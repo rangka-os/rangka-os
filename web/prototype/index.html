@@ -1,0 +1,68 @@
+<title>Rangka Prototype</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&display=swap">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="bundle.css">
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--app); color: var(--ink); font: 14px/20px var(--font-sans); }
+  #rk-app { height: 100%; }
+  .pv-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+  .pv-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
+  .pv-shell-main { min-height: 0; }
+  .pv-main { flex: 1; min-height: 0; overflow-y: auto; }
+  .pv-note { margin: 8px 8px 12px; padding: 8px 12px; border-radius: var(--r); font-size: 12px; line-height: 16px; color: var(--ink-2); background: var(--discovery-tint); }
+  .pv-note b { color: var(--discovery); }
+  .pv-src { margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+  .pv-src code { font: 12px/16px var(--font-mono); color: var(--ink-2); background: var(--neutral); padding: 0 4px; border-radius: var(--r-xs); }
+  .pv-headbody { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+  .pv-headbody .rk-steps { max-width: 560px; }
+  .pv-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .pv-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .pv-ro { min-height: var(--field); box-sizing: border-box; display: flex; align-items: center; padding: 7px 8px; border-radius: var(--r); background: var(--soft); color: var(--ink); font-size: 14px; }
+  .pv-ro.num { justify-content: flex-end; font-variant-numeric: tabular-nums; }
+  .pv-user { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pv-unsaved { font-size: 12px; color: var(--warn); font-weight: 600; }
+  .rk-shell-content > .rk-filterbar { margin-bottom: -8px; }
+  /* kanban: Jira board columns */
+  .pv-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
+  .pv-col-k { background: var(--soft); border-radius: var(--r-lg); min-height: 160px; display: flex; flex-direction: column; transition: background .1s, box-shadow .1s; }
+  .pv-col-k.over { background: var(--selected); box-shadow: inset 0 0 0 2px var(--focus); }
+  .pv-col-k header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 0; }
+  .pv-col-k header b { font: 600 12px/16px var(--font-sans); text-transform: uppercase; color: var(--ink-2); }
+  .pv-col-k header .n { font-size: 12px; line-height: 16px; color: var(--ink); background: var(--neutral); border-radius: 8px; padding: 0 6px; }
+  .pv-prob { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .pv-sum { padding: 4px 12px 0; font: 600 14px/20px var(--font-sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .pv-col-k.closed .pv-sum { color: var(--muted); }
+  .pv-cards { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
+  .pv-card { background: var(--surface); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 4px; cursor: grab; font-size: 14px; color: var(--ink-2); box-shadow: var(--shadow-float); transition: background .1s; }
+  .pv-card:hover { background: var(--soft); }
+  .pv-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .pv-card.dragging { opacity: .5; }
+  .pv-card b { font-size: 14px; font-weight: 400; color: var(--ink); line-height: 20px; }
+  .pv-card .rk-amount { color: var(--ink); font-weight: 600; }
+  .rk-table .rk-doc-no { white-space: nowrap; }
+  .pv-code { width: 100%; min-height: 60vh; box-sizing: border-box; font: 12px/1.6 var(--font-mono); color: var(--ink); background: var(--soft); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; resize: vertical; }
+  .pv-code:focus { outline: none; border-color: var(--focus); box-shadow: var(--focus-soft); }
+  .rk-grid .rk-cell { appearance: auto; }
+  .rk-card-body > .rk-form-grid { padding: 0; }
+  @media (max-width: 860px) {
+    .pv-shell { height: auto; min-height: 100%; }
+    .pv-shell > .rk-side { display: flex; width: 100%; border-right: 0; border-bottom: 1px solid var(--line-strong); }
+    .pv-shell > .rk-side .rk-side-head, .pv-shell > .rk-side .pv-note, .pv-shell > .rk-side .rk-navgroup > p { display: none; }
+    .pv-shell > .rk-side nav { flex-direction: row; flex-wrap: wrap; gap: 4px; padding: 8px; }
+    .pv-shell > .rk-side .rk-navgroup { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+    .pv-shell > .rk-side .rk-navlink { width: auto; }
+    .pv-main { overflow: visible; }
+    .rk-card-body > .rk-form-grid { grid-template-columns: minmax(0, 1fr); }
+    .rk-card-body { padding: 16px; }
+  }
+</style>
+<div id="rk-app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
+<script src="bundle.js"></script>
+<script src="meta.js"></script>
+<script src="engine.js"></script>
+<script src="app.js"></script>

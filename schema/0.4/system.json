@@ -1,0 +1,521 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/system.json",
+  "title": "Rangka system",
+  "description": "Layer 2: which backend capabilities are on and which driver serves each. One file per installation: system.rk. App files only say what they need (realtime: true, schedule:, queue:, cache:); this file decides how.",
+  "type": "object",
+  "required": [
+    "db"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "db": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Primary database. Always on.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "postgres"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+          "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+        },
+        "pool": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 200,
+          "default": 10
+        },
+        "isolation": {
+          "enum": [
+            "shared",
+            "schema",
+            "database"
+          ],
+          "default": "shared",
+          "description": "shared tables + RLS for small orgs; own schema or database for large ones"
+        }
+      }
+    },
+    "cache": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Read cache for views, dashboards, permission checks.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "memory",
+            "valkey"
+          ]
+        },
+        "url": {
+          "type": "string",
+          "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+          "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+        },
+        "fallback": {
+          "enum": [
+            "memory",
+            "none"
+          ],
+          "default": "memory"
+        },
+        "max_mb": {
+          "type": "integer",
+          "minimum": 8
+        }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Background jobs: actions with queue:, outbound webhooks, connector calls, emails.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "postgres",
+            "valkey"
+          ]
+        },
+        "workers": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 256,
+          "default": 4
+        },
+        "retries": {
+          "type": "integer",
+          "minimum": 0,
+          "maximum": 25,
+          "default": 3
+        },
+        "dead_letter_after": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h|d)$"
+        }
+      }
+    },
+    "scheduler": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Cron-style schedules from flows and automations; runs as queue jobs.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "internal"
+          ]
+        },
+        "timezone": {
+          "type": "string",
+          "default": "Asia/Jakarta"
+        },
+        "leader_lock": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "realtime": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Live updates to open screens. Postgres LISTEN/NOTIFY for one node, Valkey pub/sub for many.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "postgres",
+            "valkey"
+          ]
+        },
+        "transports": {
+          "type": "array",
+          "items": {
+            "enum": [
+              "sse",
+              "websocket"
+            ]
+          },
+          "minItems": 1,
+          "uniqueItems": true,
+          "default": [
+            "sse"
+          ]
+        },
+        "max_connections": {
+          "type": "integer",
+          "minimum": 1
+        }
+      }
+    },
+    "files": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Attachments, images, exports.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "local",
+            "s3"
+          ]
+        },
+        "path": {
+          "type": "string"
+        },
+        "bucket": {
+          "type": "string"
+        },
+        "endpoint": {
+          "type": "string",
+          "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+          "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+        },
+        "access_key": {
+          "type": "string",
+          "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+          "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+        },
+        "secret_key": {
+          "type": "string",
+          "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+          "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+        },
+        "max_upload_mb": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 25
+        }
+      }
+    },
+    "search": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Global search (⌘K) and record search.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "postgres",
+            "opensearch"
+          ]
+        },
+        "vectors": {
+          "type": "boolean",
+          "default": false,
+          "description": "pgvector embeddings for semantic search"
+        }
+      }
+    },
+    "notify": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Delivery channels. Drivers, not connectors.",
+      "properties": {
+        "email": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "driver": {
+              "enum": [
+                "smtp",
+                "log"
+              ]
+            },
+            "host": {
+              "type": "string",
+              "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+              "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+            },
+            "port": {
+              "type": "integer"
+            },
+            "username": {
+              "type": "string",
+              "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+              "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+            },
+            "password": {
+              "type": "string",
+              "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+              "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+            },
+            "from": {
+              "type": "string"
+            }
+          }
+        },
+        "push": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "driver": {
+              "enum": [
+                "fcm",
+                "log"
+              ]
+            },
+            "project": {
+              "type": "string",
+              "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+              "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+            },
+            "credentials": {
+              "type": "string",
+              "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+              "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+            }
+          }
+        },
+        "sms": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "driver": {
+              "enum": [
+                "log",
+                "twilio",
+                "zenziva"
+              ]
+            },
+            "api_key": {
+              "type": "string",
+              "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+              "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+            }
+          }
+        },
+        "whatsapp": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean"
+            },
+            "connector": {
+              "type": "string",
+              "description": "Uses an installed connector, e.g. whatsapp_business"
+            }
+          }
+        }
+      }
+    },
+    "auth": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Rangka ID, built into the kernel: password, passkeys, sessions, API tokens, and an OIDC provider for Omilo and other apps.",
+      "properties": {
+        "issuer": {
+          "type": "string",
+          "format": "uri"
+        },
+        "session_ttl": {
+          "type": "string",
+          "pattern": "^[0-9]+(ms|s|m|h|d)$"
+        },
+        "password": {
+          "type": "boolean",
+          "default": true
+        },
+        "passkeys": {
+          "type": "boolean",
+          "default": true
+        },
+        "two_factor": {
+          "enum": [
+            "off",
+            "optional",
+            "owners",
+            "everyone"
+          ],
+          "default": "owners"
+        },
+        "upstream": {
+          "type": "array",
+          "description": "Sign in with an external IdP (per organisation domain routing lives in config.rk).",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "issuer",
+              "client_id"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "model.json#/$defs/name"
+              },
+              "label": {
+                "type": "string"
+              },
+              "issuer": {
+                "type": "string",
+                "format": "uri"
+              },
+              "client_id": {
+                "type": "string",
+                "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+                "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+              },
+              "client_secret": {
+                "type": "string",
+                "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+                "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+              }
+            }
+          }
+        },
+        "clients": {
+          "type": "array",
+          "description": "Apps that sign in with Rangka ID (SSO): Omilo, other Rangka installs, partner tools.",
+          "items": {
+            "type": "object",
+            "required": [
+              "id",
+              "redirect_uris"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "id": {
+                "$ref": "model.json#/$defs/name"
+              },
+              "label": {
+                "type": "string"
+              },
+              "redirect_uris": {
+                "type": "array",
+                "items": {
+                  "type": "string",
+                  "format": "uri"
+                },
+                "minItems": 1
+              },
+              "secret": {
+                "type": "string",
+                "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+                "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+              },
+              "public": {
+                "type": "boolean",
+                "default": false,
+                "description": "Public clients use PKCE and no secret"
+              },
+              "scopes": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Where ${VARS} resolve from.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "driver": {
+          "enum": [
+            "env",
+            "file",
+            "vault"
+          ]
+        },
+        "path": {
+          "type": "string"
+        }
+      }
+    },
+    "audit": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "retention_days": {
+          "type": "integer",
+          "minimum": 30,
+          "default": 365
+        }
+      }
+    },
+    "observability": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "otlp_endpoint": {
+          "type": "string",
+          "pattern": "^(\\$\\{[A-Z][A-Z0-9_]*\\}|[^$].*)$",
+          "description": "A literal or ${ENV_VAR}. Secrets must use ${…}; the validator refuses literal passwords and keys."
+        },
+        "log_level": {
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "info"
+        },
+        "metrics": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    }
+  }
+}

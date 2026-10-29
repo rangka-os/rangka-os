@@ -1,0 +1,114 @@
+<title>Rangka CRM API</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600&display=swap">
+<link rel="stylesheet" href="tokens.css">
+<style>
+  /* Layout: VitePress-style docs. Top bar, left nav grouped by model, content column, outline on wide screens. Neutral Rangka UI; method badges use status hues as meaning. */
+  :root { --get: var(--info); --get-tint: var(--info-tint); --post: var(--ok); --post-tint: var(--ok-tint); --patch: var(--warn); --patch-tint: var(--warn-tint); --del: var(--bad); --del-tint: var(--bad-tint); }
+  * { box-sizing: border-box; }
+  body { margin: 0; background: var(--surface); color: var(--ink); font: 15px/1.6 var(--font-sans); -webkit-font-smoothing: antialiased; }
+  body::before { content: ""; position: fixed; inset: 0 0 auto; height: env(safe-area-inset-top, 0px); z-index: 10; background: var(--surface); }
+  a { color: var(--link); text-decoration: none; } a:hover { text-decoration: underline; }
+  code, pre, kbd { font-family: var(--font-mono); }
+  :focus-visible { outline: none; box-shadow: var(--focus-ring); border-radius: 4px; }
+  .top { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 9; height: 56px; display: flex; align-items: center; gap: 12px; border-bottom: 1px solid var(--line-strong); background: var(--surface);
+    padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+  .brand { display: flex; align-items: center; gap: 10px; font: 600 16px/1 var(--font-display); color: var(--ink); white-space: nowrap; }
+  .brand small { font: 500 12px var(--font-mono); color: var(--muted); }
+  .top nav { display: flex; gap: 18px; margin-left: 12px; font-size: 14px; }
+  .top nav a { color: var(--ink-2); } .top nav a.on { color: var(--ink); font-weight: 500; }
+  .sp { flex: 1; }
+  .search { display: flex; align-items: center; gap: 8px; height: 34px; width: 220px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--soft); color: var(--muted); }
+  .search input { border: 0; outline: 0; background: transparent; font: 14px var(--font-sans); color: var(--ink); width: 100%; min-width: 0; }
+  .lang { display: inline-flex; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+  .lang button { border: 0; background: transparent; padding: 0 10px; height: 32px; font: 500 12px var(--font-sans); color: var(--muted); cursor: pointer; }
+  .lang button[aria-pressed="true"] { background: var(--primary); color: var(--primary-ink); }
+  .menu-btn { display: none; border: 1px solid var(--line-strong); background: var(--surface); color: var(--ink); border-radius: 8px; height: 34px; padding: 0 10px; font: 500 13px var(--font-sans); }
+  .wrap { display: grid; grid-template-columns: 272px minmax(0, 1fr) 200px; max-width: 1440px; margin: 0 auto; }
+  .side { position: sticky; top: calc(56px + env(safe-area-inset-top, 0px)); height: calc(100vh - 56px); overflow-y: auto; padding: 20px 12px 40px max(16px, env(safe-area-inset-left, 0px)); border-right: 1px solid var(--line); background: var(--app); }
+  .side h4 { margin: 18px 8px 6px; font-size: 11px; letter-spacing: 1px; text-transform: uppercase; color: var(--muted); font-weight: 600; }
+  .side h4:first-child { margin-top: 0; }
+  .side a { display: flex; align-items: center; gap: 8px; padding: 5px 8px; border-radius: 6px; font-size: 14px; color: var(--ink-2); line-height: 1.35; }
+  .side a:hover { background: var(--hover); text-decoration: none; }
+  .side a.on { background: var(--hover); color: var(--ink); font-weight: 500; }
+  .badge { display: inline-flex; align-items: center; justify-content: center; min-width: 44px; height: 18px; padding: 0 5px; border-radius: 4px; font: 600 10px/1 var(--font-mono); letter-spacing: .02em; flex-shrink: 0; }
+  .badge.GET { color: var(--get); background: var(--get-tint); } .badge.POST { color: var(--post); background: var(--post-tint); }
+  .badge.PATCH { color: var(--patch); background: var(--patch-tint); } .badge.DELETE { color: var(--del); background: var(--del-tint); }
+  main { min-width: 0; padding: 32px max(16px, env(safe-area-inset-right, 0px)) 80px 48px; max-width: 860px; }
+  main h1 { font: 600 32px/1.2 var(--font-display); letter-spacing: -.02em; margin: 0 0 12px; text-wrap: balance; }
+  main h2 { font: 600 20px/1.3 var(--font-sans); margin: 40px 0 12px; padding-top: 16px; border-top: 1px solid var(--line); scroll-margin-top: 72px; }
+  main h3 { font: 600 15px/1.4 var(--font-sans); margin: 24px 0 8px; }
+  main p { margin: 0 0 14px; color: var(--ink-2); max-width: 68ch; }
+  .eyebrow { font: 500 12px var(--font-mono); color: var(--muted); margin-bottom: 6px; }
+  .url { display: flex; align-items: center; gap: 10px; padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--soft); margin: 4px 0 18px; overflow-x: auto; }
+  .url code { font-size: 14px; color: var(--ink); white-space: nowrap; }
+  .url code b { color: var(--muted); font-weight: 400; }
+  .url .badge { height: 22px; font-size: 11px; }
+  .detail { border: 1px solid var(--line); border-radius: 10px; overflow: hidden; margin: 8px 0 8px; }
+  .detail div { display: grid; grid-template-columns: 160px minmax(0, 1fr); gap: 12px; padding: 10px 14px; border-top: 1px solid var(--line); font-size: 14px; }
+  .detail div:first-child { border-top: 0; }
+  .detail span { color: var(--muted); }
+  .tw { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; margin: 8px 0 16px; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th { text-align: left; font: 500 12px var(--font-sans); color: var(--muted); background: var(--soft); padding: 8px 12px; border-bottom: 1px solid var(--line); white-space: nowrap; }
+  td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: top; }
+  tr:last-child td { border-bottom: 0; }
+  td code, p code, li code, .detail code { font-size: 12.5px; background: var(--soft); border: 1px solid var(--line); border-radius: 4px; padding: 1px 5px; color: var(--ink); }
+  td .t { font: 12px var(--font-mono); color: var(--muted); display: block; margin-top: 2px; }
+  .req { font: 500 11px var(--font-sans); color: var(--bad); margin-left: 6px; }
+  .vals { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 6px; }
+  .vals code { font-size: 11.5px; }
+  .tabs { border: 1px solid var(--line-strong); border-radius: 10px; overflow: hidden; margin: 8px 0 18px; }
+  .tabbar { display: flex; align-items: center; gap: 2px; padding: 0 6px; background: var(--soft); border-bottom: 1px solid var(--line); overflow-x: auto; }
+  .tabbar button { border: 0; background: transparent; height: 38px; padding: 0 10px; font: 500 13px var(--font-sans); color: var(--muted); cursor: pointer; position: relative; white-space: nowrap; }
+  .tabbar button[aria-selected="true"] { color: var(--ink); }
+  .tabbar button[aria-selected="true"]::after { content: ""; position: absolute; left: 8px; right: 8px; bottom: -1px; height: 2px; background: var(--ink); border-radius: 2px; }
+  .tabbar .copy { margin-left: auto; font-weight: 400; }
+  .st { font-family: var(--font-mono); }
+  .st.ok { color: var(--ok); } .st.bad { color: var(--bad); } .st.warn { color: var(--warn); }
+  pre { margin: 0; padding: 14px 16px; overflow-x: auto; font-size: 13px; line-height: 1.6; color: var(--ink); background: var(--surface); }
+  .k { color: var(--info); } .s { color: var(--ok); } .n { color: var(--warn); } .c { color: var(--muted); }
+  .note { display: flex; gap: 10px; padding: 12px 14px; border-radius: 10px; background: var(--info-tint); border: 1px solid var(--info-line); color: var(--ink); font-size: 14px; margin: 12px 0 18px; }
+  .note b { color: var(--info); }
+  .gen { margin-top: 36px; padding-top: 14px; border-top: 1px solid var(--line); font-size: 13px; color: var(--muted); display: flex; flex-wrap: wrap; gap: 6px 16px; }
+  .pager { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 20px; }
+  .pager a { display: block; border: 1px solid var(--line-strong); border-radius: 10px; padding: 12px 14px; color: var(--ink); }
+  .pager a:hover { border-color: var(--muted); text-decoration: none; }
+  .pager small { display: block; color: var(--muted); font-size: 12px; }
+  .pager .next { text-align: right; grid-column: 2; }
+  .outline { position: sticky; top: calc(56px + env(safe-area-inset-top, 0px)); align-self: start; padding: 32px 16px; font-size: 13px; }
+  .outline b { display: block; font-size: 12px; color: var(--ink); margin-bottom: 8px; }
+  .outline a { display: block; color: var(--muted); padding: 3px 0; }
+  .cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); gap: 12px; margin: 12px 0 24px; }
+  .card { display: block; border: 1px solid var(--line-strong); border-radius: 12px; padding: 14px 16px; color: var(--ink); }
+  .card:hover { border-color: var(--muted); text-decoration: none; }
+  .card b { display: block; font-weight: 600; margin-bottom: 4px; } .card span { font-size: 13px; color: var(--muted); }
+  ul.plain { padding-left: 18px; color: var(--ink-2); } ul.plain li { margin: 4px 0; }
+  @media (max-width: 1180px) { .wrap { grid-template-columns: 260px minmax(0, 1fr); } .outline { display: none; } }
+  @media (max-width: 860px) {
+    .wrap { grid-template-columns: minmax(0, 1fr); }
+    .side { display: none; position: fixed; inset: calc(56px + env(safe-area-inset-top, 0px)) 0 0 0; height: auto; z-index: 8; border-right: 0; }
+    .side.open { display: block; }
+    .menu-btn { display: inline-flex; align-items: center; }
+    .top nav, .search, .brand small { display: none; }
+    .top { gap: 8px; }
+    main { padding: 24px max(16px, env(safe-area-inset-right, 0px)) 64px max(16px, env(safe-area-inset-left, 0px)); }
+    main h1 { font-size: 26px; }
+    .detail div { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+  }
+</style>
+
+<header class="top">
+  <button class="menu-btn" id="menuBtn" type="button" aria-expanded="false" aria-controls="side">Menu</button>
+  <span class="brand"><svg width="26" height="26" viewBox="0 0 64 64" aria-hidden="true"><defs><clipPath id="rt"><rect width="64" height="64" rx="18"/></clipPath></defs><g clip-path="url(#rt)"><rect width="64" height="64" fill="#0d9488" opacity=".16"/><rect x="13" y="18" width="38" height="52" rx="7" fill="#0d9488"/><path d="M13 54 H51" stroke="#0f766e" stroke-width="2"/><circle cx="25" cy="34" r="3.6" fill="#1c1917"/><circle cx="39" cy="34" r="3.6" fill="#1c1917"/><path d="M27.5 42.5 Q32 47 36.5 42.5" stroke="#1c1917" stroke-width="2.2" stroke-linecap="round" fill="none"/><path d="M17 22 C17 11.5 47 11.5 47 22 Z" fill="#f59e0b" stroke="#1c1917" stroke-width="1.6"/><rect x="11.5" y="21" width="41" height="4.5" rx="2.25" fill="#f59e0b" stroke="#1c1917" stroke-width="1.6"/></g></svg><span>Rangka <span id="appTitle">CRM</span> API</span><small id="ver"></small></span>
+  <nav><a href="#intro" id="navIntro">Mulai</a><a href="#deal-list" id="navRef">Referensi API</a><a href="#webhooks" id="navHooks">Webhook</a></nav>
+  <span class="sp"></span>
+  <label class="search"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M18.031 16.617l4.283 4.282-1.415 1.415-4.282-4.283A8.96 8.96 0 0 1 11 20c-4.968 0-9-4.032-9-9s4.032-9 9-9 9 4.032 9 9a8.96 8.96 0 0 1-1.969 5.617zm-2.006-.742A6.977 6.977 0 0 0 18 11c0-3.867-3.133-7-7-7s-7 3.133-7 7 3.133 7 7 7a6.977 6.977 0 0 0 4.875-1.975l.15-.15z"/></svg><input id="q" placeholder="Cari endpoint" aria-label="Cari endpoint"></label>
+  <span class="lang" role="group" aria-label="Bahasa"><button type="button" id="lid" aria-pressed="true">ID</button><button type="button" id="len" aria-pressed="false">EN</button></span>
+</header>
+<div class="wrap">
+  <aside class="side" id="side" aria-label="Daftar isi"></aside>
+  <main id="main" aria-live="polite"><p>Memuat dokumentasi…</p></main>
+  <aside class="outline" id="outline" aria-label="Di halaman ini"></aside>
+</div>
+<script src="docs.js"></script>

@@ -1,0 +1,248 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/changeset.json",
+  "title": "Rangka change set",
+  "description": "A proposed change to metadata: the only way Rangka AI (and the Console) changes a running installation. Validated, previewed on a copy, approved by a person, applied as a reversible migration, recorded in the audit log.",
+  "type": "object",
+  "required": [
+    "id",
+    "title",
+    "author",
+    "ops",
+    "status"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^cs_[a-z0-9]{6,}$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 3,
+      "maxLength": 140
+    },
+    "reason": {
+      "type": "string"
+    },
+    "author": {
+      "type": "object",
+      "required": [
+        "kind",
+        "id"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "kind": {
+          "enum": [
+            "user",
+            "ai",
+            "console",
+            "cli"
+          ]
+        },
+        "id": {
+          "type": "string"
+        },
+        "model": {
+          "type": "string",
+          "description": "LLM used, when kind is ai"
+        }
+      }
+    },
+    "org": {
+      "type": "string",
+      "description": "Organisation the change applies to; omitted for installation-wide (app) changes"
+    },
+    "ops": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "op",
+          "path"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "op": {
+            "enum": [
+              "create",
+              "replace",
+              "patch",
+              "delete"
+            ]
+          },
+          "path": {
+            "type": "string",
+            "pattern": "^(apps/[a-z0-9_]+/(app|models/[a-z0-9_]+|dashboards/[a-z0-9_]+|flows/[a-z0-9_]+|roles/[a-z0-9_]+)|custom/[a-z0-9_]+|system|themes/[a-z0-9_]+|layouts/[a-z0-9_]+|features|config|connectors/[a-z0-9_]+)\\.rk$"
+          },
+          "content": {
+            "type": "string",
+            "description": "Full .rk text for create/replace"
+          },
+          "patch": {
+            "type": "array",
+            "description": "RFC 6902 JSON Patch against the parsed file, for patch",
+            "items": {
+              "type": "object",
+              "required": [
+                "op",
+                "path"
+              ],
+              "properties": {
+                "op": {
+                  "enum": [
+                    "add",
+                    "remove",
+                    "replace",
+                    "move",
+                    "copy",
+                    "test"
+                  ]
+                },
+                "path": {
+                  "type": "string"
+                },
+                "value": {},
+                "from": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "layers": {
+      "type": "array",
+      "items": {
+        "enum": [
+          2,
+          3,
+          4,
+          5,
+          6
+        ]
+      },
+      "description": "Computed: layers touched"
+    },
+    "risk": {
+      "enum": [
+        "low",
+        "medium",
+        "high"
+      ],
+      "description": "Computed: high when it touches system.rk, roles/permissions, money or stock fields, drops data, or changes submitted-document models"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "proposed",
+        "validated",
+        "invalid",
+        "previewed",
+        "approved",
+        "rejected",
+        "applied",
+        "reverted",
+        "failed"
+      ]
+    },
+    "validation": {
+      "type": "object",
+      "properties": {
+        "errors": {
+          "type": "array"
+        },
+        "warnings": {
+          "type": "array"
+        }
+      }
+    },
+    "preview": {
+      "type": "object",
+      "description": "Dry-run result: migrations (SQL), affected records count, screens changed",
+      "properties": {
+        "migrations": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "affected": {
+          "type": "object",
+          "additionalProperties": {
+            "type": "integer"
+          }
+        },
+        "reversible": {
+          "type": "boolean"
+        },
+        "files": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "path"
+            ],
+            "properties": {
+              "path": {
+                "type": "string"
+              },
+              "before": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              },
+              "after": {
+                "type": [
+                  "string",
+                  "null"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "status",
+          "at",
+          "by"
+        ],
+        "properties": {
+          "status": {
+            "type": "string"
+          },
+          "at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "by": {
+            "type": "string"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "created_at": {
+      "type": "string",
+      "format": "date-time"
+    },
+    "updated_at": {
+      "type": "string",
+      "format": "date-time"
+    }
+  }
+}

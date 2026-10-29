@@ -1,0 +1,194 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/layout.json",
+  "title": "Rangka layout",
+  "description": "Layer 6: the app shell and pages built from UI blocks. Templates: top-nav (Atlassian style), side-only, pos (full-screen counter), portal (customers).",
+  "type": "object",
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "extends": {
+      "type": "string",
+      "default": "rangka/top-nav"
+    },
+    "shell": {
+      "enum": [
+        "top-nav",
+        "side-only",
+        "pos",
+        "portal"
+      ],
+      "default": "top-nav"
+    },
+    "home": {
+      "type": "string",
+      "pattern": "^(dashboard|model|page):[a-z][a-z0-9_]*$",
+      "description": "Start page, e.g. dashboard:crm_overview"
+    },
+    "nav": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "top": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/link"
+          },
+          "maxItems": 6
+        },
+        "side": {
+          "type": "array",
+          "items": {
+            "type": "object",
+            "required": [
+              "items"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "group": {
+                "$ref": "model.json#/$defs/label"
+              },
+              "items": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/$defs/link"
+                }
+              }
+            }
+          }
+        },
+        "create": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]*$"
+          },
+          "description": "Models offered by the blue Buat button"
+        },
+        "app_switcher": {
+          "type": "boolean",
+          "default": true
+        }
+      }
+    },
+    "pages": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/page"
+      }
+    }
+  },
+  "$defs": {
+    "link": {
+      "type": "object",
+      "required": [
+        "to"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "to": {
+          "type": "string",
+          "pattern": "^(dashboard|model|page|settings|url):.+$"
+        },
+        "label": {
+          "$ref": "model.json#/$defs/label"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "if": {
+          "$ref": "model.json#/$defs/cel"
+        }
+      }
+    },
+    "block": {
+      "type": "object",
+      "required": [
+        "block"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "block": {
+          "enum": [
+            "page_header",
+            "list",
+            "board",
+            "form",
+            "dashboard",
+            "number",
+            "chart",
+            "table",
+            "markdown",
+            "filter_bar",
+            "tabs",
+            "columns",
+            "empty_state",
+            "embed"
+          ]
+        },
+        "span": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12
+        },
+        "props": {
+          "type": "object",
+          "description": "Props of the UI block, e.g. {model: deal, view: kanban}"
+        },
+        "children": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          }
+        },
+        "if": {
+          "$ref": "model.json#/$defs/cel"
+        }
+      }
+    },
+    "page": {
+      "type": "object",
+      "required": [
+        "name",
+        "label",
+        "blocks"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "label": {
+          "$ref": "model.json#/$defs/label"
+        },
+        "icon": {
+          "type": "string"
+        },
+        "roles": {
+          "type": "array",
+          "items": {
+            "$ref": "model.json#/$defs/name"
+          }
+        },
+        "blocks": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/block"
+          },
+          "minItems": 1
+        }
+      }
+    }
+  }
+}

@@ -1,0 +1,1724 @@
+{
+ "app": "crm",
+ "version": "0.1.0",
+ "title": {
+  "id": "CRM",
+  "en": "CRM"
+ },
+ "generated_from": "apps/crm/models/*.rk",
+ "groups": [
+  {
+   "model": "deal",
+   "label": {
+    "id": "Peluang",
+    "en": "Deal"
+   },
+   "icon": "card",
+   "endpoints": [
+    {
+     "id": "deal-list",
+     "method": "GET",
+     "path": "/api/v1/deal",
+     "title": {
+      "id": "Daftar peluang",
+      "en": "List deals"
+     },
+     "desc": {
+      "id": "Mengambil daftar peluang yang boleh dilihat pengguna, dengan filter, urutan dan halaman.",
+      "en": "Returns the deals the caller may see, with filters, sorting and paging."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "query": [
+      {
+       "name": "filter",
+       "type": "string (CEL)",
+       "label": {
+        "id": "Filter, mis. `stage == 'proposal'`",
+        "en": "Filter, e.g. `stage == 'proposal'`"
+       }
+      },
+      {
+       "name": "sort",
+       "type": "string",
+       "label": {
+        "id": "Kolom urut, awali `-` untuk turun",
+        "en": "Sort field, prefix `-` for descending"
+       },
+       "default": "expected_close"
+      },
+      {
+       "name": "fields",
+       "type": "string",
+       "label": {
+        "id": "Kolom yang diambil, pisahkan dengan koma",
+        "en": "Comma-separated fields to return"
+       },
+       "default": "name,deal_name,customer,stage,value,expected_close,owner"
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "label": {
+        "id": "Jumlah per halaman (maks. 100)",
+        "en": "Page size (max 100)"
+       },
+       "default": "20"
+      },
+      {
+       "name": "cursor",
+       "type": "string",
+       "label": {
+        "id": "Kursor dari respons sebelumnya",
+        "en": "Cursor from the previous response"
+       }
+      }
+     ],
+     "response": {
+      "data": [
+       {
+        "name": "DEAL-00012",
+        "deal_name": "Kopi untuk 3 cabang Maju Jaya",
+        "customer": "CUST-0012",
+        "stage": "proposal",
+        "value": 12500000,
+        "expected_close": "2026-11-20",
+        "owner": "USR-002"
+       }
+      ],
+      "next_cursor": "eyJvIjoyMH0"
+     }
+    },
+    {
+     "id": "deal-get",
+     "method": "GET",
+     "path": "/api/v1/deal/{name}",
+     "title": {
+      "id": "Ambil satu peluang",
+      "en": "Get a deal"
+     },
+     "desc": {
+      "id": "Mengambil satu peluang lengkap dengan kolom hitungan.",
+      "en": "Returns one deal including computed fields."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "path_params": [
+      {
+       "name": "name",
+       "type": "string",
+       "label": {
+        "id": "Nomor record, mis. DEAL-00012",
+        "en": "Record name, e.g. DEAL-00012"
+       }
+      }
+     ],
+     "response": {
+      "data": {
+       "name": "DEAL-00012",
+       "deal_name": "Kopi untuk 3 cabang Maju Jaya",
+       "customer": "CUST-0012",
+       "contact_person": "Ibu Rina",
+       "stage": "proposal",
+       "value": 12500000,
+       "probability": 50,
+       "weighted_value": 6250000,
+       "expected_close": "2026-11-20",
+       "owner": "USR-002",
+       "source": "whatsapp",
+       "lost_reason": "",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     }
+    },
+    {
+     "id": "deal-create",
+     "method": "POST",
+     "path": "/api/v1/deal",
+     "title": {
+      "id": "Buat peluang",
+      "en": "Create a deal"
+     },
+     "desc": {
+      "id": "Membuat peluang baru. Kolom hitungan diisi oleh engine dan dikembalikan di respons.",
+      "en": "Creates a deal. Computed fields are filled in by the engine and returned."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "body": [
+      {
+       "name": "deal_name",
+       "type": "string",
+       "required": true,
+       "label": {
+        "id": "Judul peluang"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "customer",
+       "type": "string (record name)",
+       "required": true,
+       "label": {
+        "id": "Pelanggan"
+       },
+       "default": null,
+       "values": [],
+       "link": "customer",
+       "note": ""
+      },
+      {
+       "name": "contact_person",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Kontak"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "stage",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Tahap"
+       },
+       "default": "'prospect'",
+       "values": [
+        "prospect",
+        "qualified",
+        "proposal",
+        "negotiation",
+        "won",
+        "lost"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "value",
+       "type": "integer (rupiah)",
+       "required": false,
+       "label": {
+        "id": "Nilai"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "expected_close",
+       "type": "string (YYYY-MM-DD)",
+       "required": false,
+       "label": {
+        "id": "Perkiraan closing"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "owner",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Penanggung jawab"
+       },
+       "default": null,
+       "values": [],
+       "link": "user",
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Sumber"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "lost_reason",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Alasan kalah"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": "shown only when `stage == 'lost'`"
+      },
+      {
+       "name": "notes",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Catatan"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      }
+     ],
+     "computed": [
+      {
+       "name": "probability",
+       "label": {
+        "id": "Peluang menang"
+       },
+       "compute": "option('stage', 'probability')"
+      },
+      {
+       "name": "weighted_value",
+       "label": {
+        "id": "Nilai tertimbang"
+       },
+       "compute": "round(value * probability / 100)"
+      }
+     ],
+     "example_body": {
+      "deal_name": "Kopi untuk 3 cabang Maju Jaya",
+      "customer": "CUST-0012",
+      "contact_person": "Ibu Rina",
+      "value": 12500000,
+      "expected_close": "2026-11-20",
+      "owner": "USR-002",
+      "source": "whatsapp",
+      "notes": "Minta harga grosir untuk 20 kg per bulan."
+     },
+     "response": {
+      "data": {
+       "name": "DEAL-00012",
+       "deal_name": "Kopi untuk 3 cabang Maju Jaya",
+       "customer": "CUST-0012",
+       "contact_person": "Ibu Rina",
+       "stage": "proposal",
+       "value": 12500000,
+       "probability": 50,
+       "weighted_value": 6250000,
+       "expected_close": "2026-11-20",
+       "owner": "USR-002",
+       "source": "whatsapp",
+       "lost_reason": "",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     },
+     "status": 201,
+     "errors": [
+      {
+       "rule": "lost_needs_reason",
+       "level": "error",
+       "message": {
+        "id": "Tulis alasan kalah supaya tim bisa belajar"
+       },
+       "check": "stage != 'lost' || lost_reason != ''",
+       "on": "save"
+      },
+      {
+       "rule": "open_needs_close_date",
+       "level": "warn",
+       "message": {
+        "id": "Peluang terbuka sebaiknya punya perkiraan closing"
+       },
+       "check": "stage == 'won' || stage == 'lost' || expected_close != ''",
+       "on": "save"
+      }
+     ],
+     "required": [
+      "deal_name",
+      "customer"
+     ],
+     "idempotent": true
+    },
+    {
+     "id": "deal-update",
+     "method": "PATCH",
+     "path": "/api/v1/deal/{name}",
+     "title": {
+      "id": "Ubah peluang",
+      "en": "Update a deal"
+     },
+     "desc": {
+      "id": "Mengubah sebagian kolom. Kolom yang tidak dikirim tidak berubah.",
+      "en": "Changes some fields. Fields you leave out stay as they are."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "body": [
+      {
+       "name": "deal_name",
+       "type": "string",
+       "required": true,
+       "label": {
+        "id": "Judul peluang"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "customer",
+       "type": "string (record name)",
+       "required": true,
+       "label": {
+        "id": "Pelanggan"
+       },
+       "default": null,
+       "values": [],
+       "link": "customer",
+       "note": ""
+      },
+      {
+       "name": "contact_person",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Kontak"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "stage",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Tahap"
+       },
+       "default": "'prospect'",
+       "values": [
+        "prospect",
+        "qualified",
+        "proposal",
+        "negotiation",
+        "won",
+        "lost"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "value",
+       "type": "integer (rupiah)",
+       "required": false,
+       "label": {
+        "id": "Nilai"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "expected_close",
+       "type": "string (YYYY-MM-DD)",
+       "required": false,
+       "label": {
+        "id": "Perkiraan closing"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "owner",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Penanggung jawab"
+       },
+       "default": null,
+       "values": [],
+       "link": "user",
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Sumber"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "lost_reason",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Alasan kalah"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": "shown only when `stage == 'lost'`"
+      },
+      {
+       "name": "notes",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Catatan"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      }
+     ],
+     "example_body": {
+      "deal_name": "Kopi untuk 3 cabang Maju Jaya",
+      "customer": "CUST-0012"
+     },
+     "response": {
+      "data": {
+       "name": "DEAL-00012",
+       "deal_name": "Kopi untuk 3 cabang Maju Jaya",
+       "customer": "CUST-0012",
+       "contact_person": "Ibu Rina",
+       "stage": "proposal",
+       "value": 12500000,
+       "probability": 50,
+       "weighted_value": 6250000,
+       "expected_close": "2026-11-20",
+       "owner": "USR-002",
+       "source": "whatsapp",
+       "lost_reason": "",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     },
+     "errors": [
+      {
+       "rule": "lost_needs_reason",
+       "level": "error",
+       "message": {
+        "id": "Tulis alasan kalah supaya tim bisa belajar"
+       },
+       "check": "stage != 'lost' || lost_reason != ''",
+       "on": "save"
+      },
+      {
+       "rule": "open_needs_close_date",
+       "level": "warn",
+       "message": {
+        "id": "Peluang terbuka sebaiknya punya perkiraan closing"
+       },
+       "check": "stage == 'won' || stage == 'lost' || expected_close != ''",
+       "on": "save"
+      }
+     ]
+    },
+    {
+     "id": "deal-delete",
+     "method": "DELETE",
+     "path": "/api/v1/deal/{name}",
+     "title": {
+      "id": "Hapus peluang",
+      "en": "Delete a deal"
+     },
+     "desc": {
+      "id": "Menghapus record. Bisa dikembalikan dalam 30 hari.",
+      "en": "Deletes the record. It can be restored for 30 days."
+     },
+     "roles": [
+      "sales_manager"
+     ],
+     "response": {
+      "deleted": "DEAL-00012",
+      "restore_until": "2026-11-29"
+     }
+    },
+    {
+     "id": "deal-meta",
+     "method": "GET",
+     "path": "/api/v1/meta/deal",
+     "title": {
+      "id": "Metadata model",
+      "en": "Model metadata"
+     },
+     "desc": {
+      "id": "Metadata model ini seperti yang terlihat oleh peran pemanggil: field, opsi, aturan dan aksi yang diizinkan. Dipakai helper Omilo untuk mempelajari app.",
+      "en": "This model's metadata as the caller's role sees it: fields, options, rules and allowed actions. Omilo helpers use it to learn the app."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "response": {
+      "name": "deal",
+      "label": {
+       "id": "Peluang",
+       "en": "Deal"
+      },
+      "fields": [
+       {
+        "name": "deal_name",
+        "type": "data",
+        "required": true
+       },
+       {
+        "name": "customer",
+        "type": "link",
+        "required": true
+       },
+       {
+        "name": "contact_person",
+        "type": "data",
+        "required": false
+       },
+       {
+        "name": "stage",
+        "type": "select",
+        "required": false
+       },
+       {
+        "…": "…"
+       }
+      ]
+     }
+    }
+   ],
+   "events": [
+    "deal.created",
+    "deal.updated",
+    "deal.stage_changed"
+   ]
+  },
+  {
+   "model": "lead",
+   "label": {
+    "id": "Lead",
+    "en": "Lead"
+   },
+   "icon": "user",
+   "endpoints": [
+    {
+     "id": "lead-list",
+     "method": "GET",
+     "path": "/api/v1/lead",
+     "title": {
+      "id": "Daftar lead",
+      "en": "List leads"
+     },
+     "desc": {
+      "id": "Mengambil daftar lead yang boleh dilihat pengguna, dengan filter, urutan dan halaman.",
+      "en": "Returns the leads the caller may see, with filters, sorting and paging."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "query": [
+      {
+       "name": "filter",
+       "type": "string (CEL)",
+       "label": {
+        "id": "Filter, mis. `stage == 'proposal'`",
+        "en": "Filter, e.g. `stage == 'proposal'`"
+       }
+      },
+      {
+       "name": "sort",
+       "type": "string",
+       "label": {
+        "id": "Kolom urut, awali `-` untuk turun",
+        "en": "Sort field, prefix `-` for descending"
+       },
+       "default": "-created_at"
+      },
+      {
+       "name": "fields",
+       "type": "string",
+       "label": {
+        "id": "Kolom yang diambil, pisahkan dengan koma",
+        "en": "Comma-separated fields to return"
+       },
+       "default": "name,lead_name,company_name,source,status,owner"
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "label": {
+        "id": "Jumlah per halaman (maks. 100)",
+        "en": "Page size (max 100)"
+       },
+       "default": "20"
+      },
+      {
+       "name": "cursor",
+       "type": "string",
+       "label": {
+        "id": "Kursor dari respons sebelumnya",
+        "en": "Cursor from the previous response"
+       }
+      }
+     ],
+     "response": {
+      "data": [
+       {
+        "name": "LEAD-00031",
+        "lead_name": "Andi Pratama",
+        "company_name": "Kedai Kopi Andi",
+        "source": "whatsapp",
+        "status": "new",
+        "owner": "USR-002"
+       }
+      ],
+      "next_cursor": "eyJvIjoyMH0"
+     }
+    },
+    {
+     "id": "lead-get",
+     "method": "GET",
+     "path": "/api/v1/lead/{name}",
+     "title": {
+      "id": "Ambil satu lead",
+      "en": "Get a lead"
+     },
+     "desc": {
+      "id": "Mengambil satu lead lengkap dengan kolom hitungan.",
+      "en": "Returns one lead including computed fields."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "path_params": [
+      {
+       "name": "name",
+       "type": "string",
+       "label": {
+        "id": "Nomor record, mis. LEAD-00031",
+        "en": "Record name, e.g. LEAD-00031"
+       }
+      }
+     ],
+     "response": {
+      "data": {
+       "name": "LEAD-00031",
+       "lead_name": "Andi Pratama",
+       "company_name": "Kedai Kopi Andi",
+       "phone": "+6281234567890",
+       "email": "andi@contoh.id",
+       "city": "Bandung",
+       "source": "whatsapp",
+       "status": "new",
+       "owner": "USR-002",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "converted_customer": "ID-0001",
+       "converted_deal": "ID-0001",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     }
+    },
+    {
+     "id": "lead-create",
+     "method": "POST",
+     "path": "/api/v1/lead",
+     "title": {
+      "id": "Buat lead",
+      "en": "Create a lead"
+     },
+     "desc": {
+      "id": "Membuat lead baru. Kolom hitungan diisi oleh engine dan dikembalikan di respons.",
+      "en": "Creates a lead. Computed fields are filled in by the engine and returned."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "body": [
+      {
+       "name": "lead_name",
+       "type": "string",
+       "required": true,
+       "label": {
+        "id": "Nama"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "company_name",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Nama usaha"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "phone",
+       "type": "string (E.164)",
+       "required": false,
+       "label": {
+        "id": "Nomor WhatsApp"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "email",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Email"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "city",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Kota"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Sumber"
+       },
+       "default": null,
+       "values": [
+        "whatsapp",
+        "instagram",
+        "referral",
+        "walk_in",
+        "website",
+        "marketplace"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Status"
+       },
+       "default": "'new'",
+       "values": [
+        "new",
+        "contacted",
+        "qualified",
+        "lost"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "owner",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Penanggung jawab"
+       },
+       "default": null,
+       "values": [],
+       "link": "user",
+       "note": ""
+      },
+      {
+       "name": "notes",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Catatan"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      }
+     ],
+     "computed": [
+      {
+       "name": "converted_customer",
+       "label": {
+        "id": "Jadi pelanggan"
+       },
+       "compute": null
+      },
+      {
+       "name": "converted_deal",
+       "label": {
+        "id": "Jadi peluang"
+       },
+       "compute": null
+      }
+     ],
+     "example_body": {
+      "lead_name": "Andi Pratama",
+      "company_name": "Kedai Kopi Andi",
+      "phone": "+6281234567890",
+      "email": "andi@contoh.id",
+      "city": "Bandung",
+      "source": "whatsapp",
+      "owner": "USR-002",
+      "notes": "Minta harga grosir untuk 20 kg per bulan."
+     },
+     "response": {
+      "data": {
+       "name": "LEAD-00031",
+       "lead_name": "Andi Pratama",
+       "company_name": "Kedai Kopi Andi",
+       "phone": "+6281234567890",
+       "email": "andi@contoh.id",
+       "city": "Bandung",
+       "source": "whatsapp",
+       "status": "new",
+       "owner": "USR-002",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "converted_customer": "ID-0001",
+       "converted_deal": "ID-0001",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     },
+     "status": 201,
+     "errors": [
+      {
+       "rule": "reach",
+       "level": "error",
+       "message": {
+        "id": "Isi nomor WhatsApp atau email supaya lead bisa dihubungi"
+       },
+       "check": "phone != '' || email != ''",
+       "on": "save"
+      }
+     ],
+     "required": [
+      "lead_name"
+     ],
+     "idempotent": true
+    },
+    {
+     "id": "lead-update",
+     "method": "PATCH",
+     "path": "/api/v1/lead/{name}",
+     "title": {
+      "id": "Ubah lead",
+      "en": "Update a lead"
+     },
+     "desc": {
+      "id": "Mengubah sebagian kolom. Kolom yang tidak dikirim tidak berubah.",
+      "en": "Changes some fields. Fields you leave out stay as they are."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "body": [
+      {
+       "name": "lead_name",
+       "type": "string",
+       "required": true,
+       "label": {
+        "id": "Nama"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "company_name",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Nama usaha"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "phone",
+       "type": "string (E.164)",
+       "required": false,
+       "label": {
+        "id": "Nomor WhatsApp"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "email",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Email"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "city",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Kota"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "source",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Sumber"
+       },
+       "default": null,
+       "values": [
+        "whatsapp",
+        "instagram",
+        "referral",
+        "walk_in",
+        "website",
+        "marketplace"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "status",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Status"
+       },
+       "default": "'new'",
+       "values": [
+        "new",
+        "contacted",
+        "qualified",
+        "lost"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "owner",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Penanggung jawab"
+       },
+       "default": null,
+       "values": [],
+       "link": "user",
+       "note": ""
+      },
+      {
+       "name": "notes",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Catatan"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      }
+     ],
+     "example_body": {
+      "lead_name": "Andi Pratama",
+      "company_name": "Kedai Kopi Andi"
+     },
+     "response": {
+      "data": {
+       "name": "LEAD-00031",
+       "lead_name": "Andi Pratama",
+       "company_name": "Kedai Kopi Andi",
+       "phone": "+6281234567890",
+       "email": "andi@contoh.id",
+       "city": "Bandung",
+       "source": "whatsapp",
+       "status": "new",
+       "owner": "USR-002",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "converted_customer": "ID-0001",
+       "converted_deal": "ID-0001",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     },
+     "errors": [
+      {
+       "rule": "reach",
+       "level": "error",
+       "message": {
+        "id": "Isi nomor WhatsApp atau email supaya lead bisa dihubungi"
+       },
+       "check": "phone != '' || email != ''",
+       "on": "save"
+      }
+     ]
+    },
+    {
+     "id": "lead-delete",
+     "method": "DELETE",
+     "path": "/api/v1/lead/{name}",
+     "title": {
+      "id": "Hapus lead",
+      "en": "Delete a lead"
+     },
+     "desc": {
+      "id": "Menghapus record. Bisa dikembalikan dalam 30 hari.",
+      "en": "Deletes the record. It can be restored for 30 days."
+     },
+     "roles": [
+      "sales_manager"
+     ],
+     "response": {
+      "deleted": "LEAD-00031",
+      "restore_until": "2026-11-29"
+     }
+    },
+    {
+     "id": "lead-convert",
+     "method": "POST",
+     "path": "/api/v1/lead/{name}/actions/convert",
+     "title": {
+      "id": "Jadikan pelanggan + peluang",
+      "en": "Convert to customer + deal"
+     },
+     "desc": {
+      "id": "Menjalankan aksi “Jadikan pelanggan + peluang” (hook `crm.convert_lead`). Hanya bisa jika `status != 'lost' && converted_deal == ''`.",
+      "en": "Runs the “Convert to customer + deal” action (hook `crm.convert_lead`). Allowed only when `status != 'lost' && converted_deal == ''`."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "response": {
+      "data": {
+       "name": "LEAD-00031",
+       "lead_name": "Andi Pratama",
+       "company_name": "Kedai Kopi Andi",
+       "phone": "+6281234567890",
+       "email": "andi@contoh.id",
+       "city": "Bandung",
+       "source": "whatsapp",
+       "status": "new",
+       "owner": "USR-002",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "converted_customer": "CUST-0063",
+       "converted_deal": "DEAL-00013",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     },
+     "errors": [
+      {
+       "rule": "action_not_allowed",
+       "level": "error",
+       "message": {
+        "id": "Aksi ini tidak bisa dijalankan pada status sekarang",
+        "en": "This action is not allowed in the current state"
+       },
+       "check": "status != 'lost' && converted_deal == ''",
+       "on": "action"
+      }
+     ],
+     "idempotent": true
+    },
+    {
+     "id": "lead-meta",
+     "method": "GET",
+     "path": "/api/v1/meta/lead",
+     "title": {
+      "id": "Metadata model",
+      "en": "Model metadata"
+     },
+     "desc": {
+      "id": "Metadata model ini seperti yang terlihat oleh peran pemanggil: field, opsi, aturan dan aksi yang diizinkan. Dipakai helper Omilo untuk mempelajari app.",
+      "en": "This model's metadata as the caller's role sees it: fields, options, rules and allowed actions. Omilo helpers use it to learn the app."
+     },
+     "roles": [
+      "sales_rep (only where `owner == user.name`)",
+      "sales_manager"
+     ],
+     "response": {
+      "name": "lead",
+      "label": {
+       "id": "Lead",
+       "en": "Lead"
+      },
+      "fields": [
+       {
+        "name": "lead_name",
+        "type": "data",
+        "required": true
+       },
+       {
+        "name": "company_name",
+        "type": "data",
+        "required": false
+       },
+       {
+        "name": "phone",
+        "type": "phone",
+        "required": false
+       },
+       {
+        "name": "email",
+        "type": "data",
+        "required": false
+       },
+       {
+        "…": "…"
+       }
+      ]
+     }
+    }
+   ],
+   "events": [
+    "lead.created",
+    "lead.updated",
+    "lead.status_changed"
+   ]
+  },
+  {
+   "model": "activity",
+   "label": {
+    "id": "Aktivitas",
+    "en": "Activity"
+   },
+   "icon": "calendar",
+   "endpoints": [
+    {
+     "id": "activity-list",
+     "method": "GET",
+     "path": "/api/v1/activity",
+     "title": {
+      "id": "Daftar aktivitas",
+      "en": "List activities"
+     },
+     "desc": {
+      "id": "Mengambil daftar aktivitas yang boleh dilihat pengguna, dengan filter, urutan dan halaman.",
+      "en": "Returns the activities the caller may see, with filters, sorting and paging."
+     },
+     "roles": [],
+     "query": [
+      {
+       "name": "filter",
+       "type": "string (CEL)",
+       "label": {
+        "id": "Filter, mis. `stage == 'proposal'`",
+        "en": "Filter, e.g. `stage == 'proposal'`"
+       }
+      },
+      {
+       "name": "sort",
+       "type": "string",
+       "label": {
+        "id": "Kolom urut, awali `-` untuk turun",
+        "en": "Sort field, prefix `-` for descending"
+       },
+       "default": "due_date"
+      },
+      {
+       "name": "fields",
+       "type": "string",
+       "label": {
+        "id": "Kolom yang diambil, pisahkan dengan koma",
+        "en": "Comma-separated fields to return"
+       },
+       "default": "due_date,activity_type,subject,deal,owner,done"
+      },
+      {
+       "name": "limit",
+       "type": "integer",
+       "label": {
+        "id": "Jumlah per halaman (maks. 100)",
+        "en": "Page size (max 100)"
+       },
+       "default": "20"
+      },
+      {
+       "name": "cursor",
+       "type": "string",
+       "label": {
+        "id": "Kursor dari respons sebelumnya",
+        "en": "Cursor from the previous response"
+       }
+      }
+     ],
+     "response": {
+      "data": [
+       {
+        "name": "ACT-00012",
+        "due_date": "2026-11-02",
+        "activity_type": "whatsapp",
+        "subject": "Kirim penawaran harga biji kopi",
+        "deal": "DEAL-00012",
+        "owner": "USR-002",
+        "done": false
+       }
+      ],
+      "next_cursor": "eyJvIjoyMH0"
+     }
+    },
+    {
+     "id": "activity-get",
+     "method": "GET",
+     "path": "/api/v1/activity/{name}",
+     "title": {
+      "id": "Ambil satu aktivitas",
+      "en": "Get an activity"
+     },
+     "desc": {
+      "id": "Mengambil satu aktivitas lengkap dengan kolom hitungan.",
+      "en": "Returns one activity including computed fields."
+     },
+     "roles": [],
+     "path_params": [
+      {
+       "name": "name",
+       "type": "string",
+       "label": {
+        "id": "Nomor record, mis. ACT-00012",
+        "en": "Record name, e.g. ACT-00012"
+       }
+      }
+     ],
+     "response": {
+      "data": {
+       "name": "ACT-00012",
+       "activity_type": "whatsapp",
+       "subject": "Kirim penawaran harga biji kopi",
+       "deal": "DEAL-00012",
+       "lead": "LEAD-00031",
+       "due_date": "2026-11-02",
+       "done": false,
+       "owner": "USR-002",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     }
+    },
+    {
+     "id": "activity-create",
+     "method": "POST",
+     "path": "/api/v1/activity",
+     "title": {
+      "id": "Buat aktivitas",
+      "en": "Create an activity"
+     },
+     "desc": {
+      "id": "Membuat aktivitas baru. Kolom hitungan diisi oleh engine dan dikembalikan di respons.",
+      "en": "Creates an activity. Computed fields are filled in by the engine and returned."
+     },
+     "roles": [],
+     "body": [
+      {
+       "name": "activity_type",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Jenis"
+       },
+       "default": "'whatsapp'",
+       "values": [
+        "whatsapp",
+        "call",
+        "meeting",
+        "visit",
+        "email"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "subject",
+       "type": "string",
+       "required": true,
+       "label": {
+        "id": "Perihal"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "deal",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Peluang"
+       },
+       "default": null,
+       "values": [],
+       "link": "deal",
+       "note": ""
+      },
+      {
+       "name": "lead",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Lead"
+       },
+       "default": null,
+       "values": [],
+       "link": "lead",
+       "note": ""
+      },
+      {
+       "name": "due_date",
+       "type": "string (YYYY-MM-DD)",
+       "required": false,
+       "label": {
+        "id": "Tanggal"
+       },
+       "default": "today()",
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "done",
+       "type": "boolean",
+       "required": false,
+       "label": {
+        "id": "Selesai"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "owner",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Penanggung jawab"
+       },
+       "default": null,
+       "values": [],
+       "link": "user",
+       "note": ""
+      },
+      {
+       "name": "notes",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Catatan"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      }
+     ],
+     "computed": [],
+     "example_body": {
+      "subject": "Kirim penawaran harga biji kopi",
+      "deal": "DEAL-00012",
+      "lead": "LEAD-00031",
+      "due_date": "2026-11-02",
+      "owner": "USR-002",
+      "notes": "Minta harga grosir untuk 20 kg per bulan."
+     },
+     "response": {
+      "data": {
+       "name": "ACT-00012",
+       "activity_type": "whatsapp",
+       "subject": "Kirim penawaran harga biji kopi",
+       "deal": "DEAL-00012",
+       "lead": "LEAD-00031",
+       "due_date": "2026-11-02",
+       "done": false,
+       "owner": "USR-002",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     },
+     "status": 201,
+     "errors": [
+      {
+       "rule": "linked",
+       "level": "error",
+       "message": {
+        "id": "Hubungkan aktivitas ke peluang atau lead"
+       },
+       "check": "deal != '' || lead != ''",
+       "on": "save"
+      }
+     ],
+     "required": [
+      "subject"
+     ],
+     "idempotent": true
+    },
+    {
+     "id": "activity-update",
+     "method": "PATCH",
+     "path": "/api/v1/activity/{name}",
+     "title": {
+      "id": "Ubah aktivitas",
+      "en": "Update an activity"
+     },
+     "desc": {
+      "id": "Mengubah sebagian kolom. Kolom yang tidak dikirim tidak berubah.",
+      "en": "Changes some fields. Fields you leave out stay as they are."
+     },
+     "roles": [],
+     "body": [
+      {
+       "name": "activity_type",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Jenis"
+       },
+       "default": "'whatsapp'",
+       "values": [
+        "whatsapp",
+        "call",
+        "meeting",
+        "visit",
+        "email"
+       ],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "subject",
+       "type": "string",
+       "required": true,
+       "label": {
+        "id": "Perihal"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "deal",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Peluang"
+       },
+       "default": null,
+       "values": [],
+       "link": "deal",
+       "note": ""
+      },
+      {
+       "name": "lead",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Lead"
+       },
+       "default": null,
+       "values": [],
+       "link": "lead",
+       "note": ""
+      },
+      {
+       "name": "due_date",
+       "type": "string (YYYY-MM-DD)",
+       "required": false,
+       "label": {
+        "id": "Tanggal"
+       },
+       "default": "today()",
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "done",
+       "type": "boolean",
+       "required": false,
+       "label": {
+        "id": "Selesai"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      },
+      {
+       "name": "owner",
+       "type": "string (record name)",
+       "required": false,
+       "label": {
+        "id": "Penanggung jawab"
+       },
+       "default": null,
+       "values": [],
+       "link": "user",
+       "note": ""
+      },
+      {
+       "name": "notes",
+       "type": "string",
+       "required": false,
+       "label": {
+        "id": "Catatan"
+       },
+       "default": null,
+       "values": [],
+       "link": null,
+       "note": ""
+      }
+     ],
+     "example_body": {
+      "subject": "Kirim penawaran harga biji kopi",
+      "deal": "DEAL-00012"
+     },
+     "response": {
+      "data": {
+       "name": "ACT-00012",
+       "activity_type": "whatsapp",
+       "subject": "Kirim penawaran harga biji kopi",
+       "deal": "DEAL-00012",
+       "lead": "LEAD-00031",
+       "due_date": "2026-11-02",
+       "done": false,
+       "owner": "USR-002",
+       "notes": "Minta harga grosir untuk 20 kg per bulan.",
+       "created_at": "2026-10-30T09:12:44+07:00",
+       "modified_at": "2026-10-30T09:12:44+07:00"
+      }
+     },
+     "errors": [
+      {
+       "rule": "linked",
+       "level": "error",
+       "message": {
+        "id": "Hubungkan aktivitas ke peluang atau lead"
+       },
+       "check": "deal != '' || lead != ''",
+       "on": "save"
+      }
+     ]
+    },
+    {
+     "id": "activity-meta",
+     "method": "GET",
+     "path": "/api/v1/meta/activity",
+     "title": {
+      "id": "Metadata model",
+      "en": "Model metadata"
+     },
+     "desc": {
+      "id": "Metadata model ini seperti yang terlihat oleh peran pemanggil: field, opsi, aturan dan aksi yang diizinkan. Dipakai helper Omilo untuk mempelajari app.",
+      "en": "This model's metadata as the caller's role sees it: fields, options, rules and allowed actions. Omilo helpers use it to learn the app."
+     },
+     "roles": [],
+     "response": {
+      "name": "activity",
+      "label": {
+       "id": "Aktivitas",
+       "en": "Activity"
+      },
+      "fields": [
+       {
+        "name": "activity_type",
+        "type": "select",
+        "required": false
+       },
+       {
+        "name": "subject",
+        "type": "data",
+        "required": true
+       },
+       {
+        "name": "deal",
+        "type": "link",
+        "required": false
+       },
+       {
+        "name": "lead",
+        "type": "link",
+        "required": false
+       },
+       {
+        "…": "…"
+       }
+      ]
+     }
+    }
+   ],
+   "events": [
+    "activity.created",
+    "activity.updated"
+   ]
+  }
+ ]
+}

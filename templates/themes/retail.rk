@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka.dev/schema/0.4/theme.json
+name: retail
+label: {id: Ritel, en: Retail}
+extends: rangka/standard
+color: {primary: '#c25100', selected-ink: '#a54800', chart-1: '#e56910'}
+radius: round
+density: comfortable

@@ -1,0 +1,8 @@
+a: yes
+b: 0812345
+c: 08:30
+d: 1_000
+e: "yes"
+f: [no, 'no']
+a: dup
+g: {on: off}

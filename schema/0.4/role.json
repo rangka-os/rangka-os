@@ -1,0 +1,37 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/role.json",
+  "title": "Rangka role",
+  "description": "A role an app defines (apps/<app>/roles/<role>.rk). Model permissions name roles; members get roles in an organisation.",
+  "type": "object",
+  "required": [
+    "name",
+    "label"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "description": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "inherits": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "description": "Roles whose permissions this role also has"
+    },
+    "desk": {
+      "type": "boolean",
+      "description": "Members with this role use the back office (false: portal only)"
+    }
+  }
+}

@@ -1,0 +1,77 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/features.json",
+  "title": "Rangka features",
+  "description": "Layer 4: plans and the entitlements they grant (apps, capabilities, limits). Cloud billing maps plans to prices; self-host can ignore it (everything on).",
+  "type": "object",
+  "required": [],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "plans": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "label"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "label": {
+            "$ref": "model.json#/$defs/label"
+          },
+          "extends": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "apps": {
+            "type": "array",
+            "items": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "capabilities": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "realtime",
+                "queue",
+                "scheduler",
+                "files",
+                "search",
+                "search_vectors",
+                "notify_email",
+                "notify_push",
+                "notify_whatsapp",
+                "sso",
+                "api",
+                "mcp",
+                "ai"
+              ]
+            }
+          },
+          "limits": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "integer",
+              "minimum": 0
+            },
+            "description": "users, outlets, records, storage_mb, ai_credits_month, api_calls_day"
+          },
+          "flags": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "boolean"
+            }
+          }
+        }
+      }
+    }
+  }
+}

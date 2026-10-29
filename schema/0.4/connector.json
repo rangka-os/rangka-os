@@ -1,0 +1,239 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/connector.json",
+  "title": "Rangka connector",
+  "description": "Layer 3: an integration (rangka-connectors/<name>/connector.rk): how to authenticate, the events it triggers and the actions flows can call.",
+  "type": "object",
+  "required": [
+    "name",
+    "label",
+    "version"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
+    },
+    "vendor": {
+      "type": "string"
+    },
+    "docs": {
+      "type": "string"
+    },
+    "auth": {
+      "type": "object",
+      "required": [
+        "type"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "type": {
+          "enum": [
+            "token",
+            "oauth2",
+            "basic",
+            "hmac",
+            "none"
+          ]
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/setting"
+          }
+        }
+      }
+    },
+    "triggers": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "via"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "label": {
+            "$ref": "model.json#/$defs/label"
+          },
+          "via": {
+            "enum": [
+              "webhook",
+              "poll"
+            ]
+          },
+          "every": {
+            "type": "string",
+            "pattern": "^[0-9]+(s|m|h)$"
+          },
+          "verify": {
+            "type": "object"
+          },
+          "for_each": {
+            "type": "string"
+          },
+          "emit": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "request"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "label": {
+            "$ref": "model.json#/$defs/label"
+          },
+          "request": {
+            "type": "object",
+            "required": [
+              "method",
+              "url"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "method": {
+                "enum": [
+                  "GET",
+                  "POST",
+                  "PUT",
+                  "PATCH",
+                  "DELETE"
+                ]
+              },
+              "url": {
+                "type": "string"
+              },
+              "headers": {
+                "type": "object",
+                "additionalProperties": {
+                  "type": "string"
+                }
+              },
+              "body": {},
+              "query": {
+                "type": "object"
+              }
+            }
+          },
+          "input": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/setting"
+            }
+          },
+          "output": {
+            "type": "object"
+          },
+          "retry": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "max": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 25
+              },
+              "backoff": {
+                "enum": [
+                  "fixed",
+                  "exponential"
+                ]
+              },
+              "on": {
+                "type": "array",
+                "items": {
+                  "type": "integer"
+                }
+              }
+            }
+          },
+          "idempotency": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "settings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/setting"
+      }
+    },
+    "limits": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "rate": {
+          "type": "string"
+        },
+        "note": {
+          "$ref": "model.json#/$defs/label"
+        }
+      }
+    }
+  },
+  "$defs": {
+    "setting": {
+      "type": "object",
+      "required": [
+        "name"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "label": {
+          "$ref": "model.json#/$defs/label"
+        },
+        "help": {
+          "$ref": "model.json#/$defs/label"
+        },
+        "type": {
+          "type": "string"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "secret": {
+          "type": "boolean",
+          "description": "Stored with the secrets driver; never returned by the API"
+        },
+        "generate": {
+          "type": "boolean"
+        },
+        "default": {
+          "$ref": "model.json#/$defs/cel"
+        }
+      }
+    }
+  }
+}

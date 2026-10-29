@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json
+model: sales_invoice
+fields:
+  - {name: x_po_number, type: data, label: {id: Nomor PO}}
+  - {name: po_ref, type: data}
+  - {name: x_region, type: link, to: regionn}
+  - {name: x_due2, type: date, default: posting_date + duration(custmer.payment_days)}
+  - {name: x_a, type: int, compute: x_b + 1}
+  - {name: x_b, type: int, compute: x_a + 1}
+  - {name: x_po_number, type: data}
+rules:
+  - name: po_needed
+    on: submit
+    check: x_po_number != '' || notes2 != ''
+    message: {id: Isi nomor PO}
+views:
+  form:
+    add:
+      - {field: x_po_number, after: customer}
+      - {field: x_missing}
+  list:
+    add:
+      - {field: x_po_number, after: nope}

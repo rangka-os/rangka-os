@@ -1,0 +1,236 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/dashboard.json",
+  "title": "Rangka dashboard",
+  "description": "A dashboard file: apps/<app>/dashboards/<name>.rk. Widgets are computed by the engine from records; nothing is stored.",
+  "type": "object",
+  "required": [
+    "name",
+    "label",
+    "widgets"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "description": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "periods": {
+      "type": "array",
+      "items": {
+        "type": "integer",
+        "minimum": 1
+      },
+      "default": [
+        7,
+        30,
+        90
+      ],
+      "description": "Period choices in days."
+    },
+    "default_period": {
+      "type": "integer",
+      "minimum": 1,
+      "default": 30
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "description": "Roles that can open it. Omit for everyone with read access to its models."
+    },
+    "widgets": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/widget"
+      }
+    },
+    "cache": {
+      "type": "string",
+      "pattern": "^[0-9]+(s|m|h)$",
+      "description": "Reuse computed widgets for this long (needs system.cache)."
+    }
+  },
+  "$defs": {
+    "widget": {
+      "type": "object",
+      "required": [
+        "name",
+        "type",
+        "model"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "label": {
+          "$ref": "model.json#/$defs/label"
+        },
+        "description": {
+          "$ref": "model.json#/$defs/label"
+        },
+        "type": {
+          "enum": [
+            "number",
+            "chart",
+            "list"
+          ],
+          "description": "number: one aggregated value; chart: values grouped by a field; list: the first rows of a filtered, sorted list"
+        },
+        "model": {
+          "$ref": "model.json#/$defs/name",
+          "description": "Model to read. Must be in this app or an app it requires (optional apps: guard with app_installed())."
+        },
+        "filter": {
+          "$ref": "model.json#/$defs/cel",
+          "description": "CEL over one record; only matching records count. Same dialect as rules."
+        },
+        "period": {
+          "$ref": "model.json#/$defs/name",
+          "description": "Date field the dashboard period (7/30/90 days) applies to. Omit to ignore the period."
+        },
+        "aggregate": {
+          "enum": [
+            "count",
+            "sum",
+            "avg",
+            "min",
+            "max"
+          ],
+          "default": "count"
+        },
+        "field": {
+          "$ref": "model.json#/$defs/name",
+          "description": "Numeric field to aggregate (needed for sum, avg, min, max)."
+        },
+        "chart": {
+          "enum": [
+            "bar",
+            "line",
+            "donut",
+            "funnel"
+          ],
+          "description": "Chart type (type: chart)."
+        },
+        "group_by": {
+          "$ref": "model.json#/$defs/name",
+          "description": "select, link, check or date field (type: chart)."
+        },
+        "grain": {
+          "enum": [
+            "day",
+            "week",
+            "month"
+          ],
+          "description": "Bucket size when group_by is a date field."
+        },
+        "sort": {
+          "type": "string",
+          "pattern": "^-?[a-z][a-z0-9_]*$",
+          "description": "Field to sort by; prefix with - for descending. For charts, 'value' or '-value' sorts groups by their aggregate."
+        },
+        "limit": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 50
+        },
+        "columns": {
+          "type": "array",
+          "items": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "minItems": 1,
+          "maxItems": 6,
+          "description": "Fields shown in a list widget."
+        },
+        "span": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 12,
+          "default": 3,
+          "description": "Width on the 12-column grid."
+        },
+        "good_when": {
+          "enum": [
+            "up",
+            "down"
+          ],
+          "default": "up",
+          "description": "Which direction of change is good (number widgets)."
+        },
+        "compact": {
+          "type": "boolean",
+          "description": "Show money as Rp 12,5 jt instead of the full amount."
+        },
+        "if": {
+          "$ref": "model.json#/$defs/cel",
+          "description": "Show the widget only when true, e.g. app_installed('sales')."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "chart"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "chart",
+              "group_by"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "list"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "columns"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "aggregate": {
+                "enum": [
+                  "sum",
+                  "avg",
+                  "min",
+                  "max"
+                ]
+              }
+            },
+            "required": [
+              "aggregate"
+            ]
+          },
+          "then": {
+            "required": [
+              "field"
+            ]
+          }
+        }
+      ]
+    }
+  }
+}

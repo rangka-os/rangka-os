@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json
+model: sales_invoice
+fields:
+  - {name: x_po_number, type: data, label: {id: Nomor PO}}
+rules:
+  - name: po_for_wholesale
+    on: save
+    check: customer.x_customer_group != 'grosir' || x_po_number != ''
+    message: {id: Pelanggan grosir perlu nomor PO}

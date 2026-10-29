@@ -1,0 +1,625 @@
+{
+ "crm_overview": [
+  {
+   "name": "pipeline",
+   "value": 51120000,
+   "rupiah": true,
+   "count": 5
+  },
+  {
+   "name": "weighted",
+   "value": 28897000,
+   "rupiah": true,
+   "count": 5
+  },
+  {
+   "name": "won",
+   "value": 8550000,
+   "rupiah": true,
+   "count": 1,
+   "prev": 0,
+   "trend": "up",
+   "delta": "baru"
+  },
+  {
+   "name": "new_leads",
+   "value": 1,
+   "rupiah": false,
+   "count": 1
+  },
+  {
+   "name": "by_stage",
+   "data": [
+    {
+     "key": "prospect",
+     "label": "Prospek",
+     "value": 6720000,
+     "count": 2
+    },
+    {
+     "key": "qualified",
+     "label": "Kualifikasi",
+     "value": 3900000,
+     "count": 1
+    },
+    {
+     "key": "proposal",
+     "label": "Penawaran",
+     "value": 12500000,
+     "count": 1
+    },
+    {
+     "key": "negotiation",
+     "label": "Negosiasi",
+     "value": 28000000,
+     "count": 1
+    },
+    {
+     "key": "won",
+     "label": "Menang",
+     "color": "var(--chart-5)",
+     "value": 8550000,
+     "count": 1
+    }
+   ],
+   "rupiah": true
+  },
+  {
+   "name": "lead_sources",
+   "data": [
+    {
+     "key": "whatsapp",
+     "label": "WhatsApp",
+     "value": 1,
+     "count": 1
+    },
+    {
+     "key": "instagram",
+     "label": "Instagram",
+     "value": 1,
+     "count": 1
+    },
+    {
+     "key": "referral",
+     "label": "Referensi",
+     "value": 1,
+     "count": 1
+    },
+    {
+     "key": "walk_in",
+     "label": "Datang langsung",
+     "value": 1,
+     "count": 1
+    }
+   ],
+   "rupiah": false
+  },
+  {
+   "name": "by_owner",
+   "data": [
+    {
+     "key": "USR-003",
+     "label": "Budi Santoso",
+     "value": 30100000,
+     "count": 2
+    },
+    {
+     "key": "USR-002",
+     "label": "Rina Wulandari",
+     "value": 21020000,
+     "count": 3
+    }
+   ],
+   "rupiah": true
+  },
+  {
+   "name": "activities_due",
+   "rows": [
+    {
+     "name": "ACT-00044",
+     "activity_type": "whatsapp",
+     "subject": "Kirim penawaran harga biji kopi",
+     "deal": "DEAL-00012",
+     "lead": "",
+     "due_date": "2026-10-30",
+     "done": false,
+     "owner": "USR-002",
+     "notes": ""
+    },
+    {
+     "name": "ACT-00043",
+     "activity_type": "meeting",
+     "subject": "Negosiasi harga paket Desember",
+     "deal": "DEAL-00011",
+     "lead": "",
+     "due_date": "2026-11-03",
+     "done": false,
+     "owner": "USR-003",
+     "notes": ""
+    },
+    {
+     "name": "ACT-00041",
+     "activity_type": "visit",
+     "subject": "Kunjungan ke kantin PT Sejahtera",
+     "deal": "",
+     "lead": "LEAD-00029",
+     "due_date": "2026-11-04",
+     "done": false,
+     "owner": "USR-002",
+     "notes": ""
+    }
+   ],
+   "total": 3
+  },
+  {
+   "name": "closing_soon",
+   "rows": [
+    {
+     "name": "DEAL-00011",
+     "deal_name": "Paket catering kantor Desember",
+     "customer": "CUST-0031",
+     "contact_person": "Pak Yudi",
+     "stage": "negotiation",
+     "value": 28000000,
+     "expected_close": "2026-11-10",
+     "owner": "USR-003",
+     "source": "whatsapp",
+     "lost_reason": "",
+     "notes": "",
+     "probability": 75,
+     "weighted_value": 21000000
+    },
+    {
+     "name": "DEAL-00012",
+     "deal_name": "Kopi untuk 3 cabang Maju Jaya",
+     "customer": "CUST-0012",
+     "contact_person": "Ibu Rina",
+     "stage": "proposal",
+     "value": 12500000,
+     "expected_close": "2026-11-20",
+     "owner": "USR-002",
+     "source": "referral",
+     "lost_reason": "",
+     "notes": "",
+     "probability": 50,
+     "weighted_value": 6250000
+    },
+    {
+     "name": "DEAL-00009",
+     "deal_name": "Gelas kertas untuk event",
+     "customer": "CUST-0058",
+     "contact_person": "Bu Sri",
+     "stage": "prospect",
+     "value": 2100000,
+     "expected_close": "2026-11-30",
+     "owner": "USR-003",
+     "source": "walk_in",
+     "lost_reason": "",
+     "notes": "",
+     "probability": 10,
+     "weighted_value": 210000
+    },
+    {
+     "name": "DEAL-00010",
+     "deal_name": "Langganan sirup aren bulanan",
+     "customer": "CUST-0047",
+     "contact_person": "",
+     "stage": "qualified",
+     "value": 3900000,
+     "expected_close": "2026-12-01",
+     "owner": "USR-002",
+     "source": "instagram",
+     "lost_reason": "",
+     "notes": "",
+     "probability": 25,
+     "weighted_value": 975000
+    },
+    {
+     "name": "DEAL-00006",
+     "deal_name": "Susu oat untuk 2 outlet",
+     "customer": "CUST-0031",
+     "contact_person": "Pak Yudi",
+     "stage": "prospect",
+     "value": 4620000,
+     "expected_close": "2026-12-05",
+     "owner": "USR-002",
+     "source": "whatsapp",
+     "lost_reason": "",
+     "notes": "",
+     "probability": 10,
+     "weighted_value": 462000
+    }
+   ],
+   "total": 5
+  }
+ ],
+ "sales_overview": [
+  {
+   "name": "revenue",
+   "value": 35562180,
+   "rupiah": true,
+   "count": 16,
+   "prev": 0,
+   "trend": "up",
+   "delta": "baru"
+  },
+  {
+   "name": "receivable",
+   "value": 11203230,
+   "rupiah": true,
+   "count": 3
+  },
+  {
+   "name": "drafts",
+   "value": 1,
+   "rupiah": false,
+   "count": 1
+  },
+  {
+   "name": "revenue_by_week",
+   "data": [
+    {
+     "key": "2026-08-03",
+     "label": "3 Agu",
+     "value": 921300,
+     "count": 1
+    },
+    {
+     "key": "2026-08-10",
+     "label": "10 Agu",
+     "value": 1177710,
+     "count": 1
+    },
+    {
+     "key": "2026-08-17",
+     "label": "17 Agu",
+     "value": 603840,
+     "count": 1
+    },
+    {
+     "key": "2026-08-24",
+     "label": "24 Agu",
+     "value": 1077810,
+     "count": 1
+    },
+    {
+     "key": "2026-08-31",
+     "label": "31 Agu",
+     "value": 632700,
+     "count": 1
+    },
+    {
+     "key": "2026-09-07",
+     "label": "7 Sep",
+     "value": 2243310,
+     "count": 1
+    },
+    {
+     "key": "2026-09-14",
+     "label": "14 Sep",
+     "value": 3520920,
+     "count": 1
+    },
+    {
+     "key": "2026-09-21",
+     "label": "21 Sep",
+     "value": 2530800,
+     "count": 1
+    },
+    {
+     "key": "2026-09-28",
+     "label": "28 Sep",
+     "value": 2135640,
+     "count": 1
+    },
+    {
+     "key": "2026-10-05",
+     "label": "5 Okt",
+     "value": 3740700,
+     "count": 2
+    },
+    {
+     "key": "2026-10-12",
+     "label": "12 Okt",
+     "value": 4440000,
+     "count": 1
+    },
+    {
+     "key": "2026-10-19",
+     "label": "19 Okt",
+     "value": 11926950,
+     "count": 3
+    },
+    {
+     "key": "2026-10-26",
+     "label": "26 Okt",
+     "value": 610500,
+     "count": 1
+    }
+   ],
+   "rupiah": true
+  },
+  {
+   "name": "top_customers",
+   "data": [
+    {
+     "key": "CUST-0012",
+     "label": "CV Maju Jaya",
+     "value": 17955360,
+     "count": 7
+    },
+    {
+     "key": "CUST-0058",
+     "label": "Warung Bu Sri",
+     "value": 6000660,
+     "count": 3
+    },
+    {
+     "key": "CUST-0031",
+     "label": "Maju Bersama Catering",
+     "value": 5951820,
+     "count": 3
+    },
+    {
+     "key": "CUST-0047",
+     "label": "Toko Sumber Rejeki",
+     "value": 5654340,
+     "count": 3
+    }
+   ],
+   "rupiah": true
+  },
+  {
+   "name": "unpaid",
+   "rows": [
+    {
+     "name": "INV-2026-00044",
+     "docstatus": 1,
+     "customer": "CUST-0031",
+     "outlet": "OUT-02",
+     "posting_date": "2026-09-24",
+     "due_date": "2026-10-24",
+     "paid_amount": 0,
+     "notes": "",
+     "items": [
+      {
+       "item": "BRG-0044",
+       "qty": 8,
+       "uom": "Kg",
+       "rate": 285000,
+       "discount": 0,
+       "amount": 2280000
+      }
+     ],
+     "tax_rate": 12,
+     "subtotal": 2280000,
+     "ppn": 250800,
+     "grand_total": 2530800
+    },
+    {
+     "name": "INV-2026-00046",
+     "docstatus": 1,
+     "customer": "CUST-0047",
+     "outlet": "OUT-01",
+     "posting_date": "2026-10-28",
+     "due_date": "2026-11-04",
+     "paid_amount": 0,
+     "notes": "",
+     "items": [
+      {
+       "item": "BRG-0210",
+       "qty": 10,
+       "uom": "Pak",
+       "rate": 42000,
+       "discount": 0,
+       "amount": 420000
+      },
+      {
+       "item": "BRG-0305",
+       "qty": 2,
+       "uom": "Botol",
+       "rate": 65000,
+       "discount": 0,
+       "amount": 130000
+      }
+     ],
+     "tax_rate": 12,
+     "subtotal": 550000,
+     "ppn": 60500,
+     "grand_total": 610500
+    },
+    {
+     "name": "INV-2026-00043",
+     "docstatus": 1,
+     "customer": "CUST-0012",
+     "outlet": "OUT-01",
+     "posting_date": "2026-10-22",
+     "due_date": "2026-11-05",
+     "paid_amount": 5000000,
+     "notes": "",
+     "items": [
+      {
+       "item": "BRG-0044",
+       "qty": 20,
+       "uom": "Kg",
+       "rate": 285000,
+       "discount": 5,
+       "amount": 5415000
+      },
+      {
+       "item": "BRG-0101",
+       "qty": 48,
+       "uom": "Pcs",
+       "rate": 38500,
+       "discount": 0,
+       "amount": 1848000
+      }
+     ],
+     "tax_rate": 12,
+     "subtotal": 7263000,
+     "ppn": 798930,
+     "grand_total": 8061930
+    }
+   ],
+   "total": 3
+  }
+ ],
+ "invoices": [
+  {
+   "name": "INV-2026-00046",
+   "subtotal": 550000,
+   "ppn": 60500,
+   "grand_total": 610500,
+   "status": "submitted"
+  },
+  {
+   "name": "INV-2026-00045",
+   "subtotal": 462000,
+   "ppn": 50820,
+   "grand_total": 512820,
+   "status": "draft"
+  },
+  {
+   "name": "INV-2026-00044",
+   "subtotal": 2280000,
+   "ppn": 250800,
+   "grand_total": 2530800,
+   "status": "overdue"
+  },
+  {
+   "name": "INV-2026-00043",
+   "subtotal": 7263000,
+   "ppn": 798930,
+   "grand_total": 8061930,
+   "status": "partly"
+  },
+  {
+   "name": "INV-2026-00042",
+   "subtotal": 1214500,
+   "ppn": 133595,
+   "grand_total": 1348095,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00041",
+   "subtotal": 2267500,
+   "ppn": 249425,
+   "grand_total": 2516925,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00040",
+   "subtotal": 4000000,
+   "ppn": 440000,
+   "grand_total": 4440000,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00039",
+   "subtotal": 1140000,
+   "ppn": 125400,
+   "grand_total": 1265400,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00038",
+   "subtotal": 2230000,
+   "ppn": 245300,
+   "grand_total": 2475300,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00037",
+   "subtotal": 1924000,
+   "ppn": 211640,
+   "grand_total": 2135640,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00036",
+   "subtotal": 3172000,
+   "ppn": 348920,
+   "grand_total": 3520920,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00035",
+   "subtotal": 2021000,
+   "ppn": 222310,
+   "grand_total": 2243310,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00034",
+   "subtotal": 570000,
+   "ppn": 62700,
+   "grand_total": 632700,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00033",
+   "subtotal": 971000,
+   "ppn": 106810,
+   "grand_total": 1077810,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00032",
+   "subtotal": 544000,
+   "ppn": 59840,
+   "grand_total": 603840,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00031",
+   "subtotal": 1061000,
+   "ppn": 116710,
+   "grand_total": 1177710,
+   "status": "paid"
+  },
+  {
+   "name": "INV-2026-00030",
+   "subtotal": 830000,
+   "ppn": 91300,
+   "grand_total": 921300,
+   "status": "paid"
+  }
+ ],
+ "deals": [
+  {
+   "name": "DEAL-00012",
+   "probability": 50,
+   "weighted_value": 6250000
+  },
+  {
+   "name": "DEAL-00011",
+   "probability": 75,
+   "weighted_value": 21000000
+  },
+  {
+   "name": "DEAL-00010",
+   "probability": 25,
+   "weighted_value": 975000
+  },
+  {
+   "name": "DEAL-00009",
+   "probability": 10,
+   "weighted_value": 210000
+  },
+  {
+   "name": "DEAL-00008",
+   "probability": 100,
+   "weighted_value": 8550000
+  },
+  {
+   "name": "DEAL-00007",
+   "probability": 0,
+   "weighted_value": 0
+  },
+  {
+   "name": "DEAL-00006",
+   "probability": 10,
+   "weighted_value": 462000
+  }
+ ]
+}

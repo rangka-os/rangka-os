@@ -1,0 +1,6 @@
+.DS_Store
+*.log
+.pgtemp*/
+.pgtemp*
+kernel/bin/
+__pycache__/

@@ -1,0 +1,75 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/app.json",
+  "title": "Rangka app manifest",
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "title"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "title": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "optional": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_]+\\.[a-z_]+$"
+      }
+    },
+    "menu": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "group",
+          "items"
+        ],
+        "properties": {
+          "group": {
+            "$ref": "model.json#/$defs/label"
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "model.json#/$defs/name"
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "dashboards": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "description": "Dashboards in dashboards/*.rk, in menu order. The first is the app's home page."
+    }
+  },
+  "additionalProperties": false
+}

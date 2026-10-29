@@ -1,0 +1,323 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/flow.json",
+  "title": "Rangka flow",
+  "description": "Durable flow: steps run in order on an event or a schedule, through the queue.",
+  "type": "object",
+  "required": [
+    "name",
+    "steps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "on": {
+      "type": "string",
+      "description": "Event: <connector>.<trigger>, <model>.created|updated|submitted|cancelled, or omitted with schedule"
+    },
+    "schedule": {
+      "type": "string",
+      "pattern": "^(@(hourly|daily|weekly|monthly)|([0-9*,/-]+\\s+){4}[0-9*,/-]+)$",
+      "description": "Cron (5 fields) in system.scheduler.timezone"
+    },
+    "steps": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/step"
+      }
+    },
+    "idempotency": {
+      "type": "string"
+    },
+    "queue": {
+      "type": "object"
+    },
+    "if": {
+      "$ref": "model.json#/$defs/cel"
+    }
+  },
+  "$defs": {
+    "step": {
+      "oneOf": [
+        {
+          "type": "object",
+          "title": "find",
+          "description": "",
+          "required": [
+            "find"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "find": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Model to search; the first match"
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "where": {
+              "$ref": "model.json#/$defs/cel"
+            },
+            "as": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Variable that holds the result"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "find_all",
+          "description": "",
+          "required": [
+            "find_all"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "find_all": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Model to search; every match"
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "where": {
+              "$ref": "model.json#/$defs/cel"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "sort": {
+              "type": "string",
+              "pattern": "^-?[a-z_]+$"
+            },
+            "as": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Variable that holds the result"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "create",
+          "description": "",
+          "required": [
+            "create"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "create": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Model of the new record"
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "set": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              },
+              "description": "field → CEL expression"
+            },
+            "as": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Variable that holds the result"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "update",
+          "description": "",
+          "required": [
+            "update",
+            "set"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "update": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Variable holding the record to change"
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "set": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              },
+              "description": "field → CEL expression"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "notify",
+          "description": "",
+          "required": [
+            "notify"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "notify": {
+              "type": "string",
+              "description": "Who: a variable, a field of the records found, a role or an email"
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "channel": {
+              "enum": [
+                "email",
+                "push",
+                "whatsapp",
+                "in_app"
+              ]
+            },
+            "template": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "model.json#/$defs/label"
+                }
+              ]
+            },
+            "to": {
+              "type": "string"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "call",
+          "description": "",
+          "required": [
+            "call"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "call": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*\\.[a-z][a-z0-9_]*$",
+              "description": "<connector>.<action>"
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "with": {
+              "type": "object",
+              "additionalProperties": {
+                "type": [
+                  "string",
+                  "number",
+                  "boolean",
+                  "null"
+                ]
+              }
+            },
+            "as": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Variable that holds the result"
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "if",
+          "required": [
+            "if",
+            "then"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "then": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/step"
+              }
+            },
+            "else": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/step"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
+          "title": "wait",
+          "description": "",
+          "required": [
+            "wait"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "wait": {
+              "oneOf": [
+                {
+                  "type": "string",
+                  "pattern": "^[0-9]+(s|m|h|d)$"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "until"
+                  ],
+                  "additionalProperties": false,
+                  "properties": {
+                    "until": {
+                      "$ref": "model.json#/$defs/cel"
+                    },
+                    "timeout": {
+                      "type": "string",
+                      "pattern": "^[0-9]+(s|m|h|d)$"
+                    }
+                  }
+                }
+              ]
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            }
+          }
+        }
+      ]
+    }
+  }
+}

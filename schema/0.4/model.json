@@ -1,0 +1,651 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/model.json",
+  "title": "Rangka model",
+  "type": "object",
+  "required": [
+    "name",
+    "fields"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "#/$defs/name"
+    },
+    "label": {
+      "$ref": "#/$defs/label"
+    },
+    "icon": {
+      "type": "string"
+    },
+    "is_submittable": {
+      "type": "boolean"
+    },
+    "is_child": {
+      "type": "boolean"
+    },
+    "naming": {
+      "type": "string",
+      "pattern": "^[A-Z0-9-]*(\\{YYYY\\}|\\{YY\\}|\\{MM\\}|[A-Z0-9-])*\\{#{2,8}\\}$",
+      "description": "e.g. INV-{YYYY}-{#####}"
+    },
+    "title_field": {
+      "$ref": "#/$defs/name"
+    },
+    "fields": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "$ref": "#/$defs/field"
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/rule"
+      }
+    },
+    "on_submit": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_]+\\.[a-z_]+$"
+      }
+    },
+    "on_cancel": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_]+\\.[a-z_]+$"
+      }
+    },
+    "actions": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "label",
+          "hook"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/name"
+          },
+          "label": {
+            "$ref": "#/$defs/label"
+          },
+          "icon": {
+            "type": "string"
+          },
+          "hook": {
+            "type": "string",
+            "pattern": "^[a-z_]+\\.[a-z_]+$"
+          },
+          "primary": {
+            "type": "boolean"
+          },
+          "if": {
+            "$ref": "#/$defs/cel"
+          },
+          "queue": {
+            "type": "object",
+            "additionalProperties": false,
+            "description": "Run in the background (needs system.queue).",
+            "properties": {
+              "retries": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 25
+              },
+              "backoff": {
+                "type": "string",
+                "pattern": "^[0-9]+(s|m|h)$"
+              },
+              "timeout": {
+                "type": "string",
+                "pattern": "^[0-9]+(s|m|h)$"
+              }
+            }
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "automations": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "when",
+          "do"
+        ],
+        "properties": {
+          "name": {
+            "$ref": "#/$defs/name"
+          },
+          "when": {
+            "type": "string"
+          },
+          "if": {
+            "$ref": "#/$defs/cel"
+          },
+          "do": {
+            "type": "string"
+          }
+        },
+        "additionalProperties": false
+      }
+    },
+    "permissions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/permission"
+      }
+    },
+    "views": {
+      "type": "object",
+      "properties": {
+        "default": {
+          "enum": [
+            "list",
+            "kanban",
+            "calendar",
+            "report"
+          ]
+        },
+        "list": {
+          "type": "object",
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/listcol"
+              },
+              "minItems": 1
+            },
+            "filters": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              }
+            },
+            "sort": {
+              "type": "string",
+              "pattern": "^-?[a-z_]+$"
+            },
+            "group_by": {
+              "$ref": "#/$defs/name"
+            }
+          },
+          "additionalProperties": false
+        },
+        "kanban": {
+          "type": "object",
+          "required": [
+            "group_by"
+          ],
+          "properties": {
+            "group_by": {
+              "$ref": "#/$defs/name"
+            },
+            "title": {
+              "$ref": "#/$defs/name"
+            },
+            "card": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/name"
+              },
+              "maxItems": 5
+            },
+            "sum": {
+              "$ref": "#/$defs/name"
+            }
+          },
+          "additionalProperties": false
+        },
+        "form": {
+          "type": "object",
+          "required": [
+            "layout"
+          ],
+          "properties": {
+            "layout": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/section"
+              }
+            }
+          },
+          "additionalProperties": false
+        }
+      },
+      "additionalProperties": false
+    },
+    "realtime": {
+      "type": "boolean",
+      "default": false,
+      "description": "Push record changes to open screens (needs system.realtime)."
+    },
+    "cache": {
+      "type": "string",
+      "pattern": "^[0-9]+(s|m|h)$",
+      "description": "Cache list reads for this long (needs system.cache)."
+    }
+  },
+  "additionalProperties": false,
+  "if": {
+    "properties": {
+      "is_child": {
+        "const": true
+      }
+    },
+    "required": [
+      "is_child"
+    ]
+  },
+  "then": {
+    "not": {
+      "anyOf": [
+        {
+          "required": [
+            "is_submittable"
+          ]
+        },
+        {
+          "required": [
+            "naming"
+          ]
+        }
+      ]
+    }
+  },
+  "$defs": {
+    "label": {
+      "type": "object",
+      "description": "A label in Bahasa Indonesia (required) and optionally English.",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 140
+        },
+        "en": {
+          "type": "string",
+          "maxLength": 140
+        }
+      },
+      "additionalProperties": false
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]{0,62}$",
+      "description": "snake_case, never renamed once released"
+    },
+    "cel": {
+      "type": "string",
+      "minLength": 1,
+      "description": "A CEL expression (plus Rangka helpers)"
+    },
+    "option": {
+      "type": "object",
+      "required": [
+        "value",
+        "label"
+      ],
+      "properties": {
+        "value": {
+          "type": "string",
+          "pattern": "^[a-z0-9_]+$"
+        },
+        "label": {
+          "$ref": "#/$defs/label"
+        },
+        "tone": {
+          "enum": [
+            "neutral",
+            "info",
+            "ok",
+            "warn",
+            "bad",
+            "muted"
+          ]
+        },
+        "probability": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100
+        },
+        "closed": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "field": {
+      "type": "object",
+      "required": [
+        "name",
+        "type"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "type": {
+          "enum": [
+            "data",
+            "text",
+            "int",
+            "float",
+            "currency",
+            "percent",
+            "check",
+            "select",
+            "multiselect",
+            "link",
+            "dynamic_link",
+            "table",
+            "date",
+            "daterange",
+            "datetime",
+            "duration",
+            "phone",
+            "npwp",
+            "attach",
+            "image",
+            "rating",
+            "color",
+            "json",
+            "signature"
+          ]
+        },
+        "label": {
+          "$ref": "#/$defs/label"
+        },
+        "required": {
+          "type": "boolean"
+        },
+        "default": {
+          "$ref": "#/$defs/cel"
+        },
+        "compute": {
+          "$ref": "#/$defs/cel"
+        },
+        "depends_on": {
+          "$ref": "#/$defs/cel"
+        },
+        "read_only": {
+          "type": "boolean"
+        },
+        "hidden": {
+          "type": "boolean"
+        },
+        "in_list": {
+          "type": "boolean"
+        },
+        "in_filter": {
+          "type": "boolean"
+        },
+        "unique": {
+          "type": "boolean"
+        },
+        "index": {
+          "type": "boolean"
+        },
+        "help": {
+          "$ref": "#/$defs/label"
+        },
+        "to": {
+          "$ref": "#/$defs/name"
+        },
+        "of": {
+          "$ref": "#/$defs/name"
+        },
+        "peek": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          },
+          "maxItems": 6
+        },
+        "options": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/option"
+          },
+          "minItems": 1
+        },
+        "chip": {
+          "type": "boolean"
+        },
+        "relative_to": {
+          "$ref": "#/$defs/name"
+        },
+        "min_rows": {
+          "type": "integer",
+          "minimum": 0
+        },
+        "read_only_for": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "hidden_for": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "money": {
+          "type": "boolean",
+          "description": "Money field (currency fields are money by default). Changes are high risk."
+        },
+        "stock": {
+          "type": "boolean",
+          "description": "Quantity that moves stock. Changes are high risk."
+        }
+      },
+      "additionalProperties": false,
+      "allOf": [
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "link"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "to"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "table"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "of"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "enum": [
+                  "select",
+                  "multiselect"
+                ]
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "options"
+            ]
+          }
+        },
+        {
+          "if": {
+            "required": [
+              "compute"
+            ]
+          },
+          "then": {
+            "not": {
+              "required": [
+                "default"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "rule": {
+      "type": "object",
+      "required": [
+        "name",
+        "on",
+        "check",
+        "message"
+      ],
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/name"
+        },
+        "on": {
+          "enum": [
+            "save",
+            "submit",
+            "cancel"
+          ]
+        },
+        "level": {
+          "enum": [
+            "error",
+            "warn",
+            "info"
+          ]
+        },
+        "check": {
+          "$ref": "#/$defs/cel"
+        },
+        "message": {
+          "$ref": "#/$defs/label"
+        }
+      },
+      "additionalProperties": false
+    },
+    "permission": {
+      "type": "object",
+      "required": [
+        "role"
+      ],
+      "properties": {
+        "role": {
+          "$ref": "#/$defs/name"
+        },
+        "if": {
+          "$ref": "#/$defs/cel"
+        },
+        "read": {
+          "type": "boolean"
+        },
+        "create": {
+          "type": "boolean"
+        },
+        "write": {
+          "type": "boolean"
+        },
+        "delete": {
+          "type": "boolean"
+        },
+        "submit": {
+          "type": "boolean"
+        },
+        "cancel": {
+          "type": "boolean"
+        },
+        "amend": {
+          "type": "boolean"
+        },
+        "export": {
+          "type": "boolean"
+        },
+        "import": {
+          "type": "boolean"
+        },
+        "print": {
+          "type": "boolean"
+        },
+        "customize": {
+          "type": "boolean"
+        }
+      },
+      "additionalProperties": false
+    },
+    "section": {
+      "type": "object",
+      "required": [
+        "section"
+      ],
+      "properties": {
+        "section": {
+          "$ref": "#/$defs/label"
+        },
+        "fields": {
+          "type": "array",
+          "items": {
+            "$ref": "#/$defs/name"
+          }
+        },
+        "columns": {
+          "type": "array",
+          "maxItems": 2,
+          "items": {
+            "type": "array",
+            "items": {
+              "$ref": "#/$defs/name"
+            }
+          }
+        },
+        "tab": {
+          "$ref": "#/$defs/label"
+        }
+      },
+      "additionalProperties": false,
+      "oneOf": [
+        {
+          "required": [
+            "fields"
+          ]
+        },
+        {
+          "required": [
+            "columns"
+          ]
+        }
+      ]
+    },
+    "listcol": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    }
+  }
+}

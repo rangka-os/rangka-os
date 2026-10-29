@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka.dev/schema/0.4/flow.json
+name: bad_flows
+on: deal.archived
+steps:
+  - {find: deals, where: stage == 'won', as: won}
+  - create: activity
+    set:
+      subject: "'Ucapan terima kasih'"
+      deal_ref: won.name
+  - if: size(won) > 0
+    then:
+      - {find_all: leadz, where: "status == 'new'", as: fresh}
+      - {call: whatsapp_business.send_textt, with: {to: "'+62'"}}
+    else:
+      - {notify: owner, channel: sms}
+  - {wait: 10m}
+  - {update: won, set: {stage: "'won'"}, where: "(x"}

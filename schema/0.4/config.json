@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/config.json",
+  "title": "Rangka organisation config",
+  "description": "Layer 4: defaults for an organisation (company). Organisations and members themselves are data in the database, managed in Console; this file seeds defaults and is what Rangka AI edits through change sets.",
+  "type": "object",
+  "required": [],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "locale": {
+      "type": "string",
+      "default": "id-ID"
+    },
+    "currency": {
+      "enum": [
+        "IDR"
+      ],
+      "default": "IDR"
+    },
+    "timezone": {
+      "type": "string",
+      "default": "Asia/Jakarta"
+    },
+    "fiscal_year_start": {
+      "type": "string",
+      "pattern": "^[0-1][0-9]-[0-3][0-9]$",
+      "default": "01-01"
+    },
+    "tax": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "ppn_rate": {
+          "type": "number",
+          "minimum": 0,
+          "maximum": 100,
+          "default": 12
+        },
+        "dpp_ratio": {
+          "type": "string",
+          "default": "11/12"
+        },
+        "pkp": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "numbering": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "Override naming per model, e.g. sales_invoice: 'INV-{YYYY}-{#####}'"
+    },
+    "plan": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "theme": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "layout": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "sso": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "domains": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "format": "hostname"
+          }
+        },
+        "upstream": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "required": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "ai": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "auto_apply": {
+          "enum": [
+            "never",
+            "low_risk"
+          ],
+          "default": "never",
+          "description": "low_risk lets Rangka AI apply layer-6 changes (theme, layout, labels) without approval"
+        },
+        "approvers": {
+          "type": "array",
+          "items": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "description": "Roles that can approve change sets"
+        }
+      }
+    },
+    "apps": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "uniqueItems": true,
+      "description": "Installed apps, in menu order. Must be allowed by the plan."
+    }
+  }
+}

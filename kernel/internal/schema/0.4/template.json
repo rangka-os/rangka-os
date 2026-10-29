@@ -1,0 +1,121 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/template.json",
+  "title": "Rangka template",
+  "description": "A starting point for a new installation: the apps to install, connectors, roles, fixtures and onboarding questions.",
+  "type": "object",
+  "required": [
+    "name",
+    "label",
+    "apps"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "version": {
+      "type": "string"
+    },
+    "summary": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "apps": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "app → version range"
+    },
+    "recommends": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "connectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "flow": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      }
+    },
+    "home": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "view": {
+          "enum": [
+            "list",
+            "kanban",
+            "calendar",
+            "report"
+          ]
+        },
+        "dashboard": {
+          "$ref": "model.json#/$defs/name"
+        }
+      }
+    },
+    "onboarding": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "ask",
+          "sets"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ask": {
+            "$ref": "model.json#/$defs/label"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sets": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

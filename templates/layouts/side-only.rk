@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=https://rangka.dev/schema/0.4/layout.json
+name: side_only
+label: {id: side-only}
+shell: side-only

@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/theme.json",
+  "title": "Rangka theme",
+  "description": "Layer 6: colours, type and density for an installation or one organisation. Starts from a template (extends) and overrides tokens. Light and dark are always both produced; overriding one colour derives its dark pair unless given.",
+  "type": "object",
+  "required": [
+    "name"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "extends": {
+      "type": "string",
+      "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+$",
+      "description": "Template, e.g. rangka/standard, rangka/retail, rangka/clinic",
+      "default": "rangka/standard"
+    },
+    "mode": {
+      "enum": [
+        "light",
+        "dark",
+        "system"
+      ],
+      "default": "system"
+    },
+    "color": {
+      "type": "object",
+      "description": "Token overrides by token name (primary, selected, brand, chart-1…). A string sets light and derives dark; an object sets both.",
+      "additionalProperties": {
+        "oneOf": [
+          {
+            "$ref": "#/$defs/hex"
+          },
+          {
+            "type": "object",
+            "required": [
+              "light"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "light": {
+                "$ref": "#/$defs/hex"
+              },
+              "dark": {
+                "$ref": "#/$defs/hex"
+              }
+            }
+          }
+        ]
+      },
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9-]*$"
+      }
+    },
+    "font": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "sans": {
+          "type": "string"
+        },
+        "display": {
+          "type": "string"
+        },
+        "mono": {
+          "type": "string"
+        }
+      }
+    },
+    "radius": {
+      "enum": [
+        "sharp",
+        "standard",
+        "round"
+      ],
+      "default": "standard"
+    },
+    "density": {
+      "enum": [
+        "compact",
+        "standard",
+        "comfortable"
+      ],
+      "default": "standard"
+    },
+    "logo": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "light": {
+          "type": "string"
+        },
+        "dark": {
+          "type": "string"
+        },
+        "mark": {
+          "type": "string"
+        }
+      }
+    },
+    "contrast_check": {
+      "type": "boolean",
+      "default": true,
+      "description": "Refuse overrides that drop text below 4.5:1 or controls below 3:1"
+    }
+  },
+  "$defs": {
+    "hex": {
+      "type": "string",
+      "pattern": "^#[0-9a-fA-F]{6}$"
+    }
+  }
+}

@@ -1,0 +1,96 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka.dev/schema/0.4/overlay.json",
+  "title": "Rangka model overlay",
+  "description": "Company layer (layer 4): fields, rules and view tweaks an organisation adds to an app model, in <site>/custom/<model>.rk. The kernel merges them onto the app model at load; app upgrades never touch them.",
+  "type": "object",
+  "required": [
+    "model"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "model": {
+      "$ref": "model.json#/$defs/name",
+      "description": "The app model this overlay extends; must equal the file name"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "fields": {
+      "type": "array",
+      "items": {
+        "allOf": [
+          {
+            "$ref": "model.json#/$defs/field"
+          },
+          {
+            "properties": {
+              "name": {
+                "type": "string",
+                "pattern": "^x_[a-z0-9_]{1,60}$",
+                "description": "Company fields start with x_"
+              }
+            }
+          }
+        ]
+      }
+    },
+    "rules": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/rule"
+      }
+    },
+    "views": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "form": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "add": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/add"
+              }
+            }
+          }
+        },
+        "list": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "add": {
+              "type": "array",
+              "items": {
+                "$ref": "#/$defs/add"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "$defs": {
+    "add": {
+      "type": "object",
+      "required": [
+        "field"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "after": {
+          "$ref": "model.json#/$defs/name",
+          "description": "Place after this field or column; at the end when omitted"
+        }
+      }
+    }
+  }
+}

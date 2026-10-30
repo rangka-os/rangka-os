@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/theme.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/theme.json",
   "title": "Rangka theme",
   "description": "Layer 6: colours, type and density for an installation or one organisation. Starts from a template (extends) and overrides tokens. Light and dark are always both produced; overriding one colour derives its dark pair unless given.",
   "type": "object",

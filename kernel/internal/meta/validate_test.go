@@ -87,7 +87,7 @@ func TestOverlayMerge(t *testing.T) {
 	dir := t.TempDir()
 	exec.Command("cp", "-r", siteDir, dir+"/site").Run()
 	os.MkdirAll(dir+"/site/custom", 0o755)
-	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json
+	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: sales_invoice
 fields:
   - {name: x_po_number, type: data, label: {id: Nomor PO}}

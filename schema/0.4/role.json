@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/role.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/role.json",
   "title": "Rangka role",
   "description": "A role an app defines (apps/<app>/roles/<role>.rk). Model permissions name roles; members get roles in an organisation.",
   "type": "object",

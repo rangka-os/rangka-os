@@ -21,7 +21,7 @@ from referencing import Registry, Resource
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.4")
-BASE = "https://rangka.dev/schema/0.4/"
+BASE = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
 FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
 GLOBALS = {"user", "true", "false", "null", "event"}

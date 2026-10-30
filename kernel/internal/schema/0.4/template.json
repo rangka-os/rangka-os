@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/template.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/template.json",
   "title": "Rangka template",
   "description": "A starting point for a new installation: the apps to install, connectors, roles, fixtures and onboarding questions.",
   "type": "object",

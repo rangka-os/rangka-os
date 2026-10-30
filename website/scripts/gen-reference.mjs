@@ -84,7 +84,7 @@ const where = {
 const workspace = join(root, '..')
 const index = []
 for (const [kind, s] of Object.entries(schemas).sort()) {
-  const lines = [`# ${kind}.rk`, '', esc(s.description || s.title || ''), '', `**Lives in** ${code(where[kind] || '')} · **Schema** [${kind}.json](https://github.com/rangka-os/rangka-os/blob/main/schema/0.4/${kind}.json) · first line: ${code(`# yaml-language-server: $schema=https://rangka.dev/schema/0.4/${kind}.json`)}`, '']
+  const lines = [`# ${kind}.rk`, '', esc(s.description || s.title || ''), '', `**Lives in** ${code(where[kind] || '')} · **Schema** [${kind}.json](https://rangka-os.github.io/rangka-os/schema/0.4/${kind}.json) ([source](https://github.com/rangka-os/rangka-os/blob/main/schema/0.4/${kind}.json)) · first line: ${code(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/${kind}.json`)}`, '']
   lines.push('## Properties', '', '| Property | Type | Meaning |', '| --- | --- | --- |', ...rows(s, s, '', 0, []), '')
   for (const [dn, d] of Object.entries(s.$defs || {})) {
     if (!d.properties || ['label'].includes(dn)) continue
@@ -115,4 +115,8 @@ writeFileSync(join(here, '..', 'reference', 'validator-codes.md'), vlines.join('
 // generated CRM API reference page
 const site = join(root, 'docs', 'site')
 if (existsSync(site)) cpSync(site, join(here, '..', 'public', 'api', 'crm'), { recursive: true })
+
+// Publish the JSON Schemas with the site, so the first line of every .rk file
+// (# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/<kind>.json) resolves.
+cpSync(schemaDir, join(here, '..', 'public', 'schema', '0.4'), { recursive: true })
 console.log(`reference: ${Object.keys(schemas).length} schemas, ${codes.size} validator codes`)

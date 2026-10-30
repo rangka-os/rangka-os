@@ -25,7 +25,7 @@ import (
 var embedded embed.FS
 
 // Base is the URL prefix of the published schemas.
-const Base = "https://rangka.dev/schema/0.4/"
+const Base = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 
 // OMap is a JSON object that keeps its key order (keyword order matters for error order).
 type OMap struct {

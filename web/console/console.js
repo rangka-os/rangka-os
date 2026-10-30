@@ -698,7 +698,7 @@
     useEffect(function () { if (!path && options.length) setPath((options.filter(function (f) { return /^themes\//.test(f.path); })[0] || options[0]).path); }, [options.length]);
     useEffect(function () {
       if (!path) return;
-      if (cur.create) { var t = "# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json\nmodel: " + cur.model + "\nfields:\n  - name: x_\n    type: data\n    label: {id: }\n"; orig.current = ""; setText(t); return; }
+      if (cur.create) { var t = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json\nmodel: " + cur.model + "\nfields:\n  - name: x_\n    type: data\n    label: {id: }\n"; orig.current = ""; setText(t); return; }
       api.file(path).then(function (f) { orig.current = f.text; setText(f.text); }, function (e) { setErr(e.message); });
     }, [path]);
     function submit() {

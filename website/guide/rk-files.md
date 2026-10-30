@@ -4,7 +4,7 @@ Every piece of Rangka metadata is a `.rk` file: YAML with strict rules, so a fil
 kernel, the Python tools, the browser and an AI agent.
 
 ```yaml
-# yaml-language-server: $schema=https://rangka.dev/schema/0.4/model.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
 name: lead
 label: {id: Lead, en: Lead}
 fields:

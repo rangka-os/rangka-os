@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/changeset.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/changeset.json",
   "title": "Rangka change set",
   "description": "A proposed change to metadata: the only way Rangka AI (and the Console) changes a running installation. Validated, previewed on a copy, approved by a person, applied as a reversible migration, recorded in the audit log.",
   "type": "object",

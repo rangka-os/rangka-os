@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/features.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/features.json",
   "title": "Rangka features",
   "description": "Layer 4: plans and the entitlements they grant (apps, capabilities, limits). Cloud billing maps plans to prices; self-host can ignore it (everything on).",
   "type": "object",

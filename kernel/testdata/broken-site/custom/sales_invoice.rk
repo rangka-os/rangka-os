@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: sales_invoice
 fields:
   - {name: x_po_number, type: data, label: {id: Nomor PO}}

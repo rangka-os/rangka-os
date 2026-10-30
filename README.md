@@ -41,7 +41,7 @@ driver serves them. By default everything runs on one Postgres and one binary.
 A small model:
 
 ```yaml
-# yaml-language-server: $schema=https://rangka.dev/schema/0.4/model.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
 name: deal
 label: {id: Peluang, en: Deal}
 realtime: true

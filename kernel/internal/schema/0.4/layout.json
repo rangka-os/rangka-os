@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/layout.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/layout.json",
   "title": "Rangka layout",
   "description": "Layer 6: the app shell and pages built from UI blocks. Templates: top-nav (Atlassian style), side-only, pos (full-screen counter), portal (customers).",
   "type": "object",

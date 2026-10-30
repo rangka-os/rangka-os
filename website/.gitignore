@@ -5,3 +5,4 @@ reference/schema/*.md
 !reference/schema/index.md
 public/api/
 reference/validator-codes.md
+public/schema/

@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://rangka.dev/schema/0.4/theme.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/theme.json
 # The default theme: Rangka Ink actions, Bata selection and links, warm stone neutrals. Token values live in web/design-system/tokens.json.
 name: standard
 label: {id: Standar, en: Standard}

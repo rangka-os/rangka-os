@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/config.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/config.json",
   "title": "Rangka organisation config",
   "description": "Layer 4: defaults for an organisation (company). Organisations and members themselves are data in the database, managed in Console; this file seeds defaults and is what Rangka AI edits through change sets.",
   "type": "object",

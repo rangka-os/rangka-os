@@ -6,7 +6,7 @@ Build a tiny **service tickets** app on top of `core`, in four files.
 
 ```yaml
 # apps/service/app.rk
-# yaml-language-server: $schema=https://rangka.dev/schema/0.4/app.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
 name: service
 version: 0.1.0
 title: {id: Servis, en: Service}
@@ -21,7 +21,7 @@ menu:
 
 ```yaml
 # apps/service/models/ticket.rk
-# yaml-language-server: $schema=https://rangka.dev/schema/0.4/model.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
 name: ticket
 label: {id: Tiket servis, en: Service ticket}
 naming: TKT-{YYYY}-{####}
@@ -56,7 +56,7 @@ views:
 
 ```yaml
 # apps/service/dashboards/service_overview.rk
-# yaml-language-server: $schema=https://rangka.dev/schema/0.4/dashboard.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/dashboard.json
 name: service_overview
 label: {id: Ringkasan servis}
 widgets:

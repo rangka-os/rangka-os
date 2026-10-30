@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/system.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/system.json",
   "title": "Rangka system",
   "description": "Layer 2: which backend capabilities are on and which driver serves each. One file per installation: system.rk. App files only say what they need (realtime: true, schedule:, queue:, cache:); this file decides how.",
   "type": "object",

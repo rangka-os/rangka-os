@@ -17,7 +17,7 @@ import (
 func addRegion() map[string]any {
 	return map[string]any{"title": "Tambah wilayah di peluang", "reason": "Tim ingin melihat pipeline per wilayah",
 		"author": map[string]any{"kind": "ai", "id": "rangka-ai", "model": "claude"},
-		"ops": []any{map[string]any{"op": "create", "path": "custom/deal.rk", "content": `# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json
+		"ops": []any{map[string]any{"op": "create", "path": "custom/deal.rk", "content": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: deal
 fields:
   - {name: x_region, type: data, label: {id: Wilayah}, in_list: true}
@@ -142,7 +142,7 @@ func TestChangeSets(t *testing.T) {
 		t.Fatalf("system risk: %v %v", sys["risk"], sys["layers"])
 	}
 	money := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Diskon faktur", "ops": []any{map[string]any{"op": "create", "path": "custom/sales_invoice.rk",
-		"content": "# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json\nmodel: sales_invoice\nfields:\n  - {name: x_discount, type: currency}\n"}}}).JSON
+		"content": "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json\nmodel: sales_invoice\nfields:\n  - {name: x_discount, type: currency}\n"}}}).JSON
 	if money["risk"] != "high" {
 		t.Fatalf("money field risk: %v", money["risk"])
 	}
@@ -167,7 +167,7 @@ func TestChangeSets(t *testing.T) {
 	}
 	// an invalid change: a link to a model that does not exist
 	bad := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Overlay rusak", "ops": []any{map[string]any{"op": "create", "path": "custom/lead.rk",
-		"content": "# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json\nmodel: lead\nfields:\n  - {name: x_place, type: link, to: placee}\n"}}}).JSON
+		"content": "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json\nmodel: lead\nfields:\n  - {name: x_place, type: link, to: placee}\n"}}}).JSON
 	bv := e.must(200, "POST", "/api/v1/changesets/"+bad["id"].(string)+"/validate", nil).JSON
 	if bv["status"] != "invalid" || get(bv, "validation", "errors", 0, "code") != "unknown_model" || get(bv, "validation", "errors", 0, "file") != "custom/lead.rk" {
 		t.Fatalf("invalid: %v", bv["validation"])

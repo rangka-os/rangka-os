@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/flow.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/flow.json",
   "title": "Rangka flow",
   "description": "Durable flow: steps run in order on an event or a schedule, through the queue.",
   "type": "object",

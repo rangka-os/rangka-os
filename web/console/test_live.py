@@ -110,7 +110,7 @@ try:
         print("live meta:", len(meta.get("flows", {})), "flows,", len(meta.get("connectors", {})), "connectors, installed", meta.get("installed"))
         if not meta.get("flows"):
             fail("/meta has no flows")
-        overlay = ("# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json\nmodel: sales_invoice\nfields:\n"
+        overlay = ("# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json\nmodel: sales_invoice\nfields:\n"
                    "  - name: x_po_number\n    type: data\n    label: {id: Nomor PO pelanggan}\n    in_list: true\nviews:\n  form:\n    add:\n      - {field: x_po_number, after: outlet}\n")
         cs = page.evaluate("""(c) => RangkaConsole.api.proposeChangeset({title: 'Tambah nomor PO di faktur (uji)', reason: 'test_live.py', ops: [{op: 'create', path: 'custom/sales_invoice.rk', content: c}]})""", overlay)
         print("proposed", cs["id"], cs["risk"], cs["layers"])

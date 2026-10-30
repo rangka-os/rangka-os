@@ -19,7 +19,7 @@ func TestDumpRoundTrip(t *testing.T) {
 		if err != nil {
 			return nil
 		}
-		out := Dump(doc.Data, doc.Root, "https://rangka.dev/schema/0.4/x.json")
+		out := Dump(doc.Data, doc.Root, "https://rangka-os.github.io/rangka-os/schema/0.4/x.json")
 		back, perr := LoadBytes(p, []byte(out))
 		if perr != nil {
 			t.Errorf("%s: dumped text does not parse: %v\n%s", p, perr, out)

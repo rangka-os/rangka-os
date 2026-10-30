@@ -38,7 +38,7 @@ sys.path.insert(0, os.path.join(OS_DIR, "tools"))
 import rkfile  # noqa: E402
 import rangka_validate  # noqa: E402  (also the source of the decision-12 theme derivation)
 
-SCHEMA = "https://rangka.dev/schema/0.4/{}.json"
+SCHEMA = "https://rangka-os.github.io/rangka-os/schema/0.4/{}.json"
 TZ = dt.timezone(dt.timedelta(hours=7))
 NOW = dt.datetime(2026, 10, 30, 9, 12, 0, tzinfo=TZ)  # the demo backend rebases every timestamp onto the real clock
 rnd = random.Random(7)
@@ -139,7 +139,7 @@ for stem, p in rkfile.listdir(FIX_DIR):
     fixtures.update(rkfile.load(p)[0])
 
 # the simulated, already-applied overlay (see module docstring)
-IG_OVERLAY = """# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json
+IG_OVERLAY = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: customer
 label: {id: Tambahan Kopi Senja}
 fields:
@@ -520,7 +520,7 @@ CS.append({
 })
 
 # 1 · AI proposes a PO number on invoices as an overlay (decision 2). Proposed; the demo walks it through.
-PO_OVERLAY = """# yaml-language-server: $schema=https://rangka.dev/schema/0.4/overlay.json
+PO_OVERLAY = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: sales_invoice
 label: {id: Tambahan Kopi Senja}
 fields:

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/connector.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/connector.json",
   "title": "Rangka connector",
   "description": "Layer 3: an integration (rangka-connectors/<name>/connector.rk): how to authenticate, the events it triggers and the actions flows can call.",
   "type": "object",

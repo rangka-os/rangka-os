@@ -22,7 +22,7 @@ Rangka AI may write layers 4–6 through change sets only. Layer 2 changes, secr
 
 Strict YAML (see `rangka-os/tools/rkfile.py` docstring): YAML 1.2 core types; refuse unquoted yes/no/on/off/y/n,
 leading-zero numbers, `1_000`, `08:30`; refuse duplicate keys, tabs, anchors/aliases, merge keys. `${ENV}` must be
-quoted inside flow mappings (`url: '${DATABASE_URL}'`). First line `# yaml-language-server: $schema=https://rangka.dev/schema/0.4/<kind>.json`
+quoted inside flow mappings (`url: '${DATABASE_URL}'`). First line `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/<kind>.json`
 names the kind. Kinds: app, model, dashboard, flow, system, theme, layout, features, config, changeset, (connector, role,
 template, fixtures: no schema yet).
 

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/overlay.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json",
   "title": "Rangka model overlay",
   "description": "Company layer (layer 4): fields, rules and view tweaks an organisation adds to an app model, in <site>/custom/<model>.rk. The kernel merges them onto the app model at load; app upgrades never touch them.",
   "type": "object",

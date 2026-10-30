@@ -602,7 +602,7 @@ func mustJSON(v any) []byte { b, _ := json.Marshal(v); return b }
 
 func TestFlowSteps(t *testing.T) {
 	e := newEnv(t, false, func(apps, site string) {
-		os.WriteFile(filepath.Join(apps, "crm", "flows", "steps_demo.rk"), []byte(`# yaml-language-server: $schema=https://rangka.dev/schema/0.4/flow.json
+		os.WriteFile(filepath.Join(apps, "crm", "flows", "steps_demo.rk"), []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
 name: steps_demo
 on: whatsapp_business.message_received
 steps:

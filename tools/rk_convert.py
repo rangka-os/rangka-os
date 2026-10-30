@@ -6,7 +6,7 @@ import json, os, sys
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rkfile
 
-BASE = "https://rangka.dev/schema/0.4/"
+BASE = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 root, keep = sys.argv[1], "--keep" in sys.argv
 n = 0
 for top in ("apps", "connectors", "templates", "fixtures"):

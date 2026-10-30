@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka.dev/schema/0.4/dashboard.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/dashboard.json",
   "title": "Rangka dashboard",
   "description": "A dashboard file: apps/<app>/dashboards/<name>.rk. Widgets are computed by the engine from records; nothing is stored.",
   "type": "object",

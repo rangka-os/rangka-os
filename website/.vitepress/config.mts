@@ -15,14 +15,17 @@ export default defineConfig({
   ignoreDeadLinks: 'localhostLinks',
   lastUpdated: true,
   head: [
-    ['link', { rel: 'icon', href: `${base}raka.svg` }],
-    ['meta', { name: 'theme-color', content: '#0c66e4' }],
+    ['link', { rel: 'icon', href: `${base}favicon.ico`, sizes: '48x48' }],
+    ['link', { rel: 'icon', href: `${base}favicon.svg`, type: 'image/svg+xml' }],
+    ['link', { rel: 'apple-touch-icon', href: `${base}apple-touch-icon.png` }],
+    ['link', { rel: 'manifest', href: `${base}site.webmanifest` }],
+    ['meta', { name: 'theme-color', content: '#B4432A' }],
     ['meta', { property: 'og:title', content: 'Rangka OS' }],
     ['meta', { property: 'og:description', content: 'Fondasi bisnismu, dibangun bersama AI. Open-source business apps as declarative .rk files.' }]
   ],
   themeConfig: {
-    logo: '/raka.svg',
-    siteTitle: 'Rangka OS',
+    logo: { light: '/brand/rangka-horizontal.svg', dark: '/brand/rangka-horizontal-reversed.svg', alt: 'Rangka' },
+    siteTitle: false,
     nav: [
       { text: 'Guide', link: '/guide/what-is-rangka', activeMatch: '/guide/' },
       { text: 'Concepts', link: '/concepts/models', activeMatch: '/concepts/' },

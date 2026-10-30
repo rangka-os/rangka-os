@@ -118,11 +118,13 @@ func oauthError(w http.ResponseWriter, status int, code, desc string) {
 
 var loginPage = template.Must(template.New("login").Parse(`<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><title>Masuk · Rangka ID</title>
-<style>body{font:14px/20px system-ui,sans-serif;background:#f7f8f9;color:#172b4d;display:grid;place-items:center;min-height:100vh;margin:0}
-form{background:#fff;border:1px solid #dcdfe4;border-radius:8px;padding:24px;width:min(320px,90vw);display:grid;gap:12px}
-h1{font-size:18px;margin:0}label{display:grid;gap:4px;font-size:12px;color:#44546f}input{font:inherit;padding:8px;border:1px solid #8590a2;border-radius:4px}
-button{font:inherit;padding:8px;border:0;border-radius:4px;background:#0c66e4;color:#fff;cursor:pointer}.err{color:#ae2e24}</style></head>
-<body><form method="post" action="/oauth/authorize"><h1>Masuk ke {{.Client}}</h1>
+<style>body{font:14px/20px system-ui,sans-serif;background:#f7f5f3;color:#1c1917;display:grid;place-items:center;min-height:100vh;margin:0}
+form{background:#fff;border:1px solid #dedad6;border-radius:8px;padding:24px;width:min(320px,90vw);display:grid;gap:12px}
+.mark{width:28px;height:28px}h1{font-size:18px;margin:0}label{display:grid;gap:4px;font-size:12px;color:#44403c}
+input{font:inherit;padding:8px;border:1px solid #8c827b;border-radius:3px}input:focus{outline:2px solid #e0623f;outline-offset:0;border-color:#e0623f}
+button{font:inherit;padding:8px;border:0;border-radius:3px;background:#1c1917;color:#fff;cursor:pointer}button:hover{background:#3a3330}
+button:focus-visible{outline:2px solid #e0623f;outline-offset:2px}.err{color:#ae2e24}</style></head>
+<body><form method="post" action="/oauth/authorize"><svg class="mark" viewBox="0 0 256 256" role="img" aria-label="Rangka"><path fill="#b4432a" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg><h1>Masuk ke {{.Client}}</h1>
 {{if .Error}}<p class="err">{{.Error}}</p>{{end}}
 <label>Email<input name="email" type="email" autocomplete="username" required></label>
 <label>Kata sandi<input name="password" type="password" autocomplete="current-password" required></label>

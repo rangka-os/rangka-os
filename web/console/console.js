@@ -983,10 +983,10 @@
     var role = me && me.roles && me.roles[0];
 
     return h("div", { className: cx("rk-shell top cn-shell", navOpen && "cn-nav-open") },
-      h(R.TopNav, { product: { name: "Rangka Console", icon: "settings", color: "#44546f" }, items: [{ id: "ringkasan", label: "Ringkasan" }, { id: "changesets", label: "Change set" }, { id: "audit", label: "Audit" }],
+      h(R.TopNav, { product: { name: "Rangka Console", icon: "settings", color: "#1c1917" }, items: [{ id: "ringkasan", label: "Ringkasan" }, { id: "changesets", label: "Change set" }, { id: "audit", label: "Audit" }],
         current: ["ringkasan", "changesets", "audit"].indexOf(screen) >= 0 ? screen : null, createLabel: "Usulkan perubahan", theme: theme, unread: pending > 0, searchPlaceholder: "Cari layar, model, change set",
         user: { name: (me && me.name) || "…", email: me && me.email, company: "Kopi Senja", companies: ["Kopi Senja", "CV Maju Jaya"] }, currentApp: "console",
-        apps: [{ id: "console", name: "Rangka Console", desc: "Kontrol instalasi", icon: "settings", color: "#44546f" }, { id: "crm", name: "Rangka CRM", desc: "Lead, peluang, aktivitas", icon: "card", color: "#5e4db2" }, { id: "sales", name: "Rangka Penjualan", desc: "Faktur, piutang", icon: "invoice", color: "#0c66e4" }],
+        apps: [{ id: "console", name: "Rangka Console", desc: "Kontrol instalasi", icon: "settings", color: "#1c1917" }, { id: "crm", name: "Rangka CRM", desc: "Lead, peluang, aktivitas", icon: "card", color: "#5e4db2" }, { id: "sales", name: "Rangka Penjualan", desc: "Faktur, piutang", icon: "invoice", color: "#0c66e4" }],
         actions: h(React.Fragment, null,
           h("span", { className: "cn-mode", title: demo ? "Data demo dari demo-data.js: " + api.modeReason : "Terhubung ke kernel " + api.modeReason }, h(R.Lozenge, { tone: demo ? "new" : "ok", bold: demo }, h("span", { className: "full" }, demo ? "Mode demo" : "Terhubung"), h("span", { className: "short" }, demo ? "Demo" : "Live"))),
           h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "cn-menu-btn", onClick: function () { setNavOpen(!navOpen); } })),
@@ -999,7 +999,7 @@
           else if (k === "logout") api.logout().then(function () { toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri."); if (!demo) location.reload(); });
           else toast("info", "Belum ada di Console v0", "Profil dan keamanan akun ada di Rangka ID.");
         } }),
-      h(R.Sidebar, { app: { name: "Rangka Console", type: (status.site || meta.site || "") + " · " + (status.version || ""), icon: "settings", color: "#44546f" }, groups: groups, current: screen === "ringkasan" ? "ringkasan" : screen, onNavigate: function (id) { nav("/" + id); },
+      h(R.Sidebar, { app: { name: "Rangka Console", type: (status.site || meta.site || "") + " · " + (status.version || ""), icon: "settings", color: "#1c1917" }, groups: groups, current: screen === "ringkasan" ? "ringkasan" : screen, onNavigate: function (id) { nav("/" + id); },
         footer: h("div", { className: "cn-side-foot" },
           demo ? h("div", { className: "cn-demo-note" }, h("b", null, "Mode demo"), h("span", null, "Data dari file .rk asli; status disimulasikan. " + (api.modeReason === "?demo=1" ? "Dibuka dengan ?demo=1." : "Kernel tidak terjangkau: " + api.modeReason + ".")),
             h("label", null, "Masuk sebagai"), h(R.Segmented, { label: "Peran demo", value: role || "owner", options: [{ value: "owner", label: "Pemilik" }, { value: "sales_manager", label: "Manajer sales" }],

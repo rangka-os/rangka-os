@@ -37,7 +37,7 @@ const steps = [
 ]
 
 const tabs = [
-  { title: 'Production-grade core', icon: 'blocks', text: 'Strict YAML with JSON Schemas, a validator with 47 checks, generated tables, REST, SSE and MCP. Nothing hand-wired per app.', label: 'Concept', link: '/guide/rk-files', linkText: '.rk files' },
+  { title: 'Production-grade core', icon: 'beams', text: 'Strict YAML with JSON Schemas, a validator with 47 checks, generated tables, REST, SSE and MCP. Nothing hand-wired per app.', label: 'Concept', link: '/guide/rk-files', linkText: '.rk files' },
   { title: 'AI for rapid changes', icon: 'spark', text: 'Rangka AI reads your models and proposes change sets in layers 4–6 only. Guardrails live in code, not in a prompt.', label: 'Tool', link: '/tools/rangka-ai', linkText: 'Rangka AI' },
   { title: 'Control without drag', icon: 'shield', text: 'Validated, previewed on a copy, approved by a person, applied live, reverted in one click. High-risk changes need the owner.', label: 'Concept', link: '/concepts/change-sets', linkText: 'Change sets' },
 ]
@@ -52,7 +52,7 @@ const features = [
 ]
 
 const scenarios = [
-  { kicker: 'Example scenario', text: 'A coffee chain with three outlets wants the customer’s PO number on invoices. Raka proposes a one-field overlay; the owner approves it from her phone and it is live before lunch.', who: 'Kopi Senja', role: 'Demo company in rangka-apps' },
+  { kicker: 'Example scenario', text: 'A coffee chain with three outlets wants the customer’s PO number on invoices. Raka, the Rangka AI agent, proposes a one-field overlay; the owner approves it from her phone and it is live before lunch.', who: 'Kopi Senja', role: 'Demo company in rangka-apps' },
   { kicker: 'Example scenario', text: 'A distributor moves from spreadsheets to the sales app. Customers, items and prices are imported, PPN is calculated the way their tax consultant expects, and nothing is custom code.', who: 'Distributor template', role: 'Planned in rangka-apps' },
   { kicker: 'Example scenario', text: 'A partner deploys a POS template for a client in an afternoon, then hands the owner Rangka AI to keep adjusting it. The partner reviews high-risk change sets.', who: 'Partner deployment', role: 'Rangka Cloud, later' },
 ]
@@ -73,7 +73,11 @@ const open = ref<number | null>(0)
   <div class="tw">
     <!-- header -->
     <header class="tw-head">
-      <a class="tw-logo" :href="b('/')" aria-label="Rangka OS home"><img :src="b('/raka.svg')" alt="" width="30" height="30" /></a>
+      <a class="tw-logo" :href="b('/')" aria-label="Rangka OS home">
+        <img v-show="!isDark" :src="b('/brand/rangka-horizontal.svg')" alt="Rangka" width="92" height="23" />
+        <img v-show="isDark" :src="b('/brand/rangka-horizontal-reversed.svg')" alt="Rangka" width="92" height="23" />
+        <span>OS</span>
+      </a>
       <nav class="tw-links">
         <a :href="b('/guide/what-is-rangka')">Guide</a><i></i>
         <a :href="b('/concepts/models')">Concepts</a><i></i>
@@ -218,7 +222,7 @@ const open = ref<number | null>(0)
 
     <!-- scenarios carousel -->
     <section class="tw-quote">
-      <div class="tw-quote-art"><img :src="b('/art/icon-blocks.png')" alt="" loading="lazy" /><span class="tw-count">{{ sc + 1 }}/{{ scenarios.length }}</span></div>
+      <div class="tw-quote-art"><img :src="b('/art/icon-spark.png')" alt="" loading="lazy" /><span class="tw-count">{{ sc + 1 }}/{{ scenarios.length }}</span></div>
       <div class="tw-quote-body">
         <p class="tw-eyebrow"><i></i>{{ scenarios[sc].kicker }}</p>
         <blockquote>{{ scenarios[sc].text }}</blockquote>
@@ -257,7 +261,11 @@ const open = ref<number | null>(0)
     <footer class="tw-foot">
       <div class="tw-foot-art"><img :src="b('/art/wordmark.png')" alt="" loading="lazy" /></div>
       <div class="tw-foot-card">
-        <img :src="b('/raka.svg')" alt="Rangka OS" width="36" height="36" />
+        <div class="tw-foot-logo">
+          <img v-show="!isDark" :src="b('/brand/rangka-horizontal.svg')" alt="Rangka" width="128" height="32" />
+          <img v-show="isDark" :src="b('/brand/rangka-horizontal-reversed.svg')" alt="Rangka" width="128" height="32" />
+          <span>OS</span>
+        </div>
         <div class="tw-foot-cols">
           <div><h4>Learn</h4><a :href="b('/guide/what-is-rangka')">What is Rangka OS</a><a :href="b('/guide/quick-start')">Quick start</a><a :href="b('/guide/first-app')">Your first app</a><a :href="b('/concepts/models')">Concepts</a><b class="p">+</b></div>
           <div><h4>Reference</h4><a :href="b('/reference/schema/')">Schemas</a><a :href="b('/reference/cli')">CLI</a><a :href="b('/reference/rest-api')">REST API</a><a :href="b('/reference/mcp')">MCP tools</a><b class="p">+</b></div>

@@ -25,7 +25,7 @@ QRIS as first-class integrations, and plans priced per company or outlet rather 
 - **System capabilities**: cache, queue, scheduler, realtime, files, search, notifications, single sign-on — switched
   on in `system.rk`, used by apps in one line.
 - **Rangka Console**: the control pane that shows every layer, capability, app, change set and connector.
-- **A design system**: React components in an Atlassian-style look, light and dark, used by every screen.
+- **A design system**: React components with Atlassian-grade structure in Rangka colours (Ink, Bata, warm stone), light and dark, used by every screen.
 - **Rangka AI**: an agent that proposes change sets, never code. See [Rangka AI](/tools/rangka-ai).
 
 ## Who it is for

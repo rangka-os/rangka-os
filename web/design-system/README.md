@@ -1,4 +1,4 @@
-Rangka is the business-apps side of the Omilo family: records, stock and money for Indonesian small and medium businesses (CRM, sales and invoices, POS, stock). Rangka screens follow the **Atlassian Design System look**: blue for actions and selection, slate neutrals, flat surfaces, uppercase status lozenges, a top navigation across the full width with a side navigation under it. Every app (Rangka CRM, Penjualan, POS, Stok) and Omilo share one account and switch through the app switcher. Rangka keeps `brand-*` teal for Raka and marketing only, has a dark theme for everything, and adds the components a business app needs: tables, filters, documents, money, dashboards and the point of sale.
+Rangka is the business-apps side of the Omilo family: records, stock and money for Indonesian small and medium businesses (CRM, sales and invoices, POS, stock). Rangka screens take their **structure from the Atlassian Design System** (density, flat surfaces, top navigation with side navigation) and their **colours from the Rangka brand**: Ink for actions, Bata for selection, links and focus, warm stone neutrals, flat surfaces, uppercase status lozenges, a top navigation across the full width with a side navigation under it. Every app (Rangka CRM, Penjualan, POS, Stok) and Omilo share one account and switch through the app switcher. The Rangka logo (Sendi) is the mark; Raka is the Rangka AI agent with its own teal. There is a dark theme for everything, plus the components a business app needs: tables, filters, documents, money, dashboards and the point of sale.
 
 ## Content fundamentals
 
@@ -16,15 +16,15 @@ Rangka is the business-apps side of the Omilo family: records, stock and money f
 - Dashboards may shorten big figures with `compactNumber()`: `Rp 51,1 jt`, `Rp 2,3 M`. Put the full amount in the tooltip.
 - Write percentages with a comma: `11%`, `2,5%`.
 - Dates read `27 Okt 2026` in the UI and `27/10/2026` in tables and exports. Times use 24 hours: `14.30`.
-- Document numbers read `INV-2026-00042`; in tables they are link-blue (`rk-doc-no`) and open the record.
+- Document numbers read `INV-2026-00042`; in tables they are link-coloured (`rk-doc-no`, deep Bata) and open the record.
 - **Numbers use tabular figures in the sans font** (`font-variant-numeric: tabular-nums`), right-aligned in columns. No monospace numbers: mono is only for code, IDs in developer screens and CEL expressions.
 
 ## Visual foundations
 
-### Layout (Atlassian navigation)
+### Layout (Atlassian-style navigation)
 
 - **The shell is `AppShell`** with `topNav`, `sider`, `pageHeader` and the content.
-- **Top navigation (`TopNav`)**, 56px, across the full width: the app switcher (grid icon) listing every Rangka app and Omilo on the same account (single sign-on), the product name with its coloured tile, the app's primary items (the current one gets a 3px blue bar under it), the blue **Buat** create button, then on the right the search "Cari atau tanya Raka" (⌘K), notifications, help and the avatar that opens `AccountMenu` (company switch, profile, theme, sign out).
+- **Top navigation (`TopNav`)**, 56px, across the full width: the app switcher (grid icon) listing every Rangka app and Omilo on the same account (single sign-on), the product name with its coloured tile, the app's primary items (the current one gets a 3px Bata bar under it), the Ink **Buat** create button, then on the right the search "Cari atau tanya Raka" (⌘K), notifications, help and the avatar that opens `AccountMenu` (company switch, profile, theme, sign out).
 - **Side navigation (`Sidebar`)**, 240px, white with a right border: an app header (32px coloured tile, name, type), the company/outlet switcher, grouped links, the signed-in person. Collapse it with `collapsed`; below 860px it hides.
 - **Page header (`PageHeader`)**: breadcrumbs, a 24px title with lozenges, actions on the right (one primary), tabs underneath. **Content** is padded 24px 40px (16px on phones), sections 24px apart.
 - **The page is white (`app`) and mostly flat.** Tables, filter bars and page headers sit straight on the page. Use `Card` (1px `line-strong` border, 6px corners, no shadow) for grouped content such as dashboard widgets, form sections, settings sections and stat cards.
@@ -33,17 +33,18 @@ Rangka is the business-apps side of the Omilo family: records, stock and money f
 
 ### Colour
 
-- **Grounds.** `app` and `surface` are white (dark: `#1d2125` / `#22272b`). `soft` is the sunken grey for input hover, read-only areas, code and footers. `neutral` is the subtle grey fill of default buttons, tags, count badges and default lozenges.
-- **Text.** `ink` (#172B4D) for primary text, `ink-2` for labels, nav items and button text, `muted` for metadata, column headers, captions and breadcrumbs. `faint` is for placeholders and disabled labels only, because it fails 4.5:1.
-- **Borders.** `border` (#8590A2) outlines inputs, selects, checkboxes and radios so fields read as fields. `line-strong` outlines cards and draws table rules and nav edges; `line` divides rows inside cards.
-- **Blue is the action and selection colour.** `primary` (#0C66E4) fills the one primary button per view, checked checkboxes and radios, the selected date and progress. `link` is the same blue.
-- **Selection** is the `selected` light-blue background with `selected-ink` blue text, plus a 2–3px blue bar on the left of a selected nav link, menu item, option or table row. Active tabs and top-nav items get a blue bar underneath.
-- **Focus** is `focus` (#388BFF): a 2px outline on buttons and controls, a 2px border on inputs.
+- **Grounds.** `app` and `surface` are white (dark: warm `#1a1715` / `#221e1b`). `soft` is the sunken grey for input hover, read-only areas, code and footers. `neutral` is the subtle grey fill of default buttons, tags, count badges and default lozenges.
+- **Text.** `ink` (#1C1917, the logo's Ink) for primary text, `ink-2` for labels, nav items and button text, `muted` for metadata, column headers, captions and breadcrumbs. `faint` is for placeholders and disabled labels only, because it fails 4.5:1.
+- **Borders.** `border` (#8C827B) outlines inputs, selects, checkboxes and radios so fields read as fields. `line-strong` outlines cards and draws table rules and nav edges; `line` divides rows inside cards.
+- **Ink is the action colour.** `primary` (#1C1917, Rangka Ink) fills the one primary button per view, checked checkboxes and radios, the selected date and progress; in dark it flips to warm off-white with dark text. Danger buttons stay `bad-solid` red, so a destructive action never looks like the main one.
+- **Bata is the selection and link colour.** Selection is the `selected` Kapur background (#F6EDE6) with `selected-ink` deep Bata text (#A33B23), plus a 2–3px Bata bar on the left of a selected nav link, menu item, option or table row. Active tabs and top-nav items get a Bata bar underneath. `link` is the same deep Bata.
+- **Focus** is `focus` (Bata Terang #E0623F): a 2px outline on buttons and controls, a 2px border on inputs.
 - **Status colours always come with a word.** `ok`, `warn`, `bad`, `info` and `discovery` each have a text colour and a `-tint` background, used by lozenges, section messages and flags. `-solid` versions fill bold lozenges, the switch (green when on), danger buttons and unread dots; `warn-solid` (yellow) takes dark `on-warn` text and also fills the warning `Banner`. `discovery` (purple) marks new things and suggestions by Raka.
-- **Charts** use `chart-1` to `chart-6` (Atlassian data-viz order); single series use `chart-1`. Legends and labels always name each series.
-- **Teal is the brand and stays out of the interface.** `brand`, `brand-deep` and `brand-soft` are for Raka, the logo, the cover, sign-in, marketing and the app icon. Never for selection, focus, links, actions or status.
+- **Charts** use `chart-1` to `chart-6`: Bata first, then teal-blue, purple, amber, green and blue; single series use `chart-1`. Legends and labels always name each series.
+- **Bata is the brand.** `brand` (Bata #B4432A, Bata Terang #E0623F on dark), `brand-deep` (Ink, the logo colour) and `brand-soft` (Kapur) carry the logo, the cover, sign-in, marketing, the landing page, the app icon and `chart-1`. Inside the interface Bata appears only as the deeper `selected-ink`/`link` and as `focus`, never as a filled button and never in error UI, which keeps `bad` red unmistakable.
+- **Teal belongs to Raka.** `raka`, `raka-deep` and `raka-soft` colour Raka, the Rangka AI agent, and Rangka AI surfaces only.
 - **Amber is shared.** `spark` is Omilo's spark; `helmet` is an alias for Raka's hat. A mark colour, never text.
-- **Dark theme.** Every token has a dark value: dark slate grounds, lighter blue (`#579DFF`) for primary and selection, lighter status hues. Every text pair holds 4.5:1 or more.
+- **Dark theme.** Every token has a dark value: warm near-black grounds, off-white primary buttons, Bata Terang (#F08A6B) for links, selection and focus, lighter status hues. Every text pair holds 4.5:1 or more.
 
 ### Type
 
@@ -62,9 +63,9 @@ Rangka is the business-apps side of the Omilo family: records, stock and money f
 
 ### Borders, shadows, states
 
-- **Flat by default.** Cards use a border, not a shadow. Everything that floats (menus, selects, date pickers, popovers, modals, drawers, the command menu, flags) uses the Atlassian overlay shadow (`shadow-pop`, `shadow-overlay`, `shadow-toast`). Clickable number cards lift with `shadow-float` on hover.
-- **Hover:** `hover` (a 6% slate wash) on nav links, menu items, subtle buttons and table rows; default buttons go to `neutral-hover`; inputs fill with `soft`.
-- **Pressed:** default buttons turn `selected` with blue text while pressed.
+- **Flat by default.** Cards use a border, not a shadow. Everything that floats (menus, selects, date pickers, popovers, modals, drawers, the command menu, flags) uses the overlay shadow tinted with Ink (`shadow-pop`, `shadow-overlay`, `shadow-toast`). Clickable number cards lift with `shadow-float` on hover.
+- **Hover:** `hover` (a 5% Ink wash) on nav links, menu items, subtle buttons and table rows; default buttons go to `neutral-hover`; inputs fill with `soft`.
+- **Pressed:** default buttons turn `selected` with Bata text while pressed.
 - **Focus:** a 2px `focus` outline with 2px offset on buttons and controls; inputs turn their border `focus` and add `focus-soft` so the border reads 2px.
 - **Disabled:** `disabled-bg` fill with a `faint` label and a not-allowed cursor.
 - **Loading:** `Spinner` for short waits and inside buttons (`loading`); `Skeleton` shapes where content will appear (tables with `loading`, number and chart cards with `loading`).
@@ -73,7 +74,7 @@ Rangka is the business-apps side of the Omilo family: records, stock and money f
 ### Records and documents
 
 - **Submitted documents are immutable.** `DocumentHeader` shows the lifecycle as a progress tracker (`Steps`: Draf → Diajukan → Lunas or Dibatalkan), says the record is locked, and offers only Batalkan and Ubah (amend).
-- **Lists are flat `Table`s** (Atlassian dynamic table): no outer card, a toolbar above (search, `FilterBar`, actions right), 12px semibold headers over a 2px rule, 1px row rules, no zebra stripes, numbers right-aligned, pagination under it. Checked rows turn `selected`; the open row also gets a 2px blue bar on the left.
+- **Lists are flat `Table`s** (Atlassian dynamic table): no outer card, a toolbar above (search, `FilterBar`, actions right), 12px semibold headers over a 2px rule, 1px row rules, no zebra stripes, numbers right-aligned, pagination under it. Checked rows turn `selected`; the open row also gets a 2px Bata bar on the left.
 - **Filters:** `FilterBar` for quick filters as dropdown buttons; `FilterBuilder` for saved views with field / operator / value rules (it shows the CEL expression the engine runs).
 - **Statuses** use `StatusChip` (a lozenge) with the fixed vocabulary: Draf, Diajukan, Lunas, Dibayar sebagian, Jatuh tempo, Dibatalkan.
 - **Links between records use `LinkField`.** Never a plain select for customers, items, suppliers or outlets: people need search, quick-create and the peek card.
@@ -101,13 +102,20 @@ Rangka is the business-apps side of the Omilo family: records, stock and money f
 - Use **Remix Icon**, line style, the same set as Omilo (`remixicon` 4.9.1, Apache-2.0).
 - Size icons at 16px in text, 12px in lozenges and 22px on POS keys. They take the text colour, usually `ink-2`.
 - The `Icon` component carries the icons Rangka uses (see the Icon card). To add another, copy its `-line` path from Remix Icon.
-- Product tiles (top nav, side nav, app switcher) are an icon in white on the app's colour (CRM purple #5E4DB2, Penjualan blue, POS orange, Stok green); the default is `primary` blue, never brand teal.
+- Product tiles (top nav, side nav, app switcher) are an icon in white on the app's colour (CRM purple #5E4DB2, Penjualan blue, POS orange, Stok green); the default is Ink; Rangka's own tools (Console) use Ink with the Rangka symbol.
 - Use no emoji and no other icon sets.
+
+## Logo
+
+- **The Rangka logo is Sendi** (logo kit v1.0, Saga Tekno Studio, 27 Oct 2026): a lowercase r made of two beams meeting in a mitred joint, the arm cut at 45° like a roof eave. Files: `assets/Logos/rangka-symbol.svg`, `rangka-horizontal.svg`, `rangka-horizontal-reversed.svg`, `rangka-app-icon-bata-rounded.svg`.
+- **Colours:** Ink #1C1917 on light, white reversed on dark or on Bata. The app icon is white on Bata #B4432A. Use the kit's files; never redraw, recolour beyond the kit's one-colour versions, or stretch.
+- **Clear space** is one beam width (about a quarter of the logo height). Minimum sizes: horizontal 96px, stacked 64px, symbol 32px, the small-cut symbol 16px.
+- **Product names** sit next to the logo as text ("Rangka OS", "Rangka CRM"), never inside it.
 
 ## Raka
 
-- **What it is.** Raka (`assets/Logos/raka-mark.svg`, the `Raka` component) is the Rangka mark. It is drawn on the Omilo mascot grid: 64 units, an 18-unit rounded tile at 16% of the body colour, and Omilo's eyes, cheeks and smile. It has a teal (`brand`) `frame` body with a seam and four bolts, and wears an amber hard hat.
-- **Where it goes.** On empty states, the sign-in screen, the cover and marketing, and in the side nav header when the app passes no `app` tile.
+- **What it is.** Raka (`assets/Logos/raka-mark.svg`, the `Raka` component) is the Rangka AI agent, not the Rangka logo. It is drawn on the Omilo mascot grid: 64 units, an 18-unit rounded tile at 16% of the body colour, and Omilo's eyes, cheeks and smile. It has a teal (`raka`) `frame` body with a seam and four bolts, and wears an amber hard hat.
+- **Where it goes.** Wherever the AI speaks or acts: the ⌘K "Tanya Raka" answers, Rangka AI change sets, onboarding chat, and empty states that offer AI help. Use the Rangka logo, not Raka, for the product, sign-in and the side nav header.
 - **Colours are fixed.** Never recolour, stretch or animate Raka beyond Omilo's eye-follow and hop.
-- **Raka is the product.** Search asks Raka ("Cari atau tanya Raka", "Tanya Raka: …"). Omilo helpers that appear in Rangka keep their own Omilo looks.
+- **Search asks Raka** ("Cari atau tanya Raka", "Tanya Raka: …"). Omilo helpers that appear in Rangka keep their own Omilo looks.
 - **The drawing is a draft** made from the project brief.

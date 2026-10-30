@@ -434,7 +434,7 @@
           else toast("warn", a.name + " belum dipasang", "Pasang dari Pengaturan › Aplikasi terpasang.");
         },
         onAccount: function (k) { if (k.indexOf("theme:") === 0) setTheme(k.slice(6)); else if (k === "settings" || k === "security") setView({ settings: true }); else toast("info", k === "logout" ? "Keluar dari semua aplikasi" : "Belum ada di prototipe", k === "logout" ? "Di produk asli, sesi SSO berakhir di Rangka dan Omilo sekaligus." : ""); } }),
-      h(R.Sidebar, { app: { name: "Kopi Senja", type: info.name + " · Outlet Kemang", icon: "store", color: "#0c66e4" }, groups: groups, current: current, onNavigate: nav,
+      h(R.Sidebar, { app: { name: "Kopi Senja", type: info.name + " · Outlet Kemang", icon: "store", color: "#9a5b2e" }, groups: groups, current: current, onNavigate: nav,
         footer: h("div", { className: "pv-note" }, h("b", null, "Prototipe"), " Semua layar dibuat dari file .rk app CRM, Penjualan dan Inti. Buka “Lihat metadata” untuk mengubahnya.") }),
       h("div", { className: "rk-shell-main pv-shell-main" },
         h("main", { className: "pv-main", key: JSON.stringify(view) + rev }, main)),

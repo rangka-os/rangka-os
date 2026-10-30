@@ -17,6 +17,7 @@ radius: standard             # sharp | standard | round
 density: standard            # compact | standard | comfortable
 ```
 
+- **`rangka/standard`** is the Rangka base: Ink (#1C1917) primary buttons, Bata (#A33B23) links, selection and focus on a Kapur tint, warm stone neutrals. A company theme overrides only what it needs, like the blue `primary` above.
 - **Tokens** are the design system's names: `primary`, `selected`, `selected-ink`, `brand`, `link`, `chart-1` … `chart-6`.
 - **Dark derivation**: a colour given once keeps its hue; backgrounds and tints go to lightness 100 − L·0.6, accents
   gain 15 lightness, then contrast floors apply.

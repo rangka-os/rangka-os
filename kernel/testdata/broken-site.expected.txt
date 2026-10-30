@@ -73,7 +73,7 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-site/config.rk:9:20  error  unknown_app  apps/2  "stok" is not an app in testdata/broken-apps
 ../broken-site/config.rk:11:9  error  unknown_layout  layout  layout "crm_last" has no file layouts/crm_last.rk; did you mean "crm_first"?
 ../broken-site/themes/kopi_senja.rk:9:9  error  low_contrast  color/link  link #aaaaaa on surface #ffffff is 2.32:1 in light; needs 4.5:1
-../broken-site/themes/kopi_senja.rk:10:13  error  low_contrast  color/selected  selected-ink #579dff on selected #579dff is 1.00:1 in dark; needs 4.5:1
+../broken-site/themes/kopi_senja.rk:10:13  error  low_contrast  color/selected  selected-ink #f08a6b on selected #579dff is 1.11:1 in dark; needs 4.5:1
 ../broken-site/layouts/crm_first.rk:12:18  error  unknown_model  nav/create/1  "leads" is not a model; did you mean "lead"?
 ../broken-site/layouts/crm_first.rk:23:77  error  unknown_widget  pages/0/blocks/1/children/1/props/widget  dashboard crm_overview has no widget "activities"; did you mean "activities_due"?
 ../broken-site/custom/dealz.rk:2:8  error  unknown_model  model  "dealz" is not a model; did you mean "deal"?

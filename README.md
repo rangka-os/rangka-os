@@ -102,7 +102,7 @@ http://localhost:8000/console/?demo=1.
 | [`schema/0.4/`](schema/0.4) | JSON Schemas for all 14 `.rk` kinds: app, model, dashboard, flow, overlay, role, connector, template, system, theme, layout, features, config, changeset |
 | [`tools/`](tools) | Reference validator `rangka_validate.py`, strict `.rk` reader `rkfile.py`, `rk_convert.py` (JSON → `.rk`), API-docs and prototype builders |
 | [`templates/`](templates) | Theme templates (`standard`, `retail`, `clinic`) and layout templates (`top-nav`, `side-only`, `pos`, `portal`) |
-| [`web/design-system/`](web/design-system) | React component bundle (`window.Rangka`, 76 exports), tokens, TypeScript types — Atlassian-style look, light and dark |
+| [`web/design-system/`](web/design-system) | React component bundle (`window.Rangka`, 76 exports), tokens, TypeScript types — Atlassian-grade structure in Rangka colours (Ink, Bata, warm stone), light and dark |
 | [`web/console/`](web/console/README.md) | Rangka Console, the control pane for operators: capabilities, apps and models, change sets, connectors, organisations, themes, audit |
 | [`web/prototype/`](web/prototype) | Browser-only renderer of the apps; the reference semantics for the kernel |
 | [`docs/contracts.md`](docs/contracts.md) | The binding contract: REST, SSE events, MCP tools, CEL dialect, change sets, v0.1 decisions |

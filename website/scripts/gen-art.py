@@ -1,6 +1,6 @@
 """Generate the landing page's dithered artwork into public/art/.
 
-Every image is drawn here from simple shapes (no third-party artwork):
+Every image is drawn here from simple shapes and the Rangka logo kit:
 greyscale shapes -> ordered (Bayer) dither -> each lit cell drawn as a short
 horizontal bar, which gives the "scanline" look. Run: python3 scripts/gen-art.py
 """
@@ -32,60 +32,53 @@ def iso(x, y, z, s, ox, oy):
     return (ox + (x - y) * s * 0.866, oy + (x + y) * s * 0.5 - z * s)
 
 
-def frame_cube(w=150, h=170, scale=8):
-    """Isometric open cube frame (rangka = frame). Returns gray, alpha."""
+SENDI = [(35, 16), (147, 16), (225, 94), (113, 94), (113, 240), (35, 240)]  # brand/rangka-symbol-small.svg
+
+
+def sendi_block(w=150, h=170, scale=8, depth=46):
+    """The Rangka symbol (Sendi, small cut) extruded into a solid beam joint. Returns gray, alpha."""
     W, H = w * scale, h * scale
     g = Image.new("L", (W, H), 0)
     a = Image.new("L", (W, H), 0)
     dg, da = ImageDraw.Draw(g), ImageDraw.Draw(a)
-    s, ox, oy = W * 0.4, W * 0.5, H * 0.33
-
-    def face(pts, shade):
-        p = [iso(*q, s, ox, oy) for q in pts]
-        dg.polygon(p, fill=shade)
-        da.polygon(p, fill=255)
-
-    t = 0.16  # beam thickness
-    # back inner faces (seen through the windows), darkest
-    face([(0, 0, 0), (1, 0, 0), (1, 0, 1), (0, 0, 1)], 235)
-    face([(0, 0, 0), (0, 1, 0), (0, 1, 1), (0, 0, 1)], 210)
-    face([(0, 0, 0), (1, 0, 0), (1, 1, 0), (0, 1, 0)], 250)
-    # front faces with a window cut, as four beams each
-    def beams(axis_pts, shade):
-        A, B, C, D = axis_pts
-        lerp = lambda p, q, u: tuple(p[i] + (q[i] - p[i]) * u for i in range(3))
-        # outer ring polygon minus inner ring = frame
-        inner = [lerp(lerp(A, C, t), lerp(B, D, t), 0) , None]
-        o = [A, B, C, D]
-        cx = tuple(sum(p[i] for p in o) / 4 for i in range(3))
-        inn = [lerp(p, cx, t * 2.2) for p in o]
-        for i in range(4):
-            face([o[i], o[(i + 1) % 4], inn[(i + 1) % 4], inn[i]], shade)
-    beams([(1, 0, 1), (1, 1, 1), (0, 1, 1), (0, 0, 1)], 40)    # top
-    beams([(1, 0, 0), (1, 1, 0), (1, 1, 1), (1, 0, 1)], 130)   # right (x=1)
-    beams([(0, 1, 0), (1, 1, 0), (1, 1, 1), (0, 1, 1)], 85)   # left (y=1)
-    # floor shadow
+    k = W / 330.0
+    ox, oy = W * 0.16, H * 0.2
+    pts = [(ox + x * k, oy + y * k) for x, y in SENDI]
+    # floor shadow first
     sh = Image.new("L", (W, H), 0)
-    ImageDraw.Draw(sh).ellipse([W * 0.08, H * 0.62, W * 0.92, H * 0.86], fill=90)
+    ImageDraw.Draw(sh).ellipse([W * 0.06, H * 0.8, W * 0.94, H * 0.97], fill=80)
     sh = sh.filter(ImageFilter.GaussianBlur(scale * 6))
-    g = Image.fromarray(np.maximum(np.array(g), np.array(sh) * (np.array(a) == 0)).astype("uint8"))
-    a = Image.fromarray(np.maximum(np.array(a), (np.array(sh) > 20) * 255).astype("uint8"))
-    g, a = g.resize((w, h), Image.BILINEAR), a.resize((w, h), Image.BILINEAR)
-    return (np.array(g) / 255.0) ** 1.0, np.array(a) / 255.0
+    # extrusion: copies stepping up and right, darkest at the back
+    dx, dy = 0.62 * k, -0.42 * k
+    for i in range(depth, 0, -1):
+        q = [(x + dx * i, y + dy * i) for x, y in pts]
+        dg.polygon(q, fill=210)
+        da.polygon(q, fill=255)
+    # front face: light at the top, a little denser at the foot
+    face = Image.new("L", (W, H), 0)
+    ImageDraw.Draw(face).polygon(pts, fill=255)
+    grad = np.linspace(40, 115, H)[:, None] * np.ones((1, W))
+    m = np.array(face) > 0
+    gg = np.array(g, dtype=float)
+    gg[m] = grad[m]
+    aa = np.maximum(np.array(a), np.array(face))
+    sha = np.array(sh, dtype=float)
+    out_g = np.where(aa > 0, gg, sha)
+    out_a = np.where((aa > 0) | (sha > 20), 255, 0)
+    g = Image.fromarray(out_g.astype("uint8")).resize((w, h), Image.BILINEAR)
+    a = Image.fromarray(out_a.astype("uint8")).resize((w, h), Image.BILINEAR)
+    return np.array(g) / 255.0, np.array(a) / 255.0
 
 
 def icon(kind, w=56, h=56, scale=10):
     W, H = w * scale, h * scale
     g = Image.new("L", (W, H), 0)
     d = ImageDraw.Draw(g)
-    if kind == "blocks":  # stacked isometric blocks
-        s = W * 0.2
-        for (x, y, z) in [(0, 0, 0), (1, 0, 0), (0, 1, 0), (0, 0, 1)]:
-            ox, oy = W * 0.5, H * 0.52
-            P = lambda a, b, c: iso(a, b, c, s, ox, oy)
-            d.polygon([P(x, y, z + 1), P(x + 1, y, z + 1), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], fill=110)
-            d.polygon([P(x + 1, y, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x + 1, y, z + 1)], fill=200)
-            d.polygon([P(x, y + 1, z), P(x + 1, y + 1, z), P(x + 1, y + 1, z + 1), P(x, y + 1, z + 1)], fill=160)
+    if kind == "beams":  # three beams with 45-degree ends, stacked like a frame
+        bh = H * 0.2
+        for i, (x0, x1, shade) in enumerate([(0.10, 0.90, 200), (0.18, 0.82, 150), (0.26, 0.74, 110)]):
+            y = H * 0.16 + i * (bh + H * 0.06)
+            d.polygon([(W * x0, y + bh), (W * x0 + bh, y), (W * x1, y), (W * x1 - bh, y + bh)], fill=shade)
     elif kind == "spark":  # AI spark: four-point star
         cx, cy, r = W / 2, H / 2, W * 0.44
         pts = []
@@ -118,28 +111,36 @@ def field(w, h, seed=7, blur=9):
     return v, np.ones_like(v)
 
 
-def wordmark(text="rangka", w=240, h=60):
-    W, H = w * 8, h * 8
-    g = Image.new("L", (W, H), 0)
-    d = ImageDraw.Draw(g)
-    try:
-        f = ImageFont.truetype("/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf", int(H * 0.9))
-    except OSError:
-        f = ImageFont.load_default()
-    bb = d.textbbox((0, 0), text, font=f)
-    d.text(((W - (bb[2] - bb[0])) / 2 - bb[0], (H - (bb[3] - bb[1])) / 2 - bb[1]), text, font=f, fill=255)
-    grad = np.linspace(0.55, 1.0, W)[None, :]
-    arr = np.array(g.resize((w, h), Image.BILINEAR)) / 255.0
+def wordmark(w=240, h=76):
+    """The real Rangka wordmark (brand/rangka-wordmark.svg), filled even-odd."""
+    import re
+    src = open(os.path.join(os.path.dirname(__file__), "..", "public", "brand", "rangka-wordmark.svg")).read()
+    vb = [float(v) for v in re.search(r'viewBox="([^"]+)"', src).group(1).split()]
+    S = 4
+    W, H = w * S, h * S
+    k = min(W / vb[2], H / vb[3]) * 0.9
+    acc = np.zeros((H, W), dtype=bool)
+    for d_attr in re.findall(r' d="([^"]+)"', src):
+        for sub in re.findall(r"M[^M]+", d_attr):
+            nums = [float(v) for v in re.findall(r"-?\d+(?:\.\d+)?", sub)]
+            pts = [((nums[i] - vb[0]) * k + (W - vb[2] * k) / 2, (nums[i + 1] - vb[1]) * k + (H - vb[3] * k) / 2) for i in range(0, len(nums) - 1, 2)]
+            if len(pts) < 3:
+                continue
+            m = Image.new("1", (W, H), 0)
+            ImageDraw.Draw(m).polygon(pts, fill=1)
+            acc ^= np.array(m, dtype=bool)
+    arr = np.array(Image.fromarray((acc * 255).astype("uint8")).resize((w, h), Image.BILINEAR)) / 255.0
     grad = np.linspace(0.45, 0.95, w)[None, :]
     return arr * grad, (arr > 0.05).astype(float)
 
 
-INK, BLUE, TEAL = (23, 26, 32, 255), (12, 102, 228, 255), (13, 148, 136, 255)
+# Rangka brand colours (logo kit v1.0): Ink #1C1917, Bata #B4432A, Bata Terang #E0623F
+INK, BATA, BATA_TERANG = (28, 25, 23, 255), (180, 67, 42, 255), (224, 98, 63, 255)
 
-dither(*frame_cube(), INK, name="frame.png")
-for k in ("blocks", "spark", "shield"):
-    dither(*icon(k), BLUE, cell=(5, 4), bar=(4, 2), name=f"icon-{k}.png")
-dither(*field(160, 130), (23, 26, 32, 255), name="field.png")
-dither(*field(220, 90, seed=3, blur=7), (87, 157, 255, 255), name="field-dark.png")
+dither(*sendi_block(), INK, name="frame.png")
+for k in ("beams", "spark", "shield"):
+    dither(*icon(k), BATA, cell=(5, 4), bar=(4, 2), name=f"icon-{k}.png")
+dither(*field(160, 130), INK, name="field.png")
+dither(*field(220, 90, seed=3, blur=7), BATA_TERANG, name="field-dark.png")
 dither(*wordmark(), (255, 255, 255, 255), cell=(6, 5), bar=(5, 3), name="wordmark.png")
 print("art written to", os.path.abspath(OUT))

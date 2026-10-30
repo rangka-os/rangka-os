@@ -10,7 +10,7 @@ Plain JS on React 18 UMD and the Rangka design system (`../design-system/bundle.
 | --- | --- |
 | `index.html` | Loads React (cdnjs), the DS bundle, `tokens.css`, `demo-data.js`, `api.js`, `console.js`; local `cn-*` styles on DS tokens |
 | `console.js` | Screens, shell (TopNav + Sidebar grouped by layer), ⌘K command menu, theme switch |
-| `api.js` | `RangkaConsoleAPI({baseUrl})`: the data adapter for CONTRACTS.md `/api/v1`, with an in-memory demo backend |
+| `api.js` | `RangkaConsoleAPI({baseUrl})`: the data adapter for `docs/contracts.md` `/api/v1`, with an in-memory demo backend |
 | `build_demo.py` | Builds `demo-data.js` and `tokens.css` from the real `.rk` files and `tokens.json` |
 | `demo-data.js`, `tokens.css` | Generated. Do not edit by hand |
 | `test_console.py` | Headless Playwright check in demo mode (every screen, 1440/390, light/dark, lifecycle, contract rules) |
@@ -84,7 +84,7 @@ python3 test_live.py --react-dir <same dir> [--shots <dir>]      # optional, nee
 
 ## Contract (v0.1)
 
-The adapter follows CONTRACTS.md "Kernel v0 additions" and "v0.1 decisions": `/meta` with `flows`, `roles`,
+The adapter follows `docs/contracts.md` "Kernel v0 additions" and "v0.1 decisions": `/meta` with `flows`, `roles`,
 `connectors`, `site{config, features, themes, layouts, system}`, `installed`, models carrying `app` and `overlay`;
 `GET /files` and `GET /files/{path}` (falling back to the `/files/meta` aliases); `/system/status` with `deploy`,
 `schema_version`, `connectors[]`, `auth.clients[]` objects; change sets with `created_at`/`updated_at`,

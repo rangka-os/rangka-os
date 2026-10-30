@@ -3,7 +3,7 @@
 The Rangka OS server: one Go binary that validates `.rk` metadata, migrates Postgres from it, runs the
 document lifecycle, serves the REST API, realtime events, the queue and scheduler, Rangka ID (sessions,
 API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The binding contract is
-[`../../CONTRACTS.md`](../../CONTRACTS.md); the reference semantics are the browser prototype
+[`../docs/contracts.md`](../docs/contracts.md); the reference semantics are the browser prototype
 (`../web/prototype/engine.js`) and `../tools/rangka_validate.py`.
 
 ```

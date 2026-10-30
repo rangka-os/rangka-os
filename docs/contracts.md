@@ -1,9 +1,9 @@
 # Rangka contracts (v0, 30 Oct 2026)
 
 Shared agreements between rangka-os (kernel, Console), rangka-ai and rangka-apps. Everything here is v0: change it
-only by editing this file, and say so in your report.
+only by editing this file in a pull request, and update both validators and the affected clients in the same change.
 
-## Repos in this workspace (/home/claude/rangka)
+## Repositories (cloned side by side)
 
 | Repo | Contains | Language |
 | --- | --- | --- |

@@ -1,0 +1,7 @@
+node_modules/
+.vitepress/dist/
+.vitepress/cache/
+reference/schema/*.md
+!reference/schema/index.md
+public/api/
+reference/validator-codes.md

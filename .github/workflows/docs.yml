@@ -1,0 +1,55 @@
+# Builds the landing page + docs (website/) and publishes them to GitHub Pages.
+# One-time setup: repo Settings → Pages → Source: "GitHub Actions".
+name: docs
+
+on:
+  push:
+    branches: [main]
+    paths: ['website/**', 'schema/**', 'docs/**', 'tools/rangka_validate.py', 'tools/rkfile.py', '.github/workflows/docs.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rangka-os }
+      # Example pages quote real files from the sibling repos.
+      - uses: actions/checkout@v4
+        with: { repository: rangka-os/rangka-apps, path: rangka-apps }
+      - uses: actions/checkout@v4
+        with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: rangka-os/website/package-lock.json
+      - uses: actions/configure-pages@v5
+      - name: Build
+        working-directory: rangka-os/website
+        env:
+          DOCS_BASE: /rangka-os/     # set to / when a custom domain (e.g. rangka.dev) is configured
+        run: |
+          npm ci
+          npm run build
+      - uses: actions/upload-pages-artifact@v3
+        with: { path: rangka-os/website/.vitepress/dist }
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

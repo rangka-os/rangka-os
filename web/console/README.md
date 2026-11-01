@@ -1,6 +1,6 @@
 # Rangka Console v0
 
-The open-source control pane of Rangka OS: what an owner or operator opens to see and maintain every mapping of the
+The source-available control pane of Rangka OS: what an owner or operator opens to see and maintain every mapping of the
 installation, layer by layer (0 deploy · 1 kernel · 2 system capabilities · 3 connectors · 4 organisation · 5 apps ·
 6 presentation), and to move change sets through their lifecycle.
 

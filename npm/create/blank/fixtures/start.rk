@@ -1,0 +1,5 @@
+# Loaded by `npm run seed`. USR-001 becomes the owner account (email and password from .env).
+outlet:
+  - {name: OUT-01, outlet_name: '{{NAME}} · Pusat'}
+user:
+  - {name: USR-001, full_name: Pemilik, role: Pemilik}

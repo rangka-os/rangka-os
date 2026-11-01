@@ -1,6 +1,6 @@
 # What is Rangka OS
 
-Rangka OS is an open-source engine for business software — CRM, sales, POS, inventory, accounting — in which every
+Rangka OS is a source-available engine for business software — CRM, sales, POS, inventory, accounting — in which every
 app is described in files instead of written in code. You describe a model ("a deal has a customer, a stage and a
 value"), its rules, dashboards and screens in `.rk` files; the Rangka kernel turns them into a database, an API,
 realtime events and a working user interface.

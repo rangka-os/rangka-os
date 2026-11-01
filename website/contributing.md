@@ -12,5 +12,5 @@ Issues and pull requests are welcome in every repository of [github.com/rangka-o
 
 UI copy is Bahasa Indonesia; code, comments and docs are English.
 
-Licence: intended AGPL-3.0 with an exception for apps and templates, plus a contributor licence agreement. The
-`LICENSE` file is not committed yet.
+Licence: Elastic License 2.0 (ELv2), see `LICENSE`. Contributions need a contributor agreement with Saga Tekno
+Studio (to be published).

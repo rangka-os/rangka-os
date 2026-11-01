@@ -4,6 +4,7 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"os"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
@@ -49,10 +50,10 @@ func cmdSeed(args []string) int {
 	fs := flag.NewFlagSet("seed", flag.ExitOnError)
 	var c common
 	c.flags(fs)
-	fixtures := fs.String("fixtures", "", "fixtures directory (default <apps>/../fixtures)")
-	org := fs.String("org", "", "organisation id (default: the site directory name)")
-	email := fs.String("email", "ceo@saga.co.id", "seed user email")
-	password := fs.String("password", "rangka-demo", "seed user password")
+	fixtures := fs.String("fixtures", os.Getenv("RANGKA_FIXTURES"), "fixtures directory (default $RANGKA_FIXTURES, else <apps>/../fixtures)")
+	org := fs.String("org", os.Getenv("RANGKA_ORG"), "organisation id (default $RANGKA_ORG, else the site directory name)")
+	email := fs.String("email", envOr("RANGKA_OWNER_EMAIL", "ceo@saga.co.id"), "seed user email (default $RANGKA_OWNER_EMAIL)")
+	password := fs.String("password", envOr("RANGKA_OWNER_PASSWORD", "rangka-demo"), "seed user password (default $RANGKA_OWNER_PASSWORD)")
 	record := fs.String("user-record", "USR-001", "core user record of the seed user")
 	fs.Parse(args)
 	ctx := context.Background()

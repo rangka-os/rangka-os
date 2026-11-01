@@ -4,3 +4,4 @@
 .pgtemp*
 kernel/bin/
 __pycache__/
+dist/

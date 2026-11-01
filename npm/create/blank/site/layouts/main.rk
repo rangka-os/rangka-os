@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/layout.json
+name: main
+label: {id: Utama}
+extends: rangka/top-nav
+shell: top-nav
+home: dashboard:crm_overview
+nav:
+  top:
+    - {to: 'dashboard:crm_overview', label: {id: Dasbor}}
+    - {to: 'model:deal', label: {id: Peluang}}
+    - {to: 'model:sales_invoice', label: {id: Faktur}, if: "app_installed('sales')"}
+    - {to: 'model:customer', label: {id: Pelanggan}}
+  create: [deal, lead, sales_invoice, customer]
+  app_switcher: true

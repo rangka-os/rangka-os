@@ -1,6 +1,6 @@
 # Rangka AI
 
-The open-source agent that understands Rangka OS and changes a running installation by proposing
+The source-available agent that understands Rangka OS and changes a running installation by proposing
 [change sets](/concepts/change-sets). It never writes code, never edits records, and can never approve or apply.
 Repository: [rangka-os/rangka-ai](https://github.com/rangka-os/rangka-ai).
 

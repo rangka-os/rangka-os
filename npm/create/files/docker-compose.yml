@@ -1,0 +1,16 @@
+# Postgres for {{NAME}}. `npm run db` starts it; data stays in the rangka-db volume.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: rangka
+      POSTGRES_PASSWORD: rangka
+      POSTGRES_DB: rangka
+    ports: ["54329:5432"]
+    volumes: [rangka-db:/var/lib/postgresql/data]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rangka"]
+      interval: 2s
+      retries: 30
+volumes:
+  rangka-db:

@@ -1,0 +1,13 @@
+{
+  "name": "@rangka-os/create",
+  "version": "0.0.0",
+  "description": "Start a Rangka OS project: npm create @rangka-os@latest my-shop",
+  "license": "Elastic-2.0",
+  "homepage": "https://rangka-os.github.io/rangka-os/guide/quick-start",
+  "repository": { "type": "git", "url": "git+https://github.com/rangka-os/rangka-os.git", "directory": "npm/create" },
+  "bugs": "https://github.com/rangka-os/rangka-os/issues",
+  "keywords": ["rangka", "create", "scaffold", "erp", "crm"],
+  "bin": { "create": "index.js" },
+  "files": ["index.js", "template", "README.md"],
+  "engines": { "node": ">=18" }
+}

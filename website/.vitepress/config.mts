@@ -10,7 +10,7 @@ export default defineConfig({
   base,
   lang: 'en',
   title: 'Rangka OS',
-  description: 'Open-source, declarative operating system for business apps. Every app is a .rk file; AI changes it through reviewed change sets.',
+  description: 'Source-available, declarative operating system for business apps. Every app is a .rk file; AI changes it through reviewed change sets.',
   cleanUrls: true,
   ignoreDeadLinks: 'localhostLinks',
   lastUpdated: true,
@@ -21,7 +21,7 @@ export default defineConfig({
     ['link', { rel: 'manifest', href: `${base}site.webmanifest` }],
     ['meta', { name: 'theme-color', content: '#B4432A' }],
     ['meta', { property: 'og:title', content: 'Rangka OS' }],
-    ['meta', { property: 'og:description', content: 'Fondasi bisnismu, dibangun bersama AI. Open-source business apps as declarative .rk files.' }]
+    ['meta', { property: 'og:description', content: 'Fondasi bisnismu, dibangun bersama AI. Source-available business apps as declarative .rk files.' }]
   ],
   themeConfig: {
     logo: { light: '/brand/rangka-horizontal.svg', dark: '/brand/rangka-horizontal-reversed.svg', alt: 'Rangka' },
@@ -39,7 +39,8 @@ export default defineConfig({
       ] },
       { text: 'v0', items: [
         { text: 'Status and roadmap', link: '/roadmap' },
-        { text: 'Contributing', link: '/contributing' }
+        { text: 'Contributing', link: '/contributing' },
+        { text: 'Releasing', link: '/contributing-release' }
       ] }
     ],
     sidebar: {
@@ -100,7 +101,7 @@ export default defineConfig({
     search: { provider: 'local' },
     outline: { level: [2, 3] },
     footer: {
-      message: 'Rangka OS is open source. Licence: AGPL-3.0 with an app exception (planned).',
+      message: 'Rangka OS is source-available under the Elastic License 2.0 (ELv2). Free to self-host.',
       copyright: 'Rangka contributors'
     }
   }

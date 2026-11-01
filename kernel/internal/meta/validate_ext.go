@@ -2,6 +2,7 @@ package meta
 
 import (
 	"fmt"
+	"github.com/rangka-os/rangka-os/kernel/internal/bundle"
 	"os"
 	"path/filepath"
 	"sort"
@@ -249,7 +250,7 @@ func TemplatesDir(appsDir string) string {
 			return filepath.Join(d, "rangka-os", "templates")
 		}
 	}
-	return ""
+	return bundle.Dir("templates") // installed binary: the templates it carries
 }
 
 func planApps(features map[string]any, plan string) []string {

@@ -1,0 +1,68 @@
+# Release build for the rangka binary: archives + checksums on GitHub Releases and a multi-arch image on
+# ghcr.io/rangka-os/rangka. Runs from .github/workflows/release.yml on a v* tag; the npm packages are
+# staged from dist/ afterwards (npm/scripts/stage.mjs). Try it locally: goreleaser release --snapshot --clean
+version: 2
+project_name: rangka
+
+before:
+  hooks:
+    - sh kernel/scripts/bundle-assets.sh   # carry web/ and templates/ inside the binary
+
+builds:
+  - id: rangka
+    dir: kernel
+    main: ./cmd/rangka
+    binary: rangka
+    env: [CGO_ENABLED=0]
+    flags: [-trimpath]
+    ldflags: ["-s -w -X main.Version={{ .Version }}"]
+    goos: [linux, darwin, windows]
+    goarch: [amd64, arm64]
+
+archives:
+  - formats: [tar.gz]
+    format_overrides:
+      - goos: windows
+        formats: [zip]
+    name_template: "rangka_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    files: [README.md, LICENSE*]
+
+checksum:
+  name_template: checksums.txt
+
+dockers:
+  - image_templates: ["ghcr.io/rangka-os/rangka:{{ .Version }}-amd64"]
+    use: buildx
+    goos: linux
+    goarch: amd64
+    dockerfile: deploy/Dockerfile
+    build_flag_templates:
+      - --platform=linux/amd64
+      - --label=org.opencontainers.image.source=https://github.com/rangka-os/rangka-os
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.licenses=Elastic-2.0
+  - image_templates: ["ghcr.io/rangka-os/rangka:{{ .Version }}-arm64"]
+    use: buildx
+    goos: linux
+    goarch: arm64
+    dockerfile: deploy/Dockerfile
+    build_flag_templates:
+      - --platform=linux/arm64
+      - --label=org.opencontainers.image.source=https://github.com/rangka-os/rangka-os
+      - --label=org.opencontainers.image.version={{ .Version }}
+      - --label=org.opencontainers.image.licenses=Elastic-2.0
+
+docker_manifests:
+  - name_template: "ghcr.io/rangka-os/rangka:{{ .Version }}"
+    image_templates: ["ghcr.io/rangka-os/rangka:{{ .Version }}-amd64", "ghcr.io/rangka-os/rangka:{{ .Version }}-arm64"]
+  - name_template: "ghcr.io/rangka-os/rangka:latest"
+    image_templates: ["ghcr.io/rangka-os/rangka:{{ .Version }}-amd64", "ghcr.io/rangka-os/rangka:{{ .Version }}-arm64"]
+    skip_push: auto   # not for pre-releases (v0.5.0-alpha.1)
+
+release:
+  github: {owner: rangka-os, name: rangka-os}
+  prerelease: auto
+
+changelog:
+  use: github
+  sort: asc

@@ -1,14 +1,43 @@
 # Quick start
 
+Two ways to run Rangka OS: start a project with npm (no Go needed), or build the kernel from source.
+
+## Start a project with npm
+
+::: warning From the first release
+`@rangka-os/cli` and `@rangka-os/create` are published when the first version tag is pushed. Until then, use
+[Build from source](#build-from-source).
+:::
+
+You need Node.js 18+ and Docker (for Postgres), or your own Postgres 16.
+
+```bash
+npm create @rangka-os@latest my-shop   # asks for the business name, template (demo or blank) and owner email
+cd my-shop
+npm install          # installs the rangka binary for your platform (@rangka-os/cli)
+npm run db           # Postgres 16 in Docker on port 54329
+npm run setup        # validate the .rk files, create tables, load fixtures, create the owner
+npm run dev          # http://localhost:8080/console/
+```
+
+The project folder holds everything: `apps/` (ready apps), `site/` (your company layer: config, theme,
+layout, overlays), `connectors/`, `fixtures/` and `.env` (database URL, owner account). Change files in
+`site/`, then `npm run validate`.
+
+Without a project you can still call the CLI: `npx @rangka-os/cli version`. A Docker image is published as
+`ghcr.io/rangka-os/rangka` (`docker run -v "$PWD:/srv" -p 8080:8080 ghcr.io/rangka-os/rangka serve`).
+
+## Build from source
+
 Run the kernel with the demo business "Kopi Senja" (a coffee shop with CRM and sales) on your machine.
 
-## Requirements
+### Requirements
 
 - Go 1.24 or newer
 - PostgreSQL 16 binaries (`initdb`, `postgres`) on the machine — the scripts start and remove a throwaway cluster
 - Python 3 with `pyyaml` and `jsonschema`, for the reference tools (optional)
 
-## Run the demo
+### Run the demo
 
 Clone the repos side by side; the kernel's Makefile expects that layout.
 

@@ -7,7 +7,7 @@ Rangka Cloud is the managed way to run Rangka OS, for businesses that want it wo
   and proposes the first configuration for the owner to approve.
 - **Priced per company or outlet**, in rupiah, never per seat; AI credits top up through QRIS.
 - **Partner deploys**: one-click templates on Indonesian hosting partners for businesses that prefer their own server.
-- **Same open-source core**: Rangka Cloud runs the same rangka-os, rangka-apps, rangka-connectors and rangka-ai —
+- **Same source-available core**: Rangka Cloud runs the same rangka-os, rangka-apps, rangka-connectors and rangka-ai —
   anything built for it also runs self-hosted.
 
 Rangka Cloud itself (onboarding, provisioning, billing, fleet operations) is a separate, closed-source service.

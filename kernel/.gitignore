@@ -1,2 +1,6 @@
 bin/
 .pgtemp*
+
+# release bundle (scripts/bundle-assets.sh)
+internal/bundle/files/*
+!internal/bundle/files/README.md

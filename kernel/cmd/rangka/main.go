@@ -20,11 +20,16 @@ Usage:
   rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--dev-open]
   rangka version
 
-The database URL can also come from $DATABASE_URL.
+Settings can also come from the environment or a .env file in the current directory:
+  DATABASE_URL, RANGKA_APPS, RANGKA_SITE, RANGKA_CONNECTORS, RANGKA_FIXTURES, RANGKA_ORG, RANGKA_ADDR,
+  RANGKA_OWNER_EMAIL, RANGKA_OWNER_PASSWORD (seed). Values already set in the environment win.
+
+Start a new project: npm create @rangka-os@latest my-shop
 `)
 }
 
 func main() {
+	loadDotEnv(".env")
 	if len(os.Args) < 2 {
 		usage()
 		os.Exit(2)

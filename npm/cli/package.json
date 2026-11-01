@@ -1,0 +1,14 @@
+{
+  "name": "@rangka-os/cli",
+  "version": "0.0.0",
+  "description": "Rangka OS kernel CLI: validate .rk metadata, migrate Postgres, seed and serve REST, SSE, MCP and the Console.",
+  "license": "Elastic-2.0",
+  "homepage": "https://rangka-os.github.io/rangka-os/",
+  "repository": { "type": "git", "url": "git+https://github.com/rangka-os/rangka-os.git", "directory": "npm/cli" },
+  "bugs": "https://github.com/rangka-os/rangka-os/issues",
+  "keywords": ["rangka", "erp", "crm", "pos", "low-code", "declarative", "mcp", "indonesia"],
+  "bin": { "rangka": "bin/rangka.js" },
+  "files": ["bin", "README.md"],
+  "engines": { "node": ">=18" },
+  "optionalDependencies": {}
+}

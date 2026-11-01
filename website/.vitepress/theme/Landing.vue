@@ -33,7 +33,7 @@ onBeforeUnmount(() => io?.disconnect())
 const steps = [
   { n: '01', a: 'Start with', b: 'ready-made', c: 'business apps', text: 'CRM, sales, POS and inventory ship as .rk apps for Indonesian businesses: rupiah without decimals, PPN 12% on DPP 11/12, NPWP, QRIS and WhatsApp. Install one with a line in config.rk.', link: '/ecosystem/apps', cta: 'Browse the apps', shot: 'kanban' },
   { n: '02', a: 'Change it', b: 'without', c: 'an engineer', text: 'Ask Rangka AI for a PO number on invoices. It writes an overlay in your company layer, explains why, and shows the exact diff and risk. A person approves; the kernel applies it live and can revert it.', link: '/concepts/change-sets', cta: 'How change sets work', shot: 'console-changeset' },
-  { n: '03', a: 'Stay in control with', b: 'open-source', c: 'infrastructure', text: 'Your business is a folder of files in your git, served by one Go binary and one Postgres. Queue, scheduler, realtime, cache and single sign-on are switched on in system.rk.', link: '/guide/architecture', cta: 'Read the architecture', shot: '' },
+  { n: '03', a: 'Stay in control with', b: 'self-hosted', c: 'infrastructure', text: 'Your business is a folder of files in your git, served by one Go binary and one Postgres. Queue, scheduler, realtime, cache and single sign-on are switched on in system.rk.', link: '/guide/architecture', cta: 'Read the architecture', shot: '' },
 ]
 
 const tabs = [
@@ -59,7 +59,7 @@ const scenarios = [
 const sc = ref(0)
 
 const faqs = [
-  ['Is Rangka OS really open source?', 'Yes. The kernel, schemas, validator, Console, apps, connectors and Rangka AI are public on GitHub. Only the hosted Rangka Cloud is closed.'],
+  ['Is Rangka OS open source?', 'The code is public on GitHub and free to self-host, change and use in your business, under the Elastic License 2.0 (ELv2). That makes it source-available rather than OSI open source: the one thing you may not do is sell Rangka to others as a hosted service. Only the hosted Rangka Cloud is closed.'],
   ['Is it ready for production?', 'Not yet. This is a v0 preview that runs end to end on a demo company. Several kernel parts use in-tree stand-ins that will be replaced; see the roadmap.'],
   ['Do I need a developer to customize it?', 'No for apps: models, rules, screens and dashboards are .rk files, changed by owners or Rangka AI through change sets. Yes if you want to work on the Go kernel.'],
   ['How do you stop AI from breaking things?', 'AI can only propose. Every change set is validated, previewed on a copy with its SQL, and approved by a person; high-risk changes need the owner. Applied changes can be reverted.'],
@@ -274,7 +274,7 @@ const open = ref<number | null>(0)
             <div class="tw-foot-btns"><a class="tw-btn sm" :href="b('/guide/quick-start')"><span>Get started</span></a><a class="tw-btn ghost sm" :href="b('/guide/what-is-rangka')"><span>Read the docs</span></a></div>
           </div>
         </div>
-        <div class="tw-foot-bottom"><span>© 2026 · Rangka contributors · AGPL-3.0 (planned)</span><span>Fondasi bisnismu, dibangun bersama AI.</span></div>
+        <div class="tw-foot-bottom"><span>© 2026 · Saga Tekno Studio · ELv2</span><span>Fondasi bisnismu, dibangun bersama AI.</span></div>
       </div>
     </footer>
   </div>

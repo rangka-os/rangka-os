@@ -1,6 +1,6 @@
 # Rangka OS
 
-**An open-source, declarative operating system for business apps** — CRM, sales, POS, inventory, ERP — built for
+**A source-available, declarative operating system for business apps** — CRM, sales, POS, inventory, ERP — built for
 Indonesian small and medium businesses.
 
 Every app, model, rule, dashboard, theme, layout and backend capability is a `.rk` file (strict YAML, validated by
@@ -15,10 +15,11 @@ can adapt the software without an engineer writing code.
 
 | Repo | What | Licence |
 | --- | --- | --- |
-| **[rangka-os](https://github.com/rangka-os/rangka-os)** (this repo) | Kernel, schemas, validator, design system, Console, docs | AGPL-3.0 + app exception (planned) |
-| [rangka-apps](https://github.com/rangka-os/rangka-apps) | Apps (core, sales, crm), templates, example site | to be decided |
-| [rangka-connectors](https://github.com/rangka-os/rangka-connectors) | Business integrations as `connector.rk` (WhatsApp, QRIS, …) | to be decided |
-| [rangka-ai](https://github.com/rangka-os/rangka-ai) | Agent that changes an installation through change sets | AGPL-3.0 |
+| **[rangka-os](https://github.com/rangka-os/rangka-os)** (this repo) | Kernel, schemas, validator, design system, Console, docs | ELv2 |
+| [rangka-apps](https://github.com/rangka-os/rangka-apps) | Apps (core, sales, crm), templates, example site | ELv2 |
+| [rangka-connectors](https://github.com/rangka-os/rangka-connectors) | Business integrations as `connector.rk` (WhatsApp, QRIS, …) | ELv2 |
+| [rangka-ai](https://github.com/rangka-os/rangka-ai) | Agent that changes an installation through change sets | ELv2 |
+| [rangka-edge](https://github.com/rangka-os/rangka-edge) | Agent at the outlet: runs device connectors (printer, RFID, scanner, cash drawer), works offline, syncs | ELv2 |
 | rangka-cloud | Managed hosting, onboarding chat, billing | private |
 
 ## How it fits together
@@ -141,5 +142,7 @@ code, comments and docs are English.
 
 ## Licence
 
-Intended: AGPL-3.0, with an exception so apps and templates built on Rangka OS may use their own licence, plus a
-contributor licence agreement. The `LICENSE` file is not committed yet; until it is, all rights are reserved.
+Elastic License 2.0 (ELv2), see `LICENSE`. Copyright 2026 Saga Tekno Studio. The code is public and free to
+self-host, change and use in your own business. You may not offer it to others as a hosted or managed service;
+partners who want to host Rangka for clients need a partner agreement with Saga. Rangka Cloud is the only
+closed part. Contributions need a contributor agreement (to be published).

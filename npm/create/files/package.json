@@ -1,0 +1,17 @@
+{
+  "name": "{{SLUG}}",
+  "private": true,
+  "description": "{{NAME}} on Rangka OS",
+  "scripts": {
+    "db": "docker compose up -d --wait db",
+    "validate": "rangka validate",
+    "migrate": "rangka migrate",
+    "seed": "rangka seed",
+    "setup": "rangka validate && rangka migrate && rangka seed",
+    "dev": "rangka serve --dev-open",
+    "start": "rangka serve"
+  },
+  "devDependencies": {
+    "@rangka-os/cli": "^{{CLI_VERSION}}"
+  }
+}

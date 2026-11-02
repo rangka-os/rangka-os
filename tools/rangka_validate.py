@@ -123,6 +123,8 @@ def validate(root, only=None, site=None, connectors=None):
                 rep.add("error", p, where, "schema", msg)
             if m.get("name") != mname:
                 rep.add("error", p, "name", "name_mismatch", f'model name "{m.get("name")}" must match the file name "{mname}"')
+            if isinstance(m.get("naming"), dict):
+                reset_needs_date(rep, p, "naming", m["naming"])
         for dname, (p, db) in a["dashboards"].items():
             for e in sorted(V["dashboard"].iter_errors(db), key=lambda e: list(map(str, e.absolute_path))):
                 rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message if len(e.message) < 160 else e.message[:157] + "…")
@@ -494,6 +496,21 @@ def template_exists(kind, name):
     return not os.path.isdir(TEMPLATES_DIR)
 
 
+def reset_needs_date(rep, path, where, series):
+    """A series whose reset period is not in its pattern repeats numbers (a default reset is inferred, never fails)."""
+    pattern, reset = series.get("pattern"), series.get("reset")
+    if not isinstance(pattern, str) or not pattern:
+        return
+    year = "{YY}" in pattern or "{YYYY}" in pattern
+    if reset == "yearly" and not year:
+        what = "{YY} or {YYYY}"
+    elif reset == "monthly" and not (year and "{MM}" in pattern):
+        what = "{MM} and {YY} or {YYYY}"
+    else:
+        return
+    rep.add("error", path, where, "reset_needs_date", f"reset {reset} needs {what} in the pattern, or numbers repeat")
+
+
 def check_site(rep, V, root, apps, allmodels, sdocs):
     for key in sorted(sdocs):
         p, d = sdocs[key]
@@ -544,11 +561,24 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
         ly = cfg.get("layout")
         if ly and ly not in layouts and not template_exists("layouts", ly):
             rep.add("error", cp, "layout", "unknown_layout", f'layout "{ly}" has no file layouts/{ly}.rk{suggest(ly, layouts)}')
-        for mn in sorted(cfg.get("numbering", {}) or {}):
+        numbering = cfg.get("numbering", {}) or {}
+        for mn in sorted(numbering):
+            if isinstance(numbering[mn], dict):
+                reset_needs_date(rep, cp, f"numbering/{mn}", numbering[mn])
+                continue
             if mn not in allmodels:
                 rep.add("error", cp, f"numbering/{mn}", "unknown_model", f'"{mn}" is not a model{suggest(mn, allmodels)}')
             elif allmodels[mn][0] not in installed:
                 rep.add("warn", cp, f"numbering/{mn}", "not_installed", f'"{mn}" comes from app "{allmodels[mn][0]}", which this site does not install')
+        for mn in sorted(allmodels):
+            app, mp, mm = allmodels[mn]
+            naming = mm.get("naming")
+            series = naming.get("series") if isinstance(naming, dict) else None
+            if app not in installed or not isinstance(series, str) or not series:
+                continue
+            if isinstance(numbering.get(series), dict) or isinstance(naming.get("pattern"), str):
+                continue
+            rep.add("error", mp, "naming/series", "unknown_series", f'series "{series}" is not defined in config.rk numbering and the model gives no default pattern')
     for tn in sorted(themes):
         p, d = themes[tn]
         ext = d.get("extends") or ""

@@ -7,7 +7,7 @@ crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one o
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
-sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' does not match '^[A-Z0-9-]*(\\{YYYY\\}|\\{YY\\}|\\{MM\\}|[A-Z0-9-])*\\{#{2,8}\\}$'
+sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' is not valid under any of the given schemas
 core/app.rk:9:29  error  unknown_model  menu/0/items/2  "outlet" is not a model in this app or its dependencies
 core/models/customer.rk:7:12  error  not_submittable  on_submit  on_submit hooks need is_submittable: true
 crm/app.rk:10:19  error  unknown_model  menu/0/items/1  "leads" is not a model in this app or its dependencies; did you mean "lead"?

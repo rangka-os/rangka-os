@@ -5,6 +5,9 @@ timezone: Asia/Jakarta
 tax: {ppn_rate: 12, dpp_ratio: 11/12, pkp: true}
 numbering:
   sales_invoice: INV-{YYYY}-{#####}
+  faktur: {pattern: "FK/{####}", reset: yearly}
+  bulanan: {pattern: "B/{YY}/{###}", reset: monthly}
+  cnt: {pattern: "X-{#}-{#}"}
 plan: mulai
 apps: [crm, sales, stok]
 theme: kopi_senja

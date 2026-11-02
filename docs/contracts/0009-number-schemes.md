@@ -69,9 +69,13 @@ A series must repeat its reset period in the number, or numbers collide: `reset:
   its increment, so no number is skipped and none is issued twice.
 - **Per org:** every org has its own counters; `{ORG}` keeps numbers of different orgs apart when they share a
   pattern.
-- **Imported numbers:** the first number of a period starts after the highest existing name that matches the
-  rendered pattern in any model using the series, so opening data imported with real numbers is continued,
-  never reused.
+- **Imported numbers:** on every allocation (not only the first of a period) the number continues after the highest
+  existing name that matches the rendered pattern in any model using the series
+  (`last = greatest(last + 1, highest + 1)`), so opening data loaded mid-period is skipped over, never reissued.
+- **Pattern or org code changes:** changing a series' pattern or an org's code mid-period keeps counting; the counter is
+  per org + series + period, not per rendered prefix.
+- **Locks:** a transaction that numbers documents of two series takes two counter locks, and Postgres aborts one of two
+  such transactions that cross; the retry is safe.
 - Amendments keep the v0 rule (`<original>-1`, `-2`, …) and take no new number.
 - Legacy string patterns keep their v0 counters in `rk_naming` (keyed by rendered prefix); nothing renumbers.
 
@@ -88,6 +92,7 @@ only; `schema/0.4` keeps its published content.
 - Per-org patterns (PT A and PT B numbering differently beyond `{ORG}`) come with contract 0010's per-org config.
 - `orgs.<id>.code` is read from `config.rk`; contract 0010 (S5) owns the `orgs:` map and its schema key. Until it lands
   the engine reads it from the loaded site config, and the fallback (org id upper-cased) applies.
+- Until contract 0010 allows `orgs:` in config.rk (schema 0.5), `{ORG}` is the org id upper-cased in practice.
 
 ## Consequences
 Sites describe a firm's numbering in `config.rk` without touching apps; counters are safe under concurrent

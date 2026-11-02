@@ -306,6 +306,7 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 				v.expr(p, fmt.Sprintf("fields/%d/%s", i, key), x, fields, visible)
 			}
 		}
+		v.money(p, m, i, f, fields, visible)
 	}
 	if tf, ok := m.Raw["title_field"]; ok && tf != nil && tf != "" {
 		if _, ok := fields[pyStr(tf)]; !ok {

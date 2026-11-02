@@ -20,7 +20,7 @@ the feature probes (approvals, attachments) and what a scenario allows with ctx.
 Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure (build,
 Postgres start, migrate, seed, user add, serve, a scenario) exits 1.
 """
-import argparse, http.cookiejar, json, os, re, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.request
+import argparse, http.cookiejar, json, os, re, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))  # rangka-os checkout (or a worktree of it)
@@ -266,6 +266,7 @@ def test_session_expiry_returns_to_route(page, ctx):
     expect_signed_in(page, ctx)
     _, app = ctx.home()
     target = ctx.menu_models(app)[0]
+    ctx.allow_http(401, r"/api/v1/")  # the list behind the dialog is asked for while the session is gone
     page.evaluate("window.__noReload = 1")
     page.context.clear_cookies(name="rk_session")
     open_nav(page)
@@ -293,6 +294,200 @@ def test_user_menu_lists_orgs(page, ctx):
         assert menu.get_by_role("menuitem", name=name).count() == 1, f"user menu lists {name}"
 
 
+# ---------------------------------------------------------------------------------------------- lists and kanban (Task 5)
+def open_route(page, ctx, hash_, who=None):
+    """Sign in (owner by default) and go to a hash route without reloading the app."""
+    page.goto(ctx.base + "/app/")
+    sign_in(page, *(who or ctx.owner))
+    expect_signed_in(page, ctx)
+    page.evaluate("(h) => { location.hash = h; }", hash_)
+
+
+def watch_requests(page):
+    """Every kernel request as (METHOD, decoded url) so a scenario can assert on the query a view sent."""
+    seen = []
+    page.on("request", lambda r: seen.append((r.method, urllib.parse.unquote_plus(r.url))) if "/api/v1/" in r.url else None)
+    return seen
+
+
+def writable_body(ctx, model, rec):
+    """A create body for `model` copied from `rec`: stored fields only, child rows likewise."""
+    meta = ctx.meta["models"]
+
+    def keep(m, r):
+        out = {}
+        for f in meta[m]["fields"]:
+            if f.get("compute") or f.get("read_only") or f["name"] not in r:
+                continue
+            v = r[f["name"]]
+            if f["type"] == "table":
+                v = [keep(f["of"], x) for x in v or []]
+            out[f["name"]] = v
+        return out
+    return keep(model, rec)
+
+
+def ensure_records(ctx, model, minimum):
+    """Make sure `model` has at least `minimum` records by creating drafts through the API as the owner."""
+    h = Http(ctx.base).login(*ctx.owner)
+    _, body = h.call("GET", f"/api/v1/r/{model}?limit=1")
+    have, seed = body["total"], (body["data"] or [None])[0]
+    assert seed, f"no seeded {model} to copy from"
+    for i in range(max(0, minimum - have)):
+        body = writable_body(ctx, model, seed)
+        for k in ("posting_date", "due_date"):  # old drafts: the seeded invoices stay on the first page
+            if k in body:
+                body[k] = "2020-01-01"
+        st, b = h.call("POST", f"/api/v1/r/{model}", body)
+        assert st in (200, 201), f"create {model}: {st} {b}"
+    return max(have, minimum)
+
+
+def table_rows(page):
+    return page.locator(".rk-table tbody tr:not([aria-hidden])")
+
+
+def wait_rows(page, timeout=10000):
+    page.wait_for_function("() => document.querySelectorAll('.rk-table tbody tr:not([aria-hidden])').length > 0 && !document.querySelector('.rk-table tbody tr[aria-hidden]')", timeout=timeout)
+
+
+def test_list_search_filter_page(page, ctx):
+    ensure_records(ctx, "sales_invoice", 25)
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    first = table_rows(page).first.inner_text()
+    assert re.search(r"Rp\s", first), "invoice rows show a rupiah total, got " + first
+    page.get_by_role("heading", name=ctx.model_label("sales_invoice")).first.wait_for(timeout=5000)
+    chips = page.locator(".rk-table tbody .rk-chip").all_inner_texts()
+    chips = [c.lower() for c in chips]
+    assert "lunas" in chips and "diajukan" in chips, f"seeded Lunas and Diajukan chips, got {sorted(set(chips))}"
+    assert any(m == "GET" and "limit=20" in u and "/r/sales_invoice" in u for m, u in reqs), "the first page asks for limit=20"
+
+    # search: a customer's name narrows the rows and goes out as q=
+    _, body = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/sales_invoice?limit=5")
+    cust = body["data"][0]["customer"]
+    before = table_rows(page).count()
+    n_req = len(reqs)
+    box = page.get_by_label("Cari", exact=True)
+    box.fill(cust)
+    page.wait_for_timeout(700)
+    q_reqs = [u for m, u in reqs[n_req:] if "q=" in u]
+    assert q_reqs and all(("q=" + cust) in u for u in q_reqs[-1:]), f"search sends q=<name>, saw {reqs[n_req:]}"
+    assert len(q_reqs) == 1, f"typing is debounced into one request, saw {len(q_reqs)}"
+    wait_rows(page)
+    after = table_rows(page).count()
+    assert 0 < after <= before, "rows narrowed"
+    box.fill("")
+    page.wait_for_timeout(700)
+    wait_rows(page)
+
+    # status filter → filter=status in ['paid']
+    n_req = len(reqs)
+    page.locator(".rk-filterbar").get_by_role("button", name="Status").click()
+    page.locator(".rk-fopt", has_text="Lunas").click()
+    page.wait_for_timeout(500)
+    wait_rows(page)
+    assert any("filter=status in ['paid']" in u for m, u in reqs[n_req:]), f"Status → Lunas sends the paid filter, saw {reqs[n_req:]}"
+    chips = page.locator(".rk-table tbody .rk-chip").all_inner_texts()
+    assert chips and {c.lower() for c in chips} == {"lunas"}, f"every row is Lunas, got {sorted(set(chips))}"
+    page.get_by_role("button", name="Hapus filter").click()
+    wait_rows(page)
+
+    # pagination: more than 20 records → page 2 sends offset=20
+    n_req = len(reqs)
+    pager = page.locator(".rk-pager")
+    pager.wait_for(timeout=5000)
+    pager.get_by_role("button", name="2", exact=True).click()
+    page.wait_for_timeout(500)
+    assert any("offset=20" in u and "limit=20" in u for m, u in reqs[n_req:]), f"page 2 sends offset=20, saw {reqs[n_req:]}"
+    wait_rows(page)
+    assert table_rows(page).count() >= 1, "page 2 has rows"
+
+    # sorting by a column header sends sort=
+    n_req = len(reqs)
+    page.locator(".rk-table thead").get_by_role("button", name="Total").click()
+    page.wait_for_timeout(400)
+    assert any("sort=grand_total" in u for m, u in reqs[n_req:]), f"header sort sends sort=, saw {reqs[n_req:]}"
+
+    # a row opens the record
+    wait_rows(page)
+    table_rows(page).first.click()
+    page.wait_for_function("() => /^#\\/r\\/sales_invoice\\/[^/]+$/.test(location.hash)", timeout=5000)
+
+
+def card_by_title(page, title):
+    return page.locator(".pv-card", has_text=title).first
+
+
+def column(page, label):
+    return page.locator(".pv-col-k", has=page.locator("header b", has_text=re.compile("^" + re.escape(label) + "$")))
+
+
+def drag_card(page, ctx, title, label):
+    """Drop the card on a column: a real mouse drag, or on a phone (columns scroll sideways, so source and target are
+    never on screen together) the same dragstart / dragover / drop sequence dispatched with a DataTransfer."""
+    if ctx.args.width >= 800:
+        card_by_title(page, title).drag_to(column(page, label).locator(".pv-cards"))
+        return
+    page.evaluate("""([title, label]) => {
+        const card = [...document.querySelectorAll('.pv-card')].find(c => c.textContent.includes(title));
+        const col = [...document.querySelectorAll('.pv-col-k')].find(c => c.querySelector('header b').textContent === label);
+        const dt = new DataTransfer();
+        const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
+        fire(card, 'dragstart'); fire(col, 'dragover'); fire(col, 'drop'); fire(card, 'dragend');
+    }""", [title, label])
+
+
+def test_kanban_move(page, ctx):
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/deal")
+    page.locator(".pv-board").wait_for(timeout=10000)
+    open_cards = column(page, "Prospek").locator(".pv-card")
+    assert open_cards.count() >= 1, "a seeded deal in Prospek"
+    title = open_cards.first.locator("b").inner_text()
+    drag_card(page, ctx, title, "Kualifikasi")
+    column(page, "Kualifikasi").locator(".pv-card", has_text=title).wait_for(timeout=5000)
+    patches = [(m, u) for m, u in reqs if m == "PATCH" and "/api/v1/r/deal/" in u]
+    assert len(patches) == 1, f"one PATCH for the drop, saw {patches}"
+    page.reload()
+    page.locator(".pv-board").wait_for(timeout=10000)
+    assert column(page, "Kualifikasi").locator(".pv-card", has_text=title).count() >= 1, "the card is still in Kualifikasi after a reload"
+
+    # a move the server rejects: card goes back, first error shown, record opens
+    ctx.allow_http(422, r"/api/v1/r/deal/")
+    page.route(re.compile(r".*/api/v1/r/deal/[^/?]+$"), lambda route: _json(route, 422, {"errors": [{"code": "rule", "message": "Isi alasan kalah dulu"}]})
+               if route.request.method == "PATCH" else route.continue_())
+    src = column(page, "Kualifikasi")
+    t2 = src.locator(".pv-card").first.locator("b").inner_text()
+    drag_card(page, ctx, t2, "Kalah")
+    page.get_by_text("Isi alasan kalah dulu").first.wait_for(timeout=5000)
+    page.wait_for_function("() => /^#\\/r\\/deal\\/[^/]+$/.test(location.hash)", timeout=5000)  # the record opens
+    page.go_back()
+    page.locator(".pv-board").wait_for(timeout=10000)
+    assert column(page, "Kualifikasi").locator(".pv-card", has_text=t2).count() >= 1, "the rejected card is back in its column"
+    assert column(page, "Kalah").locator(".pv-card", has_text=t2).count() == 0, "and not in Kalah"
+    # the toggle switches to the list
+    page.evaluate("location.hash = '#/r/deal'")
+    page.locator(".pv-board").wait_for(timeout=10000)
+    page.get_by_role("button", name="Daftar").click()
+    wait_rows(page)
+
+
+def test_forbidden_list(page, ctx):
+    ctx.allow_http(403, r"/api/v1/r/deal")
+    page.route(re.compile(r".*/api/v1/r/deal(\?.*)?$"), lambda route: _json(route, 403, {"error": {"code": "permission_denied", "message": "Peran kamu tidak boleh membaca peluang"}}))
+    open_route(page, ctx, "#/r/deal")
+    page.get_by_text("Kamu tidak punya akses ke Peluang").first.wait_for(timeout=10000)
+    assert page.locator(".pv-board").count() == 0 and table_rows(page).count() == 0, "no board or rows on a forbidden list"
+    open_nav(page)
+    other = next(m for m in ctx.menu_models(ctx.home()[1]) if m != "deal")
+    page.locator(".rk-side").get_by_role("link", name=ctx.model_label(other), exact=True).click()
+    page.wait_for_function("(m) => location.hash === '#/r/' + m", arg=other, timeout=5000)
+    page.get_by_role("heading", name=ctx.model_label(other)).first.wait_for(timeout=10000)
+    assert page.get_by_text("Kamu tidak punya akses ke Peluang").count() == 0, "the sidebar still navigates away from the forbidden state"
+
+
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
 PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")
@@ -310,8 +505,8 @@ def http_problems(responses, ctx):
         if r.status == 404 and PROBE_404.search(path):
             try:
                 err = (json.loads(r.text() or "{}").get("error") or {})
-            except Exception:
-                err = {}
+            except Exception:  # the body is gone once the page reloaded: a probe path's 404 is still the missing route
+                err = {"code": "not_found", "message": "no such endpoint"}
             if err.get("code") == "not_found" and str(err.get("message", "")).startswith("no such endpoint"):
                 continue
         out.append(f"{r.status} {r.request.method} {path}")

@@ -74,6 +74,9 @@
   .pv-card.dragging { opacity: .5; }
   .pv-card b { font-size: 14px; font-weight: 400; color: var(--ink); line-height: 20px; }
   .pv-card .rk-amount { color: var(--ink); font-weight: 600; }
+  .ap-list tbody tr { cursor: pointer; }
+  .ap-list tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .ap-pager .rk-pager select { display: none; } /* the server page size is fixed at 20 */
   .rk-table .rk-doc-no { white-space: nowrap; }
   .pv-code { width: 100%; min-height: 60vh; box-sizing: border-box; font: 12px/1.6 var(--font-mono); color: var(--ink); background: var(--soft); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; resize: vertical; }
   .pv-code:focus { outline: none; border-color: var(--focus); box-shadow: var(--focus-soft); }
@@ -97,4 +100,5 @@
 <script src="../design-system/bundle.js"></script>
 <script src="api.js"></script>
 <script src="engine.js"></script>
+<script src="list.js"></script>
 <script src="shell.js"></script>

@@ -219,7 +219,7 @@ func (s *Service) sessionPrincipal(r *http.Request) (*Principal, error) {
 	if err != nil || c.Value == "" {
 		return nil, nil
 	}
-	res, err := s.DB.Query(r.Context(), "select user_id, org_id from rk_sessions where id = $1 and expires_at > now()", HashToken(c.Value))
+	res, err := s.DB.Query(r.Context(), "select user_id, org_id from rk_sessions where id = $1 and expires_at > $2", HashToken(c.Value), s.now())
 	if err != nil || len(res.Rows) == 0 {
 		return nil, err
 	}

@@ -127,8 +127,8 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
 		if strings.HasPrefix(tok, "rk_") {
-			res, err := s.DB.Query(ctx, `update rk_tokens set last_used_at = now() where token_hash = $1 and (expires_at is null or expires_at > now())
-				returning user_id, org_id`, HashToken(tok))
+			res, err := s.DB.Query(ctx, `update rk_tokens set last_used_at = now() where token_hash = $1 and (expires_at is null or expires_at > $2)
+				returning user_id, org_id`, HashToken(tok), s.now())
 			if err != nil {
 				return nil, err
 			}
@@ -155,7 +155,7 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 		return &Principal{User: u, Via: "oidc", Scope: scope}, nil
 	}
 	if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {
-		res, err := s.DB.Query(ctx, "select user_id, org_id from rk_sessions where id = $1 and expires_at > now()", HashToken(c.Value))
+		res, err := s.DB.Query(ctx, "select user_id, org_id from rk_sessions where id = $1 and expires_at > $2", HashToken(c.Value), s.now())
 		if err != nil {
 			return nil, err
 		}

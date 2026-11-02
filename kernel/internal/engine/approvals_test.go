@@ -432,3 +432,124 @@ func TestCancelAndActionHeld(t *testing.T) {
 		t.Fatalf("lead = %v", lead["status"])
 	}
 }
+
+const convertPolicy = "approvals:\n  - {name: konversi, on: convert, approvers: [sales_manager]}\n"
+
+// a real status field is part of the snapshot (only the derived status of submittable models is not a field).
+func TestSnapshotIncludesRealStatus(t *testing.T) {
+	e, _ := approvalSetup(t, "", convertPolicy)
+	ctx := context.Background()
+	m := e.Reg().Model("lead")
+	lead, err := store.Get(ctx, e.DB, e.Reg(), "kopi-senja", m, "LEAD-00031")
+	if err != nil {
+		t.Fatal(err)
+	}
+	changed := cloneRecord(lead)
+	changed["status"] = "x"
+	if Snapshot(m, lead) == Snapshot(m, changed) {
+		t.Fatal("status change kept the snapshot")
+	}
+	out, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", nil, ActionOpts{})
+	if err != nil || !out.Held {
+		t.Fatalf("held: %+v %v", out, err)
+	}
+	if _, err := e.DB.Exec(ctx, "update "+pg.QuoteIdent(store.TableName("lead"))+" set status = 'x' where name = $1", "LEAD-00031"); err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.Approve(ctx, mgr, out.Approvals[0].ID)
+	wantStatus(t, err, 409, "approval_void")
+	if ap := approval(t, e, out.Approvals[0].ID); ap.State != "void" {
+		t.Fatalf("state = %s", ap.State)
+	}
+}
+
+// noopConvert replaces crm.convert_lead with a hook that leaves the lead unchanged.
+func noopConvert(e *Engine) {
+	e.Hooks["crm.convert_lead"] = func(h *HookCtx) (map[string]any, error) { return map[string]any{"ok": true}, nil }
+}
+
+func TestApprovalSingleUse(t *testing.T) {
+	e, _ := approvalSetup(t, "", convertPolicy)
+	noopConvert(e)
+	ctx := context.Background()
+	out, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", nil, ActionOpts{})
+	if err != nil || !out.Held {
+		t.Fatalf("held: %+v %v", out, err)
+	}
+	first := out.Approvals[0].ID
+	d, err := e.Approve(ctx, mgr, first)
+	if err != nil || d.Action["ok"] != true {
+		t.Fatalf("approve: %+v %v", d, err)
+	}
+	out, err = e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", nil, ActionOpts{})
+	if err != nil || !out.Held || len(out.Approvals) != 1 || out.Approvals[0].ID == first || out.Approvals[0].State != "pending" {
+		t.Fatalf("second run reused the approval: %+v %v", out, err)
+	}
+}
+
+func TestApprovalBoundToArgs(t *testing.T) {
+	e, _ := approvalSetup(t, "", convertPolicy)
+	noopConvert(e)
+	ctx := context.Background()
+	a, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", map[string]any{"note": "A"}, ActionOpts{})
+	if err != nil || !a.Held {
+		t.Fatalf("A: %+v %v", a, err)
+	}
+	b, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", map[string]any{"note": "B"}, ActionOpts{})
+	if err != nil || !b.Held || b.Approvals[0].ID == a.Approvals[0].ID {
+		t.Fatalf("B reused A's request: %+v %v", b, err)
+	}
+	a2, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", map[string]any{"note": "A"}, ActionOpts{})
+	if err != nil || !a2.Held || a2.Approvals[0].ID != a.Approvals[0].ID {
+		t.Fatalf("A again: %+v %v", a2, err)
+	}
+	if p := pendingFor(t, e, rep, "lead", "LEAD-00031"); len(p) != 2 {
+		t.Fatalf("pending = %d", len(p))
+	}
+	// approving B runs B (with B's args) and leaves A pending
+	var got map[string]any
+	e.Hooks["crm.convert_lead"] = func(h *HookCtx) (map[string]any, error) { got = h.Args; return map[string]any{}, nil }
+	if _, err := e.Approve(ctx, mgr, b.Approvals[0].ID); err != nil || got["note"] != "B" {
+		t.Fatalf("approve B: %v args %v", err, got)
+	}
+	if ap := approval(t, e, a.Approvals[0].ID); ap.State != "pending" {
+		t.Fatalf("A = %s", ap.State)
+	}
+}
+
+// an approval of the current snapshot runs the verb; pending requests of an older snapshot are voided.
+func TestApproveVoidsOlderSnapshot(t *testing.T) {
+	e, _ := approvalSetup(t, managerPolicy)
+	ctx := context.Background()
+	name, res := heldInvoice(t, e)
+	old := res.Approvals[0].ID
+	if _, err := e.DB.Exec(ctx, "update "+pg.QuoteIdent(store.TableName("sales_invoice"))+" set notes = 'x' where name = $1", name); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.Submit(ctx, rep, "sales_invoice", name, true)
+	if err != nil || !res.Held || res.Approvals[0].ID == old {
+		t.Fatalf("resubmit: %+v %v", res, err)
+	}
+	d, err := e.Approve(ctx, mgr, res.Approvals[0].ID)
+	if err != nil || d.Record["docstatus"] != int64(1) {
+		t.Fatalf("approve: %+v %v", d, err)
+	}
+	if ap := approval(t, e, old); ap.State != "void" {
+		t.Fatalf("old = %s", ap.State)
+	}
+}
+
+// when is evaluated on the stored record: the stored grand_total, not a value prepare would recompute.
+func TestSubmitWhenUsesStoredRecord(t *testing.T) {
+	e, _ := approvalSetup(t, managerPolicy)
+	ctx := context.Background()
+	name := newInvoice(t, e, rep)
+	// stored grand_total below the threshold, though the items still compute to 3.163.500
+	if _, err := e.DB.Exec(ctx, "update "+pg.QuoteIdent(store.TableName("sales_invoice"))+" set grand_total = 1 where name = $1", name); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.Submit(ctx, rep, "sales_invoice", name, true)
+	if err != nil || res.Held {
+		t.Fatalf("submit: %+v %v", res, err)
+	}
+}

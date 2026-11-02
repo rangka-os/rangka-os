@@ -16,18 +16,16 @@ import (
 // Document approvals (contract 0007): a verb whose policy matches is held as pending requests bound to the
 // record's snapshot; approving the last one runs the verb as the requester.
 
-// snapshotSkip are record keys left out of a snapshot (contract §3).
-var snapshotSkip = map[string]bool{"name": true, "docstatus": true, "status": true, "created_by": true, "created_at": true,
-	"modified_at": true, "idx": true, "parent": true, "parent_field": true}
+// rowSkip are child row keys left out of a snapshot (contract §3).
+var rowSkip = map[string]bool{"name": true, "idx": true, "parent": true, "parent_field": true}
 
-// Snapshot is the SHA-256 (hex) of the canonical JSON of a stored record: the model's fields and x_ fields,
-// child rows as lists of their fields, keys sorted (contract §3).
+// Snapshot is the SHA-256 (hex) of the canonical JSON of a stored record: every declared field of the model and
+// the x_ fields, child rows as lists of their fields, keys sorted (contract §3). System keys (name, docstatus,
+// the derived status, created_*, modified_at) are not declared fields and so stay out; a real field is never
+// skipped.
 func Snapshot(m *meta.Model, rec store.Record) string {
 	v := map[string]any{}
 	for _, f := range m.Fields {
-		if snapshotSkip[f.Name] {
-			continue
-		}
 		if f.Type == "table" {
 			list := []any{}
 			for _, row := range rows(rec[f.Name]) {
@@ -43,18 +41,62 @@ func Snapshot(m *meta.Model, rec store.Record) string {
 			v[k] = x
 		}
 	}
-	b, _ := json.Marshal(v) // map keys are sorted
+	return hashJSON(v)
+}
+
+// hashJSON is the SHA-256 (hex) of v's JSON (map keys sorted). Stored values always marshal; a failure is a bug.
+func hashJSON(v any) string {
+	b, err := json.Marshal(v)
+	if err != nil {
+		panic("engine: approval snapshot is not JSON: " + err.Error())
+	}
 	sum := sha256.Sum256(b)
 	return hex.EncodeToString(sum[:])
+}
+
+// argsKey is the canonical JSON of a request's args; an approval only matches a call with equal args.
+func argsKey(args map[string]any) string {
+	if args == nil {
+		args = map[string]any{}
+	}
+	b, err := json.Marshal(args)
+	if err != nil {
+		panic("engine: approval args are not JSON: " + err.Error())
+	}
+	return string(b)
 }
 
 // snapshotRow keeps a child row's fields (stored rows carry only fields, x_ fields and the system keys).
 func snapshotRow(row map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, x := range row {
-		if !snapshotSkip[k] {
+		if !rowSkip[k] {
 			out[k] = x
 		}
+	}
+	return out
+}
+
+// cloneRecord copies a record and its child rows, so the stored values survive prepare.
+func cloneRecord(rec store.Record) store.Record {
+	out := store.Record{}
+	for k, v := range rec {
+		if l, ok := v.([]any); ok {
+			c := make([]any, len(l))
+			for i, x := range l {
+				if row, ok := x.(map[string]any); ok {
+					nr := map[string]any{}
+					for rk, rv := range row {
+						nr[rk] = rv
+					}
+					c[i] = nr
+				} else {
+					c[i] = x
+				}
+			}
+			v = c
+		}
+		out[k] = v
 	}
 	return out
 }
@@ -111,42 +153,68 @@ func approvalLabel(ap *store.Approval) string {
 	return ap.Policy
 }
 
-// hold creates or finds the requests verb needs on rec. A policy is satisfied by an approved request for the
-// same snapshot; a pending one for the same snapshot is reused; otherwise a request is inserted, already
-// approved when the actor may decide it (self-approval). It returns the pending and all requests of the call.
+// hold creates or finds the requests verb needs on rec (the stored record). Requests are bound to the
+// snapshot and the args. Inside Approve's verb run an approved request satisfies its policy. On a direct call
+// approved requests are single-use: they are reused only while another matching policy still waits (so an
+// approved policy is not asked again); when they alone would let the verb run, fresh requests are made. A
+// pending request with the same snapshot and args is reused; otherwise a request is inserted, already approved
+// when the actor may decide it (self-approval). It returns the pending and all requests of the call.
 func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args map[string]any) (pending []store.Approval, all []store.Approval, err error) {
-	pols := m.ApprovalsFor(verb)
-	if len(pols) == 0 {
-		return nil, nil, nil
-	}
-	a := o.actor
-	name := str(rec["name"])
-	existing, _, err := store.ListApprovals(o.ctx, o.tx, store.ApprovalFilter{Org: a.Org, Model: m.Name, Name: name, Verb: verb, Limit: 500})
-	if err != nil {
-		return nil, nil, err
-	}
-	for _, p := range pols {
+	var pols []meta.Approval
+	for _, p := range m.ApprovalsFor(verb) {
 		if p.When != "" {
 			v, err := o.scope(m, rec).eval(p.When)
 			if err == nil && !cel.Truthy(v) {
 				continue
 			} // a when that cannot be evaluated requires approval (fail closed)
 		}
-		var found *store.Approval
-		for i := range existing {
-			x := &existing[i]
-			if x.Policy != p.Name || x.Snapshot != snapshot {
-				continue
+		pols = append(pols, p)
+	}
+	if len(pols) == 0 {
+		return nil, nil, nil
+	}
+	a := o.actor
+	name := str(rec["name"])
+	key := argsKey(args)
+	existing, _, err := store.ListApprovals(o.ctx, o.tx, store.ApprovalFilter{Org: a.Org, Model: m.Name, Name: name, Verb: verb, Limit: 500})
+	if err != nil {
+		return nil, nil, err
+	}
+	approved := map[string]*store.Approval{}
+	waiting := map[string]*store.Approval{}
+	for i := range existing {
+		x := &existing[i]
+		if x.Snapshot != snapshot || argsKey(x.Args) != key {
+			continue
+		}
+		switch x.State {
+		case "approved":
+			if approved[x.Policy] == nil {
+				approved[x.Policy] = x
 			}
-			if x.State == "approved" || (x.State == "pending" && found == nil) {
-				found = x
+		case "pending":
+			if waiting[x.Policy] == nil {
+				waiting[x.Policy] = x
 			}
 		}
-		if found != nil {
-			all = append(all, *found)
-			if found.State == "pending" {
-				pending = append(pending, *found)
+	}
+	useApproved := o.approving
+	if !useApproved {
+		for _, p := range pols {
+			if approved[p.Name] == nil {
+				useApproved = true // some policy still waits: do not ask approved ones again
+				break
 			}
+		}
+	}
+	for _, p := range pols {
+		if x := approved[p.Name]; useApproved && x != nil {
+			all = append(all, *x)
+			continue
+		}
+		if x := waiting[p.Name]; x != nil {
+			all = append(all, *x)
+			pending = append(pending, *x)
 			continue
 		}
 		var label map[string]any
@@ -291,11 +359,29 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 			return err
 		}
 		d = &Decision{Approval: *ap}
-		left, _, err := store.ListApprovals(o.ctx, o.tx, store.ApprovalFilter{Org: a.Org, State: "pending", Model: ap.Model, Name: ap.Name, Verb: ap.Verb, Limit: 1})
+		left, _, err := store.ListApprovals(o.ctx, o.tx, store.ApprovalFilter{Org: a.Org, State: "pending", Model: ap.Model, Name: ap.Name, Verb: ap.Verb, Limit: 500})
 		if err != nil {
 			return err
 		}
-		if len(left) > 0 {
+		waiting, key := false, argsKey(ap.Args)
+		for i := range left {
+			x := &left[i]
+			if ap.Model != "" && x.Snapshot != ap.Snapshot {
+				// an older request for another state of the record can never run: void it
+				v, err := store.VoidApproval(o.ctx, o.tx, a.Org, x.ID)
+				if err != nil {
+					return err
+				}
+				if err := o.approvalEvent(v, "approval.void", nil); err != nil {
+					return err
+				}
+				continue
+			}
+			if argsKey(x.Args) == key { // a request with other args is another call
+				waiting = true
+			}
+		}
+		if waiting {
 			return nil
 		}
 		return o.runApproved(ap, d)
@@ -314,7 +400,8 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 
 // runApproved runs the request's verb as its requester inside o's transaction.
 func (o *op) runApproved(ap *store.Approval, d *Decision) error {
-	ro := &op{ctx: o.ctx, tx: o.tx, e: o.e, actor: requesterActor(o.actor.Org, ap.Requester), touched: o.touched, links: map[string]map[string]any{}}
+	ro := &op{ctx: o.ctx, tx: o.tx, e: o.e, actor: requesterActor(o.actor.Org, ap.Requester), touched: o.touched, links: map[string]map[string]any{},
+		approving: true}
 	switch {
 	case strings.HasPrefix(ap.Verb, "flow:"):
 		return &StatusError{501, "not_implemented", "flow approvals are not implemented yet"}

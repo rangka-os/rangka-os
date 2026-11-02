@@ -469,7 +469,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	if toInt(rec["docstatus"]) != 0 {
 		return nil, conflict("not_draft", "Hanya draf yang bisa diajukan")
 	}
-	snap := Snapshot(m, rec)
+	stored := cloneRecord(rec) // snapshot and approval when: read the stored record (0007 §2, §3)
 	o.prepare(m, rec, false)
 	errs, warns, err := o.check(m, rec, "submit")
 	if err != nil {
@@ -483,7 +483,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		v.NeedsForce = true
 		return nil, v
 	}
-	pending, all, err := o.hold(m, rec, snap, "submit", map[string]any{"force": force})
+	pending, all, err := o.hold(m, stored, Snapshot(m, stored), "submit", map[string]any{"force": force})
 	if err != nil {
 		return nil, err
 	}

@@ -179,3 +179,16 @@ func VoidVerbApprovals(ctx context.Context, q pg.Querier, org, model, name, verb
 	}
 	return out, nil
 }
+
+// VoidApproval turns one pending request into void; ErrNotFound when it is not pending.
+func VoidApproval(ctx context.Context, q pg.Querier, org, id string) (*Approval, error) {
+	res, err := q.Query(ctx, `update rk_approvals set state = 'void' where org_id = $1 and id = $2 and state = 'pending' returning `+approvalCols, org, id)
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Rows) == 0 {
+		return nil, ErrNotFound
+	}
+	a := scanApproval(res.Rows[0])
+	return &a, nil
+}

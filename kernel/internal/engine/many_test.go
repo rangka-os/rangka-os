@@ -131,3 +131,59 @@ func TestFindBy(t *testing.T) {
 		t.Fatal("unknown field accepted")
 	}
 }
+
+func leadInputs() []map[string]any {
+	return []map[string]any{
+		{"lead_name": "L1", "phone": "+62811000111"},
+		{"lead_name": "L2", "phone": "+62811000111"},
+		{"lead_name": "L3", "phone": "+62811000333"},
+	}
+}
+
+func TestCreateManySavepointPerInput(t *testing.T) {
+	e, a := setup(t)
+	ctx := context.Background()
+	count := func() int64 {
+		n, err := store.Count(ctx, e.DB, a.Org, "lead")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return n
+	}
+	before := count()
+	res, err := e.CreateMany(ctx, a, "lead", leadInputs(), ManyOpts{DryRun: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var ve *ValidationError
+	if res[0].Err != nil || !errors.As(res[1].Err, &ve) || res[2].Err != nil || res[0].Name == "" || res[2].Name == "" {
+		t.Fatalf("dry run: %+v", res)
+	}
+	res, err = e.CreateMany(ctx, a, "lead", leadInputs(), ManyOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !errors.As(res[1].Err, &ve) || res[0].Name != "" || res[2].Name != "" {
+		t.Fatalf("commit: %+v", res)
+	}
+	if got := count(); got != before {
+		t.Fatalf("count %d, want %d", got, before)
+	}
+}
+
+func TestCreateManyBeforeSameTransaction(t *testing.T) {
+	e, a := setup(t)
+	ctx := context.Background()
+	before := itemCount(t, e, a)
+	_, err := e.CreateMany(ctx, a, "item", []map[string]any{{"item_name": "B1"}}, ManyOpts{DryRun: true,
+		Before: func(ctx context.Context, tx pg.Querier) error {
+			_, err := tx.Exec(ctx, "insert into r_item (org_id, name, item_name) values ($1, 'ZZ-BEFORE', 'zz')", a.Org)
+			return err
+		}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := itemCount(t, e, a); got != before {
+		t.Fatalf("Before row survived dry run: %d vs %d", got, before)
+	}
+}

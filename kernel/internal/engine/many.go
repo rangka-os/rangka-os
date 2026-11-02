@@ -36,9 +36,17 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 		}
 		failed := false
 		for i, in := range inputs {
+			// A savepoint per input: a unique violation aborts the Postgres transaction, and rolling back
+			// to the savepoint lets the next input run.
+			if _, err := o.tx.Exec(ctx, "savepoint many_input"); err != nil {
+				return err
+			}
 			res, err := o.create(model, in, CreateOpts{})
 			var ve *ValidationError
 			if errors.As(err, &ve) {
+				if _, err := o.tx.Exec(ctx, "rollback to savepoint many_input"); err != nil {
+					return err
+				}
 				out[i].Err = ve
 				failed = true
 				continue
@@ -46,7 +54,16 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 			if err != nil {
 				return err
 			}
+			if _, err := o.tx.Exec(ctx, "release savepoint many_input"); err != nil {
+				return err
+			}
 			out[i].Name = str(res.Record["name"])
+		}
+		if failed && !opts.DryRun {
+			// nothing is committed, so no input has a record
+			for i := range out {
+				out[i].Name = ""
+			}
 		}
 		if opts.DryRun || failed {
 			return errRollback
@@ -58,16 +75,6 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 	}
 	if err != nil {
 		return nil, err
-	}
-	if !opts.DryRun {
-		for i := range out {
-			if out[i].Err != nil {
-				for j := range out {
-					out[j].Name = ""
-				}
-				break
-			}
-		}
 	}
 	return out, nil
 }

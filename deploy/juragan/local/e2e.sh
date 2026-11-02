@@ -198,12 +198,14 @@ section_stack() {
 # Runs the backup container; stdout of the container, exit status preserved.
 run_backup() { dc run --rm -T backup "$@"; }
 
-# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok rk=<n> total=<rows> lead=<rows> method=<m>".
+# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok members=ok apps=ok rk=<n> total=<rows> lead=<rows> method=<m>".
 # shellcheck disable=SC2016 # the script runs inside the container
 INSPECT='set -euo pipefail
 d="$(mktemp -d)"; cd "$d"
 age -d -i /age.txt "/backups/$1/$2" | tar -x
 sha256sum -c SHA256SUMS >/dev/null && printf "sha=ok "
+[ "$(ls | LC_ALL=C sort | tr "\n" " ")" = "SHA256SUMS apps.tar db.dump files.tar manifest.json site.tar " ] && printf "members=ok "
+tar -tf apps.tar | grep -q "^apps/" && printf "apps=ok "
 jq -r "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method)\"" manifest.json'
 inspect_archive() { # inspect_archive <pilot> <archive file name>
   dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" --entrypoint bash backup -c "$INSPECT" _ "$1" "$2"
@@ -252,8 +254,8 @@ section_backup() {
   s_fnb="$(inspect_archive fnb "$f_fnb" 2>/dev/null)" || s_fnb=""
   for p in jasa fnb; do
     local s="s_$p"
-    if [[ "${!s}" =~ ^sha=ok\ rk=([0-9]+)\ total=([0-9]+) ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
-      ok "$p archive decrypts, SHA256SUMS verify, ${BASH_REMATCH[1]} rk_ tables with rows (${!s})"
+    if [[ "${!s}" =~ ^sha=ok\ members=ok\ apps=ok\ rk=([0-9]+)\ total=([0-9]+) ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
+      ok "$p archive decrypts, SHA256SUMS verify, members incl. apps.tar, ${BASH_REMATCH[1]} rk_ tables with rows (${!s})"
     else
       bad "$p archive inspection: ${!s}"
     fi
@@ -321,11 +323,95 @@ SHIM
   same "docker stop: no ping" "$(ping_hits)" "$hits_good"
 }
 
+drill_projects() { docker ps -a --format '{{.Names}}' | grep -c '^juragan-drill-' || true; }
+drill_networks() { docker network ls --format '{{.Name}}' | grep -c '^juragan-drill-' || true; }
+
+# flip one byte in the middle of <file> (in place)
+flip_byte() {
+  local f="$1" off
+  off=$(( $(wc -c <"$f") / 2 ))
+  # shellcheck disable=SC2059 # the format is built on purpose: printf turns \xNN into the byte
+  printf "$(printf '\\x%02x' $(( ($(od -An -tu1 -j "$off" -N1 "$f") + 1) % 256 )))" | dd of="$f" bs=1 seek="$off" conv=notrunc 2>/dev/null
+}
+
+section_drill() {
+  echo "== drill"
+  local drill=("$DEPLOY/restore-drill.sh" --env "$WORK/.env" --identity "$WORK/age-identity.txt" --log "$WORK/drill.log")
+  export DRILL_OFFBOX_NETWORK="${PROJECT}_default" # the off-box store lives in this project's network
+  local out rc=0 p
+
+  # the real drill: newest archive of each pilot from off-box, fresh project, restore, boot
+  out="$("${drill[@]}" --pilot all 2>&1)" || rc=$?
+  same "drill --pilot all exits 0" "$rc" 0
+  [ "$rc" = 0 ] || echo "$out" >&2
+  for p in jasa fnb; do
+    if grep -q "^DRILL PASSED $p $p-[0-9TZ]*[.]tar[.]age " <<<"$out"; then ok "DRILL PASSED $p"; else bad "no DRILL PASSED $p"; fi
+    if grep -q '^restore ok: [0-9]* tables, [0-9]* rows match' <<<"$out"; then ok "$p restore compared the manifest"; else bad "$p: no 'restore ok' line"; fi
+  done
+  same "drill.log has both lines" "$(grep -c '^DRILL PASSED' "$WORK/drill.log" 2>/dev/null || true)" 2
+  same "no drill project left after success" "$(drill_projects)/$(drill_networks)" 0/0
+
+  # tampering: a flipped byte in the encrypted archive fails at decryption (age authenticates every chunk)
+  local newest tdir="$WORK/tamper"
+  rm -rf "$tdir"; mkdir -p "$tdir"
+  newest="$(local_archives jasa | tail -1)"
+  cp "$newest" "$tdir/$(basename "$newest")"
+  flip_byte "$tdir/$(basename "$newest")"
+  rc=0; out="$("${drill[@]}" --pilot jasa --archive "$tdir/$(basename "$newest")" 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -qi 'authentication\|checksum' <<<"$out" && ! grep -q 'DRILL PASSED' <<<"$out"; then
+    ok "flipped byte in the .age archive: drill fails ($(grep -oi 'age authentication error\|checksum[a-z ]*' <<<"$out" | head -1))"
+  else
+    bad "tampered .age archive: rc=$rc: $out"
+  fi
+  same "no drill project left after the .age tamper" "$(drill_projects)/$(drill_networks)" 0/0
+
+  # the checksum step itself: decrypt, flip a byte in the middle of the plain tar, run with the .tar
+  local plain="$tdir/${newest##*/}"
+  plain="${plain%.age}"
+  # shellcheck disable=SC2016 # the script runs inside the container
+  dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" -v "$tdir:/t" --entrypoint bash backup \
+    -c 'age -d -i /age.txt -o "/t/$1" "/backups/jasa/$2"' _ "$(basename "$plain")" "$(basename "$newest")"
+  flip_byte "$plain"
+  rc=0; out="$("${drill[@]}" --pilot jasa --archive "$plain" 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'checksum' <<<"$out" && grep -q 'no database was touched' <<<"$out" && ! grep -q 'pg_restore' <<<"$out"; then
+    ok "flipped byte in the plain archive: fails at the checksum step before any database work"
+  else
+    bad "tampered plain archive: rc=$rc: $out"
+  fi
+  same "no drill project left after the checksum failure" "$(drill_projects)/$(drill_networks)" 0/0
+
+  # truncated archive
+  head -c $(( $(wc -c <"$plain") / 2 )) "$plain" >"$tdir/trunc.tar"
+  rc=0; out="$("${drill[@]}" --pilot jasa --archive "$tdir/trunc.tar" 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -qi 'truncated\|damaged\|checksum' <<<"$out" && ! grep -q 'DRILL PASSED' <<<"$out"; then
+    ok "truncated archive is rejected"
+  else
+    bad "truncated archive: rc=$rc: $out"
+  fi
+  same "no drill project left after the truncated archive" "$(drill_projects)/$(drill_networks)" 0/0
+
+  # restore.sh against the live jasa database is refused, and the live data is unchanged
+  local before after live="$WORK/live-srv"
+  mkdir -p "$live"
+  before="$(dc exec -T -e PGPASSWORD="$(grep '^JASA_DB_PASSWORD=' "$WORK/.env" | cut -d= -f2)" postgres \
+    psql -h localhost -U jasa -d jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
+  rc=0
+  out="$(dc run --rm -T -v "$WORK/age-identity.txt:/run/secrets/age-identity:ro" -v "$live:/restore/jasa" \
+    --entrypoint /usr/local/bin/restore.sh backup "/backups/jasa/$(basename "$newest")" jasa 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'not empty' <<<"$out"; then ok "restore into the live jasa database is refused (not empty)"; else bad "live restore: rc=$rc: $out"; fi
+  after="$(dc exec -T -e PGPASSWORD="$(grep '^JASA_DB_PASSWORD=' "$WORK/.env" | cut -d= -f2)" postgres \
+    psql -h localhost -U jasa -d jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
+  if [[ "$before" =~ ^[0-9]+$ ]]; then same "live jasa data unchanged after the refused restore" "$after" "$before"; else bad "could not count live leads: $before"; fi
+  same "refused restore wrote nothing to the folder" "$(find "$live" -mindepth 1 | wc -l | tr -d ' ')" 0
+  if [ "$(drill_projects)" = 0 ]; then ok "no juragan-drill-* container at the end"; else bad "drill containers left"; fi
+}
+
 main() {
   trap cleanup EXIT
   prepare
   section_stack
   section_backup
+  section_drill
   [ "$FAIL" -eq 0 ]
 }
 

@@ -8,6 +8,6 @@ RUN apt-get update \
  && apt-get install -y --no-install-recommends rclone age jq curl ca-certificates \
  && rm -rf /var/lib/apt/lists/*
 COPY --from=rangka /usr/local/bin/rangka /usr/local/bin/rangka
-COPY lib.sh backup.sh /usr/local/bin/
-RUN chmod 0755 /usr/local/bin/backup.sh
+COPY lib.sh backup.sh restore.sh /usr/local/bin/
+RUN chmod 0755 /usr/local/bin/backup.sh /usr/local/bin/restore.sh
 ENTRYPOINT ["/usr/local/bin/backup.sh"]

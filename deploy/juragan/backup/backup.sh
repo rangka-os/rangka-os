@@ -85,11 +85,16 @@ dump_rangka() {
   return 1
 }
 
-# tar_dir <out> <pilot> <name>: tar of /pilots/<pilot>/<name> with the path <name>/..., empty tar when missing.
+# tar_dir <out> <pilot> <name>...: tar of the existing /pilots/<pilot>/<name> folders with paths <name>/...,
+# empty tar when none exists.
 tar_dir() {
-  local out="$1" p="$2" name="$3"
-  if [ -d "$PILOTS_ROOT/$p/$name" ]; then
-    tar -C "$PILOTS_ROOT/$p" -cf "$out" "$name"
+  local out="$1" p="$2" name have=()
+  shift 2
+  for name in "$@"; do
+    [ -d "$PILOTS_ROOT/$p/$name" ] && have+=("$name")
+  done
+  if [ "${#have[@]}" -gt 0 ]; then
+    tar -C "$PILOTS_ROOT/$p" -cf "$out" "${have[@]}"
   else
     tar -cf "$out" -T /dev/null
   fi
@@ -134,6 +139,7 @@ backup_pilot() {
   fi
   tar_dir "$WORK_DIR/site.tar" "$p" site
   tar_dir "$WORK_DIR/files.tar" "$p" data
+  tar_dir "$WORK_DIR/apps.tar" "$p" apps connectors # lets a second machine boot the kernel from the archive alone
 
   pg_version="$(psql -qAtX -c 'SHOW server_version' "$url")"
   stats_to_tables_json <"$WORK_DIR/stats.tsv" >"$WORK_DIR/tables.json"
@@ -143,8 +149,8 @@ backup_pilot() {
     --slurpfile tables "$WORK_DIR/tables.json" \
     '{pilot: $pilot, created_at: $created, method: $method, rangka_version: $rv, postgres_version: $pv, tables: $tables[0]}' \
     >"$WORK_DIR/manifest.json"
-  (cd "$WORK_DIR" && sha256sum "$dump_file" site.tar files.tar manifest.json >SHA256SUMS)
-  (cd "$WORK_DIR" && tar -cf archive.tar manifest.json "$dump_file" site.tar files.tar SHA256SUMS)
+  (cd "$WORK_DIR" && sha256sum "$dump_file" site.tar files.tar apps.tar manifest.json >SHA256SUMS)
+  (cd "$WORK_DIR" && tar -cf archive.tar manifest.json "$dump_file" site.tar files.tar apps.tar SHA256SUMS)
   if [ "$suffix" = tar.age ]; then
     age -r "$BACKUP_AGE_RECIPIENT" -o "$PART_FILE" "$WORK_DIR/archive.tar"
   else

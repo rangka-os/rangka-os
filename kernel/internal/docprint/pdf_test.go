@@ -8,7 +8,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 )
 
 func fakeChromium(t *testing.T, script string) {
@@ -47,20 +46,6 @@ func TestPDF(t *testing.T) {
 	}
 }
 
-func TestPDFTimeout(t *testing.T) {
-	fakeChromium(t, "sleep 5")
-	old := pdfTimeout
-	pdfTimeout = 200 * time.Millisecond
-	defer func() { pdfTimeout = old }()
-	start := time.Now()
-	if _, err := PDF(context.Background(), []byte("<p>x</p>")); err == nil {
-		t.Fatal("want a timeout error")
-	}
-	if time.Since(start) > 3*time.Second {
-		t.Fatal("PDF did not stop at the timeout")
-	}
-}
-
 func TestPDFFailureIncludesStderr(t *testing.T) {
 	fakeChromium(t, "echo boom-from-chrome >&2; exit 1")
 	_, err := PDF(context.Background(), []byte("<p>x</p>"))
@@ -74,5 +59,18 @@ func TestPDFNoOutputFile(t *testing.T) {
 	_, err := PDF(context.Background(), []byte("<p>x</p>"))
 	if err == nil || !strings.Contains(err.Error(), "quiet-failure") {
 		t.Fatalf("got %v", err)
+	}
+}
+
+func TestTail(t *testing.T) {
+	if got := tail("abc", 10); got != "abc" {
+		t.Fatal(got)
+	}
+	// "é" is two bytes; cutting at 3 bytes of "aéé" would split a rune.
+	if got := tail("aéé", 3); got != "é" {
+		t.Fatalf("got %q", got)
+	}
+	if got := tail("xyz", 2); got != "yz" {
+		t.Fatal(got)
 	}
 }

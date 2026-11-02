@@ -5,11 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"time"
+	"unicode/utf8"
 )
 
 // ErrNoChromium is returned by PDF when no Chromium or Chrome binary is available.
@@ -61,15 +63,13 @@ func PDF(ctx context.Context, html []byte) ([]byte, error) {
 	ctx, cancel := context.WithTimeout(ctx, pdfTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, bin, "--headless", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer",
-		"--user-data-dir="+filepath.Join(dir, "profile"), "--print-to-pdf="+out, "file://"+in)
+		"--user-data-dir="+filepath.Join(dir, "profile"), "--print-to-pdf="+out, (&url.URL{Scheme: "file", Path: in}).String())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr
+	killTree(cmd)
 	cmd.WaitDelay = time.Second
 	runErr := cmd.Run()
-	detail := strings.TrimSpace(stderr.String())
-	if len(detail) > 2000 {
-		detail = detail[:2000]
-	}
+	detail := tail(strings.TrimSpace(stderr.String()), 2000)
 	if ctx.Err() != nil {
 		return nil, fmt.Errorf("chromium pdf: %w: %s", ctx.Err(), detail)
 	}
@@ -81,4 +81,16 @@ func PDF(ctx context.Context, html []byte) ([]byte, error) {
 		return nil, fmt.Errorf("chromium pdf: no output produced: %s", detail)
 	}
 	return b, nil
+}
+
+// tail keeps the last n bytes of s without splitting a UTF-8 rune.
+func tail(s string, n int) string {
+	if len(s) <= n {
+		return s
+	}
+	s = s[len(s)-n:]
+	for !utf8.RuneStart(s[0]) {
+		s = s[1:]
+	}
+	return s
 }

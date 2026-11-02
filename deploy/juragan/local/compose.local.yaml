@@ -1,0 +1,7 @@
+# Local override: self-signed TLS on *.localhost, Caddy on 8081/8443. The image is rangka:local,
+# built by local/e2e.sh (RANGKA_IMAGE in local/work/.env).
+services:
+  caddy:
+    ports: !override
+      - "8081:80"
+      - "8443:443"

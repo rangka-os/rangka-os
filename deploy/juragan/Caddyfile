@@ -1,0 +1,18 @@
+# One site per pilot. CADDY_TLS: an ACME contact email in production, `internal` locally.
+{$JASA_HOST} {
+	tls {$CADDY_TLS}
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy jasa:8080 {
+		flush_interval -1
+	}
+}
+
+{$FNB_HOST} {
+	tls {$CADDY_TLS}
+	encode zstd gzip
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy fnb:8080 {
+		flush_interval -1
+	}
+}

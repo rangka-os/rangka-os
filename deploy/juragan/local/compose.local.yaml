@@ -20,5 +20,10 @@ services:
       timeout: 3s
       retries: 30
 
+  # Receives the success ping of backup.sh; every request shows up in `docker compose logs pinger`.
+  pinger:
+    image: python:3.12-alpine
+    command: ["python", "-m", "http.server", "8080", "--directory", "/tmp"]
+
 volumes:
   offbox_data:

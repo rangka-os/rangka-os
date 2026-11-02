@@ -24,6 +24,9 @@ PASS=0
 FAIL=0
 ok() { PASS=$((PASS + 1)); echo "  ok   $*"; }
 bad() { FAIL=$((FAIL + 1)); echo "  FAIL $*" >&2; }
+same() { # same <description> <actual> <expected>
+  if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi
+}
 check() { # check <description> <command...>
   local d="$1"; shift
   if "$@" >/dev/null 2>&1; then ok "$d"; else bad "$d"; fi
@@ -72,9 +75,12 @@ prepare() {
   OFFBOX_KEY=e2eminio
   OFFBOX_SECRET="$(openssl rand -hex 12)"
   # age keypair for the backup test: built from the backup image, identity stays under work/
-  docker build -q -t juragan-backup-keygen --build-arg RANGKA_IMAGE=rangka:local "$DEPLOY/backup" >/dev/null 2>&1 || true
-  docker run --rm --entrypoint age-keygen juragan-backup-keygen >"$WORK/age-identity.txt" 2>/dev/null || true
+  docker build -q -t juragan-backup-keygen --build-arg RANGKA_IMAGE=rangka:local "$DEPLOY/backup" >/dev/null \
+    || { echo "cannot build the backup image (needed for age-keygen)" >&2; exit 2; }
+  docker run --rm --entrypoint age-keygen juragan-backup-keygen >"$WORK/age-identity.txt" \
+    || { echo "age-keygen failed in the backup image" >&2; exit 2; }
   AGE_RECIPIENT="$(sed -n 's/^# public key: //p' "$WORK/age-identity.txt")"
+  [ -n "$AGE_RECIPIENT" ] || { echo "no age public key in $WORK/age-identity.txt" >&2; exit 2; }
   mkdir -p "$WORK/backups"
   cat >"$WORK/.env" <<ENV
 RANGKA_TAG=local
@@ -91,6 +97,7 @@ FNB_DB_PASSWORD=$(openssl rand -hex 16)
 RANGKA_OWNER_EMAIL=$OWNER_EMAIL
 RANGKA_OWNER_PASSWORD=$OWNER_PASSWORD
 BACKUP_DIR=$WORK/backups
+BACKUP_PING_URL=http://pinger:8080/
 BACKUP_BUCKET=juragan-backups
 BACKUP_AGE_RECIPIENT=$AGE_RECIPIENT
 BACKUP_RCLONE_RETRIES=1
@@ -205,11 +212,15 @@ inspect_archive() { # inspect_archive <pilot> <archive file name>
 # local archives of a pilot, oldest first
 local_archives() { find "$WORK/backups/$1" -name '*.tar.age' 2>/dev/null | sort; }
 
+# number of requests the local ping receiver has logged
+ping_hits() { dc logs --no-log-prefix pinger 2>/dev/null | grep -c '"GET / HTTP' || true; }
+
 offbox_list() { dc run --rm -T --no-deps --entrypoint rclone backup lsf "offbox:juragan-backups/$1/"; }
 
 section_backup() {
   echo "== backup"
   dc build -q backup >/dev/null 2>&1 || bad "build backup image"
+  dc up -d pinger >/dev/null 2>&1 || bad "start ping receiver"
   if dc up -d --wait offbox >/dev/null 2>&1; then ok "offbox (S3) healthy"; else bad "offbox did not become healthy"; fi
   if dc run --rm -T --no-deps --entrypoint rclone backup mkdir offbox:juragan-backups >/dev/null 2>&1; then ok "bucket juragan-backups created"; else bad "bucket creation"; fi
 
@@ -223,6 +234,10 @@ section_backup() {
 
   local out
   if out="$(run_backup all 2>&1)"; then ok "backup all exits 0"; else bad "backup all failed: $out"; fi
+
+  local hits_good
+  hits_good="$(ping_hits)"
+  if [ "$hits_good" = 1 ]; then ok "success ping received once after the good run"; else bad "ping hits after good run: $hits_good"; fi
 
   local p n
   for p in jasa fnb; do
@@ -261,10 +276,31 @@ section_backup() {
   if out="$(dc run --rm -T backup jasa 2>&1)"; then bad "backup with off-box down should fail"; else ok "backup exits non-zero when off-box is down"; fi
   after_local="$(local_archives jasa | wc -l)"
   if [ "$after_local" -eq $((before_local + 1)) ]; then ok "failed upload keeps the new local archive"; else bad "local archives $before_local -> $after_local"; fi
-  if grep -qi 'ping' <<<"$out"; then bad "success ping mentioned on failure"; fi
+  if [ "$(ping_hits)" = "$hits_good" ]; then ok "no ping after the failed upload"; else bad "ping sent after a failed upload"; fi
   dc up -d --wait offbox >/dev/null
   after_remote="$(offbox_list jasa)"
   if [ "$before_remote" = "$after_remote" ]; then ok "off-box listing unchanged after the failed run"; else bad "off-box listing changed"; fi
+
+  # a failure inside the archive step (tar of site/ fails) must abort: non-zero, nothing uploaded, no ping,
+  # no half-written archive left behind. tar is shadowed by a shim that fails on site.tar only.
+  mkdir -p "$WORK/shim"
+  cat >"$WORK/shim/tar" <<'SHIM'
+#!/bin/sh
+case "$*" in *"site.tar site") echo "injected tar failure" >&2; exit 2 ;; esac
+exec /usr/bin/tar "$@"
+SHIM
+  chmod 755 "$WORK/shim/tar"
+  before_local="$(local_archives jasa | wc -l)"
+  sleep 2
+  if out="$(dc run --rm -T -v "$WORK/shim:/shim:ro" -e PATH=/shim:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin backup jasa 2>&1)"; then
+    bad "backup with a failing archive step should exit non-zero: $out"
+  else
+    ok "backup exits non-zero when the archive step fails"
+  fi
+  same "failed archive step uploads nothing" "$(offbox_list jasa)" "$before_remote"
+  same "failed archive step leaves no local archive" "$(local_archives jasa | wc -l | tr -d ' ')" "$(echo "$before_local" | tr -d ' ')"
+  if [ -z "$(find "$WORK/backups/jasa" -name '.work.*' -o -name '*.part')" ]; then ok "no work dir or .part left behind"; else bad "leftovers in backups/jasa"; fi
+  same "no ping after the archive failure" "$(ping_hits)" "$hits_good"
 }
 
 main() {

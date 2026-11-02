@@ -12,15 +12,22 @@ has_rangka_backup() {
 
 # SQL printing one line per base table outside pg_catalog/information_schema: schema.table, rows, md5.
 # One statement per table via query_to_xml; md5 of the rows as text, ordered, so it is order independent.
+# Must run inside a transaction: the SET LOCALs pin the text format of dates, floats and bytea so the
+# checksums are the same on the source and on a restored copy.
 stats_sql() {
   cat <<'SQL'
+SET LOCAL TimeZone = 'UTC';
+SET LOCAL DateStyle = 'ISO, YMD';
+SET LOCAL IntervalStyle = 'postgres';
+SET LOCAL extra_float_digits = 3;
+SET LOCAL bytea_output = 'hex';
 SELECT n.nspname || '.' || c.relname AS tbl,
        (xpath('/row/c/text()', x))[1]::text AS rows,
        (xpath('/row/m/text()', x))[1]::text AS md5
 FROM pg_class c
 JOIN pg_namespace n ON n.oid = c.relnamespace
 CROSS JOIN LATERAL query_to_xml(
-  format('SELECT count(*) AS c, md5(coalesce(string_agg(t::text, E''\n'' ORDER BY t::text), '''')) AS m FROM %I.%I t',
+  format('SELECT count(*) AS c, md5(coalesce(string_agg(t::text, E''\n'' ORDER BY t::text COLLATE "C"), '''')) AS m FROM %I.%I t',
          n.nspname, c.relname), false, true, '') AS x
 WHERE c.relkind = 'r'
   AND n.nspname NOT IN ('pg_catalog', 'information_schema')
@@ -29,7 +36,7 @@ ORDER BY (n.nspname || '.' || c.relname) COLLATE "C";
 SQL
 }
 
-# table_stats <db_url>: prints "schema.table<TAB>rows<TAB>md5", sorted, from one REPEATABLE READ snapshot.
+# table_stats <db_url>: <db_url> carries no password; psql reads PGPASSWORD or PGPASSFILE. Prints "schema.table<TAB>rows<TAB>md5", sorted, from one REPEATABLE READ snapshot.
 table_stats() {
   { echo 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;'; stats_sql; echo 'COMMIT;'; } \
     | psql -qAtX -v ON_ERROR_STOP=1 -F $'\t' "$1"

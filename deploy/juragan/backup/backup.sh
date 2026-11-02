@@ -23,15 +23,17 @@ require_env() {
   fi
 }
 
-# db_url <pilot>: the pilot role owns its database; password from <PILOT>_DB_PASSWORD.
-db_url() {
-  local p="$1" var pw
-  var="$(tr '[:lower:]' '[:upper:]' <<<"$p")_DB_PASSWORD"
-  pw="${!var:-}"
-  [ -n "$pw" ] || die "$var is not set"
-  pw="$(jq -rn --arg s "$pw" '$s | @uri')"
-  echo "postgres://$p:$pw@${BACKUP_DB_HOST:-postgres}:5432/$p?sslmode=disable"
+# pilot_password <pilot>: <PILOT>_DB_PASSWORD from the environment.
+pilot_password() {
+  local var
+  var="$(tr '[:lower:]' '[:upper:]' <<<"$1")_DB_PASSWORD"
+  [ -n "${!var:-}" ] || die "$var is not set"
+  printf '%s' "${!var}"
 }
+
+# db_url <pilot>: the pilot role owns its database. No password in the URL (argv is visible in ps);
+# psql/pg_dump read PGPASSWORD, exported by backup_pilot.
+db_url() { echo "postgres://$1@${BACKUP_DB_HOST:-postgres}:5432/$1?sslmode=disable"; }
 
 # dump_pg <url> <work dir>: db.dump plus stats.tsv from one exported REPEATABLE READ snapshot, so the
 # row counts and checksums describe exactly what pg_dump wrote.
@@ -51,7 +53,12 @@ dump_pg() {
   done
   [ "${line:-}" = __END__ ] || { log "stats query failed"; return 1; }
   # the exporting transaction stays open while pg_dump runs
-  pg_dump -Fc --snapshot="$snap" -f "$dir/db.dump" "$url" || { log "pg_dump failed"; return 1; }
+  if ! pg_dump -Fc --snapshot="$snap" -f "$dir/db.dump" "$url"; then
+    log "pg_dump failed"
+    printf '%s\n' 'ROLLBACK;' '\q' >&"${PSQL[1]}" || true
+    wait "$PSQL_PID" || true
+    return 1
+  fi
   printf '%s\n' 'COMMIT;' '\q' >&"${PSQL[1]}"
   wait "$PSQL_PID" || true
 }
@@ -59,10 +66,12 @@ dump_pg() {
 # dump_rangka <pilot> <url> <work dir>: `rangka backup`, run in the pilot folder; counts before and after,
 # one retry when the data changed in between.
 dump_rangka() {
-  local p="$1" url="$2" dir="$3" attempt before after
+  local p="$1" url="$2" dir="$3" attempt before after secret_url
   for attempt in 1 2; do
     before="$(table_stats "$url")"
-    (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
+    # the kernel takes the password from DATABASE_URL (environment only, never argv)
+    secret_url="postgres://$p:$(jq -rn --arg s "$PGPASSWORD" '$s | @uri')@${url#*@}"
+    (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
       rangka backup --out "$dir/rangka.backup") || { log "rangka backup failed"; return 1; }
     after="$(table_stats "$url")"
     if [ "$before" = "$after" ]; then
@@ -92,61 +101,67 @@ upload() { # upload <file> <pilot>
     --s3-no-check-bucket
 }
 
+# Runs in its own subshell with errexit on (see main): any failing step aborts the pilot.
+# Globals for the EXIT trap: a killed or failed run must not leave plaintext work files behind.
 backup_pilot() {
-  local p="$1" url stamp out_dir work method name final suffix
+  local p="$1" url stamp out_dir method name final suffix dump_file
   [ -d "$PILOTS_ROOT/$p" ] || { log "$p: $PILOTS_ROOT/$p is not mounted"; return 1; }
+  PGPASSWORD="$(pilot_password "$p")"
+  export PGPASSWORD
   url="$(db_url "$p")"
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   out_dir="$BACKUP_ROOT/$p"
   mkdir -p "$out_dir"
-  work="$(mktemp -d "$out_dir/.work.XXXXXX")"
-  # shellcheck disable=SC2064 # expand now: work is local to this call
-  trap "rm -rf '$work'; trap - RETURN" RETURN
-
-  if has_rangka_backup; then
-    method=rangka
-    dump_rangka "$p" "$url" "$work" || return 1
-  else
-    method=pg_dump
-    dump_pg "$url" "$work" || return 1
-  fi
-  tar_dir "$work/site.tar" "$p" site
-  tar_dir "$work/files.tar" "$p" data
-
-  local dump_file=db.dump
-  [ "$method" = rangka ] && dump_file=rangka.backup
-  stats_to_tables_json <"$work/stats.tsv" >"$work/tables.json"
-  jq -n --arg pilot "$p" --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg method "$method" \
-    --arg rv "$(rangka version 2>/dev/null | head -1 || true)" \
-    --arg pv "$(psql -qAtX -c 'SHOW server_version' "$url")" \
-    --slurpfile tables "$work/tables.json" \
-    '{pilot: $pilot, created_at: $created, method: $method, rangka_version: $rv, postgres_version: $pv, tables: $tables[0]}' \
-    >"$work/manifest.json"
-  (cd "$work" && sha256sum "$dump_file" site.tar files.tar manifest.json >SHA256SUMS)
-
+  WORK_DIR="$(mktemp -d "$out_dir/.work.XXXXXX")"
   suffix=tar.age
   [ -n "${BACKUP_AGE_RECIPIENT:-}" ] || suffix=tar
   name="$p-$stamp.$suffix"
   final="$out_dir/$name"
-  (cd "$work" && tar -cf archive.tar manifest.json "$dump_file" site.tar files.tar SHA256SUMS)
-  if [ "$suffix" = tar.age ]; then
-    age -r "$BACKUP_AGE_RECIPIENT" -o "$final.part" "$work/archive.tar"
+  PART_FILE="$final.part"
+  trap 'rm -rf "${WORK_DIR:-}" "${PART_FILE:-}"' EXIT
+  trap 'exit 143' TERM INT
+
+  if has_rangka_backup; then
+    method=rangka
+    dump_file=rangka.backup
+    dump_rangka "$p" "$url" "$WORK_DIR" || return 1
   else
-    cp "$work/archive.tar" "$final.part"
+    method=pg_dump
+    dump_file=db.dump
+    dump_pg "$url" "$WORK_DIR" || return 1
   fi
-  mv "$final.part" "$final"
+  tar_dir "$WORK_DIR/site.tar" "$p" site
+  tar_dir "$WORK_DIR/files.tar" "$p" data
+
+  stats_to_tables_json <"$WORK_DIR/stats.tsv" >"$WORK_DIR/tables.json"
+  jq -n --arg pilot "$p" --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg method "$method" \
+    --arg rv "$(rangka version 2>/dev/null | head -1 || true)" \
+    --arg pv "$(psql -qAtX -c 'SHOW server_version' "$url")" \
+    --slurpfile tables "$WORK_DIR/tables.json" \
+    '{pilot: $pilot, created_at: $created, method: $method, rangka_version: $rv, postgres_version: $pv, tables: $tables[0]}' \
+    >"$WORK_DIR/manifest.json"
+  (cd "$WORK_DIR" && sha256sum "$dump_file" site.tar files.tar manifest.json >SHA256SUMS)
+  (cd "$WORK_DIR" && tar -cf archive.tar manifest.json "$dump_file" site.tar files.tar SHA256SUMS)
+  if [ "$suffix" = tar.age ]; then
+    age -r "$BACKUP_AGE_RECIPIENT" -o "$PART_FILE" "$WORK_DIR/archive.tar"
+  else
+    cp "$WORK_DIR/archive.tar" "$PART_FILE"
+  fi
+  mv "$PART_FILE" "$final"
   log "$p: wrote $final ($method, $(wc -c <"$final") bytes)"
 
   upload "$final" "$p" || { log "$p: upload to off-box failed; local archive kept"; return 1; }
   log "$p: uploaded to offbox:$BACKUP_BUCKET/$p/$name"
 }
 
-prune_local() { # local archives older than BACKUP_KEEP_LOCAL days
+prune_local() { # archives older than BACKUP_KEEP_LOCAL days; stale work dirs and .part files older than a day
   find "$BACKUP_ROOT" -maxdepth 2 -type f \( -name '*.tar.age' -o -name '*.tar' \) -mtime "+$KEEP_LOCAL" -delete
+  find "$BACKUP_ROOT" -maxdepth 2 -type f -name '*.part' -mmin +1440 -delete
+  find "$BACKUP_ROOT" -maxdepth 2 -type d -name '.work.*' -mmin +1440 -exec rm -rf {} +
 }
 
 main() {
-  local target="${1:-}" pilots=() p failed=0
+  local target="${1:-}" pilots=() p failed=0 rc
   case "$target" in
     jasa|fnb) pilots=("$target") ;;
     all) pilots=("${ALL_PILOTS[@]}") ;;
@@ -154,7 +169,12 @@ main() {
   esac
   require_env
   for p in "${pilots[@]}"; do
-    if ! backup_pilot "$p"; then log "$p: FAILED"; failed=1; fi
+    # `if backup_pilot` would switch errexit off inside it, so run it in a subshell and read the status.
+    set +e
+    ( set -e; backup_pilot "$p" )
+    rc=$?
+    set -e
+    if [ "$rc" -ne 0 ]; then log "$p: FAILED (exit $rc)"; failed=1; fi
   done
   prune_local
   [ "$failed" = 0 ] || die "one or more backups failed"

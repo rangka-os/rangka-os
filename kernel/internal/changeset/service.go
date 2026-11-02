@@ -110,6 +110,7 @@ func (e *Error) Error() string { return e.Msg }
 type Service struct {
 	DB                              *pg.Pool
 	AppsDir, SiteDir, ConnectorsDir string
+	ModulesDir                      string // default: modules next to AppsDir (contract 0001)
 	Schemas                         *schema.Set
 	Reg                             func() *meta.Registry
 	Reload                          func(ctx context.Context) error // re-read dirs, migrate, swap the registry
@@ -137,15 +138,29 @@ func newID() string {
 
 // ---------- paths and files
 
-type roots struct{ apps, site, connectors string }
+type roots struct{ apps, site, connectors, modules string }
 
-func (s *Service) live() roots { return roots{s.AppsDir, s.SiteDir, s.ConnectorsDir} }
+func (s *Service) live() roots { return roots{s.AppsDir, s.SiteDir, s.ConnectorsDir, s.modulesDir()} }
+
+// modulesDir is ModulesDir, else the modules directory next to the apps directory (created by the first
+// change set that adds a module).
+func (s *Service) modulesDir() string {
+	if s.ModulesDir != "" {
+		return s.ModulesDir
+	}
+	return filepath.Join(filepath.Dir(filepath.Clean(s.AppsDir)), "modules")
+}
 
 // file maps a change-set path to a file under the roots.
 func (r roots) file(p string) (string, error) {
 	switch {
 	case strings.HasPrefix(p, "apps/"):
 		return filepath.Join(r.apps, filepath.FromSlash(strings.TrimPrefix(p, "apps/"))), nil
+	case strings.HasPrefix(p, "modules/"):
+		if r.modules == "" {
+			return "", fmt.Errorf("no modules directory configured for %s", p)
+		}
+		return filepath.Join(r.modules, filepath.FromSlash(strings.TrimPrefix(p, "modules/"))), nil
 	case strings.HasPrefix(p, "connectors/"):
 		if r.connectors == "" {
 			return "", fmt.Errorf("no connectors directory configured for %s", p)
@@ -292,6 +307,13 @@ func (s *Service) sandbox(ops []Op) (roots, func(), map[string]*string, error) {
 	if err := copyDir(s.AppsDir, r.apps); err != nil {
 		cleanup()
 		return roots{}, nil, nil, err
+	}
+	r.modules = filepath.Join(dir, "modules") // next to apps, where the validator looks by default
+	if st, err := os.Stat(s.modulesDir()); err == nil && st.IsDir() {
+		if err := copyDir(s.modulesDir(), r.modules); err != nil {
+			cleanup()
+			return roots{}, nil, nil, err
+		}
 	}
 	if s.SiteDir != "" {
 		r.site = filepath.Join(dir, "site", filepath.Base(s.SiteDir))

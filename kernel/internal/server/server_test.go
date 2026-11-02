@@ -45,20 +45,38 @@ type env struct {
 // fresh database and starts the kernel on an httptest server.
 func newEnv(t *testing.T, devOpen bool, mutate func(apps, site string)) *env {
 	t.Helper()
+	return newEnvWith(t, devOpen, func(dir string) (string, string) {
+		for _, p := range []string{"rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites", "rangka-connectors"} {
+			dst := filepath.Join(dir, filepath.Base(p))
+			if err := exec.Command("cp", "-r", testdb.Sibling(t, p), dst).Run(); err != nil {
+				t.Fatal(err)
+			}
+		}
+		apps, site := filepath.Join(dir, "apps"), filepath.Join(dir, "sites", "kopi-senja")
+		if mutate != nil {
+			mutate(apps, site)
+		}
+		return apps, site
+	})
+}
+
+// newEnvFrom is newEnv with the directories laid out by layout (fixtures in <dir>/fixtures).
+func newEnvFrom(t *testing.T, layout func(dir string) (apps, site string)) *env {
+	t.Helper()
+	return newEnvWith(t, false, layout)
+}
+
+func newEnvWith(t *testing.T, devOpen bool, layout func(dir string) (apps, site string)) *env {
+	t.Helper()
 	url := testdb.New(t)
 	auth.BcryptCost = 4 // bcrypt.MinCost
 	dir := t.TempDir()
-	for _, p := range []string{"rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites", "rangka-connectors"} {
-		dst := filepath.Join(dir, filepath.Base(p))
-		if err := exec.Command("cp", "-r", testdb.Sibling(t, p), dst).Run(); err != nil {
-			t.Fatal(err)
-		}
+	apps, site := layout(dir)
+	conns := filepath.Join(dir, "rangka-connectors")
+	if _, err := os.Stat(conns); err != nil {
+		conns = ""
 	}
-	apps, site := filepath.Join(dir, "apps"), filepath.Join(dir, "sites", "kopi-senja")
-	if mutate != nil {
-		mutate(apps, site)
-	}
-	cfg := Config{AppsDir: apps, SiteDir: site, ConnectorsDir: filepath.Join(dir, "rangka-connectors"), DeployTarget: "docker", DatabaseURL: url, Addr: ":0", DevOpen: devOpen, Schemas: schema.Embedded(), Version: "test",
+	cfg := Config{AppsDir: apps, SiteDir: site, ConnectorsDir: conns, DeployTarget: "docker", DatabaseURL: url, Addr: ":0", DevOpen: devOpen, Schemas: schema.Embedded(), Version: "test",
 		WebDir: filepath.Join(testdb.RepoRoot(), "web"), TemplatesDir: filepath.Join(testdb.RepoRoot(), "templates"), Now: fixedNow,
 		Logf: func(string, ...any) {}, FilesDir: t.TempDir()}
 	ctx, cancel := context.WithCancel(context.Background())

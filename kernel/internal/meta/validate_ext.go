@@ -484,7 +484,9 @@ func (v *validator) site(all map[string]vis) {
 	}
 }
 
-// orderedKeys returns the keys of a unit's map (requires, modules) in file order.
+// OrderedKeys returns the keys of a unit's map (requires, modules) in file order.
+func OrderedKeys(a *App, key string) []string { return orderedKeys(a, key) }
+
 func orderedKeys(a *App, key string) []string {
 	m := asMap(a.Raw[key])
 	if a.Doc == nil || a.Doc.Root == nil {

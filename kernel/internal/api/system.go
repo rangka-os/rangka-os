@@ -85,7 +85,7 @@ func (s *Server) Status(ctx context.Context, org string) map[string]any {
 	apps := []any{}
 	for _, name := range reg.AppOrder() {
 		a := reg.App[name]
-		apps = append(apps, map[string]any{"name": a.Name, "version": a.Version, "models": len(a.Models), "dashboards": len(a.Dashboards)})
+		apps = append(apps, map[string]any{"name": a.Name, "kind": a.Kind, "version": a.Version, "models": len(a.Models), "dashboards": len(a.Dashboards)})
 	}
 	var orgs, members int64
 	if res, err := s.DB.Query(ctx, "select (select count(*) from rk_orgs), (select count(*) from rk_members)"); err == nil {

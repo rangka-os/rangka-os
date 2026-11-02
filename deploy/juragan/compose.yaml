@@ -79,6 +79,7 @@ services:
       args:
         RANGKA_IMAGE: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
     entrypoint: ["/usr/local/bin/backup.sh"]
+    init: true # PID 1 forwards TERM (docker stop, systemd stop) so backup.sh can clean up
     depends_on:
       postgres:
         condition: service_healthy

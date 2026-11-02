@@ -12,6 +12,8 @@ PILOTS_ROOT="${PILOTS_ROOT:-/pilots}"
 BACKUP_ROOT="${BACKUP_ROOT:-/backups}"
 KEEP_LOCAL="${BACKUP_KEEP_LOCAL:-7}"
 ALL_PILOTS=(jasa fnb)
+CHILD=""   # pid (= process group, see set -m in main) of the pilot subshell that is running
+CURRENT="" # pilot being backed up
 
 log() { echo "backup: $*" >&2; }
 die() { log "$*"; exit 1; }
@@ -70,7 +72,7 @@ dump_rangka() {
   for attempt in 1 2; do
     before="$(table_stats "$url")"
     # the kernel takes the password from DATABASE_URL (environment only, never argv)
-    secret_url="postgres://$p:$(jq -rn --arg s "$PGPASSWORD" '$s | @uri')@${url#*@}"
+    secret_url="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}"
     (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
       rangka backup --out "$dir/rangka.backup") || { log "rangka backup failed"; return 1; }
     after="$(table_stats "$url")"
@@ -104,7 +106,7 @@ upload() { # upload <file> <pilot>
 # Runs in its own subshell with errexit on (see main): any failing step aborts the pilot.
 # Globals for the EXIT trap: a killed or failed run must not leave plaintext work files behind.
 backup_pilot() {
-  local p="$1" url stamp out_dir method name final suffix dump_file
+  local p="$1" url stamp out_dir method name final suffix dump_file pg_version
   [ -d "$PILOTS_ROOT/$p" ] || { log "$p: $PILOTS_ROOT/$p is not mounted"; return 1; }
   PGPASSWORD="$(pilot_password "$p")"
   export PGPASSWORD
@@ -112,7 +114,7 @@ backup_pilot() {
   stamp="$(date -u +%Y%m%dT%H%M%SZ)"
   out_dir="$BACKUP_ROOT/$p"
   mkdir -p "$out_dir"
-  WORK_DIR="$(mktemp -d "$out_dir/.work.XXXXXX")"
+  WORK_DIR="$(mktemp -d "$out_dir/.work.$$.XXXXXX")"
   suffix=tar.age
   [ -n "${BACKUP_AGE_RECIPIENT:-}" ] || suffix=tar
   name="$p-$stamp.$suffix"
@@ -133,10 +135,11 @@ backup_pilot() {
   tar_dir "$WORK_DIR/site.tar" "$p" site
   tar_dir "$WORK_DIR/files.tar" "$p" data
 
+  pg_version="$(psql -qAtX -c 'SHOW server_version' "$url")"
   stats_to_tables_json <"$WORK_DIR/stats.tsv" >"$WORK_DIR/tables.json"
   jq -n --arg pilot "$p" --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg method "$method" \
     --arg rv "$(rangka version 2>/dev/null | head -1 || true)" \
-    --arg pv "$(psql -qAtX -c 'SHOW server_version' "$url")" \
+    --arg pv "$pg_version" \
     --slurpfile tables "$WORK_DIR/tables.json" \
     '{pilot: $pilot, created_at: $created, method: $method, rangka_version: $rv, postgres_version: $pv, tables: $tables[0]}' \
     >"$WORK_DIR/manifest.json"
@@ -154,6 +157,21 @@ backup_pilot() {
   log "$p: uploaded to offbox:$BACKUP_BUCKET/$p/$name"
 }
 
+# TERM/INT (docker stop, systemd stop; PID 1 is tini via `init: true`): stop the pilot subshell and
+# everything it started, then remove this run's plaintext work dir and partial archive.
+on_term() {
+  trap '' TERM INT
+  if [ -n "$CHILD" ]; then
+    kill -TERM -- "-$CHILD" 2>/dev/null || true
+    wait "$CHILD" 2>/dev/null || true
+  fi
+  if [ -n "$CURRENT" ]; then
+    rm -rf "$BACKUP_ROOT/$CURRENT"/.work.$$.* "$BACKUP_ROOT/$CURRENT"/*.part
+  fi
+  log "terminated"
+  exit 143
+}
+
 prune_local() { # archives older than BACKUP_KEEP_LOCAL days; stale work dirs and .part files older than a day
   find "$BACKUP_ROOT" -maxdepth 2 -type f \( -name '*.tar.age' -o -name '*.tar' \) -mtime "+$KEEP_LOCAL" -delete
   find "$BACKUP_ROOT" -maxdepth 2 -type f -name '*.part' -mmin +1440 -delete
@@ -168,12 +186,18 @@ main() {
     *) echo "usage: backup.sh <jasa|fnb|all>" >&2; exit 2 ;;
   esac
   require_env
+  set -m
+  trap on_term TERM INT
   for p in "${pilots[@]}"; do
     # `if backup_pilot` would switch errexit off inside it, so run it in a subshell and read the status.
+    CURRENT="$p"
     set +e
-    ( set -e; backup_pilot "$p" )
+    ( set -e; backup_pilot "$p" ) &
+    CHILD=$!
+    wait "$CHILD"
     rc=$?
     set -e
+    CHILD=""
     if [ "$rc" -ne 0 ]; then log "$p: FAILED (exit $rc)"; failed=1; fi
   done
   prune_local

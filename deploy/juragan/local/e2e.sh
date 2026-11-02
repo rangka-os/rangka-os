@@ -301,6 +301,24 @@ SHIM
   same "failed archive step leaves no local archive" "$(local_archives jasa | wc -l | tr -d ' ')" "$(echo "$before_local" | tr -d ' ')"
   if [ -z "$(find "$WORK/backups/jasa" -name '.work.*' -o -name '*.part')" ]; then ok "no work dir or .part left behind"; else bad "leftovers in backups/jasa"; fi
   same "no ping after the archive failure" "$(ping_hits)" "$hits_good"
+
+  # docker stop during a slow archive step: plaintext work dir and .part must be gone, nothing uploaded, no ping.
+  cat >"$WORK/shim/tar" <<'SHIM'
+#!/bin/sh
+case "$*" in *"site.tar site") sleep 60 ;; esac
+exec /usr/bin/tar "$@"
+SHIM
+  sleep 2
+  dc run --rm -T --name juragan-e2e-bkterm -v "$WORK/shim:/shim:ro" \
+    -e PATH=/shim:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin backup jasa >"$WORK/term.log" 2>&1 &
+  local bgpid=$! waited=0
+  until [ -n "$(find "$WORK/backups/jasa" -name db.dump 2>/dev/null)" ] || [ "$waited" -ge 60 ]; do sleep 1; waited=$((waited + 1)); done
+  if [ -n "$(find "$WORK/backups/jasa" -name db.dump 2>/dev/null)" ]; then ok "plaintext db.dump exists mid-run"; else bad "slow run never reached the archive step"; fi
+  docker stop -t 20 juragan-e2e-bkterm >/dev/null 2>&1 || true
+  if wait "$bgpid"; then bad "stopped backup should exit non-zero"; else ok "stopped backup exits non-zero"; fi
+  if [ -z "$(find "$WORK/backups/jasa" -name '.work.*' -o -name '*.part')" ]; then ok "docker stop leaves no .work.* or .part"; else bad "leftovers after docker stop: $(find "$WORK/backups/jasa" -name '.work.*' -o -name '*.part')"; fi
+  same "docker stop: nothing uploaded" "$(offbox_list jasa)" "$before_remote"
+  same "docker stop: no ping" "$(ping_hits)" "$hits_good"
 }
 
 main() {

@@ -250,6 +250,9 @@ type CreateOpts struct {
 	Docstatus int64
 	authorize bool // check create on the new record (public entry points; hooks run inside an allowed op)
 	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
+	// AllowMissing names required fields a hook may leave empty on a new draft for the user to fill in
+	// (procurement.make_po leaves the vendor); saving and submitting the draft still require them.
+	AllowMissing []string
 }
 
 // Result of a write: the record and any warnings. Held is set when the verb waits for approval (0007);
@@ -295,6 +298,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err != nil {
 		return nil, err
 	}
+	errs = allowMissing(errs, opts.AllowMissing)
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
 	}
@@ -634,64 +638,89 @@ func (o *op) cancel(model, name string) (*Result, error) {
 func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
-		m, err := o.e.model(model)
-		if err != nil {
-			return err
-		}
-		if !m.IsSubmittable {
-			return badRequest(model + " is not submittable")
-		}
-		old, err := o.load(m, name)
-		if err != nil {
-			return err
-		}
-		if err := o.authorize(m, "amend", o.e.Output(m, copyRecord(old))); err != nil {
-			return err
-		}
-		if err := e.Guard(ctx, a, m.Name, old, "amend"); err != nil {
-			return err
-		}
-		if toInt(old["docstatus"]) != 2 {
-			return conflict("not_cancelled", "Hanya dokumen yang dibatalkan yang bisa di-amend")
-		}
-		rec := store.Record{}
-		for k, v := range old {
-			rec[k] = v
-		}
-		for _, f := range m.Fields {
-			if f.ReadOnly && f.Compute == "" {
-				rec[f.Name] = store.Zero(f)
-			}
-			if f.Type == "table" {
-				var copied []any
-				for _, row := range rows(old[f.Name]) {
-					nr := map[string]any{}
-					for k, v := range row {
-						if k != "name" && k != "parent" && k != "parent_field" && k != "idx" {
-							nr[k] = v
-						}
-					}
-					copied = append(copied, nr)
-				}
-				if copied == nil {
-					copied = []any{}
-				}
-				rec[f.Name] = copied
-			}
-		}
-		rec["name"], rec["docstatus"], rec["amended_from"] = "DRAFT-"+store.RandomName(5), int64(0), name
-		rec["created_by"] = a.ID
-		o.prepare(m, rec, false)
-		if err := store.Insert(o.ctx, o.tx, e.Reg(), a.Org, m, rec); err != nil {
-			return err
-		}
-		if err := o.event(m, rec, "created"); err != nil {
-			return err
-		}
-		res = &Result{Record: e.Output(m, rec)}
-		return nil
+		var err error
+		res, err = o.amend(model, name)
+		return err
 	})
 	return res, err
+}
+
+func (o *op) amend(model, name string) (*Result, error) {
+	e, a := o.e, o.actor
+	m, err := e.model(model)
+	if err != nil {
+		return nil, err
+	}
+	if !m.IsSubmittable {
+		return nil, badRequest(model + " is not submittable")
+	}
+	old, err := o.load(m, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.authorize(m, "amend", e.Output(m, copyRecord(old))); err != nil {
+		return nil, err
+	}
+	if err := e.Guard(o.ctx, a, m.Name, old, "amend"); err != nil {
+		return nil, err
+	}
+	if toInt(old["docstatus"]) != 2 {
+		return nil, conflict("not_cancelled", "Hanya dokumen yang dibatalkan yang bisa di-amend")
+	}
+	rec := store.Record{}
+	for k, v := range old {
+		rec[k] = v
+	}
+	for _, f := range m.Fields {
+		if f.ReadOnly && f.Compute == "" {
+			rec[f.Name] = store.Zero(f)
+		}
+		if f.Type == "table" {
+			var copied []any
+			for _, row := range rows(old[f.Name]) {
+				nr := map[string]any{}
+				for k, v := range row {
+					if k != "name" && k != "parent" && k != "parent_field" && k != "idx" {
+						nr[k] = v
+					}
+				}
+				copied = append(copied, nr)
+			}
+			if copied == nil {
+				copied = []any{}
+			}
+			rec[f.Name] = copied
+		}
+	}
+	rec["name"], rec["docstatus"], rec["amended_from"] = "DRAFT-"+store.RandomName(5), int64(0), name
+	rec["created_by"] = a.ID
+	o.prepare(m, rec, false)
+	if err := store.Insert(o.ctx, o.tx, e.Reg(), a.Org, m, rec); err != nil {
+		return nil, err
+	}
+	if err := o.event(m, rec, "created"); err != nil {
+		return nil, err
+	}
+	return &Result{Record: e.Output(m, rec)}, nil
+}
+
+func allowMissing(errs []Issue, fields []string) []Issue {
+	if len(fields) == 0 {
+		return errs
+	}
+	out := errs[:0:0]
+	for _, is := range errs {
+		skip := false
+		for _, f := range fields {
+			if is.Code == "required" && is.Field == f {
+				skip = true
+			}
+		}
+		if !skip {
+			out = append(out, is)
+		}
+	}
+	return out
 }
 
 // copyRecord is a shallow copy (permission checks decorate it with the derived status).

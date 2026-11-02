@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: stock_count
+is_submittable: true
+naming: OPN-{YYYY}-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: count_date, type: date, default: today(), required: true}
+  - {name: items, type: table, of: stock_count_item, min_rows: 1}

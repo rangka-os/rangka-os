@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: vendor_bill_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, default: '1'}
+  - {name: rate, type: currency}
+  - {name: amount, type: currency, compute: round(qty * rate)}

@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: outlet_sales
+is_submittable: true
+naming: SLS-{YYYY}-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: date, type: date, required: true}
+  - {name: source, type: select, default: "'form'", options: [{value: moka, label: {id: moka}}, {value: form, label: {id: form}}]}
+  - {name: lines, type: table, of: outlet_sales_line, min_rows: 1}
+  - {name: net_total, type: currency, compute: 'lines.map(l, l.net).sum()'}
+  - {name: cogs_total, type: currency, read_only: true}
+  - {name: margin, type: currency, compute: net_total - cogs_total}

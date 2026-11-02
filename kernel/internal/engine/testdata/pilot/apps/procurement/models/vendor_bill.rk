@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: vendor_bill
+is_submittable: true
+naming: BILL-{YYYY}-{#####}
+on_submit: [procurement.post_payable]
+on_cancel: [procurement.reverse_payable]
+fields:
+  - {name: vendor, type: link, to: vendor, required: true}
+  - {name: bill_no, type: data, required: true}
+  - {name: bill_date, type: date, default: today(), required: true}
+  - {name: items, type: table, of: vendor_bill_item, min_rows: 1}
+  - {name: subtotal, type: currency, compute: 'items.map(i, i.amount).sum()'}
+  - {name: pph23_amount, type: currency, default: '0'}
+  - {name: amount_due, type: currency, compute: subtotal - pph23_amount}
+  - {name: paid_amount, type: currency, read_only: true}
+  - {name: outstanding, type: currency, compute: amount_due - paid_amount}

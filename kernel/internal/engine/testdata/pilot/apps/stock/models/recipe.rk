@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: recipe
+naming: RSP-{####}
+fields:
+  - {name: product, type: link, to: item, required: true}
+  - {name: yield_qty, type: float, default: '1'}
+  - {name: active, type: check, default: 'true'}
+  - {name: lines, type: table, of: recipe_line, min_rows: 1}

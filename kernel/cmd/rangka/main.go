@@ -20,6 +20,7 @@ Usage:
   rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--dev-open]
   rangka backup   [--apps <dir>] [--site <dir>] --db <url> [--out file] [--org id] [--files dir]
   rangka restore  <file> --db <url> [--into dir] [--files dir]
+  rangka user add --db <url> --org <org> --email <e> --password <p> --role <role> [--name <full name>] [--record <USR-…>]
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:
@@ -50,6 +51,8 @@ func main() {
 		code = cmdBackup(os.Args[2:])
 	case "restore":
 		code = cmdRestore(os.Args[2:])
+	case "user":
+		code = cmdUser(os.Args[2:])
 	case "version", "--version":
 		fmt.Println("rangka", Version)
 	case "help", "-h", "--help":

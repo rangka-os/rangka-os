@@ -58,9 +58,10 @@ run-demo: build
 	echo "open http://localhost$(ADDR)/app/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
 	$(BIN) serve --apps $(APPS) --site $(SITE) --db "$$URL" --addr $(ADDR) --dev-open
 
-# Copy rangka-os/schema/0.5 into the binary's embedded copy (a test fails when they differ).
+# Copy rangka-os/schema/0.5 (and 0.4 app.json, for legacy app.rk files) into the binary's embedded copy
+# (a test fails when they differ).
 sync-schemas:
-	cp ../schema/0.5/*.json internal/schema/0.5/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
+	cp ../schema/0.5/*.json internal/schema/0.5/ && cp ../schema/0.4/app.json internal/schema/0.4/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
 
 # Recompute the prototype's dashboard numbers used by the dashboard tests (needs node).
 proto-expected:

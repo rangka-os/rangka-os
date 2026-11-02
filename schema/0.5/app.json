@@ -1,12 +1,14 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/app.json",
-  "title": "Rangka app manifest",
+  "title": "Rangka app",
+  "description": "What a customer installs (apps/<name>/app.rk): the modules it uses, connectors, roles, menu, dashboards, home and onboarding. An app defines no models; make a module instead.",
   "type": "object",
   "required": [
     "name",
     "version",
-    "title"
+    "title",
+    "modules"
   ],
   "properties": {
     "$schema": {
@@ -22,16 +24,66 @@
     "title": {
       "$ref": "model.json#/$defs/label"
     },
-    "requires": {
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "summary": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "rangka": {
+      "type": "string",
+      "description": "kernel version range, e.g. '>=0.5'"
+    },
+    "modules": {
       "type": "object",
       "additionalProperties": {
         "type": "string"
-      }
+      },
+      "description": "module → version range (^1.0, >=1.2): the modules this app installs"
     },
     "optional": {
       "type": "object",
       "additionalProperties": {
         "type": "string"
+      }
+    },
+    "recommends": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "connectors": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "flow": {
+            "type": "string"
+          },
+          "required": {
+            "type": "boolean"
+          }
+        }
+      }
+    },
+    "fixtures": {
+      "type": "array",
+      "items": {
+        "type": "string"
+      }
+    },
+    "roles": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
       }
     },
     "hooks": {
@@ -69,6 +121,51 @@
         "$ref": "model.json#/$defs/name"
       },
       "description": "Dashboards in dashboards/*.rk, in menu order. The first is the app's home page."
+    },
+    "home": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "model": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "view": {
+          "enum": [
+            "list",
+            "kanban",
+            "calendar",
+            "report"
+          ]
+        },
+        "dashboard": {
+          "$ref": "model.json#/$defs/name"
+        }
+      }
+    },
+    "onboarding": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "ask",
+          "sets"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "ask": {
+            "$ref": "model.json#/$defs/label"
+          },
+          "options": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            }
+          },
+          "sets": {
+            "type": "string"
+          }
+        }
+      }
     }
   },
   "additionalProperties": false

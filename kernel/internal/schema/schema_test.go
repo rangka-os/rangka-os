@@ -24,6 +24,37 @@ func TestEmbeddedInSync(t *testing.T) {
 			t.Errorf("%s: embedded copy differs from %s; run make sync-schemas", e.Name(), src)
 		}
 	}
+	a, _ := os.ReadFile("../../../schema/0.4/app.json")
+	if b, err := embedded.ReadFile("0.4/app.json"); err != nil || !bytes.Equal(a, b) {
+		t.Errorf("0.4/app.json: embedded copy differs; run make sync-schemas")
+	}
+}
+
+// app.rk with modules is a 0.5 app; without, a 0.4 app (contract 0001).
+func TestAppKindResolution(t *testing.T) {
+	s := Embedded()
+	legacy := FromData(map[string]any{"name": "crm", "version": "1.0.0", "title": map[string]any{"id": "CRM"},
+		"requires": map[string]any{"core": "^1.0"}, "menu": []any{map[string]any{"group": map[string]any{"id": "CRM"}, "items": []any{"deal"}}}})
+	if u := s.URL("app", legacy); u != Legacy+"app.json" {
+		t.Errorf("legacy url = %s", u)
+	}
+	if errs := s.Validate("app", legacy); len(errs) != 0 {
+		t.Errorf("legacy app: %+v", errs)
+	}
+	app := FromData(map[string]any{"name": "crm", "version": "1.0.0", "title": map[string]any{"id": "CRM"},
+		"modules": map[string]any{"pipeline": "^1.0"}, "requires": map[string]any{"core": "^1.0"}})
+	errs := s.Validate("app", app)
+	if len(errs) != 1 || errs[0].Message != "Additional properties are not allowed ('requires' was unexpected)" {
+		t.Errorf("0.5 app: %+v", errs)
+	}
+	mod := FromData(map[string]any{"name": "pipeline", "version": "1.0.0", "title": map[string]any{"id": "Pipeline"}, "menu": []any{}})
+	if errs := s.Validate("module", mod); len(errs) != 1 || errs[0].Message != "Additional properties are not allowed ('menu' was unexpected)" {
+		t.Errorf("module: %+v", errs)
+	}
+	bad := FromData(map[string]any{"name": "Bad", "version": "1.0.0", "title": map[string]any{"id": "x"}})
+	if errs := s.Validate("app", bad); len(errs) != 1 || errs[0].PathString() != "name" {
+		t.Errorf("legacy refs into model.json: %+v", errs)
+	}
 }
 
 func TestMessages(t *testing.T) {

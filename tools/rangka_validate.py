@@ -22,6 +22,7 @@ from referencing import Registry, Resource
 HERE = os.path.dirname(os.path.abspath(__file__))
 SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
 BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
+LEGACY = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
 FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
 GLOBALS = {"user", "true", "false", "null", "event"}
@@ -34,8 +35,20 @@ def load_schemas():
     for fn in os.listdir(SCHEMA_DIR):
         s = json.load(open(os.path.join(SCHEMA_DIR, fn)))
         reg = reg.with_resource(BASE + fn, Resource.from_contents(s))
+        reg = reg.with_resource(LEGACY + fn, Resource.from_contents(s))  # 0.4 app.json's references
         out[fn[:-5]] = s
+    legacy = os.path.join(SCHEMA_DIR, "..", "0.4", "app.json")
+    if os.path.isfile(legacy):
+        out["app@0.4"] = json.load(open(legacy))
+        reg = reg.with_resource(LEGACY + "app.json", Resource.from_contents(out["app@0.4"]))
     return {k: Draft202012Validator(v, registry=reg) for k, v in out.items()}
+
+
+def schema_for(V, kind, data):
+    """The validator of a kind: an app document without modules is a 0.4 app (contract 0001)."""
+    if kind == "app" and not (isinstance(data, dict) and "modules" in data) and "app@0.4" in V:
+        return V["app@0.4"]
+    return V[kind]
 
 
 class Report:
@@ -114,7 +127,7 @@ def validate(root, only=None, site=None, connectors=None):
         if only and name not in only:
             continue
         p = a["app_path"]
-        for e in V["app"].iter_errors(a["manifest"]):
+        for e in schema_for(V, "app", a["manifest"]).iter_errors(a["manifest"]):
             rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message)
         for mname, (p, m) in a["models"].items():
             for e in sorted(V["model"].iter_errors(m), key=lambda e: list(map(str, e.absolute_path))):

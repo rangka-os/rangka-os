@@ -82,7 +82,7 @@ func (v *validator) printTemplate(p *Print) {
 	if t == "" {
 		return // the schema reports it
 	}
-	if filepath.IsAbs(t) || !inside(p.Root, p.Template) {
+	if filepath.IsAbs(t) || !Inside(p.Root, p.Template) {
 		v.rep.extra("error", d.Path, "template", "template_outside", fmt.Sprintf(`template "%s" must stay inside %s`, t, v.rep.rel(p.Root)))
 		return
 	}

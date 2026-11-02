@@ -193,11 +193,11 @@ func (r *Registry) siteFile(rel string) (string, bool) {
 	}
 	root, _ := filepath.Abs(r.Site.Dir)
 	abs := filepath.Join(root, rel)
-	return abs, inside(root, abs)
+	return abs, Inside(root, abs)
 }
 
-// inside reports whether path is root or below it (both absolute and clean).
-func inside(root, path string) bool {
+// Inside reports whether path is root or below it (both absolute and clean).
+func Inside(root, path string) bool {
 	rel, err := filepath.Rel(root, path)
 	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }

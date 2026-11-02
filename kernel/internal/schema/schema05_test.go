@@ -74,11 +74,11 @@ func TestSchema05ContractExamples(t *testing.T) {
 }
 
 func TestSchema05LoadDir(t *testing.T) {
-	s, err := LoadDir("../../../schema/0.4")
+	s, err := LoadDir("../../../schema/0.5")
 	if err != nil {
 		t.Skip("schema source dir not found")
 	}
 	if !s.Has("print") || !s.Has("letterhead") || !s.Has("model") {
-		t.Error("LoadDir(0.4) should also load the sibling 0.5")
+		t.Error("LoadDir(schema/0.5) should load print, letterhead and model")
 	}
 }

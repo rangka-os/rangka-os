@@ -30,13 +30,19 @@ var FixedNow = func() time.Time {
 
 func setup(t *testing.T) (*Engine, Actor) {
 	t.Helper()
+	return setupSite(t, siteDir)
+}
+
+// setupSite is setup with another site folder (same apps and fixtures).
+func setupSite(t *testing.T, site string) (*Engine, Actor) {
+	t.Helper()
 	url := testdb.New(t)
 	ctx := context.Background()
-	reg, rep := meta.Validate(appsDir, siteDir, nil, schema.Embedded())
+	reg, rep := meta.Validate(appsDir, site, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("metadata errors: %v", rep.All())
 	}
-	db, err := pg.NewPool(ctx, url, 4)
+	db, err := pg.NewPool(ctx, url, 25)
 	if err != nil {
 		t.Fatal(err)
 	}

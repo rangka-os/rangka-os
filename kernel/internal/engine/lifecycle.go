@@ -288,7 +288,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	case m.IsSubmittable:
 		rec["name"] = "DRAFT-" + store.RandomName(5)
 	default:
-		n, err := store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, o.e.naming(m), o.e.Now().In(o.e.Location()))
+		n, err := o.nextName(m)
 		if err != nil {
 			return nil, err
 		}
@@ -310,14 +310,6 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 		return nil, err
 	}
 	return &Result{o.e.Output(m, rec), warns}, nil
-}
-
-// naming returns the naming pattern (config.numbering overrides the model).
-func (e *Engine) naming(m *meta.Model) string {
-	if p, ok := meta.AsMap(e.Reg().SiteConfig("numbering"))[m.Name].(string); ok && p != "" {
-		return p
-	}
-	return m.Naming
 }
 
 // Get loads a record.
@@ -449,7 +441,7 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 			if af := str(rec["amended_from"]); af != "" {
 				newName, err = o.amendName(m, af)
 			} else {
-				newName, err = store.NextName(o.ctx, o.tx, a.Org, m.Name, e.naming(m), e.Now().In(e.Location()))
+				newName, err = o.nextName(m)
 			}
 			if err != nil {
 				return err

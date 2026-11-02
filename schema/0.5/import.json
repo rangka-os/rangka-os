@@ -1,0 +1,122 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/import.json",
+  "title": "Rangka import",
+  "description": "Turns the rows of an uploaded CSV or XLSX file into records of one model (contract 0012).",
+  "type": "object",
+  "required": [
+    "name",
+    "model",
+    "map"
+  ],
+  "additionalProperties": false,
+  "$defs": {
+    "mapValue": {
+      "description": "A column header, a CEL expression starting with =, or {value, match} to set a link field by a field of the target",
+      "type": [
+        "string",
+        "object"
+      ],
+      "if": {
+        "type": "object"
+      },
+      "then": {
+        "required": [
+          "value"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "value": {
+            "type": "string"
+          },
+          "match": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "model": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "source": {
+      "enum": [
+        "csv",
+        "xlsx"
+      ],
+      "description": "The default file type the wizard offers; both readers accept either"
+    },
+    "header_row": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "1-based row holding the column names; rows above it are ignored"
+    },
+    "sheet": {
+      "type": "string",
+      "description": "xlsx only; default the first sheet"
+    },
+    "per": {
+      "enum": [
+        "outlet",
+        "org"
+      ],
+      "description": "Scope of duplicate detection (default org)"
+    },
+    "key": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Columns that identify a row, for duplicate detection"
+    },
+    "group": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "string"
+      },
+      "description": "Rows with equal values become one record"
+    },
+    "map": {
+      "type": "object",
+      "minProperties": 1,
+      "additionalProperties": {
+        "$ref": "#/$defs/mapValue"
+      },
+      "description": "Model field to column or expression"
+    },
+    "lines": {
+      "type": "object",
+      "required": [
+        "field",
+        "map"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$"
+        },
+        "map": {
+          "type": "object",
+          "additionalProperties": {
+            "$ref": "#/$defs/mapValue"
+          }
+        }
+      }
+    }
+  }
+}

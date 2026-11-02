@@ -139,3 +139,16 @@ create table if not exists rk_attachments (
 );
 create index if not exists rk_attachments_record_idx on rk_attachments (org_id, model, record);
 create index if not exists rk_attachments_blob_idx on rk_attachments (org_id, sha256);
+
+create table if not exists rk_imports (
+  id text primary key, org_id text not null, import text not null, scope text not null default '',
+  file_name text not null default '', file_sha text not null, status text not null default 'previewed',
+  rows integer not null default 0, skipped integer not null default 0,
+  errors jsonb not null default '[]', preview jsonb not null default '[]', plan jsonb not null default '[]',
+  records jsonb not null default '[]', created_by text not null default '', created_at timestamptz not null default now(),
+  committed_at timestamptz);
+create index if not exists rk_imports_org on rk_imports (org_id, import, created_at desc);
+create unique index if not exists rk_imports_committed_file on rk_imports (org_id, import, scope, file_sha) where status = 'committed';
+create table if not exists rk_import_keys (
+  org_id text not null, import text not null, scope text not null, key_hash text not null, import_id text not null,
+  primary key (org_id, import, scope, key_hash));

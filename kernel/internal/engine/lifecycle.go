@@ -459,6 +459,11 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 		if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
 			return dbIssue(m, err)
 		}
+		if newName != name {
+			if err := store.RenameRecordAttachments(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
+				return err
+			}
+		}
 		if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
 			return err
 		}

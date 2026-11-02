@@ -18,6 +18,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -37,6 +38,7 @@ type Config struct {
 	Schemas                         *schema.Set
 	Version                         string
 	DeployTarget                    string           // dev, docker, helm, desktop, cloud, partner
+	FilesDir                        string           // attachments root (--files-dir); "" = system.rk files.path, else data/files
 	Now                             func() time.Time // fixed clocks in tests
 	Logf                            func(format string, args ...any)
 }
@@ -103,6 +105,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	fstore, err := openFiles(cfg, reg)
+	if err != nil {
+		return nil, err
+	}
 	if cfg.Org == "" {
 		cfg.Org = "default"
 		if cfg.SiteDir != "" {
@@ -159,8 +165,32 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		site = filepath.Base(filepath.Clean(cfg.SiteDir))
 	}
 	s.API = &api.Server{Version: cfg.Version, Started: time.Now(), Engine: e, DB: db, Auth: s.Auth, Hub: s.Hub, Queue: s.Queue,
-		Sched: s.Sched, Changes: s.Changes, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget}
+		Sched: s.Sched, Changes: s.Changes, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget,
+		MaxUploadMB: intCfg(reg, "files.max_upload_mb", 20)}
+	if fstore != nil {
+		s.API.Files = fstore // keep a nil *Local out of the interface
+	}
 	return s, nil
+}
+
+// openFiles opens the attachments store (contract 0011 §1). Root: cfg.FilesDir (--files-dir, $RANGKA_FILES_DIR),
+// then system.rk files.path, then data/files; relative to the working directory. nil when files.enabled is false.
+func openFiles(cfg Config, reg *meta.Registry) (*files.Local, error) {
+	if reg.SystemConfig("files.enabled") == false {
+		return nil, nil
+	}
+	if d := strCfg(reg, "files.driver", "local"); d != "local" {
+		return nil, fmt.Errorf("files: driver %s is not available yet; use local", d)
+	}
+	root := cfg.FilesDir
+	if root == "" {
+		root = strCfg(reg, "files.path", "data/files")
+	}
+	l, err := files.NewLocal(root)
+	if err != nil {
+		return nil, fmt.Errorf("files: %w", err)
+	}
+	return l, nil
 }
 
 func titleCase(id string) string {

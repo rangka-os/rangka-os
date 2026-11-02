@@ -18,7 +18,7 @@ func sysStr(reg *meta.Registry, path, def string) string {
 }
 
 // Status is GET /system/status (the Console's system page).
-func (s *Server) Status(ctx context.Context) map[string]any {
+func (s *Server) Status(ctx context.Context, org string) map[string]any {
 	reg := s.Engine.Reg()
 	caps := map[string]any{}
 	lat, err := s.DB.Ping(ctx)
@@ -42,7 +42,16 @@ func (s *Server) Status(ctx context.Context) map[string]any {
 		transports = []string{"sse"}
 	}
 	caps["realtime"] = map[string]any{"driver": sysStr(reg, "realtime.driver", "postgres"), "ok": s.Hub.Listening(), "transports": transports, "connections": s.Hub.Connections()}
-	caps["files"] = map[string]any{"driver": sysStr(reg, "files.driver", "local"), "ok": true, "path": sysStr(reg, "files.path", "")}
+	fc := map[string]any{"driver": sysStr(reg, "files.driver", "local"), "ok": s.Files != nil, "path": "", "max_upload_mb": s.maxUploadMB()}
+	if s.Files != nil {
+		fc["path"] = s.Files.Root()
+	}
+	if n, b, aerr := store.AttachmentTotals(ctx, s.DB, org); aerr == nil {
+		fc["attachments"], fc["bytes"] = n, b
+	} else {
+		fc["ok"], fc["error"] = false, aerr.Error()
+	}
+	caps["files"] = fc
 	caps["search"] = map[string]any{"driver": sysStr(reg, "search.driver", "postgres"), "ok": err == nil}
 	notify := map[string]any{}
 	for _, ch := range []string{"email", "push", "whatsapp"} {

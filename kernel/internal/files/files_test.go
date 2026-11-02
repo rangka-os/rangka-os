@@ -78,6 +78,7 @@ func TestSafeFilename(t *testing.T) {
 		"":                 "lampiran",
 		"..":               "lampiran",
 		".":                "lampiran",
+		"inv\u202Efdp.exe": "invfdp.exe",
 	} {
 		if got := SafeFilename(in); got != want {
 			t.Errorf("SafeFilename(%q) = %q, want %q", in, got, want)
@@ -105,6 +106,9 @@ func TestSniffAndInline(t *testing.T) {
 	}
 	if ct := SniffType([]byte("a,b\n1,2\n"), "a.csv"); !strings.HasPrefix(ct, "text/csv") {
 		t.Errorf("csv: %q", ct)
+	}
+	if ct := SniffType([]byte("just some text"), "x.png"); Inline(ct) {
+		t.Errorf("plain text named x.png must not be inline: %q", ct)
 	}
 	if !Inline("image/png; charset=x") {
 		t.Error("params should be ignored")

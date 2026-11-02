@@ -123,7 +123,11 @@ func (l *Local) Open(org, sum string) (io.ReadSeekCloser, error) {
 	if err != nil {
 		return nil, err
 	}
-	return os.Open(p)
+	f, err := os.Open(p)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 // Delete implements Store.
@@ -138,11 +142,11 @@ func (l *Local) Delete(org, sum string) error {
 	return nil
 }
 
-// SafeFilename keeps only the base name, drops control characters and path separators, and cuts it to 200
-// bytes on a rune boundary. An empty result becomes "lampiran".
+// SafeFilename keeps only the base name, drops control and format characters (such as U+202E) and path
+// separators, and cuts it to 200 bytes on a rune boundary. An empty result becomes "lampiran".
 func SafeFilename(name string) string {
 	name = strings.Map(func(r rune) rune {
-		if unicode.IsControl(r) {
+		if unicode.IsControl(r) || unicode.Is(unicode.Cf, r) {
 			return -1
 		}
 		return r
@@ -163,11 +167,12 @@ func SafeFilename(name string) string {
 }
 
 // SniffType detects the content type from the first bytes. When that is only application/octet-stream or
-// text/plain, the filename's extension decides if it maps to a known type.
+// text/plain, the filename's extension decides if it maps to a known type, except that an extension never
+// promotes such bytes to a type shown inline (plain text named x.png stays text/plain).
 func SniffType(head []byte, filename string) string {
 	ct := http.DetectContentType(head)
 	if ct == "application/octet-stream" || strings.HasPrefix(ct, "text/plain") {
-		if t := mime.TypeByExtension(strings.ToLower(filepath.Ext(filename))); t != "" {
+		if t := mime.TypeByExtension(strings.ToLower(filepath.Ext(filename))); t != "" && !Inline(t) {
 			return t
 		}
 	}

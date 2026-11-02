@@ -93,6 +93,9 @@ type Model struct {
 	Doc                           *rk.Doc        // the app's model file
 	Overlay                       string         // custom/<model>.rk merged into Raw ("" without)
 	byName                        map[string]*Field
+
+	// From a map naming {series, pattern?, reset?} (contract 0009); Naming is then "".
+	NamingSeries, NamingPattern, NamingReset string
 }
 
 // Field returns the field called name, or nil.
@@ -253,6 +256,9 @@ func parseModel(app string, doc *rk.Doc) *Model {
 		Label: label(raw["label"]), IsSubmittable: boolean(raw, "is_submittable"), IsChild: boolean(raw, "is_child"),
 		Realtime: boolean(raw, "realtime"), Raw: raw, Doc: doc,
 		OnSubmit: strList(raw["on_submit"]), OnCancel: strList(raw["on_cancel"])}
+	if nm := asMap(raw["naming"]); nm != nil {
+		m.NamingSeries, m.NamingPattern, m.NamingReset = str(nm, "series"), str(nm, "pattern"), str(nm, "reset")
+	}
 	for _, fv := range asList(raw["fields"]) {
 		fm := asMap(fv)
 		if fm == nil || str(fm, "name") == "" {

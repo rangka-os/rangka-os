@@ -101,6 +101,9 @@ func (v *validator) shape() {
 			if got, _ := m.Raw["name"].(string); got != mn || m.Raw["name"] == nil {
 				v.rep.add("error", m.Doc.Path, "name", "name_mismatch", fmt.Sprintf(`model name "%s" must match the file name "%s"`, pyStr(m.Raw["name"]), mn))
 			}
+			if naming := asMap(m.Raw["naming"]); naming != nil {
+				v.resetNeedsDate(m.Doc.Path, "naming", naming, false)
+			}
 		}
 		for _, dn := range v.appDashboards(a) {
 			d := v.reg.Dashboards[dn]

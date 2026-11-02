@@ -70,6 +70,13 @@ create table if not exists rk_naming (
   last   bigint not null,
   primary key (org_id, prefix)
 );
+create table if not exists rk_number_series (
+  org_id text not null,
+  series text not null,
+  period text not null,                 -- '' (never), 2026 (yearly), 2026-11 (monthly)
+  last   bigint not null,
+  primary key (org_id, series, period)
+);
 create table if not exists rk_audit (
   id      bigserial primary key,
   at      timestamptz not null default now(),

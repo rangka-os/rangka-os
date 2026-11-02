@@ -25,6 +25,14 @@ JSON_TYPE = {"data": "string", "text": "string", "int": "integer", "float": "num
              "date": "string (YYYY-MM-DD)", "datetime": "string (RFC 3339)", "phone": "string (E.164)", "npwp": "string (16 digits)", "json": "object"}
 
 
+def naming_pattern(m):
+    """The model's naming pattern: the string, or the pattern of a {series, pattern} map (contract 0009)."""
+    n = m.get("naming")
+    if isinstance(n, dict):
+        n = n.get("pattern")
+    return n or "ID-{#####}"
+
+
 def L(x, lang="id"):
     return (x or {}).get(lang) or (x or {}).get("id") or ""
 
@@ -61,7 +69,7 @@ def build(root, app):
         name, label = m["name"], m.get("label", {})
         writable = [f for f in m["fields"] if not f.get("compute") and not f.get("read_only")]
         computed = [f for f in m["fields"] if f.get("compute") or f.get("read_only")]
-        record = {"name": SAMPLES.get(name) or (m.get("naming", "ID-{#####}").split("{")[0] + "00012"),
+        record = {"name": SAMPLES.get(name) or (naming_pattern(m).split("{")[0] + "00012"),
                   **{f["name"]: sample(f) for f in m["fields"]}, "created_at": "2026-10-30T09:12:44+07:00", "modified_at": "2026-10-30T09:12:44+07:00"}
         if name == "deal":
             record.update({"probability": 50, "weighted_value": 6250000, "stage": "proposal"})

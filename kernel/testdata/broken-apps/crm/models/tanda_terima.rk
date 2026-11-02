@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: tanda_terima
+label: {id: Tanda terima, en: Acknowledgement}
+naming: {series: tt_series, pattern: "X-{###}", reset: yearly}
+title_field: note
+fields:
+  - name: note
+    type: data
+    label: {id: Catatan}
+    in_list: true

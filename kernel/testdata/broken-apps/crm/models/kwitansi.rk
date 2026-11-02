@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: kwitansi
+label: {id: Kwitansi, en: Receipt}
+naming: {series: shared_series}
+title_field: note
+fields:
+  - name: note
+    type: data
+    label: {id: Catatan}
+    in_list: true

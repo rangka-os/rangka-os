@@ -157,6 +157,9 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			if len(res.Rows) == 0 {
 				return nil, ErrUnauthenticated
 			}
+			if res.Rows[0][1].(string) == "" {
+				return nil, ErrUnauthenticated
+			}
 			u, err := LoadUser(ctx, s.DB, res.Rows[0][0].(int64), res.Rows[0][1].(string))
 			if errors.Is(err, ErrNoMembership) {
 				return nil, ErrUnauthenticated
@@ -172,6 +175,9 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 		}
 		uid, _ := claims["uid"].(float64)
 		org, _ := claims["org"].(string)
+		if org == "" {
+			return nil, ErrUnauthenticated
+		}
 		u, err := LoadUser(ctx, s.DB, int64(uid), org)
 		if err != nil {
 			return nil, ErrUnauthenticated
@@ -185,6 +191,9 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			return nil, err
 		}
 		if len(res.Rows) > 0 {
+			if res.Rows[0][1].(string) == "" {
+				return nil, ErrUnauthenticated
+			}
 			u, err := LoadUser(ctx, s.DB, res.Rows[0][0].(int64), res.Rows[0][1].(string))
 			if errors.Is(err, ErrNoMembership) {
 				return nil, ErrUnauthenticated

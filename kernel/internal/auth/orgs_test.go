@@ -3,6 +3,8 @@ package auth
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"reflect"
 	"testing"
 	"time"
@@ -126,5 +128,83 @@ func TestOutletsLoaded(t *testing.T) {
 	u, err := LoadUser(ctx, s.DB, uid, "pt_alpha")
 	if err != nil || !reflect.DeepEqual(u.Outlets, []string{"OUT-001"}) {
 		t.Fatalf("%+v %v", u, err)
+	}
+}
+
+func bearer(tok string) *http.Request {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.Header.Set("Authorization", "Bearer "+tok)
+	return r
+}
+
+func cookieReq(c string) *http.Request {
+	r := httptest.NewRequest("GET", "/", nil)
+	r.AddCookie(&http.Cookie{Name: CookieName, Value: c})
+	return r
+}
+
+func jwtFor(t *testing.T, ctx context.Context, s *Service, uid int64, claims map[string]any) string {
+	t.Helper()
+	c := map[string]any{"iss": s.Issuer, "uid": uid, "typ": "access", "exp": time.Now().Add(time.Hour).Unix()}
+	for k, v := range claims {
+		c[k] = v
+	}
+	tok, err := s.SignJWT(ctx, c)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return tok
+}
+
+func TestRemovedMembershipEndsAccess(t *testing.T) {
+	ctx, s, uid := orgEnv(t)
+	s.Issuer = "http://rk.test"
+	cookie, u, err := s.Login(ctx, "a@x.id", "rahasia-123", "pt_alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	api, _, err := s.CreateToken(ctx, u, "ci", time.Hour)
+	if err != nil {
+		t.Fatal(err)
+	}
+	jwt := jwtFor(t, ctx, s, uid, map[string]any{"org": "pt_alpha", "scope": "openid"})
+	reqs := map[string]func() *http.Request{
+		"session": func() *http.Request { return cookieReq(cookie) },
+		"token":   func() *http.Request { return bearer(api) },
+		"jwt":     func() *http.Request { return bearer(jwt) },
+	}
+	for name, mk := range reqs {
+		if p, err := s.Resolve(mk()); err != nil || p == nil || p.User.Org != "pt_alpha" {
+			t.Fatalf("%s before removal: %+v %v", name, p, err)
+		}
+	}
+	if err := RemoveMember(ctx, s.DB, "pt_alpha", uid); err != nil {
+		t.Fatal(err)
+	}
+	for name, mk := range reqs {
+		if p, err := s.Resolve(mk()); !errors.Is(err, ErrUnauthenticated) || p != nil {
+			t.Fatalf("%s after removal: %+v %v", name, p, err)
+		}
+	}
+}
+
+func TestResolveEmptyOrgUnauthenticated(t *testing.T) {
+	ctx, s, uid := orgEnv(t)
+	s.Issuer = "http://rk.test"
+	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at) values ($1, $2, '', $3)", HashToken("empty-sess"), uid, time.Now().Add(time.Hour)); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.DB.Query(ctx, "insert into rk_tokens (user_id, org_id, name, token_hash) values ($1, '', 'x', $2)", uid, HashToken("rk_empty")); err != nil {
+		t.Fatal(err)
+	}
+	for name, r := range map[string]*http.Request{
+		"session":    cookieReq("empty-sess"),
+		"token":      bearer("rk_empty"),
+		"jwt":        bearer(jwtFor(t, ctx, s, uid, map[string]any{"org": ""})),
+		"jwt-no-org": bearer(jwtFor(t, ctx, s, uid, nil)),
+	} {
+		if p, err := s.Resolve(r); !errors.Is(err, ErrUnauthenticated) || p != nil {
+			t.Fatalf("%s: %+v %v", name, p, err)
+		}
 	}
 }

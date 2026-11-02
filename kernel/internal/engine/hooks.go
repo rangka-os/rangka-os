@@ -46,6 +46,7 @@ func (h *HookCtx) Update(model, name string, patch map[string]any) (store.Record
 func registerBuiltinHooks(e *Engine) {
 	e.Hooks["crm.convert_lead"] = convertLead
 	e.Hooks["crm.mark_won"] = markWon
+	registerLedgerHooks(e)
 }
 
 func or(a, b any) any {

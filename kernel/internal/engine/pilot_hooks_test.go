@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -185,5 +186,175 @@ func TestPilotSetSubmitted(t *testing.T) {
 	}
 	if c := p.get("customer", m.cust); money(c["outstanding"]) != 600000 {
 		t.Fatalf("customer outstanding = %v", c["outstanding"])
+	}
+}
+
+// ---------- Task 2: receivables, payables, payments
+
+// invoice submits a sales invoice of one service line; ppn on gives 11/12 × 12% PPN.
+func (p *pilot) invoice(m masters, cust string, rate int64, ppn bool, extra map[string]any) string {
+	p.t.Helper()
+	in := map[string]any{"customer": cust, "ppn_applies": ppn, "items": []any{map[string]any{"item": m.jasa, "qty": 1, "rate": rate}}}
+	for k, v := range extra {
+		in[k] = v
+	}
+	return p.doc("sales_invoice", in)
+}
+
+func (p *pilot) outstanding(model, name string) int64 {
+	p.t.Helper()
+	return money(p.get(model, name)["outstanding"])
+}
+
+func alloc(inv string, amount int64) map[string]any {
+	return map[string]any{"sales_invoice": inv, "amount": amount}
+}
+
+// TestPilotPaymentAllocation is the Review Focus: over-allocation against the stored outstanding, one payment
+// across two invoices, and cancel as the exact inverse.
+func TestPilotPaymentAllocation(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	inv1 := p.invoice(m, m.cust, 10000000, true, nil) // 10.000.000 + PPN 1.100.000
+	inv2 := p.invoice(m, m.cust, 3900000, false, nil)
+	if got := p.outstanding("sales_invoice", inv1); got != 11100000 {
+		t.Fatalf("invoice 1 outstanding = %d", got)
+	}
+	if got := p.outstanding("customer", m.cust); got != 15000000 {
+		t.Fatalf("customer outstanding after two invoices = %d", got)
+	}
+
+	over := p.create("payment", map[string]any{"customer": m.cust, "amount": 12000000, "allocations": []any{alloc(inv1, 12000000)}})
+	_, err := p.e.Submit(p.ctx, p.a, "payment", over, true)
+	wantCode(t, err, 409, "over_allocation")
+	if !strings.Contains(err.Error(), "Alokasi melebihi sisa tagihan "+inv1) {
+		t.Errorf("message = %q", err.Error())
+	}
+	if p.get("payment", over)["docstatus"] != int64(0) || p.outstanding("sales_invoice", inv1) != 11100000 {
+		t.Fatal("refused submit was not rolled back")
+	}
+
+	short := p.create("payment", map[string]any{"customer": m.cust, "amount": 10000000, "allocations": []any{alloc(inv1, 11100000)}})
+	_, err = p.e.Submit(p.ctx, p.a, "payment", short, true)
+	wantCode(t, err, 409, "over_payment")
+
+	pay := p.doc("payment", map[string]any{"customer": m.cust, "amount": 15000000, "allocations": []any{alloc(inv1, 11100000), alloc(inv2, 3900000)}})
+	for _, inv := range []string{inv1, inv2} {
+		r := p.get("sales_invoice", inv)
+		if money(r["outstanding"]) != 0 || r["status"] != "paid" {
+			t.Fatalf("%s after payment: outstanding %v status %v", inv, r["outstanding"], r["status"])
+		}
+	}
+	if got := p.outstanding("customer", m.cust); got != 0 {
+		t.Fatalf("customer outstanding after payment = %d", got)
+	}
+	for _, row := range rows(p.get("payment", pay)["allocations"]) {
+		if row["applied_idr"] != money(row["amount"]) {
+			t.Errorf("applied_idr = %v for amount %v", row["applied_idr"], row["amount"])
+		}
+	}
+
+	wantCode(t, p.cancel("sales_invoice", inv1), 409, "has_payments")
+	if err := p.cancel("payment", pay); err != nil {
+		t.Fatal(err)
+	}
+	if p.outstanding("sales_invoice", inv1) != 11100000 || p.outstanding("sales_invoice", inv2) != 3900000 || p.outstanding("customer", m.cust) != 15000000 {
+		t.Fatal("cancel did not restore the outstanding amounts")
+	}
+	if err := p.cancel("sales_invoice", inv2); err != nil {
+		t.Fatal(err)
+	}
+	if got := p.outstanding("customer", m.cust); got != 11100000 {
+		t.Fatalf("customer outstanding after cancelling invoice 2 = %d", got)
+	}
+}
+
+func TestPilotPaymentRefusals(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	other := p.invoice(m, m.cust2, 1000000, false, nil)
+	draft := p.create("sales_invoice", map[string]any{"customer": m.cust, "items": []any{map[string]any{"item": m.jasa}}})
+	for _, c := range []struct{ inv, code string }{{other, "wrong_party"}, {draft, "not_submitted"}} {
+		pay := p.create("payment", map[string]any{"customer": m.cust, "amount": 1000000, "allocations": []any{alloc(c.inv, 1000)}})
+		_, err := p.e.Submit(p.ctx, p.a, "payment", pay, true)
+		wantCode(t, err, 409, c.code)
+	}
+	// two rows on one invoice: the second sees the first
+	inv := p.invoice(m, m.cust, 1000000, false, nil)
+	pay := p.create("payment", map[string]any{"customer": m.cust, "amount": 1200000, "allocations": []any{alloc(inv, 600000), alloc(inv, 600000)}})
+	_, err := p.e.Submit(p.ctx, p.a, "payment", pay, true)
+	wantCode(t, err, 409, "over_allocation")
+	// withheld PPh 23 settles the invoice with the cash
+	p.doc("payment", map[string]any{"customer": m.cust, "amount": 980000, "allocations": []any{map[string]any{"sales_invoice": inv, "amount": 980000, "withheld": 20000}}})
+	if p.outstanding("sales_invoice", inv) != 0 || p.outstanding("customer", m.cust) != 0 {
+		t.Fatal("withheld not applied")
+	}
+}
+
+// TestPilotForeignPayment: a USD payment applies round(amount × rate) rupiah and cancel reverses exactly that.
+func TestPilotForeignPayment(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	inv := p.invoice(m, m.cust, 2000000, false, nil)
+	pay := p.doc("payment", map[string]any{"customer": m.cust, "currency": "USD", "rate": 15500.55, "amount": 100, "allocations": []any{alloc(inv, 100)}})
+	if got := p.outstanding("sales_invoice", inv); got != 2000000-1550055 {
+		t.Fatalf("outstanding after USD payment = %d", got)
+	}
+	if r := rows(p.get("payment", pay)["allocations"])[0]; r["applied_idr"] != int64(1550055) {
+		t.Fatalf("applied_idr = %v", r["applied_idr"])
+	}
+	if err := p.cancel("payment", pay); err != nil {
+		t.Fatal(err)
+	}
+	if p.outstanding("sales_invoice", inv) != 2000000 || p.outstanding("customer", m.cust) != 2000000 {
+		t.Fatal("USD payment cancel")
+	}
+}
+
+func TestPilotDownPaymentAndRetention(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	dp := p.invoice(m, m.cust, 3000000, false, map[string]any{"kind": "down_payment"})
+	a := p.invoice(m, m.cust, 5000000, false, map[string]any{"dp_invoice": dp, "dp_deduction": 2000000})
+	if got := p.outstanding("sales_invoice", a); got != 3000000 {
+		t.Fatalf("invoice after DP deduction = %d", got)
+	}
+	b := p.create("sales_invoice", map[string]any{"customer": m.cust, "ppn_applies": false, "dp_invoice": dp, "dp_deduction": 2000000,
+		"items": []any{map[string]any{"item": m.jasa, "rate": 5000000}}})
+	_, err := p.e.Submit(p.ctx, p.a, "sales_invoice", b, true)
+	wantCode(t, err, 409, "dp_over_deducted")
+	wantCode(t, p.cancel("sales_invoice", dp), 409, "has_dependents")
+
+	ret := map[string]any{"kind": "retention", "retention_of": a}
+	p.invoice(m, m.cust, 250000, false, ret)
+	again := p.create("sales_invoice", map[string]any{"customer": m.cust, "kind": "retention", "retention_of": a, "ppn_applies": false,
+		"items": []any{map[string]any{"item": m.jasa, "rate": 250000}}})
+	_, err = p.e.Submit(p.ctx, p.a, "sales_invoice", again, true)
+	wantCode(t, err, 409, "retention_billed")
+	if got := p.outstanding("customer", m.cust); got != 3000000+3000000+250000 {
+		t.Fatalf("customer outstanding = %d", got)
+	}
+}
+
+func TestPilotPayables(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	bill := p.doc("vendor_bill", map[string]any{"vendor": m.vend, "bill_no": "TM/001", "items": []any{map[string]any{"item": m.beras, "qty": 100, "rate": 12000}}})
+	if p.outstanding("vendor", m.vend) != 1200000 {
+		t.Fatal("vendor outstanding after bill")
+	}
+	pay := p.doc("payment", map[string]any{"direction": "pay", "vendor": m.vend, "amount": 1200000, "allocations": []any{map[string]any{"vendor_bill": bill, "amount": 1200000}}})
+	if p.outstanding("vendor_bill", bill) != 0 || p.outstanding("vendor", m.vend) != 0 {
+		t.Fatal("vendor bill payment")
+	}
+	wantCode(t, p.cancel("vendor_bill", bill), 409, "has_payments")
+	if err := p.cancel("payment", pay); err != nil {
+		t.Fatal(err)
+	}
+	if err := p.cancel("vendor_bill", bill); err != nil {
+		t.Fatal(err)
+	}
+	if p.outstanding("vendor", m.vend) != 0 {
+		t.Fatal("vendor outstanding after cancel")
 	}
 }

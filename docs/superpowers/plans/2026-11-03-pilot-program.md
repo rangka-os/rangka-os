@@ -56,7 +56,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - `GET /auth/me` → adds `orgs: [{id, name, roles}]` and `org` (current). `POST /auth/org` `{org}` switches the session's org (cookie `rk_org`); tokens carry a fixed org.
 - `GET /approvals?state=pending|approved|rejected` · `POST /approvals/{id}/approve` · `POST /approvals/{id}/reject` `{reason}`.
 - `GET /r/{model}/{name}/print?format={print}&as=html|pdf`.
-- `POST /r/{model}/{name}/attachments` (multipart `file`) · `GET /r/{model}/{name}/attachments` · `GET /attachments/{id}` · `DELETE /attachments/{id}` (drafts only).
+- `POST /r/{model}/{name}/attachments` (multipart `file`) → 201 `{id, filename, content_type, size, sha256, created_by, created_at, url}` · `GET /r/{model}/{name}/attachments` → `{data: [item…]}` · `GET /attachments/{id}` (bytes) · `DELETE /attachments/{id}` → 204 (drafts only; 409 `submitted` otherwise). 413 `too_large` over `files.max_upload_mb` (default 20), 501 `files_disabled` when `files.enabled` is false. Storage root: `--files-dir` / `$RANGKA_FILES_DIR`, then `system.rk files.path`, then `./data/files`.
 - `POST /imports/{import}` (multipart `file`, form `outlet` optional) → `{id, rows, preview[], errors[], duplicate}` · `POST /imports/{import}/{id}/commit` · `GET /imports/{import}/{id}`.
 - `/api/v1/files` keeps meaning `.rk` files; uploads are "attachments".
 

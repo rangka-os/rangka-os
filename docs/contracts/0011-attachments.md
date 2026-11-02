@@ -58,6 +58,8 @@ Nothing in the model's own table changes, so no `.rk` key and no schema 0.5 chan
 - **Delete is refused unless the record is a draft** (docstatus 0, or the model is not submittable):
   409 `submitted`, "Lampiran dokumen yang sudah diajukan tidak bisa dihapus". Cancel + amend gives a new draft;
   attachments are not copied to the amended document.
+- Attachments follow the record when submit renames it (`DRAFT-…` → final number): `store.RenameRecordAttachments`
+  runs in the same transaction as the submit (`Engine.Submit`).
 - Deleting a record deletes its attachments (rows and unreferenced blobs) after the record delete commits.
 - Every upload and delete writes `rk_audit` (`attachment.added`, `attachment.deleted`, target `<model>/<name>`,
   data `{id, filename, size, sha256}`).

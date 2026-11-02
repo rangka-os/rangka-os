@@ -44,7 +44,6 @@ lines:
     gross: Gross Sales
     discount: Discounts
     net: "=int(row['Net Sales']) - int(row['Refunds'])"
-submit: false               # true submits each record in the same transaction
 ```
 
 - **`map` values.** A plain string is a column header. A string starting with `=` is a CEL expression with `row`
@@ -69,8 +68,9 @@ submit: false               # true submits each record in the same transaction
   `1/0/ya/tidak/true/false`. Money is never parsed as float: integers and decimal strings only.
 
 ### 3. REST (`/api/v1`, same error shape as today)
-- `POST /imports/{import}` (multipart `file`, form `outlet` when `per: outlet`) reads, maps and checks every row
-  without writing records, stores the upload as an import log entry, and returns
+- `POST /imports/{import}` (multipart `file`, form `outlet` when `per: outlet`) reads, maps and checks every row,
+  then runs the creates as a dry run in a transaction that is rolled back (so model rules and required fields are
+  reported now, not at commit), stores the upload as an import log entry, and returns
   `{id, import, rows, preview[], errors[], skipped, duplicate}`:
   - `rows`: data rows read; `preview`: the first 20 records as they would be created (parent with lines);
   - `errors`: `[{row, column, message}]`, `row` the spreadsheet row number (header row included, so it matches
@@ -115,8 +115,9 @@ New kind, so it lives in `schema/0.5/import.json`; the kernel and the Python val
 next to 0.4 and look a schema up by kind (0.4 first, then 0.5). Only the `$schema` kind is read, as before.
 
 ## Not in this contract
-Moka API, ZIP uploads, updating existing records from a file (imports only create), scheduled pulls, MCP tools
-for imports (later; preview only, never commit).
+Moka API, ZIP uploads, updating existing records from a file (imports only create), submitting in the import
+transaction (records arrive as drafts; head office submits them, which is when stock moves), scheduled pulls, MCP
+tools for imports (later; preview only, never commit).
 
 ## Consequences
 Any app can ship a spreadsheet import as metadata; Moka is one `.rk` file, not kernel code. Re-uploads and

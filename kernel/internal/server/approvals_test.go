@@ -143,3 +143,47 @@ func TestApprovalsREST(t *testing.T) {
 		t.Fatalf("missing approval: %s", r.Body)
 	}
 }
+
+// TestApprovalsMCP: an agent token lists approvals but cannot decide one.
+func TestApprovalsMCP(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(apps, "sales", "models", "sales_invoice.rk")
+		b, _ := os.ReadFile(p)
+		b = append(b, []byte("approvals:\n  - name: manager\n    on: submit\n    when: \"grand_total > 1000000\"\n    approvers: [sales_manager]\n    label: {id: Persetujuan manajer}\n")...)
+		os.WriteFile(p, b, 0o644)
+	})
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "rep@kopisenja.id", "Sales", "rahasia-123", "kopi-senja", "sales_rep", "USR-003"); err != nil {
+		t.Fatal(err)
+	}
+	rep := e.userEnv("rep@kopisenja.id", "rahasia-123")
+	draft := rep.must(201, "POST", "/api/v1/r/sales_invoice", map[string]any{"customer": "CUST-0012", "outlet": "OUT-01",
+		"items": []any{map[string]any{"item": "BRG-0044", "qty": 4}}}).JSON["name"].(string)
+	id := get(rep.must(202, "POST", "/api/v1/r/sales_invoice/"+draft+"/submit", map[string]any{"force": true}).JSON, "approval", "id").(string)
+
+	e.login()
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "omilo"}).JSON["token"].(string)
+	m := &env{t: t, s: e.s, ts: e.ts, token: tok}
+
+	var names []string
+	for _, tl := range rpc(m, 1, "tools/list", nil)["tools"].([]any) {
+		names = append(names, get(tl, "name").(string))
+	}
+	if all := strings.Join(names, ","); !strings.Contains(all, "rangka_approvals_list") || !strings.Contains(all, "rangka_approve") {
+		t.Fatalf("tools: %s", all)
+	}
+	list := call(m, "rangka_approvals_list", map[string]any{"state": "pending"})
+	if list["total"] != 1.0 || get(list, "data", 0, "id") != id || get(list, "data", 0, "can_decide") != false {
+		t.Fatalf("list: %v", list)
+	}
+	res := rpc(m, 2, "tools/call", map[string]any{"name": "rangka_approve", "arguments": map[string]any{"id": id, "decision": "approve"}})
+	if res["isError"] != true || get(res, "structuredContent", "error", "code") != "human_required" {
+		t.Fatalf("agent approve: %v", res)
+	}
+	res = rpc(m, 3, "tools/call", map[string]any{"name": "rangka_approve", "arguments": map[string]any{"id": id, "decision": "maybe"}})
+	if res["isError"] != true || get(res, "structuredContent", "error", "code") != "bad_request" {
+		t.Fatalf("bad decision: %v", res)
+	}
+	if rec := rep.must(200, "GET", "/api/v1/r/sales_invoice/"+draft, nil).JSON; rec["docstatus"] != 0.0 {
+		t.Fatalf("invoice changed: %v", rec["docstatus"])
+	}
+}

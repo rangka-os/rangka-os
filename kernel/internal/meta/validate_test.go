@@ -152,26 +152,34 @@ func TestApprovalsParsed(t *testing.T) {
 // A company overlay adds policies after the app's own (ruling R1) and they are checked like the app's.
 func TestApprovalsOverlay(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", siteDir, dir+"/site").Run()
+	if out, err := exec.Command("cp", "-r", appsDir, dir+"/apps").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	if out, err := exec.Command("cp", "-r", siteDir, dir+"/site").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	f := dir + "/apps/sales/models/sales_invoice.rk"
+	b, _ := os.ReadFile(f)
+	os.WriteFile(f, append(b, []byte("approvals:\n  - {name: own, on: submit, approvers: [sales_manager]}\n")...), 0o644)
 	os.MkdirAll(dir+"/site/custom", 0o755)
 	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: sales_invoice
 approvals:
   - {name: big, on: submit, when: "grand_total > 50000000", approvers: [sales_manager]}
 `), 0o644)
-	reg, rep := ValidateOpts(Options{AppsDir: appsDir, SiteDir: dir + "/site"}, nil, schema.Embedded())
+	reg, rep := ValidateOpts(Options{AppsDir: dir + "/apps", SiteDir: dir + "/site"}, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("errors: %v", rep.All())
 	}
 	got := reg.Models["sales_invoice"].ApprovalsFor("submit")
-	if len(got) != 1 || got[0].Name != "big" || got[0].When != "grand_total > 50000000" {
+	if len(got) != 2 || got[0].Name != "own" || got[1].Name != "big" || got[1].When != "grand_total > 50000000" {
 		t.Fatalf("overlay approvals = %+v", got)
 	}
 	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`model: sales_invoice
 approvals:
   - {name: bad, on: post, when: "nope > 1", approvers: [sales_manager]}
 `), 0o644)
-	_, rep = ValidateOpts(Options{AppsDir: appsDir, SiteDir: dir + "/site"}, nil, schema.Embedded())
+	_, rep = ValidateOpts(Options{AppsDir: dir + "/apps", SiteDir: dir + "/site"}, nil, schema.Embedded())
 	var buf bytes.Buffer
 	rep.Print(&buf)
 	for _, want := range []string{"approvals/0/on", "unknown_verb", "approvals/0/when"} {

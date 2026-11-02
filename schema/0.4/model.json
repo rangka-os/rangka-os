@@ -666,8 +666,7 @@
           "$ref": "#/$defs/name"
         },
         "on": {
-          "type": "string",
-          "pattern": "^[a-z_]+$",
+          "$ref": "#/$defs/name",
           "description": "submit, cancel or an action name of this model"
         },
         "when": {

@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: approve_gate
+on: lead.created
+steps:
+  - {approve: {approvers: [sales_manager], when: "size(x > 0"}, as: gate}

@@ -979,14 +979,25 @@ def check_overlays(rep, V, apps, allmodels, overlays):
         for i, r in enumerate(o.get("rules", [])):
             if isinstance(r, dict):
                 check_expr(rep, p, f"rules/{i}/check", r.get("check", ""), m, merged, visible)
+        appr_names = {a.get("name") for a in m.get("approvals", []) if isinstance(a, dict)}
+        app_roles = set().union(*[apps[x]["roles"] for x in [app, *reqs] if x in apps])
         for i, am in enumerate(o.get("approvals", [])):
             if not isinstance(am, dict):
                 continue
             on = am.get("on")
-            if on not in ("submit", "cancel") and on not in [ac.get("name") for ac in m.get("actions", [])]:
+            if on in ("submit", "cancel"):
+                if not m.get("is_submittable"):
+                    rep.add("error", p, f"approvals/{i}/on", "not_submittable", f"approvals on {on} need is_submittable: true")
+            elif on not in [ac.get("name") for ac in m.get("actions", [])]:
                 rep.add("error", p, f"approvals/{i}/on", "unknown_verb", f'"{on}" is not submit, cancel or an action of this model')
+            if am.get("name") in appr_names:
+                rep.add("error", p, f"approvals/{i}/name", "duplicate_approval", f'"{am.get("name")}" is declared twice')
+            appr_names.add(am.get("name"))
             if "when" in am:
                 check_expr(rep, p, f"approvals/{i}/when", am["when"], m, merged, visible)
+            for j, r in enumerate(am.get("approvers", [])):
+                if r not in app_roles:
+                    rep.add("warn", p, f"approvals/{i}/approvers/{j}", "unknown_role", f'role "{r}" has no file in roles/ (it must exist at install)')
         views = m.get("views", {})
         placed = [n for s in views.get("form", {}).get("layout", []) for n in list(s.get("fields", [])) + [x for col in s.get("columns", []) for x in col]]
         cols = list(views.get("list", {}).get("columns", []))

@@ -117,3 +117,17 @@ create table if not exists rk_changesets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+create table if not exists rk_attachments (
+  id           text primary key,
+  org_id       text not null,
+  model        text not null,
+  record       text not null,
+  filename     text not null,
+  content_type text not null,
+  size         bigint not null,
+  sha256       text not null,
+  created_by   text not null default '',
+  created_at   timestamptz not null default now()
+);
+create index if not exists rk_attachments_record_idx on rk_attachments (org_id, model, record);
+create index if not exists rk_attachments_blob_idx on rk_attachments (org_id, sha256);

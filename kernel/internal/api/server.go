@@ -7,11 +7,13 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/mcp"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -29,12 +31,16 @@ type Server struct {
 	Queue        *jobs.Queue
 	Sched        *jobs.Scheduler
 	Changes      *changeset.Service
-	WebDir       string // rangka-os/web, served at /
-	TemplatesDir string // rangka-os/templates (theme and layout templates)
-	Org          string // default organisation
-	Site         string // site name
-	DeployTarget string // dev, docker, helm, desktop, cloud, partner
+	WebDir       string      // rangka-os/web, served at /
+	TemplatesDir string      // rangka-os/templates (theme and layout templates)
+	Org          string      // default organisation
+	Site         string      // site name
+	DeployTarget string      // dev, docker, helm, desktop, cloud, partner
+	Files        files.Store // attachments blob store; nil = files capability disabled (501 files_disabled)
+	MaxUploadMB  int         // files.max_upload_mb; 0 = 20
 	Log          func(format string, args ...any)
+
+	blobMu sync.Mutex // orders blob removal against uploads of the same bytes (one process)
 }
 
 type ctxKey struct{}
@@ -106,6 +112,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/r/{model}/{name}", a(s.patchRecord))
 	mux.HandleFunc("DELETE /api/v1/r/{model}/{name}", a(s.deleteRecord))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.lifecycle))
+	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", a(s.uploadAttachment))
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", a(s.listAttachments))
+	mux.HandleFunc("GET /api/v1/attachments/{id}", a(s.getAttachment))
+	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.runAction))
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))
 	mux.HandleFunc("POST /api/v1/flows/{name}/run", a(s.runFlow))

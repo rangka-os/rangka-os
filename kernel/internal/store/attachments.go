@@ -111,3 +111,9 @@ func AttachmentTotals(ctx context.Context, q pg.Querier) (count, bytes int64, er
 	}
 	return toInt(res.Rows[0][0]), toInt(res.Rows[0][1]), nil
 }
+
+// RenameRecordAttachments moves a record's attachments to its new name (submit names a DRAFT-xxxxx record).
+func RenameRecordAttachments(ctx context.Context, q pg.Querier, org, model, from, to string) error {
+	_, err := q.Exec(ctx, "update rk_attachments set record = $4 where org_id = $1 and model = $2 and record = $3", org, model, from, to)
+	return err
+}

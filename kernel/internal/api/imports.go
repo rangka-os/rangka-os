@@ -1,6 +1,7 @@
 package api
 
 import (
+	"errors"
 	"io"
 	"net/http"
 
@@ -11,7 +12,7 @@ import (
 func (s *Server) previewImport(w http.ResponseWriter, r *http.Request, c *caller) {
 	r.Body = http.MaxBytesReader(w, r.Body, imports.MaxBytes+1<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		writeError(w, http.StatusBadRequest, "file_required", "Pilih file dulu")
+		uploadError(w, err)
 		return
 	}
 	f, hdr, err := r.FormFile("file")
@@ -22,7 +23,7 @@ func (s *Server) previewImport(w http.ResponseWriter, r *http.Request, c *caller
 	defer f.Close()
 	data, err := io.ReadAll(f)
 	if err != nil {
-		writeError(w, http.StatusBadRequest, "file_required", "Pilih file dulu")
+		uploadError(w, err)
 		return
 	}
 	e, err := s.Imports.Preview(r.Context(), c.actor, r.PathValue("import"), hdr.Filename, data, r.FormValue("outlet"))
@@ -31,6 +32,16 @@ func (s *Server) previewImport(w http.ResponseWriter, r *http.Request, c *caller
 		return
 	}
 	writeJSON(w, http.StatusOK, e)
+}
+
+// uploadError answers a failed multipart read: 413 when the body is over the MaxBytesReader limit, else 400.
+func uploadError(w http.ResponseWriter, err error) {
+	var mbe *http.MaxBytesError
+	if errors.As(err, &mbe) {
+		writeError(w, http.StatusRequestEntityTooLarge, "too_large", imports.ErrTooBig.Error())
+		return
+	}
+	writeError(w, http.StatusBadRequest, "file_required", "Pilih file dulu")
 }
 
 // commitImport creates the records of a previewed entry. Only people may run it.

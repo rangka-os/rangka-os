@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 )
 
 const importSchema = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/"
@@ -152,6 +154,12 @@ func TestImportsMoka(t *testing.T) {
 	// no file
 	if r := e.upload("/api/v1/imports/moka_item_details", "", nil, form); r.Status != 400 || get(r.JSON, "error", "code") != "file_required" || get(r.JSON, "error", "message") != "Pilih file dulu" {
 		t.Fatalf("no file: %d %s", r.Status, r.Body)
+	}
+
+	// a body over the upload limit is refused with 413 before the file is read
+	big := make([]byte, imports.MaxBytes+2<<20)
+	if r := e.upload("/api/v1/imports/moka_item_details", "big.csv", big, form); r.Status != 413 || get(r.JSON, "error", "code") != "too_large" || get(r.JSON, "error", "message") != imports.ErrTooBig.Error() {
+		t.Fatalf("too large: %d %.200s", r.Status, r.Body)
 	}
 
 	// preview, commit

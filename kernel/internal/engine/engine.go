@@ -24,6 +24,7 @@ type Actor struct {
 	UserName string   // the user record the person is (USR-001); user.name in CEL
 	Roles    []string // member roles (owner, sales_manager, …)
 	Human    bool     // signed in with a browser session (not a token)
+	Outlets  []string // the member's outlets in Org (user.outlets in CEL; row scope, contract 0010 §5)
 }
 
 // Enqueuer puts background jobs on the queue (implemented by package jobs).

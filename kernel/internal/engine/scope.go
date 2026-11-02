@@ -45,7 +45,11 @@ func UserVar(a Actor) map[string]any {
 	if name == "" {
 		name = a.ID
 	}
-	return map[string]any{"name": name, "email": a.ID, "roles": roles}
+	outlets := make([]any, len(a.Outlets))
+	for i, o := range a.Outlets {
+		outlets[i] = o
+	}
+	return map[string]any{"name": name, "email": a.ID, "roles": roles, "outlets": outlets}
 }
 
 func (s *scope) env() *cel.Env {

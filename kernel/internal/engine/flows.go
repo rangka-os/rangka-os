@@ -254,7 +254,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err != nil {
 				return err
 			}
-			res, err := o.update(mn, name, input)
+			res, err := o.update(mn, name, input, false)
 			if err != nil {
 				return fmt.Errorf("step %s update %s %s: %w", i, mn, name, err)
 			}

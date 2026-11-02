@@ -242,6 +242,7 @@ func (e *Engine) Output(m *meta.Model, rec store.Record) store.Record {
 type CreateOpts struct {
 	KeepName  bool // use input["name"] (seeding, imports)
 	Docstatus int64
+	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
 }
 
 // Result of a write: the record and any warnings.
@@ -255,7 +256,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.create(model, input, CreateOpts{})
+		res, err = o.create(model, input, CreateOpts{Guard: true})
 		return err
 	})
 	return res, err
@@ -280,6 +281,11 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
+	}
+	if opts.Guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "create"); err != nil {
+			return nil, err
+		}
 	}
 	rec["created_by"] = o.actor.ID
 	switch {
@@ -333,6 +339,9 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	if err != nil {
 		return nil, err
 	}
+	if err := e.Guard(ctx, a, m.Name, rec, "read"); err != nil {
+		return nil, err
+	}
 	return e.Output(m, rec), nil
 }
 
@@ -349,13 +358,15 @@ func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch 
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.update(model, name, patch)
+		res, err = o.update(model, name, patch, true)
 		return err
 	})
 	return res, err
 }
 
-func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
+// update merges patch into a record. guard checks the stored and the new record against the actor's row
+// scope (public Update); automations, hooks and flow steps pass false.
+func (o *op) update(model, name string, patch map[string]any, guard bool) (*Result, error) {
 	m, err := o.e.model(model)
 	if err != nil {
 		return nil, err
@@ -363,6 +374,11 @@ func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
 	cur, err := o.load(m, name)
 	if err != nil {
 		return nil, err
+	}
+	if guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, cur, "update"); err != nil {
+			return nil, err
+		}
 	}
 	if m.IsSubmittable && toInt(cur["docstatus"]) != 0 {
 		return nil, conflict("immutable", "Dokumen yang sudah diajukan tidak bisa diubah; batalkan lalu ubah (amend)")
@@ -378,6 +394,11 @@ func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
+	}
+	if guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "update"); err != nil {
+			return nil, err
+		}
 	}
 	if err := store.Update(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name, rec); err != nil {
 		return nil, dbIssue(m, err)
@@ -400,6 +421,9 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		}
 		cur, err := o.load(m, name)
 		if err != nil {
+			return err
+		}
+		if err := e.Guard(ctx, a, m.Name, cur, "delete"); err != nil {
 			return err
 		}
 		if m.IsSubmittable && toInt(cur["docstatus"]) == 1 {
@@ -426,6 +450,9 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 		}
 		rec, err := o.load(m, name)
 		if err != nil {
+			return err
+		}
+		if err := e.Guard(ctx, a, m.Name, rec, "submit"); err != nil {
 			return err
 		}
 		if toInt(rec["docstatus"]) != 0 {
@@ -503,6 +530,9 @@ func (e *Engine) Cancel(ctx context.Context, a Actor, model, name string) (*Resu
 		if err != nil {
 			return err
 		}
+		if err := e.Guard(ctx, a, m.Name, rec, "cancel"); err != nil {
+			return err
+		}
 		if toInt(rec["docstatus"]) != 1 {
 			return conflict("not_submitted", "Hanya dokumen yang sudah diajukan yang bisa dibatalkan")
 		}
@@ -539,6 +569,9 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 		}
 		old, err := o.load(m, name)
 		if err != nil {
+			return err
+		}
+		if err := e.Guard(ctx, a, m.Name, old, "amend"); err != nil {
 			return err
 		}
 		if toInt(old["docstatus"]) != 2 {

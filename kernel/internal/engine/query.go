@@ -24,7 +24,8 @@ type ListOpts struct {
 	Children bool
 }
 
-// List returns matching records and the total before paging. v0 filters in memory with CEL; a CEL→SQL
+// List returns matching records and the total before paging; records outside the actor's row scope are
+// left out before filtering, so total counts visible records only. v0 filters in memory with CEL; a CEL→SQL
 // translation for simple filters is the next step for large tables.
 func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts) ([]store.Record, int, error) {
 	m, err := e.model(model)
@@ -46,7 +47,11 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	links := map[string]map[string]any{}
 	var out []store.Record
 	q := strings.ToLower(strings.TrimSpace(opts.Q))
+	rs := e.RowScope(a)
 	for _, r := range all {
+		if !rs.Visible(m, r) {
+			continue
+		}
 		e.Output(m, r)
 		if opts.Filter != "" {
 			v, err := e.newScope(ctx, e.DB, a, m, r, links).eval(opts.Filter)

@@ -51,7 +51,7 @@ func Actor(p *auth.Principal) engine.Actor {
 	if name == "" {
 		name = u.Email
 	}
-	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human()}
+	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human(), Outlets: u.Outlets}
 }
 
 // ChangeActor converts a principal into a change-set actor.

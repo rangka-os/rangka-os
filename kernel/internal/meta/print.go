@@ -1,8 +1,10 @@
 package meta
 
 import (
+	"os"
 	"path/filepath"
 	"sort"
+	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
@@ -70,16 +72,22 @@ func parseRelated(m map[string]any) Related {
 	return r
 }
 
-// loadPrints reads dir/print/*.rk; site formats (app "") replace app formats of the same name.
+// loadPrints reads dir/print/*.rk; resolvePrints picks the format of each name once apps are installed.
 func (r *Registry) loadPrints(ld *loader, app, root, docPrefix string) {
 	for _, e := range rk.ListDir(filepath.Join(root, "print")) {
 		if d := ld.load(e.Path); d != nil {
-			p := parsePrint(app, root, e.Stem, d)
-			r.printFiles = append(r.printFiles, p)
+			r.printFiles = append(r.printFiles, parsePrint(app, root, e.Stem, d))
 			r.Docs[docPrefix+"print/"+e.Stem+".rk"] = d
-			if old := r.Prints[e.Stem]; old == nil || old.App != "" || app == "" {
-				r.Prints[e.Stem] = p
-			}
+		}
+	}
+}
+
+// resolvePrints fills Prints: a site format wins, else the first installed app's, else the first app's.
+func (r *Registry) resolvePrints() {
+	for _, p := range r.printFiles {
+		old := r.Prints[p.Name]
+		if old == nil || p.App == "" || (old.App != "" && !r.Installed[old.App] && r.Installed[p.App]) {
+			r.Prints[p.Name] = p
 		}
 	}
 }
@@ -132,34 +140,69 @@ func loadLetterheads(dir string, ld *loader, s *Site, r *Registry) {
 	}
 }
 
-// Letterhead returns the letterhead of an org: letterheads/<org>.rk, else letterhead.rk, else just
-// config.org.legal_name. logo is an absolute path. The result is a copy.
+// Letterhead returns the letterhead of an org: letterheads/<org>.rk, else letterhead.rk, else one built from
+// the org's entry in config.rk orgs: (legal_name, else name, and npwp), else config.org.legal_name. The org's
+// entry fills legal_name and npwp a letterhead file leaves out. logo is an absolute path inside the site
+// folder, or absent when it escapes the folder or the file is missing. The result is a deep copy.
 func (r *Registry) Letterhead(org string) map[string]any {
 	if r.Site == nil {
 		return map[string]any{"legal_name": ""}
 	}
+	entry := asMap(asMap(r.SiteConfig("orgs"))[org])
 	d := r.Site.Letterheads[org]
 	if d == nil {
 		d = r.Site.Letterheads[""]
 	}
-	if d == nil {
+	if d == nil && entry == nil {
 		return map[string]any{"legal_name": str(asMap(r.SiteConfig("org")), "legal_name")}
 	}
 	out := map[string]any{}
-	for k, v := range asMap(d.Data) {
-		out[k] = v
+	if d != nil {
+		if m := asMap(d.Data); m != nil {
+			out = deepCopy(m).(map[string]any)
+		}
+	}
+	if entry != nil {
+		if str(out, "legal_name") == "" {
+			if n := str(entry, "legal_name"); n != "" {
+				out["legal_name"] = n
+			} else {
+				out["legal_name"] = str(entry, "name")
+			}
+		}
+		if str(out, "npwp") == "" && str(entry, "npwp") != "" {
+			out["npwp"] = str(entry, "npwp")
+		}
 	}
 	if logo := str(out, "logo"); logo != "" {
-		out["logo"] = r.siteFile(logo)
+		if abs, ok := r.siteFile(logo); ok && fileExists(abs) {
+			out["logo"] = abs
+		} else {
+			delete(out, "logo")
+		}
+	} else {
+		delete(out, "logo")
 	}
 	return out
 }
 
-// siteFile resolves a site-relative path to an absolute one.
-func (r *Registry) siteFile(rel string) string {
+// siteFile resolves a site-relative path to an absolute one; ok is false when it leaves the site folder.
+func (r *Registry) siteFile(rel string) (string, bool) {
 	if filepath.IsAbs(rel) {
-		return rel
+		return rel, false
 	}
-	abs, _ := filepath.Abs(filepath.Join(r.Site.Dir, rel))
-	return abs
+	root, _ := filepath.Abs(r.Site.Dir)
+	abs := filepath.Join(root, rel)
+	return abs, inside(root, abs)
+}
+
+// inside reports whether path is root or below it (both absolute and clean).
+func inside(root, path string) bool {
+	rel, err := filepath.Rel(root, path)
+	return err == nil && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
+}
+
+func fileExists(p string) bool {
+	st, err := os.Stat(p)
+	return err == nil && !st.IsDir()
 }

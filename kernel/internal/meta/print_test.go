@@ -2,8 +2,8 @@ package meta
 
 import (
 	"bytes"
+	"io/fs"
 	"os"
-	"os/exec"
 	"path/filepath"
 	"reflect"
 	"strings"
@@ -93,13 +93,142 @@ func TestLetterhead(t *testing.T) {
 	}
 }
 
-// config.org arrives with the schema 0.5 bootstrap (another stream); until then only this test's own config sets it.
+// copyDir copies a directory tree.
+func copyDir(t *testing.T, src, dst string) {
+	t.Helper()
+	err := filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		rel, _ := filepath.Rel(src, p)
+		if d.IsDir() {
+			return os.MkdirAll(filepath.Join(dst, rel), 0o755)
+		}
+		b, err := os.ReadFile(p)
+		if err != nil {
+			return err
+		}
+		return os.WriteFile(filepath.Join(dst, rel), b, 0o644)
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+}
+
+func writeFile(t *testing.T, path, text string) {
+	t.Helper()
+	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
+		t.Fatal(err)
+	}
+}
+
+func editFile(t *testing.T, path, old, new string) {
+	t.Helper()
+	b, err := os.ReadFile(path)
+	if err != nil || !strings.Contains(string(b), old) {
+		t.Fatalf("%s: %q not found (%v)", path, old, err)
+	}
+	writeFile(t, path, strings.Replace(string(b), old, new, 1))
+}
+
+const configHead = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/config.json\n"
+
+// config.org / config.orgs arrive with the schema 0.5 bootstrap (another stream); until then these tests
+// load a site with their own config.rk and do not validate it.
 func TestLetterheadFallback(t *testing.T) {
 	dir := t.TempDir()
-	os.WriteFile(filepath.Join(dir, "config.rk"), []byte("# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/config.json\norg: {legal_name: PT Contoh Jasa Teknik}\n"), 0o644)
+	writeFile(t, filepath.Join(dir, "config.rk"), configHead+"org: {legal_name: PT Contoh Jasa Teknik}\n")
 	reg := Load(printApps, dir, nil)
 	if got := reg.Letterhead("x"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Contoh Jasa Teknik"}) {
 		t.Errorf("fallback = %v", got)
+	}
+}
+
+func TestLetterheadFromOrgs(t *testing.T) {
+	dir := t.TempDir()
+	writeFile(t, filepath.Join(dir, "config.rk"), configHead+`org: {legal_name: PT Lama}
+orgs:
+  pusat: {name: Kantor pusat, code: PST, legal_name: PT Contoh Jasa Teknik, npwp: "00.000.000.0-000.000", pkp: true}
+  cabang: {name: PT Contoh Cabang}
+`)
+	reg := Load(printApps, dir, nil)
+	if got := reg.Letterhead("pusat"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"}) {
+		t.Errorf("pusat = %v", got)
+	}
+	if got := reg.Letterhead("cabang"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Contoh Cabang"}) {
+		t.Errorf("cabang = %v", got)
+	}
+	if got := reg.Letterhead("lain"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Lama"}) {
+		t.Errorf("no orgs entry = %v", got)
+	}
+
+	// a letterhead file without legal_name / npwp takes them from the org's entry; its own values win
+	writeFile(t, filepath.Join(dir, "letterhead.rk"), "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json\ntagline: Inspeksi\n")
+	writeFile(t, filepath.Join(dir, "letterheads", "cabang.rk"), "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json\nlegal_name: PT Kop Cabang\nnpwp: \"11.111.111.1-111.111\"\n")
+	reg = Load(printApps, dir, nil)
+	if got := reg.Letterhead("pusat"); !reflect.DeepEqual(got, map[string]any{"tagline": "Inspeksi", "legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"}) {
+		t.Errorf("filled = %v", got)
+	}
+	if got := reg.Letterhead("cabang"); got["legal_name"] != "PT Kop Cabang" || got["npwp"] != "11.111.111.1-111.111" {
+		t.Errorf("own values = %v", got)
+	}
+}
+
+func TestLetterheadDeepCopy(t *testing.T) {
+	reg := Load(printApps, printSite, nil)
+	lh := reg.Letterhead("")
+	asMap(asList(lh["bank"])[0])["bank"] = "changed"
+	asMap(lh["signatory"])["name"] = "changed"
+	again := reg.Letterhead("")
+	if asMap(asList(again["bank"])[0])["bank"] != "Bank Contoh" || asMap(again["signatory"])["name"] != "Nama Penandatangan" {
+		t.Errorf("Letterhead shares nested values with the document: %v", again)
+	}
+}
+
+func TestLogoOutsideSite(t *testing.T) {
+	for _, logo := range []string{"/etc/hosts", "../print-apps/core/app.rk"} {
+		dir := t.TempDir()
+		copyDir(t, printSite, dir+"/site")
+		copyDir(t, printApps, dir+"/print-apps")
+		editFile(t, dir+"/site/letterhead.rk", "logo: brand/logo.svg", "logo: "+logo)
+		reg, rep := Validate(printApps, dir+"/site", nil, schema.Embedded())
+		var n int
+		for _, it := range rep.All() {
+			if it.Code == "logo_missing" && strings.Contains(it.Message, "inside the site folder") {
+				n++
+			} else if it.Level == "error" {
+				t.Errorf("%s: unexpected %v", logo, it)
+			}
+		}
+		if n != 1 {
+			t.Errorf("%s: logo_missing reported %d times: %v", logo, n, rep.All())
+		}
+		if _, has := reg.Letterhead("")["logo"]; has {
+			t.Errorf("%s: Letterhead returned a logo outside the site", logo)
+		}
+	}
+	dir := t.TempDir()
+	copyDir(t, printSite, dir+"/site")
+	editFile(t, dir+"/site/letterhead.rk", "logo: brand/logo.svg", "logo: brand/none.png")
+	if _, has := Load(printApps, dir+"/site", nil).Letterhead("")["logo"]; has {
+		t.Error("Letterhead returned a missing logo")
+	}
+}
+
+func TestSamePrintNameInstalledWins(t *testing.T) {
+	dir := t.TempDir()
+	copyDir(t, printApps, dir+"/apps")
+	writeFile(t, dir+"/apps/aa/app.rk", "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json\nname: aa\nversion: 1.0.0\n")
+	writeFile(t, dir+"/apps/aa/print/quotation.rk", "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\nname: quotation\nmodel: quotation\ntemplate: quotation.html\n")
+	reg := Load(dir+"/apps", printSite, nil) // config.rk installs core and sales, not aa
+	if p := reg.Print("quotation"); p == nil || p.App != "sales" {
+		t.Fatalf("quotation = %+v", p)
+	}
+	if got := reg.PrintsFor("quotation"); len(got) != 1 || got[0].App != "sales" {
+		t.Errorf("PrintsFor = %+v", got)
 	}
 }
 
@@ -113,32 +242,20 @@ func TestValidatePrintsClean(t *testing.T) {
 
 func TestValidatePrintsBroken(t *testing.T) {
 	dir := t.TempDir()
-	if err := exec.Command("cp", "-r", printApps, dir+"/apps").Run(); err != nil {
-		t.Fatal(err)
-	}
-	if err := exec.Command("cp", "-r", printSite, dir+"/site").Run(); err != nil {
-		t.Fatal(err)
-	}
-	edit := func(path, old, new string) {
-		t.Helper()
-		b, err := os.ReadFile(path)
-		if err != nil || !strings.Contains(string(b), old) {
-			t.Fatalf("%s: %q not found (%v)", path, old, err)
-		}
-		os.WriteFile(path, []byte(strings.Replace(string(b), old, new, 1)), 0o644)
-	}
-	edit(dir+"/apps/sales/print/quotation.rk", "template: quotation.html", "template: ../../config.rk.html")
-	edit(dir+"/apps/sales/print/purchase_order.rk", "template: purchase_order.html", "template: nope.html")
-	edit(dir+"/site/print/sales_invoice.html", "{{.Doc.name}}", "{{ .Doc.x | nosuchfunc }}")
-	edit(dir+"/apps/sales/print/sales_invoice.rk", "model: sales_invoice", "model: nope")
-	edit(dir+"/apps/core/print/statement.rk", "match: {customer: name}", "match: {nope: name}")
-	edit(dir+"/site/letterhead.rk", "logo: brand/logo.svg", "logo: brand/none.png")
-	os.WriteFile(dir+"/site/print/a.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+	copyDir(t, printApps, dir+"/apps")
+	copyDir(t, printSite, dir+"/site")
+	editFile(t, dir+"/apps/sales/print/quotation.rk", "template: quotation.html", "template: ../../config.rk.html")
+	editFile(t, dir+"/apps/sales/print/purchase_order.rk", "template: purchase_order.html", "template: nope.html")
+	editFile(t, dir+"/site/print/sales_invoice.html", "{{.Doc.name}}", "{{ .Doc.x | nosuchfunc }}")
+	editFile(t, dir+"/apps/sales/print/sales_invoice.rk", "model: sales_invoice", "model: nope")
+	editFile(t, dir+"/apps/core/print/statement.rk", "match: {customer: name}", "match: {nope: name}")
+	editFile(t, dir+"/site/letterhead.rk", "logo: brand/logo.svg", "logo: brand/none.png")
+	writeFile(t, dir+"/site/print/a.rk", `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
 name: b
 model: quotation
 template: a.html
-`), 0o644)
-	os.WriteFile(dir+"/site/print/a.html", []byte("<p>{{.Doc.name}}</p>\n"), 0o644)
+`)
+	writeFile(t, dir+"/site/print/a.html", "<p>{{.Doc.name}}</p>\n")
 
 	_, rep := Validate(dir+"/apps", dir+"/site", nil, schema.Embedded())
 	count := map[string]int{}
@@ -159,13 +276,13 @@ template: a.html
 
 func TestPrintSchemaErrors(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", printApps, dir+"/apps").Run()
-	os.WriteFile(dir+"/apps/sales/print/quotation.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+	copyDir(t, printApps, dir+"/apps")
+	writeFile(t, dir+"/apps/sales/print/quotation.rk", `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
 name: quotation
 model: quotation
 template: quotation.html
 paper: A3
-`), 0o644)
+`)
 	_, rep := Validate(dir+"/apps", "", nil, schema.Embedded())
 	var n int
 	for _, it := range rep.All() {

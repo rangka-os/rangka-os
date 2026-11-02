@@ -203,6 +203,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		}
 	}
 	r.resolveInstalled()
+	r.resolvePrints()
 	return r
 }
 

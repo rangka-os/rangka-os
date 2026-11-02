@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
-	"strings"
 )
 
 // PrintFuncNames are the helpers print templates may call (contract 0008 §3). The renderer (docprint)
@@ -33,7 +32,9 @@ func (v *validator) validatePrints() {
 		for _, org := range sortedKeysM(s.Letterheads) {
 			d := s.Letterheads[org]
 			if logo := str(asMap(d.Data), "logo"); logo != "" {
-				if _, err := os.Stat(v.reg.siteFile(logo)); err != nil {
+				if abs, ok := v.reg.siteFile(logo); !ok {
+					v.rep.extra("error", d.Path, "logo", "logo_missing", fmt.Sprintf(`logo "%s" must be a file inside the site folder %s`, logo, v.rep.rel(s.Dir)))
+				} else if !fileExists(abs) {
 					v.rep.extra("error", d.Path, "logo", "logo_missing", fmt.Sprintf(`logo file "%s" does not exist in %s`, logo, v.rep.rel(s.Dir)))
 				}
 			}
@@ -81,7 +82,7 @@ func (v *validator) printTemplate(p *Print) {
 	if t == "" {
 		return // the schema reports it
 	}
-	if rel, err := filepath.Rel(p.Root, p.Template); filepath.IsAbs(t) || err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+	if filepath.IsAbs(t) || !inside(p.Root, p.Template) {
 		v.rep.extra("error", d.Path, "template", "template_outside", fmt.Sprintf(`template "%s" must stay inside %s`, t, v.rep.rel(p.Root)))
 		return
 	}

@@ -77,7 +77,6 @@ create table if not exists rk_number_series (
   last   bigint not null,
   primary key (org_id, series, period)
 );
-alter table rk_orgs add column if not exists code text;   -- {ORG} in number series (contract 0009)
 create table if not exists rk_audit (
   id      bigserial primary key,
   at      timestamptz not null default now(),

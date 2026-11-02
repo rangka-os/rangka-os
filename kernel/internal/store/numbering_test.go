@@ -94,9 +94,18 @@ func seriesDB(t *testing.T, size int) *pg.Pool {
 	return db
 }
 
+func nextSeriesCode(t *testing.T, db *pg.Pool, org, code string, s Scheme, tables []string, now time.Time) string {
+	t.Helper()
+	got, err := NextSeriesName(context.Background(), db, org, code, s, tables, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
 func nextSeries(t *testing.T, db *pg.Pool, org string, s Scheme, tables []string, now time.Time) string {
 	t.Helper()
-	got, err := NextSeriesName(context.Background(), db, org, s, tables, now)
+	got, err := NextSeriesName(context.Background(), db, org, strings.ToUpper(org), s, tables, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -112,19 +121,15 @@ func expectNames(t *testing.T, got []string, want ...string) {
 
 func TestNextSeriesNameSequence(t *testing.T) {
 	db := seriesDB(t, 2)
-	ctx := context.Background()
 	s := Scheme{Series: "inv", Pattern: "INV/{ORG}/{YY}{MM}/{####}", Reset: "monthly"}
 	oct := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
 	nov := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
-	if _, err := db.Exec(ctx, `insert into rk_orgs (id, name, code) values ('pt-c', 'C', 'PTC')`); err != nil {
-		t.Fatal(err)
-	}
 	got := []string{
 		nextSeries(t, db, "pt-a", s, nil, oct),
 		nextSeries(t, db, "pt-a", s, nil, oct),
 		nextSeries(t, db, "pt-a", s, nil, nov),
 		nextSeries(t, db, "pt-b", s, nil, nov),
-		nextSeries(t, db, "pt-c", s, nil, nov),
+		nextSeriesCode(t, db, "pt-c", "PTC", s, nil, nov),
 	}
 	expectNames(t, got, "INV/PT-A/2610/0001", "INV/PT-A/2610/0002", "INV/PT-A/2611/0001", "INV/PT-B/2611/0001", "INV/PTC/2611/0001")
 }
@@ -162,7 +167,7 @@ func TestNextSeriesNameRollbackNoGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	first, err := NextSeriesName(ctx, tx1, "pt-a", s, nil, now)
+	first, err := NextSeriesName(ctx, tx1, "pt-a", "PT-A", s, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -173,7 +178,7 @@ func TestNextSeriesNameRollbackNoGap(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	second, err := NextSeriesName(ctx, tx2, "pt-a", s, nil, now)
+	second, err := NextSeriesName(ctx, tx2, "pt-a", "PT-A", s, nil, now)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -204,7 +209,7 @@ func TestNextSeriesNameConcurrent(t *testing.T) {
 				errs <- err
 				return
 			}
-			name, err := NextSeriesName(ctx, tx, "pt-a", s, []string{"t_doc"}, now)
+			name, err := NextSeriesName(ctx, tx, "pt-a", "PT-A", s, []string{"t_doc"}, now)
 			if err == nil {
 				_, err = tx.Exec(ctx, `insert into t_doc values ('pt-a', $1)`, name)
 			}

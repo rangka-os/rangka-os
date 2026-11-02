@@ -56,29 +56,11 @@ func FormatNumber(prefix, suffix string, digits int, n int64) string {
 	return fmt.Sprintf("%s%0*d%s", prefix, digits, n, suffix)
 }
 
-// OrgCode is the org's short code for {ORG}: rk_orgs.code when set, else the org id upper-cased.
-func OrgCode(ctx context.Context, q pg.Querier, org string) (string, error) {
-	res, err := q.Query(ctx, "select code from rk_orgs where id = $1", org)
-	if err != nil {
-		return "", err
-	}
-	if len(res.Rows) > 0 {
-		if code, ok := res.Rows[0][0].(string); ok && code != "" {
-			return code, nil
-		}
-	}
-	return strings.ToUpper(org), nil
-}
-
 // NextSeriesName takes the next number of a series for an org inside q's transaction. tables are the record
 // tables of every model using the series; the first number of a period continues after the highest existing
-// name there that matches the rendered pattern. now must already be in the site timezone.
-func NextSeriesName(ctx context.Context, q pg.Querier, org string, s Scheme, tables []string, now time.Time) (string, error) {
-	code, err := OrgCode(ctx, q, org)
-	if err != nil {
-		return "", err
-	}
-	prefix, suffix, digits := RenderSeries(s.Pattern, code, now)
+// name there that matches the rendered pattern. orgCode is used verbatim for {ORG}. now must already be in the site timezone.
+func NextSeriesName(ctx context.Context, q pg.Querier, org, orgCode string, s Scheme, tables []string, now time.Time) (string, error) {
+	prefix, suffix, digits := RenderSeries(s.Pattern, orgCode, now)
 	reset := s.Reset
 	if reset == "" {
 		reset = DefaultReset(s.Pattern)

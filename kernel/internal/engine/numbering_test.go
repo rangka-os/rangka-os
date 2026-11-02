@@ -86,6 +86,19 @@ func TestSeriesSubmitAndMonthlyReset(t *testing.T) {
 	}
 }
 
+// TestSeriesOrgCode sets orgs.<id>.code on the loaded config at test time: schema/0.5 config.json does not
+// allow an orgs key until contract 0010 (S5) lands, so the testdata site cannot carry it.
+func TestSeriesOrgCode(t *testing.T) {
+	e, a := setupSite(t, numberingSite)
+	if got := e.orgCode("kopi-senja"); got != "KOPI-SENJA" {
+		t.Fatalf("fallback orgCode = %q", got)
+	}
+	e.Reg().Site.Config["orgs"] = map[string]any{"kopi-senja": map[string]any{"name": "Kopi Senja", "code": "KS"}}
+	if got := submitName(t, e, a, newDraftInvoice(t, e, a)); got != "INV/KS/2610/0001" {
+		t.Fatalf("first number = %q, want INV/KS/2610/0001", got)
+	}
+}
+
 func TestSeriesConcurrentSubmits(t *testing.T) {
 	e, a := setupSite(t, numberingSite)
 	const n = 20

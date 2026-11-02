@@ -33,7 +33,7 @@ numbering:
 | Token | Value |
 | --- | --- |
 | `{YYYY}` `{YY}` `{MM}` | year, 2-digit year, month of the submit time in the site timezone |
-| `{ORG}` | the org's short code: `rk_orgs.code` when set, else the org id upper-cased |
+| `{ORG}` | the org's short code: `config.rk` `orgs.<id>.code` when set, else the org id upper-cased |
 | `{#…}` | the counter, zero-padded to the number of `#` (1–9); exactly one, anywhere in the pattern |
 
 Literal text may be any of `A–Z a–z 0–9 / - . _`. A counter that outgrows its width is printed in full
@@ -81,12 +81,13 @@ No REST, MCP or SSE change: the number appears as the record `name`. AI tools ne
 
 ## Schema
 `model.json` `naming` becomes `string | {series, pattern?, reset?}`; `config.json` `numbering` values become
-`string | {pattern, reset?}`. These are existing keys whose values widen, so S4 edits them in `schema/0.4`
-(files that declare 0.4 keep validating); the integrator copies them along when `schema/0.5/` is cut.
+`string | {pattern, reset?}`. These are existing keys whose values widen, so S4 edits them in `schema/0.5`
+only; `schema/0.4` keeps its published content.
 
 ## Open
 - Per-org patterns (PT A and PT B numbering differently beyond `{ORG}`) come with contract 0010's per-org config.
-- `rk_orgs.code` is added here (`add column if not exists`); contract 0010 owns how it is set.
+- `orgs.<id>.code` is read from `config.rk`; contract 0010 (S5) owns the `orgs:` map and its schema key. Until it lands
+  the engine reads it from the loaded site config, and the fallback (org id upper-cased) applies.
 
 ## Consequences
 Sites describe a firm's numbering in `config.rk` without touching apps; counters are safe under concurrent

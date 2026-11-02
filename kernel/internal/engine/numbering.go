@@ -1,6 +1,8 @@
 package engine
 
 import (
+	"strings"
+
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -70,5 +72,14 @@ func (o *op) nextName(m *meta.Model) (string, error) {
 			tables = append(tables, store.TableName(x.Name))
 		}
 	}
-	return store.NextSeriesName(o.ctx, o.tx, o.actor.Org, s, tables, now)
+	return store.NextSeriesName(o.ctx, o.tx, o.actor.Org, e.orgCode(o.actor.Org), s, tables, now)
+}
+
+// orgCode is the {ORG} token: config.rk orgs.<id>.code when set, else the org id upper-cased.
+// (When Registry.OrgConfig lands with contract 0010, this body becomes a call to it.)
+func (e *Engine) orgCode(org string) string {
+	if code, _ := meta.AsMap(meta.AsMap(e.Reg().SiteConfig("orgs"))[org])["code"].(string); code != "" {
+		return code
+	}
+	return strings.ToUpper(org)
 }

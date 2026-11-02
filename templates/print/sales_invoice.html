@@ -1,0 +1,106 @@
+{{/* Faktur (sales invoice). Reference layout, contract 0008 §6; field names in README.md.
+     PPN rows and the e-Faktur note appear only for a PKP org (.Org.pkp). */}}
+{{define "style"}}
+.doc-title{font-size:15pt;margin:0 0 4mm}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;margin-bottom:5mm}
+.fields{width:auto}
+.fields th,.fields td{border:0;padding:.4mm 4mm .4mm 0}
+.fields th{font-weight:400;color:#57534E;white-space:nowrap}
+.to{min-width:70mm}
+.to .name{font-weight:600}
+.pre{white-space:pre-line}
+.items{margin:3mm 0}
+.items thead th{border-bottom:1px solid #1C1917}
+.items .no{width:9mm}
+.items tr,.totals tr{break-inside:avoid}
+.totals{width:95mm;margin-left:auto}
+.totals th{font-weight:400}
+.totals .grand th,.totals .grand td{font-weight:600;border-top:1px solid #1C1917;border-bottom:0}
+.terbilang{margin:3mm 0 4mm}
+.note{margin:0 0 2mm}
+.pay{display:flex;justify-content:space-between;gap:10mm;break-inside:avoid}
+.footnote{margin-top:6mm;padding-top:2mm;border-top:1px solid #D6D3D1;font-size:9pt}
+.footer{margin-top:4mm;text-align:center}
+{{end}}
+{{- $cur := or .Doc.currency "IDR"}}
+{{template "letterhead" .}}
+<h1 class="doc-title">Faktur</h1>
+<div class="head">
+  <div class="to">
+    <div class="muted">Kepada</div>
+    {{- with .Links.customer}}
+    <div class="name">{{.customer_name}}</div>
+    {{- with .address}}
+    <div class="pre">{{.}}</div>
+    {{- end}}
+    {{- with .npwp}}
+    <div>NPWP {{.}}</div>
+    {{- end}}
+    {{- else}}
+    <div class="name">{{.Doc.customer}}</div>
+    {{- end}}
+  </div>
+  <table class="fields">
+    <tr><th>No. faktur</th><td>{{.Doc.name}}</td></tr>
+    <tr><th>Tanggal</th><td>{{date .Doc.posting_date}}</td></tr>
+    <tr><th>Jatuh tempo</th><td>{{date .Doc.due_date}}</td></tr>
+    {{- with .Doc.customer_po}}
+    <tr><th>No. PO pelanggan</th><td>{{.}}</td></tr>
+    {{- end}}
+    {{- with .Doc.quotation}}
+    <tr><th>No. penawaran</th><td>{{.}}</td></tr>
+    {{- end}}
+  </table>
+</div>
+
+<table class="items">
+  <thead>
+    <tr><th class="no">No</th><th>Uraian</th><th class="num">Qty</th><th>Satuan</th><th class="num">Harga satuan</th><th class="num">Diskon</th><th class="num">Jumlah</th></tr>
+  </thead>
+  <tbody>
+    {{- range $i, $row := .Doc.items}}
+    <tr>
+      <td>{{sub $i -1}}</td>
+      <td class="pre">{{or $row.description $row.item}}</td>
+      <td class="num">{{number $row.qty}}</td>
+      <td>{{$row.uom}}</td>
+      <td class="num">{{money $row.rate $cur}}</td>
+      <td class="num">{{if ne (sub $row.discount 0) "0"}}{{number $row.discount}}%{{end}}</td>
+      <td class="num">{{money $row.amount $cur}}</td>
+    </tr>
+    {{- end}}
+  </tbody>
+</table>
+
+<table class="totals">
+  <tr><th>Subtotal</th><td class="num">{{money .Doc.subtotal $cur}}</td></tr>
+  {{- if ne (sub .Doc.discount_amount 0) "0"}}
+  <tr><th>Diskon</th><td class="num">{{money (sub 0 .Doc.discount_amount) $cur}}</td></tr>
+  {{- end}}
+  {{- if ne (sub .Doc.down_payment 0) "0"}}
+  <tr><th>Uang muka</th><td class="num">{{money (sub 0 .Doc.down_payment) $cur}}</td></tr>
+  {{- end}}
+  {{- if .Org.pkp}}
+  <tr><th>DPP nilai lain (11/12)</th><td class="num">{{money .Doc.dpp $cur}}</td></tr>
+  <tr><th>PPN 12%</th><td class="num">{{money .Doc.ppn $cur}}</td></tr>
+  {{- end}}
+  <tr class="grand"><th>Total</th><td class="num">{{money .Doc.grand_total $cur}}</td></tr>
+</table>
+{{- if eq $cur "IDR"}}
+<p class="terbilang"><em>Terbilang: {{terbilang .Doc.grand_total}}</em></p>
+{{- end}}
+{{- with .Doc.notes}}
+<p class="note pre">{{.}}</p>
+{{- end}}
+<p class="note">Bila pembayaran dipotong PPh Pasal 23, mohon kirimkan bukti potongnya kepada kami.</p>
+
+<div class="pay">
+  <div>{{template "bank_accounts" .}}</div>
+  {{template "signature" .}}
+</div>
+{{- if .Org.pkp}}
+<p class="footnote muted">Faktur pajak (e-Faktur) diterbitkan terpisah.</p>
+{{- end}}
+{{- with .Letterhead.footer}}{{with .id}}
+<p class="footer muted">{{.}}</p>
+{{- end}}{{end}}

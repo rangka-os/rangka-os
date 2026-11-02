@@ -1,1 +1,101 @@
-<h1>{{.Doc.name}}</h1>
+{{/* Laporan tagihan (statement of account) on a customer, from related.invoices. Reference layout,
+     contract 0008 §6; field names in README.md. Ages are counted at print time. */}}
+{{define "style"}}
+.doc-title{font-size:15pt;margin:0}
+.subtitle{margin:0 0 4mm}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;margin-bottom:5mm}
+.fields{width:auto}
+.fields th,.fields td{border:0;padding:.4mm 4mm .4mm 0}
+.fields th{font-weight:400;color:#57534E;white-space:nowrap}
+.to{min-width:70mm}
+.to .name{font-weight:600}
+.pre{white-space:pre-line}
+.items{margin:3mm 0 6mm;font-size:9pt}
+.items th,.items td{white-space:nowrap}
+.items thead th{border-bottom:1px solid #1C1917}
+.items .no{width:9mm}
+.items tr{break-inside:avoid}
+.items tfoot th,.items tfoot td{font-weight:600;border-top:1px solid #1C1917;border-bottom:0}
+h2{font-size:11pt;margin:0 0 1.5mm}
+.aging{margin-bottom:5mm;break-inside:avoid}
+.aging th{text-align:right;border-bottom:1px solid #1C1917}
+.aging .total{font-weight:600}
+.note{margin:0 0 2mm}
+.pay{display:flex;justify-content:space-between;gap:10mm;break-inside:avoid}
+.footer{margin-top:6mm;text-align:center}
+{{end}}
+{{template "letterhead" .}}
+<h1 class="doc-title">Laporan tagihan</h1>
+<p class="subtitle muted">Statement of account</p>
+<div class="head">
+  <div class="to">
+    <div class="muted">Kepada Yth.</div>
+    <div class="name">{{or .Doc.customer_name .Doc.name}}</div>
+    {{- with .Doc.address}}
+    <div class="pre">{{.}}</div>
+    {{- end}}
+    {{- with .Doc.npwp}}
+    <div>NPWP {{.}}</div>
+    {{- end}}
+  </div>
+  <table class="fields">
+    <tr><th>Per tanggal</th><td>{{date .Printed}}</td></tr>
+    <tr><th>Kode pelanggan</th><td>{{.Doc.name}}</td></tr>
+  </table>
+</div>
+
+<table class="items">
+  <thead>
+    <tr><th class="no">No</th><th>No. faktur</th><th>Tanggal</th><th>Jatuh tempo</th><th class="num">Tagihan</th><th class="num">Dibayar</th><th class="num">Sisa</th><th class="num">Umur (hari)</th></tr>
+  </thead>
+  <tbody>
+    {{- range $i, $row := .Related.invoices}}
+    {{- $open := sub $row.grand_total $row.paid_amount}}
+    <tr>
+      <td>{{sub $i -1}}</td>
+      <td>{{$row.name}}</td>
+      <td>{{date $row.posting_date}}</td>
+      <td>{{date $row.due_date}}</td>
+      <td class="num">{{rupiah $row.grand_total}}</td>
+      <td class="num">{{rupiah $row.paid_amount}}</td>
+      <td class="num">{{rupiah $open}}</td>
+      <td class="num">{{if eq $open "0"}}Lunas{{else}}{{overdue $row.due_date}}{{end}}</td>
+    </tr>
+    {{- else}}
+    <tr><td colspan="8" class="muted">Tidak ada tagihan.</td></tr>
+    {{- end}}
+  </tbody>
+  {{- $age := aging .Related.invoices}}
+  <tfoot>
+    <tr>
+      <th colspan="4">Total</th>
+      <td class="num">{{rupiah (sum .Related.invoices "grand_total")}}</td>
+      <td class="num">{{rupiah (sum .Related.invoices "paid_amount")}}</td>
+      <td class="num">{{rupiah $age.total}}</td>
+      <td></td>
+    </tr>
+  </tfoot>
+</table>
+
+<h2>Umur tagihan (hari)</h2>
+<table class="aging">
+  <tr><th>Belum jatuh tempo</th><th>1–30</th><th>31–60</th><th>61–90</th><th>&gt; 90 hari</th><th>Total sisa</th></tr>
+  <tr>
+    <td class="num">{{rupiah $age.current}}</td>
+    <td class="num">{{rupiah $age.d30}}</td>
+    <td class="num">{{rupiah $age.d60}}</td>
+    <td class="num">{{rupiah $age.d90}}</td>
+    <td class="num">{{rupiah $age.over90}}</td>
+    <td class="num total">{{rupiah $age.total}}</td>
+  </tr>
+</table>
+
+<p class="note">Mohon periksa laporan ini. Bila ada perbedaan dengan catatan Anda, silakan hubungi kami.</p>
+
+<div class="pay">
+  <div>{{template "bank_accounts" .}}</div>
+  {{template "signature" .}}
+</div>
+{{- with .Letterhead.footer}}{{with .id}}
+<p class="footer muted">{{.}}</p>
+{{- end}}{{end}}

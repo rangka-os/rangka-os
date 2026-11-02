@@ -53,7 +53,7 @@ const partials = `{{define "style"}}{{end}}` +
 	`</div>{{end}}` +
 	`{{with .npwp}}<div>NPWP {{.}}</div>{{end}}` +
 	`</div></header>{{end}}{{end}}` +
-	`{{define "bank_accounts"}}{{with .Letterhead.bank}}<div class="bank-accounts"><div class="muted">Pembayaran ke</div>` +
+	`{{define "bank_accounts"}}{{with .Letterhead.bank}}<div class="bank-accounts"><div class="muted">Pembayaran ke rekening:</div>` +
 	`{{range .}}<div>{{.bank}} · {{.account}}{{with .holder}} · a.n. {{.}}{{end}}</div>{{end}}` +
 	`</div>{{end}}{{end}}` +
 	`{{define "signature"}}<div class="signature"><div>Hormat kami,</div><div class="space"></div>` +

@@ -1,1 +1,109 @@
-<h1>{{.Doc.name}}</h1>
+{{/* Surat penawaran harga (quotation). Reference layout, contract 0008 §6; field names in README.md. */}}
+{{define "style"}}
+.doc-title{font-size:15pt;margin:0 0 4mm}
+.head{display:flex;justify-content:space-between;align-items:flex-start;gap:10mm;margin-bottom:5mm}
+.fields{width:auto}
+.fields th,.fields td{border:0;padding:.4mm 4mm .4mm 0}
+.fields th{font-weight:400;color:#57534E;white-space:nowrap}
+.to{min-width:70mm}
+.to .name{font-weight:600}
+.pre{white-space:pre-line}
+.items{margin:3mm 0}
+.items thead th{border-bottom:1px solid #1C1917}
+.items .no{width:9mm}
+.items tr,.totals tr{break-inside:avoid}
+.totals{width:95mm;margin-left:auto}
+.totals th{font-weight:400}
+.totals .grand th,.totals .grand td{font-weight:600;border-top:1px solid #1C1917;border-bottom:0}
+.terbilang{margin:3mm 0 5mm}
+h2{font-size:11pt;margin:0 0 1.5mm}
+.terms{margin:0 0 4mm;padding-left:5mm}
+.closing{break-inside:avoid}
+.footer{margin-top:8mm;text-align:center}
+{{end}}
+{{template "letterhead" .}}
+<h1 class="doc-title">Surat penawaran harga</h1>
+<div class="head">
+  <table class="fields">
+    <tr><th>Nomor</th><td>{{.Doc.name}}</td></tr>
+    {{- $rev := number .Doc.revision}}{{if $rev}}
+    <tr><th>Revisi</th><td>Rev.{{if eq (len $rev) 1}}0{{end}}{{$rev}}</td></tr>
+    {{- end}}
+    <tr><th>Tanggal</th><td>{{date .Doc.quotation_date}}</td></tr>
+    {{- with .Doc.subject}}
+    <tr><th>Perihal</th><td>{{.}}</td></tr>
+    {{- end}}
+  </table>
+  <div class="to">
+    <div class="muted">Kepada Yth.</div>
+    {{- with .Links.customer}}
+    <div class="name">{{.customer_name}}</div>
+    {{- with .address}}
+    <div class="pre">{{.}}</div>
+    {{- end}}
+    {{- else}}
+    <div class="name">{{.Doc.customer}}</div>
+    {{- end}}
+    {{- with .Doc.contact_person}}
+    <div>Up. {{.}}</div>
+    {{- end}}
+  </div>
+</div>
+
+<p>Dengan hormat, bersama ini kami sampaikan penawaran harga sebagai berikut:</p>
+
+<table class="items">
+  <thead>
+    <tr><th class="no">No</th><th>Uraian</th><th class="num">Qty</th><th>Satuan</th><th class="num">Harga satuan</th><th class="num">Diskon</th><th class="num">Jumlah</th></tr>
+  </thead>
+  <tbody>
+    {{- range $i, $row := .Doc.items}}
+    <tr>
+      <td>{{sub $i -1}}</td>
+      <td class="pre">{{or $row.description $row.item}}</td>
+      <td class="num">{{number $row.qty}}</td>
+      <td>{{$row.uom}}</td>
+      <td class="num">{{rupiah $row.rate}}</td>
+      <td class="num">{{if ne (sub $row.discount 0) "0"}}{{number $row.discount}}%{{end}}</td>
+      <td class="num">{{rupiah $row.amount}}</td>
+    </tr>
+    {{- end}}
+  </tbody>
+</table>
+
+<table class="totals">
+  <tr><th>Subtotal</th><td class="num">{{rupiah .Doc.subtotal}}</td></tr>
+  {{- if ne (sub .Doc.discount_amount 0) "0"}}
+  <tr><th>Diskon</th><td class="num">{{rupiah (sub 0 .Doc.discount_amount)}}</td></tr>
+  {{- end}}
+  {{- if .Org.pkp}}
+  <tr><th>DPP nilai lain (11/12)</th><td class="num">{{rupiah .Doc.dpp}}</td></tr>
+  <tr><th>PPN 12%</th><td class="num">{{rupiah .Doc.ppn}}</td></tr>
+  {{- end}}
+  <tr class="grand"><th>Total</th><td class="num">{{rupiah .Doc.grand_total}}</td></tr>
+</table>
+<p class="terbilang"><em>Terbilang: {{terbilang .Doc.grand_total}}</em></p>
+
+<h2>Syarat dan ketentuan</h2>
+<ol class="terms">
+  {{- with .Doc.valid_until}}
+  <li>Penawaran ini berlaku sampai {{date .}}.</li>
+  {{- end}}
+  {{- with .Doc.payment_terms}}
+  <li>Pembayaran: {{.}}</li>
+  {{- end}}
+  {{- with .Doc.delivery_terms}}
+  <li>Waktu pelaksanaan: {{.}}</li>
+  {{- end}}
+  {{- with .Doc.notes}}
+  <li class="pre">{{.}}</li>
+  {{- end}}
+</ol>
+
+<div class="closing">
+  <p>Demikian penawaran ini kami sampaikan. Atas perhatian dan kerja sama Anda, kami ucapkan terima kasih.</p>
+  {{template "signature" .}}
+</div>
+{{- with .Letterhead.footer}}{{with .id}}
+<p class="footer muted">{{.}}</p>
+{{- end}}{{end}}

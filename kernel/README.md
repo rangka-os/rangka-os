@@ -85,6 +85,8 @@ rangka validate --apps <dir> [--site <dir>] [--connectors <dir>] [--json] [app .
 rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--dev-open]
+rangka user add    <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."] --db <url>
+rangka user remove <email> --org <id> --db <url>
 ```
 
 `validate` prints `file:line:col  level  code  path  message` exactly like `rangka_validate.py` and exits 1 on
@@ -125,6 +127,28 @@ serves `rangka-os/web` at `/` (prototype at `/prototype/`).
 `rangka.mcp` scope). OAuth clients come from `system.rk auth.clients`. Change-set approval needs a person
 with a browser session and an approver role (`config.rk ai.approvers`, always `owner`).
 `--dev-open` makes anonymous requests act as the org owner; it is for local demos only.
+
+* `GET /auth/me` returns `user` (with `outlets`, the member's outlets in the current org), `orgs`
+  (`[{id, name, code, roles}]`, every membership, sorted by id) and `org` (the current one).
+* `POST /auth/org {"org": "<id>"}` switches a browser session to another org the user belongs to, sets the
+  `rk_org` cookie and answers like `/auth/me`. Not a member: 403 `permission_denied`. API and OIDC tokens
+  have a fixed org: 400 `org_fixed`. Sessions only.
+* `GET /api/v1/orgs` lists only the caller's orgs.
+* `rangka user add` creates the user (password from the `RANGKA_USER_PASSWORD` environment variable,
+  required for a new user) or updates the membership; `rangka user remove` ends a membership and fails when
+  the user is not a member.
+
+### Multi-org and row scope
+
+Contract: [`0010`](../docs/contracts/0010-multi-org-and-row-scope.md).
+
+* Per-org settings live in `config.rk` under `orgs:` (name, code, `config:` overrides). `rangka migrate`,
+  `seed` and `serve` upsert `rk_orgs` from it; code reads them with `Registry.OrgConfig(org, key)`.
+* A role with `scope: {field, from}` limits a member to records whose outlet field is in `user.outlets`.
+  The engine enforces it for lists, dashboards, records, actions and SSE.
+* Every model table has row-level security keyed by org: the kernel sets `rangka.org` on each pooled
+  connection from the request context. Superusers and `BYPASSRLS` roles skip RLS, so `serve` logs a warning
+  when connected as one. Hosted installs must connect as a plain role that owns the tables.
 
 ## Tests
 

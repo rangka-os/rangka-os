@@ -93,11 +93,13 @@ scope: {field: outlet, from: user.outlets}
   whole org.
 - Enforced in the engine, so every interface built on it follows:
   - lists, dashboards and reports leave out-of-scope records out (totals included); the dashboard cache key
-    includes the scope;
+    includes the scope's field and values;
   - reading, updating, deleting, submitting, cancelling, amending or running an action on an out-of-scope
     record → 403 `permission_denied` `{model, action}`;
   - creating a record, or changing a scope field, to a value outside `from` → 403 `permission_denied`;
-  - SSE `record` events of scoped models reach a scoped subscriber only for visible records;
+  - SSE `record` events of scoped models reach a scoped subscriber only for visible records. The filter is
+    fixed per connection: role or outlet changes apply when the client reconnects;
+  - a queued action is guarded when it is enqueued, not again in the worker;
   - MCP tools go through the same engine calls.
 - Automations, hooks and flow steps run inside an allowed operation are not scoped (an outlet's goods
   receipt may write a stock move that head office sees).
@@ -111,7 +113,7 @@ shared with S1's model permissions (`engine.PermissionError`).
 ### 7. CLI
 - `rangka user add <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]`:
   creates the user (password from `RANGKA_USER_PASSWORD`, required for a new user) or updates the membership.
-- `rangka user remove <email> --org <id>` ends a membership.
+- `rangka user remove <email> --org <id>` ends a membership; it fails when the user is not a member.
 
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.

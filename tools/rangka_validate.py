@@ -56,12 +56,12 @@ def schema_for(V, kind, data):
 
 
 def parse_version(s):
-    m = re.match(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?", s.strip()) if isinstance(s, str) else None
+    m = re.fullmatch(r"([0-9]+)(?:\.([0-9]+))?(?:\.([0-9]+))?", s.strip()) if isinstance(s, str) else None
     return tuple(int(x or 0) for x in m.groups()) if m else None
 
 
 def satisfies(version, rng):
-    """^a.b: same major and at least a.b; >=a.b: at least a.b. Other ranges are not checked."""
+    """^a.b: same major and at least a.b; >=a.b: at least a.b. Other ranges (a || b, pre-releases) are not checked."""
     v = parse_version(version)
     if v is None or not isinstance(rng, str):
         return True
@@ -151,6 +151,9 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
     for app, d, stem in units:
         ap = rkfile.find(d, stem)
         if not ap:
+            old = rkfile.find(d, "app") if stem == "module" else None
+            if old:
+                rep.add("warn", old, "(root)", "module_manifest_name", f"modules/{app} has app.rk, which is not read; rename to module.rk (contract 0001)")
             continue
         man = rep.load(ap) or {}
         kind = "module" if stem == "module" else "app" if isinstance(man, dict) and "modules" in man else "legacy"
@@ -227,6 +230,10 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                     rep.add("error", a["app_path"], f"{key}/{k}", "unknown_module", f'"{k}" is not a module{suggest(k, mods)}')
                 elif not satisfies(apps[k]["manifest"].get("version"), deps[k]):
                     rep.add("error", a["app_path"], f"{key}/{k}", "version_mismatch", f'"{k}" is {apps[k]["manifest"].get("version")}; this needs {deps[k]}')
+        if a["kind"] == "legacy" and isinstance(man.get("requires"), dict):
+            for k in man["requires"]:
+                if k in apps and apps[k]["kind"] == "app":
+                    rep.add("error", a["app_path"], f"requires/{k}", "requires_app", f'"{k}" is an app; a unit can require modules only (contract 0001)')
         if a["kind"] == "app":
             listed = man.get("modules") if isinstance(man.get("modules"), dict) else {}
             reqs = set(closure(apps, [k for k in listed if k in mods])) | set(man.get("optional", {}))

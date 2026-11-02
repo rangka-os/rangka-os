@@ -157,6 +157,9 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		name, dir := u.name, u.dir
 		ap := rk.Find(dir, u.stem)
 		if ap == "" {
+			if old := rk.Find(dir, "app"); u.stem == "module" && old != "" && rep != nil {
+				rep.add("warn", old, "(root)", "module_manifest_name", fmt.Sprintf("modules/%s has app.rk, which is not read; rename to module.rk (contract 0001)", name))
+			}
 			continue
 		}
 		a := &App{Name: name, Dir: dir, Prefix: u.prefix, File: ap}

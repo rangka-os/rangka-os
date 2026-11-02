@@ -98,11 +98,13 @@ func LoadDir(dir string) (*Set, error) {
 			return nil, fmt.Errorf("%s: %w", e.Name(), err)
 		}
 	}
-	// rangka-os/schema/0.4/app.json next to the directory, for legacy app.rk files
-	if b, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Clean(dir)), "0.4", "app.json")); err == nil {
-		if err := s.addLegacy(b); err != nil {
-			return nil, fmt.Errorf("0.4/app.json: %w", err)
-		}
+	// 0.4/app.json for legacy app.rk files: the one next to the directory, else the embedded copy
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Clean(dir)), "0.4", "app.json"))
+	if err != nil {
+		b, _ = embedded.ReadFile("0.4/app.json")
+	}
+	if err := s.addLegacy(b); err != nil {
+		return nil, fmt.Errorf("0.4/app.json: %w", err)
 	}
 	return s, nil
 }

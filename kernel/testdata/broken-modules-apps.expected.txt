@@ -1,3 +1,4 @@
+../modules/oldstyle/app.rk:1:1  warn   module_manifest_name  (root)  modules/oldstyle has app.rk, which is not read; rename to module.rk (contract 0001)
 contacts/app.rk:2:7  error  duplicate_unit  name  "contacts" is already a module (../modules/contacts/module.rk); modules and apps share one namespace
 ../modules/invoicing/module.rk:1:1  error  schema  (root)  Additional properties are not allowed ('menu' was unexpected)
 legacy/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/legacy/module.rk and an app (contract 0001)
@@ -6,10 +7,11 @@ shop/app.rk:2:1  error  app_defines_model  models  app "shop" has models/; an ap
 ../modules/pipeline/module.rk:5:39  error  version_mismatch  requires/contacts  "contacts" is 1.2.0; this needs >=1.5
 ../modules/pipeline/module.rk:5:57  error  unknown_module  requires/billing  "billing" is not a module
 ../modules/pipeline/models/deal.rk:6:37  error  unknown_model  fields/1/to  "invoice" is not a model in this app or its dependencies
+legacy/app.rk:5:51  error  requires_app  requires/shop  "shop" is an app; a unit can require modules only (contract 0001)
 shop/app.rk:5:21  error  version_mismatch  modules/contacts  "contacts" is 1.2.0; this needs ^2.0
 shop/app.rk:5:49  error  unknown_module  modules/nope  "nope" is not a module
 shop/app.rk:8:29  error  unknown_model  menu/0/items/2  "invoice" is not a model in this app or its dependencies
 ../site/config.rk:3:14  error  unknown_app  apps/1  "pipeline" is not an app in testdata/broken-modules-apps/apps
 ../site/config.rk:5:12  warn   not_installed  numbering/invoice  "invoice" comes from app "invoicing", which this site does not install
 
-10 error(s), 3 warning(s)
+11 error(s), 4 warning(s)

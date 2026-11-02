@@ -31,7 +31,7 @@ func TestModulesAndApps(t *testing.T) {
 	if strings.Join(apps, ",") != "crm" || strings.Join(mods, ",") != "contacts,pipeline" {
 		t.Fatalf("apps %v modules %v", apps, mods)
 	}
-	if got := mustJSON(get(m, "apps", 0, "modules")); string(got) != `["contacts","pipeline"]` {
+	if got := mustJSON(get(m, "apps", 0, "modules")); string(got) != `["pipeline"]` {
 		t.Errorf("crm modules = %s", got)
 	}
 	if get(m, "modules", 1, "requires", "contacts") != "^1.0" || get(m, "models", "deal", "module") != "pipeline" || get(m, "models", "customer", "module") != "contacts" {

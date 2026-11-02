@@ -92,7 +92,11 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 			if strings.Contains(p, "/models/") {
 				assessModel(a, p, old, nw)
 			}
-			a.raise("high", "edits app file "+p+" (app files belong to app authors; organisations change models through custom/<model>.rk)")
+			what := "app"
+			if strings.HasPrefix(p, "modules/") {
+				what = "module"
+			}
+			a.raise("high", "edits "+what+" file "+p+" ("+what+" files belong to app authors; organisations change models through custom/<model>.rk)")
 		case unitPath(p):
 			switch {
 			case strings.Contains(p, "/dashboards/"):

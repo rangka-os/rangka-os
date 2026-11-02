@@ -282,11 +282,7 @@ func (r roots) result(ops []Op) (map[string]*string, error) {
 			if err != nil {
 				return nil, fmt.Errorf("op %d: %v", i, err)
 			}
-			kind := doc.Kind()
-			url := ""
-			if kind != "" {
-				url = schema.Base + kind + ".json"
-			}
+			url := headerURL(doc.Kind(), data)
 			text := rk.Dump(data, doc.Root, url)
 			out[op.Path] = &text
 		default:
@@ -294,6 +290,20 @@ func (r roots) result(ops []Op) (map[string]*string, error) {
 		}
 	}
 	return out, nil
+}
+
+// headerURL is the schema URL a re-dumped document declares: 0.5, except an app without modules, which is a
+// 0.4 app (contract 0001) and keeps the 0.4 app.json it is checked against.
+func headerURL(kind string, data any) string {
+	if kind == "" {
+		return ""
+	}
+	if m, ok := data.(map[string]any); kind == "app" && ok {
+		if _, has := m["modules"]; !has {
+			return schema.Legacy + "app.json"
+		}
+	}
+	return schema.Base + kind + ".json"
 }
 
 // sandbox copies the installation into a temp dir and applies the ops there.

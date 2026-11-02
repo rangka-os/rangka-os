@@ -166,3 +166,25 @@ func TestImportSchema(t *testing.T) {
 		t.Errorf("missing value: %+v", errs)
 	}
 }
+
+// --schemas <dir> without a sibling 0.4/app.json still checks legacy app.rk files against 0.4 app.json.
+func TestLoadDirLegacyFallback(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "only-0.5")
+	os.MkdirAll(dir, 0o755)
+	ents, err := os.ReadDir("../../../schema/0.5")
+	if err != nil {
+		t.Skip("schema source dir not found")
+	}
+	for _, e := range ents {
+		b, _ := os.ReadFile(filepath.Join("../../../schema/0.5", e.Name()))
+		os.WriteFile(filepath.Join(dir, e.Name()), b, 0o644)
+	}
+	s, err := LoadDir(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	legacy := FromData(map[string]any{"name": "crm", "version": "1.0.0", "title": map[string]any{"id": "CRM"}, "requires": map[string]any{"core": "^1.0"}})
+	if errs := s.Validate("app", legacy); len(errs) != 0 {
+		t.Errorf("legacy app with LoadDir: %+v", errs)
+	}
+}

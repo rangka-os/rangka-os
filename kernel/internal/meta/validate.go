@@ -5,7 +5,6 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
-	"strconv"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
@@ -257,6 +256,11 @@ func (v *validator) meaning() {
 // version satisfies the range. 0.4 units keep missing_dependency (site check) only.
 func (v *validator) dependencies(a *App) {
 	if a.Kind == KindLegacy {
+		for _, k := range orderedKeys(a, "requires") {
+			if u := v.reg.App[k]; u != nil && u.Kind == KindApp {
+				v.rep.add("error", a.File, "requires/"+k, "requires_app", fmt.Sprintf(`"%s" is an app; a unit can require modules only (contract 0001)`, k))
+			}
+		}
 		return
 	}
 	var mods []string
@@ -282,53 +286,6 @@ func (v *validator) dependencies(a *App) {
 			}
 		}
 	}
-}
-
-var versionRe = regexp.MustCompile(`^(\d+)(?:\.(\d+))?(?:\.(\d+))?`)
-
-func parseVersion(x any) ([3]int, bool) {
-	s, ok := x.(string)
-	if !ok {
-		return [3]int{}, false
-	}
-	m := versionRe.FindStringSubmatch(strings.TrimSpace(s))
-	if m == nil {
-		return [3]int{}, false
-	}
-	var out [3]int
-	for i := 0; i < 3; i++ {
-		out[i], _ = strconv.Atoi(m[i+1])
-	}
-	return out, true
-}
-
-func lessVersion(a, b [3]int) bool {
-	for i := 0; i < 3; i++ {
-		if a[i] != b[i] {
-			return a[i] < b[i]
-		}
-	}
-	return false
-}
-
-// Satisfies reports whether version meets a range: ^a.b (same major, at least a.b) or >=a.b. Other ranges
-// and unreadable versions are not checked (rangka_validate.py satisfies).
-func Satisfies(version, rng any) bool {
-	ver, ok := parseVersion(version)
-	r, isStr := rng.(string)
-	if !ok || !isStr {
-		return true
-	}
-	r = strings.TrimSpace(r)
-	switch {
-	case strings.HasPrefix(r, "^"):
-		b, ok := parseVersion(r[1:])
-		return !ok || ver[0] == b[0] && !lessVersion(ver, b)
-	case strings.HasPrefix(r, ">="):
-		b, ok := parseVersion(r[2:])
-		return !ok || !lessVersion(ver, b)
-	}
-	return true
 }
 
 func fieldMap(m *Model) map[string]map[string]any {

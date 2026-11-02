@@ -67,7 +67,7 @@ prepare() {
     cp -R "$APPS_REPO/sites/kopi-senja" "$d/site"
   done
   # the kernel runs as uid 65532 and writes site/custom and data/
-  docker run --rm -v "$WORK/pilots:/p" alpine chown -R 65532:65532 /p
+  docker run --rm -v "$WORK/pilots:/p" alpine:3.20 chown -R 65532:65532 /p
   OWNER_PASSWORD="$(openssl rand -hex 12)"
   cat >"$WORK/.env" <<ENV
 RANGKA_TAG=local
@@ -148,12 +148,18 @@ section_stack() {
   local jar="$WORK/cookies.txt" sse_rc=0 sse_hdr
   URL_PATH=/auth/login https "$JASA_HOST" -o /dev/null -c "$jar" -X POST -H 'Content-Type: application/json' \
     -d "{\"email\":\"$OWNER_EMAIL\",\"password\":\"$OWNER_PASSWORD\"}"
-  sse_hdr="$(URL_PATH=/api/v1/events https "$JASA_HOST" -N --max-time 3 -b "$jar" -D - -o /dev/null)" || sse_rc=$?
+  sse_hdr="$(URL_PATH=/api/v1/events https "$JASA_HOST" -N --max-time 3 -H 'Accept-Encoding: gzip, zstd' -b "$jar" -D - -o /dev/null)" || sse_rc=$?
   if [ "$sse_rc" = 28 ] && grep -qi '^content-type: text/event-stream' <<<"$sse_hdr"; then
     ok "SSE stays open with text/event-stream through caddy"
   else
     bad "SSE: curl exit $sse_rc, headers: $sse_hdr"
   fi
+  if grep -qi '^content-encoding:' <<<"$sse_hdr"; then bad "SSE response is compressed"; else ok "SSE response is not compressed"; fi
+
+  # normal responses are still compressed when asked
+  local json_hdr
+  json_hdr="$(URL_PATH=/.well-known/openid-configuration https "$JASA_HOST" -H 'Accept-Encoding: gzip' -D - -o /dev/null)" || json_hdr=""
+  if grep -qi '^content-encoding: \(gzip\|zstd\)' <<<"$json_hdr"; then ok "JSON response is compressed"; else bad "JSON not compressed: $json_hdr"; fi
 
   # only Caddy publishes ports
   local running svc pub

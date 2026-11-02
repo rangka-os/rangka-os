@@ -81,13 +81,16 @@ type docField struct {
 	f     map[string]any
 }
 
-// resolveDoc finds field name for model m (own: m's fields): on m itself, or, for a child model without it,
-// on every visible model with a table of m (sorted by name). missing names the first model that lacks it.
-func resolveDoc(m *Model, own map[string]map[string]any, name string, visible map[string]vis) (found []docField, missing string) {
-	if f := own[name]; f != nil {
+// resolveDoc finds field name for model m (own: m's fields). A model that is not a child resolves it on itself.
+// A child resolves it on every visible model with a table of it (sorted by name), after first trying itself
+// when childFirst is set (currency_field; rate_field is never read from the child). missing names the first
+// model that lacks it.
+func resolveDoc(m *Model, own map[string]map[string]any, name string, visible map[string]vis, childFirst bool) (found []docField, missing string) {
+	child := boolean(m.Raw, "is_child")
+	if f := own[name]; f != nil && (childFirst || !child) {
 		return []docField{{m.Name, f}}, ""
 	}
-	if !boolean(m.Raw, "is_child") {
+	if !child {
 		return nil, m.Name
 	}
 	var parents []string
@@ -118,7 +121,7 @@ func (v *validator) money(p string, m *Model, i int, f map[string]any, fields ma
 	n := pyStr(f["name"])
 	if str(f, "type") == "money" {
 		if cf, ok := f["currency_field"].(string); ok {
-			found, missing := resolveDoc(m, fields, cf, visible)
+			found, missing := resolveDoc(m, fields, cf, visible, true)
 			if missing != "" {
 				v.rep.add("error", p, fmt.Sprintf("fields/%d/currency_field", i), "bad_currency_field", fmt.Sprintf(`"%s" is not a field of %s`, cf, missing))
 			} else {
@@ -135,7 +138,7 @@ func (v *validator) money(p string, m *Model, i int, f map[string]any, fields ma
 		if r, ok := f["rate_field"].(string); ok && r != "" {
 			rate = r
 		}
-		found, missing := resolveDoc(m, fields, rate, visible)
+		found, missing := resolveDoc(m, fields, rate, visible, false)
 		for _, c := range found {
 			if missing == "" && !contains(rateFieldTypes, str(c.f, "type")) {
 				missing = c.model

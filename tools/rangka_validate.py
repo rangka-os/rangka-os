@@ -159,6 +159,8 @@ def validate(root, only=None, site=None, connectors=None):
                 if n in seen:
                     rep.add("error", p, f"fields/{i}", "duplicate_field", f'"{n}" is declared twice')
                 seen.add(n)
+                if "money_of" in f:
+                    continue  # a generated IDR twin (contract 0013): nothing written to check
                 for key in ("to", "of"):
                     t = f.get(key)
                     if t and t not in visible:
@@ -252,12 +254,14 @@ def with_twins(fields):
     return out
 
 
-def resolve_doc(mname, m, fields, name, visible):
-    """Field `name` on the model, or (child models) on every visible model with a table of it, sorted by name.
-    Returns ([(model, field)], first model that lacks it or None)."""
-    if name in fields:
+def resolve_doc(mname, m, fields, name, visible, child_first):
+    """Field `name` on the model when it is not a child. A child resolves it on every visible model with a table
+    of it (sorted by name), after first trying itself when child_first is set (currency_field; rate_field is never
+    read from the child). Returns ([(model, field)], first model that lacks it or None)."""
+    child = m.get("is_child")
+    if name in fields and (child_first or not child):
         return [(mname, fields[name])], None
-    if not m.get("is_child"):
+    if not child:
         return [], mname
     parents = sorted(pn for pn, v in visible.items()
                      if any(f.get("type") == "table" and f.get("of") == mname for f in v[2].get("fields", []) if "name" in f))
@@ -277,7 +281,7 @@ def check_money(rep, p, mname, m, i, f, fields, visible):
     if f.get("type") == "money":
         cf = f.get("currency_field")
         if isinstance(cf, str):
-            found, missing = resolve_doc(mname, m, fields, cf, visible)
+            found, missing = resolve_doc(mname, m, fields, cf, visible, True)
             if missing:
                 rep.add("error", p, f"fields/{i}/currency_field", "bad_currency_field", f'"{cf}" is not a field of {missing}')
             else:
@@ -286,7 +290,7 @@ def check_money(rep, p, mname, m, i, f, fields, visible):
                         rep.add("error", p, f"fields/{i}/currency_field", "bad_currency_field", f'currency field "{cf}" must be select, data or link; it is {c.get("type")}')
                         break
         rate = f.get("rate_field") if isinstance(f.get("rate_field"), str) and f.get("rate_field") else "rate"
-        found, missing = resolve_doc(mname, m, fields, rate, visible)
+        found, missing = resolve_doc(mname, m, fields, rate, visible, False)
         for doc, c in found:
             if not missing and c.get("type") not in ("float", "currency", "int"):
                 missing = doc

@@ -9,11 +9,12 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 )
 
-const moneyHead = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/"
+const moneyHead = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/"
 
 // moneyApp writes app "billing" with models bill (header) and bill_line (child) into a temp dir.
-// billFields and lineFields replace the default field lists when not empty.
-func moneyApp(t *testing.T, billFields, lineFields string) string {
+// billFields and lineFields replace the default field lists when not empty; quoteFields, when given, adds a
+// second header model quote.
+func moneyApp(t *testing.T, billFields, lineFields string, quoteFields ...string) string {
 	t.Helper()
 	if billFields == "" {
 		billFields = `  - {name: currency, type: data}
@@ -32,6 +33,9 @@ func moneyApp(t *testing.T, billFields, lineFields string) string {
 		"billing/models/bill.rk": moneyHead + "model.json\nname: bill\nlabel: {id: Tagihan}\nfields:\n" + billFields,
 		"billing/models/bill_line.rk": moneyHead + "model.json\nname: bill_line\nis_child: true\nlabel: {id: Baris}\nfields:\n" +
 			lineFields,
+	}
+	if len(quoteFields) > 0 {
+		files["billing/models/quote.rk"] = moneyHead + "model.json\nname: quote\nlabel: {id: Penawaran}\nfields:\n" + quoteFields[0]
 	}
 	for p, s := range files {
 		full := filepath.Join(dir, p)
@@ -102,38 +106,49 @@ func TestMoneyValidator(t *testing.T) {
 	line := "  - {name: amount, type: money, currency_field: currency}\n"
 	cases := []struct {
 		name, bill, line, code, where, msg string
+		quote                              []string
 	}{
 		{"no currency_field", `  - {name: currency, type: data}
   - {name: rate, type: float}
   - {name: total, type: money}
   - {name: items, type: table, of: bill_line}
-`, line, "schema", "fields/2", "'currency_field' is a required property"},
+`, line, "schema", "fields/2", "'currency_field' is a required property", nil},
 		{"unknown currency_field", `  - {name: currency, type: data}
   - {name: rate, type: float}
   - {name: total, type: money, currency_field: nope}
   - {name: items, type: table, of: bill_line}
-`, line, "bad_currency_field", "fields/2/currency_field", `"nope" is not a field of bill`},
+`, line, "bad_currency_field", "fields/2/currency_field", `"nope" is not a field of bill`, nil},
 		{"date currency_field", `  - {name: currency, type: data}
   - {name: rate, type: float}
   - {name: posting_date, type: date}
   - {name: total, type: money, currency_field: posting_date}
   - {name: items, type: table, of: bill_line}
-`, line, "bad_currency_field", "fields/3/currency_field", `currency field "posting_date" must be select, data or link; it is date`},
+`, line, "bad_currency_field", "fields/3/currency_field", `currency field "posting_date" must be select, data or link; it is date`, nil},
 		{"no rate", `  - {name: currency, type: data}
   - {name: total, type: money, currency_field: currency}
-`, "  - {name: qty, type: int}\n", "missing_rate_field", "fields/1", `money fields need a rate field "rate" (float, currency or int) on bill`},
+`, "  - {name: qty, type: int}\n", "missing_rate_field", "fields/1", `money fields need a rate field "rate" (float, currency or int) on bill`, nil},
 		{"child without parent rate", `  - {name: currency, type: data}
   - {name: items, type: table, of: bill_line}
-`, line, "missing_rate_field", "fields/0", `money fields need a rate field "rate" (float, currency or int) on bill`},
+`, line, "missing_rate_field", "fields/0", `money fields need a rate field "rate" (float, currency or int) on bill`, nil},
+		{"child rate is not the document rate", `  - {name: currency, type: data}
+  - {name: items, type: table, of: bill_line}
+`, `  - {name: rate, type: currency}
+  - {name: amount, type: money, currency_field: currency}
+`, "missing_rate_field", "fields/1", `money fields need a rate field "rate" (float, currency or int) on bill`, nil},
+		{"two parents, one without rate", `  - {name: currency, type: data}
+  - {name: rate, type: float}
+  - {name: items, type: table, of: bill_line}
+`, line, "missing_rate_field", "fields/0", `money fields need a rate field "rate" (float, currency or int) on quote`,
+			[]string{"  - {name: currency, type: data}\n  - {name: lines, type: table, of: bill_line}\n"}},
 		{"twin clash", `  - {name: currency, type: data}
   - {name: rate, type: float}
   - {name: total, type: money, currency_field: currency}
   - {name: total_idr, type: currency}
-`, "  - {name: qty, type: int}\n", "twin_clash", "fields/3", `"total_idr" is generated for money field "total"; rename it`},
+`, "  - {name: qty, type: int}\n", "twin_clash", "fields/3", `"total_idr" is generated for money field "total"; rename it`, nil},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			_, rep := Validate(moneyApp(t, c.bill, c.line), "", nil, schema.Embedded())
+			_, rep := Validate(moneyApp(t, c.bill, c.line, c.quote...), "", nil, schema.Embedded())
 			all := rep.All()
 			if len(all) != 1 {
 				t.Fatalf("want 1 problem, got %v", all)

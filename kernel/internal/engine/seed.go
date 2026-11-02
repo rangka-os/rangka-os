@@ -115,6 +115,9 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 					return fmt.Errorf("fixture %s %s: %s", mn, name, issues[0].Message)
 				}
 				o.prepare(m, rec, true)
+				if issues := o.scope(m, rec).checkMoney("", "", map[string]bool{}); len(issues) > 0 {
+					return fmt.Errorf("fixture %s %s: %s", mn, name, issues[0].Message)
+				}
 				if name == "" {
 					n, err := store.NextName(o.ctx, o.tx, a.Org, mn, e.naming(m), e.Now().In(e.Location()))
 					if err != nil {

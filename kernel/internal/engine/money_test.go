@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -190,6 +191,62 @@ func issueOf(t *testing.T, err error, code string) Issue {
 	return Issue{}
 }
 
+// wantIssues fails unless err is a ValidationError with a bad_value issue for every field → message of want.
+func wantIssues(t *testing.T, err error, want map[string]string) {
+	t.Helper()
+	var ve *ValidationError
+	if !errors.As(err, &ve) {
+		t.Fatalf("want a ValidationError with %v, got %v", want, err)
+	}
+	left := map[string]string{}
+	for k, v := range want {
+		left[k] = v
+	}
+	for _, is := range ve.Errors {
+		if left[is.Field] == is.Message && is.Code == "bad_value" {
+			delete(left, is.Field)
+		}
+	}
+	if len(left) > 0 {
+		t.Errorf("missing %v in %+v", left, ve.Errors)
+	}
+}
+
+// TestMoneyComputeErrors: a money compute that fails is refused at save, never stored as 0.
+func TestMoneyComputeErrors(t *testing.T) {
+	e, a := setupMoney(t)
+	ctx := context.Background()
+	// 6e15 × 2 is beyond numeric(20,4)
+	_, err := e.Create(ctx, a, "bill", map[string]any{"items": []any{line(2, "6000000000000000")}})
+	wantIssues(t, err, map[string]string{"items.0.amount": "Nilai terlalu besar"})
+	// each line fits, their sum does not
+	_, err = e.Create(ctx, a, "bill", map[string]any{"items": []any{line(1, "6000000000000000"), line(1, "6000000000000000")}})
+	wantIssues(t, err, map[string]string{"total": "Total terlalu besar"})
+	// per_part = total / parts
+	_, err = e.Create(ctx, a, "bill", map[string]any{"parts": 0, "items": []any{line(1, "100")}})
+	wantIssues(t, err, map[string]string{"per_part": "Per bagian tidak bisa dihitung"})
+	rec := createBill(t, e, a, map[string]any{"items": []any{line(1, "100")}})
+	if got := dec(t, rec, "per_part"); got != "100" {
+		t.Errorf("per_part = %s, want 100 (parts defaults to 1)", got)
+	}
+}
+
+// TestMoneySeedChecks: fixtures run the money checks too.
+func TestMoneySeedChecks(t *testing.T) {
+	e, a := setupMoney(t)
+	_, err := e.Seed(context.Background(), a, map[string][]map[string]any{
+		"bill": {{"name": "BILL-00001", "currency": "USD", "items": []any{line(1, "10")}}},
+	})
+	if err == nil || !strings.Contains(err.Error(), "Kurs wajib diisi untuk mata uang USD") {
+		t.Fatalf("seed USD without rate: %v", err)
+	}
+	if _, err := e.Seed(context.Background(), a, map[string][]map[string]any{
+		"bill": {{"name": "BILL-00002", "currency": "USD", "rate": 2, "items": []any{line(1, "10")}}},
+	}); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestMoneyChecks(t *testing.T) {
 	e, a := setupMoney(t)
 	ctx := context.Background()
@@ -213,17 +270,7 @@ func TestMoneyChecks(t *testing.T) {
 
 	// an IDR twin out of int64 range: 9e15 USD at 15000 IDR
 	_, err = e.Create(ctx, a, "bill", map[string]any{"currency": "USD", "rate": 15000, "items": []any{line(1, "9000000000000000")}})
-	var ve *ValidationError
-	errors.As(err, &ve)
-	want := map[string]string{"items.0.price": "Harga terlalu besar", "items.0.amount": "Nilai terlalu besar", "total": "Total terlalu besar"}
-	for _, is := range ve.Errors {
-		if want[is.Field] == is.Message && is.Code == "bad_value" {
-			delete(want, is.Field)
-		}
-	}
-	if len(want) > 0 {
-		t.Errorf("too large: missing %v in %+v", want, ve.Errors)
-	}
+	wantIssues(t, err, map[string]string{"items.0.price": "Harga terlalu besar", "items.0.amount": "Nilai terlalu besar", "total": "Total terlalu besar"})
 
 	// a client-sent twin is ignored, on create and on update
 	rec := createBill(t, e, a, map[string]any{"currency": "USD", "rate": 2, "total_idr": 1, "items": []any{map[string]any{"qty": 1, "price": "5", "amount_idr": 7}}})

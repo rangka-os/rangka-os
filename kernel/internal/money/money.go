@@ -101,12 +101,15 @@ func divRound(n, d *big.Int) *big.Int {
 	return q
 }
 
+// ErrRange is the error for an amount outside numeric(20,4).
+var ErrRange = errors.New("money: amount out of range")
+
 // FromRat rounds half away from zero to 4 dp; errors when out of range.
 func FromRat(r *big.Rat) (Decimal, error) {
 	n := new(big.Int).Mul(r.Num(), ten4)
 	d := Decimal{divRound(n, r.Denom())}
 	if !InRange(d) {
-		return Decimal{}, errors.New("money: amount out of range")
+		return Decimal{}, ErrRange
 	}
 	return d, nil
 }

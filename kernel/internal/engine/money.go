@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math/big"
+	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/money"
@@ -147,6 +148,15 @@ func (s *scope) checkMoney(prefix, docPrefix string, seen map[string]bool) []Iss
 				add(rfPath, "missing_rate", "Kurs wajib diisi untuk mata uang "+code)
 			}
 		}
+		if f.Compute != "" {
+			if err := s.computeErr(f); err != nil {
+				msg := labelOr(f) + " tidak bisa dihitung"
+				if isRange(err) {
+					msg = labelOr(f) + " terlalu besar"
+				}
+				add(prefix+f.Name, "bad_value", msg)
+			}
+		}
 		tooLarge := !money.InRange(d)
 		if r, ok := s.idrRate(f); ok && money.ValidCode(code) {
 			if _, err := money.ToIDR(d, r); err != nil {
@@ -161,4 +171,20 @@ func (s *scope) checkMoney(prefix, docPrefix string, seen map[string]bool) []Iss
 		out = append(out, cs.checkMoney(fmt.Sprintf("%s%s.%d.", prefix, tf.Name, i), prefix, seen)...)
 	})
 	return out
+}
+
+// computeErr re-evaluates computed money field f; compute stores 0 on an error, so check reports it here.
+func (s *scope) computeErr(f *meta.Field) error {
+	v, err := s.eval(f.Compute)
+	if err != nil {
+		return err
+	}
+	_, err = store.Coerce(f, v)
+	return err
+}
+
+// isRange reports an amount outside numeric(20,4), from CEL decimal arithmetic or from store.Coerce.
+func isRange(err error) bool {
+	m := err.Error()
+	return strings.Contains(m, money.ErrRange.Error()) || strings.HasSuffix(m, " is too large")
 }

@@ -10,3 +10,5 @@ fields:
   - {name: total, type: money, currency_field: currency, label: {id: Total, en: Total}, compute: "sum(items.map(i, i.amount))"}
   - {name: tax, type: money, currency_field: currency, label: {id: Pajak, en: Tax}, compute: "total * 0.11"}
   - {name: grand_total, type: money, currency_field: currency, label: {id: Total akhir, en: Grand total}, compute: "total + tax"}
+  - {name: parts, type: float, label: {id: Jumlah bagian, en: Parts}, default: "1"}
+  - {name: per_part, type: money, currency_field: currency, label: {id: Per bagian, en: Per part}, compute: "total / parts"}

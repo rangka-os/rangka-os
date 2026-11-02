@@ -69,6 +69,9 @@ func InsertApproval(ctx context.Context, q pg.Querier, a *Approval) error {
 	if a.Requester == nil {
 		a.Requester = map[string]any{}
 	}
+	if a.Approvers == nil {
+		a.Approvers = []string{}
+	}
 	var label, decidedBy, decidedAt any
 	if a.Label != nil {
 		label = pg.JSON{V: a.Label}
@@ -159,8 +162,14 @@ func DecideApproval(ctx context.Context, q pg.Querier, org, id, state, by, reaso
 
 // VoidApprovals turns the pending requests of a record into void (except exceptID) and returns the voided rows.
 func VoidApprovals(ctx context.Context, q pg.Querier, org, model, name, exceptID string) ([]Approval, error) {
+	return VoidVerbApprovals(ctx, q, org, model, name, "", exceptID)
+}
+
+// VoidVerbApprovals is VoidApprovals limited to one verb (all verbs when verb is empty).
+func VoidVerbApprovals(ctx context.Context, q pg.Querier, org, model, name, verb, exceptID string) ([]Approval, error) {
 	res, err := q.Query(ctx, `update rk_approvals set state = 'void' where org_id = $1 and model = $2 and name = $3 and state = 'pending' and id <> $4
-		returning `+approvalCols, org, model, name, exceptID)
+		and ($5 = '' or verb = $5)
+		returning `+approvalCols, org, model, name, exceptID, verb)
 	if err != nil {
 		return nil, err
 	}

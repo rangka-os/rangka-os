@@ -36,13 +36,16 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 	writeJSON(w, status, b)
 }
 
-// fail maps engine errors to HTTP: 422 validation, StatusError codes, 404, else 500.
+// fail maps engine errors to HTTP: 422 validation, 403 permission_denied, StatusError codes, 404, else 500.
 func fail(w http.ResponseWriter, err error) {
 	var ve *engine.ValidationError
 	var se *engine.StatusError
+	var pe *engine.PermissionError
 	switch {
 	case errors.As(err, &ve):
 		writeJSON(w, http.StatusUnprocessableEntity, ve)
+	case errors.As(err, &pe):
+		writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{"code": "permission_denied", "message": pe.Msg, "model": pe.Model, "action": pe.Action}})
 	case errors.As(err, &se):
 		writeError(w, se.Status, se.Code, se.Msg)
 	case errors.Is(err, store.ErrNotFound):

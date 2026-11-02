@@ -184,9 +184,11 @@ func toolResult(out any, err error) map[string]any {
 	if err != nil {
 		code, msg := "internal", err.Error()
 		body := map[string]any{}
+		var extra map[string]any
 		var ve *engine.ValidationError
 		var ce *changeset.Error
 		var se *engine.StatusError
+		var pe *engine.PermissionError
 		switch {
 		case errors.As(err, &ve):
 			code = "invalid"
@@ -198,8 +200,15 @@ func toolResult(out any, err error) map[string]any {
 			}
 		case errors.As(err, &se):
 			code = se.Code
+		case errors.As(err, &pe):
+			code = "permission_denied"
+			extra = map[string]any{"model": pe.Model, "action": pe.Action}
 		}
-		body["error"] = map[string]any{"code": code, "message": msg}
+		e := map[string]any{"code": code, "message": msg}
+		for k, v := range extra {
+			e[k] = v
+		}
+		body["error"] = e
 		b, _ := json.Marshal(body)
 		var sc map[string]any
 		json.Unmarshal(b, &sc)

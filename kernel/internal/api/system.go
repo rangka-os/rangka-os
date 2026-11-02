@@ -6,6 +6,7 @@ import (
 	"strconv"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -201,22 +202,37 @@ func (s *Server) orgUsage(ctx context.Context, org string) map[string]any {
 }
 
 func (s *Server) listOrgs(w http.ResponseWriter, r *http.Request, c *caller) {
-	res, err := s.DB.Query(r.Context(), `select o.id, o.name, coalesce((select role from rk_members m join rk_users u on u.id = m.user_id where m.org_id = o.id and u.email = $1), '')
-		from rk_orgs o order by o.id`, c.actor.ID)
+	orgs, err := s.memberships(r.Context(), c)
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	plan, _ := s.Engine.Reg().SiteConfig("plan").(string)
 	out := []any{}
-	for _, row := range res.Rows {
-		id := row[0].(string)
-		out = append(out, map[string]any{"id": id, "name": row[1], "plan": plan, "usage": s.orgUsage(r.Context(), id), "role": row[2], "current": id == c.actor.Org})
+	for _, m := range orgs {
+		role := ""
+		if len(m.Roles) > 0 {
+			role = m.Roles[0]
+		}
+		out = append(out, map[string]any{"id": m.ID, "name": m.Name, "code": m.Code, "plan": plan, "usage": s.orgUsage(r.Context(), m.ID), "role": role, "current": m.ID == c.actor.Org})
 	}
 	writeJSON(w, 200, map[string]any{"data": out})
 }
 
 func (s *Server) listMembers(w http.ResponseWriter, r *http.Request, c *caller) {
+	orgs, err := s.memberships(r.Context(), c)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	member := false
+	for _, m := range orgs {
+		member = member || m.ID == r.PathValue("id")
+	}
+	if !member {
+		fail(w, engine.Denied("org", "read"))
+		return
+	}
 	res, err := s.DB.Query(r.Context(), `select u.id, u.email, u.full_name, m.role, coalesce(m.record, ''),
 		greatest((select max(created_at) from rk_sessions x where x.user_id = u.id), (select max(last_used_at) from rk_tokens t where t.user_id = u.id))
 		from rk_members m join rk_users u on u.id = m.user_id where m.org_id = $1 order by u.email`, r.PathValue("id"))

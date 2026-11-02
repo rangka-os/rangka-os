@@ -71,7 +71,7 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p != nil && p.User.Org == "" {
+	if p != nil && p.User.Org == "" && p.Via == "dev" {
 		p.User.Org = s.Org
 	}
 	return p, nil
@@ -131,6 +131,7 @@ func (s *Server) Handler() http.Handler {
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
 	mux.HandleFunc("POST /auth/logout", s.logout)
+	mux.HandleFunc("POST /auth/org", a(s.switchOrg))
 	mux.HandleFunc("GET /auth/me", a(s.me))
 	mux.HandleFunc("GET /.well-known/openid-configuration", s.Auth.Discovery)
 	mux.HandleFunc("GET /oauth/authorize", s.Auth.Authorize)

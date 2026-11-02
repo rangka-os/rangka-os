@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/import.json
+name: moka_item_details
+label: {id: Penjualan Moka (detail item)}
+model: outlet_sales
+source: csv
+header_row: 1
+sheet: Item Details
+per: outlet
+key: [Date, Receipt Number, Item, Variant]
+group: [Date]
+map:
+  date: Date
+  note: "='Moka ' + row['Date']"
+lines:
+  field: lines
+  map:
+    item: {value: SKU, match: sku}
+    qty: Quantity
+    gross: Gross Sales
+    discount: Discounts
+    net: "=int(row['Net Sales']) - int(row['Refunds'])"

@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: outlet_sales_line
+is_child: true
+fields:
+  - name: item
+    type: link
+    to: item
+    label: {id: Barang}
+  - name: qty
+    type: float
+    label: {id: Qty}
+  - name: gross
+    type: currency
+    label: {id: Penjualan kotor}
+  - name: discount
+    type: currency
+    label: {id: Diskon}
+  - name: net
+    type: currency
+    label: {id: Penjualan bersih}

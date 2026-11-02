@@ -67,7 +67,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - `config.rk` `numbering:` series map `{<series>: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly|monthly|never}}` per org; models reference `naming: {series: <series>}`.
 - `imports/<name>.rk` (kind `import`): `{name, model, source: csv|xlsx, header_row, key: [<cols>], map: {<field>: <column or CEL>}, per: outlet|org}`; duplicates detected by `key` + file SHA-256.
 - Field type `money` (new): `{currency_field: <field>}`; stored as numeric(20,4) plus an IDR integer twin `<field>_idr` computed at the document's `rate`. Existing `currency` stays IDR-only.
-- `config.rk` `org:` `{legal_name, npwp, pkp: true|false}`; `features.rk` unchanged.
+- `config.rk` `org:` `{legal_name, npwp, pkp: true|false}` (site default) and `orgs:` map `{<org id>: {name, code, config: {<any config.rk key, e.g. org, numbering>}}}` for per-org overrides; kernel code reads org settings with `Registry.OrgConfig(org, "org.pkp")` (contract 0010); `{ORG}` is the org's `code`. `features.rk` unchanged.
 
 ### Modules and apps (rangka-apps, contract 0001 layout)
 `modules/`: contacts, catalogue, quotation, orders, projects, workforce, invoicing, payments, procurement, outlets, stock, outlet_sales, tax_id (PPN, PPh 23), currency.

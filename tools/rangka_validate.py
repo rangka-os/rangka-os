@@ -578,6 +578,9 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
                 continue
             if isinstance(numbering.get(series), dict) or isinstance(naming.get("pattern"), str):
                 continue
+            own = numbering.get(mn)  # the engine resolves config.numbering[<model>] before the model's own naming
+            if (isinstance(own, str) and own) or (isinstance(own, dict) and isinstance(own.get("pattern"), str) and own["pattern"]):
+                continue
             rep.add("error", mp, "naming/series", "unknown_series", f'series "{series}" is not defined in config.rk numbering and the model gives no default pattern')
     for tn in sorted(themes):
         p, d = themes[tn]

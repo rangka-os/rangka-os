@@ -399,6 +399,13 @@ func (v *validator) site(all map[string]vis) {
 			if _, defined := numbering[series].(map[string]any); defined {
 				continue
 			}
+			// the engine resolves config.numbering[<model>] (a string, or an object with a pattern) before the model's own naming
+			if str, _ := numbering[mn].(string); str != "" {
+				continue
+			}
+			if p, _ := asMap(numbering[mn])["pattern"].(string); p != "" {
+				continue
+			}
 			if _, hasPattern := naming["pattern"].(string); !hasPattern {
 				v.rep.extra("error", x.own.Doc.Path, "naming/series", "unknown_series", fmt.Sprintf(`series "%s" is not defined in config.rk numbering and the model gives no default pattern`, series))
 			}

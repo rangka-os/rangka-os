@@ -4,6 +4,7 @@ version: 0.1.0
 title: {id: Izin, en: Permissions}
 requires: {rangka: '>=0.4'}
 dashboards: [perm_overview]
+hooks: [perm.stamp]
 menu:
   - group: {id: Izin}
     items: [voucher, note]

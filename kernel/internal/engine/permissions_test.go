@@ -271,7 +271,7 @@ func TestDashboardWidgetPermissions(t *testing.T) {
 	}
 	// no role: voucher widget denied, note widget computed
 	w := widgets(permNobody)
-	want := map[string]any{"code": "permission_denied", "model": "voucher", "action": "read"}
+	want := map[string]any{"code": "permission_denied", "message": "permission denied: read on voucher", "model": "voucher", "action": "read"}
 	if got := w[0].(map[string]any)["error"]; !mapsEqual(got, want) {
 		t.Fatalf("voucher widget error = %v, want %v", got, want)
 	}

@@ -196,6 +196,16 @@ func (e *Engine) Can(ctx context.Context, a Actor, model, action string, rec sto
 	return e.Authorize(ctx, a, model, action, rec) == nil
 }
 
+// Unconditional reports whether a may perform action on every record of model: no if: has to be evaluated.
+// SSE uses it to pass events (deletes included) without loading the record.
+func (e *Engine) Unconditional(a Actor, model, action string) bool {
+	m := e.permModel(model)
+	if m == nil {
+		return knownAction[action] && unrestricted(a)
+	}
+	return e.decide(a, m, action).all
+}
+
 // Allowed gives the model-level answer for every action (conditional grants count as allowed), for /meta.
 func (e *Engine) Allowed(a Actor, model string) map[string]bool {
 	out := make(map[string]bool, len(Actions))

@@ -20,6 +20,10 @@ fields:
     type: table
     of: voucher_line
     label: {id: Baris}
+actions:
+  - name: stamp
+    label: {id: Cap}
+    hook: perm.stamp
 permissions:
   - {role: manager, read: true, create: true, write: true, delete: true, submit: true, cancel: true, amend: true, print: true, export: true}
   - {role: clerk, read: true, create: true, write: true, submit: true, print: true, if: owner == user.name}

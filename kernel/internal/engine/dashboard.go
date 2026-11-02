@@ -167,7 +167,7 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 		}
 	}
 	if err := dc.e.Authorize(dc.ctx, dc.a, m.Name, "read", nil); err != nil {
-		return map[string]any{"error": map[string]any{"code": "permission_denied", "model": m.Name, "action": "read"}}, nil
+		return map[string]any{"error": map[string]any{"code": "permission_denied", "message": err.Error(), "model": m.Name, "action": "read"}}, nil
 	}
 	today := dc.e.Today()
 	from := ""

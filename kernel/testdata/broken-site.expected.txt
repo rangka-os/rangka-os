@@ -75,6 +75,7 @@ sales/imports/bad_lines_map.rk:9:10  error  cel_syntax  lines/map/qty  unbalance
 sales/imports/bad_model.rk:3:8  error  unknown_model  model  "sales_invoce" is not a model; did you mean "sales_invoice"?
 sales/imports/bad_per.rk:4:6  error  import_per_outlet  per  per: outlet needs a link field "outlet" to outlet on customer
 sales/imports/bad_per.rk:4:6  warn   import_no_key  per  per: outlet imports should set key so overlapping files are not imported twice
+sales/imports/not_a_map.rk:1:1  error  schema  (root)  [{'name': 'not_a_map'}, {'model': 'invoice'}] is not of type 'object'
 sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_name" must match the file name "wrong_name"
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
@@ -108,4 +109,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/custom/sales_invoice.rk:23:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
 
-101 error(s), 8 warning(s)
+102 error(s), 8 warning(s)

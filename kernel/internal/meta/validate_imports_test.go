@@ -34,9 +34,16 @@ func TestValidateImports(t *testing.T) {
 		"sales/imports/bad_per.rk import_no_key per",
 		"sales/imports/wrong_name.rk name_mismatch name",
 		"sales/imports/bad_lines.rk schema (root)",
+		"sales/imports/not_a_map.rk schema (root)",
 	} {
 		if !got[w] {
 			t.Errorf("missing %q", w)
+		}
+	}
+	// a file that is not a mapping only gets schema errors
+	for k := range got {
+		if strings.HasPrefix(k, "sales/imports/not_a_map.rk ") && !strings.Contains(k, " schema ") {
+			t.Errorf("unexpected %q", k)
 		}
 	}
 }

@@ -495,6 +495,8 @@ def check_import_map(rep, p, at, entries, model, fields, allmodels):
 
 def check_import(rep, V, allmodels, stem, p, d):
     schema_errors(rep, V, "import", p, d)
+    if not isinstance(d, dict):
+        return
     if d.get("name") != stem:
         rep.add("error", p, "name", "name_mismatch", f'import name "{d.get("name")}" must match the file name "{stem}"')
     model = d.get("model")

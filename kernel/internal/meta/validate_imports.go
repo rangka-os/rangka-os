@@ -54,6 +54,9 @@ func (v *validator) imports(all map[string]vis, site bool) {
 func (v *validator) checkImport(stem string, im *Import, all map[string]vis) {
 	p := im.Doc.Path
 	v.schemaErr("import", im.Doc)
+	if _, ok := im.Doc.Data.(map[string]any); !ok {
+		return // not a mapping: the schema errors say so
+	}
 	if got, ok := im.Raw["name"].(string); !ok || got != stem {
 		v.rep.extra("error", p, "name", "name_mismatch", fmt.Sprintf(`import name "%s" must match the file name "%s"`, pyStr(im.Raw["name"]), stem))
 	}

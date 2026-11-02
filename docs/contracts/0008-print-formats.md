@@ -67,6 +67,7 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 | `option "field" v` | `option "status" .Doc.status` | the option's Indonesian label |
 | `sub a b`, `sum list "field"` | `sub .Doc.grand_total .Doc.paid_amount` | exact decimal arithmetic for money columns |
 | `overdue d` | `overdue .Doc.due_date` | whole days past `d` at print time, `0` when not due |
+| `aging rows` | `aging .Related.invoices` | open amounts (`grand_total − paid_amount`) by age past `due_date`: `current`, `d30`, `d60`, `d90`, `over90`, `total` |
 | `upper s` | | upper case |
 - Missing values print as empty. Templates cannot run script: responses carry `Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'`.
 

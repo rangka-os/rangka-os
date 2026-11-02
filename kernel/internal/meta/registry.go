@@ -1,6 +1,7 @@
 package meta
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"sort"
@@ -12,7 +13,8 @@ import (
 // Registry is the loaded metadata of an installation: apps (models, dashboards, flows, roles) and a site.
 type Registry struct {
 	AppsDir, SiteDir string
-	Apps             []*App // sorted by name
+	ModulesDir       string
+	Apps             []*App // modules sorted by name, then apps and legacy units sorted by name
 	App              map[string]*App
 	Models           map[string]*Model
 	Dashboards       map[string]*Dashboard
@@ -105,48 +107,95 @@ func Load(appsDir, siteDir string, rep *Report) *Registry {
 	return LoadOpts(Options{AppsDir: appsDir, SiteDir: siteDir}, rep)
 }
 
-// Options name the metadata directories.
+// Options name the metadata directories. ModulesDir defaults to the modules directory next to AppsDir
+// when it exists (DefaultModulesDir).
 type Options struct {
-	AppsDir, SiteDir, ConnectorsDir string
+	AppsDir, SiteDir, ConnectorsDir, ModulesDir string
 }
 
-// LoadOpts is Load with a connectors directory.
+// DefaultModulesDir is <parent of appsDir>/modules when that directory exists, else "".
+func DefaultModulesDir(appsDir string) string {
+	d := filepath.Join(filepath.Dir(filepath.Clean(appsDir)), "modules")
+	if st, err := os.Stat(d); err == nil && st.IsDir() {
+		return d
+	}
+	return ""
+}
+
+func sortedDir(dir string) []string {
+	ents, _ := os.ReadDir(dir)
+	var out []string
+	for _, e := range ents {
+		out = append(out, e.Name())
+	}
+	sort.Strings(out)
+	return out
+}
+
+// LoadOpts is Load with connectors and modules directories.
 func LoadOpts(o Options, rep *Report) *Registry {
 	appsDir, siteDir := o.AppsDir, o.SiteDir
-	r := &Registry{AppsDir: appsDir, SiteDir: siteDir, ConnectorsDir: o.ConnectorsDir, App: map[string]*App{}, Models: map[string]*Model{},
+	if o.ModulesDir == "" {
+		o.ModulesDir = DefaultModulesDir(appsDir)
+	}
+	r := &Registry{AppsDir: appsDir, SiteDir: siteDir, ConnectorsDir: o.ConnectorsDir, ModulesDir: o.ModulesDir, App: map[string]*App{}, Models: map[string]*Model{},
 		Dashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Imports: map[string]*Import{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
 		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}}
 	ld := &loader{rep: rep}
-	names, _ := os.ReadDir(appsDir)
-	var appNames []string
-	for _, e := range names {
-		appNames = append(appNames, e.Name())
+	// modules first, then apps (rangka_validate.py order); a name in both is reported on the app
+	type unit struct{ name, dir, stem, prefix string }
+	var units []unit
+	if o.ModulesDir != "" {
+		for _, n := range sortedDir(o.ModulesDir) {
+			units = append(units, unit{n, filepath.Join(o.ModulesDir, n), "module", "modules/" + n})
+		}
 	}
-	sort.Strings(appNames)
-	for _, name := range appNames {
-		dir := filepath.Join(appsDir, name)
-		ap := rk.Find(dir, "app")
+	for _, n := range sortedDir(appsDir) {
+		units = append(units, unit{n, filepath.Join(appsDir, n), "app", "apps/" + n})
+	}
+	for _, u := range units {
+		name, dir := u.name, u.dir
+		ap := rk.Find(dir, u.stem)
 		if ap == "" {
 			continue
 		}
-		a := &App{Name: name, Dir: dir}
+		a := &App{Name: name, Dir: dir, Prefix: u.prefix, File: ap}
 		if d := ld.load(ap); d != nil {
 			a.Doc, a.Raw = d, asMap(d.Data)
-			r.Docs["apps/"+name+"/app.rk"] = d
 		}
 		if a.Raw == nil {
 			a.Raw = map[string]any{}
 		}
+		_, hasModules := a.Raw["modules"]
+		switch {
+		case u.stem == "module":
+			a.Kind = KindModule
+		case hasModules:
+			a.Kind = KindApp
+		default:
+			a.Kind = KindLegacy
+		}
+		if prev := r.App[name]; prev != nil {
+			if rep != nil {
+				rep.add("error", ap, "name", "duplicate_unit", fmt.Sprintf(`"%s" is already a module (%s); modules and apps share one namespace`, name, rep.rel(prev.File)))
+			}
+			continue
+		}
+		if a.Doc != nil {
+			r.Docs[u.prefix+"/"+u.stem+".rk"] = a.Doc
+		}
 		a.Version, a.Title = str(a.Raw, "version"), label(a.Raw["title"])
-		a.Requires, a.Optional = asMap(a.Raw["requires"]), asMap(a.Raw["optional"])
+		a.Requires, a.Optional, a.Modules = asMap(a.Raw["requires"]), asMap(a.Raw["optional"]), asMap(a.Raw["modules"])
 		a.Hooks, a.Dashboards = strList(a.Raw["hooks"]), strList(a.Raw["dashboards"])
-		for _, e := range rk.ListDir(filepath.Join(dir, "models")) {
-			if d := ld.load(e.Path); d != nil {
-				m := parseModel(name, d)
-				m.Name = e.Stem // registry key is the file name; name_mismatch is reported by validate
-				r.Models[e.Stem] = m
-				a.Models = append(a.Models, e.Stem)
-				r.Docs["apps/"+name+"/models/"+e.Stem+".rk"] = d
+		if a.Kind != KindApp { // an app defines no models (app_defines_model)
+			for _, e := range rk.ListDir(filepath.Join(dir, "models")) {
+				if d := ld.load(e.Path); d != nil {
+					m := parseModel(name, d)
+					m.Name = e.Stem // registry key is the file name; name_mismatch is reported by validate
+					r.Models[e.Stem] = m
+					a.Models = append(a.Models, e.Stem)
+					r.Docs[u.prefix+"/models/"+e.Stem+".rk"] = d
+				}
 			}
 		}
 		for _, e := range rk.ListDir(filepath.Join(dir, "roles")) {
@@ -157,7 +206,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				db := parseDashboard(name, d)
 				db.Name = e.Stem
 				r.Dashboards[e.Stem] = db
-				r.Docs["apps/"+name+"/dashboards/"+e.Stem+".rk"] = d
+				r.Docs[u.prefix+"/dashboards/"+e.Stem+".rk"] = d
 			}
 		}
 		r.Apps = append(r.Apps, a)
@@ -172,7 +221,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				f.Name = e.Stem
 				r.Flows[e.Stem] = f
 				a.Flows = append(a.Flows, e.Stem)
-				r.Docs["apps/"+a.Name+"/flows/"+e.Stem+".rk"] = d
+				r.Docs[a.Prefix+"/flows/"+e.Stem+".rk"] = d
 			}
 		}
 		for _, e := range rk.ListDir(filepath.Join(a.Dir, "imports")) {
@@ -180,12 +229,12 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				im := parseImport(d, a.Name)
 				im.Name = e.Stem
 				r.Imports[e.Stem] = im
-				r.Docs["apps/"+a.Name+"/imports/"+e.Stem+".rk"] = d
+				r.Docs[a.Prefix+"/imports/"+e.Stem+".rk"] = d
 			}
 		}
 		for _, e := range rk.ListDir(filepath.Join(a.Dir, "roles")) {
 			if d := ld.load(e.Path); d != nil {
-				r.Docs["apps/"+a.Name+"/roles/"+e.Stem+".rk"] = d
+				r.Docs[a.Prefix+"/roles/"+e.Stem+".rk"] = d
 				r.Roles[e.Stem] = d
 			}
 		}
@@ -323,22 +372,32 @@ func (r *Registry) Capabilities() map[string]bool {
 	return out
 }
 
+// resolveInstalled installs config.apps (else the plan's apps, else every unit) plus, transitively, each
+// app's modules and every unit's requires, dependencies first (contract 0001).
 func (r *Registry) resolveInstalled() {
+	var want []string
+	listed := false
 	if r.Site != nil {
 		if l, ok := r.Site.Config["apps"].([]any); ok {
+			listed = true
 			for _, x := range l {
-				if n, _ := x.(string); r.App[n] != nil && !r.Installed[n] {
-					r.Installed[n] = true
-					r.order = append(r.order, n)
+				if n, _ := x.(string); r.App[n] != nil && r.App[n].IsApp() {
+					want = append(want, n)
 				}
 			}
-			return
 		}
 	}
-	want := r.PlanApps()
-	if want == nil {
-		for _, a := range r.Apps {
-			want = append(want, a.Name)
+	if !listed {
+		if plan := r.PlanApps(); plan != nil {
+			for _, n := range plan {
+				if r.App[n] != nil && r.App[n].IsApp() {
+					want = append(want, n)
+				}
+			}
+		} else {
+			for _, a := range r.Apps {
+				want = append(want, a.Name)
+			}
 		}
 	}
 	var visit func(string, int)
@@ -347,17 +406,38 @@ func (r *Registry) resolveInstalled() {
 		if a == nil || r.Installed[name] || depth > 20 {
 			return
 		}
+		r.Installed[name] = true // before the dependencies, so a cycle ends
+		for _, dep := range sortedKeys(a.Modules) {
+			visit(dep, depth+1)
+		}
 		for _, dep := range sortedKeys(a.Requires) {
 			visit(dep, depth+1)
 		}
-		if !r.Installed[name] {
-			r.Installed[name] = true
-			r.order = append(r.order, name)
-		}
+		r.order = append(r.order, name)
 	}
 	for _, n := range want {
 		visit(n, 0)
 	}
+}
+
+// Closure returns names plus, transitively, each app's modules and every unit's requires (units that exist),
+// in rangka_validate.py closure() order.
+func (r *Registry) Closure(names []string) []string {
+	var out []string
+	seen := map[string]bool{}
+	todo := append([]string{}, names...)
+	for len(todo) > 0 {
+		n := todo[0]
+		todo = todo[1:]
+		a := r.App[n]
+		if a == nil || seen[n] {
+			continue
+		}
+		seen[n] = true
+		out = append(out, n)
+		todo = append(append(todo, orderedKeys(a, "modules")...), orderedKeys(a, "requires")...)
+	}
+	return out
 }
 
 // SiteConfig returns a value from config.rk by dotted path ("ai.approvers").

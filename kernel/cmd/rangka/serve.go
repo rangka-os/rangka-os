@@ -37,7 +37,7 @@ func cmdServe(args []string) int {
 		AppsDir: c.apps, SiteDir: c.site, DatabaseURL: c.db, Addr: *addr, Org: *org, DevOpen: *devOpen, Schemas: set, Version: Version,
 		WebDir:        server.FindDir(*web, "web", "../web", filepath.Join(appsParent, "..", "rangka-os", "web"), bundle.Dir("web")),
 		TemplatesDir:  server.FindDir(*templates, "templates", "../templates", filepath.Join(appsParent, "..", "rangka-os", "templates"), bundle.Dir("templates")),
-		ConnectorsDir: c.connectorsDir(), DeployTarget: *deploy, FilesDir: *filesDir,
+		ConnectorsDir: c.connectorsDir(), ModulesDir: c.modules, DeployTarget: *deploy, FilesDir: *filesDir,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

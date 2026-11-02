@@ -32,6 +32,7 @@ import (
 // Config of a kernel instance.
 type Config struct {
 	AppsDir, SiteDir, ConnectorsDir string
+	ModulesDir                      string // default: modules next to AppsDir (contract 0001)
 	WebDir, TemplatesDir            string
 	DatabaseURL                     string
 	Addr                            string
@@ -62,7 +63,7 @@ type Server struct {
 
 // LoadRegistry validates the metadata directories and refuses to continue on errors.
 func LoadRegistry(cfg Config) (*meta.Registry, error) {
-	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir}, nil, cfg.Schemas)
+	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir, ModulesDir: cfg.ModulesDir}, nil, cfg.Schemas)
 	if rep.Errors() > 0 {
 		var b []byte
 		for _, it := range rep.All() {

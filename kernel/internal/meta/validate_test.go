@@ -11,11 +11,24 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
+// onlyDeprecations reports whether the report has nothing but the 0.4 layout warnings (contract 0001).
+func onlyDeprecations(rep *Report) bool {
+	for _, it := range rep.All() {
+		if it.Code != "deprecated_layout" && it.Code != "deprecated_template" {
+			return false
+		}
+	}
+	return true
+}
+
 func TestRealAppsValid(t *testing.T) {
 	reg, rep := Validate(testdb.Sibling(t, "rangka-apps/apps"), testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), nil, schema.Embedded())
 	var buf bytes.Buffer
-	if n := rep.Print(&buf); n != 0 || len(rep.All()) != 0 {
-		t.Fatalf("expected no problems:\n%s", buf.String())
+	if n := rep.Print(&buf); n != 0 || !onlyDeprecations(rep) {
+		t.Fatalf("expected no problems but the deprecation warnings:\n%s", buf.String())
+	}
+	if reg.App["crm"].Kind != KindLegacy {
+		t.Errorf("crm kind = %s", reg.App["crm"].Kind)
 	}
 	if got := strings.Join(reg.AppOrder(), ","); got != "core,crm,sales" {
 		t.Errorf("installed apps = %s", got)
@@ -67,11 +80,58 @@ func TestBrokenSiteMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-site.expected.txt", Options{AppsDir: "testdata/broken-apps", SiteDir: "testdata/broken-site", ConnectorsDir: "testdata/broken-connectors"})
 }
 
+func TestBrokenModulesAppsMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-modules-apps.expected.txt", Options{AppsDir: "testdata/broken-modules-apps/apps", SiteDir: "testdata/broken-modules-apps/site"})
+}
+
+// The contract 0001 layout: modules/ next to apps/, an app that names its modules, a site installing the app.
+func TestModulesApps(t *testing.T) {
+	reg, rep := ValidateOpts(Options{AppsDir: "../../testdata/modules-apps/apps", SiteDir: "../../testdata/modules-apps/site"}, nil, schema.Embedded())
+	var buf bytes.Buffer
+	if rep.Print(&buf); len(rep.All()) != 0 {
+		t.Fatalf("expected no problems:\n%s", buf.String())
+	}
+	if got := strings.Join(reg.AppOrder(), ","); got != "contacts,pipeline,crm" {
+		t.Errorf("installed = %s", got)
+	}
+	kinds := map[string]string{"contacts": KindModule, "pipeline": KindModule, "crm": KindApp}
+	for n, k := range kinds {
+		if reg.App[n] == nil || reg.App[n].Kind != k {
+			t.Errorf("%s: kind %v want %s", n, reg.App[n], k)
+		}
+	}
+	if m := reg.Model("deal"); m == nil || m.App != "pipeline" {
+		t.Fatalf("deal = %+v", m)
+	}
+	for _, k := range []string{"modules/pipeline/module.rk", "modules/pipeline/models/deal.rk", "modules/pipeline/flows/deal_follow_up.rk",
+		"modules/contacts/roles/sales_rep.rk", "apps/crm/app.rk", "apps/crm/dashboards/crm_overview.rk"} {
+		if reg.Docs[k] == nil {
+			t.Errorf("no doc %s", k)
+		}
+	}
+	if reg.Dashboard("crm_overview") == nil {
+		t.Error("app dashboard not installed")
+	}
+}
+
+func TestSatisfies(t *testing.T) {
+	cases := []struct {
+		v, r string
+		ok   bool
+	}{{"1.2.0", "^1.0", true}, {"2.0.0", "^1.0", false}, {"1.0.0", "^1.2", false}, {"1.2.0", ">=1.2", true},
+		{"1.1.9", ">=1.2", false}, {"0.1.0", "^0.1", true}, {"1.0.0", "1.0.0", true}, {"x", "^1.0", true}}
+	for _, c := range cases {
+		if Satisfies(c.v, c.r) != c.ok {
+			t.Errorf("Satisfies(%s, %s) != %v", c.v, c.r, c.ok)
+		}
+	}
+}
+
 // Overlay fields are visible through links: sales_invoice's overlay rule reads customer.x_customer_group,
 // which customer's overlay adds (testdata/overlay-site).
 func TestOverlayFieldsThroughLinks(t *testing.T) {
 	reg, rep := ValidateOpts(Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: "../../testdata/overlay-site"}, nil, schema.Embedded())
-	if len(rep.All()) != 0 {
+	if !onlyDeprecations(rep) {
 		t.Fatalf("problems: %v", rep.All())
 	}
 	if reg.Model("customer").Field("x_customer_group") == nil || reg.Model("sales_invoice").Field("x_po_number") == nil {

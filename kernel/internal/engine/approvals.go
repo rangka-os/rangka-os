@@ -315,6 +315,9 @@ func (o *op) decide(id string) (*store.Approval, error) {
 // requesterActor rebuilds the person who asked for the verb from a request.
 func requesterActor(org string, r map[string]any) Actor {
 	a := Actor{Org: org, ID: str(r["id"]), UserName: str(r["user"]), Human: true}
+	if h, ok := r["human"].(bool); ok { // flow requests record whether the flow ran for a person
+		a.Human = h
+	}
 	switch rs := r["roles"].(type) {
 	case []any:
 		for _, x := range rs {
@@ -336,7 +339,8 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 		if err != nil {
 			return err
 		}
-		if ap.Model != "" {
+		flow := isFlowApproval(ap)
+		if !flow {
 			m, err := e.model(ap.Model)
 			if err != nil {
 				return err
@@ -359,6 +363,9 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 			return err
 		}
 		d = &Decision{Approval: *ap}
+		if flow { // a flow request stands alone: no snapshot of a record, no sibling requests
+			return o.runApproved(ap, d)
+		}
 		left, _, err := store.ListApprovals(o.ctx, o.tx, store.ApprovalFilter{Org: a.Org, State: "pending", Model: ap.Model, Name: ap.Name, Verb: ap.Verb, Limit: 500})
 		if err != nil {
 			return err
@@ -366,7 +373,7 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 		waiting, key := false, argsKey(ap.Args)
 		for i := range left {
 			x := &left[i]
-			if ap.Model != "" && x.Snapshot != ap.Snapshot {
+			if x.Snapshot != ap.Snapshot {
 				// an older request for another state of the record can never run: void it
 				v, err := store.VoidApproval(o.ctx, o.tx, a.Org, x.ID)
 				if err != nil {
@@ -403,8 +410,8 @@ func (o *op) runApproved(ap *store.Approval, d *Decision) error {
 	ro := &op{ctx: o.ctx, tx: o.tx, e: o.e, actor: requesterActor(o.actor.Org, ap.Requester), touched: o.touched, links: map[string]map[string]any{},
 		approving: true}
 	switch {
-	case strings.HasPrefix(ap.Verb, "flow:"):
-		return &StatusError{501, "not_implemented", "flow approvals are not implemented yet"}
+	case isFlowApproval(ap):
+		return ro.resumeFlow(ap, d)
 	case ap.Verb == "submit":
 		force, _ := ap.Args["force"].(bool)
 		res, err := ro.submit(ap.Model, ap.Name, force)
@@ -439,6 +446,31 @@ func (o *op) runApproved(ap *store.Approval, d *Decision) error {
 	return nil
 }
 
+func isFlowApproval(ap *store.Approval) bool { return strings.HasPrefix(ap.Verb, "flow:") }
+
+// resumeFlow runs the remaining top-level steps of an approved flow request as o's actor (the flow's original
+// actor), with the saved variables and the step's as: set to the decision.
+func (o *op) resumeFlow(ap *store.Approval, d *Decision) error {
+	name := strings.TrimPrefix(ap.Verb, "flow:")
+	f := o.e.Reg().Flows[name]
+	if f == nil || !o.e.Reg().IsInstalled(f.App) {
+		return notFound("flow " + name)
+	}
+	vars := map[string]any{}
+	for k, v := range meta.AsMap(ap.Args["vars"]) {
+		vars[k] = v
+	}
+	if as := str(ap.Args["as"]); as != "" {
+		vars[as] = map[string]any{"state": "approved", "by": ap.DecidedBy, "at": *ap.DecidedAt}
+	}
+	out := newFlowResult(name)
+	if err := o.e.flowIn(o, f, meta.AsMap(ap.Args["event"]), int(toInt(ap.Args["resume"])), vars, out); err != nil {
+		return err
+	}
+	d.Flow = out
+	return nil
+}
+
 // Reject rejects a pending request with a reason; the other pending requests of the same (record, verb) become
 // void. The record is left as it is.
 func (e *Engine) Reject(ctx context.Context, a Actor, id, reason string) (*Decision, error) {
@@ -460,10 +492,13 @@ func (e *Engine) Reject(ctx context.Context, a Actor, id, reason string) (*Decis
 		if err := o.approvalEvent(ap, "approval.rejected", map[string]any{"reason": reason}); err != nil {
 			return err
 		}
-		if ap.Model != "" {
-			if err := o.voidExcept(ap.Model, ap.Name, ap.Verb, ap.ID); err != nil {
+		if isFlowApproval(ap) {
+			f := strings.TrimPrefix(ap.Verb, "flow:")
+			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.rejected", "flow/"+f, approvalLabel(ap)+": "+reason, map[string]any{"approval": ap.ID, "reason": reason}); err != nil {
 				return err
 			}
+		} else if err := o.voidExcept(ap.Model, ap.Name, ap.Verb, ap.ID); err != nil {
+			return err
 		}
 		d = &Decision{Approval: *ap}
 		return nil

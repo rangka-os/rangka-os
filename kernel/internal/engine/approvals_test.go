@@ -38,9 +38,20 @@ var (
 // kota_diblokir added to sales_invoice.
 func approvalSetup(t *testing.T, policies string, leadPolicies ...string) (*Engine, Actor) {
 	t.Helper()
+	return approvalSetupFiles(t, nil, policies, leadPolicies...)
+}
+
+// approvalSetupFiles is approvalSetup that also writes files (path relative to apps/ → content).
+func approvalSetupFiles(t *testing.T, files map[string]string, policies string, leadPolicies ...string) (*Engine, Actor) {
+	t.Helper()
 	apps := filepath.Join(t.TempDir(), "apps")
 	if err := os.CopyFS(apps, os.DirFS(appsDir)); err != nil {
 		t.Fatal(err)
+	}
+	for rel, text := range files {
+		if err := os.WriteFile(filepath.Join(apps, rel), []byte(text), 0o644); err != nil {
+			t.Fatal(err)
+		}
 	}
 	appendTo := func(rel, text string, rule bool) {
 		p := filepath.Join(apps, rel)
@@ -503,7 +514,16 @@ func TestApprovalBoundToArgs(t *testing.T) {
 	if err != nil || !a2.Held || a2.Approvals[0].ID != a.Approvals[0].ID {
 		t.Fatalf("A again: %+v %v", a2, err)
 	}
-	if p := pendingFor(t, e, rep, "lead", "LEAD-00031"); len(p) != 2 {
+	// nil args and empty args are the same call
+	n1, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", nil, ActionOpts{})
+	if err != nil || !n1.Held {
+		t.Fatalf("nil args: %+v %v", n1, err)
+	}
+	n2, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", map[string]any{}, ActionOpts{})
+	if err != nil || !n2.Held || n2.Approvals[0].ID != n1.Approvals[0].ID {
+		t.Fatalf("empty args made another request: %+v %v", n2, err)
+	}
+	if p := pendingFor(t, e, rep, "lead", "LEAD-00031"); len(p) != 3 {
 		t.Fatalf("pending = %d", len(p))
 	}
 	// approving B runs B (with B's args) and leaves A pending
@@ -551,5 +571,80 @@ func TestSubmitWhenUsesStoredRecord(t *testing.T) {
 	res, err := e.Submit(ctx, rep, "sales_invoice", name, true)
 	if err != nil || res.Held {
 		t.Fatalf("submit: %+v %v", res, err)
+	}
+}
+
+// approveFlow is a flow (no on:) that waits for a sales manager before it creates an activity for the lead.
+func approveFlow(when string) map[string]string {
+	return map[string]string{"crm/flows/approve_demo.rk": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: approve_demo
+label: {id: Demo persetujuan}
+steps:
+  - {find: lead, as: lead}
+  - approve: {approvers: [sales_manager], when: "` + when + `", label: {id: Setujui tindak lanjut}}
+    as: ok
+  - {create: activity, set: {subject: "'Disetujui'", lead: lead.name, done: "false"}}
+`}
+}
+
+func TestFlowApproveStep(t *testing.T) {
+	e, _ := approvalSetupFiles(t, approveFlow("lead != null"), "")
+	ctx := context.Background()
+	out, err := e.RunFlow(ctx, rep, "approve_demo", nil)
+	if err != nil || out.WaitingApproval == "" || len(out.Created) != 0 {
+		t.Fatalf("run: %+v %v", out, err)
+	}
+	if last := out.Steps[len(out.Steps)-1]; last != "2: approve ("+out.WaitingApproval+")" {
+		t.Fatalf("steps = %v", out.Steps)
+	}
+	ap := approval(t, e, out.WaitingApproval)
+	if ap.State != "pending" || ap.Model != "" || ap.Name != "" || ap.Verb != "flow:approve_demo" || ap.Policy != "Setujui tindak lanjut" ||
+		toInt(ap.Args["resume"]) != 2 || ap.Args["as"] != "ok" || ap.RequestedBy != rep.ID {
+		t.Fatalf("approval = %+v", ap)
+	}
+	if _, ok := meta.AsMap(ap.Args["vars"])["event"]; ok {
+		t.Fatal("vars carry the event")
+	}
+	if _, err := e.Approve(ctx, rep, ap.ID); err == nil {
+		t.Fatal("rep approved")
+	}
+	d, err := e.Approve(ctx, mgr, ap.ID)
+	if err != nil || d.Flow == nil || len(d.Flow.Created) != 1 || !strings.HasPrefix(d.Flow.Created[0], "activity/ACT-") {
+		t.Fatalf("approve: %+v %v", d, err)
+	}
+	act, err := e.Get(ctx, rep, "activity", strings.TrimPrefix(d.Flow.Created[0], "activity/"))
+	if err != nil || act["subject"] != "Disetujui" || act["lead"] == nil || act["created_by"] != rep.ID {
+		t.Fatalf("activity = %v %v", act, err)
+	}
+	if ap := approval(t, e, ap.ID); ap.State != "approved" || ap.DecidedBy != mgr.ID {
+		t.Fatalf("after approve = %+v", ap)
+	}
+	_, err = e.Approve(ctx, mgr, ap.ID)
+	wantStatus(t, err, 409, "not_pending")
+
+	// rejected: no activity, audit flow.rejected
+	acts, _ := store.Count(ctx, e.DB, "kopi-senja", "activity")
+	out, err = e.RunFlow(ctx, rep, "approve_demo", nil)
+	if err != nil || out.WaitingApproval == "" {
+		t.Fatalf("second run: %+v %v", out, err)
+	}
+	if _, err := e.Reject(ctx, mgr, out.WaitingApproval, "Belum perlu"); err != nil {
+		t.Fatal(err)
+	}
+	if n, _ := store.Count(ctx, e.DB, "kopi-senja", "activity"); n != acts {
+		t.Fatalf("activities %d → %d", acts, n)
+	}
+	if au, _ := store.ListAudit(ctx, e.DB, store.AuditFilter{Orgs: []string{"kopi-senja"}, Kind: "flow.rejected"}); len(au) != 1 || au[0].Actor != mgr.ID {
+		t.Fatalf("flow.rejected audits = %+v", au)
+	}
+
+	// when false: the step is skipped and the flow runs on
+	e2, _ := approvalSetupFiles(t, approveFlow("false"), "")
+	out, err = e2.RunFlow(ctx, rep, "approve_demo", nil)
+	if err != nil || out.WaitingApproval != "" || len(out.Created) != 1 || out.Steps[1] != "2: skipped" {
+		t.Fatalf("when false: %+v %v", out, err)
+	}
+	if l, n, err := e2.ListApprovals(ctx, rep, store.ApprovalFilter{}); err != nil || n != 0 {
+		t.Fatalf("approvals = %v %d %v", l, n, err)
 	}
 }

@@ -145,7 +145,11 @@ func (o *op) runAction(model, name, action string, args map[string]any, opts Act
 		}
 	}
 	if !opts.FromQueue { // the request was held, if at all, before it was queued
-		pending, all, err := o.hold(m, rec, Snapshot(m, rec), action, map[string]any{"args": args})
+		held := args
+		if held == nil {
+			held = map[string]any{} // no args and empty args are the same call
+		}
+		pending, all, err := o.hold(m, rec, Snapshot(m, rec), action, map[string]any{"args": held})
 		if err != nil {
 			return nil, err
 		}

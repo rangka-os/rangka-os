@@ -1,4 +1,4 @@
-<title>Rangka Prototype</title>
+<title>Rangka</title>
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&display=swap">
 <link rel="stylesheet" href="tokens.css">
@@ -7,6 +7,39 @@
   html, body { height: 100%; margin: 0; }
   body { background: var(--app); color: var(--ink); font: 14px/20px var(--font-sans); }
   #rk-app { height: 100%; }
+  /* app shell (shell.js) */
+  .ap-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+  .ap-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
+  .ap-shell > .rk-side nav { flex: 0 0 auto; overflow: visible; }
+  .ap-shell .rk-shell-main { min-height: 0; }
+  .ap-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+  .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { max-width: var(--page-max); box-sizing: border-box; width: 100%; }
+  .ap-menu-btn, .ap-nav-scrim { display: none; }
+  .ap-splash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); padding: 24px; box-sizing: border-box; }
+  .ap-splash > .rk-alert { max-width: 480px; }
+  .ap-muted { margin: 0; color: var(--muted); }
+  .ap-signin { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: var(--soft); }
+  .ap-signin-card { width: min(400px, 100%); display: flex; flex-direction: column; gap: 16px; padding: 32px; box-sizing: border-box; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); }
+  .ap-signin-card h1 { margin: 0; font: 600 24px/28px var(--font-sans); }
+  .ap-signin-brand { display: flex; align-items: center; gap: 8px; font: 600 16px/20px var(--font-sans); }
+  .ap-signin-mark { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; background: var(--brand); color: #ffffff; }
+  .ap-signin-mark .rk-icon { width: 16px; height: 16px; }
+  .ap-signin-form { display: flex; flex-direction: column; gap: 16px; }
+  .ap-signin-dialog { width: min(var(--dialog-w), calc(100vw - 32px)); }
+  .ap-signin-dialog .rk-dialog-main { display: flex; flex-direction: column; gap: 16px; }
+  @media (max-width: 860px) {
+    .ap-shell { height: auto; min-height: 100%; }
+    .ap-main { overflow: visible; }
+    .ap-menu-btn { display: inline-flex; }
+    .ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: var(--topbar); left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
+    .ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: var(--topbar) 0 0 0; background: var(--scrim); z-index: 39; }
+  }
+  @media (max-width: 640px) {
+    .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Bantuan"], .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Notifikasi"] { display: none; }
+    .ap-shell .rk-topnav > .rk-iconbtn[aria-label="Pindah aplikasi"] { display: none; }
+    .ap-signin-card { padding: 24px 16px; }
+  }
+  /* list, form and kanban styles from the prototype (pv-*), kept for the views that move over in later tasks */
   .pv-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
   .pv-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
   .pv-shell-main { min-height: 0; }
@@ -61,8 +94,7 @@
 <div id="rk-app"></div>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/js-yaml/4.1.0/js-yaml.min.js"></script>
 <script src="../design-system/bundle.js"></script>
-<script src="meta.js"></script>
+<script src="api.js"></script>
 <script src="engine.js"></script>
-<script src="app.js"></script>
+<script src="shell.js"></script>

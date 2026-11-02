@@ -36,6 +36,9 @@ func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Recor
 		if SystemKeys[k] && f == nil {
 			continue
 		}
+		if f.MoneyOf() != "" {
+			continue // IDR twins are computed by the kernel; a client-sent value is ignored
+		}
 		if f.Type == "table" {
 			cm := e.Reg().Models[f.Of]
 			if cm == nil {
@@ -91,6 +94,7 @@ func (o *op) prepare(m *meta.Model, rec store.Record, isNew bool) {
 		}
 		for _, row := range rows(rec[f.Name]) {
 			cs := o.scope(cm, row)
+			cs.parent = s
 			if isNew || str(row["name"]) == "" {
 				cs.applyDefaults()
 			}
@@ -99,6 +103,7 @@ func (o *op) prepare(m *meta.Model, rec store.Record, isNew bool) {
 	}
 	fill(m, rec)
 	s.compute()
+	o.settleMoney(m, rec)
 }
 
 // check runs rules (on save, or on submit = submit + save rules), required fields, min_rows (submit),
@@ -138,7 +143,8 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 		}
 	}
 	more, err := o.checkValues(m, rec, "")
-	return append(errs, more...), warns, err
+	errs = append(errs, more...)
+	return append(errs, s.checkMoney("", "", map[string]bool{})...), warns, err
 }
 
 func (o *op) checkValues(m *meta.Model, rec store.Record, prefix string) ([]Issue, error) {

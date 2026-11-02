@@ -24,6 +24,9 @@ var ErrNotFound = errors.New("record not found")
 
 // Zero is the value of a missing field (CONTRACTS: ” for text/date/link, 0 for numbers, false for check).
 func Zero(f *meta.Field) any {
+	if f.MoneyOf() != "" {
+		return int64(0) // an IDR twin is whole rupiah, like its bigint column
+	}
 	switch f.Type {
 	case "int", "rating":
 		return int64(0)

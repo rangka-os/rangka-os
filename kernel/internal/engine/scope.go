@@ -6,6 +6,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -13,15 +14,16 @@ import (
 // scope evaluates expressions against one record: fields by name, links load their record on member
 // access, table fields are lists of rows, plus user and any extra variables (event, flow variables).
 type scope struct {
-	ctx   context.Context
-	q     pg.Querier
-	e     *Engine
-	org   string
-	m     *meta.Model
-	rec   store.Record
-	actor Actor
-	extra map[string]any
-	links map[string]map[string]any // shared cache of loaded link records (model/name → scope map)
+	ctx    context.Context
+	q      pg.Querier
+	e      *Engine
+	org    string
+	m      *meta.Model
+	rec    store.Record
+	actor  Actor
+	extra  map[string]any
+	links  map[string]map[string]any // shared cache of loaded link records (model/name → scope map)
+	parent *scope                    // the document of a child row (nil for a document)
 }
 
 func (e *Engine) newScope(ctx context.Context, q pg.Querier, a Actor, m *meta.Model, rec store.Record, links map[string]map[string]any) *scope {
@@ -242,6 +244,7 @@ func (s *scope) compute() {
 		}
 		for _, row := range rows(s.rec[f.Name]) {
 			child := s.e.newScope(s.ctx, s.q, s.actor, cm, row, s.links)
+			child.parent = s
 			child.compute()
 		}
 	}
@@ -254,6 +257,9 @@ func (s *scope) compute() {
 		c, err := store.Coerce(f, v)
 		if err != nil {
 			c = store.Zero(f)
+		}
+		if d, ok := c.(money.Decimal); ok && money.IsIDR(s.currencyOf(f)) {
+			c = d.Round(0) // IDR documents stay whole rupiah; later computes see the rounded value
 		}
 		s.rec[f.Name] = c
 	}

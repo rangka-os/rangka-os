@@ -161,3 +161,18 @@ func TestMoneyRoundTrip(t *testing.T) {
 		t.Errorf("second migrate: %+v %v", res, err)
 	}
 }
+
+// TestTwinZero: an IDR twin is whole rupiah everywhere, so its zero value is int64 like the bigint column.
+func TestTwinZero(t *testing.T) {
+	reg := moneyRegistry(t)
+	tw := reg.Models["bill"].Field("total_idr")
+	if tw == nil || tw.MoneyOf() != "total" {
+		t.Fatalf("twin = %+v", tw)
+	}
+	if v := Zero(tw); v != int64(0) {
+		t.Errorf("Zero(twin) = %#v, want int64(0)", v)
+	}
+	if v := Zero(&meta.Field{Name: "x", Type: "currency"}); v != float64(0) {
+		t.Errorf("Zero(currency) = %#v, want float64(0)", v)
+	}
+}

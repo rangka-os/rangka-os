@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: bill
+label: {id: Tagihan, en: Bill}
+is_submittable: true
+naming: BILL-{#####}
+fields:
+  - {name: currency, type: data, label: {id: Mata uang, en: Currency}, default: "'IDR'"}
+  - {name: rate, type: float, label: {id: Kurs, en: Rate}}
+  - {name: items, type: table, of: bill_line, label: {id: Baris, en: Lines}}
+  - {name: total, type: money, currency_field: currency, label: {id: Total, en: Total}, compute: "sum(items.map(i, i.amount))"}
+  - {name: tax, type: money, currency_field: currency, label: {id: Pajak, en: Tax}, compute: "total * 0.11"}
+  - {name: grand_total, type: money, currency_field: currency, label: {id: Total akhir, en: Grand total}, compute: "total + tax"}

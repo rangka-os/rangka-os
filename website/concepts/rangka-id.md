@@ -13,5 +13,5 @@ Sign-in is built into the kernel; no separate identity server is needed.
 
 Roles come from `apps/<app>/roles/*.rk`; owners and the roles in `config.ai.approvers` approve change sets.
 
-v0 status: passwords use PBKDF2 (the hash format names its algorithm, so it can move to argon2); passkeys, OIDC
+v0 status: passwords use bcrypt (PBKDF2 hashes from earlier builds are upgraded at the next sign-in); passkeys, OIDC
 refresh tokens, organisation switching and enforcement of model `permissions:` are not done yet.

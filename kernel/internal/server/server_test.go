@@ -48,7 +48,7 @@ type env struct {
 func newEnv(t *testing.T, devOpen bool, mutate func(apps, site string)) *env {
 	t.Helper()
 	url := testdb.New(t)
-	auth.Iterations = 1000
+	auth.BcryptCost = 4 // bcrypt.MinCost
 	dir := t.TempDir()
 	for _, p := range []string{"rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites", "rangka-connectors"} {
 		dst := filepath.Join(dir, filepath.Base(p))

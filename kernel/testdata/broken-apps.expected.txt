@@ -58,7 +58,8 @@ crm/flows/bad_flow.rk:9:17  error  unknown_field  steps/1/set/deal_ref  "deal_re
 crm/flows/bad_flow.rk:12:20  error  unknown_model  steps/2/then/0/find_all  "leadz" is not a model; did you mean "lead"?
 crm/flows/bad_flow.rk:17:49  error  cel_syntax  steps/4/where  unbalanced parentheses in `(x`
 crm/flows/no_trigger.rk:1:1  warn   never_runs  (root)  a flow needs on: (an event) or schedule: (cron)
+crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-55 error(s), 7 warning(s)
+56 error(s), 7 warning(s)

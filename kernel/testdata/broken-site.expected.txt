@@ -60,6 +60,7 @@ crm/flows/bad_flow.rk:13:16  error  unknown_action  steps/2/then/1/call  connect
 crm/flows/bad_flow.rk:17:49  error  cel_syntax  steps/4/where  unbalanced parentheses in `(x`
 crm/flows/no_trigger.rk:1:1  warn   never_runs  (root)  a flow needs on: (an event) or schedule: (cron)
 crm/flows/no_trigger.rk:4:12  error  unknown_connector  steps/0/call  "nowhere" is not a connector
+crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
@@ -72,6 +73,7 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-site/config.rk:9:13  error  missing_dependency  apps/1  "sales" requires "core"; add it to apps
 ../broken-site/config.rk:9:20  error  unknown_app  apps/2  "stok" is not an app in testdata/broken-apps
 ../broken-site/config.rk:11:9  error  unknown_layout  layout  layout "crm_last" has no file layouts/crm_last.rk; did you mean "crm_first"?
+../broken-site/config.rk:15:55  error  nested_orgs  orgs/pt_beta/config/orgs  org "pt_beta" config cannot contain orgs
 ../broken-site/themes/kopi_senja.rk:9:9  error  low_contrast  color/link  link #aaaaaa on surface #ffffff is 2.32:1 in light; needs 4.5:1
 ../broken-site/themes/kopi_senja.rk:10:13  error  low_contrast  color/selected  selected-ink #f08a6b on selected #579dff is 1.11:1 in dark; needs 4.5:1
 ../broken-site/layouts/crm_first.rk:12:18  error  unknown_model  nav/create/1  "leads" is not a model; did you mean "lead"?
@@ -87,4 +89,4 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-site/custom/sales_invoice.rk:23:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
 
-81 error(s), 7 warning(s)
+83 error(s), 7 warning(s)

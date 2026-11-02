@@ -117,6 +117,51 @@
       },
       "uniqueItems": true,
       "description": "Installed apps, in menu order. Must be allowed by the plan."
+    },
+    "org": {
+      "type": "object",
+      "description": "The legal entity printed on documents",
+      "additionalProperties": false,
+      "properties": {
+        "legal_name": {
+          "type": "string"
+        },
+        "npwp": {
+          "type": "string"
+        },
+        "pkp": {
+          "type": "boolean",
+          "default": false
+        }
+      }
+    },
+    "orgs": {
+      "type": "object",
+      "description": "Per-org settings by org id; an org's config overrides this file's keys for that org (contract 0010)",
+      "propertyNames": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "additionalProperties": {
+        "type": "object",
+        "required": [
+          "name"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1
+          },
+          "code": {
+            "type": "string",
+            "pattern": "^[A-Z0-9]{1,8}$"
+          },
+          "config": {
+            "$ref": "#",
+            "description": "Any config.rk key, overriding the site value for this org (orgs not allowed)"
+          }
+        }
+      }
     }
   }
 }

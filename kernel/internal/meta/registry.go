@@ -23,6 +23,7 @@ type Registry struct {
 	Roles            map[string]*rk.Doc // by role name
 	Connectors       map[string]*rk.Doc // by connector name (directory)
 	Overlays         map[string]*rk.Doc // <site>/custom/<model>.rk by file stem
+	Orgs             map[string]*OrgDoc // config.rk orgs: by org id
 	ConnectorsDir    string
 	order            []string
 }
@@ -183,6 +184,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 	if siteDir != "" {
 		r.Site = loadSite(siteDir, ld, r)
 	}
+	r.loadOrgs()
 	if o.ConnectorsDir != "" {
 		ents, _ := os.ReadDir(o.ConnectorsDir)
 		var names []string

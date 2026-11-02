@@ -356,7 +356,7 @@ func (o *op) load(m *meta.Model, name string) (store.Record, error) {
 }
 
 // Update merges patch into a draft (or non-submittable) record, recomputes and runs save rules. The actor
-// needs write on the stored record.
+// needs write on the stored record and on the record after the patch.
 func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch map[string]any) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
@@ -389,6 +389,11 @@ func (o *op) update(model, name string, patch map[string]any, authorize bool) (*
 		return nil, validation(issues, nil)
 	}
 	o.prepare(m, rec, false)
+	if authorize { // write must also hold after the patch (no handing a record to someone else)
+		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(rec))); err != nil {
+			return nil, err
+		}
+	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err

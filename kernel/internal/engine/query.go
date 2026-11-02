@@ -35,10 +35,10 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	if m.IsChild {
 		return nil, 0, badRequest(model + " rows are read through their parent document")
 	}
-	if err := e.Authorize(ctx, a, m.Name, "read", nil); err != nil {
-		return nil, 0, err
-	}
 	readable := e.decide(a, m, "read")
+	if !readable.maybe() {
+		return nil, 0, &PermissionError{Model: m.Name, Action: "read"}
+	}
 	if opts.Filter != "" {
 		if _, err := cel.Compile(opts.Filter); err != nil {
 			return nil, 0, badRequest("filter: " + err.Error())

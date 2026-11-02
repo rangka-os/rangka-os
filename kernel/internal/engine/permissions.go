@@ -76,6 +76,10 @@ func (e *Engine) permModel(name string) *meta.Model {
 	if m == nil || !m.IsChild {
 		return m
 	}
+	if p, ok := e.parentCache.Load(m); ok {
+		return p.(*meta.Model)
+	}
+	parent := m
 	names := make([]string, 0, len(reg.Models))
 	for n := range reg.Models {
 		names = append(names, n)
@@ -84,12 +88,13 @@ func (e *Engine) permModel(name string) *meta.Model {
 	for _, n := range names {
 		pm := reg.Models[n]
 		for _, f := range pm.Fields {
-			if f.Type == "table" && f.Of == m.Name {
-				return pm
+			if f.Type == "table" && f.Of == m.Name && parent == m {
+				parent = pm
 			}
 		}
 	}
-	return m
+	e.parentCache.Store(m, parent)
+	return parent
 }
 
 func hasRole(a Actor, role string) bool {

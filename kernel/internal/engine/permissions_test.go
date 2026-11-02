@@ -305,3 +305,62 @@ func mapsEqual(got any, want map[string]any) bool {
 	}
 	return true
 }
+
+func TestWriteChecksPatchedRecord(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	_, err := e.Update(ctx, permClerkA, "voucher", "V1", map[string]any{"owner": "USR-003"})
+	wantPermErr(t, err, "voucher", "write")
+	v1, err := e.Get(ctx, permOwner, "voucher", "V1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v1["owner"] != "USR-002" {
+		t.Fatalf("V1 owner = %v after a denied patch, want USR-002", v1["owner"])
+	}
+	if _, err := e.Update(ctx, permClerkA, "voucher", "V1", map[string]any{"title": "Bensin sore"}); err != nil {
+		t.Fatalf("clerk patches own title: %v", err)
+	}
+}
+
+func TestFlowRunChecksSteps(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	count := func() int {
+		t.Helper()
+		_, total, err := e.List(ctx, permOwner, "voucher", ListOpts{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return total
+	}
+	_, err := e.RunFlow(ctx, permViewer, "make_voucher", nil)
+	wantPermErr(t, err, "voucher", "create")
+	if n := count(); n != 2 {
+		t.Fatalf("vouchers after denied flow = %d, want 2", n)
+	}
+	// a person with no read grant is stopped at the find_all step
+	_, err = e.RunFlow(ctx, permNobody, "make_voucher", nil)
+	wantPermErr(t, err, "voucher", "read")
+	if _, err := e.RunFlow(ctx, permManager, "make_voucher", nil); err != nil {
+		t.Fatalf("manager runs flow: %v", err)
+	}
+	if _, err := e.RunFlow(ctx, Actor{Org: permOrg, ID: "flow:make_voucher", System: true}, "make_voucher", nil); err != nil {
+		t.Fatalf("system runs flow: %v", err)
+	}
+	// clerk A: find_all sees only readable rows (V1), the created voucher is clerk A's own
+	res, err := e.RunFlow(ctx, permClerkA, "make_voucher", nil)
+	if err != nil {
+		t.Fatalf("clerk A runs flow: %v", err)
+	}
+	made, err := e.Get(ctx, permOwner, "voucher", res.Created[0][len("voucher/"):])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if made["owner"] != "USR-002" || made["amount"] != int64(1) {
+		t.Fatalf("clerk flow voucher = owner %v amount %v (%T), want USR-002 and 1", made["owner"], made["amount"], made["amount"])
+	}
+	if n := count(); n != 5 {
+		t.Fatalf("vouchers = %d, want 5", n)
+	}
+}

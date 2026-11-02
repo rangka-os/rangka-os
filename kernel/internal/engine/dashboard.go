@@ -155,9 +155,6 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 	if m == nil {
 		return map[string]any{"error": "Model " + w.Model + " tidak terpasang"}, nil
 	}
-	if err := dc.e.Authorize(dc.ctx, dc.a, m.Name, "read", nil); err != nil {
-		return map[string]any{"error": map[string]any{"code": "permission_denied", "model": m.Name, "action": "read"}}, nil
-	}
 	if w.If != "" {
 		v, err := cel.Eval(w.If, &cel.Env{Today: dc.e.Today, Apps: dc.e.Reg().IsInstalled, Vars: func(n string) (any, bool) {
 			if n == "user" {
@@ -168,6 +165,9 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 		if err != nil || !cel.Truthy(v) {
 			return map[string]any{"hidden": true}, nil
 		}
+	}
+	if err := dc.e.Authorize(dc.ctx, dc.a, m.Name, "read", nil); err != nil {
+		return map[string]any{"error": map[string]any{"code": "permission_denied", "model": m.Name, "action": "read"}}, nil
 	}
 	today := dc.e.Today()
 	from := ""

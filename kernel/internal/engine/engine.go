@@ -53,7 +53,8 @@ type Engine struct {
 	OnWrite func(org, model string)
 	Log     func(format string, args ...any)
 
-	permCache sync.Map // *meta.Model → *modelPerms
+	permCache   sync.Map // *meta.Model → *modelPerms
+	parentCache sync.Map // child *meta.Model → parent *meta.Model
 }
 
 // New makes an engine with the built-in hooks.
@@ -71,6 +72,7 @@ func (e *Engine) Reg() *meta.Registry { return e.reg.Load() }
 func (e *Engine) SetRegistry(r *meta.Registry) {
 	e.reg.Store(r)
 	e.permCache.Clear()
+	e.parentCache.Clear()
 	if e.Cache != nil {
 		e.Cache.DeletePrefix("dash:")
 	}

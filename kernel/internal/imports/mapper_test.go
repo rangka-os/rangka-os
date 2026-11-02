@@ -163,6 +163,25 @@ func TestMapDuplicateRow(t *testing.T) {
 	}
 }
 
+func TestMapSameItemOtherModifiers(t *testing.T) {
+	reg, imp := fixture(t)
+	tb := mokaTable(t)
+	// the same item and variant on one receipt, once plain and once with a modifier, are two lines
+	again := Row{Num: 10, Cells: map[string]string{}}
+	for k, v := range tb.Rows[0].Cells {
+		again.Cells[k] = v
+	}
+	again.Cells["Modifiers"] = "Extra keju"
+	tb.Rows = append(tb.Rows, again)
+	m := Map(reg, imp, tb, nil, newFake(), now)
+	if len(m.Errors) != 0 {
+		t.Fatalf("errors: %+v", m.Errors)
+	}
+	if r := m.Records[0]; len(r.Keys) != 9 || r.Keys[0] == r.Keys[8] {
+		t.Fatalf("keys: %v", r.Keys)
+	}
+}
+
 func TestMapBadCell(t *testing.T) {
 	reg, imp := fixture(t)
 	tb := mokaTable(t)

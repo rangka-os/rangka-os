@@ -82,7 +82,7 @@ model: outlet_sales
 source: csv
 header_row: 1
 per: outlet
-key: [Date, Receipt Number, Item, Variant]
+key: [Date, Receipt Number, Item, Variant, Modifiers]
 group: [Date]
 map:
   date: Date
@@ -198,7 +198,7 @@ func TestImportsMoka(t *testing.T) {
 	// a cell that is not a number is reported with row, column and message
 	lines := strings.Split(string(csv), "\n")
 	cols := strings.Split(lines[2], ",") // spreadsheet row 3
-	cols[8] = "dua"
+	cols[9] = "dua" // Quantity
 	lines[2] = strings.Join(cols, ",")
 	// another outlet, since rows already imported for Outlet Dago are skipped before they are checked
 	other := e.must(201, "POST", "/api/v1/r/outlet", map[string]any{"outlet_name": "Outlet Braga"}).JSON["name"].(string)

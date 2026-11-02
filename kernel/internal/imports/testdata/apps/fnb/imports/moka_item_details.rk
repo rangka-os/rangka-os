@@ -5,7 +5,7 @@ model: outlet_sales
 source: csv
 header_row: 1
 per: outlet
-key: [Date, Receipt Number, Item, Variant]
+key: [Date, Receipt Number, Item, Variant, Modifiers]
 group: [Date]
 map:
   date: Date

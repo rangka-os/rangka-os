@@ -1,9 +1,9 @@
-Date,Time,Outlet,Receipt Number,Category,Item,Variant,SKU,Quantity,Gross Sales,Discounts,Refunds,Net Sales,Tax,Gratuity,Sales Type,Payment Method,Collected By,Served By
-02/11/2026,08:14,Outlet Dago,DGO-0001,Tahu,Tahu Original,Isi 10,TH-ORI-10,2,50000,0,0,50000,0,0,Dine In,Cash,Kasir 1,Kasir 1
-02/11/2026,08:14,Outlet Dago,DGO-0001,Minuman,Es Teh Manis,Regular,MN-ETM-R,2,16000,0,0,16000,0,0,Dine In,Cash,Kasir 1,Kasir 1
-02/11/2026,09:02,Outlet Dago,DGO-0002,Tahu,Tahu Original,Isi 20,TH-ORI-20,1,48000,4800,0,43200,0,0,Take Away,QRIS,Kasir 1,Kasir 1
-02/11/2026,09:40,Outlet Dago,DGO-0003,Tahu,Tahu Isi,Isi 5,TH-ISI-5,3,45000,0,0,45000,0,0,Take Away,GoPay,Kasir 2,Kasir 2
-02/11/2026,09:40,Outlet Dago,DGO-0003,Minuman,Es Jeruk,Regular,MN-EJR-R,1,10000,0,0,10000,0,0,Take Away,GoPay,Kasir 2,Kasir 2
-02/11/2026,11:25,Outlet Dago,DGO-0004,Tahu,Tahu Original,Isi 10,TH-ORI-10,1,25000,0,25000,0,0,0,Dine In,Cash,Kasir 1,Kasir 1
-02/11/2026,12:10,Outlet Dago,DGO-0005,Tahu,Tahu Original,Isi 10,TH-ORI-10,4,100000,10000,0,90000,0,0,GoFood,GoFood,Kasir 2,Kasir 2
-02/11/2026,12:10,Outlet Dago,DGO-0005,Minuman,Es Teh Manis,Regular,MN-ETM-R,4,32000,0,0,32000,0,0,GoFood,GoFood,Kasir 2,Kasir 2
+Date,Time,Outlet,Receipt Number,Category,Item,Variant,Modifiers,SKU,Quantity,Gross Sales,Discounts,Refunds,Net Sales,Tax,Gratuity,Sales Type,Payment Method,Collected By,Served By
+02/11/2026,08:14,Outlet Dago,DGO-0001,Tahu,Tahu Original,Isi 10,,TH-ORI-10,2,50000,0,0,50000,0,0,Dine In,Cash,Kasir 1,Kasir 1
+02/11/2026,08:14,Outlet Dago,DGO-0001,Minuman,Es Teh Manis,Regular,,MN-ETM-R,2,16000,0,0,16000,0,0,Dine In,Cash,Kasir 1,Kasir 1
+02/11/2026,09:02,Outlet Dago,DGO-0002,Tahu,Tahu Original,Isi 20,,TH-ORI-20,1,48000,4800,0,43200,0,0,Take Away,QRIS,Kasir 1,Kasir 1
+02/11/2026,09:40,Outlet Dago,DGO-0003,Tahu,Tahu Isi,Isi 5,Extra pedas,TH-ISI-5,3,45000,0,0,45000,0,0,Take Away,GoPay,Kasir 2,Kasir 2
+02/11/2026,09:40,Outlet Dago,DGO-0003,Minuman,Es Jeruk,Regular,,MN-EJR-R,1,10000,0,0,10000,0,0,Take Away,GoPay,Kasir 2,Kasir 2
+02/11/2026,11:25,Outlet Dago,DGO-0004,Tahu,Tahu Original,Isi 10,,TH-ORI-10,1,25000,0,25000,0,0,0,Dine In,Cash,Kasir 1,Kasir 1
+02/11/2026,12:10,Outlet Dago,DGO-0005,Tahu,Tahu Original,Isi 10,,TH-ORI-10,4,100000,10000,0,90000,0,0,GoFood,GoFood,Kasir 2,Kasir 2
+02/11/2026,12:10,Outlet Dago,DGO-0005,Minuman,Es Teh Manis,Regular,,MN-ETM-R,4,32000,0,0,32000,0,0,GoFood,GoFood,Kasir 2,Kasir 2

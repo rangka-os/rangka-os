@@ -20,7 +20,7 @@ func TestReadMokaSample(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(tb.Headers) != 19 || len(tb.Rows) != 8 {
+	if len(tb.Headers) != 20 || len(tb.Rows) != 8 {
 		t.Fatalf("headers=%d rows=%d", len(tb.Headers), len(tb.Rows))
 	}
 	if tb.Rows[0].Num != 2 {
@@ -28,6 +28,9 @@ func TestReadMokaSample(t *testing.T) {
 	}
 	if got := tb.Rows[2].Cells["Discounts"]; got != "4800" {
 		t.Errorf("Discounts = %q", got)
+	}
+	if got := tb.Rows[3].Cells["Modifiers"]; got != "Extra pedas" {
+		t.Errorf("Modifiers = %q", got)
 	}
 }
 

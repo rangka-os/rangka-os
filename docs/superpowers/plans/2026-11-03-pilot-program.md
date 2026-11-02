@@ -64,7 +64,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - Model `approvals:` list of `{name, on: <verb|action>, when: <CEL>, approvers: [<role>], label}`; a matching transition creates an approval request bound to a SHA-256 of the record snapshot; the verb runs only after approval.
 - Flow step `approve: {approvers: [<role>], when: <CEL>, label}`.
 - `print/<name>.rk` (kind `print`) in a module or site: `{name, model, label, paper: A4|A5|80mm, template: <path to .html>}`; templates are Go `html/template` with helpers `rupiah`, `money`, `date`, `terbilang`; site `letterhead.rk` (kind `letterhead`) supplies logo, address, NPWP, bank.
-- `config.rk` `numbering:` series map `{<series>: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly|monthly|never}}` per org; models reference `naming: {series: <series>}`.
+- `config.rk` `numbering:` series map `{<series>: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly|monthly|never}}` per org; models reference `naming: {series: <series>}`. Models may also give a default `{series, pattern, reset}`, and a site object keyed by a model name numbers that model as its own series (contract 0009 §3).
 - `imports/<name>.rk` (kind `import`): `{name, model, source: csv|xlsx, header_row, key: [<cols>], map: {<field>: <column or CEL>}, per: outlet|org}`; duplicates detected by `key` + file SHA-256.
 - Field type `money` (new): `{currency_field: <field>}`; stored as numeric(20,4) plus an IDR integer twin `<field>_idr` computed at the document's `rate`. Existing `currency` stays IDR-only.
 - `config.rk` `org:` `{legal_name, npwp, pkp: true|false}`; `features.rk` unchanged.

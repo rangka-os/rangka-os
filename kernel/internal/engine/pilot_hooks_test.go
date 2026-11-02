@@ -358,3 +358,123 @@ func TestPilotPayables(t *testing.T) {
 		t.Fatal("vendor outstanding after cancel")
 	}
 }
+
+// ---------- Task 3: conversions
+
+func TestPilotQuotationRevisionOutcomeOrder(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	q := p.doc("quotation", map[string]any{"customer": m.cust, "subject": "Inspeksi tangki", "rfq_ref": "RFQ-77",
+		"items": []any{map[string]any{"item": m.jasa, "qty": 2, "rate": 1000000, "discount": 10}}})
+	if r := p.get("quotation", q); r["revision"] != int64(0) || q != "QUO-2026-00001" {
+		t.Fatalf("quotation %s revision %v", q, r["revision"])
+	}
+	res := p.action("quotation", q, "new_revision", nil)
+	draft := p.get("quotation", opened(res))
+	if draft["revision"] != int64(1) || draft["outcome"] != "open" || draft["amended_from"] != q || draft["docstatus"] != int64(0) {
+		t.Fatalf("revision draft = %v %v %v %v", draft["revision"], draft["outcome"], draft["amended_from"], draft["docstatus"])
+	}
+	if p.get("quotation", q)["docstatus"] != int64(2) {
+		t.Fatal("old revision not cancelled")
+	}
+	q1 := p.submit("quotation", opened(res))
+	if q1 != "QUO-2026-00001-1" {
+		t.Fatalf("revision name = %s", q1)
+	}
+
+	_, err := p.e.RunAction(p.ctx, p.a, "quotation", q1, "mark_outcome", map[string]any{"outcome": "won"}, ActionOpts{})
+	wantCode(t, err, 409, "bad_outcome")
+	_, err = p.e.RunAction(p.ctx, p.a, "quotation", q1, "mark_outcome", map[string]any{"outcome": "lost"}, ActionOpts{})
+	wantCode(t, err, 409, "lost_reason_required")
+	_, err = p.e.RunAction(p.ctx, p.a, "quotation", q1, "make_order", map[string]any{"po_number": "PO-1"}, ActionOpts{})
+	wantCode(t, err, 409, "action_not_allowed") // still open
+	p.action("quotation", q1, "mark_outcome", map[string]any{"outcome": "accepted"})
+	if r := p.get("quotation", q1); r["outcome"] != "accepted" || r["docstatus"] != int64(1) {
+		t.Fatalf("outcome = %v", r["outcome"])
+	}
+
+	_, err = p.e.RunAction(p.ctx, p.a, "quotation", q1, "make_order", map[string]any{"po_number": "PO-1"}, ActionOpts{})
+	wantCode(t, err, 422, "po_required")
+	args := map[string]any{"po_number": "PO/BP/0091", "po_date": "2026-10-29"}
+	so := opened(p.action("quotation", q1, "make_order", args))
+	o := p.get("customer_order", so)
+	line := rows(o["items"])[0]
+	if o["customer"] != m.cust || o["quotation"] != q1 || o["po_number"] != "PO/BP/0091" || o["po_date"] != "2026-10-29" ||
+		line["qty"] != 2.0 || money(line["rate"]) != 900000 || money(o["subtotal"]) != 1800000 {
+		t.Fatalf("order = %v, line %v", o, line)
+	}
+	if again := opened(p.action("quotation", q1, "make_order", args)); again != so {
+		t.Fatalf("second make_order made %s, want the draft %s", again, so)
+	}
+}
+
+func TestPilotInvoiceFromOrder(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	so := p.create("customer_order", map[string]any{"customer": m.cust, "po_number": "PO-9", "po_date": "2026-10-01",
+		"items": []any{map[string]any{"item": m.jasa, "qty": 3, "rate": 1000000}}})
+	_, err := p.e.RunAction(p.ctx, p.a, "customer_order", so, "make_invoice", nil, ActionOpts{})
+	wantCode(t, err, 409, "action_not_allowed")
+	so = p.submit("customer_order", so)
+	d1 := opened(p.action("customer_order", so, "make_invoice", nil))
+	if again := opened(p.action("customer_order", so, "make_invoice", nil)); again != d1 {
+		t.Fatal("draft not reused")
+	}
+	inv := p.get("sales_invoice", d1)
+	if inv["customer_order"] != so || inv["po_number"] != "PO-9" || rows(inv["items"])[0]["qty"] != 3.0 {
+		t.Fatalf("draft invoice = %v", inv)
+	}
+	if _, err := p.e.Update(p.ctx, p.a, "sales_invoice", d1, map[string]any{"ppn_applies": false, "items": []any{map[string]any{"item": m.jasa, "qty": 1, "rate": 1000000}}}); err != nil {
+		t.Fatal(err)
+	}
+	i1 := p.submit("sales_invoice", d1)
+	if got := money(p.get("customer_order", so)["invoiced_amount"]); got != 1000000 {
+		t.Fatalf("invoiced_amount = %d", got)
+	}
+	d2 := opened(p.action("customer_order", so, "make_invoice", nil))
+	if q := rows(p.get("sales_invoice", d2)["items"])[0]["qty"]; q != 2.0 {
+		t.Fatalf("remainder qty = %v", q)
+	}
+	p.submit("sales_invoice", d2)
+	_, err = p.e.RunAction(p.ctx, p.a, "customer_order", so, "make_invoice", nil, ActionOpts{})
+	wantCode(t, err, 409, "nothing_to_invoice")
+	if err := p.cancel("sales_invoice", i1); err != nil {
+		t.Fatal(err)
+	}
+	if got := money(p.get("customer_order", so)["invoiced_amount"]); got != 2000000 {
+		t.Fatalf("invoiced_amount after cancel = %d", got)
+	}
+}
+
+func TestPilotPurchaseRequestToPO(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	pack := p.create("uom_conversion", map[string]any{"item": m.beras, "uom": m.karung, "factor": 50})
+	pr := p.doc("purchase_request", map[string]any{"outlet": m.outB, "needed_by": "2026-11-05",
+		"items": []any{map[string]any{"item": m.beras, "qty": 2, "uom": m.karung, "packing": pack}}})
+	po := opened(p.action("purchase_request", pr, "make_po", nil))
+	d := p.get("purchase_order", po)
+	line := rows(d["items"])[0]
+	if d["vendor"] != "" || d["purchase_request"] != pr || d["outlet"] != m.outB || line["packing"] != pack || money(line["rate"]) != 11000 || line["stock_qty"] != 100.0 {
+		t.Fatalf("draft PO = %v, line %v", d, line)
+	}
+	if st := p.get("purchase_request", pr)["state"]; st != "ordered" {
+		t.Fatalf("request state = %v", st)
+	}
+	if again := opened(p.action("purchase_request", pr, "make_po", nil)); again != po {
+		t.Fatal("draft PO not reused")
+	}
+	// the draft still needs a vendor before it is submitted
+	if _, err := p.e.Submit(p.ctx, p.a, "purchase_order", po, true); err == nil {
+		t.Fatal("PO without vendor submitted")
+	}
+	if _, err := p.e.Update(p.ctx, p.a, "purchase_order", po, map[string]any{"vendor": m.vend}); err != nil {
+		t.Fatal(err)
+	}
+	po = p.submit("purchase_order", po)
+	gr := opened(p.action("purchase_order", po, "receive", nil))
+	g := p.get("goods_receipt", gr)
+	if g["vendor"] != m.vend || g["outlet"] != m.outB || g["purchase_order"] != po || rows(g["items"])[0]["qty"] != 2.0 || rows(g["items"])[0]["stock_qty"] != 100.0 {
+		t.Fatalf("draft receipt = %v", g)
+	}
+}

@@ -10,8 +10,8 @@ fields:
   - {name: revision, type: int, default: '0', read_only: true}
   - {name: items, type: table, of: quotation_item, min_rows: 1}
   - {name: subtotal, type: currency, compute: 'items.map(i, i.amount).sum()'}
-  - {name: outcome, type: select, default: "'open'", options: [{value: open, label: {id: open}}, {value: accepted, label: {id: accepted}}, {value: lost, label: {id: lost}}]}
-  - {name: lost_reason, type: text}
+  - {name: outcome, type: select, default: "'open'", read_only: true, options: [{value: open, label: {id: open}}, {value: accepted, label: {id: accepted}}, {value: lost, label: {id: lost}}]}
+  - {name: lost_reason, type: text, read_only: true}
 actions:
   - {name: new_revision, label: {id: new_revision}, hook: quotation.revise, if: "docstatus == 1 && outcome == 'open'"}
   - {name: mark_outcome, label: {id: mark_outcome}, hook: quotation.mark_outcome, if: docstatus == 1}

@@ -47,6 +47,7 @@ func registerBuiltinHooks(e *Engine) {
 	e.Hooks["crm.convert_lead"] = convertLead
 	e.Hooks["crm.mark_won"] = markWon
 	registerLedgerHooks(e)
+	registerConversionHooks(e)
 }
 
 func or(a, b any) any {

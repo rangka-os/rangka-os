@@ -26,8 +26,6 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-const workspace = "../../../.."
-
 var fixedNow = func() time.Time {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
 	return time.Date(2026, 10, 30, 10, 0, 0, 0, loc)
@@ -52,7 +50,7 @@ func newEnv(t *testing.T, devOpen bool, mutate func(apps, site string)) *env {
 	dir := t.TempDir()
 	for _, p := range []string{"rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites", "rangka-connectors"} {
 		dst := filepath.Join(dir, filepath.Base(p))
-		if err := exec.Command("cp", "-r", filepath.Join(workspace, p), dst).Run(); err != nil {
+		if err := exec.Command("cp", "-r", testdb.Sibling(t, p), dst).Run(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -61,7 +59,7 @@ func newEnv(t *testing.T, devOpen bool, mutate func(apps, site string)) *env {
 		mutate(apps, site)
 	}
 	cfg := Config{AppsDir: apps, SiteDir: site, ConnectorsDir: filepath.Join(dir, "rangka-connectors"), DeployTarget: "docker", DatabaseURL: url, Addr: ":0", DevOpen: devOpen, Schemas: schema.Embedded(), Version: "test",
-		WebDir: filepath.Join(workspace, "rangka-os", "web"), TemplatesDir: filepath.Join(workspace, "rangka-os", "templates"), Now: fixedNow,
+		WebDir: filepath.Join(testdb.RepoRoot(), "web"), TemplatesDir: filepath.Join(testdb.RepoRoot(), "templates"), Now: fixedNow,
 		Logf: func(string, ...any) {}, FilesDir: t.TempDir()}
 	ctx, cancel := context.WithCancel(context.Background())
 	reg, err := LoadRegistry(cfg)
@@ -660,11 +658,11 @@ steps:
 
 func TestConfigAppsMustBeInPlan(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", filepath.Join(workspace, "rangka-apps/sites/kopi-senja"), dir+"/site").Run()
+	exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), dir+"/site").Run()
 	p := dir + "/site/config.rk"
 	b, _ := os.ReadFile(p)
 	os.WriteFile(p, []byte(strings.Replace(string(b), "plan: tumbuh", "plan: mulai", 1)), 0o644)
-	_, err := LoadRegistry(Config{AppsDir: filepath.Join(workspace, "rangka-apps/apps"), SiteDir: dir + "/site", Schemas: schema.Embedded()})
+	_, err := LoadRegistry(Config{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: dir + "/site", Schemas: schema.Embedded()})
 	if err == nil || !strings.Contains(err.Error(), `app_not_in_plan apps/2 plan "mulai" does not include "sales"`) {
 		t.Fatalf("expected refusal, got %v", err)
 	}

@@ -17,11 +17,6 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-const (
-	appsDir = "../../../../rangka-apps/apps"
-	siteDir = "../../../../rangka-apps/sites/kopi-senja"
-)
-
 // FixedNow is the date the prototype numbers in testdata were computed for.
 var FixedNow = func() time.Time {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
@@ -30,7 +25,7 @@ var FixedNow = func() time.Time {
 
 func setup(t *testing.T) (*Engine, Actor) {
 	t.Helper()
-	return setupSite(t, siteDir)
+	return setupSite(t, testdb.Sibling(t, "rangka-apps/sites/kopi-senja"))
 }
 
 // setupSite is setup with another site folder (same apps and fixtures).
@@ -38,7 +33,7 @@ func setupSite(t *testing.T, site string) (*Engine, Actor) {
 	t.Helper()
 	url := testdb.New(t)
 	ctx := context.Background()
-	reg, rep := meta.Validate(appsDir, site, nil, schema.Embedded())
+	reg, rep := meta.Validate(testdb.Sibling(t, "rangka-apps/apps"), site, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("metadata errors: %v", rep.All())
 	}
@@ -53,7 +48,7 @@ func setupSite(t *testing.T, site string) (*Engine, Actor) {
 	e := New(db, reg)
 	e.Now = FixedNow
 	a := Actor{Org: "kopi-senja", ID: "ceo@saga.co.id", UserName: "USR-001", Roles: []string{"owner"}, Human: true}
-	fx, err := LoadFixtures(FixturesDir(appsDir))
+	fx, err := LoadFixtures(FixturesDir(testdb.Sibling(t, "rangka-apps/apps")))
 	if err != nil {
 		t.Fatal(err)
 	}

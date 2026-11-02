@@ -2,7 +2,9 @@
 # (initdb/pg_ctl/postgres; scripts/pgtemp.sh finds Debian, Homebrew, DBngin and Postgres.app installs, else set PGBIN).
 
 GO      ?= go
-WS      := $(abspath ../..)
+# Workspace that holds rangka-apps/ and rangka-connectors/: $RANGKA_WORKSPACE, else the first ancestor of this
+# repo's parent with rangka-apps/apps (works from a git worktree), else two levels up.
+WS      ?= $(shell scripts/workspace.sh)
 APPS    ?= $(WS)/rangka-apps/apps
 SITE    ?= $(WS)/rangka-apps/sites/kopi-senja
 CONN    ?= $(WS)/rangka-connectors

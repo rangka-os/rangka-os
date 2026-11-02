@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
 // The embedded copy must equal rangka-os/schema/0.5 (run `make sync-schemas` after editing the schemas).
@@ -69,35 +70,40 @@ func TestRepr(t *testing.T) {
 func TestWorkspaceFilesValidate(t *testing.T) {
 	s := Embedded()
 	n := 0
-	filepath.WalkDir("../../../..", func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() && (d.Name() == "testdata" || d.Name() == "node_modules") {
-			if d != nil && d.IsDir() {
+	for _, root := range []string{testdb.RepoRoot(), testdb.Sibling(t, "rangka-apps"), testdb.Sibling(t, "rangka-connectors")} {
+		filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+			if err == nil && testdb.SkipHidden(d) {
 				return filepath.SkipDir
 			}
+			if err != nil || d.IsDir() && (d.Name() == "testdata" || d.Name() == "node_modules") {
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if d.IsDir() || filepath.Ext(p) != ".rk" {
+				return nil
+			}
+			doc, err := rk.Load(p)
+			if err != nil {
+				t.Errorf("%s: %v", p, err)
+				return nil
+			}
+			kind := doc.Kind()
+			if kind == "" {
+				return nil
+			}
+			if !s.Has(kind) {
+				t.Errorf("%s: no schema %s.json", p, kind)
+				return nil
+			}
+			for _, e := range s.Validate(kind, FromNode(doc.Root)) {
+				t.Errorf("%s: %s %s", p, e.PathString(), e.Message)
+			}
+			n++
 			return nil
-		}
-		if d.IsDir() || filepath.Ext(p) != ".rk" {
-			return nil
-		}
-		doc, err := rk.Load(p)
-		if err != nil {
-			t.Errorf("%s: %v", p, err)
-			return nil
-		}
-		kind := doc.Kind()
-		if kind == "" {
-			return nil
-		}
-		if !s.Has(kind) {
-			t.Errorf("%s: no schema %s.json", p, kind)
-			return nil
-		}
-		for _, e := range s.Validate(kind, FromNode(doc.Root)) {
-			t.Errorf("%s: %s %s", p, e.PathString(), e.Message)
-		}
-		n++
-		return nil
-	})
+		})
+	}
 	if n < 30 {
 		t.Errorf("only %d files checked", n)
 	}

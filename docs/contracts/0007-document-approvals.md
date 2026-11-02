@@ -1,0 +1,143 @@
+# 0007: Document approvals
+
+Status: proposed (3 Nov 2026) · Owner: rangka-os · Stream S2 of the pilot program
+
+## Context
+Both pilots need a manager to approve documents before they take effect: a quotation before it goes out, a
+purchase order before it reaches a vendor, an invoice above a threshold. Today `submit` makes a document final at
+once, and the only approval in the kernel is for change sets (metadata), which is a different thing.
+
+The approval must be deterministic (no LLM decides it), must bind to what the approver actually saw, and must use
+the same lifecycle (draft → submitted → cancelled → amended) instead of adding a second one.
+
+## Decision
+
+### 1. Model key `approvals:` (schema 0.5)
+```yaml
+approvals:
+  - name: manager_over_10m
+    on: submit                 # submit | cancel | <action name of this model>
+    when: grand_total > 10000000   # CEL over the record, optional (absent = always)
+    approvers: [sales_manager]     # roles; owner may always approve
+    label: {id: Persetujuan manajer, en: Manager approval}
+```
+- `name` is unique in the model. `on: submit|cancel` needs `is_submittable: true`; any other value must be an
+  action of the model.
+- Company overlays (`site/custom/<model>.rk`) may add `approvals:`; they are appended to the app's list, like `rules`.
+  This is how a site sets its own thresholds without editing `apps/`.
+
+### 2. What a matching transition does
+When a person asks for a verb (`submit`, `cancel`, or an action) and one or more policies with that `on` match
+(`when` true, evaluated on the stored record):
+1. The verb's own checks run first (submit rules, required fields, warnings). A document that would fail submit
+   never creates a request.
+2. For each matching policy without an approved request for the same snapshot, the kernel inserts a row in
+   `rk_approvals` with state `pending`, bound to the record's **snapshot hash** (§3).
+3. The verb does **not** run. The record keeps `docstatus 0` (or 1 for cancel). REST answers **202**
+   `{approval: <first pending item>, approvals: [<all items>], record: <record>}`.
+4. When the caller holds one of the policy's approver roles (or `owner`) and is a person (§5), the request is
+   created already `approved` by the caller (self-approval is recorded, not skipped). If every matching policy is
+   approved this way, the verb runs at once and the call answers as before (200).
+
+When the last pending request of a (record, verb) is approved, the kernel runs the verb in the same transaction,
+**as the requester** (their id, user record and roles, stored on the request), with the request's arguments
+(`force` for submit, `args` for actions). Audit entries record both requester and approver. If the verb now fails
+(a rule fails because linked data changed, a warning needs `force` that was not given), the approval is rolled back
+and the error is returned; the request stays pending.
+
+Reject (`{reason}` required) sets the request `rejected`; other pending requests for the same (record, verb) become
+`void`. The record stays a draft and can be edited and submitted again, which creates new requests.
+
+### 3. Snapshot binding (the Review Focus rule)
+- `snapshot` = SHA-256 (hex) of the canonical JSON of the stored record: every field of the model and `x_` fields,
+  child tables as lists of their rows' fields (row `name`, `idx`, `parent`, `parent_field` left out), keys sorted,
+  numbers as stored. `name`, `docstatus`, `status`, `created_*`, `modified_at` are left out.
+- Any update or delete of a record with pending requests sets them to `void` in the same transaction (SSE
+  `approval` event, audit `approval.void`).
+- Approve recomputes the snapshot from the stored record; if it differs from the request's, the request becomes
+  `void` and approve returns **409** `approval_void` ("Dokumen berubah setelah diajukan; ajukan ulang"). This guards
+  against writes that bypass the engine.
+- A submitted document cannot be edited (cancel + amend), so "edited after approval" can only mean "edited while
+  pending", which voids the request.
+
+### 4. Flow step `approve`
+```yaml
+- approve: {approvers: [purchasing_manager], when: po.grand_total > 5000000, label: {id: Setujui PO}}
+  as: po_approval
+```
+- If the step's `if:` or the map's `when` is false, the step is skipped.
+- Otherwise a request is created (model/name empty, `flow` set, snapshot = hash of the flow variables) and the
+  flow stops, like `wait`. Approve runs the remaining top-level steps in the approve transaction with the saved
+  variables, as the flow's original actor; `as:` holds `{state: "approved", by, at}`. Reject ends the flow
+  (audit `flow.rejected`). `approve` is only allowed at the top level of a flow (as `wait`).
+
+### 5. Who may decide
+- Approve and reject need a person: a browser session (`Principal.Human()`), as for change sets. API tokens and
+  OIDC (AI) tokens get **403** `human_required`; MCP's `rangka_approve` follows the same rule, so an agent can list
+  approvals but never decide one.
+- The caller must hold one of the request's `approvers` roles or `owner`; otherwise **403** `permission_denied`
+  `{model, action: "approve"}`.
+- Only `pending` requests can be decided (**409** `not_pending`).
+
+### 6. Storage
+```sql
+create table if not exists rk_approvals (
+  id           text primary key,           -- apr_<random>
+  org_id       text not null,
+  model        text not null default '',   -- '' for flow approvals
+  name         text not null default '',   -- record name at request time
+  verb         text not null,              -- submit, cancel, <action>, or flow:<flow>
+  policy       text not null,              -- approvals[].name, or the flow step label
+  label        jsonb,
+  approvers    text[] not null,
+  state        text not null,              -- pending, approved, rejected, void
+  snapshot     text not null,              -- sha256 hex
+  args         jsonb not null default '{}', -- {force} / action args / flow resume state
+  requested_by text not null,
+  requester    jsonb not null,             -- {id, user, roles} the verb runs as
+  requested_at timestamptz not null default now(),
+  decided_by   text,
+  decided_at   timestamptz,
+  reason       text not null default ''
+);
+create index if not exists rk_approvals_org_state_idx on rk_approvals (org_id, state, requested_at desc);
+create index if not exists rk_approvals_record_idx on rk_approvals (org_id, model, name);
+```
+
+### 7. Interfaces
+- REST (`/api/v1`): `GET /approvals?state=pending|approved|rejected|void&model=&name=` → `{data, total}`;
+  `GET /approvals/{id}`; `POST /approvals/{id}/approve` `{}`; `POST /approvals/{id}/reject` `{reason}`. Item:
+  `{id, model, name, policy, label, verb, approvers, state, requested_by, requested_at, decided_by, decided_at,
+  reason, can_decide}`; `can_decide` is true when the caller may decide it now. Approve/reject return 200 with the
+  item, plus `record` when the verb ran.
+- `POST /r/{model}/{name}/submit|cancel` and `/actions/{action}` answer 202 as in §2 when held.
+- SSE: `event: approval` with `{id, model, name, state}` on create and on every state change (org-scoped).
+- MCP: `rangka_approvals_list` (read-only; `state`, `model`, `name`) and `rangka_approve` (`id`,
+  `decision: approve|reject`, `reason`), the latter refused for non-person callers (§5).
+- `GET /api/v1/meta` carries each model's `approvals` unchanged.
+
+### 8. Validation (Go and Python identical)
+- `approvals/<i>/on`: `unknown_verb` (error) when not submit/cancel/an action of the model; `not_submittable`
+  (error) for submit/cancel on a non-submittable model.
+- `approvals/<i>/when`: the usual expression checks.
+- `approvals/<i>/approvers/<j>`: `unknown_role` (warn), as for `permissions`.
+- `approvals/<i>/name`: `duplicate_approval` (error).
+- Flow `approve` steps: schema, and parentheses in `when`.
+
+## Rulings made while writing this (check these)
+- The verb runs as the **requester**, not the approver: the approver need not hold submit rights, and the submitted
+  document's `created_by`/hooks see the person who prepared it.
+- **Self-approval is allowed** and recorded: an owner-led firm's owner submitting their own quotation should not
+  wait for themself. A site that needs four-eyes can list approver roles the preparer does not hold.
+- `owner` may always approve, matching change sets.
+- Multiple matching policies all need approval (e.g. manager above Rp 10.000.000 and director above
+  Rp 100.000.000); there is no ordering between them.
+- Flow approvals bind to the flow's variables, not to a record; a flow that needs record binding should use a
+  model `approvals:` policy on the verb instead.
+- Schema: per the S4 note, keys are added to the live schema files (`schema/0.4/*.json`, the copy the kernel and
+  validator load) and move with them when the integrator cuts `schema/0.5/`.
+
+## Consequences
+- Apps can require approval with metadata only; sites can tighten it through overlays.
+- The web app (S0) gets an inbox from `GET /approvals` and a "Menunggu persetujuan" banner from `?model=&name=`.
+- Row scope on the inbox (outlet, org) follows S1/S5 when they land; until then the inbox lists the org's requests.

@@ -24,20 +24,24 @@ settings, a database-level guard, and outlet scope.
 - The API reports roles as a list (`roles: [role]`) so a later change to several roles per org does not
   change the shape.
 
-### 2. Per-org settings (site `orgs/<id>.rk`, kind `org`, schema 0.5)
+### 2. Per-org settings (`config.rk` key `orgs:`, schema 0.5)
 ```yaml
-# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/org.json
-id: pt_alpha
-name: PT Alpha Inspeksi
-code: ALP
-config:            # any config.rk key, overriding the site value for this org
-  org: {legal_name: PT Alpha Inspeksi, npwp: "00.000.000.0-000.000", pkp: true}
-  numbering: {invoice: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly}}
+# site config.rk
+org: {legal_name: PT Contoh, pkp: false}      # site default (program plan's fixed key)
+orgs:
+  pt_alpha:
+    name: PT Alpha Inspeksi
+    code: ALP
+    config:            # any config.rk key, overriding the site value for this org
+      org: {legal_name: PT Alpha Inspeksi, npwp: "00.000.000.0-000.000", pkp: true}
+      numbering: {invoice: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly}}
 ```
-- `rangka migrate`, `seed` and `serve` upsert `rk_orgs` (id, name, code) from these files. Orgs created
+- No new kind: the program plan fixes `org:` as a `config.rk` key, and one site file holding every org keeps
+  them reviewable together. An org's `config` may not itself contain `orgs` (error `nested_orgs`).
+- `rangka migrate`, `seed` and `serve` upsert `rk_orgs` (id, name, code) from `orgs:`. Orgs created
   only in the database (seed, CLI) keep working with the site config.
-- Kernel code reads org-dependent settings with `Registry.OrgConfig(org, key)`: the org file's
-  `config[key]` when present, else `config.rk`'s value. S3 (letterhead), S4 (numbering, `{ORG}`) and S8
+- Kernel code reads org-dependent settings with `Registry.OrgConfig(org, key)`: `orgs.<org>.config[key]`
+  when present, else `config.rk`'s value. S3 (letterhead), S4 (numbering, `{ORG}`) and S8
   (`org.pkp`) use it instead of `SiteConfig`.
 
 ### 3. Signing in and switching (REST, fixed in the program plan)
@@ -112,6 +116,6 @@ shared with S1's model permissions (`engine.PermissionError`).
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.
 - S3, S4 and S8 read org settings with `OrgConfig`; S4's `{ORG}` is `rk_orgs.code`.
-- S9's pilot bundles declare `site/orgs/*.rk` and create members with `rangka user add`.
+- S9's pilot bundles declare `orgs:` in `config.rk` and create members with `rangka user add`.
 - Several roles per org, business units inside an org, and scope on fields other than outlet-like links
   wait for a later contract.

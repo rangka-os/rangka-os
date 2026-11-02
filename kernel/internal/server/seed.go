@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"fmt"
+	"sort"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
@@ -23,6 +24,9 @@ type SeedOptions struct {
 // Seed migrates, creates the org, loads fixtures and creates the seed user (owner).
 func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (*engine.SeedStats, error) {
 	if _, err := store.Migrate(ctx, db, reg, false, "seed"); err != nil {
+		return nil, err
+	}
+	if err := SyncOrgs(ctx, db, reg); err != nil {
 		return nil, err
 	}
 	if err := auth.EnsureOrg(ctx, db, o.Org, titleCase(o.Org)); err != nil {
@@ -50,4 +54,24 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 		return nil, err
 	}
 	return st, nil
+}
+
+// SyncOrgs upserts every org of config.rk's orgs: map into rk_orgs (name and code), in id order.
+func SyncOrgs(ctx context.Context, q pg.Querier, reg *meta.Registry) error {
+	ids := make([]string, 0, len(reg.Orgs))
+	for id := range reg.Orgs {
+		ids = append(ids, id)
+	}
+	sort.Strings(ids)
+	for _, id := range ids {
+		o := reg.Orgs[id]
+		name := o.Name
+		if name == "" {
+			name = titleCase(id)
+		}
+		if err := auth.EnsureOrgCode(ctx, q, id, name, o.Code); err != nil {
+			return fmt.Errorf("sync org %s: %w", id, err)
+		}
+	}
+	return nil
 }

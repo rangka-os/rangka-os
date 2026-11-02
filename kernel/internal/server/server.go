@@ -117,6 +117,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
+	if err := SyncOrgs(ctx, db, reg); err != nil {
+		db.Close()
+		return nil, err
+	}
 	if err := auth.EnsureOrg(ctx, db, cfg.Org, titleCase(cfg.Org)); err != nil {
 		db.Close()
 		return nil, err
@@ -213,6 +217,9 @@ func (s *Server) Reload(ctx context.Context) error {
 		return err
 	}
 	if _, err := store.Migrate(ctx, s.DB, reg, false, "changeset"); err != nil {
+		return err
+	}
+	if err := SyncOrgs(ctx, s.DB, reg); err != nil {
 		return err
 	}
 	s.Engine.SetRegistry(reg)

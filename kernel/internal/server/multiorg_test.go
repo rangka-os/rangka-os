@@ -2,6 +2,8 @@ package server
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -173,5 +175,26 @@ func TestDevOpenMeHasOrg(t *testing.T) {
 	me := e.must(200, "GET", "/auth/me", nil).JSON
 	if get(me, "org", "id") != "kopi-senja" || len(me["orgs"].([]any)) != 1 {
 		t.Fatalf("me: %v", me)
+	}
+}
+
+func TestSiteOrgsSynced(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		add := "\norgs:\n  pt_alpha:\n    name: PT Alpha\n    code: ALP\n"
+		if err := os.WriteFile(p, append(b, add...), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	res, err := e.s.DB.Query(context.Background(), "select name, code from rk_orgs where id = 'pt_alpha'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(res.Rows) != 1 || res.Rows[0][0] != "PT Alpha" || res.Rows[0][1] != "ALP" {
+		t.Fatalf("rk_orgs: %v", res.Rows)
 	}
 }

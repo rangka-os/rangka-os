@@ -32,6 +32,11 @@ func cmdMigrate(args []string) int {
 	if err != nil {
 		return fail(err)
 	}
+	if !*dry {
+		if err := server.SyncOrgs(ctx, db, reg); err != nil {
+			return fail(err)
+		}
+	}
 	for _, s := range res.Statements {
 		fmt.Println(strings.TrimSpace(s) + ";")
 	}

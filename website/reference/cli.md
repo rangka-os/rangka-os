@@ -22,7 +22,7 @@ rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <di
 | `backup` | Writes one verified `tar.gz`: every table, `site/`, `apps/` and the uploads directory, with checksums. See [Backup and restore](#backup-and-restore). |
 | `restore` | Rebuilds an archive into an empty database and verifies it against the archive's checksums. |
 | `seed` | Creates the organisation (`--org`, `$RANGKA_ORG`, else the site folder name), loads `fixtures/*.rk`, and the owner account (`--email`/`--password`, `$RANGKA_OWNER_EMAIL`/`$RANGKA_OWNER_PASSWORD`; demo default `ceo@saga.co.id` / `rangka-demo`). |
-| `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/console/`, `/prototype/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
+| `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/app/`, `/console/`; `/` redirects to `/app/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
 
 ## Migrations
 

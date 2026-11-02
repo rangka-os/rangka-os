@@ -188,7 +188,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "not_found", "no such endpoint "+r.URL.Path)
 	})
-	// static web (prototype, console, design system)
+	// static web (app, console, design system)
 	if s.WebDir != "" {
 		mux.Handle("GET /", s.static())
 	}
@@ -198,7 +198,16 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) static() http.Handler {
 	fsrv := http.FileServer(http.Dir(s.WebDir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// the end-user app moved from /prototype/ to /app/; old links keep working
+		if r.URL.Path == "/prototype" || strings.HasPrefix(r.URL.Path, "/prototype/") {
+			http.Redirect(w, r, "/app/", http.StatusMovedPermanently)
+			return
+		}
 		if r.URL.Path == "/" {
+			if _, err := os.Stat(filepath.Join(s.WebDir, "app", "index.html")); err == nil {
+				http.Redirect(w, r, "/app/", http.StatusFound)
+				return
+			}
 			if _, err := os.Stat(filepath.Join(s.WebDir, "index.html")); err != nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write([]byte(indexPage(s.WebDir)))

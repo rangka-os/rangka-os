@@ -6,6 +6,6 @@ cd "$(dirname "$0")/.."
 WS=$(cd ../.. && pwd)
 TMP=$(mktemp -d)
 python3 "$WS/rangka-os/tools/build_proto.py" "$WS/rangka-apps" "$TMP/meta.js" >/dev/null
-TZ=Asia/Jakarta node scripts/proto-dashboards.js "$TMP/meta.js" "$WS/rangka-os/web/prototype/engine.js" > testdata/prototype-dashboards.json
+TZ=Asia/Jakarta node scripts/proto-dashboards.js "$TMP/meta.js" "$WS/rangka-os/web/app/engine.js" > testdata/prototype-dashboards.json
 rm -rf "$TMP"
 echo "wrote testdata/prototype-dashboards.json"

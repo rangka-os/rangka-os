@@ -275,9 +275,15 @@ func TestREST(t *testing.T) {
 	if cd["created_by"] != "ceo@saga.co.id" || cd["owner"] != "USR-002" {
 		t.Fatalf("created_by/owner: %v %v", cd["created_by"], cd["owner"])
 	}
-	// the prototype and console are served at /
-	if r := e.do("GET", "/prototype/", nil); r.Status != 200 || !bytes.Contains(r.Body, []byte("Rangka")) {
-		t.Fatalf("static: %d", r.Status)
+	// the app is served at /app/, / and the old /prototype/ redirect to it
+	if r := e.do("GET", "/app/", nil); r.Status != 200 || !bytes.Contains(r.Body, []byte("Rangka")) {
+		t.Fatalf("/app/ = %d", r.Status)
+	}
+	if r := e.do("GET", "/prototype/", nil); r.Status != 301 || r.Header.Get("Location") != "/app/" {
+		t.Fatalf("/prototype/ = %d %q", r.Status, r.Header.Get("Location"))
+	}
+	if r := e.do("GET", "/", nil); r.Status != 302 || r.Header.Get("Location") != "/app/" {
+		t.Fatalf("/ = %d %q", r.Status, r.Header.Get("Location"))
 	}
 }
 

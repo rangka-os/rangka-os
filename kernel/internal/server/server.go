@@ -243,7 +243,17 @@ func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 
 func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	name := meta.Str(j.Args, "flow")
-	a := engine.Actor{Org: j.Org, ID: "flow:" + name, UserName: "system", Roles: []string{"system"}, System: true}
+	// a resumed wait: runs as whoever started the flow; schedules and kernel-started flows run as System
+	a := engine.JobActor(j.Org, j.Args["actor"])
+	if a.System {
+		a.Roles = append([]string{"system"}, a.Roles...)
+		if a.ID == "" || a.ID == "system" {
+			a.ID = "flow:" + name
+		}
+		if a.UserName == "" {
+			a.UserName = "system"
+		}
+	}
 	start := 0
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)

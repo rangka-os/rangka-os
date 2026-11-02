@@ -364,3 +364,59 @@ func TestFlowRunChecksSteps(t *testing.T) {
 		t.Fatalf("vouchers = %d, want 5", n)
 	}
 }
+
+// recordingQueue keeps the jobs a flow puts on the queue.
+type recordingQueue struct{ jobs []map[string]any }
+
+func (q *recordingQueue) Enqueue(_ context.Context, _ pg.Querier, kind, org string, args map[string]any, _ EnqueueOpts) (int64, error) {
+	q.jobs = append(q.jobs, map[string]any{"kind": kind, "org": org, "args": args})
+	return int64(len(q.jobs)), nil
+}
+
+func TestFlowResumeKeepsActor(t *testing.T) {
+	e := permSetup(t)
+	q := &recordingQueue{}
+	e.Queue = q
+	ctx := context.Background()
+	resume := func(starter Actor) error {
+		t.Helper()
+		res, err := e.RunFlow(ctx, starter, "wait_voucher", nil)
+		if err != nil {
+			t.Fatalf("start as %v: %v", starter.Roles, err)
+		}
+		if res.WaitingJob == 0 || len(res.Created) != 0 {
+			t.Fatalf("flow did not wait: %+v", res)
+		}
+		j := q.jobs[len(q.jobs)-1]
+		args := roundTrip(j["args"]).(map[string]any) // the queue stores JSON
+		a := JobActor(j["org"].(string), args["actor"])
+		if a.System != starter.System || a.UserName != starter.UserName || !equalStrings(a.Roles, starter.Roles) || a.Org != starter.Org {
+			t.Fatalf("resumed actor = %+v, want %+v", a, starter)
+		}
+		_, err = e.RunFlowFrom(ctx, a, "wait_voucher", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]))
+		return err
+	}
+	wantPermErr(t, resume(permViewer), "voucher", "create")
+	if err := resume(permSystem); err != nil {
+		t.Fatalf("system resume: %v", err)
+	}
+	if err := resume(permManager); err != nil {
+		t.Fatalf("manager resume: %v", err)
+	}
+	// jobs without an actor (schedules) resume as System
+	if a := JobActor(permOrg, nil); !a.System {
+		t.Fatalf("actor-less job = %+v, want System", a)
+	}
+}
+
+func equalStrings(a, b []string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	for i := range a {
+		if a[i] != b[i] {
+			return false
+		}
+	}
+	return true
+}

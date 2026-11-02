@@ -45,7 +45,7 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 //
 // A flow runs as its actor: find, create and update steps are authorized like the public entry points
 // (read, create, write), so a person running a flow can do no more than they could by hand. Flows the
-// kernel starts (schedules, events, resumed waits) run as a System actor.
+// kernel starts (schedules, events) run as a System actor; a wait: resumes as the actor that started the run.
 func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any) (*FlowResult, error) {
 	f := e.Reg().Flows[flowName]
 	if f == nil || !e.Reg().IsInstalled(f.App) {
@@ -341,7 +341,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 					saved[k] = v
 				}
 			}
-			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": saved},
+			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": saved, "actor": a.JobArgs()},
 				EnqueueOpts{RunAt: e.Now().Add(d)})
 			if err != nil {
 				return err

@@ -7,6 +7,12 @@ B=internal/bundle/files
 find "$B" -mindepth 1 -maxdepth 1 ! -name README.md -exec rm -rf {} +
 [ "$1" = "clean" ] && exit 0
 mkdir -p "$B/web" "$B/templates"
+# The prototype's meta.js is generated from the sibling rangka-apps checkout.
+if [ -d ../../rangka-apps/apps ]; then
+  python3 ../tools/build_proto.py ../../rangka-apps ../web/prototype/meta.js
+else
+  echo "warning: ../../rangka-apps not found; the prototype is bundled without meta.js" >&2
+fi
 for d in console design-system prototype; do
   [ -d "../web/$d" ] || continue
   mkdir -p "$B/web/$d"

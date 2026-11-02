@@ -1,5 +1,5 @@
-# Rangka OS kernel. Needs Go 1.24+ and, for DB tests and the demo, PostgreSQL 16 binaries
-# (initdb/pg_ctl; set PGBIN if they are not in /usr/lib/postgresql/<v>/bin).
+# Rangka OS kernel. Needs Go 1.24+ and, for DB tests and the demo, PostgreSQL 16+ server binaries
+# (initdb/pg_ctl/postgres; scripts/pgtemp.sh finds Debian, Homebrew, DBngin and Postgres.app installs, else set PGBIN).
 
 GO      ?= go
 WS      := $(abspath ../..)
@@ -10,7 +10,7 @@ ADDR    ?= :8080
 BIN     := bin/rangka
 MODULE  ?=
 
-.PHONY: build test test-unit vet validate compare-python run-demo sync-schemas proto-expected rename-module clean
+.PHONY: build test test-unit vet validate compare-python run-demo proto sync-schemas proto-expected rename-module clean
 
 build:
 	$(GO) build -o $(BIN) ./cmd/rangka
@@ -46,7 +46,7 @@ compare-python: build
 
 # Temp Postgres → migrate → seed (org kopi-senja, ceo@saga.co.id / rangka-demo) → serve on :8080 with
 # --dev-open. Ctrl-C stops the server and removes the database.
-run-demo: build
+run-demo: build proto
 	@URL=$$(PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh start) || exit 1; \
 	trap 'PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh stop' EXIT INT TERM; \
 	echo "temporary postgres: $$URL"; \
@@ -54,6 +54,10 @@ run-demo: build
 	$(BIN) seed --apps $(APPS) --site $(SITE) --db "$$URL" && \
 	echo "open http://localhost$(ADDR)/prototype/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
 	$(BIN) serve --apps $(APPS) --site $(SITE) --db "$$URL" --addr $(ADDR) --dev-open
+
+# The prototype's metadata + seed (web/prototype/meta.js, not committed) from rangka-apps.
+proto:
+	python3 ../tools/build_proto.py $(WS)/rangka-apps ../web/prototype/meta.js
 
 # Copy rangka-os/schema/0.4 into the binary's embedded copy (a test fails when they differ).
 sync-schemas:

@@ -46,6 +46,15 @@ func draftFor(h *HookCtx, model, field, source string) (store.Record, error) {
 	return found[0], nil
 }
 
+// needOpen refuses a quotation whose outcome is decided (” left by amend counts as open).
+func needOpen(q map[string]any) error {
+	switch str(q["outcome"]) {
+	case "accepted", "lost":
+		return refuse("not_open", "Penawaran "+str(q["name"])+" sudah "+str(q["outcome"]))
+	}
+	return nil
+}
+
 func needSubmitted(rec map[string]any, what string) error {
 	if toInt(rec["docstatus"]) != 1 {
 		return refuse("not_submitted", what+" "+str(rec["name"])+" harus sudah diajukan")
@@ -59,6 +68,9 @@ func reviseQuotation(h *HookCtx) (map[string]any, error) {
 	q := h.Record
 	name := str(q["name"])
 	if err := needSubmitted(q, "Penawaran"); err != nil {
+		return nil, err
+	}
+	if err := needOpen(q); err != nil {
 		return nil, err
 	}
 	if _, err := h.op.cancel(h.Model.Name, name); err != nil {
@@ -87,6 +99,9 @@ func reviseQuotation(h *HookCtx) (map[string]any, error) {
 func markOutcome(h *HookCtx) (map[string]any, error) {
 	q := h.Record
 	if err := needSubmitted(q, "Penawaran"); err != nil {
+		return nil, err
+	}
+	if err := needOpen(q); err != nil {
 		return nil, err
 	}
 	outcome := str(h.Args["outcome"])

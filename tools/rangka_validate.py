@@ -188,6 +188,24 @@ def validate(root, only=None, site=None, connectors=None):
             for i, pr in enumerate(m.get("permissions", [])):
                 if pr.get("role") not in roles:
                     rep.add("warn", p, f"permissions/{i}/role", "unknown_role", f'role "{pr.get("role")}" has no file in roles/ (it must exist at install)')
+            approval_names = set()
+            for i, am in enumerate(m.get("approvals", [])):
+                if not isinstance(am, dict):
+                    continue
+                on = am.get("on")
+                if on in ("submit", "cancel"):
+                    if not m.get("is_submittable"):
+                        rep.add("error", p, f"approvals/{i}/on", "not_submittable", f"approvals on {on} need is_submittable: true")
+                elif on not in [ac.get("name") for ac in m.get("actions", [])]:
+                    rep.add("error", p, f"approvals/{i}/on", "unknown_verb", f'"{on}" is not submit, cancel or an action of this model')
+                if am.get("name") in approval_names:
+                    rep.add("error", p, f"approvals/{i}/name", "duplicate_approval", f'"{am.get("name")}" is declared twice')
+                approval_names.add(am.get("name"))
+                if "when" in am:
+                    check_expr(rep, p, f"approvals/{i}/when", am["when"], m, fields, visible)
+                for j, r in enumerate(am.get("approvers", [])):
+                    if r not in roles:
+                        rep.add("warn", p, f"approvals/{i}/approvers/{j}", "unknown_role", f'role "{r}" has no file in roles/ (it must exist at install)')
             views = m.get("views", {})
             for i, c in enumerate(views.get("list", {}).get("columns", [])):
                 if c not in known:
@@ -556,6 +574,8 @@ def check_steps(rep, p, at, steps, allmodels, conns):
                 rep.add("error", p, f"{w}/call", "unknown_action", f'connector {cn} has no action "{act}"')
         for k in ("where", "if"):
             parens(rep, p, f"{w}/{k}", st.get(k))
+        if isinstance(st.get("approve"), dict):
+            parens(rep, p, f"{w}/approve/when", st["approve"].get("when"))
         if isinstance(st.get("set"), dict):
             for fk in sorted(st["set"]):
                 parens(rep, p, f"{w}/set/{fk}", st["set"][fk])
@@ -959,6 +979,14 @@ def check_overlays(rep, V, apps, allmodels, overlays):
         for i, r in enumerate(o.get("rules", [])):
             if isinstance(r, dict):
                 check_expr(rep, p, f"rules/{i}/check", r.get("check", ""), m, merged, visible)
+        for i, am in enumerate(o.get("approvals", [])):
+            if not isinstance(am, dict):
+                continue
+            on = am.get("on")
+            if on not in ("submit", "cancel") and on not in [ac.get("name") for ac in m.get("actions", [])]:
+                rep.add("error", p, f"approvals/{i}/on", "unknown_verb", f'"{on}" is not submit, cancel or an action of this model')
+            if "when" in am:
+                check_expr(rep, p, f"approvals/{i}/when", am["when"], m, merged, visible)
         views = m.get("views", {})
         placed = [n for s in views.get("form", {}).get("layout", []) for n in list(s.get("fields", [])) + [x for col in s.get("columns", []) for x in col]]
         cols = list(views.get("list", {}).get("columns", []))

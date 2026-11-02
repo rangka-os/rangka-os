@@ -214,6 +214,9 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 		for _, k := range []string{"where", "if"} {
 			v.parens(p, w+"/"+k, st[k])
 		}
+		if ap, ok := st["approve"].(map[string]any); ok {
+			v.parens(p, w+"/approve/when", ap["when"])
+		}
 		if set, ok := st["set"].(map[string]any); ok {
 			for _, fk := range sortedKeys(set) {
 				v.parens(p, w+"/set/"+fk, set[fk])
@@ -655,6 +658,19 @@ func (v *validator) overlays(all map[string]vis) {
 				chk = ""
 			}
 			v.exprTo(true, p, fmt.Sprintf("rules/%d/check", i), chk, merged, visible)
+		}
+		for i, av := range asList(o["approvals"]) {
+			am, ok := av.(map[string]any)
+			if !ok {
+				continue
+			}
+			on := pyStr(am["on"])
+			if on != "submit" && on != "cancel" && !contains(actionNames(own), on) {
+				v.rep.extra("error", p, fmt.Sprintf("approvals/%d/on", i), "unknown_verb", fmt.Sprintf(`"%s" is not submit, cancel or an action of this model`, on))
+			}
+			if e, ok := am["when"]; ok {
+				v.exprTo(true, p, fmt.Sprintf("approvals/%d/when", i), e, merged, visible)
+			}
 		}
 		views := asMap(own.Raw["views"])
 		var placed, cols []string

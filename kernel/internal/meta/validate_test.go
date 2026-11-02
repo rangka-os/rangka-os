@@ -118,6 +118,91 @@ views:
 	}
 }
 
+// approvals: key is parsed, ApprovalsFor filters by verb in declaration order (0007 §1).
+func TestApprovalsParsed(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("cp", "-r", appsDir, dir+"/apps").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	f := dir + "/apps/sales/models/sales_invoice.rk"
+	b, _ := os.ReadFile(f)
+	b = append(b, []byte(`approvals:
+  - name: manager
+    on: submit
+    when: "grand_total > 10000000"
+    approvers: [sales_manager]
+    label: {id: Persetujuan manajer}
+`)...)
+	os.WriteFile(f, b, 0o644)
+	reg, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	m := reg.Models["sales_invoice"]
+	got := m.ApprovalsFor("submit")
+	if len(got) != 1 || strings.Join(got[0].Approvers, ",") != "sales_manager" || got[0].When != "grand_total > 10000000" ||
+		got[0].Name != "manager" || got[0].On != "submit" || got[0].Label.Text() != "Persetujuan manajer" {
+		t.Fatalf("ApprovalsFor(submit) = %+v", got)
+	}
+	if len(m.ApprovalsFor("cancel")) != 0 {
+		t.Error("cancel must have no policies")
+	}
+}
+
+// A company overlay adds policies after the app's own (ruling R1) and they are checked like the app's.
+func TestApprovalsOverlay(t *testing.T) {
+	dir := t.TempDir()
+	exec.Command("cp", "-r", siteDir, dir+"/site").Run()
+	os.MkdirAll(dir+"/site/custom", 0o755)
+	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
+model: sales_invoice
+approvals:
+  - {name: big, on: submit, when: "grand_total > 50000000", approvers: [sales_manager]}
+`), 0o644)
+	reg, rep := ValidateOpts(Options{AppsDir: appsDir, SiteDir: dir + "/site"}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	got := reg.Models["sales_invoice"].ApprovalsFor("submit")
+	if len(got) != 1 || got[0].Name != "big" || got[0].When != "grand_total > 50000000" {
+		t.Fatalf("overlay approvals = %+v", got)
+	}
+	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`model: sales_invoice
+approvals:
+  - {name: bad, on: post, when: "nope > 1", approvers: [sales_manager]}
+`), 0o644)
+	_, rep = ValidateOpts(Options{AppsDir: appsDir, SiteDir: dir + "/site"}, nil, schema.Embedded())
+	var buf bytes.Buffer
+	rep.Print(&buf)
+	for _, want := range []string{"approvals/0/on", "unknown_verb", "approvals/0/when"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, buf.String())
+		}
+	}
+}
+
+// Flow approve steps: schema, and parentheses in when (0007 §4).
+func TestFlowApproveStep(t *testing.T) {
+	dir := t.TempDir()
+	exec.Command("cp", "-r", appsDir, dir+"/apps").Run()
+	flow := func(step string) string {
+		os.WriteFile(dir+"/apps/crm/flows/morning_follow_up.rk", []byte("name: morning_follow_up\nschedule: 0 8 * * 1-5\nsteps:\n  - "+step+"\n"), 0o644)
+		_, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())
+		var buf bytes.Buffer
+		rep.Print(&buf)
+		return buf.String()
+	}
+	if out := flow(`{approve: {approvers: [sales_manager], when: "size(x) > 0", label: {id: Setujui}}, if: "true", as: gate}`); strings.Contains(out, "approve") {
+		t.Errorf("valid approve step reported:\n%s", out)
+	}
+	if out := flow(`{approve: {approvers: [sales_manager], when: "size(x > 0"}}`); !strings.Contains(out, "steps/0/approve/when") || !strings.Contains(out, "cel_syntax") {
+		t.Errorf("missing parens error:\n%s", out)
+	}
+	if out := flow(`{approve: {approvers: []}}`); !strings.Contains(out, "schema") {
+		t.Errorf("empty approvers accepted:\n%s", out)
+	}
+}
+
 func TestSuggest(t *testing.T) {
 	if got := suggest("customr", []string{"customer", "deal", "lead"}); got != `; did you mean "customer"?` {
 		t.Errorf("got %q", got)

@@ -85,8 +85,8 @@ lines:
   with 422 `import_errors` while the preview has errors, 409 `already_imported` when `duplicate` is true or the
   entry is already committed. Returns the entry with `records` (the names created).
 - `GET /imports/{import}/{id}` returns the entry. `GET /imports/{import}` lists the org's recent entries.
-- Commit needs a human caller; an AI token may preview but gets 403 `permission_denied` on commit (data that
-  moves money and stock is applied by people). Model `permissions:` checks (create on `model`) come with
+- Commit needs a person signed in (a session); tokens (AI and CLI) may preview but get 403 `permission_denied` on
+  commit (data that moves money and stock is applied by people). Model `permissions:` checks (create on `model`) come with
   contract 0005 §4 / stream S1 and apply here like everywhere else.
 
 ### 4. Duplicates

@@ -18,7 +18,7 @@ JASA_HOST=jasa.localhost
 FNB_HOST=fnb.localhost
 OWNER_EMAIL=owner@e2e.localhost
 
-APPS_REPO="${RANGKA_APPS_REPO:-$(cd "$(git -C "$REPO" rev-parse --git-common-dir)/../.." && pwd)/rangka-apps}"
+APPS_REPO="${RANGKA_APPS_REPO:-$(cd "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/../.." && pwd)/rangka-apps}"
 
 PASS=0
 FAIL=0
@@ -65,8 +65,9 @@ prepare() {
     cp -R "$APPS_REPO/apps" "$d/apps"
     cp -R "$APPS_REPO/fixtures" "$d/fixtures"
     cp -R "$APPS_REPO/sites/kopi-senja" "$d/site"
-    chmod -R a+rwX "$d" # kernel runs as uid 65532
   done
+  # the kernel runs as uid 65532 and writes site/custom and data/
+  docker run --rm -v "$WORK/pilots:/p" alpine chown -R 65532:65532 /p
   OWNER_PASSWORD="$(openssl rand -hex 12)"
   cat >"$WORK/.env" <<ENV
 RANGKA_TAG=local
@@ -101,18 +102,21 @@ section_stack() {
   fi
 
   dc up -d postgres >/dev/null
-  for p in jasa fnb; do dc run --rm "$p" seed >/dev/null 2>&1 || bad "seed $p"; done
+  local seed_out
+  for p in jasa fnb; do
+    if seed_out="$(dc run --rm "$p" seed 2>&1)"; then ok "seed $p"; else bad "seed $p: $seed_out"; fi
+  done
   dc up -d >/dev/null
 
-  local host code i
+  local host code
   for host in "$JASA_HOST" "$FNB_HOST"; do
     code=000
-    for i in $(seq 1 40); do
+    for _ in $(seq 1 40); do
       code="$(URL_PATH=/.well-known/openid-configuration https "$host" -o /dev/null -w '%{http_code}')" || code=000
       [ "$code" = 200 ] && break
       sleep 1
     done
-    [ "$code" = 200 ] && ok "$host liveness 200" || bad "$host liveness $code"
+    if [ "$code" = 200 ]; then ok "$host liveness 200"; else bad "$host liveness $code"; fi
 
     local hdr
     hdr="$(URL_PATH=/auth/login https "$host" -D - -o /dev/null -X POST -H 'Content-Type: application/json' \
@@ -135,13 +139,30 @@ section_stack() {
 
   # plain HTTP redirects to HTTPS
   local loc
-  loc="$(curl -s --resolve "$JASA_HOST:$HTTP_PORT:127.0.0.1" -o /dev/null -w '%{http_code} %{redirect_url}' "http://$JASA_HOST:$HTTP_PORT/")"
-  if [[ "$loc" == 30[178]\ https://* ]]; then ok "http redirects to https ($loc)"; else bad "http redirect: $loc"; fi
+  for host in "$JASA_HOST" "$FNB_HOST"; do
+    loc="$(curl -s --resolve "$host:$HTTP_PORT:127.0.0.1" -o /dev/null -w '%{http_code} %{redirect_url}' "http://$host:$HTTP_PORT/")"
+    if [[ "$loc" == 30[178]\ https://* ]]; then ok "$host http redirects to https ($loc)"; else bad "$host http redirect: $loc"; fi
+  done
+
+  # SSE through Caddy: event-stream content type, and the connection stays open (curl times out, exit 28)
+  local jar="$WORK/cookies.txt" sse_rc=0 sse_hdr
+  URL_PATH=/auth/login https "$JASA_HOST" -o /dev/null -c "$jar" -X POST -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$OWNER_EMAIL\",\"password\":\"$OWNER_PASSWORD\"}"
+  sse_hdr="$(URL_PATH=/api/v1/events https "$JASA_HOST" -N --max-time 3 -b "$jar" -D - -o /dev/null)" || sse_rc=$?
+  if [ "$sse_rc" = 28 ] && grep -qi '^content-type: text/event-stream' <<<"$sse_hdr"; then
+    ok "SSE stays open with text/event-stream through caddy"
+  else
+    bad "SSE: curl exit $sse_rc, headers: $sse_hdr"
+  fi
 
   # only Caddy publishes ports
-  local pub
+  local running svc pub
+  running="$(dc ps --status running --format '{{.Service}}' | sort | tr '\n' ' ')"
+  for svc in caddy fnb jasa postgres; do
+    if [[ " $running" == *" $svc "* ]]; then ok "$svc running"; else bad "$svc not running ($running)"; fi
+  done
   pub="$(docker ps --filter "label=com.docker.compose.project=$PROJECT" --format '{{.Names}} {{.Ports}}' | grep -v caddy | grep -c -- '->' || true)"
-  [ "$pub" = 0 ] && ok "only caddy publishes ports" || bad "non-caddy services publish ports"
+  if [ "$pub" = 0 ]; then ok "only caddy publishes ports"; else bad "non-caddy services publish ports"; fi
 }
 
 main() {

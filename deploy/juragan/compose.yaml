@@ -20,8 +20,8 @@ services:
     volumes:
       - pgdata:/var/lib/postgresql/data
       - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres"]
+    healthcheck: # TCP only: the init-time server listens on the socket alone, so healthy means init is done
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
       interval: 5s
       timeout: 5s
       retries: 20

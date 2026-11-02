@@ -5,7 +5,9 @@ import (
 	"errors"
 	"os"
 	"testing"
+	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/xuri/excelize/v2"
 )
 
@@ -85,6 +87,46 @@ func TestReadXLSX(t *testing.T) {
 	}
 	if len(tb2.Rows) != 1 {
 		t.Fatalf("%+v", tb2)
+	}
+}
+
+func TestReadCSVDelimiterFromHeaderLine(t *testing.T) {
+	data := []byte("Laporan, bulan ini, Moka\nNama;Harga\nTahu;5000\n")
+	tb, err := Read(data, "", 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(tb.Headers) != 2 || tb.Rows[0].Cells["Harga"] != "5000" {
+		t.Fatalf("%+v", tb)
+	}
+}
+
+func TestReadXLSXDateCells(t *testing.T) {
+	f := excelize.NewFile()
+	f.SetCellValue("Sheet1", "A1", "Date")
+	f.SetCellValue("Sheet1", "A2", time.Date(2026, 11, 2, 0, 0, 0, 0, time.UTC))
+	f.SetCellInt("Sheet1", "A3", 46328)
+	style, err := f.NewStyle(&excelize.Style{NumFmt: 14})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.SetCellStyle("Sheet1", "A3", "A3", style)
+	var buf bytes.Buffer
+	if err := f.Write(&buf); err != nil {
+		t.Fatal(err)
+	}
+	tb, err := Read(buf.Bytes(), "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range tb.Rows {
+		v, msg := Convert(&meta.Field{Type: "date"}, "Date", r.Cells["Date"])
+		if msg != "" || v != "2026-11-02" {
+			t.Errorf("row %d: raw %q -> %v %q", r.Num, r.Cells["Date"], v, msg)
+		}
+	}
+	if len(tb.Rows) != 2 {
+		t.Fatalf("rows: %+v", tb.Rows)
 	}
 }
 

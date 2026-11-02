@@ -4,9 +4,10 @@ module github.com/rangka-os/rangka-os/kernel
 
 go 1.24.0
 
+require github.com/xuri/excelize/v2 v2.9.1
+
 require (
 	github.com/jackc/pgx/v5 v5.8.0
-	github.com/xuri/excelize/v2 v2.9.1
 	golang.org/x/crypto v0.43.0
 )
 

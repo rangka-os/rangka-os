@@ -49,7 +49,7 @@ func Read(data []byte, sheet string, headerRow int) (*Table, error) {
 	if bytes.HasPrefix(data, []byte("PK\x03\x04")) {
 		grid, err = readXLSX(data, sheet)
 	} else {
-		grid, err = readCSV(data)
+		grid, err = readCSV(data, headerRow)
 	}
 	if err != nil {
 		return nil, err
@@ -87,15 +87,12 @@ func Read(data []byte, sheet string, headerRow int) (*Table, error) {
 	return t, nil
 }
 
-func readCSV(data []byte) ([][]string, error) {
+func readCSV(data []byte, headerRow int) ([][]string, error) {
 	data = bytes.TrimPrefix(data, []byte("\xef\xbb\xbf"))
-	// The delimiter is chosen from the first non-empty line.
+	// The delimiter is chosen from the header line.
 	first := data
-	for _, l := range bytes.Split(data, []byte("\n")) {
-		if len(bytes.TrimSpace(l)) > 0 {
-			first = l
-			break
-		}
+	if lines := bytes.Split(data, []byte("\n")); headerRow <= len(lines) {
+		first = lines[headerRow-1]
 	}
 	r := csv.NewReader(bytes.NewReader(data))
 	if bytes.Count(first, []byte(";")) > bytes.Count(first, []byte(",")) {
@@ -123,7 +120,7 @@ func readCSV(data []byte) ([][]string, error) {
 }
 
 func readXLSX(data []byte, sheet string) ([][]string, error) {
-	f, err := excelize.OpenReader(bytes.NewReader(data))
+	f, err := excelize.OpenReader(bytes.NewReader(data), excelize.Options{UnzipSizeLimit: 200 << 20})
 	if err != nil {
 		return nil, ErrUnreadable
 	}

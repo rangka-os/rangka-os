@@ -11,13 +11,14 @@ import (
 )
 
 var (
-	reID    = regexp.MustCompile(`^\d{1,3}(\.\d{3})+(,\d+)?$`)
-	reEN    = regexp.MustCompile(`^\d{1,3}(,\d{3})+(\.\d+)?$`)
+	reID    = regexp.MustCompile(`^[1-9]\d{0,2}(\.\d{3})+(,\d+)?$`)
+	reEN    = regexp.MustCompile(`^[1-9]\d{0,2}(,\d{3})+(\.\d+)?$`)
 	rePlain = regexp.MustCompile(`^\d+([.,]\d+)?$`)
 
 	reDMY    = regexp.MustCompile(`^(\d{1,2})/(\d{1,2})/(\d{4})$`)
 	reISO    = regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
-	reSerial = regexp.MustCompile(`^\d{1,7}$`)
+	reSerial = regexp.MustCompile(`^(\d{1,7})(?:\.(\d+))?$`)
+	reExp    = regexp.MustCompile(`^(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$`)
 	reTime   = regexp.MustCompile(`^(\d{1,2}):(\d{2})(?::(\d{2}))?$`)
 )
 
@@ -51,7 +52,7 @@ func Convert(f *meta.Field, column, cell string) (any, string) {
 			return bad(`Kolom "%s" harus angka, isinya "%s"`)
 		}
 		return n, ""
-	case "float", "percent", "decimal":
+	case "float", "percent":
 		i, frac, ok := parseNumber(cell)
 		if !ok {
 			return bad(`Kolom "%s" harus angka, isinya "%s"`)
@@ -105,6 +106,22 @@ func parseNumber(s string) (intPart, frac string, ok bool) {
 	}
 	s = strings.ReplaceAll(s, " ", "")
 	switch {
+	case reExp.MatchString(s):
+		m := reExp.FindStringSubmatch(s)
+		e, err := strconv.Atoi(m[3])
+		if err != nil || e > 30 || e < -30 {
+			return "", "", false
+		}
+		digits := m[1] + m[2]
+		point := len(m[1]) + e
+		switch {
+		case point <= 0:
+			s = "0." + strings.Repeat("0", -point) + digits
+		case point >= len(digits):
+			s = digits + strings.Repeat("0", point-len(digits))
+		default:
+			s = digits[:point] + "." + digits[point:]
+		}
 	case reID.MatchString(s):
 		s = strings.ReplaceAll(s, ".", "")
 		s = strings.Replace(s, ",", ".", 1)
@@ -131,38 +148,40 @@ func excelDate(serial int) string {
 	return time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC).AddDate(0, 0, serial).Format("2006-01-02")
 }
 
+// parseClock validates HH:MM[:SS] and returns HH:MM:SS.
+func parseClock(s string) (string, bool) {
+	m := reTime.FindStringSubmatch(s)
+	if m == nil {
+		return "", false
+	}
+	h, _ := strconv.Atoi(m[1])
+	mi, _ := strconv.Atoi(m[2])
+	sec := 0
+	if m[3] != "" {
+		sec, _ = strconv.Atoi(m[3])
+	}
+	if h > 23 || mi > 59 || sec > 59 {
+		return "", false
+	}
+	return fmt.Sprintf("%02d:%02d:%02d", h, mi, sec), true
+}
+
 // parseDate returns the date (yyyy-mm-dd) and time (HH:MM:SS) of a cell. A time part is only
-// accepted when withTime is set.
+// accepted when withTime is set. Excel serials may carry a day fraction (the time of day).
 func parseDate(s string, withTime bool) (date, clock string, ok bool) {
 	clock = "00:00:00"
 	datePart := s
 	if withTime {
 		if d, t, found := strings.Cut(s, " "); found {
-			datePart, s = d, strings.TrimSpace(t)
-			m := reTime.FindStringSubmatch(s)
-			if m == nil {
+			datePart = d
+			if clock, ok = parseClock(strings.TrimSpace(t)); !ok {
 				return "", "", false
 			}
-			h, _ := strconv.Atoi(m[1])
-			mi, _ := strconv.Atoi(m[2])
-			sec := 0
-			if m[3] != "" {
-				sec, _ = strconv.Atoi(m[3])
-			}
-			if h > 23 || mi > 59 || sec > 59 {
-				return "", "", false
-			}
-			clock = fmt.Sprintf("%02d:%02d:%02d", h, mi, sec)
 		} else if d, t, found := strings.Cut(s, "T"); found {
-			datePart, s = d, t
-			m := reTime.FindStringSubmatch(s)
-			if m == nil {
+			datePart = d
+			if clock, ok = parseClock(t); !ok {
 				return "", "", false
 			}
-			if m[3] == "" {
-				m[3] = "00"
-			}
-			clock = fmt.Sprintf("%02s:%s:%s", m[1], m[2], m[3])
 		}
 	}
 	var y, mo, d int
@@ -174,10 +193,28 @@ func parseDate(s string, withTime bool) (date, clock string, ok bool) {
 		y, _ = strconv.Atoi(m[1])
 		mo, _ = strconv.Atoi(m[2])
 		d, _ = strconv.Atoi(m[3])
-	} else if reSerial.MatchString(datePart) {
-		n, _ := strconv.Atoi(datePart)
+	} else if m := reSerial.FindStringSubmatch(datePart); m != nil {
+		n, _ := strconv.Atoi(m[1])
 		if n < 1 || n > maxExcelSerial {
 			return "", "", false
+		}
+		if withTime && m[2] != "" {
+			// Day fraction to whole seconds with integer maths (no float64).
+			fr := m[2]
+			if len(fr) > 9 {
+				fr = fr[:9]
+			}
+			num, _ := strconv.ParseInt(fr, 10, 64)
+			den := int64(1)
+			for range fr {
+				den *= 10
+			}
+			secs := (num*86400*2 + den) / (2 * den)
+			if secs >= 86400 {
+				secs -= 86400
+				n++
+			}
+			clock = fmt.Sprintf("%02d:%02d:%02d", secs/3600, secs%3600/60, secs%60)
 		}
 		return excelDate(n), clock, true
 	} else {

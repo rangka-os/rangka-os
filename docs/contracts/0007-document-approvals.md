@@ -134,8 +134,14 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
   Rp 100.000.000); there is no ordering between them.
 - Flow approvals bind to the flow's variables, not to a record; a flow that needs record binding should use a
   model `approvals:` policy on the verb instead.
-- Schema: per the S4 note, keys are added to the live schema files (`schema/0.4/*.json`, the copy the kernel and
-  validator load) and move with them when the integrator cuts `schema/0.5/`.
+- Approvals are **bound to the verb's arguments and single-use**: a request matches only the same policy, snapshot
+  and arguments (`{force}` for submit, the action's args), and earlier approvals let the verb run only inside the
+  approve that completes them. Running an action again on an unchanged record asks again.
+- A `when` that cannot be evaluated **requires approval** (fail closed), unlike rules, which let a broken check pass.
+- The snapshot includes every declared field, including a real `status` field (only the derived status is left out).
+- **Flow approvals never self-approve**; they always wait. Flow requests remember whether the starter was a person.
+- Reject voids the other pending requests of the same verb only; requests for other verbs on the record stay.
+- Schema: the keys live in `schema/0.5/` (model `approvals`, flow step `approve`, overlay `approvals`).
 
 ## Consequences
 - Apps can require approval with metadata only; sites can tighten it through overlays.

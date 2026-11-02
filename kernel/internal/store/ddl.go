@@ -178,11 +178,12 @@ func (t Table) createSQL() string {
 type Live struct {
 	Columns map[string]map[string]string // table → column → information_schema data_type
 	Indexes map[string]bool
+	RLS     map[string]bool // table → row-level security enabled and forced with policy rk_org
 }
 
 // Introspect reads the live r_ tables.
 func Introspect(ctx context.Context, q pg.Querier) (*Live, error) {
-	l := &Live{Columns: map[string]map[string]string{}, Indexes: map[string]bool{}}
+	l := &Live{Columns: map[string]map[string]string{}, Indexes: map[string]bool{}, RLS: map[string]bool{}}
 	res, err := q.Query(ctx, `select table_name, column_name, data_type from information_schema.columns
 		where table_schema = current_schema() and table_name like 'r\_%'`)
 	if err != nil {
@@ -202,10 +203,23 @@ func Introspect(ctx context.Context, q pg.Querier) (*Live, error) {
 	for _, r := range res.Rows {
 		l.Indexes[r[0].(string)] = true
 	}
+	res, err = q.Query(ctx, `select c.relname, c.relrowsecurity and c.relforcerowsecurity and exists (select 1 from pg_policies p
+		where p.schemaname = n.nspname and p.tablename = c.relname and p.policyname = 'rk_org')
+		from pg_class c join pg_namespace n on n.oid = c.relnamespace
+		where n.nspname = current_schema() and c.relkind = 'r' and c.relname like 'r\_%'`)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range res.Rows {
+		if ok, _ := r[1].(bool); ok {
+			l.RLS[r[0].(string)] = true
+		}
+	}
 	return l, nil
 }
 
-// Plan diffs desired tables against the live schema: new tables, added columns and missing indexes.
+// Plan diffs desired tables against the live schema: new tables, added columns, missing indexes and missing
+// row-level security.
 // Columns are never dropped or retyped automatically; notes report drift for a person to resolve.
 func Plan(desired []Table, live *Live) (stmts, notes []string) {
 	for _, t := range desired {
@@ -246,8 +260,22 @@ func Plan(desired []Table, live *Live) (stmts, notes []string) {
 				stmts = append(stmts, ix.Def)
 			}
 		}
+		if !live.RLS[t.Name] {
+			stmts = append(stmts, t.rlsSQL()...)
+		}
 	}
 	return stmts, notes
+}
+
+// rlsSQL limits rows to the connection's org (rangka.org, see pg.WithOrg); owners are bound too (force).
+func (t Table) rlsSQL() []string {
+	q := pg.QuoteIdent(t.Name)
+	return []string{
+		"alter table " + q + " enable row level security",
+		"alter table " + q + " force row level security",
+		"drop policy if exists rk_org on " + q,
+		"create policy rk_org on " + q + " using (rk_org_ok(org_id)) with check (rk_org_ok(org_id))",
+	}
 }
 
 // FileHash is the hash stored in rk_meta_files.

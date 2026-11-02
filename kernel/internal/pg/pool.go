@@ -45,8 +45,19 @@ func NewPool(ctx context.Context, url string, size int) (*Pool, error) {
 // Config returns the connection settings.
 func (p *Pool) Config() Config { return p.cfg }
 
-// Acquire takes a connection (opening one when the pool has room).
+// Acquire takes a connection (opening one when the pool has room) with rangka.org set from OrgFrom(ctx).
 func (p *Pool) Acquire(ctx context.Context) (*Conn, error) {
+	c, err := p.acquire(ctx)
+	if err != nil {
+		return nil, err
+	}
+	if err := p.applyOrg(ctx, c); err != nil {
+		return nil, err
+	}
+	return c, nil
+}
+
+func (p *Pool) acquire(ctx context.Context) (*Conn, error) {
 	if p.closed.Load() {
 		return nil, errors.New("pg: pool closed")
 	}

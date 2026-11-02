@@ -14,6 +14,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
 // ProtocolVersion is the newest MCP revision this server speaks.
@@ -74,6 +75,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized","message":"send Authorization: Bearer <rk_ token or OIDC access token with scope rangka.mcp>"}`, http.StatusUnauthorized)
 		return
 	}
+	// queries made while serving this request run with rangka.org set (row-level security backstop)
+	r = r.WithContext(pg.WithOrg(r.Context(), caller.Actor.Org))
 	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
 	if err != nil {
 		http.Error(w, err.Error(), 400)

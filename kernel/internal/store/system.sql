@@ -119,3 +119,6 @@ create table if not exists rk_changesets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+-- Row-level security on model tables (contract 0010 §4): with rangka.org set (per pooled connection), rows of
+-- other orgs are invisible and cannot be written; with it empty (migrations, seed, scheduler scans) all pass.
+create or replace function rk_org_ok(o text) returns boolean language sql stable as $$ select coalesce(nullif(current_setting('rangka.org', true), ''), o) = o $$;

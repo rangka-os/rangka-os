@@ -113,6 +113,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
 	}
+	warnIfBypassRLS(ctx, db, cfg.Logf)
 	if _, err := store.Migrate(ctx, db, reg, false, "serve"); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
@@ -228,7 +229,16 @@ func (s *Server) Reload(ctx context.Context) error {
 	return nil
 }
 
+// warnIfBypassRLS logs when the database role skips row-level security (superuser or BYPASSRLS).
+func warnIfBypassRLS(ctx context.Context, db *pg.Pool, logf func(string, ...any)) {
+	res, err := db.Query(ctx, "select rolsuper or rolbypassrls from pg_roles where rolname = current_user")
+	if err == nil && len(res.Rows) == 1 && res.Rows[0][0] == true {
+		logf("warning: connected as a superuser or BYPASSRLS role; row-level security is not enforced")
+	}
+}
+
 func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
 	act := meta.AsMap(j.Args["actor"])
 	a := engine.Actor{Org: j.Org, ID: meta.Str(act, "id"), UserName: meta.Str(act, "user"), Roles: meta.StrList(act["roles"])}
 	if a.ID == "" {
@@ -247,6 +257,7 @@ func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 }
 
 func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
 	name := meta.Str(j.Args, "flow")
 	a := engine.Actor{Org: j.Org, ID: "flow:" + name, UserName: "system", Roles: []string{"system"}}
 	start := 0

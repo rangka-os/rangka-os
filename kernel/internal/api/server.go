@@ -90,7 +90,9 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
 			return
 		}
-		h(w, r, &caller{p: p, actor: Actor(p)})
+		c := &caller{p: p, actor: Actor(p)}
+		// queries made while serving this request run with rangka.org set (row-level security backstop)
+		h(w, r.WithContext(pg.WithOrg(r.Context(), c.actor.Org)), c)
 	}
 }
 

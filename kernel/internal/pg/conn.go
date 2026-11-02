@@ -122,6 +122,7 @@ type Conn struct {
 	broken   bool
 	notes    []Notification
 	mu       sync.Mutex
+	org      string // rangka.org as last set by the pool (see applyOrg)
 }
 
 // Connect opens a connection.

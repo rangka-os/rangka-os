@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"errors"
 	"os"
 	"strings"
 	"testing"
@@ -10,11 +11,17 @@ import (
 )
 
 type fakeLookup struct {
-	skus map[string]string // sku -> item name
-	dup  map[string]bool
+	skus  map[string]string // sku -> item name
+	dup   map[string]bool
+	err   error
+	calls int
 }
 
 func (f *fakeLookup) Find(model, field, value string) ([]string, error) {
+	f.calls++
+	if f.err != nil {
+		return nil, f.err
+	}
 	if model == "item" && field == "sku" {
 		if f.dup[value] {
 			return []string{"BRG-0001", "BRG-0002"}, nil
@@ -106,6 +113,51 @@ func TestMapUnknownLink(t *testing.T) {
 	}
 	if len(m.Records) != 1 {
 		t.Fatalf("record with errors must still be returned")
+	}
+}
+
+func TestMapLookupErrorAndCache(t *testing.T) {
+	reg, imp := fixture(t)
+	lk := newFake()
+	m := Map(reg, imp, mokaTable(t), nil, lk, now)
+	if len(m.Errors) != 0 || lk.calls != 5 {
+		t.Fatalf("8 rows with 5 distinct SKUs: %d lookups, errors %+v", lk.calls, m.Errors)
+	}
+	lk = newFake()
+	lk.err = errors.New("koneksi putus")
+	m = Map(reg, imp, mokaTable(t), nil, lk, now)
+	want := RowError{Row: 2, Column: "SKU", Message: "Gagal mencari Barang: koneksi putus"}
+	if len(m.Errors) != 8 || m.Errors[0] != want {
+		t.Fatalf("errors: %+v", m.Errors)
+	}
+}
+
+func TestMapKeysSameForCSVAndXLSX(t *testing.T) {
+	reg, imp := fixture(t)
+	csvData, err := os.ReadFile("testdata/moka-item-details.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	xt, err := Read(mokaXLSX(t, csvData), "", 1)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if xt.Rows[0].Cells["Date"] != "46328" || xt.Rows[0].Cells["Gross Sales"] != "50000" {
+		t.Fatalf("xlsx cells: %v", xt.Rows[0].Cells)
+	}
+	a := Map(reg, imp, mokaTable(t), nil, newFake(), now)
+	b := Map(reg, imp, xt, nil, newFake(), now)
+	if len(a.Errors)+len(b.Errors) != 0 || len(a.Records) != 1 || len(b.Records) != 1 {
+		t.Fatalf("errors %+v %+v", a.Errors, b.Errors)
+	}
+	if strings.Join(a.Records[0].Keys, ",") != strings.Join(b.Records[0].Keys, ",") {
+		t.Fatalf("keys differ:\n%v\n%v", a.Records[0].Keys, b.Records[0].Keys)
+	}
+	// a key column without a typed field is hashed as trimmed text
+	tb := mokaTable(t)
+	tb.Rows[0].Cells["Receipt Number"] = " DGO-0001 "
+	if c := Map(reg, imp, tb, nil, newFake(), now); c.Records[0].Keys[0] != a.Records[0].Keys[0] {
+		t.Fatalf("trimmed text key differs")
 	}
 }
 

@@ -25,7 +25,7 @@ type Lookup interface {
 }
 
 // Planned is one record to create. Rows are the source rows it came from; Keys holds one hash per source
-// row (hex SHA-256 of the key cells joined by "\x1f"), empty when the import has no key.
+// row (see keyer), empty when the import has no key.
 type Planned struct {
 	Input map[string]any
 	Rows  []int
@@ -39,10 +39,18 @@ type Mapping struct {
 }
 
 type mapper struct {
-	reg  *meta.Registry
-	lk   Lookup
-	now  time.Time
-	errs []RowError
+	reg   *meta.Registry
+	lk    Lookup
+	now   time.Time
+	errs  []RowError
+	found map[lookupKey]lookupResult // Lookup results of this Map call
+}
+
+type lookupKey struct{ model, field, value string }
+
+type lookupResult struct {
+	names []string
+	err   error
 }
 
 // Map turns the rows of t into record inputs for imp.Model. scope holds fixed parent values (per: outlet).
@@ -52,18 +60,13 @@ func Map(reg *meta.Registry, imp *meta.Import, t *Table, scope map[string]any, l
 		out.Errors = errs
 		return out
 	}
-	mp := &mapper{reg: reg, lk: lk, now: now}
-	model := reg.Models[imp.Model]
-	var lineModel *meta.Model
+	mp := &mapper{reg: reg, lk: lk, now: now, found: map[lookupKey]lookupResult{}}
+	model, lineModel := models(reg, imp)
 	var linesField string
 	if imp.Lines != nil {
 		linesField = imp.Lines.Field
-		if model != nil {
-			if f := model.Field(linesField); f != nil {
-				lineModel = reg.Models[f.Of]
-			}
-		}
 	}
+	kr := newKeyer(reg, imp)
 
 	var groups [][]Row
 	idx := map[string]int{}
@@ -81,7 +84,7 @@ func Map(reg *meta.Registry, imp *meta.Import, t *Table, scope map[string]any, l
 		groups = append(groups, []Row{r})
 	}
 
-	firstSeen := map[string]int{}
+	firstSeen := map[string]int{} // key hash -> first row
 	for _, g := range groups {
 		p := Planned{Input: map[string]any{}}
 		for k, v := range scope {
@@ -95,8 +98,8 @@ func Map(reg *meta.Registry, imp *meta.Import, t *Table, scope map[string]any, l
 		for _, r := range g {
 			p.Rows = append(p.Rows, r.Num)
 			if len(imp.Key) > 0 {
-				p.Keys = append(p.Keys, hashKey(r, imp.Key))
-				kk := joinCells(r, imp.Key)
+				kk := kr.hash(r)
+				p.Keys = append(p.Keys, kk)
 				if prev, ok := firstSeen[kk]; ok {
 					mp.errs = append(mp.errs, RowError{Row: r.Num, Column: imp.Key[0], Message: fmt.Sprintf("Baris ganda: sama dengan baris %d", prev)})
 				} else {
@@ -171,9 +174,90 @@ func joinCells(r Row, cols []string) string {
 	return strings.Join(vals, "\x1f")
 }
 
-func hashKey(r Row, cols []string) string {
-	sum := sha256.Sum256([]byte(joinCells(r, cols)))
+// models returns the import's model and the model of its lines (nil when unknown or without lines).
+func models(reg *meta.Registry, imp *meta.Import) (model, lineModel *meta.Model) {
+	model = reg.Models[imp.Model]
+	if imp.Lines != nil && model != nil {
+		if f := model.Field(imp.Lines.Field); f != nil {
+			lineModel = reg.Models[f.Of]
+		}
+	}
+	return model, lineModel
+}
+
+// typedKey lists the field types whose cells are normalised before hashing, so a key does not depend on how
+// a file writes the value (02/11/2026 in CSV, Excel serial 46328 in XLSX; "1.000" or 1000).
+var typedKey = map[string]bool{"int": true, "currency": true, "rating": true, "float": true, "percent": true,
+	"date": true, "datetime": true, "check": true}
+
+// keyer hashes the key columns of a row: hex SHA-256 of the values joined by "\x1f". A key column that is
+// also mapped as a plain column (map or lines.map, no formula) to a typed field contributes the value Convert
+// gives (yyyy-mm-dd, canonical integer or decimal); any other column, or a cell Convert rejects, its trimmed
+// text.
+type keyer struct {
+	cols   []string
+	fields []*meta.Field // per column; nil = text
+}
+
+func newKeyer(reg *meta.Registry, imp *meta.Import) *keyer {
+	model, lineModel := models(reg, imp)
+	typed := func(m *meta.Model, mv meta.MapValue, name, col string) *meta.Field {
+		if m == nil || mv.CEL != "" || mv.Column != col {
+			return nil
+		}
+		if f := m.Field(name); f != nil && typedKey[f.Type] {
+			return f
+		}
+		return nil
+	}
+	k := &keyer{cols: imp.Key, fields: make([]*meta.Field, len(imp.Key))}
+	for i, c := range imp.Key {
+		for _, name := range imp.MapOrder {
+			if f := typed(model, imp.Map[name], name, c); f != nil {
+				k.fields[i] = f
+				break
+			}
+		}
+		if k.fields[i] != nil || imp.Lines == nil {
+			continue
+		}
+		for _, name := range imp.Lines.MapOrder {
+			if f := typed(lineModel, imp.Lines.Map[name], name, c); f != nil {
+				k.fields[i] = f
+				break
+			}
+		}
+	}
+	return k
+}
+
+func (k *keyer) hash(r Row) string {
+	vals := make([]string, len(k.cols))
+	for i, c := range k.cols {
+		cell := strings.TrimSpace(r.Cells[c])
+		vals[i] = cell
+		if f := k.fields[i]; f != nil {
+			if v, msg := Convert(f, c, cell); msg == "" && v != nil {
+				vals[i] = fmt.Sprint(v)
+			}
+		}
+	}
+	sum := sha256.Sum256([]byte(strings.Join(vals, "\x1f")))
 	return hex.EncodeToString(sum[:])
+}
+
+// rowKeys returns the key hash of every row of t by row number; nil when the import has no key or the file
+// lacks a column Map needs (Map reports that).
+func rowKeys(reg *meta.Registry, imp *meta.Import, t *Table) map[int]string {
+	if len(imp.Key) == 0 || len(checkColumns(imp, t)) > 0 {
+		return nil
+	}
+	k := newKeyer(reg, imp)
+	out := make(map[int]string, len(t.Rows))
+	for _, r := range t.Rows {
+		out[r.Num] = k.hash(r)
+	}
+	return out
 }
 
 // setValue resolves one map entry for row r and stores it under name in dst; problems go to mp.errs.
@@ -251,9 +335,15 @@ func (mp *mapper) link(f *meta.Field, mv meta.MapValue, cell string) (any, strin
 	if mv.Match != "" {
 		field = mv.Match
 	}
-	names, err := mp.lk.Find(f.To, field, cell)
+	lk := lookupKey{f.To, field, cell}
+	res, ok := mp.found[lk]
+	if !ok {
+		res.names, res.err = mp.lk.Find(f.To, field, cell)
+		mp.found[lk] = res
+	}
+	names, err := res.names, res.err
 	if err != nil {
-		return nil, err.Error()
+		return nil, fmt.Sprintf("Gagal mencari %s: %s", tname, err)
 	}
 	if mv.Match != "" {
 		mf := mv.Match

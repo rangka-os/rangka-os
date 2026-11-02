@@ -51,7 +51,7 @@ func EnsureOrgCode(ctx context.Context, q pg.Querier, id, name, code string) err
 	return err
 }
 
-// SetOutlets limits a membership to the given outlet codes (empty: all outlets).
+// SetOutlets limits a membership to the given outlet codes (empty: a scoped role sees no scoped records, an unscoped role ignores outlets).
 func SetOutlets(ctx context.Context, q pg.Querier, org string, userID int64, outlets []string) error {
 	if outlets == nil {
 		outlets = []string{}

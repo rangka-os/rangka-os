@@ -175,6 +175,7 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 		d := toInt(rec["docstatus"])
 		ev.Docstatus = &d
 	}
+	ev.Fields = o.e.eventFields(m, rec)
 	if err := store.Notify(o.ctx, o.tx, ev); err != nil {
 		return err
 	}

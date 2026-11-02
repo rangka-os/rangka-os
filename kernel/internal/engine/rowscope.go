@@ -138,3 +138,49 @@ func contains(l []string, s string) bool {
 	}
 	return false
 }
+
+// eventFields returns the values of every row-scope field (of any role) that exists on m, for the record's
+// event. nil when no role has a scope or none of its fields is on the model.
+func (e *Engine) eventFields(m *meta.Model, rec store.Record) map[string]string {
+	reg := e.Reg()
+	var out map[string]string
+	for role := range reg.Roles {
+		rs := reg.RoleScope(role)
+		if rs == nil {
+			continue
+		}
+		for _, fn := range rs.Fields {
+			if m.Field(fn) == nil {
+				continue
+			}
+			if out == nil {
+				out = map[string]string{}
+			}
+			out[fn] = str(rec[fn])
+		}
+	}
+	return out
+}
+
+// EventVisible returns the filter for the actor's SSE stream: nil when the actor is unscoped (all events),
+// else a func that keeps record events inside the row scope. Other event types pass.
+func (e *Engine) EventVisible(a Actor) func(store.Event) bool {
+	s := e.RowScope(a)
+	if s == nil {
+		return nil
+	}
+	return func(ev store.Event) bool {
+		if ev.Type != "record" {
+			return true
+		}
+		m := e.Reg().Model(ev.Model)
+		if m == nil {
+			return false
+		}
+		rec := map[string]any{"name": ev.Name}
+		for k, v := range ev.Fields {
+			rec[k] = v
+		}
+		return s.Visible(m, rec)
+	}
+}

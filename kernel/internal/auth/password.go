@@ -75,7 +75,7 @@ type User struct {
 	Org      string   `json:"org"`
 	Roles    []string `json:"roles"`
 	Record   string   `json:"record,omitempty"` // core user record (USR-001)
-	Outlets  []string `json:"outlets"`          // outlet codes this membership is limited to (empty: all)
+	Outlets  []string `json:"outlets"`          // outlet codes this membership is limited to (empty: a scoped role sees no scoped records, an unscoped role ignores outlets)
 }
 
 // EnsureOrg creates an organisation when missing.

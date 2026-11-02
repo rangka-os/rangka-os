@@ -2,12 +2,14 @@ package server
 
 import (
 	"context"
+	"net/http"
 	"net/http/cookiejar"
 	"net/url"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
@@ -392,5 +394,36 @@ func TestMCPListScoped(t *testing.T) {
 	res := rpc(m, 9, "tools/call", map[string]any{"name": "rangka_get_record", "arguments": map[string]any{"model": "sales_invoice", "name": "INV-2026-00044"}})
 	if res["isError"] != true {
 		t.Fatalf("get of another outlet's invoice: %v", res)
+	}
+}
+
+func TestSSEScoped(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"})
+	req, _ := http.NewRequest("GET", staff.ts.URL+"/api/v1/events?models=sales_invoice", nil)
+	for _, c := range staff.jar.Cookies(req.URL) {
+		req.AddCookie(c)
+	}
+	res, err := http.DefaultClient.Do(req)
+	if err != nil || res.StatusCode != 200 {
+		t.Fatalf("events: %v %v", err, res)
+	}
+	defer res.Body.Close()
+	time.Sleep(50 * time.Millisecond)
+	mk := func(outlet string) string {
+		body := map[string]any{"customer": "CUST-0012", "outlet": outlet, "items": []any{map[string]any{"item": "BRG-0044", "qty": 1}}}
+		return owner.must(201, "POST", "/api/v1/r/sales_invoice", body).JSON["name"].(string)
+	}
+	other := mk("OUT-02")
+	own := mk("OUT-01")
+	// events are ordered: if the out-of-scope one were delivered it would be the first to arrive
+	evs := readEvents(t, res.Body, 1, 3*time.Second)
+	if evs[0]["name"] == other {
+		t.Fatalf("event of another outlet delivered: %v", evs[0])
+	}
+	if evs[0]["model"] != "sales_invoice" || evs[0]["name"] != own || evs[0]["op"] != "created" {
+		t.Fatalf("event: %v", evs[0])
+	}
+	if _, leak := evs[0]["fields"]; leak {
+		t.Fatalf("fields must not reach the client: %v", evs[0])
 	}
 }

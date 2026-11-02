@@ -29,6 +29,7 @@ type Hub struct {
 type sub struct {
 	org    string
 	models map[string]bool
+	allow  func(store.Event) bool
 	ch     chan store.Event
 }
 
@@ -54,6 +55,9 @@ func (h *Hub) Publish(ev store.Event) {
 		if ev.Type == "record" && len(s.models) > 0 && !s.models[ev.Model] {
 			continue
 		}
+		if s.allow != nil && ev.Type == "record" && !s.allow(ev) {
+			continue
+		}
 		select {
 		case s.ch <- ev:
 		default:
@@ -61,9 +65,10 @@ func (h *Hub) Publish(ev store.Event) {
 	}
 }
 
-// Subscribe registers a subscriber; call the returned func to leave.
-func (h *Hub) Subscribe(org string, models []string) (<-chan store.Event, func()) {
-	s := &sub{org: org, models: map[string]bool{}, ch: make(chan store.Event, 64)}
+// Subscribe registers a subscriber; call the returned func to leave. allow limits record events to the ones
+// it accepts (row scope); nil means all events. Change set and job events are never filtered by it.
+func (h *Hub) Subscribe(org string, models []string, allow func(store.Event) bool) (<-chan store.Event, func()) {
+	s := &sub{org: org, models: map[string]bool{}, allow: allow, ch: make(chan store.Event, 64)}
 	for _, m := range models {
 		if m = strings.TrimSpace(m); m != "" {
 			s.models[m] = true
@@ -110,7 +115,7 @@ func (h *Hub) Run(ctx context.Context, db *pg.Pool) {
 
 // ServeSSE streams events: `event: record|changeset|job` with JSON data; `?models=deal,lead` filters
 // record events; a comment line every Heartbeat keeps proxies from closing the stream.
-func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string) {
+func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string, allow func(store.Event) bool) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -120,7 +125,7 @@ func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string) {
 	if m := r.URL.Query().Get("models"); m != "" {
 		models = strings.Split(m, ",")
 	}
-	ch, leave := h.Subscribe(org, models)
+	ch, leave := h.Subscribe(org, models, allow)
 	defer leave()
 	h.conns.Add(1)
 	defer h.conns.Add(-1)

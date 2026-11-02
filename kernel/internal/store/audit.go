@@ -22,6 +22,9 @@ type Event struct {
 	Status    string `json:"status,omitempty"`
 	Kind      string `json:"kind,omitempty"`
 	State     string `json:"state,omitempty"`
+	// Fields carries the values of the row-scope fields of a record event (outlet), so subscribers can be
+	// filtered without reading the record. Never sent to clients.
+	Fields map[string]string `json:"fields,omitempty"`
 }
 
 // Notify publishes an event.

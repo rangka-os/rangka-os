@@ -112,7 +112,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))
 	mux.HandleFunc("POST /api/v1/flows/{name}/run", a(s.runFlow))
 	// realtime
-	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) { s.Hub.ServeSSE(w, r, c.actor.Org) }))
+	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
+		s.Hub.ServeSSE(w, r, c.actor.Org, s.Engine.EventVisible(c.actor))
+	}))
 	// change sets
 	mux.HandleFunc("GET /api/v1/changesets", a(s.listChangesets))
 	mux.HandleFunc("POST /api/v1/changesets", a(s.proposeChangeset))

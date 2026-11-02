@@ -4,7 +4,6 @@ label: {id: Penjualan Moka (detail item)}
 model: outlet_sales
 source: csv
 header_row: 1
-sheet: Item Details
 per: outlet
 key: [Date, Receipt Number, Item, Variant]
 group: [Date]
@@ -18,4 +17,5 @@ lines:
     qty: Quantity
     gross: Gross Sales
     discount: Discounts
-    net: "=int(row['Net Sales']) - int(row['Refunds'])"
+    net: Net Sales
+    refund: Refunds

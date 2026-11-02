@@ -79,8 +79,8 @@ func TestMapMoka(t *testing.T) {
 	if l["item"] != "BRG-0001" || l["qty"] != "2" || l["gross"] != int64(50000) || l["discount"] != int64(0) || l["net"] != int64(50000) {
 		t.Fatalf("line 1: %#v", l)
 	}
-	// Refund row: Net Sales 0 minus Refunds 25000.
-	if lines[5]["net"] != int64(-25000) {
+	// Refund row: Net Sales is already net of refunds.
+	if lines[5]["net"] != int64(0) || lines[5]["refund"] != int64(25000) {
 		t.Fatalf("line 6: %#v", lines[5])
 	}
 	if len(r.Keys) != 8 {
@@ -173,11 +173,32 @@ func TestMapBadCell(t *testing.T) {
 	}
 }
 
+func formulaImport(imp *meta.Import) *meta.Import {
+	i2 := *imp
+	l := *imp.Lines
+	l.Map = map[string]meta.MapValue{"item": imp.Lines.Map["item"], "net": {CEL: "int(row['Net Sales']) - int(row['Refunds'])"}}
+	l.MapOrder = []string{"item", "net"}
+	i2.Lines = &l
+	return &i2
+}
+
+func TestMapFormula(t *testing.T) {
+	reg, imp := fixture(t)
+	m := Map(reg, formulaImport(imp), mokaTable(t), nil, newFake(), now)
+	if len(m.Errors) != 0 {
+		t.Fatalf("errors: %+v", m.Errors)
+	}
+	lines := m.Records[0].Input["lines"].([]map[string]any)
+	if lines[0]["net"] != int64(50000) || lines[5]["net"] != int64(-25000) {
+		t.Fatalf("lines: %#v %#v", lines[0], lines[5])
+	}
+}
+
 func TestMapFormulaFailure(t *testing.T) {
 	reg, imp := fixture(t)
 	tb := mokaTable(t)
 	tb.Rows[0].Cells["Refunds"] = "x"
-	m := Map(reg, imp, tb, nil, newFake(), now)
+	m := Map(reg, formulaImport(imp), tb, nil, newFake(), now)
 	if len(m.Errors) != 1 || m.Errors[0].Row != 2 || !strings.HasPrefix(m.Errors[0].Message, "Rumus untuk net gagal: ") {
 		t.Fatalf("errors: %+v", m.Errors)
 	}

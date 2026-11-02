@@ -18,3 +18,6 @@ fields:
   - name: net
     type: currency
     label: {id: Penjualan bersih}
+  - name: refund
+    type: currency
+    label: {id: Retur}

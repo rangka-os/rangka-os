@@ -2,6 +2,7 @@ package imports
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"os"
@@ -223,6 +224,13 @@ func TestPreviewCommitAndDuplicates(t *testing.T) {
 	if err != nil || len(list) != 4 || list[0].ID != other.ID {
 		t.Fatalf("list: %d %v", len(list), err)
 	}
+	// list entries leave out the preview records
+	b, _ := json.Marshal(list[0])
+	var lj map[string]any
+	json.Unmarshal(b, &lj)
+	if _, ok := lj["preview"]; ok || lj["id"] != other.ID || lj["rows"] != float64(8) {
+		t.Fatalf("list entry json: %s", b)
+	}
 	_, err = s.Get(ctx, engine.Actor{Org: "other-org", ID: "x"}, mokaName, p.ID)
 	wantStatus(t, err, 404, "not_found")
 }
@@ -252,9 +260,15 @@ func TestCommitRefusesStalePreviews(t *testing.T) {
 	}
 	_, err = s.Commit(ctx, a, mokaName, a2.ID)
 	wantStatus(t, err, 409, "already_imported")
+	if se := err.(*engine.StatusError); se.Msg != "Sudah diimpor" {
+		t.Fatalf("same file: %q", se.Msg)
+	}
 	// b's keys collide in rk_import_keys: nothing of b is written
 	_, err = s.Commit(ctx, a, mokaName, b.ID)
 	wantStatus(t, err, 409, "already_imported")
+	if se := err.(*engine.StatusError); se.Msg != "Sebagian baris sudah diimpor, unggah ulang file" {
+		t.Fatalf("stale overlap: %q", se.Msg)
+	}
 	if n := salesCount(t, s, a); n != 1 {
 		t.Fatalf("sales %d", n)
 	}
@@ -329,11 +343,25 @@ func TestPreviewRowErrors(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(p.Errors) == 0 || p.Errors[0].Row != 2 || p.Errors[0].Column != "date" || p.Errors[0].Message == "" {
+	if len(p.Errors) == 0 || p.Errors[0].Row != 2 || p.Errors[0].Column != "Date" || p.Errors[0].Message == "" {
 		t.Fatalf("dry run errors: %+v", p.Errors)
 	}
 	_, err = s.Commit(ctx, a, mokaName, p.ID)
 	wantStatus(t, err, 422, "import_errors")
+
+	// a line issue (item required) names the column and the source row of that line
+	lines := strings.Split(string(mokaBytes(t)), "\n")
+	cols := strings.Split(lines[4], ",") // sheet row 5
+	cols[8] = ""                         // SKU
+	lines[4] = strings.Join(cols, ",")
+	p, err = s.Preview(ctx, a, mokaName, "nosku.csv", []byte(strings.Join(lines, "\n")), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := RowError{Row: 5, Column: "SKU", Message: "Baris baris 4: Barang wajib diisi"}
+	if len(p.Errors) != 1 || p.Errors[0] != want {
+		t.Fatalf("line errors: %+v", p.Errors)
+	}
 }
 
 func TestPreviewRefusals(t *testing.T) {
@@ -357,4 +385,87 @@ func TestPreviewRefusals(t *testing.T) {
 	wantStatus(t, err, 413, "too_large")
 	_, err = s.Commit(ctx, a, mokaName, "imp_missing")
 	wantStatus(t, err, 404, "not_found")
+}
+
+func TestXLSXOfCommittedCSVIsDuplicate(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	p, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Commit(ctx, a, mokaName, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// the same rows saved as XLSX: other bytes, dates as Excel serials, amounts as numbers
+	x, err := s.Preview(ctx, a, mokaName, "moka.xlsx", mokaXLSX(t, mokaBytes(t)), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !x.Duplicate || x.Skipped != 8 || x.Rows != 8 || x.Message != "Semua baris sudah diimpor" {
+		t.Fatalf("xlsx preview: %+v", x)
+	}
+}
+
+func TestSkippedFirstRowParentFromFirstNewRow(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	// note comes from a column that differs inside the group
+	im := *s.Engine.Reg().Imports[mokaName]
+	im.Map = map[string]meta.MapValue{"date": im.Map["date"], "note": {Column: "Receipt Number"}}
+	im.MapOrder = []string{"date", "note"}
+	s.Engine.Reg().Imports[mokaName] = &im
+
+	lines := strings.SplitAfter(string(mokaBytes(t)), "\n")
+	first := strings.Join(lines[:3], "") // header + both rows of DGO-0001
+	p, err := s.Preview(ctx, a, mokaName, "pagi.csv", []byte(first), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Commit(ctx, a, mokaName, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// the whole day: the group's first two rows are skipped, the record takes its parent from row 4
+	d, err := s.Preview(ctx, a, mokaName, "hari.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Skipped != 2 || d.Duplicate || len(d.Errors) != 0 || len(d.Preview) != 1 {
+		t.Fatalf("preview: %+v", d)
+	}
+	if d.Preview[0]["note"] != "DGO-0002" || d.Preview[0]["date"] != "2026-11-02" {
+		t.Fatalf("parent: %#v", d.Preview[0])
+	}
+	if lines, _ := d.Preview[0]["lines"].([]any); len(lines) != 6 {
+		t.Fatalf("lines: %d", len(lines))
+	}
+	c, err := s.Commit(ctx, a, mokaName, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.Engine.Get(ctx, a, "outlet_sales", c.Records[0])
+	if err != nil || rec["note"] != "DGO-0002" {
+		t.Fatalf("record: %#v %v", rec, err)
+	}
+}
+
+func TestCommitHeaderOnlyFile(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	header, _, _ := strings.Cut(string(mokaBytes(t)), "\n")
+	p, err := s.Preview(ctx, a, mokaName, "kosong.csv", []byte(header+"\n"), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rows != 0 || len(p.Errors) != 0 || p.Duplicate {
+		t.Fatalf("preview: %+v", p)
+	}
+	_, err = s.Commit(ctx, a, mokaName, p.ID)
+	wantStatus(t, err, 422, "import_empty")
+	if se := err.(*engine.StatusError); se.Msg != "File tidak berisi baris data" {
+		t.Fatalf("msg %q", se.Msg)
+	}
+	if g, _ := s.Get(ctx, a, mokaName, p.ID); g.Status != "previewed" {
+		t.Fatalf("entry: %+v", g)
+	}
 }

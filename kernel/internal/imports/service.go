@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
@@ -58,6 +59,16 @@ type planned struct {
 
 func errAlreadyImported() error {
 	return &engine.StatusError{Status: 409, Code: "already_imported", Msg: "Sudah diimpor"}
+}
+
+// errPartlyImported: some rows of a previewed entry were committed by another entry after the preview.
+func errPartlyImported() error {
+	return &engine.StatusError{Status: 409, Code: "already_imported", Msg: "Sebagian baris sudah diimpor, unggah ulang file"}
+}
+
+// conflict reports a unique violation or a deadlock: another commit of the same file or rows got there first.
+func conflict(err error) bool {
+	return pg.IsCode(err, "23505") || pg.IsCode(err, "40P01")
 }
 
 func (s *Service) imp(name string) (*meta.Import, error) {
@@ -119,24 +130,26 @@ func (s *Service) Preview(ctx context.Context, a engine.Actor, name, fileName st
 	sha := hex.EncodeToString(sum[:])
 
 	now := s.Engine.Now().In(s.Engine.Location())
-	mp := Map(reg, im, t, scope, &lookup{ctx: ctx, q: s.DB, reg: reg, org: a.Org}, now)
-
-	seen, err := s.seenKeys(ctx, a.Org, name, scopeName, mp.Records)
+	// Rows whose key was already committed are left out before mapping: they are not imported again, their
+	// errors do not matter, and a group whose first rows were imported takes its parent fields from the first
+	// new row. File-level errors (the header row) still come from Map.
+	keys := rowKeys(reg, im, t)
+	seen, err := s.seenKeys(ctx, a.Org, name, scopeName, keys)
 	if err != nil {
 		return nil, err
 	}
-	linesField := ""
-	if im.Lines != nil {
-		linesField = im.Lines.Field
-	}
-	plan, skippedRows := dropSeen(mp.Records, seen, linesField)
-	// Errors of skipped rows do not matter: those rows are not imported again. File-level errors (the header
-	// row) always stay.
-	rowErrs := []RowError{}
-	for _, e := range mp.Errors {
-		if !skippedRows[e.Row] {
-			rowErrs = append(rowErrs, e)
+	fresh := &Table{Headers: t.Headers, HeaderRow: t.HeaderRow}
+	for _, r := range t.Rows {
+		if !seen[keys[r.Num]] {
+			fresh.Rows = append(fresh.Rows, r)
 		}
+	}
+	skipped := len(t.Rows) - len(fresh.Rows)
+	mp := Map(reg, im, fresh, scope, &lookup{ctx: ctx, q: s.DB, reg: reg, org: a.Org}, now)
+	plan := mp.Records
+	rowErrs := mp.Errors
+	if rowErrs == nil {
+		rowErrs = []RowError{}
 	}
 
 	stored := make([]planned, len(plan))
@@ -154,7 +167,7 @@ func (s *Service) Preview(ctx context.Context, a engine.Actor, name, fileName st
 		if err != nil {
 			return nil, err
 		}
-		rowErrs = append(rowErrs, validationRowErrors(res, stored)...)
+		rowErrs = append(rowErrs, validationRowErrors(im, res, stored)...)
 	}
 	preview := inputs
 	if len(preview) > previewLimit {
@@ -163,7 +176,7 @@ func (s *Service) Preview(ctx context.Context, a engine.Actor, name, fileName st
 	id := "imp_" + strings.ToLower(store.RandomName(10))
 	_, err = s.DB.Exec(ctx, `insert into rk_imports (id, org_id, import, scope, file_name, file_sha, rows, skipped, errors, preview, plan, created_by)
 		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12)`,
-		id, a.Org, name, scopeName, fileName, sha, len(t.Rows), len(skippedRows),
+		id, a.Org, name, scopeName, fileName, sha, len(t.Rows), skipped,
 		pg.JSON{V: rowErrs}, pg.JSON{V: preview}, pg.JSON{V: stored}, a.ID)
 	if err != nil {
 		return nil, err
@@ -171,18 +184,18 @@ func (s *Service) Preview(ctx context.Context, a engine.Actor, name, fileName st
 	return s.Get(ctx, a, name, id)
 }
 
-// seenKeys returns the keys of recs already committed for (org, import, scope).
-func (s *Service) seenKeys(ctx context.Context, org, name, scope string, recs []Planned) (map[string]bool, error) {
-	var keys pg.Array
-	for _, p := range recs {
-		keys = append(keys, p.Keys...)
-	}
+// seenKeys returns which of keys (by row number) were already committed for (org, import, scope).
+func (s *Service) seenKeys(ctx context.Context, org, name, scope string, keys map[int]string) (map[string]bool, error) {
 	seen := map[string]bool{}
 	if len(keys) == 0 {
 		return seen, nil
 	}
+	arr := make(pg.Array, 0, len(keys))
+	for _, k := range keys {
+		arr = append(arr, k)
+	}
 	res, err := s.DB.Query(ctx, `select key_hash from rk_import_keys where org_id = $1 and import = $2 and scope = $3 and key_hash = any($4)`,
-		org, name, scope, keys)
+		org, name, scope, arr)
 	if err != nil {
 		return nil, err
 	}
@@ -190,44 +203,6 @@ func (s *Service) seenKeys(ctx context.Context, org, name, scope string, recs []
 		seen[fmt.Sprint(r[0])] = true
 	}
 	return seen, nil
-}
-
-// dropSeen removes the rows whose key is in seen: a record keeps only its new rows (and their lines), and a
-// record with no row left is dropped. It returns the remaining records and the skipped row numbers.
-func dropSeen(recs []Planned, seen map[string]bool, linesField string) ([]Planned, map[int]bool) {
-	skipped := map[int]bool{}
-	var out []Planned
-	for _, p := range recs {
-		if len(p.Keys) == 0 {
-			out = append(out, p)
-			continue
-		}
-		lines, _ := p.Input[linesField].([]map[string]any)
-		q := Planned{Input: make(map[string]any, len(p.Input))}
-		for k, v := range p.Input {
-			q.Input[k] = v
-		}
-		var keep []map[string]any
-		for i, k := range p.Keys {
-			if seen[k] {
-				skipped[p.Rows[i]] = true
-				continue
-			}
-			q.Rows = append(q.Rows, p.Rows[i])
-			q.Keys = append(q.Keys, k)
-			if i < len(lines) {
-				keep = append(keep, lines[i])
-			}
-		}
-		if len(q.Rows) == 0 {
-			continue
-		}
-		if lines != nil {
-			q.Input[linesField] = keep
-		}
-		out = append(out, q)
-	}
-	return out, skipped
 }
 
 // jsonInput gives an input the shape it has after a JSON round trip (lines as []any, integers as int64), the
@@ -241,23 +216,56 @@ func jsonInput(in map[string]any) (map[string]any, error) {
 	return out, nil
 }
 
-// validationRowErrors turns the engine's per-record validation errors into row errors on the first source row.
-func validationRowErrors(res []engine.ManyResult, plan []planned) []RowError {
+// validationRowErrors turns the engine's per-record validation errors into row errors. An issue on a field
+// mapped from a plain column (map, or lines.map for "<lines>.<i>.<field>") names that column, and a line
+// issue the source row of that line; any other issue names the field on the record's first source row.
+func validationRowErrors(im *meta.Import, res []engine.ManyResult, plan []planned) []RowError {
 	var out []RowError
 	for i, r := range res {
 		var ve *engine.ValidationError
 		if !errors.As(r.Err, &ve) {
 			continue
 		}
-		row := 0
-		if i < len(plan) && len(plan[i].Rows) > 0 {
-			row = plan[i].Rows[0]
+		var rows []int
+		if i < len(plan) {
+			rows = plan[i].Rows
 		}
 		for _, is := range ve.Errors {
-			out = append(out, RowError{Row: row, Column: is.Field, Message: is.Message})
+			row, col := issueSource(im, is.Field, rows)
+			out = append(out, RowError{Row: row, Column: col, Message: is.Message})
 		}
 	}
 	return out
+}
+
+func issueSource(im *meta.Import, field string, rows []int) (row int, column string) {
+	if len(rows) > 0 {
+		row = rows[0]
+	}
+	column = field
+	if mv, ok := im.Map[field]; ok && mv.CEL == "" && mv.Column != "" {
+		return row, mv.Column
+	}
+	if im.Lines == nil {
+		return row, column
+	}
+	rest, ok := strings.CutPrefix(field, im.Lines.Field+".")
+	if !ok {
+		return row, column
+	}
+	idx, name, ok := strings.Cut(rest, ".")
+	n, err := strconv.Atoi(idx)
+	if !ok || err != nil || n < 0 {
+		return row, column
+	}
+	// Each line comes from one source row, in order (Map, one line per row of the group).
+	if n < len(rows) {
+		row = rows[n]
+	}
+	if mv, ok := im.Lines.Map[name]; ok && mv.CEL == "" && mv.Column != "" {
+		column = mv.Column
+	}
+	return row, column
 }
 
 // Commit creates the records of a previewed entry in one transaction, records its keys and marks it committed.
@@ -276,11 +284,20 @@ func (s *Service) Commit(ctx context.Context, a engine.Actor, name, id string) (
 	if len(ent.Errors) > 0 {
 		return nil, errImportErrors()
 	}
+	if len(plan) == 0 {
+		return nil, &engine.StatusError{Status: 422, Code: "import_empty", Msg: "File tidak berisi baris data"}
+	}
 	inputs := make([]map[string]any, len(plan))
+	uniq := map[string]bool{}
 	var keys pg.Array
 	for i, p := range plan {
 		inputs[i] = p.Input
-		keys = append(keys, p.Keys...)
+		for _, k := range p.Keys {
+			if !uniq[k] {
+				uniq[k] = true
+				keys = append(keys, k)
+			}
+		}
 	}
 	before := func(ctx context.Context, tx pg.Querier) error {
 		// Marking the entry committed first: a concurrent commit of the same entry waits on this row and then
@@ -288,7 +305,7 @@ func (s *Service) Commit(ctx context.Context, a engine.Actor, name, id string) (
 		// rk_imports_committed_file and then fails with a unique violation.
 		res, err := tx.Exec(ctx, `update rk_imports set status = 'committed', committed_at = now()
 			where org_id = $1 and import = $2 and id = $3 and status = 'previewed'`, a.Org, name, id)
-		if pg.IsCode(err, "23505") {
+		if conflict(err) {
 			return errAlreadyImported()
 		}
 		if err != nil {
@@ -300,19 +317,28 @@ func (s *Service) Commit(ctx context.Context, a engine.Actor, name, id string) (
 		if len(keys) == 0 {
 			return nil
 		}
-		// A key committed since the preview (an overlapping file) violates the primary key of rk_import_keys.
-		_, err = tx.Exec(ctx, `insert into rk_import_keys (org_id, import, scope, key_hash, import_id)
-			select $1, $2, $3, k, $4 from unnest($5::text[]) as k`, a.Org, name, ent.Scope, id, keys)
-		if pg.IsCode(err, "23505") {
+		// Keys go in sorted, so concurrent commits of overlapping files lock them in the same order. A key
+		// committed since the preview (an overlapping file) is not inserted: then the entry is stale.
+		res, err = tx.Exec(ctx, `insert into rk_import_keys (org_id, import, scope, key_hash, import_id)
+			select $1, $2, $3, k, $4 from unnest($5::text[]) as k order by k
+			on conflict do nothing`, a.Org, name, ent.Scope, id, keys)
+		switch {
+		case conflict(err):
+			return errPartlyImported()
+		case err != nil:
+			return err
+		case res.RowsAffected() == 0:
 			return errAlreadyImported()
+		case res.RowsAffected() < int64(len(keys)):
+			return errPartlyImported()
 		}
-		return err
+		return nil
 	}
 	res, err := s.Engine.CreateMany(ctx, a, im.Model, inputs, engine.ManyOpts{Before: before})
 	if err != nil {
 		return nil, err
 	}
-	if errs := validationRowErrors(res, plan); len(errs) > 0 {
+	if errs := validationRowErrors(im, res, plan); len(errs) > 0 {
 		// Nothing was written (CreateMany rolled back); keep the errors on the entry so it shows why.
 		if _, err := s.DB.Exec(ctx, `update rk_imports set errors = $1 where org_id = $2 and id = $3`, pg.JSON{V: errs}, a.Org, id); err != nil {
 			return nil, err
@@ -342,23 +368,31 @@ func (s *Service) Get(ctx context.Context, a engine.Actor, name, id string) (*En
 	return ent, err
 }
 
+// ListItem is an entry as List returns it: without the preview records (Get has them).
+type ListItem struct {
+	*Entry
+	// Preview shadows Entry.Preview and is always nil, so the JSON has no "preview".
+	Preview *struct{} `json:"preview,omitempty"`
+}
+
 // List returns the newest entries of the caller's org for one import.
-func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]*Entry, error) {
+func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]ListItem, error) {
 	if _, err := s.imp(name); err != nil {
 		return nil, err
 	}
-	res, err := s.DB.Query(ctx, selectEntry+` from rk_imports i where i.org_id = $1 and i.import = $2 order by i.created_at desc, i.id desc limit `+fmt.Sprint(listLimit),
+	sql := strings.Replace(selectEntry, "i.preview::text as preview", "null as preview", 1)
+	res, err := s.DB.Query(ctx, sql+` from rk_imports i where i.org_id = $1 and i.import = $2 order by i.created_at desc, i.id desc limit `+fmt.Sprint(listLimit),
 		a.Org, name)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]*Entry, 0, len(res.Rows))
+	out := make([]ListItem, 0, len(res.Rows))
 	for _, row := range res.Maps() {
 		ent, err := scanEntry(row)
 		if err != nil {
 			return nil, err
 		}
-		out = append(out, ent)
+		out = append(out, ListItem{Entry: ent})
 	}
 	return out, nil
 }

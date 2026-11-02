@@ -74,7 +74,7 @@ func (s *Server) listImports(w http.ResponseWriter, r *http.Request, c *caller) 
 		return
 	}
 	if list == nil {
-		list = []*imports.Entry{}
+		list = []imports.ListItem{}
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"imports": list})
 }

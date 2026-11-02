@@ -6,6 +6,7 @@ fields:
     type: link
     to: item
     label: {id: Barang}
+    required: true
   - name: qty
     type: float
     label: {id: Qty}

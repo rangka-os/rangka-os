@@ -57,8 +57,8 @@ func FormatNumber(prefix, suffix string, digits int, n int64) string {
 }
 
 // NextSeriesName takes the next number of a series for an org inside q's transaction. tables are the record
-// tables of every model using the series; the first number of a period continues after the highest existing
-// name there that matches the rendered pattern. orgCode is used verbatim for {ORG}. now must already be in the site timezone.
+// tables of every model using the series; every number continues after the highest existing
+// name there that matches the rendered pattern, so imported names are skipped over. orgCode is used verbatim for {ORG}. now must already be in the site timezone.
 func NextSeriesName(ctx context.Context, q pg.Querier, org, orgCode string, s Scheme, tables []string, now time.Time) (string, error) {
 	prefix, suffix, digits := RenderSeries(s.Pattern, orgCode, now)
 	reset := s.Reset
@@ -76,7 +76,7 @@ func NextSeriesName(ctx context.Context, q pg.Querier, org, orgCode string, s Sc
 	}
 	sql := fmt.Sprintf(`insert into rk_number_series (org_id, series, period, last)
 		values ($1, $2, $3, coalesce(%s, 0) + 1)
-		on conflict (org_id, series, period) do update set last = rk_number_series.last + 1
+		on conflict (org_id, series, period) do update set last = greatest(rk_number_series.last + 1, excluded.last)
 		returning last`, start)
 	args := []any{org, s.Series, Period(reset, now)}
 	if len(tables) > 0 {

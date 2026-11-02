@@ -256,3 +256,34 @@ func TestNextSeriesNameOverflow(t *testing.T) {
 	got := []string{nextSeries(t, db, "pt-a", s, []string{"t_doc"}, now), nextSeries(t, db, "pt-a", s, []string{"t_doc"}, now)}
 	expectNames(t, got, "A-100", "A-101")
 }
+
+func TestNextSeriesNameSkipsImportedMidPeriod(t *testing.T) {
+	db := seriesDB(t, 2)
+	ctx := context.Background()
+	s := Scheme{Series: "inv", Pattern: "INV-{YYYY}-{####}", Reset: "yearly"}
+	now := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	tables := []string{"t_doc"}
+	got := []string{nextSeries(t, db, "pt-a", s, tables, now)}
+	if _, err := db.Exec(ctx, `insert into t_doc values ('pt-a', 'INV-2026-0005')`); err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, nextSeries(t, db, "pt-a", s, tables, now), nextSeries(t, db, "pt-a", s, tables, now))
+	expectNames(t, got, "INV-2026-0001", "INV-2026-0006", "INV-2026-0007")
+}
+
+func TestNextSeriesNameSharedSeriesTwoTables(t *testing.T) {
+	db := seriesDB(t, 2)
+	ctx := context.Background()
+	if _, err := db.Exec(ctx, `create table t_doc2 (org_id text, name text, primary key (org_id, name))`); err != nil {
+		t.Fatal(err)
+	}
+	s := Scheme{Series: "inv", Pattern: "INV-{YYYY}-{####}", Reset: "yearly"}
+	now := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	tables := []string{"t_doc", "t_doc2"}
+	got := []string{nextSeries(t, db, "pt-a", s, tables, now)}
+	if _, err := db.Exec(ctx, `insert into t_doc2 values ('pt-a', 'INV-2026-0003')`); err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, nextSeries(t, db, "pt-a", s, tables, now))
+	expectNames(t, got, "INV-2026-0001", "INV-2026-0004")
+}

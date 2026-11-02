@@ -71,6 +71,39 @@ services:
       - jasa
       - fnb
 
+  # Nightly backup: `docker compose run --rm backup all` (see systemd/). Profile tools: never started by `up`.
+  backup:
+    profiles: ["tools"]
+    build:
+      context: ./backup
+      args:
+        RANGKA_IMAGE: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
+    entrypoint: ["/usr/local/bin/backup.sh"]
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      JASA_DB_PASSWORD: ${JASA_DB_PASSWORD:?}
+      FNB_DB_PASSWORD: ${FNB_DB_PASSWORD:?}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_ALLOW_PLAINTEXT: ${BACKUP_ALLOW_PLAINTEXT:-0}
+      BACKUP_KEEP_LOCAL: ${BACKUP_KEEP_LOCAL:-7}
+      BACKUP_PING_URL: ${BACKUP_PING_URL:-}
+      BACKUP_RCLONE_RETRIES: ${BACKUP_RCLONE_RETRIES:-3}
+      BACKUP_RCLONE_LOW_LEVEL_RETRIES: ${BACKUP_RCLONE_LOW_LEVEL_RETRIES:-10}
+      BACKUP_RCLONE_CONTIMEOUT: ${BACKUP_RCLONE_CONTIMEOUT:-30s}
+      RCLONE_CONFIG_OFFBOX_TYPE: ${RCLONE_CONFIG_OFFBOX_TYPE:-s3}
+      RCLONE_CONFIG_OFFBOX_PROVIDER: ${RCLONE_CONFIG_OFFBOX_PROVIDER:-}
+      RCLONE_CONFIG_OFFBOX_REGION: ${RCLONE_CONFIG_OFFBOX_REGION:-}
+      RCLONE_CONFIG_OFFBOX_ENDPOINT: ${RCLONE_CONFIG_OFFBOX_ENDPOINT:-}
+      RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID: ${RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY: ${RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY:-}
+    volumes:
+      - ${PILOTS_DIR:?}/jasa:/pilots/jasa:ro
+      - ${PILOTS_DIR:?}/fnb:/pilots/fnb:ro
+      - ${BACKUP_DIR:-./backups}:/backups
+
 volumes:
   pgdata:
   caddy_data:

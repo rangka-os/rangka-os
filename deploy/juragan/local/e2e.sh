@@ -69,6 +69,13 @@ prepare() {
   # the kernel runs as uid 65532 and writes site/custom and data/
   docker run --rm -v "$WORK/pilots:/p" alpine:3.20 chown -R 65532:65532 /p
   OWNER_PASSWORD="$(openssl rand -hex 12)"
+  OFFBOX_KEY=e2eminio
+  OFFBOX_SECRET="$(openssl rand -hex 12)"
+  # age keypair for the backup test: built from the backup image, identity stays under work/
+  docker build -q -t juragan-backup-keygen --build-arg RANGKA_IMAGE=rangka:local "$DEPLOY/backup" >/dev/null 2>&1 || true
+  docker run --rm --entrypoint age-keygen juragan-backup-keygen >"$WORK/age-identity.txt" 2>/dev/null || true
+  AGE_RECIPIENT="$(sed -n 's/^# public key: //p' "$WORK/age-identity.txt")"
+  mkdir -p "$WORK/backups"
   cat >"$WORK/.env" <<ENV
 RANGKA_TAG=local
 RANGKA_IMAGE=rangka:local
@@ -83,6 +90,16 @@ JASA_DB_PASSWORD=$(openssl rand -hex 16)
 FNB_DB_PASSWORD=$(openssl rand -hex 16)
 RANGKA_OWNER_EMAIL=$OWNER_EMAIL
 RANGKA_OWNER_PASSWORD=$OWNER_PASSWORD
+BACKUP_DIR=$WORK/backups
+BACKUP_BUCKET=juragan-backups
+BACKUP_AGE_RECIPIENT=$AGE_RECIPIENT
+BACKUP_RCLONE_RETRIES=1
+BACKUP_RCLONE_LOW_LEVEL_RETRIES=1
+BACKUP_RCLONE_CONTIMEOUT=5s
+RCLONE_CONFIG_OFFBOX_PROVIDER=Minio
+RCLONE_CONFIG_OFFBOX_ENDPOINT=http://offbox:9000
+RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID=$OFFBOX_KEY
+RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY=$OFFBOX_SECRET
 ENV
 }
 
@@ -171,10 +188,90 @@ section_stack() {
   if [ "$pub" = 0 ]; then ok "only caddy publishes ports"; else bad "non-caddy services publish ports"; fi
 }
 
+# Runs the backup container; stdout of the container, exit status preserved.
+run_backup() { dc run --rm -T backup "$@"; }
+
+# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok rk=<n> total=<rows> lead=<rows> method=<m>".
+# shellcheck disable=SC2016 # the script runs inside the container
+INSPECT='set -euo pipefail
+d="$(mktemp -d)"; cd "$d"
+age -d -i /age.txt "/backups/$1/$2" | tar -x
+sha256sum -c SHA256SUMS >/dev/null && printf "sha=ok "
+jq -r "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method)\"" manifest.json'
+inspect_archive() { # inspect_archive <pilot> <archive file name>
+  dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" --entrypoint bash backup -c "$INSPECT" _ "$1" "$2"
+}
+
+# local archives of a pilot, oldest first
+local_archives() { find "$WORK/backups/$1" -name '*.tar.age' 2>/dev/null | sort; }
+
+offbox_list() { dc run --rm -T --no-deps --entrypoint rclone backup lsf "offbox:juragan-backups/$1/"; }
+
+section_backup() {
+  echo "== backup"
+  dc build -q backup >/dev/null 2>&1 || bad "build backup image"
+  if dc up -d --wait offbox >/dev/null 2>&1; then ok "offbox (S3) healthy"; else bad "offbox did not become healthy"; fi
+  if dc run --rm -T --no-deps --entrypoint rclone backup mkdir offbox:juragan-backups >/dev/null 2>&1; then ok "bucket juragan-backups created"; else bad "bucket creation"; fi
+
+  # create one record on jasa through the API so its data differs from fnb
+  local jar="$WORK/cookies.txt" code
+  URL_PATH=/auth/login https "$JASA_HOST" -o /dev/null -c "$jar" -X POST -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$OWNER_EMAIL\",\"password\":\"$OWNER_PASSWORD\"}"
+  code="$(URL_PATH=/api/v1/r/lead https "$JASA_HOST" -b "$jar" -o /dev/null -w '%{http_code}' -X POST \
+    -H 'Content-Type: application/json' -d '{"lead_name":"Backup Test","phone":"+6281200000001"}')"
+  if [[ "$code" == 2?? ]]; then ok "created a lead on jasa ($code)"; else bad "create lead on jasa: $code"; fi
+
+  local out
+  if out="$(run_backup all 2>&1)"; then ok "backup all exits 0"; else bad "backup all failed: $out"; fi
+
+  local p n
+  for p in jasa fnb; do
+    n="$(offbox_list "$p" 2>/dev/null | grep -c "^$p-.*[.]tar[.]age$" || true)"
+    if [ "$n" = 1 ]; then ok "off-box has one $p archive"; else bad "off-box $p archive count: $n"; fi
+  done
+
+  local f_jasa f_fnb s_jasa s_fnb
+  f_jasa="$(basename "$(local_archives jasa | tail -1)")"
+  f_fnb="$(basename "$(local_archives fnb | tail -1)")"
+  s_jasa="$(inspect_archive jasa "$f_jasa" 2>/dev/null)" || s_jasa=""
+  s_fnb="$(inspect_archive fnb "$f_fnb" 2>/dev/null)" || s_fnb=""
+  for p in jasa fnb; do
+    local s="s_$p"
+    if [[ "${!s}" =~ ^sha=ok\ rk=([0-9]+)\ total=([0-9]+) ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
+      ok "$p archive decrypts, SHA256SUMS verify, ${BASH_REMATCH[1]} rk_ tables with rows (${!s})"
+    else
+      bad "$p archive inspection: ${!s}"
+    fi
+  done
+  local t_jasa t_fnb l_jasa l_fnb
+  t_jasa="$(sed -n 's/.*total=\([0-9]*\).*/\1/p' <<<"$s_jasa")"; t_fnb="$(sed -n 's/.*total=\([0-9]*\).*/\1/p' <<<"$s_fnb")"
+  l_jasa="$(sed -n 's/.*lead=\([0-9]*\).*/\1/p' <<<"$s_jasa")"; l_fnb="$(sed -n 's/.*lead=\([0-9]*\).*/\1/p' <<<"$s_fnb")"
+  if [ -n "$t_jasa" ] && [ -n "$t_fnb" ] && [ "$t_jasa" -gt "$t_fnb" ] && [ "${l_jasa:-0}" -eq $((${l_fnb:-0} + 1)) ]; then
+    ok "jasa manifest has more rows than fnb ($t_jasa > $t_fnb, leads $l_jasa vs $l_fnb)"
+  else
+    bad "row totals: jasa=$t_jasa fnb=$t_fnb leads jasa=$l_jasa fnb=$l_fnb"
+  fi
+  if [[ "$s_jasa" == *method=pg_dump* ]]; then ok "method is pg_dump (current binary has no rangka backup)"; else bad "method: $s_jasa"; fi
+
+  # off-box down: non-zero exit, a new local archive is kept, remote listing unchanged afterwards
+  local before_remote after_remote before_local after_local
+  before_remote="$(offbox_list jasa)"; before_local="$(local_archives jasa | wc -l)"
+  dc stop offbox >/dev/null
+  sleep 2 # archive names are second-resolution
+  if out="$(dc run --rm -T backup jasa 2>&1)"; then bad "backup with off-box down should fail"; else ok "backup exits non-zero when off-box is down"; fi
+  after_local="$(local_archives jasa | wc -l)"
+  if [ "$after_local" -eq $((before_local + 1)) ]; then ok "failed upload keeps the new local archive"; else bad "local archives $before_local -> $after_local"; fi
+  if grep -qi 'ping' <<<"$out"; then bad "success ping mentioned on failure"; fi
+  dc up -d --wait offbox >/dev/null
+  after_remote="$(offbox_list jasa)"
+  if [ "$before_remote" = "$after_remote" ]; then ok "off-box listing unchanged after the failed run"; else bad "off-box listing changed"; fi
+}
+
 main() {
   trap cleanup EXIT
   prepare
   section_stack
+  section_backup
   [ "$FAIL" -eq 0 ]
 }
 

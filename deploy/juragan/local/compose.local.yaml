@@ -5,3 +5,20 @@ services:
     ports: !override
       - "8081:80"
       - "8443:443"
+
+  # Off-box storage for the backup test: a throwaway S3 server (MinIO no longer publishes images).
+  offbox:
+    image: rustfs/rustfs:1.0.4
+    environment:
+      RUSTFS_ACCESS_KEY: ${RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID:?}
+      RUSTFS_SECRET_KEY: ${RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY:?}
+    volumes:
+      - offbox_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+volumes:
+  offbox_data:

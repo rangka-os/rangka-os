@@ -47,8 +47,8 @@ bank:
 signatory: {name: Nama Penandatangan, title: Direktur}
 footer: {id: Terima kasih atas kepercayaan Anda}
 ```
-- Lookup: `letterheads/<org>.rk` for the caller's org, else `letterhead.rk`, else an empty letterhead (`config.org.legal_name` as the name).
-- `config.rk` `org:` (`legal_name`, `npwp`, `pkp`) is passed to templates as `.Org` (contract fixed in the program plan).
+- Lookup: `letterheads/<org>.rk` for the caller's org, else `letterhead.rk`, else a letterhead built from the org's settings (name, NPWP).
+- Per-org settings live in `config.rk` `orgs:` (id → `{name, code, legal_name, npwp, pkp, …}`, contract 0010, read via `Registry.OrgConfig`); the caller's entry is passed to templates as `.Org`, and fills `legal_name`/`npwp` when the letterhead file leaves them out.
 
 ### 3. Templates: Go `html/template`
 - The template holds the page body. The kernel wraps it in a full document: `<!doctype html>`, `lang="id"`, title = record name, `@page` size and margins for the paper, base CSS (Rangka tokens: ink text, stone rules, tabular numbers), and a `print-<paper>` class on `<body>`. A template may add CSS with `{{define "style"}}…{{end}}`.

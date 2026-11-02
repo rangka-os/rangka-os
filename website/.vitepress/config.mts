@@ -102,7 +102,7 @@ export default defineConfig({
     outline: { level: [2, 3] },
     footer: {
       message: 'Rangka OS is source-available under the Elastic License 2.0 (ELv2). Free to self-host.',
-      copyright: 'Rangka contributors'
+      copyright: '© 2026 Saga Tekno Studio'
     }
   }
 })

@@ -59,7 +59,7 @@ const scenarios = [
 const sc = ref(0)
 
 const faqs = [
-  ['Is Rangka OS open source?', 'The code is public on GitHub and free to self-host, change and use in your business, under the Elastic License 2.0 (ELv2). That makes it source-available rather than OSI open source: the one thing you may not do is sell Rangka to others as a hosted service. Only the hosted Rangka Cloud is closed.'],
+  ['Is Rangka OS open source?', 'No, it is source-available under the Elastic License 2.0 (ELv2). The code is public on GitHub and free to self-host, change and use for your own business. Offering Rangka to others as a hosted or managed service needs a separate agreement with Saga Tekno Studio. Only the hosted Rangka Cloud is closed.'],
   ['Is it ready for production?', 'Not yet. This is a v0 preview that runs end to end on a demo company. Several kernel parts use in-tree stand-ins that will be replaced; see the roadmap.'],
   ['Do I need a developer to customize it?', 'No for apps: models, rules, screens and dashboards are .rk files, changed by owners or Rangka AI through change sets. Yes if you want to work on the Go kernel.'],
   ['How do you stop AI from breaking things?', 'AI can only propose. Every change set is validated, previewed on a copy with its SQL, and approved by a person; high-risk changes need the owner. Applied changes can be reverted.'],
@@ -274,7 +274,7 @@ const open = ref<number | null>(0)
             <div class="tw-foot-btns"><a class="tw-btn sm" :href="b('/guide/quick-start')"><span>Get started</span></a><a class="tw-btn ghost sm" :href="b('/guide/what-is-rangka')"><span>Read the docs</span></a></div>
           </div>
         </div>
-        <div class="tw-foot-bottom"><span>© 2026 · Saga Tekno Studio · ELv2</span><span>Fondasi bisnismu, dibangun bersama AI.</span></div>
+        <div class="tw-foot-bottom"><span>© 2026 Saga Tekno Studio · Elastic License 2.0</span><span>Fondasi bisnismu, dibangun bersama AI.</span></div>
       </div>
     </footer>
   </div>

@@ -51,8 +51,9 @@ test("compute and applyDefaults from live meta", () => {
 });
 
 test("today() and app_installed() read meta", () => {
-  const E = load({}).create(META, lookup);
-  assert.strictEqual(E.evaluate("today()", () => undefined), "2026-11-03");
+  const E = load({}).create(Object.assign({}, META, { today: "2030-01-02" }), lookup);
+  assert.strictEqual(E.evaluate("today()", () => undefined), "2030-01-02");
+  assert.strictEqual(E.todayISO(), "2030-01-02");
   assert.strictEqual(E.evaluate("app_installed('sales')", () => undefined), true);
   assert.strictEqual(E.evaluate("app_installed('crm')", () => undefined), false);
 });
@@ -64,6 +65,15 @@ test("runRules returns the model message", () => {
   assert.strictEqual(out.length, 1);
   assert.strictEqual(out[0].level, "error");
   assert.strictEqual(out[0].message, "Jatuh tempo tidak boleh sebelum tanggal faktur");
+});
+
+test("status overdue is judged against meta.today, not the clock", () => {
+  const E = load({}).create(Object.assign({}, META, { today: "2030-01-02" }), lookup);
+  const inv = { docstatus: 1, grand_total: 100, paid_amount: 0 };
+  assert.strictEqual(E.status("sales_invoice", Object.assign({ due_date: "2029-12-31" }, inv)), "overdue");
+  assert.strictEqual(E.status("sales_invoice", Object.assign({ due_date: "2030-01-02" }, inv)), "submitted");
+  // due after the real clock but before meta.today
+  assert.strictEqual(E.status("sales_invoice", Object.assign({ due_date: "2029-06-01" }, inv)), "overdue");
 });
 
 test("status paid, and no store functions on Eng", () => {

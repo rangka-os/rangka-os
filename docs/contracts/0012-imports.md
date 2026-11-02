@@ -25,7 +25,7 @@ overlapping days, must not create sales or stock moves twice.
 ```yaml
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/import.json
 name: moka_item_details
-label: Penjualan Moka (detail item)
+label: {id: Penjualan Moka (detail item)}
 model: outlet_sales
 source: csv                 # csv | xlsx: the default the wizard offers; both readers accept either file
 header_row: 1               # 1-based row holding the column names; rows above it are ignored
@@ -43,7 +43,8 @@ lines:
     qty: Quantity
     gross: Gross Sales
     discount: Discounts
-    net: "=int(row['Net Sales']) - int(row['Refunds'])"
+    refund: Refunds
+    net: Net Sales            # Moka's net already has discounts and refunds taken off
 ```
 
 - **`map` values.** A plain string is a column header. A string starting with `=` is a CEL expression with `row`

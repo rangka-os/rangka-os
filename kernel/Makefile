@@ -59,9 +59,9 @@ run-demo: build proto
 proto:
 	python3 ../tools/build_proto.py $(WS)/rangka-apps ../web/prototype/meta.js
 
-# Copy rangka-os/schema/0.4 into the binary's embedded copy (a test fails when they differ).
+# Copy rangka-os/schema/0.5 into the binary's embedded copy (a test fails when they differ).
 sync-schemas:
-	cp ../schema/0.4/*.json internal/schema/0.4/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
+	cp ../schema/0.5/*.json internal/schema/0.5/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
 
 # Recompute the prototype's dashboard numbers used by the dashboard tests (needs node).
 proto-expected:

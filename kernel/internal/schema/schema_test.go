@@ -9,16 +9,16 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
 
-// The embedded copy must equal rangka-os/schema/0.4 (run `make sync-schemas` after editing the schemas).
+// The embedded copy must equal rangka-os/schema/0.5 (run `make sync-schemas` after editing the schemas).
 func TestEmbeddedInSync(t *testing.T) {
-	src := "../../../schema/0.4"
+	src := "../../../schema/0.5"
 	ents, err := os.ReadDir(src)
 	if err != nil {
 		t.Skip("schema source dir not found")
 	}
 	for _, e := range ents {
 		a, _ := os.ReadFile(filepath.Join(src, e.Name()))
-		b, err := embedded.ReadFile("0.4/" + e.Name())
+		b, err := embedded.ReadFile("0.5/" + e.Name())
 		if err != nil || !bytes.Equal(a, b) {
 			t.Errorf("%s: embedded copy differs from %s; run make sync-schemas", e.Name(), src)
 		}

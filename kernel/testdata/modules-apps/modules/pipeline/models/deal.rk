@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: deal
+label: {id: Peluang, en: Deal}
+naming: DEAL-{#####}
+title_field: deal_name
+fields:
+  - name: deal_name
+    type: data
+    label: {id: Judul peluang}
+    required: true
+    in_list: true
+  - name: customer
+    type: link
+    to: customer
+    label: {id: Pelanggan}
+    required: true
+    in_list: true
+  - name: stage
+    type: select
+    label: {id: Tahap}
+    default: "'prospect'"
+    in_list: true
+    options:
+      - {value: prospect, label: {id: Prospek}}
+      - {value: won, label: {id: Menang}}
+      - {value: lost, label: {id: Kalah}}
+  - name: value
+    type: currency
+    label: {id: Nilai}
+    in_list: true
+rules:
+  - name: value_positive
+    on: save
+    check: value >= 0
+    message: {id: Nilai tidak boleh minus}
+actions:
+  - {name: mark_won, label: {id: Tandai menang}, hook: crm.mark_won, if: "stage != 'won'"}
+permissions:
+  - {role: sales_manager, read: true, write: true, create: true, delete: true}
+  - {role: sales_rep, read: true, write: true, create: true}
+views:
+  list:
+    columns: [name, deal_name, customer, stage, value]

@@ -10,7 +10,11 @@ expressions only reference fields that exist, computed fields have no cycles, ro
 Pass 3 (v0.1): flows, roles, connectors, the site (system/features/config/themes/layouts: installed apps vs plan,
 theme and layout names, theme contrast with the dark derivation) and company overlays (<site>/custom/<model>.rk).
 
-Usage: rangka_validate.py <apps dir> [--site <dir>] [--connectors <dir>] [app ...]
+Modules and apps (contract 0001): modules/<m>/module.rk (default: the modules dir next to the apps dir) and
+apps/<a>/app.rk with modules: {name: range}. An app.rk without modules is a 0.4 app (a module and an app in one),
+still read with a deprecation warning.
+
+Usage: rangka_validate.py <apps dir> [--site <dir>] [--connectors <dir>] [--modules <dir>] [app ...]
 Prints one line per problem: file:line:col  level  code  path  message. Exit 1 when any error is found.
 """
 import json, os, re, sys, difflib
@@ -49,6 +53,39 @@ def schema_for(V, kind, data):
     if kind == "app" and not (isinstance(data, dict) and "modules" in data) and "app@0.4" in V:
         return V["app@0.4"]
     return V[kind]
+
+
+def parse_version(s):
+    m = re.match(r"(\d+)(?:\.(\d+))?(?:\.(\d+))?", s.strip()) if isinstance(s, str) else None
+    return tuple(int(x or 0) for x in m.groups()) if m else None
+
+
+def satisfies(version, rng):
+    """^a.b: same major and at least a.b; >=a.b: at least a.b. Other ranges are not checked."""
+    v = parse_version(version)
+    if v is None or not isinstance(rng, str):
+        return True
+    r = rng.strip()
+    if r.startswith("^"):
+        b = parse_version(r[1:])
+        return b is None or (v[0] == b[0] and v >= b)
+    if r.startswith(">="):
+        b = parse_version(r[2:])
+        return b is None or v >= b
+    return True
+
+
+def closure(apps, names):
+    """names plus, transitively, each app's modules and every unit's requires (units that exist)."""
+    out, todo = [], list(names)
+    while todo:
+        n = todo.pop(0)
+        if n in apps and n not in out:
+            out.append(n)
+            man = apps[n]["manifest"] if isinstance(apps[n]["manifest"], dict) else {}
+            todo += [k for k in (man.get("modules") or {}) if isinstance(man.get("modules"), dict)]
+            todo += [k for k in (man.get("requires") or {}) if isinstance(man.get("requires"), dict)]
+    return out
 
 
 class Report:
@@ -99,17 +136,29 @@ def idents(expr):
     return out
 
 
-def validate(root, only=None, site=None, connectors=None):
+def default_modules(root):
+    d = os.path.join(os.path.dirname(os.path.normpath(root)), "modules")
+    return d if os.path.isdir(d) else None
+
+
+def validate(root, only=None, site=None, connectors=None, modules=None):
     V = load_schemas()
     rep = Report(root)
     apps = {}
-    for app in sorted(os.listdir(root)):
-        d = os.path.join(root, app)
-        ap = rkfile.find(d, "app")
+    modules = modules or default_modules(root)
+    units = [(m, os.path.join(modules, m), "module") for m in sorted(os.listdir(modules))] if modules and os.path.isdir(modules) else []
+    units += [(a, os.path.join(root, a), "app") for a in sorted(os.listdir(root))]
+    for app, d, stem in units:
+        ap = rkfile.find(d, stem)
         if not ap:
             continue
-        a = {"dir": d, "app_path": ap, "manifest": rep.load(ap) or {}, "models": {}, "roles": set()}
-        for st, p in rkfile.listdir(os.path.join(d, "models")):
+        man = rep.load(ap) or {}
+        kind = "module" if stem == "module" else "app" if isinstance(man, dict) and "modules" in man else "legacy"
+        if app in apps:
+            rep.add("error", ap, "name", "duplicate_unit", f'"{app}" is already a module ({os.path.relpath(apps[app]["app_path"], root)}); modules and apps share one namespace')
+            continue
+        a = {"dir": d, "app_path": ap, "manifest": man, "kind": kind, "models": {}, "roles": set()}
+        for st, p in (rkfile.listdir(os.path.join(d, "models")) if kind != "app" else []):
             m = rep.load(p)
             if m is not None:
                 a["models"][st] = (p, m)
@@ -127,8 +176,12 @@ def validate(root, only=None, site=None, connectors=None):
         if only and name not in only:
             continue
         p = a["app_path"]
-        for e in schema_for(V, "app", a["manifest"]).iter_errors(a["manifest"]):
+        if a["kind"] == "legacy":
+            rep.add("warn", p, "(root)", "deprecated_layout", f"0.4 app.rk: split into modules/{name}/module.rk and an app (contract 0001)")
+        for e in schema_for(V, "module" if a["kind"] == "module" else "app", a["manifest"]).iter_errors(a["manifest"]):
             rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message)
+        if a["kind"] == "app" and rkfile.listdir(os.path.join(a["dir"], "models")):
+            rep.add("error", p, "models", "app_defines_model", f'app "{name}" has models/; an app defines no models, move them into a module (contract 0001)')
         for mname, (p, m) in a["models"].items():
             for e in sorted(V["model"].iter_errors(m), key=lambda e: list(map(str, e.absolute_path))):
                 where = "/".join(map(str, e.absolute_path)) or "(root)"
@@ -143,6 +196,11 @@ def validate(root, only=None, site=None, connectors=None):
                 rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message if len(e.message) < 160 else e.message[:157] + "…")
             if db.get("name") != dname:
                 rep.add("error", p, "name", "name_mismatch", f'dashboard name "{db.get("name")}" must match the file name "{dname}"')
+    tdir = os.path.join(os.path.dirname(os.path.normpath(root)), "templates")
+    for tn in sorted(os.listdir(tdir)) if os.path.isdir(tdir) else []:
+        tp = rkfile.find(os.path.join(tdir, tn), "template")
+        if tp:
+            rep.add("warn", tp, "(root)", "deprecated_template", f"template.rk becomes apps/{tn}/app.rk (contract 0001)")
 
     # the IDR twins of money fields are fields of their model from here on (contract 0013)
     for a in apps.values():
@@ -157,7 +215,21 @@ def validate(root, only=None, site=None, connectors=None):
     for name, a in apps.items():
         if only and name not in only:
             continue
-        reqs = set(a["manifest"].get("requires", {})) | set(a["manifest"].get("optional", {}))
+        man = a["manifest"]
+        reqs = set(man.get("requires", {})) | set(man.get("optional", {}))
+        mods = [k for k, u in apps.items() if u["kind"] != "app"]  # modules and 0.4 units
+        for key in ("requires", "modules") if a["kind"] != "legacy" else ():
+            deps = man.get(key)
+            for k in deps if isinstance(deps, dict) else {}:
+                if k == "rangka" and key == "requires":
+                    continue
+                if k not in mods:
+                    rep.add("error", a["app_path"], f"{key}/{k}", "unknown_module", f'"{k}" is not a module{suggest(k, mods)}')
+                elif not satisfies(apps[k]["manifest"].get("version"), deps[k]):
+                    rep.add("error", a["app_path"], f"{key}/{k}", "version_mismatch", f'"{k}" is {apps[k]["manifest"].get("version")}; this needs {deps[k]}')
+        if a["kind"] == "app":
+            listed = man.get("modules") if isinstance(man.get("modules"), dict) else {}
+            reqs = set(closure(apps, [k for k in listed if k in mods])) | set(man.get("optional", {}))
         visible = {m: v for m, v in allmodels.items() if v[0] == name or v[0] in reqs}
         roles = set().union(*[apps[x]["roles"] for x in [name, *reqs] if x in apps])
         hooks = CORE_HOOKS | set(a["manifest"].get("hooks", []))
@@ -742,32 +814,33 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
     if features[0]:
         for i, pl in enumerate(features[1].get("plans", [])):
             for j, a in enumerate(pl.get("apps", [])):
-                if a not in apps:
-                    rep.add("error", features[0], f"plans/{i}/apps/{j}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, apps)}')
+                if a not in apps or apps[a]["kind"] == "module":
+                    rep.add("error", features[0], f"plans/{i}/apps/{j}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, [k for k, u in apps.items() if u["kind"] != "module"])}')
         for i, pl in enumerate(features[1].get("plans", [])):
             ext = pl.get("extends")
             if ext and ext not in plans:
                 rep.add("error", features[0], f"plans/{i}/extends", "unknown_plan", f'plan "{ext}" does not exist')
     cp, cfg = config
     installed = list(apps)
+    app_names = [k for k, u in apps.items() if u["kind"] != "module"]
     if cp:
         plan = cfg.get("plan")
         allowed = plan_info(features[1], plan) if plan and plan in plans else None
         if plan and features[0] and plan not in plans:
             rep.add("error", cp, "plan", "unknown_plan", f'plan "{plan}" is not in features.rk{suggest(plan, plans)}')
         if isinstance(cfg.get("apps"), list):
-            installed = [a for a in cfg["apps"] if a in apps]
+            installed = closure(apps, [a for a in cfg["apps"] if a in app_names])
             for i, a in enumerate(cfg["apps"]):
-                if a not in apps:
-                    rep.add("error", cp, f"apps/{i}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, apps)}')
+                if a not in app_names:
+                    rep.add("error", cp, f"apps/{i}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, app_names)}')
                     continue
                 if allowed is not None and a not in allowed:
                     rep.add("error", cp, f"apps/{i}", "app_not_in_plan", f'plan "{plan}" does not include "{a}" (it allows {", ".join(allowed)})')
-                for dep in apps[a]["manifest"].get("requires", {}):
-                    if dep in apps and dep not in cfg["apps"]:
+                for dep in apps[a]["manifest"].get("requires", {}) if apps[a]["kind"] == "legacy" else ():
+                    if dep in apps and apps[dep]["kind"] == "legacy" and dep not in cfg["apps"]:
                         rep.add("error", cp, f"apps/{i}", "missing_dependency", f'"{a}" requires "{dep}"; add it to apps')
         elif allowed is not None:
-            installed = [a for a in allowed if a in apps]
+            installed = closure(apps, [a for a in allowed if a in app_names])
         th = cfg.get("theme")
         if th and th not in themes and not template_exists("themes", th):
             rep.add("error", cp, "theme", "unknown_theme", f'theme "{th}" has no file themes/{th}.rk{suggest(th, themes)}')
@@ -1129,7 +1202,7 @@ def check_overlays(rep, V, apps, allmodels, overlays):
 
 
 if __name__ == "__main__":
-    args, opts = [], {"--site": None, "--connectors": None}
+    args, opts = [], {"--site": None, "--connectors": None, "--modules": None}
     it = iter(sys.argv[1:])
     for a in it:
         if a in opts:
@@ -1139,4 +1212,4 @@ if __name__ == "__main__":
         else:
             args.append(a)
     root = args[0] if args else "apps"
-    sys.exit(1 if validate(root, set(args[1:]) or None, opts["--site"], opts["--connectors"]).print() else 0)
+    sys.exit(1 if validate(root, set(args[1:]) or None, opts["--site"], opts["--connectors"], opts["--modules"]).print() else 0)

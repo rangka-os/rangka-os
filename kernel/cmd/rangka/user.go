@@ -109,6 +109,10 @@ func cmdUser(args []string) int {
 			return fail(fmt.Errorf("no user %s", ua.Email))
 		}
 		if err := auth.RemoveMember(ctx, db, ua.Org, res.Rows[0][0].(int64)); err != nil {
+			if errors.Is(err, auth.ErrNoMembership) {
+				fmt.Fprintf(os.Stderr, "%s is not a member of %s\n", ua.Email, ua.Org)
+				return 1
+			}
 			return fail(err)
 		}
 		fmt.Printf("removed %s from %s\n", ua.Email, ua.Org)
@@ -125,8 +129,13 @@ func cmdUser(args []string) int {
 		// the password of an existing user is never changed; a throwaway value satisfies EnsureUser
 		password = auth.RandomToken("unused", 16)
 	}
-	if err := auth.EnsureOrg(ctx, db, ua.Org, titleCase(ua.Org)); err != nil {
+	if res, err := db.Query(ctx, "select 1 from rk_orgs where id = $1", ua.Org); err != nil {
 		return fail(err)
+	} else if len(res.Rows) == 0 {
+		if err := auth.EnsureOrg(ctx, db, ua.Org, titleCase(ua.Org)); err != nil {
+			return fail(err)
+		}
+		fmt.Fprintf(os.Stderr, "created org %s\n", ua.Org)
 	}
 	id, err := auth.EnsureUser(ctx, db, ua.Email, ua.Name, password, ua.Org, ua.Role, ua.Record)
 	if err != nil {

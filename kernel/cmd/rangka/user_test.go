@@ -124,4 +124,11 @@ func TestUserAddRemove(t *testing.T) {
 	if code := cmdUser([]string{"remove", "nobody@example.test", "--org", "pt-baru"}); code != 1 {
 		t.Fatalf("remove unknown: exit %d", code)
 	}
+	// known user who is no longer a member, and an org that does not exist
+	if code := cmdUser([]string{"remove", "staff@example.test", "--org", "pt-baru"}); code != 1 {
+		t.Fatalf("remove non-member: exit %d", code)
+	}
+	if code := cmdUser([]string{"remove", "staff@example.test", "--org", "tidak-ada"}); code != 1 {
+		t.Fatalf("remove from missing org: exit %d", code)
+	}
 }

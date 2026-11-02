@@ -66,8 +66,14 @@ func SetOutlets(ctx context.Context, q pg.Querier, org string, userID int64, out
 	return nil
 }
 
-// RemoveMember deletes a user's membership in an org.
+// RemoveMember deletes a user's membership in an org; ErrNoMembership when there was none.
 func RemoveMember(ctx context.Context, q pg.Querier, org string, userID int64) error {
-	_, err := q.Query(ctx, "delete from rk_members where org_id = $1 and user_id = $2", org, userID)
-	return err
+	res, err := q.Query(ctx, "delete from rk_members where org_id = $1 and user_id = $2 returning user_id", org, userID)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) == 0 {
+		return ErrNoMembership
+	}
+	return nil
 }

@@ -1,0 +1,38 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json",
+  "title": "Rangka letterhead",
+  "type": "object",
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "legal_name": {"type": "string"},
+    "tagline": {"type": "string"},
+    "logo": {"type": "string"},
+    "address": {"type": "string"},
+    "phone": {"type": "string"},
+    "email": {"type": "string"},
+    "website": {"type": "string"},
+    "npwp": {"type": "string"},
+    "bank": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": ["bank", "account"],
+        "additionalProperties": false,
+        "properties": {
+          "bank": {"type": "string"},
+          "account": {"type": "string"},
+          "holder": {"type": "string"},
+          "branch": {"type": "string"}
+        }
+      }
+    },
+    "signatory": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {"name": {"type": "string"}, "title": {"type": "string"}}
+    },
+    "footer": {"type": "object", "additionalProperties": {"type": "string"}}
+  }
+}

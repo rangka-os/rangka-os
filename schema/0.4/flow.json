@@ -316,46 +316,6 @@
               "description": "Run the step only when this is true"
             }
           }
-        },
-        {
-          "type": "object",
-          "title": "approve",
-          "description": "Wait for approval before the flow goes on",
-          "required": [
-            "approve"
-          ],
-          "additionalProperties": false,
-          "properties": {
-            "approve": {
-              "type": "object",
-              "required": [
-                "approvers"
-              ],
-              "additionalProperties": false,
-              "properties": {
-                "approvers": {
-                  "type": "array",
-                  "minItems": 1,
-                  "items": {
-                    "$ref": "model.json#/$defs/name"
-                  }
-                },
-                "when": {
-                  "$ref": "model.json#/$defs/cel"
-                },
-                "label": {
-                  "$ref": "model.json#/$defs/label"
-                }
-              }
-            },
-            "if": {
-              "$ref": "model.json#/$defs/cel",
-              "description": "Run the step only when this is true"
-            },
-            "as": {
-              "$ref": "model.json#/$defs/name"
-            }
-          }
         }
       ]
     }

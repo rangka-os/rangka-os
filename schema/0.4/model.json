@@ -47,12 +47,6 @@
         "$ref": "#/$defs/rule"
       }
     },
-    "approvals": {
-      "type": "array",
-      "items": {
-        "$ref": "#/$defs/approval"
-      }
-    },
     "on_submit": {
       "type": "array",
       "items": {
@@ -652,39 +646,6 @@
     "listcol": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$"
-    },
-    "approval": {
-      "type": "object",
-      "required": [
-        "name",
-        "on",
-        "approvers"
-      ],
-      "additionalProperties": false,
-      "properties": {
-        "name": {
-          "$ref": "#/$defs/name"
-        },
-        "on": {
-          "$ref": "#/$defs/name",
-          "description": "submit, cancel or an action name of this model"
-        },
-        "when": {
-          "$ref": "#/$defs/cel",
-          "description": "Policy applies only when this is true (absent = always)"
-        },
-        "approvers": {
-          "type": "array",
-          "minItems": 1,
-          "items": {
-            "$ref": "#/$defs/name"
-          },
-          "description": "Roles that may approve; owner always may"
-        },
-        "label": {
-          "$ref": "#/$defs/label"
-        }
-      }
     }
   }
 }

@@ -44,12 +44,6 @@
         "$ref": "model.json#/$defs/rule"
       }
     },
-    "approvals": {
-      "type": "array",
-      "items": {
-        "$ref": "model.json#/$defs/approval"
-      }
-    },
     "views": {
       "type": "object",
       "additionalProperties": false,

@@ -125,7 +125,7 @@ func TestApprovalsParsed(t *testing.T) {
 		t.Fatal(err, string(out))
 	}
 	f := dir + "/apps/sales/models/sales_invoice.rk"
-	b, _ := os.ReadFile(f)
+	b := mustRead(t, f)
 	b = append(b, []byte(`approvals:
   - name: manager
     on: submit
@@ -133,7 +133,7 @@ func TestApprovalsParsed(t *testing.T) {
     approvers: [sales_manager]
     label: {id: Persetujuan manajer}
 `)...)
-	os.WriteFile(f, b, 0o644)
+	mustWrite(t, f, b)
 	reg, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("errors: %v", rep.All())
@@ -159,14 +159,14 @@ func TestApprovalsOverlay(t *testing.T) {
 		t.Fatal(err, string(out))
 	}
 	f := dir + "/apps/sales/models/sales_invoice.rk"
-	b, _ := os.ReadFile(f)
-	os.WriteFile(f, append(b, []byte("approvals:\n  - {name: own, on: submit, approvers: [sales_manager]}\n")...), 0o644)
+	b := mustRead(t, f)
+	mustWrite(t, f, append(b, []byte("approvals:\n  - {name: own, on: submit, approvers: [sales_manager]}\n")...))
 	os.MkdirAll(dir+"/site/custom", 0o755)
-	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
+	mustWrite(t, dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: sales_invoice
 approvals:
   - {name: big, on: submit, when: "grand_total > 50000000", approvers: [sales_manager]}
-`), 0o644)
+`))
 	reg, rep := ValidateOpts(Options{AppsDir: dir + "/apps", SiteDir: dir + "/site"}, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("errors: %v", rep.All())
@@ -175,10 +175,10 @@ approvals:
 	if len(got) != 2 || got[0].Name != "own" || got[1].Name != "big" || got[1].When != "grand_total > 50000000" {
 		t.Fatalf("overlay approvals = %+v", got)
 	}
-	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`model: sales_invoice
+	mustWrite(t, dir+"/site/custom/sales_invoice.rk", []byte(`model: sales_invoice
 approvals:
   - {name: bad, on: post, when: "nope > 1", approvers: [sales_manager]}
-`), 0o644)
+`))
 	_, rep = ValidateOpts(Options{AppsDir: dir + "/apps", SiteDir: dir + "/site"}, nil, schema.Embedded())
 	var buf bytes.Buffer
 	rep.Print(&buf)
@@ -194,7 +194,7 @@ func TestFlowApproveStep(t *testing.T) {
 	dir := t.TempDir()
 	exec.Command("cp", "-r", appsDir, dir+"/apps").Run()
 	flow := func(step string) string {
-		os.WriteFile(dir+"/apps/crm/flows/morning_follow_up.rk", []byte("name: morning_follow_up\nschedule: 0 8 * * 1-5\nsteps:\n  - "+step+"\n"), 0o644)
+		mustWrite(t, dir+"/apps/crm/flows/morning_follow_up.rk", []byte("name: morning_follow_up\nschedule: 0 8 * * 1-5\nsteps:\n  - "+step+"\n"))
 		_, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())
 		var buf bytes.Buffer
 		rep.Print(&buf)
@@ -208,6 +208,22 @@ func TestFlowApproveStep(t *testing.T) {
 	}
 	if out := flow(`{approve: {approvers: []}}`); !strings.Contains(out, "schema") {
 		t.Errorf("empty approvers accepted:\n%s", out)
+	}
+}
+
+func mustRead(t *testing.T, f string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func mustWrite(t *testing.T, f string, b []byte) {
+	t.Helper()
+	if err := os.WriteFile(f, b, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

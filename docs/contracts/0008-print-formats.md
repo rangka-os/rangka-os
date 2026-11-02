@@ -1,0 +1,108 @@
+# 0008: Print formats
+
+Status: proposed (3 Nov 2026) · Owner: rangka-os (kernel, schema 0.5) · Stream S3 · Affects: rangka-apps (modules ship print formats), pilot bundles (letterheads), web app (print button)
+
+## Context
+- Pilot A must print a quotation, invoice, PO and statement of account (SOA) that look like the firm's own; pilot B prints POs to suppliers.
+- Today a record can only be read as JSON. Firms retype it into Word.
+- Layouts follow common public Indonesian conventions for *surat penawaran harga*, *faktur/invoice* (PPN, PPh 23 note), *purchase order* and *laporan tagihan / statement of account*. No real customer document is used anywhere.
+
+## Decision
+
+### 1. Kind `print` (`print/<name>.rk` in a module/app or in the site)
+```yaml
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: sales_invoice          # = file stem
+model: sales_invoice
+label: {id: Faktur, en: Invoice}
+paper: A4                    # A4 | A5 | 80mm   (default A4)
+template: sales_invoice.html # relative to this file; must stay inside the module/app/site folder
+default: true                # optional: the format the print button uses first
+related:                     # optional: lists loaded for the template (SOA, delivery lists)
+  invoices:
+    model: sales_invoice
+    match: {customer: name}  # related.customer == doc.name
+    filter: docstatus == 1   # optional CEL on the related record (no `doc` access)
+    sort: posting_date       # field or -field
+    limit: 500               # default 200, max 1000
+```
+- A site `print/<name>.rk` with the same name replaces the module's one (a firm's own look without touching `apps/`).
+- Formats of apps that are not installed are ignored.
+
+### 2. Kind `letterhead` (site `letterhead.rk`, optional `letterheads/<org>.rk` per org)
+```yaml
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json
+legal_name: PT Contoh Jasa Teknik
+tagline: Inspeksi dan pengujian
+logo: brand/logo.png         # site-relative png/jpg/svg, inlined as a data: URI
+address: |
+  Jl. Contoh No. 1
+  Jakarta 10110
+phone: "+62 21 000 0000"
+email: halo@contoh.test
+website: contoh.test
+npwp: "00.000.000.0-000.000"
+bank:
+  - {bank: Bank Contoh, account: "000 000 0000", holder: PT Contoh Jasa Teknik, branch: Jakarta}
+signatory: {name: Nama Penandatangan, title: Direktur}
+footer: {id: Terima kasih atas kepercayaan Anda}
+```
+- Lookup: `letterheads/<org>.rk` for the caller's org, else `letterhead.rk`, else an empty letterhead (`config.org.legal_name` as the name).
+- `config.rk` `org:` (`legal_name`, `npwp`, `pkp`) is passed to templates as `.Org` (contract fixed in the program plan).
+
+### 3. Templates: Go `html/template`
+- The template holds the page body. The kernel wraps it in a full document: `<!doctype html>`, `lang="id"`, title = record name, `@page` size and margins for the paper, base CSS (Rangka tokens: ink text, stone rules, tabular numbers), and a `print-<paper>` class on `<body>`. A template may add CSS with `{{define "style"}}…{{end}}`.
+- Data: `.Doc` (the record with child tables; every model field present, missing ones empty), `.Links` (each top-level link field's record, e.g. `.Links.customer.customer_name`), `.Related.<name>` (lists from `related:`), `.Letterhead`, `.Org`, `.Model` (`name`, `label`), `.Format` (`name`, `label`, `paper`), `.Printed` (print time, org time zone).
+- Built-in partials, which a template may redefine: `letterhead` (logo, legal name, address, NPWP, contacts), `bank_accounts`, `signature`.
+- Helpers (exact output, tested):
+
+| Helper | Example | Output |
+| --- | --- | --- |
+| `rupiah n` | `rupiah 1250000` | `Rp 1.250.000` (negative `-Rp 1.250.000`; rounds half away from zero to whole rupiah) |
+| `money n code` | `money "1234.5" "USD"` | `USD 1.234,50`; `IDR` → same as `rupiah` |
+| `number n [decimals]` | `number 1.5` | `1,5` (Indonesian separators, trailing zeros dropped unless decimals given) |
+| `date d ["long"]` | `date "2026-10-27"` | `27 Okt 2026`; `long` → `27 Oktober 2026` |
+| `terbilang n` | `terbilang 1250000` | `satu juta dua ratus lima puluh ribu rupiah` (`seratus`, `seribu`, `sebelas`; up to triliun; `nol rupiah`; `minus …`) |
+| `label "field"` | `label "due_date"` | the model field's Indonesian label |
+| `option "field" v` | `option "status" .Doc.status` | the option's Indonesian label |
+| `sub a b`, `sum list "field"` | `sub .Doc.grand_total .Doc.paid_amount` | exact decimal arithmetic for money columns |
+| `overdue d` | `overdue .Doc.due_date` | whole days past `d` at print time, `0` when not due |
+| `upper s` | | upper case |
+- Missing values print as empty. Templates cannot run script: responses carry `Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'`.
+
+### 4. REST
+`GET /api/v1/r/{model}/{name}/print?format={print}&as=html|pdf`
+- `format` defaults to the model's `default: true` format, else the only one; none → 404 `no_print_format`.
+- `as=html` (default): `text/html; charset=utf-8`.
+- `as=pdf`: rendered by headless Chromium (`RANGKA_CHROMIUM` = path, or found on `PATH` / the macOS app path; `RANGKA_CHROMIUM=off` disables). Without it: 501 `pdf_unavailable` with message "PDF belum tersedia di server ini. Buka versi HTML lalu cetak dari browser (Ctrl+P → Simpan sebagai PDF)." and `hint` = the HTML URL. PDF is `inline; filename="<name>.pdf"`.
+- `/api/v1/meta` lists each model's formats as `prints: [{name, label, paper, default}]`.
+- Each print writes an audit entry `record.print` (`<model>/<name>`, format, as).
+
+### 5. Permissions
+- The record is read through the engine as the caller (same org, same row scope as `GET /r/{model}/{name}`), so other orgs' records are never printed.
+- If the model declares `permissions:`, the caller needs a role entry with `print: true` whose `if:` (when set) holds on the record; the `owner` role always may. Otherwise 403 `permission_denied` with `{model, action: "print"}`:
+  `{"error": {"code": "permission_denied", "message": "…", "model": "sales_invoice", "action": "print"}}`.
+- Models without `permissions:` stay open to signed-in members, as for reads today. When S1's general permission check lands, print calls it with action `print` and this rule moves there unchanged.
+
+### 6. Reference layouts (rangka-os `templates/print/`)
+Starting points that modules copy next to their `print/*.rk`:
+- `quotation.html`: *Surat Penawaran Harga* with Nomor/Rev., Perihal, Kepada Yth., item table (No, Uraian, Qty, Satuan, Harga satuan, Diskon, Jumlah), subtotal, diskon, DPP nilai lain 11/12, PPN, total, terbilang, syarat (masa berlaku, pembayaran, waktu pelaksanaan), Hormat kami + signatory.
+- `sales_invoice.html`: *Faktur / Invoice* with no. faktur, tanggal, jatuh tempo, no. PO pelanggan, Kepada (NPWP), item table, subtotal, uang muka, DPP, PPN (only when `.Org.pkp`), total, PPh 23 note ("Bila pembayaran dipotong PPh Pasal 23, mohon kirimkan bukti potongnya kepada kami"), terbilang, bank accounts, note that the e-Faktur is issued separately.
+- `purchase_order.html`: *Pesanan Pembelian* with vendor, kirim ke, item table, syarat pembayaran, tanggal kirim, disetujui oleh.
+- `statement.html`: *Laporan Tagihan (Statement of Account)* on `customer`, using `related.invoices`: per-invoice tagihan, dibayar, sisa, umur; aging summary (belum jatuh tempo, 1–30, 31–60, 61–90, > 90 hari).
+- The field names they use are listed in `templates/print/README.md` for S8 to match or adapt.
+
+### 7. Validation (`rangka validate`, kernel checks)
+`schema`, `name_mismatch`, `unknown_model` (model or related model), `unknown_field` (match fields), `template_missing`, `template_outside` (path escapes its folder), `template_error` (does not parse with the helpers), `logo_missing`.
+
+### 8. Schema 0.5
+`schema/0.5/print.json` and `schema/0.5/letterhead.json` are new files. The kernel embeds `schema/0.5/*.json` next to 0.4; a kind resolves to its 0.4 schema when one exists, else to 0.5. Other 0.5 files from other streams sit next to these.
+
+## Consequences
+- Any module gets printable documents by adding a `.rk` and an `.html`; firms override the look per site.
+- PDF needs Chromium next to the binary (the release image should install `chromium`, S15); without it users print from the browser.
+- The Python reference validator does not know `print`/`letterhead` yet; `compare-python` stays identical because its inputs contain neither. Follow-up: add the same checks to `tools/rangka_validate.py`.
+
+## Open
+- Per-document letterhead choice when one org has several brands (not needed for the pilots).
+- QR code / e-Faktur fields on the invoice once the tax connector exists.

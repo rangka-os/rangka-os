@@ -1,6 +1,6 @@
 # .rk schemas
 
-Every kind of `.rk` file, generated from `schema/0.4`.
+Every kind of `.rk` file, generated from `schema/0.5`.
 
 | Kind | Lives in | What it is |
 | --- | --- | --- |

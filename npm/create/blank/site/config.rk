@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/config.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
 # {{NAME}}: company settings. Apps listed here are installed; theme and layout pick files in themes/ and layouts/.
 locale: id-ID
 currency: IDR

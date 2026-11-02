@@ -31,7 +31,7 @@ source: csv                 # csv | xlsx: the default the wizard offers; both re
 header_row: 1               # 1-based row holding the column names; rows above it are ignored
 sheet: Item Details         # xlsx only; default the first sheet
 per: outlet                 # outlet | org (default org)
-key: [Date, Receipt Number, Item, Variant]
+key: [Date, Receipt Number, Item, Variant, Modifiers]
 group: [Date]               # rows with equal values become one record; without group, one row = one record
 map:
   date: Date
@@ -84,7 +84,13 @@ lines:
   naming, computed fields, automations, audit, events as for any create), skipping already-imported rows. Refused
   with 422 `import_errors` while the preview has errors, 409 `already_imported` when `duplicate` is true or the
   entry is already committed. Returns the entry with `records` (the names created).
-- `GET /imports/{import}/{id}` returns the entry. `GET /imports/{import}` lists the org's recent entries.
+- `GET /imports/{import}/{id}` returns the entry. `GET /imports/{import}` lists the org's 50 most recent entries
+  (without `preview`).
+- A file with no data rows previews with `rows: 0`; its commit is refused with 422 `import_empty`.
+- An upload over 20 MB gets 413 `too_large`. A commit whose rows were imported by another commit after its preview
+  gets 409 `already_imported` ("Sebagian baris sudah diimpor, unggah ulang file").
+- In `errors`, `column` is the file's column header when the failing field is mapped from a column, else the field
+  name.
 - Commit needs a person signed in (a session); tokens (AI and CLI) may preview but get 403 `permission_denied` on
   commit (data that moves money and stock is applied by people). Model `permissions:` checks (create on `model`) come with
   contract 0005 §4 / stream S1 and apply here like everywhere else.
@@ -92,13 +98,17 @@ lines:
 ### 4. Duplicates
 Two layers, both scoped by org, import name and (for `per: outlet`) outlet:
 1. **File:** the SHA-256 of the uploaded bytes. The same file committed twice → `duplicate: true`, commit 409.
-2. **Rows:** the values of `key` columns (trimmed, joined with U+001F) are hashed per row; committed keys are kept
+2. **Rows:** the values of `key` columns are hashed per row (joined with U+001F; a key column mapped to a typed field
+  is hashed as converted, e.g. a date as `2026-11-02`, so the CSV and XLSX copies of one export match; other columns
+  as trimmed text); committed keys are kept
   in `rk_import_keys` with a unique index. A later upload (an overlapping export, a re-export of the same day)
   skips rows whose key exists and creates only the new ones. Two rows with the same key in one file are an error.
   The unique index makes concurrent commits of overlapping files safe: the second transaction fails and nothing
   from it is written.
 
-`key` is required for `per: outlet` imports; without `key`, only the file check applies.
+`per: outlet` imports should set `key` (the validator warns otherwise); without `key`, only the file check applies.
+An overlapping export for a day already imported creates a second record for that day with only the new rows, so
+reports sum per date.
 
 ### 5. Import log
 `rk_imports (id, org_id, import, scope, file_name, file_sha, status previewed|committed, rows, skipped, errors

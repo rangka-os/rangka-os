@@ -75,6 +75,7 @@ type User struct {
 	Org      string   `json:"org"`
 	Roles    []string `json:"roles"`
 	Record   string   `json:"record,omitempty"` // core user record (USR-001)
+	Outlets  []string `json:"outlets"`          // outlet codes this membership is limited to (empty: all)
 }
 
 // EnsureOrg creates an organisation when missing.
@@ -112,25 +113,48 @@ func nullIf(s string) any {
 // ErrBadLogin is returned for a wrong email or password.
 var ErrBadLogin = errors.New("email atau kata sandi salah")
 
-// LoadUser loads a user and its membership in org (the first membership when org is empty).
+// ErrNoMembership means the user is not a member of the requested organisation (or of any).
+var ErrNoMembership = errors.New("bukan anggota organisasi ini")
+
+// LoadUser loads a user and its membership in org (the first membership by org id when org is empty).
 func LoadUser(ctx context.Context, q pg.Querier, userID int64, org string) (*User, error) {
-	res, err := q.Query(ctx, `select u.id, u.email, u.full_name, coalesce(m.org_id, ''), coalesce(m.role, ''), coalesce(m.record, '')
-		from rk_users u left join rk_members m on m.user_id = u.id and ($2 = '' or m.org_id = $2)
-		where u.id = $1 order by m.org_id limit 1`, userID, org)
+	res, err := q.Query(ctx, "select email, full_name from rk_users where id = $1", userID)
 	if err != nil {
 		return nil, err
 	}
 	if len(res.Rows) == 0 {
 		return nil, ErrBadLogin
 	}
-	r := res.Rows[0]
-	u := &User{ID: r[0].(int64), Email: r[1].(string), FullName: r[2].(string), Org: r[3].(string), Record: r[5].(string)}
-	if role := r[4].(string); role != "" {
-		u.Roles = []string{role}
-	} else {
-		u.Roles = []string{}
+	u := &User{ID: userID, Email: res.Rows[0][0].(string), FullName: res.Rows[0][1].(string), Roles: []string{}, Outlets: []string{}}
+	res, err = q.Query(ctx, `select org_id, role, coalesce(record, ''), outlets from rk_members
+		where user_id = $1 and ($2 = '' or org_id = $2) order by org_id limit 1`, userID, org)
+	if err != nil {
+		return nil, err
 	}
+	if len(res.Rows) == 0 {
+		return nil, ErrNoMembership
+	}
+	r := res.Rows[0]
+	u.Org, u.Record = r[0].(string), r[2].(string)
+	if role := r[1].(string); role != "" {
+		u.Roles = []string{role}
+	}
+	u.Outlets = stringList(r[3])
 	return u, nil
+}
+
+// stringList converts a scanned text[] to []string (never nil).
+func stringList(v any) []string {
+	out := []string{}
+	switch a := v.(type) {
+	case []any:
+		for _, x := range a {
+			out = append(out, fmt.Sprint(x))
+		}
+	case []string:
+		out = append(out, a...)
+	}
+	return out
 }
 
 // Authenticate checks email and password.

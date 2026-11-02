@@ -224,6 +224,9 @@ func (s *Service) sessionPrincipal(r *http.Request) (*Principal, error) {
 		return nil, err
 	}
 	u, err := LoadUser(r.Context(), s.DB, res.Rows[0][0].(int64), res.Rows[0][1].(string))
+	if errors.Is(err, ErrNoMembership) {
+		return nil, nil
+	}
 	if err != nil {
 		return nil, err
 	}

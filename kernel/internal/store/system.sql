@@ -30,6 +30,8 @@ create table if not exists rk_members (
   record  text,                         -- the user record (core user model) this member is, e.g. USR-001
   primary key (org_id, user_id)
 );
+alter table rk_orgs add column if not exists code text not null default '';
+alter table rk_members add column if not exists outlets text[] not null default '{}';
 create table if not exists rk_sessions (
   id         text primary key,          -- sha256 of the cookie value
   user_id    bigint not null references rk_users(id) on delete cascade,

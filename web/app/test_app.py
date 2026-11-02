@@ -14,7 +14,11 @@ Pilot features that other streams build (orgs, approvals, print, attachments, im
 has them, else against contract mocks: call mock_feature(page, feature) in a scenario. The run ends with
 "live: … · mocked: …"; --require-all turns any mocked feature into a failure.
 
-Prints SKIP and exits 0 when Go or Postgres is missing; exits 1 on any failure.
+Every HTTP answer >= 400 and every failed request to the kernel fails the scenario too, except 401 on /auth/*, the missing-route 404 ("no such endpoint") of
+the feature probes (approvals, attachments) and what a scenario allows with ctx.allow_http(status, url_regex).
+
+Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure (build,
+Postgres start, migrate, seed, user add, serve, a scenario) exits 1.
 """
 import argparse, http.cookiejar, json, os, re, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.request
 
@@ -173,6 +177,11 @@ class Ctx:
         self.base, self.meta, self.args = base, meta, args
         self.features, self.live, self.mocked, self.mock_state = {}, set(), set(), {}
         self.owner, self.password, self.users = OWNER, PASSWORD, USERS
+        self.allowed_http = []  # per scenario: (status, url regex) a scenario expects; see allow_http
+
+    def allow_http(self, status, url_pattern):
+        """Let the current scenario see an HTTP error it provokes on purpose (e.g. 403 from a forbidden list)."""
+        self.allowed_http.append((status, re.compile(url_pattern)))
 
     def home(self):
         """(hash, app) of the home route: the first dashboard of the first app with dashboards, else the first list."""
@@ -286,6 +295,27 @@ def test_user_menu_lists_orgs(page, ctx):
 
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
+PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")
+
+
+def http_problems(responses, ctx):
+    """HTTP answers >= 400 that the scenario did not expect."""
+    out = []
+    for r in responses:
+        path = re.sub(r"^https?://[^/]+", "", r.url)
+        if r.status == 401 and path.startswith("/auth/"):
+            continue
+        if any(st == r.status and rx.search(path) for st, rx in ctx.allowed_http):
+            continue
+        if r.status == 404 and PROBE_404.search(path):
+            try:
+                err = (json.loads(r.text() or "{}").get("error") or {})
+            except Exception:
+                err = {}
+            if err.get("code") == "not_found" and str(err.get("message", "")).startswith("no such endpoint"):
+                continue
+        out.append(f"{r.status} {r.request.method} {path}")
+    return out
 
 
 def main():
@@ -317,29 +347,38 @@ def main():
         sys.exit(1)
 
     tmp = tempfile.mkdtemp(prefix="rk-app-")
-    bin_path = os.path.join(tmp, "rangka")
-    b = subprocess.run(["go", "build", "-o", bin_path, "./cmd/rangka"], cwd=KERNEL, capture_output=True, text=True, timeout=600)
-    if b.returncode:
-        print("FAIL kernel does not build:\n" + b.stderr[-1500:])
-        sys.exit(1)
-    work = os.path.join(tmp, "ws")
-    for src, dst in (("rangka-apps/apps", "rangka-apps/apps"), ("rangka-apps/fixtures", "rangka-apps/fixtures"),
-                     ("rangka-apps/sites/kopi-senja", "rangka-apps/sites/kopi-senja"), ("rangka-connectors", "rangka-connectors")):
-        shutil.copytree(os.path.join(WS, src), os.path.join(work, dst))
-    APPS, SITE, CONN = (os.path.join(work, "rangka-apps", "apps"), os.path.join(work, "rangka-apps", "sites", "kopi-senja"), os.path.join(work, "rangka-connectors"))
     env = dict(os.environ, PGTEMP_STATE=os.path.join(tmp, ".pgtemp"))
-    pg = subprocess.run([os.path.join(KERNEL, "scripts", "pgtemp.sh"), "start"], capture_output=True, text=True, env=env)
-    if pg.returncode:
-        shutil.rmtree(tmp, ignore_errors=True)
-        skip("postgres did not start: " + pg.stderr[-500:])
-    db = pg.stdout.strip().splitlines()[-1]
-    server, failures = None, []
+    pgtemp = os.path.join(KERNEL, "scripts", "pgtemp.sh")
+    server, log, pg_started, failures, skipped = None, None, False, [], None
 
     def fail(m):
         failures.append(m)
         print("FAIL", m)
 
+    def log_tail():
+        if not log:
+            return ""
+        log.flush()
+        with open(log.name) as f:
+            return "".join(f.readlines()[-30:])
+
     try:
+        bin_path = os.path.join(tmp, "rangka")
+        b = subprocess.run(["go", "build", "-o", bin_path, "./cmd/rangka"], cwd=KERNEL, capture_output=True, text=True, timeout=600)
+        if b.returncode:
+            raise RuntimeError("kernel does not build:\n" + b.stderr[-1500:])
+        work = os.path.join(tmp, "ws")
+        for src in ("rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites/kopi-senja", "rangka-connectors"):
+            shutil.copytree(os.path.join(WS, src), os.path.join(work, src))
+        APPS, SITE, CONN = (os.path.join(work, "rangka-apps", "apps"), os.path.join(work, "rangka-apps", "sites", "kopi-senja"), os.path.join(work, "rangka-connectors"))
+        pg_started = True  # stop even after a failed start: it may have left a cluster behind
+        pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
+        if pg.returncode:
+            if "no PostgreSQL server binaries found" in pg.stderr:
+                skipped = "PostgreSQL server binaries not found (install PostgreSQL 16+ or set PGBIN)"
+                raise SystemExit
+            raise RuntimeError("postgres did not start: " + pg.stderr[-800:])
+        db = pg.stdout.strip().splitlines()[-1]
         common = ["--apps", APPS, "--site", SITE, "--db", db, "--connectors", CONN]
         steps = [["migrate"] + common, ["seed"] + common + ["--fixtures", os.path.join(work, "rangka-apps", "fixtures"), "--email", OWNER[0], "--password", OWNER[1]]]
         steps += [["user", "add", "--db", db, "--org", ORG, "--email", e, "--password", PASSWORD, "--role", role, "--name", name] for e, role, name in USERS]
@@ -353,13 +392,15 @@ def main():
                                    "--templates", os.path.join(ROOT, "templates"), "--org", ORG], stdout=log, stderr=subprocess.STDOUT)
         base = f"http://127.0.0.1:{port}"
         for _ in range(150):
+            if server.poll() is not None:
+                raise RuntimeError(f"rangka serve exited with {server.returncode}:\n{log_tail()}")
             try:
                 urllib.request.urlopen(base + "/app/index.html", timeout=1)
                 break
             except Exception:
                 time.sleep(0.2)
         else:
-            raise RuntimeError("kernel did not serve /app/ (see " + log.name + ")")
+            raise RuntimeError("kernel did not serve /app/ within 30s:\n" + log_tail())
 
         _, meta = Http(base).login(*OWNER).call("GET", "/api/v1/meta")
         CTX = ctx = Ctx(base, meta, args)
@@ -374,21 +415,31 @@ def main():
         with sync_playwright() as pw:
             br = pw.chromium.launch()
             for name, fn in scenarios:
+                ctx.allowed_http = []
                 bctx = br.new_context(viewport={"width": args.width, "height": height})
                 page = bctx.new_page()
                 if args.react_dir:
                     page.route("https://cdnjs.cloudflare.com/**", lambda r: r.fulfill(path=react[r.request.url.rsplit("/", 1)[-1]])
                                if r.request.url.rsplit("/", 1)[-1] in react else r.abort())
                 page.route("https://fonts.googleapis.com/**", lambda r: r.abort())
-                errs = []
+                errs, responses = [], []
                 page.on("pageerror", lambda e: errs.append("pageerror: " + str(e)))
-                # A 401 from the kernel is part of signing in; the browser logs it as a failed resource, not an app error.
+                # Failed loads are judged from the responses below (aborted font/CDN requests have none).
                 page.on("console", lambda m: errs.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
+                page.on("response", lambda r: responses.append(r) if r.status >= 400 else None)
+                # Chrome aborts some error answers without a response event (a 404 stylesheet served as text/plain);
+                # a failed request to the kernel is a failure too. Font/CDN requests aborted on purpose are elsewhere.
+                failed = []
+                page.on("requestfailed", lambda r: failed.append(f"{r.url} ({r.failure})") if r.url.startswith(ctx.base + "/") else None)
                 t0 = time.time()
                 try:
                     fn(page, ctx)
-                    if errs:
-                        raise AssertionError("console errors: " + " | ".join(errs[:3]))
+                    bad = http_problems(responses, ctx)
+                    problems = (["unexpected HTTP errors: " + " | ".join(bad[:5])] if bad else []) + \
+                               (["failed requests: " + " | ".join(failed[:5])] if failed else []) + \
+                               (["console errors: " + " | ".join(errs[:3])] if errs else [])
+                    if problems:
+                        raise AssertionError("; ".join(problems))
                     print(f"ok   {name} ({time.time() - t0:.1f}s)")
                 except Exception as e:
                     fail(f"{name}: {type(e).__name__}: {e}")
@@ -406,6 +457,8 @@ def main():
         print(f"\nlive: {', '.join(live)} · mocked: {', '.join(mocked)}")
         if args.require_all and ctx.mocked:
             fail("--require-all: features ran on contract mocks: " + ", ".join(sorted(ctx.mocked)))
+    except SystemExit:
+        pass
     except Exception as e:
         fail(f"setup: {e}")
     finally:
@@ -415,11 +468,16 @@ def main():
                 server.wait(10)
             except subprocess.TimeoutExpired:
                 server.kill()
-        subprocess.run([os.path.join(KERNEL, "scripts", "pgtemp.sh"), "stop"], env=env, capture_output=True)
+        if log:
+            log.close()
+        if pg_started:
+            subprocess.run([pgtemp, "stop"], env=env, capture_output=True)
         if args.keep:
             print("kept", tmp)
         else:
             shutil.rmtree(tmp, ignore_errors=True)
+    if skipped:
+        skip(skipped)
     print(f"{'OK' if not failures else 'FAILED'}: {len(scenarios)} scenario(s) at width {args.width}, {len(failures)} failure(s)")
     sys.exit(1 if failures else 0)
 

@@ -104,7 +104,8 @@
     function call(method, path, body) {
       return raw(method, path, body).then(function (res) {
         if (res.status < 200 || res.status >= 300) return failure(res).then(function (e) { throw e; });
-        if (res.status === 204) return { status: 204, body: null };
+        // read the (empty) body anyway: an unread 204 shows up as an aborted request
+        if (res.status === 204) return res.text().then(function () { return { status: 204, body: null }; }, function () { return { status: 204, body: null }; });
         return res.text().then(function (t) {
           var b = null;
           try { b = t ? JSON.parse(t) : null; } catch (e) { b = null; }

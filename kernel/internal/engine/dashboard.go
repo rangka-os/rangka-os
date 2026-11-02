@@ -26,7 +26,7 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 	if period <= 0 {
 		period = d.DefaultPeriod
 	}
-	key := "dash:" + a.Org + ":" + name + ":" + formatInt(int64(period)) + ":" + e.Today()
+	key := "dash:" + a.Org + ":" + name + ":" + formatInt(int64(period)) + ":" + e.Today() + ":" + permKey(a)
 	ttl := cache.ParseTTL(d.Cache)
 	if ttl > 0 && e.Cache != nil {
 		if v, ok := e.Cache.Get(key); ok {
@@ -71,12 +71,17 @@ func (dc *dashCtx) all(m *meta.Model) ([]store.Record, error) {
 	if r, ok := dc.rows[m.Name]; ok {
 		return r, nil
 	}
-	r, err := store.All(dc.ctx, dc.e.DB, dc.e.Reg(), dc.a.Org, m, false)
+	all, err := store.All(dc.ctx, dc.e.DB, dc.e.Reg(), dc.a.Org, m, false)
 	if err != nil {
 		return nil, err
 	}
-	for _, rec := range r {
+	readable := dc.e.decide(dc.a, m, "read")
+	var r []store.Record
+	for _, rec := range all {
 		dc.e.Output(m, rec)
+		if dc.e.recordAllowed(dc.ctx, dc.e.DB, dc.a, m, readable, rec, dc.links) {
+			r = append(r, rec)
+		}
 	}
 	dc.rows[m.Name] = r
 	return r, nil
@@ -149,6 +154,9 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 	m := dc.e.Reg().Model(w.Model)
 	if m == nil {
 		return map[string]any{"error": "Model " + w.Model + " tidak terpasang"}, nil
+	}
+	if err := dc.e.Authorize(dc.ctx, dc.a, m.Name, "read", nil); err != nil {
+		return map[string]any{"error": map[string]any{"code": "permission_denied", "model": m.Name, "action": "read"}}, nil
 	}
 	if w.If != "" {
 		v, err := cel.Eval(w.If, &cel.Env{Today: dc.e.Today, Apps: dc.e.Reg().IsInstalled, Vars: func(n string) (any, bool) {

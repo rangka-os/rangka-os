@@ -223,6 +223,7 @@ func (s *Server) Reload(ctx context.Context) error {
 
 func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 	act := meta.AsMap(j.Args["actor"])
+	// a queued action replays a person's request: same roles, same permission checks (not System)
 	a := engine.Actor{Org: j.Org, ID: meta.Str(act, "id"), UserName: meta.Str(act, "user"), Roles: meta.StrList(act["roles"])}
 	if a.ID == "" {
 		a.ID = "queue"
@@ -241,7 +242,7 @@ func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 
 func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	name := meta.Str(j.Args, "flow")
-	a := engine.Actor{Org: j.Org, ID: "flow:" + name, UserName: "system", Roles: []string{"system"}}
+	a := engine.Actor{Org: j.Org, ID: "flow:" + name, UserName: "system", Roles: []string{"system"}, System: true}
 	start := 0
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)

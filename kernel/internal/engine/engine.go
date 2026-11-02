@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,9 @@ type Actor struct {
 	UserName string   // the user record the person is (USR-001); user.name in CEL
 	Roles    []string // member roles (owner, sales_manager, …)
 	Human    bool     // signed in with a browser session (not a token)
+	// System marks kernel-internal actors (seed, flows and automations the kernel starts): they bypass
+	// permission checks. Queue jobs replaying a person's action keep that person's roles and System=false.
+	System bool
 }
 
 // Enqueuer puts background jobs on the queue (implemented by package jobs).
@@ -48,6 +52,8 @@ type Engine struct {
 	Queue   Enqueuer
 	OnWrite func(org, model string)
 	Log     func(format string, args ...any)
+
+	permCache sync.Map // *meta.Model → *modelPerms
 }
 
 // New makes an engine with the built-in hooks.
@@ -64,6 +70,7 @@ func (e *Engine) Reg() *meta.Registry { return e.reg.Load() }
 // SetRegistry swaps the registry (live metadata reload).
 func (e *Engine) SetRegistry(r *meta.Registry) {
 	e.reg.Store(r)
+	e.permCache.Clear()
 	if e.Cache != nil {
 		e.Cache.DeletePrefix("dash:")
 	}

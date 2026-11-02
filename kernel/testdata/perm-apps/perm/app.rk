@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+name: perm
+version: 0.1.0
+title: {id: Izin, en: Permissions}
+requires: {rangka: '>=0.4'}
+dashboards: [perm_overview]
+menu:
+  - group: {id: Izin}
+    items: [voucher, note]

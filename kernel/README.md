@@ -140,12 +140,15 @@ DELETE /api/v1/attachments/{id}               → 204
 
 * Bytes live under a root directory, first match wins: `rangka serve --files-dir` / `$RANGKA_FILES_DIR`, then
   `system.rk files.path`, then `./data/files` (relative to where `serve` runs). Content-addressed per org
-  (`<root>/<org>/<sha[0:2]>/<sha>`); metadata is in `rk_attachments`. Back up the root together with the database.
+  (`<root>/<orgdir>/<sha[0:2]>/<sha>`, where `<orgdir>` is the org id, or `_` + 16 hex of its sha256 when the id is not a plain slug); metadata is in `rk_attachments`. Back up the root together with the database.
 * Limit `files.max_upload_mb` (default 20): larger uploads get 413 `too_large`. `files: {enabled: false}` answers
   501 `files_disabled`; `driver: s3` is refused at start-up until a driver exists.
-* Reading needs read access to the record, upload and delete need `write`. Upload works in any docstatus; delete
+* Reading needs the record to be visible to the caller (org scope today; role permissions once contract 0005 §4
+  lands), upload and delete need `write`. Upload works in any docstatus; delete
   is refused (409 `submitted`) once a submittable record is submitted. Attachments follow the record when submit
   renames it and go with it when it is deleted. Uploads and deletes are audited.
+  Downloads send `nosniff` and `Content-Security-Policy: sandbox`, except PDF (Chromium's viewer refuses sandboxed
+  documents).
 
 ## Tests
 

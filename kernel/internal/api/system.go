@@ -18,7 +18,7 @@ func sysStr(reg *meta.Registry, path, def string) string {
 }
 
 // Status is GET /system/status (the Console's system page).
-func (s *Server) Status(ctx context.Context) map[string]any {
+func (s *Server) Status(ctx context.Context, org string) map[string]any {
 	reg := s.Engine.Reg()
 	caps := map[string]any{}
 	lat, err := s.DB.Ping(ctx)
@@ -46,8 +46,10 @@ func (s *Server) Status(ctx context.Context) map[string]any {
 	if s.Files != nil {
 		fc["path"] = s.Files.Root()
 	}
-	if n, b, aerr := store.AttachmentTotals(ctx, s.DB); aerr == nil {
+	if n, b, aerr := store.AttachmentTotals(ctx, s.DB, org); aerr == nil {
 		fc["attachments"], fc["bytes"] = n, b
+	} else {
+		fc["ok"], fc["error"] = false, aerr.Error()
 	}
 	caps["files"] = fc
 	caps["search"] = map[string]any{"driver": sysStr(reg, "search.driver", "postgres"), "ok": err == nil}

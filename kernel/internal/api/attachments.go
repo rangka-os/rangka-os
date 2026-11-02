@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"mime"
 	"mime/multipart"
 	"net/http"
 	"os"
@@ -232,7 +233,8 @@ func (s *Server) listAttachments(w http.ResponseWriter, r *http.Request, c *call
 	writeJSON(w, http.StatusOK, map[string]any{"data": out})
 }
 
-// contentDisposition builds `inline|attachment; filename*=UTF-8”<pct-escaped>` (RFC 6266 / 5987).
+// contentDisposition builds `inline|attachment; filename*=UTF-8` plus two apostrophes and the percent-escaped
+// name (RFC 6266 / 5987).
 func contentDisposition(disp, filename string) string {
 	const attrChar = "!#$&+-.^_`|~"
 	var b strings.Builder
@@ -273,7 +275,9 @@ func (s *Server) getAttachment(w http.ResponseWriter, r *http.Request, c *caller
 	h := w.Header()
 	h.Set("Content-Type", row.ContentType)
 	h.Set("X-Content-Type-Options", "nosniff")
-	h.Set("Content-Security-Policy", "sandbox")
+	if mt, _, _ := mime.ParseMediaType(row.ContentType); mt != "application/pdf" {
+		h.Set("Content-Security-Policy", "sandbox") // Chromium's PDF viewer refuses sandboxed documents
+	}
 	h.Set("Cache-Control", "private, max-age=0")
 	h.Set("Content-Disposition", contentDisposition(disp, row.Filename))
 	http.ServeContent(w, r, "", row.CreatedAt, f) // sets Content-Length, honours Range

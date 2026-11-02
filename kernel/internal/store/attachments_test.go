@@ -54,7 +54,7 @@ func TestAttachmentRows(t *testing.T) {
 	if n, _ := CountBlobRefs(ctx, db, "b", sha); n != 1 {
 		t.Fatalf("refs b: %d", n)
 	}
-	if c, b, err := AttachmentTotals(ctx, db); err != nil || c != 3 || b != 35 {
+	if c, b, err := AttachmentTotals(ctx, db, "a"); err != nil || c != 2 || b != 30 {
 		t.Fatalf("totals: %d %d %v", c, b, err)
 	}
 	if err := DeleteAttachment(ctx, db, "a", a1.ID); err != nil {

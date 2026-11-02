@@ -18,9 +18,11 @@ Status: proposed (3 Nov 2026) · Owner: rangka-os (kernel) · Affects: web app (
 - Root directory, first match wins: `rangka serve --files-dir` / `$RANGKA_FILES_DIR`, then `system.rk`
   `files.path`, then `./data/files`. A relative path is relative to the working directory of `rangka serve`
   (never the site directory, which is a git checkout).
-- Layout: `<root>/<org>/<sha256[0:2]>/<sha256>`. Content-addressed per org: the same bytes uploaded twice in one
+- Layout: `<root>/<orgdir>/<sha256[0:2]>/<sha256>`, where `<orgdir>` is the org id when it matches
+  `^[a-z0-9][a-z0-9_-]*$`, otherwise `_` + the first 16 hex digits of `sha256(org id)`. Any non-empty org id is
+  accepted and can never leave the root; an empty one is an error. Content-addressed per org: the same bytes uploaded twice in one
   org are stored once; the blob is removed when its last attachment row is deleted. Orgs never share blobs.
-- Writes go to a temp file in `<root>/<org>/tmp/` and are renamed into place, so a crash never leaves half a file
+- Writes go to a temp file in `<root>/<orgdir>/tmp/` and are renamed into place, so a crash never leaves half a file
   under its hash.
 
 ### 2. Table `rk_attachments` (kernel table, `store/system.sql`)
@@ -40,8 +42,9 @@ Nothing in the model's own table changes, so no `.rk` key and no schema 0.5 chan
 - **Size limit:** `files.max_upload_mb`, default **20**. Larger → 413 `too_large` (message in Bahasa Indonesia).
   The body is read through `http.MaxBytesReader`, so an oversized upload is never buffered whole.
 - **Content type** is sniffed from the bytes (`http.DetectContentType`), falling back to the extension; the
-  client's header is not trusted. Downloads send `X-Content-Type-Options: nosniff` and
-  `Content-Security-Policy: sandbox`. `Content-Disposition` is `inline` for raster images (`image/png|jpeg|gif|webp`)
+  client's header is not trusted. The extension fallback never yields an inline type (plain text named `x.png`
+  stays `text/plain`). Downloads send `X-Content-Type-Options: nosniff` and `Content-Security-Policy: sandbox`,
+  except `application/pdf`, which omits the CSP header because Chromium's PDF viewer refuses sandboxed documents. `Content-Disposition` is `inline` for raster images (`image/png|jpeg|gif|webp`)
   and `application/pdf` (the web app previews these), `attachment` for everything else, SVG and HTML included.
 - **Filename:** base name only, control characters and path separators removed, at most 200 bytes; empty →
   `lampiran`.
@@ -67,7 +70,7 @@ Nothing in the model's own table changes, so no `.rk` key and no schema 0.5 chan
 ### 5. Permission check used until 0005 §4 lands
 `Engine.Permits(ctx, actor, model, record, action)` (kernel, `engine/permits.go`):
 - a model without `permissions:` allows everything (today's behaviour);
-- role `owner` and the internal actors (`system`, `seed`, `flow:*`) are allowed;
+- roles `owner` and `system`, and the internal actors (`system`, `seed`, `flow:*`) are allowed;
 - otherwise some entry whose `role` is one of the actor's roles must have `<action>: true` and, if it has `if:`,
   the CEL must be true on the record (same scope as action `if:`).
 - A refusal is 403 `permission_denied` `{model, action}` as fixed in 0005 §4.
@@ -75,7 +78,7 @@ Nothing in the model's own table changes, so no `.rk` key and no schema 0.5 chan
 S1 (0005 §4) may replace the body of `Permits` with the general enforcement; the attachment handlers only call it.
 
 ### 6. Status and backup
-- `/system/status` `capabilities.files` reports `{driver, ok, path (resolved root), max_upload_mb, attachments, bytes}`.
+- `/system/status` `capabilities.files` reports `{driver, ok, path (resolved root), max_upload_mb, attachments, bytes}`; `attachments` and `bytes` are totals for the caller's org. If the totals query fails, `ok` is false and `error` carries the message.
 - Backup (0005 §2) archives the resolved root; `rk_attachments` is in the database dump.
 
 ## Not in this contract

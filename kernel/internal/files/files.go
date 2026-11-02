@@ -35,7 +35,7 @@ var (
 	sumRe = regexp.MustCompile(`^[0-9a-f]{64}$`)
 )
 
-// Local stores blobs under a directory: <root>/<org>/<sum[0:2]>/<sum>.
+// Local stores blobs under a directory: <root>/<orgdir>/<sum[0:2]>/<sum>, where orgdir is the org id when it is a slug, else "_"+16 hex of sha256(org).
 type Local struct{ root string }
 
 // NewLocal creates the root directory (0750) and returns a store for it.
@@ -53,29 +53,37 @@ func NewLocal(root string) (*Local, error) {
 // Root returns the absolute root directory.
 func (l *Local) Root() string { return l.root }
 
-func checkOrg(org string) error {
-	if !orgRe.MatchString(org) {
-		return fmt.Errorf("files: invalid org id %q", org)
+// orgDir maps an org id to its directory name: the id itself when it is a plain slug, otherwise
+// "_" + the first 16 hex digits of sha256(org). The mapping never fails for a non-empty id.
+func orgDir(org string) (string, error) {
+	if org == "" {
+		return "", fmt.Errorf("files: empty org id")
 	}
-	return nil
+	if orgRe.MatchString(org) {
+		return org, nil
+	}
+	h := sha256.Sum256([]byte(org))
+	return "_" + hex.EncodeToString(h[:])[:16], nil
 }
 
 func (l *Local) blobPath(org, sum string) (string, error) {
-	if err := checkOrg(org); err != nil {
+	dir, err := orgDir(org)
+	if err != nil {
 		return "", err
 	}
 	if !sumRe.MatchString(sum) {
 		return "", fmt.Errorf("files: invalid sha256 %q", sum)
 	}
-	return filepath.Join(l.root, org, sum[:2], sum), nil
+	return filepath.Join(l.root, dir, sum[:2], sum), nil
 }
 
 // Put implements Store.
 func (l *Local) Put(org string, r io.Reader) (string, int64, error) {
-	if err := checkOrg(org); err != nil {
+	dir, err := orgDir(org)
+	if err != nil {
 		return "", 0, err
 	}
-	tmpDir := filepath.Join(l.root, org, "tmp")
+	tmpDir := filepath.Join(l.root, dir, "tmp")
 	if err := os.MkdirAll(tmpDir, 0o750); err != nil {
 		return "", 0, err
 	}

@@ -103,9 +103,9 @@ func CountBlobRefs(ctx context.Context, q pg.Querier, org, sum string) (int64, e
 	return toInt(res.Rows[0][0]), nil
 }
 
-// AttachmentTotals returns the number of attachment rows and their summed size, over all organisations.
-func AttachmentTotals(ctx context.Context, q pg.Querier) (count, bytes int64, err error) {
-	res, err := q.Query(ctx, "select count(*), coalesce(sum(size), 0) from rk_attachments")
+// AttachmentTotals returns the number of attachment rows and their summed size for one organisation.
+func AttachmentTotals(ctx context.Context, q pg.Querier, org string) (count, bytes int64, err error) {
+	res, err := q.Query(ctx, "select count(*), coalesce(sum(size), 0) from rk_attachments where org_id = $1", org)
 	if err != nil {
 		return 0, 0, err
 	}

@@ -127,7 +127,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/changesets/{id}", a(s.getChangeset))
 	mux.HandleFunc("POST /api/v1/changesets/{id}/{verb}", a(s.changesetVerb))
 	// system, orgs, files
-	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) { writeJSON(w, 200, s.Status(r.Context())) }))
+	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
+		writeJSON(w, 200, s.Status(r.Context(), c.actor.Org))
+	}))
 	mux.HandleFunc("GET /api/v1/system/jobs", a(s.listJobs))
 	mux.HandleFunc("GET /api/v1/system/jobs/{id}", a(s.getJob))
 	mux.HandleFunc("GET /api/v1/system/audit", a(s.listAudit))
@@ -162,7 +164,7 @@ func (s *Server) Handler() http.Handler {
 		Changes: s.Changes,
 		Meta:    func(ctx context.Context, a engine.Actor) (any, error) { return s.Meta(ctx, a) },
 		File:    func(ctx context.Context, p string) (any, error) { return s.File(p) },
-		Status:  func(ctx context.Context) any { return s.Status(ctx) },
+		Status:  func(ctx context.Context, org string) any { return s.Status(ctx, org) },
 	}
 	for _, m := range []string{"POST", "GET", "DELETE"} {
 		mux.Handle(m+" /mcp", mcpHandler)

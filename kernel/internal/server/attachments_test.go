@@ -101,7 +101,7 @@ func TestAttachmentsCRUD(t *testing.T) {
 		t.Fatalf("list: %v", l)
 	}
 	dl := e.must(200, "GET", it["url"].(string), nil)
-	if !bytes.Equal(dl.Body, pdfBytes) || !strings.HasPrefix(dl.Header.Get("Content-Disposition"), "inline") || dl.Header.Get("Content-Type") != "application/pdf" {
+	if !bytes.Equal(dl.Body, pdfBytes) || !strings.HasPrefix(dl.Header.Get("Content-Disposition"), "inline") || dl.Header.Get("Content-Type") != "application/pdf" || dl.Header.Get("Content-Security-Policy") != "" {
 		t.Fatalf("download: %q %v", dl.Body, dl.Header)
 	}
 	e.must(204, "DELETE", it["url"].(string), nil)
@@ -251,6 +251,13 @@ func TestAttachmentDownloadHeaders(t *testing.T) {
 	e := newEnv(t, false, nil)
 	e.login()
 	base := "/api/v1/r/sales_invoice/" + e.newInvoice() + "/attachments"
+	pdf := e.upload(base, "x.pdf", pdfBytes)
+	if pdf.Status != 201 {
+		t.Fatalf("pdf: %d %s", pdf.Status, pdf.Body)
+	}
+	if h := e.must(200, "GET", pdf.JSON["url"].(string), nil).Header; h.Get("Content-Security-Policy") != "" || h.Get("X-Content-Type-Options") != "nosniff" {
+		t.Fatalf("pdf headers: %v", h)
+	}
 	for fn, body := range map[string]string{"x.svg": `<svg xmlns="http://www.w3.org/2000/svg"/>`, "x.html": "<html><script>alert(1)</script></html>"} {
 		up := e.upload(base, fn, []byte(body))
 		if up.Status != 201 {
@@ -276,10 +283,15 @@ func TestAttachmentDownloadHeaders(t *testing.T) {
 func TestAttachmentsMissingRecordAndPart(t *testing.T) {
 	e := newEnv(t, false, nil)
 	e.login()
-	if r := e.upload("/api/v1/r/sales_invoice/NOPE/attachments", "a.pdf", pdfBytes); r.Status != 404 {
+	if r := e.upload("/api/v1/r/sales_invoice/NOPE/attachments", "a.pdf", pdfBytes); r.Status != 404 || code(r) != "not_found" {
 		t.Fatalf("missing record: %d %s", r.Status, r.Body)
 	}
-	e.must(404, "GET", "/api/v1/r/sales_invoice/NOPE/attachments", nil)
+	if r := e.do("GET", "/api/v1/r/sales_invoice/NOPE/attachments", nil); r.Status != 404 || code(r) != "not_found" {
+		t.Fatalf("list missing record: %d %s", r.Status, r.Body)
+	}
+	if r := e.do("GET", "/api/v1/r/nope/X/attachments", nil); r.Status != 404 || code(r) != "not_found" {
+		t.Fatalf("unknown model: %d %s", r.Status, r.Body)
+	}
 	name := e.newInvoice()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -302,6 +314,10 @@ func TestAttachmentsStatus(t *testing.T) {
 	e.login()
 	if r := e.upload("/api/v1/r/sales_invoice/"+e.newInvoice()+"/attachments", "a.pdf", pdfBytes); r.Status != 201 {
 		t.Fatalf("upload: %d %s", r.Status, r.Body)
+	}
+	if _, err := e.s.DB.Exec(context.Background(), `insert into rk_attachments (id, org_id, model, record, filename, content_type, size, sha256)
+		values ('att_other0000000000000001', 'other', 'deal', 'DEAL-00011', 'a.pdf', 'application/pdf', 777, $1)`, strings.Repeat("a", 64)); err != nil {
+		t.Fatal(err)
 	}
 	st := e.must(200, "GET", "/api/v1/system/status", nil).JSON
 	f := get(st, "capabilities", "files").(map[string]any)

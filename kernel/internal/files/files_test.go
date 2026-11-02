@@ -7,6 +7,7 @@ import (
 	"io"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
 	"unicode/utf8"
@@ -59,8 +60,38 @@ func TestLocalRejectsBadOrgAndSum(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.Put("../x", strings.NewReader("a")); err == nil {
-		t.Fatal("bad org accepted")
+	if _, _, err := s.Put("", strings.NewReader("a")); err == nil {
+		t.Fatal("empty org accepted")
+	}
+	dirRe := regexp.MustCompile(`^_[0-9a-f]{16}$`)
+	for _, org := range []string{"../x", "PT Maju"} {
+		sum, _, err := s.Put(org, strings.NewReader("a"))
+		if err != nil {
+			t.Fatalf("org %q: %v", org, err)
+		}
+		dirs, _ := os.ReadDir(s.Root())
+		found := false
+		for _, d := range dirs {
+			if dirRe.MatchString(d.Name()) {
+				if _, err := os.Stat(filepath.Join(s.Root(), d.Name(), sum[:2], sum)); err == nil {
+					found = true
+				}
+			}
+		}
+		if !found {
+			t.Fatalf("org %q: blob not under a _<16 hex> directory in root", org)
+		}
+		rc, err := s.Open(org, sum)
+		if err != nil {
+			t.Fatalf("open %q: %v", org, err)
+		}
+		rc.Close()
+		if err := s.Delete(org, sum); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(filepath.Dir(s.Root()), "x")); err == nil {
+		t.Fatal("blob escaped the root")
 	}
 	if _, err := s.Open("kopi-senja", "../../etc/passwd"); err == nil {
 		t.Fatal("bad sum accepted")

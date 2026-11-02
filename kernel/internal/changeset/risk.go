@@ -40,13 +40,13 @@ func (a *Assessment) raise(level, why string) {
 	a.Reasons = append(a.Reasons, level+": "+why)
 }
 
-// sensitiveField is a money field (money: true; currency fields unless money: false) or a stock field (stock: true).
+// sensitiveField is a money field (money: true; currency and money typed fields unless money: false) or a stock field (stock: true).
 func sensitiveField(f map[string]any) bool {
 	if b, ok := f["money"].(bool); ok {
 		if b {
 			return true
 		}
-	} else if t, _ := f["type"].(string); t == "currency" {
+	} else if t, _ := f["type"].(string); t == "currency" || t == "money" {
 		return true
 	}
 	return f["stock"] == true

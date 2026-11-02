@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"strings"
 	"testing"
@@ -289,4 +290,29 @@ func TestMoneyChecks(t *testing.T) {
 	if got := idr(t, res.Record, "total_idr"); got != 10 {
 		t.Errorf("update total_idr = %d, want 10", got)
 	}
+}
+
+func TestMoneyJSON(t *testing.T) {
+	e, a := setupMoney(t)
+	rec := createBill(t, e, a, map[string]any{"currency": "USD", "rate": 15873.5, "items": []any{line(1, "1250.5")}})
+	m := e.Reg().Model("bill")
+	b, err := json.Marshal(e.Output(m, rec))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{`"total":"1250.5"`, `"total_idr":19849812`} {
+		if !strings.Contains(string(b), want) {
+			t.Errorf("%s missing from %s", want, b)
+		}
+	}
+	var in map[string]any
+	if err := json.Unmarshal([]byte(`{"currency":"USD","rate":15873.5,"items":[{"qty":1,"price":0.1}]}`), &in); err != nil {
+		t.Fatal(err)
+	}
+	got := createBill(t, e, a, in)
+	both(t, e, a, got, func(r map[string]any) {
+		if p := dec(t, firstLine(r), "price"); p != "0.1" {
+			t.Errorf("price = %s", p)
+		}
+	})
 }

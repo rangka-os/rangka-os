@@ -217,6 +217,8 @@ func (e *evaluator) eval(x Expr, f *frame) (any, error) {
 				return -y, nil
 			case Duration:
 				return Duration{-y.D}, nil
+			case money.Decimal:
+				return y.Neg(), nil
 			}
 			return nil, errf("no such overload: -%s", typeName(v))
 		}

@@ -36,6 +36,8 @@ func TestDecimalArithmetic(t *testing.T) {
 		"sum(items.map(i, i.amount))": "0.5",
 		"sum([b, 1])":                 "1.25",
 		"round(a)":                    "1251",
+		"-a":                          "-1250.5",
+		"-(0 - b)":                    "0.25",
 		"round(a * r, 2)":             "137.56",
 	}
 	for src, want := range dec {

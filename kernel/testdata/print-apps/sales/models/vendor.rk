@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: vendor
+label: {id: Pemasok}
+naming: VND-{####}
+title_field: vendor_name
+fields:
+  - {name: vendor_name, type: data, label: {id: Nama pemasok}, required: true, in_list: true}
+  - {name: address, type: text, label: {id: Alamat}}
+  - {name: npwp, type: data, label: {id: NPWP}}

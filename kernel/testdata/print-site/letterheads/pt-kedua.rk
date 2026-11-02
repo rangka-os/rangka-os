@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json
+legal_name: PT Contoh Kedua
+logo: brand/logo.svg
+address: |
+  Jl. Contoh No. 2
+  Bandung 40111
+npwp: "00.000.000.0-000.000"

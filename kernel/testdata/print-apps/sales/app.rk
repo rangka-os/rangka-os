@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+name: sales
+version: 1.0.0
+title: {id: Penjualan, en: Sales}
+requires: {rangka: '>=0.4', core: ^1.0}
+menu:
+  - group: {id: Penjualan}
+    items: [quotation, sales_invoice]
+  - group: {id: Pembelian}
+    items: [purchase_order, vendor]

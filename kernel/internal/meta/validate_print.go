@@ -1,0 +1,96 @@
+package meta
+
+import (
+	"fmt"
+	"html/template"
+	"os"
+	"path/filepath"
+	"strings"
+)
+
+// PrintFuncNames are the helpers print templates may call (contract 0008 §3). The renderer (docprint)
+// provides them; validation parses templates with no-op stand-ins of the same names.
+var PrintFuncNames = []string{"rupiah", "money", "number", "date", "terbilang", "label", "option", "sub", "sum", "overdue", "aging", "upper"}
+
+func printFuncStubs() template.FuncMap {
+	fm := template.FuncMap{}
+	for _, n := range PrintFuncNames {
+		fm[n] = func(...any) any { return nil }
+	}
+	return fm
+}
+
+// validatePrints checks print formats and letterheads (kernel extension, after more()).
+func (v *validator) validatePrints() {
+	all := v.allModels()
+	for _, p := range v.reg.printFiles {
+		if p.App != "" && v.skip(p.App) {
+			continue
+		}
+		v.printFormat(p, all)
+	}
+	if s := v.reg.Site; s != nil {
+		for _, org := range sortedKeysM(s.Letterheads) {
+			d := s.Letterheads[org]
+			if logo := str(asMap(d.Data), "logo"); logo != "" {
+				if _, err := os.Stat(v.reg.siteFile(logo)); err != nil {
+					v.rep.extra("error", d.Path, "logo", "logo_missing", fmt.Sprintf(`logo file "%s" does not exist in %s`, logo, v.rep.rel(s.Dir)))
+				}
+			}
+		}
+	}
+}
+
+func (v *validator) printFormat(p *Print, all map[string]vis) {
+	d, raw := p.Doc, p.Raw
+	v.schemaErr("print", d)
+	if got, ok := raw["name"].(string); !ok || got != p.Name {
+		v.rep.extra("error", d.Path, "name", "name_mismatch", fmt.Sprintf(`print name "%s" must match the file name "%s"`, pyStr(raw["name"]), p.Name))
+	}
+	model, known := all[p.Model]
+	if _, has := raw["model"]; has && !known {
+		v.rep.extra("error", d.Path, "model", "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, p.Model, suggest(p.Model, keys(all))))
+	}
+	related := asMap(raw["related"])
+	for _, rn := range sortedKeys(related) {
+		rel := p.Related[rn]
+		at := "related/" + rn
+		target, ok := all[rel.Model]
+		if !ok {
+			if rel.Model != "" {
+				v.rep.extra("error", d.Path, at+"/model", "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, rel.Model, suggest(rel.Model, keys(all))))
+			}
+			continue
+		}
+		relFields := union(fieldNames(target.m), SystemFields)
+		for _, k := range sortedKeys(asMap(asMap(related[rn])["match"])) {
+			if !relFields[k] {
+				v.rep.extra("error", d.Path, at+"/match/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s`, k, rel.Model))
+			}
+			if dv, ok := rel.Match[k]; ok && known && !union(fieldNames(model.m), SystemFields)[dv] {
+				v.rep.extra("error", d.Path, at+"/match/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s`, dv, p.Model))
+			}
+		}
+	}
+	v.printTemplate(p)
+}
+
+func (v *validator) printTemplate(p *Print) {
+	d := p.Doc
+	t := str(p.Raw, "template")
+	if t == "" {
+		return // the schema reports it
+	}
+	if rel, err := filepath.Rel(p.Root, p.Template); filepath.IsAbs(t) || err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		v.rep.extra("error", d.Path, "template", "template_outside", fmt.Sprintf(`template "%s" must stay inside %s`, t, v.rep.rel(p.Root)))
+		return
+	}
+	src, err := os.ReadFile(p.Template)
+	if err != nil {
+		v.rep.extra("error", d.Path, "template", "template_missing", fmt.Sprintf(`template file "%s" does not exist`, t))
+		return
+	}
+	if _, err := template.New(filepath.Base(p.Template)).Funcs(printFuncStubs()).Parse(string(src)); err != nil {
+		v.rep.extra("error", d.Path, "template", "template_error", truncMsg(err.Error()))
+	}
+}

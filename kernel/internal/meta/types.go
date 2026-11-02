@@ -161,16 +161,17 @@ type App struct {
 	Flows              []string
 }
 
-// Site is one installation: system.rk, features.rk, config.rk, themes and layouts.
+// Site is one installation: system.rk, features.rk, config.rk, themes, layouts and letterheads.
 type Site struct {
-	Dir      string
-	Name     string
-	System   map[string]any
-	Features map[string]any
-	Config   map[string]any
-	Themes   map[string]*rk.Doc
-	Layouts  map[string]*rk.Doc
-	Docs     map[string]*rk.Doc // by site-relative path
+	Dir         string
+	Name        string
+	System      map[string]any
+	Features    map[string]any
+	Config      map[string]any
+	Themes      map[string]*rk.Doc
+	Layouts     map[string]*rk.Doc
+	Letterheads map[string]*rk.Doc // "" = letterhead.rk, else the org of letterheads/<org>.rk
+	Docs        map[string]*rk.Doc // by site-relative path
 }
 
 // ---------- raw data helpers

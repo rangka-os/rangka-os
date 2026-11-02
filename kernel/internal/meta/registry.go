@@ -23,8 +23,10 @@ type Registry struct {
 	Roles            map[string]*rk.Doc // by role name
 	Connectors       map[string]*rk.Doc // by connector name (directory)
 	Overlays         map[string]*rk.Doc // <site>/custom/<model>.rk by file stem
+	Prints           map[string]*Print  // print formats by name; a site format replaces an app's one
 	ConnectorsDir    string
 	order            []string
+	printFiles       []*Print // every loaded print file, apps first (validation)
 }
 
 // AppOrder returns installed app names in a stable order (dependencies first).
@@ -113,7 +115,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 	appsDir, siteDir := o.AppsDir, o.SiteDir
 	r := &Registry{AppsDir: appsDir, SiteDir: siteDir, ConnectorsDir: o.ConnectorsDir, App: map[string]*App{}, Models: map[string]*Model{},
 		Dashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
-		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}}
+		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}, Prints: map[string]*Print{}}
 	ld := &loader{rep: rep}
 	names, _ := os.ReadDir(appsDir)
 	var appNames []string
@@ -179,6 +181,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				r.Roles[e.Stem] = d
 			}
 		}
+		r.loadPrints(ld, a.Name, a.Dir, "apps/"+a.Name+"/")
 	}
 	if siteDir != "" {
 		r.Site = loadSite(siteDir, ld, r)
@@ -204,7 +207,8 @@ func LoadOpts(o Options, rep *Report) *Registry {
 }
 
 func loadSite(dir string, ld *loader, r *Registry) *Site {
-	s := &Site{Dir: dir, Name: filepath.Base(dir), Themes: map[string]*rk.Doc{}, Layouts: map[string]*rk.Doc{}, Docs: map[string]*rk.Doc{}}
+	s := &Site{Dir: dir, Name: filepath.Base(dir), Themes: map[string]*rk.Doc{}, Layouts: map[string]*rk.Doc{}, Docs: map[string]*rk.Doc{},
+		Letterheads: map[string]*rk.Doc{}}
 	for _, stem := range []string{"system", "features", "config"} {
 		p := rk.Find(dir, stem)
 		if p == "" {
@@ -245,6 +249,8 @@ func loadSite(dir string, ld *loader, r *Registry) *Site {
 			r.Docs["custom/"+e.Stem+".rk"] = d
 		}
 	}
+	r.loadPrints(ld, "", dir, "")
+	loadLetterheads(dir, ld, s, r)
 	return s
 }
 

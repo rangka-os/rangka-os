@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: item
+label: {id: Barang dan jasa}
+naming: BRG-{####}
+title_field: item_name
+fields:
+  - {name: item_name, type: data, label: {id: Nama barang}, required: true, in_list: true}
+  - {name: uom, type: data, label: {id: Satuan}, in_list: true}

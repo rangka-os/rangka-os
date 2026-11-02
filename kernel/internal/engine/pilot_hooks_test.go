@@ -392,6 +392,8 @@ func TestPilotQuotationRevisionOutcomeOrder(t *testing.T) {
 	if r := p.get("quotation", q1); r["outcome"] != "accepted" || r["docstatus"] != int64(1) {
 		t.Fatalf("outcome = %v", r["outcome"])
 	}
+	_, err = p.e.RunAction(p.ctx, p.a, "quotation", q1, "mark_outcome", map[string]any{"outcome": "lost", "lost_reason": "harga"}, ActionOpts{})
+	wantCode(t, err, 409, "not_open")
 
 	_, err = p.e.RunAction(p.ctx, p.a, "quotation", q1, "make_order", map[string]any{"po_number": "PO-1"}, ActionOpts{})
 	wantCode(t, err, 422, "po_required")
@@ -476,5 +478,179 @@ func TestPilotPurchaseRequestToPO(t *testing.T) {
 	g := p.get("goods_receipt", gr)
 	if g["vendor"] != m.vend || g["outlet"] != m.outB || g["purchase_order"] != po || rows(g["items"])[0]["qty"] != 2.0 || rows(g["items"])[0]["stock_qty"] != 100.0 {
 		t.Fatalf("draft receipt = %v", g)
+	}
+}
+
+// ---------- Task 4: stock
+
+func (p *pilot) balance(outlet, item string) store.Record {
+	p.t.Helper()
+	rows, _, err := p.e.List(p.ctx, p.a, "stock_balance", ListOpts{Filter: "outlet == '" + outlet + "' && item == '" + item + "'"})
+	if err != nil || len(rows) != 1 {
+		p.t.Fatalf("balance %s/%s: %d rows, %v", outlet, item, len(rows), err)
+	}
+	return rows[0]
+}
+
+func (p *pilot) wantBalance(outlet, item string, qty float64, value, avg int64) store.Record {
+	p.t.Helper()
+	b := p.balance(outlet, item)
+	if qtyOf(b["qty"]) != qty || money(b["value"]) != value || money(b["avg_cost"]) != avg {
+		p.t.Fatalf("balance %s/%s = qty %v value %v avg %v, want %v %d %d", outlet, item, b["qty"], b["value"], b["avg_cost"], qty, value, avg)
+	}
+	return b
+}
+
+func (p *pilot) moves(voucher string) []store.Record {
+	p.t.Helper()
+	rows, _, err := p.e.List(p.ctx, p.a, "stock_move", ListOpts{Filter: "voucher == '" + voucher + "'", Sort: "name"})
+	if err != nil {
+		p.t.Fatal(err)
+	}
+	return rows
+}
+
+func (p *pilot) receipt(m masters, outlet string, qty, rate int64) string {
+	p.t.Helper()
+	return p.doc("goods_receipt", map[string]any{"vendor": m.vend, "outlet": outlet, "items": []any{map[string]any{"item": m.beras, "qty": qty, "rate": rate}}})
+}
+
+// TestPilotStockAverageTransferSale: moving average, reversal back to the prior balance, transfers at the
+// average, and a recipe sale that drives an outlet negative (the negative-stock exception).
+func TestPilotStockAverageTransferSale(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	p.receipt(m, m.outA, 100, 12000)
+	p.wantBalance(m.outA, m.beras, 100, 1200000, 12000)
+	gr2 := p.receipt(m, m.outA, 50, 15000)
+	p.wantBalance(m.outA, m.beras, 150, 1950000, 13000)
+
+	if err := p.cancel("goods_receipt", gr2); err != nil {
+		t.Fatal(err)
+	}
+	p.wantBalance(m.outA, m.beras, 100, 1200000, 12000)
+	if mv := p.moves(gr2); len(mv) != 2 || mv[1]["reason"] != "reversal" || mv[1]["qty"] != -50.0 || money(mv[1]["value"]) != -750000 {
+		t.Fatalf("reversal moves = %v", mv)
+	}
+	am, err := p.e.Amend(p.ctx, p.a, "goods_receipt", gr2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	p.submit("goods_receipt", str(am.Record["name"]))
+	p.wantBalance(m.outA, m.beras, 150, 1950000, 13000)
+
+	trf := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 30}}})
+	p.wantBalance(m.outA, m.beras, 120, 1560000, 13000)
+	p.wantBalance(m.outB, m.beras, 30, 390000, 13000)
+	if mv := p.moves(trf); len(mv) != 2 || mv[0]["reason"] != "transfer_out" || money(mv[0]["value"]) != -390000 || mv[1]["reason"] != "transfer_in" || money(mv[1]["unit_cost"]) != 13000 {
+		t.Fatalf("transfer moves = %v", mv)
+	}
+	p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outC, "items": []any{map[string]any{"item": m.beras, "qty": 20}}})
+	p.wantBalance(m.outC, m.beras, 20, 260000, 13000)
+
+	p.create("recipe", map[string]any{"product": m.nasi, "yield_qty": 1, "lines": []any{map[string]any{"material": m.beras, "qty": 0.1}}})
+	sale := p.doc("outlet_sales", map[string]any{"outlet": m.outC, "date": "2026-10-30", "lines": []any{map[string]any{"item": m.nasi, "qty": 300}}})
+	b := p.wantBalance(m.outC, m.beras, -10, -130000, 13000)
+	if b["negative"] != true {
+		t.Fatal("stock_balance.negative not set")
+	}
+	s := p.get("outlet_sales", sale)
+	if line := rows(s["lines"])[0]; money(line["cogs"]) != 390000 || money(s["cogs_total"]) != 390000 || money(s["margin"]) != 7500000-390000 {
+		t.Fatalf("sale cogs = %v total %v margin %v", line["cogs"], s["cogs_total"], s["margin"])
+	}
+	mv := p.moves(sale)
+	if len(mv) != 1 || mv[0]["negative"] != true || mv[0]["reason"] != "sale" || mv[0]["qty"] != -30.0 || mv[0]["balance_qty"] != -10.0 {
+		t.Fatalf("sale move = %v", mv)
+	}
+	// the module's flow, run with the move record as its event, notifies head office
+	fr, err := p.e.RunFlow(p.ctx, p.a, "stock_negative_alert", map[string]any(mv[0]))
+	if err != nil || fr.Skipped || len(fr.Notifications) != 1 || fr.Notifications[0].Text != "Stok "+m.beras+" di "+m.outC+" minus (-10)" {
+		t.Fatalf("negative alert flow = %+v, %v", fr, err)
+	}
+	if fr, _ := p.e.RunFlow(p.ctx, p.a, "stock_negative_alert", map[string]any(p.moves(trf)[1])); !fr.Skipped {
+		t.Fatal("flow ran for a move that is not negative")
+	}
+
+	dup := p.create("outlet_sales", map[string]any{"outlet": m.outC, "date": "2026-10-30", "lines": []any{map[string]any{"item": m.nasi, "qty": 1}}})
+	_, err = p.e.Submit(p.ctx, p.a, "outlet_sales", dup, true)
+	wantCode(t, err, 409, "duplicate_sales")
+	if err := p.cancel("outlet_sales", sale); err != nil {
+		t.Fatal(err)
+	}
+	p.wantBalance(m.outC, m.beras, 20, 260000, 13000)
+}
+
+// TestPilotStockCountWastePacking: a count posts the difference and records system_qty; waste goes out at
+// the average; a PO in Karung (factor 50) is received as kilograms and its received_qty follows.
+func TestPilotStockCountWastePacking(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	p.receipt(m, m.outB, 20, 13000)
+	opn := p.doc("stock_count", map[string]any{"outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "counted_qty": 18}}})
+	if l := rows(p.get("stock_count", opn)["items"])[0]; l["system_qty"] != 20.0 || l["difference"] != -2.0 {
+		t.Fatalf("count line = %v", l)
+	}
+	if mv := p.moves(opn); len(mv) != 1 || mv[0]["qty"] != -2.0 || money(mv[0]["value"]) != -26000 || mv[0]["reason"] != "count" {
+		t.Fatalf("count move = %v", mv)
+	}
+	p.wantBalance(m.outB, m.beras, 18, 234000, 13000)
+	adj := p.doc("stock_adjustment", map[string]any{"outlet": m.outB, "reason": "waste", "items": []any{map[string]any{"item": m.beras, "qty": 1}}})
+	if mv := p.moves(adj); len(mv) != 1 || mv[0]["reason"] != "waste" || money(mv[0]["value"]) != -13000 {
+		t.Fatalf("waste move = %v", mv)
+	}
+	p.wantBalance(m.outB, m.beras, 17, 221000, 13000)
+	// a count that finds more posts it in at the average; a material with no average yet uses standard_cost
+	p.doc("stock_count", map[string]any{"outlet": m.outA, "items": []any{map[string]any{"item": m.beras, "counted_qty": 5}}})
+	p.wantBalance(m.outA, m.beras, 5, 55000, 11000)
+
+	pack := p.create("uom_conversion", map[string]any{"item": m.beras, "uom": m.karung, "factor": 50})
+	po := p.doc("purchase_order", map[string]any{"vendor": m.vend, "outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 2, "uom": m.karung, "packing": pack, "rate": 600000}}})
+	gr := p.submit("goods_receipt", opened(p.action("purchase_order", po, "receive", nil)))
+	if mv := p.moves(gr); len(mv) != 1 || mv[0]["qty"] != 100.0 || money(mv[0]["unit_cost"]) != 12000 {
+		t.Fatalf("packed receipt move = %v", mv)
+	}
+	b := p.balance(m.outB, m.beras)
+	if b["qty"] != 117.0 || money(b["avg_cost"]) != 12145 || money(b["value"]) != 1420965 {
+		t.Fatalf("balance after packed receipt = %v %v %v", b["qty"], b["avg_cost"], b["value"])
+	}
+	o := p.get("purchase_order", po)
+	if rows(o["items"])[0]["received_qty"] != 2.0 || o["received_pct"] != 100.0 {
+		t.Fatalf("PO received = %v %v", rows(o["items"])[0]["received_qty"], o["received_pct"])
+	}
+	_, err := p.e.RunAction(p.ctx, p.a, "purchase_order", po, "receive", nil, ActionOpts{})
+	wantCode(t, err, 409, "nothing_to_receive")
+	if err := p.cancel("goods_receipt", gr); err != nil {
+		t.Fatal(err)
+	}
+	if b := p.balance(m.outB, m.beras); b["qty"] != 17.0 {
+		t.Fatalf("qty after reversing the packed receipt = %v", b["qty"])
+	}
+	if o := p.get("purchase_order", po); rows(o["items"])[0]["received_qty"] != 0.0 || o["received_pct"] != 0.0 {
+		t.Fatal("PO received_qty not reverted")
+	}
+}
+
+// TestPilotConcurrentAllocation: two payments submitted at once for the whole of one invoice; the row lock
+// makes the second see the first, so exactly one succeeds.
+func TestPilotConcurrentAllocation(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	inv := p.invoice(m, m.cust, 5000000, false, nil)
+	a := p.create("payment", map[string]any{"customer": m.cust, "amount": 5000000, "allocations": []any{alloc(inv, 5000000)}})
+	b := p.create("payment", map[string]any{"customer": m.cust, "amount": 5000000, "allocations": []any{alloc(inv, 5000000)}})
+	errs := make(chan error, 2)
+	for _, n := range []string{a, b} {
+		go func(n string) { _, err := p.e.Submit(p.ctx, p.a, "payment", n, true); errs <- err }(n)
+	}
+	e1, e2 := <-errs, <-errs
+	if (e1 == nil) == (e2 == nil) {
+		t.Fatalf("want one success and one refusal, got %v / %v", e1, e2)
+	}
+	if e1 == nil {
+		e1 = e2
+	}
+	wantCode(t, e1, 409, "over_allocation")
+	if p.outstanding("sales_invoice", inv) != 0 || p.outstanding("customer", m.cust) != 0 {
+		t.Fatal("outstanding after concurrent payments")
 	}
 }

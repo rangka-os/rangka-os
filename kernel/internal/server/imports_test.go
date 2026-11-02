@@ -194,6 +194,30 @@ func TestImportsMoka(t *testing.T) {
 	if get(r.JSON, "error", "code") != "already_imported" {
 		t.Fatalf("second commit: %s", r.Body)
 	}
+	if n := len(e.must(200, "GET", "/api/v1/r/outlet_sales", nil).JSON["data"].([]any)); n != 1 {
+		t.Fatalf("outlet_sales after 409: %d", n)
+	}
+
+	// an overlapping export (the same day plus a new one): the known rows are skipped, one new record
+	more := string(csv) + "03/11/2026,08:01,Outlet Dago,DGO-0101,Tahu,Tahu Original,Isi 10,,TH-ORI-10,1,25000,0,0,25000,0,0,Dine In,Cash,Kasir 1,Kasir 1\n" +
+		"03/11/2026,08:01,Outlet Dago,DGO-0101,Minuman,Es Jeruk,Regular,,MN-EJR-R,1,10000,0,0,10000,0,0,Dine In,Cash,Kasir 1,Kasir 1\n"
+	ov := e.upload("/api/v1/imports/moka_item_details", "moka-2.csv", []byte(more), form)
+	if ov.Status != 200 || ov.JSON["rows"] != float64(10) || ov.JSON["skipped"] != float64(8) || ov.JSON["duplicate"] != false || len(ov.JSON["errors"].([]any)) != 0 {
+		t.Fatalf("overlap preview: %d %s", ov.Status, ov.Body)
+	}
+	oc := e.must(200, "POST", "/api/v1/imports/moka_item_details/"+ov.JSON["id"].(string)+"/commit", nil)
+	if recs, _ := oc.JSON["records"].([]any); len(recs) != 1 {
+		t.Fatalf("overlap commit: %s", oc.Body)
+	}
+	if n := len(e.must(200, "GET", "/api/v1/r/outlet_sales", nil).JSON["data"].([]any)); n != 2 {
+		t.Fatalf("outlet_sales after overlap: %d", n)
+	}
+	// list entries carry no preview records
+	for _, it := range e.must(200, "GET", "/api/v1/imports/moka_item_details", nil).JSON["imports"].([]any) {
+		if _, ok := it.(map[string]any)["preview"]; ok {
+			t.Fatalf("list entry with preview: %v", it)
+		}
+	}
 
 	// a cell that is not a number is reported with row, column and message
 	lines := strings.Split(string(csv), "\n")

@@ -9,8 +9,8 @@ API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The b
 ```
 make test       # all tests against a throwaway Postgres (started and removed by scripts/pgtemp.sh)
 make run-demo   # temp Postgres → migrate → seed → serve :8080 with --dev-open; Ctrl-C cleans up
-make validate   # rangka validate on rangka-apps/apps + sites/kopi-senja + rangka-connectors
-make compare-python   # Go vs rangka_validate.py on the real metadata and two broken copies (must be identical)
+make validate   # rangka validate on testdata/catalogue-v0 (rangka-apps as of v0) + rangka-connectors
+make compare-python   # Go vs rangka_validate.py on the v0 catalogue, the broken copies and the modules/apps fixtures (must be identical)
 ```
 
 Then open http://localhost:8080/app/, http://localhost:8080/api/v1/meta, or point an MCP client at

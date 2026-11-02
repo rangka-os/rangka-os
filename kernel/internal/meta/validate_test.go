@@ -22,7 +22,7 @@ func onlyDeprecations(rep *Report) bool {
 }
 
 func TestRealAppsValid(t *testing.T) {
-	reg, rep := Validate(testdb.Sibling(t, "rangka-apps/apps"), testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), nil, schema.Embedded())
+	reg, rep := Validate(testdb.Catalogue("apps"), testdb.Catalogue("sites/kopi-senja"), nil, schema.Embedded())
 	var buf bytes.Buffer
 	if n := rep.Print(&buf); n != 0 || !onlyDeprecations(rep) {
 		t.Fatalf("expected no problems but the deprecation warnings:\n%s", buf.String())
@@ -130,7 +130,7 @@ func TestSatisfies(t *testing.T) {
 // Overlay fields are visible through links: sales_invoice's overlay rule reads customer.x_customer_group,
 // which customer's overlay adds (testdata/overlay-site).
 func TestOverlayFieldsThroughLinks(t *testing.T) {
-	reg, rep := ValidateOpts(Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: "../../testdata/overlay-site"}, nil, schema.Embedded())
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: "../../testdata/overlay-site"}, nil, schema.Embedded())
 	if !onlyDeprecations(rep) {
 		t.Fatalf("problems: %v", rep.All())
 	}
@@ -141,7 +141,7 @@ func TestOverlayFieldsThroughLinks(t *testing.T) {
 
 func TestOverlayMerge(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), dir+"/site").Run()
+	exec.Command("cp", "-r", testdb.Catalogue("sites/kopi-senja"), dir+"/site").Run()
 	os.MkdirAll(dir+"/site/custom", 0o755)
 	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: sales_invoice
@@ -153,7 +153,7 @@ views:
   form: {add: [{field: x_po_number, after: outlet}]}
   list: {add: [{field: x_po_number, after: customer}]}
 `), 0o644)
-	reg, rep := ValidateOpts(Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: dir + "/site"}, nil, schema.Embedded())
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: dir + "/site"}, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("errors: %v", rep.All())
 	}
@@ -177,7 +177,7 @@ views:
 // approvals: key is parsed, ApprovalsFor filters by verb in declaration order (0007 §1).
 func TestApprovalsParsed(t *testing.T) {
 	dir := t.TempDir()
-	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").CombinedOutput(); err != nil {
+	if out, err := exec.Command("cp", "-r", testdb.Catalogue("apps"), dir+"/apps").CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
 	f := dir + "/apps/sales/models/sales_invoice.rk"
@@ -208,10 +208,10 @@ func TestApprovalsParsed(t *testing.T) {
 // A company overlay adds policies after the app's own (ruling R1) and they are checked like the app's.
 func TestApprovalsOverlay(t *testing.T) {
 	dir := t.TempDir()
-	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").CombinedOutput(); err != nil {
+	if out, err := exec.Command("cp", "-r", testdb.Catalogue("apps"), dir+"/apps").CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
-	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), dir+"/site").CombinedOutput(); err != nil {
+	if out, err := exec.Command("cp", "-r", testdb.Catalogue("sites/kopi-senja"), dir+"/site").CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
 	f := dir + "/apps/sales/models/sales_invoice.rk"
@@ -248,7 +248,7 @@ approvals:
 // Flow approve steps: schema, and parentheses in when (0007 §4).
 func TestFlowApproveStep(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").Run()
+	exec.Command("cp", "-r", testdb.Catalogue("apps"), dir+"/apps").Run()
 	flow := func(step string) string {
 		mustWrite(t, dir+"/apps/crm/flows/morning_follow_up.rk", []byte("name: morning_follow_up\nschedule: 0 8 * * 1-5\nsteps:\n  - "+step+"\n"))
 		_, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())

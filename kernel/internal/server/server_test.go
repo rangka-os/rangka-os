@@ -46,9 +46,9 @@ type env struct {
 func newEnv(t *testing.T, devOpen bool, mutate func(apps, site string)) *env {
 	t.Helper()
 	return newEnvWith(t, devOpen, func(dir string) (string, string) {
-		for _, p := range []string{"rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites", "rangka-connectors"} {
+		for _, p := range []string{testdb.Catalogue("apps"), testdb.Catalogue("fixtures"), testdb.Catalogue("sites"), testdb.Sibling(t, "rangka-connectors")} {
 			dst := filepath.Join(dir, filepath.Base(p))
-			if err := exec.Command("cp", "-r", testdb.Sibling(t, p), dst).Run(); err != nil {
+			if err := exec.Command("cp", "-r", p, dst).Run(); err != nil {
 				t.Fatal(err)
 			}
 		}
@@ -676,11 +676,11 @@ steps:
 
 func TestConfigAppsMustBeInPlan(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), dir+"/site").Run()
+	exec.Command("cp", "-r", testdb.Catalogue("sites/kopi-senja"), dir+"/site").Run()
 	p := dir + "/site/config.rk"
 	b, _ := os.ReadFile(p)
 	os.WriteFile(p, []byte(strings.Replace(string(b), "plan: tumbuh", "plan: mulai", 1)), 0o644)
-	_, err := LoadRegistry(Config{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: dir + "/site", Schemas: schema.Embedded()})
+	_, err := LoadRegistry(Config{AppsDir: testdb.Catalogue("apps"), SiteDir: dir + "/site", Schemas: schema.Embedded()})
 	if err == nil || !strings.Contains(err.Error(), `app_not_in_plan apps/2 plan "mulai" does not include "sales"`) {
 		t.Fatalf("expected refusal, got %v", err)
 	}

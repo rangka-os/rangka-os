@@ -2,11 +2,13 @@
 # (initdb/pg_ctl/postgres; scripts/pgtemp.sh finds Debian, Homebrew, DBngin and Postgres.app installs, else set PGBIN).
 
 GO      ?= go
-# Workspace that holds rangka-apps/ and rangka-connectors/: $RANGKA_WORKSPACE, else the first ancestor of this
-# repo's parent with rangka-apps/apps (works from a git worktree), else two levels up.
+# Workspace that holds rangka-connectors/: $RANGKA_WORKSPACE, else the first ancestor of this repo's parent with
+# rangka-apps/apps (works from a git worktree), else two levels up.
 WS      ?= $(shell scripts/workspace.sh)
-APPS    ?= $(WS)/rangka-apps/apps
-SITE    ?= $(WS)/rangka-apps/sites/kopi-senja
+# rangka-apps as of v0 (0.4 layout), so the kernel does not follow rangka-apps' layout (contract 0001)
+CAT     := testdata/catalogue-v0
+APPS    ?= $(CAT)/apps
+SITE    ?= $(CAT)/sites/kopi-senja
 CONN    ?= $(WS)/rangka-connectors
 ADDR    ?= :8080
 BIN     := bin/rangka
@@ -56,10 +58,10 @@ run-demo: build
 	@URL=$$(PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh start) || exit 1; \
 	trap 'PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh stop' EXIT INT TERM; \
 	echo "temporary postgres: $$URL"; \
-	$(BIN) migrate --apps $(APPS) --site $(SITE) --db "$$URL" | tail -1 && \
-	$(BIN) seed --apps $(APPS) --site $(SITE) --db "$$URL" && \
+	$(BIN) migrate --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" | tail -1 && \
+	$(BIN) seed --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" && \
 	echo "open http://localhost$(ADDR)/app/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
-	$(BIN) serve --apps $(APPS) --site $(SITE) --db "$$URL" --addr $(ADDR) --dev-open
+	$(BIN) serve --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" --addr $(ADDR) --dev-open
 
 # Copy rangka-os/schema/0.5 (and 0.4 app.json, for legacy app.rk files) into the binary's embedded copy
 # (a test fails when they differ).

@@ -1,0 +1,69 @@
+package api
+
+import (
+	"io"
+	"net/http"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/imports"
+)
+
+// previewImport reads an uploaded file, maps it and stores a previewed import log entry (contract 0012 §3).
+func (s *Server) previewImport(w http.ResponseWriter, r *http.Request, c *caller) {
+	r.Body = http.MaxBytesReader(w, r.Body, imports.MaxBytes+1<<20)
+	if err := r.ParseMultipartForm(32 << 20); err != nil {
+		writeError(w, http.StatusBadRequest, "file_required", "Pilih file dulu")
+		return
+	}
+	f, hdr, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file_required", "Pilih file dulu")
+		return
+	}
+	defer f.Close()
+	data, err := io.ReadAll(f)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "file_required", "Pilih file dulu")
+		return
+	}
+	e, err := s.Imports.Preview(r.Context(), c.actor, r.PathValue("import"), hdr.Filename, data, r.FormValue("outlet"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, e)
+}
+
+// commitImport creates the records of a previewed entry. Only people may run it.
+func (s *Server) commitImport(w http.ResponseWriter, r *http.Request, c *caller) {
+	if !c.p.Human() {
+		writeError(w, http.StatusForbidden, "permission_denied", "Impor hanya bisa dijalankan oleh pengguna")
+		return
+	}
+	e, err := s.Imports.Commit(r.Context(), c.actor, r.PathValue("import"), r.PathValue("id"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, e)
+}
+
+func (s *Server) getImport(w http.ResponseWriter, r *http.Request, c *caller) {
+	e, err := s.Imports.Get(r.Context(), c.actor, r.PathValue("import"), r.PathValue("id"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, e)
+}
+
+func (s *Server) listImports(w http.ResponseWriter, r *http.Request, c *caller) {
+	list, err := s.Imports.List(r.Context(), c.actor, r.PathValue("import"))
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if list == nil {
+		list = []*imports.Entry{}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"imports": list})
+}

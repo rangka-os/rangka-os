@@ -1,8 +1,16 @@
 package store
 
 import (
+	"context"
+	"fmt"
+	"sort"
+	"strings"
+	"sync"
 	"testing"
 	"time"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
 func jakarta(t *testing.T) time.Time {
@@ -65,4 +73,181 @@ func TestFormatNumber(t *testing.T) {
 			t.Errorf("FormatNumber(%q,%q,%d,%d) = %q; want %q", c.prefix, c.suffix, c.digits, c.n, got, c.want)
 		}
 	}
+}
+
+// --- DB tests -------------------------------------------------------------------------------------
+
+func seriesDB(t *testing.T, size int) *pg.Pool {
+	t.Helper()
+	ctx := context.Background()
+	db, err := pg.NewPool(ctx, testdb.New(t), size)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	if _, err := db.Exec(ctx, SystemSQL()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Exec(ctx, `create table t_doc (org_id text, name text, primary key (org_id, name))`); err != nil {
+		t.Fatal(err)
+	}
+	return db
+}
+
+func nextSeries(t *testing.T, db *pg.Pool, org string, s Scheme, tables []string, now time.Time) string {
+	t.Helper()
+	got, err := NextSeriesName(context.Background(), db, org, s, tables, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return got
+}
+
+func expectNames(t *testing.T, got []string, want ...string) {
+	t.Helper()
+	if strings.Join(got, ",") != strings.Join(want, ",") {
+		t.Fatalf("got %v; want %v", got, want)
+	}
+}
+
+func TestNextSeriesNameSequence(t *testing.T) {
+	db := seriesDB(t, 2)
+	ctx := context.Background()
+	s := Scheme{Series: "inv", Pattern: "INV/{ORG}/{YY}{MM}/{####}", Reset: "monthly"}
+	oct := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	nov := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	if _, err := db.Exec(ctx, `insert into rk_orgs (id, name, code) values ('pt-c', 'C', 'PTC')`); err != nil {
+		t.Fatal(err)
+	}
+	got := []string{
+		nextSeries(t, db, "pt-a", s, nil, oct),
+		nextSeries(t, db, "pt-a", s, nil, oct),
+		nextSeries(t, db, "pt-a", s, nil, nov),
+		nextSeries(t, db, "pt-b", s, nil, nov),
+		nextSeries(t, db, "pt-c", s, nil, nov),
+	}
+	expectNames(t, got, "INV/PT-A/2610/0001", "INV/PT-A/2610/0002", "INV/PT-A/2611/0001", "INV/PT-B/2611/0001", "INV/PTC/2611/0001")
+}
+
+func TestNextSeriesNameYearlyContinues(t *testing.T) {
+	db := seriesDB(t, 2)
+	s := Scheme{Series: "d", Pattern: "{##}/D/{YYYY}", Reset: "yearly"}
+	got := []string{
+		nextSeries(t, db, "pt-a", s, nil, time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)),
+		nextSeries(t, db, "pt-a", s, nil, time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)),
+	}
+	expectNames(t, got, "01/D/2026", "02/D/2026")
+}
+
+func TestNextSeriesNameAfterImported(t *testing.T) {
+	db := seriesDB(t, 2)
+	ctx := context.Background()
+	for _, n := range []string{"INV/PT-A/2610/0007", "INV/PT-A/2610/abc"} {
+		if _, err := db.Exec(ctx, `insert into t_doc values ('pt-a', $1)`, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s := Scheme{Series: "inv", Pattern: "INV/{ORG}/{YY}{MM}/{####}", Reset: "monthly"}
+	now := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	got := []string{nextSeries(t, db, "pt-a", s, []string{"t_doc"}, now), nextSeries(t, db, "pt-a", s, []string{"t_doc"}, now)}
+	expectNames(t, got, "INV/PT-A/2610/0008", "INV/PT-A/2610/0009")
+}
+
+func TestNextSeriesNameRollbackNoGap(t *testing.T) {
+	db := seriesDB(t, 2)
+	ctx := context.Background()
+	s := Scheme{Series: "inv", Pattern: "INV-{####}", Reset: "never"}
+	now := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	tx1, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	first, err := NextSeriesName(ctx, tx1, "pt-a", s, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx1.Rollback(ctx); err != nil {
+		t.Fatal(err)
+	}
+	tx2, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	second, err := NextSeriesName(ctx, tx2, "pt-a", s, nil, now)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := tx2.Commit(ctx); err != nil {
+		t.Fatal(err)
+	}
+	expectNames(t, []string{first, second}, "INV-0001", "INV-0001")
+}
+
+func TestNextSeriesNameConcurrent(t *testing.T) {
+	db := seriesDB(t, 25)
+	ctx := context.Background()
+	s := Scheme{Series: "inv", Pattern: "{####}", Reset: "never"}
+	now := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	const workers = 20
+	var (
+		mu        sync.Mutex
+		committed []string
+		wg        sync.WaitGroup
+	)
+	errs := make(chan error, workers)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			tx, err := db.Begin(ctx)
+			if err != nil {
+				errs <- err
+				return
+			}
+			name, err := NextSeriesName(ctx, tx, "pt-a", s, []string{"t_doc"}, now)
+			if err == nil {
+				_, err = tx.Exec(ctx, `insert into t_doc values ('pt-a', $1)`, name)
+			}
+			if err != nil {
+				_ = tx.Rollback(ctx)
+				errs <- err
+				return
+			}
+			if i%5 == 0 {
+				if err := tx.Rollback(ctx); err != nil {
+					errs <- err
+				}
+				return
+			}
+			if err := tx.Commit(ctx); err != nil {
+				errs <- err
+				return
+			}
+			mu.Lock()
+			committed = append(committed, name)
+			mu.Unlock()
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		t.Fatal(err)
+	}
+	sort.Strings(committed)
+	want := make([]string, 16)
+	for i := range want {
+		want[i] = fmt.Sprintf("%04d", i+1)
+	}
+	expectNames(t, committed, want...)
+}
+
+func TestNextSeriesNameOverflow(t *testing.T) {
+	db := seriesDB(t, 2)
+	if _, err := db.Exec(context.Background(), `insert into t_doc values ('pt-a', 'A-99')`); err != nil {
+		t.Fatal(err)
+	}
+	s := Scheme{Series: "a", Pattern: "A-{##}", Reset: "never"}
+	now := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	got := []string{nextSeries(t, db, "pt-a", s, []string{"t_doc"}, now), nextSeries(t, db, "pt-a", s, []string{"t_doc"}, now)}
+	expectNames(t, got, "A-100", "A-101")
 }

@@ -213,3 +213,13 @@ func (e *Engine) EventVisible(a Actor) func(store.Event) bool {
 		return s.Visible(m, rec)
 	}
 }
+
+// guard is Guard for a verb run inside an op. An approved verb (Approve running it as the requester) is not
+// guarded again: the requester was guarded when the verb was held, the approver when deciding, and the
+// requester rebuilt from the request carries no outlets.
+func (o *op) guard(m *meta.Model, rec store.Record, action string) error {
+	if o.approving {
+		return nil
+	}
+	return o.e.Guard(o.ctx, o.actor, m.Name, rec, action)
+}

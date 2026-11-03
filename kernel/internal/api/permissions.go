@@ -10,12 +10,17 @@ import (
 
 // eventAllow is the SSE filter for one caller: a record event passes when the caller may read the record.
 // The record is loaded only when the model-level grant is conditional (if:); a deleted record then fails to
-// load and is dropped, while with an unconditional read it passes. Other events (change sets, jobs) pass.
-// A record event must also be inside the caller's row scope (engine.EventVisible, contract 0010 §7), which is
-// checked first from the event's own fields.
+// load and is dropped, while with an unconditional read it passes. An approval event passes when the caller
+// may see the request (GetApproval: read on its record, inside the caller's row scope; a flow request for owner
+// and its approver roles). Other events (change sets, jobs) pass. A record event must also be inside the
+// caller's row scope (engine.EventVisible, contract 0010 §7), which is checked first from the event's own fields.
 func (s *Server) eventAllow(ctx context.Context, a engine.Actor) func(store.Event) bool {
 	inScope := s.Engine.EventVisible(a) // nil when a has no row scope
 	return func(ev store.Event) bool {
+		if ev.Type == "approval" {
+			_, err := s.Engine.GetApproval(ctx, a, ev.ID)
+			return err == nil
+		}
 		if ev.Type != "record" {
 			return true
 		}

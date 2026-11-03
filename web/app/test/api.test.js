@@ -263,6 +263,19 @@ test("printPdf 501 maps to pdf_unavailable; success gives a Blob", async () => {
   assert.match(f.calls[0].url, /print\?format=a4&as=pdf$/);
 });
 
+test("printCheck sends HEAD for the HTML print and maps 403/404", async () => {
+  const f = stub([json(200), json(403), json(404)]);
+  const api = RA({ fetch: f });
+  assert.strictEqual(await api.printCheck("sales_invoice", "INV/1", "ringkas"), true);
+  assert.strictEqual(f.calls[0].init.method, "HEAD");
+  assert.strictEqual(f.calls[0].url, "/api/v1/r/sales_invoice/INV%2F1/print?format=ringkas&as=html");
+  const e403 = await rejected(api.printCheck("sales_invoice", "INV-1"));
+  assert.deepStrictEqual([e403.status, e403.code], [403, "permission_denied"]);
+  assert.match(f.calls[1].url, /\/print\?as=html$/);
+  const e404 = await rejected(api.printCheck("sales_invoice", "INV-1"));
+  assert.deepStrictEqual([e404.status, e404.code], [404, "not_found"]);
+});
+
 test("approvals, approve, reject, dashboard, attachments urls", async () => {
   const f = stub(() => ({ status: 200, body: { data: [], total: 0 } }));
   const api = RA({ fetch: f });

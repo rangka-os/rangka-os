@@ -14,7 +14,8 @@ on any console error.
 Pilot features that other streams build (orgs, approvals, print, attachments, imports) run against the kernel when it
 has them, else against contract mocks. When schema/0.5/overlay.json knows `approvals` (S2 merged), the temp site gets
 custom/sales_invoice.rk with a real policy (manager_check on submit, approvers [sales_manager]) before migrate, so the
-approval scenarios run live: call mock_feature(page, feature) in a scenario. The run ends with
+approval scenarios run live; likewise imports/*.rk (S7) and print/*.rk + letterhead.rk (S3: two sales_invoice formats
+and a lead card sales roles may not print). Call mock_feature(page, feature) in a scenario. The run ends with
 "live: … · mocked: …"; --require-all turns any mocked feature into a failure.
 
 Every HTTP answer >= 400 and every failed request to the kernel fails the scenario too, except 401 on /auth/*, the missing-route 404 ("no such endpoint") of
@@ -1803,39 +1804,164 @@ def go_record(page, number):
     page.evaluate("(h) => { location.hash = h; }", "#/r/sales_invoice/" + urllib.parse.quote(number))
 
 
+# window.print in every document of the context (also the print tab, whose CSP allows no script of its own) only
+# counts the call: "Cetak dari browser" must reach it, and a real print dialog would block headless Chromium.
+PRINT_STUB_JS = "window.print = function () { window.__printed = (window.__printed || 0) + 1; };"
+PRINT_TAB = r"/api/v1/r/sales_invoice/{}/print\?{}as=html$"
+
+
+def print_tab(ctx, popup, number, fmt=None):
+    """The print tab DocTools opened: it starts blank and loads the HTML print view once HEAD said yes."""
+    pop = popup.value
+    pat = PRINT_TAB.format(re.escape(urllib.parse.quote(number)), "format=" + re.escape(fmt) + "&" if fmt else "")
+    pop.wait_for_url(re.compile(".*" + pat), timeout=10000)
+    pop.wait_for_load_state()
+    return pop
+
+
+def pdf_available(ctx, number):
+    """HEAD ?as=pdf as the owner: 200 when the server has Chromium for PDFs, 501 pdf_unavailable when not."""
+    h = owner_http(ctx)
+    req = urllib.request.Request(ctx.base + f"/api/v1/r/sales_invoice/{urllib.parse.quote(number)}/print?as=pdf", method="HEAD")
+    try:
+        return h.opener.open(req, timeout=30).status == 200
+    except urllib.error.HTTPError as e:
+        assert e.code == 501, f"HEAD as=pdf: {e.code}"
+        return False
+
+
+def check_browser_print(page, ctx, number, title="PDF belum tersedia di server ini", text=None):
+    """The PDF dialog (501 or 500 pdf_failed) explains and its "Cetak dari browser" opens the HTML print view and calls
+    window.print()."""
+    dlg = page.get_by_role("alertdialog")
+    dlg.wait_for(timeout=10000)
+    assert title in dlg.inner_text(), dlg.inner_text()
+    if text:
+        assert text in dlg.inner_text(), dlg.inner_text()
+    with page.context.expect_page(timeout=10000) as popup:
+        dlg.get_by_role("button", name="Cetak dari browser").click()
+    pop = print_tab(ctx, popup, number)
+    pop.wait_for_function("() => window.__printed >= 1", timeout=10000)
+    assert number in pop.locator("body").inner_text(), "the browser-print view is the invoice"
+    pop.close()
+    assert page.get_by_role("alertdialog").count() == 0, "the dialog closes"
+
+
 def test_print_invoice(page, ctx):
-    ctx.allow_http(501, r"/print\?")  # Unduh PDF on a server without a renderer
     number = submitted_invoice(ctx)
-    mock_feature(page, "print")
+    page.context.add_init_script(PRINT_STUB_JS)
+    mocked = mock_feature(page, "print")
+    formats = [PRINT_FORMAT] if mocked else (ctx.meta["models"]["sales_invoice"].get("prints") or [])
+    if not mocked:
+        assert [f["name"] for f in formats] == [PRINT_INVOICE, PRINT_SHORT] and formats[0]["default"], f"meta prints: {formats}"
+    answers = []
+    page.context.on("response", lambda r: answers.append(r) if "/print?" in r.url else None)
     open_route(page, ctx, "#/r/sales_invoice/" + number)
     area = main_area(page)
     cetak = area.get_by_role("button", name="Cetak", exact=True)
     cetak.wait_for(timeout=10000)
-    # one format: a plain button that opens the HTML print in a new tab
-    with page.context.expect_page(timeout=10000) as popup:
+
+    # several formats (live: the reference invoice by default, a short A5): a menu, default first
+    if len(formats) > 1:
         cetak.click()
-    pop = popup.value
-    pop.wait_for_load_state()
-    assert re.search(r"/api/v1/r/sales_invoice/" + re.escape(urllib.parse.quote(number)) + r"/print\?(format=[^&]+&)?as=html$", pop.url), "print URL: " + pop.url
-    assert number in pop.locator("body").inner_text(), "the print shows the invoice number"
+        menu = page.get_by_role("menu")
+        menu.wait_for(timeout=5000)
+        labels = [t.strip() for t in menu.get_by_role("menuitem").all_inner_texts()]
+        assert labels == ["Faktur · A4", "Faktur ringkas · A5"], f"format menu: {labels}"
+        with page.context.expect_page(timeout=10000) as popup:
+            menu.get_by_role("menuitem").first.click()
+    else:
+        with page.context.expect_page(timeout=10000) as popup:
+            cetak.click()
+    pop = print_tab(ctx, popup, number)
+    text = pop.locator("body").inner_text()
+    assert number in text, "the print shows the invoice number"
+    if not mocked:  # the server's page: the reference layout under the site letterhead, served as HTML
+        assert LETTERHEAD_NAME in text and "Faktur" in text and "Terbilang" in text, text[:300]
+        html = [r for r in answers if r.request.method == "GET" and "as=html" in r.url][-1]
+        assert html.status == 200 and html.headers["content-type"].startswith("text/html"), (html.status, html.headers)
+        assert "default-src 'none'" in html.headers.get("content-security-policy", ""), "the print page runs no script"
+        assert any(r.request.method == "HEAD" and r.status == 200 for r in answers), "Cetak asks HEAD first"
+        print(f"     html: {html.url.split('/api/v1')[1]} → 200 text/html, letterhead {LETTERHEAD_NAME!r}")
     pop.close()
-    # Unduh PDF: a server without a renderer says 501, the app explains and offers Cetak instead
-    area.get_by_role("button", name="Unduh PDF", exact=True).click()
-    page.locator(".rk-toast", has_text="PDF belum tersedia di server ini — pakai Cetak lalu simpan sebagai PDF").wait_for(timeout=10000)
-    # several formats: Cetak opens a menu of their labels
-    set_prints(page, [PRINT_FORMAT, {"name": "struk", "label": {"id": "Struk kecil"}, "paper": "a6"}])
+    if len(formats) > 1:  # the second format passes format=
+        cetak.click()
+        with page.context.expect_page(timeout=10000) as popup:
+            page.get_by_role("menu").get_by_role("menuitem", name=re.compile("Faktur ringkas")).click()
+        pop = print_tab(ctx, popup, number, PRINT_SHORT)
+        assert "Faktur ringkas " + number in pop.locator("body").inner_text()
+        pop.close()
+
+    # one format: a plain button; the buttons are disabled while the HEAD is in flight
+    set_prints(page, [formats[0]])
     page.reload()
     cetak = main_area(page).get_by_role("button", name="Cetak", exact=True)
     cetak.wait_for(timeout=10000)
-    cetak.click()
-    menu = page.get_by_role("menu")
-    menu.wait_for(timeout=5000)
-    labels = [t.strip() for t in menu.get_by_role("menuitem").all_inner_texts()]
-    assert len(labels) == 2 and "Faktur A4" in labels[0] and "Struk kecil" in labels[1], f"format menu: {labels}"
+    held = held_route(page, r".*/print\?.*as=html$", "HEAD")
     with page.context.expect_page(timeout=10000) as popup:
-        menu.get_by_role("menuitem", name=re.compile("Struk kecil")).click()
-    assert "format=struk" in popup.value.url and "as=html" in popup.value.url, "a non-default format passes format=: " + popup.value.url
+        cetak.click()
+    wait_held(page, held)
+    assert cetak.is_disabled() and main_area(page).get_by_role("button", name="Unduh PDF", exact=True).is_disabled(), "buttons disabled in flight"
+    held[0].continue_()
+    print_tab(ctx, popup, number).close()
+    page.unroute(re.compile(r".*/print\?.*as=html$"))
+
+    # Unduh PDF: a real PDF when the server has Chromium; else (501 pdf_unavailable) the browser-print fallback
+    ctx.allow_http(501, r"/print\?")
+    pdf_btn = main_area(page).get_by_role("button", name="Unduh PDF", exact=True)
+    if not mocked and pdf_available(ctx, number):
+        with page.expect_download(timeout=60000) as dl, page.expect_response(lambda r: "as=pdf" in r.url, timeout=60000) as ri:
+            pdf_btn.click()
+        r = ri.value
+        assert r.status == 200 and r.headers["content-type"] == "application/pdf", (r.status, r.headers.get("content-type"))
+        assert dl.value.suggested_filename == number + ".pdf", dl.value.suggested_filename
+        with open(dl.value.path(), "rb") as f:
+            head = f.read(5)
+        assert head == b"%PDF-", head
+        print("     pdf path: real PDF (server has Chromium) → application/pdf, " + dl.value.suggested_filename)
+        # the fallback on a server without Chromium: the kernel's own 501 body, forced here
+        hint = f"/api/v1/r/sales_invoice/{urllib.parse.quote(number)}/print?format={PRINT_INVOICE}&as=html"
+        page.route(re.compile(r".*/print\?.*as=pdf$"), lambda route: _json(route, 501, {"error": {"code": "pdf_unavailable",
+                   "message": "PDF belum tersedia di server ini. Buka versi HTML lalu cetak dari browser (Ctrl+P → Simpan sebagai PDF).", "hint": hint}}))
+        pdf_btn.click()
+        check_browser_print(page, ctx, number)
+        print("     pdf fallback: 501 pdf_unavailable forced in the browser → dialog → Cetak dari browser → print()")
+        page.unroute(re.compile(r".*/print\?.*as=pdf$"))
+    else:
+        pdf_btn.click()
+        check_browser_print(page, ctx, number)
+        print("     pdf path: server 501 pdf_unavailable → dialog → Cetak dari browser → print()" + (" (mocked)" if mocked else ""))
+
+    # a 500 pdf_failed (a Chromium that cannot launch): the same browser-print way out, with the server's message
+    ctx.allow_http(500, r"/print\?")
+    failed_msg = "PDF gagal dibuat. Coba lagi atau cetak dari versi HTML."
+    page.route(re.compile(r".*/print\?.*as=pdf$"), lambda route: _json(route, 500, {"error": {"code": "pdf_failed", "message": failed_msg}}))
+    pdf_btn.click()
+    check_browser_print(page, ctx, number, title="PDF gagal dibuat di server", text=failed_msg)
+    assert not pdf_btn.is_disabled(), "Unduh PDF enabled again"
+    print("     pdf_failed: 500 forced in the browser → dialog with the server message → Cetak dari browser → print()")
+    page.unroute(re.compile(r".*/print\?.*as=pdf$"))
+
+    # closing the blank tab while the HEAD is in flight: no error, the buttons come back
+    held = held_route(page, r".*/print\?.*as=html$", "HEAD")
+    with page.context.expect_page(timeout=10000) as popup:
+        main_area(page).get_by_role("button", name="Cetak", exact=True).click()
+    wait_held(page, held)
     popup.value.close()
+    held[0].continue_()
+    page.wait_for_function("() => [...document.querySelectorAll('.ap-main button')].some(b => b.textContent.trim() === 'Cetak' && !b.disabled)", timeout=10000)
+    page.unroute(re.compile(r".*/print\?.*as=html$"))
+
+    # a 404 (record gone, or out of the caller's scope) closes the tab and says so
+    ctx.allow_http(404, r"/print\?")
+    page.route(re.compile(r".*/print\?.*as=html$"), lambda route: route.fulfill(status=404, body="") if route.request.method == "HEAD" else route.continue_())
+    with page.context.expect_page(timeout=10000) as popup:
+        main_area(page).get_by_role("button", name="Cetak", exact=True).click()
+    page.locator(".rk-toast", has_text="Dokumen tidak ditemukan").wait_for(timeout=10000)
+    if not popup.value.is_closed():
+        popup.value.wait_for_event("close", timeout=5000)
+    page.unroute(re.compile(r".*/print\?.*as=html$"))
+
     # no formats in meta: no print buttons at all
     set_prints(page, [])
     page.reload()
@@ -1843,6 +1969,46 @@ def test_print_invoice(page, ctx):
     page.wait_for_timeout(300)
     assert main_area(page).get_by_role("button", name="Cetak", exact=True).count() == 0, "no Cetak without formats"
     assert main_area(page).get_by_role("button", name="Unduh PDF", exact=True).count() == 0, "no Unduh PDF without formats"
+
+
+def test_print_permission(page, ctx):
+    """lead.rk grants sales_rep no `print`: meta says can.print false, so no Cetak; the server answers 403 too, and when
+    the button shows anyway (meta forced) the 403 becomes a message, not a JSON page."""
+    if mock_feature(page, "print"):
+        print("     (skipped: print permission is the kernel's, this run has no print endpoint)")
+        return
+    sales = Http(ctx.base).login(*SALES)
+    st, body = sales.call("GET", "/api/v1/r/lead?limit=1")
+    assert st == 200 and body["data"], f"sales leads: {st} {body}"
+    lead = body["data"][0]["name"]
+    st, body = sales.call("GET", f"/api/v1/r/lead/{urllib.parse.quote(lead)}/print")
+    assert st == 403 and body["error"]["code"] == "permission_denied" and body["error"].get("action") == "print", f"{st} {body}"
+    st, meta = sales.call("GET", "/api/v1/meta")
+    assert meta["models"]["lead"]["can"]["print"] is False and meta["models"]["lead"]["prints"], meta["models"]["lead"].get("can")
+    open_route(page, ctx, "#/r/lead/" + urllib.parse.quote(lead), who=SALES)
+    main_area(page).locator(".rk-pagehead").wait_for(timeout=10000)
+    page.wait_for_timeout(300)
+    assert main_area(page).get_by_role("button", name="Cetak", exact=True).count() == 0, "no Cetak without print permission"
+    assert main_area(page).get_by_role("button", name="Unduh PDF", exact=True).count() == 0, "no Unduh PDF without print permission"
+
+    # a stale meta that still claims print: the HEAD's 403 closes the tab and explains
+    ctx.allow_http(403, r"/print\?")
+
+    def lie(route):
+        r = route.fetch()
+        b = r.json()
+        b["models"]["lead"]["can"]["print"] = True
+        _json(route, r.status, b)
+    page.route(re.compile(r".*/api/v1/meta(\?.*)?$"), lie)
+    page.reload()
+    cetak = main_area(page).get_by_role("button", name="Cetak", exact=True)
+    cetak.wait_for(timeout=15000)
+    with page.context.expect_page(timeout=10000) as popup:
+        cetak.click()
+    page.locator(".rk-toast", has_text="Kamu tidak punya izin mencetak dokumen ini").wait_for(timeout=10000)
+    if not popup.value.is_closed():
+        popup.value.wait_for_event("close", timeout=5000)
+    print(f"     sales_rep on lead {lead}: no Cetak (can.print false); API 403 permission_denied action=print; forced button → message")
 
 
 def owner_http(ctx):
@@ -2314,6 +2480,76 @@ def enable_import_def(site):
     return True
 
 
+# Print formats (S3, contract 0008) for the temp site: the reference invoice layout as the default format, a short A5
+# format (so Cetak is a menu) and a lead card that sales roles may not print (lead.rk's permissions have no `print`).
+# The letterhead is the public demo company Kopi Senja (example address and numbers, no real customer data).
+LETTERHEAD_NAME = "PT Kopi Senja Contoh"
+LETTERHEAD_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json
+legal_name: PT Kopi Senja Contoh
+tagline: Kopi dan roti sejak 2019 (data contoh)
+address: |
+  Jl. Contoh Raya No. 1
+  Jakarta Selatan 12730
+phone: "+62 21 000 0000"
+email: halo@kopisenja.test
+npwp: "00.000.000.0-000.000"
+bank:
+  - {bank: Bank Contoh, account: "000 000 0000", holder: PT Kopi Senja Contoh, branch: Jakarta}
+signatory: {name: Penandatangan Contoh, title: Direktur}
+footer: {id: Terima kasih atas kepercayaan Anda}
+"""
+PRINT_INVOICE = "sales_invoice"
+PRINT_INVOICE_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: sales_invoice
+model: sales_invoice
+label: {id: Faktur, en: Invoice}
+paper: A4
+template: sales_invoice.html
+default: true
+"""
+PRINT_SHORT = "faktur_ringkas"
+PRINT_SHORT_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: faktur_ringkas
+model: sales_invoice
+label: {id: Faktur ringkas, en: Short invoice}
+paper: A5
+template: faktur_ringkas.html
+"""
+PRINT_SHORT_HTML = """{{template "letterhead" .}}
+<h1>Faktur ringkas {{.Doc.name}}</h1>
+<p>Total {{rupiah .Doc.grand_total}}</p>
+"""
+PRINT_LEAD_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: lead_card
+model: lead
+label: {id: Kartu lead}
+paper: A5
+template: lead_card.html
+default: true
+"""
+PRINT_LEAD_HTML = """{{template "letterhead" .}}
+<h1>Lead {{.Doc.name}}</h1>
+<p>{{.Doc.lead_name}}</p>
+"""
+
+
+def enable_print_formats(site):
+    """When the kernel knows the `print` kind (S3: schema/0.5/print.json), give the temp site print formats and a
+    letterhead, so the print scenarios run live; otherwise they run on mock_feature('print'). Returns True when written."""
+    if not os.path.exists(os.path.join(ROOT, "schema", "0.5", "print.json")):
+        return False
+    d = os.path.join(site, "print")
+    os.makedirs(d, exist_ok=True)
+    shutil.copy(os.path.join(ROOT, "templates", "print", "sales_invoice.html"), os.path.join(d, "sales_invoice.html"))
+    for fn, text in ((PRINT_INVOICE + ".rk", PRINT_INVOICE_RK), (PRINT_SHORT + ".rk", PRINT_SHORT_RK), (PRINT_SHORT + ".html", PRINT_SHORT_HTML),
+                     ("lead_card.rk", PRINT_LEAD_RK), ("lead_card.html", PRINT_LEAD_HTML)):
+        with open(os.path.join(d, fn), "w") as f:
+            f.write(text)
+    with open(os.path.join(site, "letterhead.rk"), "w") as f:
+        f.write(LETTERHEAD_RK)
+    return True
+
+
 SCROLL_JS = """() => ({sw: document.documentElement.scrollWidth, bw: document.body.scrollWidth, vw: window.innerWidth})"""
 SMALL_CONTROLS_JS = """() => {
   const out = [];
@@ -2429,6 +2665,7 @@ def main():
         APPS, SITE, CONN = (os.path.join(work, "rangka-apps", "apps"), os.path.join(work, "rangka-apps", "sites", "kopi-senja"), os.path.join(work, "rangka-connectors"))
         enable_approval_policy(SITE)
         enable_import_def(SITE)
+        enable_print_formats(SITE)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

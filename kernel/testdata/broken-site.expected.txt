@@ -3,13 +3,11 @@ core/models/outlet.rk:7:1  error  duplicate_key  (syntax)  "icon" appears twice 
 core/models/outlet.rk:8:7  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
 core/app.rk:4:9  error  schema  hooks/0  'Bad Hook' does not match '^[a-z_]+\\.[a-z_]+$'
 core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must match the file name "item"
-crm/models/deal.rk:1:1  error  schema  (root)  Additional properties are not allowed ('approvals' was unexpected)
 crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', …
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
 crm/models/tanda_terima.rk:4:9  error  reset_needs_date  naming  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
-sales/models/sales_invoice.rk:1:1  error  schema  (root)  Additional properties are not allowed ('approvals' was unexpected)
 sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' is not valid under any of the given schemas
 core/app.rk:9:29  error  unknown_model  menu/0/items/2  "outlet" is not a model in this app or its dependencies
 core/models/customer.rk:7:12  error  not_submittable  on_submit  on_submit hooks need is_submittable: true
@@ -58,7 +56,6 @@ sales/models/sales_invoice.rk:87:12  error  duplicate_approval  approvals/1/name
 sales/models/sales_invoice.rk:87:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
 sales/models/sales_invoice.rk:87:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
 sales/models/sales_invoice.rk:9:3  error  compute_cycle  fields/grand_total/compute  grand_total → grand_total
-crm/flows/approve_gate.rk:5:5  error  schema  steps/0  {'approve': {'approvers': ['sales_manager'], 'when': 'size(x > 0'}, 'as': 'gate'} is not valid under any of the given schemas
 crm/flows/approve_gate.rk:5:50  error  cel_syntax  steps/0/approve/when  unbalanced parentheses in `size(x > 0`
 crm/flows/bad_flow.rk:10:5  error  schema  steps/2  {'if': 'size(won) > 0', 'then': [{'find_all': 'leadz', 'where': "status == 'new'", 'as': 'fresh'}, {'call': 'whatsapp_business.send_textt', 'with': {'to': "'…
 crm/flows/bad_flow.rk:17:5  error  schema  steps/4  {'update': 'won', 'set': {'stage': "'won'"}, 'where': '(x'} is not valid under any of the given schemas
@@ -109,10 +106,8 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/layouts/crm_first.rk:23:77  error  unknown_widget  pages/0/blocks/1/children/1/props/widget  dashboard crm_overview has no widget "activities"; did you mean "activities_due"?
 ../broken-site/imports/site_bad.rk:5:14  error  unknown_field  map/x_missing  "x_missing" is not a field of customer
 ../broken-site/custom/dealz.rk:2:8  error  unknown_model  model  "dealz" is not a model; did you mean "deal"?
-../broken-site/custom/lead.rk:1:1  error  schema  (root)  Additional properties are not allowed ('approvals' was unexpected)
 ../broken-site/custom/lead.rk:2:8  error  name_mismatch  model  overlay model "deal" must match the file name "lead"
 ../broken-site/custom/lead.rk:6:21  error  not_submittable  approvals/0/on  approvals on cancel need is_submittable: true
-../broken-site/custom/sales_invoice.rk:1:1  error  schema  (root)  Additional properties are not allowed ('approvals' was unexpected)
 ../broken-site/custom/sales_invoice.rk:5:12  error  schema  fields/1/name  'po_ref' does not match '^x_[a-z0-9_]{1,60}$'
 ../broken-site/custom/sales_invoice.rk:6:38  error  unknown_model  fields/2/to  "regionn" is not a model in this app or its dependencies
 ../broken-site/custom/sales_invoice.rk:7:41  error  unknown_field  fields/3/default  `custmer` in `posting_date + duration(custmer.payment_days)` is not a field; did you mean "customer"?
@@ -129,4 +124,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/custom/sales_invoice.rk:27:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
 
-117 error(s), 13 warning(s)
+112 error(s), 13 warning(s)

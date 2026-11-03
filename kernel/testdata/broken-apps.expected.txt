@@ -3,13 +3,11 @@ core/models/outlet.rk:7:1  error  duplicate_key  (syntax)  "icon" appears twice 
 core/models/outlet.rk:8:7  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
 core/app.rk:4:9  error  schema  hooks/0  'Bad Hook' does not match '^[a-z_]+\\.[a-z_]+$'
 core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must match the file name "item"
-crm/models/deal.rk:1:1  error  schema  (root)  Additional properties are not allowed ('approvals' was unexpected)
 crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', …
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
 crm/models/tanda_terima.rk:4:9  error  reset_needs_date  naming  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
-sales/models/sales_invoice.rk:1:1  error  schema  (root)  Additional properties are not allowed ('approvals' was unexpected)
 sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' is not valid under any of the given schemas
 core/app.rk:9:29  error  unknown_model  menu/0/items/2  "outlet" is not a model in this app or its dependencies
 core/models/customer.rk:7:12  error  not_submittable  on_submit  on_submit hooks need is_submittable: true
@@ -58,7 +56,6 @@ sales/models/sales_invoice.rk:87:12  error  duplicate_approval  approvals/1/name
 sales/models/sales_invoice.rk:87:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
 sales/models/sales_invoice.rk:87:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
 sales/models/sales_invoice.rk:9:3  error  compute_cycle  fields/grand_total/compute  grand_total → grand_total
-crm/flows/approve_gate.rk:5:5  error  schema  steps/0  {'approve': {'approvers': ['sales_manager'], 'when': 'size(x > 0'}, 'as': 'gate'} is not valid under any of the given schemas
 crm/flows/approve_gate.rk:5:50  error  cel_syntax  steps/0/approve/when  unbalanced parentheses in `size(x > 0`
 crm/flows/bad_flow.rk:10:5  error  schema  steps/2  {'if': 'size(won) > 0', 'then': [{'find_all': 'leadz', 'where': "status == 'new'", 'as': 'fresh'}, {'call': 'whatsapp_business.send_textt', 'with': {'to': "'…
 crm/flows/bad_flow.rk:17:5  error  schema  steps/4  {'update': 'won', 'set': {'stage': "'won'"}, 'where': '(x'} is not valid under any of the given schemas
@@ -88,4 +85,4 @@ sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-79 error(s), 10 warning(s)
+76 error(s), 10 warning(s)

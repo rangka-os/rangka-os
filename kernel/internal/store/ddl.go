@@ -458,8 +458,12 @@ func Plan(desired []Table, live *Live) (stmts, notes []string) {
 
 // rlsSQL limits rows to the connection's org (rangka.org, see pg.WithOrg); owners are bound too (force).
 // It is idempotent, so it also repairs a table with only part of it in place.
-func (t Table) rlsSQL() []string {
-	q := pg.QuoteIdent(t.Name)
+func (t Table) rlsSQL() []string { return RLSStatements(t.Name) }
+
+// RLSStatements are the idempotent statements that put row-level security (policy rk_org on org_id) on a
+// model table; restore uses them for archived tables the models no longer have.
+func RLSStatements(table string) []string {
+	q := pg.QuoteIdent(table)
 	return []string{
 		"alter table " + q + " enable row level security",
 		"alter table " + q + " force row level security",

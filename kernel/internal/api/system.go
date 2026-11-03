@@ -8,6 +8,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -203,7 +204,9 @@ func containsStr(l []string, s string) bool {
 }
 
 // orgUsage counts what an organisation uses (CONTRACTS v0.1 decision 8).
+// The caller passes only orgs it is a member of (listOrgs); the counts run with that org's RLS setting.
 func (s *Server) orgUsage(ctx context.Context, org string) map[string]any {
+	ctx = pg.WithOrg(ctx, org)
 	reg := s.Engine.Reg()
 	var users, records, outlets, ai int64
 	if res, err := s.DB.Query(ctx, "select count(*) from rk_members where org_id = $1", org); err == nil {

@@ -62,7 +62,8 @@ type AuditFilter struct {
 	Org   string   // ?org=
 	Kind  string   // ?kind= prefix
 	Actor string   // ?actor=
-	// HideRecordsOf leaves out record.* entries whose target model is in the list (row-scoped members).
+	// HideRecordsOf leaves out entries about records (record.*, attachment.*, approval.*, action.*,
+	// automation.run, hook.skipped) whose target model is in the list (row-scoped members).
 	HideRecordsOf []string
 	Limit         int
 }
@@ -77,7 +78,8 @@ func ListAudit(ctx context.Context, q pg.Querier, f AuditFilter) ([]AuditEntry, 
 	}
 	res, err := q.Query(ctx, `select at, actor, kind, target, summary, data, org_id from rk_audit
 		where (org_id = '' or org_id = any($1)) and ($2 = '' or org_id = $2) and ($3 = '' or kind like $3 || '%') and ($4 = '' or actor = $4)
-		and not (kind like 'record.%' and split_part(target, '/', 1) = any($6))
+		and not ((kind like 'record.%' or kind like 'attachment.%' or kind like 'approval.%' or kind like 'action.%'
+			or kind in ('automation.run', 'hook.skipped')) and split_part(target, '/', 1) = any($6))
 		order by id desc limit $5`, pg.Array(f.Orgs), f.Org, f.Kind, f.Actor, f.Limit, pg.Array(f.HideRecordsOf))
 	if err != nil {
 		return nil, err

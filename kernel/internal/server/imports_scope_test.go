@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
@@ -126,4 +128,40 @@ func TestImportOfOtherOrg404(t *testing.T) {
 	}
 	e.must(200, "POST", "/auth/org", map[string]any{"org": "kopi-senja"})
 	e.must(200, "POST", path+"/"+id+"/commit", nil)
+}
+
+// plainOutletImport adds an import without per: outlet whose rows name their outlet in a column.
+func plainOutletImport(apps, site string) {
+	addFnbTest(apps, site)
+	p := filepath.Join(apps, "fnb_test", "imports", "outlet_sales_plain.rk")
+	if err := os.WriteFile(p, []byte(importSchema+"import.json\nname: outlet_sales_plain\nlabel: {id: Penjualan per baris}\nmodel: outlet_sales\nsource: csv\nheader_row: 1\nmap:\n  date: Date\n  outlet: Outlet\n  note: Note\n"), 0o644); err != nil {
+		panic(err)
+	}
+}
+
+// TestImportScopedPreviewRowsOfOtherOutlet: an entry without per: outlet whose planned rows include another
+// outlet is not readable by a scoped member (403 import), and is left out of their list.
+func TestImportScopedPreviewRowsOfOtherOutlet(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"}, plainOutletImport)
+	const path = "/api/v1/imports/outlet_sales_plain"
+	csv := []byte("Date,Outlet,Note\n2026-11-01,OUT-01,pagi\n2026-11-01,OUT-02,rahasia outlet lain\n")
+	pv := owner.uploadForm(path, "mix.csv", csv, nil)
+	if pv.Status != 200 || len(pv.JSON["errors"].([]any)) != 0 {
+		t.Fatalf("owner preview: %d %s", pv.Status, pv.Body)
+	}
+	id := pv.JSON["id"].(string)
+	r := staff.do("GET", path+"/"+id, nil)
+	assertDenied(t, r, "outlet_sales", "import")
+	if strings.Contains(string(r.Body), "rahasia") {
+		t.Fatalf("preview leaked: %s", r.Body)
+	}
+	if l := staff.must(200, "GET", path, nil).JSON["imports"].([]any); len(l) != 0 {
+		t.Fatalf("member lists the entry: %v", l)
+	}
+	// an entry with only the member's outlet stays readable
+	own := owner.uploadForm(path, "own.csv", []byte("Date,Outlet,Note\n2026-11-02,OUT-01,siang\n"), nil)
+	staff.must(200, "GET", path+"/"+own.JSON["id"].(string), nil)
+	if l := staff.must(200, "GET", path, nil).JSON["imports"].([]any); len(l) != 1 {
+		t.Fatalf("member list: %v", l)
+	}
 }

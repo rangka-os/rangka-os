@@ -5,6 +5,7 @@ import (
 	"io"
 	"net/http"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 )
 
@@ -46,8 +47,8 @@ func uploadError(w http.ResponseWriter, err error) {
 
 // commitImport creates the records of a previewed entry. Only people may run it.
 func (s *Server) commitImport(w http.ResponseWriter, r *http.Request, c *caller) {
-	if !c.p.Human() {
-		writeError(w, http.StatusForbidden, "permission_denied", "Impor hanya bisa dijalankan oleh pengguna")
+	if im := s.Engine.Reg().Imports[r.PathValue("import")]; im != nil && !c.p.Human() {
+		fail(w, engine.Denied(im.Model, "import")) // the one 403 shape; an unknown import is 404 below
 		return
 	}
 	e, err := s.Imports.Commit(r.Context(), c.actor, r.PathValue("import"), r.PathValue("id"))

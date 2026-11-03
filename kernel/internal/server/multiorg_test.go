@@ -13,6 +13,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // twoOrgEnv adds a second org (pt_beta) next to kopi-senja: the seed user belongs to both,
@@ -507,12 +508,18 @@ func TestAuditScopedLeavesOutScopedRecords(t *testing.T) {
 	owner.must(201, "POST", "/api/v1/r/sales_invoice", map[string]any{"customer": "CUST-0012", "outlet": "OUT-02",
 		"items": []any{map[string]any{"item": "BRG-0044", "qty": 2}}})
 	owner.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "Audit Pelanggan"})
+	// entries about scoped records under other kinds are left out too
+	for _, k := range []string{"attachment.added", "approval.approved", "action.run", "automation.run", "hook.skipped"} {
+		if err := store.Audit(context.Background(), owner.s.DB, "kopi-senja", "ceo@saga.co.id", k, "sales_invoice/INV-X", "test", nil); err != nil {
+			t.Fatal(err)
+		}
+	}
 	l := rowsOf(staff.must(200, "GET", "/api/v1/system/audit?limit=500", nil))
 	sawCustomer := false
 	for _, x := range l {
 		k, _ := get(x, "kind").(string)
 		tg, _ := get(x, "target").(string)
-		if strings.HasPrefix(k, "record.") && (strings.HasPrefix(tg, "sales_invoice/") || strings.HasPrefix(tg, "outlet/")) {
+		if strings.HasPrefix(tg, "sales_invoice/") || strings.HasPrefix(tg, "outlet/") {
 			t.Fatalf("scoped member sees %s %s", k, tg)
 		}
 		if strings.HasPrefix(k, "record.") && strings.HasPrefix(tg, "customer/") {

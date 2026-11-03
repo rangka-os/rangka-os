@@ -93,6 +93,23 @@ func (s *Service) outletAllowed(a engine.Actor, outlet string) bool {
 	return s.Engine.RowScope(a).Visible(s.Engine.Reg().Model("outlet"), map[string]any{"name": outlet})
 }
 
+// entryAllowed reports whether a scoped member may read an entry: its outlet (per: outlet) and every planned
+// input must be inside the member's row scope. Members without a row scope may read every entry of their org.
+func (s *Service) entryAllowed(ctx context.Context, a engine.Actor, im *meta.Import, ent *Entry, plan []planned) bool {
+	if s.Engine.RowScope(a) == nil {
+		return true
+	}
+	if !s.outletAllowed(a, ent.Scope) {
+		return false
+	}
+	for _, p := range plan {
+		if s.Engine.Guard(ctx, a, im.Model, p.Input, "import") != nil {
+			return false
+		}
+	}
+	return true
+}
+
 // lookup resolves link values with store.FindBy inside one org.
 type lookup struct {
 	ctx context.Context
@@ -385,8 +402,9 @@ func (s *Service) Get(ctx context.Context, a engine.Actor, name, id string) (*En
 	if err != nil {
 		return nil, err
 	}
-	ent, _, err := s.load(ctx, a, name, id, false)
-	if err == nil && !s.outletAllowed(a, ent.Scope) {
+	scoped := s.Engine.RowScope(a) != nil
+	ent, plan, err := s.load(ctx, a, name, id, scoped)
+	if err == nil && !s.entryAllowed(ctx, a, im, ent, plan) {
 		return nil, engine.Denied(im.Model, "import")
 	}
 	return ent, err
@@ -401,10 +419,15 @@ type ListItem struct {
 
 // List returns the newest entries of the caller's org for one import.
 func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]ListItem, error) {
-	if _, err := s.imp(ctx, a, name); err != nil {
+	im, err := s.imp(ctx, a, name)
+	if err != nil {
 		return nil, err
 	}
 	sql := strings.Replace(selectEntry, "i.preview::text as preview", "null as preview", 1)
+	scoped := s.Engine.RowScope(a) != nil
+	if scoped { // entries are checked row by row against the member's row scope
+		sql += `, i.plan::text as plan`
+	}
 	res, err := s.DB.Query(ctx, sql+` from rk_imports i where i.org_id = $1 and i.import = $2 order by i.created_at desc, i.id desc limit `+fmt.Sprint(listLimit),
 		a.Org, name)
 	if err != nil {
@@ -416,8 +439,14 @@ func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]List
 		if err != nil {
 			return nil, err
 		}
-		if !s.outletAllowed(a, ent.Scope) {
-			continue // another outlet's entry (row scope)
+		if scoped {
+			plan, err := parsePlan(str(row["plan"]))
+			if err != nil {
+				return nil, err
+			}
+			if !s.entryAllowed(ctx, a, im, ent, plan) {
+				continue // another outlet's entry or rows (row scope)
+			}
 		}
 		out = append(out, ListItem{Entry: ent})
 	}
@@ -450,9 +479,18 @@ func (s *Service) load(ctx context.Context, a engine.Actor, name, id string, wit
 	if !withPlan {
 		return ent, nil, nil
 	}
-	var raw []json.RawMessage
-	if err := json.Unmarshal([]byte(str(row["plan"])), &raw); err != nil {
+	plan, err := parsePlan(str(row["plan"]))
+	if err != nil {
 		return nil, nil, err
+	}
+	return ent, plan, nil
+}
+
+// parsePlan decodes the plan column of an entry.
+func parsePlan(text string) ([]planned, error) {
+	var raw []json.RawMessage
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+		return nil, err
 	}
 	plan := make([]planned, len(raw))
 	for i, r := range raw {
@@ -462,13 +500,13 @@ func (s *Service) load(ctx context.Context, a engine.Actor, name, id string, wit
 			Keys  []string        `json:"keys"`
 		}
 		if err := json.Unmarshal(r, &p); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		// DecodeJSON keeps integers (money) as int64, never float64.
 		in, _ := pg.DecodeJSON(p.Input).(map[string]any)
 		plan[i] = planned{Input: in, Rows: p.Rows, Keys: p.Keys}
 	}
-	return ent, plan, nil
+	return plan, nil
 }
 
 func scanEntry(row map[string]any) (*Entry, error) {

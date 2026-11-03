@@ -247,6 +247,8 @@ func (s *Server) Wait() {
 func (s *Server) Reload(ctx context.Context) error {
 	s.reload.Lock()
 	defer s.reload.Unlock()
+	// migrate and its pre-migrate backup are installation-wide: not limited by the caller's org (RLS)
+	ctx = pg.WithOrg(ctx, "")
 	reg, err := LoadRegistry(s.Cfg)
 	if err != nil {
 		return err

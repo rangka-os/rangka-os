@@ -482,13 +482,21 @@ func TestRestoreAddsArchivedColumns(t *testing.T) {
 	if _, err := s.db.Exec(ctx, `alter table r_lead add column x_legacy numeric(18,2);
 		update r_lead set x_legacy = 12.5;
 		create table _del_20260101_old (name text, tags text[], at timestamp with time zone);
-		insert into _del_20260101_old values ('a', '{x,y}', '2026-01-01 07:00+07')`); err != nil {
+		insert into _del_20260101_old values ('a', '{x,y}', '2026-01-01 07:00+07');
+		create table _del_20260101_r_gone (org_id text not null, name text not null);
+		insert into _del_20260101_r_gone values ('kopi-senja', 'G-1')`); err != nil {
 		t.Fatal(err)
 	}
 	archive := s.backup(t, "")
 	dst := pool(t, testdb.New(t))
 	if _, err := backup.Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
 		t.Fatal(err)
+	}
+	// an archived model table gets the org policy back (contract 0010 §4); a table without org_id does not
+	r, err := dst.Query(ctx, `select relname, relrowsecurity and relforcerowsecurity from pg_class
+		where relname in ('_del_20260101_r_gone', '_del_20260101_old') order by relname`)
+	if err != nil || len(r.Rows) != 2 || r.Rows[0][1] != false || r.Rows[1][1] != true {
+		t.Fatalf("row-level security on archived tables: %v %v", r, err)
 	}
 	a, _ := backup.Sums(ctx, s.db, "")
 	b, _ := backup.Sums(ctx, dst, "")

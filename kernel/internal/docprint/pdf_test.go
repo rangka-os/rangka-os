@@ -8,6 +8,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func fakeChromium(t *testing.T, script string) {
@@ -70,7 +71,20 @@ func TestTail(t *testing.T) {
 	if got := tail("aéé", 3); got != "é" {
 		t.Fatalf("got %q", got)
 	}
+	if got := tail("\x80\x80\x80\x80", 2); got != "" {
+		t.Fatalf("got %q", got)
+	}
 	if got := tail("xyz", 2); got != "yz" {
 		t.Fatal(got)
+	}
+}
+
+func TestPDFTimeoutError(t *testing.T) {
+	fakeChromium(t, "sleep 5")
+	old := pdfTimeout
+	pdfTimeout = 200 * time.Millisecond
+	defer func() { pdfTimeout = old }()
+	if _, err := PDF(context.Background(), []byte("<p>x</p>")); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("got %v, want deadline exceeded", err)
 	}
 }

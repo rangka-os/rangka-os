@@ -16,15 +16,24 @@ import (
 func TestPDFTimeoutKillsProcessTree(t *testing.T) {
 	pidfile := filepath.Join(t.TempDir(), "pid")
 	fakeChromium(t, "sleep 30 & echo $! > "+pidfile+"; wait")
-	old := pdfTimeout
-	pdfTimeout = 300 * time.Millisecond
-	defer func() { pdfTimeout = old }()
+	// Cancel the caller's context once the grandchild's pid is on disk, so the kill never races startup.
+	// pdfTimeout stays a generous backstop.
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	go func() {
+		for end := time.Now().Add(10 * time.Second); time.Now().Before(end); time.Sleep(20 * time.Millisecond) {
+			if b, err := os.ReadFile(pidfile); err == nil && strings.HasSuffix(string(b), "\n") {
+				cancel()
+				return
+			}
+		}
+	}()
 	start := time.Now()
-	if _, err := PDF(context.Background(), []byte("<p>x</p>")); err == nil {
-		t.Fatal("want a timeout error")
+	if _, err := PDF(ctx, []byte("<p>x</p>")); err == nil {
+		t.Fatal("want a cancellation error")
 	}
-	if time.Since(start) > 5*time.Second {
-		t.Fatal("PDF did not stop at the timeout")
+	if time.Since(start) > 8*time.Second {
+		t.Fatal("PDF did not stop after cancellation")
 	}
 	b, err := os.ReadFile(pidfile)
 	if err != nil {

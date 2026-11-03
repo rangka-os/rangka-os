@@ -89,7 +89,7 @@ func tail(s string, n int) string {
 		return s
 	}
 	s = s[len(s)-n:]
-	for !utf8.RuneStart(s[0]) {
+	for len(s) > 0 && !utf8.RuneStart(s[0]) {
 		s = s[1:]
 	}
 	return s

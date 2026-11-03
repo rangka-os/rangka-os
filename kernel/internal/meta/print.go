@@ -57,7 +57,8 @@ func parsePrint(app, root, stem string, doc *rk.Doc) *Print {
 }
 
 func parseRelated(m map[string]any) Related {
-	r := Related{Model: str(m, "model"), Filter: celText(m["filter"]), Sort: str(m, "sort"), Limit: integer(m, "limit"), Match: map[string]string{}}
+	r := Related{Model: str(m, "model"), Filter: celText(m["filter"]), Sort: str(m, "sort"),
+		Limit: integer(m, "limit"), Match: map[string]string{}}
 	for k, v := range asMap(m["match"]) {
 		if s, ok := v.(string); ok {
 			r.Match[k] = s

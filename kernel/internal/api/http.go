@@ -37,10 +37,9 @@ func writeError(w http.ResponseWriter, status int, code, msg string) {
 }
 
 // permissionDenied writes the 403 body: {"error": {"code": "permission_denied", "message", "model", "action"}}.
-func permissionDenied(w http.ResponseWriter, model, action string) {
-	pe := &engine.PermissionError{Model: model, Action: action}
+func permissionDenied(w http.ResponseWriter, pe *engine.PermissionError) {
 	writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{
-		"code": "permission_denied", "message": pe.Error(), "model": model, "action": action}})
+		"code": "permission_denied", "message": pe.Error(), "model": pe.Model, "action": pe.Action}})
 }
 
 // fail maps engine errors to HTTP: 422 validation, 403 permission, StatusError codes, 404, else 500.
@@ -50,7 +49,7 @@ func fail(w http.ResponseWriter, err error) {
 	var pe *engine.PermissionError
 	switch {
 	case errors.As(err, &pe):
-		permissionDenied(w, pe.Model, pe.Action)
+		permissionDenied(w, pe)
 	case errors.As(err, &ve):
 		writeJSON(w, http.StatusUnprocessableEntity, ve)
 	case errors.As(err, &se):

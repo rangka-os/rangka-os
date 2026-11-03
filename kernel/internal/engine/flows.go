@@ -202,7 +202,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			}
 			readable := e.decide(a, e.permModel(m.Name), "read")
 			if !readable.maybe() {
-				return &PermissionError{Model: e.permModel(m.Name).Name, Action: "read"}
+				return e.Deny(e.permModel(m.Name).Name, "read")
 			}
 			recs, err := store.All(o.ctx, o.tx, e.Reg(), a.Org, m, false)
 			if err != nil {

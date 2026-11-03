@@ -69,13 +69,11 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 		return "", nil, err
 	}
 	u, err := LoadUser(ctx, s.DB, id, org)
+	if errors.Is(err, ErrNoMembership) && org != "" {
+		u, err = LoadUser(ctx, s.DB, id, "")
+	}
 	if err != nil {
 		return "", nil, err
-	}
-	if u.Org == "" {
-		if u, err = LoadUser(ctx, s.DB, id, ""); err != nil {
-			return "", nil, err
-		}
 	}
 	tok := RandomToken("", 32)
 	ttl := s.SessionTTL
@@ -87,6 +85,30 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 	}
 	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.login", "user/"+u.Email, "signed in", nil)
 	return tok, u, nil
+}
+
+// SwitchOrg moves a live session to another organisation the user belongs to.
+func (s *Service) SwitchOrg(ctx context.Context, cookie, org string) (*User, error) {
+	id := HashToken(cookie)
+	res, err := s.DB.Query(ctx, "select user_id from rk_sessions where id = $1 and expires_at > $2", id, s.now())
+	if err != nil {
+		return nil, err
+	}
+	if len(res.Rows) == 0 {
+		return nil, ErrUnauthenticated
+	}
+	u, err := LoadUser(ctx, s.DB, res.Rows[0][0].(int64), org)
+	if err != nil {
+		return nil, err
+	}
+	if org == "" || u.Org != org {
+		return nil, ErrNoMembership
+	}
+	if _, err := s.DB.Query(ctx, "update rk_sessions set org_id = $1 where id = $2", u.Org, id); err != nil {
+		return nil, err
+	}
+	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.org_switched", "org/"+u.Org, "switched organisation", nil)
+	return u, nil
 }
 
 // Logout ends a session.
@@ -135,7 +157,13 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			if len(res.Rows) == 0 {
 				return nil, ErrUnauthenticated
 			}
+			if res.Rows[0][1].(string) == "" {
+				return nil, ErrUnauthenticated
+			}
 			u, err := LoadUser(ctx, s.DB, res.Rows[0][0].(int64), res.Rows[0][1].(string))
+			if errors.Is(err, ErrNoMembership) {
+				return nil, ErrUnauthenticated
+			}
 			if err != nil {
 				return nil, err
 			}
@@ -147,6 +175,9 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 		}
 		uid, _ := claims["uid"].(float64)
 		org, _ := claims["org"].(string)
+		if org == "" {
+			return nil, ErrUnauthenticated
+		}
 		u, err := LoadUser(ctx, s.DB, int64(uid), org)
 		if err != nil {
 			return nil, ErrUnauthenticated
@@ -160,7 +191,13 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			return nil, err
 		}
 		if len(res.Rows) > 0 {
+			if res.Rows[0][1].(string) == "" {
+				return nil, ErrUnauthenticated
+			}
 			u, err := LoadUser(ctx, s.DB, res.Rows[0][0].(int64), res.Rows[0][1].(string))
+			if errors.Is(err, ErrNoMembership) {
+				return nil, ErrUnauthenticated
+			}
 			if err != nil {
 				return nil, err
 			}

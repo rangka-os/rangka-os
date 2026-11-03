@@ -462,6 +462,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         schema_errors(rep, V, "role", p, r)
         if r.get("name") != st:
             rep.add("error", p, "name", "name_mismatch", f'role name "{r.get("name")}" must match the file name "{st}"')
+        check_scope(rep, p, r, allmodels)
 
     # connectors
     for cn in sorted(conns):
@@ -475,6 +476,20 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
             check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
+
+
+def check_scope(rep, p, r, allmodels):
+    """Role scope (contract 0010): every scope field must be a field of some model."""
+    sc = r.get("scope")
+    if not isinstance(sc, dict):
+        return
+    f = sc.get("field")
+    fields = [f] if isinstance(f, str) else [x for x in f if isinstance(x, str)] if isinstance(f, list) else []
+    known = {fd.get("name") for _, _, m in allmodels.values() if isinstance(m, dict)
+             for fd in (m.get("fields") if isinstance(m.get("fields"), list) else []) if isinstance(fd, dict)}
+    for name in fields:
+        if name not in known:
+            rep.add("error", p, "scope/field", "unknown_scope_field", f'scope field "{name}" is not a field of any installed model')
 
 
 def import_map(d):
@@ -690,6 +705,11 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             if (isinstance(own, str) and own) or (isinstance(own, dict) and isinstance(own.get("pattern"), str) and own["pattern"]):
                 continue
             rep.add("error", mp, "naming/series", "unknown_series", f'series "{series}" is not defined in config.rk numbering and the model gives no default pattern')
+        orgs = cfg.get("orgs") if isinstance(cfg.get("orgs"), dict) else {}
+        for oid in sorted(orgs):
+            oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None
+            if isinstance(oc, dict) and "orgs" in oc:
+                rep.add("error", cp, f"orgs/{oid}/config/orgs", "nested_orgs", f'org "{oid}" config cannot contain orgs')
     for tn in sorted(themes):
         p, d = themes[tn]
         ext = d.get("extends") or ""

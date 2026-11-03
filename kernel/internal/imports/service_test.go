@@ -1,6 +1,7 @@
 package imports
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -220,9 +221,15 @@ func TestPreviewCommitAndDuplicates(t *testing.T) {
 	if err != nil || g.Status != "committed" || g.Duplicate || len(g.Records) != 1 || g.FileName != "moka.csv" || g.CreatedBy != a.ID {
 		t.Fatalf("get: %+v %v", g, err)
 	}
-	list, err := s.List(ctx, a, mokaName)
-	if err != nil || len(list) != 4 || list[0].ID != other.ID {
-		t.Fatalf("list: %d %v", len(list), err)
+	list, total, err := s.List(ctx, a, mokaName)
+	if err != nil || len(list) != 4 || total != 4 || list[0].ID != other.ID {
+		t.Fatalf("list: %d/%d %v", len(list), total, err)
+	}
+	// preview records come out in model field order, lines in the child model's
+	pj, _ := json.Marshal(g)
+	if !bytes.Contains(pj, []byte(`"preview":[{"date":`)) || !regexpOrder(pj, `"date"`, `"outlet"`, `"note"`, `"lines"`) ||
+		!regexpOrder(pj, `{"item"`, `"qty"`, `"gross"`, `"discount"`, `"net"`, `"refund"`) {
+		t.Fatalf("preview key order: %s", pj)
 	}
 	// list entries leave out the preview records
 	b, _ := json.Marshal(list[0])
@@ -479,7 +486,7 @@ func TestImportNeedsImportPermission(t *testing.T) {
 	if !errors.As(err, &pe) || pe.Model != "outlet_sales" || pe.Action != "import" {
 		t.Fatalf("outlet staff preview: %v", err)
 	}
-	if _, err := s.List(ctx, staff, mokaName); !errors.As(err, &pe) {
+	if _, _, err := s.List(ctx, staff, mokaName); !errors.As(err, &pe) {
 		t.Fatalf("outlet staff list: %v", err)
 	}
 	ho := engine.Actor{Org: "tahu-dago", ID: "ho@example.com", Roles: []string{"head_office"}, Human: true}
@@ -490,4 +497,17 @@ func TestImportNeedsImportPermission(t *testing.T) {
 	if _, err := s.Commit(ctx, ho, mokaName, p.ID); err != nil {
 		t.Fatalf("head office commit: %v", err)
 	}
+}
+
+// regexpOrder reports whether the needles appear in b in this order.
+func regexpOrder(b []byte, needles ...string) bool {
+	at := 0
+	for _, n := range needles {
+		i := bytes.Index(b[at:], []byte(n))
+		if i < 0 {
+			return false
+		}
+		at += i + len(n)
+	}
+	return true
 }

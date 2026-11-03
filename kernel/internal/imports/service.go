@@ -41,6 +41,9 @@ type Entry struct {
 	CreatedBy   string           `json:"created_by"`
 	CreatedAt   time.Time        `json:"created_at"`
 	CommittedAt *time.Time       `json:"committed_at"`
+
+	order   *previewOrder // key order of Preview in JSON (order.go)
+	listing bool          // List leaves the preview out
 }
 
 const (
@@ -84,6 +87,32 @@ func (s *Service) imp(ctx context.Context, a engine.Actor, name string) (*meta.I
 	return im, nil
 }
 
+// outletAllowed reports whether a per-outlet scope (an outlet name, "" for none) is inside the actor's row
+// scope (contract 0010 §5); actors without a row scope may use every outlet.
+func (s *Service) outletAllowed(a engine.Actor, outlet string) bool {
+	if outlet == "" {
+		return true
+	}
+	return s.Engine.RowScope(a).Visible(s.Engine.Reg().Model("outlet"), map[string]any{"name": outlet})
+}
+
+// entryAllowed reports whether a scoped member may read an entry: its outlet (per: outlet) and every planned
+// input must be inside the member's row scope. Members without a row scope may read every entry of their org.
+func (s *Service) entryAllowed(ctx context.Context, a engine.Actor, im *meta.Import, ent *Entry, plan []planned) bool {
+	if s.Engine.RowScope(a) == nil {
+		return true
+	}
+	if !s.outletAllowed(a, ent.Scope) {
+		return false
+	}
+	for _, p := range plan {
+		if s.Engine.Guard(ctx, a, im.Model, p.Input, "import") != nil {
+			return false
+		}
+	}
+	return true
+}
+
 // lookup resolves link values with store.FindBy inside one org.
 type lookup struct {
 	ctx context.Context
@@ -113,6 +142,9 @@ func (s *Service) Preview(ctx context.Context, a engine.Actor, name, fileName st
 	if im.Per == "outlet" {
 		if outlet == "" {
 			return nil, &engine.StatusError{Status: 400, Code: "outlet_required", Msg: "Pilih outlet dulu"}
+		}
+		if !s.outletAllowed(a, outlet) {
+			return nil, s.Engine.Deny(im.Model, "import")
 		}
 		ok, err := store.Exists(ctx, s.DB, a.Org, "outlet", outlet)
 		if err != nil {
@@ -283,6 +315,9 @@ func (s *Service) Commit(ctx context.Context, a engine.Actor, name, id string) (
 	if err != nil {
 		return nil, err
 	}
+	if !s.outletAllowed(a, ent.Scope) {
+		return nil, s.Engine.Deny(im.Model, "import")
+	}
 	if ent.Status == "committed" || ent.Duplicate {
 		return nil, errAlreadyImported()
 	}
@@ -366,40 +401,75 @@ func errImportErrors() error {
 
 // Get returns one entry of the caller's org.
 func (s *Service) Get(ctx context.Context, a engine.Actor, name, id string) (*Entry, error) {
-	if _, err := s.imp(ctx, a, name); err != nil {
-		return nil, err
-	}
-	ent, _, err := s.load(ctx, a, name, id, false)
-	return ent, err
-}
-
-// ListItem is an entry as List returns it: without the preview records (Get has them).
-type ListItem struct {
-	*Entry
-	// Preview shadows Entry.Preview and is always nil, so the JSON has no "preview".
-	Preview *struct{} `json:"preview,omitempty"`
-}
-
-// List returns the newest entries of the caller's org for one import.
-func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]ListItem, error) {
-	if _, err := s.imp(ctx, a, name); err != nil {
-		return nil, err
-	}
-	sql := strings.Replace(selectEntry, "i.preview::text as preview", "null as preview", 1)
-	res, err := s.DB.Query(ctx, sql+` from rk_imports i where i.org_id = $1 and i.import = $2 order by i.created_at desc, i.id desc limit `+fmt.Sprint(listLimit),
-		a.Org, name)
+	im, err := s.imp(ctx, a, name)
 	if err != nil {
 		return nil, err
 	}
-	out := make([]ListItem, 0, len(res.Rows))
+	scoped := s.Engine.RowScope(a) != nil
+	ent, plan, err := s.load(ctx, a, name, id, scoped)
+	if err == nil && !s.entryAllowed(ctx, a, im, ent, plan) {
+		return nil, s.Engine.Deny(im.Model, "import")
+	}
+	if ent != nil {
+		ent.order = orderFor(s.Engine.Reg(), s.Engine.Reg().Imports[name])
+	}
+	return ent, err
+}
+
+// List returns the newest entries of the caller's org for one import (without their previews; Get has them)
+// and how many entries the import has in all. A member with a row scope sees only the entries it may see
+// (entryAllowed), and total counts only those.
+func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]*Entry, int, error) {
+	im, err := s.imp(ctx, a, name)
+	if err != nil {
+		return nil, 0, err
+	}
+	sql := strings.Replace(selectEntry, "i.preview::text as preview", "null as preview", 1)
+	scoped := s.Engine.RowScope(a) != nil
+	limit := ` limit ` + fmt.Sprint(listLimit)
+	if scoped { // entries are checked row by row against the member's row scope; all of them, for total
+		sql += `, i.plan::text as plan`
+		limit = ""
+	}
+	res, err := s.DB.Query(ctx, sql+` from rk_imports i where i.org_id = $1 and i.import = $2 order by i.created_at desc, i.id desc`+limit,
+		a.Org, name)
+	if err != nil {
+		return nil, 0, err
+	}
+	out := make([]*Entry, 0, min(len(res.Rows), listLimit))
+	visible := 0
 	for _, row := range res.Maps() {
 		ent, err := scanEntry(row)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		out = append(out, ListItem{Entry: ent})
+		if scoped {
+			plan, err := parsePlan(str(row["plan"]))
+			if err != nil {
+				return nil, 0, err
+			}
+			if !s.entryAllowed(ctx, a, im, ent, plan) {
+				continue // another outlet's entry or rows (row scope)
+			}
+		}
+		visible++
+		if len(out) < listLimit {
+			ent.listing = true
+			out = append(out, ent)
+		}
 	}
-	return out, nil
+	if scoped {
+		return out, visible, nil
+	}
+	cnt, err := s.DB.Query(ctx, `select count(*) from rk_imports where org_id = $1 and import = $2`, a.Org, name)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := len(out)
+	if len(cnt.Rows) == 1 {
+		total = int(toInt64(cnt.Rows[0][0]))
+	}
+	return out, total, nil
 }
 
 // selectEntry reads entries with dup_file: another entry committed the same file for the same scope.
@@ -428,9 +498,18 @@ func (s *Service) load(ctx context.Context, a engine.Actor, name, id string, wit
 	if !withPlan {
 		return ent, nil, nil
 	}
-	var raw []json.RawMessage
-	if err := json.Unmarshal([]byte(str(row["plan"])), &raw); err != nil {
+	plan, err := parsePlan(str(row["plan"]))
+	if err != nil {
 		return nil, nil, err
+	}
+	return ent, plan, nil
+}
+
+// parsePlan decodes the plan column of an entry.
+func parsePlan(text string) ([]planned, error) {
+	var raw []json.RawMessage
+	if err := json.Unmarshal([]byte(text), &raw); err != nil {
+		return nil, err
 	}
 	plan := make([]planned, len(raw))
 	for i, r := range raw {
@@ -440,13 +519,13 @@ func (s *Service) load(ctx context.Context, a engine.Actor, name, id string, wit
 			Keys  []string        `json:"keys"`
 		}
 		if err := json.Unmarshal(r, &p); err != nil {
-			return nil, nil, err
+			return nil, err
 		}
 		// DecodeJSON keeps integers (money) as int64, never float64.
 		in, _ := pg.DecodeJSON(p.Input).(map[string]any)
 		plan[i] = planned{Input: in, Rows: p.Rows, Keys: p.Keys}
 	}
-	return ent, plan, nil
+	return plan, nil
 }
 
 func scanEntry(row map[string]any) (*Entry, error) {

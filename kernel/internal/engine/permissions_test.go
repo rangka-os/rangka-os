@@ -79,8 +79,27 @@ func wantPermErr(t *testing.T, err error, model, action string) {
 	if pe.Model != model || pe.Action != action {
 		t.Fatalf("PermissionError = %+v, want {%s %s}", *pe, model, action)
 	}
-	if want := "permission denied: " + action + " on " + model; pe.Error() != want {
-		t.Fatalf("Error() = %q, want %q", pe.Error(), want)
+	if !strings.HasPrefix(pe.Error(), "Kamu tidak punya izin untuk ") {
+		t.Fatalf("Error() = %q, want the Indonesian message", pe.Error())
+	}
+}
+
+// TestPermissionMessage: the 403 message uses an Indonesian verb and the model's label, lower-cased mid-sentence.
+func TestPermissionMessage(t *testing.T) {
+	for _, c := range []struct {
+		pe   PermissionError
+		want string
+	}{
+		{PermissionError{Model: "sales_invoice", Action: "read", Label: "Faktur penjualan"}, "Kamu tidak punya izin untuk melihat faktur penjualan"},
+		{PermissionError{Model: "sales_invoice", Action: "submit", Label: "Faktur penjualan"}, "Kamu tidak punya izin untuk mengajukan faktur penjualan"},
+		{PermissionError{Model: "org", Action: "switch"}, "Kamu tidak punya izin untuk masuk ke organisasi ini"},
+		{PermissionError{Model: "flow", Action: "run"}, "Kamu tidak punya izin untuk menjalankan alur ini"},
+		{PermissionError{Model: "deal", Action: "action:win", Label: "Peluang"}, "Kamu tidak punya izin untuk menjalankan aksi win pada peluang"},
+		{PermissionError{Model: "gadget", Action: "frobnicate"}, "Kamu tidak punya izin untuk frobnicate gadget"},
+	} {
+		if got := c.pe.Error(); got != c.want {
+			t.Errorf("%+v: Error() = %q, want %q", c.pe, got, c.want)
+		}
 	}
 }
 
@@ -272,7 +291,7 @@ func TestDashboardWidgetPermissions(t *testing.T) {
 	}
 	// no role: voucher widget denied, note widget computed
 	w := widgets(permNobody)
-	want := map[string]any{"code": "permission_denied", "message": "permission denied: read on voucher", "model": "voucher", "action": "read"}
+	want := map[string]any{"code": "permission_denied", "message": "Kamu tidak punya izin untuk melihat voucher", "model": "voucher", "action": "read"}
 	if got := w[0].(map[string]any)["error"]; !mapsEqual(got, want) {
 		t.Fatalf("voucher widget error = %v, want %v", got, want)
 	}

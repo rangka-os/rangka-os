@@ -59,7 +59,7 @@ func Actor(p *auth.Principal) engine.Actor {
 	if name == "" {
 		name = u.Email
 	}
-	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human()}
+	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human(), Outlets: u.Outlets}
 }
 
 // ChangeActor converts a principal into a change-set actor.
@@ -79,7 +79,7 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p != nil && p.User.Org == "" {
+	if p != nil && p.User.Org == "" && p.Via == "dev" {
 		p.User.Org = s.Org
 	}
 	return p, nil
@@ -98,7 +98,9 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
 			return
 		}
-		h(w, r, &caller{p: p, actor: Actor(p)})
+		c := &caller{p: p, actor: Actor(p)}
+		// queries made while serving this request run with rangka.org set (row-level security backstop)
+		h(w, r.WithContext(pg.WithOrg(r.Context(), c.actor.Org)), c)
 	}
 }
 
@@ -159,6 +161,7 @@ func (s *Server) Handler() http.Handler {
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
 	mux.HandleFunc("POST /auth/logout", s.logout)
+	mux.HandleFunc("POST /auth/org", a(s.switchOrg))
 	mux.HandleFunc("GET /auth/me", a(s.me))
 	mux.HandleFunc("GET /.well-known/openid-configuration", s.Auth.Discovery)
 	mux.HandleFunc("GET /oauth/authorize", s.Auth.Authorize)

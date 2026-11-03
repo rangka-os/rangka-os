@@ -36,7 +36,7 @@ func (h *HookCtx) Create(model string, input map[string]any) (store.Record, []Is
 
 // Update updates a record in the hook's transaction.
 func (h *HookCtx) Update(model, name string, patch map[string]any) (store.Record, error) {
-	r, err := h.op.update(model, name, patch, false)
+	r, err := h.op.update(model, name, patch, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -137,6 +137,12 @@ func (o *op) runAction(model, name, action string, args map[string]any, opts Act
 	}
 	if err := o.authorize(m, "write", e.Output(m, copyRecord(rec))); err != nil {
 		return nil, err
+	}
+	// a queued action was guarded when it was enqueued; the worker's actor carries no outlets
+	if !opts.FromQueue {
+		if err := o.guard(m, rec, "action:"+action); err != nil {
+			return nil, err
+		}
 	}
 	if act.If != "" {
 		v, err := o.scope(m, rec).eval(act.If)

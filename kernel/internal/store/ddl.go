@@ -187,12 +187,16 @@ type Live struct {
 	// TableIndexes are every index of an r_ table with its key columns (table → index → columns); soft deletes
 	// rename them along with their table or column.
 	TableIndexes map[string]map[string][]string
+	// RLS is table → row-level security enabled and forced with policy rk_org (contract 0010 §4). Introspect
+	// always sets it; when it is nil (a hand-built Live) no row-level security steps are planned for existing
+	// tables.
+	RLS map[string]bool
 }
 
 // Introspect reads the live r_ tables (and soft-deleted _del_ tables).
 func Introspect(ctx context.Context, q pg.Querier) (*Live, error) {
 	l := &Live{Columns: map[string]map[string]string{}, Types: map[string]map[string]string{}, Indexes: map[string]bool{},
-		TableIndexes: map[string]map[string][]string{}}
+		TableIndexes: map[string]map[string][]string{}, RLS: map[string]bool{}}
 	res, err := q.Query(ctx, `select table_name, column_name, data_type from information_schema.columns
 		where table_schema = current_schema() and (table_name like 'r\_%' or table_name like '\_del\_%')`)
 	if err != nil {
@@ -241,6 +245,18 @@ func Introspect(ctx context.Context, q pg.Querier) (*Live, error) {
 		}
 		if !onDeleted {
 			l.Indexes[ix] = true
+		}
+	}
+	res, err = q.Query(ctx, `select c.relname, c.relrowsecurity and c.relforcerowsecurity and exists (select 1 from pg_policies p
+		where p.schemaname = n.nspname and p.tablename = c.relname and p.policyname = 'rk_org')
+		from pg_class c join pg_namespace n on n.oid = c.relnamespace
+		where n.nspname = current_schema() and c.relkind = 'r' and c.relname like 'r\_%'`)
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range res.Rows {
+		if ok, _ := r[1].(bool); ok {
+			l.RLS[r[0].(string)] = true
 		}
 	}
 	return l, nil
@@ -312,6 +328,8 @@ func expired(name string, now time.Time) bool {
 // widening retypes are medium; other retypes are high and destructive. With allowDestructive, columns and
 // tables the model no longer has are soft-deleted (renamed to _del_<YYYYMMDD>_<name>) and soft-deleted ones
 // older than 30 days are dropped; without it they are reported as notes.
+// Every model table gets row-level security (policy rk_org): a new table in its create step, an existing
+// table without it in a low-risk step of its own that rolls back to no row-level security.
 func PlanSteps(desired []Table, live *Live, now time.Time, allowDestructive bool) (steps []Step, notes []string) {
 	add := func(sql, reverse, risk string, destructive bool) {
 		steps = append(steps, Step{SQL: sql, Reverse: reverse, Risk: risk, Destructive: destructive})
@@ -338,8 +356,12 @@ func PlanSteps(desired []Table, live *Live, now time.Time, allowDestructive bool
 		tq := pg.QuoteIdent(t.Name)
 		cols, exists := live.Columns[t.Name]
 		if !exists {
-			add(t.createSQL(), "drop table "+tq, RiskLow, false)
+			// a new table gets its row-level security in the same step; dropping the table undoes both
+			add(t.createSQL()+";\n"+strings.Join(t.rlsSQL(), ";\n"), "drop table "+tq, RiskLow, false)
 		} else {
+			if live.RLS != nil && !live.RLS[t.Name] {
+				add(strings.Join(t.rlsSQL(), ";\n"), strings.Join(t.rlsReverseSQL(), ";\n"), RiskLow, false)
+			}
 			want := map[string]bool{}
 			for _, c := range t.Columns {
 				want[c.Name] = true
@@ -432,6 +454,32 @@ func Plan(desired []Table, live *Live) (stmts, notes []string) {
 		stmts = append(stmts, s.SQL)
 	}
 	return stmts, notes
+}
+
+// rlsSQL limits rows to the connection's org (rangka.org, see pg.WithOrg); owners are bound too (force).
+// It is idempotent, so it also repairs a table with only part of it in place.
+func (t Table) rlsSQL() []string { return RLSStatements(t.Name) }
+
+// RLSStatements are the idempotent statements that put row-level security (policy rk_org on org_id) on a
+// model table; restore uses them for archived tables the models no longer have.
+func RLSStatements(table string) []string {
+	q := pg.QuoteIdent(table)
+	return []string{
+		"alter table " + q + " enable row level security",
+		"alter table " + q + " force row level security",
+		"drop policy if exists rk_org on " + q,
+		"create policy rk_org on " + q + " using (rk_org_ok(org_id)) with check (rk_org_ok(org_id))",
+	}
+}
+
+// rlsReverseSQL undoes rlsSQL (a rollback); it keeps every row.
+func (t Table) rlsReverseSQL() []string {
+	q := pg.QuoteIdent(t.Name)
+	return []string{
+		"drop policy if exists rk_org on " + q,
+		"alter table " + q + " no force row level security",
+		"alter table " + q + " disable row level security",
+	}
 }
 
 // FileHash is the hash stored in rk_meta_files.

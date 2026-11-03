@@ -121,9 +121,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
 	}
+	warnIfBypassRLS(ctx, db, cfg.Logf)
 	if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", Before: cfg.preBackup(db, reg)}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
+	}
+	if err := SyncOrgs(ctx, db, reg); err != nil {
+		db.Close()
+		return nil, err
 	}
 	if err := auth.EnsureOrg(ctx, db, cfg.Org, titleCase(cfg.Org)); err != nil {
 		db.Close()
@@ -242,11 +247,16 @@ func (s *Server) Wait() {
 func (s *Server) Reload(ctx context.Context) error {
 	s.reload.Lock()
 	defer s.reload.Unlock()
+	// migrate and its pre-migrate backup are installation-wide: not limited by the caller's org (RLS)
+	ctx = pg.WithOrg(ctx, "")
 	reg, err := LoadRegistry(s.Cfg)
 	if err != nil {
 		return err
 	}
 	if _, err := store.MigrateWith(ctx, s.DB, reg, store.MigrateOpts{Source: "changeset", Before: s.Cfg.preBackup(s.DB, reg)}); err != nil {
+		return err
+	}
+	if err := SyncOrgs(ctx, s.DB, reg); err != nil {
 		return err
 	}
 	s.Engine.SetRegistry(reg)
@@ -255,7 +265,16 @@ func (s *Server) Reload(ctx context.Context) error {
 	return nil
 }
 
+// warnIfBypassRLS logs when the database role skips row-level security (superuser or BYPASSRLS).
+func warnIfBypassRLS(ctx context.Context, db *pg.Pool, logf func(string, ...any)) {
+	res, err := db.Query(ctx, "select rolsuper or rolbypassrls from pg_roles where rolname = current_user")
+	if err == nil && len(res.Rows) == 1 && res.Rows[0][0] == true {
+		logf("warning: connected as a superuser or BYPASSRLS role; row-level security is not enforced")
+	}
+}
+
 func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
 	act := meta.AsMap(j.Args["actor"])
 	// a queued action replays a person's request: same roles, same permission checks (not System). The roles
 	// are the ones captured at enqueue time; a member demoted before the job runs keeps the old grants.
@@ -276,6 +295,7 @@ func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 }
 
 func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
 	name := meta.Str(j.Args, "flow")
 	// a resumed wait: runs as whoever started the flow; schedules and kernel-started flows run as System
 	a := engine.JobActor(j.Org, j.Args["actor"])

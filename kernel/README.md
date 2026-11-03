@@ -15,8 +15,8 @@ make compare-python   # Go vs rangka_validate.py on the real metadata and two br
 
 Then open http://localhost:8080/app/, http://localhost:8080/api/v1/meta, or point an MCP client at
 `POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`. More people:
-`rangka user add --db $DATABASE_URL --org kopi-senja --email <e> --password <p> --role <role>` (see `rangka user` in
-`cmd/rangka/user.go`; `--reset-password` and `--create-org` are opt-in).
+`RANGKA_USER_PASSWORD=<p> rangka user add <email> --org kopi-senja --role <role>` (see `rangka user` below;
+`--reset-password` and `--create-org` are opt-in).
 
 ## Stand-ins (for now)
 
@@ -93,6 +93,9 @@ rangka backup   --db <url> [--apps <dir>] [--site <dir>] [--out <file>] [--org <
 rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--files-dir <dir>] [--dev-open]
+rangka user add    <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]
+                   [--reset-password] [--create-org] [--db <url>]
+rangka user remove <email> --org <id> [--db <url>]
 ```
 
 `validate` prints `file:line:col  level  code  path  message` exactly like `rangka_validate.py` and exits 1 on
@@ -140,6 +143,32 @@ table, site, apps, uploads) and `restore` rebuilds it into an empty database and
 `rangka.mcp` scope). OAuth clients come from `system.rk auth.clients`. Change-set approval needs a person
 with a browser session and an approver role (`config.rk ai.approvers`, always `owner`).
 `--dev-open` makes anonymous requests act as the org owner; it is for local demos only.
+
+* `GET /auth/me` returns `user` (with `outlets`, the member's outlets in the current org), `orgs`
+  (`[{id, name, code, roles}]`, every membership, sorted by id) and `org` (the current one).
+* `POST /auth/org {"org": "<id>"}` switches a browser session to another org the user belongs to, sets the
+  `rk_org` cookie and answers like `/auth/me`. Not a member: 403 `permission_denied`. API and OIDC tokens
+  have a fixed org: 400 `org_fixed`. Sessions only.
+* `GET /api/v1/orgs` lists only the caller's orgs.
+* `rangka user add` creates the user or updates the membership (role, `--record`; `--outlets` replaces the
+  member's outlets, `--outlets ""` clears them). The email is the first argument or `--email`. The password
+  comes from the `RANGKA_USER_PASSWORD` environment variable (or `--password`, which lands in shell history)
+  and is needed only for a new account or with `--reset-password`; an existing account's password is never
+  changed otherwise. An unknown org is refused unless `--create-org` is given. `--db` and `--org` default to
+  `$DATABASE_URL` and `$RANGKA_ORG`. `rangka user remove <email> --org <id>` ends a membership and exits 1 with
+  `<email> is not a member of <org>` when it is not one. Missing or wrong flags exit 2.
+
+### Multi-org and row scope
+
+Contract: [`0010`](../docs/contracts/0010-multi-org-and-row-scope.md).
+
+* Per-org settings live in `config.rk` under `orgs:` (name, code, `config:` overrides). `rangka migrate`,
+  `seed` and `serve` upsert `rk_orgs` from it; code reads them with `Registry.OrgConfig(org, key)`.
+* A role with `scope: {field, from}` limits a member to records whose outlet field is in `user.outlets`.
+  The engine enforces it for lists, dashboards, records, actions and SSE.
+* Every model table has row-level security keyed by org: the kernel sets `rangka.org` on each pooled
+  connection from the request context. Superusers and `BYPASSRLS` roles skip RLS, so `serve` logs a warning
+  when connected as one. Hosted installs must connect as a plain role that owns the tables.
 
 ## Attachments
 

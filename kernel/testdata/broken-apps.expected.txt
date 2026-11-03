@@ -82,7 +82,8 @@ sales/imports/bad_per.rk:4:6  error  import_per_outlet  per  per: outlet needs a
 sales/imports/bad_per.rk:4:6  warn   import_no_key  per  per: outlet imports should set key so overlapping files are not imported twice
 sales/imports/not_a_map.rk:1:1  error  schema  (root)  [{'name': 'not_a_map'}, {'model': 'invoice'}] is not of type 'object'
 sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_name" must match the file name "wrong_name"
+crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-76 error(s), 10 warning(s)
+77 error(s), 10 warning(s)

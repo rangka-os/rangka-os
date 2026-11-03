@@ -284,6 +284,19 @@ func (t *Tx) CopyFrom(ctx context.Context, r io.Reader, sql string) (int64, erro
 	return tag.RowsAffected(), nil
 }
 
+// CopyTo runs COPY … TO STDOUT into w on the transaction's connection (so it sees the transaction's snapshot
+// and SET LOCAL settings) and returns the row count.
+func (t *Tx) CopyTo(ctx context.Context, w io.Writer, sql string) (int64, error) {
+	if t.done {
+		return 0, errTxDone
+	}
+	tag, err := t.tx.Conn().PgConn().CopyTo(ctx, w, sql)
+	if err != nil {
+		return 0, wrapErr(err)
+	}
+	return tag.RowsAffected(), nil
+}
+
 // AfterCommit registers fn to run after a successful commit.
 func (t *Tx) AfterCommit(fn func()) { t.after = append(t.after, fn) }
 

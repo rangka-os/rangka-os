@@ -225,6 +225,25 @@ func TestCopyRoundTrip(t *testing.T) {
 	}
 }
 
+// TestTxCopyTo checks COPY TO inside a transaction sees its session settings (timezone for timestamptz text).
+func TestTxCopyTo(t *testing.T) {
+	ctx := context.Background()
+	p := testPool(t)
+	tx, err := p.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, err := tx.Exec(ctx, "set local timezone = 'UTC'"); err != nil {
+		t.Fatal(err)
+	}
+	var b bytes.Buffer
+	n, err := tx.CopyTo(ctx, &b, "copy (select '2026-11-03 09:30:00+07'::timestamptz) to stdout")
+	if err != nil || n != 1 || b.String() != "2026-11-03 02:30:00+00\n" {
+		t.Fatalf("CopyTo = %d %q, %v", n, b.String(), err)
+	}
+}
+
 func TestListen(t *testing.T) {
 	ctx := context.Background()
 	p := testPool(t)

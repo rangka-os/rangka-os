@@ -31,6 +31,8 @@ KERNEL = os.path.join(ROOT, "kernel")
 
 OWNER = ("ceo@saga.co.id", "rangka-demo")
 USERS = [("manajer@contoh.test", "sales_manager", "Manajer Contoh"), ("sales@contoh.test", "sales_rep", "Sales Contoh")]
+# core user records (crm_demo fixtures) the demo members are: sales_rep permissions compare `owner == user.name`
+RECORDS = {"manajer@contoh.test": "USR-003", "sales@contoh.test": "USR-002"}
 PASSWORD = "rangka-demo"
 ORG = "kopi-senja"
 
@@ -1714,7 +1716,8 @@ def test_action_needs_approval(page, ctx):
     """A held action is a waiting request, not a background job."""
     approvals_mocked(page, ctx)
     sales = Http(ctx.base).login(*SALES)
-    st, lead = sales.call("POST", "/api/v1/r/lead", {"lead_name": "Rina Tahan", "company_name": "Kedai Tahan", "phone": "0812" + str(int(time.time() * 1000))[-8:]})
+    # sales_rep may create only a lead they own (permissions: if owner == user.name)
+    st, lead = sales.call("POST", "/api/v1/r/lead", {"lead_name": "Rina Tahan", "company_name": "Kedai Tahan", "owner": RECORDS[SALES[0]], "phone": "0812" + str(int(time.time() * 1000))[-8:]})
     assert st == 201, f"create lead as sales {st} {lead}"
     open_route(page, ctx, "#/r/lead/" + lead["name"], who=SALES)
     wait_form(page, "Simpan")
@@ -2319,7 +2322,7 @@ def main():
         db = pg.stdout.strip().splitlines()[-1]
         common = ["--apps", APPS, "--site", SITE, "--db", db, "--connectors", CONN]
         steps = [["migrate"] + common, ["seed"] + common + ["--fixtures", os.path.join(work, "rangka-apps", "fixtures"), "--email", OWNER[0], "--password", OWNER[1]]]
-        steps += [["user", "add", "--db", db, "--org", ORG, "--email", e, "--password", PASSWORD, "--role", role, "--name", name] for e, role, name in USERS]
+        steps += [["user", "add", "--db", db, "--org", ORG, "--email", e, "--password", PASSWORD, "--role", role, "--name", name, "--record", RECORDS[e]] for e, role, name in USERS]
         for cmd in steps:
             r = subprocess.run([bin_path] + cmd, capture_output=True, text=True, timeout=180)
             if r.returncode:

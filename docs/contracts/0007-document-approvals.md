@@ -86,7 +86,7 @@ create table if not exists rk_approvals (
   id           text primary key,           -- apr_<random>
   org_id       text not null,
   model        text not null default '',   -- '' for flow approvals
-  name         text not null default '',   -- record name at request time
+  name         text not null default '',   -- record name; follows the rename at submit (DRAFT-… → number)
   verb         text not null,              -- submit, cancel, <action>, or flow:<flow>
   policy       text not null,              -- approvals[].name, or the flow step label
   label        jsonb,

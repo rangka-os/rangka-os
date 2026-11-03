@@ -440,6 +440,9 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 		if err != nil || !ran {
 			return err
 		}
+		if n := str(d.Record["name"]); n != "" { // submit renamed the record (and its requests)
+			ap.Name, d.Approval.Name = n, n
+		}
 		// the verb ran: requests of the same verb with other args can no longer run on this record state
 		return o.voidApprovals(ap.Model, ap.Name, ap.Verb)
 	})

@@ -191,7 +191,11 @@ func TestApproveRunsVerbAsRequester(t *testing.T) {
 	if d.Approval.State != "approved" || d.Approval.DecidedBy != "mgr@x" {
 		t.Fatalf("approval = %+v", d.Approval)
 	}
-	if ap := approval(t, e, res.Approvals[0].ID); ap.State != "approved" || ap.DecidedBy != "mgr@x" || ap.DecidedAt == nil {
+	// the request follows the record's rename from DRAFT-… to its number
+	if d.Approval.Name != d.Record["name"] {
+		t.Fatalf("decision approval name = %v, record %v", d.Approval.Name, d.Record["name"])
+	}
+	if ap := approval(t, e, res.Approvals[0].ID); ap.State != "approved" || ap.DecidedBy != "mgr@x" || ap.DecidedAt == nil || ap.Name != d.Record["name"] {
 		t.Fatalf("stored approval = %+v", ap)
 	}
 	au, err := store.ListAudit(ctx, e.DB, store.AuditFilter{Orgs: []string{owner.Org}, Kind: "record.submitted"})
@@ -253,7 +257,10 @@ func TestSelfApprovalByApproverRole(t *testing.T) {
 	if err != nil || res.Held || res.Record["docstatus"] != int64(1) {
 		t.Fatalf("submit: %+v %v", res, err)
 	}
-	l, n, _ := e.ListApprovals(ctx, mgr, store.ApprovalFilter{Model: "sales_invoice", Name: name})
+	if l, n, _ := e.ListApprovals(ctx, mgr, store.ApprovalFilter{Model: "sales_invoice", Name: name}); n != 0 {
+		t.Fatalf("approvals still under the draft name: %+v", l)
+	}
+	l, n, _ := e.ListApprovals(ctx, mgr, store.ApprovalFilter{Model: "sales_invoice", Name: str(res.Record["name"])})
 	if n != 1 || l[0].State != "approved" || l[0].DecidedBy != "mgr@x" || l[0].RequestedBy != "mgr@x" {
 		t.Fatalf("approvals = %+v", l)
 	}
@@ -795,10 +802,11 @@ func TestSelfApprovedRunMarksUsed(t *testing.T) {
 	e, _ := approvalSetup(t, managerPolicy)
 	ctx := context.Background()
 	name := newInvoice(t, e, mgr)
-	if res, err := e.Submit(ctx, mgr, "sales_invoice", name, true); err != nil || res.Held {
+	res, err := e.Submit(ctx, mgr, "sales_invoice", name, true)
+	if err != nil || res.Held {
 		t.Fatalf("submit: %+v %v", res, err)
 	}
-	l, _, _ := e.ListApprovals(ctx, mgr, store.ApprovalFilter{Model: "sales_invoice", Name: name})
+	l, _, _ := e.ListApprovals(ctx, mgr, store.ApprovalFilter{Model: "sales_invoice", Name: str(res.Record["name"])})
 	if len(l) != 1 || l[0].UsedAt == nil {
 		t.Fatalf("approvals = %+v", l)
 	}

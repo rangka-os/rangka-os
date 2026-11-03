@@ -207,3 +207,10 @@ func VoidApproval(ctx context.Context, q pg.Querier, org, id string) (*Approval,
 	a := scanApproval(res.Rows[0])
 	return &a, nil
 }
+
+// RenameRecordApprovals follows a record's rename at submit (DRAFT-xxxxx → its number), so requests keep
+// pointing at the record.
+func RenameRecordApprovals(ctx context.Context, q pg.Querier, org, model, from, to string) error {
+	_, err := q.Exec(ctx, "update rk_approvals set name = $4 where org_id = $1 and model = $2 and name = $3", org, model, from, to)
+	return err
+}

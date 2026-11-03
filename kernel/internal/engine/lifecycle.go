@@ -509,6 +509,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if err := store.RenameRecordAttachments(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
 			return nil, err
 		}
+		if err := store.RenameRecordApprovals(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
+			return nil, err
+		}
 	}
 	if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
 		return nil, err

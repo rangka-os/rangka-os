@@ -8,7 +8,7 @@ nav:
   top:
     - {to: 'dashboard:crm_overview', label: {id: Dasbor}}
     - {to: 'model:deal', label: {id: Peluang}}
-    - {to: 'model:sales_invoice', label: {id: Faktur}, if: "app_installed('sales')"}
+    - {to: 'model:sales_invoice', label: {id: Faktur}, if: "app_installed('invoicing')"}
     - {to: 'model:customer', label: {id: Pelanggan}}
   create: [deal, lead, sales_invoice, customer]
   app_switcher: true

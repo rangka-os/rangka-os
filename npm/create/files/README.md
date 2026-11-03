@@ -5,7 +5,8 @@ describes the business is a `.rk` file:
 
 | Folder | What | Who changes it |
 | --- | --- | --- |
-| `apps/` | Ready apps (core, CRM, sales): models, dashboards, flows, roles | Upgraded as a whole; don't edit |
+| `modules/` | Building blocks (contacts, catalogue, pipeline, invoicing, stock, …): models, flows, roles | Upgraded as a whole; don't edit |
+| `apps/` | Ready apps (CRM, jasa_proyek, fnb_cabang) that pick modules; `site/config.rk` installs them | Upgraded as a whole; don't edit |
 | `site/` | Your company layer: `config.rk`, `features.rk`, `system.rk`, `themes/`, `layouts/`, `custom/` overlays | You, the Console or Rangka AI, through change sets |
 | `connectors/` | Integrations such as WhatsApp Business | Upgraded as a whole |
 | `fixtures/` | Data loaded by `npm run seed` | You |
@@ -25,7 +26,7 @@ npm run dev      # http://localhost:8080/console/  ·  API /api/v1  ·  MCP /mcp
 ## Change things
 
 Edit a file under `site/`, then `npm run validate`. To add a field to a model, write an overlay in
-`site/custom/<model>.rk` (fields start with `x_`) rather than editing `apps/`. See the
+`site/custom/<model>.rk` (fields start with `x_`) rather than editing `modules/` or `apps/`. See the
 [docs](https://rangka-os.github.io/rangka-os/concepts/organisation).
 
 Rangka OS is a v0 preview: not for production data yet.

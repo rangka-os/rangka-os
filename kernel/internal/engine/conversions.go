@@ -88,6 +88,13 @@ func reviseQuotation(h *HookCtx) (map[string]any, error) {
 				"message": "Pembatalan penawaran " + name + " menunggu persetujuan; jalankan revisi lagi setelah disetujui"}, nil
 		}
 	case 2: // cancelled (an approved held cancel): amend once
+		done, err := h.Find(h.Model.Name, map[string]any{"amended_from": name, "docstatus": 1})
+		if err != nil {
+			return nil, err
+		}
+		if len(done) > 0 {
+			return nil, refuse("already_revised", "Penawaran "+name+" sudah direvisi menjadi "+str(done[0]["name"]))
+		}
 		if d, err := draftFor(h, h.Model.Name, "amended_from", name); err != nil || d != nil {
 			if err != nil {
 				return nil, err

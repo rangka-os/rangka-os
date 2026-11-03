@@ -464,7 +464,7 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if err != nil {
 			return err
 		}
-		cur, err := o.load(m, name)
+		cur, err := o.lockLoad(m, name) // advisory lock, then row: the same order as Approve
 		if err != nil {
 			return err
 		}

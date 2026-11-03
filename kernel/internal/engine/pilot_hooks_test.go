@@ -869,30 +869,44 @@ func TestPilotReviseHeldCancel(t *testing.T) {
 	if p.get("quotation", q)["docstatus"] != int64(2) {
 		t.Fatal("approved cancel did not run")
 	}
-	// the module's new_revision if: must allow a cancelled quotation for this; the hook is called directly
-	var draft string
-	for i := 0; i < 2; i++ {
-		if err := p.e.run(p.ctx, p.a, func(o *op) error {
-			mq := p.e.Reg().Model("quotation")
-			rec, err := o.lockLoad(mq, q)
-			if err != nil {
-				return err
-			}
-			out, err := callHook(reviseQuotation, &HookCtx{op: o, Model: mq, Record: rec})
-			if err == nil {
-				if draft == "" {
-					draft = opened(out)
-				} else if opened(out) != draft {
-					t.Errorf("second revise made %s, want %s", opened(out), draft)
-				}
-			}
-			return err
-		}); err != nil {
-			t.Fatal(err)
-		}
+	// revise on the cancelled quotation (the gate allows docstatus 2) amends once; a second call reuses the draft
+	draft := opened(p.action("quotation", q, "new_revision", nil))
+	if again := opened(p.action("quotation", q, "new_revision", nil)); again != draft {
+		t.Fatalf("second revise made %s, want %s", again, draft)
 	}
 	if d := p.get("quotation", draft); d["revision"] != int64(1) || d["amended_from"] != q {
 		t.Fatalf("revision draft = %v %v", d["revision"], d["amended_from"])
+	}
+	p.submit("quotation", draft)
+	_, err = p.e.RunAction(p.ctx, p.a, "quotation", q, "new_revision", nil, ActionOpts{})
+	wantCode(t, err, 409, "already_revised")
+}
+
+// TestPilotHeldDeleteRacesApprove: deleting a held draft while its approval is approved. Delete takes the
+// record's advisory lock before the row, like Approve, so exactly one wins and neither deadlocks.
+func TestPilotHeldDeleteRacesApprove(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	approver := Actor{Org: "pilot", ID: "boss@pilot.test", UserName: "USR-002", Roles: []string{"owner"}, Human: true}
+	clerk := Actor{Org: "pilot", ID: "clerk@pilot.test", UserName: "USR-003", Roles: []string{"clerk"}, Human: true}
+	for i := 0; i < 10; i++ {
+		bill := p.create("vendor_bill", map[string]any{"vendor": m.vend, "bill_no": "DEL/" + formatInt(int64(i)), "items": []any{map[string]any{"item": m.beras, "qty": 1, "rate": 200000000}}})
+		res, err := p.e.Submit(p.ctx, clerk, "vendor_bill", bill, true)
+		if err != nil || !res.Held {
+			t.Fatalf("submit not held: %v", err)
+		}
+		delErr, apErr := make(chan error, 1), make(chan error, 1)
+		go func() { delErr <- p.e.Delete(p.ctx, clerk, "vendor_bill", bill) }()
+		go func() { _, err := p.e.Approve(p.ctx, approver, res.Approvals[0].ID); apErr <- err }()
+		de, ae := <-delErr, <-apErr
+		for _, err := range []error{de, ae} {
+			if err != nil && strings.Contains(err.Error(), "deadlock") {
+				t.Fatalf("round %d: %v", i, err)
+			}
+		}
+		if (de == nil) == (ae == nil) {
+			t.Fatalf("round %d: want exactly one winner, delete %v, approve %v", i, de, ae)
+		}
 	}
 }
 

@@ -13,7 +13,7 @@ fields:
   - {name: outcome, type: select, default: "'open'", read_only: true, options: [{value: open, label: {id: open}}, {value: accepted, label: {id: accepted}}, {value: lost, label: {id: lost}}]}
   - {name: lost_reason, type: text, read_only: true}
 actions:
-  - {name: new_revision, label: {id: new_revision}, hook: quotation.revise, if: "docstatus == 1 && outcome == 'open'"}
+  - {name: new_revision, label: {id: new_revision}, hook: quotation.revise, if: "(docstatus == 1 || docstatus == 2) && (outcome == 'open' || outcome == '')"}
   - {name: mark_outcome, label: {id: mark_outcome}, hook: quotation.mark_outcome, if: docstatus == 1}
   - {name: make_order, label: {id: make_order}, hook: orders.from_quotation, if: "docstatus == 1 && outcome == 'accepted'"}
 approvals:

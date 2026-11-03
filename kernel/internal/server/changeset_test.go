@@ -203,3 +203,46 @@ func TestAutoApplyLowRisk(t *testing.T) {
 	ai.must(200, "POST", "/api/v1/changesets/"+cs2["id"].(string)+"/validate", nil)
 	ai.must(409, "POST", "/api/v1/changesets/"+cs2["id"].(string)+"/apply", nil)
 }
+
+// Change sets never apply destructive DDL: a retype that may lose data is a blocking validation error that
+// names the operator step, and serve refuses to start on it with the same advice.
+func TestDestructiveRetypeNeedsOperator(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Kontak jadi angka", "ops": []any{map[string]any{"op": "patch", "path": "apps/crm/models/deal.rk",
+		"patch": []any{map[string]any{"op": "test", "path": "/fields/2/name", "value": "contact_person"}, map[string]any{"op": "replace", "path": "/fields/2/type", "value": "int"}}}}}).JSON
+	id := cs["id"].(string)
+	blocking := func(v any) bool {
+		errs, _ := v.([]any)
+		for _, it := range errs {
+			if m, _ := it.(map[string]any); m["code"] == "destructive_migration" && strings.Contains(m["message"].(string), "contact_person") &&
+				strings.Contains(m["message"].(string), "rangka migrate --allow-destructive") {
+				return true
+			}
+		}
+		return false
+	}
+	v := e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil).JSON
+	if v["status"] != "invalid" || !blocking(get(v, "validation", "errors")) {
+		t.Fatalf("validate: %v %v", v["status"], v["validation"])
+	}
+	if r := e.do("POST", "/api/v1/changesets/"+id+"/preview", nil); r.Status != 409 {
+		t.Fatalf("preview of a destructive change: %d %s", r.Status, r.Body)
+	}
+	e.must(409, "POST", "/api/v1/changesets/"+id+"/approve", nil)
+
+	p := filepath.Join(e.apps, "crm", "models", "deal.rk")
+	b, _ := os.ReadFile(p)
+	if err := os.WriteFile(p, []byte(strings.Replace(string(b), "  - name: contact_person\n    type: data\n", "  - name: contact_person\n    type: int\n", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(context.Background(), e.s.Cfg)
+	if err == nil {
+		s.Close()
+		t.Fatal("serve started with a refused retype")
+	}
+	if msg := err.Error(); !strings.Contains(msg, `"r_deal" alter column "contact_person"`) || !strings.Contains(msg, "rangka migrate --dry-run --allow-destructive") ||
+		!strings.Contains(msg, "rangka migrate --allow-destructive") {
+		t.Fatalf("start-up error does not guide the operator: %v", err)
+	}
+}

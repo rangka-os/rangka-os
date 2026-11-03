@@ -1,126 +1,226 @@
+// Package pg is the kernel's PostgreSQL access layer on pgx v5: a pool, transactions, COPY and
+// LISTEN/NOTIFY, with results buffered and decoded into plain Go values (see normalize).
 package pg
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
-	"sync"
-	"sync/atomic"
+	"io"
+	"strconv"
+	"strings"
 	"time"
+
+	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 )
 
-// Querier is what the store needs: a pool, a connection or a transaction.
+// Querier is what the store needs: a pool or a transaction.
 type Querier interface {
 	Query(ctx context.Context, sql string, args ...any) (*Result, error)
 	Exec(ctx context.Context, sql string, args ...any) (*Result, error)
 }
 
-// Pool is a fixed-size connection pool.
-type Pool struct {
-	cfg    Config
-	idle   chan *Conn
-	slots  chan struct{}
-	closed atomic.Bool
-	mu     sync.Mutex
-	all    map[*Conn]bool
+// Error is a server error (ErrorResponse).
+type Error struct {
+	Severity, Code, Message, Detail, Hint, Position, Table, Column, Constraint string
+	pe                                                                         *pgconn.PgError
 }
 
-// NewPool connects lazily; it checks the first connection.
+func (e *Error) Error() string {
+	s := "pg: " + e.Message + " (SQLSTATE " + e.Code + ")"
+	if e.Detail != "" {
+		s += ": " + e.Detail
+	}
+	return s
+}
+
+// Unwrap returns the pgconn error.
+func (e *Error) Unwrap() error { return e.pe }
+
+// IsCode reports whether err is a server error with SQLSTATE code (e.g. 23505 unique_violation).
+func IsCode(err error, code string) bool {
+	var pe *Error
+	return errors.As(err, &pe) && pe.Code == code
+}
+
+// wrapErr turns a *pgconn.PgError into an *Error.
+func wrapErr(err error) error {
+	var pe *pgconn.PgError
+	if err == nil || !errors.As(err, &pe) {
+		return err
+	}
+	pos := ""
+	if pe.Position != 0 {
+		pos = strconv.Itoa(int(pe.Position))
+	}
+	return &Error{Severity: pe.Severity, Code: pe.Code, Message: pe.Message, Detail: pe.Detail, Hint: pe.Hint, Position: pos,
+		Table: pe.TableName, Column: pe.ColumnName, Constraint: pe.ConstraintName, pe: pe}
+}
+
+// Notification is a NOTIFY message.
+type Notification struct {
+	PID     uint32
+	Channel string
+	Payload string
+}
+
+// Result is a fully read query result.
+type Result struct {
+	Columns []string
+	OIDs    []uint32
+	Rows    [][]any
+	Tag     string
+}
+
+// Maps returns the rows as column → value maps.
+func (r *Result) Maps() []map[string]any {
+	out := make([]map[string]any, len(r.Rows))
+	for i, row := range r.Rows {
+		m := make(map[string]any, len(r.Columns))
+		for j, c := range r.Columns {
+			m[c] = row[j]
+		}
+		out[i] = m
+	}
+	return out
+}
+
+// RowsAffected parses the command tag ("UPDATE 3" → 3).
+func (r *Result) RowsAffected() int64 {
+	f := strings.Fields(r.Tag)
+	if len(f) == 0 {
+		return 0
+	}
+	n, _ := strconv.ParseInt(f[len(f)-1], 10, 64)
+	return n
+}
+
+// conn is what pgxpool.Pool, pgx.Conn and pgx.Tx share.
+type conn interface {
+	Query(ctx context.Context, sql string, args ...any) (pgx.Rows, error)
+	Exec(ctx context.Context, sql string, args ...any) (pgconn.CommandTag, error)
+}
+
+// query runs one statement through the extended protocol and buffers the rows.
+func query(ctx context.Context, c conn, sql string, args []any) (*Result, error) {
+	args, err := encodeArgs(args)
+	if err != nil {
+		return nil, err
+	}
+	rows, err := c.Query(ctx, sql, args...)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	defer rows.Close()
+	fds := rows.FieldDescriptions()
+	res := &Result{Columns: make([]string, len(fds)), OIDs: make([]uint32, len(fds))}
+	for i, fd := range fds {
+		res.Columns[i], res.OIDs[i] = fd.Name, fd.DataTypeOID
+	}
+	for rows.Next() {
+		vals, err := rows.Values()
+		if err != nil {
+			return nil, wrapErr(err)
+		}
+		for i, v := range vals {
+			vals[i] = normalize(res.OIDs[i], v)
+		}
+		res.Rows = append(res.Rows, vals)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, wrapErr(err)
+	}
+	res.Tag = rows.CommandTag().String()
+	return res, nil
+}
+
+// exec runs a statement; without args it may hold several statements (simple protocol).
+func exec(ctx context.Context, c conn, sql string, args []any) (*Result, error) {
+	if len(args) > 0 {
+		return query(ctx, c, sql, args)
+	}
+	tag, err := c.Exec(ctx, sql)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	return &Result{Tag: tag.String()}, nil
+}
+
+// Pool is a connection pool.
+type Pool struct {
+	p *pgxpool.Pool
+}
+
+// NewPool opens a pool of at most size connections and checks one.
 func NewPool(ctx context.Context, url string, size int) (*Pool, error) {
-	cfg, err := ParseURL(url)
+	cfg, err := pgxpool.ParseConfig(url)
 	if err != nil {
 		return nil, err
 	}
 	if size <= 0 {
 		size = 10
 	}
-	p := &Pool{cfg: cfg, idle: make(chan *Conn, size), slots: make(chan struct{}, size), all: map[*Conn]bool{}}
-	c, err := p.Acquire(ctx)
+	cfg.MaxConns = int32(size)
+	// Unnamed statements, no statement cache: a cached plan fails once after DDL changes a table
+	// ("cached plan must not change result type"), and change sets alter tables at runtime.
+	cfg.ConnConfig.DefaultQueryExecMode = pgx.QueryExecModeExec
+	cfg.AfterConnect = func(_ context.Context, c *pgx.Conn) error {
+		registerJSON(c.TypeMap())
+		return nil
+	}
+	p, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
 	}
-	p.Release(c)
-	return p, nil
+	if err := p.Ping(ctx); err != nil {
+		p.Close()
+		return nil, wrapErr(err)
+	}
+	return &Pool{p: p}, nil
 }
 
-// Config returns the connection settings.
-func (p *Pool) Config() Config { return p.cfg }
-
-// Acquire takes a connection (opening one when the pool has room).
-func (p *Pool) Acquire(ctx context.Context) (*Conn, error) {
-	if p.closed.Load() {
-		return nil, errors.New("pg: pool closed")
-	}
-	for {
-		select {
-		case c := <-p.idle:
-			if c.Broken() {
-				p.forget(c)
-				continue
-			}
-			return c, nil
-		default:
-		}
-		select {
-		case c := <-p.idle:
-			if c.Broken() {
-				p.forget(c)
-				continue
-			}
-			return c, nil
-		case p.slots <- struct{}{}:
-			c, err := Connect(ctx, p.cfg)
-			if err != nil {
-				<-p.slots
-				return nil, err
-			}
-			p.mu.Lock()
-			p.all[c] = true
-			p.mu.Unlock()
-			return c, nil
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
+// registerJSON makes json and jsonb decode through DecodeJSON (integral numbers as int64).
+func registerJSON(m *pgtype.Map) {
+	m.RegisterType(&pgtype.Type{Name: "json", OID: pgtype.JSONOID, Codec: &pgtype.JSONCodec{Marshal: json.Marshal, Unmarshal: unmarshalJSON}})
+	m.RegisterType(&pgtype.Type{Name: "jsonb", OID: pgtype.JSONBOID, Codec: &pgtype.JSONBCodec{Marshal: json.Marshal, Unmarshal: unmarshalJSON}})
 }
 
-func (p *Pool) forget(c *Conn) {
-	c.Close()
-	p.mu.Lock()
-	delete(p.all, c)
-	p.mu.Unlock()
-	<-p.slots
+func unmarshalJSON(b []byte, v any) error {
+	if p, ok := v.(*any); ok {
+		*p = DecodeJSON(b)
+		return nil
+	}
+	return json.Unmarshal(b, v)
 }
 
-// Release returns a connection; broken connections and ones left inside a transaction are closed.
-func (p *Pool) Release(c *Conn) {
-	if c == nil {
-		return
-	}
-	if c.Broken() || c.TxStatus() != 'I' || p.closed.Load() {
-		p.forget(c)
-		return
-	}
-	p.idle <- c
-}
+// Config returns the pool settings.
+func (p *Pool) Config() *pgxpool.Config { return p.p.Config() }
 
 // Query runs a statement on a pooled connection.
 func (p *Pool) Query(ctx context.Context, sql string, args ...any) (*Result, error) {
-	c, err := p.Acquire(ctx)
-	if err != nil {
-		return nil, err
-	}
-	defer p.Release(c)
-	return c.Query(ctx, sql, args...)
+	return query(ctx, p.p, sql, args)
 }
 
 // Exec runs a statement (or, without args, several statements) on a pooled connection.
 func (p *Pool) Exec(ctx context.Context, sql string, args ...any) (*Result, error) {
-	c, err := p.Acquire(ctx)
+	return exec(ctx, p.p, sql, args)
+}
+
+// CopyTo runs COPY … TO STDOUT into w and returns the row count.
+func (p *Pool) CopyTo(ctx context.Context, w io.Writer, sql string) (int64, error) {
+	c, err := p.p.Acquire(ctx)
 	if err != nil {
-		return nil, err
+		return 0, err
 	}
-	defer p.Release(c)
-	return c.Exec(ctx, sql, args...)
+	defer c.Release()
+	tag, err := c.Conn().PgConn().CopyTo(ctx, w, sql)
+	if err != nil {
+		return 0, wrapErr(err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // Ping measures a round trip.
@@ -132,58 +232,69 @@ func (p *Pool) Ping(ctx context.Context) (time.Duration, error) {
 
 // Stats returns open and idle connection counts.
 func (p *Pool) Stats() (open, idle int) {
-	p.mu.Lock()
-	defer p.mu.Unlock()
-	return len(p.all), len(p.idle)
+	s := p.p.Stat()
+	return int(s.TotalConns()), int(s.IdleConns())
 }
 
-// Close closes idle connections and refuses new work.
-func (p *Pool) Close() {
-	p.closed.Store(true)
-	for {
-		select {
-		case c := <-p.idle:
-			p.forget(c)
-		default:
-			return
-		}
-	}
-}
+// Close closes the pool; it waits for connections in use to be released.
+func (p *Pool) Close() { p.p.Close() }
 
 // Tx is a transaction on one connection.
 type Tx struct {
-	c    *Conn
-	p    *Pool
+	tx   pgx.Tx
 	done bool
 	// AfterCommit callbacks run once the transaction committed.
 	after []func()
 }
 
+var errTxDone = errors.New("pg: transaction is finished")
+
 // Begin starts a transaction.
 func (p *Pool) Begin(ctx context.Context) (*Tx, error) {
-	c, err := p.Acquire(ctx)
+	tx, err := p.p.Begin(ctx)
 	if err != nil {
-		return nil, err
+		return nil, wrapErr(err)
 	}
-	if _, err := c.Simple(ctx, "BEGIN"); err != nil {
-		p.Release(c)
-		return nil, err
-	}
-	return &Tx{c: c, p: p}, nil
+	return &Tx{tx: tx}, nil
 }
 
 func (t *Tx) Query(ctx context.Context, sql string, args ...any) (*Result, error) {
 	if t.done {
-		return nil, errors.New("pg: transaction is finished")
+		return nil, errTxDone
 	}
-	return t.c.Query(ctx, sql, args...)
+	return query(ctx, t.tx, sql, args)
 }
 
 func (t *Tx) Exec(ctx context.Context, sql string, args ...any) (*Result, error) {
 	if t.done {
-		return nil, errors.New("pg: transaction is finished")
+		return nil, errTxDone
 	}
-	return t.c.Exec(ctx, sql, args...)
+	return exec(ctx, t.tx, sql, args)
+}
+
+// CopyFrom runs COPY … FROM STDIN with r as input and returns the row count.
+func (t *Tx) CopyFrom(ctx context.Context, r io.Reader, sql string) (int64, error) {
+	if t.done {
+		return 0, errTxDone
+	}
+	tag, err := t.tx.Conn().PgConn().CopyFrom(ctx, r, sql)
+	if err != nil {
+		return 0, wrapErr(err)
+	}
+	return tag.RowsAffected(), nil
+}
+
+// CopyTo runs COPY … TO STDOUT into w on the transaction's connection (so it sees the transaction's snapshot
+// and SET LOCAL settings) and returns the row count.
+func (t *Tx) CopyTo(ctx context.Context, w io.Writer, sql string) (int64, error) {
+	if t.done {
+		return 0, errTxDone
+	}
+	tag, err := t.tx.Conn().PgConn().CopyTo(ctx, w, sql)
+	if err != nil {
+		return 0, wrapErr(err)
+	}
+	return tag.RowsAffected(), nil
 }
 
 // AfterCommit registers fn to run after a successful commit.
@@ -192,17 +303,16 @@ func (t *Tx) AfterCommit(fn func()) { t.after = append(t.after, fn) }
 // Commit commits and releases the connection.
 func (t *Tx) Commit(ctx context.Context) error {
 	if t.done {
-		return errors.New("pg: transaction is finished")
+		return errTxDone
 	}
 	t.done = true
-	_, err := t.c.Simple(ctx, "COMMIT")
-	t.p.Release(t.c)
-	if err == nil {
-		for _, fn := range t.after {
-			fn()
-		}
+	if err := t.tx.Commit(ctx); err != nil {
+		return wrapErr(err)
 	}
-	return err
+	for _, fn := range t.after {
+		fn()
+	}
+	return nil
 }
 
 // Rollback aborts (a no-op after Commit) and releases the connection.
@@ -211,36 +321,40 @@ func (t *Tx) Rollback(ctx context.Context) error {
 		return nil
 	}
 	t.done = true
-	_, err := t.c.Simple(context.WithoutCancel(ctx), "ROLLBACK")
-	t.p.Release(t.c)
-	return err
+	return wrapErr(t.tx.Rollback(context.WithoutCancel(ctx)))
 }
 
 // Listener holds a dedicated connection for LISTEN.
 type Listener struct {
-	c *Conn
+	c *pgx.Conn
 }
 
 // Listen opens a dedicated connection and listens on channels.
 func (p *Pool) Listen(ctx context.Context, channels ...string) (*Listener, error) {
-	c, err := Connect(ctx, p.cfg)
+	c, err := pgx.ConnectConfig(ctx, p.p.Config().ConnConfig.Copy())
 	if err != nil {
-		return nil, err
+		return nil, wrapErr(err)
 	}
 	for _, ch := range channels {
-		if _, err := c.Simple(ctx, "LISTEN "+QuoteIdent(ch)); err != nil {
-			c.Close()
-			return nil, err
+		if _, err := c.Exec(ctx, "LISTEN "+QuoteIdent(ch)); err != nil {
+			c.Close(context.WithoutCancel(ctx))
+			return nil, wrapErr(err)
 		}
 	}
 	return &Listener{c: c}, nil
 }
 
 // Wait returns the next notification.
-func (l *Listener) Wait(ctx context.Context) (*Notification, error) { return l.c.WaitNotification(ctx) }
+func (l *Listener) Wait(ctx context.Context) (*Notification, error) {
+	n, err := l.c.WaitForNotification(ctx)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	return &Notification{PID: n.PID, Channel: n.Channel, Payload: n.Payload}, nil
+}
 
 // Broken reports whether the listener must be reopened.
-func (l *Listener) Broken() bool { return l.c.Broken() }
+func (l *Listener) Broken() bool { return l.c.IsClosed() }
 
 // Close closes the listener connection.
-func (l *Listener) Close() error { return l.c.Close() }
+func (l *Listener) Close() error { return l.c.Close(context.Background()) }

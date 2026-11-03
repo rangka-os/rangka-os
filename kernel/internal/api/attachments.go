@@ -43,11 +43,6 @@ func attachmentItem(a *store.Attachment) map[string]any {
 		"created_by": a.CreatedBy, "created_at": a.CreatedAt.UTC().Format(time.RFC3339), "url": "/api/v1/attachments/" + a.ID}
 }
 
-func permissionDenied(w http.ResponseWriter, model, action string) {
-	writeJSON(w, http.StatusForbidden, map[string]any{"error": map[string]any{"code": "permission_denied",
-		"message": "Kamu tidak punya izin " + action + " pada " + model, "model": model, "action": action}})
-}
-
 func attachmentNotFound(w http.ResponseWriter) {
 	writeError(w, http.StatusNotFound, "not_found", "lampiran tidak ditemukan")
 }
@@ -77,7 +72,8 @@ func isTooLarge(err error) bool {
 	return errors.Is(err, errTooLarge) || errors.As(err, &mbe)
 }
 
-// attachmentRecord loads the record an attachment belongs to; any 404 becomes "lampiran tidak ditemukan".
+// attachmentRecord loads the record an attachment belongs to through engine.Get, which checks read (403 with
+// action read); any 404 becomes "lampiran tidak ditemukan".
 func (s *Server) attachmentRecord(w http.ResponseWriter, r *http.Request, c *caller) (*store.Attachment, store.Record, bool) {
 	ctx := r.Context()
 	row, err := store.GetAttachment(ctx, s.DB, c.actor.Org, r.PathValue("id"))
@@ -117,22 +113,13 @@ func (s *Server) logf(format string, args ...any) {
 	}
 }
 
-// POST /api/v1/r/{model}/{name}/attachments (multipart, part "file").
-func (s *Server) uploadAttachment(w http.ResponseWriter, r *http.Request, c *caller) {
+// POST /api/v1/r/{model}/{name}/attachments (multipart, part "file"), behind recordGuard("write").
+func (s *Server) uploadAttachment(w http.ResponseWriter, r *http.Request, c *caller, _ store.Record) {
 	if !s.filesOn(w) {
 		return
 	}
 	ctx := r.Context()
 	model, name := r.PathValue("model"), r.PathValue("name")
-	rec, err := s.Engine.Get(ctx, c.actor, model, name)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	if !s.Engine.Permits(ctx, c.actor, model, rec, "write") {
-		permissionDenied(w, model, "write")
-		return
-	}
 	mb := s.maxUploadMB()
 	limit := int64(mb) << 20
 	tooLarge := func() {
@@ -210,17 +197,13 @@ func (s *Server) uploadAttachment(w http.ResponseWriter, r *http.Request, c *cal
 	writeJSON(w, http.StatusCreated, attachmentItem(a))
 }
 
-// GET /api/v1/r/{model}/{name}/attachments
-func (s *Server) listAttachments(w http.ResponseWriter, r *http.Request, c *caller) {
+// GET /api/v1/r/{model}/{name}/attachments, behind recordGuard("read").
+func (s *Server) listAttachments(w http.ResponseWriter, r *http.Request, c *caller, _ store.Record) {
 	if !s.filesOn(w) {
 		return
 	}
 	ctx := r.Context()
 	model, name := r.PathValue("model"), r.PathValue("name")
-	if _, err := s.Engine.Get(ctx, c.actor, model, name); err != nil {
-		fail(w, err)
-		return
-	}
 	rows, err := store.ListAttachments(ctx, s.DB, c.actor.Org, model, name)
 	if err != nil {
 		fail(w, err)
@@ -305,8 +288,8 @@ func (s *Server) deleteAttachment(w http.ResponseWriter, r *http.Request, c *cal
 	if !ok {
 		return
 	}
-	if !s.Engine.Permits(ctx, c.actor, row.Model, rec, "write") {
-		permissionDenied(w, row.Model, "write")
+	if err := s.Engine.Authorize(ctx, c.actor, row.Model, "write", rec); err != nil {
+		fail(w, err)
 		return
 	}
 	if m := s.Engine.Reg().Model(row.Model); m != nil && m.IsSubmittable && docstatus(rec) != 0 {

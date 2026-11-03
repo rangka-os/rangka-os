@@ -61,8 +61,10 @@ func (h *Hub) Publish(ev store.Event) {
 	}
 }
 
-// Subscribe registers a subscriber; call the returned func to leave.
-func (h *Hub) Subscribe(org string, models []string) (<-chan store.Event, func()) {
+// Subscribe registers a subscriber; call the returned func to leave. allow, when not nil, decides per event
+// whether this subscriber may see it (the API checks record permissions there). It runs on a goroutine of
+// the subscriber, not under the hub's lock, so it may query the database; events keep their order.
+func (h *Hub) Subscribe(org string, models []string, allow func(store.Event) bool) (<-chan store.Event, func()) {
 	s := &sub{org: org, models: map[string]bool{}, ch: make(chan store.Event, 64)}
 	for _, m := range models {
 		if m = strings.TrimSpace(m); m != "" {
@@ -72,10 +74,39 @@ func (h *Hub) Subscribe(org string, models []string) (<-chan store.Event, func()
 	h.mu.Lock()
 	h.subs[s] = true
 	h.mu.Unlock()
-	return s.ch, func() {
+	unsubscribe := func() {
 		h.mu.Lock()
 		delete(h.subs, s)
 		h.mu.Unlock()
+	}
+	if allow == nil {
+		return s.ch, unsubscribe
+	}
+	out := make(chan store.Event, 64)
+	done := make(chan struct{})
+	go func() {
+		for {
+			select {
+			case <-done:
+				return
+			case ev := <-s.ch:
+				if !allow(ev) {
+					continue
+				}
+				select {
+				case out <- ev:
+				case <-done:
+					return
+				}
+			}
+		}
+	}()
+	var once sync.Once
+	return out, func() {
+		once.Do(func() {
+			unsubscribe()
+			close(done)
+		})
 	}
 }
 
@@ -109,8 +140,9 @@ func (h *Hub) Run(ctx context.Context, db *pg.Pool) {
 }
 
 // ServeSSE streams events: `event: record|changeset|job` with JSON data; `?models=deal,lead` filters
-// record events; a comment line every Heartbeat keeps proxies from closing the stream.
-func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string) {
+// record events; allow (nil = all) filters per event as in Subscribe; a comment line every Heartbeat keeps
+// proxies from closing the stream.
+func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string, allow func(store.Event) bool) {
 	fl, ok := w.(http.Flusher)
 	if !ok {
 		http.Error(w, "streaming unsupported", http.StatusInternalServerError)
@@ -120,7 +152,7 @@ func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string) {
 	if m := r.URL.Query().Get("models"); m != "" {
 		models = strings.Split(m, ",")
 	}
-	ch, leave := h.Subscribe(org, models)
+	ch, leave := h.Subscribe(org, models, allow)
 	defer leave()
 	h.conns.Add(1)
 	defer h.conns.Add(-1)

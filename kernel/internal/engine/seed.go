@@ -84,7 +84,8 @@ type SeedStats struct {
 }
 
 // Seed inserts fixture records for an org as the prototype loads them: names and docstatus as given,
-// missing values from defaults, computed fields computed. Existing records are left alone.
+// missing values from defaults, computed fields computed. Existing records are left alone. The kernel seeds
+// as a System actor; anyone else needs create on each record.
 func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[string]any) (*SeedStats, error) {
 	st := &SeedStats{Created: map[string]int{}, Skipped: map[string]int{}}
 	var models []string
@@ -115,6 +116,9 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 					return fmt.Errorf("fixture %s %s: %s", mn, name, issues[0].Message)
 				}
 				o.prepare(m, rec, true)
+				if err := o.authorize(m, "create", rec); err != nil {
+					return err
+				}
 				if name == "" {
 					n, err := o.nextName(m)
 					if err != nil {

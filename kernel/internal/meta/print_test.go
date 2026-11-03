@@ -161,14 +161,19 @@ orgs:
     name: PT Contoh Tanpa Nama Resmi
     config:
       org: {pkp: false}
+  dua:
+    name: PT Contoh Dua
+    config:
+      org: {legal_name: PT Contoh Dua Resmi}
 `
 	writeFile(t, filepath.Join(dir, "config.rk"), cfg)
 	reg := validSite(t, dir)
 	for org, want := range map[string]map[string]any{
 		"pusat":  {"legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"},
-		"cabang": {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // no config.org: the site's org:
-		"lain":   {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // not in orgs:
-		"tanpa":  {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // config.org: {pkp: false} merges over the site's org:
+		"cabang": {"legal_name": "PT Contoh Cabang"},                        // listed, no config.org: its own name, no site npwp
+		"lain":   {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // not in orgs: the site's org:
+		"tanpa":  {"legal_name": "PT Contoh Tanpa Nama Resmi"},              // config.org without legal_name: the org's name, no site npwp
+		"dua":    {"legal_name": "PT Contoh Dua Resmi"},                     // config.org: {legal_name} inherits no npwp
 	} {
 		if got := reg.Letterhead(org); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s = %v, want %v", org, got, want)
@@ -179,8 +184,13 @@ orgs:
 	writeFile(t, filepath.Join(dir, "letterhead.rk"), "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json\ntagline: Inspeksi\n")
 	writeFile(t, filepath.Join(dir, "letterheads", "cabang.rk"), "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json\nlegal_name: PT Kop Cabang\nnpwp: \"11.111.111.1-111.111\"\n")
 	reg = validSite(t, dir)
-	if got := reg.Letterhead("pusat"); !reflect.DeepEqual(got, map[string]any{"tagline": "Inspeksi", "legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"}) {
-		t.Errorf("filled = %v", got)
+	// an unlisted org uses letterhead.rk and the site's org:
+	if got := reg.Letterhead("lain"); !reflect.DeepEqual(got, map[string]any{"tagline": "Inspeksi", "legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}) {
+		t.Errorf("unlisted = %v", got)
+	}
+	// a listed org without its own letterheads/<org>.rk gets nothing from the site's letterhead.rk
+	if got := reg.Letterhead("pusat"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"}) {
+		t.Errorf("listed without own file = %v", got)
 	}
 	if got := reg.Letterhead("cabang"); got["legal_name"] != "PT Kop Cabang" || got["npwp"] != "11.111.111.1-111.111" {
 		t.Errorf("own values = %v", got)

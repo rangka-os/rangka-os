@@ -43,11 +43,18 @@ orgs:
 - Kernel code reads org-dependent settings with `Registry.OrgConfig(org, key)`: `config.rk`'s value with
   `orgs.<org>.config[key]` deep-merged over it (below). S3 (letterhead), S4 (numbering, `{ORG}`) and S8
   (`org.pkp`) use it instead of `SiteConfig`.
-- An org's config is deep-merged over the site's: where both hold a map at a key, the maps merge key by key
-  (recursively) and the org wins; for any other pair of types the org's value replaces the site's. An org
-  that sets `tax: {ppn_rate: 11}` keeps the site's `tax.pkp` and `tax.dpp_ratio`, and `org: {legal_name: X}`
-  keeps the site's `org.npwp` and `org.pkp`. There is no way to unset a site subkey from an org; set it to
-  another value instead.
+- An org's config is deep-merged over the site's, except `org` and `numbering`. Where both hold a map at a
+  key, the maps merge key by key (recursively) and the org wins; for any other pair of types the org's value
+  replaces the site's. An org that sets `tax: {ppn_rate: 11}` keeps the site's `tax.pkp` and `tax.dpp_ratio`.
+  `OrgConfig` returns deep copies, so callers cannot change the site config.
+- `org` and `numbering` replace: when an org sets them, its value wins whole and nothing is inherited. Orgs
+  are separate legal entities, so identity is never inherited. For an org listed in `orgs:`, identity comes
+  only from its own entry: `legal_name` is its `config.org.legal_name`, else `orgs.<id>.name`; `npwp` is only
+  its own `config.org.npwp`; `pkp` is its own `config.org.pkp`, else the merged `tax.pkp`. The site's `org:`
+  applies only to orgs not listed in `orgs:`. A `numbering` map is one scheme set: an org's map is used
+  whole, so site series are not visible to an org that defines its own.
+- A site subkey cannot be unset from an org: the schema rejects a null value (`tax: null` is "not of type
+  object"), so an org sets another value instead.
 
 ### 3. Signing in and switching (REST, fixed in the program plan)
 - `GET /auth/me` adds `orgs: [{id, name, code, roles}]` (every membership, sorted by id) and

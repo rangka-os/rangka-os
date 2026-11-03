@@ -26,20 +26,33 @@ func (r *Registry) loadOrgs() {
 	}
 }
 
-// OrgConfig returns a value by dotted path ("tax.pkp") for org. The org's config (orgs.<id>.config) is
-// deep-merged over the site's: where both hold a map at a key the maps merge recursively and the org wins;
-// for any other pair of types the org's value replaces the site's. An unknown org, or a key the org does not
-// set, gives the site's value. Merged maps are copies; the site and org maps are never modified.
+// replacedKeys are the config.rk keys an org's value replaces whole instead of merging: orgs are separate
+// legal entities, so identity (org:) must never be inherited from the site, and a numbering map is one
+// scheme set (contract 0010 §2).
+var replacedKeys = map[string]bool{"org": true, "numbering": true}
+
+// OrgConfig returns a value by dotted path ("tax.pkp") for org, as a deep copy. The org's config
+// (orgs.<id>.config) is deep-merged over the site's: where both hold a map at a key the maps merge
+// recursively and the org wins; for any other pair of types the org's value replaces the site's. The keys in
+// replacedKeys (org, numbering) are never merged: the org's value wins whole. An unknown org, or a key the
+// org does not set, gives the site's value.
 func (r *Registry) OrgConfig(org, path string) any {
 	o := r.Orgs[org]
 	if o == nil {
-		return r.SiteConfig(path)
+		return deepCopy(r.SiteConfig(path))
+	}
+	parts := strings.Split(path, ".")
+	if ov, set := o.Config[parts[0]]; set && replacedKeys[parts[0]] {
+		for _, p := range parts[1:] {
+			ov = asMap(ov)[p]
+		}
+		return deepCopy(ov)
 	}
 	var site any
 	if r.Site != nil {
 		site = r.Site.Config
 	}
-	return orgLookup(site, o.Config, strings.Split(path, "."))
+	return deepCopy(orgLookup(site, o.Config, parts))
 }
 
 // orgLookup follows parts through site and org together. Once the org does not set a key the rest is the site's

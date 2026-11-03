@@ -133,14 +133,20 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 	w.Write(body)
 }
 
-// printOrg is .Org (contract 0008 §2): the org's config org: (legal_name, npwp, pkp; OrgConfig falls back to
-// the site's), plus name and code from its orgs: entry. pkp falls back to tax.pkp when org: leaves it out.
+// printOrg is .Org (contract 0008 §2): the org's identity (legal_name, npwp, pkp), plus name and code from its
+// orgs: entry. An org listed in orgs: is its own legal entity and takes only its own config.org; the site's org:
+// applies to unlisted orgs. pkp falls back to the (merged) tax.pkp when org: leaves it out.
 func printOrg(reg *meta.Registry, org string) map[string]any {
 	out := map[string]any{}
-	for k, v := range meta.AsMap(reg.OrgConfig(org, "org")) {
+	o := reg.Orgs[org]
+	src := meta.AsMap(reg.OrgConfig(org, "org")) // a deep copy
+	if o != nil {
+		src = meta.AsMap(meta.AsMap(o.Config)["org"])
+	}
+	for k, v := range src {
 		out[k] = v
 	}
-	if o := reg.Orgs[org]; o != nil {
+	if o != nil {
 		out["name"], out["code"] = o.Name, o.Code
 	}
 	if _, ok := out["pkp"]; !ok {

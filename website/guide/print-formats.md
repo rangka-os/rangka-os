@@ -53,9 +53,12 @@ as the reference statement does.
 `name` and `code` from `orgs.<id>`. `.Org.pkp` comes from `org.pkp`, else from `tax.pkp`. The reference invoice and quotation print the DPP and PPN rows only when
 `.Org.pkp` is true.
 
-Per-organisation settings are deep-merged over the site's: an organisation that sets only
-`org: {legal_name: PT Cabang}` keeps the site's `npwp` and `pkp`, and `tax: {ppn_rate: 11}` keeps the site's
-`tax.pkp`. Only the keys an organisation writes differ from the site.
+Per-organisation settings are deep-merged over the site's, with two exceptions. `tax: {ppn_rate: 11}` keeps the
+site's `tax.pkp`. But `org:` and `numbering` replace whole: each organisation listed in `orgs:` is its own legal
+entity and never inherits the site's `legal_name` or `npwp`. Its legal name is its own `org.legal_name`, else its
+`name`; its `pkp` is its own `org.pkp`, else `tax.pkp`. A listed organisation without its own
+`letterheads/<org>.rk` does not use `letterhead.rk` (that holds another entity's bank and signatory); its
+letterhead is built from its own data only.
 
 ## Override per site
 
@@ -89,8 +92,8 @@ signatory: {name: Nama Penandatangan, title: Direktur}
 footer: {id: Terima kasih atas kepercayaan Anda}
 ```
 
-Rangka picks `letterheads/<org>.rk` for the caller's organisation, then `letterhead.rk`, then builds one from the
-organisation's settings (`org.legal_name`, else the org's `name`, and `org.npwp`), which also fill a letterhead
+Rangka picks `letterheads/<org>.rk` for the caller's organisation, then (only for an organisation not listed in
+`orgs:`) `letterhead.rk`, then builds one from the organisation's settings (`org.legal_name`, else the org's `name`, and `org.npwp`), which also fill a letterhead
 file that leaves them out. The partials `letterhead`, `bank_accounts` and `signature` render it.
 
 ## Helpers

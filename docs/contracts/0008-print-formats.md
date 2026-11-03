@@ -47,8 +47,8 @@ bank:
 signatory: {name: Nama Penandatangan, title: Direktur}
 footer: {id: Terima kasih atas kepercayaan Anda}
 ```
-- Lookup: `letterheads/<org>.rk` for the caller's org, else `letterhead.rk`, else a letterhead built from the org's settings (legal name, NPWP).
-- Org data (contract 0010): `Registry.OrgConfig(org, "org")`, i.e. `config.rk` `orgs.<id>.config.org`, else the site-wide `org:` (`legal_name`, `npwp`, `pkp`). Templates get it as `.Org`, a copy, plus `name` and `code` from `orgs.<id>` when the org is listed there; `.Org.pkp` is `org.pkp`, else `OrgConfig(org, "tax.pkp")`. The same data fills a letterhead's `legal_name` (else the org's `name`) and `npwp` when the letterhead file leaves them out.
+- Lookup for an org not listed in `orgs:`: `letterheads/<org>.rk`, else `letterhead.rk`, else a letterhead built from the site's `org:` (legal name, NPWP). An org listed in `orgs:` is its own legal entity: `letterheads/<org>.rk`, else a letterhead built from its own data only. It never falls back to `letterhead.rk`, whose bank and signatory belong to another entity.
+- Org data (contract 0010 §2): templates get `.Org`, a copy. For an org listed in `orgs:` it holds only that org's own `config.org` (`legal_name`, `npwp`, `pkp`) plus `name` and `code` from `orgs.<id>`; the site's `org:` is never merged in, so an org without its own `npwp` has none. For an unlisted org it is the site's `org:`. `.Org.pkp` is `org.pkp`, else the merged `OrgConfig(org, "tax.pkp")`. The same data fills a letterhead's `legal_name` (else the org's `name`) and `npwp` when the letterhead file leaves them out.
 
 ### 3. Templates: Go `html/template`
 - The template holds the page body. The kernel wraps it in a full document: `<!doctype html>`, `lang="id"`, title = record name, `@page` size and margins for the paper, base CSS (Rangka tokens: ink text, stone rules, tabular numbers), and a `print-<paper>` class on `<body>`. A template may add CSS with `{{define "style"}}…{{end}}`.

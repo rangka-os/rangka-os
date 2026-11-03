@@ -86,3 +86,76 @@ newest_archive() {
   [ -n "$n" ] || { echo "no archive for $1 in offbox:$BACKUP_BUCKET/$1/" >&2; return 1; }
   echo "$n"
 }
+
+# handback_sql: SQL for the Postgres admin role, run with `-v pilot=<role>`. Gives every object a rangka restore created
+# as the admin (relations, functions, types, domains, schemas in public and rk*) to the pilot role. Objects that an
+# extension owns, and the dependents that follow their owner (indexes, owned sequences, array and multirange types), stay.
+handback_sql() {
+  cat <<'SQL'
+SELECT set_config('restore.pilot', :'pilot', false);
+DO $do$
+DECLARE r record; me text := current_user;
+BEGIN
+  FOR r IN
+    SELECT n.nspname, c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%') AND c.relkind IN ('r','p','v','m','S','f','c')
+      AND pg_get_userbyid(c.relowner) = me
+      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = c.oid AND d.classid = 'pg_class'::regclass
+                      AND (d.deptype = 'e' OR (d.deptype IN ('a','i') AND c.relkind <> 'c')))
+  LOOP
+    EXECUTE format('ALTER %s %I.%I OWNER TO %I',
+      CASE r.relkind WHEN 'S' THEN 'SEQUENCE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'f' THEN 'FOREIGN TABLE' WHEN 'c' THEN 'TYPE' ELSE 'TABLE' END,
+      r.nspname, r.relname, current_setting('restore.pilot'));
+  END LOOP;
+  -- functions (the policy helper rk_org_ok)
+  FOR r IN
+    SELECT n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) AS args, p.prokind FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%') AND pg_get_userbyid(p.proowner) = me
+      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e' AND d.classid = 'pg_proc'::regclass)
+  LOOP
+    EXECUTE format('ALTER %s %I.%I(%s) OWNER TO %I', CASE r.prokind WHEN 'p' THEN 'PROCEDURE' ELSE 'FUNCTION' END,
+      r.nspname, r.proname, r.args, current_setting('restore.pilot'));
+  END LOOP;
+  -- domains, enums, ranges (arrays and multiranges follow their element/range type)
+  FOR r IN
+    SELECT n.nspname, t.typname, t.typtype FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%') AND t.typtype IN ('d','e','r') AND pg_get_userbyid(t.typowner) = me
+      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = t.oid AND d.deptype = 'e' AND d.classid = 'pg_type'::regclass)
+  LOOP
+    EXECUTE format('ALTER %s %I.%I OWNER TO %I', CASE r.typtype WHEN 'd' THEN 'DOMAIN' ELSE 'TYPE' END,
+      r.nspname, r.typname, current_setting('restore.pilot'));
+  END LOOP;
+  FOR r IN SELECT nspname FROM pg_namespace WHERE nspname LIKE 'rk%' AND pg_get_userbyid(nspowner) = me LOOP
+    EXECUTE format('ALTER SCHEMA %I OWNER TO %I', r.nspname, current_setting('restore.pilot'));
+  END LOOP;
+END $do$;
+SQL
+}
+
+# foreign_owned_sql: SQL, run with `-v pilot=<role>`, printing one line per object in public or rk* schemas that someone
+# other than the pilot role owns: every relation kind, function, schema, and non-array user type (domain, enum, range,
+# base). Extension-owned objects are left out. Empty output = the hand-back is complete.
+foreign_owned_sql() {
+  cat <<'SQL'
+WITH ext AS (SELECT objid, classid FROM pg_depend WHERE deptype = 'e'),
+o AS (
+  SELECT 'relation (' || c.relkind::text || ') ' || n.nspname || '.' || c.relname AS what, pg_get_userbyid(c.relowner) AS owner
+    FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%')
+      AND NOT EXISTS (SELECT 1 FROM ext WHERE ext.objid = c.oid AND ext.classid = 'pg_class'::regclass)
+  UNION ALL
+  SELECT 'function ' || n.nspname || '.' || p.proname, pg_get_userbyid(p.proowner)
+    FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
+    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%')
+      AND NOT EXISTS (SELECT 1 FROM ext WHERE ext.objid = p.oid AND ext.classid = 'pg_proc'::regclass)
+  UNION ALL
+  SELECT 'schema ' || nspname, pg_get_userbyid(nspowner) FROM pg_namespace WHERE nspname LIKE 'rk%'
+  UNION ALL
+  SELECT 'type ' || n.nspname || '.' || t.typname, pg_get_userbyid(t.typowner)
+    FROM pg_type t JOIN pg_namespace n ON n.oid = t.typnamespace
+    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%') AND t.typrelid = 0 AND t.typcategory <> 'A' AND t.typtype <> 'm'
+      AND NOT EXISTS (SELECT 1 FROM ext WHERE ext.objid = t.oid AND ext.classid = 'pg_type'::regclass)
+)
+SELECT what || ' is owned by ' || owner FROM o WHERE owner <> :'pilot' ORDER BY 1;
+SQL
+}

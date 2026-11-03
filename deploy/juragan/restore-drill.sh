@@ -4,7 +4,8 @@
 # Per pilot: fetch the newest archive from off-box (or use --archive), start a throwaway compose project
 # juragan-drill-<epoch> (own postgres with random passwords, no Caddy, kernel on a random 127.0.0.1 port),
 # restore.sh, `migrate --dry-run` must plan 0 statements, the pilot role must be NOSUPERUSER NOBYPASSRLS and (binary with S5)
-# every table with an org_id must have row-level security enabled and forced, boot the kernel,
+# there must be at least one r_* table and every r_* table must have row-level security enabled and forced, the pilot
+# role must own every object, boot the kernel,
 # GET /.well-known/openid-configuration = 200.
 # Prints "DRILL PASSED <pilot> <archive> <UTC time>" and appends it to drill.log. Exit non-zero when any pilot fails.
 # The archive's age (UTC stamp in its name) is printed and must be at most --max-age hours (default 48). A different release than the
@@ -169,15 +170,18 @@ archive_age_hours() {
   echo $(( ($(date -u +%s) - epoch) / 3600 ))
 }
 
-# rls_gap <pilot> <like|not like>: tables of public with an org_id column but without enabled and forced row-level
-# security, among the model tables (name like 'r\_%') or the others
-rls_gap() {
-  dc exec -T postgres psql -U postgres -d "$1" -qAtX <<SQL
-select coalesce(string_agg(c.relname, ' ' order by c.relname), '')
+# rls_state <pilot> <model|system>: "<n>|<names>". model = the n tables named r_* whose names lack enabled and
+# forced row-level security (whether or not they have an org_id column); system = other public tables with an org_id
+# column and no such security (a note only). n counts the tables examined.
+rls_state() {
+  local scope="r\\_%" neg=""
+  if [ "$2" = system ]; then neg="not"; fi
+  dc exec -T postgres psql -U postgres -d "$1" -qAtX -v ON_ERROR_STOP=1 <<SQL
+select count(*) || '|' || coalesce(string_agg(c.relname, ' ' order by c.relname) filter (where not (c.relrowsecurity and c.relforcerowsecurity)), '')
 from pg_class c
-join pg_attribute a on a.attrelid = c.oid and a.attname = 'org_id' and not a.attisdropped
 where c.relkind = 'r' and c.relnamespace = 'public'::regnamespace
-  and c.relname $2 'r\_%' and not (c.relrowsecurity and c.relforcerowsecurity)
+  and c.relname $neg like '$scope'
+  and ('$2' = 'model' or exists (select 1 from pg_attribute a where a.attrelid = c.oid and a.attname = 'org_id' and not a.attisdropped))
 SQL
 }
 
@@ -219,17 +223,26 @@ drill_pilot() {
   # With S5 every model table (r_*, parents and children) has row-level security enabled AND forced, so the owning
   # role is bound too (contract 0010 section 4). The kernel's own rk_* tables that carry an org_id (sessions, tokens,
   # members, audit, jobs, ...) are not covered by S5; they are listed as a note, not failed.
-  local help unforced sysnote
-  help="$(dc run --rm -T --no-deps "$p" help 2>&1 || true)"
+  local help state n unforced sysnote
+  help="$(dc run --rm -T --no-deps "$p" help 2>&1)" || { log "$p: 'rangka help' failed, cannot tell whether this binary has S5:"; echo "$help" >&2; return 1; }
+  [ -n "$help" ] || { log "$p: 'rangka help' printed nothing, cannot tell whether this binary has S5"; return 1; }
   if has_multiorg_help "$help"; then
-    unforced="$(rls_gap "$p" like)" || { log "$p: could not read the row-level security state"; return 1; }
-    sysnote="$(rls_gap "$p" 'not like')" || { log "$p: could not read the row-level security state"; return 1; }
+    state="$(rls_state "$p" model)" || { log "$p: could not read the row-level security state"; return 1; }
+    n="${state%%|*}" unforced="${state#*|}"
+    sysnote="$(rls_state "$p" system)" || { log "$p: could not read the row-level security state"; return 1; }
+    sysnote="${sysnote#*|}"
+    [[ "$n" =~ ^[0-9]+$ ]] && [ "$n" -ge 1 ] || { log "$p: no model tables (r_*) found in the restored database: nothing to check, which is a failure"; return 1; }
     if [ -n "$unforced" ]; then log "$p: model tables without enabled and forced row-level security: $unforced"; return 1; fi
-    log "$p: row-level security is enabled and forced on every model table (r_*)"
+    log "$p: row-level security is enabled and forced on all $n model tables (r_*)"
     [ -z "$sysnote" ] || log "$p: NOTE kernel tables with an org_id and no row-level security (not covered by S5): $sysnote"
   else
     log "$p: this binary has no S5 (multi-org, row-level security): row-level security not checked"
   fi
+  # the pilot role owns every object of the restored database (both restore methods)
+  local foreign
+  foreign="$(foreign_owned_sql | dc exec -T postgres psql -U postgres -d "$p" -qAtX -v ON_ERROR_STOP=1 -v pilot="$p")" || { log "$p: could not check object ownership"; return 1; }
+  if [ -n "$foreign" ]; then log "$p: objects not owned by the pilot role after the restore:"; echo "$foreign" >&2; return 1; fi
+  log "$p: every object in public and rk* is owned by the pilot role"
   dc up -d "$p" >/dev/null || { log "$p: kernel did not start"; return 1; }
   port="$(dc port "$p" 8080 | sed 's/.*://')"
   code=000

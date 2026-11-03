@@ -402,6 +402,24 @@ SHIM
   if out="$(dc run --rm -T -v "$WORK/shim2:/shim2:ro" -e PATH=/shim2:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin backup jasa 2>&1)"; then bad "backup with a failing find should exit non-zero: $out"; elif grep -q 'cannot scan .* for symlinks and hardlinks (find failed)' <<<"$out"; then ok "a failing find fails the backup closed and says so"; else bad "find failure message: $out"; fi
   same "failing find: no new local archive, nothing uploaded" "$(local_archives jasa | wc -l | tr -d ' ')/$(offbox_list jasa)" "$before_local/$before_remote"
   same "failing find: no ping" "$(ping_hits)" "$hits_good"
+
+  # the nightly backup checks the LIVE role: a pilot role that is SUPERUSER or BYPASSRLS fails its backup (non-zero, no
+  # archive, no upload, no ping), whatever the scripts of this checkout say. The role is put back right after each case.
+  local flag rc
+  for flag in BYPASSRLS SUPERUSER; do
+    dc exec -T postgres psql -U postgres -qAtX -v ON_ERROR_STOP=1 -c "ALTER ROLE jasa $flag" >/dev/null
+    before_local="$(local_archives jasa | wc -l | tr -d ' ')"
+    sleep 2
+    out="$(run_backup jasa 2>&1)" && rc=0 || rc=$?
+    dc exec -T postgres psql -U postgres -qAtX -v ON_ERROR_STOP=1 -c "ALTER ROLE jasa NO$flag" >/dev/null
+    if [ "$rc" != 0 ] && grep -q 'database role jasa is SUPERUSER or BYPASSRLS' <<<"$out"; then ok "role jasa with $flag: backup fails and says why"; else bad "role $flag: rc=$rc: $out"; fi
+    same "role $flag: no new local archive, nothing uploaded" "$(local_archives jasa | wc -l | tr -d ' ')/$(offbox_list jasa)" "$before_local/$before_remote"
+    same "role $flag: no ping" "$(ping_hits)" "$hits_good"
+    if [ -z "$(find "$WORK/backups/jasa" -name '.work.*' -o -name '*.part')" ]; then ok "role $flag: no work dir left"; else bad "role $flag: leftovers"; fi
+  done
+  same "role jasa is plain again after the checks (superuser,bypassrls)" "$(dc exec -T postgres psql -U postgres -qAtX -c "select rolsuper::int || ',' || rolbypassrls::int from pg_roles where rolname = 'jasa'")" 0,0
+  sleep 2
+  if out="$(run_backup jasa 2>&1)"; then ok "backup jasa passes again with the plain role"; else bad "backup after the role checks: $out"; fi
 }
 
 drill_projects() { docker ps -a --format '{{.Names}}' | grep -c '^juragan-drill-' || true; }
@@ -630,6 +648,50 @@ section_rangka() {
   same "the drill restored with method rangka for both pilots" "$(grep -c '^restore: method: rangka' <<<"$out")" 2
   same "rangka restore: manifest comparison exact (restore ok line) for both pilots" "$(grep -c '^restore ok: [0-9]* tables, [0-9]* rows match' <<<"$out")" 2
   same "no drill project left after the rangka drills" "$(drill_projects)/$(drill_networks)" 0/0
+  # after the hand-back the drill itself ran the ownership check on both pilots
+  same "drill checked object ownership after the rangka restore" "$(grep -c 'every object in public and rk\* is owned by the pilot role' <<<"$out")" 2
+
+  # a rangka archive without RESTORE_ADMIN_PASSWORD is refused before any database work, with a clear message
+  local live="$WORK/live-srv" newest before after
+  mkdir -p "$live"
+  newest="$(basename "$(local_archives jasa | tail -1)")"
+  before="$(psql_as jasa jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
+  rc=0
+  out="$(dc run --rm -T -e RESTORE_ADMIN_PASSWORD= -v "$WORK/age-identity.txt:/run/secrets/age-identity:ro" -v "$live:/restore/jasa" \
+    --entrypoint /usr/local/bin/restore.sh backup "/backups/jasa/$newest" jasa 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'needs RESTORE_ADMIN_PASSWORD' <<<"$out"; then ok "rangka archive without RESTORE_ADMIN_PASSWORD is refused with a clear message"; else bad "missing admin password: rc=$rc: $out"; fi
+  after="$(psql_as jasa jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
+  same "refused restore left the live data alone" "$after" "$before"
+
+  # the hand-back: objects of every kind created by the admin end up owned by the pilot role, and the ownership check
+  # sees them before (negative control) and no longer after. Scratch database e2e_hb, owned by the plain role jasa.
+  local adm=(dc exec -T postgres psql -U postgres -d e2e_hb -qAtX -v ON_ERROR_STOP=1 -v pilot=jasa)
+  dc exec -T postgres psql -U postgres -qAtX -v ON_ERROR_STOP=1 -c "create database e2e_hb owner jasa" >/dev/null
+  "${adm[@]}" >/dev/null <<'SQL'
+create schema rk_x;
+create table public.r_t (a int primary key);
+create table rk_x.t2 (id serial primary key, v int);
+create sequence public.s1;
+create view public.v1 as select 1 as one;
+create materialized view public.mv1 as select 1 as one;
+create function public.f1() returns int language sql as 'select 1';
+create domain public.d1 as text check (value <> '');
+create type public.en1 as enum ('a', 'b');
+create type public.cmp1 as (a int, b text);
+create type public.rg1 as range (subtype = int4);
+SQL
+  out="$(foreign_owned_sql | "${adm[@]}")"
+  if [ "$(grep -c 'is owned by postgres' <<<"$out")" -ge 10 ] && grep -q 'type public.d1 is owned by postgres' <<<"$out" && grep -q 'type public.en1 ' <<<"$out" \
+     && grep -q 'schema rk_x ' <<<"$out" && grep -q 'function public.f1 ' <<<"$out"; then
+    ok "ownership check lists tables, views, sequences, functions, domains, enums, ranges and schemas owned by the admin"
+  else
+    bad "ownership check before the hand-back: $out"
+  fi
+  handback_sql | "${adm[@]}" >/dev/null || bad "handback_sql failed"
+  out="$(foreign_owned_sql | "${adm[@]}")"
+  same "after the hand-back nothing in public or rk* is owned by anyone but jasa" "$out" ""
+  same "the domain and the schema are owned by jasa" "$("${adm[@]}" -c "select pg_get_userbyid(typowner) || ',' || (select pg_get_userbyid(nspowner) from pg_namespace where nspname = 'rk_x') from pg_type where typname = 'd1'")" jasa,jasa
+  dc exec -T postgres psql -U postgres -qAtX -c "drop database e2e_hb" >/dev/null || bad "drop e2e_hb"
 }
 
 main() {

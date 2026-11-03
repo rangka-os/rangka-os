@@ -123,6 +123,19 @@ dump_rangka() {
   return 1
 }
 
+# check_role <pilot> <url>: the live pilot role must be a plain owner (NOSUPERUSER, NOBYPASSRLS), or row-level
+# security would not bind the kernel and a backup would no longer prove anything about isolation.
+# The restore drill checks these scripts; this checks the real role every night.
+check_role() {
+  local p="$1" flags
+  flags="$(psql -qAtX -v ON_ERROR_STOP=1 -c 'select rolsuper::int || '"','"' || rolbypassrls::int from pg_roles where rolname = current_user' "$2")" \
+    || { log "$p: cannot read the pilot role's flags"; return 1; }
+  if [ "$flags" != 0,0 ]; then
+    log "$p: database role $p is SUPERUSER or BYPASSRLS (superuser,bypassrls = $flags): row-level security does not bind it. Refusing to back up; fix the role (ALTER ROLE $p NOSUPERUSER NOBYPASSRLS)"
+    return 1
+  fi
+}
+
 # tar_dir <out> <pilot> <name>...: tar of the existing /pilots/<pilot>/<name> folders with paths <name>/...,
 # empty tar when none exists.
 tar_dir() {
@@ -166,6 +179,7 @@ backup_pilot() {
   trap 'rm -rf "${WORK_DIR:-}" "${PART_FILE:-}"' EXIT
   trap 'exit 143' TERM INT
 
+  check_role "$p" "$url" || return 1
   check_no_links "$p" || return 1
   method="$(pick_method)"
   if [ "$method" = rangka ]; then

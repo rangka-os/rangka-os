@@ -84,6 +84,10 @@ main() {
   esac
   [ -f "$dump_file" ] || die "$dump_file missing in the archive"
   log "method: $method"
+  # checked before any database work, so a missing password leaves the target untouched
+  if [ "$method" = rangka ] && [ -z "${RESTORE_ADMIN_PASSWORD:-}" ]; then
+    die "this archive was made with BACKUP_METHOD=rangka and needs RESTORE_ADMIN_PASSWORD (the postgres superuser password): rangka restore cannot COPY into tables with row-level security as the pilot role; nothing was restored"
+  fi
   # the drill compares these with its own release (empty in archives made before they were recorded)
   log "manifest: rangka_tag=$(jq -r '.rangka_tag // ""' manifest.json) rangka_image=$(jq -r '.rangka_image // ""' manifest.json)"
   [ "$(jq '.tables | length' manifest.json)" -ge 1 ] || die "manifest lists no tables: not a usable backup"
@@ -117,46 +121,25 @@ main() {
     # with row-level security for any role the policy binds (SQLSTATE 0A000), the forced-RLS owner included. So the
     # restore runs as the Postgres admin role (RESTORE_ADMIN_PASSWORD, from the operator, never stored) and then hands
     # every object back to the pilot role, which must own them for FORCE RLS and for the kernel's own migrations.
-    [ -n "${RESTORE_ADMIN_PASSWORD:-}" ] || die "BACKUP_METHOD=rangka archives need RESTORE_ADMIN_PASSWORD (the postgres superuser password): rangka restore cannot COPY into tables with row-level security as the pilot role"
     local admin_url="postgres://postgres@${BACKUP_DB_HOST:-postgres}:5432/$p?sslmode=disable"
     DATABASE_URL="postgres://postgres:$(jq -rn 'env.RESTORE_ADMIN_PASSWORD | @uri')@${url#*@}" \
       rangka restore "$WORK_DIR/x/rangka.backup" --into "$WORK_DIR/rk-into" --files "$WORK_DIR/rk-files" \
       || die "rangka restore failed"
-    PGPASSWORD="$RESTORE_ADMIN_PASSWORD" psql -qAtX -v ON_ERROR_STOP=1 -v pilot="$p" "$admin_url" <<'SQL' >/dev/null \
-      || die "could not hand the restored objects to the pilot role"
-SELECT set_config('restore.pilot', :'pilot', false);
-DO $do$
-DECLARE r record;
-BEGIN
-  FOR r IN
-    SELECT n.nspname, c.relname, c.relkind FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
-    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%') AND c.relkind IN ('r','p','v','m','S','f')
-      AND pg_get_userbyid(c.relowner) = 'postgres'
-      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = c.oid AND d.deptype IN ('a','i') AND d.classid = 'pg_class'::regclass)
-  LOOP
-    EXECUTE format('ALTER %s %I.%I OWNER TO %I',
-      CASE r.relkind WHEN 'S' THEN 'SEQUENCE' WHEN 'v' THEN 'VIEW' WHEN 'm' THEN 'MATERIALIZED VIEW' WHEN 'f' THEN 'FOREIGN TABLE' ELSE 'TABLE' END,
-      r.nspname, r.relname, current_setting('restore.pilot'));
-  END LOOP;
-  -- functions (the policy helper rk_org_ok) and schemas created by the restore, unless an extension owns them
-  FOR r IN
-    SELECT n.nspname, p.proname, pg_get_function_identity_arguments(p.oid) AS args, p.prokind FROM pg_proc p JOIN pg_namespace n ON n.oid = p.pronamespace
-    WHERE (n.nspname = 'public' OR n.nspname LIKE 'rk%') AND pg_get_userbyid(p.proowner) = 'postgres'
-      AND NOT EXISTS (SELECT 1 FROM pg_depend d WHERE d.objid = p.oid AND d.deptype = 'e' AND d.classid = 'pg_proc'::regclass)
-  LOOP
-    EXECUTE format('ALTER %s %I.%I(%s) OWNER TO %I', CASE r.prokind WHEN 'p' THEN 'PROCEDURE' ELSE 'FUNCTION' END,
-      r.nspname, r.proname, r.args, current_setting('restore.pilot'));
-  END LOOP;
-  FOR r IN SELECT nspname FROM pg_namespace WHERE nspname LIKE 'rk%' AND pg_get_userbyid(nspowner) = 'postgres' LOOP
-    EXECUTE format('ALTER SCHEMA %I OWNER TO %I', r.nspname, current_setting('restore.pilot'));
-  END LOOP;
-END $do$;
-SQL
+    handback_sql | PGPASSWORD="$RESTORE_ADMIN_PASSWORD" psql -qAtX -v ON_ERROR_STOP=1 -v pilot="$p" "$admin_url" >/dev/null \
+      || die "could not hand the restored objects to the pilot role; the database is now half restored: drop and recreate it before retrying (RUNBOOK section 5)"
   else
     # one transaction: a failure leaves the database empty
     pg_restore --no-owner --role="$p" --exit-on-error --single-transaction -d "$url" db.dump \
       || die "pg_restore failed"
   fi
+
+  # 4b. the pilot role must own everything the restore created, or FORCE RLS and the kernel's migrations break
+  n="$(foreign_owned_sql | psql -qAtX -v ON_ERROR_STOP=1 -v pilot="$p" "$url")" || die "could not check object ownership"
+  if [ -n "$n" ]; then
+    echo "$n" >&2
+    die "hand-back incomplete: the objects above are not owned by $p; the database is half restored: drop and recreate it before retrying (RUNBOOK section 5)"
+  fi
+  log "every object in public and rk* is owned by $p"
 
   # 5. site, apps, files
   for n in apps site files; do

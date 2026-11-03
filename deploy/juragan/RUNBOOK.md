@@ -247,8 +247,9 @@ hand any time: `docker compose run --rm backup all` (or `jasa` / `fnb`).
    (SQLSTATE 0A000, "COPY FROM not supported with row-level security"), the owner included. `rangka restore` loads
    rows with COPY, so as the pilot role it fails at the first model table. `restore.sh` therefore restores a
    `rangka` archive as the `postgres` role (`RESTORE_ADMIN_PASSWORD` in its environment; the drill supplies it
-   from its throwaway secrets) and then hands every table and sequence to the pilot role with `ALTER ... OWNER`,
-   so FORCE RLS and the kernel's migrations work exactly as for a `pg_dump` restore. The drill's RLS gate runs
+   from its throwaway secrets) and then hands every table, view, sequence, function, type, domain and schema in `public`
+   and `rk*` to the pilot role with `ALTER ... OWNER`, and verifies that nothing there is owned by anyone else
+   (it fails and lists the objects otherwise), so FORCE RLS and the kernel's migrations work exactly as for a `pg_dump` restore. The drill's RLS gate runs
    after that and still requires the pilot role to be NOSUPERUSER NOBYPASSRLS with RLS enabled and forced.
    `pg_dump` archives restore as the pilot role as before. A kernel fix (a restore that sets up RLS after the load,
    or restores through a role that may bypass it) would remove this step.
@@ -314,16 +315,23 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
      -v "$(grep '^PILOTS_DIR=' .env | cut -d= -f2-)/<pilot>:/restore/<pilot>" \
      --entrypoint /usr/local/bin/restore.sh backup "/backups/<pilot>/<archive name>" <pilot>
    ```
-   For an archive with `method: rangka` (manifest.json) add `-e RESTORE_ADMIN_PASSWORD` and export the postgres
-   superuser password (`POSTGRES_PASSWORD` from `.env`) in your shell for this one command; see section 5.
+   For an archive with `method: rangka` (manifest.json) add `-e RESTORE_ADMIN_PASSWORD` and put the postgres
+   superuser password (`POSTGRES_PASSWORD` from `.env`) in your shell for this one command without leaving it in the
+   shell history; see section 5. Without it `restore.sh` stops before touching the database:
+   ```bash
+   read -rs RESTORE_ADMIN_PASSWORD; export RESTORE_ADMIN_PASSWORD   # paste the password, press Enter
+   docker compose run --rm -T --no-deps -e RESTORE_ADMIN_PASSWORD ...   # the command above
+   unset RESTORE_ADMIN_PASSWORD
+   ```
    (`/backups/in/<archive name>` if you copied it in step 1.) Expected last line:
    `restore ok: <N> tables, <M> rows match`. Earlier lines: `restore: checksums ok`,
    `restore: unpacked apps, site and files into /restore/<pilot>`. Any `MISSING`, `MISMATCH` or
    `restored data does not match the manifest` means do not start the pilot: keep the old database and folders,
    and escalate.
 
-   If `restore.sh` fails after `pg_restore` (a folder or table-comparison error, a killed run), the database and
-   the folders are no longer empty and it refuses a rerun. Empty them again, then run step 5 once more: stop the
+   If `restore.sh` fails after the database restore started (a folder or table-comparison error, a killed run, or for
+   a `rangka` archive the hand-back step: `could not hand the restored objects to the pilot role` or `hand-back
+   incomplete: ... not owned by <pilot>`), the database and the folders are no longer empty and it refuses a rerun. Empty them again, then run step 5 once more: stop the
    pilot (it should be stopped), drop and recreate the database as in step 3 (the failed attempt is worthless, so
    `DROP DATABASE <pilot>;` first, then the same `CREATE DATABASE` and `REVOKE` statements), and move the partly
    filled folders aside as in step 4 (use a new `<pilot>-old-<yyyymmdd>b` name).
@@ -376,8 +384,10 @@ Per pilot the drill:
 3. runs `restore.sh` (checksums, empty target, restore, exact table comparison with the manifest);
 4. requires `migrate --dry-run` to plan 0 statements;
 5. checks the database role: `NOSUPERUSER` and `NOBYPASSRLS`, otherwise the drill fails (section 10);
-6. with an S5 binary, checks that every model table (`r_*`) has row-level security enabled and forced, otherwise
-   the drill fails; kernel tables that carry an `org_id` but no RLS are only listed as a `NOTE` (section 10);
+6. with an S5 binary, requires at least one model table (`r_*`) and that every one of them has row-level security
+   enabled and forced (whether or not it has an `org_id` column), otherwise the drill fails; a `rangka help` that
+   fails or prints nothing fails the drill too (the gate is never skipped silently). Then it checks that the pilot
+   role owns every object in `public` and `rk*` (both restore methods). Kernel tables that carry an `org_id` but no RLS are only listed as a `NOTE` (section 10);
 7. boots the kernel and expects `GET /.well-known/openid-configuration` = 200.
 
 The project and its temp folder are removed on exit.
@@ -435,7 +445,7 @@ Mapped to the program's go-live gate (per pilot). All of it before Dede signs of
 - [ ] Bucket: Object Lock (governance, 30 days), versioning, 35-day expiry rule, Block Public Access all confirmed.
 - [ ] Bundle (S9): `auth.issuer` is `https://<host>`, `files.path: ./data/files`, `db.url: '${DATABASE_URL}'`.
 - [ ] Owner seeded; `RANGKA_OWNER_*` blank in `.env`.
-- [ ] The restore drill (same run) printed `database role ... NOSUPERUSER NOBYPASSRLS` as ok and, with S5, `row-level security is enabled and forced on every model table`; `docker compose logs jasa fnb | grep 'row-level security is not enforced'` prints nothing.
+- [ ] The restore drill (same run) printed `database role ... NOSUPERUSER NOBYPASSRLS` as ok and, with S5, `row-level security is enabled and forced on all N model tables (r_*)`; `docker compose logs jasa fnb | grep 'row-level security is not enforced'` prints nothing.
 - [ ] Gate items owned elsewhere: the spec's day-one list works with the pilot's real opening data, the permission matrix test passes (cross-org and cross-outlet requests return 403), the Review Focus tests pass (`local/e2e.sh`).
 - [ ] Dede signs off.
 
@@ -488,7 +498,11 @@ role's flags are all false and it owns every table (FORCE RLS binds the owner). 
 for how to run it before S5 is on `main`. Without S5 it is reported as skipped, never as passed.
 
 **The drill gate.** After the restore, `restore-drill.sh` fails when the pilot role is a superuser or has BYPASSRLS,
-and (S5 binary) when a model table has RLS missing or not forced (section 7, items 5 and 6).
+and (S5 binary) when there is no model table or one has RLS missing or not forced (section 7, items 5 and 6).
+The drill checks the scripts of its own checkout against a throwaway database; it cannot see the production role.
+**The nightly backup checks the live role:** `backup.sh` connects as the real pilot role and fails that pilot's backup
+(non-zero exit, no archive, no upload, no success ping, a clear message in the log) when the role is SUPERUSER or has
+BYPASSRLS. A missed ping then raises the alarm. Fix with `ALTER ROLE <pilot> NOSUPERUSER NOBYPASSRLS;` as `postgres`.
 
 **Known gap (S5, reported to its owner).** S5 enables RLS on model tables only. The kernel's own tables with an
 `org_id` (`rk_approvals`, `rk_attachments`, `rk_audit`, `rk_changesets`, `rk_import_keys`, `rk_imports`, `rk_jobs`,

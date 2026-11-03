@@ -22,7 +22,8 @@ fields:
   hold ISO codes. A `data` field works too.
 - `currency_field` (required): the field holding the ISO 4217 code. It must be a `select`, `data` or `link` field
   of the same model; on a child model it may instead be a field of the parent document (every model that has a
-  `table` of it). The child's own field is tried first.
+  `table` of it). The child's own field is tried first. The validator accepts `select`, but select option values
+  must be lower case and cannot be ISO codes, so use `link` or `data`.
 - `rate_field` (optional, default `rate`): IDR per one unit of the foreign currency, a `float`, `currency` or `int`
   field of the document. For a model that is not a child, it resolves on the model itself. For a child model it
   resolves on the parent document(s) only, never on the child: every visible model with a `table` of the child

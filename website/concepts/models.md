@@ -38,10 +38,17 @@ fields:
   - {name: total, type: money, currency_field: currency, compute: "sum(items.map(i, i.amount))"}
 ```
 
-- `currency_field` holds the ISO code (`select`, `data` or `link`). `rate_field` (default `rate`) holds rupiah per
+- `currency_field` holds the ISO code: a `link` (to the currency model, whose record names are ISO codes) or `data`. A `select` cannot hold upper-case ISO codes, because option values must be lower case. `rate_field` (default `rate`) holds rupiah per
   one unit of the foreign currency. An empty currency means IDR.
-- The kernel adds a read-only twin `total_idr`: whole rupiah, `round(total x rate)`, half away from zero. Use the
+- The kernel adds a read-only twin `total_idr`: whole rupiah, `round(total × rate)`, half away from zero. Use the
   twin in lists, dashboards and reports. A foreign document without a positive rate is refused.
+- On a child row, such as an invoice line, the rate comes from the parent document only. A line's own `rate`
+  (often its unit price) is ignored, so put `rate` on the header.
+- A header's twin is `round(header amount × rate)`, not the sum of the line twins. The two may differ by at most
+  half a rupiah per line.
+- A money compute that fails (too large, division by zero) blocks the save.
+- Twins are read-only and carry `money_of` in `/api/v1/meta`. Clients drop them when writing a model back, and a
+  sent `total_idr` is ignored.
 - IDR documents stay whole rupiah. Foreign values keep up to 4 decimals; more is refused, not rounded.
 - In JSON a `money` value is a string (`"total": "1250.5"`) and the twin is an integer (`"total_idr": 19849812`).
   Input accepts a string or a number. Never do money arithmetic in client floats.

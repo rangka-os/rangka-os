@@ -38,6 +38,9 @@ func cmdBackup(args []string) int {
 		}
 		*files = backup.FilesDir(reg, c.site)
 	}
+	if *files == "" {
+		fmt.Fprintln(os.Stderr, "rangka: warning: no --site or --files given, uploaded files are not backed up")
+	}
 	db, err := c.pool(ctx)
 	if err != nil {
 		return fail(err)
@@ -51,6 +54,9 @@ func cmdBackup(args []string) int {
 	}
 	m, err := backup.Write(ctx, db, f, backup.Options{Org: *org, SiteDir: c.site, AppsDir: c.apps, FilesDir: *files, Version: Version,
 		Now: func() time.Time { return now }})
+	if err == nil {
+		err = f.Sync() // on disk before the rename makes it look complete
+	}
 	if cerr := f.Close(); err == nil {
 		err = cerr
 	}

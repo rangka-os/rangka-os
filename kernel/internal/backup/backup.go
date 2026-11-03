@@ -281,6 +281,9 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 	filesAbs := ""
 	if o.FilesDir != "" {
 		filesAbs = abs(o.FilesDir)
+		if r, err := filepath.EvalSymlinks(o.FilesDir); err == nil {
+			filesAbs = r
+		}
 	}
 	type entry struct{ name, src string }
 	var entries []entry
@@ -291,11 +294,16 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) && prefix == "files" {
 			return nil // no uploads yet
 		}
-		return filepath.WalkDir(dir, func(p string, d fs.DirEntry, err error) error {
+		// a root given through a symlink (a mounted volume, a linked site) is walked at its target
+		root, err := filepath.EvalSymlinks(dir)
+		if err != nil {
+			return err
+		}
+		return filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 			if err != nil {
 				return err
 			}
-			rel, _ := filepath.Rel(dir, p)
+			rel, _ := filepath.Rel(root, p)
 			if d.IsDir() {
 				// the files dir goes under files/ only, also when system.rk puts it inside the site
 				if skip[filepath.ToSlash(rel)] || (prefix != "files" && filesAbs != "" && abs(p) == filesAbs) {
@@ -303,10 +311,23 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 				}
 				return nil
 			}
-			if !d.Type().IsRegular() {
-				return nil // symlinks, sockets: not archived
+			name := prefix + "/" + filepath.ToSlash(rel)
+			switch {
+			case d.Type().IsRegular():
+			case d.Type()&fs.ModeSymlink != 0:
+				// a link to a file is archived as the file's content under the link's path; a link to a
+				// directory is refused (links can form cycles), never skipped silently
+				st, err := os.Stat(p)
+				if err != nil {
+					return fmt.Errorf("backup: %s: broken symlink: %w", p, err)
+				}
+				if !st.Mode().IsRegular() {
+					return fmt.Errorf("backup: %s is a symlink to a directory or special file; replace it with the files themselves", p)
+				}
+			default:
+				return fmt.Errorf("backup: %s is not a regular file", p)
 			}
-			entries = append(entries, entry{prefix + "/" + filepath.ToSlash(rel), p})
+			entries = append(entries, entry{name, p})
 			return nil
 		})
 	}
@@ -410,7 +431,9 @@ func sortedNames[V any](m map[string]V) []string {
 	return out
 }
 
-// cleanEntry reports whether a tar entry name is a plain relative path (no .., not absolute).
+// cleanEntry reports whether an archive entry name is a plain relative slash path that stays inside the
+// directory it is extracted to on every OS: no .., not absolute, no backslashes or drive letters.
 func cleanEntry(name string) bool {
-	return name != "" && !strings.HasPrefix(name, "/") && path.Clean(name) == name && name != ".." && !strings.HasPrefix(name, "../")
+	return name != "" && !strings.HasPrefix(name, "/") && !strings.ContainsAny(name, `\:`) &&
+		path.Clean(name) == name && filepath.IsLocal(filepath.FromSlash(name))
 }

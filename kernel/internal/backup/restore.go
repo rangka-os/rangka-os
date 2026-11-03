@@ -11,6 +11,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strconv"
 	"strings"
 
@@ -41,11 +42,11 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 	}
 	defer os.RemoveAll(tmp)
 	// 1. the whole archive into a temp dir, every checksum checked
-	m, err := extract(archive, tmp)
+	m, names, err := extract(archive, tmp)
 	if err != nil {
 		return nil, err
 	}
-	if err := check(m, tmp); err != nil {
+	if err := check(m, tmp, names); err != nil {
 		return nil, err
 	}
 	// 2. version, then an empty target
@@ -61,8 +62,11 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 		return nil, fmt.Errorf("%w: it has %d table(s) in schema public; restore into a new database", ErrNotEmpty, n)
 	}
 	// 3. metadata into Into, migrate from it
-	if entries, err := os.ReadDir(o.Into); err == nil && len(entries) > 0 {
+	if !emptyDir(o.Into) {
 		return nil, fmt.Errorf("backup: %s is not empty; pick another --into directory", o.Into)
+	}
+	if o.FilesDir != "" && !emptyDir(o.FilesDir) {
+		return nil, fmt.Errorf("backup: files dir %s is not empty; pick another --files directory", o.FilesDir)
 	}
 	apps, site := filepath.Join(o.Into, "apps"), ""
 	for _, d := range []string{"site", "apps"} {
@@ -77,27 +81,34 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 	if err != nil {
 		return nil, fmt.Errorf("archived metadata: %w", err)
 	}
-	if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "restore"}); err != nil {
-		return nil, fmt.Errorf("migrate: %w", err)
-	}
-	// 4. tables and columns the models no longer have (soft-deleted ones, x_ history) from the manifest
-	if err := addMissing(ctx, db, m.Tables); err != nil {
-		return nil, err
-	}
-	// 5. the rows, in one transaction
-	if err := load(ctx, db, m.Tables, tmp); err != nil {
-		return nil, err
-	}
-	// 6. files
 	files := o.FilesDir
 	if files == "" {
 		files = FilesDir(reg, site)
 		if site == "" {
 			files = filepath.Join(o.Into, "files")
 		}
+		if !emptyDir(files) {
+			return nil, fmt.Errorf("backup: files dir %s is not empty; pass an empty --files directory", files)
+		}
 	}
+	// from here on the database is written; a failure leaves it partly restored
+	partly := func(err error) error {
+		return fmt.Errorf("%w (the database is now partly restored: drop and recreate it before retrying)", err)
+	}
+	if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "restore"}); err != nil {
+		return nil, partly(fmt.Errorf("migrate: %w", err))
+	}
+	// 4. tables and columns the models no longer have (soft-deleted ones, x_ history) from the manifest
+	if err := addMissing(ctx, db, m.Tables); err != nil {
+		return nil, partly(err)
+	}
+	// 5. the rows, in one transaction
+	if err := load(ctx, db, m.Tables, tmp); err != nil {
+		return nil, partly(err)
+	}
+	// 6. files
 	if err := copyTree(filepath.Join(tmp, "files"), files); err != nil {
-		return nil, err
+		return nil, partly(err)
 	}
 	for _, f := range m.Files {
 		rel, ok := strings.CutPrefix(f.Path, "files/")
@@ -105,26 +116,26 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 			continue
 		}
 		if sum, _, err := hashFile(filepath.Join(files, filepath.FromSlash(rel))); err != nil || sum != f.SHA256 {
-			return nil, fmt.Errorf("%w: file %s", ErrVerify, f.Path)
+			return nil, partly(fmt.Errorf("%w: file %s", ErrVerify, f.Path))
 		}
 	}
 	// 7. verify
 	if err := verify(ctx, db, m); err != nil {
-		return nil, err
+		return nil, partly(err)
 	}
 	return m, nil
 }
 
-// extract reads every regular entry of a tar.gz into dir and returns the manifest.
-func extract(archive, dir string) (*Manifest, error) {
+// extract reads every regular entry of a tar.gz into dir and returns the manifest and the entry names.
+func extract(archive, dir string) (*Manifest, map[string]bool, error) {
 	f, err := os.Open(archive)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	defer f.Close()
 	zr, err := gzip.NewReader(f)
 	if err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+		return nil, nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
 	}
 	tr := tar.NewReader(zr)
 	seen := map[string]bool{}
@@ -134,48 +145,54 @@ func extract(archive, dir string) (*Manifest, error) {
 			break
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+			return nil, nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
 		}
 		if h.Typeflag == tar.TypeDir {
 			continue
 		}
 		if h.Typeflag != tar.TypeReg || !cleanEntry(h.Name) || seen[h.Name] {
-			return nil, fmt.Errorf("%w: unexpected entry %q", ErrCorrupt, h.Name)
+			return nil, nil, fmt.Errorf("%w: unexpected entry %q", ErrCorrupt, h.Name)
 		}
 		seen[h.Name] = true
 		dst := filepath.Join(dir, filepath.FromSlash(h.Name))
 		if err := os.MkdirAll(filepath.Dir(dst), 0o755); err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		out, err := os.Create(dst)
 		if err != nil {
-			return nil, err
+			return nil, nil, err
 		}
 		_, err = io.Copy(out, tr)
 		if cerr := out.Close(); err == nil {
 			err = cerr
 		}
 		if err != nil {
-			return nil, fmt.Errorf("%w: %s: %v", ErrCorrupt, h.Name, err)
+			return nil, nil, fmt.Errorf("%w: %s: %v", ErrCorrupt, h.Name, err)
 		}
 	}
 	// gzip checks its CRC at the end of the stream; read to it
 	if _, err := io.Copy(io.Discard, zr); err != nil {
-		return nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
+		return nil, nil, fmt.Errorf("%w: %v", ErrCorrupt, err)
 	}
 	b, err := os.ReadFile(filepath.Join(dir, "manifest.json"))
 	if err != nil {
-		return nil, fmt.Errorf("%w: no manifest.json", ErrCorrupt)
+		return nil, nil, fmt.Errorf("%w: no manifest.json", ErrCorrupt)
 	}
 	var m Manifest
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, fmt.Errorf("%w: manifest.json: %v", ErrCorrupt, err)
+		return nil, nil, fmt.Errorf("%w: manifest.json: %v", ErrCorrupt, err)
 	}
-	return &m, nil
+	return &m, seen, nil
 }
 
-// check compares every data/ and file entry with its manifest checksum.
-func check(m *Manifest, dir string) error {
+// pgType is a Postgres type name as format_type prints it (text, numeric(18,2), character varying(20),
+// timestamp with time zone, text[]). Manifest types go into DDL, so anything else is refused.
+var pgType = regexp.MustCompile(`^[a-z][a-z0-9_ ]*(\([0-9]+(,[0-9]+)?\))?(\[\])?$`)
+
+// check compares every data/ and file entry with its manifest checksum, checks table names and column types,
+// and refuses entries the manifest does not list.
+func check(m *Manifest, dir string, names map[string]bool) error {
+	listed := map[string]bool{"manifest.json": true}
 	if m.Format < 1 || len(m.Tables) == 0 {
 		return fmt.Errorf("%w: manifest has no tables", ErrCorrupt)
 	}
@@ -183,6 +200,12 @@ func check(m *Manifest, dir string) error {
 		if !cleanEntry(t.Name) || strings.Contains(t.Name, "/") || len(t.Columns) == 0 {
 			return fmt.Errorf("%w: bad table %q in the manifest", ErrCorrupt, t.Name)
 		}
+		for _, c := range t.Columns {
+			if c.Name == "" || !pgType.MatchString(c.Type) {
+				return fmt.Errorf("%w: bad column %q %q of table %s in the manifest", ErrCorrupt, c.Name, c.Type, t.Name)
+			}
+		}
+		listed["data/"+t.Name+".copy"] = true
 		if sum, _, err := hashFile(filepath.Join(dir, "data", t.Name+".copy")); err != nil || sum != t.SHA256 {
 			return fmt.Errorf("%w: data/%s.copy is missing or does not match its checksum", ErrCorrupt, t.Name)
 		}
@@ -195,8 +218,20 @@ func check(m *Manifest, dir string) error {
 		if sum, size, err := hashFile(filepath.Join(dir, filepath.FromSlash(f.Path))); err != nil || sum != f.SHA256 || size != f.Size {
 			return fmt.Errorf("%w: %s is missing or does not match its checksum", ErrCorrupt, f.Path)
 		}
+		listed[f.Path] = true
+	}
+	for _, n := range sortedNames(names) {
+		if !listed[n] {
+			return fmt.Errorf("%w: entry %s is not in the manifest", ErrCorrupt, n)
+		}
 	}
 	return nil
+}
+
+// emptyDir reports whether dir does not exist or has no entries.
+func emptyDir(dir string) bool {
+	entries, err := os.ReadDir(dir)
+	return errors.Is(err, fs.ErrNotExist) || (err == nil && len(entries) == 0)
 }
 
 // newer reports whether archive's major.minor.patch is above binary's. Pre-release and build suffixes are

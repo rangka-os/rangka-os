@@ -219,10 +219,30 @@ func TestRestoreRefusesNonEmpty(t *testing.T) {
 	if _, err := Restore(ctx, s.db, archive, restoreOpts(t)); !errors.Is(err, ErrNotEmpty) {
 		t.Fatalf("restore into the source: err = %v, want ErrNotEmpty", err)
 	}
+	// a non-empty --files dir is refused before the database is touched
+	empty := pool(t, testdb.New(t))
+	o := restoreOpts(t)
+	os.MkdirAll(o.FilesDir, 0o755)
+	os.WriteFile(filepath.Join(o.FilesDir, "old.txt"), []byte("old"), 0o644)
+	if _, err := Restore(ctx, empty, archive, o); err == nil || !strings.Contains(err.Error(), "not empty") {
+		t.Fatalf("non-empty files dir: err = %v", err)
+	}
+	if n := tableCount(t, empty); n != 0 {
+		t.Fatalf("target has %d tables after a refused restore", n)
+	}
+	if n := count(t, dst, "select count(*) from pg_tables where schemaname = 'public'"); n != 1 {
+		t.Fatalf("the non-empty target has %d tables, want its 1", n)
+	}
 }
 
 // rewrite copies a tar.gz archive, passing each entry through fn (nil drops it).
 func rewrite(t *testing.T, src string, fn func(name string, data []byte) []byte) string {
+	t.Helper()
+	return rewriteExtra(t, src, fn)
+}
+
+// rewriteExtra is rewrite plus extra entries appended at the end (each with the body "x").
+func rewriteExtra(t *testing.T, src string, fn func(name string, data []byte) []byte, extra ...*tar.Header) string {
 	t.Helper()
 	f, err := os.Open(src)
 	if err != nil {
@@ -258,6 +278,17 @@ func rewrite(t *testing.T, src string, fn func(name string, data []byte) []byte)
 			t.Fatal(err)
 		}
 		tw.Write(data)
+	}
+	for _, h := range extra {
+		if h.Typeflag == tar.TypeReg {
+			h.Size = 1
+		}
+		if err := tw.WriteHeader(h); err != nil {
+			t.Fatal(err)
+		}
+		if h.Typeflag == tar.TypeReg {
+			tw.Write([]byte("x"))
+		}
 	}
 	tw.Close()
 	zw.Close()
@@ -317,6 +348,117 @@ func TestRestoreRefusesCorrupt(t *testing.T) {
 		if _, err := os.Stat(o.Into); !os.IsNotExist(err) {
 			t.Errorf("%s: --into dir created on a refused restore", name)
 		}
+	}
+}
+
+func TestRestoreRefusesBadEntries(t *testing.T) {
+	ctx := context.Background()
+	s := newSource(t)
+	archive := s.backup(t, "")
+	keep := func(_ string, data []byte) []byte { return data }
+	reg := func(name string) *tar.Header { return &tar.Header{Name: name, Mode: 0o644, Typeflag: tar.TypeReg} }
+	cases := map[string]string{
+		"dotdot":       rewriteExtra(t, archive, keep, reg("../x")),
+		"inner dotdot": rewriteExtra(t, archive, keep, reg("files/../../x")),
+		"backslash":    rewriteExtra(t, archive, keep, reg(`..\x`)),
+		"drive":        rewriteExtra(t, archive, keep, reg("C:/x")),
+		"absolute":     rewriteExtra(t, archive, keep, reg("/tmp/x")),
+		"symlink":      rewriteExtra(t, archive, keep, &tar.Header{Name: "files/l", Linkname: "/etc/passwd", Typeflag: tar.TypeSymlink}),
+		"hardlink":     rewriteExtra(t, archive, keep, &tar.Header{Name: "files/h", Linkname: "manifest.json", Typeflag: tar.TypeLink}),
+		"unlisted":     rewriteExtra(t, archive, keep, reg("site/extra.rk")),
+		"bad type": rewrite(t, archive, func(name string, data []byte) []byte {
+			if name == "manifest.json" {
+				return bytes.Replace(data, []byte(`"type": "text"`), []byte(`"type": "text; drop table x"`), 1)
+			}
+			return data
+		}),
+	}
+	for name, path := range cases {
+		dst := pool(t, testdb.New(t))
+		if _, err := Restore(ctx, dst, path, restoreOpts(t)); !errors.Is(err, ErrCorrupt) {
+			t.Errorf("%s: err = %v, want ErrCorrupt", name, err)
+		}
+		if n := tableCount(t, dst); n != 0 {
+			t.Errorf("%s: target has %d tables after a refused restore", name, n)
+		}
+	}
+}
+
+// TestSymlinks: roots given through symlinks are walked at their targets, a symlink to a file inside a tree is
+// archived as the file, a symlink to a directory fails the backup. rangka.lock at the site root is archived.
+func TestSymlinks(t *testing.T) {
+	ctx := context.Background()
+	s := newSource(t)
+	os.WriteFile(filepath.Join(s.site, "rangka.lock"), []byte("lock: 1\n"), 0o644)
+	if err := os.Symlink(filepath.Join(s.files, "lead", "LEAD-001", "kartu nama.jpg"), filepath.Join(s.files, "linked.jpg")); err != nil {
+		t.Fatal(err)
+	}
+	links := t.TempDir()
+	for name, target := range map[string]string{"site": s.site, "apps": s.apps, "files": s.files} {
+		if err := os.Symlink(target, filepath.Join(links, name)); err != nil {
+			t.Fatal(err)
+		}
+	}
+	path := filepath.Join(t.TempDir(), "a.tar.gz")
+	f, _ := os.Create(path)
+	m, err := Write(ctx, s.db, f, Options{SiteDir: filepath.Join(links, "site"), AppsDir: filepath.Join(links, "apps"),
+		FilesDir: filepath.Join(links, "files"), Version: version, Now: fixedNow})
+	f.Close()
+	if err != nil {
+		t.Fatal(err)
+	}
+	got := map[string]bool{}
+	for _, fs := range m.Files {
+		got[fs.Path] = true
+	}
+	for _, p := range []string{"site/system.rk", "site/rangka.lock", "apps/crm/models/lead.rk", "files/lead/LEAD-001/kartu nama.jpg", "files/linked.jpg"} {
+		if !got[p] {
+			t.Errorf("%s not archived", p)
+		}
+	}
+	o := restoreOpts(t)
+	if _, err := Restore(ctx, pool(t, testdb.New(t)), path, o); err != nil {
+		t.Fatal(err)
+	}
+	want, _ := os.ReadFile(filepath.Join(s.files, "lead", "LEAD-001", "kartu nama.jpg"))
+	for _, p := range []string{"linked.jpg", "lead/LEAD-001/kartu nama.jpg"} {
+		if b, err := os.ReadFile(filepath.Join(o.FilesDir, p)); err != nil || !bytes.Equal(b, want) {
+			t.Errorf("restored %s = %q, %v", p, b, err)
+		}
+	}
+	if b, err := os.ReadFile(filepath.Join(o.Into, "site", "rangka.lock")); err != nil || string(b) != "lock: 1\n" {
+		t.Errorf("rangka.lock = %q, %v", b, err)
+	}
+	// a directory symlink inside the files tree is refused, naming the path
+	if err := os.Symlink(s.files, filepath.Join(s.files, "loop")); err != nil {
+		t.Fatal(err)
+	}
+	_, err = Write(ctx, s.db, io.Discard, Options{SiteDir: s.site, AppsDir: s.apps, FilesDir: filepath.Join(links, "files"), Version: version, Now: fixedNow})
+	if err == nil || !strings.Contains(err.Error(), "loop") {
+		t.Fatalf("dir symlink: err = %v", err)
+	}
+}
+
+// TestRestoreAddsArchivedColumns: a column and a soft-deleted table the models no longer have are recreated
+// from the manifest and keep their rows.
+func TestRestoreAddsArchivedColumns(t *testing.T) {
+	ctx := context.Background()
+	s := newSource(t)
+	if _, err := s.db.Exec(ctx, `alter table r_lead add column x_legacy numeric(18,2);
+		update r_lead set x_legacy = 12.5;
+		create table _del_20260101_old (name text, tags text[], at timestamp with time zone);
+		insert into _del_20260101_old values ('a', '{x,y}', '2026-01-01 07:00+07')`); err != nil {
+		t.Fatal(err)
+	}
+	archive := s.backup(t, "")
+	dst := pool(t, testdb.New(t))
+	if _, err := Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
+		t.Fatal(err)
+	}
+	a, _ := Sums(ctx, s.db, "")
+	b, _ := Sums(ctx, dst, "")
+	if !reflect.DeepEqual(a, b) {
+		t.Error("sums differ")
 	}
 }
 

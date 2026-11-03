@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly encrypted backup of the juragan.ai pilots to off-box storage
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/usr/bin/docker compose -f /opt/juragan/rangka-os/deploy/juragan/compose.yaml --env-file /opt/juragan/rangka-os/deploy/juragan/.env run --rm backup all
+TimeoutStartSec=2h

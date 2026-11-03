@@ -115,6 +115,12 @@ scope: {field: outlet, from: user.outlets}
   - reading, updating, deleting, submitting, cancelling, amending or running an action on an out-of-scope
     record → 403 `permission_denied` `{model, action}`;
   - creating a record, or changing a scope field, to a value outside `from` → 403 `permission_denied`;
+  - **reads need any, writes need every:** reading (list, get, print, attachments list, import preview)
+    needs one scope field in `from`; writing (create, update before and after the patch, delete, submit,
+    cancel, amend, actions, attachment upload) needs every scope field that holds a value to be in `from`,
+    and at least one filled. So outlet staff at Dago read a Braga→Dago `stock_transfer` but cannot create,
+    change, submit, cancel or delete it; cross-outlet transfers are made by head office or by a member
+    scoped to both outlets;
   - SSE `record` events of scoped models reach a scoped subscriber only for visible records. The filter is
     fixed per connection: role or outlet changes apply when the client reconnects. An update that moves a
     record out of a subscriber's scope sends that subscriber nothing (no delete-like event), so an open view

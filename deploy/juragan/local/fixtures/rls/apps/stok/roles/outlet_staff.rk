@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json
+name: outlet_staff
+label: {id: Staf outlet}
+scope: {field: outlet, from: user.outlets}

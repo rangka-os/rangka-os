@@ -13,6 +13,9 @@ rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>]
                 [--connectors <dir>] [--deploy-target dev|docker|helm|desktop|cloud|partner] [--dev-open]
+rangka user add <email> --org <org> --role <role> [--outlets a,b] [--name <full name>] [--record <USR-…>]
+                [--reset-password] [--create-org] [--db <url>]
+rangka user remove <email> --org <org> [--db <url>]
 ```
 
 | Command | Does |
@@ -22,7 +25,9 @@ rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <di
 | `backup` | Writes one verified `tar.gz`: every table, `site/`, `apps/` and the uploads directory, with checksums. See [Backup and restore](#backup-and-restore). |
 | `restore` | Rebuilds an archive into an empty database and verifies it against the archive's checksums. |
 | `seed` | Creates the organisation (`--org`, `$RANGKA_ORG`, else the site folder name), loads `fixtures/*.rk`, and the owner account (`--email`/`--password`, `$RANGKA_OWNER_EMAIL`/`$RANGKA_OWNER_PASSWORD`; demo default `ceo@saga.co.id` / `rangka-demo`). |
-| `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/console/`, `/prototype/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
+| `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/app/`, `/console/`; `/` redirects to `/app/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
+| `user add` | Creates a Rangka ID account and sets its role in an organisation (one role per member), so people can sign in to `/app/`. The email is the first argument (or `--email`). The password comes from `$RANGKA_USER_PASSWORD` (or `--password`, which lands in shell history) and is needed only for a new account or with `--reset-password`; an existing account keeps its password otherwise. `--db` and `--org` default to `$DATABASE_URL` and `$RANGKA_ORG`. An unknown organisation is refused unless `--create-org` is given; `--record` links the member to a core user record; `--outlets a,b` sets the outlets the member works at (`--outlets ""` clears them). Missing flags exit 2. |
+| `user remove` | Ends a membership. Exits 1 with `<email> is not a member of <org>` when it is not one. |
 
 ## Migrations
 

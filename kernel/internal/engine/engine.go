@@ -1,6 +1,6 @@
 // Package engine runs the document lifecycle on top of the store: defaults, computed fields, rules, naming
 // at submit, immutability, cancel and amend, actions and hooks, list queries and dashboards. Its semantics
-// follow the browser prototype (rangka-os/web/prototype/engine.js).
+// follow the browser prototype (rangka-os/web/app/engine.js).
 package engine
 
 import (

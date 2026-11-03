@@ -22,7 +22,7 @@ func TestMigrateFilesDir(t *testing.T) {
 	ctx := context.Background()
 	dir := t.TempDir()
 	apps := filepath.Join(dir, "apps")
-	if err := exec.Command("cp", "-r", "../../../../rangka-apps/apps", apps).Run(); err != nil {
+	if err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), apps).Run(); err != nil {
 		t.Fatal(err)
 	}
 	t.Setenv("RANGKA_FILES_DIR", "")

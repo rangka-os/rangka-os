@@ -25,7 +25,7 @@ func TestPreMigrateBackup(t *testing.T) {
 	defer db.Close()
 	dir := t.TempDir()
 	apps := filepath.Join(dir, "apps")
-	if err := exec.Command("cp", "-r", filepath.Join(workspace, "rangka-apps/apps"), apps).Run(); err != nil {
+	if err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), apps).Run(); err != nil {
 		t.Fatal(err)
 	}
 	site := filepath.Join(dir, "site")
@@ -85,7 +85,7 @@ func TestPreMigrateBackup(t *testing.T) {
 
 // TestFilesRoot: the pre-migrate backup of a running server archives the directory it serves attachments from.
 func TestFilesRoot(t *testing.T) {
-	apps, _ := filepath.Abs(filepath.Join(workspace, "rangka-apps/apps"))
+	apps, _ := filepath.Abs(testdb.Sibling(t, "rangka-apps/apps"))
 	reg, err := LoadRegistry(Config{AppsDir: apps, Schemas: schema.Embedded()})
 	if err != nil {
 		t.Fatal(err)

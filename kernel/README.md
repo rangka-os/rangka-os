@@ -4,7 +4,7 @@ The Rangka OS server: one Go binary that validates `.rk` metadata, migrates Post
 document lifecycle, serves the REST API, realtime events, the queue and scheduler, Rangka ID (sessions,
 API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The binding contract is
 [`../docs/contracts.md`](../docs/contracts.md); the reference semantics are the browser prototype
-(`../web/prototype/engine.js`) and `../tools/rangka_validate.py`.
+(`../web/app/engine.js`) and `../tools/rangka_validate.py`.
 
 ```
 make test       # all tests against a throwaway Postgres (started and removed by scripts/pgtemp.sh)
@@ -13,8 +13,10 @@ make validate   # rangka validate on rangka-apps/apps + sites/kopi-senja + rangk
 make compare-python   # Go vs rangka_validate.py on the real metadata and two broken copies (must be identical)
 ```
 
-Then open http://localhost:8080/prototype/, http://localhost:8080/api/v1/meta, or point an MCP client at
-`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`.
+Then open http://localhost:8080/app/, http://localhost:8080/api/v1/meta, or point an MCP client at
+`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`. More people:
+`RANGKA_USER_PASSWORD=<p> rangka user add <email> --org kopi-senja --role <role>` (see `rangka user` below;
+`--reset-password` and `--create-org` are opt-in).
 
 ## Stand-ins (for now)
 
@@ -91,15 +93,16 @@ rangka backup   --db <url> [--apps <dir>] [--site <dir>] [--out <file>] [--org <
 rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--files-dir <dir>] [--dev-open]
-rangka user add    <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."] --db <url>
-rangka user remove <email> --org <id> --db <url>
+rangka user add    <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]
+                   [--reset-password] [--create-org] [--db <url>]
+rangka user remove <email> --org <id> [--db <url>]
 ```
 
 `validate` prints `file:line:col  level  code  path  message` exactly like `rangka_validate.py` and exits 1 on
 errors. `migrate` and `serve` refuse metadata with errors. `seed` creates the org (the site directory name),
 loads `fixtures/*.rk` the way the prototype loads its seed (names and docstatus kept, defaults and computed
 fields filled) and the owner `ceo@saga.co.id` / `rangka-demo` mapped to user record `USR-001`. `serve`
-serves `rangka-os/web` at `/` (prototype at `/prototype/`).
+serves `rangka-os/web` at `/` (app at `/app/`, `/` redirects there).
 
 `migrate --dry-run` prints each statement with its risk and changes nothing; destructive steps need
 `--allow-destructive`; `--rollback n` undoes the last n migrations. `backup` writes one verified archive (every
@@ -147,9 +150,13 @@ with a browser session and an approver role (`config.rk ai.approvers`, always `o
   `rk_org` cookie and answers like `/auth/me`. Not a member: 403 `permission_denied`. API and OIDC tokens
   have a fixed org: 400 `org_fixed`. Sessions only.
 * `GET /api/v1/orgs` lists only the caller's orgs.
-* `rangka user add` creates the user (password from the `RANGKA_USER_PASSWORD` environment variable,
-  required for a new user) or updates the membership; `rangka user remove` ends a membership and fails when
-  the user is not a member.
+* `rangka user add` creates the user or updates the membership (role, `--record`; `--outlets` replaces the
+  member's outlets, `--outlets ""` clears them). The email is the first argument or `--email`. The password
+  comes from the `RANGKA_USER_PASSWORD` environment variable (or `--password`, which lands in shell history)
+  and is needed only for a new account or with `--reset-password`; an existing account's password is never
+  changed otherwise. An unknown org is refused unless `--create-org` is given. `--db` and `--org` default to
+  `$DATABASE_URL` and `$RANGKA_ORG`. `rangka user remove <email> --org <id>` ends a membership and exits 1 with
+  `<email> is not a member of <org>` when it is not one. Missing or wrong flags exit 2.
 
 ### Multi-org and row scope
 
@@ -190,7 +197,7 @@ DELETE /api/v1/attachments/{id}               → 204
 ## Tests
 
 `make test` runs unit tests and integration tests (fresh database per test: `internal/testdb`). Without
-`RANGKA_TEST_DATABASE_URL` the database tests skip. Notable tests:
+`RANGKA_TEST_DATABASE_URL` the database tests skip. Tests and the Makefile find `rangka-apps` and `rangka-connectors` by searching upward from this checkout (so git worktrees work); set `RANGKA_WORKSPACE` to the folder that holds them to override. Tests that need them skip when they are missing, except when `CI` is set (any non-empty value) or `RANGKA_REQUIRE_SIBLINGS=1`: then a missing checkout fails the test (`testdb.Sibling`), so a CI run cannot pass by skipping. Notable tests:
 
 * `internal/rk` compares data, positions and error codes with `rkfile.py` on every workspace `.rk` file
   and an edge-case corpus (`testdata/yaml`).

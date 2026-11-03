@@ -123,9 +123,17 @@ scope: {field: outlet, from: user.outlets}
 shared with S1's model permissions (`engine.PermissionError`).
 
 ### 7. CLI
-- `rangka user add <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]`:
-  creates the user (password from `RANGKA_USER_PASSWORD`, required for a new user) or updates the membership.
-- `rangka user remove <email> --org <id>` ends a membership; it fails when the user is not a member.
+One command, shared with S0's set-up (which spells the email `--email`):
+- `rangka user add <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]
+  [--reset-password] [--create-org] [--db <url>]`: creates the user or updates the membership. The email may
+  also be given as `--email <e>`. The password comes from `RANGKA_USER_PASSWORD` (preferred; `--password <p>`
+  also works but lands in shell history) and is required only for a new account or with `--reset-password`;
+  otherwise an existing account's password is never changed. `--outlets` replaces the member's outlets and
+  `--outlets ""` clears them; without it they are left alone. An unknown org is refused unless `--create-org`
+  is given (no silent auto-create). `--db` and `--org` default to `$DATABASE_URL` and `$RANGKA_ORG`.
+- `rangka user remove <email> --org <id> [--db <url>]` ends a membership; for a non-member it exits 1 with
+  `<email> is not a member of <org>`.
+- Missing or wrong flags exit 2.
 
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.

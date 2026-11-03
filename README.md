@@ -79,7 +79,7 @@ Then open:
 | URL | What |
 | --- | --- |
 | http://localhost:8080/console/ | Rangka Console (sign in: `ceo@saga.co.id` / `rangka-demo`) |
-| http://localhost:8080/prototype/ | The apps rendered from metadata |
+| http://localhost:8080/app/ | The end-user web app: dashboards, lists, forms, approvals, imports |
 | http://localhost:8080/api/v1/meta | Metadata API |
 | `POST http://localhost:8080/mcp` | MCP endpoint for AI clients |
 
@@ -105,7 +105,7 @@ http://localhost:8000/console/?demo=1.
 | [`templates/`](templates) | Theme templates (`standard`, `retail`, `clinic`) and layout templates (`top-nav`, `side-only`, `pos`, `portal`) |
 | [`web/design-system/`](web/design-system) | React component bundle (`window.Rangka`, 76 exports), tokens, TypeScript types — Atlassian-grade structure in Rangka colours (Ink, Bata, warm stone), light and dark |
 | [`web/console/`](web/console/README.md) | Rangka Console, the control pane for operators: capabilities, apps and models, change sets, connectors, organisations, themes, audit |
-| [`web/prototype/`](web/prototype) | Browser-only renderer of the apps; the reference semantics for the kernel |
+| [`web/app/`](web/app) | The end-user web app (served at `/app/`); its engine is the reference semantics for the kernel |
 | [`docs/contracts.md`](docs/contracts.md) | The binding contract: REST, SSE events, MCP tools, CEL dialect, change sets, v0.1 decisions |
 | [`docs/site/`](docs/site) | API reference page generated from metadata |
 

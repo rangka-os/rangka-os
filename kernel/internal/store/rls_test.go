@@ -25,7 +25,7 @@ func TestRLSBlocksOtherOrg(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer admin.Close()
-	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: "../../../../rangka-apps/apps", SiteDir: "../../../../rangka-apps/sites/kopi-senja"}, nil, schema.Embedded())
+	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: testdb.Sibling(t, "rangka-apps/sites/kopi-senja")}, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("metadata errors: %v", rep.All())
 	}

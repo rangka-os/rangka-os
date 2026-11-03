@@ -50,8 +50,16 @@
   }
   var cache = {};
   function addDays(iso, n) { var d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
-  function todayISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  function clockISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function isDate(v) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); }
+
+  /* create(meta, lookup): the pure engine for live /api/v1/meta metadata.
+     meta = {models, dashboards, installed: [app names], today}; lookup(model, name) -> record|null (sync, from the app's cache). */
+  function create(meta, lookup) {
+    var META = meta, CURRENT = null;
+    lookup = lookup || function () { return null; };
+    function todayISO() { return META.today || clockISO(); }
+    function installed() { return META.installed || (META.app && META.app.installed) || []; }
   function ev(e, scope) {
     if ("n" in e) return e.n;
     if ("s" in e) return e.s;
@@ -65,7 +73,7 @@
       if (e.call === "duration") return { days: Number(a[0]) || 0 };
       if (e.call === "size") return a[0] == null ? 0 : a[0].length;
       if (e.call === "truncate") return String(a[0] || "").slice(0, a[1] || 80);
-      if (e.call === "app_installed") return (META.app.installed || []).indexOf(a[0]) >= 0;
+      if (e.call === "app_installed") return installed().indexOf(a[0]) >= 0;
       if (e.call === "option") { var cf = CURRENT && field(CURRENT.m, a[0]), ov = CURRENT && CURRENT.rec[a[0]]; var op = cf && (cf.options || []).filter(function (o) { return o.value === ov; })[0]; return op ? op[a[1]] : null; }
       throw new Error("Unknown function " + e.call);
     }
@@ -90,11 +98,8 @@
   }
   function evaluate(src, scope) { var ast = cache[src] || (cache[src] = parse(src)); return ev(ast, scope); }
 
-  /* ---------- store */
-  var META = window.RANGKA_META, store = {}, counters = {}, CURRENT = null;
-  Object.keys(window.RANGKA_SEED).forEach(function (m) { store[m] = window.RANGKA_SEED[m].map(function (r) { return JSON.parse(JSON.stringify(r)); }); });
   function model(name) { return META.models[name]; }
-  function get(m, name) { return (store[m] || []).filter(function (r) { return r.name === name; })[0] || null; }
+  function get(m, name) { return lookup(m, name) || null; }
   function field(m, f) { return model(m).fields.filter(function (x) { return x.name === f; })[0]; }
 
   /* scope: plain fields, links resolve to the linked record */
@@ -148,6 +153,20 @@
     });
     return out;
   }
+  function blank(m) { var r = { __new: true, docstatus: 0 }; model(m).fields.forEach(function (f) { if (f.type === "table") r[f.name] = []; }); return compute(m, applyDefaults(m, r)); }
+  function title(m, rec) { var tf = model(m).title_field; if (!rec) return ""; var f = tf && field(m, tf); if (f && f.type === "link") { var l = get(f.to, rec[tf]); return l ? title(f.to, l) : ""; } return tf ? rec[tf] : rec.name; }
+    return { META: META, model: model, field: field, get: get, evaluate: evaluate, compute: compute, applyDefaults: applyDefaults, status: status,
+      runRules: runRules, title: title, numeric: numeric, blank: blank, todayISO: todayISO, scopeFor: scopeFor, isDate: isDate, addDays: addDays,
+      actionAllowed: function (m, rec, a) { if (!a.if) return true; try { return !!evaluate(a.if, scopeFor(m, rec)); } catch (e) { return false; } } };
+  }
+
+  /* ---------- legacy: in-memory store prototype, used only by kernel/scripts/proto-dashboards.js */
+  function legacy(META, SEED) {
+    var store = {}, counters = {};
+    Object.keys(SEED).forEach(function (m) { store[m] = SEED[m].map(function (r) { return JSON.parse(JSON.stringify(r)); }); });
+    var E = create(META, function (m, name) { return (store[m] || []).filter(function (r) { return r.name === name; })[0] || null; });
+    var model = E.model, get = E.get, field = E.field, evaluate = E.evaluate, compute = E.compute, applyDefaults = E.applyDefaults, scopeFor = E.scopeFor,
+      todayISO = E.todayISO, title = E.title, blank = E.blank;
   function nextName(m) {
     var pat = model(m).naming || (m.toUpperCase() + "-{#####}"), y = String(new Date().getFullYear());
     var prefix = pat.replace("{YYYY}", y).replace(/\{#+\}/, "");
@@ -174,7 +193,6 @@
     var n = JSON.parse(JSON.stringify(rec)); n.docstatus = 0; n.amended_from = rec.name; n.paid_amount = 0; n.name = "DRAFT-" + Math.random().toString(36).slice(2, 7).toUpperCase();
     return save(m, n);
   }
-  function blank(m) { var r = { __new: true, docstatus: 0 }; model(m).fields.forEach(function (f) { if (f.type === "table") r[f.name] = []; }); return compute(m, applyDefaults(m, r)); }
   /* hooks: named engine functions an action or automation calls (Go in the real engine) */
   var HOOKS = {
     "crm.convert_lead": function (m, lead) {
@@ -193,8 +211,6 @@
     var hk = HOOKS[a.hook]; if (!hk) throw new Error("Hook " + a.hook + " belum ada di prototipe");
     return hk(m, rec);
   }
-  function actionAllowed(m, rec, a) { if (!a.if) return true; try { return !!evaluate(a.if, scopeFor(m, rec)); } catch (e) { return false; } }
-  function title(m, rec) { var tf = model(m).title_field; if (!rec) return ""; var f = tf && field(m, tf); if (f && f.type === "link") { var l = get(f.to, rec[tf]); return l ? title(f.to, l) : ""; } return tf ? rec[tf] : rec.name; }
 
 
   /* ---------- dashboards: widgets computed from records, nothing stored */
@@ -264,7 +280,17 @@
     return { error: "Jenis widget tidak dikenal: " + w.type };
   }
   function dashboard(name) { return (META.dashboards || {})[name]; }
-  window.RangkaEngine = { META: META, store: store, model: model, get: get, field: field, evaluate: evaluate, compute: compute, applyDefaults: applyDefaults,
-    status: status, runRules: runRules, runAction: runAction, actionAllowed: actionAllowed, save: save, submit: submit, cancel: cancel, amend: amend, blank: blank, title: title, todayISO: todayISO, numeric: numeric, dashboard: dashboard, computeWidget: computeWidget };
-  Object.keys(store).forEach(function (m) { store[m].forEach(function (r) { applyDefaults(m, r); compute(m, r); }); });
+    var out = { META: META, store: store, model: model, get: get, field: field, evaluate: evaluate, compute: compute, applyDefaults: applyDefaults,
+      status: E.status, runRules: E.runRules, runAction: runAction, actionAllowed: E.actionAllowed, save: save, submit: submit, cancel: cancel, amend: amend,
+      blank: blank, title: title, todayISO: todayISO, numeric: E.numeric, dashboard: dashboard, computeWidget: computeWidget };
+    Object.keys(store).forEach(function (m) { store[m].forEach(function (r) { applyDefaults(m, r); compute(m, r); }); });
+    return out;
+  }
+
+  var api = { create: create };
+  if (window.RANGKA_META && window.RANGKA_SEED) {
+    var lg = legacy(window.RANGKA_META, window.RANGKA_SEED);
+    Object.keys(lg).forEach(function (k) { api[k] = lg[k]; });
+  }
+  window.RangkaEngine = api;
 })();

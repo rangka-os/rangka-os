@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"math/big"
 	"sort"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
@@ -303,17 +304,25 @@ func Status(m *meta.Model, rec map[string]any, today string) string {
 	case 2:
 		return "cancelled"
 	}
-	total, paid := num(rec["grand_total"]), num(rec["paid_amount"])
-	if total > 0 && paid >= total {
+	total, paid := amount(rec["grand_total"]), amount(rec["paid_amount"])
+	if total.Sign() > 0 && paid.Cmp(total) >= 0 {
 		return "paid"
 	}
 	if d := str(rec["due_date"]); d != "" && d < today {
 		return "overdue"
 	}
-	if paid > 0 {
+	if paid.Sign() > 0 {
 		return "partly"
 	}
 	return "submitted"
+}
+
+// amount is the exact value of a number or money decimal (0 for anything else).
+func amount(v any) *big.Rat {
+	if r, ok := exact(v); ok {
+		return r
+	}
+	return new(big.Rat)
 }
 
 func num(v any) float64 {

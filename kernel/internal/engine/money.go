@@ -61,6 +61,15 @@ func (s *scope) idrRate(f *meta.Field) (*big.Rat, bool) {
 	return s.rateOf(f)
 }
 
+// exact is the exact value of a number or money decimal (false for anything else, text included).
+func exact(v any) (*big.Rat, bool) {
+	switch v.(type) {
+	case money.Decimal, int64, int, float64:
+		return money.Rat(v)
+	}
+	return nil, false
+}
+
 // decimal is the money value of field name in rec (zero when it is not a decimal).
 func decimal(rec store.Record, name string) money.Decimal {
 	d, _ := rec[name].(money.Decimal)

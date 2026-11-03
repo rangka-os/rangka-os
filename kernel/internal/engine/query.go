@@ -9,6 +9,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -111,8 +112,18 @@ func matchText(m *meta.Model, r store.Record, q string) bool {
 	return false
 }
 
-// compareValues orders numbers numerically, everything else as text (missing values first).
+// compareValues orders numbers numerically (money decimals exactly), everything else as text (missing
+// values first).
 func compareValues(a, b any) int {
+	_, ad := a.(money.Decimal)
+	_, bd := b.(money.Decimal)
+	if ad || bd {
+		ra, aok := exact(a)
+		rb, bok := exact(b)
+		if aok && bok {
+			return ra.Cmp(rb)
+		}
+	}
 	fa, aNum := numeric(a)
 	fb, bNum := numeric(b)
 	if aNum && bNum {

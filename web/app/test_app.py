@@ -881,18 +881,12 @@ def column(page, label):
 
 
 def drag_card(page, ctx, title, label):
-    """Drop the card on a column: a real mouse drag, or on a phone (columns scroll sideways, so source and target are
-    never on screen together) the same dragstart / dragover / drop sequence dispatched with a DataTransfer."""
+    """Move the card to a column: a real mouse drag on a wide screen; on a phone (touch: HTML5 drag does not work) the
+    card's "Pindah ke …" select, which PATCHes the stage like a drop."""
     if ctx.args.width >= 800:
         card_by_title(page, title).drag_to(column(page, label).locator(".pv-cards"))
         return
-    page.evaluate("""([title, label]) => {
-        const card = [...document.querySelectorAll('.pv-card')].find(c => c.textContent.includes(title));
-        const col = [...document.querySelectorAll('.pv-col-k')].find(c => c.querySelector('header b').textContent === label);
-        const dt = new DataTransfer();
-        const fire = (el, type) => el.dispatchEvent(new DragEvent(type, { bubbles: true, cancelable: true, dataTransfer: dt }));
-        fire(card, 'dragstart'); fire(col, 'dragover'); fire(col, 'drop'); fire(card, 'dragend');
-    }""", [title, label])
+    card_by_title(page, title).get_by_label(re.compile("^Pindah ")).select_option(label=label)
 
 
 def test_kanban_move(page, ctx):
@@ -2233,6 +2227,10 @@ def test_no_horizontal_scroll(page, ctx):
     page.evaluate("() => { location.hash = '#/r/sales_invoice'; }")
     wait_rows(page)
     check_fits(page, ctx, "list")
+    page.locator(".rk-filterbar").get_by_role("button", name="Status").click()
+    page.locator(".rk-fpop").wait_for(timeout=5000)
+    check_fits(page, ctx, "list with a filter open")
+    page.locator(".rk-filterbar").get_by_role("button", name="Status").click()
     page.evaluate("() => { location.hash = '#/r/sales_invoice/new'; }")
     fill_invoice(page)
     check_fits(page, ctx, "invoice form with lines")
@@ -2354,7 +2352,10 @@ def main():
             br = pw.chromium.launch()
             for name, fn in scenarios:
                 ctx.allowed_http = []
-                bctx = br.new_context(viewport={"width": args.width, "height": height})
+                # a phone width is a phone: meta viewport honoured (is_mobile) and touch input, so a page without
+                # <meta name=viewport> lays out at ~980px and the phone rules never apply, as on a real device
+                phone = args.width < 600
+                bctx = br.new_context(viewport={"width": args.width, "height": height}, is_mobile=phone, has_touch=phone)
                 page = bctx.new_page()
                 errs, responses = [], []
                 # React is vendored (web/app/vendor): a request to a script CDN would be a regression

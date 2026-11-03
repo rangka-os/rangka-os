@@ -1,5 +1,8 @@
+<!doctype html>
+<html lang="id">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rangka</title>
-<meta name="claude:viewport-fit-sides" content="cover">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&display=swap">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="../design-system/bundle.css">
@@ -91,6 +94,10 @@
     body .rk-iconbtn { min-width: 40px; }
     body .rk-select-btn, body .rk-btn, body .rk-iconbtn { height: auto; min-height: 40px; }
     body .rk-seg button, body .rk-pager button { min-height: 40px; }
+    /* a filter's list opens under the whole bar at full width: anchored to its button it ran past the screen edge */
+    .ap-main .rk-filterbar { position: relative; }
+    .ap-main .rk-fwrap { position: static; }
+    .ap-main .rk-fpop { left: 0; right: 0; width: auto; }
   }
   /* approvals (approvals.js) */
   .ap-approvals { display: flex; flex-direction: column; gap: 8px; }
@@ -140,6 +147,7 @@
   .pv-cards { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
   .pv-card { background: var(--surface); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 4px; cursor: grab; font-size: 14px; color: var(--ink-2); box-shadow: var(--shadow-float); transition: background .1s; }
   .pv-card:hover { background: var(--soft); }
+  .pv-card-move { margin-top: 4px; font: inherit; font-size: 12px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 2px 4px; max-width: 100%; cursor: pointer; }
   .pv-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
   .pv-card.dragging { opacity: .5; }
   .pv-card b { font-size: 14px; font-weight: 400; color: var(--ink); line-height: 20px; }

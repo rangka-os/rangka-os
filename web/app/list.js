@@ -3,7 +3,8 @@
  * RangkaApp.ListView({model | route.model}) pages through GET /api/v1/r/<model> (q, filter, sort, limit, offset). Search is
  * debounced 300 ms, the quick filters become one CEL clause per filter (`field in ['a','b']`, joined with ` && `), the
  * column headers sort on the server and the page size is 20. A model with views.kanban gets a Papan / Daftar toggle.
- * RangkaApp.Kanban({model, rows, onMoved}) PATCHes {<group_by>: value} when a card is dropped on another column; the card
+ * RangkaApp.Kanban({model, rows, onMoved}) PATCHes {<group_by>: value} when a card is dropped on another column (or picked
+ * in the card's "Pindah ke…" select, for touch and keyboard); the card
  * moves at once and goes back when the kernel refuses (a 422 also toasts the first error and opens the record).
  * RangkaApp.cellFor(model, field, rec) renders one list cell; RangkaApp.ForbiddenState({what}) is the "no access" screen
  * every view shows on a 403 permission_denied.
@@ -161,6 +162,7 @@
     var ms = useState({}), moved = ms[0], setMoved = ms[1]; // optimistic: name → column value while the PATCH is in flight
     var inflight = useRef({});
 
+    function stop(e) { e.stopPropagation(); }
     function groupOf(r) { return Object.prototype.hasOwnProperty.call(moved, r.name) ? moved[r.name] : r[kb.group_by]; }
     function setOne(name, val) { setMoved(function (cur) { var n = Object.assign({}, cur); if (val === undefined) delete n[name]; else n[name] = val; return n; }); }
 
@@ -207,7 +209,12 @@
                 var v = r[c]; if (v == null || v === "") return null;
                 var fd = eng.field(m, c);
                 return h("div", { key: c, className: "pv-card-row" }, fd && fd.type === "currency" ? h("span", { className: "rk-amount" }, R.formatRupiah(v)) : cellFor(m, c, r, ctx));
-              }));
+              }),
+              // Touch screens and keyboards cannot drag: the same move as a drop, from a select on the card.
+              h("select", { className: "pv-card-move", value: "", "aria-label": "Pindah " + (r[kb.title] || r.name) + " ke",
+                  onClick: stop, onKeyDown: stop, onChange: function (e) { var to = e.target.value; if (to) move(r.name, to); } },
+                h("option", { value: "" }, "Pindah ke…"),
+                (gf.options || []).filter(function (x) { return x.value !== o.value; }).map(function (x) { return h("option", { key: x.value, value: x.value }, L(x.label)); })));
           })));
       }));
   }

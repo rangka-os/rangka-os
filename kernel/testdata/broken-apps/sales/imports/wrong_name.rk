@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/import.json
+name: other_name
+model: sales_invoice
+map:
+  customer: {value: Pelanggan, match: name}

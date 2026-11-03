@@ -102,3 +102,30 @@ func TestWorkspaceFilesValidate(t *testing.T) {
 		t.Errorf("only %d files checked", n)
 	}
 }
+
+func TestImportSchema(t *testing.T) {
+	s := Embedded()
+	if !s.Has("import") || s.Raw("import") == nil {
+		t.Fatal("kind import has no schema")
+	}
+	if !s.Has("model") {
+		t.Fatal("existing kinds must stay available")
+	}
+	ok := FromData(map[string]any{"name": "moka", "model": "outlet_sales", "map": map[string]any{"date": "Date"}})
+	if errs := s.Validate("import", ok); len(errs) != 0 {
+		t.Errorf("valid import reported %+v", errs)
+	}
+	bad := FromData(map[string]any{"name": "moka", "map": map[string]any{}})
+	got := map[string]string{}
+	for _, e := range s.Validate("import", bad) {
+		got[e.PathString()] = e.Message
+	}
+	if got["(root)"] != "'model' is a required property" || got["map"] != "{} does not have enough properties" || len(got) != 2 {
+		t.Errorf("missing model / empty map: %+v", got)
+	}
+	noValue := FromData(map[string]any{"name": "x", "model": "y", "map": map[string]any{"a": map[string]any{"match": "sku"}}})
+	errs := s.Validate("import", noValue)
+	if len(errs) != 1 || errs[0].PathString() != "map/a" || errs[0].Message != "'value' is a required property" {
+		t.Errorf("missing value: %+v", errs)
+	}
+}

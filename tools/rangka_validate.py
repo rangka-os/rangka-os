@@ -365,11 +365,16 @@ def kind_of(path):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
+    app_imports, site_imports = [], []
     for name, a in apps.items():
         for st, p in rkfile.listdir(os.path.join(a["dir"], "flows")):
             f = rep.load(p)
             if f is not None:
                 flows[st] = (name, p, f)
+        for st, p in rkfile.listdir(os.path.join(a["dir"], "imports")):
+            d = rep.load(p)
+            if d is not None:
+                app_imports.append((name, st, p, d))
         for st, p in rkfile.listdir(os.path.join(a["dir"], "roles")):
             r = rep.load(p)
             if r is not None:
@@ -386,6 +391,10 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                 d = rep.load(p)
                 if d is not None:
                     sdocs[f"{sub}/{st}.rk"] = (p, d)
+        for st, p in rkfile.listdir(os.path.join(site, "imports")):
+            d = rep.load(p)
+            if d is not None:
+                site_imports.append(("", st, p, d))
         for st, p in rkfile.listdir(os.path.join(site, "custom")):
             d = rep.load(p)
             if d is not None:
@@ -422,6 +431,12 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         parens(rep, p, "if", f.get("if"))
         check_steps(rep, p, "steps", f.get("steps", []), allmodels, conns)
 
+    # imports
+    for app, st, p, d in sorted(app_imports, key=lambda x: (x[0], x[1])):
+        if only and app not in only:
+            continue
+        check_import(rep, V, allmodels, st, p, d)
+
     # roles
     for app, st, p, r in roles:
         if only and app not in only:
@@ -439,7 +454,80 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
 
     if site:
         check_site(rep, V, root, apps, allmodels, sdocs)
+        for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
+            check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
+
+
+def import_map(d):
+    """(column or CEL text, match) per key of an import map: block, in file order, as meta/imports.go reads it."""
+    out = {}
+    if not isinstance(d, dict):
+        return out
+    for k, v in d.items():
+        match = ""
+        if isinstance(v, dict):
+            match = v.get("match") if isinstance(v.get("match"), str) else ""
+            v = v.get("value")
+        cel = v[1:].strip() if isinstance(v, str) and v.startswith("=") else ""
+        out[k] = (cel, match)
+    return out
+
+
+def check_import_map(rep, p, at, entries, model, fields, allmodels):
+    for k, (cel, match) in entries.items():
+        w = f"{at}/{k}"
+        f = fields.get(k)
+        if f is None and k not in SYSTEM_FIELDS:
+            rep.add("error", p, w, "unknown_field", f'"{k}" is not a field of {model}')
+        if cel:
+            parens(rep, p, w, cel)
+        if not match or f is None:
+            continue
+        if f.get("type") != "link":
+            rep.add("error", p, w + "/match", "not_a_link", f'"{k}" is not a link field')
+            continue
+        to = f.get("to")
+        if isinstance(to, str) and to in allmodels:
+            if match not in {x["name"] for x in allmodels[to][2].get("fields", []) if "name" in x} | SYSTEM_FIELDS:
+                rep.add("error", p, w + "/match", "unknown_field", f'"{match}" is not a field of {to}')
+
+
+def check_import(rep, V, allmodels, stem, p, d):
+    schema_errors(rep, V, "import", p, d)
+    if not isinstance(d, dict):
+        return
+    if d.get("name") != stem:
+        rep.add("error", p, "name", "name_mismatch", f'import name "{d.get("name")}" must match the file name "{stem}"')
+    model = d.get("model")
+    if not isinstance(model, str) or not model:
+        return
+    if model not in allmodels:
+        rep.add("error", p, "model", "unknown_model", f'"{model}" is not a model{suggest(model, allmodels)}')
+        return
+    fields = {f["name"]: f for f in allmodels[model][2].get("fields", []) if "name" in f}
+    lines = d.get("lines") if isinstance(d.get("lines"), dict) else None
+    child, child_name = None, ""
+    if lines and isinstance(lines.get("field"), str) and lines["field"]:
+        lf = lines["field"]
+        if lf not in fields:
+            rep.add("error", p, "lines/field", "unknown_field", f'"{lf}" is not a field of {model}')
+        elif fields[lf].get("type") != "table":
+            rep.add("error", p, "lines/field", "not_a_table", f'"{lf}" is not a table field of {model}')
+        else:
+            of = fields[lf].get("of")
+            if isinstance(of, str) and of in allmodels:
+                child_name = of
+                child = {f["name"]: f for f in allmodels[of][2].get("fields", []) if "name" in f}
+    check_import_map(rep, p, "map", import_map(d.get("map")), model, fields, allmodels)
+    if lines and child is not None:
+        check_import_map(rep, p, "lines/map", import_map(lines.get("map")), child_name, child, allmodels)
+    if d.get("per") == "outlet":
+        o = fields.get("outlet")
+        if not o or o.get("type") != "link" or o.get("to") != "outlet":
+            rep.add("error", p, "per", "import_per_outlet", f'per: outlet needs a link field "outlet" to outlet on {model}')
+        if not d.get("key"):
+            rep.add("warn", p, "per", "import_no_key", "per: outlet imports should set key so overlapping files are not imported twice")
 
 
 def check_steps(rep, p, at, steps, allmodels, conns):

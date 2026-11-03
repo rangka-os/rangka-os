@@ -23,6 +23,34 @@ require_env() {
   if [ -z "${BACKUP_AGE_RECIPIENT:-}" ] && [ "${BACKUP_ALLOW_PLAINTEXT:-0}" != 1 ]; then
     die "BACKUP_AGE_RECIPIENT is not set (BACKUP_ALLOW_PLAINTEXT=1 only for local debugging)"
   fi
+  case "${BACKUP_METHOD:-pg_dump}" in
+    pg_dump|auto) ;;
+    rangka) has_rangka_backup || die "BACKUP_METHOD=rangka but this rangka binary has no 'backup' command (needs the S1 release)" ;;
+    *) die "BACKUP_METHOD must be pg_dump, rangka or auto (got '${BACKUP_METHOD}')" ;;
+  esac
+}
+
+# pick_method: pg_dump (default), rangka (required) or auto (rangka when the binary has it, else pg_dump).
+pick_method() {
+  case "${BACKUP_METHOD:-pg_dump}" in
+    rangka) echo rangka ;;
+    auto) if has_rangka_backup; then echo rangka; else echo pg_dump; fi ;;
+    *) echo pg_dump ;;
+  esac
+}
+
+# check_no_links <pilot>: restore.sh refuses symlinks and hardlinks in an archive, so refuse them here,
+# the same night, naming the path.
+check_no_links() {
+  local p="$1" name found
+  for name in site data apps connectors; do
+    [ -d "$PILOTS_ROOT/$p/$name" ] || continue
+    found="$(find "$PILOTS_ROOT/$p/$name" \( -type l -o \( -type f -links +1 \) \) -print -quit)"
+    if [ -n "$found" ]; then
+      log "$p: $found is a symlink or hardlink; the archive would not restore. Replace it with a plain file or move it out of $name/"
+      return 1
+    fi
+  done
 }
 
 # pilot_password <pilot>: <PILOT>_DB_PASSWORD from the environment.
@@ -66,13 +94,14 @@ dump_pg() {
 }
 
 # dump_rangka <pilot> <url> <work dir>: `rangka backup`, run in the pilot folder; counts before and after,
-# one retry when the data changed in between.
+# one retry when the data changed in between. Called as `dump_rangka ... || return 1`, which switches errexit
+# off in here: every step checks its own status.
 dump_rangka() {
   local p="$1" url="$2" dir="$3" attempt before after secret_url org_var org_args
   for attempt in 1 2; do
-    before="$(table_stats "$url")"
+    before="$(table_stats "$url")" || { log "table stats failed"; return 1; }
     # the kernel takes the password from DATABASE_URL (environment only, never argv)
-    secret_url="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}"
+    secret_url="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}" || return 1
     # S1 CLI: `rangka backup [--out file] [--org id] [--files dir]` writes a tar.gz with its own manifest and sums;
     # untested here until the binary ships it. Files live in data/files (system.rk files.path).
     org_args=()
@@ -81,9 +110,9 @@ dump_rangka() {
     (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
       rangka backup --out "$dir/rangka.backup" "${org_args[@]}" --files "$PILOTS_ROOT/$p/data/files") \
       || { log "rangka backup failed"; return 1; }
-    after="$(table_stats "$url")"
+    after="$(table_stats "$url")" || { log "table stats failed"; return 1; }
     if [ "$before" = "$after" ]; then
-      printf '%s\n' "$after" >"$dir/stats.tsv"
+      printf '%s\n' "$after" >"$dir/stats.tsv" || return 1
       return 0
     fi
     log "data changed during rangka backup (attempt $attempt)"
@@ -134,15 +163,16 @@ backup_pilot() {
   trap 'rm -rf "${WORK_DIR:-}" "${PART_FILE:-}"' EXIT
   trap 'exit 143' TERM INT
 
-  if has_rangka_backup; then
-    method=rangka
+  check_no_links "$p" || return 1
+  method="$(pick_method)"
+  if [ "$method" = rangka ]; then
     dump_file=rangka.backup
     dump_rangka "$p" "$url" "$WORK_DIR" || return 1
   else
-    method=pg_dump
     dump_file=db.dump
     dump_pg "$url" "$WORK_DIR" || return 1
   fi
+  require_stats "$WORK_DIR/stats.tsv" || return 1
   tar_dir "$WORK_DIR/site.tar" "$p" site
   tar_dir "$WORK_DIR/files.tar" "$p" data
   tar_dir "$WORK_DIR/apps.tar" "$p" apps connectors # lets a second machine boot the kernel from the archive alone
@@ -151,9 +181,10 @@ backup_pilot() {
   stats_to_tables_json <"$WORK_DIR/stats.tsv" >"$WORK_DIR/tables.json"
   jq -n --arg pilot "$p" --arg created "$(date -u +%Y-%m-%dT%H:%M:%SZ)" --arg method "$method" \
     --arg rv "$(rangka version 2>/dev/null | head -1 || true)" \
+    --arg tag "${RANGKA_TAG:-}" --arg image "${RANGKA_IMAGE:-}" \
     --arg pv "$pg_version" \
     --slurpfile tables "$WORK_DIR/tables.json" \
-    '{pilot: $pilot, created_at: $created, method: $method, rangka_version: $rv, postgres_version: $pv, tables: $tables[0]}' \
+    '{pilot: $pilot, created_at: $created, method: $method, rangka_version: $rv, rangka_tag: $tag, rangka_image: $image, postgres_version: $pv, tables: $tables[0]}' \
     >"$WORK_DIR/manifest.json"
   (cd "$WORK_DIR" && sha256sum "$dump_file" site.tar files.tar apps.tar manifest.json >SHA256SUMS)
   (cd "$WORK_DIR" && tar -cf archive.tar manifest.json "$dump_file" site.tar files.tar apps.tar SHA256SUMS)

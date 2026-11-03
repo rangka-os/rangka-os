@@ -12,6 +12,8 @@ has_rangka_backup() {
 
 # SQL printing one line per base table outside pg_catalog/information_schema: schema.table, rows, md5.
 # One statement per table via query_to_xml; md5 of the rows as text, ordered, so it is order independent.
+# The md5 aggregates a table's rows into one string_agg value, so a table whose text form exceeds 1 GB
+# (the Postgres limit for one value) makes the query fail and the backup with it: loud, not silent.
 # Must run inside a transaction: the SET LOCALs pin the text format of dates, floats and bytea so the
 # checksums are the same on the source and on a restored copy.
 stats_sql() {
@@ -40,6 +42,14 @@ SQL
 table_stats() {
   { echo 'BEGIN ISOLATION LEVEL REPEATABLE READ READ ONLY;'; stats_sql; echo 'COMMIT;'; } \
     | psql -qAtX -v ON_ERROR_STOP=1 -F $'\t' "$1"
+}
+
+# require_stats <stats.tsv>: a backup whose table list is empty proves nothing and must not be uploaded.
+require_stats() {
+  if [ "$(grep -c . "$1" 2>/dev/null || true)" -lt 1 ]; then
+    echo "backup: no table statistics were recorded (empty $1); refusing to continue" >&2
+    return 1
+  fi
 }
 
 # stats_to_tables_json: stdin = table_stats output, stdout = {"schema.table": {"rows": n, "md5": "..."}}.

@@ -1,9 +1,16 @@
 # juragan.ai: two Rangka pilots (jasa, fnb) on one VM. Secrets come from .env (see .env.example).
 name: juragan
 
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
 x-kernel: &kernel
   image: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
   restart: unless-stopped
+  logging: *logging
   command: ["serve"]
   depends_on:
     postgres:
@@ -13,6 +20,7 @@ services:
   postgres:
     image: postgres:16
     restart: unless-stopped
+    logging: *logging
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
       JASA_DB_PASSWORD: ${JASA_DB_PASSWORD:?}
@@ -61,6 +69,7 @@ services:
   caddy:
     image: caddy:2
     restart: unless-stopped
+    logging: *logging
     environment:
       JASA_HOST: ${JASA_HOST:?}
       FNB_HOST: ${FNB_HOST:?}
@@ -78,6 +87,7 @@ services:
   # Nightly backup: `docker compose run --rm backup all` (see systemd/). Profile tools: never started by `up`.
   backup:
     profiles: ["tools"]
+    logging: *logging
     build:
       context: ./backup
       args:
@@ -93,6 +103,9 @@ services:
       JASA_ORG: ${JASA_ORG:-}
       FNB_ORG: ${FNB_ORG:-}
       BACKUP_BUCKET: ${BACKUP_BUCKET:-}
+      BACKUP_METHOD: ${BACKUP_METHOD:-pg_dump}
+      RANGKA_TAG: ${RANGKA_TAG:-}
+      RANGKA_IMAGE: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
       BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
       BACKUP_ALLOW_PLAINTEXT: ${BACKUP_ALLOW_PLAINTEXT:-0}
       BACKUP_KEEP_LOCAL: ${BACKUP_KEEP_LOCAL:-7}
@@ -109,7 +122,7 @@ services:
     volumes:
       - ${PILOTS_DIR:?}/jasa:/pilots/jasa:ro
       - ${PILOTS_DIR:?}/fnb:/pilots/fnb:ro
-      - ${BACKUP_DIR:-./backups}:/backups
+      - ${BACKUP_DIR:-/opt/juragan/backups}:/backups
 
 volumes:
   pgdata:

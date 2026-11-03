@@ -83,6 +83,8 @@ main() {
     *) die "unknown backup method '$method'" ;;
   esac
   [ -f "$dump_file" ] || die "$dump_file missing in the archive"
+  # the drill compares these with its own release (empty in archives made before they were recorded)
+  log "manifest: rangka_tag=$(jq -r '.rangka_tag // ""' manifest.json) rangka_image=$(jq -r '.rangka_image // ""' manifest.json)"
   [ "$(jq '.tables | length' manifest.json)" -ge 1 ] || die "manifest lists no tables: not a usable backup"
   # apps.tar is absent in archives made before it existed; the others are always present
   [ ! -f site.tar ] || check_tar site.tar '^site(/|$)'

@@ -170,6 +170,9 @@ Each step has the check that proves it.
    `backup: <pilot>: uploaded to offbox:<bucket>/<pilot>/<name>`, then `backup: done`. Check the bucket shows
    `jasa/` and `fnb/` with `.tar.age` objects, and that the healthchecks.io check turned green.
 
+   If the bucket has Object Lock, every PutObject must carry a Content-MD5 header; rclone sends it on single-part
+   uploads, and this first backup landing in the bucket proves it works.
+
 ## 4. Pilot bundle requirements (S9)
 
 Each pilot's `site/system.rk` must have:
@@ -218,9 +221,11 @@ hand any time: `docker compose run --rm backup all` (or `jasa` / `fnb`).
    docker compose ps
    ```
 4. Check `docker compose logs --tail 50 jasa fnb` and the HTTPS check from section 3, step 7.
-5. After the first release that has `rangka backup` / `rangka restore` (S1, contract 0005 section 2), the scripts
-   switch to it automatically (they look for `rangka backup` in `rangka help`); until then they use
-   `pg_dump` / `pg_restore`. Re-run the restore drill (section 7) after that release.
+5. The nightly dump uses `pg_dump` (`BACKUP_METHOD=pg_dump`, the default), never by itself anything else. After
+   the first release that has `rangka backup` / `rangka restore` (S1, contract 0005 section 2), switch to it only
+   deliberately: set `BACKUP_METHOD=rangka` (`auto` picks it when the binary has it; `rangka` fails when it does
+   not), run one backup by hand (`docker compose run --rm backup all`), then a restore drill (section 7) that
+   passes on that archive. Only then leave it on. Revert by removing the line.
 
 **Rollback:** set the previous tag in `.env`, `docker compose up -d`. If the new release's migration changed data
 destructively, the old binary is not enough: restore from the pre-upgrade archive (section 6).
@@ -238,6 +243,10 @@ procedure is modelled on `restore-drill.sh`.
 You need the age private key on this machine for the duration of the restore only (from the password manager,
 for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
 
+0. **Stop the nightly timer** so no backup runs during the restore (start it again in the last step):
+   ```bash
+   sudo systemctl stop juragan-backup.timer
+   ```
 1. **Get the archive** into `BACKUP_DIR` (set to `/opt/juragan/backups` in section 2; mounted at `/backups` in the backup container).
    The local archive of the night you want is already in `BACKUP_DIR/<pilot>/`. For an off-box one, copy it in
    with the same rclone settings the backup uses:
@@ -284,6 +293,12 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
    `restore: unpacked apps, site and files into /restore/<pilot>`. Any `MISSING`, `MISMATCH` or
    `restored data does not match the manifest` means do not start the pilot: keep the old database and folders,
    and escalate.
+
+   If `restore.sh` fails after `pg_restore` (a folder or table-comparison error, a killed run), the database and
+   the folders are no longer empty and it refuses a rerun. Empty them again, then run step 5 once more: stop the
+   pilot (it should be stopped), drop and recreate the database as in step 3 (the failed attempt is worthless, so
+   `DROP DATABASE <pilot>;` first, then the same `CREATE DATABASE` and `REVOKE` statements), and move the partly
+   filled folders aside as in step 4 (use a new `<pilot>-old-<yyyymmdd>b` name).
 6. **Fix ownership and start:**
    ```bash
    P="$(grep '^PILOTS_DIR=' .env | cut -d= -f2-)/<pilot>"
@@ -295,6 +310,11 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
    `200`, `docker compose logs --tail 50 <pilot>` is clean, and a login works.
 8. Remove the age key: `shred -u <path to age key>` (or remove it from the machine). Remove the copied-in
    archive too (`sudo rm -f /opt/juragan/backups/in/<archive name>`; it is encrypted, but there is no reason to keep it).
+   Start the nightly timer again and confirm it is scheduled:
+   ```bash
+   sudo systemctl start juragan-backup.timer
+   systemctl list-timers juragan-backup.timer
+   ```
 
 ## 7. Restore drill on a second machine
 
@@ -315,8 +335,10 @@ cd deploy/juragan
 ./restore-drill.sh --pilot all --env <drill env file> --identity <age key file>
 ```
 
-Options: `--pilot jasa|fnb|all`, `--archive <file>` (needs one pilot), `--log <file>`, `--keep`. Per pilot the
-drill fetches the newest archive, starts a throwaway compose project (`juragan-drill-<epoch>`, own Postgres,
+Options: `--pilot jasa|fnb|all`, `--archive <file>` (needs one pilot), `--log <file>`, `--max-age <hours>`
+(default 48), `--keep`. Per pilot the drill prints the archive's age (from the UTC stamp in its name) and fails
+when it is older than `--max-age`: that means the nightly backup has stopped. It also warns when the archive was
+made with another `RANGKA_TAG` or image than the drill env file names. Per pilot the drill fetches the newest archive, starts a throwaway compose project (`juragan-drill-<epoch>`, own Postgres,
 random passwords, no Caddy), runs `restore.sh`, requires `migrate --dry-run` to plan 0 statements, boots the
 kernel and expects `GET /.well-known/openid-configuration` = 200. The project and its temp folder are removed on
 exit.

@@ -137,6 +137,12 @@ section_stack() {
     bad "compose config failed but did not name JASA_DB_PASSWORD: $err"
   fi
 
+  # every service, the backup one included, rotates its logs (json-file, 10m x 5)
+  local logcfg
+  logcfg="$(docker compose -p "$PROJECT" --env-file "$WORK/.env" -f "$DEPLOY/compose.yaml" --profile tools config --format json \
+    | jq -r '.services | to_entries | map("\(.key)=\(.value.logging.driver)/\(.value.logging.options["max-size"])/\(.value.logging.options["max-file"])") | sort | join(" ")')" || logcfg=""
+  same "every service has json-file logging 10m x 5" "$logcfg" "backup=json-file/10m/5 caddy=json-file/10m/5 fnb=json-file/10m/5 jasa=json-file/10m/5 postgres=json-file/10m/5"
+
   dc up -d postgres >/dev/null
   local seed_out
   for p in jasa fnb; do
@@ -208,7 +214,7 @@ section_stack() {
 # Runs the backup container; stdout of the container, exit status preserved.
 run_backup() { dc run --rm -T backup "$@"; }
 
-# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok members=ok apps=ok nobackups=ok rk=<n> total=<rows> lead=<rows> method=<m>".
+# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok members=ok apps=ok nobackups=ok rk=<n> total=<rows> lead=<rows> method=<m> tag=<t> image=<i>".
 # shellcheck disable=SC2016 # the script runs inside the container
 INSPECT='set -euo pipefail
 d="$(mktemp -d)"; cd "$d"
@@ -217,7 +223,7 @@ sha256sum -c SHA256SUMS >/dev/null && printf "sha=ok "
 [ "$(ls | LC_ALL=C sort | tr "\n" " ")" = "SHA256SUMS apps.tar db.dump files.tar manifest.json site.tar " ] && printf "members=ok "
 tar -tf apps.tar | grep -q "^apps/" && printf "apps=ok "
 [ -z "$(for t in site files apps; do tar -tf $t.tar; done | grep "^backups")" ] && printf "nobackups=ok "
-jq -r "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method)\"" manifest.json'
+jq -r "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method) tag=\(.rangka_tag) image=\(.rangka_image)\"" manifest.json'
 inspect_archive() { # inspect_archive <pilot> <archive file name>
   dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" --entrypoint bash backup -c "$INSPECT" _ "$1" "$2"
 }
@@ -332,6 +338,33 @@ SHIM
   if [ -z "$(find "$WORK/backups/jasa" -name '.work.*' -o -name '*.part')" ]; then ok "docker stop leaves no .work.* or .part"; else bad "leftovers after docker stop: $(find "$WORK/backups/jasa" -name '.work.*' -o -name '*.part')"; fi
   same "docker stop: nothing uploaded" "$(offbox_list jasa)" "$before_remote"
   same "docker stop: no ping" "$(ping_hits)" "$hits_good"
+
+  # manifest records the release the archive was made with
+  if [[ "$s_jasa" == *"tag=local image=rangka:local"* ]]; then ok "manifest records rangka_tag and rangka_image"; else bad "manifest tag/image: $s_jasa"; fi
+
+  # BACKUP_METHOD=rangka against a binary without `rangka backup` fails at once and clearly; a bogus value too
+  before_local="$(local_archives jasa | wc -l | tr -d ' ')"
+  if out="$(dc run --rm -T -e BACKUP_METHOD=rangka backup jasa 2>&1)"; then bad "BACKUP_METHOD=rangka should fail on this binary"; elif grep -q "BACKUP_METHOD=rangka but this rangka binary has no 'backup' command" <<<"$out"; then ok "BACKUP_METHOD=rangka fails clearly on a binary without rangka backup"; else bad "BACKUP_METHOD=rangka message: $out"; fi
+  if out="$(dc run --rm -T -e BACKUP_METHOD=bogus backup jasa 2>&1)"; then bad "BACKUP_METHOD=bogus should fail"; elif grep -q 'BACKUP_METHOD must be' <<<"$out"; then ok "unknown BACKUP_METHOD is refused"; else bad "BACKUP_METHOD=bogus message: $out"; fi
+  same "refused method: no new local archive, nothing uploaded" "$(local_archives jasa | wc -l | tr -d ' ')/$(offbox_list jasa)" "$before_local/$before_remote"
+
+  # a backup with no table statistics must never be accepted (require_stats guards both methods)
+  : >"$WORK/stats.empty"
+  printf 'public.t\t1\tabc\n' >"$WORK/stats.good"
+  if require_stats "$WORK/stats.empty" 2>/dev/null; then bad "require_stats accepted an empty stats file"; else ok "require_stats rejects an empty stats file"; fi
+  if require_stats "$WORK/stats.good" 2>/dev/null; then ok "require_stats accepts one table"; else bad "require_stats rejected a valid stats file"; fi
+  # wiring check (a real run would need a database without tables)
+  # shellcheck disable=SC2016 # literal text of backup.sh
+  if grep -q 'require_stats "\$WORK_DIR/stats.tsv"' "$DEPLOY/backup/backup.sh"; then ok "backup.sh applies require_stats after either method"; else bad "backup.sh does not call require_stats"; fi
+
+  # a symlink under site/ makes the backup fail the same night: named path, no archive, no upload, no ping
+  docker run --rm -v "$WORK/pilots:/p" alpine:3.20 ln -s /etc/passwd /p/jasa/site/evil-link
+  before_local="$(local_archives jasa | wc -l | tr -d ' ')"
+  sleep 2
+  if out="$(run_backup jasa 2>&1)"; then bad "backup with a symlink in site/ should fail"; elif grep -q '/pilots/jasa/site/evil-link is a symlink or hardlink' <<<"$out"; then ok "symlink in site/ fails the backup and names the path"; else bad "symlink message: $out"; fi
+  same "symlink: no new local archive, nothing uploaded" "$(local_archives jasa | wc -l | tr -d ' ')/$(offbox_list jasa)" "$before_local/$before_remote"
+  same "symlink: no ping" "$(ping_hits)" "$hits_good"
+  docker run --rm -v "$WORK/pilots:/p" alpine:3.20 rm -f /p/jasa/site/evil-link
 }
 
 drill_projects() { docker ps -a --format '{{.Names}}' | grep -c '^juragan-drill-' || true; }
@@ -361,8 +394,43 @@ section_drill() {
   local seq
   seq="$(grep -oE '^(restore ok: [0-9]+ tables, [0-9]+ rows match|DRILL PASSED [a-z]+)' <<<"$out" | sed -E 's/^restore ok.*/restore ok/' | tr '\n' ',')"
   same "each pilot: restore ok (manifest compared) right before its DRILL PASSED" "$seq" "restore ok,DRILL PASSED jasa,restore ok,DRILL PASSED fnb,"
+  if grep -q 'archive is [0-9]* hour(s) old (limit 48)' <<<"$out"; then ok "drill prints the archive age with the default limit"; else bad "no archive age line"; fi
+  if grep -q 'WARNING archive was made with' <<<"$out"; then bad "release warning on a matching release"; else ok "no release warning when tag and image match"; fi
   same "drill.log has both lines" "$(grep -c '^DRILL PASSED' "$WORK/drill.log" 2>/dev/null || true)" 2
   same "no drill project left after success" "$(drill_projects)/$(drill_networks)" 0/0
+
+  # an archive older than --max-age (default 48 h) fails before any restore; its age comes from the UTC stamp in the name
+  local old="jasa-20200101T000000Z.tar.age"
+  cp "$(local_archives jasa | tail -1)" "$WORK/$old"
+  rc=0; out="$("${drill[@]}" --pilot jasa --archive "$WORK/$old" 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'older than --max-age 48 hours' <<<"$out" && ! grep -q 'restore:' <<<"$out"; then
+    ok "archive from 2020 fails the default 48 h age check before restoring"
+  else
+    bad "old archive: rc=$rc: $out"
+  fi
+  rm -f "$WORK/$old"
+  # three hours old by name against --max-age 2 fails; the stamp is built with python (date flags differ per OS)
+  old="jasa-$(python3 -c 'import datetime as d; print((d.datetime.now(d.timezone.utc) - d.timedelta(hours=3)).strftime("%Y%m%dT%H%M%SZ"))').tar.age"
+  cp "$(local_archives jasa | tail -1)" "$WORK/$old"
+  rc=0; out="$("${drill[@]}" --pilot jasa --archive "$WORK/$old" --max-age 2 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'archive is 3 hour(s) old (limit 2)' <<<"$out" && grep -q 'older than --max-age 2 hours' <<<"$out"; then
+    ok "archive 3 h old fails --max-age 2 and prints its age"
+  else
+    bad "3 h old archive: rc=$rc: $out"
+  fi
+  rm -f "$WORK/$old"
+  same "no drill project left after the age checks" "$(drill_projects)/$(drill_networks)" 0/0
+
+  # a drill on another release than the archive's manifest records only warns
+  sed 's/^RANGKA_TAG=.*/RANGKA_TAG=other/' "$WORK/.env" >"$WORK/.env.othertag"
+  rc=0; out="$("$DEPLOY/restore-drill.sh" --env "$WORK/.env.othertag" --identity "$WORK/age-identity.txt" --log "$WORK/drill.log" \
+    --pilot fnb --archive "$(local_archives fnb | tail -1)" 2>&1)" || rc=$?
+  if [ "$rc" = 0 ] && grep -q 'fnb: WARNING archive was made with RANGKA_TAG=local, this drill runs RANGKA_TAG=other' <<<"$out"; then
+    ok "different RANGKA_TAG: warning printed, drill still passes"
+  else
+    bad "release warning: rc=$rc: $out"
+  fi
+  same "no drill project left after the release-warning drill" "$(drill_projects)/$(drill_networks)" 0/0
 
   # tampering: a flipped byte in the encrypted archive fails at decryption (age authenticates every chunk)
   local newest tdir="$WORK/tamper"

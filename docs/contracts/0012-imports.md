@@ -73,7 +73,8 @@ lines:
   then runs the creates as a dry run in a transaction that is rolled back (so model rules and required fields are
   reported now, not at commit), stores the upload as an import log entry, and returns
   `{id, import, rows, preview[], errors[], skipped, duplicate}`:
-  - `rows`: data rows read; `preview`: the first 20 records as they would be created (parent with lines);
+  - `rows`: data rows read; `preview`: the first 20 records as they would be created (parent with lines), keys in
+    the model's field order (lines in the child model's);
   - `errors`: `[{row, column, message}]`, `row` the spreadsheet row number (header row included, so it matches
     Excel), `message` in Bahasa Indonesia, e.g. `Kolom "Quantity" harus angka, isinya "dua"`,
     `Item dengan sku "TH-XX" tidak ditemukan`, `Kolom "Gross Sales" tidak ada di file`;
@@ -86,8 +87,8 @@ lines:
   entry is already committed. Returns the entry with `records` (the names created).
 - `GET /meta` lists the imports of installed apps and the site under `imports: {<name>: {name, model, label, source,
   per, app}}` (site imports have `app: ""`), so the web app can offer an import wizard.
-- `GET /imports/{import}/{id}` returns the entry. `GET /imports/{import}` lists the org's 50 most recent entries
-  (without `preview`).
+- `GET /imports/{import}/{id}` returns the entry. `GET /imports/{import}` returns `{data, total}` (as `/r/{model}`
+  and `/approvals` do): `data` holds the org's 50 most recent entries without `preview`, `total` counts all of them.
 - A file with no data rows previews with `rows: 0`; its commit is refused with 422 `import_empty`.
 - An upload over 20 MB gets 413 `too_large`. A commit whose rows were imported by another commit after its preview
   gets 409 `already_imported` ("Sebagian baris sudah diimpor, unggah ulang file").

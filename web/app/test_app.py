@@ -832,11 +832,12 @@ def test_dashboard_numbers(page, ctx):
     page.wait_for_function("(h) => location.hash === h", arg=hash_, timeout=5000)
     # switching the period asks the kernel for it
     page.locator(".rk-numcard").first.wait_for(timeout=10000)
-    mark = len(seen)
-    page.get_by_role("button", name="90 hari", exact=True).click()
-    page.wait_for_function("() => document.querySelector('.rk-seg [aria-pressed=true]').textContent === '90 hari'", timeout=5000)
-    page.locator(".rk-numcard").first.wait_for(timeout=10000)
-    assert any(f"/dashboards/{name}" in u and "period=90" in u for _, u in seen[mark:]), "90 hari sends period=90"
+    with page.expect_response(lambda r: "/api/v1/dashboards/" in r.url and "period=90" in r.url) as resp:
+        page.get_by_role("button", name="90 hari", exact=True).click()
+    assert resp.value.status == 200, "the 90-day request is answered"
+    # the view re-rendered from that response: period stamped on the content, loading finished
+    page.wait_for_selector('.rk-shell-content[data-period="90"][data-loading="false"]', timeout=10000)
+    assert page.locator(".rk-seg [aria-pressed=true]").inner_text() == "90 hari", "90 hari is selected"
     st, body90 = http.call("GET", f"/api/v1/dashboards/{name}?period=90")
     for w in [w for w in body90["widgets"] if w.get("type") == "number" and not w.get("hidden") and not w.get("error")]:
         want = ctx.rupiah_text(w["value"]) if w.get("rupiah") else fmt_count(w["value"])

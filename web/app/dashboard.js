@@ -111,7 +111,7 @@
       if (r && r.hidden) return null;
       return widgetCard(ctx, w, r, days, loading || !data, ctx.navigate);
     }).filter(Boolean);
-    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, h(R.DashGrid, null, cards)));
+    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" }, h(R.DashGrid, null, cards)));
   }
 
   RA.DashboardView = DashboardView;

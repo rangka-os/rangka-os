@@ -144,7 +144,8 @@ func loadLetterheads(dir string, ld *loader, s *Site, r *Registry) {
 // the org's data. An org listed in orgs: is its own legal entity: its data is only its own config.org
 // (legal_name, else the org's name from orgs:; npwp), and without its own letterheads/<org>.rk it gets no
 // letterhead file at all (the site's letterhead.rk holds another entity's bank and signatory). An unlisted org
-// uses the site's org: and letterhead.rk. The data fills legal_name and npwp a letterhead file leaves out. logo is an absolute path inside the site folder, or absent when it escapes the folder or the file is
+// uses the site's org: and letterhead.rk. The data fills legal_name and npwp a letterhead file leaves out.
+// logo is an absolute path inside the site folder, or absent when it escapes the folder or the file is
 // missing. The result is a deep copy.
 func (r *Registry) Letterhead(org string) map[string]any {
 	if r.Site == nil {

@@ -50,8 +50,8 @@ as the reference statement does.
 ## Organisation data
 
 `.Org` holds the caller's organisation: its `org:` settings in `config.rk` (`legal_name`, `npwp`, `pkp`) plus
-`name` and `code` from `orgs.<id>`. `.Org.pkp` comes from `org.pkp`, else from `tax.pkp`. The reference invoice and quotation print the DPP and PPN rows only when
-`.Org.pkp` is true.
+`name` and `code` from `orgs.<id>`. `.Org.pkp` comes from `org.pkp`, else from `tax.pkp`. The reference invoice
+and quotation print the DPP and PPN rows only when `.Org.pkp` is true.
 
 Per-organisation settings are deep-merged over the site's, with two exceptions. `tax: {ppn_rate: 11}` keeps the
 site's `tax.pkp`. But `org:` and `numbering` replace whole: each organisation listed in `orgs:` is its own legal
@@ -93,8 +93,8 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 ```
 
 Rangka picks `letterheads/<org>.rk` for the caller's organisation, then (only for an organisation not listed in
-`orgs:`) `letterhead.rk`, then builds one from the organisation's settings (`org.legal_name`, else the org's `name`, and `org.npwp`), which also fill a letterhead
-file that leaves them out. The partials `letterhead`, `bank_accounts` and `signature` render it.
+`orgs:`) `letterhead.rk`, then builds one from the organisation's settings (`org.legal_name`, else the org's
+`name`, and `org.npwp`), which also fill a letterhead file that leaves them out. The partials `letterhead`, `bank_accounts` and `signature` render it.
 
 ## Helpers
 

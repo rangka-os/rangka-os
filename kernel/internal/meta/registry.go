@@ -476,6 +476,7 @@ func (r *Registry) SystemConfig(path string) any {
 
 // AsMap and helpers are exported for other packages reading raw metadata.
 func AsMap(v any) map[string]any            { return asMap(v) }
+func DeepCopy(v any) any                    { return deepCopy(v) }
 func AsList(v any) []any                    { return asList(v) }
 func Str(m map[string]any, k string) string { return str(m, k) }
 func StrList(v any) []string                { return strList(v) }

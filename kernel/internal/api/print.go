@@ -134,20 +134,26 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 }
 
 // printOrg is .Org (contract 0008 §2): the org's identity (legal_name, npwp, pkp), plus name and code from its
-// orgs: entry. An org listed in orgs: is its own legal entity and takes only its own config.org; the site's org:
-// applies to unlisted orgs. pkp falls back to the (merged) tax.pkp when org: leaves it out.
+// orgs: entry. An org listed in orgs: is its own legal entity and takes only a deep copy of its own config.org,
+// with legal_name falling back to its orgs: name; the site's org: applies to unlisted orgs. pkp falls back to
+// the (merged) tax.pkp when org: leaves it out.
 func printOrg(reg *meta.Registry, org string) map[string]any {
-	out := map[string]any{}
+	var src map[string]any
 	o := reg.Orgs[org]
-	src := meta.AsMap(reg.OrgConfig(org, "org")) // a deep copy
 	if o != nil {
-		src = meta.AsMap(meta.AsMap(o.Config)["org"])
+		src = meta.AsMap(meta.DeepCopy(o.Config["org"]))
+	} else {
+		src = meta.AsMap(reg.OrgConfig(org, "org")) // already a deep copy
 	}
+	out := map[string]any{}
 	for k, v := range src {
 		out[k] = v
 	}
 	if o != nil {
 		out["name"], out["code"] = o.Name, o.Code
+		if meta.Str(out, "legal_name") == "" {
+			out["legal_name"] = o.Name
+		}
 	}
 	if _, ok := out["pkp"]; !ok {
 		if v, ok := reg.OrgConfig(org, "tax.pkp").(bool); ok {

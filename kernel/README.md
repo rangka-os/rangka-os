@@ -4,7 +4,7 @@ The Rangka OS server: one Go binary that validates `.rk` metadata, migrates Post
 document lifecycle, serves the REST API, realtime events, the queue and scheduler, Rangka ID (sessions,
 API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The binding contract is
 [`../docs/contracts.md`](../docs/contracts.md); the reference semantics are the browser prototype
-(`../web/prototype/engine.js`) and `../tools/rangka_validate.py`.
+(`../web/app/engine.js`) and `../tools/rangka_validate.py`.
 
 ```
 make test       # all tests against a throwaway Postgres (started and removed by scripts/pgtemp.sh)
@@ -13,8 +13,10 @@ make validate   # rangka validate on rangka-apps/apps + sites/kopi-senja + rangk
 make compare-python   # Go vs rangka_validate.py on the real metadata and two broken copies (must be identical)
 ```
 
-Then open http://localhost:8080/prototype/, http://localhost:8080/api/v1/meta, or point an MCP client at
-`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`.
+Then open http://localhost:8080/app/, http://localhost:8080/api/v1/meta, or point an MCP client at
+`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`. More people:
+`rangka user add --db $DATABASE_URL --org kopi-senja --email <e> --password <p> --role <role>` (see `rangka user` in
+`cmd/rangka/user.go`; `--reset-password` and `--create-org` are opt-in).
 
 ## Stand-ins (for now)
 
@@ -97,7 +99,7 @@ rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <di
 errors. `migrate` and `serve` refuse metadata with errors. `seed` creates the org (the site directory name),
 loads `fixtures/*.rk` the way the prototype loads its seed (names and docstatus kept, defaults and computed
 fields filled) and the owner `ceo@saga.co.id` / `rangka-demo` mapped to user record `USR-001`. `serve`
-serves `rangka-os/web` at `/` (prototype at `/prototype/`).
+serves `rangka-os/web` at `/` (app at `/app/`, `/` redirects there).
 
 `migrate --dry-run` prints each statement with its risk and changes nothing; destructive steps need
 `--allow-destructive`; `--rollback n` undoes the last n migrations. `backup` writes one verified archive (every
@@ -166,7 +168,7 @@ DELETE /api/v1/attachments/{id}               → 204
 ## Tests
 
 `make test` runs unit tests and integration tests (fresh database per test: `internal/testdb`). Without
-`RANGKA_TEST_DATABASE_URL` the database tests skip. Notable tests:
+`RANGKA_TEST_DATABASE_URL` the database tests skip. Tests and the Makefile find `rangka-apps` and `rangka-connectors` by searching upward from this checkout (so git worktrees work); set `RANGKA_WORKSPACE` to the folder that holds them to override. Tests that need them skip when they are missing, except when `CI` is set (any non-empty value) or `RANGKA_REQUIRE_SIBLINGS=1`: then a missing checkout fails the test (`testdb.Sibling`), so a CI run cannot pass by skipping. Notable tests:
 
 * `internal/rk` compares data, positions and error codes with `rkfile.py` on every workspace `.rk` file
   and an edge-case corpus (`testdata/yaml`).

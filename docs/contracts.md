@@ -7,7 +7,7 @@ only by editing this file in a pull request, and update both validators and the 
 
 | Repo | Contains | Language |
 | --- | --- | --- |
-| `rangka-os/` | `schema/0.4/*.json` (all .rk schemas), `tools/` (Python reference validator `rangka_validate.py`, strict YAML reader `rkfile.py`, docs + prototype builders), `templates/` (theme + layout templates), `web/design-system/` (bundle.js/css, tokens.json, index.d.ts), `web/prototype/` (browser-only renderer), `docs/site/` (API docs page), `kernel/` (Go, new), `web/console/` (Console, new) | Go, JS, Python tools |
+| `rangka-os/` | `schema/0.4/*.json` (all .rk schemas), `tools/` (Python reference validator `rangka_validate.py`, strict YAML reader `rkfile.py`, docs + prototype builders), `templates/` (theme + layout templates), `web/design-system/` (bundle.js/css, tokens.json, index.d.ts), `web/app/` (end-user web app), `docs/site/` (API docs page), `kernel/` (Go, new), `web/console/` (Console, new) | Go, JS, Python tools |
 | `rangka-apps/` | `apps/{core,sales,crm}` (app.rk, models, dashboards, flows, roles), `fixtures/*.rk`, `templates/crm`, `sites/kopi-senja/` (an installation: system.rk, features.rk, config.rk, themes/, layouts/) | .rk |
 | `rangka-connectors/` | `whatsapp_business/connector.rk` | .rk |
 | `rangka-ai/` | Agent (new) | TypeScript (Node 20+) |
@@ -46,7 +46,7 @@ Every model → table `r_<model>` with typed columns (+ `org_id`, `name` PK per 
 naming pattern applied at submit (`INV-{YYYY}-{#####}` per org); submitted (1) is immutable (409); cancel → 2; amend →
 new draft with `amended_from`. Rules run on `save` and `submit`; `level: warn` returns warnings, error blocks.
 Computed fields recomputed on every save. Status for invoices: draft, submitted, partly, paid, overdue, cancelled (see
-`rangka-os/web/prototype/engine.js` `status()`).
+`rangka-os/web/app/engine.js` `status()`).
 
 ## REST (JSON, `/api/v1`)
 

@@ -10,20 +10,24 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
 // TestPythonCompat loads every .rk file in the workspace (and testdata/yaml) with both this loader and
 // rangka-os/tools/rkfile.py and compares data, node positions and error codes. Skips without python3+PyYAML.
 func TestPythonCompat(t *testing.T) {
-	tools, _ := filepath.Abs("../../../tools")
-	workspace, _ := filepath.Abs("../../../..")
+	tools := filepath.Join(testdb.RepoRoot(), "tools")
 	if _, err := os.Stat(filepath.Join(tools, "rkfile.py")); err != nil {
 		t.Skip("rkfile.py not found")
 	}
 	var files []string
-	for _, root := range []string{filepath.Join(workspace, "rangka-apps"), filepath.Join(workspace, "rangka-os", "templates"),
-		filepath.Join(workspace, "rangka-connectors"), "../../testdata"} {
+	for _, root := range []string{testdb.Sibling(t, "rangka-apps"), filepath.Join(testdb.RepoRoot(), "templates"),
+		testdb.Sibling(t, "rangka-connectors"), "../../testdata"} {
 		filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+			if err == nil && testdb.SkipHidden(d) {
+				return filepath.SkipDir
+			}
 			if err == nil && !d.IsDir() && strings.HasSuffix(p, ".rk") {
 				files = append(files, p)
 			}

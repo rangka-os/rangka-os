@@ -250,6 +250,7 @@
       return json("POST", "/api/v1/imports/" + enc(name), fd);
     };
     api.importCommit = function (name, id) { return json("POST", "/api/v1/imports/" + enc(name) + "/" + enc(id) + "/commit", {}); };
+    api.importList = function (name) { return json("GET", "/api/v1/imports/" + enc(name)); };
     api.importGet = function (name, id) { return json("GET", "/api/v1/imports/" + enc(name) + "/" + enc(id)); };
 
     /* ----- feature detection */

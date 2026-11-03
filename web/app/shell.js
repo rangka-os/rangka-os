@@ -82,8 +82,15 @@
     });
     var more = [];
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
-    if (features.imports) more.push({ id: "import", label: "Impor data", icon: "download" });
+    var imps = features.imports ? Object.keys(meta.imports || {}) : [];
+    if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
     if (more.length) groups.push({ label: "Lainnya", items: more });
+    if (imps.length > 1) {
+      groups.push({ label: "Impor data", items: imps.map(function (k) {
+        var l = (meta.imports[k] || {}).label;
+        return { id: "import/" + k, label: L(l) || k, icon: "download" };
+      }).sort(function (a, b) { return a.label < b.label ? -1 : a.label > b.label ? 1 : 0; }) });
+    }
     return groups;
   }
 
@@ -93,7 +100,7 @@
       case "dash": return "d/" + route.dash;
       case "list": case "form": return "r/" + route.model;
       case "approvals": return "approvals";
-      case "import": return "import";
+      case "import": return "import/" + route.import;
       default: return null;
     }
   }
@@ -389,7 +396,7 @@
         h(R.Sidebar, {
           app: { name: name, type: ((me && me.roles) || []).map(function (r) { return L(((meta.roles || {})[r] || {}).label) || r; }).join(", "), icon: "store", color: "var(--brand)" },
           groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route),
-          onNavigate: function (id) { RA.navigate("#/" + (id === "import" ? "import/" + (Object.keys(meta.imports || {})[0] || "") : id)); setNavOpen(false); }
+          onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); }
         }),
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
         h("div", { className: "rk-shell-main" }, h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route), "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, home: home }))),

@@ -61,13 +61,21 @@ test("navGroups: dashboards, each app's menu groups, then approvals and imports 
   assert.strictEqual(off[1].items[1].icon, "invoice", "default icon");
   const on = A.navGroups(META, { approvals: true, imports: true });
   const last = on[on.length - 1];
-  assert.deepStrictEqual(plain(last).items.map((i) => [i.id, i.label]), [["approvals", "Persetujuan"], ["import", "Impor data"]]);
+  assert.deepStrictEqual(plain(last).items.map((i) => [i.id, i.label]), [["approvals", "Persetujuan"], ["import/pelanggan_csv", "Impor data"]]);
+  // no import definitions: no entry and no dangling "#/import/" link, even when the flag is on
+  const none = A.navGroups({ ...META, imports: {} }, { approvals: false, imports: true });
+  assert.ok(!plain(none).some((g) => g.items.some((i) => /^import/.test(i.id))));
+  // several imports: a group listing them by label
+  const many = A.navGroups({ ...META, imports: { b: { label: { id: "Zebra" } }, a: { label: { id: "Alfa" } } } }, { imports: true });
+  const grp = plain(many[many.length - 1]);
+  assert.strictEqual(grp.label, "Impor data");
+  assert.deepStrictEqual(grp.items.map((i) => [i.id, i.label]), [["import/a", "Alfa"], ["import/b", "Zebra"]]);
 });
 
 test("navId maps a route to its sidebar entry", () => {
   assert.strictEqual(A.navId({ kind: "form", model: "lead", name: "X" }), "r/lead");
   assert.strictEqual(A.navId({ kind: "dash", dash: "crm_overview" }), "d/crm_overview");
-  assert.strictEqual(A.navId({ kind: "import", import: "x" }), "import");
+  assert.strictEqual(A.navId({ kind: "import", import: "x" }), "import/x");
   assert.strictEqual(A.navId({ kind: "approvals" }), "approvals");
 });
 

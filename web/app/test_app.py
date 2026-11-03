@@ -22,7 +22,7 @@ the feature probes (approvals, attachments) and what a scenario allows with ctx.
 Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure (build,
 Postgres start, migrate, seed, user add, serve, a scenario) exits 1.
 """
-import argparse, email, email.policy, http.cookiejar, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request, zlib
+import argparse, csv, email, hashlib, io, uuid, email.policy, http.cookiejar, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))  # rangka-os checkout (or a worktree of it)
@@ -352,6 +352,162 @@ def _mock_attachments(page, ctx):
     page.route(re.compile(r".*/api/v1/attachments/[^/?]+(\?.*)?$"), one)
 
 
+IMPORT_NAME = "barang_csv"
+IMPORT_DEF = {"name": IMPORT_NAME, "model": "item", "label": {"id": "Barang dari CSV", "en": "Items from CSV"}, "source": "csv", "per": "org", "app": ""}
+IMPORT_COLUMNS = ("Nama barang", "Satuan", "Harga jual")
+IMPORT_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/import.json
+name: barang_csv
+label: {id: Barang dari CSV, en: Items from CSV}
+model: item
+source: csv
+per: org
+key: [Nama barang]
+map:
+  item_name: Nama barang
+  uom: Satuan
+  rate: Harga jual
+"""
+
+
+def csv_text(rows, header=IMPORT_COLUMNS):
+    return "\n".join(",".join(r) for r in [header] + rows) + "\n"
+
+
+def register_csv(ctx, filename, text):
+    """Keep the CSV text a scenario uploads under its file name: Chromium hands route interceptors no bytes for a File
+    inside FormData (Task 9), so the import mock answers from this copy. The live kernel reads the real bytes."""
+    ctx.mock_state.setdefault("imp", {"files": {}, "entries": {}, "keys": set(), "shas": set()})["files"][filename] = text
+
+
+def _import_cell_error(row_no, col, value):
+    return {"row": row_no, "column": col, "message": f'Kolom "{col}" harus angka, isinya "{value}"'}
+
+
+def _mock_imports(page, ctx):
+    """S7 shape (contract 0012), stateful: meta.imports, POST /imports/{name} (multipart file → entry with preview and
+    errors, duplicates by file SHA and by row key), commit (creates the records through the real kernel API as the owner,
+    answers with their names), GET entry and list. Reads uploaded CSV text from register_csv by file name."""
+    st = ctx.mock_state.setdefault("imp", {"files": {}, "entries": {}, "keys": set(), "shas": set()})
+
+    def meta(route):
+        resp = route.fetch()
+        body = resp.json()
+        body["imports"] = {IMPORT_NAME: dict(IMPORT_DEF)}
+        _json(route, 200, body)
+
+    def read(text):
+        text = text.lstrip("\ufeff")
+        first = text.split("\n", 1)[0]
+        delim = ";" if first.count(";") > first.count(",") else ","
+        rows = [r for r in csv.reader(io.StringIO(text), delimiter=delim) if any(c.strip() for c in r)]
+        return rows[0] if rows else [], rows[1:]
+
+    def check(text):
+        header, data = read(text)
+        errors, records, keys = [], [], set()
+        for col in IMPORT_COLUMNS[:1] + IMPORT_COLUMNS[2:]:
+            if col not in header:
+                errors.append({"row": 1, "column": col, "message": f'Kolom "{col}" tidak ada di file'})
+        if errors:
+            return len(data), errors, []
+        ix = {c: header.index(c) for c in IMPORT_COLUMNS if c in header}
+        for n, r in enumerate(data):
+            row_no = n + 2
+            cell = lambda c: (r[ix[c]].strip() if c in ix and ix[c] < len(r) else "")
+            rec = {"item_name": cell("Nama barang")}
+            if not rec["item_name"]:
+                errors.append({"row": row_no, "column": "Nama barang", "message": 'Kolom "Nama barang" wajib diisi'})
+            if cell("Satuan"):
+                rec["uom"] = cell("Satuan")
+            raw = cell("Harga jual")
+            if raw:
+                t = re.sub(r"^Rp\s*", "", raw)
+                if re.fullmatch(r"\d+", t) or re.fullmatch(r"\d{1,3}(\.\d{3})+", t):
+                    rec["rate"] = int(t.replace(".", ""))
+                else:
+                    errors.append(_import_cell_error(row_no, "Harga jual", raw))
+            if rec["item_name"] in keys:
+                errors.append({"row": row_no, "column": "Nama barang", "message": f'Baris ganda: "{rec["item_name"]}" ada dua kali di file'})
+            keys.add(rec["item_name"])
+            records.append(rec)
+        return len(data), errors, records
+
+    def entry_json(e):
+        return {k: v for k, v in e.items() if not k.startswith("_")}
+
+    def handler(route):
+        req = route.request
+        path = re.sub(r"\?.*$", "", re.sub(r"^https?://[^/]+", "", req.url))
+        m = re.fullmatch(r"/api/v1/imports/([^/]+)(?:/([^/]+)(/commit)?)?", path)
+        name, eid, commit = (m.group(1), m.group(2), m.group(3)) if m else (None, None, None)
+        if name != IMPORT_NAME:
+            _json(route, 404, {"error": {"code": "not_found", "message": "import tidak ditemukan"}})
+            return
+        if req.method == "GET" and not eid:
+            _json(route, 200, {"imports": [dict(entry_json(e), preview=None) for e in st["entries"].values()][-50:]})
+            return
+        if req.method == "GET":
+            e = st["entries"].get(eid)
+            _json(route, 200, entry_json(e)) if e else _json(route, 404, {"error": {"code": "not_found", "message": "impor tidak ditemukan"}})
+            return
+        if not eid:  # upload
+            ctype = req.headers.get("content-type", "")
+            msg = email.message_from_bytes(f"Content-Type: {ctype}\r\n\r\n".encode() + (req.post_data_buffer or b""), policy=email.policy.default)
+            part = next((x for x in msg.iter_parts() if x.get_param("name", header="content-disposition") == "file"), None)
+            if part is None:
+                _json(route, 400, {"error": {"code": "file_required", "message": "Pilih file yang mau diimpor"}})
+                return
+            fname = part.get_filename() or "file.csv"
+            data = part.get_payload(decode=True) or b""
+            if not data:
+                data = st["files"].get(fname, "").encode()
+            if len(data) > 20 * 1024 * 1024:
+                _json(route, 413, {"error": {"code": "too_large", "message": "Ukuran file melebihi batas 20 MB"}})
+                return
+            rows, errors, records = check(data.decode("utf-8", "replace"))
+            sha = hashlib.sha256(data).hexdigest()
+            skipped = len([r for r in records if r["item_name"] in st["keys"]])
+            fresh = [r for r in records if r["item_name"] not in st["keys"]]
+            dup, message = False, ""
+            if sha in st["shas"]:
+                dup, message = True, "File ini sudah diimpor"
+            elif rows and skipped == rows and not errors:
+                dup, message = True, "Semua baris sudah diimpor"
+            e = {"id": uuid.uuid4().hex, "import": IMPORT_NAME, "scope": "", "file_name": fname, "file_sha": sha, "status": "previewed",
+                 "rows": rows, "skipped": skipped, "duplicate": dup, "message": message, "errors": errors, "preview": fresh[:20], "records": [],
+                 "created_by": ctx.owner[0], "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "committed_at": None, "_rows": fresh}
+            st["entries"][e["id"]] = e
+            _json(route, 200, entry_json(e))
+            return
+        # commit
+        e = st["entries"].get(eid)
+        if not e:
+            _json(route, 404, {"error": {"code": "not_found", "message": "impor tidak ditemukan"}})
+            return
+        if e["errors"]:
+            _json(route, 422, {"error": {"code": "import_errors", "message": "File masih punya baris yang salah"}})
+        elif e["rows"] == 0:
+            _json(route, 422, {"error": {"code": "import_empty", "message": "File tidak punya baris data"}})
+        elif e["duplicate"] or e["status"] == "committed":
+            _json(route, 409, {"error": {"code": "already_imported", "message": e["message"] or "File ini sudah diimpor"}})
+        elif any(r["item_name"] in st["keys"] for r in e["_rows"]):
+            _json(route, 409, {"error": {"code": "already_imported", "message": "Sebagian baris sudah diimpor, unggah ulang file"}})
+        else:
+            h = Http(ctx.base).login(*ctx.owner)
+            names = []
+            for r in e["_rows"]:
+                code, rec = h.call("POST", "/api/v1/r/item", dict(r))
+                assert code in (200, 201), f"import mock: create item {r}: {code} {rec}"
+                names.append(rec["name"])
+                st["keys"].add(r["item_name"])
+            st["shas"].add(e["file_sha"])
+            e.update(status="committed", records=names, committed_at=time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()))
+            _json(route, 200, entry_json(e))
+
+    page.route(re.compile(r".*/api/v1/meta(\?.*)?$"), meta)
+    page.route(re.compile(r".*/api/v1/imports(/.*)?$"), handler)
+
+
 def _mock_todo(task):
     def install(page, ctx):
         raise NotImplementedError(f"contract mock arrives with {task}")
@@ -363,7 +519,7 @@ MOCKS = {
     "approvals": _mock_approvals,
     "print": _mock_print,
     "attachments": _mock_attachments,
-    "imports": _mock_todo("Task 10"),
+    "imports": _mock_imports,
 }
 
 
@@ -1645,6 +1801,143 @@ def test_attachment_serving(page, ctx):
         full.close()
 
 
+# ---------------------------------------------------------------------------------------------- imports (Task 10)
+def write_csv(ctx, tmp, filename, rows):
+    text = csv_text(rows)
+    register_csv(ctx, filename, text)
+    path = os.path.join(tmp, filename)
+    with open(path, "w", encoding="utf-8") as f:
+        f.write(text)
+    return path
+
+
+def import_table(page, label):
+    return main_area(page).locator(f"table[aria-label='{label}']")
+
+
+def open_import(page, ctx):
+    open_route(page, ctx, "#/import/" + IMPORT_NAME)
+    main_area(page).get_by_role("heading", name="Barang dari CSV").wait_for(timeout=10000)
+
+
+def pick_and_check(page, path):
+    main_area(page).locator("input[type=file]").set_input_files(path)
+    page.get_by_role("button", name="Periksa file", exact=True).click()
+    main_area(page).get_by_text(re.compile(r"\d+ baris dibaca")).wait_for(timeout=10000)
+
+
+def items_named(ctx, prefix):
+    _, body = owner_http(ctx).call("GET", "/api/v1/r/item?q=" + urllib.parse.quote_plus(prefix) + "&limit=100")
+    return [r for r in body["data"] if r["item_name"].startswith(prefix)]
+
+
+def test_import_csv(page, ctx):
+    mocked = mock_feature(page, "imports")
+    tmp = tempfile.mkdtemp(prefix="rk-imp-")
+    try:
+        path = write_csv(ctx, tmp, "barang-uji.csv", [["Impor Uji A", "Pcs", "12500"], ["Impor Uji B", "Box", "1.250.000"], ["Impor Uji C", "Pcs", "Rp 9.900"]])
+        reqs = watch_requests(page)
+        open_route(page, ctx, ctx.home()[0])  # signed in on the home page; the sidebar entry opens the wizard
+        open_nav(page)
+        page.locator(".rk-side").get_by_text("Impor data", exact=True).click()
+        page.wait_for_function("(n) => location.hash === '#/import/' + n", arg=IMPORT_NAME, timeout=5000)
+        main_area(page).get_by_role("heading", name="Barang dari CSV").wait_for(timeout=10000)
+        assert main_area(page).locator(".rk-steps .rk-step").count() == 3
+        assert main_area(page).get_by_role("button", name="Periksa file", exact=True).is_disabled(), "nothing to upload yet"
+        pick_and_check(page, path)
+        main_area(page).get_by_text("3 baris dibaca").wait_for()
+        t = import_table(page, "Pratinjau impor")
+        assert t.locator("tbody tr").count() == 3, "preview shows 3 rows"
+        heads = [x.strip() for x in t.locator("thead th").all_inner_texts()]
+        assert heads[:3] == ["Nama barang", "Satuan", "Harga jual"], f"labels come from the model's fields: {heads}"
+        assert t.get_by_text("Rp 1.250.000").count() == 1 and t.get_by_text("Impor Uji A").count() == 1
+        assert main_area(page).get_by_role("button", name="Impor", exact=True).is_enabled()
+        page.get_by_role("button", name="Impor", exact=True).click()
+        main_area(page).get_by_text("3 data dibuat").wait_for(timeout=10000)
+        assert main_area(page).get_by_text("Data dibuat sebagai draf").count() >= 1
+        assert len(items_named(ctx, "Impor Uji")) == 3, "three records exist on the kernel"
+        main_area(page).get_by_role("link", name=re.compile("^Buka daftar")).click()
+        page.wait_for_function("() => location.hash === '#/r/item'", timeout=5000)
+        wait_rows(page)  # the list is on screen: the wizard is gone
+        # the same file again: the server says it was imported; no Impor button
+        page.evaluate("(n) => { location.hash = '#/import/' + n; }", IMPORT_NAME)
+        main_area(page).get_by_role("heading", name="Barang dari CSV").wait_for(timeout=10000)
+        pick_and_check(page, path)
+        main_area(page).get_by_text("File ini sudah diimpor").first.wait_for(timeout=5000)
+        assert main_area(page).get_by_role("button", name="Impor", exact=True).count() == 0, "no Impor for a duplicate"
+        assert main_area(page).get_by_text("3 baris dilewati (sudah diimpor)").count() == 1
+        assert len(items_named(ctx, "Impor Uji")) == 3, "no second copy"
+        commits = [r for r in reqs if r[0] == "POST" and r[1].endswith("/commit")]
+        assert len(commits) == 1, f"one commit, saw {len(commits)}"
+        assert ("imports" in ctx.live) != mocked
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_import_row_errors(page, ctx):
+    mock_feature(page, "imports")
+    tmp = tempfile.mkdtemp(prefix="rk-imp-")
+    try:
+        path = write_csv(ctx, tmp, "salah.csv", [["Salah A", "Pcs", "dua"], ["Salah B", "Pcs", "5000"], ["Salah C", "Pcs", "7000"]])
+        reqs = watch_requests(page)
+        open_import(page, ctx)
+        pick_and_check(page, path)
+        t = import_table(page, "Kesalahan impor")
+        t.wait_for(timeout=5000)
+        assert [x.strip() for x in t.locator("thead th").all_inner_texts()] == ["Baris", "Kolom", "Pesan"]
+        cells = [x.strip() for x in t.locator("tbody tr").first.locator("td").all_inner_texts()]
+        assert cells[0] == "2" and cells[1] == "Harga jual" and "dua" in cells[2], f"the bad row (spreadsheet row 2: the header is row 1) is named: {cells}"
+        assert t.locator("tbody tr").count() == 1
+        btn = main_area(page).get_by_role("button", name="Impor", exact=True)
+        assert btn.is_disabled(), "Impor is blocked while the preview has errors"
+        btn.click(force=True)
+        page.wait_for_timeout(300)
+        assert not [r for r in reqs if r[1].endswith("/commit")], "no commit request"
+        assert not items_named(ctx, "Salah "), "nothing was created"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_import_double_click_commit(page, ctx):
+    mock_feature(page, "imports")
+    tmp = tempfile.mkdtemp(prefix="rk-imp-")
+    try:
+        path = write_csv(ctx, tmp, "dobel.csv", [["Dobel A", "Pcs", "1000"], ["Dobel B", "Pcs", "2000"]])
+        open_import(page, ctx)
+        pick_and_check(page, path)
+        held = held_route(page, r".*/api/v1/imports/[^/]+/[^/]+/commit$", "POST")
+        btn = main_area(page).get_by_role("button", name="Impor", exact=True)
+        btn.dblclick()
+        wait_held(page, held)
+        page.wait_for_timeout(300)
+        assert len(held) == 1, f"one commit request for a double click, saw {len(held)}"
+        assert main_area(page).get_by_role("button", name=re.compile("^Pilih file lain")).is_disabled(), "the wizard is locked while the commit runs"
+        held[0].fallback()
+        main_area(page).get_by_text("2 data dibuat").wait_for(timeout=10000)
+        page.wait_for_timeout(300)
+        assert len(held) == 1
+        assert len(items_named(ctx, "Dobel ")) == 2, "two records, once"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_import_file_too_large(page, ctx):
+    mock_feature(page, "imports")
+    tmp = tempfile.mkdtemp(prefix="rk-imp-")
+    try:
+        big = os.path.join(tmp, "besar.csv")
+        with open(big, "wb") as f:
+            f.truncate(21 * 1024 * 1024)
+        reqs = watch_requests(page)
+        open_import(page, ctx)
+        main_area(page).locator("input[type=file]").set_input_files(big)
+        main_area(page).get_by_text("Ukuran file maksimal 20 MB").first.wait_for(timeout=5000)
+        assert main_area(page).get_by_role("button", name="Periksa file", exact=True).is_disabled()
+        assert not [r for r in reqs if r[0] == "POST"], "no request for a 21 MB file"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
 PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")
@@ -1689,6 +1982,17 @@ def enable_approval_policy(site):
     os.makedirs(os.path.join(site, "custom"), exist_ok=True)
     with open(os.path.join(site, "custom", "sales_invoice.rk"), "w") as f:
         f.write(APPROVAL_OVERLAY)
+    return True
+
+
+def enable_import_def(site):
+    """When the kernel knows the `import` kind (S7: schema/0.5/import.json), give the temp site the import the scenarios
+    use, so they run live; otherwise they run on mock_feature('imports'). Returns True when written."""
+    if not os.path.exists(os.path.join(ROOT, "schema", "0.5", "import.json")):
+        return False
+    os.makedirs(os.path.join(site, "imports"), exist_ok=True)
+    with open(os.path.join(site, "imports", IMPORT_NAME + ".rk"), "w") as f:
+        f.write(IMPORT_RK)
     return True
 
 
@@ -1746,6 +2050,7 @@ def main():
             shutil.copytree(os.path.join(WS, src), os.path.join(work, src))
         APPS, SITE, CONN = (os.path.join(work, "rangka-apps", "apps"), os.path.join(work, "rangka-apps", "sites", "kopi-senja"), os.path.join(work, "rangka-connectors"))
         enable_approval_policy(SITE)
+        enable_import_def(SITE)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

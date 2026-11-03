@@ -242,6 +242,9 @@ test("approvals, approve, reject, dashboard, attachments urls", async () => {
   assert.strictEqual(f.calls[5].url, "/api/v1/imports/customers/I1/commit");
   await api.importGet("customers", "I1");
   assert.strictEqual(f.calls[6].url, "/api/v1/imports/customers/I1");
+  await api.importList("customers");
+  assert.strictEqual(f.calls[7].url, "/api/v1/imports/customers");
+  assert.strictEqual(f.calls[7].init.method, "GET");
 });
 
 test("update uses PATCH and remove uses DELETE", async () => {

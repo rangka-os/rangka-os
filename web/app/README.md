@@ -67,4 +67,5 @@ sideways and controls are at least 40px tall). React 18.3.1 is vendored in `vend
 
 Features another stream builds run live when the kernel has them and otherwise against `page.route` mocks that answer
 exactly the Fixed-interface shapes. The run ends with `live: … · mocked: …`. `--require-all` fails when anything ran
-on a mock: the integrator's gate once the approvals, print, attachments, imports and multi-org streams are merged.
+on a mock: the integrator's gate once the approvals, print, attachments, imports and multi-org streams are merged. Without
+Go, Playwright or the PostgreSQL binaries the suite prints SKIP and exits 0, but with `--require-all` it exits 1.

@@ -19,8 +19,8 @@ approval scenarios run live: call mock_feature(page, feature) in a scenario. The
 Every HTTP answer >= 400 and every failed request to the kernel fails the scenario too, except 401 on /auth/*, the missing-route 404 ("no such endpoint") of
 the feature probes (approvals, attachments) and what a scenario allows with ctx.allow_http(status, url_regex).
 
-Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure (build,
-Postgres start, migrate, seed, user add, serve, a scenario) exits 1.
+Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing (exits 1 with --require-all);
+any other failure (build, Postgres start, migrate, seed, user add, serve, a scenario) exits 1.
 """
 import argparse, csv, email, hashlib, io, uuid, email.policy, http.cookiejar, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request, zlib
 
@@ -2148,6 +2148,10 @@ def main():
     args = ap.parse_args()
 
     def skip(why):
+        # --require-all is the integrator's gate: a suite that did not run is not a pass
+        if args.require_all:
+            print("FAIL web app live suite did not run (--require-all):", why)
+            sys.exit(1)
         print("SKIP web app live suite:", why)
         sys.exit(0)
 

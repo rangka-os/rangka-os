@@ -21,6 +21,17 @@ func onlyDeprecations(rep *Report) bool {
 	return true
 }
 
+// withoutDeprecations is the report without the 0.4 layout warnings.
+func withoutDeprecations(rep *Report) []Item {
+	var out []Item
+	for _, it := range rep.All() {
+		if it.Code != "deprecated_layout" && it.Code != "deprecated_template" {
+			out = append(out, it)
+		}
+	}
+	return out
+}
+
 func TestRealAppsValid(t *testing.T) {
 	reg, rep := Validate(testdb.Catalogue("apps"), testdb.Catalogue("sites/kopi-senja"), nil, schema.Embedded())
 	var buf bytes.Buffer

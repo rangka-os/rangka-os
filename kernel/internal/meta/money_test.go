@@ -51,7 +51,7 @@ func moneyApp(t *testing.T, billFields, lineFields string, quoteFields ...string
 
 func TestMoneyTwins(t *testing.T) {
 	reg, rep := Validate(moneyApp(t, "", ""), "", nil, schema.Embedded())
-	if len(rep.All()) != 0 {
+	if !onlyDeprecations(rep) { // the fixture is a 0.4 app (contract 0001)
 		t.Fatalf("problems: %v", rep.All())
 	}
 	tw := reg.Models["bill"].Field("total_idr")
@@ -149,7 +149,7 @@ func TestMoneyValidator(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			_, rep := Validate(moneyApp(t, c.bill, c.line, c.quote...), "", nil, schema.Embedded())
-			all := rep.All()
+			all := withoutDeprecations(rep) // the fixture is a 0.4 app (contract 0001)
 			if len(all) != 1 {
 				t.Fatalf("want 1 problem, got %v", all)
 			}

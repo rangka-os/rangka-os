@@ -15,7 +15,7 @@ const overlaySite = "../../testdata/overlay-site"
 
 func TestOrgConfigFallsBackToSite(t *testing.T) {
 	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: overlaySite}, nil, schema.Embedded())
-	if len(rep.All()) != 0 {
+	if !onlyDeprecations(rep) { // catalogue-v0 is the 0.4 layout (contract 0001)
 		t.Fatalf("problems: %v", rep.All())
 	}
 	o := reg.Orgs["pt_alpha"]

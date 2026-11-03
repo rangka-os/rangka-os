@@ -8,7 +8,10 @@ import (
 	"os"
 	"strings"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/backup"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/server"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -39,7 +42,7 @@ func cmdMigrate(args []string) int {
 		return fail(err)
 	}
 	defer db.Close()
-	res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{DryRun: *dry, AllowDestructive: *destructive, Source: "migrate"})
+	res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{DryRun: *dry, AllowDestructive: *destructive, Source: "migrate", Before: preBackup(db, &c, reg)})
 	if err != nil && !errors.Is(err, store.ErrDestructive) {
 		return fail(err)
 	}
@@ -82,6 +85,13 @@ func migrateRollback(ctx context.Context, c *common, o store.RollbackOpts) int {
 		return fail(err)
 	}
 	defer db.Close()
+	if o.Before == nil {
+		reg, rerr := c.registry()
+		if rerr != nil && server.Production() {
+			fmt.Fprintln(os.Stderr, "rangka: warning: metadata did not load, the backup uses the default files dir:", rerr)
+		}
+		o.Before = preBackup(db, c, reg)
+	}
 	res, err := store.Rollback(ctx, db, o)
 	if err != nil && (res == nil || !errors.Is(err, store.ErrDestructive)) {
 		return fail(err)
@@ -129,4 +139,10 @@ func cmdSeed(args []string) int {
 	}
 	fmt.Printf("seeded org %s: created %v, already there %v; user %s (owner)\n", orgID, st.Created, st.Skipped, *email)
 	return 0
+}
+
+// preBackup is the production-mode backup before a migration or rollback (see server.PreMigrateBackup).
+func preBackup(db *pg.Pool, c *common, reg *meta.Registry) func(context.Context, []store.Step) error {
+	return server.PreMigrateBackup(db, backup.Options{SiteDir: c.site, AppsDir: c.apps, FilesDir: backup.FilesDir(reg, c.site), Version: Version},
+		server.BackupDir(c.site))
 }

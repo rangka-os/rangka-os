@@ -113,7 +113,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
 	}
-	if _, err := store.Migrate(ctx, db, reg, false, "serve"); err != nil {
+	if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", Before: cfg.preBackup(db, reg)}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -212,7 +212,7 @@ func (s *Server) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := store.Migrate(ctx, s.DB, reg, false, "changeset"); err != nil {
+	if _, err := store.MigrateWith(ctx, s.DB, reg, store.MigrateOpts{Source: "changeset", Before: s.Cfg.preBackup(s.DB, reg)}); err != nil {
 		return err
 	}
 	s.Engine.SetRegistry(reg)

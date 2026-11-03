@@ -1,4 +1,4 @@
-package backup
+package backup_test
 
 import (
 	"archive/tar"
@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/backup"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
@@ -93,7 +94,7 @@ func (s *source) backup(t *testing.T, org string) string {
 	if err != nil {
 		t.Fatal(err)
 	}
-	m, err := Write(context.Background(), s.db, f, Options{Org: org, SiteDir: s.site, AppsDir: s.apps, FilesDir: s.files, Version: version, Now: fixedNow})
+	m, err := backup.Write(context.Background(), s.db, f, backup.Options{Org: org, SiteDir: s.site, AppsDir: s.apps, FilesDir: s.files, Version: version, Now: fixedNow})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -106,9 +107,9 @@ func (s *source) backup(t *testing.T, org string) string {
 	return path
 }
 
-func restoreOpts(t *testing.T) RestoreOptions {
+func restoreOpts(t *testing.T) backup.RestoreOptions {
 	d := t.TempDir()
-	return RestoreOptions{Version: version, Into: filepath.Join(d, "r"), FilesDir: filepath.Join(d, "files"), Registry: loadRegistry}
+	return backup.RestoreOptions{Version: version, Into: filepath.Join(d, "r"), FilesDir: filepath.Join(d, "files"), Registry: loadRegistry}
 }
 
 func count(t *testing.T, db *pg.Pool, sql string) int64 {
@@ -127,15 +128,15 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 
 	dst := pool(t, testdb.New(t))
 	o := restoreOpts(t)
-	m, err := Restore(ctx, dst, archive, o)
+	m, err := backup.Restore(ctx, dst, archive, o)
 	if err != nil {
 		t.Fatal(err)
 	}
-	a, err := Sums(ctx, s.db, "")
+	a, err := backup.Sums(ctx, s.db, "")
 	if err != nil {
 		t.Fatal(err)
 	}
-	b, err := Sums(ctx, dst, "")
+	b, err := backup.Sums(ctx, dst, "")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -190,7 +191,7 @@ func TestFilesInsideSite(t *testing.T) {
 	os.MkdirAll(up, 0o755)
 	os.WriteFile(filepath.Join(up, "a.txt"), []byte("a"), 0o644)
 	var buf bytes.Buffer
-	m, err := Write(ctx, s.db, &buf, Options{SiteDir: s.site, AppsDir: s.apps, FilesDir: up, Version: version, Now: fixedNow})
+	m, err := backup.Write(ctx, s.db, &buf, backup.Options{SiteDir: s.site, AppsDir: s.apps, FilesDir: up, Version: version, Now: fixedNow})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -213,10 +214,10 @@ func TestRestoreRefusesNonEmpty(t *testing.T) {
 	if _, err := dst.Exec(ctx, "create table something (a int)"); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := Restore(ctx, dst, archive, restoreOpts(t)); !errors.Is(err, ErrNotEmpty) {
+	if _, err := backup.Restore(ctx, dst, archive, restoreOpts(t)); !errors.Is(err, backup.ErrNotEmpty) {
 		t.Fatalf("err = %v, want ErrNotEmpty", err)
 	}
-	if _, err := Restore(ctx, s.db, archive, restoreOpts(t)); !errors.Is(err, ErrNotEmpty) {
+	if _, err := backup.Restore(ctx, s.db, archive, restoreOpts(t)); !errors.Is(err, backup.ErrNotEmpty) {
 		t.Fatalf("restore into the source: err = %v, want ErrNotEmpty", err)
 	}
 	// a non-empty --files dir is refused before the database is touched
@@ -224,7 +225,7 @@ func TestRestoreRefusesNonEmpty(t *testing.T) {
 	o := restoreOpts(t)
 	os.MkdirAll(o.FilesDir, 0o755)
 	os.WriteFile(filepath.Join(o.FilesDir, "old.txt"), []byte("old"), 0o644)
-	if _, err := Restore(ctx, empty, archive, o); err == nil || !strings.Contains(err.Error(), "not empty") {
+	if _, err := backup.Restore(ctx, empty, archive, o); err == nil || !strings.Contains(err.Error(), "not empty") {
 		t.Fatalf("non-empty files dir: err = %v", err)
 	}
 	if n := tableCount(t, empty); n != 0 {
@@ -339,7 +340,7 @@ func TestRestoreRefusesCorrupt(t *testing.T) {
 	dst := pool(t, testdb.New(t))
 	for name, path := range cases {
 		o := restoreOpts(t)
-		if _, err := Restore(ctx, dst, path, o); !errors.Is(err, ErrCorrupt) {
+		if _, err := backup.Restore(ctx, dst, path, o); !errors.Is(err, backup.ErrCorrupt) {
 			t.Errorf("%s: err = %v, want ErrCorrupt", name, err)
 		}
 		if n := tableCount(t, dst); n != 0 {
@@ -375,7 +376,7 @@ func TestRestoreRefusesBadEntries(t *testing.T) {
 	}
 	for name, path := range cases {
 		dst := pool(t, testdb.New(t))
-		if _, err := Restore(ctx, dst, path, restoreOpts(t)); !errors.Is(err, ErrCorrupt) {
+		if _, err := backup.Restore(ctx, dst, path, restoreOpts(t)); !errors.Is(err, backup.ErrCorrupt) {
 			t.Errorf("%s: err = %v, want ErrCorrupt", name, err)
 		}
 		if n := tableCount(t, dst); n != 0 {
@@ -401,7 +402,7 @@ func TestSymlinks(t *testing.T) {
 	}
 	path := filepath.Join(t.TempDir(), "a.tar.gz")
 	f, _ := os.Create(path)
-	m, err := Write(ctx, s.db, f, Options{SiteDir: filepath.Join(links, "site"), AppsDir: filepath.Join(links, "apps"),
+	m, err := backup.Write(ctx, s.db, f, backup.Options{SiteDir: filepath.Join(links, "site"), AppsDir: filepath.Join(links, "apps"),
 		FilesDir: filepath.Join(links, "files"), Version: version, Now: fixedNow})
 	f.Close()
 	if err != nil {
@@ -417,7 +418,7 @@ func TestSymlinks(t *testing.T) {
 		}
 	}
 	o := restoreOpts(t)
-	if _, err := Restore(ctx, pool(t, testdb.New(t)), path, o); err != nil {
+	if _, err := backup.Restore(ctx, pool(t, testdb.New(t)), path, o); err != nil {
 		t.Fatal(err)
 	}
 	want, _ := os.ReadFile(filepath.Join(s.files, "lead", "LEAD-001", "kartu nama.jpg"))
@@ -433,7 +434,7 @@ func TestSymlinks(t *testing.T) {
 	if err := os.Symlink(s.files, filepath.Join(s.files, "loop")); err != nil {
 		t.Fatal(err)
 	}
-	_, err = Write(ctx, s.db, io.Discard, Options{SiteDir: s.site, AppsDir: s.apps, FilesDir: filepath.Join(links, "files"), Version: version, Now: fixedNow})
+	_, err = backup.Write(ctx, s.db, io.Discard, backup.Options{SiteDir: s.site, AppsDir: s.apps, FilesDir: filepath.Join(links, "files"), Version: version, Now: fixedNow})
 	if err == nil || !strings.Contains(err.Error(), "loop") {
 		t.Fatalf("dir symlink: err = %v", err)
 	}
@@ -452,11 +453,11 @@ func TestRestoreAddsArchivedColumns(t *testing.T) {
 	}
 	archive := s.backup(t, "")
 	dst := pool(t, testdb.New(t))
-	if _, err := Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
+	if _, err := backup.Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
 		t.Fatal(err)
 	}
-	a, _ := Sums(ctx, s.db, "")
-	b, _ := Sums(ctx, dst, "")
+	a, _ := backup.Sums(ctx, s.db, "")
+	b, _ := backup.Sums(ctx, dst, "")
 	if !reflect.DeepEqual(a, b) {
 		t.Error("sums differ")
 	}
@@ -474,7 +475,7 @@ func TestRestoreRefusesNewer(t *testing.T) {
 	})
 	dst := pool(t, testdb.New(t))
 	o := restoreOpts(t)
-	if _, err := Restore(ctx, dst, newer, o); !errors.Is(err, ErrNewerArchive) {
+	if _, err := backup.Restore(ctx, dst, newer, o); !errors.Is(err, backup.ErrNewerArchive) {
 		t.Fatalf("err = %v, want ErrNewerArchive", err)
 	}
 	if n := tableCount(t, dst); n != 0 {
@@ -482,28 +483,8 @@ func TestRestoreRefusesNewer(t *testing.T) {
 	}
 	// a dev binary skips the check
 	o.Version = "dev"
-	if _, err := Restore(ctx, dst, newer, o); err != nil {
+	if _, err := backup.Restore(ctx, dst, newer, o); err != nil {
 		t.Fatalf("dev binary: %v", err)
-	}
-}
-
-func TestNewer(t *testing.T) {
-	for _, c := range []struct {
-		archive, binary string
-		want            bool
-	}{
-		{"99.0.0", "0.4.0-dev", true},
-		{"0.4.1", "0.4.0", true},
-		{"0.5.0-alpha.1", "0.4.9", true},
-		{"0.4.0", "0.4.0-dev", false},
-		{"0.4.0-dev", "0.4.0", false},
-		{"v0.4.0", "0.4.1", false},
-		{"0.4.0", "0.10.0", false},
-		{"99.0.0", "dev", false},
-	} {
-		if got := newer(c.archive, c.binary); got != c.want {
-			t.Errorf("newer(%q, %q) = %v, want %v", c.archive, c.binary, got, c.want)
-		}
 	}
 }
 
@@ -517,7 +498,7 @@ func TestOrgBackup(t *testing.T) {
 	archive := s.backup(t, "kopi-senja")
 
 	dst := pool(t, testdb.New(t))
-	if _, err := Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
+	if _, err := backup.Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
 		t.Fatal(err)
 	}
 	r, err := dst.Query(ctx, `select c.relname from pg_class c join pg_attribute a on a.attrelid = c.oid
@@ -544,8 +525,8 @@ func TestOrgBackup(t *testing.T) {
 	if n := count(t, dst, "select count(*) from rk_users where email = 'ceo@saga.co.id'"); n != 1 {
 		t.Error("the org's own user is missing")
 	}
-	a, _ := Sums(ctx, s.db, "kopi-senja")
-	b, _ := Sums(ctx, dst, "kopi-senja")
+	a, _ := backup.Sums(ctx, s.db, "kopi-senja")
+	b, _ := backup.Sums(ctx, dst, "kopi-senja")
 	if !reflect.DeepEqual(a, b) {
 		t.Error("org sums differ")
 	}

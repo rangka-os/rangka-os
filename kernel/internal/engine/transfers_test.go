@@ -272,3 +272,139 @@ func TestPilotTransferReceiptRaces(t *testing.T) {
 		t.Fatalf("stock not conserved: %v + %v", a, b)
 	}
 }
+
+// TestPilotTransferMixedCostCap: two lines of minyak leave at different averages (33.333, then 33.334), so
+// they come in at their mean, round(66.667 / 2) = 33.334. A partial receipt of 1,999999 kg would be
+// round(1,999999 × 33.334) = 66.668, more than the 66.667 that left: it is capped at 66.667, and the last
+// 0,000001 kg comes in at 0, never negative. An all-zero receipt is empty_receipt.
+func TestPilotTransferMixedCostCap(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	pack := p.create("uom_conversion", map[string]any{"item": m.minyak, "uom": m.karung, "factor": 3})
+	p.doc("goods_receipt", map[string]any{"vendor": m.vend, "outlet": m.outA, "items": []any{map[string]any{"item": m.minyak, "qty": 1, "uom": m.karung, "packing": pack, "rate": 100000}}})
+	trf := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{
+		map[string]any{"item": m.minyak, "qty": 1}, map[string]any{"item": m.minyak, "qty": 1}}})
+	if l := rows(p.get("stock_transfer", trf)["items"]); rp(l[0]["unit_cost"]) != 33333 || rp(l[1]["unit_cost"]) != 33334 {
+		t.Fatalf("line unit costs = %v %v", l[0]["unit_cost"], l[1]["unit_cost"])
+	}
+	if out := -p.sumIn(trf); out != 66667 {
+		t.Fatalf("out-value = %d", out)
+	}
+	wantCode(t, p.submitErr("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.minyak, 0)), 409, "empty_receipt")
+
+	a := p.doc("stock_transfer_receipt", map[string]any{"stock_transfer": trf, "outlet": m.outB, "items": []any{
+		map[string]any{"item": m.minyak, "qty": 0}, map[string]any{"item": m.minyak, "qty": 1.999999}}})
+	mv := p.moves(a)
+	if len(mv) != 1 || rp(mv[0]["unit_cost"]) != 33334 || rp(mv[0]["value"]) != 66667 {
+		t.Fatalf("capped partial = %v", mv)
+	}
+	b := p.submit("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.minyak, 0.000001))
+	for _, r := range []string{a, b} {
+		for _, mv := range p.moves(r) {
+			if qtyOf(mv["qty"]) > 0 && rp(mv["value"]) < 0 {
+				t.Fatalf("positive qty with negative value: %v", mv)
+			}
+		}
+	}
+	if p.sumIn(a, b) != 66667 || p.get("stock_transfer", trf)["state"] != "received" {
+		t.Fatalf("in-values %d, state %v", p.sumIn(a, b), p.get("stock_transfer", trf)["state"])
+	}
+	p.wantBalance(m.outB, m.minyak, 2, 66667, 33334)
+}
+
+// TestPilotTransferCancelEarlierReceipt: cancelling a receipt that is not the last one, then receiving again;
+// the in-values still add up to the out-value.
+func TestPilotTransferCancelEarlierReceipt(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	pack := p.create("uom_conversion", map[string]any{"item": m.beras, "uom": m.karung, "factor": 70})
+	p.doc("goods_receipt", map[string]any{"vendor": m.vend, "outlet": m.outA, "items": []any{map[string]any{"item": m.beras, "qty": 1, "uom": m.karung, "packing": pack, "rate": 1000000}}})
+	trf := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 30}}})
+	r1 := p.submit("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.beras, 9.75))
+	r2 := p.submit("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.beras, 10.25))
+	if p.sumIn(r1) != 139289 || p.sumIn(r2) != 146432 {
+		t.Fatalf("parts = %d %d", p.sumIn(r1), p.sumIn(r2))
+	}
+	if err := p.cancel("stock_transfer_receipt", r1); err != nil {
+		t.Fatal(err)
+	}
+	p.wantTransfer(trf, "partly_received", 10.25, 14286)
+	r3 := p.submit("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.beras, 9.75))
+	r4 := p.submit("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.beras, 10))
+	if got := p.sumIn(r1, r2, r3, r4); got != 428580 || p.sumIn(r4) != 428580-146432-139289 {
+		t.Fatalf("in-values %d (last %d), out-value 428580", got, p.sumIn(r4))
+	}
+	p.wantBalance(m.outB, m.beras, 30, 428580, 14286)
+	p.wantTransfer(trf, "received", 30, 14286)
+}
+
+// TestPilotOneStepTransferCancelAfterUpgrade: a transfer submitted one-step (no receipt model yet) is not
+// receivable once the model is installed, and cancelling it reverses its 4 real moves.
+func TestPilotOneStepTransferCancelAfterUpgrade(t *testing.T) {
+	p := setupPilot(t)
+	rm := p.e.Reg().Models["stock_transfer_receipt"]
+	delete(p.e.Reg().Models, "stock_transfer_receipt")
+	m := p.masters()
+	p.receipt(m, m.outA, 100, 12000)
+	trf := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{
+		map[string]any{"item": m.beras, "qty": 10}, map[string]any{"item": m.beras, "qty": 5}}})
+	if mv := p.moves(trf); len(mv) != 4 {
+		t.Fatalf("one-step moves = %v", mv)
+	}
+	p.wantBalance(m.outB, m.beras, 15, 180000, 12000)
+
+	p.e.Reg().Models["stock_transfer_receipt"] = rm
+	wantCode(t, p.submitErr("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.beras, 1)), 409, "not_in_transit")
+	if err := p.cancel("stock_transfer", trf); err != nil {
+		t.Fatal(err)
+	}
+	mv := p.moves(trf)
+	n := 0
+	for _, x := range mv {
+		if x["reason"] == "reversal" {
+			n++
+		}
+	}
+	if len(mv) != 8 || n != 4 {
+		t.Fatalf("after cancel: %d moves, %d reversals", len(mv), n)
+	}
+	p.wantBalance(m.outA, m.beras, 100, 1200000, 12000)
+	p.wantBalance(m.outB, m.beras, 0, 0, 12000)
+}
+
+// TestPilotReceiptRacesReceiptCancel: a receipt submitted while the receipt that took everything is
+// cancelled. The cancel always succeeds; the new receipt either follows it or finds the transfer received.
+func TestPilotReceiptRacesReceiptCancel(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	p.receipt(m, m.outA, 1000, 12000)
+	var received float64
+	for i := 0; i < 4; i++ {
+		trf := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 10}}})
+		r1 := p.submit("stock_transfer_receipt", p.trReceipt(trf, m.outB, m.beras, 10))
+		r2 := p.trReceipt(trf, m.outB, m.beras, 10)
+		cancelErr, recErr := make(chan error, 1), make(chan error, 1)
+		go func() { cancelErr <- p.cancel("stock_transfer_receipt", r1) }()
+		go func() { recErr <- p.submitErr("stock_transfer_receipt", r2) }()
+		ce, re := <-cancelErr, <-recErr
+		if ce != nil {
+			t.Fatalf("round %d: cancel %v", i, ce)
+		}
+		tr := p.get("stock_transfer", trf)
+		switch {
+		case re == nil:
+			if tr["state"] != "received" {
+				t.Fatalf("round %d: receipt won, state %v", i, tr["state"])
+			}
+		default:
+			wantCode(t, re, 409, "not_in_transit")
+			if tr["state"] != "in_transit" {
+				t.Fatalf("round %d: receipt refused, state %v", i, tr["state"])
+			}
+		}
+		received += qtyOf(rows(tr["items"])[0]["received_qty"])
+	}
+	if b := p.balance(m.outB, m.beras); qtyOf(b["qty"]) != received || rp(b["value"]) != int64(received)*12000 {
+		t.Fatalf("Dago %v / %v, received %v", b["qty"], b["value"], received)
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net/url"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -736,5 +737,54 @@ func TestRestoreMissingBlob(t *testing.T) {
 	_, err := backup.Restore(ctx, pool(t, testdb.New(t)), stripped, restoreOpts(t))
 	if !errors.Is(err, backup.ErrVerify) || !strings.Contains(err.Error(), att.SHA256) {
 		t.Fatalf("err = %v, want ErrVerify naming the blob", err)
+	}
+}
+
+// A hosted install connects as the database owner, a role RLS applies to (NOSUPERUSER NOBYPASSRLS, contract
+// 0010 §4). Postgres refuses COPY FROM into a table whose RLS binds the caller, so restore must still load
+// every row as that role and leave RLS forced afterwards.
+func TestRestoreAsTableOwner(t *testing.T) {
+	ctx := context.Background()
+	s := newSource(t)
+	archive := s.backup(t, "")
+
+	admin := pool(t, os.Getenv("RANGKA_TEST_DATABASE_URL"))
+	role := "rk_owner_" + strings.ToLower(store.RandomName(8))
+	if _, err := admin.Exec(ctx, "create role "+role+" login nosuperuser nobypassrls"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { admin.Exec(context.Background(), "drop role if exists "+role) })
+	dstURL := testdb.New(t) // dropped before the role (cleanups run last-in first-out)
+	u, err := url.Parse(dstURL)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, "alter database "+pg.QuoteIdent(strings.TrimPrefix(u.Path, "/"))+" owner to "+role); err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.User(role)
+	dst := pool(t, u.String())
+
+	if _, err := backup.Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
+		t.Fatalf("restore as the owner role: %v", err)
+	}
+	a, err := backup.Sums(ctx, s.db, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := backup.Sums(ctx, dst, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(a, b) {
+		t.Errorf("sums differ after restoring as the owner role")
+	}
+	if n := count(t, dst, `select count(*) from pg_class where relnamespace = 'public'::regnamespace
+		and relkind = 'r' and relrowsecurity and not relforcerowsecurity`); n != 0 {
+		t.Errorf("%d tables lost forced row-level security", n)
+	}
+	if n := count(t, dst, `select count(*) from pg_class where relnamespace = 'public'::regnamespace
+		and relkind = 'r' and relforcerowsecurity`); n == 0 {
+		t.Errorf("no table has forced row-level security; the test does not exercise RLS")
 	}
 }

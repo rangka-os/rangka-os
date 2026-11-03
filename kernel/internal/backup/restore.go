@@ -407,6 +407,23 @@ func load(ctx context.Context, db *pg.Pool, tables []TableSum, dir string) error
 	if err != nil {
 		return err
 	}
+	// COPY FROM is refused on a table whose row-level security binds the caller, which forced RLS does for
+	// the owner role a hosted install runs as. The owner may lift the force for this transaction; it is put
+	// back before commit, and a failed load rolls the ALTERs back with everything else.
+	r, err := tx.Query(ctx, `select quote_ident(relname) from pg_class
+		where relnamespace = 'public'::regnamespace and relkind = 'r' and relforcerowsecurity`)
+	if err != nil {
+		return err
+	}
+	var forced []string
+	for _, row := range r.Rows {
+		forced = append(forced, row[0].(string))
+	}
+	for _, t := range forced {
+		if _, err := tx.Exec(ctx, "alter table "+t+" no force row level security"); err != nil {
+			return fmt.Errorf("lift forced row-level security on %s for the load: %w", t, err)
+		}
+	}
 	for _, t := range ordered {
 		f, err := os.Open(filepath.Join(dir, "data", t.Name+".copy"))
 		if err != nil {
@@ -422,7 +439,12 @@ func load(ctx context.Context, db *pg.Pool, tables []TableSum, dir string) error
 			return fmt.Errorf("%w: %s: loaded %d rows, the manifest says %d", ErrVerify, t.Name, n, t.Rows)
 		}
 	}
-	r, err := tx.Query(ctx, `select quote_ident(n.nspname) || '.' || quote_ident(s.relname), quote_ident(t.relname), quote_ident(a.attname)
+	for _, t := range forced {
+		if _, err := tx.Exec(ctx, "alter table "+t+" force row level security"); err != nil {
+			return fmt.Errorf("force row-level security on %s again: %w", t, err)
+		}
+	}
+	r, err = tx.Query(ctx, `select quote_ident(n.nspname) || '.' || quote_ident(s.relname), quote_ident(t.relname), quote_ident(a.attname)
 		from pg_class s join pg_namespace n on n.oid = s.relnamespace
 		join pg_depend d on d.objid = s.oid and d.classid = 'pg_class'::regclass and d.refclassid = 'pg_class'::regclass and d.deptype in ('a', 'i')
 		join pg_class t on t.oid = d.refobjid join pg_attribute a on a.attrelid = t.oid and a.attnum = d.refobjsubid

@@ -198,7 +198,9 @@ drill_pilot() {
     log "$p: no UTC stamp in the name $name: age not checked" # only possible with --archive and a renamed file
   fi
   dc up -d --wait postgres >/dev/null || { log "$p: postgres did not start"; return 1; }
-  dc run --rm -T --no-deps -v "$IDENTITY:/run/secrets/age-identity:ro" -v "$TMP/pilots/$p:/restore/$p" \
+  # the admin password reaches the restore through the environment (needed by rangka archives only, see restore.sh)
+  RESTORE_ADMIN_PASSWORD="$(grep '^POSTGRES_PASSWORD=' "$TMP/drill.env" | cut -d= -f2)" \
+  dc run --rm -T --no-deps -e RESTORE_ADMIN_PASSWORD -v "$IDENTITY:/run/secrets/age-identity:ro" -v "$TMP/pilots/$p:/restore/$p" \
     --entrypoint /usr/local/bin/restore.sh backup "/backups/in/$name" "$p" 2>&1 | tee "$TMP/restore.out" >&2 || { log "$p: restore failed"; return 1; }
   warn_release "$p"
   # /srv/backups (pre-migrate backups of the kernel in production mode) lives outside the archive

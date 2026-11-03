@@ -240,7 +240,18 @@ hand any time: `docker compose run --rm backup all` (or `jasa` / `fnb`).
    org link, so it could never match the manifest. `rangka restore <file> --into <dir> --files <dir>` also with
    `DATABASE_URL`; both folders go to a scratch dir (they must be empty, and the pilot folder already holds
    `backups/`), the pilot folders come from the archive's own `apps.tar`, `site.tar`, `files.tar`. Not proven:
-   attachments (the sample data has none), and a backup of a database with S5's row-level security (section 10).
+   attachments (the sample data has none).
+
+   **Kernel finding, restore of a `rangka` archive needs the admin role.** With S5 the model tables have row-level
+   security enabled and forced, and Postgres refuses `COPY FROM` on such a table for every role the policy binds
+   (SQLSTATE 0A000, "COPY FROM not supported with row-level security"), the owner included. `rangka restore` loads
+   rows with COPY, so as the pilot role it fails at the first model table. `restore.sh` therefore restores a
+   `rangka` archive as the `postgres` role (`RESTORE_ADMIN_PASSWORD` in its environment; the drill supplies it
+   from its throwaway secrets) and then hands every table and sequence to the pilot role with `ALTER ... OWNER`,
+   so FORCE RLS and the kernel's migrations work exactly as for a `pg_dump` restore. The drill's RLS gate runs
+   after that and still requires the pilot role to be NOSUPERUSER NOBYPASSRLS with RLS enabled and forced.
+   `pg_dump` archives restore as the pilot role as before. A kernel fix (a restore that sets up RLS after the load,
+   or restores through a role that may bypass it) would remove this step.
 
 **Rollback:** set the previous tag in `.env`, `docker compose up -d`. If the new release's migration changed data
 destructively, the old binary is not enough: restore from the pre-upgrade archive (section 6).
@@ -303,6 +314,8 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
      -v "$(grep '^PILOTS_DIR=' .env | cut -d= -f2-)/<pilot>:/restore/<pilot>" \
      --entrypoint /usr/local/bin/restore.sh backup "/backups/<pilot>/<archive name>" <pilot>
    ```
+   For an archive with `method: rangka` (manifest.json) add `-e RESTORE_ADMIN_PASSWORD` and export the postgres
+   superuser password (`POSTGRES_PASSWORD` from `.env`) in your shell for this one command; see section 5.
    (`/backups/in/<archive name>` if you copied it in step 1.) Expected last line:
    `restore ok: <N> tables, <M> rows match`. Earlier lines: `restore: checksums ok`,
    `restore: unpacked apps, site and files into /restore/<pilot>`. Any `MISSING`, `MISMATCH` or
@@ -401,10 +414,13 @@ KEEP=1 deploy/juragan/local/e2e.sh   # leaves the stack running
 RANGKA_SRC=<checkout> deploy/juragan/local/e2e.sh   # build the kernel from another checkout
 ```
 
-`section_rls` needs a kernel with S5 (multi-org, row-level security, outlet scope, contract 0010). Until S5 is on
-`main` it prints `SKIP ******** section_rls NOT RUN` and the summary says `skipped 1`: that is not a pass. To run it,
-point `RANGKA_SRC` at a checkout of the S5 branch (for example
-`git worktree add --detach /tmp/s05 origin/pilot/s05-multiorg`, then `RANGKA_SRC=/tmp/s05 deploy/juragan/local/e2e.sh`).
+`section_rls` needs a kernel with S5 (multi-org, row-level security, outlet scope, contract 0010), which `main` has: the
+default image runs it. With an older checkout in `RANGKA_SRC` it prints `SKIP ******** section_rls NOT RUN` and the
+summary counts it as skipped: that is not a pass. It starts a third kernel as a plain owner role on its own database
+and the two-org fixture `local/fixtures/rls`, and asserts through REST and SQL that an org_a user cannot list or
+GET org_b rows (404), an outlet user sees only their outlet (403 on another outlet's row), and that the owner role
+with `rangka.org=org_a` counts 0 org_b rows. The restore drill repeats the role and RLS checks on every restored
+pilot database (section 7).
 
 ## 9. Go-live checklist
 
@@ -431,8 +447,9 @@ Postgres skips row-level security for superusers and for roles with `BYPASSRLS`.
 every model table has RLS enabled and forced, with policy `rk_org`, and the kernel sets `rangka.org` per request:
 only a role that is neither of those makes that database-level guard hold, even if a query forgets its
 `where org_id`. Never connect a kernel as `postgres`, and never grant `BYPASSRLS`. The nightly dump and the
-restore run as the same plain role, which is enough: the policy lets every row through when `rangka.org` is not set
-(migrations, seed, the backup), so the backup is complete.
+`pg_restore` run as the same plain role, which is enough: the policy lets every row through when `rangka.org` is not
+set (migrations, seed, the backup), so the backup is complete. The exception is `rangka restore` (COPY is refused
+under RLS): restore.sh runs it as `postgres` and gives the objects back to the pilot role (section 5).
 
 **The warning to look for.** A kernel that connects as a superuser or BYPASSRLS role logs, once at start:
 

@@ -403,7 +403,8 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 		}
 		d = &Decision{Approval: *ap}
 		if flow { // a flow request stands alone: no snapshot of a record, no sibling requests
-			return o.runApproved(ap, d)
+			_, err := o.runApproved(ap, d)
+			return err
 		}
 		left, _, err := store.ListApprovals(o.ctx, o.tx, store.ApprovalFilter{Org: a.Org, State: "pending", Model: ap.Model, Name: ap.Name, Verb: ap.Verb, Limit: 500})
 		if err != nil {
@@ -430,7 +431,12 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 		if waiting {
 			return nil
 		}
-		return o.runApproved(ap, d)
+		ran, err := o.runApproved(ap, d)
+		if err != nil || !ran {
+			return err
+		}
+		// the verb ran: requests of the same verb with other args can no longer run on this record state
+		return o.voidApprovals(ap.Model, ap.Name, ap.Verb)
 	})
 	if stale != nil && errors.Is(err, errApprovalVoid) {
 		// the record changed behind the engine's back: void its requests in a transaction of their own
@@ -444,45 +450,49 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 	return d, nil
 }
 
-// runApproved runs the request's verb as its requester inside o's transaction.
-func (o *op) runApproved(ap *store.Approval, d *Decision) error {
+// runApproved runs the request's verb as its requester inside o's transaction. ran is false when the verb is
+// held again (a policy that newly matches waits).
+func (o *op) runApproved(ap *store.Approval, d *Decision) (ran bool, err error) {
 	ro := &op{ctx: o.ctx, tx: o.tx, e: o.e, actor: requesterActor(o.actor.Org, ap.Requester), touched: o.touched, links: map[string]map[string]any{},
 		approving: true}
 	switch {
 	case isFlowApproval(ap):
-		return ro.resumeFlow(ap, d)
+		return true, ro.resumeFlow(ap, d)
 	case ap.Verb == "submit":
 		force, _ := ap.Args["force"].(bool)
 		res, err := ro.submit(ap.Model, ap.Name, force)
 		if err != nil {
-			return err
+			return false, err
 		}
-		if !res.Held {
-			d.Record = res.Record
+		if res.Held {
+			return false, nil
 		}
+		d.Record = res.Record
 	case ap.Verb == "cancel":
 		res, err := ro.cancel(ap.Model, ap.Name)
 		if err != nil {
-			return err
+			return false, err
 		}
-		if !res.Held {
-			d.Record = res.Record
+		if res.Held {
+			return false, nil
 		}
+		d.Record = res.Record
 	default:
 		args, _ := ap.Args["args"].(map[string]any)
 		out, err := ro.runAction(ap.Model, ap.Name, ap.Verb, args, ActionOpts{})
 		if err != nil {
-			return err
+			return false, err
 		}
 		switch {
 		case out.Held:
+			return false, nil
 		case out.Queued:
 			d.Action = map[string]any{"queued": true, "job_id": out.JobID}
 		default:
 			d.Action = out.Result
 		}
 	}
-	return nil
+	return true, nil
 }
 
 func isFlowApproval(ap *store.Approval) bool { return strings.HasPrefix(ap.Verb, "flow:") }

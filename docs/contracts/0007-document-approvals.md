@@ -43,7 +43,8 @@ When the last pending request of a (record, verb) is approved, the kernel runs t
 **as the requester** (their id, user record and roles, stored on the request), with the request's arguments
 (`force` for submit, `args` for actions). Audit entries record both requester and approver. If the verb now fails
 (a rule fails because linked data changed, a warning needs `force` that was not given), the approval is rolled back
-and the error is returned; the request stays pending.
+and the error is returned; the request stays pending. Once the verb has run, the other pending requests of the
+same (record, verb), made for other arguments, become `void` (SSE `approval` event, audit `approval.void`).
 
 Reject (`{reason}` required) sets the request `rejected`; other pending requests for the same (record, verb) become
 `void`. The record stays a draft and can be edited and submitted again, which creates new requests.

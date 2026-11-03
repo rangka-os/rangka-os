@@ -527,14 +527,19 @@ func TestApprovalBoundToArgs(t *testing.T) {
 	if p := pendingFor(t, e, rep, "lead", "LEAD-00031"); len(p) != 3 {
 		t.Fatalf("pending = %d", len(p))
 	}
-	// approving B runs B (with B's args) and leaves A pending
+	// approving B runs B (with B's args); the requests of the other calls (A, no args) become void
 	var got map[string]any
 	e.Hooks["crm.convert_lead"] = func(h *HookCtx) (map[string]any, error) { got = h.Args; return map[string]any{}, nil }
 	if _, err := e.Approve(ctx, mgr, b.Approvals[0].ID); err != nil || got["note"] != "B" {
 		t.Fatalf("approve B: %v args %v", err, got)
 	}
-	if ap := approval(t, e, a.Approvals[0].ID); ap.State != "pending" {
-		t.Fatalf("A = %s", ap.State)
+	for _, id := range []string{a.Approvals[0].ID, n1.Approvals[0].ID} {
+		if ap := approval(t, e, id); ap.State != "void" {
+			t.Fatalf("%s = %s", id, ap.State)
+		}
+	}
+	if au, _ := store.ListAudit(ctx, e.DB, store.AuditFilter{Orgs: []string{"kopi-senja"}, Kind: "approval.void"}); len(au) != 2 {
+		t.Fatalf("void audit = %d", len(au))
 	}
 }
 

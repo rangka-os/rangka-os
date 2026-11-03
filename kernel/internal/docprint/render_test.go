@@ -71,7 +71,7 @@ func mustContain(t *testing.T, out string, wants ...string) {
 
 func TestRenderShell(t *testing.T) {
 	out := renderBody(t, `<p>{{.Doc.name}}</p>`, "A5", map[string]any{"name": "INV-1"}, nil)
-	if !strings.HasPrefix(out, "<!doctype html>\n<html lang=\"id\">\n<head>\n<meta charset=\"utf-8\">\n<title>INV-1</title>\n<style>") {
+	if !strings.HasPrefix(out, "<!doctype html>\n<html lang=\"id\">\n<head>\n<meta charset=\"utf-8\">\n"+cspMeta+"\n<title>INV-1</title>\n<style>") {
 		t.Errorf("bad shell start:\n%s", out)
 	}
 	if !strings.HasSuffix(out, "</style>\n</head>\n<body class=\"print-a5\">\n<p>INV-1</p>\n</body>\n</html>\n") {
@@ -79,6 +79,22 @@ func TestRenderShell(t *testing.T) {
 	}
 	mustContain(t, out, `<html lang="id">`, `<title>INV-1</title>`, `@page{size:A5;margin:10mm}`, `class="print-a5"`, `<p>INV-1</p>`,
 		"#1C1917", "#D6D3D1", "#57534E", "tabular-nums", "10pt")
+}
+
+// cspMeta is the shell's CSP meta tag: the PDF is a file:// page Chromium opens without the HTTP header.
+const cspMeta = `<meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src data:; style-src 'unsafe-inline'">`
+
+// The CSP meta is the first element after charset in <head>, before anything a template can add.
+func TestRenderCSPMeta(t *testing.T) {
+	out := renderBody(t, `{{define "style"}}p{color:red}{{end}}<img src="http://127.0.0.1:9/x.png"><script>alert(1)</script>`, "A4",
+		map[string]any{"name": "INV-1"}, nil)
+	head := out[:strings.Index(out, "</head>")]
+	if !strings.Contains(head, "<meta charset=\"utf-8\">\n"+cspMeta+"\n<title>") || strings.Count(out, "Content-Security-Policy") != 1 {
+		t.Errorf("CSP meta not right after charset:\n%s", out)
+	}
+	if !strings.Contains(cspMeta, CSP) {
+		t.Errorf("cspMeta out of step with CSP %q", CSP)
+	}
 }
 
 func TestRenderPapers(t *testing.T) {

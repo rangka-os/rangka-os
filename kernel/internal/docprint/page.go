@@ -33,7 +33,9 @@ const baseCSS = `*{box-sizing:border-box}` +
 
 // shell builds the page template text; the format's template is executed as bodyName.
 func shell(page, class string) string {
-	return "<!doctype html>\n<html lang=\"id\">\n<head>\n<meta charset=\"utf-8\">\n<title>{{.Doc.name}}</title>\n" +
+	// The CSP is also a meta tag, first after charset: a PDF is rendered from a file:// page with no HTTP header.
+	return "<!doctype html>\n<html lang=\"id\">\n<head>\n<meta charset=\"utf-8\">\n" +
+		"<meta http-equiv=\"Content-Security-Policy\" content=\"" + CSP + "\">\n<title>{{.Doc.name}}</title>\n" +
 		"<style>" + page + baseCSS + "{{template \"style\" .}}</style>\n</head>\n" +
 		"<body class=\"print-" + class + "\">\n{{template \"" + bodyName + "\" .}}\n</body>\n</html>\n"
 }

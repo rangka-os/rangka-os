@@ -7,8 +7,8 @@ from the workspace.
 
 ```text
 rangka validate --apps <dir> [--site <dir>] [--connectors <dir>] [--json] [app ...]
-rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n]
-rangka backup   --db <url> [--apps <dir>] [--site <dir>] [--out <file>] [--org <id>] [--files <dir>]
+rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n] [--files-dir <dir>]
+rangka backup   --db <url> [--apps <dir>] [--site <dir>] [--out <file>] [--org <id>] [--files-dir <dir>]
 rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>]
@@ -47,7 +47,7 @@ Every step records its reverse.
 ## Backup and restore
 
 ```text
-rangka backup  --db <url> --apps <dir> --site <dir> [--out rangka-all-20261103-020000.tar.gz] [--org <id>] [--files <dir>]
+rangka backup  --db <url> --apps <dir> --site <dir> [--out rangka-all-20261103-020000.tar.gz] [--org <id>] [--files-dir <dir>]
 rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database> [--into restore-dir] [--files <dir>]
 ```
 
@@ -55,16 +55,25 @@ rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database>
   `public` as `COPY` text, `site/` (without `data/` and `backups/`), `apps/` and the uploads directory.
 - Backup is written in Go through the database connection (`COPY ... TO STDOUT`), so the single binary needs no
   Postgres client tools. All tables are read from one snapshot. The file is written as `<out>.partial` and renamed
-  when complete.
-- `--org` archives one organisation (rows with that `org_id`). Rows of the installation itself (`org_id` empty) are
-  left out, so schedule whole-database backups for disaster recovery. Without `--org` the whole database is archived.
-- `--files` (backup and restore) resolves like `serve`: `$RANGKA_FILES_DIR`, else `files.path` of `system.rk`, else
-  `./data/files`. Relative paths are relative to the working directory; set `RANGKA_FILES_DIR` in deployments. A symlinked
-  file inside the tree is copied as its content; a symlinked directory inside the tree is an error that names it.
+  when complete. Every archive (also the pre-migrate ones) is created with mode `0600`: it holds password, token and
+  session hashes and the OIDC signing key.
+- `--org` archives one organisation: rows with that `org_id`, its members' users, and only its own area of the
+  uploads directory (`files/<org>/`). Tables without an org link are left out and listed in the manifest's
+  `excluded` field, except `rk_meta_files` and `rk_migrations`. Today that is `rk_keys`, so a restored org archive
+  makes a fresh OIDC signing key on first use (OIDC clients fetch the new JWKS). Rows of the installation itself
+  (`org_id` empty) are left out as well, so schedule whole-database backups for disaster recovery. Without `--org` the
+  whole database is archived.
+- `--files-dir` (`--files` also works for backup and restore) resolves like `serve`: `$RANGKA_FILES_DIR`, else `files.path`
+  of `system.rk`, else `./data/files`. Relative paths are relative to the working directory; set `RANGKA_FILES_DIR` in
+  deployments. A symlinked file inside the tree is copied as its content; a symlinked directory inside the tree is an
+  error that names it.
+- Backup fails when an attachment row in scope (`rk_attachments`) has no blob in the uploads directory, also when the
+  directory does not exist. Run it where `serve` runs or point `--files-dir` / `RANGKA_FILES_DIR` at the same directory.
 - `restore` needs an empty database. It migrates from the archived `apps/` and `site/`, adds archived columns the
   models no longer have, loads the tables in foreign-key order with `COPY ... FROM STDIN`, resets sequences, then
-  recomputes the checksums and compares them with the manifest. It writes `site/` and `apps/` into `--into`
-  (default `./restore-<archive name>`) and the uploads into `--files`.
+  recomputes the checksums and compares them with the manifest. It also checks that every restored attachment row
+  has its blob. It writes `site/` and `apps/` into `--into` (default `./restore-<archive name>`) and the uploads into
+  `--files` (directories `0750`, files `0640`, like the files store).
 - An archive written by a newer kernel than the running binary is refused. A corrupt archive (bad checksum, unsafe
   entry, unexpected column type) is refused before anything is written.
 - If a restore fails after the migration step, the schema is left behind. Retry into a fresh database.
@@ -79,7 +88,9 @@ migration that `serve` runs at start-up and every change-set apply first write a
 <RANGKA_BACKUP_DIR, default <site>/backups>/rangka-all-<YYYYMMDD-HHMMSS>-pre-migrate.tar.gz
 ```
 
-Without `--site` the default is `./backups` in the working directory.
+Without `--site` the default is `./backups` in the working directory. The backup archives the uploads directory that
+`serve` uses: pass `rangka migrate` the same `--files-dir` (or `RANGKA_FILES_DIR`) as `serve`, or the backup fails
+when attachments exist.
 
 The backup is taken only when there is something to apply, before the first statement. If it fails, the migration
 does not run. Archives are never overwritten and never deleted by the kernel: clear old ones yourself, and copy
@@ -120,6 +131,7 @@ made by `npm create @rangka-os` needs no flags:
 | `DATABASE_URL` | `--db` |
 | `RANGKA_APPS`, `RANGKA_SITE`, `RANGKA_CONNECTORS`, `RANGKA_FIXTURES` | `--apps`, `--site`, `--connectors`, `--fixtures` |
 | `RANGKA_ORG` | `--org` (seed, serve) |
+| `RANGKA_FILES_DIR` | `--files-dir` (serve, migrate, backup), `--files` (restore) |
 | `RANGKA_ENV` | `production` turns on the backup before migrations |
 | `RANGKA_BACKUP_DIR` | where those backups go (default `<site>/backups`) |
 | `RANGKA_ADDR` | `--addr` |

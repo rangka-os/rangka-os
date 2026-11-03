@@ -21,6 +21,7 @@ func cmdBackup(args []string) int {
 	out := fs.String("out", "", "archive path (default rangka-<org|all>-<YYYYMMDD-HHMMSS>.tar.gz)")
 	org := fs.String("org", "", "back up one organisation (default: the whole database)")
 	files := fs.String("files", envOr("RANGKA_FILES_DIR", ""), "uploads directory (default: $RANGKA_FILES_DIR, else system.rk files.path, else ./data/files; relative to the working directory, like serve)")
+	fs.StringVar(files, "files-dir", envOr("RANGKA_FILES_DIR", ""), "same as --files (the flag name serve and migrate use)")
 	fs.Parse(reorder(args))
 	ctx := context.Background()
 	now := time.Now()

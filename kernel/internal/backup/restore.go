@@ -70,7 +70,7 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 	}
 	apps, site := filepath.Join(o.Into, "apps"), ""
 	for _, d := range []string{"site", "apps"} {
-		if err := copyTree(filepath.Join(tmp, d), filepath.Join(o.Into, d)); err != nil {
+		if err := copyTree(filepath.Join(tmp, d), filepath.Join(o.Into, d), 0o755, 0o644); err != nil {
 			return nil, err
 		}
 	}
@@ -107,7 +107,7 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 		return nil, partly(err)
 	}
 	// 6. files
-	if err := copyTree(filepath.Join(tmp, "files"), files); err != nil {
+	if err := copyTree(filepath.Join(tmp, "files"), files, 0o750, 0o640); err != nil {
 		return nil, partly(err)
 	}
 	for _, f := range m.Files {
@@ -119,9 +119,19 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 			return nil, partly(fmt.Errorf("%w: file %s", ErrVerify, f.Path))
 		}
 	}
-	// 7. verify
+	// 7. verify: the tables against the manifest, and every restored attachment row against its blob
 	if err := verify(ctx, db, m); err != nil {
 		return nil, partly(err)
+	}
+	blobs, err := attachmentBlobs(ctx, db, "")
+	if err != nil {
+		return nil, partly(err)
+	}
+	if missing := missingBlobs(blobs, func(rel string) bool {
+		st, err := os.Stat(filepath.Join(files, filepath.FromSlash(rel)))
+		return err == nil && st.Mode().IsRegular()
+	}); len(missing) > 0 {
+		return nil, partly(fmt.Errorf("%w: %d attachment blob(s) missing from %s: %s", ErrVerify, len(missing), files, listSome(missing)))
 	}
 	return m, nil
 }
@@ -444,8 +454,8 @@ func verify(ctx context.Context, db *pg.Pool, m *Manifest) error {
 	return nil
 }
 
-// copyTree copies the regular files under src into dst (nothing when src does not exist).
-func copyTree(src, dst string) error {
+// copyTree copies the regular files under src into dst with the given modes (nothing when src does not exist).
+func copyTree(src, dst string, dirMode, fileMode os.FileMode) error {
 	if _, err := os.Stat(src); errors.Is(err, fs.ErrNotExist) {
 		return nil
 	}
@@ -456,14 +466,14 @@ func copyTree(src, dst string) error {
 		rel, _ := filepath.Rel(src, p)
 		to := filepath.Join(dst, rel)
 		if d.IsDir() {
-			return os.MkdirAll(to, 0o755)
+			return os.MkdirAll(to, dirMode)
 		}
 		in, err := os.Open(p)
 		if err != nil {
 			return err
 		}
 		defer in.Close()
-		out, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0o644)
+		out, err := os.OpenFile(to, os.O_WRONLY|os.O_CREATE|os.O_EXCL, fileMode)
 		if err != nil {
 			return err
 		}

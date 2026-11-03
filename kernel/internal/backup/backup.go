@@ -21,6 +21,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
@@ -35,8 +36,11 @@ var (
 	ErrNewerArchive = errors.New("backup: the archive is newer than this binary")
 	// ErrCorrupt: the archive cannot be read or an entry does not match its checksum.
 	ErrCorrupt = errors.New("backup: the archive is corrupt")
-	// ErrVerify: the restored database does not match the archive's checksums.
+	// ErrVerify: the restored database does not match the archive's checksums, or an attachment has no blob.
 	ErrVerify = errors.New("backup: the restored database does not match the archive")
+	// ErrMissingBlobs: attachment rows in scope have no blob in the files dir (or the files dir is missing),
+	// so the archive would be incomplete.
+	ErrMissingBlobs = errors.New("backup: attachment files are missing from the files dir")
 )
 
 // Options say what Write archives.
@@ -54,6 +58,9 @@ type Manifest struct {
 	CreatedAt time.Time  `json:"created_at"`
 	Tables    []TableSum `json:"tables"`
 	Files     []FileSum  `json:"files"`
+	// Excluded lists the tables an org archive leaves out: installation-level tables without an org link
+	// (rk_keys, …). Restore starts them empty; the kernel fills them as on first start.
+	Excluded []string `json:"excluded"`
 }
 
 // TableSum is a table's row count and the SHA-256 of its canonical COPY text (see Sums).
@@ -147,6 +154,79 @@ func (t table) filter(org string) string {
 	return " where " + strings.Join(conds, " and ")
 }
 
+// installTables are tables without an org link that an org archive still carries: the restored kernel needs
+// them to know which metadata and migrations are applied.
+var installTables = map[string]bool{"rk_meta_files": true, "rk_migrations": true}
+
+// scope returns the tables an archive of org holds and the names it leaves out: for one org, the tables
+// without an org link (no filter) other than installTables. org "" keeps every table.
+func scope(tables []table, org string) (kept []table, excluded []string) {
+	excluded = []string{}
+	if org == "" {
+		return tables, excluded
+	}
+	for _, t := range tables {
+		if t.filter(org) == "" && !installTables[t.name] {
+			excluded = append(excluded, t.name)
+			continue
+		}
+		kept = append(kept, t)
+	}
+	return kept, excluded
+}
+
+// blob is an attachment's content in the files dir.
+type blob struct{ org, sha string }
+
+// attachmentBlobs lists the distinct blobs the rk_attachments rows of org ("" = every org) point at; none when
+// the table does not exist.
+func attachmentBlobs(ctx context.Context, q pg.Querier, org string) ([]blob, error) {
+	r, err := q.Query(ctx, "select to_regclass('rk_attachments') is not null")
+	if err != nil {
+		return nil, err
+	}
+	if ok, _ := r.Rows[0][0].(bool); !ok {
+		return nil, nil
+	}
+	sql := "select org_id, sha256 from rk_attachments"
+	var args []any
+	if org != "" {
+		sql += " where org_id = $1"
+		args = append(args, org)
+	}
+	if r, err = q.Query(ctx, sql+` group by org_id, sha256 order by org_id collate "C", sha256 collate "C"`, args...); err != nil {
+		return nil, err
+	}
+	out := make([]blob, len(r.Rows))
+	for i, row := range r.Rows {
+		out[i] = blob{row[0].(string), row[1].(string)}
+	}
+	return out, nil
+}
+
+// missingBlobs returns the blobs whose files/<rel> path has() does not report, as slash paths.
+func missingBlobs(blobs []blob, has func(rel string) bool) []string {
+	var missing []string
+	for _, b := range blobs {
+		rel, err := files.BlobRel(b.org, b.sha)
+		if err != nil || !has(rel) {
+			if err != nil {
+				rel = b.org + "/" + b.sha
+			}
+			missing = append(missing, rel)
+		}
+	}
+	return missing
+}
+
+// listSome is the first few of names for an error message.
+func listSome(names []string) string {
+	if len(names) > 5 {
+		return strings.Join(names[:5], ", ") + fmt.Sprintf(" and %d more", len(names)-5)
+	}
+	return strings.Join(names, ", ")
+}
+
 func (t table) colList() string {
 	q := make([]string, len(t.cols))
 	for i, c := range t.cols {
@@ -203,7 +283,7 @@ func sumTables(ctx context.Context, tx *pg.Tx, tables []table, org string, out f
 
 // Sums returns each public table's row count and the SHA-256 of
 // `COPY (select <columns sorted by name> from t [org filter] order by <same columns>) TO STDOUT` with
-// timezone UTC. org "" covers the whole database.
+// timezone UTC. org "" covers the whole database; for one org, the tables an org archive excludes are left out.
 func Sums(ctx context.Context, db *pg.Pool, org string) ([]TableSum, error) {
 	var sums []TableSum
 	err := snapshot(ctx, db, func(tx *pg.Tx) error {
@@ -211,6 +291,7 @@ func Sums(ctx context.Context, db *pg.Pool, org string) ([]TableSum, error) {
 		if err != nil {
 			return err
 		}
+		tables, _ = scope(tables, org)
 		sums, err = sumTables(ctx, tx, tables, org, nil)
 		return err
 	})
@@ -233,7 +314,10 @@ func FilesDir(reg *meta.Registry, override string) string {
 }
 
 // Write archives the database (or one org), the site (minus data/ and backups/), the apps and the files dir
-// as tar.gz into w and returns the manifest. Tables are read from one snapshot.
+// as tar.gz into w and returns the manifest. Tables are read from one snapshot. An org archive holds only that
+// org's rows and its area of the files dir; tables without an org link (rk_keys, …) other than rk_meta_files
+// and rk_migrations are left out and listed in Manifest.Excluded. Write fails with ErrMissingBlobs when an
+// rk_attachments row in scope has no blob in the files dir, also when the files dir does not exist.
 func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest, error) {
 	now := time.Now
 	if o.Now != nil {
@@ -247,6 +331,7 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 	defer os.RemoveAll(tmp)
 	// 1. tables into temp files (the tar header needs each entry's size up front)
 	var open []*os.File
+	var blobs []blob
 	defer func() {
 		for _, f := range open {
 			f.Close()
@@ -265,6 +350,10 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 			if len(r.Rows) == 0 {
 				return fmt.Errorf("backup: org %q not found", o.Org)
 			}
+		}
+		tables, m.Excluded = scope(tables, o.Org)
+		if blobs, err = attachmentBlobs(ctx, tx, o.Org); err != nil {
+			return err
 		}
 		m.Tables, err = sumTables(ctx, tx, tables, o.Org, func(name string) (io.Writer, error) {
 			f, err := os.Create(filepath.Join(tmp, name+".copy"))
@@ -288,12 +377,13 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 	}
 	type entry struct{ name, src string }
 	var entries []entry
+	isFiles := func(prefix string) bool { return prefix == "files" || strings.HasPrefix(prefix, "files/") }
 	add := func(prefix, dir string, skip map[string]bool) error {
 		if dir == "" {
 			return nil
 		}
-		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) && prefix == "files" {
-			return nil // no uploads yet
+		if _, err := os.Stat(dir); errors.Is(err, fs.ErrNotExist) && isFiles(prefix) {
+			return nil // no uploads yet; checked against rk_attachments below
 		}
 		// a root given through a symlink (a mounted volume, a linked site) is walked at its target
 		root, err := filepath.EvalSymlinks(dir)
@@ -307,7 +397,7 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 			rel, _ := filepath.Rel(root, p)
 			if d.IsDir() {
 				// the files dir goes under files/ only, also when system.rk puts it inside the site
-				if skip[filepath.ToSlash(rel)] || (prefix != "files" && filesAbs != "" && abs(p) == filesAbs) {
+				if skip[filepath.ToSlash(rel)] || (!isFiles(prefix) && filesAbs != "" && abs(p) == filesAbs) {
 					return filepath.SkipDir
 				}
 				return nil
@@ -338,8 +428,31 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 	if err := add("apps", o.AppsDir, nil); err != nil {
 		return nil, err
 	}
-	if err := add("files", o.FilesDir, nil); err != nil {
+	filesPrefix, filesDir := "files", o.FilesDir
+	if o.Org != "" && o.FilesDir != "" {
+		// an org archive carries only the org's own area: files/<orgdir>/…
+		od, err := files.OrgDir(o.Org)
+		if err != nil {
+			return nil, err
+		}
+		filesPrefix, filesDir = "files/"+od, filepath.Join(o.FilesDir, od)
+	}
+	if err := add(filesPrefix, filesDir, nil); err != nil {
 		return nil, err
+	}
+	archived := map[string]bool{}
+	for _, e := range entries {
+		archived[e.name] = true
+	}
+	if missing := missingBlobs(blobs, func(rel string) bool { return archived["files/"+rel] }); len(missing) > 0 {
+		where := fmt.Sprintf("files dir %s", o.FilesDir)
+		if o.FilesDir == "" {
+			where = "no files dir given"
+		} else if _, err := os.Stat(o.FilesDir); errors.Is(err, fs.ErrNotExist) {
+			where += " does not exist"
+		}
+		return nil, fmt.Errorf("%w: %d attachment blob(s) not found (%s): %s; point --files-dir or RANGKA_FILES_DIR at the directory rangka serve uses",
+			ErrMissingBlobs, len(missing), where, listSome(missing))
 	}
 	for _, e := range entries {
 		sum, size, err := hashFile(e.src)

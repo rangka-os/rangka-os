@@ -23,6 +23,7 @@ func cmdMigrate(args []string) int {
 	dry := fs.Bool("dry-run", false, "print the statements and their risk without running them")
 	destructive := fs.Bool("allow-destructive", false, "allow retypes that may lose data, soft deletes of removed columns/tables and drops of soft-deleted ones older than 30 days")
 	rollback := fs.Int("rollback", 0, "undo the last n migrations instead of migrating")
+	filesDir := fs.String("files-dir", envOr("RANGKA_FILES_DIR", ""), "attachments directory the production pre-migrate backup archives, as serve (default: system.rk files.path, else ./data/files)")
 	fs.Parse(args)
 	ctx := context.Background()
 	rollbackSet := false
@@ -31,7 +32,7 @@ func cmdMigrate(args []string) int {
 		if *rollback < 1 {
 			return fail(fmt.Errorf("--rollback needs a number of migrations of at least 1"))
 		}
-		return migrateRollback(ctx, &c, store.RollbackOpts{N: *rollback, DryRun: *dry, AllowDestructive: *destructive})
+		return migrateRollback(ctx, &c, *filesDir, store.RollbackOpts{N: *rollback, DryRun: *dry, AllowDestructive: *destructive})
 	}
 	reg, err := c.registry()
 	if err != nil {
@@ -42,7 +43,7 @@ func cmdMigrate(args []string) int {
 		return fail(err)
 	}
 	defer db.Close()
-	res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{DryRun: *dry, AllowDestructive: *destructive, Source: "migrate", Before: preBackup(db, &c, reg)})
+	res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{DryRun: *dry, AllowDestructive: *destructive, Source: "migrate", Before: preBackup(db, &c, reg, *filesDir)})
 	if err != nil && !errors.Is(err, store.ErrDestructive) {
 		return fail(err)
 	}
@@ -79,7 +80,7 @@ func printSteps(steps, refused []store.Step) {
 }
 
 // migrateRollback undoes the last n migrations (rangka migrate --rollback n).
-func migrateRollback(ctx context.Context, c *common, o store.RollbackOpts) int {
+func migrateRollback(ctx context.Context, c *common, filesDir string, o store.RollbackOpts) int {
 	db, err := c.pool(ctx)
 	if err != nil {
 		return fail(err)
@@ -90,7 +91,7 @@ func migrateRollback(ctx context.Context, c *common, o store.RollbackOpts) int {
 		if rerr != nil && server.Production() {
 			fmt.Fprintln(os.Stderr, "rangka: warning: metadata did not load, the backup uses the default files dir:", rerr)
 		}
-		o.Before = preBackup(db, c, reg)
+		o.Before = preBackup(db, c, reg, filesDir)
 	}
 	res, err := store.Rollback(ctx, db, o)
 	if err != nil && (res == nil || !errors.Is(err, store.ErrDestructive)) {
@@ -142,8 +143,9 @@ func cmdSeed(args []string) int {
 }
 
 // preBackup is the production-mode backup before a migration or rollback (see server.PreMigrateBackup).
-func preBackup(db *pg.Pool, c *common, reg *meta.Registry) func(context.Context, []store.Step) error {
-	files := backup.FilesDir(reg, os.Getenv("RANGKA_FILES_DIR")) // the directory serve uses
+// filesDir is --files-dir ($RANGKA_FILES_DIR), resolved like serve.
+func preBackup(db *pg.Pool, c *common, reg *meta.Registry, filesDir string) func(context.Context, []store.Step) error {
+	files := backup.FilesDir(reg, filesDir) // the directory serve uses
 	return server.PreMigrateBackup(db, backup.Options{SiteDir: c.site, AppsDir: c.apps, FilesDir: files, Version: Version},
 		server.BackupDir(c.site))
 }

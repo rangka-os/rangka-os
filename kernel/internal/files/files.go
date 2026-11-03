@@ -66,7 +66,11 @@ func orgDir(org string) (string, error) {
 	return "_" + hex.EncodeToString(h[:])[:16], nil
 }
 
-func (l *Local) blobPath(org, sum string) (string, error) {
+// OrgDir is the directory name of an org's area under the files root (see orgDir).
+func OrgDir(org string) (string, error) { return orgDir(org) }
+
+// BlobRel is a blob's slash path relative to the files root: <orgdir>/<sum[0:2]>/<sum>.
+func BlobRel(org, sum string) (string, error) {
 	dir, err := orgDir(org)
 	if err != nil {
 		return "", err
@@ -74,7 +78,15 @@ func (l *Local) blobPath(org, sum string) (string, error) {
 	if !sumRe.MatchString(sum) {
 		return "", fmt.Errorf("files: invalid sha256 %q", sum)
 	}
-	return filepath.Join(l.root, dir, sum[:2], sum), nil
+	return dir + "/" + sum[:2] + "/" + sum, nil
+}
+
+func (l *Local) blobPath(org, sum string) (string, error) {
+	rel, err := BlobRel(org, sum)
+	if err != nil {
+		return "", err
+	}
+	return filepath.Join(l.root, filepath.FromSlash(rel)), nil
 }
 
 // Put implements Store.

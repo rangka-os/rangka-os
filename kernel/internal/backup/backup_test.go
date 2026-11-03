@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"compress/gzip"
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -528,11 +529,59 @@ func TestOrgBackup(t *testing.T) {
 	if n := count(t, s.db, "select count(*) from r_lead where org_id = 'toko-lain'"); n == 0 {
 		t.Fatal("second org has no leads")
 	}
+	// an attachment in each org, and the installation's OIDC signing key (rk_keys)
+	own := s.attach(t, "kopi-senja", "DEAL-00011", []byte("%PDF-1.4 kopi-senja\n"))
+	other := s.attach(t, "toko-lain", "DEAL-00011", []byte("%PDF-1.4 toko-lain\n"))
+	if _, err := (&auth.Service{DB: s.db}).SignJWT(ctx, map[string]any{"sub": "x"}); err != nil {
+		t.Fatal(err)
+	}
+	if n := count(t, s.db, "select count(*) from rk_keys"); n != 1 {
+		t.Fatalf("source rk_keys rows = %d", n)
+	}
 	archive := s.backup(t, "kopi-senja")
 
 	dst := pool(t, testdb.New(t))
-	if _, err := backup.Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
+	o := restoreOpts(t)
+	m, err := backup.Restore(ctx, dst, archive, o)
+	if err != nil {
 		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(m.Excluded, []string{"rk_keys"}) {
+		t.Errorf("excluded = %v, want [rk_keys]", m.Excluded)
+	}
+	for _, ts := range m.Tables {
+		if ts.Name == "rk_keys" {
+			t.Error("rk_keys is in the org archive")
+		}
+	}
+	for _, f := range m.Files {
+		if strings.HasPrefix(f.Path, "files/") && !strings.HasPrefix(f.Path, "files/kopi-senja/") {
+			t.Errorf("org archive holds %s", f.Path)
+		}
+	}
+	if _, err := os.Stat(filepath.Join(o.FilesDir, "toko-lain")); !os.IsNotExist(err) {
+		t.Error("the other org's files were restored")
+	}
+	rfs, _ := files.NewLocal(o.FilesDir)
+	if f, err := rfs.Open("kopi-senja", own.SHA256); err != nil {
+		t.Errorf("own blob not restored: %v", err)
+	} else {
+		f.Close()
+	}
+	if _, err := rfs.Open("toko-lain", other.SHA256); err == nil {
+		t.Error("the other org's blob was restored")
+	}
+	// the restored kernel has no signing key and makes a fresh one on first use, as on a first start
+	if n := count(t, dst, "select count(*) from rk_keys"); n != 0 {
+		t.Errorf("rk_keys restored: %d rows", n)
+	}
+	if _, err := (&auth.Service{DB: dst}).SignJWT(ctx, map[string]any{"sub": "x"}); err != nil {
+		t.Fatalf("fresh signing key: %v", err)
+	}
+	srcKid, _ := s.db.Query(ctx, "select kid from rk_keys")
+	dstKid, _ := dst.Query(ctx, "select kid from rk_keys")
+	if len(dstKid.Rows) != 1 || reflect.DeepEqual(srcKid.Rows, dstKid.Rows) {
+		t.Errorf("restored kernel keys %v, source %v: want one fresh key", dstKid.Rows, srcKid.Rows)
 	}
 	r, err := dst.Query(ctx, `select c.relname from pg_class c join pg_attribute a on a.attrelid = c.oid
 		where c.relnamespace = 'public'::regnamespace and c.relkind = 'r' and a.attname = 'org_id' and not a.attisdropped order by 1`)
@@ -592,5 +641,94 @@ func TestFilesDir(t *testing.T) {
 	}
 	if got := backup.FilesDir(reg, ""); got != "uploads" {
 		t.Errorf("files.path: got %q, want uploads (relative to the working directory)", got)
+	}
+}
+
+// attach stores blob for org in the source's files dir and inserts its rk_attachments row.
+func (s *source) attach(t *testing.T, org, record string, blob []byte) *store.Attachment {
+	t.Helper()
+	fs, err := files.NewLocal(s.files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sum, size, err := fs.Put(org, bytes.NewReader(blob))
+	if err != nil {
+		t.Fatal(err)
+	}
+	att := &store.Attachment{Org: org, Model: "deal", Record: record, Filename: "bast.pdf",
+		ContentType: "application/pdf", Size: size, SHA256: sum, CreatedBy: "ceo@saga.co.id"}
+	if err := store.InsertAttachment(context.Background(), s.db, att); err != nil {
+		t.Fatal(err)
+	}
+	return att
+}
+
+// TestBackupMissingBlobs: an attachment row without its blob fails the backup instead of writing an archive
+// that restores "verified" without the file, also when the files dir does not exist at all.
+func TestBackupMissingBlobs(t *testing.T) {
+	ctx := context.Background()
+	s := newSource(t)
+	att := s.attach(t, "kopi-senja", "DEAL-00011", []byte("%PDF-1.4 bast\n"))
+	write := func(org, dir string) error {
+		_, err := backup.Write(ctx, s.db, io.Discard, backup.Options{Org: org, SiteDir: s.site, AppsDir: s.apps, FilesDir: dir, Version: version, Now: fixedNow})
+		return err
+	}
+	if err := write("", s.files); err != nil {
+		t.Fatalf("with the blob: %v", err)
+	}
+	// the wrong (missing) files dir, for the whole database and for the org
+	gone := filepath.Join(t.TempDir(), "nowhere")
+	for _, org := range []string{"", "kopi-senja"} {
+		if err := write(org, gone); !errors.Is(err, backup.ErrMissingBlobs) || !strings.Contains(err.Error(), "does not exist") {
+			t.Errorf("org %q, missing files dir: err = %v, want ErrMissingBlobs naming the missing dir", org, err)
+		}
+	}
+	// the blob deleted from an existing files dir
+	fs, _ := files.NewLocal(s.files)
+	if err := fs.Delete("kopi-senja", att.SHA256); err != nil {
+		t.Fatal(err)
+	}
+	if err := write("", s.files); !errors.Is(err, backup.ErrMissingBlobs) || !strings.Contains(err.Error(), att.SHA256) {
+		t.Errorf("missing blob: err = %v, want ErrMissingBlobs naming the blob", err)
+	}
+}
+
+// TestRestoreMissingBlob: restore verification fails when a restored attachment row has no blob, even when
+// the archive's own checksums all match (an archive written without the blob).
+func TestRestoreMissingBlob(t *testing.T) {
+	ctx := context.Background()
+	s := newSource(t)
+	att := s.attach(t, "kopi-senja", "DEAL-00011", []byte("%PDF-1.4 bast\n"))
+	archive := s.backup(t, "")
+	blobPath := "files/kopi-senja/" + att.SHA256[:2] + "/" + att.SHA256
+	dropped := false
+	stripped := rewrite(t, archive, func(name string, data []byte) []byte {
+		switch name {
+		case blobPath:
+			dropped = true
+			return nil
+		case "manifest.json":
+			var m backup.Manifest
+			if err := json.Unmarshal(data, &m); err != nil {
+				t.Fatal(err)
+			}
+			var keep []backup.FileSum
+			for _, f := range m.Files {
+				if f.Path != blobPath {
+					keep = append(keep, f)
+				}
+			}
+			m.Files = keep
+			out, _ := json.Marshal(m)
+			return out
+		}
+		return data
+	})
+	if !dropped {
+		t.Fatalf("archive has no %s", blobPath)
+	}
+	_, err := backup.Restore(ctx, pool(t, testdb.New(t)), stripped, restoreOpts(t))
+	if !errors.Is(err, backup.ErrVerify) || !strings.Contains(err.Error(), att.SHA256) {
+		t.Fatalf("err = %v, want ErrVerify naming the blob", err)
 	}
 }

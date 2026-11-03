@@ -9,6 +9,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -19,6 +20,17 @@ var ErrNoChromium = errors.New("chromium not found")
 
 // pdfTimeout bounds one conversion; a variable so tests can shorten it.
 var pdfTimeout = 30 * time.Second
+
+// pdfSlots bounds the Chromium processes running at once (each is 100–200 MB for up to pdfTimeout):
+// RANGKA_PDF_CONCURRENCY, default 2, read once at start.
+var pdfSlots = make(chan struct{}, pdfConcurrency())
+
+func pdfConcurrency() int {
+	if n, err := strconv.Atoi(os.Getenv("RANGKA_PDF_CONCURRENCY")); err == nil && n > 0 {
+		return n
+	}
+	return 2
+}
 
 const macChrome = "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
 
@@ -45,11 +57,19 @@ func FindChromium() string {
 	return ""
 }
 
-// PDF renders an HTML document to PDF with headless Chromium.
+// PDF renders an HTML document to PDF with headless Chromium. It waits for one of pdfSlots first and gives up
+// when ctx ends while waiting.
 func PDF(ctx context.Context, html []byte) ([]byte, error) {
 	bin := FindChromium()
 	if bin == "" {
 		return nil, ErrNoChromium
+	}
+	slots := pdfSlots
+	select {
+	case slots <- struct{}{}:
+		defer func() { <-slots }()
+	case <-ctx.Done():
+		return nil, fmt.Errorf("chromium pdf: waiting for a free slot: %w", ctx.Err())
 	}
 	dir, err := os.MkdirTemp("", "rangka-pdf-")
 	if err != nil {

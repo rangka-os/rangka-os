@@ -512,6 +512,275 @@ def test_forbidden_list(page, ctx):
     assert page.get_by_text("Kamu tidak punya akses ke Peluang").count() == 0, "the sidebar still navigates away from the forbidden state"
 
 
+# ---------------------------------------------------------------------------------------------- forms and the document lifecycle (Task 6)
+def rupiah(n):
+    s = f"{abs(int(n)):,}".replace(",", ".")
+    return ("-" if n < 0 else "") + "Rp " + s
+
+
+def main_area(page):
+    return page.locator(".ap-main")
+
+
+def wait_form(page, button="Simpan draf"):
+    page.get_by_role("button", name=button, exact=True).wait_for(timeout=10000)
+
+
+def by_label(page, label):
+    """A form control by its label; required fields carry a "*" after the label text."""
+    return page.get_by_label(re.compile("^" + re.escape(label) + r"\s*\*?$"))
+
+
+def pick_link(page, label, query, option):
+    """Type into a link field's search box and pick the option whose text contains `option`."""
+    box = by_label(page, label)
+    box.click()
+    box.fill(query)
+    page.locator(".rk-pop [role=option]", has_text=option).first.click()
+    page.locator(".rk-field", has=page.locator("label", has_text=re.compile("^" + re.escape(label)))).locator(".rk-link-val", has_text=option).wait_for(timeout=5000)
+
+
+def grid_line(page, row, item, qty=None):
+    """Fill line `row` (1-based) of the child table: the item select (options come from the server), then qty."""
+    sel = page.locator(f'select[aria-label="Barang baris {row}"]')
+    sel.locator(f'option[value="{item}"]').wait_for(state="attached", timeout=10000)
+    sel.select_option(item)
+    if qty is not None:
+        page.locator(f'input[aria-label="Qty baris {row}"]').fill(str(qty))
+
+
+def grand_total(page):
+    return page.locator(".rk-totals b.grand").inner_text().strip()
+
+
+def field_box(page, label):
+    return page.locator(".ap-main .rk-field, .ap-main .ap-fw").filter(has=page.locator("label", has_text=re.compile("^" + re.escape(label) + r"\*?$")))
+
+
+def fill_invoice(page):
+    """A new invoice for Maju Bersama Catering at Kemang: 2 × Susu oat 1 L (38.500) + 1 × Sirup gula aren (65.000)."""
+    wait_form(page)
+    pick_link(page, "Pelanggan", "Maju Bersama", "Maju Bersama Catering")
+    pick_link(page, "Outlet", "Kemang", "Kemang")
+    page.get_by_role("button", name="Tambah baris").click()
+    grid_line(page, 1, "BRG-0101", 2)
+    page.get_by_role("button", name="Tambah baris").click()
+    grid_line(page, 2, "BRG-0305")
+
+
+INVOICE_PREVIEW = 157620  # 142.000 + PPN round(142.000 × 11/12 × 12%) = 15.620
+
+
+def submit_and_confirm(page):
+    """Press Ajukan; when the kernel asks to confirm warnings (credit limit), press Tetap ajukan."""
+    page.get_by_role("button", name="Ajukan", exact=True).click()
+    for _ in range(100):
+        if re.search(r"^#/r/sales_invoice/INV-\d{4}-\d{5}", page.evaluate("location.hash")):
+            return
+        dlg = page.get_by_role("button", name="Tetap ajukan")
+        if dlg.count() and dlg.is_visible():
+            dlg.click()
+        page.wait_for_timeout(100)
+    raise AssertionError("the invoice did not get its INV number, hash " + page.evaluate("location.hash"))
+
+
+def submitted_invoice(ctx):
+    """An invoice submitted through the API (for scenarios run on their own with -k)."""
+    if ctx.mock_state.get("invoice"):
+        return ctx.mock_state["invoice"]
+    h = Http(ctx.base).login(*ctx.owner)
+    st, rec = h.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0031", "outlet": "OUT-01", "items": [{"item": "BRG-0210", "qty": 1}]})
+    assert st == 201, f"create invoice: {st} {rec}"
+    st, rec = h.call("POST", f"/api/v1/r/sales_invoice/{rec['name']}/submit", {"force": True})
+    assert st == 200, f"submit invoice: {st} {rec}"
+    return rec["name"]
+
+
+def test_invoice_create_submit(page, ctx):
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice/new")
+    fill_invoice(page)
+    page.wait_for_function("(t) => (document.querySelector('.rk-totals b.grand') || {}).textContent === t", arg=rupiah(INVOICE_PREVIEW), timeout=5000)
+    assert not any(m != "GET" for m, u in reqs), f"nothing written before Simpan draf, saw {[x for x in reqs if x[0] != 'GET']}"
+    page.get_by_role("button", name="Simpan draf", exact=True).click()
+    page.wait_for_function("() => /^#\\/r\\/sales_invoice\\/DRAFT-[^/]+$/.test(location.hash)", timeout=10000)
+    name = urllib.parse.unquote(page.evaluate("location.hash").rsplit("/", 1)[-1])
+    h = Http(ctx.base).login(*ctx.owner)
+    st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + name)
+    assert st == 200 and rec["docstatus"] == 0, f"the draft exists: {st} {rec}"
+    assert grand_total(page) == rupiah(rec["grand_total"]), f"page total {grand_total(page)} is the server's {rec['grand_total']}"
+    assert [(x["item"], x["qty"]) for x in rec["items"]] == [("BRG-0101", 2), ("BRG-0305", 1)], f"saved lines {rec['items']}"
+    submit_and_confirm(page)
+    number = page.evaluate("location.hash").rsplit("/", 1)[-1]
+    assert re.fullmatch(r"INV-\d{4}-\d{5}", number), number
+    main_area(page).locator(".rk-steps [aria-current=step]", has_text="Diajukan").wait_for(timeout=5000)
+    assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Diajukan").count() == 1, "status chip Diajukan"
+    assert main_area(page).locator(".rk-pagehead .rk-doc-no", has_text=number).count() == 1, "the header shows the number"
+    editable = main_area(page).locator("input, textarea, select, [role=combobox]")
+    assert editable.count() == 0, f"no editable input on a submitted invoice, found {editable.count()}"
+    st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + number)
+    assert st == 200 and rec["docstatus"] == 1 and grand_total(page) == rupiah(rec["grand_total"]), f"submitted record {st} {rec}"
+    ctx.mock_state["invoice"] = number
+
+
+def test_cancel_amend(page, ctx):
+    number = submitted_invoice(ctx)
+    open_route(page, ctx, "#/r/sales_invoice/" + number)
+    page.get_by_role("button", name="Batalkan", exact=True).click()
+    dlg = page.get_by_role("alertdialog")
+    dlg.wait_for(timeout=5000)
+    dlg.get_by_role("button", name="Ya, batalkan").click()
+    main_area(page).locator(".rk-pagehead .rk-chip", has_text="Dibatalkan").wait_for(timeout=10000)
+    h = Http(ctx.base).login(*ctx.owner)
+    assert h.call("GET", "/api/v1/r/sales_invoice/" + number)[1]["docstatus"] == 2, "cancelled on the server"
+    page.get_by_role("button", name="Amandemen", exact=True).click()
+    page.wait_for_function("() => /^#\\/r\\/sales_invoice\\/DRAFT-[^/]+$/.test(location.hash)", timeout=10000)
+    draft = urllib.parse.unquote(page.evaluate("location.hash").rsplit("/", 1)[-1])
+    st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + draft)
+    assert st == 200 and rec["amended_from"] == number and rec["docstatus"] == 0, f"the amendment: {st} {rec}"
+    link = main_area(page).locator(".rk-pagehead a", has_text=number)
+    link.wait_for(timeout=5000)
+    assert link.get_attribute("href") == "#/r/sales_invoice/" + number, "amended_from links back"
+    wait_form(page)
+
+
+def test_server_errors_win(page, ctx):
+    ctx.allow_http(422, r"/api/v1/r/sales_invoice$")
+    posts = []
+    page.on("response", lambda r: posts.append(r.status) if r.request.method == "POST" and re.search(r"/api/v1/r/sales_invoice$", r.url) else None)
+    open_route(page, ctx, "#/r/sales_invoice/new")
+    wait_form(page)
+    pick_link(page, "Pelanggan", "Maju Bersama", "Maju Bersama Catering")
+    pick_link(page, "Outlet", "Kemang", "Kemang")
+    page.get_by_role("button", name="Tambah baris").click()
+    grid_line(page, 1, "BRG-0210")
+    # due date in the month before the posting date
+    by_label(page, "Jatuh tempo").click()
+    page.get_by_role("button", name="Bulan sebelumnya").click()
+    page.locator(".rk-cal .rk-day:not(.out)").first.click()
+    due = field_box(page, "Jatuh tempo")
+    assert due.locator(".rk-field-error").count() == 0 and "rk-field-error" not in (due.first.get_attribute("class") or ""), "the browser's preview is not an error"
+    page.get_by_role("button", name="Simpan draf", exact=True).click()
+    page.locator(".ap-main .rk-field.rk-field-error", has=page.locator("label", has_text=re.compile("^Jatuh tempo"))) \
+        .locator(".rk-field-hint", has_text="Jatuh tempo tidak boleh sebelum tanggal faktur").wait_for(timeout=10000)
+    assert posts == [422], f"the server answered 422, saw {posts}"
+    assert page.evaluate("location.hash") == "#/r/sales_invoice/new", "still the new form"
+
+    # fix the date; the server's create answer carries a total unlike the preview: the page shows the server's
+    preview = grand_total(page)
+    by_label(page, "Jatuh tempo").click()
+    page.locator(".rk-cal .rk-preset", has_text="7 hari").click()
+    tampered = []
+
+    def tamper(route):
+        r = route.fetch()
+        body = r.json()
+        body["grand_total"] = body["grand_total"] + 1000
+        tampered.append(body)
+        _json(route, r.status, body)
+    page.route(re.compile(r".*/api/v1/r/sales_invoice$"), tamper, times=1)
+    page.get_by_role("button", name="Simpan draf", exact=True).click()
+    page.wait_for_function("() => /^#\\/r\\/sales_invoice\\/DRAFT-[^/]+$/.test(location.hash)", timeout=10000)
+    assert tampered, "the create went through the stub"
+    want = rupiah(tampered[0]["grand_total"])
+    page.wait_for_function("(t) => (document.querySelector('.rk-totals b.grand') || {}).textContent === t", arg=want, timeout=5000)
+    assert want != preview, "the stubbed total differs from the preview"
+    assert main_area(page).get_by_text("Jatuh tempo tidak boleh sebelum tanggal faktur").count() == 0, "the old error is gone"
+
+
+def test_double_submit_sends_one_request(page, ctx):
+    posts = []
+    page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and re.search(r"/api/v1/r/lead$", r.url) else None)
+    open_route(page, ctx, "#/r/lead/new")
+    wait_form(page, "Simpan")
+    by_label(page, "Nama").fill("Klik Dua Kali")
+    by_label(page, "Nomor WhatsApp").fill("0812" + str(int(time.time() * 1000))[-8:])
+    page.get_by_role("button", name="Simpan", exact=True).dblclick()
+    page.wait_for_function("() => /^#\\/r\\/lead\\/LEAD-\\d+$/.test(location.hash)", timeout=10000)
+    page.wait_for_timeout(500)
+    assert len(posts) == 1, f"one POST for a double click, saw {len(posts)}"
+    _, body = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/lead?q=Klik+Dua+Kali&limit=50")
+    assert len([r for r in body["data"] if r["lead_name"] == "Klik Dua Kali"]) == 1, "one lead created"
+
+
+def test_rupiah_input(page, ctx):
+    h = Http(ctx.base).login(*ctx.owner)
+    _, body = h.call("GET", "/api/v1/r/deal?limit=50")
+    deal = next(r for r in body["data"] if r["stage"] not in ("won", "lost"))
+    patches = []
+    page.on("request", lambda r: patches.append(r.post_data) if r.method == "PATCH" and "/api/v1/r/deal/" in r.url else None)
+    open_route(page, ctx, "#/r/deal/" + deal["name"])
+    wait_form(page, "Simpan")
+    box = by_label(page, "Nilai")
+    box.fill("1.250.000")
+    page.get_by_role("button", name="Simpan", exact=True).click()
+    for _ in range(100):
+        if patches:
+            break
+        page.wait_for_timeout(50)
+    assert patches and json.loads(patches[0])["value"] == 1250000 and isinstance(json.loads(patches[0])["value"], int), f"PATCH sends the integer, saw {patches}"
+    page.get_by_text("Peluang disimpan").first.wait_for(timeout=10000)
+    st, rec = h.call("GET", "/api/v1/r/deal/" + deal["name"])
+    assert rec["value"] == 1250000, f"saved value {rec['value']!r}"
+    assert box.input_value() == "Rp 1.250.000", f"the field shows {box.input_value()!r}"
+    for typed in ("Rp 2.500.000", "2500000"):
+        box.fill(typed)
+        main_area(page).locator(".rk-pagehead h1").click()
+        assert box.input_value() == "Rp 2.500.000", f"{typed!r} shows {box.input_value()!r}"
+
+
+def test_action_convert_lead(page, ctx):
+    h = Http(ctx.base).login(*ctx.owner)
+    st, lead = h.call("POST", "/api/v1/r/lead", {"lead_name": "Rina Aksi", "company_name": "Kedai Aksi", "phone": "0813" + str(int(time.time() * 1000))[-8:]})
+    assert st == 201, f"create lead {st} {lead}"
+    open_route(page, ctx, "#/r/lead/" + lead["name"])
+    wait_form(page, "Simpan")
+    page.get_by_role("button", name="Jadikan pelanggan + peluang").click()
+    page.wait_for_function("() => /^#\\/r\\/deal\\/DEAL-\\d+$/.test(location.hash)", timeout=10000)
+    main_area(page).get_by_role("heading", name="Peluang Kedai Aksi").wait_for(timeout=10000)
+    _, after = h.call("GET", "/api/v1/r/lead/" + lead["name"])
+    assert after["converted_deal"] == page.evaluate("location.hash").rsplit("/", 1)[-1], "the deal the action made"
+
+
+def test_session_expiry_keeps_draft(page, ctx):
+    posts = []
+    page.on("response", lambda r: posts.append(r.status) if r.request.method == "POST" and re.search(r"/api/v1/r/lead$", r.url) else None)
+    open_route(page, ctx, "#/r/lead/new")
+    wait_form(page, "Simpan")
+    by_label(page, "Nama").fill("Draf Sesi Habis")
+    by_label(page, "Email").fill("sesi@contoh.test")
+    ctx.allow_http(401, r"/api/v1/")
+    page.context.clear_cookies(name="rk_session")
+    page.get_by_role("button", name="Simpan", exact=True).click()
+    dlg = page.locator(".ap-signin-dialog")
+    dlg.wait_for(timeout=10000)
+    assert page.evaluate("location.hash") == "#/r/lead/new", "still on the form"
+    sign_in(page, within=".ap-signin-dialog")
+    dlg.wait_for(state="detached", timeout=10000)
+    assert by_label(page, "Nama").input_value() == "Draf Sesi Habis", "the typed name survived"
+    assert posts == [401], f"only the refused POST so far, saw {posts}"
+    page.get_by_role("button", name="Simpan", exact=True).click()
+    page.wait_for_function("() => /^#\\/r\\/lead\\/LEAD-\\d+$/.test(location.hash)", timeout=10000)
+    assert posts == [401, 201], f"one POST after signing in again, saw {posts}"
+    _, body = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/lead?q=Draf+Sesi+Habis&limit=50")
+    assert len([r for r in body["data"] if r["lead_name"] == "Draf Sesi Habis"]) == 1, "one lead created"
+
+
+def test_forbidden_record(page, ctx):
+    _, body = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/deal?limit=1")
+    name = body["data"][0]["name"]
+    ctx.allow_http(403, r"/api/v1/r/deal/")
+    page.route(re.compile(r".*/api/v1/r/deal/[^/?]+$"), lambda route: _json(route, 403, {"error": {"code": "permission_denied", "message": "Peran kamu tidak boleh membaca peluang ini"}}))
+    open_route(page, ctx, "#/r/deal/" + name)
+    page.get_by_text("Kamu tidak punya akses ke Peluang").first.wait_for(timeout=10000)
+    assert main_area(page).locator("input, select, textarea").count() == 0, "no form on a forbidden record"
+    open_nav(page)
+    other = next(m for m in ctx.menu_models(ctx.home()[1]) if m != "deal")
+    page.locator(".rk-side").get_by_role("link", name=ctx.model_label(other), exact=True).click()
+    page.wait_for_function("(m) => location.hash === '#/r/' + m", arg=other, timeout=5000)
+    page.get_by_role("heading", name=ctx.model_label(other)).first.wait_for(timeout=10000)
+
+
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
 PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")

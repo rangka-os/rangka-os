@@ -39,6 +39,24 @@
     .ap-shell .rk-topnav > .rk-iconbtn[aria-label="Pindah aplikasi"] { display: none; }
     .ap-signin-card { padding: 24px 16px; }
   }
+  /* form view (fields.js, form.js) */
+  .ap-fw { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .ap-fw > .rk-field { gap: inherit; }
+  .ap-link { min-width: 0; }
+  .ap-check { justify-content: flex-end; }
+  .ap-grid-link { min-width: 220px; }
+  .ap-main .rk-grid-scroll { position: relative; } /* keeps the visually hidden "Aksi" header inside the scroller */
+  .ap-grid-empty { color: var(--muted); text-align: center; padding: 12px; }
+  .ap-ro-grid { margin-top: 24px; }
+  .ap-amended { font-size: 12px; color: var(--muted); }
+  .ap-main .rk-desc a, .ap-main .pv-ro a, .ap-amended a { color: var(--link); text-decoration: none; }
+  .ap-main .rk-desc a:hover, .ap-main .pv-ro a:hover, .ap-amended a:hover { text-decoration: underline; }
+  .ap-errlist { margin: 4px 0 0; padding-left: 18px; }
+  .ap-main .rk-dialog-body .ap-errlist { margin-bottom: 8px; }
+  @media (max-width: 600px) {
+    .ap-main .rk-pagehead-extra { width: 100%; flex-wrap: wrap; }
+    .ap-grid-link { min-width: 180px; }
+  }
   /* list, form and kanban styles from the prototype (pv-*), kept for the views that move over in later tasks */
   .pv-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
   .pv-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
@@ -101,4 +119,6 @@
 <script src="api.js"></script>
 <script src="engine.js"></script>
 <script src="list.js"></script>
+<script src="fields.js"></script>
+<script src="form.js"></script>
 <script src="shell.js"></script>

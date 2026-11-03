@@ -35,11 +35,19 @@ fields:
   - name: npwp
     type: npwp
     label: {id: NPWP}
+  - name: org
+    type: link
+    to: user
+    label: {id: Pemilik}
 rules:
   - name: npwp_16
     on: save
     check: npwp == '' || size(npwp) == 16
     message: {id: NPWP harus 16 angka}
+  - name: org_field_wins
+    on: save
+    check: org.nope != '' || tax.ppn_rate > 0
+    message: {id: Field org menutupi global org}
 views:
   form:
     layout:

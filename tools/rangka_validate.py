@@ -485,7 +485,7 @@ def check_expr(rep, p, where, expr, m, fields, visible):
             if head not in FUNCTIONS:
                 rep.add("error", p, where, "unknown_function", f'`{head}()` is not a CEL or Rangka function{suggest(head, FUNCTIONS)}')
             continue
-        if head in GLOBALS:
+        if head in GLOBALS and head not in fields:  # a field wins over a global, as at run time
             continue
         if head not in fields and head not in SYSTEM_FIELDS:
             rep.add("error", p, where, "unknown_field", f'`{head}` in `{expr}` is not a field{suggest(head, fields)}')
@@ -899,7 +899,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
         for where, tax in dpp_where:
             r = tax.get("dpp_ratio") if isinstance(tax, dict) else None
             if isinstance(r, str) and parse_dpp_ratio(r) is None:
-                rep.add("error", cp, where, "bad_dpp_ratio", f'dpp_ratio "{r}" must be two whole numbers like 11/12')
+                rep.add("error", cp, where, "bad_dpp_ratio", f'dpp_ratio "{r}" must be two positive whole numbers like 11/12')
     for tn in sorted(themes):
         p, d = themes[tn]
         ext = d.get("extends") or ""
@@ -918,7 +918,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
 def parse_dpp_ratio(s):
     """A DPP ratio such as "11/12" as (11, 12): two positive whole numbers around "/" (kernel meta.ParseDPPRatio)."""
     a, sep, b = s.partition("/")
-    a, b = a.strip(), b.strip()
+    a, b = a.strip(" \t\n\r\f\v"), b.strip(" \t\n\r\f\v")
     if not sep or not re.fullmatch(r"[0-9]{1,9}", a) or not re.fullmatch(r"[0-9]{1,9}", b) or int(a) == 0 or int(b) == 0:
         return None
     return int(a), int(b)

@@ -14,6 +14,7 @@ sales/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modul
 sales/models/sales_invoice.rk:67:5  error  schema  fields/13  'currency_field' is a required property
 sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' is not valid under any of the given schemas
 core/app.rk:9:29  error  unknown_model  menu/0/items/2  "outlet" is not a model in this app or its dependencies
+core/models/customer.rk:49:12  error  unknown_field  rules/1/check  `org.nope`: user has no field "nope"
 core/models/customer.rk:7:12  error  not_submittable  on_submit  on_submit hooks need is_submittable: true
 crm/app.rk:10:19  error  unknown_model  menu/0/items/1  "leads" is not a model in this app or its dependencies; did you mean "lead"?
 crm/models/activity.rk:42:18  error  unknown_field  fields/4/relative_to  "start_date" is not a field
@@ -110,8 +111,8 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-site/config.rk:8:11  error  reset_needs_date  numbering/faktur  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activity_log" is not defined in config.rk numbering and the model gives no default pattern
 ../broken-site/config.rk:19:55  error  nested_orgs  orgs/pt_beta/config/orgs  org "pt_beta" config cannot contain orgs
-../broken-site/config.rk:5:32  error  bad_dpp_ratio  tax/dpp_ratio  dpp_ratio "11:12" must be two whole numbers like 11/12
-../broken-site/config.rk:19:102  error  bad_dpp_ratio  orgs/pt_beta/config/tax/dpp_ratio  dpp_ratio "0/12" must be two whole numbers like 11/12
+../broken-site/config.rk:5:32  error  bad_dpp_ratio  tax/dpp_ratio  dpp_ratio "11:12" must be two positive whole numbers like 11/12
+../broken-site/config.rk:19:102  error  bad_dpp_ratio  orgs/pt_beta/config/tax/dpp_ratio  dpp_ratio "0/12" must be two positive whole numbers like 11/12
 ../broken-site/themes/kopi_senja.rk:9:9  error  low_contrast  color/link  link #aaaaaa on surface #ffffff is 2.32:1 in light; needs 4.5:1
 ../broken-site/themes/kopi_senja.rk:10:13  error  low_contrast  color/selected  selected-ink #f08a6b on selected #579dff is 1.11:1 in dark; needs 4.5:1
 ../broken-site/layouts/crm_first.rk:12:18  error  unknown_model  nav/create/1  "leads" is not a model; did you mean "lead"?
@@ -138,4 +139,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:19:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:20:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-121 error(s), 18 warning(s)
+122 error(s), 18 warning(s)

@@ -540,10 +540,11 @@ func (v *validator) exprTo(extra bool, p, where string, x any, fields map[string
 			}
 			continue
 		}
-		if Globals[r.Head] {
+		// a field wins over a global of the same name, as at run time (engine scope.lookup)
+		f, isField := fields[r.Head]
+		if !isField && Globals[r.Head] {
 			continue
 		}
-		f, isField := fields[r.Head]
 		if !isField && !SystemFields[r.Head] {
 			add("error", p, where, "unknown_field", fmt.Sprintf("`%s` in `%s` is not a field%s", r.Head, e, suggest(r.Head, keys(fields))))
 			continue

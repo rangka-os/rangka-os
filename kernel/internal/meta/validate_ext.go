@@ -474,7 +474,7 @@ func (v *validator) site(all map[string]vis) {
 		for _, d := range dpp {
 			if r, ok := d.tax["dpp_ratio"].(string); ok {
 				if _, _, ok := ParseDPPRatio(r); !ok {
-					v.rep.extra("error", cfg.Path, d.where, "bad_dpp_ratio", fmt.Sprintf(`dpp_ratio "%s" must be two whole numbers like 11/12`, r))
+					v.rep.extra("error", cfg.Path, d.where, "bad_dpp_ratio", fmt.Sprintf(`dpp_ratio "%s" must be two positive whole numbers like 11/12`, r))
 				}
 			}
 		}

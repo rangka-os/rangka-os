@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -646,5 +647,75 @@ func TestFlowApproveStep(t *testing.T) {
 	}
 	if l, n, err := e2.ListApprovals(ctx, rep, store.ApprovalFilter{}); err != nil || n != 0 {
 		t.Fatalf("approvals = %v %d %v", l, n, err)
+	}
+}
+
+// two approvers deciding the two policies of one invoice at once: the second to commit runs the verb.
+func TestConcurrentApprovesRunVerb(t *testing.T) {
+	e, owner := approvalSetup(t, managerPolicy+ownerBigPolicy)
+	ctx := context.Background()
+	for round := 0; round < 5; round++ {
+		_, res := heldInvoice(t, e)
+		byPolicy := map[string]string{}
+		for _, ap := range res.Approvals {
+			byPolicy[ap.Policy] = ap.ID
+		}
+		var wg sync.WaitGroup
+		ds := make([]*Decision, 2)
+		errs := make([]error, 2)
+		for i, x := range []struct {
+			a  Actor
+			id string
+		}{{mgr, byPolicy["manager"]}, {owner, byPolicy["owner_big"]}} {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				ds[i], errs[i] = e.Approve(ctx, x.a, x.id)
+			}()
+		}
+		wg.Wait()
+		ran := 0
+		for i := range ds {
+			if errs[i] != nil {
+				t.Fatalf("round %d approve %d: %v", round, i, errs[i])
+			}
+			if ds[i].Record != nil {
+				if ds[i].Record["docstatus"] != int64(1) {
+					t.Fatalf("round %d: docstatus %v", round, ds[i].Record["docstatus"])
+				}
+				ran++
+			}
+		}
+		if ran != 1 {
+			t.Fatalf("round %d: verb ran %d times, want 1", round, ran)
+		}
+	}
+}
+
+// a double-clicked submit makes one pending request per policy.
+func TestConcurrentSubmitsOneRequestPerPolicy(t *testing.T) {
+	e, _ := approvalSetup(t, managerPolicy+ownerBigPolicy)
+	ctx := context.Background()
+	for round := 0; round < 5; round++ {
+		name := newInvoice(t, e, rep)
+		var wg sync.WaitGroup
+		errs := make([]error, 2)
+		for i := range errs {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				_, errs[i] = e.Submit(ctx, rep, "sales_invoice", name, true)
+			}()
+		}
+		wg.Wait()
+		for _, err := range errs {
+			if err != nil {
+				t.Fatal(err)
+			}
+		}
+		p := pendingFor(t, e, rep, "sales_invoice", name)
+		if len(p) != 2 || p[0].Policy == p[1].Policy {
+			t.Fatalf("round %d: pending = %+v", round, p)
+		}
 	}
 }

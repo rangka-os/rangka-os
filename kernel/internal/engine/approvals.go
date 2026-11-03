@@ -175,6 +175,9 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 	}
 	a := o.actor
 	name := str(rec["name"])
+	if err := o.lockRecord(m.Name, name); err != nil {
+		return nil, nil, err
+	}
 	key := argsKey(args)
 	existing, _, err := store.ListApprovals(o.ctx, o.tx, store.ApprovalFilter{Org: a.Org, Model: m.Name, Name: name, Verb: verb, Limit: 500})
 	if err != nil {
@@ -251,6 +254,14 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 	return pending, all, nil
 }
 
+// lockRecord serialises approval work on one record until the transaction ends (hold, approve, reject).
+// Transactions are READ COMMITTED: without it two approvers could each see the other's request pending, or a
+// double submit could insert two requests for one policy. The lock is reentrant within a transaction.
+func (o *op) lockRecord(model, name string) error {
+	_, err := o.tx.Exec(o.ctx, `select pg_advisory_xact_lock(hashtext($1))`, o.actor.Org+"/"+model+"/"+name)
+	return err
+}
+
 // approvalEvent audits a request's change (kind approval.*) and publishes the SSE approval event.
 func (o *op) approvalEvent(ap *store.Approval, kind string, extra map[string]any) error {
 	if err := store.Notify(o.ctx, o.tx, store.Event{Type: "approval", Org: ap.Org, Model: ap.Model, Name: ap.Name, ID: ap.ID, State: ap.State}); err != nil {
@@ -293,11 +304,19 @@ func (o *op) decide(id string) (*store.Approval, error) {
 	if !a.Human {
 		return nil, &StatusError{403, "human_required", "Persetujuan harus dilakukan oleh orang yang masuk lewat aplikasi"}
 	}
-	ap, err := store.GetApproval(o.ctx, o.tx, a.Org, id, true)
+	ap, err := store.GetApproval(o.ctx, o.tx, a.Org, id, false)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, notFound("approval " + id)
 	}
 	if err != nil {
+		return nil, err
+	}
+	if !isFlowApproval(ap) { // the record lock before the row lock, so decisions on one record queue
+		if err := o.lockRecord(ap.Model, ap.Name); err != nil {
+			return nil, err
+		}
+	}
+	if ap, err = store.GetApproval(o.ctx, o.tx, a.Org, id, true); err != nil {
 		return nil, err
 	}
 	if ap.State == "void" {

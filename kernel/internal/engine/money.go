@@ -92,6 +92,12 @@ func (o *op) settleMoney(m *meta.Model, rec store.Record) {
 }
 
 func (s *scope) settle() {
+	s.settleOwn()
+	s.childScopes(func(_ *meta.Field, _ int, cs *scope) { cs.settle() })
+}
+
+// settleOwn sets the IDR twins of the record itself (not its rows).
+func (s *scope) settleOwn() {
 	for _, tw := range s.m.Fields {
 		mf := s.m.Field(tw.MoneyOf())
 		if tw.MoneyOf() == "" || mf == nil {
@@ -103,7 +109,6 @@ func (s *scope) settle() {
 		}
 		s.rec[tw.Name] = n
 	}
-	s.childScopes(func(_ *meta.Field, _ int, cs *scope) { cs.settle() })
 }
 
 const (

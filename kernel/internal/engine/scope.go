@@ -203,8 +203,20 @@ func computeOrder(m *meta.Model) []*meta.Field {
 	for _, f := range comp {
 		refs, _ := cel.FreeVars(f.Compute)
 		for _, r := range refs {
-			if _, ok := idx[r.Head]; ok && r.Kind == "ref" && r.Head != f.Name {
-				deps[f.Name] = append(deps[f.Name], r.Head)
+			if r.Kind != "ref" {
+				continue
+			}
+			heads := []string{r.Head}
+			// an IDR twin depends on its money field, currency and rate
+			if tw := m.Field(r.Head); tw != nil && tw.MoneyOf() != "" {
+				if mf := m.Field(tw.MoneyOf()); mf != nil {
+					heads = []string{mf.Name, mf.CurrencyField(), mf.RateField()}
+				}
+			}
+			for _, h := range heads {
+				if _, ok := idx[h]; ok && h != f.Name {
+					deps[f.Name] = append(deps[f.Name], h)
+				}
 			}
 		}
 	}
@@ -232,7 +244,9 @@ func computeOrder(m *meta.Model) []*meta.Field {
 	return out
 }
 
-// compute recomputes child rows first, then the record's computed fields (errors give the zero value).
+// compute recomputes child rows first, then the record's computed fields (errors give the zero value). The
+// IDR twins are settled before the computes and again after each one, so a compute reading <field>_idr (its
+// own record's, or a row's) sees the twin of the current amount and rate.
 func (s *scope) compute() {
 	for _, f := range s.m.Fields {
 		if f.Type != "table" {
@@ -248,6 +262,7 @@ func (s *scope) compute() {
 			child.compute()
 		}
 	}
+	s.settleOwn()
 	for _, f := range computeOrder(s.m) {
 		v, err := s.eval(f.Compute)
 		if err != nil || v == nil {
@@ -262,6 +277,7 @@ func (s *scope) compute() {
 			c = d.Round(0) // IDR documents stay whole rupiah; later computes see the rounded value
 		}
 		s.rec[f.Name] = c
+		s.settleOwn()
 	}
 }
 

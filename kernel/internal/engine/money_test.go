@@ -316,3 +316,33 @@ func TestMoneyJSON(t *testing.T) {
 		}
 	})
 }
+
+// TestMoneyTwinsInComputes: a compute reading an IDR twin (the header's own, or a sum of line twins) sees the
+// twin at the current amount and rate, on create and after a rate change on update.
+func TestMoneyTwinsInComputes(t *testing.T) {
+	e, a := setupMoney(t)
+	in := map[string]any{"currency": "USD", "rate": 2, "paid_amount": "5", "items": []any{line(1, "10"), line(1, "0.25")}}
+	rec := createBill(t, e, a, in)
+	// lines 20 + round(0.5) = 21; grand_total 11.3775 × 2 = 22.755 → 23; paid 10
+	both(t, e, a, rec, func(r map[string]any) {
+		if got := r["lines_idr"]; got != int64(21) {
+			t.Errorf("create lines_idr = %#v, want 21", got)
+		}
+		if got := r["outstanding_idr"]; got != int64(13) {
+			t.Errorf("create outstanding_idr = %#v, want 13", got)
+		}
+	})
+	res, err := e.Update(context.Background(), a, "bill", rec["name"].(string), map[string]any{"rate": 4})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// lines 40 + 1 = 41; 11.3775 × 4 = 45.51 → 46; paid 20
+	both(t, e, a, res.Record, func(r map[string]any) {
+		if got := r["lines_idr"]; got != int64(41) {
+			t.Errorf("update lines_idr = %#v, want 41", got)
+		}
+		if got := r["outstanding_idr"]; got != int64(26) {
+			t.Errorf("update outstanding_idr = %#v, want 26", got)
+		}
+	})
+}

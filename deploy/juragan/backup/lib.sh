@@ -10,6 +10,12 @@ has_rangka_backup() {
   grep -q 'rangka backup' <<<"$help"
 }
 
+# True when the `rangka help` text (argument) shows S5: multi-org, row-level security, outlet scope (contract 0010).
+# S5 owns the `user add <email> --org ... --outlets` form; the older `user add --email` form of S0 does not match.
+has_multiorg_help() {
+  grep -q 'rangka user add <email>' <<<"$1"
+}
+
 # SQL printing one line per base table outside pg_catalog/information_schema: schema.table, rows, md5.
 # One statement per table via query_to_xml; md5 of the rows as text, ordered, so it is order independent.
 # The md5 aggregates a table's rows into one string_agg value, so a table whose text form exceeds 1 GB
@@ -44,10 +50,12 @@ table_stats() {
     | psql -qAtX -v ON_ERROR_STOP=1 -F $'\t' "$1"
 }
 
-# require_stats <stats.tsv>: a backup whose table list is empty proves nothing and must not be uploaded.
+# require_stats <stats.tsv>: a backup whose table list is missing or empty proves nothing and must not be uploaded.
 require_stats() {
-  if [ "$(grep -c . "$1" 2>/dev/null || true)" -lt 1 ]; then
-    echo "backup: no table statistics were recorded (empty $1); refusing to continue" >&2
+  local n=0
+  if [ -s "$1" ]; then n="$(grep -c . "$1" || true)"; fi
+  if [ "${n:-0}" -lt 1 ]; then
+    echo "backup: no table statistics were recorded (missing or empty $1); refusing to continue" >&2
     return 1
   fi
 }
@@ -57,11 +65,12 @@ stats_to_tables_json() {
   jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: {rows: (.[1] | tonumber), md5: .[2]}}) | from_entries'
 }
 
-# migrate_statements <file>: the number N from the last "-- would apply N statement(s);" line of a
-# `rangka migrate --dry-run` output; fails (prints nothing) when there is no such line.
+# migrate_statements <file>: the number N from the last "would apply N statement(s);" line of a
+# `rangka migrate --dry-run` output ("-- risk low: would apply N statement(s); ..." since S1, "-- would apply ..."
+# before); fails (prints nothing) when there is no such line. An "applied N" line (a real run) does not count.
 migrate_statements() {
   local n
-  n="$(sed -n 's/^-- would apply \([0-9][0-9]*\) statement(s);.*/\1/p' "$1" | tail -1)"
+  n="$(sed -n -E 's/^-- (risk [a-z]+: )?would apply ([0-9]+) statement\(s\);.*/\2/p' "$1" | tail -1)"
   [ -n "$n" ] || return 1
   echo "$n"
 }

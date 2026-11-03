@@ -3,7 +3,9 @@
 # Restore drill: proves the newest off-box backup restores on THIS machine (needs bash and docker compose only).
 # Per pilot: fetch the newest archive from off-box (or use --archive), start a throwaway compose project
 # juragan-drill-<epoch> (own postgres with random passwords, no Caddy, kernel on a random 127.0.0.1 port),
-# restore.sh, `migrate --dry-run` must plan 0 statements, boot the kernel, GET /.well-known/openid-configuration = 200.
+# restore.sh, `migrate --dry-run` must plan 0 statements, the pilot role must be NOSUPERUSER NOBYPASSRLS and (binary with S5)
+# every table with an org_id must have row-level security enabled and forced, boot the kernel,
+# GET /.well-known/openid-configuration = 200.
 # Prints "DRILL PASSED <pilot> <archive> <UTC time>" and appends it to drill.log. Exit non-zero when any pilot fails.
 # The archive's age (UTC stamp in its name) is printed and must be at most --max-age hours (default 48). A different release than the
 # archive's manifest records is only warned about.
@@ -167,6 +169,18 @@ archive_age_hours() {
   echo $(( ($(date -u +%s) - epoch) / 3600 ))
 }
 
+# rls_gap <pilot> <like|not like>: tables of public with an org_id column but without enabled and forced row-level
+# security, among the model tables (name like 'r\_%') or the others
+rls_gap() {
+  dc exec -T postgres psql -U postgres -d "$1" -qAtX <<SQL
+select coalesce(string_agg(c.relname, ' ' order by c.relname), '')
+from pg_class c
+join pg_attribute a on a.attrelid = c.oid and a.attname = 'org_id' and not a.attisdropped
+where c.relkind = 'r' and c.relnamespace = 'public'::regnamespace
+  and c.relname $2 'r\_%' and not (c.relrowsecurity and c.relforcerowsecurity)
+SQL
+}
+
 drill_pilot() {
   local p="$1" name port code
   if [ -n "$ARCHIVE" ]; then
@@ -196,6 +210,24 @@ drill_pilot() {
   fi
   pending="$(migrate_statements "$TMP/migrate.out")" || { log "$p: no 'would apply N statement(s)' line in the migrate output:"; cat "$TMP/migrate.out" >&2; return 1; }
   if [ "$pending" != 0 ]; then log "$p: migrate --dry-run would apply $pending statement(s): the restored schema does not match this binary"; cat "$TMP/migrate.out" >&2; return 1; fi
+  # the pilot role is a plain owner: no SUPERUSER, no BYPASSRLS, so row-level security binds the kernel
+  local flags
+  flags="$(dc exec -T postgres psql -U postgres -qAtX -c "select rolsuper::int || ',' || rolbypassrls::int from pg_roles where rolname = '$p'")" || flags=""
+  if [ "$flags" != 0,0 ]; then log "$p: database role $p must be NOSUPERUSER and NOBYPASSRLS (superuser,bypassrls = '$flags'): row-level security would not bind it"; return 1; fi
+  # With S5 every model table (r_*, parents and children) has row-level security enabled AND forced, so the owning
+  # role is bound too (contract 0010 section 4). The kernel's own rk_* tables that carry an org_id (sessions, tokens,
+  # members, audit, jobs, ...) are not covered by S5; they are listed as a note, not failed.
+  local help unforced sysnote
+  help="$(dc run --rm -T --no-deps "$p" help 2>&1 || true)"
+  if has_multiorg_help "$help"; then
+    unforced="$(rls_gap "$p" like)" || { log "$p: could not read the row-level security state"; return 1; }
+    sysnote="$(rls_gap "$p" 'not like')" || { log "$p: could not read the row-level security state"; return 1; }
+    if [ -n "$unforced" ]; then log "$p: model tables without enabled and forced row-level security: $unforced"; return 1; fi
+    log "$p: row-level security is enabled and forced on every model table (r_*)"
+    [ -z "$sysnote" ] || log "$p: NOTE kernel tables with an org_id and no row-level security (not covered by S5): $sysnote"
+  else
+    log "$p: this binary has no S5 (multi-org, row-level security): row-level security not checked"
+  fi
   dc up -d "$p" >/dev/null || { log "$p: kernel did not start"; return 1; }
   port="$(dc port "$p" 8080 | sed 's/.*://')"
   code=000

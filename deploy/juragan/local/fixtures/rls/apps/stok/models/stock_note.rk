@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: stock_note
+naming: SN-{###}
+label: {id: Catatan stok}
+title_field: note
+fields:
+  - name: note
+    type: data
+    label: {id: Catatan}
+    required: true
+    in_list: true
+  - name: outlet
+    type: link
+    to: outlet
+    label: {id: Outlet}
+    required: true
+    in_list: true

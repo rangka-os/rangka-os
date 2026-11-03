@@ -5,6 +5,8 @@
 #   local/e2e.sh            run everything, tear down on exit
 #   KEEP=1 local/e2e.sh     leave the stack running
 #   RANGKA_APPS_REPO=…      path to the rangka-apps checkout (default: sibling of the main rangka-os clone)
+#   RANGKA_SRC=…            checkout to build rangka:local from (default: this one); a checkout with S5 makes
+#                           section_rls run, otherwise it is reported as SKIPPED
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -23,10 +25,20 @@ APPS_REPO="${RANGKA_APPS_REPO:-$(cd "$(git -C "$REPO" rev-parse --path-format=ab
 # shellcheck source-path=SCRIPTDIR source=../backup/lib.sh
 . "$DEPLOY/backup/lib.sh"
 
+# shellcheck source-path=SCRIPTDIR source=rls-check.sh
+. "$HERE/rls-check.sh"
+
+SRC="${RANGKA_SRC:-$REPO}"
+
 PASS=0
 FAIL=0
+SKIPPED=()
 ok() { PASS=$((PASS + 1)); echo "  ok   $*"; }
 bad() { FAIL=$((FAIL + 1)); echo "  FAIL $*" >&2; }
+skip() { # skip <section> <reason>: loud, and listed in the summary; never counted as a pass
+  SKIPPED+=("$1")
+  echo "  SKIP ******** $1 NOT RUN: $2"
+}
 same() { # same <description> <actual> <expected>
   if [ "$2" = "$3" ]; then ok "$1"; else bad "$1 (got '$2', want '$3')"; fi
 }
@@ -45,9 +57,9 @@ cleanup() {
   if [ "${KEEP:-0}" = 1 ]; then
     echo "KEEP=1: stack left running (project $PROJECT)"
   else
-    dc down -v --remove-orphans >/dev/null 2>&1 || true
+    COMPOSE_PROFILES='*' dc down -v --remove-orphans >/dev/null 2>&1 || true # '*': the rls service has a profile
   fi
-  echo "passed $PASS, failed $FAIL"
+  echo "passed $PASS, failed $FAIL, skipped ${#SKIPPED[@]}${SKIPPED[*]:+ (${SKIPPED[*]}: NOT RUN, see SKIP lines above)}"
   [ "$rc" -ne 0 ] || [ "$FAIL" -eq 0 ] || rc=1
   exit "$rc"
 }
@@ -69,8 +81,8 @@ https() { # https <host> <curl args...>
 
 prepare() {
   [ -d "$APPS_REPO/apps" ] || { echo "rangka-apps not found at $APPS_REPO (set RANGKA_APPS_REPO)" >&2; exit 2; }
-  echo "== build rangka:local"
-  docker build -q -t rangka:local -f "$HERE/Dockerfile.rangka" "$REPO" >/dev/null
+  echo "== build rangka:local from $SRC"
+  docker build -q -t rangka:local -f "$HERE/Dockerfile.rangka" "$SRC" >/dev/null
   echo "== prepare pilot folders from $APPS_REPO"
   rm -rf "$WORK"
   mkdir -p "$WORK/pilots"
@@ -119,6 +131,8 @@ RCLONE_CONFIG_OFFBOX_PROVIDER=Minio
 RCLONE_CONFIG_OFFBOX_ENDPOINT=http://offbox:9000
 RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID=$OFFBOX_KEY
 RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY=$OFFBOX_SECRET
+RLS_DIR=$WORK/rls
+RLS_DB_PASSWORD=$(openssl rand -hex 16)
 ENV
 }
 
@@ -177,6 +191,11 @@ section_stack() {
   out="$(psql_as fnb jasa -c 'select 1' 2>&1 || true)"
   if grep -q 'permission denied for database' <<<"$out"; then ok "role fnb refused on database jasa"; else bad "isolation: $out"; fi
 
+  # the pilot roles are plain owners (row-level security must bind the kernel) and the kernels say nothing about RLS
+  out="$(dc exec -T postgres psql -U postgres -qAtX -c "select string_agg(rolname || '=' || rolsuper::int || rolbypassrls::int || rolcreaterole::int, ' ' order by rolname) from pg_roles where rolname in ('jasa', 'fnb')" 2>&1 || true)"
+  same "roles jasa, fnb: NOSUPERUSER NOBYPASSRLS NOCREATEROLE (super, bypassrls, createrole = 000)" "$out" "fnb=000 jasa=000"
+  same "no 'row-level security is not enforced' warning in the jasa and fnb kernel logs" "$(dc logs jasa fnb 2>&1 | grep -c 'row-level security is not enforced' || true)" 0
+
   # plain HTTP redirects to HTTPS
   local loc
   for host in "$JASA_HOST" "$FNB_HOST"; do
@@ -214,16 +233,20 @@ section_stack() {
 # Runs the backup container; stdout of the container, exit status preserved.
 run_backup() { dc run --rm -T backup "$@"; }
 
-# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok members=ok apps=ok nobackups=ok rk=<n> total=<rows> lead=<rows> method=<m> tag=<t> image=<i>".
+# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok members=ok apps=ok nobackups=ok rk=<n> total=<rows> lead=<rows> method=<m> tag=<t> image=<i> rkarchive=<none|ok|bad>".
 # shellcheck disable=SC2016 # the script runs inside the container
 INSPECT='set -euo pipefail
 d="$(mktemp -d)"; cd "$d"
 age -d -i /age.txt "/backups/$1/$2" | tar -x
 sha256sum -c SHA256SUMS >/dev/null && printf "sha=ok "
-[ "$(ls | LC_ALL=C sort | tr "\n" " ")" = "SHA256SUMS apps.tar db.dump files.tar manifest.json site.tar " ] && printf "members=ok "
+case "$(ls | LC_ALL=C sort | tr "\n" " ")" in
+  "SHA256SUMS apps.tar db.dump files.tar manifest.json site.tar "|"SHA256SUMS apps.tar files.tar manifest.json rangka.backup site.tar ") printf "members=ok " ;;
+esac
 tar -tf apps.tar | grep -q "^apps/" && printf "apps=ok "
 [ -z "$(for t in site files apps; do tar -tf $t.tar; done | grep "^backups")" ] && printf "nobackups=ok "
-jq -r "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method) tag=\(.rangka_tag) image=\(.rangka_image)\"" manifest.json'
+rka=none
+if [ -f rangka.backup ]; then tar -tzf rangka.backup >rk.list; if grep -qx manifest.json rk.list; then rka=ok; else rka=bad; fi; fi
+jq -r --arg rka "$rka" "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method) tag=\(.rangka_tag) image=\(.rangka_image) rkarchive=\(\$rka)\"" manifest.json'
 inspect_archive() { # inspect_archive <pilot> <archive file name>
   dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" --entrypoint bash backup -c "$INSPECT" _ "$1" "$2"
 }
@@ -285,7 +308,7 @@ section_backup() {
   else
     bad "row totals: jasa=$t_jasa fnb=$t_fnb leads jasa=$l_jasa fnb=$l_fnb"
   fi
-  if [[ "$s_jasa" == *method=pg_dump* ]]; then ok "method is pg_dump (current binary has no rangka backup)"; else bad "method: $s_jasa"; fi
+  if [[ "$s_jasa" == *method=pg_dump* ]]; then ok "method is pg_dump (the default; this binary has rangka backup but is not asked to use it)"; else bad "method: $s_jasa"; fi
 
   # off-box down: non-zero exit, a new local archive is kept, remote listing unchanged afterwards
   local before_remote after_remote before_local after_local
@@ -342,9 +365,13 @@ SHIM
   # manifest records the release the archive was made with
   if [[ "$s_jasa" == *"tag=local image=rangka:local"* ]]; then ok "manifest records rangka_tag and rangka_image"; else bad "manifest tag/image: $s_jasa"; fi
 
-  # BACKUP_METHOD=rangka against a binary without `rangka backup` fails at once and clearly; a bogus value too
+  # BACKUP_METHOD=rangka against a binary without `rangka backup` fails at once and clearly (a `rangka` shim whose help
+  # lists no backup stands in for it); a bogus value too
+  mkdir -p "$WORK/shim2"
+  printf '#!/bin/sh\necho "usage: rangka serve"\n' >"$WORK/shim2/rangka"
+  chmod 755 "$WORK/shim2/rangka"
   before_local="$(local_archives jasa | wc -l | tr -d ' ')"
-  if out="$(dc run --rm -T -e BACKUP_METHOD=rangka backup jasa 2>&1)"; then bad "BACKUP_METHOD=rangka should fail on this binary"; elif grep -q "BACKUP_METHOD=rangka but this rangka binary has no 'backup' command" <<<"$out"; then ok "BACKUP_METHOD=rangka fails clearly on a binary without rangka backup"; else bad "BACKUP_METHOD=rangka message: $out"; fi
+  if out="$(dc run --rm -T -v "$WORK/shim2:/shim2:ro" -e PATH=/shim2:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin -e BACKUP_METHOD=rangka backup jasa 2>&1)"; then bad "BACKUP_METHOD=rangka should fail on a binary without rangka backup"; elif grep -q "BACKUP_METHOD=rangka but this rangka binary has no 'backup' command" <<<"$out"; then ok "BACKUP_METHOD=rangka fails clearly on a binary without rangka backup"; else bad "BACKUP_METHOD=rangka message: $out"; fi
   if out="$(dc run --rm -T -e BACKUP_METHOD=bogus backup jasa 2>&1)"; then bad "BACKUP_METHOD=bogus should fail"; elif grep -q 'BACKUP_METHOD must be' <<<"$out"; then ok "unknown BACKUP_METHOD is refused"; else bad "BACKUP_METHOD=bogus message: $out"; fi
   same "refused method: no new local archive, nothing uploaded" "$(local_archives jasa | wc -l | tr -d ' ')/$(offbox_list jasa)" "$before_local/$before_remote"
 
@@ -352,6 +379,7 @@ SHIM
   : >"$WORK/stats.empty"
   printf 'public.t\t1\tabc\n' >"$WORK/stats.good"
   if require_stats "$WORK/stats.empty" 2>/dev/null; then bad "require_stats accepted an empty stats file"; else ok "require_stats rejects an empty stats file"; fi
+  if require_stats "$WORK/stats.missing" 2>/dev/null; then bad "require_stats accepted a missing stats file"; else ok "require_stats rejects a missing stats file"; fi
   if require_stats "$WORK/stats.good" 2>/dev/null; then ok "require_stats accepts one table"; else bad "require_stats rejected a valid stats file"; fi
   # wiring check (a real run would need a database without tables)
   # shellcheck disable=SC2016 # literal text of backup.sh
@@ -365,6 +393,15 @@ SHIM
   same "symlink: no new local archive, nothing uploaded" "$(local_archives jasa | wc -l | tr -d ' ')/$(offbox_list jasa)" "$before_local/$before_remote"
   same "symlink: no ping" "$(ping_hits)" "$hits_good"
   docker run --rm -v "$WORK/pilots:/p" alpine:3.20 rm -f /p/jasa/site/evil-link
+
+  # the link scan fails closed: when find itself fails the backup fails, instead of archiving unchecked files
+  printf '#!/bin/sh\ncase "$*" in *-quit*) echo "injected find failure" >&2; exit 1 ;; esac\nexec /usr/bin/find "$@"\n' >"$WORK/shim2/find"
+  chmod 755 "$WORK/shim2/find"
+  before_local="$(local_archives jasa | wc -l | tr -d ' ')"
+  sleep 2
+  if out="$(dc run --rm -T -v "$WORK/shim2:/shim2:ro" -e PATH=/shim2:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin backup jasa 2>&1)"; then bad "backup with a failing find should exit non-zero: $out"; elif grep -q 'cannot scan .* for symlinks and hardlinks (find failed)' <<<"$out"; then ok "a failing find fails the backup closed and says so"; else bad "find failure message: $out"; fi
+  same "failing find: no new local archive, nothing uploaded" "$(local_archives jasa | wc -l | tr -d ' ')/$(offbox_list jasa)" "$before_local/$before_remote"
+  same "failing find: no ping" "$(ping_hits)" "$hits_good"
 }
 
 drill_projects() { docker ps -a --format '{{.Names}}' | grep -c '^juragan-drill-' || true; }
@@ -547,12 +584,62 @@ tar -cf "/t/$2" manifest.json db.dump site.tar files.tar apps.tar SHA256SUMS'
   if [ "$(drill_projects)" = 0 ]; then ok "no juragan-drill-* container at the end"; else bad "drill containers left"; fi
 }
 
+# BACKUP_METHOD=rangka end to end (S1's `rangka backup` / `rangka restore`): backup, archive contents, the drill
+# restoring it from off-box with the exact manifest comparison. The default stays pg_dump; this is the proof for the
+# switch described in RUNBOOK section 5. Runs after the drill section so the earlier checks use pg_dump archives.
+section_rangka() {
+  echo "== rangka backup path"
+  local help
+  help="$(dc run --rm -T --no-deps jasa help 2>&1 || true)"
+  if ! grep -q 'rangka backup' <<<"$help"; then
+    skip "section_rangka" "this rangka binary has no 'rangka backup' (S1)"
+    return 0
+  fi
+  local out rc=0 p f s hits
+  hits="$(ping_hits)"
+  sleep 2 # archive names are second-resolution
+  if out="$(dc run --rm -T -e BACKUP_METHOD=rangka backup all 2>&1)"; then ok "BACKUP_METHOD=rangka: backup all exits 0"; else bad "rangka backup all failed: $out"; fi
+  same "BACKUP_METHOD=rangka: one success ping" "$(ping_hits)" "$((hits + 1))"
+  for p in jasa fnb; do
+    f="$(basename "$(local_archives "$p" | tail -1)")"
+    s="$(inspect_archive "$p" "$f" 2>/dev/null)" || s=""
+    if [[ "$s" =~ ^sha=ok\ members=ok\ apps=ok\ nobackups=ok\ rk=([0-9]+)\ total=([0-9]+)\ lead=[0-9]+\ method=rangka\ .*rkarchive=ok$ ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
+      ok "$p rangka archive: sums verify, members incl. rangka.backup (a valid tar.gz), no db.dump, ${BASH_REMATCH[1]} rk_ tables with rows ($s)"
+    else
+      bad "$p rangka archive inspection: $s"
+    fi
+    if [ "$(offbox_list "$p" | grep -c "^$f\$")" = 1 ]; then ok "$p rangka archive is off-box"; else bad "$p rangka archive not off-box"; fi
+  done
+
+  # auto picks rangka on this binary
+  sleep 2
+  if out="$(dc run --rm -T -e BACKUP_METHOD=auto backup jasa 2>&1)"; then ok "BACKUP_METHOD=auto: backup jasa exits 0"; else bad "auto backup failed: $out"; fi
+  f="$(basename "$(local_archives jasa | tail -1)")"
+  s="$(inspect_archive jasa "$f" 2>/dev/null)" || s=""
+  if [[ "$s" == *method=rangka* ]]; then ok "BACKUP_METHOD=auto chose rangka on a binary that has it"; else bad "auto method: $s"; fi
+
+  # the drill restores the newest off-box archives, which are now rangka ones: rangka restore, then the exact comparison
+  local drill=("$DEPLOY/restore-drill.sh" --env "$WORK/.env" --identity "$WORK/age-identity.txt" --log "$WORK/drill.log")
+  export DRILL_OFFBOX_NETWORK="${PROJECT}_default"
+  out="$("${drill[@]}" --pilot all 2>&1)" || rc=$?
+  same "drill on rangka archives exits 0" "$rc" 0
+  [ "$rc" = 0 ] || echo "$out" >&2
+  for p in jasa fnb; do
+    if grep -q "^DRILL PASSED $p $p-[0-9TZ]*[.]tar[.]age " <<<"$out"; then ok "DRILL PASSED $p on a rangka archive"; else bad "no DRILL PASSED $p on a rangka archive"; fi
+  done
+  same "the drill restored with method rangka for both pilots" "$(grep -c '^restore: method: rangka' <<<"$out")" 2
+  same "rangka restore: manifest comparison exact (restore ok line) for both pilots" "$(grep -c '^restore ok: [0-9]* tables, [0-9]* rows match' <<<"$out")" 2
+  same "no drill project left after the rangka drills" "$(drill_projects)/$(drill_networks)" 0/0
+}
+
 main() {
   trap cleanup EXIT
   prepare
   section_stack
   section_backup
   section_drill
+  section_rangka
+  section_rls
   [ "$FAIL" -eq 0 ]
 }
 

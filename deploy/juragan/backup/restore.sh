@@ -83,6 +83,7 @@ main() {
     *) die "unknown backup method '$method'" ;;
   esac
   [ -f "$dump_file" ] || die "$dump_file missing in the archive"
+  log "method: $method"
   # the drill compares these with its own release (empty in archives made before they were recorded)
   log "manifest: rangka_tag=$(jq -r '.rangka_tag // ""' manifest.json) rangka_image=$(jq -r '.rangka_image // ""' manifest.json)"
   [ "$(jq '.tables | length' manifest.json)" -ge 1 ] || die "manifest lists no tables: not a usable backup"
@@ -107,11 +108,14 @@ main() {
 
   # 4. restore the database
   if [ "$method" = rangka ]; then
-    # S1 CLI: `rangka restore <file> [--into dir] [--files dir]`; the database comes from $DATABASE_URL (environment,
-    # never argv). It migrates the schema from the archived apps+site, verifies its own sums, refuses a non-empty database.
-    # Untested here until the binary ships it. The tars below are unpacked afterwards too (connectors/, same files again).
+    # S1 CLI: `rangka restore <file> --db <url> [--into dir] [--files dir]` (the database comes from $DATABASE_URL,
+    # never argv). It verifies its own sums, extracts site/ and apps/ into --into and the uploads into --files (both
+    # must be empty or absent: the pilot folder may already hold backups/), migrates the schema from the archived
+    # metadata, loads the rows in one transaction and verifies them. Everything it writes to disk goes to the work
+    # dir: the folders come from the tars below, the same way as for pg_dump archives.
     DATABASE_URL="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}" \
-      rangka restore "$WORK_DIR/x/rangka.backup" --into "$srv" --files "$srv/data/files" || die "rangka restore failed"
+      rangka restore "$WORK_DIR/x/rangka.backup" --into "$WORK_DIR/rk-into" --files "$WORK_DIR/rk-files" \
+      || die "rangka restore failed"
   else
     # one transaction: a failure leaves the database empty
     pg_restore --no-owner --role="$p" --exit-on-error --single-transaction -d "$url" db.dump \

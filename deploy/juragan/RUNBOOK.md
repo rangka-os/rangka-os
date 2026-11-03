@@ -9,7 +9,8 @@ scripts in this folder (or `local/e2e.sh`) run. Placeholders are in `<angle brac
 chat, tickets or git.
 
 Files in this folder: `compose.yaml`, `.env.example`, `Caddyfile`, `postgres/initdb/10-pilots.sh`,
-`backup/{Dockerfile,lib.sh,backup.sh,restore.sh}`, `restore-drill.sh`, `systemd/`, `local/` (end-to-end test).
+`backup/{Dockerfile,lib.sh,backup.sh,restore.sh}`, `restore-drill.sh`, `systemd/`, `local/` (end-to-end test, `local/rls-check.sh`,
+`local/fixtures/rls/`).
 
 ## 1. Provider
 
@@ -132,8 +133,8 @@ Each step has the check that proves it.
    docker compose ps
    ```
    `postgres` is healthy, `jasa`, `fnb` and `caddy` are up. The first start creates one role and one database per
-   pilot (`postgres/initdb/10-pilots.sh`): the `jasa` role cannot connect to `fnb` and the reverse. The kernels
-   migrate on start.
+   pilot (`postgres/initdb/10-pilots.sh`): the `jasa` role cannot connect to `fnb` and the reverse, and neither is a
+   superuser nor has BYPASSRLS (section 10). The kernels migrate on start.
 6. **Seed the owner once per pilot.** **Dede** types the password himself, so it never lands in shell history or
    a file. The two values are passed to this one command only and are not written to `.env`:
    ```bash
@@ -183,9 +184,10 @@ Each pilot's `site/system.rk` must have:
 - `db.url: '${DATABASE_URL}'` (quoted; compose injects the real URL, nothing secret in the bundle).
 - `db.isolation` as the bundle needs.
 
-`RANGKA_ENV=production` and `RANGKA_BACKUP_DIR=/srv/backups` are already set in `compose.yaml`: once the S1
-kernel lands, migrations take a pre-migrate backup into `<pilot>/backups/` (local disk only, not in the nightly
-archive).
+`RANGKA_ENV=production` and `RANGKA_BACKUP_DIR=/srv/backups` are already set in `compose.yaml`: with the S1 kernel
+(on `main`), every migration takes a pre-migrate backup into `<pilot>/backups/` first (local disk only, not in the
+nightly archive). `local/e2e.sh` proves that the kernel starts and migrates this way (it writes into the mounted
+`backups/` folder, owned by uid 65532).
 
 ## 5. Daily operations
 
@@ -221,11 +223,24 @@ hand any time: `docker compose run --rm backup all` (or `jasa` / `fnb`).
    docker compose ps
    ```
 4. Check `docker compose logs --tail 50 jasa fnb` and the HTTPS check from section 3, step 7.
-5. The nightly dump uses `pg_dump` (`BACKUP_METHOD=pg_dump`, the default), never by itself anything else. After
-   the first release that has `rangka backup` / `rangka restore` (S1, contract 0005 section 2), switch to it only
-   deliberately: set `BACKUP_METHOD=rangka` (`auto` picks it when the binary has it; `rangka` fails when it does
-   not), run one backup by hand (`docker compose run --rm backup all`), then a restore drill (section 7) that
-   passes on that archive. Only then leave it on. Revert by removing the line.
+5. The nightly dump uses `pg_dump` (`BACKUP_METHOD=pg_dump`, the default), never by itself anything else.
+   `BACKUP_METHOD=rangka` (S1's `rangka backup` / `rangka restore`, contract 0005 section 2; `auto` picks it when
+   the binary has it, `rangka` fails when it does not) is proven but stays off until you switch deliberately:
+   set `BACKUP_METHOD=rangka`, run one backup by hand (`docker compose run --rm backup all`), then a restore drill
+   (section 7) that passes on that archive. Only then leave it on. Revert by removing the line.
+
+   What `local/e2e.sh` (section "rangka backup path") proved with the S1 binary on `main`: `backup all` with
+   `BACKUP_METHOD=rangka` writes the same archive layout as before, with `rangka.backup` (the tar.gz of
+   `rangka backup`) instead of `db.dump`, covered by `SHA256SUMS` and with `method: rangka` in `manifest.json`;
+   `BACKUP_METHOD=auto` picks it; the drill restores it with `rangka restore` into the empty pilot database and
+   compares every table's row count and checksum with the manifest exactly (the same check as for `pg_dump`
+   archives), then the kernel boots on it with 0 pending migration statements. How the scripts call the CLI:
+   `rangka backup --out <file> --files <pilot>/data/files` with the database in `DATABASE_URL` (environment, not
+   argv). No `--org`: the pilot database is the unit of backup, and an org archive leaves out the tables without an
+   org link, so it could never match the manifest. `rangka restore <file> --into <dir> --files <dir>` also with
+   `DATABASE_URL`; both folders go to a scratch dir (they must be empty, and the pilot folder already holds
+   `backups/`), the pilot folders come from the archive's own `apps.tar`, `site.tar`, `files.tar`. Not proven:
+   attachments (the sample data has none), and a backup of a database with S5's row-level security (section 10).
 
 **Rollback:** set the previous tag in `.env`, `docker compose up -d`. If the new release's migration changed data
 destructively, the old binary is not enough: restore from the pre-upgrade archive (section 6).
@@ -336,12 +351,23 @@ cd deploy/juragan
 ```
 
 Options: `--pilot jasa|fnb|all`, `--archive <file>` (needs one pilot), `--log <file>`, `--max-age <hours>`
-(default 48), `--keep`. Per pilot the drill prints the archive's age (from the UTC stamp in its name) and fails
-when it is older than `--max-age`: that means the nightly backup has stopped. It also warns when the archive was
-made with another `RANGKA_TAG` or image than the drill env file names. Per pilot the drill fetches the newest archive, starts a throwaway compose project (`juragan-drill-<epoch>`, own Postgres,
-random passwords, no Caddy), runs `restore.sh`, requires `migrate --dry-run` to plan 0 statements, boots the
-kernel and expects `GET /.well-known/openid-configuration` = 200. The project and its temp folder are removed on
-exit.
+(default 48), `--keep`.
+
+Per pilot the drill:
+
+1. prints the archive's age (from the UTC stamp in its name) and fails when it is older than `--max-age`: that
+   means the nightly backup has stopped. It also warns when the archive was made with another `RANGKA_TAG` or image
+   than the drill env file names;
+2. fetches the newest archive and starts a throwaway compose project (`juragan-drill-<epoch>`, own Postgres, random
+   passwords, no Caddy);
+3. runs `restore.sh` (checksums, empty target, restore, exact table comparison with the manifest);
+4. requires `migrate --dry-run` to plan 0 statements;
+5. checks the database role: `NOSUPERUSER` and `NOBYPASSRLS`, otherwise the drill fails (section 10);
+6. with an S5 binary, checks that every model table (`r_*`) has row-level security enabled and forced, otherwise
+   the drill fails; kernel tables that carry an `org_id` but no RLS are only listed as a `NOTE` (section 10);
+7. boots the kernel and expects `GET /.well-known/openid-configuration` = 200.
+
+The project and its temp folder are removed on exit.
 
 Pass condition: one line per pilot, also appended to `drill.log` in `deploy/juragan/`:
 
@@ -363,15 +389,22 @@ A failure prints `DRILL FAILED <pilot>` and exits non-zero.
 
 ## 8. Local test (no cloud)
 
-`deploy/juragan/local/e2e.sh` builds a local image, runs the whole stack with a self-signed CA on
-`*.localhost` ports 8081/8443, and runs three sections: the stack (database isolation, HTTPS, seed and login),
-backup (archive, off-box upload, failed upload), and drill (restore, corrupted or truncated archives, refusal of
-a non-empty database). The output counts the checks (about 71). Needs Docker.
+`deploy/juragan/local/e2e.sh` builds a local image from this checkout, runs the whole stack with a self-signed CA on
+`*.localhost` ports 8081/8443, and runs the sections: the stack (database isolation, role flags, HTTPS, seed and
+login), backup (archive, off-box upload, failed upload, fail-closed scans), drill (restore, corrupted or truncated
+archives, refusal of a non-empty database), the rangka backup path (`BACKUP_METHOD=rangka`, section 5) and rls
+(section 10). The output ends with `passed N, failed M, skipped K` and names every skipped section. Needs Docker.
 
 ```bash
 deploy/juragan/local/e2e.sh          # tears down on exit
 KEEP=1 deploy/juragan/local/e2e.sh   # leaves the stack running
+RANGKA_SRC=<checkout> deploy/juragan/local/e2e.sh   # build the kernel from another checkout
 ```
+
+`section_rls` needs a kernel with S5 (multi-org, row-level security, outlet scope, contract 0010). Until S5 is on
+`main` it prints `SKIP ******** section_rls NOT RUN` and the summary says `skipped 1`: that is not a pass. To run it,
+point `RANGKA_SRC` at a checkout of the S5 branch (for example
+`git worktree add --detach /tmp/s05 origin/pilot/s05-multiorg`, then `RANGKA_SRC=/tmp/s05 deploy/juragan/local/e2e.sh`).
 
 ## 9. Go-live checklist
 
@@ -386,5 +419,61 @@ Mapped to the program's go-live gate (per pilot). All of it before Dede signs of
 - [ ] Bucket: Object Lock (governance, 30 days), versioning, 35-day expiry rule, Block Public Access all confirmed.
 - [ ] Bundle (S9): `auth.issuer` is `https://<host>`, `files.path: ./data/files`, `db.url: '${DATABASE_URL}'`.
 - [ ] Owner seeded; `RANGKA_OWNER_*` blank in `.env`.
+- [ ] The restore drill (same run) printed `database role ... NOSUPERUSER NOBYPASSRLS` as ok and, with S5, `row-level security is enabled and forced on every model table`; `docker compose logs jasa fnb | grep 'row-level security is not enforced'` prints nothing.
 - [ ] Gate items owned elsewhere: the spec's day-one list works with the pilot's real opening data, the permission matrix test passes (cross-org and cross-outlet requests return 403), the Review Focus tests pass (`local/e2e.sh`).
 - [ ] Dede signs off.
+
+## 10. Database role and row-level security
+
+**Why the pilot role is a plain owner.** Each kernel connects as its own role (`jasa`, `fnb`), which owns its
+database and tables and is created `NOSUPERUSER NOBYPASSRLS NOCREATEROLE NOCREATEDB` by `postgres/initdb/10-pilots.sh`.
+Postgres skips row-level security for superusers and for roles with `BYPASSRLS`. With S5 (contract 0010 section 4)
+every model table has RLS enabled and forced, with policy `rk_org`, and the kernel sets `rangka.org` per request:
+only a role that is neither of those makes that database-level guard hold, even if a query forgets its
+`where org_id`. Never connect a kernel as `postgres`, and never grant `BYPASSRLS`. The nightly dump and the
+restore run as the same plain role, which is enough: the policy lets every row through when `rangka.org` is not set
+(migrations, seed, the backup), so the backup is complete.
+
+**The warning to look for.** A kernel that connects as a superuser or BYPASSRLS role logs, once at start:
+
+```text
+warning: connected as a superuser or BYPASSRLS role; row-level security is not enforced
+```
+
+```bash
+docker compose logs jasa fnb | grep 'row-level security is not enforced'
+```
+
+must print nothing. `local/e2e.sh` asserts it for both pilots and, in `section_rls`, proves the check can fail
+(a kernel connected as the `postgres` superuser does log the line).
+
+**Checking the role in a running stack:**
+
+```bash
+docker compose exec -T postgres psql -U postgres -c \
+  "select rolname, rolsuper, rolbypassrls, rolcreaterole from pg_roles where rolname in ('jasa', 'fnb')"
+```
+
+All three flags must be `f`. A database created before `10-pilots.sh` had the explicit flags has the same role
+attributes (`CREATE ROLE` defaults are `NO...`); to be sure, `ALTER ROLE <pilot> NOSUPERUSER NOBYPASSRLS NOCREATEROLE;`.
+
+**The RLS check, locally.** `section_rls` (`local/rls-check.sh`, fixture `local/fixtures/rls/`) starts a third kernel
+as role `rlsapp` (plain owner of database `rls`) on a site with two orgs and the role `outlet_staff` (scope: field
+`outlet`, from `user.outlets`), creates users with `rangka user add` (`RANGKA_USER_PASSWORD` in the environment, never
+argv) and checks through REST:
+
+- an `org_a` user lists none of `org_b`'s records, and GET of an `org_b` record by name is 404;
+- an outlet user of `org_b` lists only the records of their outlet, and GET of another outlet's record is 403
+  `permission_denied`;
+
+and in the database, as `rlsapp`: with `rangka.org` set to `org_a`, `org_b`'s rows are invisible (count 0), the
+role's flags are all false and it owns every table (FORCE RLS binds the owner). It needs an S5 kernel; see section 8
+for how to run it before S5 is on `main`. Without S5 it is reported as skipped, never as passed.
+
+**The drill gate.** After the restore, `restore-drill.sh` fails when the pilot role is a superuser or has BYPASSRLS,
+and (S5 binary) when a model table has RLS missing or not forced (section 7, items 5 and 6).
+
+**Known gap (S5, reported to its owner).** S5 enables RLS on model tables only. The kernel's own tables with an
+`org_id` (`rk_approvals`, `rk_attachments`, `rk_audit`, `rk_changesets`, `rk_import_keys`, `rk_imports`, `rk_jobs`,
+`rk_members`, `rk_naming`, `rk_number_series`, `rk_oauth_codes`, `rk_sessions`, `rk_tokens`) have none, which matches
+contract 0010 section 4 ("every model table") but not a stricter reading. The drill prints them as a `NOTE`.

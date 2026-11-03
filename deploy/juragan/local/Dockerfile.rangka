@@ -1,7 +1,11 @@
 # Local test image: the same binary and base as deploy/Dockerfile, built from this checkout.
-# Build context is the rangka-os repo root:  docker build -t rangka:local -f deploy/juragan/local/Dockerfile.rangka .
+# Build context is the rangka-os repo root (or any other checkout, see RANGKA_SRC in e2e.sh):
+#   docker build -t rangka:local -f deploy/juragan/local/Dockerfile.rangka .
 FROM golang:1.24 AS build
 WORKDIR /src
+# modules first: this layer is cached until go.mod or go.sum changes (pgx, x/crypto and the rest)
+COPY kernel/go.mod kernel/go.sum ./kernel/
+RUN cd kernel && go mod download
 COPY kernel ./kernel
 COPY web ./web
 COPY templates ./templates

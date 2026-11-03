@@ -45,7 +45,9 @@ check_no_links() {
   local p="$1" name found
   for name in site data apps connectors; do
     [ -d "$PILOTS_ROOT/$p/$name" ] || continue
-    found="$(find "$PILOTS_ROOT/$p/$name" \( -type l -o \( -type f -links +1 \) \) -print -quit)"
+    # called as `check_no_links ... || return 1`, so errexit is off here: a failed scan must fail the backup itself
+    found="$(find "$PILOTS_ROOT/$p/$name" \( -type l -o \( -type f -links +1 \) \) -print -quit)" \
+      || { log "$p: cannot scan $PILOTS_ROOT/$p/$name for symlinks and hardlinks (find failed); refusing to back up unchecked files"; return 1; }
     if [ -n "$found" ]; then
       log "$p: $found is a symlink or hardlink; the archive would not restore. Replace it with a plain file or move it out of $name/"
       return 1
@@ -83,7 +85,10 @@ dump_pg() {
   done
   [ "${line:-}" = __END__ ] || { log "stats query failed"; return 1; }
   # the exporting transaction stays open while pg_dump runs
-  if ! pg_dump -Fc --snapshot="$snap" -f "$dir/db.dump" "$url"; then
+  # --enable-row-security: with S5's FORCE row-level security even the owning role is subject to the policies, and
+  # pg_dump stops with "query would be affected by row-level security policy" without it. With no org set the
+  # policy lets every row through (contract 0010 section 4), so the dump is complete.
+  if ! pg_dump -Fc --enable-row-security --snapshot="$snap" -f "$dir/db.dump" "$url"; then
     log "pg_dump failed"
     printf '%s\n' 'ROLLBACK;' '\q' >&"${PSQL[1]}" || true
     wait "$PSQL_PID" || true
@@ -93,22 +98,20 @@ dump_pg() {
   wait "$PSQL_PID" || true
 }
 
-# dump_rangka <pilot> <url> <work dir>: `rangka backup`, run in the pilot folder; counts before and after,
-# one retry when the data changed in between. Called as `dump_rangka ... || return 1`, which switches errexit
-# off in here: every step checks its own status.
+# dump_rangka <pilot> <url> <work dir>: `rangka backup` (S1, contract 0005 section 2), run in the pilot folder;
+# table counts and checksums before and after, one retry when the data changed in between. Called as
+# `dump_rangka ... || return 1`, which switches errexit off in here: every step checks its own status.
 dump_rangka() {
-  local p="$1" url="$2" dir="$3" attempt before after secret_url org_var org_args
+  local p="$1" url="$2" dir="$3" attempt before after secret_url
   for attempt in 1 2; do
     before="$(table_stats "$url")" || { log "table stats failed"; return 1; }
-    # the kernel takes the password from DATABASE_URL (environment only, never argv)
+    # the kernel takes the database from DATABASE_URL (environment only, never argv)
     secret_url="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}" || return 1
-    # S1 CLI: `rangka backup [--out file] [--org id] [--files dir]` writes a tar.gz with its own manifest and sums;
-    # untested here until the binary ships it. Files live in data/files (system.rk files.path).
-    org_args=()
-    org_var="$(tr '[:lower:]' '[:upper:]' <<<"$p")_ORG"
-    [ -z "${!org_var:-}" ] || org_args=(--org "${!org_var}")
+    # Whole database, no --org: the pilot database is the unit of backup and restore, and an org archive leaves out
+    # the tables without an org link (rk_keys, ...), which would never match the manifest. --files is the pilot's
+    # files folder (system.rk files.path, ./data/files); a missing one only matters once attachments exist.
     (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
-      rangka backup --out "$dir/rangka.backup" "${org_args[@]}" --files "$PILOTS_ROOT/$p/data/files") \
+      rangka backup --out "$dir/rangka.backup" --files "$PILOTS_ROOT/$p/data/files") \
       || { log "rangka backup failed"; return 1; }
     after="$(table_stats "$url")" || { log "table stats failed"; return 1; }
     if [ "$before" = "$after" ]; then

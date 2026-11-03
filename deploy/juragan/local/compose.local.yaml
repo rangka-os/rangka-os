@@ -25,5 +25,24 @@ services:
     image: python:3.12-alpine
     command: ["python", "-m", "http.server", "8080", "--directory", "/tmp"]
 
+  # Third kernel for the RLS check (rls-check.sh): its own database `rls`, owned by the plain role `rlsapp`
+  # (created by the check, not by initdb), on the two-org fixture. Started by name, never by `up`.
+  rls:
+    profiles: ["rls"]
+    image: ${RANGKA_IMAGE:?}
+    command: ["serve"]
+    environment:
+      DATABASE_URL: postgres://rlsapp:${RLS_DB_PASSWORD:-}@postgres:5432/rls?sslmode=disable
+      RANGKA_ORG: org_a
+      RANGKA_APPS: /srv/apps
+      RANGKA_SITE: /srv/site
+      RANGKA_ADDR: ":8080"
+    ports: ["127.0.0.1::8080"]
+    volumes:
+      - ${RLS_DIR:-/nonexistent}:/srv
+    depends_on:
+      postgres:
+        condition: service_healthy
+
 volumes:
   offbox_data:

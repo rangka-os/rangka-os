@@ -123,8 +123,10 @@ scope: {field: outlet, from: user.outlets}
   `Engine.Guard(ctx, actor, model, record, action)` before acting.
 
 ### 6. Error shape
-`403 {"error": {"code": "permission_denied", "message": "Kamu tidak punya izin untuk <action> <model>", "model": "<model>", "action": "<action>"}}`,
-shared with S1's model permissions (`engine.PermissionError`).
+`403 {"error": {"code": "permission_denied", "message": "Kamu tidak punya izin untuk melihat faktur penjualan", "model": "sales_invoice", "action": "read"}}`,
+shared with S1's model permissions (`engine.PermissionError`). `code`, `model` and `action` are for code; `message` is
+for people: an Indonesian verb per action (melihat, membuat, mengubah, mengajukan, membatalkan, merevisi, menghapus,
+mencetak, mengekspor, mengimpor, menyetujui, menolak, menjalankan) and the model's label, lower-cased mid-sentence.
 
 ### 7. CLI
 One command, shared with S0's set-up (which spells the email `--email`):

@@ -26,17 +26,62 @@ var knownAction = func() map[string]bool {
 // §4) and row scope (contract 0010 §6) alike. The API answers it with the one 403 permission_denied body.
 type PermissionError struct {
 	Model, Action string
+	Label         string // the model's label for the message ("Faktur penjualan"); "" falls back to nouns or Model
 }
 
-// Error is the human message of the 403 body, in Bahasa Indonesia since the web app shows it; code, model and
-// action stay machine-readable (contract 0010 §6).
+// actionWords are the verbs of the 403 message per action; unknown actions show as given.
+var actionWords = map[string]string{
+	"read": "melihat", "query": "melihat", "create": "membuat", "write": "mengubah", "update": "mengubah",
+	"submit": "mengajukan", "cancel": "membatalkan", "amend": "merevisi", "delete": "menghapus", "print": "mencetak",
+	"export": "mengekspor", "import": "mengimpor", "approve": "menyetujui", "reject": "menolak",
+	"customize": "menyesuaikan", "run": "menjalankan", "switch": "masuk ke",
+}
+
+// nouns name the non-model targets of a 403 (organisations, flows, jobs).
+var nouns = map[string]string{"org": "organisasi ini", "flow": "alur ini", "job": "tugas ini"}
+
+// Error is the human message of the 403 body, in Bahasa Indonesia since the web app shows it ("Kamu tidak punya
+// izin untuk melihat faktur penjualan"); code, model and action stay machine-readable (contract 0010 §6).
 func (p *PermissionError) Error() string {
-	return "Kamu tidak punya izin untuk " + p.Action + " " + p.Model
+	verb := actionWords[p.Action]
+	if strings.HasPrefix(p.Action, "action:") {
+		verb = "menjalankan aksi " + strings.TrimPrefix(p.Action, "action:") + " pada"
+	}
+	if verb == "" {
+		verb = p.Action
+	}
+	what := lowerFirst(p.Label)
+	if what == "" {
+		what = nouns[p.Model]
+	}
+	if what == "" {
+		what = p.Model
+	}
+	return "Kamu tidak punya izin untuk " + verb + " " + what
+}
+
+// lowerFirst lower-cases the first letter for use mid-sentence ("Faktur penjualan" → "faktur penjualan").
+func lowerFirst(s string) string {
+	if s == "" {
+		return s
+	}
+	r := []rune(s)
+	return strings.ToLower(string(r[0])) + string(r[1:])
 }
 
 // Denied builds the error for an action the caller may not perform (row scope, contract 0010 §6, uses it too).
+// Engine.Deny also fills the model's label.
 func Denied(model, action string) *PermissionError {
 	return &PermissionError{Model: model, Action: action}
+}
+
+// Deny is Denied with the model's label from the registry, for the message.
+func (e *Engine) Deny(model, action string) *PermissionError {
+	pe := Denied(model, action)
+	if m := e.Reg().Model(model); m != nil {
+		pe.Label = m.Label.Text()
+	}
+	return pe
 }
 
 // grant is one entry of a model's permissions: list.
@@ -175,7 +220,7 @@ func (e *Engine) authorize(ctx context.Context, q pg.Querier, links map[string]m
 		if knownAction[action] && unrestricted(a) {
 			return nil
 		}
-		return &PermissionError{Model: model, Action: action}
+		return e.Deny(model, action)
 	}
 	d := e.decide(a, m, action)
 	if rec == nil {
@@ -185,7 +230,7 @@ func (e *Engine) authorize(ctx context.Context, q pg.Querier, links map[string]m
 	} else if e.recordAllowed(ctx, q, a, m, d, rec, links) {
 		return nil
 	}
-	return &PermissionError{Model: m.Name, Action: action}
+	return e.Deny(m.Name, action)
 }
 
 // Authorize decides whether a may perform action on model: nil, or a *PermissionError. With a record the

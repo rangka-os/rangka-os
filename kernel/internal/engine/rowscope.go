@@ -138,7 +138,7 @@ func (e *Engine) Guard(ctx context.Context, a Actor, model string, rec store.Rec
 		return nil
 	}
 	if !s.Visible(e.Reg().Model(model), rec) {
-		return Denied(model, action)
+		return e.Deny(model, action)
 	}
 	return nil
 }

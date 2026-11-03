@@ -38,7 +38,7 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	}
 	readable := e.decide(a, m, "read")
 	if !readable.maybe() {
-		return nil, 0, &PermissionError{Model: m.Name, Action: "read"}
+		return nil, 0, e.Deny(m.Name, "read")
 	}
 	if opts.Filter != "" {
 		if _, err := cel.Compile(opts.Filter); err != nil {

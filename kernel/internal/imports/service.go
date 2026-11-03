@@ -144,7 +144,7 @@ func (s *Service) Preview(ctx context.Context, a engine.Actor, name, fileName st
 			return nil, &engine.StatusError{Status: 400, Code: "outlet_required", Msg: "Pilih outlet dulu"}
 		}
 		if !s.outletAllowed(a, outlet) {
-			return nil, engine.Denied(im.Model, "import")
+			return nil, s.Engine.Deny(im.Model, "import")
 		}
 		ok, err := store.Exists(ctx, s.DB, a.Org, "outlet", outlet)
 		if err != nil {
@@ -316,7 +316,7 @@ func (s *Service) Commit(ctx context.Context, a engine.Actor, name, id string) (
 		return nil, err
 	}
 	if !s.outletAllowed(a, ent.Scope) {
-		return nil, engine.Denied(im.Model, "import")
+		return nil, s.Engine.Deny(im.Model, "import")
 	}
 	if ent.Status == "committed" || ent.Duplicate {
 		return nil, errAlreadyImported()
@@ -408,7 +408,7 @@ func (s *Service) Get(ctx context.Context, a engine.Actor, name, id string) (*En
 	scoped := s.Engine.RowScope(a) != nil
 	ent, plan, err := s.load(ctx, a, name, id, scoped)
 	if err == nil && !s.entryAllowed(ctx, a, im, ent, plan) {
-		return nil, engine.Denied(im.Model, "import")
+		return nil, s.Engine.Deny(im.Model, "import")
 	}
 	if ent != nil {
 		ent.order = orderFor(s.Engine.Reg(), s.Engine.Reg().Imports[name])

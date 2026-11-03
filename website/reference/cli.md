@@ -35,8 +35,10 @@ Every step records its reverse.
   no longer has, and dropping a soft-deleted column or table older than 30 days. A plan that contains a retype is
   refused as a whole (exit 1, nothing applied) unless you pass `--allow-destructive`. Columns and tables removed from a
   model stay in the database and show up as notes.
-- **Soft delete** renames the column or table to `_del_<YYYYMMDD>_<name>` (63 bytes at most). It is dropped for good
-  only after 30 days and only with `--allow-destructive`.
+- **Soft delete** renames the column or table to `_del_<YYYYMMDD>_<name>` (63 bytes at most), and its indexes the
+  same way, so a column or table that comes back gets fresh indexes (a returning `unique: true` field is unique
+  again). Rolling it back renames both back. It is dropped for good only after 30 days and only with
+  `--allow-destructive`.
 - `--rollback n` undoes the last n migrations (n of at least 1). A rollback whose reverse drops a column or table is
   destructive too and needs `--allow-destructive`. It supports `--dry-run`.
 - `serve` migrates at start-up and refuses to start on a destructive retype, with a message that points to

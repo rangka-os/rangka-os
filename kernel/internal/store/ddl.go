@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"slices"
 	"sort"
 	"strings"
 	"time"
@@ -181,12 +182,17 @@ func (t Table) createSQL() string {
 type Live struct {
 	Columns map[string]map[string]string // table → column → information_schema data_type
 	Types   map[string]map[string]string // table → column → full SQL type (format_type), when introspected
+	// Indexes are the live indexes of r_ tables, without those on soft-deleted (_del_) columns.
 	Indexes map[string]bool
+	// TableIndexes are every index of an r_ table with its key columns (table → index → columns); soft deletes
+	// rename them along with their table or column.
+	TableIndexes map[string]map[string][]string
 }
 
 // Introspect reads the live r_ tables (and soft-deleted _del_ tables).
 func Introspect(ctx context.Context, q pg.Querier) (*Live, error) {
-	l := &Live{Columns: map[string]map[string]string{}, Types: map[string]map[string]string{}, Indexes: map[string]bool{}}
+	l := &Live{Columns: map[string]map[string]string{}, Types: map[string]map[string]string{}, Indexes: map[string]bool{},
+		TableIndexes: map[string]map[string][]string{}}
 	res, err := q.Query(ctx, `select table_name, column_name, data_type from information_schema.columns
 		where table_schema = current_schema() and (table_name like 'r\_%' or table_name like '\_del\_%')`)
 	if err != nil {
@@ -213,12 +219,29 @@ func Introspect(ctx context.Context, q pg.Querier) (*Live, error) {
 		}
 		l.Types[t][c] = ft
 	}
-	res, err = q.Query(ctx, `select indexname from pg_indexes where schemaname = current_schema() and tablename like 'r\_%'`)
+	res, err = q.Query(ctx, `select t.relname, i.relname, coalesce(string_agg(a.attname::text, ',' order by a.attnum), '')
+		from pg_index x join pg_class i on i.oid = x.indexrelid join pg_class t on t.oid = x.indrelid
+		join pg_namespace n on n.oid = t.relnamespace
+		left join pg_attribute a on a.attrelid = t.oid and a.attnum = any(x.indkey) and a.attnum > 0
+		where n.nspname = current_schema() and t.relname like 'r\_%'
+		group by t.relname, i.relname`)
 	if err != nil {
 		return nil, err
 	}
 	for _, r := range res.Rows {
-		l.Indexes[r[0].(string)] = true
+		t, ix, cols := r[0].(string), r[1].(string), strings.Split(r[2].(string), ",")
+		if l.TableIndexes[t] == nil {
+			l.TableIndexes[t] = map[string][]string{}
+		}
+		l.TableIndexes[t][ix] = cols
+		// an index on a soft-deleted column does not serve the model: a returning column gets its own
+		onDeleted := false
+		for _, c := range cols {
+			onDeleted = onDeleted || strings.HasPrefix(c, softDeletePrefix)
+		}
+		if !onDeleted {
+			l.Indexes[ix] = true
+		}
 	}
 	return l, nil
 }
@@ -293,6 +316,22 @@ func PlanSteps(desired []Table, live *Live, now time.Time, allowDestructive bool
 	add := func(sql, reverse, risk string, destructive bool) {
 		steps = append(steps, Step{SQL: sql, Reverse: reverse, Risk: risk, Destructive: destructive})
 	}
+	// renameIndexes soft-deletes the indexes of table that match keep (sorted by name), so a returning table or
+	// column gets fresh indexes instead of finding the old names taken
+	renameIndexes := func(table string, keep func(cols []string) bool) {
+		ixs := live.TableIndexes[table]
+		names := make([]string, 0, len(ixs))
+		for ix, cols := range ixs {
+			if !strings.HasPrefix(ix, softDeletePrefix) && keep(cols) {
+				names = append(names, ix)
+			}
+		}
+		sort.Strings(names)
+		for _, ix := range names {
+			from, to := pg.QuoteIdent(ix), pg.QuoteIdent(softDeleteName(ix, now))
+			add(fmt.Sprintf("alter index %s rename to %s", from, to), fmt.Sprintf("alter index %s rename to %s", to, from), RiskHigh, true)
+		}
+	}
 	wanted := map[string]bool{}
 	for _, t := range desired {
 		wanted[t.Name] = true
@@ -349,6 +388,7 @@ func PlanSteps(desired []Table, live *Live, now time.Time, allowDestructive bool
 					del := pg.QuoteIdent(softDeleteName(c, now))
 					add(fmt.Sprintf("alter table %s rename column %s to %s", tq, cq, del),
 						fmt.Sprintf("alter table %s rename column %s to %s", tq, del, cq), RiskHigh, true)
+					renameIndexes(t.Name, func(cols []string) bool { return slices.Contains(cols, c) })
 				default:
 					notes = append(notes, fmt.Sprintf("%s.%s is no longer in the model; the column and its data are kept", t.Name, c))
 				}
@@ -377,6 +417,7 @@ func PlanSteps(desired []Table, live *Live, now time.Time, allowDestructive bool
 		case allowDestructive:
 			del := pg.QuoteIdent(softDeleteName(t, now))
 			add(fmt.Sprintf("alter table %s rename to %s", tq, del), fmt.Sprintf("alter table %s rename to %s", del, tq), RiskHigh, true)
+			renameIndexes(t, func([]string) bool { return true })
 		default:
 			notes = append(notes, fmt.Sprintf("%s is no longer in the model; the table and its data are kept", t))
 		}

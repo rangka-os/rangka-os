@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -301,7 +302,9 @@ func TestSoftDeleteAndDrop(t *testing.T) {
 	res = e.mustMigrate(MigrateOpts{Source: "test", AllowDestructive: true})
 	want := Step{SQL: `alter table "r_deal" rename column "region" to "_del_20261103_region"`,
 		Reverse: `alter table "r_deal" rename column "_del_20261103_region" to "region"`, Risk: "high", Destructive: true}
-	if len(res.Steps) != 1 || res.Steps[0] != want || e.column("r_deal", "_del_20261103_region") != "text" || e.column("r_deal", "region") != "" {
+	wantIdx := Step{SQL: `alter index "r_deal_region_idx" rename to "_del_20261103_r_deal_region_idx"`,
+		Reverse: `alter index "_del_20261103_r_deal_region_idx" rename to "r_deal_region_idx"`, Risk: "high", Destructive: true}
+	if len(res.Steps) != 2 || res.Steps[0] != want || res.Steps[1] != wantIdx || e.column("r_deal", "_del_20261103_region") != "text" || e.column("r_deal", "region") != "" {
 		t.Fatalf("soft delete: %+v", res.Steps)
 	}
 	res = e.mustMigrate(MigrateOpts{Source: "test"})
@@ -403,5 +406,125 @@ func TestPlanStepsRisk(t *testing.T) {
 	}
 	if long := softDeleteName("x_"+strings.Repeat("a", 70), day0); len(long) > 63 || !strings.HasPrefix(long, "_del_20261103_x_aaa") {
 		t.Errorf("long soft-delete name %q", long)
+	}
+}
+
+const codeField = "  - name: kode\n    type: data\n    unique: true\n    label: {id: Kode}\n"
+
+// indexDef is the definition of index name, "" when there is none.
+func (e *migrateEnv) indexDef(name string) string {
+	e.t.Helper()
+	r, err := e.db.Query(e.ctx, "select indexdef from pg_indexes where schemaname = current_schema() and indexname = $1", name)
+	if err != nil {
+		e.t.Fatal(err)
+	}
+	if len(r.Rows) == 0 {
+		return ""
+	}
+	return r.Rows[0][0].(string)
+}
+
+// TestSoftDeleteColumnIndexes: soft-deleting a unique column renames its index with it (rollback renames it
+// back), and a column that returns gets its own unique index; after that nothing is planned.
+func TestSoftDeleteColumnIndexes(t *testing.T) {
+	e := newMigrateEnv(t)
+	e.edit("rules:\n", codeField+"rules:\n")
+	e.mustMigrate(MigrateOpts{Source: "test"})
+	if !strings.Contains(e.indexDef("r_deal_kode_uniq"), "(org_id, kode)") {
+		t.Fatalf("unique index = %q", e.indexDef("r_deal_kode_uniq"))
+	}
+	e.edit(codeField, "")
+	res := e.mustMigrate(MigrateOpts{Source: "test", AllowDestructive: true})
+	want := []string{`alter table "r_deal" rename column "kode" to "_del_20261103_kode"`,
+		`alter index "r_deal_kode_uniq" rename to "_del_20261103_r_deal_kode_uniq"`}
+	if !reflect.DeepEqual(res.Statements, want) || e.indexDef("r_deal_kode_uniq") != "" ||
+		!strings.Contains(e.indexDef("_del_20261103_r_deal_kode_uniq"), "_del_20261103_kode") {
+		t.Fatalf("soft delete: %v", res.Statements)
+	}
+	// the rollback renames the column and its index back
+	if _, err := Rollback(e.ctx, e.db, RollbackOpts{N: 1, AllowDestructive: true}); err != nil {
+		t.Fatal(err)
+	}
+	if e.column("r_deal", "kode") != "text" || !strings.Contains(e.indexDef("r_deal_kode_uniq"), "(org_id, kode)") || e.indexDef("_del_20261103_r_deal_kode_uniq") != "" {
+		t.Fatalf("rollback: column %q, index %q", e.column("r_deal", "kode"), e.indexDef("r_deal_kode_uniq"))
+	}
+	e.mustMigrate(MigrateOpts{Source: "test", AllowDestructive: true})
+	// the column returns: a new column with a new unique index, then nothing to do
+	e.edit("rules:\n", codeField+"rules:\n")
+	res = e.mustMigrate(MigrateOpts{Source: "test"})
+	if len(res.Steps) != 2 || !strings.Contains(e.indexDef("r_deal_kode_uniq"), "(org_id, kode)") {
+		t.Fatalf("re-add: %v; index %q", res.Statements, e.indexDef("r_deal_kode_uniq"))
+	}
+	if _, err := e.db.Exec(e.ctx, `insert into r_deal (org_id, name, kode) values ('o', 'DEAL-1', 'K1')`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.db.Exec(e.ctx, `insert into r_deal (org_id, name, kode) values ('o', 'DEAL-2', 'K1')`); err == nil {
+		t.Fatal("the returned column is not unique")
+	}
+	if res = e.mustMigrate(MigrateOpts{Source: "test"}); len(res.Steps) != 0 {
+		t.Fatalf("second migrate planned %v", res.Statements)
+	}
+}
+
+// TestSoftDeleteTableIndexes: soft-deleting a table renames its indexes; when the model returns its table and
+// indexes are created again and a second migrate plans nothing.
+func TestSoftDeleteTableIndexes(t *testing.T) {
+	e := newMigrateEnv(t)
+	p := filepath.Join(e.apps, "crm", "models", "tiket.rk")
+	model := "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json\n" +
+		"name: tiket\nlabel: {id: Tiket}\nnaming: TKT-{#####}\nfields:\n" + codeField
+	if err := os.WriteFile(p, []byte(model), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	e.mustMigrate(MigrateOpts{Source: "test"})
+	if e.indexDef("r_tiket_kode_uniq") == "" || e.indexDef("r_tiket_pkey") == "" {
+		t.Fatal("tiket indexes missing")
+	}
+	os.Remove(p)
+	res := e.mustMigrate(MigrateOpts{Source: "test", AllowDestructive: true})
+	want := []string{`alter table "r_tiket" rename to "_del_20261103_r_tiket"`,
+		`alter index "r_tiket_kode_uniq" rename to "_del_20261103_r_tiket_kode_uniq"`,
+		`alter index "r_tiket_pkey" rename to "_del_20261103_r_tiket_pkey"`}
+	if !reflect.DeepEqual(res.Statements, want) {
+		t.Fatalf("soft delete: %v", res.Statements)
+	}
+	if err := os.WriteFile(p, []byte(model), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	res = e.mustMigrate(MigrateOpts{Source: "test"})
+	if len(res.Steps) != 2 || !strings.Contains(e.indexDef("r_tiket_kode_uniq"), "ON public.r_tiket ") {
+		t.Fatalf("re-add: %v; index %q", res.Statements, e.indexDef("r_tiket_kode_uniq"))
+	}
+	if res = e.mustMigrate(MigrateOpts{Source: "test"}); len(res.Steps) != 0 {
+		t.Fatalf("second migrate planned %v", res.Statements)
+	}
+}
+
+// TestSoftDeleteIndexNames: index soft-delete names stay within Postgres' 63 bytes and the reverse renames back;
+// an index on a _del_ column (left from before indexes were renamed) is not a live index of the model.
+func TestSoftDeleteIndexNames(t *testing.T) {
+	long := "r_" + strings.Repeat("panjang_", 6) + "x_uniq"
+	live := &Live{Columns: map[string]map[string]string{"r_t": {"org_id": "text", "name": "text", "x": "text"}},
+		Indexes: map[string]bool{}, TableIndexes: map[string]map[string][]string{"r_t": {long: {"org_id", "x"}, "r_t_pkey": {"org_id", "name"}}}}
+	steps, _ := PlanSteps([]Table{{Name: "r_t", Columns: []Column{{"org_id", "text", true, ""}, {"name", "text", true, ""}}}}, live, day0, true)
+	if len(steps) != 2 || !strings.HasPrefix(steps[1].SQL, `alter index "`+long+`" rename to "_del_20261103_`) {
+		t.Fatalf("steps = %+v", steps)
+	}
+	to := softDeleteName(long, day0)
+	if len(to) > 63 || steps[1].Reverse != fmt.Sprintf(`alter index %s rename to %s`, pg.QuoteIdent(to), pg.QuoteIdent(long)) {
+		t.Fatalf("name %q (%d bytes), reverse %q", to, len(to), steps[1].Reverse)
+	}
+
+	e := newMigrateEnv(t)
+	e.mustMigrate(MigrateOpts{Source: "test"})
+	if _, err := e.db.Exec(e.ctx, `alter table r_deal add column _del_20261001_old text; create index r_deal_old_idx on r_deal (org_id, _del_20261001_old)`); err != nil {
+		t.Fatal(err)
+	}
+	l, err := Introspect(e.ctx, e.db)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if l.Indexes["r_deal_old_idx"] || !reflect.DeepEqual(l.TableIndexes["r_deal"]["r_deal_old_idx"], []string{"org_id", "_del_20261001_old"}) || !l.Indexes["r_deal_pkey"] {
+		t.Fatalf("indexes %v, table indexes %v", l.Indexes, l.TableIndexes["r_deal"])
 	}
 }

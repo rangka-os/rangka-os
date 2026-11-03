@@ -97,6 +97,16 @@ func TestRenderCSPMeta(t *testing.T) {
 	}
 }
 
+// .Truncated.<name> is true for a related list the endpoint cut at its limit, false (not an error) otherwise.
+func TestRenderTruncated(t *testing.T) {
+	body := `{{if .Truncated.a}}A{{end}}{{if .Truncated.b}}B{{end}}`
+	if out := renderBody(t, body, "A4", map[string]any{"name": "X"}, nil); strings.Contains(out, "<body class=\"print-a4\">\nA") {
+		t.Errorf("nil RelatedTruncated: %s", out)
+	}
+	out := renderBody(t, body, "A4", map[string]any{"name": "X"}, func(in *Input) { in.RelatedTruncated = map[string]bool{"a": true, "b": false} })
+	mustContain(t, out, "<body class=\"print-a4\">\nA\n</body>")
+}
+
 func TestRenderPapers(t *testing.T) {
 	cases := []struct{ paper, page, class, size string }{
 		{"A4", "@page{size:A4;margin:15mm}", "print-a4", "10pt"},

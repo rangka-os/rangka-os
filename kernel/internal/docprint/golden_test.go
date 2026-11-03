@@ -202,6 +202,18 @@ func TestGoldenContent(t *testing.T) {
 		"Rp 5.880.000", "Rp 17.482.500", "Rp 23.362.500", ">45<", ">10<", "Lunas")
 }
 
+// A cut related list (more open invoices than the limit) says so on the statement; a complete one does not.
+func TestGoldenStatementTruncated(t *testing.T) {
+	reg := goldenRegistry(t)
+	const note = "Daftar dipotong: hanya 3 tagihan terlama yang ditampilkan."
+	in := goldenCases(t, reg)["statement"]
+	if out := renderGolden(t, in); strings.Contains(out, "Daftar dipotong") {
+		t.Errorf("complete list says it was cut:\n%s", out)
+	}
+	in.RelatedTruncated = map[string]bool{"invoices": true}
+	mustContain(t, renderGolden(t, in), note)
+}
+
 func TestGoldenInvoiceWithoutPKP(t *testing.T) {
 	reg := goldenRegistry(t)
 	in := goldenCases(t, reg)["sales_invoice"]

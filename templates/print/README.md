@@ -53,6 +53,11 @@ plus `footer.id` and `signatory`) and `.Org.pkp`.
 - **Row numbers.** `{{sub $i -1}}` is `$i + 1` (there is no `add` helper).
 - **Statement.** `Sisa` is `sub grand_total paid_amount`; a row with nothing open says `Lunas`, others show
   `overdue due_date` (days past due at print time). The aging table comes from `aging .Related.invoices`.
+  The format's related list holds **open invoices only** (`filter: docstatus == 1 && grand_total > paid_amount`),
+  oldest first, `limit: 1000`. Listing paid history too would let a long-standing customer's paid invoices
+  fill the limit and push the newest (most likely open) ones off the page, so `Total sisa` and the aging would
+  understate what the customer owes. When more open invoices match than the limit, `.Truncated.invoices` is
+  true and the page prints "Daftar dipotong: hanya N tagihan terlama yang ditampilkan."
 
 ## Writing templates: guard nested values
 

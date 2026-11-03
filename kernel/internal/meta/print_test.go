@@ -30,7 +30,7 @@ func TestLoadPrints(t *testing.T) {
 	if len(cust) != 1 {
 		t.Fatalf("customer formats = %+v", cust)
 	}
-	want := Related{Model: "sales_invoice", Match: map[string]string{"customer": "name"}, Filter: "docstatus == 1", Sort: "posting_date", Limit: 500}
+	want := Related{Model: "sales_invoice", Match: map[string]string{"customer": "name"}, Filter: "docstatus == 1 && grand_total > paid_amount", Sort: "posting_date", Limit: 1000}
 	if got := cust[0].Related["invoices"]; !reflect.DeepEqual(got, want) {
 		t.Errorf("related = %+v", got)
 	}

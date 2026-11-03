@@ -22,9 +22,9 @@ related:                     # optional: lists loaded for the template (SOA, del
   invoices:
     model: sales_invoice
     match: {customer: name}  # related.customer == doc.name
-    filter: docstatus == 1   # optional CEL on the related record (no `doc` access)
+    filter: docstatus == 1 && grand_total > paid_amount  # optional CEL on the related record (no `doc` access); open items only
     sort: posting_date       # field or -field
-    limit: 500               # default 200, max 1000
+    limit: 1000              # default 200, max 1000; more matches → .Truncated.invoices
 ```
 - A site `print/<name>.rk` with the same name replaces the module's one (a firm's own look without touching `apps/`).
 - Formats of apps that are not installed are ignored.
@@ -52,7 +52,7 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 
 ### 3. Templates: Go `html/template`
 - The template holds the page body. The kernel wraps it in a full document: `<!doctype html>`, `lang="id"`, title = record name, `@page` size and margins for the paper, base CSS (Rangka tokens: ink text, stone rules, tabular numbers), and a `print-<paper>` class on `<body>`. A template may add CSS with `{{define "style"}}…{{end}}`.
-- Data: `.Doc` (the record with child tables; every model field present, missing ones empty), `.Links` (each top-level link field's record, e.g. `.Links.customer.customer_name`), `.Related.<name>` (lists from `related:`), `.Letterhead`, `.Org`, `.Model` (`name`, `label`), `.Format` (`name`, `label`, `paper`), `.Printed` (print time, org time zone).
+- Data: `.Doc` (the record with child tables; every model field present, missing ones empty), `.Links` (each top-level link field's record, e.g. `.Links.customer.customer_name`), `.Related.<name>` (lists from `related:`), `.Truncated.<name>` (true when more rows matched than the list's `limit`, so the list was cut; templates should say so), `.Letterhead`, `.Org`, `.Model` (`name`, `label`), `.Format` (`name`, `label`, `paper`), `.Printed` (print time, org time zone).
 - Built-in partials, which a template may redefine: `letterhead` (logo, legal name, address, NPWP, contacts), `bank_accounts`, `signature`.
 - Helpers (exact output, tested):
 

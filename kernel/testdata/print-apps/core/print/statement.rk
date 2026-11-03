@@ -9,6 +9,6 @@ related:
   invoices:
     model: sales_invoice
     match: {customer: name}
-    filter: docstatus == 1
+    filter: docstatus == 1 && grand_total > paid_amount
     sort: posting_date
-    limit: 500
+    limit: 1000

@@ -16,15 +16,17 @@ import (
 
 // Input is everything a print format is rendered from.
 type Input struct {
-	Format     *meta.Print
-	Model      *meta.Model
-	Doc        map[string]any            // record incl. child tables
-	Links      map[string]map[string]any // top-level link field → linked record
-	Related    map[string][]map[string]any
-	Letterhead map[string]any         // from Registry.Letterhead (logo = abs path)
-	Org        map[string]any         // config.org
-	Printed    time.Time              // already in the org time zone
-	Children   map[string]*meta.Model // child models of table fields, by model name
+	Format  *meta.Print
+	Model   *meta.Model
+	Doc     map[string]any            // record incl. child tables
+	Links   map[string]map[string]any // top-level link field → linked record
+	Related map[string][]map[string]any
+	// RelatedTruncated marks the related lists cut at their limit (more rows matched), as .Truncated.<name>
+	RelatedTruncated map[string]bool
+	Letterhead       map[string]any         // from Registry.Letterhead (logo = abs path)
+	Org              map[string]any         // config.org
+	Printed          time.Time              // already in the org time zone
+	Children         map[string]*meta.Model // child models of table fields, by model name
 }
 
 // Render executes the format's template inside the page shell (contract 0008 §3) and returns the HTML page.
@@ -74,6 +76,7 @@ func Render(in Input) ([]byte, error) {
 		"Doc":        fill(in.Doc, m, in.Children),
 		"Links":      orEmpty(in.Links),
 		"Related":    orEmpty(in.Related),
+		"Truncated":  orEmpty(in.RelatedTruncated),
 		"Letterhead": letterhead,
 		"Org":        orEmpty(in.Org),
 		"Model":      map[string]any{"name": m.Name, "label": m.Label.Text()},

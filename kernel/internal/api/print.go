@@ -71,7 +71,7 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 		}
 		return
 	}
-	related, err := s.printRelated(ctx, c.actor, f, rec)
+	related, truncated, err := s.printRelated(ctx, c.actor, f, rec)
 	if err != nil {
 		fail(w, err)
 		return
@@ -83,7 +83,7 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 		}
 	}
 	page, err := docprint.Render(docprint.Input{
-		Format: f, Model: m, Doc: rec, Links: s.printLinks(ctx, c.actor, m, rec), Related: related,
+		Format: f, Model: m, Doc: rec, Links: s.printLinks(ctx, c.actor, m, rec), Related: related, RelatedTruncated: truncated,
 		Letterhead: reg.Letterhead(c.actor.Org), Org: printOrg(reg, c.actor.Org), Printed: s.Engine.Now().In(s.Engine.Location()),
 		Children: children,
 	})
@@ -187,23 +187,25 @@ func (s *Server) printLinks(ctx context.Context, a engine.Actor, m *meta.Model, 
 
 // printRelated loads the format's related lists as the caller: rows of the related model passing its filter
 // and whose match fields equal the document's, in its sort order, cut to its limit. The match pairs are part
-// of the List filter, so the limit applies to matching rows only.
-func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record) (map[string][]map[string]any, error) {
-	out := map[string][]map[string]any{}
+// of the List filter, so the limit applies to matching rows only. truncated marks the lists that had more
+// matching rows than the limit.
+func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record) (out map[string][]map[string]any, truncated map[string]bool, err error) {
+	out, truncated = map[string][]map[string]any{}, map[string]bool{}
 	for key, rel := range f.Related {
 		list := []map[string]any{}
 		out[key] = list
 		filter, ok, err := relatedFilter(rel, rec)
 		if err != nil {
-			return nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
+			return nil, nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
 		}
 		if !ok {
 			continue // the document has no value to match on
 		}
-		rows, _, err := s.Engine.List(ctx, a, rel.Model, engine.ListOpts{Filter: filter, Sort: rel.Sort, Limit: rel.Limit})
+		rows, total, err := s.Engine.List(ctx, a, rel.Model, engine.ListOpts{Filter: filter, Sort: rel.Sort, Limit: rel.Limit})
 		if err != nil {
-			return nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
+			return nil, nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
 		}
+		truncated[key] = total > len(rows)
 		for _, row := range rows {
 			if matches(row, rec, rel.Match) { // defence in depth: the filter already holds these
 				list = append(list, row)
@@ -211,7 +213,7 @@ func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print
 		}
 		out[key] = list
 	}
-	return out, nil
+	return out, truncated, nil
 }
 
 var celIdent = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)

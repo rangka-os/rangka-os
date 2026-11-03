@@ -17,5 +17,6 @@ fields:
   - {name: dpp, type: currency, label: {id: DPP nilai lain}}
   - {name: ppn, type: currency, label: {id: PPN}}
   - {name: grand_total, type: currency, label: {id: Total}, in_list: true}
+  - {name: paid_amount, type: currency, label: {id: Dibayar}}
   - {name: currency, type: data, label: {id: Mata uang}}
   - {name: notes, type: text, label: {id: Catatan}}

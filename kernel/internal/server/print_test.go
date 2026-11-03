@@ -246,7 +246,7 @@ func statementEnv(t *testing.T) *env {
 			t.Fatal(err)
 		}
 		for p, s := range map[string]string{"statement.rk": statementRK,
-			"statement.html": `<ul>{{range .Related.invoices}}<li>{{.name}}|{{.customer}}</li>{{end}}</ul>`} {
+			"statement.html": `<ul>{{range .Related.invoices}}<li>{{.name}}|{{.customer}}</li>{{end}}</ul>{{if .Truncated.invoices}}<p>TRUNCATED</p>{{end}}`} {
 			if err := os.WriteFile(filepath.Join(dir, p), []byte(s), 0o644); err != nil {
 				t.Fatal(err)
 			}
@@ -267,8 +267,8 @@ func TestPrintRelatedMatchBeforeLimit(t *testing.T) {
 		mine = append(mine, e.submittedInvoice(c))
 	}
 	body := string(e.must(200, "GET", "/api/v1/r/customer/"+c+"/print?format=statement", nil).Body)
-	if got := strings.Count(body, "<li>"); got != 3 {
-		t.Fatalf("want 3 rows (the related limit), got %d:\n%s", got, body)
+	if got := strings.Count(body, "<li>"); got != 3 || !strings.Contains(body, "TRUNCATED") {
+		t.Fatalf("want 3 rows (the related limit), marked truncated, got %d:\n%s", got, body)
 	}
 	for _, n := range mine[:3] {
 		if !strings.Contains(body, "<li>"+n+"|"+c+"</li>") {
@@ -362,5 +362,47 @@ func TestPrintOrgPKP(t *testing.T) {
 				t.Errorf("DPP/PPN rows printed = %v, want %v:\n%s", got, tc.ppn, body)
 			}
 		})
+	}
+}
+
+// Exactly the limit is not truncated.
+func TestPrintRelatedAtLimitNotTruncated(t *testing.T) {
+	e := statementEnv(t)
+	c := e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "PT Pelanggan Contoh"}).JSON["name"].(string)
+	for i := 0; i < 3; i++ {
+		e.submittedInvoice(c)
+	}
+	body := string(e.must(200, "GET", "/api/v1/r/customer/"+c+"/print?format=statement", nil).Body)
+	if strings.Count(body, "<li>") != 3 || strings.Contains(body, "TRUNCATED") {
+		t.Fatalf("3 rows at limit 3 must not be marked truncated:\n%s", body)
+	}
+}
+
+// The reference statement (kernel/testdata/print-apps) lists open invoices only, so the limit never hides
+// what the customer still owes behind paid history.
+func TestPrintReferenceStatementOpenOnly(t *testing.T) {
+	e := printEnv(t, func(apps, site string) {
+		dir := filepath.Join(site, "print")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for _, f := range []string{"statement.rk", "statement.html"} {
+			b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "print-apps", "core", "print", f))
+			if err != nil {
+				t.Fatal(err)
+			}
+			if err := os.WriteFile(filepath.Join(dir, f), b, 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	c := e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "PT Pelanggan Contoh"}).JSON["name"].(string)
+	paid, open := e.submittedInvoice(c), e.submittedInvoice(c)
+	if _, err := e.s.DB.Exec(context.Background(), `update r_sales_invoice set paid_amount = grand_total where name = $1`, paid); err != nil {
+		t.Fatal(err)
+	}
+	body := string(e.must(200, "GET", "/api/v1/r/customer/"+c+"/print?format=statement", nil).Body)
+	if !strings.Contains(body, open) || strings.Contains(body, paid) || strings.Contains(body, "Daftar dipotong") {
+		t.Fatalf("want open %s only, not paid %s, not truncated:\n%s", open, paid, body)
 	}
 }

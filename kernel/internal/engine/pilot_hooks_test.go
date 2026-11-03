@@ -7,6 +7,7 @@ import (
 	"errors"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -656,6 +657,7 @@ func TestPilotConcurrentAllocation(t *testing.T) {
 	if p.outstanding("sales_invoice", inv) != 0 || p.outstanding("customer", m.cust) != 0 {
 		t.Fatal("outstanding after concurrent payments")
 	}
+	p.wantPartyInvariant(0, "sales_invoice", "customer", m.cust)
 }
 
 // TestPilotHooksUnderRLS runs allocation, a conversion and stock hooks as a plain (non-superuser) role, so the
@@ -741,48 +743,120 @@ func TestPilotReceiptAtLineAmount(t *testing.T) {
 
 // TestPilotCancelRacesAllocation: cancelling an invoice while a payment allocates to it. The row lock makes
 // one wait for the other: either the cancel is refused (has_payments) or the allocation is (not_submitted),
-// never both committed.
+// never both committed. A round the payment wins cancels the payment and leaves the invoice open, so the
+// customer's outstanding grows by one invoice per such round; every round checks the full invariant.
 func TestPilotCancelRacesAllocation(t *testing.T) {
 	p := setupPilot(t)
 	m := p.masters()
-	for i := 0; i < 6; i++ {
-		inv := p.invoice(m, m.cust, 1000000, false, nil)
-		pay := p.create("payment", map[string]any{"customer": m.cust, "amount": 1000000, "allocations": []any{alloc(inv, 1000000)}})
-		cancelErr, payErr := make(chan error, 1), make(chan error, 1)
-		go func() { cancelErr <- p.cancel("sales_invoice", inv) }()
-		go func() { _, err := p.e.Submit(p.ctx, p.a, "payment", pay, true); payErr <- err }()
-		ce, pe := <-cancelErr, <-payErr
+	p.raceCancelAllocation(pilotRaceRounds, "sales_invoice", "customer", m.cust,
+		func(i int) string { return p.invoice(m, m.cust, 1000000, false, nil) },
+		func(inv string) map[string]any {
+			return map[string]any{"customer": m.cust, "amount": 1000000, "allocations": []any{alloc(inv, 1000000)}}
+		})
+}
+
+// TestPilotCancelRacesPayableAllocation is the same race on the payables side: a vendor bill cancelled while
+// a payment (direction pay) allocates to it.
+func TestPilotCancelRacesPayableAllocation(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	p.raceCancelAllocation(pilotRaceRounds, "vendor_bill", "vendor", m.vend,
+		func(i int) string {
+			return p.doc("vendor_bill", map[string]any{"vendor": m.vend, "bill_no": "RACE/" + formatInt(int64(i)), "items": []any{map[string]any{"item": m.beras, "qty": 1, "rate": 1000000}}})
+		},
+		func(bill string) map[string]any {
+			return map[string]any{"direction": "pay", "vendor": m.vend, "amount": 1000000, "allocations": []any{map[string]any{"vendor_bill": bill, "amount": 1000000}}}
+		})
+}
+
+// pilotRaceRounds is enough rounds for both winners to show up in most runs, few enough to keep the test fast.
+const pilotRaceRounds = 10
+
+// raceCancelAllocation races, round by round, the cancel of a fresh target document (sales_invoice or
+// vendor_bill of party) against the submit of a payment allocating its whole amount. Both goroutines are
+// released together and the launch order alternates, so either side can win. After each round it checks the
+// winner's codes and stored values, then wantPartyInvariant.
+func (p *pilot) raceCancelAllocation(rounds int, target, partyModel, party string, newTarget func(int) string, payment func(string) map[string]any) {
+	t := p.t
+	t.Helper()
+	wins := map[string]int{}
+	for i := 0; i < rounds; i++ {
+		doc := newTarget(i)
+		pay := p.create("payment", payment(doc))
+		var ce, pe error
+		var paid string
+		var wg sync.WaitGroup
+		gate := make(chan struct{})
+		cancelSide := func() { defer wg.Done(); <-gate; ce = p.cancel(target, doc) }
+		paySide := func() {
+			defer wg.Done()
+			<-gate
+			r, err := p.e.Submit(p.ctx, p.a, "payment", pay, true)
+			if pe = err; err == nil {
+				paid = str(r.Record["name"])
+			}
+		}
+		wg.Add(2)
+		if i%2 == 0 {
+			go cancelSide()
+			go paySide()
+		} else {
+			go paySide()
+			go cancelSide()
+		}
+		close(gate)
+		wg.Wait()
 		switch {
 		case ce == nil && pe != nil:
+			wins["cancel"]++
 			wantCode(t, pe, 409, "not_submitted")
-			if r := p.get("sales_invoice", inv); r["docstatus"] != int64(2) || rp(r["paid_amount"]) != 0 {
-				t.Fatalf("cancel won but invoice = %v %v", r["docstatus"], r["paid_amount"])
+			if r := p.get(target, doc); r["docstatus"] != int64(2) || rp(r["paid_amount"]) != 0 {
+				t.Fatalf("round %d: cancel won but %s = %v %v", i, target, r["docstatus"], r["paid_amount"])
+			}
+			if r := p.get("payment", pay); r["docstatus"] != int64(0) {
+				t.Fatalf("round %d: cancel won but payment docstatus = %v", i, r["docstatus"])
 			}
 		case pe == nil && ce != nil:
+			wins["payment"]++
 			wantCode(t, ce, 409, "has_payments")
-			if r := p.get("sales_invoice", inv); r["docstatus"] != int64(1) || rp(r["paid_amount"]) != 1000000 {
-				t.Fatalf("payment won but invoice = %v %v", r["docstatus"], r["paid_amount"])
+			if r := p.get(target, doc); r["docstatus"] != int64(1) || rp(r["paid_amount"]) != 1000000 {
+				t.Fatalf("round %d: payment won but %s = %v %v", i, target, r["docstatus"], r["paid_amount"])
 			}
-			if err := p.cancel("payment", p.mustSubmittedName("payment", pay)); err != nil {
+			p.wantPartyInvariant(i, target, partyModel, party)
+			if err := p.cancel("payment", paid); err != nil {
 				t.Fatal(err)
 			}
 		default:
 			t.Fatalf("round %d: cancel %v, payment %v", i, ce, pe)
 		}
-		if got := p.outstanding("customer", m.cust); got != 0 && got != 1000000 {
-			t.Fatalf("customer outstanding = %d", got)
-		}
+		p.wantPartyInvariant(i, target, partyModel, party)
 	}
+	t.Logf("%s race winners over %d rounds: %v", target, rounds, wins)
 }
 
-// mustSubmittedName finds the submitted record that was the draft name (Submit renames DRAFT-…).
-func (p *pilot) mustSubmittedName(model, draft string) string {
+// wantPartyInvariant checks that a party's stored outstanding is the sum of amount_due − paid_amount over its
+// submitted target documents (sales invoices of a customer, vendor bills of a vendor), and that each
+// document's own outstanding is that difference.
+func (p *pilot) wantPartyInvariant(round int, target, partyModel, party string) {
 	p.t.Helper()
-	rows, _, err := p.e.List(p.ctx, p.a, model, ListOpts{Filter: "docstatus == 1", Sort: "-name", Limit: 1})
-	if err != nil || len(rows) == 0 {
-		p.t.Fatalf("no submitted %s for %s: %v", model, draft, err)
+	docs, _, err := p.e.List(p.ctx, p.a, target, ListOpts{Filter: "docstatus == 1", Limit: 1000})
+	if err != nil {
+		p.t.Fatal(err)
 	}
-	return str(rows[0]["name"])
+	var want int64
+	for _, d := range docs {
+		if str(d[partyModel]) != party {
+			continue
+		}
+		open := rp(d["amount_due"]) - rp(d["paid_amount"])
+		if got := rp(d["outstanding"]); got != open {
+			p.t.Fatalf("round %d: %s %s outstanding = %d, want amount_due − paid = %d", round, target, str(d["name"]), got, open)
+		}
+		want += open
+	}
+	if got := p.outstanding(partyModel, party); got != want {
+		p.t.Fatalf("round %d: %s %s outstanding = %d, want %d (open %s)", round, partyModel, party, got, want, target)
+	}
 }
 
 // TestPilotCrossDocumentStockLocks: a goods receipt with lines [minyak, beras] and a stock adjustment with

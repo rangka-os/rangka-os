@@ -113,7 +113,8 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
   read as a person.
 
 ### 7. Interfaces
-- REST (`/api/v1`): `GET /approvals?state=pending|approved|rejected|void&model=&name=` → `{data, total}`;
+- REST (`/api/v1`): `GET /approvals?state=pending|approved|rejected|void&model=&name=` → `{data, total}` (another
+  `state` → **400** `bad_request`, as for MCP's list);
   `GET /approvals/{id}`; `POST /approvals/{id}/approve` `{}`; `POST /approvals/{id}/reject` `{reason}`. Item:
   `{id, model, name, policy, label, verb, approvers, state, requested_by, requested_at, decided_by, decided_at,
   reason, can_decide}`; `can_decide` is true when the caller may decide it now. Approve/reject return 200 with the

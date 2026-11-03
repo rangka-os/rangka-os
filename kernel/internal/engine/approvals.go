@@ -122,6 +122,11 @@ func CanDecide(a Actor, ap *store.Approval) bool {
 
 // ListApprovals lists the requests of the caller's organisation.
 func (e *Engine) ListApprovals(ctx context.Context, a Actor, f store.ApprovalFilter) ([]store.Approval, int, error) {
+	switch f.State {
+	case "", "pending", "approved", "rejected", "void":
+	default:
+		return nil, 0, badRequest("state harus pending, approved, rejected atau void")
+	}
 	f.Org = a.Org
 	return store.ListApprovals(ctx, e.DB, f)
 }

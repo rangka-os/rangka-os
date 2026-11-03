@@ -97,6 +97,9 @@ func TestApprovalsREST(t *testing.T) {
 	if list["total"] != 1.0 || len(list["data"].([]any)) != 1 || get(list, "data", 0, "can_decide") != true || get(list, "data", 0, "id") != id {
 		t.Fatalf("list: %v", list)
 	}
+	if r := mgr.do("GET", "/api/v1/approvals?state=menunggu", nil); r.Status != 400 || get(r.JSON, "error", "code") != "bad_request" {
+		t.Fatalf("unknown state: %d %s", r.Status, r.Body)
+	}
 	if r := rep.do("POST", "/api/v1/approvals/"+id+"/approve", map[string]any{}); r.Status != 403 || get(r.JSON, "error", "code") != "permission_denied" {
 		t.Fatalf("rep approve: %d %s", r.Status, r.Body)
 	}
@@ -174,6 +177,10 @@ func TestApprovalsMCP(t *testing.T) {
 	list := call(m, "rangka_approvals_list", map[string]any{"state": "pending"})
 	if list["total"] != 1.0 || get(list, "data", 0, "id") != id || get(list, "data", 0, "can_decide") != false {
 		t.Fatalf("list: %v", list)
+	}
+	bad := rpc(m, 4, "tools/call", map[string]any{"name": "rangka_approvals_list", "arguments": map[string]any{"state": "open"}})
+	if bad["isError"] != true || get(bad, "structuredContent", "error", "code") != "bad_request" {
+		t.Fatalf("unknown state: %v", bad)
 	}
 	res := rpc(m, 2, "tools/call", map[string]any{"name": "rangka_approve", "arguments": map[string]any{"id": id, "decision": "approve"}})
 	if res["isError"] != true || get(res, "structuredContent", "error", "code") != "human_required" {

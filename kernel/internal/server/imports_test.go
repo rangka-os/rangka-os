@@ -111,8 +111,8 @@ lines:
 	}
 }
 
-// upload posts a multipart form with a file part and extra fields.
-func (e *env) upload(path, fileName string, data []byte, fields map[string]string) *resp {
+// uploadForm posts a multipart form with a file part and extra fields.
+func (e *env) uploadForm(path, fileName string, data []byte, fields map[string]string) *resp {
 	e.t.Helper()
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
@@ -152,18 +152,18 @@ func TestImportsMoka(t *testing.T) {
 	form := map[string]string{"outlet": outlet.(string)}
 
 	// no file
-	if r := e.upload("/api/v1/imports/moka_item_details", "", nil, form); r.Status != 400 || get(r.JSON, "error", "code") != "file_required" || get(r.JSON, "error", "message") != "Pilih file dulu" {
+	if r := e.uploadForm("/api/v1/imports/moka_item_details", "", nil, form); r.Status != 400 || get(r.JSON, "error", "code") != "file_required" || get(r.JSON, "error", "message") != "Pilih file dulu" {
 		t.Fatalf("no file: %d %s", r.Status, r.Body)
 	}
 
 	// a body over the upload limit is refused with 413 before the file is read
 	big := make([]byte, imports.MaxBytes+2<<20)
-	if r := e.upload("/api/v1/imports/moka_item_details", "big.csv", big, form); r.Status != 413 || get(r.JSON, "error", "code") != "too_large" || get(r.JSON, "error", "message") != imports.ErrTooBig.Error() {
+	if r := e.uploadForm("/api/v1/imports/moka_item_details", "big.csv", big, form); r.Status != 413 || get(r.JSON, "error", "code") != "too_large" || get(r.JSON, "error", "message") != imports.ErrTooBig.Error() {
 		t.Fatalf("too large: %d %.200s", r.Status, r.Body)
 	}
 
 	// preview, commit
-	pv := e.upload("/api/v1/imports/moka_item_details", "moka.csv", csv, form)
+	pv := e.uploadForm("/api/v1/imports/moka_item_details", "moka.csv", csv, form)
 	if pv.Status != 200 || pv.JSON["rows"] != float64(8) || pv.JSON["duplicate"] != false || len(pv.JSON["errors"].([]any)) != 0 {
 		t.Fatalf("preview: %d %s", pv.Status, pv.Body)
 	}
@@ -186,7 +186,7 @@ func TestImportsMoka(t *testing.T) {
 	}
 
 	// the same file again is a duplicate and cannot be committed
-	dup := e.upload("/api/v1/imports/moka_item_details", "moka.csv", csv, form)
+	dup := e.uploadForm("/api/v1/imports/moka_item_details", "moka.csv", csv, form)
 	if dup.Status != 200 || dup.JSON["duplicate"] != true {
 		t.Fatalf("duplicate: %d %s", dup.Status, dup.Body)
 	}
@@ -201,7 +201,7 @@ func TestImportsMoka(t *testing.T) {
 	// an overlapping export (the same day plus a new one): the known rows are skipped, one new record
 	more := string(csv) + "03/11/2026,08:01,Outlet Dago,DGO-0101,Tahu,Tahu Original,Isi 10,,TH-ORI-10,1,25000,0,0,25000,0,0,Dine In,Cash,Kasir 1,Kasir 1\n" +
 		"03/11/2026,08:01,Outlet Dago,DGO-0101,Minuman,Es Jeruk,Regular,,MN-EJR-R,1,10000,0,0,10000,0,0,Dine In,Cash,Kasir 1,Kasir 1\n"
-	ov := e.upload("/api/v1/imports/moka_item_details", "moka-2.csv", []byte(more), form)
+	ov := e.uploadForm("/api/v1/imports/moka_item_details", "moka-2.csv", []byte(more), form)
 	if ov.Status != 200 || ov.JSON["rows"] != float64(10) || ov.JSON["skipped"] != float64(8) || ov.JSON["duplicate"] != false || len(ov.JSON["errors"].([]any)) != 0 {
 		t.Fatalf("overlap preview: %d %s", ov.Status, ov.Body)
 	}
@@ -226,7 +226,7 @@ func TestImportsMoka(t *testing.T) {
 	lines[2] = strings.Join(cols, ",")
 	// another outlet, since rows already imported for Outlet Dago are skipped before they are checked
 	other := e.must(201, "POST", "/api/v1/r/outlet", map[string]any{"outlet_name": "Outlet Braga"}).JSON["name"].(string)
-	bad := e.upload("/api/v1/imports/moka_item_details", "bad.csv", []byte(strings.Join(lines, "\n")), map[string]string{"outlet": other})
+	bad := e.uploadForm("/api/v1/imports/moka_item_details", "bad.csv", []byte(strings.Join(lines, "\n")), map[string]string{"outlet": other})
 	errs, _ := bad.JSON["errors"].([]any)
 	if bad.Status != 200 || len(errs) == 0 {
 		t.Fatalf("bad: %d %s", bad.Status, bad.Body)

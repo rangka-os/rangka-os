@@ -1,0 +1,48 @@
+# Kernel tests on every push and pull request to main: unit and database tests (backup -> restore included),
+# then the Go validator against the Python reference on the real metadata.
+# The tests read rangka-apps and rangka-connectors next to this repo, so all three are checked out side by side.
+name: kernel
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: kernel-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rangka-os }
+      - uses: actions/checkout@v4
+        with: { repository: rangka-os/rangka-apps, path: rangka-apps }
+      - uses: actions/checkout@v4
+        with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
+
+      - uses: actions/setup-go@v5
+        with: { go-version-file: rangka-os/kernel/go.mod }
+
+      # scripts/pgtemp.sh starts a throwaway cluster from these binaries (ubuntu 24.04 ships PostgreSQL 16).
+      - name: Install PostgreSQL 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+          echo "PGBIN=/usr/lib/postgresql/16/bin" >> "$GITHUB_ENV"
+
+      # tools/rangka_validate.py, the reference the Go validator must match byte for byte.
+      - name: Install Python packages
+        run: python3 -m pip install jsonschema pyyaml
+
+      - name: Vet
+        run: make -C rangka-os/kernel vet
+
+      - name: Test and compare with the Python validator
+        run: make -C rangka-os/kernel test compare-python

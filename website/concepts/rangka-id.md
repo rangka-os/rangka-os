@@ -13,5 +13,7 @@ Sign-in is built into the kernel; no separate identity server is needed.
 
 Roles come from `apps/<app>/roles/*.rk`; owners and the roles in `config.ai.approvers` approve change sets.
 
-v0 status: passwords use bcrypt (PBKDF2 hashes from earlier builds are upgraded at the next sign-in); passkeys, OIDC
-refresh tokens, organisation switching and enforcement of model `permissions:` are not done yet.
+v0 status: passwords use bcrypt (PBKDF2 hashes from earlier builds are upgraded at the next sign-in). Model
+`permissions:` are enforced for people, API tokens and MCP alike (see [CLI](/reference/cli#permissions)). Passkeys, OIDC
+refresh tokens and organisation switching are not done yet; switching organisations and row scope per branch come with
+stream S5.

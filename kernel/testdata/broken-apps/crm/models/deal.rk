@@ -144,3 +144,5 @@ views:
           - [lost_reason]
       - section: {id: Catatan}
         fields: [notes]
+approvals:
+  - {name: b, on: submit, approvers: [sales_manager]}

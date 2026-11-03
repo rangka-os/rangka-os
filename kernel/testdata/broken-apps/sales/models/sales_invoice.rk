@@ -99,3 +99,6 @@ views:
         fields: [items]
       - section: {id: Catatan}
         fields: [notes]
+approvals:
+  - {name: a, on: post, approvers: [sales_manager]}
+  - {name: a, on: submit, when: "nope > 1", approvers: [ghost_role]}

@@ -1,6 +1,6 @@
 // Package engine runs the document lifecycle on top of the store: defaults, computed fields, rules, naming
 // at submit, immutability, cancel and amend, actions and hooks, list queries and dashboards. Its semantics
-// follow the browser prototype (rangka-os/web/prototype/engine.js).
+// follow the browser prototype (rangka-os/web/app/engine.js).
 package engine
 
 import (
@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -24,6 +25,10 @@ type Actor struct {
 	UserName string   // the user record the person is (USR-001); user.name in CEL
 	Roles    []string // member roles (owner, sales_manager, …)
 	Human    bool     // signed in with a browser session (not a token)
+	Outlets  []string // the member's outlets in Org (user.outlets in CEL; row scope, contract 0010 §5)
+	// System marks kernel-internal actors (seed, flows and automations the kernel starts): they bypass
+	// permission checks. Queue jobs replaying a person's action keep that person's roles and System=false.
+	System bool
 }
 
 // Enqueuer puts background jobs on the queue (implemented by package jobs).
@@ -48,6 +53,9 @@ type Engine struct {
 	Queue   Enqueuer
 	OnWrite func(org, model string)
 	Log     func(format string, args ...any)
+
+	permCache   sync.Map // *meta.Model → *modelPerms
+	parentCache sync.Map // child *meta.Model → parent *meta.Model
 }
 
 // New makes an engine with the built-in hooks.
@@ -64,6 +72,8 @@ func (e *Engine) Reg() *meta.Registry { return e.reg.Load() }
 // SetRegistry swaps the registry (live metadata reload).
 func (e *Engine) SetRegistry(r *meta.Registry) {
 	e.reg.Store(r)
+	e.permCache.Clear()
+	e.parentCache.Clear()
 	if e.Cache != nil {
 		e.Cache.DeletePrefix("dash:")
 	}
@@ -141,6 +151,8 @@ type op struct {
 	actor   Actor
 	touched map[string]bool
 	links   map[string]map[string]any
+	// approving is set while Approve runs the approved verb: earlier approved requests then satisfy hold.
+	approving bool
 }
 
 func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {
@@ -174,6 +186,7 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 		d := toInt(rec["docstatus"])
 		ev.Docstatus = &d
 	}
+	ev.Fields = o.e.eventFields(m, rec)
 	if err := store.Notify(o.ctx, o.tx, ev); err != nil {
 		return err
 	}

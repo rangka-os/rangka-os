@@ -1,0 +1,513 @@
+package imports
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"errors"
+	"fmt"
+	"os"
+	"strings"
+	"sync"
+	"testing"
+	"time"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
+)
+
+const mokaName = "moka_item_details"
+
+// newService migrates a fresh database for the fnb fixture and seeds the five items of the Moka sample and
+// outlet OUT-01.
+func newService(t *testing.T) (*Service, engine.Actor) {
+	t.Helper()
+	url := testdb.New(t)
+	ctx := context.Background()
+	reg := meta.Load("testdata/apps", "", nil)
+	db, err := pg.NewPool(ctx, url, 6)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	if _, err := store.Migrate(ctx, db, reg, false, "test"); err != nil {
+		t.Fatal(err)
+	}
+	e := engine.New(db, reg)
+	e.Now = func() time.Time { return time.Date(2026, 11, 3, 10, 0, 0, 0, time.UTC) }
+	a := engine.Actor{Org: "tahu-dago", ID: "ceo@saga.co.id", Roles: []string{"owner"}, Human: true}
+	items := []map[string]any{
+		{"item_name": "Tahu Original 10", "sku": "TH-ORI-10"},
+		{"item_name": "Tahu Original 20", "sku": "TH-ORI-20"},
+		{"item_name": "Tahu Isi 5", "sku": "TH-ISI-5"},
+		{"item_name": "Es Teh Manis", "sku": "MN-ETM-R"},
+		{"item_name": "Es Jeruk", "sku": "MN-EJR-R"},
+	}
+	if res, err := e.CreateMany(ctx, a, "item", items, engine.ManyOpts{}); err != nil || res[0].Err != nil {
+		t.Fatalf("items: %v %+v", err, res)
+	}
+	res, err := e.CreateMany(ctx, a, "outlet", []map[string]any{{"outlet_name": "Outlet Dago"}}, engine.ManyOpts{})
+	if err != nil || res[0].Name != "OUT-01" {
+		t.Fatalf("outlet: %v %+v", err, res)
+	}
+	return &Service{DB: db, Engine: e}, a
+}
+
+func mokaBytes(t *testing.T) []byte {
+	t.Helper()
+	data, err := os.ReadFile("testdata/moka-item-details.csv")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return data
+}
+
+const extraRows = "03/11/2026,08:01,Outlet Dago,DGO-0101,Tahu,Tahu Original,Isi 10,,TH-ORI-10,1,25000,0,0,25000,0,0,Dine In,Cash,Kasir 1,Kasir 1\n" +
+	"03/11/2026,08:01,Outlet Dago,DGO-0101,Minuman,Es Jeruk,Regular,,MN-EJR-R,1,10000,0,0,10000,0,0,Dine In,Cash,Kasir 1,Kasir 1\n"
+
+func withExtra(t *testing.T) []byte {
+	data := mokaBytes(t)
+	if !strings.HasSuffix(string(data), "\n") {
+		data = append(data, '\n')
+	}
+	return append(data, extraRows...)
+}
+
+func salesCount(t *testing.T, s *Service, a engine.Actor) int64 {
+	t.Helper()
+	n, err := store.Count(context.Background(), s.DB, a.Org, "outlet_sales")
+	if err != nil {
+		t.Fatal(err)
+	}
+	return n
+}
+
+func keyCount(t *testing.T, s *Service, a engine.Actor) int64 {
+	t.Helper()
+	res, err := s.DB.Query(context.Background(), "select count(*) from rk_import_keys where org_id = $1", a.Org)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return res.Rows[0][0].(int64)
+}
+
+func wantStatus(t *testing.T, err error, status int, code string) {
+	t.Helper()
+	var se *engine.StatusError
+	if !errors.As(err, &se) || se.Status != status || se.Code != code {
+		t.Fatalf("err %v, want %d %s", err, status, code)
+	}
+}
+
+func TestPreviewCommitAndDuplicates(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+
+	p, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rows != 8 || len(p.Errors) != 0 || p.Duplicate || p.Skipped != 0 || p.Status != "previewed" || p.Scope != "OUT-01" || p.Message != "" {
+		t.Fatalf("preview: %+v", p)
+	}
+	if len(p.Preview) != 1 {
+		t.Fatalf("preview records: %d", len(p.Preview))
+	}
+	if lines, _ := p.Preview[0]["lines"].([]any); len(lines) != 8 {
+		t.Fatalf("preview lines: %#v", p.Preview[0]["lines"])
+	}
+	if n := salesCount(t, s, a); n != 0 {
+		t.Fatalf("preview wrote %d sales", n)
+	}
+	// the stored plan keeps money as int64, never float64
+	_, plan, err := s.load(ctx, a, mokaName, p.ID, true)
+	if err != nil || len(plan) != 1 || len(plan[0].Keys) != 8 || len(plan[0].Rows) != 8 {
+		t.Fatalf("plan: %+v %v", plan, err)
+	}
+	if l := plan[0].Input["lines"].([]any)[2].(map[string]any); l["net"] != int64(43200) || l["gross"] != int64(48000) {
+		t.Fatalf("plan line 3: %#v", l)
+	}
+
+	c, err := s.Commit(ctx, a, mokaName, p.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Status != "committed" || len(c.Records) != 1 || c.CommittedAt == nil {
+		t.Fatalf("commit: %+v", c)
+	}
+	if n := salesCount(t, s, a); n != 1 {
+		t.Fatalf("sales %d", n)
+	}
+	if n := keyCount(t, s, a); n != 8 {
+		t.Fatalf("keys %d", n)
+	}
+	// money survives the stored plan as integers, and the record is a draft
+	rec, err := s.Engine.Get(ctx, a, "outlet_sales", c.Records[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	lines := rec["lines"].([]any)
+	if len(lines) != 8 || rec["outlet"] != "OUT-01" || rec["date"] != "2026-11-02" {
+		t.Fatalf("record: %#v", rec)
+	}
+	if l := lines[2].(store.Record); fmt.Sprint(l["net"]) != "43200" || fmt.Sprint(l["discount"]) != "4800" {
+		t.Fatalf("line 3: %#v", l)
+	}
+
+	// the same file again
+	d, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !d.Duplicate || d.Message != "File ini sudah diimpor" || d.Skipped != 8 || len(d.Preview) != 0 {
+		t.Fatalf("duplicate preview: %+v", d)
+	}
+	_, err = s.Commit(ctx, a, mokaName, d.ID)
+	wantStatus(t, err, 409, "already_imported")
+	if n := salesCount(t, s, a); n != 1 {
+		t.Fatalf("sales %d after duplicate", n)
+	}
+
+	// an overlapping export: only the new day is created
+	o, err := s.Preview(ctx, a, mokaName, "moka-2.csv", withExtra(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if o.Rows != 10 || o.Skipped != 8 || o.Duplicate || len(o.Errors) != 0 || len(o.Preview) != 1 {
+		t.Fatalf("overlap preview: %+v", o)
+	}
+	oc, err := s.Commit(ctx, a, mokaName, o.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(oc.Records) != 1 {
+		t.Fatalf("overlap records: %v", oc.Records)
+	}
+	rec, err = s.Engine.Get(ctx, a, "outlet_sales", oc.Records[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if lines := rec["lines"].([]any); len(lines) != 2 || rec["date"] != "2026-11-03" {
+		t.Fatalf("overlap record: %#v", rec)
+	}
+	if n := salesCount(t, s, a); n != 2 {
+		t.Fatalf("sales %d", n)
+	}
+
+	// the same entry committed twice
+	_, err = s.Commit(ctx, a, mokaName, o.ID)
+	wantStatus(t, err, 409, "already_imported")
+	if n := salesCount(t, s, a); n != 2 {
+		t.Fatalf("sales %d after second commit", n)
+	}
+
+	// the same rows uploaded under another outlet are a different scope
+	if _, err := s.Engine.CreateMany(ctx, a, "outlet", []map[string]any{{"outlet_name": "Outlet Dua"}}, engine.ManyOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	other, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-02")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if other.Duplicate || other.Skipped != 0 {
+		t.Fatalf("other outlet: %+v", other)
+	}
+
+	// Get and List
+	g, err := s.Get(ctx, a, mokaName, p.ID)
+	if err != nil || g.Status != "committed" || g.Duplicate || len(g.Records) != 1 || g.FileName != "moka.csv" || g.CreatedBy != a.ID {
+		t.Fatalf("get: %+v %v", g, err)
+	}
+	list, total, err := s.List(ctx, a, mokaName)
+	if err != nil || len(list) != 4 || total != 4 || list[0].ID != other.ID {
+		t.Fatalf("list: %d/%d %v", len(list), total, err)
+	}
+	// preview records come out in model field order, lines in the child model's
+	pj, _ := json.Marshal(g)
+	if !bytes.Contains(pj, []byte(`"preview":[{"date":`)) || !regexpOrder(pj, `"date"`, `"outlet"`, `"note"`, `"lines"`) ||
+		!regexpOrder(pj, `{"item"`, `"qty"`, `"gross"`, `"discount"`, `"net"`, `"refund"`) {
+		t.Fatalf("preview key order: %s", pj)
+	}
+	// list entries leave out the preview records
+	b, _ := json.Marshal(list[0])
+	var lj map[string]any
+	json.Unmarshal(b, &lj)
+	if _, ok := lj["preview"]; ok || lj["id"] != other.ID || lj["rows"] != float64(8) {
+		t.Fatalf("list entry json: %s", b)
+	}
+	_, err = s.Get(ctx, engine.Actor{Org: "other-org", ID: "x", Roles: []string{"owner"}}, mokaName, p.ID)
+	wantStatus(t, err, 404, "not_found")
+}
+
+func TestCommitRefusesStalePreviews(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	// two previews of the same file before either is committed
+	a1, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	a2, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// and an overlapping file (other bytes, same keys plus two)
+	b, err := s.Preview(ctx, a, mokaName, "moka-2.csv", withExtra(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if a2.Duplicate || b.Duplicate || b.Skipped != 0 {
+		t.Fatalf("previews: %+v %+v", a2, b)
+	}
+	if _, err := s.Commit(ctx, a, mokaName, a1.ID); err != nil {
+		t.Fatal(err)
+	}
+	_, err = s.Commit(ctx, a, mokaName, a2.ID)
+	wantStatus(t, err, 409, "already_imported")
+	if se := err.(*engine.StatusError); se.Msg != "Sudah diimpor" {
+		t.Fatalf("same file: %q", se.Msg)
+	}
+	// b's keys collide in rk_import_keys: nothing of b is written
+	_, err = s.Commit(ctx, a, mokaName, b.ID)
+	wantStatus(t, err, 409, "already_imported")
+	if se := err.(*engine.StatusError); se.Msg != "Sebagian baris sudah diimpor, unggah ulang file" {
+		t.Fatalf("stale overlap: %q", se.Msg)
+	}
+	if n := salesCount(t, s, a); n != 1 {
+		t.Fatalf("sales %d", n)
+	}
+	if n := keyCount(t, s, a); n != 8 {
+		t.Fatalf("keys %d", n)
+	}
+	if g, _ := s.Get(ctx, a, mokaName, b.ID); g.Status != "previewed" || len(g.Records) != 0 {
+		t.Fatalf("b: %+v", g)
+	}
+}
+
+func TestConcurrentCommitsOfOverlappingFiles(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	var ids []string
+	for _, data := range [][]byte{mokaBytes(t), withExtra(t), mokaBytes(t)} {
+		p, err := s.Preview(ctx, a, mokaName, "moka.csv", data, "OUT-01")
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids = append(ids, p.ID)
+	}
+	errs := make([]error, len(ids))
+	var wg sync.WaitGroup
+	for i, id := range ids {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, errs[i] = s.Commit(ctx, a, mokaName, id)
+		}()
+	}
+	wg.Wait()
+	ok := 0
+	for _, err := range errs {
+		if err == nil {
+			ok++
+			continue
+		}
+		wantStatus(t, err, 409, "already_imported")
+	}
+	if ok != 1 {
+		t.Fatalf("%d commits succeeded: %v", ok, errs)
+	}
+	if n := keyCount(t, s, a); n != 8 && n != 10 {
+		t.Fatalf("keys %d", n)
+	}
+	if n := salesCount(t, s, a); n != 1 && n != 2 {
+		t.Fatalf("sales %d", n)
+	}
+}
+
+func TestPreviewRowErrors(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	data := strings.Replace(string(mokaBytes(t)), "TH-ISI-5", "TH-XX", 1)
+	p, err := s.Preview(ctx, a, mokaName, "bad.csv", []byte(data), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Errors) != 1 || p.Errors[0].Row != 5 || p.Errors[0].Column != "SKU" || !strings.Contains(p.Errors[0].Message, `"TH-XX" tidak ditemukan`) {
+		t.Fatalf("errors: %+v", p.Errors)
+	}
+	_, err = s.Commit(ctx, a, mokaName, p.ID)
+	wantStatus(t, err, 422, "import_errors")
+	if n := salesCount(t, s, a); n != 0 {
+		t.Fatalf("sales %d", n)
+	}
+
+	// an engine validation error (date required) comes back from the dry run as a row error
+	data = strings.Replace(string(mokaBytes(t)), "02/11/2026", "", -1)
+	p, err = s.Preview(ctx, a, mokaName, "nodate.csv", []byte(data), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(p.Errors) == 0 || p.Errors[0].Row != 2 || p.Errors[0].Column != "Date" || p.Errors[0].Message == "" {
+		t.Fatalf("dry run errors: %+v", p.Errors)
+	}
+	_, err = s.Commit(ctx, a, mokaName, p.ID)
+	wantStatus(t, err, 422, "import_errors")
+
+	// a line issue (item required) names the column and the source row of that line
+	lines := strings.Split(string(mokaBytes(t)), "\n")
+	cols := strings.Split(lines[4], ",") // sheet row 5
+	cols[8] = ""                         // SKU
+	lines[4] = strings.Join(cols, ",")
+	p, err = s.Preview(ctx, a, mokaName, "nosku.csv", []byte(strings.Join(lines, "\n")), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := RowError{Row: 5, Column: "SKU", Message: "Baris baris 4: Barang wajib diisi"}
+	if len(p.Errors) != 1 || p.Errors[0] != want {
+		t.Fatalf("line errors: %+v", p.Errors)
+	}
+}
+
+func TestPreviewRefusals(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	_, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "")
+	wantStatus(t, err, 400, "outlet_required")
+	_, err = s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-99")
+	wantStatus(t, err, 422, "unknown_outlet")
+	if se := err.(*engine.StatusError); se.Msg != `Outlet "OUT-99" tidak ditemukan` {
+		t.Fatalf("msg %q", se.Msg)
+	}
+	_, err = s.Preview(ctx, a, "nope", "moka.csv", mokaBytes(t), "OUT-01")
+	wantStatus(t, err, 404, "not_found")
+	if se := err.(*engine.StatusError); se.Msg != `Impor "nope" tidak ada` {
+		t.Fatalf("msg %q", se.Msg)
+	}
+	_, err = s.Preview(ctx, a, mokaName, "x.xlsx", []byte("PK\x03\x04garbage"), "OUT-01")
+	wantStatus(t, err, 400, "unreadable")
+	_, err = s.Preview(ctx, a, mokaName, "big.csv", make([]byte, MaxBytes+1), "OUT-01")
+	wantStatus(t, err, 413, "too_large")
+	_, err = s.Commit(ctx, a, mokaName, "imp_missing")
+	wantStatus(t, err, 404, "not_found")
+}
+
+func TestXLSXOfCommittedCSVIsDuplicate(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	p, err := s.Preview(ctx, a, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Commit(ctx, a, mokaName, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// the same rows saved as XLSX: other bytes, dates as Excel serials, amounts as numbers
+	x, err := s.Preview(ctx, a, mokaName, "moka.xlsx", mokaXLSX(t, mokaBytes(t)), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !x.Duplicate || x.Skipped != 8 || x.Rows != 8 || x.Message != "Semua baris sudah diimpor" {
+		t.Fatalf("xlsx preview: %+v", x)
+	}
+}
+
+func TestSkippedFirstRowParentFromFirstNewRow(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	// note comes from a column that differs inside the group
+	im := *s.Engine.Reg().Imports[mokaName]
+	im.Map = map[string]meta.MapValue{"date": im.Map["date"], "note": {Column: "Receipt Number"}}
+	im.MapOrder = []string{"date", "note"}
+	s.Engine.Reg().Imports[mokaName] = &im
+
+	lines := strings.SplitAfter(string(mokaBytes(t)), "\n")
+	first := strings.Join(lines[:3], "") // header + both rows of DGO-0001
+	p, err := s.Preview(ctx, a, mokaName, "pagi.csv", []byte(first), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Commit(ctx, a, mokaName, p.ID); err != nil {
+		t.Fatal(err)
+	}
+	// the whole day: the group's first two rows are skipped, the record takes its parent from row 4
+	d, err := s.Preview(ctx, a, mokaName, "hari.csv", mokaBytes(t), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if d.Skipped != 2 || d.Duplicate || len(d.Errors) != 0 || len(d.Preview) != 1 {
+		t.Fatalf("preview: %+v", d)
+	}
+	if d.Preview[0]["note"] != "DGO-0002" || d.Preview[0]["date"] != "2026-11-02" {
+		t.Fatalf("parent: %#v", d.Preview[0])
+	}
+	if lines, _ := d.Preview[0]["lines"].([]any); len(lines) != 6 {
+		t.Fatalf("lines: %d", len(lines))
+	}
+	c, err := s.Commit(ctx, a, mokaName, d.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	rec, err := s.Engine.Get(ctx, a, "outlet_sales", c.Records[0])
+	if err != nil || rec["note"] != "DGO-0002" {
+		t.Fatalf("record: %#v %v", rec, err)
+	}
+}
+
+func TestCommitHeaderOnlyFile(t *testing.T) {
+	s, a := newService(t)
+	ctx := context.Background()
+	header, _, _ := strings.Cut(string(mokaBytes(t)), "\n")
+	p, err := s.Preview(ctx, a, mokaName, "kosong.csv", []byte(header+"\n"), "OUT-01")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if p.Rows != 0 || len(p.Errors) != 0 || p.Duplicate {
+		t.Fatalf("preview: %+v", p)
+	}
+	_, err = s.Commit(ctx, a, mokaName, p.ID)
+	wantStatus(t, err, 422, "import_empty")
+	if se := err.(*engine.StatusError); se.Msg != "File tidak berisi baris data" {
+		t.Fatalf("msg %q", se.Msg)
+	}
+	if g, _ := s.Get(ctx, a, mokaName, p.ID); g.Status != "previewed" {
+		t.Fatalf("entry: %+v", g)
+	}
+}
+
+func TestImportNeedsImportPermission(t *testing.T) {
+	s, _ := newService(t)
+	ctx := context.Background()
+	staff := engine.Actor{Org: "tahu-dago", ID: "kasir@example.com", Roles: []string{"outlet_staff"}, Human: true}
+	_, err := s.Preview(ctx, staff, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	var pe *engine.PermissionError
+	if !errors.As(err, &pe) || pe.Model != "outlet_sales" || pe.Action != "import" {
+		t.Fatalf("outlet staff preview: %v", err)
+	}
+	if _, _, err := s.List(ctx, staff, mokaName); !errors.As(err, &pe) {
+		t.Fatalf("outlet staff list: %v", err)
+	}
+	ho := engine.Actor{Org: "tahu-dago", ID: "ho@example.com", Roles: []string{"head_office"}, Human: true}
+	p, err := s.Preview(ctx, ho, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil || len(p.Errors) != 0 {
+		t.Fatalf("head office preview: %v %+v", err, p)
+	}
+	if _, err := s.Commit(ctx, ho, mokaName, p.ID); err != nil {
+		t.Fatalf("head office commit: %v", err)
+	}
+}
+
+// regexpOrder reports whether the needles appear in b in this order.
+func regexpOrder(b []byte, needles ...string) bool {
+	at := 0
+	for _, n := range needles {
+		i := bytes.Index(b[at:], []byte(n))
+		if i < 0 {
+			return false
+		}
+		at += i + len(n)
+	}
+	return true
+}

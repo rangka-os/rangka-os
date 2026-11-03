@@ -67,15 +67,14 @@ Nothing in the model's own table changes, so no `.rk` key and no schema 0.5 chan
 - Every upload and delete writes `rk_audit` (`attachment.added`, `attachment.deleted`, target `<model>/<name>`,
   data `{id, filename, size, sha256}`).
 
-### 5. Permission check used until 0005 §4 lands
-`Engine.Permits(ctx, actor, model, record, action)` (kernel, `engine/permits.go`):
-- a model without `permissions:` allows everything (today's behaviour);
-- roles `owner` and `system`, and the internal actors (`system`, `seed`, `flow:*`) are allowed;
-- otherwise some entry whose `role` is one of the actor's roles must have `<action>: true` and, if it has `if:`,
-  the CEL must be true on the record (same scope as action `if:`).
-- A refusal is 403 `permission_denied` `{model, action}` as fixed in 0005 §4.
-
-S1 (0005 §4) may replace the body of `Permits` with the general enforcement; the attachment handlers only call it.
+### 5. Permission check
+S1 (0005 §4) landed, so the interim `Engine.Permits` is gone and attachments use the general enforcement:
+- list and upload are routed through the record guard (`api/permissions.go`, `recordGuard("read"|"write", …)`): it
+  loads the record with `Engine.Get` (checks `read`), then `Engine.Authorize` for `write`;
+- download loads the attachment's record with `Engine.Get` (checks `read`); delete then calls
+  `Engine.Authorize(…, "write", record)`;
+- a caller who cannot read the record gets 403 `permission_denied` with action `read`; one who can read but not
+  write gets action `write`. The body is 0005 §4's `{"error": {code, message, model, action}}`.
 
 ### 6. Status and backup
 - `/system/status` `capabilities.files` reports `{driver, ok, path (resolved root), max_upload_mb, attachments, bytes}`; `attachments` and `bytes` are totals for the caller's org. If the totals query fails, `ok` is false and `error` carries the message.

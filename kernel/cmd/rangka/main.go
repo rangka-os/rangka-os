@@ -1,5 +1,5 @@
-// Command rangka is the Rangka OS kernel: validate metadata, migrate the database, seed demo data and serve
-// the REST/MCP API.
+// Command rangka is the Rangka OS kernel: validate metadata, migrate the database, seed demo data, serve
+// the REST/MCP API, and back up and restore an installation.
 package main
 
 import (
@@ -15,14 +15,19 @@ func usage() {
 
 Usage:
   rangka validate --apps <dir> [--site <dir>] [--json] [app ...]
-  rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run]
+  rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n]
   rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
   rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--dev-open]
+  rangka backup   [--apps <dir>] [--site <dir>] --db <url> [--out file] [--org id] [--files dir]
+  rangka restore  <file> --db <url> [--into dir] [--files dir]
+  rangka user add <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."] [--reset-password] [--create-org] [--db <url>]
+  rangka user remove <email> --org <id> [--db <url>]
+    (the email may also be --email <e>; the password comes from RANGKA_USER_PASSWORD or --password, new accounts or --reset-password only)
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:
   DATABASE_URL, RANGKA_APPS, RANGKA_SITE, RANGKA_CONNECTORS, RANGKA_FIXTURES, RANGKA_ORG, RANGKA_ADDR,
-  RANGKA_OWNER_EMAIL, RANGKA_OWNER_PASSWORD (seed). Values already set in the environment win.
+  RANGKA_OWNER_EMAIL, RANGKA_OWNER_PASSWORD (seed), RANGKA_USER_PASSWORD (user add: new accounts or --reset-password). Values already set in the environment win.
 
 Start a new project: npm create @rangka-os@latest my-shop
 `)
@@ -42,8 +47,14 @@ func main() {
 		code = cmdMigrate(os.Args[2:])
 	case "seed":
 		code = cmdSeed(os.Args[2:])
+	case "user":
+		code = cmdUser(os.Args[2:])
 	case "serve":
 		code = cmdServe(os.Args[2:])
+	case "backup":
+		code = cmdBackup(os.Args[2:])
+	case "restore":
+		code = cmdRestore(os.Args[2:])
 	case "version", "--version":
 		fmt.Println("rangka", Version)
 	case "help", "-h", "--help":

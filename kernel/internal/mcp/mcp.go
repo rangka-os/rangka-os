@@ -1,6 +1,6 @@
 // Package mcp serves the Model Context Protocol endpoint (POST /mcp, JSON-RPC 2.0, Streamable HTTP with
-// JSON responses) with the tools fixed in CONTRACTS.md. There are no approve/apply tools: a person approves
-// change sets in the Console or the app.
+// JSON responses) with the tools fixed in CONTRACTS.md. There are no apply tools: a person approves change sets
+// in the Console or the app. Agents can list document approvals, but rangka_approve refuses non-person callers.
 package mcp
 
 import (
@@ -14,6 +14,8 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // ProtocolVersion is the newest MCP revision this server speaks.
@@ -74,6 +76,8 @@ func (h *Handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, `{"error":"unauthorized","message":"send Authorization: Bearer <rk_ token or OIDC access token with scope rangka.mcp>"}`, http.StatusUnauthorized)
 		return
 	}
+	// queries made while serving this request run with rangka.org set (row-level security backstop)
+	r = r.WithContext(pg.WithOrg(r.Context(), caller.Actor.Org))
 	body, err := io.ReadAll(io.LimitReader(r.Body, 4<<20))
 	if err != nil {
 		http.Error(w, err.Error(), 400)
@@ -140,7 +144,8 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 			"serverInfo":      map[string]any{"name": "rangka-os", "title": "Rangka OS kernel", "version": h.Version},
 			"instructions": "Rangka OS: read metadata (rangka_meta, rangka_get_file), query records (rangka_query, rangka_get_record), " +
 				"read dashboards and system status, and propose metadata changes as change sets (propose → validate → preview). " +
-				"A person approves and applies change sets in the Console; there is no tool for that.",
+				"A person approves and applies change sets in the Console; there is no tool for that. " +
+				"Agents can list document approvals (rangka_approvals_list); approving or rejecting one needs a person.",
 		}
 	case "notifications/initialized", "notifications/cancelled":
 		return nil
@@ -179,7 +184,8 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 }
 
 // toolResult follows CONTRACTS v0.1 decision 9: content [{type: text, text: <json>}] plus structuredContent;
-// errors set isError and carry {error: {code, message}}.
+// errors set isError and carry {error: {code, message}}; a refused permission adds model and action, as the
+// REST 403 body does.
 func toolResult(out any, err error) map[string]any {
 	if err != nil {
 		code, msg := "internal", err.Error()
@@ -187,7 +193,12 @@ func toolResult(out any, err error) map[string]any {
 		var ve *engine.ValidationError
 		var ce *changeset.Error
 		var se *engine.StatusError
+		var pe *engine.PermissionError
+		errBody := map[string]any{}
 		switch {
+		case errors.As(err, &pe):
+			code, msg = "permission_denied", pe.Error()
+			errBody["model"], errBody["action"] = pe.Model, pe.Action
 		case errors.As(err, &ve):
 			code = "invalid"
 			body["errors"], body["warnings"] = ve.Errors, ve.Warnings
@@ -199,7 +210,8 @@ func toolResult(out any, err error) map[string]any {
 		case errors.As(err, &se):
 			code = se.Code
 		}
-		body["error"] = map[string]any{"code": code, "message": msg}
+		errBody["code"], errBody["message"] = code, msg
+		body["error"] = errBody
 		b, _ := json.Marshal(body)
 		var sc map[string]any
 		json.Unmarshal(b, &sc)
@@ -241,7 +253,24 @@ func tools() []any {
 		map[string]any{"name": "rangka_changeset_validate", "title": "Validate a change set", "description": "Run the validator on a copy of the metadata with the change applied.", "inputSchema": obj(map[string]any{"id": strp("change set id (cs_…)")}, "id")},
 		map[string]any{"name": "rangka_changeset_preview", "title": "Preview a change set", "description": "Dry run: the SQL migrations that would run and how many records the touched models hold.", "inputSchema": obj(map[string]any{"id": strp("change set id")}, "id")},
 		map[string]any{"name": "rangka_changeset_status", "title": "Change set status", "description": "The change set with its status and history.", "inputSchema": obj(map[string]any{"id": strp("change set id")}, "id"), "annotations": ro},
+		map[string]any{"name": "rangka_approvals_list", "title": "List approvals", "description": "Document approval requests of this organisation, newest first, each with can_decide for the caller. Filter by state (pending, approved, rejected, void), model and record name.",
+			"inputSchema": obj(map[string]any{"state": map[string]any{"enum": []string{"pending", "approved", "rejected", "void"}}, "model": strp("model name"), "name": strp("record name")}), "annotations": ro},
+		map[string]any{"name": "rangka_approve", "title": "Approve or reject", "description": "Decide an approval request. Needs a person (browser session): agent and API-token callers get human_required. A reject needs a reason.",
+			"inputSchema": obj(map[string]any{"id": strp("approval id (apr_…)"), "decision": map[string]any{"enum": []string{"approve", "reject"}}, "reason": strp("why (required for reject)")}, "id", "decision"),
+			"annotations": map[string]any{"readOnlyHint": false, "destructiveHint": false, "openWorldHint": false}},
 	}
+}
+
+// approvalItem is a request as MCP shows it: the stored fields plus whether the caller may decide it now.
+func approvalItem(a engine.Actor, ap *store.Approval) map[string]any {
+	b, _ := json.Marshal(ap)
+	out := map[string]any{}
+	json.Unmarshal(b, &out)
+	if ap.Label == nil {
+		out["label"] = map[string]any{}
+	}
+	out["can_decide"] = engine.CanDecide(a, ap)
+	return out
 }
 
 func sarg(args map[string]any, k string) string {
@@ -299,6 +328,41 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 		return h.Changes.Preview(ctx, c.Change, sarg(args, "id"))
 	case "rangka_changeset_status":
 		return h.Changes.Get(ctx, c.Change.Org, sarg(args, "id"))
+	case "rangka_approvals_list":
+		rows, total, err := e.ListApprovals(ctx, c.Actor, store.ApprovalFilter{State: sarg(args, "state"), Model: sarg(args, "model"), Name: sarg(args, "name"), Limit: 50})
+		if err != nil {
+			return nil, err
+		}
+		items := make([]map[string]any, 0, len(rows))
+		for i := range rows {
+			items = append(items, approvalItem(c.Actor, &rows[i]))
+		}
+		return map[string]any{"data": items, "total": total}, nil
+	case "rangka_approve":
+		var d *engine.Decision
+		var err error
+		switch sarg(args, "decision") {
+		case "approve":
+			d, err = e.Approve(ctx, c.Actor, sarg(args, "id"))
+		case "reject":
+			d, err = e.Reject(ctx, c.Actor, sarg(args, "id"), sarg(args, "reason"))
+		default:
+			return nil, &engine.StatusError{Status: 400, Code: "bad_request", Msg: "decision must be approve or reject"}
+		}
+		if err != nil {
+			return nil, err
+		}
+		out := map[string]any{"approval": approvalItem(c.Actor, &d.Approval)}
+		if d.Record != nil {
+			out["record"] = d.Record
+		}
+		if d.Action != nil {
+			out["action"] = d.Action
+		}
+		if d.Flow != nil {
+			out["flow"] = d.Flow
+		}
+		return out, nil
 	}
 	return nil, fmt.Errorf("%w %s", errUnknownTool, name)
 }

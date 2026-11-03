@@ -1,12 +1,15 @@
 package api
 
 import (
+	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 )
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -19,11 +22,18 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	}
 	org := body.Org
 	if org == "" {
-		org = s.Org
+		// the cookie is a preference; the session row is the authority
+		if c, err := r.Cookie(orgCookie); err == nil {
+			org = c.Value
+		}
 	}
 	tok, u, err := s.Auth.Login(r.Context(), body.Email, body.Password, org)
 	if errors.Is(err, auth.ErrBadLogin) {
 		writeError(w, 401, "bad_login", err.Error())
+		return
+	}
+	if errors.Is(err, auth.ErrNoMembership) {
+		writeError(w, 403, "no_membership", err.Error())
 		return
 	}
 	if err != nil {
@@ -43,11 +53,85 @@ func (s *Server) logout(w http.ResponseWriter, r *http.Request) {
 }
 
 func (s *Server) me(w http.ResponseWriter, r *http.Request, c *caller) {
-	approver := false
-	for _, role := range c.p.User.Roles {
-		approver = approver || s.Changes.Approvers()[role]
+	approver := s.isApprover(c.p.User)
+	writeJSON(w, 200, s.meBody(r.Context(), c, approver))
+}
+
+// orgCookie remembers the last org a browser used; the web app reads it, the server only prefers it at login.
+const orgCookie = "rk_org"
+
+// memberships lists the caller's orgs. The dev-open demo user has no row, so it is an owner of the default org.
+func (s *Server) memberships(ctx context.Context, c *caller) ([]auth.Membership, error) {
+	if c.p.User.ID != 0 {
+		return auth.Memberships(ctx, s.DB, c.p.User.ID)
 	}
-	writeJSON(w, 200, map[string]any{"user": c.p.User, "via": c.p.Via, "approver": approver, "human": c.p.Human()})
+	m := auth.Membership{ID: c.p.User.Org, Name: c.p.User.Org, Code: strings.ToUpper(c.p.User.Org), Roles: []string{"owner"}}
+	if res, err := s.DB.Query(ctx, "select name from rk_orgs where id = $1", m.ID); err == nil && len(res.Rows) > 0 {
+		m.Name = res.Rows[0][0].(string)
+	}
+	if code, err := auth.OrgCode(ctx, s.DB, m.ID); err == nil && code != "" {
+		m.Code = code
+	}
+	return []auth.Membership{m}, nil
+}
+
+func (s *Server) meBody(ctx context.Context, c *caller, approver bool) map[string]any {
+	orgs, err := s.memberships(ctx, c)
+	if err != nil {
+		orgs = []auth.Membership{}
+	}
+	var cur *auth.Membership
+	for i := range orgs {
+		if orgs[i].ID == c.p.User.Org {
+			cur = &orgs[i]
+		}
+	}
+	return map[string]any{"user": c.p.User, "via": c.p.Via, "approver": approver, "human": c.p.Human(), "orgs": orgs, "org": cur}
+}
+
+func (s *Server) isApprover(u *auth.User) bool {
+	for _, role := range u.Roles {
+		if s.Changes.Approvers()[role] {
+			return true
+		}
+	}
+	return false
+}
+
+// switchOrg moves a browser session to another org of the same user.
+func (s *Server) switchOrg(w http.ResponseWriter, r *http.Request, c *caller) {
+	var body struct {
+		Org string `json:"org"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, 400, "bad_json", err.Error())
+		return
+	}
+	if c.p.Via != "session" {
+		writeError(w, 400, "org_fixed", "this credential is tied to one organisation; sign in with a browser session to switch")
+		return
+	}
+	ck, err := r.Cookie(auth.CookieName)
+	if err != nil {
+		writeError(w, 401, "unauthenticated", auth.ErrUnauthenticated.Error())
+		return
+	}
+	u, err := s.Auth.SwitchOrg(r.Context(), ck.Value, body.Org)
+	switch {
+	case errors.Is(err, auth.ErrNoMembership):
+		fail(w, engine.Denied("org", "switch"))
+		return
+	case errors.Is(err, auth.ErrUnauthenticated):
+		writeError(w, 401, "unauthenticated", err.Error())
+		return
+	case err != nil:
+		fail(w, err)
+		return
+	}
+	http.SetCookie(w, &http.Cookie{Name: orgCookie, Value: u.Org, Path: "/", MaxAge: 31536000, SameSite: http.SameSiteLaxMode, Secure: strings.HasPrefix(s.Auth.Issuer, "https://")})
+	nc := &caller{p: &auth.Principal{User: u, Via: c.p.Via, Scope: c.p.Scope}}
+	nc.actor = Actor(nc.p)
+	writeJSON(w, 200, s.meBody(r.Context(), nc, s.isApprover(u)))
 }
 
 func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) {

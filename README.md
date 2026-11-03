@@ -42,7 +42,7 @@ driver serves them. By default everything runs on one Postgres and one binary.
 A small model:
 
 ```yaml
-# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
 name: deal
 label: {id: Peluang, en: Deal}
 realtime: true
@@ -79,7 +79,7 @@ Then open:
 | URL | What |
 | --- | --- |
 | http://localhost:8080/console/ | Rangka Console (sign in: `ceo@saga.co.id` / `rangka-demo`) |
-| http://localhost:8080/prototype/ | The apps rendered from metadata |
+| http://localhost:8080/app/ | The end-user web app: dashboards, lists, forms, approvals, imports |
 | http://localhost:8080/api/v1/meta | Metadata API |
 | `POST http://localhost:8080/mcp` | MCP endpoint for AI clients |
 
@@ -100,12 +100,12 @@ http://localhost:8000/console/?demo=1.
 | Path | What |
 | --- | --- |
 | [`kernel/`](kernel/README.md) | Go kernel: `.rk` loader + validator, migrations, CEL, lifecycle, REST, SSE, queue, scheduler, cache, Rangka ID (sessions, API tokens, OIDC provider), change sets, MCP |
-| [`schema/0.4/`](schema/0.4) | JSON Schemas for all 14 `.rk` kinds: app, model, dashboard, flow, overlay, role, connector, template, system, theme, layout, features, config, changeset |
+| [`schema/0.5/`](schema/0.5) | JSON Schemas for all 14 `.rk` kinds (current): app, model, dashboard, flow, overlay, role, connector, template, system, theme, layout, features, config, changeset. `schema/0.4/` stays published for existing files |
 | [`tools/`](tools) | Reference validator `rangka_validate.py`, strict `.rk` reader `rkfile.py`, `rk_convert.py` (JSON → `.rk`), API-docs and prototype builders |
 | [`templates/`](templates) | Theme templates (`standard`, `retail`, `clinic`) and layout templates (`top-nav`, `side-only`, `pos`, `portal`) |
 | [`web/design-system/`](web/design-system) | React component bundle (`window.Rangka`, 76 exports), tokens, TypeScript types — Atlassian-grade structure in Rangka colours (Ink, Bata, warm stone), light and dark |
 | [`web/console/`](web/console/README.md) | Rangka Console, the control pane for operators: capabilities, apps and models, change sets, connectors, organisations, themes, audit |
-| [`web/prototype/`](web/prototype) | Browser-only renderer of the apps; the reference semantics for the kernel |
+| [`web/app/`](web/app) | The end-user web app (served at `/app/`); its engine is the reference semantics for the kernel |
 | [`docs/contracts.md`](docs/contracts.md) | The binding contract: REST, SSE events, MCP tools, CEL dialect, change sets, v0.1 decisions |
 | [`docs/site/`](docs/site) | API reference page generated from metadata |
 

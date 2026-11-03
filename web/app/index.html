@@ -1,0 +1,188 @@
+<!doctype html>
+<html lang="id">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Rangka</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&display=swap">
+<link rel="stylesheet" href="tokens.css">
+<link rel="stylesheet" href="../design-system/bundle.css">
+<style>
+  html, body { height: 100%; margin: 0; }
+  body { background: var(--app); color: var(--ink); font: 14px/20px var(--font-sans); }
+  #rk-app { height: 100%; }
+  /* app shell (shell.js) */
+  .ap-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+  .ap-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
+  .ap-shell > .rk-side nav { flex: 0 0 auto; overflow: visible; }
+  .ap-shell .rk-shell-main { min-height: 0; }
+  .ap-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
+  .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { max-width: var(--page-max); box-sizing: border-box; width: 100%; }
+  .ap-menu-btn, .ap-nav-scrim { display: none; }
+  .ap-splash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); padding: 24px; box-sizing: border-box; }
+  .ap-splash > .rk-alert { max-width: 480px; }
+  .ap-muted { margin: 0; color: var(--muted); }
+  .ap-signin { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: var(--soft); }
+  .ap-signin-card { width: min(400px, 100%); display: flex; flex-direction: column; gap: 16px; padding: 32px; box-sizing: border-box; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); }
+  .ap-signin-card h1 { margin: 0; font: 600 24px/28px var(--font-sans); }
+  .ap-signin-brand { display: flex; align-items: center; gap: 8px; font: 600 16px/20px var(--font-sans); }
+  .ap-signin-mark { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; background: var(--brand); color: #ffffff; }
+  .ap-signin-mark .rk-icon { width: 16px; height: 16px; }
+  .ap-signin-form { display: flex; flex-direction: column; gap: 16px; }
+  .ap-signin-dialog { width: min(var(--dialog-w), calc(100vw - 32px)); }
+  .ap-signin-dialog .rk-dialog-main { display: flex; flex-direction: column; gap: 16px; }
+  @media (max-width: 860px) {
+    .ap-shell { height: auto; min-height: 100%; }
+    .ap-main { overflow: visible; }
+    .ap-menu-btn { display: inline-flex; }
+    .ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: var(--topbar); left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
+    .ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: var(--topbar) 0 0 0; background: var(--scrim); z-index: 39; }
+  }
+  @media (max-width: 640px) {
+    .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Bantuan"], .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Notifikasi"] { display: none; }
+    .ap-shell .rk-topnav > .rk-iconbtn[aria-label="Pindah aplikasi"] { display: none; }
+    .ap-signin-card { padding: 24px 16px; }
+  }
+  /* form view (fields.js, form.js) */
+  .ap-printmenu { position: relative; display: inline-flex; }
+  .ap-printmenu-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; }
+  .ap-imp { display: flex; flex-direction: column; gap: 16px; }
+  .ap-imp-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; margin-top: 12px; }
+  .ap-imp-sum { margin: 0 0 4px; }
+  .ap-imp-tw { overflow-x: auto; max-width: 100%; }
+  .ap-imp-link { color: var(--link); }
+  .ap-imp .rk-field { max-width: 360px; margin-bottom: 12px; }
+  .ap-att { margin-top: 16px; }
+  .ap-att-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px; margin-bottom: 12px; border: 1px dashed var(--border); border-radius: var(--r-lg); background: var(--soft); }
+  .ap-att-zone.on { background: var(--selected); border-color: var(--selected-ink); }
+  .ap-att-input { display: none; }
+  .ap-att-empty { padding: 4px 0; }
+  .ap-att-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .ap-att-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); min-width: 0; }
+  .ap-att-row:first-child { border-top: 0; }
+  .ap-att-open { flex: 0 0 auto; display: block; line-height: 0; }
+  .ap-att-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line-strong); background: var(--soft); }
+  .ap-att-icon { width: 40px; height: 40px; box-sizing: border-box; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; border-radius: var(--r-md); border: 1px solid var(--line-strong); background: var(--soft); color: var(--muted); font: 600 9px/10px var(--font-sans); }
+  .ap-att-icon .rk-icon { width: 16px; height: 16px; }
+  .ap-att-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .ap-att-name { color: var(--link); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ap-fw { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+  .ap-fw > .rk-field { gap: inherit; }
+  .ap-link { min-width: 0; }
+  .ap-check { justify-content: flex-end; }
+  .ap-grid-link { min-width: 220px; }
+  .ap-gl { display: flex; flex-direction: column; min-width: 0; }
+  .ap-gl-pop { list-style: none; margin: 2px 0 0; padding: 4px; max-height: 220px; overflow-y: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
+  .ap-gl-opt { display: flex; flex-direction: column; gap: 0; padding: 8px; min-height: 40px; box-sizing: border-box; justify-content: center; border-radius: var(--r-sm); cursor: pointer; }
+  .ap-gl-opt small { color: var(--muted); font-size: 12px; line-height: 16px; }
+  .ap-gl-opt:hover { background: var(--hover); }
+  .ap-gl-opt.on { background: var(--selected); color: var(--selected-ink); }
+  .ap-gl-note { padding: 8px; color: var(--muted); }
+  .ap-main .rk-grid-scroll { position: relative; } /* keeps the visually hidden "Aksi" header inside the scroller */
+  .ap-grid-empty { color: var(--muted); text-align: center; padding: 12px; }
+  .ap-ro-grid { margin-top: 24px; }
+  .ap-form-fields { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 24px; }
+  .ap-amended { font-size: 12px; color: var(--muted); }
+  .ap-main .rk-desc a, .ap-main .pv-ro a, .ap-amended a { color: var(--link); text-decoration: none; }
+  .ap-main .rk-desc a:hover, .ap-main .pv-ro a:hover, .ap-amended a:hover { text-decoration: underline; }
+  .ap-errlist { margin: 4px 0 0; padding-left: 18px; }
+  .ap-main .rk-dialog-body .ap-errlist { margin-bottom: 8px; }
+  @media (max-width: 600px) {
+    .ap-main .rk-pagehead-extra { width: 100%; flex-wrap: wrap; }
+    .ap-grid-link { min-width: 180px; }
+    /* phone: every button and field is at least 40px tall (links stay inline) */
+    body button, body [role=button], body select, body textarea, body input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: 40px; }
+    body .rk-iconbtn { min-width: 40px; }
+    body .rk-select-btn, body .rk-btn, body .rk-iconbtn { height: auto; min-height: 40px; }
+    body .rk-seg button, body .rk-pager button { min-height: 40px; }
+    /* a filter's list opens under the whole bar at full width: anchored to its button it ran past the screen edge */
+    .ap-main .rk-filterbar { position: relative; }
+    .ap-main .rk-fwrap { position: static; }
+    .ap-main .rk-fpop { left: 0; right: 0; width: auto; }
+  }
+  /* approvals (approvals.js) */
+  .ap-approvals { display: flex; flex-direction: column; gap: 8px; }
+  .ap-banner-meta { font-weight: 600; }
+  .ap-decide { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ap-reason { display: flex; flex-direction: column; gap: 12px; }
+  .ap-reason textarea { width: 100%; box-sizing: border-box; }
+  .ap-main .rk-tabs { margin-bottom: 0; }
+  .ap-inbox { list-style: none; margin: 0; padding: 0; }
+  .ap-inbox-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line-strong); }
+  .ap-inbox-row:first-child { padding-top: 0; }
+  .ap-inbox-row:last-child { border-bottom: 0; padding-bottom: 0; }
+  .ap-inbox-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 280px; }
+  .ap-inbox-doc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; }
+  .ap-inbox-doc a { color: var(--link); text-decoration: none; overflow-wrap: anywhere; }
+  .ap-inbox-doc a:hover { text-decoration: underline; }
+  .ap-inbox-reason { color: var(--ink-2); overflow-wrap: anywhere; }
+  .ap-inbox .ap-muted { font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+  /* list, form and kanban styles from the prototype (pv-*), kept for the views that move over in later tasks */
+  .pv-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
+  .pv-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
+  .pv-shell-main { min-height: 0; }
+  .pv-main { flex: 1; min-height: 0; overflow-y: auto; }
+  .pv-note { margin: 8px 8px 12px; padding: 8px 12px; border-radius: var(--r); font-size: 12px; line-height: 16px; color: var(--ink-2); background: var(--discovery-tint); }
+  .pv-note b { color: var(--discovery); }
+  .pv-src { margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+  .pv-src code { font: 12px/16px var(--font-mono); color: var(--ink-2); background: var(--neutral); padding: 0 4px; border-radius: var(--r-xs); }
+  .pv-headbody { display: flex; flex-direction: column; gap: 12px; padding-top: 4px; }
+  .pv-headbody .rk-steps { max-width: 560px; }
+  .pv-col { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .pv-stack { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+  .pv-ro { min-height: var(--field); box-sizing: border-box; display: flex; align-items: center; padding: 7px 8px; border-radius: var(--r); background: var(--soft); color: var(--ink); font-size: 14px; }
+  .pv-ro.num { justify-content: flex-end; font-variant-numeric: tabular-nums; }
+  .pv-user { display: inline-flex; align-items: center; gap: 6px; white-space: nowrap; }
+  .pv-unsaved { font-size: 12px; color: var(--warn); font-weight: 600; }
+  .rk-shell-content > .rk-filterbar { margin-bottom: -8px; }
+  /* kanban: Jira board columns */
+  .pv-board { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(260px, 1fr); gap: 12px; overflow-x: auto; padding-bottom: 8px; align-items: start; }
+  .pv-col-k { background: var(--soft); border-radius: var(--r-lg); min-height: 160px; display: flex; flex-direction: column; transition: background .1s, box-shadow .1s; }
+  .pv-col-k.over { background: var(--selected); box-shadow: inset 0 0 0 2px var(--focus); }
+  .pv-col-k header { display: flex; align-items: center; gap: 8px; padding: 12px 12px 0; }
+  .pv-col-k header b { font: 600 12px/16px var(--font-sans); text-transform: uppercase; color: var(--ink-2); }
+  .pv-col-k header .n { font-size: 12px; line-height: 16px; color: var(--ink); background: var(--neutral); border-radius: 8px; padding: 0 6px; }
+  .pv-prob { margin-left: auto; font-size: 12px; color: var(--muted); }
+  .pv-sum { padding: 4px 12px 0; font: 600 14px/20px var(--font-sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+  .pv-col-k.closed .pv-sum { color: var(--muted); }
+  .pv-cards { display: flex; flex-direction: column; gap: 4px; padding: 8px; }
+  .pv-card { background: var(--surface); border-radius: var(--r); padding: 12px; display: flex; flex-direction: column; gap: 4px; cursor: grab; font-size: 14px; color: var(--ink-2); box-shadow: var(--shadow-float); transition: background .1s; }
+  .pv-card:hover { background: var(--soft); }
+  .pv-card-move { margin-top: 4px; font: inherit; font-size: 12px; color: var(--ink-2); background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-sm); padding: 2px 4px; max-width: 100%; cursor: pointer; }
+  .pv-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+  .pv-card.dragging { opacity: .5; }
+  .pv-card b { font-size: 14px; font-weight: 400; color: var(--ink); line-height: 20px; }
+  .pv-card .rk-amount { color: var(--ink); font-weight: 600; }
+  .ap-list tbody tr { cursor: pointer; }
+  .ap-list tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+  .ap-pager .rk-pager select { display: none; } /* the server page size is fixed at 20 */
+  .rk-table .rk-doc-no { white-space: nowrap; }
+  .pv-code { width: 100%; min-height: 60vh; box-sizing: border-box; font: 12px/1.6 var(--font-mono); color: var(--ink); background: var(--soft); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; resize: vertical; }
+  .pv-code:focus { outline: none; border-color: var(--focus); box-shadow: var(--focus-soft); }
+  .rk-grid .rk-cell { appearance: auto; }
+  .rk-card-body > .rk-form-grid { padding: 0; }
+  @media (max-width: 860px) {
+    .pv-shell { height: auto; min-height: 100%; }
+    .pv-shell > .rk-side { display: flex; width: 100%; border-right: 0; border-bottom: 1px solid var(--line-strong); }
+    .pv-shell > .rk-side .rk-side-head, .pv-shell > .rk-side .pv-note, .pv-shell > .rk-side .rk-navgroup > p { display: none; }
+    .pv-shell > .rk-side nav { flex-direction: row; flex-wrap: wrap; gap: 4px; padding: 8px; }
+    .pv-shell > .rk-side .rk-navgroup { flex-direction: row; flex-wrap: wrap; gap: 4px; }
+    .pv-shell > .rk-side .rk-navlink { width: auto; }
+    .pv-main { overflow: visible; }
+    .rk-card-body > .rk-form-grid { grid-template-columns: minmax(0, 1fr); }
+    .rk-card-body { padding: 16px; }
+  }
+</style>
+<div id="rk-app"></div>
+<script src="vendor/react.production.min.js"></script>
+<script src="vendor/react-dom.production.min.js"></script>
+<script src="../design-system/bundle.js"></script>
+<script src="api.js"></script>
+<script src="engine.js"></script>
+<script src="list.js"></script>
+<script src="fields.js"></script>
+<script src="form.js"></script>
+<script src="approvals.js"></script>
+<script src="dashboard.js"></script>
+<script src="docs.js"></script>
+<script src="import.js"></script>
+<script src="shell.js"></script>

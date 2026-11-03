@@ -7,7 +7,7 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/meta` | Apps, models (with `app` and merged overlays), dashboards, flows, roles, connectors, theme tokens (light + dark), layout, `site` (config, features, redacted system), `installed`, `user`, `today` |
+| GET | `/meta` | Apps, models (with `app`, merged overlays and `can`), dashboards, flows, roles, connectors, theme tokens (light + dark), layout, `site` (config, features, redacted system), `installed`, `user`, `today` |
 | GET | `/r/{model}` | `?filter=<CEL>&sort=-field&limit=50&offset=0&q=text` → `{data, total}` |
 | POST | `/r/{model}` | Create → 201. Defaults and computed fields applied, save rules run |
 | GET · PATCH · DELETE | `/r/{model}/{name}` | PATCH merges. Submitted documents return 409 |
@@ -15,6 +15,39 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | POST | `/r/{model}/{name}/actions/{action}` | Runs the hook; 202 `{job_id}` when the action has `queue:` |
 | GET | `/dashboards/{name}?period=30` | Every widget computed; `X-Cache: hit\|miss` when cached |
 | POST | `/flows/{name}/run` | Run a flow now with `{event: {…}}` |
+
+## Permissions
+
+Model `permissions:` are enforced on every route below, for people, API tokens and MCP alike. Mapping:
+
+| Request | Action |
+| --- | --- |
+| `GET` record, list, `/events` | `read` |
+| `POST /r/{model}` | `create` |
+| `PATCH`, `actions/{action}`, any other lifecycle verb | `write` |
+| `DELETE` | `delete` |
+| `submit`, `cancel`, `amend` | the same name |
+| `GET /r/{model}/{name}/print` | `print` |
+| `GET` attachments of a record | `read` |
+| `POST` attachments of a record | `write` |
+
+Child models use their parent's permissions. A flow that a person starts runs as that person, so each step is
+checked with their roles. A dashboard widget over a model the caller cannot read returns the 403 body in place of
+its data. `export` and `import` are checked by the code that serves them; there is no export endpoint yet.
+
+A refusal is `403`:
+
+```json
+{"error": {"code": "permission_denied", "message": "Kamu tidak punya izin untuk cancel voucher", "model": "voucher", "action": "cancel"}}
+```
+
+A single record the caller may not read answers 403 too, never 404; the print and attachments routes answer
+`action: "read"` when the caller cannot read the record. List rows removed by an `if:` condition are left out and
+are not counted in `total`.
+
+`GET /meta` adds `models.<name>.can`, an object with a boolean per action (`read`, `create`, `write`, `delete`,
+`submit`, `cancel`, `amend`, `export`, `import`, `print`, `customize`) for the caller. A conditional grant reads as
+`true`; the record check still applies. Clients such as the web app and the Console can use it to hide actions the caller may not take.
 
 Errors: 422 `{errors:[{field?, rule?, code, message}], warnings?, needs_force?}`; everything else
 `{error:{code, message}}`. Successful writes may carry `_warnings`.

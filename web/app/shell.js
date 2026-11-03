@@ -352,9 +352,11 @@
     function afterReSignIn() {
       setExpired(false);
       api.me().then(function (m2) {
+        // someone else signed in: nothing on screen is theirs (drafts, cache, menus), start the app over as them
+        if (me && m2.id !== me.id) { onExpired = null; global.location.reload(); return; }
         var orgChanged = me && m2.org !== me.org;
         setMe(m2);
-        if (orgChanged) { cacheRef.current.clear(); reloadMeta(); }
+        if (orgChanged) { cacheRef.current.clear(); reloadMeta(m2); }
       }, function () {});
     }
 

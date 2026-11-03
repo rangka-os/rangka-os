@@ -298,7 +298,8 @@
         setErr(e);
         setLoading(false);
       });
-    }, [m, dq, filter, sortParam(sort), page, mode, reload, ctx.me]);
+      // refetch for another org, or once the user has signed in again after this list was refused with 401
+    }, [m, dq, filter, sortParam(sort), page, mode, reload, ctx.me && ctx.me.org, err && err.status === 401 ? ctx.me : null]);
 
     if (err && err.status === 403) return h(ForbiddenState, { what: label });
     if (err && err.status === 401) return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Menunggu masuk" })); // the shell shows the sign-in dialog; signing in reloads

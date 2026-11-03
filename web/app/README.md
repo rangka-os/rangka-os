@@ -62,8 +62,9 @@ python3 web/app/test_app.py [--width 1280|400] [--require-all] [--shots DIR] [--
 
 `test_app.py` builds the kernel, starts a throwaway Postgres, migrates, seeds, adds a `sales_manager` and a
 `sales_rep`, serves, and runs every scenario in a fresh Chromium context. A scenario fails on an exception, a console
-error or an unexpected HTTP error. `--width 400` runs the same scenarios at phone width (and checks nothing scrolls
-sideways and controls are at least 40px tall). React 18.3.1 is vendored in `vendor/` (see `vendor/README.md`); the suite fails on any request to a script CDN.
+error or an unexpected HTTP error. `--width 400` runs the same scenarios as a phone (400px, mobile viewport and touch);
+`test_no_horizontal_scroll` is the scenario that checks the main screens do not scroll sideways and that controls are
+at least 40px tall. React 18.3.1 is vendored in `vendor/` (see `vendor/README.md`); the suite fails on any request to a script CDN.
 
 Features another stream builds run live when the kernel has them and otherwise against `page.route` mocks that answer
 exactly the Fixed-interface shapes. The run ends with `live: … · mocked: …`. `--require-all` fails when anything ran

@@ -17,11 +17,6 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-const (
-	appsDir = "../../../../rangka-apps/apps"
-	siteDir = "../../../../rangka-apps/sites/kopi-senja"
-)
-
 // FixedNow is the date the prototype numbers in testdata were computed for.
 var FixedNow = func() time.Time {
 	loc, _ := time.LoadLocation("Asia/Jakarta")
@@ -30,7 +25,7 @@ var FixedNow = func() time.Time {
 
 func setup(t *testing.T) (*Engine, Actor) {
 	t.Helper()
-	return setupSite(t, siteDir)
+	return setupSite(t, testdb.Sibling(t, "rangka-apps/sites/kopi-senja"))
 }
 
 // setupSite is setup with another site folder (same apps and fixtures).
@@ -38,7 +33,7 @@ func setupSite(t *testing.T, site string) (*Engine, Actor) {
 	t.Helper()
 	url := testdb.New(t)
 	ctx := context.Background()
-	reg, rep := meta.Validate(appsDir, site, nil, schema.Embedded())
+	reg, rep := meta.Validate(testdb.Sibling(t, "rangka-apps/apps"), site, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("metadata errors: %v", rep.All())
 	}
@@ -53,7 +48,7 @@ func setupSite(t *testing.T, site string) (*Engine, Actor) {
 	e := New(db, reg)
 	e.Now = FixedNow
 	a := Actor{Org: "kopi-senja", ID: "ceo@saga.co.id", UserName: "USR-001", Roles: []string{"owner"}, Human: true}
-	fx, err := LoadFixtures(FixturesDir(appsDir))
+	fx, err := LoadFixtures(FixturesDir(testdb.Sibling(t, "rangka-apps/apps")))
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -307,5 +302,44 @@ func TestAutomationMarkWon(t *testing.T) {
 		automationFires("stage changes to 'won'", map[string]any{"stage": "won"}, map[string]any{"stage": "won"}, "updated") ||
 		!automationFires("submitted", nil, nil, "submitted") || !automationFires("value changes", map[string]any{"value": 1.0}, map[string]any{"value": 2.0}, "updated") {
 		t.Error("automationFires")
+	}
+}
+
+// TestListSearchMatchesLinkTitle: q finds records by the display title of a linked record (a customer's name), not only by its key.
+func TestListSearchMatchesLinkTitle(t *testing.T) {
+	e, a := setup(t)
+	ctx := context.Background()
+	all, total, err := e.List(ctx, a, "sales_invoice", ListOpts{Limit: 1000})
+	if err != nil || total == 0 {
+		t.Fatalf("invoices: %d %v", total, err)
+	}
+	cm := e.Reg().Models["customer"]
+	cust, err := store.Get(ctx, e.DB, e.Reg(), a.Org, cm, str(all[0]["customer"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := e.Title(ctx, a, "customer", cust, 0)
+	if title == "" || title == str(cust["name"]) {
+		t.Fatalf("customer title %q should differ from its key", title)
+	}
+	want := 0
+	for _, r := range all {
+		if str(r["customer"]) == str(cust["name"]) {
+			want++
+		}
+	}
+	part := strings.ToLower(title[:len(title)-1])
+	rows, got, err := e.List(ctx, a, "sales_invoice", ListOpts{Q: part, Limit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got < want || got >= total {
+		t.Fatalf("q=%q matched %d of %d invoices, want at least %d and fewer than all", part, got, total, want)
+	}
+	for _, r := range rows {
+		c, _ := store.Get(ctx, e.DB, e.Reg(), a.Org, cm, str(r["customer"]))
+		if !strings.Contains(strings.ToLower(e.Title(ctx, a, "customer", c, 0)), part) {
+			t.Fatalf("invoice %v (customer %v) does not match q", r["name"], r["customer"])
+		}
 	}
 }

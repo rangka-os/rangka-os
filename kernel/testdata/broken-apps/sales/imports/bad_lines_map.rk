@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/import.json
+name: bad_lines_map
+model: sales_invoice
+lines:
+  field: items
+  map:
+    ghost: Kolom
+    item: {value: SKU, match: nope}
+    qty: "=int(row['Qty']"

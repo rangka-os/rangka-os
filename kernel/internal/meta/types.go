@@ -74,6 +74,15 @@ type Rule struct {
 	Message                Label
 }
 
+// Approval is one approval policy of a model (0007 §1): a verb (submit, cancel or an action) that waits for
+// a person holding one of Approvers when When matches.
+type Approval struct {
+	Name, On, When string
+	Approvers      []string
+	Label          Label
+	Raw            map[string]any
+}
+
 type Action struct {
 	Name, Hook, If string
 	Label          Label
@@ -88,6 +97,7 @@ type Model struct {
 	Fields                        []*Field
 	Rules                         []Rule
 	Actions                       []Action
+	Approvals                     []Approval // app's own first, then the company overlay's
 	OnSubmit, OnCancel            []string
 	Raw                           map[string]any // merged with the company overlay, when there is one
 	Doc                           *rk.Doc        // the app's model file
@@ -96,6 +106,17 @@ type Model struct {
 
 	// From a map naming {series, pattern?, reset?} (contract 0009); Naming is then "".
 	NamingSeries, NamingPattern, NamingReset string
+}
+
+// ApprovalsFor returns the policies whose verb is verb, in declaration order.
+func (m *Model) ApprovalsFor(verb string) []Approval {
+	var out []Approval
+	for _, a := range m.Approvals {
+		if a.On == verb {
+			out = append(out, a)
+		}
+	}
+	return out
 }
 
 // Field returns the field called name, or nil.
@@ -298,6 +319,14 @@ func parseModel(app string, doc *rk.Doc) *Model {
 			continue
 		}
 		m.Actions = append(m.Actions, Action{Name: str(am, "name"), Hook: str(am, "hook"), If: celText(am["if"]), Label: label(am["label"]), Queue: asMap(am["queue"])})
+	}
+	for _, av := range asList(raw["approvals"]) {
+		am := asMap(av)
+		if am == nil {
+			continue
+		}
+		m.Approvals = append(m.Approvals, Approval{Name: str(am, "name"), On: str(am, "on"), When: celText(am["when"]),
+			Approvers: strList(am["approvers"]), Label: label(am["label"]), Raw: am})
 	}
 	return m
 }

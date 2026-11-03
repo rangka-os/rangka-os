@@ -23,70 +23,91 @@ type Notification struct {
 
 // FlowResult summarises a flow run.
 type FlowResult struct {
-	Flow          string         `json:"flow"`
-	Skipped       bool           `json:"skipped,omitempty"`
-	Steps         []string       `json:"steps"`
-	Created       []string       `json:"created"`
-	Updated       []string       `json:"updated"`
-	Calls         []string       `json:"calls"`
-	Notifications []Notification `json:"notifications"`
-	WaitingJob    int64          `json:"waiting_job,omitempty"` // a wait: step put the rest on the queue
+	Flow            string         `json:"flow"`
+	Skipped         bool           `json:"skipped,omitempty"`
+	Steps           []string       `json:"steps"`
+	Created         []string       `json:"created"`
+	Updated         []string       `json:"updated"`
+	Calls           []string       `json:"calls"`
+	Notifications   []Notification `json:"notifications"`
+	WaitingJob      int64          `json:"waiting_job,omitempty"`      // a wait: step put the rest on the queue
+	WaitingApproval string         `json:"waiting_approval,omitempty"` // an approve: step waits for this request
 }
 
-// RunFlow runs a flow from its first step. event is the trigger payload (flows with on:).
+// RunFlow runs a flow from its first step for a caller (REST). event is the trigger payload (flows with on:).
+// Flow steps are not row-scoped, so a member with a row scope may not start a flow directly (contract 0010
+// §5); flows started by automations, the scheduler or jobs go through RunFlowFrom and stay unguarded.
 func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event map[string]any) (*FlowResult, error) {
+	if e.RowScope(a) != nil {
+		return nil, Denied("flow", "run")
+	}
 	return e.RunFlowFrom(ctx, a, flowName, event, 0, nil)
 }
 
 // RunFlowFrom runs a flow's steps in one transaction from top-level step start with variables vars (a
 // resumed wait). Steps: find, find_all, create, update, notify (log driver), call (connector action; the
-// kernel records the call, it has no connector runtime yet), if/then/else and wait (the remaining steps are
-// queued for later). Every step may have if: and as:.
+// kernel records the call, it has no connector runtime yet), if/then/else, wait (the remaining steps are
+// queued for later) and approve (the remaining steps wait for a decision). Every step may have if: and as:.
+//
+// A flow runs as its actor: find, create and update steps are authorized like the public entry points
+// (read, create, write), so a person running a flow can do no more than they could by hand. Flows the
+// kernel starts (schedules, events) run as a System actor; a wait: resumes as the actor that started the run.
 func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any) (*FlowResult, error) {
 	f := e.Reg().Flows[flowName]
 	if f == nil || !e.Reg().IsInstalled(f.App) {
 		return nil, notFound("flow " + flowName)
 	}
+	out := newFlowResult(flowName)
+	err := e.run(ctx, a, func(o *op) error { return e.flowIn(o, f, event, start, vars, out) })
+	if c := flowConnector(e, f); err != nil && c != "" {
+		store.Audit(context.WithoutCancel(ctx), e.DB, a.Org, a.ID, "connector.error", "connector/"+c, "flow "+flowName+": "+err.Error(), nil)
+	}
+	return out, err
+}
+
+func newFlowResult(flow string) *FlowResult {
+	return &FlowResult{Flow: flow, Steps: []string{}, Created: []string{}, Updated: []string{}, Calls: []string{}, Notifications: []Notification{}}
+}
+
+// flowConnector is the connector a flow's on: names ("" for model events and flows without on:).
+func flowConnector(e *Engine, f *meta.Flow) string {
+	if head, _, ok := strings.Cut(f.On, "."); ok && e.Reg().Models[head] == nil {
+		return head
+	}
+	return ""
+}
+
+// flowIn runs f's steps inside o's transaction, as o's actor, from top-level step start.
+func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, vars map[string]any, out *FlowResult) error {
+	a := o.actor
 	if event == nil {
 		event = map[string]any{}
 	}
-	connector := ""
-	if head, _, ok := strings.Cut(f.On, "."); ok && e.Reg().Models[head] == nil {
-		connector = head
+	if vars == nil {
+		vars = map[string]any{}
 	}
-	out := &FlowResult{Flow: flowName, Steps: []string{}, Created: []string{}, Updated: []string{}, Calls: []string{}, Notifications: []Notification{}}
-	err := e.run(ctx, a, func(o *op) error {
-		if vars == nil {
-			vars = map[string]any{}
-		}
-		vars["event"] = event
-		r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out}
-		if start == 0 && connector != "" && len(event) > 0 {
-			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+connector, f.On+" → flow "+flowName, nil); err != nil {
-				return err
-			}
-		}
-		if start == 0 && f.If != "" {
-			v, err := cel.Eval(f.If, r.env())
-			if err != nil || !cel.Truthy(v) {
-				out.Skipped = true
-				return nil
-			}
-		}
-		steps := f.Steps
-		var list []any
-		for _, st := range steps {
-			list = append(list, map[string]any(st))
-		}
-		if err := r.steps(list, "", start); err != nil {
+	vars["event"] = event
+	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out}
+	if c := flowConnector(e, f); start == 0 && c != "" && len(event) > 0 {
+		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+c, f.On+" → flow "+f.Name, nil); err != nil {
 			return err
 		}
-		return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.run", "flow/"+flowName, fmt.Sprintf("%d step(s), %d created, %d notification(s)", len(out.Steps), len(out.Created), len(out.Notifications)), nil)
-	})
-	if err != nil && connector != "" {
-		store.Audit(context.WithoutCancel(ctx), e.DB, a.Org, a.ID, "connector.error", "connector/"+connector, "flow "+flowName+": "+err.Error(), nil)
 	}
-	return out, err
+	if start == 0 && f.If != "" {
+		v, err := cel.Eval(f.If, r.env())
+		if err != nil || !cel.Truthy(v) {
+			out.Skipped = true
+			return nil
+		}
+	}
+	var list []any
+	for _, st := range f.Steps {
+		list = append(list, map[string]any(st))
+	}
+	if err := r.steps(list, "", start); err != nil {
+		return err
+	}
+	return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.run", "flow/"+f.Name, fmt.Sprintf("%d step(s), %d created, %d notification(s)", len(out.Steps), len(out.Created), len(out.Notifications)), nil)
 }
 
 type flowRun struct {
@@ -179,6 +200,10 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err != nil {
 				return err
 			}
+			readable := e.decide(a, e.permModel(m.Name), "read")
+			if !readable.maybe() {
+				return &PermissionError{Model: e.permModel(m.Name).Name, Action: "read"}
+			}
 			recs, err := store.All(o.ctx, o.tx, e.Reg(), a.Org, m, false)
 			if err != nil {
 				return err
@@ -199,6 +224,9 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			var found []any
 			for _, rec := range recs {
 				e.Output(m, rec)
+				if !e.recordAllowed(o.ctx, o.tx, a, m, readable, rec, o.links) {
+					continue
+				}
 				if where != "" {
 					sc := o.scope(m, rec)
 					sc.extra = r.vars
@@ -235,7 +263,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err != nil {
 				return err
 			}
-			res, err := o.create(mn, input, CreateOpts{})
+			res, err := o.create(mn, input, CreateOpts{authorize: true})
 			if err != nil {
 				return fmt.Errorf("step %s create %s: %w", i, mn, err)
 			}
@@ -254,7 +282,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err != nil {
 				return err
 			}
-			res, err := o.update(mn, name, input)
+			res, err := o.update(mn, name, input, true, false)
 			if err != nil {
 				return fmt.Errorf("step %s update %s %s: %w", i, mn, name, err)
 			}
@@ -324,13 +352,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if _, isUntil := st["wait"].(map[string]any); isUntil {
 				next = idx // check the condition again
 			}
-			saved := map[string]any{}
-			for k, v := range r.vars {
-				if k != "event" {
-					saved[k] = v
-				}
-			}
-			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": saved},
+			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs()},
 				EnqueueOpts{RunAt: e.Now().Add(d)})
 			if err != nil {
 				return err
@@ -338,11 +360,75 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			r.out.WaitingJob = id
 			r.out.Steps = append(r.out.Steps, fmt.Sprintf("%s: wait %s (job %d)", i, d, id))
 			r.stop = true
+		case st["approve"] != nil:
+			if label != "" {
+				return badRequest(fmt.Sprintf("flow %s step %s: approve is only allowed at the top level of a flow", r.f.Name, i))
+			}
+			spec := meta.AsMap(st["approve"])
+			if when, _ := spec["when"].(string); when != "" {
+				v, err := cel.Eval(when, r.env())
+				if err == nil && !cel.Truthy(v) {
+					r.out.Steps = append(r.out.Steps, i+": skipped")
+					continue
+				} // a when that cannot be evaluated requires approval (fail closed, as for model policies)
+			}
+			id, err := r.requestApproval(spec, i, idx+1, as)
+			if err != nil {
+				return err
+			}
+			r.out.WaitingApproval = id
+			r.out.Steps = append(r.out.Steps, fmt.Sprintf("%s: approve (%s)", i, id))
+			r.stop = true
 		default:
 			return badRequest(fmt.Sprintf("flow %s step %s: unknown step", r.f.Name, i))
 		}
 	}
 	return nil
+}
+
+// saved is the flow's variables without the event, as stored to resume a flow.
+func (r *flowRun) saved() map[string]any {
+	out := map[string]any{}
+	for k, v := range r.vars {
+		if k != "event" {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// requestApproval inserts the pending request of an approve step (contract 0007 §4). It always waits: the
+// flow's actor never approves it in passing (ruling R2). Approve resumes at top-level step resume.
+func (r *flowRun) requestApproval(spec map[string]any, i string, resume int, as string) (string, error) {
+	o, a := r.o, r.a
+	var label map[string]any
+	if l := meta.AsMap(spec["label"]); len(l) > 0 {
+		label = map[string]any{}
+		for k, v := range l {
+			label[k] = v
+		}
+	}
+	policy := str(label["id"])
+	if policy == "" {
+		policy = "step " + i
+	}
+	approvers := []string{}
+	for _, x := range meta.AsList(spec["approvers"]) {
+		approvers = append(approvers, str(x))
+	}
+	vars, event := r.saved(), r.vars["event"]
+	roles := append([]string{}, a.Roles...)
+	ap := store.Approval{Org: a.Org, Verb: "flow:" + r.f.Name, Policy: policy, Label: label, Approvers: approvers,
+		State: "pending", Snapshot: hashJSON(map[string]any{"event": event, "vars": vars}),
+		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as},
+		RequestedBy: a.ID, Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System}}
+	if err := store.InsertApproval(o.ctx, o.tx, &ap); err != nil {
+		return "", err
+	}
+	if err := o.approvalEvent(&ap, "approval.requested", nil); err != nil {
+		return "", err
+	}
+	return ap.ID, nil
 }
 
 // waitFor returns how long to wait: a duration ('10m', '2d'), or for {until: cel} 0 when true and one

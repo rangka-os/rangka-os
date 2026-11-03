@@ -30,6 +30,8 @@ create table if not exists rk_members (
   record  text,                         -- the user record (core user model) this member is, e.g. USR-001
   primary key (org_id, user_id)
 );
+alter table rk_orgs add column if not exists code text not null default '';
+alter table rk_members add column if not exists outlets text[] not null default '{}';
 create table if not exists rk_sessions (
   id         text primary key,          -- sha256 of the cookie value
   user_id    bigint not null references rk_users(id) on delete cascade,
@@ -124,6 +126,7 @@ create table if not exists rk_changesets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table rk_migrations add column if not exists steps jsonb, add column if not exists risk text, add column if not exists rolled_back_at timestamptz;
 create table if not exists rk_attachments (
   id           text primary key,
   org_id       text not null,
@@ -138,3 +141,42 @@ create table if not exists rk_attachments (
 );
 create index if not exists rk_attachments_record_idx on rk_attachments (org_id, model, record);
 create index if not exists rk_attachments_blob_idx on rk_attachments (org_id, sha256);
+-- Row-level security on model tables (contract 0010 §4): with rangka.org set (per pooled connection), rows of
+-- other orgs are invisible and cannot be written; with it empty (migrations, seed, scheduler scans) all pass.
+create or replace function rk_org_ok(o text) returns boolean language sql stable as $$ select coalesce(nullif(current_setting('rangka.org', true), ''), o) = o $$;
+
+create table if not exists rk_imports (
+  id text primary key, org_id text not null, import text not null, scope text not null default '',
+  file_name text not null default '', file_sha text not null, status text not null default 'previewed',
+  rows integer not null default 0, skipped integer not null default 0,
+  errors jsonb not null default '[]', preview jsonb not null default '[]', plan jsonb not null default '[]',
+  records jsonb not null default '[]', created_by text not null default '', created_at timestamptz not null default now(),
+  committed_at timestamptz);
+create index if not exists rk_imports_org on rk_imports (org_id, import, created_at desc);
+create unique index if not exists rk_imports_committed_file on rk_imports (org_id, import, scope, file_sha) where status = 'committed';
+create table if not exists rk_import_keys (
+  org_id text not null, import text not null, scope text not null, key_hash text not null, import_id text not null,
+  primary key (org_id, import, scope, key_hash));
+
+create table if not exists rk_approvals (
+  id           text primary key,           -- apr_<random>
+  org_id       text not null,
+  model        text not null default '',   -- '' for flow approvals
+  name         text not null default '',   -- record name at request time
+  verb         text not null,              -- submit, cancel, <action>, or flow:<flow>
+  policy       text not null,              -- approvals[].name, or the flow step label
+  label        jsonb,
+  approvers    text[] not null,
+  state        text not null,              -- pending, approved, rejected, void
+  snapshot     text not null,              -- sha256 hex
+  args         jsonb not null default '{}', -- {force} / action args / flow resume state
+  requested_by text not null,
+  requester    jsonb not null,             -- {id, user, roles, human, system} the verb runs as
+  requested_at timestamptz not null default now(),
+  decided_by   text,
+  decided_at   timestamptz,
+  reason       text not null default '',
+  used_at      timestamptz                 -- set when the verb ran with this approval (single-use)
+);
+create index if not exists rk_approvals_org_state_idx on rk_approvals (org_id, state, requested_at desc);
+create index if not exists rk_approvals_record_idx on rk_approvals (org_id, model, name);

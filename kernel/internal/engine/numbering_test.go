@@ -86,16 +86,35 @@ func TestSeriesSubmitAndMonthlyReset(t *testing.T) {
 	}
 }
 
-// TestSeriesOrgCode sets orgs.<id>.code on the loaded config at test time: schema/0.5 config.json does not
-// allow an orgs key until contract 0010 (S5) lands, so the testdata site cannot carry it.
+// TestSeriesOrgCode sets the org's code on the loaded registry at test time (config.rk orgs, contract 0010).
 func TestSeriesOrgCode(t *testing.T) {
 	e, a := setupSite(t, numberingSite)
 	if got := e.orgCode("kopi-senja"); got != "KOPI-SENJA" {
 		t.Fatalf("fallback orgCode = %q", got)
 	}
-	e.Reg().Site.Config["orgs"] = map[string]any{"kopi-senja": map[string]any{"name": "Kopi Senja", "code": "KS"}}
+	e.Reg().Orgs["kopi-senja"] = &meta.OrgDoc{ID: "kopi-senja", Name: "Kopi Senja", Code: "KS"}
 	if got := submitName(t, e, a, newDraftInvoice(t, e, a)); got != "INV/KS/2610/0001" {
 		t.Fatalf("first number = %q, want INV/KS/2610/0001", got)
+	}
+}
+
+// TestSeriesPerOrgNumbering: an org's own numbering in config.rk orgs replaces the site's (contract 0010 §2).
+func TestSeriesPerOrgNumbering(t *testing.T) {
+	e, a := setupSite(t, numberingSite)
+	site := meta.AsMap(e.Reg().SiteConfig("numbering"))
+	own := map[string]any{}
+	for k, v := range site {
+		own[k] = v
+	}
+	inv := map[string]any{}
+	for k, v := range meta.AsMap(site["sales_invoice"]) {
+		inv[k] = v
+	}
+	inv["pattern"] = "FKT/{ORG}/{YY}/{####}"
+	own["sales_invoice"] = inv
+	e.Reg().Orgs["kopi-senja"] = &meta.OrgDoc{ID: "kopi-senja", Code: "KS", Config: map[string]any{"numbering": own}}
+	if got := submitName(t, e, a, newDraftInvoice(t, e, a)); got != "FKT/KS/26/0001" {
+		t.Fatalf("per-org number = %q, want FKT/KS/26/0001", got)
 	}
 }
 

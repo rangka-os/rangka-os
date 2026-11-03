@@ -32,6 +32,36 @@
     "desk": {
       "type": "boolean",
       "description": "Members with this role use the back office (false: portal only)"
+    },
+    "scope": {
+      "type": "object",
+      "description": "Row scope: members with this role see only records whose field holds a value from `from` (contract 0010)",
+      "required": [
+        "field",
+        "from"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "field": {
+          "anyOf": [
+            {
+              "$ref": "model.json#/$defs/name"
+            },
+            {
+              "type": "array",
+              "items": {
+                "$ref": "model.json#/$defs/name"
+              },
+              "minItems": 1
+            }
+          ],
+          "description": "A field name or a list of names, e.g. outlet or [from_outlet, to_outlet]"
+        },
+        "from": {
+          "type": "string",
+          "description": "CEL over user returning a list of record names, e.g. user.outlets"
+        }
+      }
     }
   }
 }

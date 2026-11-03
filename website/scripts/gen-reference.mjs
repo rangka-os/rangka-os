@@ -1,4 +1,4 @@
-// Generates the .rk reference pages from rangka-os/schema/0.4, the validator code list from tools/, and copies the
+// Generates the .rk reference pages from rangka-os/schema/0.5, the validator code list from tools/, and copies the
 // generated API reference page into public/. Runs before every dev/build so the docs never drift from the schemas.
 import { readFileSync, writeFileSync, readdirSync, mkdirSync, cpSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -6,7 +6,7 @@ import { fileURLToPath } from 'node:url'
 
 const here = dirname(fileURLToPath(import.meta.url))
 const root = join(here, '..', '..')
-const schemaDir = join(root, 'schema', '0.4')
+const schemaDir = join(root, 'schema', '0.5')
 const out = join(here, '..', 'reference', 'schema')
 mkdirSync(out, { recursive: true })
 
@@ -84,7 +84,7 @@ const where = {
 const workspace = join(root, '..')
 const index = []
 for (const [kind, s] of Object.entries(schemas).sort()) {
-  const lines = [`# ${kind}.rk`, '', esc(s.description || s.title || ''), '', `**Lives in** ${code(where[kind] || '')} · **Schema** [${kind}.json](https://rangka-os.github.io/rangka-os/schema/0.4/${kind}.json) ([source](https://github.com/rangka-os/rangka-os/blob/main/schema/0.4/${kind}.json)) · first line: ${code(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/${kind}.json`)}`, '']
+  const lines = [`# ${kind}.rk`, '', esc(s.description || s.title || ''), '', `**Lives in** ${code(where[kind] || '')} · **Schema** [${kind}.json](https://rangka-os.github.io/rangka-os/schema/0.5/${kind}.json) ([source](https://github.com/rangka-os/rangka-os/blob/main/schema/0.5/${kind}.json)) · first line: ${code(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/${kind}.json`)}`, '']
   lines.push('## Properties', '', '| Property | Type | Meaning |', '| --- | --- | --- |', ...rows(s, s, '', 0, []), '')
   for (const [dn, d] of Object.entries(s.$defs || {})) {
     if (!d.properties || ['label'].includes(dn)) continue
@@ -99,7 +99,7 @@ for (const [kind, s] of Object.entries(schemas).sort()) {
   writeFileSync(join(out, `${kind}.md`), lines.join('\n'))
   index.push(`| [${kind}.rk](./${kind}) | ${code(where[kind] || '')} | ${esc((s.description || s.title || '').split('. ')[0])} |`)
 }
-writeFileSync(join(out, 'index.md'), ['# .rk schemas', '', 'Every kind of `.rk` file, generated from `schema/0.4`.', '', '| Kind | Lives in | What it is |', '| --- | --- | --- |', ...index, ''].join('\n'))
+writeFileSync(join(out, 'index.md'), ['# .rk schemas', '', 'Every kind of `.rk` file, generated from `schema/0.5`.', '', '| Kind | Lives in | What it is |', '| --- | --- | --- |', ...index, ''].join('\n'))
 
 // validator codes
 const py = readFileSync(join(root, 'tools', 'rangka_validate.py'), 'utf8') + readFileSync(join(root, 'tools', 'rkfile.py'), 'utf8')
@@ -117,6 +117,6 @@ const site = join(root, 'docs', 'site')
 if (existsSync(site)) cpSync(site, join(here, '..', 'public', 'api', 'crm'), { recursive: true })
 
 // Publish the JSON Schemas with the site, so the first line of every .rk file
-// (# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/<kind>.json) resolves.
-cpSync(schemaDir, join(here, '..', 'public', 'schema', '0.4'), { recursive: true })
+// (# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/<kind>.json) resolves. 0.4 stays published: existing .rk files point at it.
+for (const ver of ['0.4', '0.5']) cpSync(join(root, 'schema', ver), join(here, '..', 'public', 'schema', ver), { recursive: true })
 console.log(`reference: ${Object.keys(schemas).length} schemas, ${codes.size} validator codes`)

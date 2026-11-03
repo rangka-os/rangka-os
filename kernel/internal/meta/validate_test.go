@@ -8,15 +8,11 @@ import (
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
-)
-
-const (
-	appsDir = "../../../../rangka-apps/apps"
-	siteDir = "../../../../rangka-apps/sites/kopi-senja"
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
 func TestRealAppsValid(t *testing.T) {
-	reg, rep := Validate(appsDir, siteDir, nil, schema.Embedded())
+	reg, rep := Validate(testdb.Sibling(t, "rangka-apps/apps"), testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), nil, schema.Embedded())
 	var buf bytes.Buffer
 	if n := rep.Print(&buf); n != 0 || len(rep.All()) != 0 {
 		t.Fatalf("expected no problems:\n%s", buf.String())
@@ -74,7 +70,7 @@ func TestBrokenSiteMatchPython(t *testing.T) {
 // Overlay fields are visible through links: sales_invoice's overlay rule reads customer.x_customer_group,
 // which customer's overlay adds (testdata/overlay-site).
 func TestOverlayFieldsThroughLinks(t *testing.T) {
-	reg, rep := ValidateOpts(Options{AppsDir: appsDir, SiteDir: "../../testdata/overlay-site"}, nil, schema.Embedded())
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: "../../testdata/overlay-site"}, nil, schema.Embedded())
 	if len(rep.All()) != 0 {
 		t.Fatalf("problems: %v", rep.All())
 	}
@@ -85,7 +81,7 @@ func TestOverlayFieldsThroughLinks(t *testing.T) {
 
 func TestOverlayMerge(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", siteDir, dir+"/site").Run()
+	exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), dir+"/site").Run()
 	os.MkdirAll(dir+"/site/custom", 0o755)
 	os.WriteFile(dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
 model: sales_invoice
@@ -97,7 +93,7 @@ views:
   form: {add: [{field: x_po_number, after: outlet}]}
   list: {add: [{field: x_po_number, after: customer}]}
 `), 0o644)
-	reg, rep := ValidateOpts(Options{AppsDir: appsDir, SiteDir: dir + "/site"}, nil, schema.Embedded())
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: dir + "/site"}, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("errors: %v", rep.All())
 	}
@@ -115,6 +111,115 @@ views:
 	}
 	if reg.App["sales"].Doc.Text == "" || strings.Contains(m.Doc.Text, "x_po_number") {
 		t.Error("app file must not change")
+	}
+}
+
+// approvals: key is parsed, ApprovalsFor filters by verb in declaration order (0007 §1).
+func TestApprovalsParsed(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	f := dir + "/apps/sales/models/sales_invoice.rk"
+	b := mustRead(t, f)
+	b = append(b, []byte(`approvals:
+  - name: manager
+    on: submit
+    when: "grand_total > 10000000"
+    approvers: [sales_manager]
+    label: {id: Persetujuan manajer}
+`)...)
+	mustWrite(t, f, b)
+	reg, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	m := reg.Models["sales_invoice"]
+	got := m.ApprovalsFor("submit")
+	if len(got) != 1 || strings.Join(got[0].Approvers, ",") != "sales_manager" || got[0].When != "grand_total > 10000000" ||
+		got[0].Name != "manager" || got[0].On != "submit" || got[0].Label.Text() != "Persetujuan manajer" {
+		t.Fatalf("ApprovalsFor(submit) = %+v", got)
+	}
+	if len(m.ApprovalsFor("cancel")) != 0 {
+		t.Error("cancel must have no policies")
+	}
+}
+
+// A company overlay adds policies after the app's own (ruling R1) and they are checked like the app's.
+func TestApprovalsOverlay(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), dir+"/site").CombinedOutput(); err != nil {
+		t.Fatal(err, string(out))
+	}
+	f := dir + "/apps/sales/models/sales_invoice.rk"
+	b := mustRead(t, f)
+	mustWrite(t, f, append(b, []byte("approvals:\n  - {name: own, on: submit, approvers: [sales_manager]}\n")...))
+	os.MkdirAll(dir+"/site/custom", 0o755)
+	mustWrite(t, dir+"/site/custom/sales_invoice.rk", []byte(`# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/overlay.json
+model: sales_invoice
+approvals:
+  - {name: big, on: submit, when: "grand_total > 50000000", approvers: [sales_manager]}
+`))
+	reg, rep := ValidateOpts(Options{AppsDir: dir + "/apps", SiteDir: dir + "/site"}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	got := reg.Models["sales_invoice"].ApprovalsFor("submit")
+	if len(got) != 2 || got[0].Name != "own" || got[1].Name != "big" || got[1].When != "grand_total > 50000000" {
+		t.Fatalf("overlay approvals = %+v", got)
+	}
+	mustWrite(t, dir+"/site/custom/sales_invoice.rk", []byte(`model: sales_invoice
+approvals:
+  - {name: bad, on: post, when: "nope > 1", approvers: [sales_manager]}
+`))
+	_, rep = ValidateOpts(Options{AppsDir: dir + "/apps", SiteDir: dir + "/site"}, nil, schema.Embedded())
+	var buf bytes.Buffer
+	rep.Print(&buf)
+	for _, want := range []string{"approvals/0/on", "unknown_verb", "approvals/0/when"} {
+		if !strings.Contains(buf.String(), want) {
+			t.Errorf("missing %q in:\n%s", want, buf.String())
+		}
+	}
+}
+
+// Flow approve steps: schema, and parentheses in when (0007 §4).
+func TestFlowApproveStep(t *testing.T) {
+	dir := t.TempDir()
+	exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").Run()
+	flow := func(step string) string {
+		mustWrite(t, dir+"/apps/crm/flows/morning_follow_up.rk", []byte("name: morning_follow_up\nschedule: 0 8 * * 1-5\nsteps:\n  - "+step+"\n"))
+		_, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())
+		var buf bytes.Buffer
+		rep.Print(&buf)
+		return buf.String()
+	}
+	if out := flow(`{approve: {approvers: [sales_manager], when: "size(x) > 0", label: {id: Setujui}}, if: "true", as: gate}`); strings.Contains(out, "approve") {
+		t.Errorf("valid approve step reported:\n%s", out)
+	}
+	if out := flow(`{approve: {approvers: [sales_manager], when: "size(x > 0"}}`); !strings.Contains(out, "steps/0/approve/when") || !strings.Contains(out, "cel_syntax") {
+		t.Errorf("missing parens error:\n%s", out)
+	}
+	if out := flow(`{approve: {approvers: []}}`); !strings.Contains(out, "schema") {
+		t.Errorf("empty approvers accepted:\n%s", out)
+	}
+}
+
+func mustRead(t *testing.T, f string) []byte {
+	t.Helper()
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
+}
+
+func mustWrite(t *testing.T, f string, b []byte) {
+	t.Helper()
+	if err := os.WriteFile(f, b, 0o644); err != nil {
+		t.Fatal(err)
 	}
 }
 

@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: voucher
+label: {id: Voucher, en: Voucher}
+is_submittable: true
+naming: VCH-{#####}
+title_field: title
+fields:
+  - name: title
+    type: data
+    label: {id: Judul}
+    in_list: true
+  - name: owner
+    type: data
+    label: {id: Pemilik}
+    in_list: true
+  - name: amount
+    type: int
+    label: {id: Jumlah}
+  - name: lines
+    type: table
+    of: voucher_line
+    label: {id: Baris}
+actions:
+  - name: stamp
+    label: {id: Cap}
+    hook: perm.stamp
+permissions:
+  - {role: manager, read: true, create: true, write: true, delete: true, submit: true, cancel: true, amend: true, print: true, export: true}
+  - {role: clerk, read: true, create: true, write: true, submit: true, print: true, if: owner == user.name}
+  - {role: viewer, read: true}

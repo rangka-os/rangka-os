@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
@@ -170,17 +171,43 @@ func (s *Service) Validate(ctx context.Context, a Actor, id string) (*ChangeSet,
 	if !in(cs.Status, "proposed", "validated", "invalid", "previewed") {
 		return nil, &Error{409, "bad_status", "a change set that is " + cs.Status + " cannot be validated again", nil}
 	}
-	v, _, _, cleanup, err := s.check(cs)
+	v, reg, _, cleanup, err := s.check(cs)
 	if err != nil {
 		return nil, err
 	}
+	err = s.blockDestructive(ctx, v, reg)
 	cleanup()
+	if err != nil {
+		return nil, err
+	}
 	cs.Validation, cs.Preview = v, nil
 	status, note := "validated", fmt.Sprintf("%d warning(s)", len(v.Warnings))
 	if len(v.Errors) > 0 {
 		status, note = "invalid", fmt.Sprintf("%d error(s): %s", len(v.Errors), v.Errors[0].Code+" "+v.Errors[0].Message)
 	}
 	return cs, s.transition(ctx, cs, a, status, note, false)
+}
+
+// blockDestructive adds a blocking error for each destructive migration step the change would need (a retype
+// that may lose data). Change sets never apply destructive DDL: that is an operator step with
+// rangka migrate --allow-destructive.
+func (s *Service) blockDestructive(ctx context.Context, v *Validation, reg *meta.Registry) error {
+	if s.DB == nil || reg == nil || len(v.Errors) > 0 {
+		return nil
+	}
+	live, err := store.Introspect(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	steps, _ := store.PlanSteps(store.Tables(reg), live, time.Now(), false)
+	for _, st := range steps {
+		if st.Destructive {
+			v.Errors = append(v.Errors, meta.Item{Level: "error", Pos: "1:1", Where: "(migration)", Code: "destructive_migration",
+				Message: "this change needs a destructive migration that change sets never apply (" + st.SQL + "); an operator reviews it with " +
+					"`rangka migrate --dry-run --allow-destructive` and runs `rangka migrate --allow-destructive`"})
+		}
+	}
+	return nil
 }
 
 func in(s string, set ...string) bool {
@@ -207,6 +234,9 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 		return nil, err
 	}
 	defer cleanup()
+	if err := s.blockDestructive(ctx, v, reg); err != nil {
+		return nil, err
+	}
 	cs.Validation = v
 	live0 := s.live()
 	after, _ := live0.result(cs.Ops)

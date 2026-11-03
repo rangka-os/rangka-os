@@ -54,7 +54,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 
 ### REST additions (`/api/v1`, JSON, same error shape as today)
 - `GET /auth/me` → adds `orgs: [{id, name, roles}]` and `org` (current). `POST /auth/org` `{org}` switches the session's org (cookie `rk_org`); tokens carry a fixed org.
-- `GET /approvals?state=pending|approved|rejected` · `POST /approvals/{id}/approve` · `POST /approvals/{id}/reject` `{reason}`.
+- `GET /approvals?state=pending|approved|rejected|void&model=&name=` → `{data, total}` (items carry `can_decide`) · `GET /approvals/{id}` · `POST /approvals/{id}/approve` · `POST /approvals/{id}/reject` `{reason}` → `{approval, record?, action?, flow?}`. A held `submit`/`cancel`/action answers **202** `{approval, approvals, record}`. Deciding needs a browser session (403 `human_required` for tokens).
 - `GET /r/{model}/{name}/print?format={print}&as=html|pdf`.
 - `POST /r/{model}/{name}/attachments` (multipart `file`) → 201 `{id, filename, content_type, size, sha256, created_by, created_at, url}` · `GET /r/{model}/{name}/attachments` → `{data: [item…]}` · `GET /attachments/{id}` (bytes) · `DELETE /attachments/{id}` → 204 (drafts only; 409 `submitted` otherwise). 413 `too_large` over `files.max_upload_mb` (default 20), 501 `files_disabled` when `files.enabled` is false. Storage root: `--files-dir` / `$RANGKA_FILES_DIR`, then `system.rk files.path`, then `./data/files`.
 - `POST /imports/{import}` (multipart `file`, form `outlet` optional) → `{id, rows, preview[], errors[], duplicate}` · `POST /imports/{import}/{id}/commit` · `GET /imports/{import}/{id}`.
@@ -67,7 +67,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - `config.rk` `numbering:` series map `{<series>: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly|monthly|never}}` per org; models reference `naming: {series: <series>}`. Models may also give a default `{series, pattern, reset}`, and a site object keyed by a model name numbers that model as its own series (contract 0009 §3).
 - `imports/<name>.rk` (kind `import`): `{name, model, source: csv|xlsx, header_row, key: [<cols>], map: {<field>: <column or CEL>}, per: outlet|org}`; duplicates detected by `key` + file SHA-256.
 - Field type `money` (new): `{currency_field: <field>}`; stored as numeric(20,4) plus an IDR integer twin `<field>_idr` computed at the document's `rate`. Existing `currency` stays IDR-only.
-- `config.rk` `org:` `{legal_name, npwp, pkp: true|false}`; `features.rk` unchanged.
+- `config.rk` `org:` `{legal_name, npwp, pkp: true|false}` (site default) and `orgs:` map `{<org id>: {name, code, config: {<any config.rk key, e.g. org, numbering>}}}` for per-org overrides; kernel code reads org settings with `Registry.OrgConfig(org, "org.pkp")` (contract 0010); `{ORG}` is the org's `code`. `features.rk` unchanged.
 
 ### Modules and apps (rangka-apps, contract 0001 layout)
 `modules/`: contacts, catalogue, quotation, orders, projects, workforce, invoicing, payments, procurement, outlets, stock, outlet_sales, tax_id (PPN, PPh 23), currency.
@@ -75,6 +75,16 @@ Streams build against these. A stream that needs to change one edits this sectio
 
 ### Model names other streams rely on
 `customer`, `vendor`, `contact_person`, `item` (services and goods, `kind: service|good|material|product`), `uom`, `uom_conversion`, `price_list`, `quotation` (+`quotation_item`, `revision` int, `amended_from`), `customer_order`, `project`, `assignment`, `timesheet`, `acceptance`, `worker`, `certification`, `sales_invoice` (+`sales_invoice_item`), `payment` (+`payment_allocation`), `withholding` (PPh 23 bukti potong), `purchase_request`, `purchase_order`, `goods_receipt`, `vendor_bill`, `outlet`, `recipe` (+`recipe_line`), `stock_move`, `stock_transfer`, `stock_count`, `outlet_sales` (+`outlet_sales_line`).
+
+### S0 reads (end-user web app, `/app/`) — shapes as built by the streams on 3 Nov 2026
+The app feature-detects each of these: a missing route (`404 not_found "no such endpoint …"`) or an absent meta key turns the feature off.
+- **S5 `/auth/me`:** `{user:{id,email,full_name,org,roles}, via, approver, human, org: {id,name,code,roles}, orgs: [{id,name,code,roles}]}` (S0 also accepts `org` as a plain id). `POST /auth/org {org}` → the /auth/me body; 403 `permission_denied`, 400 `org_fixed`. The app reloads fully after a switch. Switcher shown when `orgs.length > 1`.
+- **S1 permissions:** `meta.models[m].can: {<action>: bool}` when present hides buttons; 403 `{error:{code:"permission_denied", message, model, action}}` shows "Kamu tidak punya akses ke …".
+- **S2 approvals (contract 0007):** item `{id, model, name, verb, policy, label:{id,en}, approvers[], state: pending|approved|rejected|void, snapshot, requested_by, requested_at, decided_by?, decided_at?, reason, used_at?, can_decide}`; `GET /approvals?state=&model=&name=` → `{data,total}`; held verb → **202** `{approval, approvals, record}`; approve/reject → `{approval, record?}`; reject needs `{reason}`; approve 409 `approval_void`. Editing a held draft voids its requests (the form stays editable and says so). An approval's `name` follows the record's rename at submit.
+- **S3 print (contract 0008):** `meta.models[m].prints: [{name,label,paper,default}]` (default first; S0 also accepts a top-level `meta.prints` map); `format` omitted → default; `as=pdf` without a renderer → 501 `pdf_unavailable`.
+- **S6 attachments (contract 0011):** item `{id, filename, content_type, size, sha256, created_by, created_at, url}`; 409 `submitted` on delete of a submitted record's file; 413 `too_large`; 501 `files_disabled` = feature off; PDFs and raster images inline (PDF without the CSP sandbox header).
+- **S7 imports (contract 0012):** `meta.imports: {<name>: {name, model, label:{id,en}, source, per, app}}`; preview entry `{id, import, scope, file_name, file_sha, status, rows, skipped, duplicate, message, errors[{row,column,message}], preview[], records[], …}`; commit → entry with `status: committed`, `records` (drafts); 422 `import_errors`/`import_empty`, 409 `already_imported`, 413 `too_large`, 400 `file_required`/`outlet_required`, 422 `unknown_outlet`.
+- **Kernel list search (S0, R5):** `q` also matches the display title of link fields.
 
 ---
 

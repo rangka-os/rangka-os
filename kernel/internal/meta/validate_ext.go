@@ -116,6 +116,7 @@ func (v *validator) more() {
 		v.parens(p, "if", f.Raw["if"])
 		v.steps(p, "steps", f.Raw["steps"], all)
 	}
+	v.imports(all, false)
 	for _, a := range v.reg.Apps {
 		if v.skip(a.Name) {
 			continue
@@ -129,6 +130,7 @@ func (v *validator) more() {
 			if got, ok := asMap(d.Data)["name"].(string); !ok || got != rn {
 				v.rep.extra("error", d.Path, "name", "name_mismatch", fmt.Sprintf(`role name "%s" must match the file name "%s"`, pyStr(asMap(d.Data)["name"]), rn))
 			}
+			v.scopeFields(d, all)
 		}
 	}
 	for _, cn := range sortedKeysM(conns) {
@@ -140,7 +142,29 @@ func (v *validator) more() {
 	}
 	if v.reg.Site != nil {
 		v.site(all)
+		v.imports(all, true)
 		v.overlays(all)
+	}
+}
+
+// scopeFields reports scope fields (role key scope.field, a name or a list) that no model has.
+func (v *validator) scopeFields(d *rk.Doc, all map[string]vis) {
+	sc, ok := asMap(d.Data)["scope"].(map[string]any)
+	if !ok {
+		return
+	}
+	known := map[string]bool{}
+	for _, x := range all {
+		for _, f := range asList(x.m.Raw["fields"]) {
+			if n, ok := asMap(f)["name"].(string); ok {
+				known[n] = true
+			}
+		}
+	}
+	for _, f := range scopeFields(sc["field"]) {
+		if !known[f] {
+			v.rep.extra("error", d.Path, "scope/field", "unknown_scope_field", fmt.Sprintf(`scope field "%s" is not a field of any installed model`, f))
+		}
 	}
 }
 
@@ -211,6 +235,9 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 		}
 		for _, k := range []string{"where", "if"} {
 			v.parens(p, w+"/"+k, st[k])
+		}
+		if ap, ok := st["approve"].(map[string]any); ok {
+			v.parens(p, w+"/approve/when", ap["when"])
 		}
 		if set, ok := st["set"].(map[string]any); ok {
 			for _, fk := range sortedKeys(set) {
@@ -408,6 +435,11 @@ func (v *validator) site(all map[string]vis) {
 			}
 			if _, hasPattern := naming["pattern"].(string); !hasPattern {
 				v.rep.extra("error", x.own.Doc.Path, "naming/series", "unknown_series", fmt.Sprintf(`series "%s" is not defined in config.rk numbering and the model gives no default pattern`, series))
+			}
+		}
+		for _, id := range sortedKeys(asMap(c["orgs"])) {
+			if _, nested := asMap(asMap(asMap(c["orgs"])[id])["config"])["orgs"]; nested {
+				v.rep.extra("error", cfg.Path, "orgs/"+id+"/config/orgs", "nested_orgs", fmt.Sprintf(`org "%s" config cannot contain orgs`, id))
 			}
 		}
 	}
@@ -653,6 +685,46 @@ func (v *validator) overlays(all map[string]vis) {
 				chk = ""
 			}
 			v.exprTo(true, p, fmt.Sprintf("rules/%d/check", i), chk, merged, visible)
+		}
+		apprNames := map[string]bool{}
+		for _, av := range asList(own.Raw["approvals"]) {
+			apprNames[pyStr(asMap(av)["name"])] = true
+		}
+		roles := map[string]bool{}
+		for _, an := range append([]string{a.Name}, append(keys(a.Requires), keys(a.Optional)...)...) {
+			if ap := v.reg.App[an]; ap != nil {
+				for _, r := range ap.Roles {
+					roles[r] = true
+				}
+			}
+		}
+		for i, av := range asList(o["approvals"]) {
+			am, ok := av.(map[string]any)
+			if !ok {
+				continue
+			}
+			on := pyStr(am["on"])
+			ap := fmt.Sprintf("approvals/%d", i)
+			if on == "submit" || on == "cancel" {
+				if !boolean(own.Raw, "is_submittable") {
+					v.rep.extra("error", p, ap+"/on", "not_submittable", fmt.Sprintf("approvals on %s need is_submittable: true", on))
+				}
+			} else if !contains(actionNames(own), on) {
+				v.rep.extra("error", p, ap+"/on", "unknown_verb", fmt.Sprintf(`"%s" is not submit, cancel or an action of this model`, on))
+			}
+			if n := pyStr(am["name"]); apprNames[n] {
+				v.rep.extra("error", p, ap+"/name", "duplicate_approval", fmt.Sprintf(`"%s" is declared twice`, n))
+			} else {
+				apprNames[n] = true
+			}
+			if e, ok := am["when"]; ok {
+				v.exprTo(true, p, ap+"/when", e, merged, visible)
+			}
+			for j, r := range asList(am["approvers"]) {
+				if !roles[pyStr(r)] {
+					v.rep.extra("warn", p, fmt.Sprintf("%s/approvers/%d", ap, j), "unknown_role", fmt.Sprintf(`role "%s" has no file in roles/ (it must exist at install)`, pyStr(r)))
+				}
+			}
 		}
 		views := asMap(own.Raw["views"])
 		var placed, cols []string

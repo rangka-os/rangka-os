@@ -14,6 +14,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
+	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/mcp"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -31,6 +32,7 @@ type Server struct {
 	Queue        *jobs.Queue
 	Sched        *jobs.Scheduler
 	Changes      *changeset.Service
+	Imports      *imports.Service
 	WebDir       string      // rangka-os/web, served at /
 	TemplatesDir string      // rangka-os/templates (theme and layout templates)
 	Org          string      // default organisation
@@ -57,7 +59,7 @@ func Actor(p *auth.Principal) engine.Actor {
 	if name == "" {
 		name = u.Email
 	}
-	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human()}
+	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human(), Outlets: u.Outlets}
 }
 
 // ChangeActor converts a principal into a change-set actor.
@@ -77,7 +79,7 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p != nil && p.User.Org == "" {
+	if p != nil && p.User.Org == "" && p.Via == "dev" {
 		p.User.Org = s.Org
 	}
 	return p, nil
@@ -96,7 +98,9 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
 			return
 		}
-		h(w, r, &caller{p: p, actor: Actor(p)})
+		c := &caller{p: p, actor: Actor(p)}
+		// queries made while serving this request run with rangka.org set (row-level security backstop)
+		h(w, r.WithContext(pg.WithOrg(r.Context(), c.actor.Org)), c)
 	}
 }
 
@@ -112,16 +116,29 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/r/{model}/{name}", a(s.patchRecord))
 	mux.HandleFunc("DELETE /api/v1/r/{model}/{name}", a(s.deleteRecord))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.lifecycle))
-	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", a(s.uploadAttachment))
-	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", a(s.listAttachments))
-	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", a(s.printRecord))
 	mux.HandleFunc("GET /api/v1/attachments/{id}", a(s.getAttachment))
 	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.runAction))
+	// guarded record routes: the guard checks the permission, then the stream's handler runs
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", s.recordGuard("print", notImplemented))
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", s.recordGuard("read", s.listAttachments))
+	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", s.recordGuard("write", s.uploadAttachment))
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))
 	mux.HandleFunc("POST /api/v1/flows/{name}/run", a(s.runFlow))
+	// imports
+	mux.HandleFunc("POST /api/v1/imports/{import}", a(s.previewImport))
+	mux.HandleFunc("POST /api/v1/imports/{import}/{id}/commit", a(s.commitImport))
+	mux.HandleFunc("GET /api/v1/imports/{import}/{id}", a(s.getImport))
+	mux.HandleFunc("GET /api/v1/imports/{import}", a(s.listImports))
 	// realtime
-	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) { s.Hub.ServeSSE(w, r, c.actor.Org) }))
+	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
+		s.Hub.ServeSSE(w, r, c.actor.Org, s.eventAllow(r.Context(), c.actor))
+	}))
+	// approvals
+	mux.HandleFunc("GET /api/v1/approvals", a(s.listApprovals))
+	mux.HandleFunc("GET /api/v1/approvals/{id}", a(s.getApproval))
+	mux.HandleFunc("POST /api/v1/approvals/{id}/approve", a(s.decideApproval(true)))
+	mux.HandleFunc("POST /api/v1/approvals/{id}/reject", a(s.decideApproval(false)))
 	// change sets
 	mux.HandleFunc("GET /api/v1/changesets", a(s.listChangesets))
 	mux.HandleFunc("POST /api/v1/changesets", a(s.proposeChangeset))
@@ -144,6 +161,7 @@ func (s *Server) Handler() http.Handler {
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
 	mux.HandleFunc("POST /auth/logout", s.logout)
+	mux.HandleFunc("POST /auth/org", a(s.switchOrg))
 	mux.HandleFunc("GET /auth/me", a(s.me))
 	mux.HandleFunc("GET /.well-known/openid-configuration", s.Auth.Discovery)
 	mux.HandleFunc("GET /oauth/authorize", s.Auth.Authorize)
@@ -173,7 +191,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "not_found", "no such endpoint "+r.URL.Path)
 	})
-	// static web (prototype, console, design system)
+	// static web (app, console, design system)
 	if s.WebDir != "" {
 		mux.Handle("GET /", s.static())
 	}
@@ -183,7 +201,16 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) static() http.Handler {
 	fsrv := http.FileServer(http.Dir(s.WebDir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// the end-user app moved from /prototype/ to /app/; old links keep working
+		if r.URL.Path == "/prototype" || strings.HasPrefix(r.URL.Path, "/prototype/") {
+			http.Redirect(w, r, "/app/", http.StatusMovedPermanently)
+			return
+		}
 		if r.URL.Path == "/" {
+			if _, err := os.Stat(filepath.Join(s.WebDir, "app", "index.html")); err == nil {
+				http.Redirect(w, r, "/app/", http.StatusFound)
+				return
+			}
 			if _, err := os.Stat(filepath.Join(s.WebDir, "index.html")); err != nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write([]byte(indexPage(s.WebDir)))

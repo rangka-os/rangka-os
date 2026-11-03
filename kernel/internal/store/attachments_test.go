@@ -17,7 +17,7 @@ func TestAttachmentRows(t *testing.T) {
 		t.Fatal(err)
 	}
 	defer db.Close()
-	if _, err := Migrate(ctx, db, load(t, "../../../../rangka-apps/apps"), false, "test"); err != nil {
+	if _, err := Migrate(ctx, db, load(t, testdb.Sibling(t, "rangka-apps/apps")), false, "test"); err != nil {
 		t.Fatal(err)
 	}
 	sha := "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"

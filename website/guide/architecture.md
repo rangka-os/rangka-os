@@ -43,7 +43,7 @@ rangka-connectors/<connector>/       # layer 3
                      queue · scheduler · cache · audit · Rangka ID
 ```
 
-The browser prototype (`web/prototype/engine.js`) and the Python validator (`tools/rangka_validate.py`) are the
+The browser prototype (`web/app/engine.js`) and the Python validator (`tools/rangka_validate.py`) are the
 reference semantics; the kernel's tests check it matches them, including dashboard numbers and validator output byte
 for byte.
 

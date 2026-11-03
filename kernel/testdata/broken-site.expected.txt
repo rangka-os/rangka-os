@@ -21,6 +21,7 @@ crm/models/deal.rk:6:14  error  unknown_field  title_field  "deal_title" is not 
 crm/models/deal.rk:89:12  error  unknown_field  rules/0/check  `stagee` in `stagee != 'lost' || lost_reason != '' || customer.payment_dayz > 0` is not a field; did you mean "stage"?
 crm/models/deal.rk:94:12  error  cel_syntax  rules/1/check  unbalanced parentheses in `todya() == expected_close || (stage == 'won'`
 crm/models/deal.rk:107:11  warn   unknown_role  permissions/1/role  role "sales_director" has no file in roles/ (it must exist at install)
+crm/models/deal.rk:148:19  error  not_submittable  approvals/0/on  approvals on submit need is_submittable: true
 crm/models/deal.rk:122:9  error  unknown_field  views/list/columns/6  "amount" is not a field
 crm/models/deal.rk:125:15  error  bad_group_by  views/kanban/group_by  kanban columns need a select field; "value" is currencyy
 crm/models/deal.rk:128:10  error  not_numeric  views/kanban/sum  "value" cannot be summed
@@ -49,7 +50,13 @@ crm/dashboards/crm_overview.rk:103:13  error  bad_field_type  widgets/10/period 
 crm/dashboards/extra_board.rk:2:7  warn   unlisted_dashboard  name  add "extra_board" to dashboards in app.rk or nobody can open it
 sales/models/sales_invoice.rk:18:9  error  unknown_model  fields/1/to  "outlet" is not a model in this app or its dependencies
 sales/models/sales_invoice.rk:34:9  error  not_child  fields/4/of  "sales_invoice_item" must set is_child: true to be used in a table field
+sales/models/sales_invoice.rk:86:19  error  unknown_verb  approvals/0/on  "post" is not submit, cancel or an action of this model
+sales/models/sales_invoice.rk:86:37  warn   unknown_role  approvals/0/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
+sales/models/sales_invoice.rk:87:12  error  duplicate_approval  approvals/1/name  "a" is declared twice
+sales/models/sales_invoice.rk:87:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
+sales/models/sales_invoice.rk:87:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
 sales/models/sales_invoice.rk:9:3  error  compute_cycle  fields/grand_total/compute  grand_total → grand_total
+crm/flows/approve_gate.rk:5:50  error  cel_syntax  steps/0/approve/when  unbalanced parentheses in `size(x > 0`
 crm/flows/bad_flow.rk:10:5  error  schema  steps/2  {'if': 'size(won) > 0', 'then': [{'find_all': 'leadz', 'where': "status == 'new'", 'as': 'fresh'}, {'call': 'whatsapp_business.send_textt', 'with': {'to': "'…
 crm/flows/bad_flow.rk:17:5  error  schema  steps/4  {'update': 'won', 'set': {'stage': "'won'"}, 'where': '(x'} is not valid under any of the given schemas
 crm/flows/bad_flow.rk:2:7  error  name_mismatch  name  flow name "bad_flows" must match the file name "bad_flow"
@@ -61,6 +68,23 @@ crm/flows/bad_flow.rk:13:16  error  unknown_action  steps/2/then/1/call  connect
 crm/flows/bad_flow.rk:17:49  error  cel_syntax  steps/4/where  unbalanced parentheses in `(x`
 crm/flows/no_trigger.rk:1:1  warn   never_runs  (root)  a flow needs on: (an event) or schedule: (cron)
 crm/flows/no_trigger.rk:4:12  error  unknown_connector  steps/0/call  "nowhere" is not a connector
+sales/imports/bad_import.rk:11:10  error  not_a_table  lines/field  "notes" is not a table field of sales_invoice
+sales/imports/bad_import.rk:7:9  error  unknown_field  map/nope  "nope" is not a field of sales_invoice
+sales/imports/bad_import.rk:8:13  error  cel_syntax  map/customer  unbalanced parentheses in `lower(name`
+sales/imports/bad_import.rk:8:43  error  unknown_field  map/customer/match  "nope" is not a field of customer
+sales/imports/bad_import.rk:9:34  error  not_a_link  map/notes/match  "notes" is not a link field
+sales/imports/bad_lines.rk:1:1  error  schema  (root)  'map' is a required property
+sales/imports/bad_lines.rk:5:10  error  unknown_field  lines/field  "ghost" is not a field of sales_invoice
+sales/imports/bad_lines_map.rk:1:1  error  schema  (root)  'map' is a required property
+sales/imports/bad_lines_map.rk:7:12  error  unknown_field  lines/map/ghost  "ghost" is not a field of sales_invoice_item
+sales/imports/bad_lines_map.rk:8:31  error  unknown_field  lines/map/item/match  "nope" is not a field of item
+sales/imports/bad_lines_map.rk:9:10  error  cel_syntax  lines/map/qty  unbalanced parentheses in `int(row['Qty']`
+sales/imports/bad_model.rk:3:8  error  unknown_model  model  "sales_invoce" is not a model; did you mean "sales_invoice"?
+sales/imports/bad_per.rk:4:6  error  import_per_outlet  per  per: outlet needs a link field "outlet" to outlet on customer
+sales/imports/bad_per.rk:4:6  warn   import_no_key  per  per: outlet imports should set key so overlapping files are not imported twice
+sales/imports/not_a_map.rk:1:1  error  schema  (root)  [{'name': 'not_a_map'}, {'model': 'invoice'}] is not of type 'object'
+sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_name" must match the file name "wrong_name"
+crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
@@ -77,19 +101,29 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-site/config.rk:9:12  error  reset_needs_date  numbering/bulanan  reset monthly needs {MM} and {YY} or {YYYY} in the pattern, or numbers repeat
 ../broken-site/config.rk:8:11  error  reset_needs_date  numbering/faktur  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activity_log" is not defined in config.rk numbering and the model gives no default pattern
+../broken-site/config.rk:19:55  error  nested_orgs  orgs/pt_beta/config/orgs  org "pt_beta" config cannot contain orgs
 ../broken-site/themes/kopi_senja.rk:9:9  error  low_contrast  color/link  link #aaaaaa on surface #ffffff is 2.32:1 in light; needs 4.5:1
 ../broken-site/themes/kopi_senja.rk:10:13  error  low_contrast  color/selected  selected-ink #f08a6b on selected #579dff is 1.11:1 in dark; needs 4.5:1
 ../broken-site/layouts/crm_first.rk:12:18  error  unknown_model  nav/create/1  "leads" is not a model; did you mean "lead"?
 ../broken-site/layouts/crm_first.rk:23:77  error  unknown_widget  pages/0/blocks/1/children/1/props/widget  dashboard crm_overview has no widget "activities"; did you mean "activities_due"?
+../broken-site/imports/site_bad.rk:5:14  error  unknown_field  map/x_missing  "x_missing" is not a field of customer
 ../broken-site/custom/dealz.rk:2:8  error  unknown_model  model  "dealz" is not a model; did you mean "deal"?
 ../broken-site/custom/lead.rk:2:8  error  name_mismatch  model  overlay model "deal" must match the file name "lead"
+../broken-site/custom/lead.rk:6:21  error  not_submittable  approvals/0/on  approvals on cancel need is_submittable: true
 ../broken-site/custom/sales_invoice.rk:5:12  error  schema  fields/1/name  'po_ref' does not match '^x_[a-z0-9_]{1,60}$'
 ../broken-site/custom/sales_invoice.rk:6:38  error  unknown_model  fields/2/to  "regionn" is not a model in this app or its dependencies
 ../broken-site/custom/sales_invoice.rk:7:41  error  unknown_field  fields/3/default  `custmer` in `posting_date + duration(custmer.payment_days)` is not a field; did you mean "customer"?
 ../broken-site/custom/sales_invoice.rk:10:5  error  duplicate_field  fields/6  "x_po_number" is already a field of sales_invoice
 ../broken-site/custom/sales_invoice.rk:14:12  error  unknown_field  rules/0/check  `notes2` in `x_po_number != '' || notes2 != ''` is not a field; did you mean "notes"?
-../broken-site/custom/sales_invoice.rk:20:9  error  unknown_field  views/form/add/1  "x_missing" is not a field of sales_invoice
-../broken-site/custom/sales_invoice.rk:23:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
+../broken-site/custom/sales_invoice.rk:17:21  error  unknown_verb  approvals/0/on  "ship" is not submit, cancel or an action of this model
+../broken-site/custom/sales_invoice.rk:17:33  error  unknown_field  approvals/0/when  `grand_totl` in `grand_totl > 1` is not a field; did you mean "grand_total"?
+../broken-site/custom/sales_invoice.rk:17:63  warn   unknown_role  approvals/0/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
+../broken-site/custom/sales_invoice.rk:18:12  error  duplicate_approval  approvals/1/name  "a" is declared twice
+../broken-site/custom/sales_invoice.rk:18:39  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
+../broken-site/custom/sales_invoice.rk:19:12  error  duplicate_approval  approvals/2/name  "big" is declared twice
+../broken-site/custom/sales_invoice.rk:19:41  warn   unknown_role  approvals/2/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
+../broken-site/custom/sales_invoice.rk:24:9  error  unknown_field  views/form/add/1  "x_missing" is not a field of sales_invoice
+../broken-site/custom/sales_invoice.rk:27:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
 
-86 error(s), 7 warning(s)
+114 error(s), 13 warning(s)

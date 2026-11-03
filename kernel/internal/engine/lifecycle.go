@@ -242,20 +242,26 @@ func (e *Engine) Output(m *meta.Model, rec store.Record) store.Record {
 type CreateOpts struct {
 	KeepName  bool // use input["name"] (seeding, imports)
 	Docstatus int64
+	authorize bool // check create on the new record (public entry points; hooks run inside an allowed op)
+	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
 }
 
-// Result of a write: the record and any warnings.
+// Result of a write: the record and any warnings. Held is set when the verb waits for approval (0007);
+// Approvals then lists every request of the call.
 type Result struct {
-	Record   store.Record
-	Warnings []Issue
+	Record    store.Record
+	Warnings  []Issue
+	Held      bool             `json:"-"`
+	Approvals []store.Approval `json:"-"`
 }
 
 // Create saves a new record: defaults, compute, save rules, name (DRAFT-xxxxx for submittable models).
+// The actor needs create, decided on the new record after defaults.
 func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[string]any) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.create(model, input, CreateOpts{})
+		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true})
 		return err
 	})
 	return res, err
@@ -274,12 +280,22 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 		return nil, validation(issues, nil)
 	}
 	o.prepare(m, rec, true)
+	if opts.authorize {
+		if err := o.authorize(m, "create", rec); err != nil {
+			return nil, err
+		}
+	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
+	}
+	if opts.Guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "create"); err != nil {
+			return nil, err
+		}
 	}
 	rec["created_by"] = o.actor.ID
 	switch {
@@ -309,10 +325,10 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.automations(m, nil, rec, "created"); err != nil {
 		return nil, err
 	}
-	return &Result{o.e.Output(m, rec), warns}, nil
+	return &Result{Record: o.e.Output(m, rec), Warnings: warns}, nil
 }
 
-// Get loads a record.
+// Get loads a record the actor may read.
 func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Record, error) {
 	m, err := e.model(model)
 	if err != nil {
@@ -325,7 +341,14 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	if err != nil {
 		return nil, err
 	}
-	return e.Output(m, rec), nil
+	rec = e.Output(m, rec)
+	if err := e.authorize(ctx, e.DB, nil, a, m.Name, "read", rec); err != nil {
+		return nil, err
+	}
+	if err := e.Guard(ctx, a, m.Name, rec, "read"); err != nil {
+		return nil, err
+	}
+	return rec, nil
 }
 
 func (o *op) load(m *meta.Model, name string) (store.Record, error) {
@@ -336,18 +359,22 @@ func (o *op) load(m *meta.Model, name string) (store.Record, error) {
 	return rec, err
 }
 
-// Update merges patch into a draft (or non-submittable) record, recomputes and runs save rules.
+// Update merges patch into a draft (or non-submittable) record, recomputes and runs save rules. The actor
+// needs write on the stored record and on the record after the patch.
 func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch map[string]any) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.update(model, name, patch)
+		res, err = o.update(model, name, patch, true, true)
 		return err
 	})
 	return res, err
 }
 
-func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
+// update merges patch into a record. authorize checks write on the stored and the patched record (public
+// Update, flow steps); guard checks both against the actor's row scope (public Update only). Automations and
+// hooks pass false for both.
+func (o *op) update(model, name string, patch map[string]any, authorize, guard bool) (*Result, error) {
 	m, err := o.e.model(model)
 	if err != nil {
 		return nil, err
@@ -355,6 +382,16 @@ func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
 	cur, err := o.load(m, name)
 	if err != nil {
 		return nil, err
+	}
+	if authorize {
+		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(cur))); err != nil {
+			return nil, err
+		}
+	}
+	if guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, cur, "update"); err != nil {
+			return nil, err
+		}
 	}
 	if m.IsSubmittable && toInt(cur["docstatus"]) != 0 {
 		return nil, conflict("immutable", "Dokumen yang sudah diajukan tidak bisa diubah; batalkan lalu ubah (amend)")
@@ -364,6 +401,11 @@ func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
 		return nil, validation(issues, nil)
 	}
 	o.prepare(m, rec, false)
+	if authorize { // write must also hold after the patch (no handing a record to someone else)
+		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(rec))); err != nil {
+			return nil, err
+		}
+	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err
@@ -371,8 +413,16 @@ func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
 	}
+	if guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "update"); err != nil {
+			return nil, err
+		}
+	}
 	if err := store.Update(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name, rec); err != nil {
 		return nil, dbIssue(m, err)
+	}
+	if err := o.voidApprovals(m.Name, name, ""); err != nil {
+		return nil, err
 	}
 	if err := o.event(m, rec, "updated"); err != nil {
 		return nil, err
@@ -380,7 +430,7 @@ func (o *op) update(model, name string, patch map[string]any) (*Result, error) {
 	if err := o.automations(m, cur, rec, "updated"); err != nil {
 		return nil, err
 	}
-	return &Result{o.e.Output(m, rec), warns}, nil
+	return &Result{Record: o.e.Output(m, rec), Warnings: warns}, nil
 }
 
 // Delete removes a record (not a submitted one).
@@ -394,10 +444,19 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if err != nil {
 			return err
 		}
+		if err := o.authorize(m, "delete", o.e.Output(m, copyRecord(cur))); err != nil {
+			return err
+		}
+		if err := e.Guard(ctx, a, m.Name, cur, "delete"); err != nil {
+			return err
+		}
 		if m.IsSubmittable && toInt(cur["docstatus"]) == 1 {
 			return conflict("immutable", "Dokumen yang sudah diajukan tidak bisa dihapus; batalkan dulu")
 		}
 		if err := store.Delete(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name); err != nil {
+			return err
+		}
+		if err := o.voidApprovals(m.Name, name, ""); err != nil {
 			return err
 		}
 		return o.event(m, cur, "deleted")
@@ -405,70 +464,93 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 }
 
 // Submit validates a draft with submit rules, names it with the naming pattern and makes it immutable.
-// Warnings block unless force is set.
+// Warnings block unless force is set. A matching approval policy holds the draft instead (Result.Held).
 func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force bool) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
-		m, err := o.e.model(model)
-		if err != nil {
-			return err
-		}
-		if !m.IsSubmittable {
-			return badRequest(model + " is not submittable")
-		}
-		rec, err := o.load(m, name)
-		if err != nil {
-			return err
-		}
-		if toInt(rec["docstatus"]) != 0 {
-			return conflict("not_draft", "Hanya draf yang bisa diajukan")
-		}
-		o.prepare(m, rec, false)
-		errs, warns, err := o.check(m, rec, "submit")
-		if err != nil {
-			return err
-		}
-		if len(errs) > 0 {
-			return validation(errs, warns)
-		}
-		if len(warns) > 0 && !force {
-			v := validation(nil, warns)
-			v.NeedsForce = true
-			return v
-		}
-		newName := name
-		if strings.HasPrefix(name, "DRAFT-") {
-			if af := str(rec["amended_from"]); af != "" {
-				newName, err = o.amendName(m, af)
-			} else {
-				newName, err = o.nextName(m)
-			}
-			if err != nil {
-				return err
-			}
-		}
-		rec["name"], rec["docstatus"] = newName, int64(1)
-		if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
-			return dbIssue(m, err)
-		}
-		if newName != name {
-			if err := store.RenameRecordAttachments(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
-				return err
-			}
-		}
-		if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
-			return err
-		}
-		if err := o.event(m, rec, "submitted"); err != nil {
-			return err
-		}
-		if err := o.automations(m, rec, rec, "submitted"); err != nil {
-			return err
-		}
-		res = &Result{e.Output(m, rec), warns}
-		return nil
+		var err error
+		res, err = o.submit(model, name, force)
+		return err
 	})
 	return res, err
+}
+
+func (o *op) submit(model, name string, force bool) (*Result, error) {
+	e, a := o.e, o.actor
+	m, err := e.model(model)
+	if err != nil {
+		return nil, err
+	}
+	if !m.IsSubmittable {
+		return nil, badRequest(model + " is not submittable")
+	}
+	rec, err := o.load(m, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.authorize(m, "submit", e.Output(m, copyRecord(rec))); err != nil {
+		return nil, err
+	}
+	if err := o.guard(m, rec, "submit"); err != nil {
+		return nil, err
+	}
+	if toInt(rec["docstatus"]) != 0 {
+		return nil, conflict("not_draft", "Hanya draf yang bisa diajukan")
+	}
+	stored := cloneRecord(rec) // snapshot and approval when: read the stored record (0007 §2, §3)
+	o.prepare(m, rec, false)
+	errs, warns, err := o.check(m, rec, "submit")
+	if err != nil {
+		return nil, err
+	}
+	if len(errs) > 0 {
+		return nil, validation(errs, warns)
+	}
+	if len(warns) > 0 && !force {
+		v := validation(nil, warns)
+		v.NeedsForce = true
+		return nil, v
+	}
+	pending, all, err := o.hold(m, stored, Snapshot(m, stored), "submit", map[string]any{"force": force})
+	if err != nil {
+		return nil, err
+	}
+	if len(pending) > 0 {
+		return &Result{Record: e.Output(m, rec), Warnings: warns, Held: true, Approvals: all}, nil
+	}
+	newName := name
+	if strings.HasPrefix(name, "DRAFT-") {
+		if af := str(rec["amended_from"]); af != "" {
+			newName, err = o.amendName(m, af)
+		} else {
+			newName, err = o.nextName(m)
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	rec["name"], rec["docstatus"] = newName, int64(1)
+	if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
+		return nil, dbIssue(m, err)
+	}
+	if newName != name {
+		if err := store.RenameRecordAttachments(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
+			return nil, err
+		}
+		if err := store.RenameRecordApprovals(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
+			return nil, err
+		}
+	}
+	if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
+		return nil, err
+	}
+	if err := o.event(m, rec, "submitted"); err != nil {
+		return nil, err
+	}
+	if err := o.automations(m, rec, rec, "submitted"); err != nil {
+		return nil, err
+	}
+	return &Result{Record: e.Output(m, rec), Warnings: warns}, nil
 }
 
 func (o *op) amendName(m *meta.Model, base string) (string, error) {
@@ -485,41 +567,60 @@ func (o *op) amendName(m *meta.Model, base string) (string, error) {
 	return "", conflict("naming", "too many amendments of "+base)
 }
 
-// Cancel turns a submitted document into a cancelled one (docstatus 2).
+// Cancel turns a submitted document into a cancelled one (docstatus 2), unless an approval policy holds it.
 func (e *Engine) Cancel(ctx context.Context, a Actor, model, name string) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
-		m, err := o.e.model(model)
-		if err != nil {
-			return err
-		}
-		if !m.IsSubmittable {
-			return badRequest(model + " is not submittable")
-		}
-		rec, err := o.load(m, name)
-		if err != nil {
-			return err
-		}
-		if toInt(rec["docstatus"]) != 1 {
-			return conflict("not_submitted", "Hanya dokumen yang sudah diajukan yang bisa dibatalkan")
-		}
-		rec["docstatus"] = int64(2)
-		if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
-			return err
-		}
-		if err := o.runHooks(m, rec, m.OnCancel); err != nil {
-			return err
-		}
-		if err := o.event(m, rec, "cancelled"); err != nil {
-			return err
-		}
-		if err := o.automations(m, rec, rec, "cancelled"); err != nil {
-			return err
-		}
-		res = &Result{e.Output(m, rec), nil}
-		return nil
+		var err error
+		res, err = o.cancel(model, name)
+		return err
 	})
 	return res, err
+}
+
+func (o *op) cancel(model, name string) (*Result, error) {
+	e, a := o.e, o.actor
+	m, err := e.model(model)
+	if err != nil {
+		return nil, err
+	}
+	if !m.IsSubmittable {
+		return nil, badRequest(model + " is not submittable")
+	}
+	rec, err := o.load(m, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.authorize(m, "cancel", e.Output(m, copyRecord(rec))); err != nil {
+		return nil, err
+	}
+	if err := o.guard(m, rec, "cancel"); err != nil {
+		return nil, err
+	}
+	if toInt(rec["docstatus"]) != 1 {
+		return nil, conflict("not_submitted", "Hanya dokumen yang sudah diajukan yang bisa dibatalkan")
+	}
+	pending, all, err := o.hold(m, rec, Snapshot(m, rec), "cancel", map[string]any{})
+	if err != nil {
+		return nil, err
+	}
+	if len(pending) > 0 {
+		return &Result{Record: e.Output(m, rec), Held: true, Approvals: all}, nil
+	}
+	rec["docstatus"] = int64(2)
+	if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
+		return nil, err
+	}
+	if err := o.runHooks(m, rec, m.OnCancel); err != nil {
+		return nil, err
+	}
+	if err := o.event(m, rec, "cancelled"); err != nil {
+		return nil, err
+	}
+	if err := o.automations(m, rec, rec, "cancelled"); err != nil {
+		return nil, err
+	}
+	return &Result{Record: e.Output(m, rec)}, nil
 }
 
 // Amend copies a cancelled document into a new draft with amended_from set; read-only stored values
@@ -536,6 +637,12 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 		}
 		old, err := o.load(m, name)
 		if err != nil {
+			return err
+		}
+		if err := o.authorize(m, "amend", o.e.Output(m, copyRecord(old))); err != nil {
+			return err
+		}
+		if err := e.Guard(ctx, a, m.Name, old, "amend"); err != nil {
 			return err
 		}
 		if toInt(old["docstatus"]) != 2 {
@@ -575,10 +682,19 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 		if err := o.event(m, rec, "created"); err != nil {
 			return err
 		}
-		res = &Result{e.Output(m, rec), nil}
+		res = &Result{Record: e.Output(m, rec)}
 		return nil
 	})
 	return res, err
+}
+
+// copyRecord is a shallow copy (permission checks decorate it with the derived status).
+func copyRecord(r store.Record) store.Record {
+	out := make(store.Record, len(r)+1)
+	for k, v := range r {
+		out[k] = v
+	}
+	return out
 }
 
 // runHooks runs on_submit/on_cancel hooks; core hooks without an implementation are recorded as skipped.

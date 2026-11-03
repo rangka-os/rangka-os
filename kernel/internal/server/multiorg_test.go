@@ -533,3 +533,41 @@ func TestAuditScopedLeavesOutScopedRecords(t *testing.T) {
 		t.Fatalf("owner audit: %d", n)
 	}
 }
+
+// ---------- writes need every scope field in scope (contract 0010 §5)
+
+const transferModel = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json\n" +
+	"name: stock_transfer\nnaming: TRF-{####}\nlabel: {id: Transfer stok}\nfields:\n" +
+	"  - {name: from_outlet, type: link, to: outlet, label: {id: Dari}}\n" +
+	"  - {name: to_outlet, type: link, to: outlet, label: {id: Ke}}\n"
+
+const transferStaffRole = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json\n" +
+	"name: outlet_staff\nlabel: {id: Staf outlet}\nscope: {field: [outlet, from_outlet, to_outlet], from: user.outlets}\n"
+
+// TestTransferWritesNeedBothOutlets: staff at OUT-02 (Bintaro) cannot create or change an OUT-01 → OUT-02
+// transfer, can create OUT-02 → OUT-02, and can still read the cross-outlet one head office created.
+func TestTransferWritesNeedBothOutlets(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-02"}, func(apps, site string) {
+		if err := os.WriteFile(filepath.Join(apps, "core", "models", "stock_transfer.rk"), []byte(transferModel), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(apps, "core", "roles", "outlet_staff.rk"), []byte(transferStaffRole), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	cross := map[string]any{"from_outlet": "OUT-01", "to_outlet": "OUT-02"}
+	assertDenied(t, staff.do("POST", "/api/v1/r/stock_transfer", cross), "stock_transfer", "create")
+	if n := len(rowsOf(owner.must(200, "GET", "/api/v1/r/stock_transfer", nil))); n != 0 {
+		t.Fatalf("refused create wrote %d transfers", n)
+	}
+	own := staff.must(201, "POST", "/api/v1/r/stock_transfer", map[string]any{"from_outlet": "OUT-02", "to_outlet": "OUT-02"})
+	ho := owner.must(201, "POST", "/api/v1/r/stock_transfer", cross)
+	name := get(ho.JSON, "name").(string)
+	if r := staff.must(200, "GET", "/api/v1/r/stock_transfer/"+name, nil); get(r.JSON, "from_outlet") != "OUT-01" {
+		t.Fatalf("staff read of the cross-outlet transfer: %s", r.Body)
+	}
+	assertDenied(t, staff.do("PATCH", "/api/v1/r/stock_transfer/"+name, map[string]any{"to_outlet": "OUT-02"}), "stock_transfer", "update")
+	assertDenied(t, staff.do("DELETE", "/api/v1/r/stock_transfer/"+name, nil), "stock_transfer", "delete")
+	// re-pointing their own transfer to another outlet is refused too (the patched record is checked)
+	assertDenied(t, staff.do("PATCH", "/api/v1/r/stock_transfer/"+get(own.JSON, "name").(string), map[string]any{"from_outlet": "OUT-01"}), "stock_transfer", "update")
+}

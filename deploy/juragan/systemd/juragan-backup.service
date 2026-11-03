@@ -6,5 +6,5 @@ Wants=network-online.target
 
 [Service]
 Type=oneshot
-ExecStart=/usr/bin/docker compose -f /opt/juragan/deploy/juragan/compose.yaml --env-file /opt/juragan/deploy/juragan/.env run --rm backup all
+ExecStart=/usr/bin/docker compose -f /opt/juragan/rangka-os/deploy/juragan/compose.yaml --env-file /opt/juragan/rangka-os/deploy/juragan/.env run --rm backup all
 TimeoutStartSec=2h

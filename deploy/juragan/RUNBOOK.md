@@ -63,7 +63,7 @@ Each step has the check that proves it.
    dig +short fnb.juragan.ai
    ```
    Both print the Elastic IP. Caddy gets certificates by itself once DNS resolves and 80/443 are open.
-5. **Bucket and IAM key:** create the bucket as in section 1 (Object Lock cannot be added later), the
+5. **Bucket and IAM key:** create the bucket as in section 1 (enable Object Lock at bucket creation: simplest), the
    `juragan-backup` user with the policy, and one access key. Keep the key for step 8. Check: bucket properties
    show Versioning on, Object Lock on (governance, 30 days), Block Public Access on.
 6. **age key pair**, on your laptop, not the VM:
@@ -71,16 +71,19 @@ Each step has the check that proves it.
    age-keygen -o juragan-backup.key
    ```
    It prints `Public key: age1...`. Put `juragan-backup.key` into the password manager and keep one offline
-   copy. The private key never goes on the VM. Check: you can open the stored copy and it starts with
-   `AGE-SECRET-KEY-`. The public key (`age1...`) goes into `BACKUP_AGE_RECIPIENT` in `.env`.
+   copy. The private key never goes on the VM. Check: `grep -c '^AGE-SECRET-KEY-' juragan-backup.key`
+   prints `1`. The file also has a `# public key: age1...` line: that `age1...` value goes into
+   `BACKUP_AGE_RECIPIENT` in `.env`.
 7. **Image pull:** the release image `ghcr.io/rangka-os/rangka:<tag>` is public, no login needed. Check on the
    VM after Docker is installed: `docker pull ghcr.io/rangka-os/rangka:<tag>`.
-8. **`.env`** (on the VM, section 3): copy `.env.example` and fill it in. Generate each database password:
+8. **`.env`** (on the VM, section 3): copy `.env.example` and fill it in. Generate each database password (hex, so it is
+   URL-safe: the passwords are embedded in `DATABASE_URL`, and characters such as `/`, `@` or `:` would break it):
    ```bash
-   openssl rand -base64 32
+   openssl rand -hex 24
    ```
    Keys to set: `RANGKA_TAG` (a pinned release, never `latest`), `PILOTS_DIR`, `JASA_HOST`, `FNB_HOST`,
    `CADDY_TLS` (an ops email for ACME), `POSTGRES_PASSWORD`, `JASA_DB_PASSWORD`, `FNB_DB_PASSWORD`,
+   `JASA_ORG`, `FNB_ORG` (organisation ids, default `jasa` / `fnb`), `BACKUP_DIR=/opt/juragan/backups`,
    `BACKUP_BUCKET`, `BACKUP_AGE_RECIPIENT`, and `RCLONE_CONFIG_OFFBOX_PROVIDER=AWS`,
    `RCLONE_CONFIG_OFFBOX_REGION=ap-southeast-3`, `RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID`,
    `RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY` (leave `RCLONE_CONFIG_OFFBOX_ENDPOINT` blank for AWS). Compose
@@ -98,15 +101,18 @@ Each step has the check that proves it.
    docker --version
    docker compose version
    ```
-2. **Clone this repo to `/opt/juragan`** (the systemd units expect `/opt/juragan/deploy/juragan`). If the clone
+2. **Clone this repo to `/opt/juragan/rangka-os`** (the systemd units expect `/opt/juragan/rangka-os/deploy/juragan`).
+   Pilot data, backups and the pilots checkout live next to the clone, never inside it:
+   `/opt/juragan/pilots`, `/opt/juragan/pilots-src`, `/opt/juragan/backups`. If the clone
    needs credentials, **Dede** adds a read-only deploy key to the VM.
    ```bash
-   sudo git clone <rangka-os repo URL> /opt/juragan
-   cd /opt/juragan/deploy/juragan
+   sudo mkdir -p /opt/juragan
+   sudo git clone <rangka-os repo URL> /opt/juragan/rangka-os
+   cd /opt/juragan/rangka-os/deploy/juragan
    ```
 3. **Pilot folders** from the private repo `rangka-os/juragan-pilots` (stream S9), one folder per pilot with
-   `apps/`, `site/`, `fixtures/`. Check out to `/opt/juragan/pilots/<pilot>` (**Dede** adds a read-only deploy key
-   for that repo too), then create the writable folders and hand them to the kernel (distroless nonroot, uid 65532):
+   `apps/`, `site/`, `fixtures/`. Clone it to `/opt/juragan/pilots-src` (**Dede** adds a read-only deploy key
+   for that repo too), copy each folder to `/opt/juragan/pilots/<pilot>`, then create the writable folders and hand them to the kernel (distroless nonroot, uid 65532):
    ```bash
    sudo git clone <juragan-pilots repo URL> /opt/juragan/pilots-src
    sudo mkdir -p /opt/juragan/pilots
@@ -115,6 +121,7 @@ Each step has the check that proves it.
      sudo mkdir -p /opt/juragan/pilots/$p/data/files /opt/juragan/pilots/$p/backups
    done
    sudo chown -R 65532:65532 /opt/juragan/pilots
+   sudo mkdir -p /opt/juragan/backups && sudo chmod 700 /opt/juragan/backups
    ```
    `backups/` receives the kernel's pre-migrate backups (see section 5); the nightly archive does not include it.
 4. **`.env`:** `cp .env.example .env`, fill it in (section 2, step 8), then `chmod 600 .env`.
@@ -182,7 +189,7 @@ archive).
 Status and logs:
 
 ```bash
-cd /opt/juragan/deploy/juragan
+cd /opt/juragan/rangka-os/deploy/juragan
 docker compose ps
 docker compose logs --tail 100 jasa
 docker compose logs -f fnb
@@ -231,11 +238,11 @@ procedure is modelled on `restore-drill.sh`.
 You need the age private key on this machine for the duration of the restore only (from the password manager,
 for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
 
-1. **Get the archive** into `BACKUP_DIR` (default `./backups`, mounted at `/backups` in the backup container).
+1. **Get the archive** into `BACKUP_DIR` (set to `/opt/juragan/backups` in section 2; mounted at `/backups` in the backup container).
    The local archive of the night you want is already in `BACKUP_DIR/<pilot>/`. For an off-box one, copy it in
    with the same rclone settings the backup uses:
    ```bash
-   mkdir -p backups/in
+   sudo mkdir -p /opt/juragan/backups/in
    docker compose run --rm -T --no-deps --entrypoint rclone backup \
      copyto "offbox:<bucket>/<pilot>/<archive name>" "/backups/in/<archive name>" --s3-no-check-bucket
    ```
@@ -258,8 +265,10 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
    ```bash
    cd "$(grep '^PILOTS_DIR=' .env | cut -d= -f2-)"/<pilot>
    sudo mkdir ../<pilot>-old-<yyyymmdd>
+   # a pilot may have no connectors/ folder: `|| true` only skips a missing folder; the next step's
+   # "not empty" refusal in restore.sh still catches anything left behind
    sudo mv apps site data connectors ../<pilot>-old-<yyyymmdd>/ 2>/dev/null || true
-   cd /opt/juragan/deploy/juragan
+   cd /opt/juragan/rangka-os/deploy/juragan
    ```
    If a folder does not exist, that is fine.
 5. **Run restore.sh** in the backup image, with the pilot folder mounted read-write at `/restore/<pilot>` and
@@ -284,7 +293,8 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
    ```
 7. **Check:** `curl -sS -o /dev/null -w '%{http_code}\n' https://<host>/.well-known/openid-configuration` prints
    `200`, `docker compose logs --tail 50 <pilot>` is clean, and a login works.
-8. `shred -u <path to age key>` (or remove it from the machine).
+8. Remove the age key: `shred -u <path to age key>` (or remove it from the machine). Remove the copied-in
+   archive too (`sudo rm -f /opt/juragan/backups/in/<archive name>`; it is encrypted, but there is no reason to keep it).
 
 ## 7. Restore drill on a second machine
 
@@ -294,9 +304,10 @@ that has:
 
 - Docker with the compose plugin and a checkout of this repo (`deploy/juragan/`).
 - A drill env file with only the off-box settings, **not** the production DB passwords (the drill makes its own):
-  `RANGKA_TAG`, `BACKUP_BUCKET`, `RCLONE_CONFIG_OFFBOX_TYPE=s3`, `RCLONE_CONFIG_OFFBOX_PROVIDER=AWS`,
+  `RANGKA_TAG`, `BACKUP_BUCKET`, `JASA_ORG` / `FNB_ORG` (only if production uses other ids than `jasa` / `fnb`), `RCLONE_CONFIG_OFFBOX_TYPE=s3`, `RCLONE_CONFIG_OFFBOX_PROVIDER=AWS`,
   `RCLONE_CONFIG_OFFBOX_REGION=ap-southeast-3`, `RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID`,
-  `RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY`. Use the optional read-only key here. Mode 600.
+  `RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY`. Use the optional read-only key here. Mode 600. On Biznet Gio set
+  `RCLONE_CONFIG_OFFBOX_PROVIDER=Other` and `RCLONE_CONFIG_OFFBOX_ENDPOINT=<service URL>` instead.
 - The age private key file from the password manager. **Delete it from the machine after the drill.**
 
 ```bash
@@ -347,7 +358,7 @@ Mapped to the program's go-live gate (per pilot). All of it before Dede signs of
 - [ ] HTTPS works on both hosts (`curl` of `/.well-known/openid-configuration` returns 200 on `https://jasa.juragan.ai` and `https://fnb.juragan.ai`).
 - [ ] A backup of each pilot is in the bucket (`jasa/`, `fnb/` hold `.tar.age` objects from the last night, timer log clean).
 - [ ] Restore drill passed on another machine within the last 24 hours (`DRILL PASSED` lines for both pilots in `drill.log`); the drill's age key file deleted afterwards.
-- [ ] Secrets only in `/opt/juragan/deploy/juragan/.env`, mode 600 (`stat -c %a .env` prints `600`); not in git, not in a bundle; age private key not on the VM.
+- [ ] Secrets only in `/opt/juragan/rangka-os/deploy/juragan/.env`, mode 600 (`stat -c %a .env` prints `600`); not in git, not in a bundle; age private key not on the VM.
 - [ ] `juragan-backup.timer` enabled (`systemctl list-timers juragan-backup.timer` shows the next run).
 - [ ] healthchecks.io ping alert set for `BACKUP_PING_URL` and verified green.
 - [ ] Bucket: Object Lock (governance, 30 days), versioning, 35-day expiry rule, Block Public Access all confirmed.

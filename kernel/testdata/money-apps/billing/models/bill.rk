@@ -15,3 +15,6 @@ fields:
   - {name: parts, type: float, label: {id: Jumlah bagian, en: Parts}, default: "1"}
   - {name: per_part, type: money, currency_field: currency, label: {id: Per bagian, en: Per part}, compute: "total / parts"}
   - {name: paid_amount, type: money, currency_field: currency, label: {id: Dibayar, en: Paid}}
+  - {name: balance, type: currency, label: {id: Saldo, en: Balance}, compute: "grand_total - paid_amount"}
+  - {name: paid_pct, type: percent, label: {id: Persen dibayar, en: Paid %}, compute: "paid_amount / grand_total * 100"}
+  - {name: grand_whole, type: int, label: {id: Total bulat, en: Whole total}, compute: "grand_total"}

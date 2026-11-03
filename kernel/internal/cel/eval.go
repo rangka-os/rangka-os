@@ -1001,6 +1001,9 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			return v, nil
 		case float64:
 			return int64(a), nil
+		case money.Decimal:
+			r := a.Rat()
+			return new(big.Int).Quo(r.Num(), r.Denom()).Int64(), nil // truncates toward zero, like int(double)
 		case int64:
 			return a, nil
 		case bool:
@@ -1019,6 +1022,10 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			if err != nil {
 				return nil, errf("cannot convert '%s' to double", a)
 			}
+			return v, nil
+		}
+		if d, ok := Unwrap(args[0]).(money.Decimal); ok {
+			v, _ := d.Rat().Float64()
 			return v, nil
 		}
 		if v, ok := toFloat(args[0]); ok {

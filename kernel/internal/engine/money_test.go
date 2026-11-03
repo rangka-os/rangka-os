@@ -346,3 +346,22 @@ func TestMoneyTwinsInComputes(t *testing.T) {
 		}
 	})
 }
+
+// TestMoneyIntoOtherTypes: a non-money compute yielding a decimal is converted, never silently 0.
+func TestMoneyIntoOtherTypes(t *testing.T) {
+	e, a := setupMoney(t)
+	// total 10.5, tax 1.155, grand_total 11.655, paid 5
+	rec := createBill(t, e, a, map[string]any{"currency": "USD", "rate": 2, "paid_amount": "5", "items": []any{line(1, "10.5")}})
+	both(t, e, a, rec, func(r map[string]any) {
+		if got := r["balance"]; got != 6.655 {
+			t.Errorf("balance = %#v, want 6.655", got)
+		}
+		// 5 / 11.655 = 0.4290 (4 dp), × 100
+		if got := r["paid_pct"]; got != 42.9 {
+			t.Errorf("paid_pct = %#v, want 42.9", got)
+		}
+		if got := r["grand_whole"]; got != int64(12) {
+			t.Errorf("grand_whole = %#v, want 12", got)
+		}
+	})
+}

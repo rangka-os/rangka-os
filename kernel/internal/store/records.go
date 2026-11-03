@@ -54,6 +54,8 @@ func Coerce(f *meta.Field, v any) (any, error) {
 		return coerceMoney(f, v)
 	case "int", "rating":
 		switch x := v.(type) {
+		case money.Decimal:
+			return x.Round(0).Rat().Num().Int64(), nil // half away from zero; a numeric(20,4) whole fits int64
 		case int64:
 			return x, nil
 		case int:
@@ -77,6 +79,9 @@ func Coerce(f *meta.Field, v any) (any, error) {
 		}
 	case "float", "percent", "currency":
 		switch x := v.(type) {
+		case money.Decimal:
+			f, _ := x.Rat().Float64()
+			return f, nil
 		case float64:
 			return x, nil
 		case int64:
@@ -135,6 +140,8 @@ func Coerce(f *meta.Field, v any) (any, error) {
 		switch x := v.(type) {
 		case string:
 			return x, nil
+		case money.Decimal:
+			return x.String(), nil
 		case float64:
 			return strconv.FormatFloat(x, 'f', -1, 64), nil
 		case int64:

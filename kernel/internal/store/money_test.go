@@ -176,3 +176,35 @@ func TestTwinZero(t *testing.T) {
 		t.Errorf("Zero(currency) = %#v, want float64(0)", v)
 	}
 }
+
+// TestCoerceDecimalIntoOtherTypes: a decimal into int rounds half away from zero, into a float type converts
+// exactly as far as float64 allows, into text gives the canonical string.
+func TestCoerceDecimalIntoOtherTypes(t *testing.T) {
+	d := func(s string) money.Decimal {
+		v, err := money.Parse(s)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return v
+	}
+	cases := []struct {
+		typ, in string
+		want    any
+	}{
+		{"int", "2.5", int64(3)},
+		{"int", "-2.5", int64(-3)},
+		{"int", "2.4999", int64(2)},
+		{"rating", "4.5", int64(5)},
+		{"float", "0.3", 0.3},
+		{"currency", "-1250.5", -1250.5},
+		{"percent", "42.9", 42.9},
+		{"data", "1250.50", "1250.5"},
+		{"text", "0", "0"},
+	}
+	for _, c := range cases {
+		got, err := Coerce(&meta.Field{Name: "x", Type: c.typ}, d(c.in))
+		if err != nil || got != c.want {
+			t.Errorf("Coerce(%s, %s) = %#v, %v; want %#v", c.typ, c.in, got, err, c.want)
+		}
+	}
+}

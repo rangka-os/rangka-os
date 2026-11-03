@@ -78,3 +78,15 @@ func TestDecimalArithmetic(t *testing.T) {
 		}
 	}
 }
+
+// TestDecimalConversions: int(decimal) truncates toward zero like int(double); double(decimal) converts.
+func TestDecimalConversions(t *testing.T) {
+	vars := map[string]any{"p": mustDec(t, "2.7"), "n": mustDec(t, "-2.7"), "h": mustDec(t, "1250.5")}
+	want := map[string]any{"int(p)": int64(2), "int(n)": int64(-2), "double(h)": 1250.5, "double(n)": -2.7}
+	for src, w := range want {
+		got, err := Eval(src, env(vars))
+		if err != nil || got != w {
+			t.Errorf("%s = %#v, %v; want %#v", src, got, err, w)
+		}
+	}
+}

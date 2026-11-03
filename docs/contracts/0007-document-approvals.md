@@ -31,7 +31,7 @@ When a person asks for a verb (`submit`, `cancel`, or an action) and one or more
 (`when` true, evaluated on the stored record):
 1. The verb's own checks run first (submit rules, required fields, warnings). A document that would fail submit
    never creates a request.
-2. For each matching policy without an approved request for the same snapshot, the kernel inserts a row in
+2. For each matching policy without an unused approved request (§6) for the same snapshot, the kernel inserts a row in
    `rk_approvals` with state `pending`, bound to the record's **snapshot hash** (§3).
 3. The verb does **not** run. The record keeps `docstatus 0` (or 1 for cancel). REST answers **202**
    `{approval: <first pending item>, approvals: [<all items>], record: <record>}`.
@@ -77,7 +77,7 @@ Reject (`{reason}` required) sets the request `rejected`; other pending requests
   OIDC (AI) tokens get **403** `human_required`; MCP's `rangka_approve` follows the same rule, so an agent can list
   approvals but never decide one.
 - The caller must hold one of the request's `approvers` roles or `owner`; otherwise **403** `permission_denied`
-  `{model, action: "approve"}`.
+  with `code` and `message` only (no `{model, action}` detail until S1's permission error lands).
 - Only `pending` requests can be decided (**409** `not_pending`).
 
 ### 6. Storage
@@ -152,6 +152,14 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
 - **Flow approvals never self-approve**; they always wait. Flow requests remember whether the starter was a person.
 - Reject voids the other pending requests of the same verb only; requests for other verbs on the record stay.
 - Schema: the keys live in `schema/0.5/` (model `approvals`, flow step `approve`, overlay `approvals`).
+- Concurrent work on one record is **serialised** with a transaction-scoped advisory lock
+  (`pg_advisory_xact_lock(hashtext(org/model/name))`) taken by hold, approve and reject, so two approvers cannot
+  each see the other pending and a double submit makes one request per policy.
+- **Attachments are not part of the snapshot** for the pilots: uploading a file to a held draft does not void its
+  requests.
+- Known limits: editing a flow definition while one of its approvals is pending resumes the flow at the stored
+  step index of the new definition; action args reach an approved hook after a JSON round trip (numbers as
+  `float64`), as for queued actions.
 
 ## Consequences
 - Apps can require approval with metadata only; sites can tighten it through overlays.

@@ -272,7 +272,7 @@ func celText(v any) string {
 }
 
 func parseModel(app string, doc *rk.Doc) *Model {
-	raw := asMap(doc.Data)
+	raw := withTwinsRaw(asMap(doc.Data)) // the IDR twins of money fields are fields too (contract 0013)
 	m := &Model{Name: str(raw, "name"), App: app, Naming: str(raw, "naming"), TitleField: str(raw, "title_field"),
 		Label: label(raw["label"]), IsSubmittable: boolean(raw, "is_submittable"), IsChild: boolean(raw, "is_child"),
 		Realtime: boolean(raw, "realtime"), Raw: raw, Doc: doc,

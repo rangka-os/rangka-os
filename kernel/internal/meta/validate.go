@@ -276,6 +276,9 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 			v.rep.add("error", p, fmt.Sprintf("fields/%d", i), "duplicate_field", fmt.Sprintf(`"%s" is declared twice`, n))
 		}
 		seen[n] = true
+		if _, twin := f["money_of"]; twin {
+			continue // a generated IDR twin (contract 0013): nothing written to check
+		}
 		for _, key := range []string{"to", "of"} {
 			t, _ := f[key].(string)
 			if t != "" {
@@ -309,6 +312,7 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 				v.expr(p, fmt.Sprintf("fields/%d/%s", i, key), x, fields, visible)
 			}
 		}
+		v.money(p, m, i, f, fields, visible)
 	}
 	if tf, ok := m.Raw["title_field"]; ok && tf != nil && tf != "" {
 		if _, ok := fields[pyStr(tf)]; !ok {

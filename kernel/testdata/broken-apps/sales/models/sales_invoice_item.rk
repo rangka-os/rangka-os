@@ -26,3 +26,7 @@ fields:
     type: currency
     label: {id: Jumlah}
     compute: round(qty * rate * (1 - discount / 100))
+  - name: amount_fx
+    type: money
+    currency_field: nope
+    rate_field: fx_rate

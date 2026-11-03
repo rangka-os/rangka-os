@@ -39,6 +39,8 @@ func SQLType(fieldType string) string {
 		return "double precision"
 	case "currency":
 		return "numeric"
+	case "money":
+		return "numeric(20,4)"
 	case "check":
 		return "boolean"
 	case "date":
@@ -52,7 +54,7 @@ func SQLType(fieldType string) string {
 }
 
 // information_schema.columns data_type for each SQL type.
-var infoType = map[string]string{"bigint": "bigint", "double precision": "double precision", "numeric": "numeric",
+var infoType = map[string]string{"bigint": "bigint", "double precision": "double precision", "numeric": "numeric", "numeric(20,4)": "numeric",
 	"boolean": "boolean", "date": "date", "timestamptz": "timestamp with time zone", "jsonb": "jsonb", "text": "text",
 	"smallint": "smallint", "integer": "integer"}
 
@@ -84,6 +86,15 @@ func identName(s string) string {
 	}
 	h := sha256.Sum256([]byte(s))
 	return s[:54] + "_" + hex.EncodeToString(h[:4])
+}
+
+// ColumnType is the column type of a field: money is numeric(20,4), its generated IDR twin is bigint
+// (whole rupiah), everything else follows SQLType.
+func ColumnType(f *meta.Field) string {
+	if f.MoneyOf() != "" {
+		return "bigint"
+	}
+	return SQLType(f.Type)
 }
 
 // IsColumn reports whether a field has its own column: table fields are child tables and company x_ fields
@@ -131,7 +142,7 @@ func ModelTable(m *meta.Model) Table {
 		if !IsColumn(f) {
 			continue
 		}
-		col(f.Name, SQLType(f.Type), false, "")
+		col(f.Name, ColumnType(f), false, "")
 	}
 	tn := t.Name
 	idx := func(suffix, def string) {

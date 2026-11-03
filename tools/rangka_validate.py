@@ -131,6 +131,12 @@ def validate(root, only=None, site=None, connectors=None):
             if db.get("name") != dname:
                 rep.add("error", p, "name", "name_mismatch", f'dashboard name "{db.get("name")}" must match the file name "{dname}"')
 
+    # the IDR twins of money fields are fields of their model from here on (contract 0013)
+    for a in apps.values():
+        for p, m in a["models"].values():
+            if isinstance(m, dict) and isinstance(m.get("fields"), list):
+                m["fields"] = with_twins(m["fields"])
+
     # ---------- pass 2: meaning (each app sees its own models + those of the apps it requires)
     allmodels = {m: (app, p, mm) for app, a in apps.items() for m, (p, mm) in a["models"].items()}
     # company overlays are part of every model other files see (links, dashboards, flows, other overlays)
@@ -155,6 +161,8 @@ def validate(root, only=None, site=None, connectors=None):
                 if n in seen:
                     rep.add("error", p, f"fields/{i}", "duplicate_field", f'"{n}" is declared twice')
                 seen.add(n)
+                if "money_of" in f:
+                    continue  # a generated IDR twin (contract 0013): nothing written to check
                 for key in ("to", "of"):
                     t = f.get(key)
                     if t and t not in visible:
@@ -170,6 +178,7 @@ def validate(root, only=None, site=None, connectors=None):
                 for key in ("default", "compute", "depends_on"):
                     if key in f:
                         check_expr(rep, p, f"fields/{i}/{key}", f[key], m, fields, visible)
+                check_money(rep, p, mname, m, i, f, fields, visible)
             if m.get("title_field") and m["title_field"] not in fields:
                 rep.add("error", p, "title_field", "unknown_field", f'"{m["title_field"]}" is not a field{suggest(m["title_field"], fields)}')
             for i, r in enumerate(m.get("rules", [])):
@@ -243,6 +252,74 @@ def validate(root, only=None, site=None, connectors=None):
             check_dashboard(rep, p, db, visible, set(a["manifest"].get("optional", {})), allmodels, name)
     validate_more(rep, V, root, apps, allmodels, only, site, connectors)
     return rep
+
+
+def twin_name(field):
+    return field + "_idr"
+
+
+def with_twins(fields):
+    """fields plus, at the end, the read-only IDR twin of every money field whose twin name is not declared."""
+    declared = {f.get("name") for f in fields if isinstance(f, dict) and isinstance(f.get("name"), str)}
+    out = list(fields)
+    for f in fields:
+        n = f.get("name") if isinstance(f, dict) else None
+        if not isinstance(n, str) or not n or f.get("type") != "money" or twin_name(n) in declared:
+            continue
+        declared.add(twin_name(n))
+        tw = {"name": twin_name(n), "type": "currency", "read_only": True, "money_of": n}
+        if isinstance(f.get("label"), dict):
+            tw["label"] = {k: f"{x} (IDR)" for k, x in f["label"].items()}
+        out.append(tw)
+    return out
+
+
+def resolve_doc(mname, m, fields, name, visible, child_first):
+    """Field `name` on the model when it is not a child. A child resolves it on every visible model with a table
+    of it (sorted by name), after first trying itself when child_first is set (currency_field; rate_field is never
+    read from the child). Returns ([(model, field)], first model that lacks it or None)."""
+    child = m.get("is_child")
+    if name in fields and (child_first or not child):
+        return [(mname, fields[name])], None
+    if not child:
+        return [], mname
+    parents = sorted(pn for pn, v in visible.items()
+                     if any(f.get("type") == "table" and f.get("of") == mname for f in v[2].get("fields", []) if "name" in f))
+    if not parents:
+        return [], mname
+    found = []
+    for pn in parents:
+        pf = {f["name"]: f for f in visible[pn][2].get("fields", []) if "name" in f}
+        if name not in pf:
+            return [], pn
+        found.append((pn, pf[name]))
+    return found, None
+
+
+def check_money(rep, p, mname, m, i, f, fields, visible):
+    n = f.get("name")
+    if f.get("type") == "money":
+        cf = f.get("currency_field")
+        if isinstance(cf, str):
+            found, missing = resolve_doc(mname, m, fields, cf, visible, True)
+            if missing:
+                rep.add("error", p, f"fields/{i}/currency_field", "bad_currency_field", f'"{cf}" is not a field of {missing}')
+            else:
+                for _, c in found:
+                    if c.get("type") not in ("select", "data", "link"):
+                        rep.add("error", p, f"fields/{i}/currency_field", "bad_currency_field", f'currency field "{cf}" must be select, data or link; it is {c.get("type")}')
+                        break
+        rate = f.get("rate_field") if isinstance(f.get("rate_field"), str) and f.get("rate_field") else "rate"
+        found, missing = resolve_doc(mname, m, fields, rate, visible, False)
+        for doc, c in found:
+            if not missing and c.get("type") not in ("float", "currency", "int"):
+                missing = doc
+        if missing:
+            rep.add("error", p, f"fields/{i}", "missing_rate_field", f'money fields need a rate field "{rate}" (float, currency or int) on {missing}')
+    if "money_of" not in f and isinstance(n, str) and len(n) > 4 and n.endswith("_idr"):
+        mf = fields.get(n[:-4])
+        if mf and mf.get("type") == "money":
+            rep.add("error", p, f"fields/{i}", "twin_clash", f'"{n}" is generated for money field "{n[:-4]}"; rename it')
 
 
 NUMERIC = ("currency", "int", "float", "percent")

@@ -2,10 +2,12 @@ package engine
 
 import (
 	"context"
+	"math/big"
 	"sort"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -13,15 +15,16 @@ import (
 // scope evaluates expressions against one record: fields by name, links load their record on member
 // access, table fields are lists of rows, plus user and any extra variables (event, flow variables).
 type scope struct {
-	ctx   context.Context
-	q     pg.Querier
-	e     *Engine
-	org   string
-	m     *meta.Model
-	rec   store.Record
-	actor Actor
-	extra map[string]any
-	links map[string]map[string]any // shared cache of loaded link records (model/name → scope map)
+	ctx    context.Context
+	q      pg.Querier
+	e      *Engine
+	org    string
+	m      *meta.Model
+	rec    store.Record
+	actor  Actor
+	extra  map[string]any
+	links  map[string]map[string]any // shared cache of loaded link records (model/name → scope map)
+	parent *scope                    // the document of a child row (nil for a document)
 }
 
 func (e *Engine) newScope(ctx context.Context, q pg.Querier, a Actor, m *meta.Model, rec store.Record, links map[string]map[string]any) *scope {
@@ -205,8 +208,20 @@ func computeOrder(m *meta.Model) []*meta.Field {
 	for _, f := range comp {
 		refs, _ := cel.FreeVars(f.Compute)
 		for _, r := range refs {
-			if _, ok := idx[r.Head]; ok && r.Kind == "ref" && r.Head != f.Name {
-				deps[f.Name] = append(deps[f.Name], r.Head)
+			if r.Kind != "ref" {
+				continue
+			}
+			heads := []string{r.Head}
+			// an IDR twin depends on its money field, currency and rate
+			if tw := m.Field(r.Head); tw != nil && tw.MoneyOf() != "" {
+				if mf := m.Field(tw.MoneyOf()); mf != nil {
+					heads = []string{mf.Name, mf.CurrencyField(), mf.RateField()}
+				}
+			}
+			for _, h := range heads {
+				if _, ok := idx[h]; ok && h != f.Name {
+					deps[f.Name] = append(deps[f.Name], h)
+				}
 			}
 		}
 	}
@@ -234,7 +249,9 @@ func computeOrder(m *meta.Model) []*meta.Field {
 	return out
 }
 
-// compute recomputes child rows first, then the record's computed fields (errors give the zero value).
+// compute recomputes child rows first, then the record's computed fields (errors give the zero value). The
+// IDR twins are settled before the computes and again after each one, so a compute reading <field>_idr (its
+// own record's, or a row's) sees the twin of the current amount and rate.
 func (s *scope) compute() {
 	for _, f := range s.m.Fields {
 		if f.Type != "table" {
@@ -246,9 +263,11 @@ func (s *scope) compute() {
 		}
 		for _, row := range rows(s.rec[f.Name]) {
 			child := s.e.newScope(s.ctx, s.q, s.actor, cm, row, s.links)
+			child.parent = s
 			child.compute()
 		}
 	}
+	s.settleOwn()
 	for _, f := range computeOrder(s.m) {
 		v, err := s.eval(f.Compute)
 		if err != nil || v == nil {
@@ -259,7 +278,11 @@ func (s *scope) compute() {
 		if err != nil {
 			c = store.Zero(f)
 		}
+		if d, ok := c.(money.Decimal); ok && money.IsIDR(s.currencyOf(f)) {
+			c = d.Round(0) // IDR documents stay whole rupiah; later computes see the rounded value
+		}
 		s.rec[f.Name] = c
+		s.settleOwn()
 	}
 }
 
@@ -285,17 +308,25 @@ func Status(m *meta.Model, rec map[string]any, today string) string {
 	case 2:
 		return "cancelled"
 	}
-	total, paid := num(rec["grand_total"]), num(rec["paid_amount"])
-	if total > 0 && paid >= total {
+	total, paid := amount(rec["grand_total"]), amount(rec["paid_amount"])
+	if total.Sign() > 0 && paid.Cmp(total) >= 0 {
 		return "paid"
 	}
 	if d := str(rec["due_date"]); d != "" && d < today {
 		return "overdue"
 	}
-	if paid > 0 {
+	if paid.Sign() > 0 {
 		return "partly"
 	}
 	return "submitted"
+}
+
+// amount is the exact value of a number or money decimal (0 for anything else).
+func amount(v any) *big.Rat {
+	if r, ok := exact(v); ok {
+		return r
+	}
+	return new(big.Rat)
 }
 
 func num(v any) float64 {

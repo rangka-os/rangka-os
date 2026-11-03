@@ -47,7 +47,7 @@ are not counted in `total`.
 
 `GET /meta` adds `models.<name>.can`, an object with a boolean per action (`read`, `create`, `write`, `delete`,
 `submit`, `cancel`, `amend`, `export`, `import`, `print`, `customize`) for the caller. A conditional grant reads as
-`true`; the record check still applies. The Console uses it to hide buttons.
+`true`; the record check still applies. Clients such as the web app and the Console can use it to hide actions the caller may not take.
 
 Errors: 422 `{errors:[{field?, rule?, code, message}], warnings?, needs_force?}`; everything else
 `{error:{code, message}}`. Successful writes may carry `_warnings`.

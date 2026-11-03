@@ -16,10 +16,13 @@ import (
 // Production reports whether RANGKA_ENV=production: migrations then back up first.
 func Production() bool { return os.Getenv("RANGKA_ENV") == "production" }
 
-// BackupDir is where pre-migration archives go: RANGKA_BACKUP_DIR, else <site>/backups.
+// BackupDir is where pre-migration archives go: RANGKA_BACKUP_DIR, else <site>/backups (./backups when there is no site).
 func BackupDir(siteDir string) string {
 	if d := os.Getenv("RANGKA_BACKUP_DIR"); d != "" {
 		return d
+	}
+	if siteDir == "" {
+		return "./backups" // no site: relative to the working directory, on purpose
 	}
 	return filepath.Join(siteDir, "backups")
 }

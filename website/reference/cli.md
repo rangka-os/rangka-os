@@ -78,6 +78,8 @@ migration that `serve` runs at start-up and every change-set apply first write a
 <RANGKA_BACKUP_DIR, default <site>/backups>/rangka-all-<YYYYMMDD-HHMMSS>-pre-migrate.tar.gz
 ```
 
+Without `--site` the default is `./backups` in the working directory.
+
 The backup is taken only when there is something to apply, before the first statement. If it fails, the migration
 does not run. Archives are never overwritten and never deleted by the kernel: clear old ones yourself, and copy
 them off the machine. `--dry-run` takes no backup.

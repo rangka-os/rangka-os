@@ -40,7 +40,7 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 	if o.Now != nil {
 		e.Now = o.Now
 	}
-	st, err := e.Seed(ctx, engine.Actor{Org: o.Org, ID: o.Email}, fx)
+	st, err := e.Seed(ctx, engine.Actor{Org: o.Org, ID: o.Email, System: true}, fx)
 	if err != nil {
 		return nil, err
 	}

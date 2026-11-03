@@ -36,7 +36,7 @@ func (h *HookCtx) Create(model string, input map[string]any) (store.Record, []Is
 
 // Update updates a record in the hook's transaction.
 func (h *HookCtx) Update(model, name string, patch map[string]any) (store.Record, error) {
-	r, err := h.op.update(model, name, patch, false)
+	r, err := h.op.update(model, name, patch, false, false)
 	if err != nil {
 		return nil, err
 	}
@@ -106,7 +106,7 @@ func (e *Engine) ActionAllowed(ctx context.Context, a Actor, m *meta.Model, act 
 	return err == nil && v == true
 }
 
-// RunAction runs a model action's hook on a record. Actions with queue: are put on the queue unless the
+// RunAction runs a model action's hook on a record; the actor needs write on it. Actions with queue: are put on the queue unless the
 // worker is running them.
 func (e *Engine) RunAction(ctx context.Context, a Actor, model, name, action string, args map[string]any, opts ActionOpts) (*ActionResult, error) {
 	var out *ActionResult
@@ -121,6 +121,9 @@ func (e *Engine) RunAction(ctx context.Context, a Actor, model, name, action str
 		}
 		rec, err := o.load(m, name)
 		if err != nil {
+			return err
+		}
+		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(rec))); err != nil {
 			return err
 		}
 		// a queued action was guarded when it was enqueued; the worker's actor carries no outlets

@@ -28,5 +28,19 @@ Use the real pgx, chi, cel-go, River, jsonschema, yaml.v3 and bcrypt, each behin
 - Row scope for company and branch (outlet) through Postgres RLS on shared tables.
 - Tests: a permission matrix per role over the demo site. MCP tokens (Omilo helpers) get the same checks as people.
 
+## Status (3 Nov 2026, stream S1)
+Shipped, in one PR:
+- §1: pgx v5 and bcrypt replace their stand-ins (PBKDF2 hashes are upgraded at the next sign-in).
+- §2: `rangka backup` and `rangka restore`, written natively in Go (`COPY` per table, no `pg_dump`), with checksums and verification. Restore is tested in CI.
+- §3: `migrate --dry-run` with risk, `--rollback n`, `--allow-destructive`, soft delete (`_del_<date>_<name>`, dropped after 30 days). Change sets never apply destructive DDL. In production mode (`RANGKA_ENV=production`) migrate, rollback, start-up migrate and change-set applies back up first to `RANGKA_BACKUP_DIR` (default `<site>/backups`).
+- §4: model `permissions:` enforced in REST, MCP, SSE, print, attachments, flows started by people and meta (`can`); 403 `permission_denied` with `model` and `action`. The contract's "update" is `write`. Tokens get the same checks as people.
+
+Deferred:
+- Scheduled `backup:` key in `system.rk` (S15's nightly `rangka backup` job covers the pilots; follow-up after go-live).
+- Stand-ins for chi, cel-go, River, jsonschema and yaml.v3 stay (the program plan allows them to follow; one commit per library when they do).
+- An export endpoint. `engine.Authorize(..., "export", nil)` is the hook for whoever adds it.
+- Row scope for company and branch (Postgres RLS), and the cross-branch gate below, are S5.
+- Org-only backups leave out installation-level rows (`org_id` empty), so nightly backups should be whole-database. A restore that fails after migration leaves the schema behind and needs a fresh database.
+
 ## Gate
 A pilot install on a fresh machine can be backed up, restored elsewhere, upgraded and rolled back, and a `sales_rep` cannot read another branch's invoices through any interface.

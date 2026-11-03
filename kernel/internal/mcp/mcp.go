@@ -182,17 +182,21 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 }
 
 // toolResult follows CONTRACTS v0.1 decision 9: content [{type: text, text: <json>}] plus structuredContent;
-// errors set isError and carry {error: {code, message}}.
+// errors set isError and carry {error: {code, message}}; a refused permission adds model and action, as the
+// REST 403 body does.
 func toolResult(out any, err error) map[string]any {
 	if err != nil {
 		code, msg := "internal", err.Error()
 		body := map[string]any{}
-		var extra map[string]any
 		var ve *engine.ValidationError
 		var ce *changeset.Error
 		var se *engine.StatusError
 		var pe *engine.PermissionError
+		errBody := map[string]any{}
 		switch {
+		case errors.As(err, &pe):
+			code, msg = "permission_denied", pe.Error()
+			errBody["model"], errBody["action"] = pe.Model, pe.Action
 		case errors.As(err, &ve):
 			code = "invalid"
 			body["errors"], body["warnings"] = ve.Errors, ve.Warnings
@@ -203,15 +207,9 @@ func toolResult(out any, err error) map[string]any {
 			}
 		case errors.As(err, &se):
 			code = se.Code
-		case errors.As(err, &pe):
-			code = "permission_denied"
-			extra = map[string]any{"model": pe.Model, "action": pe.Action}
 		}
-		e := map[string]any{"code": code, "message": msg}
-		for k, v := range extra {
-			e[k] = v
-		}
-		body["error"] = e
+		errBody["code"], errBody["message"] = code, msg
+		body["error"] = errBody
 		b, _ := json.Marshal(body)
 		var sc map[string]any
 		json.Unmarshal(b, &sc)

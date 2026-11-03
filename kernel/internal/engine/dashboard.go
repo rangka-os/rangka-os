@@ -27,7 +27,8 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 		period = d.DefaultPeriod
 	}
 	rs := e.RowScope(a)
-	key := "dash:" + a.Org + ":" + name + ":" + formatInt(int64(period)) + ":" + e.Today() + ":" + scopeKey(rs)
+	// permissions and row scope both decide what the widgets count
+	key := "dash:" + a.Org + ":" + name + ":" + formatInt(int64(period)) + ":" + e.Today() + ":" + permKey(a) + ":" + scopeKey(rs)
 	ttl := cache.ParseTTL(d.Cache)
 	if ttl > 0 && e.Cache != nil {
 		if v, ok := e.Cache.Get(key); ok {
@@ -73,17 +74,21 @@ func (dc *dashCtx) all(m *meta.Model) ([]store.Record, error) {
 	if r, ok := dc.rows[m.Name]; ok {
 		return r, nil
 	}
-	r, err := store.All(dc.ctx, dc.e.DB, dc.e.Reg(), dc.a.Org, m, false)
+	all, err := store.All(dc.ctx, dc.e.DB, dc.e.Reg(), dc.a.Org, m, false)
 	if err != nil {
 		return nil, err
 	}
-	vis := r[:0]
-	for _, rec := range r {
-		if dc.scope.Visible(m, rec) {
-			vis = append(vis, dc.e.Output(m, rec))
+	readable := dc.e.decide(dc.a, m, "read")
+	var r []store.Record
+	for _, rec := range all {
+		if !dc.scope.Visible(m, rec) {
+			continue
+		}
+		dc.e.Output(m, rec)
+		if dc.e.recordAllowed(dc.ctx, dc.e.DB, dc.a, m, readable, rec, dc.links) {
+			r = append(r, rec)
 		}
 	}
-	r = vis
 	dc.rows[m.Name] = r
 	return r, nil
 }
@@ -166,6 +171,9 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 		if err != nil || !cel.Truthy(v) {
 			return map[string]any{"hidden": true}, nil
 		}
+	}
+	if err := dc.e.Authorize(dc.ctx, dc.a, m.Name, "read", nil); err != nil {
+		return map[string]any{"error": map[string]any{"code": "permission_denied", "message": err.Error(), "model": m.Name, "action": "read"}}, nil
 	}
 	today := dc.e.Today()
 	from := ""

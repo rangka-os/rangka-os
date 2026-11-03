@@ -114,16 +114,18 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/r/{model}/{name}", a(s.patchRecord))
 	mux.HandleFunc("DELETE /api/v1/r/{model}/{name}", a(s.deleteRecord))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.lifecycle))
-	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", a(s.uploadAttachment))
-	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", a(s.listAttachments))
 	mux.HandleFunc("GET /api/v1/attachments/{id}", a(s.getAttachment))
 	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.runAction))
+	// guarded record routes: the guard checks the permission, then the stream's handler runs
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", s.recordGuard("print", notImplemented))
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", s.recordGuard("read", s.listAttachments))
+	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", s.recordGuard("write", s.uploadAttachment))
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))
 	mux.HandleFunc("POST /api/v1/flows/{name}/run", a(s.runFlow))
 	// realtime
 	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
-		s.Hub.ServeSSE(w, r, c.actor.Org, s.Engine.EventVisible(c.actor))
+		s.Hub.ServeSSE(w, r, c.actor.Org, s.eventAllow(r.Context(), c.actor))
 	}))
 	// change sets
 	mux.HandleFunc("GET /api/v1/changesets", a(s.listChangesets))

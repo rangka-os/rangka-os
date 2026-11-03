@@ -242,6 +242,7 @@ func (e *Engine) Output(m *meta.Model, rec store.Record) store.Record {
 type CreateOpts struct {
 	KeepName  bool // use input["name"] (seeding, imports)
 	Docstatus int64
+	authorize bool // check create on the new record (public entry points; hooks run inside an allowed op)
 	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
 }
 
@@ -252,11 +253,12 @@ type Result struct {
 }
 
 // Create saves a new record: defaults, compute, save rules, name (DRAFT-xxxxx for submittable models).
+// The actor needs create, decided on the new record after defaults.
 func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[string]any) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.create(model, input, CreateOpts{Guard: true})
+		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true})
 		return err
 	})
 	return res, err
@@ -275,6 +277,11 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 		return nil, validation(issues, nil)
 	}
 	o.prepare(m, rec, true)
+	if opts.authorize {
+		if err := o.authorize(m, "create", rec); err != nil {
+			return nil, err
+		}
+	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err
@@ -318,7 +325,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	return &Result{o.e.Output(m, rec), warns}, nil
 }
 
-// Get loads a record.
+// Get loads a record the actor may read.
 func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Record, error) {
 	m, err := e.model(model)
 	if err != nil {
@@ -331,10 +338,14 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	if err != nil {
 		return nil, err
 	}
+	rec = e.Output(m, rec)
+	if err := e.authorize(ctx, e.DB, nil, a, m.Name, "read", rec); err != nil {
+		return nil, err
+	}
 	if err := e.Guard(ctx, a, m.Name, rec, "read"); err != nil {
 		return nil, err
 	}
-	return e.Output(m, rec), nil
+	return rec, nil
 }
 
 func (o *op) load(m *meta.Model, name string) (store.Record, error) {
@@ -345,20 +356,22 @@ func (o *op) load(m *meta.Model, name string) (store.Record, error) {
 	return rec, err
 }
 
-// Update merges patch into a draft (or non-submittable) record, recomputes and runs save rules.
+// Update merges patch into a draft (or non-submittable) record, recomputes and runs save rules. The actor
+// needs write on the stored record and on the record after the patch.
 func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch map[string]any) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.update(model, name, patch, true)
+		res, err = o.update(model, name, patch, true, true)
 		return err
 	})
 	return res, err
 }
 
-// update merges patch into a record. guard checks the stored and the new record against the actor's row
-// scope (public Update); automations, hooks and flow steps pass false.
-func (o *op) update(model, name string, patch map[string]any, guard bool) (*Result, error) {
+// update merges patch into a record. authorize checks write on the stored and the patched record (public
+// Update, flow steps); guard checks both against the actor's row scope (public Update only). Automations and
+// hooks pass false for both.
+func (o *op) update(model, name string, patch map[string]any, authorize, guard bool) (*Result, error) {
 	m, err := o.e.model(model)
 	if err != nil {
 		return nil, err
@@ -366,6 +379,11 @@ func (o *op) update(model, name string, patch map[string]any, guard bool) (*Resu
 	cur, err := o.load(m, name)
 	if err != nil {
 		return nil, err
+	}
+	if authorize {
+		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(cur))); err != nil {
+			return nil, err
+		}
 	}
 	if guard {
 		if err := o.e.Guard(o.ctx, o.actor, m.Name, cur, "update"); err != nil {
@@ -380,6 +398,11 @@ func (o *op) update(model, name string, patch map[string]any, guard bool) (*Resu
 		return nil, validation(issues, nil)
 	}
 	o.prepare(m, rec, false)
+	if authorize { // write must also hold after the patch (no handing a record to someone else)
+		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(rec))); err != nil {
+			return nil, err
+		}
+	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err
@@ -415,6 +438,9 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if err != nil {
 			return err
 		}
+		if err := o.authorize(m, "delete", o.e.Output(m, copyRecord(cur))); err != nil {
+			return err
+		}
 		if err := e.Guard(ctx, a, m.Name, cur, "delete"); err != nil {
 			return err
 		}
@@ -442,6 +468,9 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 		}
 		rec, err := o.load(m, name)
 		if err != nil {
+			return err
+		}
+		if err := o.authorize(m, "submit", o.e.Output(m, copyRecord(rec))); err != nil {
 			return err
 		}
 		if err := e.Guard(ctx, a, m.Name, rec, "submit"); err != nil {
@@ -527,6 +556,9 @@ func (e *Engine) Cancel(ctx context.Context, a Actor, model, name string) (*Resu
 		if err != nil {
 			return err
 		}
+		if err := o.authorize(m, "cancel", o.e.Output(m, copyRecord(rec))); err != nil {
+			return err
+		}
 		if err := e.Guard(ctx, a, m.Name, rec, "cancel"); err != nil {
 			return err
 		}
@@ -566,6 +598,9 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 		}
 		old, err := o.load(m, name)
 		if err != nil {
+			return err
+		}
+		if err := o.authorize(m, "amend", o.e.Output(m, copyRecord(old))); err != nil {
 			return err
 		}
 		if err := e.Guard(ctx, a, m.Name, old, "amend"); err != nil {
@@ -612,6 +647,15 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 		return nil
 	})
 	return res, err
+}
+
+// copyRecord is a shallow copy (permission checks decorate it with the derived status).
+func copyRecord(r store.Record) store.Record {
+	out := make(store.Record, len(r)+1)
+	for k, v := range r {
+		out[k] = v
+	}
+	return out
 }
 
 // runHooks runs on_submit/on_cancel hooks; core hooks without an implementation are recorded as skipped.

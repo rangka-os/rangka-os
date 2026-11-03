@@ -165,7 +165,8 @@ func fromSQL(f *meta.Field, v any) any {
 		}
 	case "datetime":
 		if t, ok := v.(time.Time); ok {
-			return t.Format(time.RFC3339)
+			// pgx decodes timestamptz into time.Local; values are always UTC (Z) whatever the host's TZ
+			return t.UTC().Format(time.RFC3339)
 		}
 	}
 	return v

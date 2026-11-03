@@ -24,9 +24,10 @@ type ListOpts struct {
 	Children bool
 }
 
-// List returns matching records and the total before paging; records outside the actor's row scope are
-// left out before filtering, so total counts visible records only. v0 filters in memory with CEL; a CEL→SQL
-// translation for simple filters is the next step for large tables.
+// List returns matching records the actor may read and the total before paging. Records outside the actor's
+// row scope, and rows whose read grant's if: is false, are left out before filtering and paging and are not
+// counted. Without a read grant the list is denied. v0 filters in memory with CEL; a CEL→SQL translation for
+// simple filters is the next step for large tables.
 func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts) ([]store.Record, int, error) {
 	m, err := e.model(model)
 	if err != nil {
@@ -34,6 +35,10 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	}
 	if m.IsChild {
 		return nil, 0, badRequest(model + " rows are read through their parent document")
+	}
+	readable := e.decide(a, m, "read")
+	if !readable.maybe() {
+		return nil, 0, &PermissionError{Model: m.Name, Action: "read"}
 	}
 	if opts.Filter != "" {
 		if _, err := cel.Compile(opts.Filter); err != nil {
@@ -53,6 +58,9 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 			continue
 		}
 		e.Output(m, r)
+		if !e.recordAllowed(ctx, e.DB, a, m, readable, r, links) {
+			continue
+		}
 		if opts.Filter != "" {
 			v, err := e.newScope(ctx, e.DB, a, m, r, links).eval(opts.Filter)
 			if err != nil {

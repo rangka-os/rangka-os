@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: wait_voucher
+label: {id: Tunggu lalu buat voucher}
+on: note.updated
+steps:
+  - {wait: 10m}
+  - create: voucher
+    set:
+      title: "'Setelah menunggu'"
+      owner: user.name

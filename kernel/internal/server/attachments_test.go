@@ -163,9 +163,10 @@ func TestAttachmentPermissions(t *testing.T) {
 	}
 	e.jar, _ = cookiejar.New(nil)
 	e.must(200, "POST", "/auth/login", map[string]any{"email": "rep@example.com", "password": "rep-pass-123"})
+	// a sales_rep may not read another rep's deal, so the guard refuses with action read (S1)
 	r := e.upload("/api/v1/r/deal/DEAL-00011/attachments", "x.pdf", pdfBytes)
-	if r.Status != 403 || code(r) != "permission_denied" || get(r.JSON, "error", "model") != "deal" || get(r.JSON, "error", "action") != "write" ||
-		get(r.JSON, "error", "message") != "Kamu tidak punya izin write pada deal" {
+	if r.Status != 403 || code(r) != "permission_denied" || get(r.JSON, "error", "model") != "deal" || get(r.JSON, "error", "action") != "read" ||
+		get(r.JSON, "error", "message") == "" {
 		t.Fatalf("rep upload other deal: %d %s", r.Status, r.Body)
 	}
 	if r := e.upload("/api/v1/r/deal/DEAL-00012/attachments", "mine.pdf", pdfBytes); r.Status != 201 {

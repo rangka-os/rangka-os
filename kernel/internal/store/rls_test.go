@@ -90,12 +90,58 @@ func TestRLSBlocksOtherOrg(t *testing.T) {
 	if _, err := plain.Exec(pg.WithOrg(ctx, "a"), "insert into r_customer (org_id, name) values ($1, $2)", "b", "Citra"); err == nil {
 		t.Fatal("insert for org b under org a succeeded")
 	}
+	// transactions get their connection through the same hook
+	tx, err := plain.Begin(pg.WithOrg(ctx, "b"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := tx.Query(ctx, "select name from r_customer")
+	tx.Rollback(ctx)
+	if err != nil || len(res.Rows) != 1 || res.Rows[0][0] != "Budi" {
+		t.Fatalf("transaction under org b: %v %v", res, err)
+	}
 	// child tables are covered too
 	if _, err := admin.Exec(ctx, "insert into r_sales_invoice_item (org_id, name, parent, parent_field) values ('a', 'i1', 'x', 'items'), ('b', 'i2', 'x', 'items')"); err != nil {
 		t.Fatal(err)
 	}
-	res, err := plain.Query(pg.WithOrg(ctx, "a"), "select name from r_sales_invoice_item")
+	res, err = plain.Query(pg.WithOrg(ctx, "a"), "select name from r_sales_invoice_item")
 	if err != nil || len(res.Rows) != 1 {
 		t.Fatalf("child table under org a: %v %v", res, err)
+	}
+}
+
+// TestRLSStepRollsBack: a table without row-level security gets it in one low-risk, non-destructive step with a
+// reverse; --dry-run shows it, rollback removes it without --allow-destructive, and the next migrate adds it back.
+func TestRLSStepRollsBack(t *testing.T) {
+	e := newMigrateEnv(t)
+	e.mustMigrate(MigrateOpts{Source: "test"})
+	rls := func() int64 {
+		return e.count("select count(*) from pg_class where relname = 'r_deal' and relrowsecurity and relforcerowsecurity")
+	}
+	if rls() != 1 {
+		t.Fatal("r_deal has no row-level security after migrate")
+	}
+	if _, err := e.db.Exec(e.ctx, `drop policy rk_org on r_deal; alter table r_deal no force row level security; alter table r_deal disable row level security`); err != nil {
+		t.Fatal(err)
+	}
+	dry := e.mustMigrate(MigrateOpts{Source: "test", DryRun: true})
+	if len(dry.Steps) != 1 || dry.Steps[0].Risk != RiskLow || dry.Steps[0].Destructive || dry.Steps[0].Reverse == "" ||
+		!strings.Contains(dry.Steps[0].SQL, `create policy rk_org on "r_deal"`) || rls() != 0 {
+		t.Fatalf("dry run: %+v", dry.Steps)
+	}
+	if res := e.mustMigrate(MigrateOpts{Source: "test"}); len(res.Steps) != 1 || rls() != 1 {
+		t.Fatalf("migrate: %+v", res.Steps)
+	}
+	if _, err := Rollback(e.ctx, e.db, RollbackOpts{N: 1}); err != nil {
+		t.Fatal(err)
+	}
+	if rls() != 0 || e.count("select count(*) from pg_policies where tablename = 'r_deal' and policyname = 'rk_org'") != 0 {
+		t.Fatal("rollback left row-level security on r_deal")
+	}
+	if res := e.mustMigrate(MigrateOpts{Source: "test"}); len(res.Steps) != 1 || rls() != 1 {
+		t.Fatalf("migrate after rollback: %+v", res.Steps)
+	}
+	if res := e.mustMigrate(MigrateOpts{Source: "test"}); len(res.Steps) != 0 {
+		t.Fatalf("second migrate: %+v", res.Steps)
 	}
 }

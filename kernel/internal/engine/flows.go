@@ -47,6 +47,10 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 // resumed wait). Steps: find, find_all, create, update, notify (log driver), call (connector action; the
 // kernel records the call, it has no connector runtime yet), if/then/else and wait (the remaining steps are
 // queued for later). Every step may have if: and as:.
+//
+// A flow runs as its actor: find, create and update steps are authorized like the public entry points
+// (read, create, write), so a person running a flow can do no more than they could by hand. Flows the
+// kernel starts (schedules, events) run as a System actor; a wait: resumes as the actor that started the run.
 func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any) (*FlowResult, error) {
 	f := e.Reg().Flows[flowName]
 	if f == nil || !e.Reg().IsInstalled(f.App) {
@@ -184,6 +188,10 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err != nil {
 				return err
 			}
+			readable := e.decide(a, e.permModel(m.Name), "read")
+			if !readable.maybe() {
+				return &PermissionError{Model: e.permModel(m.Name).Name, Action: "read"}
+			}
 			recs, err := store.All(o.ctx, o.tx, e.Reg(), a.Org, m, false)
 			if err != nil {
 				return err
@@ -204,6 +212,9 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			var found []any
 			for _, rec := range recs {
 				e.Output(m, rec)
+				if !e.recordAllowed(o.ctx, o.tx, a, m, readable, rec, o.links) {
+					continue
+				}
 				if where != "" {
 					sc := o.scope(m, rec)
 					sc.extra = r.vars
@@ -240,7 +251,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err != nil {
 				return err
 			}
-			res, err := o.create(mn, input, CreateOpts{})
+			res, err := o.create(mn, input, CreateOpts{authorize: true})
 			if err != nil {
 				return fmt.Errorf("step %s create %s: %w", i, mn, err)
 			}
@@ -259,7 +270,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err != nil {
 				return err
 			}
-			res, err := o.update(mn, name, input, false)
+			res, err := o.update(mn, name, input, true, false)
 			if err != nil {
 				return fmt.Errorf("step %s update %s %s: %w", i, mn, name, err)
 			}
@@ -335,7 +346,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 					saved[k] = v
 				}
 			}
-			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": saved},
+			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": saved, "actor": a.JobArgs()},
 				EnqueueOpts{RunAt: e.Now().Add(d)})
 			if err != nil {
 				return err

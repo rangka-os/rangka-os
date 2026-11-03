@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: note
+label: {id: Catatan, en: Note}
+naming: NOTE-{#####}
+title_field: body
+fields:
+  - name: body
+    type: data
+    label: {id: Isi}

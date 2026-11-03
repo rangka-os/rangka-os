@@ -15,6 +15,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/api"
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/backup"
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
@@ -120,7 +121,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return nil, fmt.Errorf("database: %w", err)
 	}
 	warnIfBypassRLS(ctx, db, cfg.Logf)
-	if _, err := store.Migrate(ctx, db, reg, false, "serve"); err != nil {
+	if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", Before: cfg.preBackup(db, reg)}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -187,15 +188,17 @@ func openFiles(cfg Config, reg *meta.Registry) (*files.Local, error) {
 	if d := strCfg(reg, "files.driver", "local"); d != "local" {
 		return nil, fmt.Errorf("files: driver %s is not available yet; use local", d)
 	}
-	root := cfg.FilesDir
-	if root == "" {
-		root = strCfg(reg, "files.path", "data/files")
-	}
-	l, err := files.NewLocal(root)
+	l, err := files.NewLocal(cfg.filesRoot(reg))
 	if err != nil {
 		return nil, fmt.Errorf("files: %w", err)
 	}
 	return l, nil
+}
+
+// filesRoot is the attachments directory (backup.FilesDir: cfg.FilesDir, then system.rk files.path, then
+// data/files, relative to the working directory). The pre-migrate backup archives the same directory.
+func (cfg Config) filesRoot(reg *meta.Registry) string {
+	return backup.FilesDir(reg, cfg.FilesDir)
 }
 
 func titleCase(id string) string {
@@ -247,7 +250,7 @@ func (s *Server) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := store.Migrate(ctx, s.DB, reg, false, "changeset"); err != nil {
+	if _, err := store.MigrateWith(ctx, s.DB, reg, store.MigrateOpts{Source: "changeset", Before: s.Cfg.preBackup(s.DB, reg)}); err != nil {
 		return err
 	}
 	if err := SyncOrgs(ctx, s.DB, reg); err != nil {
@@ -270,6 +273,8 @@ func warnIfBypassRLS(ctx context.Context, db *pg.Pool, logf func(string, ...any)
 func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 	ctx = pg.WithOrg(ctx, j.Org)
 	act := meta.AsMap(j.Args["actor"])
+	// a queued action replays a person's request: same roles, same permission checks (not System). The roles
+	// are the ones captured at enqueue time; a member demoted before the job runs keeps the old grants.
 	a := engine.Actor{Org: j.Org, ID: meta.Str(act, "id"), UserName: meta.Str(act, "user"), Roles: meta.StrList(act["roles"])}
 	if a.ID == "" {
 		a.ID = "queue"
@@ -289,7 +294,17 @@ func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	ctx = pg.WithOrg(ctx, j.Org)
 	name := meta.Str(j.Args, "flow")
-	a := engine.Actor{Org: j.Org, ID: "flow:" + name, UserName: "system", Roles: []string{"system"}}
+	// a resumed wait: runs as whoever started the flow; schedules and kernel-started flows run as System
+	a := engine.JobActor(j.Org, j.Args["actor"])
+	if a.System {
+		a.Roles = append([]string{"system"}, a.Roles...)
+		if a.ID == "" || a.ID == "system" {
+			a.ID = "flow:" + name
+		}
+		if a.UserName == "" {
+			a.UserName = "system"
+		}
+	}
 	start := 0
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)

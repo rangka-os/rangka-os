@@ -39,7 +39,7 @@ func newMigrateEnv(t *testing.T) *migrateEnv {
 	}
 	t.Cleanup(db.Close)
 	apps := filepath.Join(t.TempDir(), "apps")
-	if err := exec.Command("cp", "-r", "../../../../rangka-apps/apps", apps).Run(); err != nil {
+	if err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), apps).Run(); err != nil {
 		t.Fatal(err)
 	}
 	return &migrateEnv{t, ctx, db, apps}

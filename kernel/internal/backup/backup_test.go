@@ -27,7 +27,6 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-const workspace = "../../../.."
 
 const version = "0.4.0-dev"
 
@@ -59,7 +58,7 @@ func newSource(t *testing.T) *source {
 	auth.BcryptCost = 4
 	dir := t.TempDir()
 	for _, p := range []string{"rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites"} {
-		if err := exec.Command("cp", "-r", filepath.Join(workspace, p), filepath.Join(dir, filepath.Base(p))).Run(); err != nil {
+		if err := exec.Command("cp", "-r", testdb.Sibling(t, p), filepath.Join(dir, filepath.Base(p))).Run(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -620,7 +619,7 @@ func TestFilesDir(t *testing.T) {
 	dir := t.TempDir()
 	site := filepath.Join(dir, "site")
 	os.MkdirAll(site, 0o755)
-	apps, _ := filepath.Abs(filepath.Join(workspace, "rangka-apps/apps"))
+	apps, _ := filepath.Abs(testdb.Sibling(t, "rangka-apps/apps"))
 	reg, err := loadRegistry(apps, site)
 	if err != nil {
 		t.Fatal(err)

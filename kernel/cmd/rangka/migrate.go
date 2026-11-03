@@ -22,8 +22,13 @@ func cmdMigrate(args []string) int {
 	rollback := fs.Int("rollback", 0, "undo the last n migrations instead of migrating")
 	fs.Parse(args)
 	ctx := context.Background()
-	if *rollback > 0 {
-		return migrateRollback(ctx, &c, *rollback, *dry)
+	rollbackSet := false
+	fs.Visit(func(f *flag.Flag) { rollbackSet = rollbackSet || f.Name == "rollback" })
+	if rollbackSet {
+		if *rollback < 1 {
+			return fail(fmt.Errorf("--rollback needs a number of migrations of at least 1"))
+		}
+		return migrateRollback(ctx, &c, store.RollbackOpts{N: *rollback, DryRun: *dry, AllowDestructive: *destructive})
 	}
 	reg, err := c.registry()
 	if err != nil {
@@ -38,16 +43,7 @@ func cmdMigrate(args []string) int {
 	if err != nil && !errors.Is(err, store.ErrDestructive) {
 		return fail(err)
 	}
-	for _, s := range res.Steps {
-		mark := s.Risk
-		if s.Destructive {
-			mark += ", destructive"
-		}
-		fmt.Printf("%s;  -- %s\n", strings.TrimSpace(s.SQL), mark)
-	}
-	for _, s := range res.Refused {
-		fmt.Printf("-- refused (needs --allow-destructive): %s\n", strings.TrimSpace(s.SQL))
-	}
+	printSteps(res.Steps, res.Refused)
 	for _, n := range res.Notes {
 		fmt.Println("-- note:", n)
 	}
@@ -62,25 +58,43 @@ func cmdMigrate(args []string) int {
 	return 0
 }
 
+// printSteps prints each step with its risk, then the refused ones.
+func printSteps(steps, refused []store.Step) {
+	for _, s := range steps {
+		if s.Destructive && len(refused) > 0 {
+			continue // listed as refused below
+		}
+		mark := s.Risk
+		if s.Destructive {
+			mark += ", destructive"
+		}
+		fmt.Printf("%s;  -- %s\n", strings.TrimSpace(s.SQL), mark)
+	}
+	for _, s := range refused {
+		fmt.Printf("-- refused (needs --allow-destructive): %s\n", strings.TrimSpace(s.SQL))
+	}
+}
+
 // migrateRollback undoes the last n migrations (rangka migrate --rollback n).
-func migrateRollback(ctx context.Context, c *common, n int, dry bool) int {
+func migrateRollback(ctx context.Context, c *common, o store.RollbackOpts) int {
 	db, err := c.pool(ctx)
 	if err != nil {
 		return fail(err)
 	}
 	defer db.Close()
-	res, err := store.Rollback(ctx, db, n, dry)
+	res, err := store.Rollback(ctx, db, o)
+	if err != nil && (res == nil || !errors.Is(err, store.ErrDestructive)) {
+		return fail(err)
+	}
+	printSteps(res.Steps, res.Refused)
+	verb := "rolled back"
+	if o.DryRun || err != nil {
+		verb = "would roll back"
+	}
+	fmt.Printf("-- risk %s: %s %d migration(s) %v; %d statement(s)\n", store.HighestRisk(res.Steps), verb, len(res.Migrations), res.Migrations, len(res.Statements))
 	if err != nil {
 		return fail(err)
 	}
-	for _, s := range res.Statements {
-		fmt.Println(strings.TrimSpace(s) + ";")
-	}
-	verb := "rolled back"
-	if dry {
-		verb = "would roll back"
-	}
-	fmt.Printf("-- %s %d migration(s) %v; %d statement(s)\n", verb, len(res.Migrations), res.Migrations, len(res.Statements))
 	return 0
 }
 

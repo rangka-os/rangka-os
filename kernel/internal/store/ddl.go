@@ -254,7 +254,7 @@ func HighestRisk(steps []Step) string {
 // widening retypes keep every value (information_schema data_type before → after).
 var widening = map[[2]string]bool{
 	{"integer", "bigint"}: true, {"smallint", "integer"}: true, {"smallint", "bigint"}: true,
-	{"character varying", "text"}: true, {"numeric", "numeric"}: true,
+	{"character varying", "text"}: true,
 }
 
 // softDeletePrefix marks a column or table the model no longer has; it is dropped after softDeleteDays.
@@ -277,10 +277,12 @@ func softDeletedOn(name string) (time.Time, bool) {
 	return d, err == nil
 }
 
-// expired reports whether a soft-deleted name is older than softDeleteDays at now.
+// expired reports whether a soft-deleted name is more than softDeleteDays calendar days old at now (dates are
+// compared in now's zone, the zone softDeleteName formats them in).
 func expired(name string, now time.Time) bool {
 	d, ok := softDeletedOn(name)
-	return ok && now.Sub(d) > softDeleteDays*24*time.Hour
+	today := time.Date(now.Year(), now.Month(), now.Day(), 0, 0, 0, 0, time.UTC)
+	return ok && today.Sub(d) > softDeleteDays*24*time.Hour
 }
 
 // PlanSteps diffs desired tables against the live schema. New tables, columns and indexes are low risk;
@@ -431,10 +433,12 @@ func MigrateWith(ctx context.Context, db *pg.Pool, reg *meta.Registry, o Migrate
 }
 
 func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Table, o MigrateOpts) (*MigrateResult, error) {
-	if _, err := db.Exec(ctx, systemSQL); err != nil {
-		return nil, fmt.Errorf("kernel tables: %w", err)
+	q, done, err := kernelTables(ctx, db, o.DryRun)
+	if err != nil {
+		return nil, err
 	}
-	live, err := Introspect(ctx, db)
+	defer done()
+	live, err := Introspect(ctx, q)
 	if err != nil {
 		return nil, err
 	}
@@ -453,7 +457,7 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 		res.Statements = append(res.Statements, s.SQL)
 	}
 	old := map[string]string{}
-	if r, err := db.Query(ctx, "select path, hash from rk_meta_files"); err == nil {
+	if r, err := q.Query(ctx, "select path, hash from rk_meta_files"); err == nil {
 		for _, row := range r.Rows {
 			old[row[0].(string)] = row[1].(string)
 		}
@@ -466,7 +470,7 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 	}
 	res.Files = len(paths)
 	if len(res.Refused) > 0 {
-		return res, fmt.Errorf("%d destructive step(s) refused, nothing applied: %w", len(res.Refused), ErrDestructive)
+		return res, refusal(res.Refused, "rangka migrate --dry-run --allow-destructive", "rangka migrate --allow-destructive")
 	}
 	if o.DryRun {
 		return res, nil
@@ -506,31 +510,120 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 	return res, tx.Commit(ctx)
 }
 
+// kernelTables creates the kernel tables. On a dry run it does so in a transaction that done rolls back, so a
+// dry run changes nothing even on an empty database; q reads through that transaction.
+func kernelTables(ctx context.Context, db *pg.Pool, dryRun bool) (q pg.Querier, done func(), err error) {
+	if !dryRun {
+		if _, err := db.Exec(ctx, systemSQL); err != nil {
+			return nil, nil, fmt.Errorf("kernel tables: %w", err)
+		}
+		return db, func() {}, nil
+	}
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, nil, err
+	}
+	done = func() { tx.Rollback(ctx) }
+	if _, err := tx.Exec(ctx, systemSQL); err != nil {
+		done()
+		return nil, nil, fmt.Errorf("kernel tables: %w", err)
+	}
+	return tx, done, nil
+}
+
+// refusal is the ErrDestructive error for refused steps: it names them and the operator commands to run.
+func refusal(refused []Step, review, run string) error {
+	var what []string
+	for _, s := range refused {
+		what = append(what, firstLine(s.SQL))
+	}
+	return fmt.Errorf("refused %d destructive step(s), nothing applied: %s; review with `%s`, then run `%s`: %w",
+		len(refused), strings.Join(what, "; "), review, run, ErrDestructive)
+}
+
 // ErrIrreversible is returned (wrapped) when a migration to roll back has a step without a reverse.
 var ErrIrreversible = errors.New("migration cannot be rolled back")
+
+// RollbackOpts configures Rollback.
+type RollbackOpts struct {
+	N                        int // how many of the latest migrations to undo
+	DryRun, AllowDestructive bool
+	Before                   func(ctx context.Context, steps []Step) error // runs before any statement is applied
+}
 
 // RollbackResult reports what a rollback did.
 type RollbackResult struct {
 	Migrations []int64  `json:"migrations"` // rk_migrations ids, newest first
 	Statements []string `json:"statements"`
+	Steps      []Step   `json:"steps"`             // the reverse steps, in the order they run
+	Refused    []Step   `json:"refused,omitempty"` // destructive reverse steps not allowed; nothing was applied
 }
 
-// Rollback undoes the last n migrations that are not rolled back yet, newest first, by running the recorded
+// dropsData reports whether a statement drops a table or a column.
+func dropsData(sql string) bool {
+	return strings.HasPrefix(sql, "drop table ") || strings.Contains(sql, " drop column ")
+}
+
+// Rollback undoes the last N migrations that are not rolled back yet, newest first, by running the recorded
 // reverse of each step in reverse order in one transaction, and marks them rolled_back_at. Nothing runs when
-// any step has no reverse.
-func Rollback(ctx context.Context, db *pg.Pool, n int, dryRun bool) (*RollbackResult, error) {
-	if n < 1 {
+// any step has no reverse (ErrIrreversible), or when a reverse is destructive (it drops a table or column, or
+// undoes a destructive step) and AllowDestructive is not set (ErrDestructive). Rolling back does not change
+// the models: the next migrate plans the same steps again unless the models are reverted too.
+func Rollback(ctx context.Context, db *pg.Pool, o RollbackOpts) (*RollbackResult, error) {
+	if o.N < 1 {
 		return nil, fmt.Errorf("rollback: n must be at least 1")
 	}
-	if _, err := db.Exec(ctx, systemSQL); err != nil {
-		return nil, fmt.Errorf("kernel tables: %w", err)
-	}
-	r, err := db.Query(ctx, "select id, steps from rk_migrations where rolled_back_at is null order by id desc limit $1", int64(n))
+	q, done, err := kernelTables(ctx, db, o.DryRun)
 	if err != nil {
 		return nil, err
 	}
-	if len(r.Rows) < n {
-		return nil, fmt.Errorf("rollback: %d migration(s) asked, %d can be rolled back", n, len(r.Rows))
+	defer done()
+	res, err := planRollback(ctx, q, o, false)
+	if err != nil || o.DryRun {
+		return res, err
+	}
+	if o.Before != nil {
+		if err := o.Before(ctx, res.Steps); err != nil {
+			return nil, fmt.Errorf("before rollback: %w", err)
+		}
+	}
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer tx.Rollback(ctx)
+	// re-plan under a row lock so a concurrent migrate or rollback cannot change what is undone
+	again, err := planRollback(ctx, tx, o, true)
+	if err != nil {
+		return nil, err
+	}
+	if !equalIDs(again.Migrations, res.Migrations) {
+		return nil, fmt.Errorf("rollback: the migration log changed while preparing the rollback; try again")
+	}
+	for _, s := range res.Statements {
+		if _, err := tx.Exec(ctx, s); err != nil {
+			return nil, fmt.Errorf("%s: %w", firstLine(s), err)
+		}
+	}
+	for _, id := range res.Migrations {
+		if _, err := tx.Exec(ctx, "update rk_migrations set rolled_back_at = now() where id = $1", id); err != nil {
+			return nil, err
+		}
+	}
+	return res, tx.Commit(ctx)
+}
+
+func planRollback(ctx context.Context, q pg.Querier, o RollbackOpts, lock bool) (*RollbackResult, error) {
+	sql := "select id, steps from rk_migrations where rolled_back_at is null order by id desc limit $1"
+	if lock {
+		sql += " for update"
+	}
+	r, err := q.Query(ctx, sql, int64(o.N))
+	if err != nil {
+		return nil, err
+	}
+	if len(r.Rows) < o.N {
+		return nil, fmt.Errorf("rollback: %d migration(s) asked, %d can be rolled back", o.N, len(r.Rows))
 	}
 	res := &RollbackResult{}
 	for _, row := range r.Rows {
@@ -547,32 +640,39 @@ func Rollback(ctx context.Context, db *pg.Pool, n int, dryRun bool) (*RollbackRe
 			return nil, fmt.Errorf("migration %d steps: %w", id, err)
 		}
 		for i := len(steps) - 1; i >= 0; i-- {
-			if steps[i].Reverse == "" {
-				return nil, fmt.Errorf("migration %d: %s has no reverse: %w", id, firstLine(steps[i].SQL), ErrIrreversible)
+			s := steps[i]
+			if s.Reverse == "" {
+				return nil, fmt.Errorf("migration %d: %s has no reverse: %w", id, firstLine(s.SQL), ErrIrreversible)
 			}
-			res.Statements = append(res.Statements, steps[i].Reverse)
+			rs := Step{SQL: s.Reverse, Reverse: s.SQL, Risk: s.Risk, Destructive: s.Destructive || dropsData(s.Reverse)}
+			if rs.Destructive {
+				rs.Risk = RiskHigh
+			}
+			if rs.Destructive && !o.AllowDestructive {
+				res.Refused = append(res.Refused, rs)
+			}
+			res.Steps = append(res.Steps, rs)
+			res.Statements = append(res.Statements, rs.SQL)
 		}
 		res.Migrations = append(res.Migrations, id)
 	}
-	if dryRun {
-		return res, nil
+	if len(res.Refused) > 0 {
+		n := fmt.Sprint(o.N)
+		return res, refusal(res.Refused, "rangka migrate --rollback "+n+" --dry-run --allow-destructive", "rangka migrate --rollback "+n+" --allow-destructive")
 	}
-	tx, err := db.Begin(ctx)
-	if err != nil {
-		return nil, err
+	return res, nil
+}
+
+func equalIDs(a, b []int64) bool {
+	if len(a) != len(b) {
+		return false
 	}
-	defer tx.Rollback(ctx)
-	for _, s := range res.Statements {
-		if _, err := tx.Exec(ctx, s); err != nil {
-			return nil, fmt.Errorf("%s: %w", firstLine(s), err)
+	for i := range a {
+		if a[i] != b[i] {
+			return false
 		}
 	}
-	for _, id := range res.Migrations {
-		if _, err := tx.Exec(ctx, "update rk_migrations set rolled_back_at = now() where id = $1", id); err != nil {
-			return nil, err
-		}
-	}
-	return res, tx.Commit(ctx)
+	return true
 }
 
 func sortedDocPaths(reg *meta.Registry) []string {

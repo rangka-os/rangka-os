@@ -8,6 +8,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"reflect"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -47,11 +48,13 @@ func newMigrateEnv(t *testing.T) *migrateEnv {
 func (e *migrateEnv) edit(old, new string) {
 	e.t.Helper()
 	p := filepath.Join(e.apps, "crm", "models", "deal.rk")
-	b, _ := os.ReadFile(p)
-	if !strings.Contains(string(b), old) {
-		e.t.Fatalf("deal.rk has no %q", old)
+	b, err := os.ReadFile(p)
+	if err != nil || !strings.Contains(string(b), old) {
+		e.t.Fatalf("deal.rk has no %q: %v", old, err)
 	}
-	os.WriteFile(p, []byte(strings.Replace(string(b), old, new, 1)), 0o644)
+	if err := os.WriteFile(p, []byte(strings.Replace(string(b), old, new, 1)), 0o644); err != nil {
+		e.t.Fatal(err)
+	}
 }
 
 func (e *migrateEnv) migrate(o MigrateOpts) (*MigrateResult, error) {
@@ -140,6 +143,22 @@ func TestStepsRecorded(t *testing.T) {
 
 func TestDryRunChangesNothing(t *testing.T) {
 	e := newMigrateEnv(t)
+	tables := `select count(*) from information_schema.tables where table_schema = current_schema()`
+	if n := e.count(tables); n != 0 {
+		t.Fatalf("fresh database has %d tables", n)
+	}
+	if res := e.mustMigrate(MigrateOpts{DryRun: true, Source: "test"}); len(res.Steps) == 0 {
+		t.Fatal("dry run on an empty database planned nothing")
+	}
+	if n := e.count(tables); n != 0 {
+		t.Fatalf("dry run on an empty database created %d tables", n)
+	}
+	if _, err := Rollback(e.ctx, e.db, RollbackOpts{N: 1, DryRun: true}); err == nil {
+		t.Fatal("dry rollback on an empty database should find nothing to roll back")
+	}
+	if n := e.count(tables); n != 0 {
+		t.Fatalf("dry rollback on an empty database created %d tables", n)
+	}
 	e.mustMigrate(MigrateOpts{Source: "test"})
 	e.edit("rules:\n", regionField+"rules:\n")
 	before := e.snapshot()
@@ -164,7 +183,8 @@ func TestRetypeRefused(t *testing.T) {
 	before := e.snapshot()
 	called := false
 	res, err := e.migrate(MigrateOpts{Source: "test", Before: func(context.Context, []Step) error { called = true; return nil }})
-	if !errors.Is(err, ErrDestructive) || res == nil || len(res.Refused) != 1 || called {
+	if !errors.Is(err, ErrDestructive) || res == nil || len(res.Refused) != 1 || called ||
+		!strings.Contains(err.Error(), `"r_deal" alter column "contact_person"`) || !strings.Contains(err.Error(), "rangka migrate --allow-destructive") {
 		t.Fatalf("err %v res %+v called %v", err, res, called)
 	}
 	ref := res.Refused[0]
@@ -209,34 +229,46 @@ func TestRollback(t *testing.T) {
 	e.mustMigrate(MigrateOpts{Source: "test"})
 	e.edit("rules:\n", regionField+"rules:\n")
 	e.mustMigrate(MigrateOpts{Source: "test"})
-	if e.column("r_deal", "region") != "text" {
-		t.Fatal("region not added")
+	if _, err := e.db.Exec(e.ctx, `insert into r_deal (org_id, name, region) values ('o', 'DEAL-1', 'Bandung')`); err != nil {
+		t.Fatal(err)
 	}
 	before := e.snapshot()
-	rb, err := Rollback(e.ctx, e.db, 1, true)
 	want := []string{`drop index if exists "r_deal_region_idx"`, `alter table "r_deal" drop column "region"`}
+	// dropping the added column loses its data: refused without AllowDestructive, dry run or not
+	for _, dry := range []bool{true, false} {
+		rb, err := Rollback(e.ctx, e.db, RollbackOpts{N: 1, DryRun: dry, Before: func(context.Context, []Step) error {
+			t.Fatal("Before called on a refused rollback")
+			return nil
+		}})
+		if !errors.Is(err, ErrDestructive) || rb == nil || len(rb.Refused) != 1 || rb.Refused[0].SQL != want[1] || !rb.Refused[0].Destructive || rb.Refused[0].Risk != "high" {
+			t.Fatalf("rollback without flag (dry %v): %+v %v", dry, rb, err)
+		}
+		if e.snapshot() != before || e.count(`select count(*) from r_deal where region = 'Bandung'`) != 1 {
+			t.Fatal("a refused rollback changed the database")
+		}
+	}
+	rb, err := Rollback(e.ctx, e.db, RollbackOpts{N: 1, DryRun: true, AllowDestructive: true})
 	if err != nil || len(rb.Migrations) != 1 || !reflect.DeepEqual(rb.Statements, want) {
 		t.Fatalf("dry rollback %+v %v", rb, err)
 	}
 	if e.snapshot() != before {
 		t.Fatal("dry rollback changed the database")
 	}
-	rb, err = Rollback(e.ctx, e.db, 1, false)
-	if err != nil || !reflect.DeepEqual(rb.Statements, want) {
-		t.Fatalf("rollback %+v %v", rb, err)
+	var seen []Step
+	rb, err = Rollback(e.ctx, e.db, RollbackOpts{N: 1, AllowDestructive: true, Before: func(_ context.Context, s []Step) error { seen = s; return nil }})
+	if err != nil || !reflect.DeepEqual(rb.Statements, want) || len(seen) != 2 || seen[0].Risk != "low" || seen[1].Reverse != `alter table "r_deal" add column "region" text` {
+		t.Fatalf("rollback %+v %v seen %+v", rb, err, seen)
 	}
 	if e.column("r_deal", "region") != "" {
 		t.Fatal("region still there")
 	}
-	if n := e.count("select count(*) from rk_migrations where rolled_back_at is not null and id = " + itoa(rb.Migrations[0])); n != 1 {
+	if n := e.count("select count(*) from rk_migrations where rolled_back_at is not null and id = " + strconv.FormatInt(rb.Migrations[0], 10)); n != 1 {
 		t.Fatal("rolled_back_at not set")
 	}
-	if _, err := Rollback(e.ctx, e.db, 5, false); err == nil {
+	if _, err := Rollback(e.ctx, e.db, RollbackOpts{N: 5, AllowDestructive: true}); err == nil {
 		t.Fatal("rolling back more migrations than recorded should fail")
 	}
 }
-
-func itoa(n int64) string { b, _ := json.Marshal(n); return string(b) }
 
 func TestRollbackIrreversible(t *testing.T) {
 	e := newMigrateEnv(t)
@@ -248,7 +280,7 @@ func TestRollbackIrreversible(t *testing.T) {
 	}
 	before := e.snapshot()
 	for _, n := range []int{1, 2} {
-		if _, err := Rollback(e.ctx, e.db, n, false); !errors.Is(err, ErrIrreversible) {
+		if _, err := Rollback(e.ctx, e.db, RollbackOpts{N: n, AllowDestructive: true}); !errors.Is(err, ErrIrreversible) {
 			t.Fatalf("Rollback(%d) err = %v", n, err)
 		}
 	}
@@ -276,7 +308,7 @@ func TestSoftDeleteAndDrop(t *testing.T) {
 	if len(res.Steps) != 0 || len(res.Notes) != 0 {
 		t.Fatalf("soft-deleted column reported: %+v %v", res.Steps, res.Notes)
 	}
-	res = e.mustMigrate(MigrateOpts{Source: "test", AllowDestructive: true, Now: func() time.Time { return day0.AddDate(0, 0, 29) }})
+	res = e.mustMigrate(MigrateOpts{Source: "test", AllowDestructive: true, Now: func() time.Time { return day0.AddDate(0, 0, 30).Add(14 * time.Hour) }})
 	if len(res.Steps) != 0 {
 		t.Fatalf("dropped too early: %+v", res.Steps)
 	}

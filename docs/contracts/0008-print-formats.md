@@ -107,7 +107,7 @@ Starting points that modules copy next to their `print/*.rk`:
 ## Consequences
 - Any module gets printable documents by adding a `.rk` and an `.html`; firms override the look per site.
 - PDF needs Chromium next to the binary (the release image should install `chromium`, S15); without it users print from the browser.
-- The Python reference validator does not know `print`/`letterhead` yet; `compare-python` stays identical because its inputs contain neither. Follow-up: add the same checks to `tools/rangka_validate.py`.
+- `tools/rangka_validate.py` makes the same print and letterhead checks, except `template_error`: it has no Go template parser, so that check is kernel only and `compare-python`'s broken print input has no unparsable template.
 
 ## Open
 - Per-document letterhead choice when one org has several brands (not needed for the pilots).

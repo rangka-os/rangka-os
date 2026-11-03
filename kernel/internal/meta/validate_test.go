@@ -95,6 +95,11 @@ func TestBrokenModulesAppsMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-modules-apps.expected.txt", Options{AppsDir: "testdata/broken-modules-apps/apps", SiteDir: "testdata/broken-modules-apps/site"})
 }
 
+// Print formats and letterheads (contract 0008): every check except template_error, which is kernel only.
+func TestBrokenPrintMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-print.expected.txt", Options{AppsDir: "testdata/broken-print-apps/apps", SiteDir: "testdata/broken-print-site"})
+}
+
 // The contract 0001 layout: modules/ next to apps/, an app that names its modules, a site installing the app.
 func TestModulesApps(t *testing.T) {
 	reg, rep := ValidateOpts(Options{AppsDir: "../../testdata/modules-apps/apps", SiteDir: "../../testdata/modules-apps/site"}, nil, schema.Embedded())

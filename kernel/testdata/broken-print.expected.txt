@@ -1,0 +1,14 @@
+../modules/core/print/syntax.rk:5:10  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
+../../broken-print-site/letterhead.rk:1:1  error  schema  (root)  Additional properties are not allowed ('fax' was unexpected)
+../modules/core/print/bad_model.rk:3:8  error  unknown_model  model  "custmer" is not a model; did you mean "customer"?
+../modules/core/print/bad_name.rk:2:7  error  name_mismatch  name  print name "other_name" must match the file name "bad_name"
+../modules/core/print/bad_related.rk:7:12  error  unknown_model  related/invoices/model  "sales_invoce" is not a model; did you mean "sales_invoice"?
+../modules/core/print/bad_related.rk:11:23  error  unknown_field  related/lines/match/customer  "nofield" is not a field of customer
+../modules/core/print/bad_related.rk:11:38  error  unknown_field  related/lines/match/nope  "nope" is not a field of sales_invoice
+../modules/core/print/bad_schema.rk:5:8  error  schema  paper  'A3' is not one of ['A4', 'A5', '80mm']
+../modules/core/print/outside.rk:4:11  error  template_outside  template  template "../../../escape.html" must stay inside ../modules/core
+../../broken-print-site/print/missing.rk:4:11  error  template_missing  template  template file "nope.html" does not exist
+../../broken-print-site/letterhead.rk:3:7  error  logo_missing  logo  logo "../outside.svg" must be a file inside the site folder ../../broken-print-site
+../../broken-print-site/letterheads/pt-b.rk:3:7  error  logo_missing  logo  logo file "brand/none.svg" does not exist in ../../broken-print-site
+
+12 error(s), 0 warning(s)

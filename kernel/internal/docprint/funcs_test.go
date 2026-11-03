@@ -279,6 +279,9 @@ func TestDPPFactor(t *testing.T) {
 		{nil, cfg, "11/12"},
 		{map[string]any{"dpp_ratio": ""}, cfg, "11/12"},
 		{map[string]any{"dpp_ratio": nil}, cfg, "11/12"},
+		{map[string]any{"dpp_ratio": float64(0)}, cfg, "11/12"}, // a NULL numeric column reads as 0: unset
+		{map[string]any{"dpp_ratio": 0}, cfg, "11/12"},
+		{nil, map[string]any{"dpp_ratio": float64(0)}, ""},
 		{map[string]any{"dpp_ratio": "1/1"}, cfg, ""},
 		{map[string]any{"dpp_ratio": "11/12"}, map[string]any{"dpp_ratio": "1/1"}, "11/12"},
 		{nil, map[string]any{"dpp_ratio": 1}, ""},

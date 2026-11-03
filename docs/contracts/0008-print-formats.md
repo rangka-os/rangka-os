@@ -70,7 +70,7 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 | `overdue d` | `overdue .Doc.due_date` | whole days past `d` at print time, `0` when not due |
 | `aging rows` | `aging .Related.invoices` | open amounts (`grand_total − paid_amount`) by age past `due_date`: `current`, `d30`, `d60`, `d90`, `over90`, `total` |
 | `taxrate doc tax` | `number (taxrate .Doc .Tax)` | the record's `ppn_rate`, else its `tax_rate`, else `tax.ppn_rate`; a record value is set when present and not null or `""`, so a stored `0` prints `0` |
-| `dppfactor doc tax` | `dppfactor .Doc .Tax` | the record's `dpp_ratio` (same rule), else `tax.dpp_ratio`, as written (`11/12`); `""` when it equals exactly 1 (`1`, `1/1`, `12/12`, `1.0`) |
+| `dppfactor doc tax` | `dppfactor .Doc .Tax` | the record's `dpp_ratio` (same rule, but a numeric `0` is unset too), else `tax.dpp_ratio`, as written (`11/12`); `""` when it equals exactly 1 (`1`, `1/1`, `12/12`, `1.0`) |
 | `upper s` | | upper case |
 - Missing values print as empty. Templates cannot run script or load anything: the page carries `Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'` as a `<meta http-equiv>` first in `<head>` (so the PDF, rendered from a local file, is bound too) and, for `as=html`, as a response header.
 

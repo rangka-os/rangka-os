@@ -385,12 +385,25 @@ func TaxRate(doc, tax any) any {
 	return v
 }
 
+// dppValue is m's dpp_ratio when it is set. Unlike a rate, a numeric 0 is unset: no factor is 0, and the engine
+// reads an empty numeric column as 0.
+func dppValue(m any) (any, bool) {
+	v, ok := recordValue(m, "dpp_ratio")
+	if _, isText := v.(string); ok && !isText {
+		if r, num := toRat(v); num && r.Sign() == 0 {
+			return nil, false
+		}
+	}
+	return v, ok
+}
+
 // DPPFactor is the DPP factor a document prints: the record's dpp_ratio, else tax's dpp_ratio, as written
-// ("11/12"). It is "" when the factor is exactly 1 (1, "1/1", "12/12", "1.0"): the DPP is the full value.
+// ("11/12"); a numeric 0 counts as unset. It is "" when the factor is exactly 1 (1, "1/1", "12/12", "1.0"):
+// the DPP is the full value.
 func DPPFactor(doc, tax any) string {
-	v, ok := recordValue(doc, "dpp_ratio")
+	v, ok := dppValue(doc)
 	if !ok {
-		v, _ = recordValue(tax, "dpp_ratio")
+		v, _ = dppValue(tax)
 	}
 	if v == nil {
 		return ""

@@ -75,6 +75,12 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 			flows[name] = raw
 		}
 	}
+	imports := map[string]any{} // for the import wizard (contract 0012); site imports have app ""
+	for name, im := range reg.Imports {
+		if (im.App == "" || reg.IsInstalled(im.App)) && reg.Model(im.Model) != nil {
+			imports[name] = map[string]any{"name": name, "model": im.Model, "label": im.Label, "source": im.Source, "per": im.Per, "app": im.App}
+		}
+	}
 	roles := map[string]any{}
 	for _, an := range reg.AppOrder() {
 		for _, rn := range reg.App[an].Roles {
@@ -89,7 +95,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 		}
 	}
 	out := map[string]any{
-		"apps": apps, "models": models, "dashboards": dashboards, "flows": flows, "roles": roles,
+		"apps": apps, "models": models, "dashboards": dashboards, "flows": flows, "imports": imports, "roles": roles,
 		"connectors": connectorsMeta(reg), "site": siteMeta(reg),
 		"theme": s.theme(reg), "layout": s.layout(reg),
 		"installed": reg.AppOrder(), "org": a.Org,

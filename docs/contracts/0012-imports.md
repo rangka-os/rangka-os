@@ -84,6 +84,8 @@ lines:
   naming, computed fields, automations, audit, events as for any create), skipping already-imported rows. Refused
   with 422 `import_errors` while the preview has errors, 409 `already_imported` when `duplicate` is true or the
   entry is already committed. Returns the entry with `records` (the names created).
+- `GET /meta` lists the imports of installed apps and the site under `imports: {<name>: {name, model, label, source,
+  per, app}}` (site imports have `app: ""`), so the web app can offer an import wizard.
 - `GET /imports/{import}/{id}` returns the entry. `GET /imports/{import}` lists the org's 50 most recent entries
   (without `preview`).
 - A file with no data rows previews with `rows: 0`; its commit is refused with 422 `import_empty`.

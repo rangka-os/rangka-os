@@ -141,6 +141,11 @@ func (e *env) uploadForm(path, fileName string, data []byte, fields map[string]s
 func TestImportsMoka(t *testing.T) {
 	e := newEnv(t, false, addFnbTest)
 	e.login()
+	m := e.must(200, "GET", "/api/v1/meta", nil).JSON
+	if get(m, "imports", "moka_item_details", "model") != "outlet_sales" || get(m, "imports", "moka_item_details", "per") != "outlet" ||
+		get(m, "imports", "moka_item_details", "source") != "csv" || get(m, "imports", "moka_item_details", "app") != "fnb_test" {
+		t.Fatalf("meta imports: %v", m["imports"])
+	}
 	csv, err := os.ReadFile("../imports/testdata/moka-item-details.csv")
 	if err != nil {
 		t.Fatal(err)

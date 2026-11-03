@@ -251,7 +251,7 @@ type CreateOpts struct {
 	authorize bool // check create on the new record (public entry points; hooks run inside an allowed op)
 	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
 	// AllowMissing names required fields a hook may leave empty on a new draft for the user to fill in
-	// (procurement.make_po leaves the vendor); saving and submitting the draft still require them.
+	// (procurement.receive leaves the outlet when the PO has none); saving and submitting the draft still require them.
 	AllowMissing []string
 }
 

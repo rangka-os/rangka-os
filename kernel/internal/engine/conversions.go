@@ -215,11 +215,15 @@ func invoiceFromOrder(h *HookCtx) (map[string]any, error) {
 	return openResult("sales_invoice", str(inv["name"]), "Draf faktur "+str(inv["name"])+" dibuat dari pesanan "+name), nil
 }
 
-// makePO is procurement.make_po: a draft purchase_order with the request's lines; the vendor comes from the
-// args or is left for the user. The request's state becomes ordered.
+// makePO is procurement.make_po: a draft purchase_order for the vendor in the args (422 vendor_required
+// without one) with the request's lines. The request's state becomes ordered.
 func makePO(h *HookCtx) (map[string]any, error) {
 	pr := h.Record
 	name := str(pr["name"])
+	vendor := str(h.Args["vendor"])
+	if vendor == "" {
+		return nil, &StatusError{422, "vendor_required", "Vendor wajib diisi"}
+	}
 	if h.op.e.Reg().Model("purchase_order") == nil {
 		return map[string]any{"message": "purchase_order is not installed"}, nil
 	}
@@ -236,11 +240,7 @@ func makePO(h *HookCtx) (map[string]any, error) {
 	for _, l := range rows(pr["items"]) {
 		items = append(items, map[string]any{"item": l["item"], "qty": l["qty"], "uom": l["uom"], "packing": l["packing"], "rate": l["est_rate"]})
 	}
-	in := map[string]any{"purchase_request": name, "outlet": pr["outlet"], "items": items}
-	if v := str(h.Args["vendor"]); v != "" {
-		in["vendor"] = v
-	}
-	po, err := h.createDraft("purchase_order", in, "vendor")
+	po, err := h.createDraft("purchase_order", map[string]any{"vendor": vendor, "purchase_request": name, "outlet": pr["outlet"], "items": items})
 	if err != nil {
 		return nil, err
 	}

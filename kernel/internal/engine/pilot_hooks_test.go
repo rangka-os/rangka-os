@@ -464,24 +464,19 @@ func TestPilotPurchaseRequestToPO(t *testing.T) {
 	pack := p.create("uom_conversion", map[string]any{"item": m.beras, "uom": m.karung, "factor": 50})
 	pr := p.doc("purchase_request", map[string]any{"outlet": m.outB, "needed_by": "2026-11-05",
 		"items": []any{map[string]any{"item": m.beras, "qty": 2, "uom": m.karung, "packing": pack}}})
-	po := opened(p.action("purchase_request", pr, "make_po", nil))
+	_, err := p.e.RunAction(p.ctx, p.a, "purchase_request", pr, "make_po", nil, ActionOpts{})
+	wantCode(t, err, 422, "vendor_required")
+	po := opened(p.action("purchase_request", pr, "make_po", map[string]any{"vendor": m.vend}))
 	d := p.get("purchase_order", po)
 	line := rows(d["items"])[0]
-	if d["vendor"] != "" || d["purchase_request"] != pr || d["outlet"] != m.outB || line["packing"] != pack || rp(line["rate"]) != 11000 || line["stock_qty"] != 100.0 {
+	if d["vendor"] != m.vend || d["purchase_request"] != pr || d["outlet"] != m.outB || line["packing"] != pack || rp(line["rate"]) != 11000 || line["stock_qty"] != 100.0 {
 		t.Fatalf("draft PO = %v, line %v", d, line)
 	}
 	if st := p.get("purchase_request", pr)["state"]; st != "ordered" {
 		t.Fatalf("request state = %v", st)
 	}
-	if again := opened(p.action("purchase_request", pr, "make_po", nil)); again != po {
+	if again := opened(p.action("purchase_request", pr, "make_po", map[string]any{"vendor": m.vend})); again != po {
 		t.Fatal("draft PO not reused")
-	}
-	// the draft still needs a vendor before it is submitted
-	if _, err := p.e.Submit(p.ctx, p.a, "purchase_order", po, true); err == nil {
-		t.Fatal("PO without vendor submitted")
-	}
-	if _, err := p.e.Update(p.ctx, p.a, "purchase_order", po, map[string]any{"vendor": m.vend}); err != nil {
-		t.Fatal(err)
 	}
 	po = p.submit("purchase_order", po)
 	gr := opened(p.action("purchase_order", po, "receive", nil))

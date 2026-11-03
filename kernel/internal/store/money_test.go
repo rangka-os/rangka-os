@@ -10,6 +10,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
@@ -17,6 +18,12 @@ const moneyHead = "# yaml-language-server: $schema=https://rangka-os.github.io/r
 
 // moneyRegistry loads a temp app "billing" with a bill header (money total) and a bill_line child (money amount).
 func moneyRegistry(t *testing.T) *meta.Registry {
+	t.Helper()
+	return load(t, moneyAppsDir(t))
+}
+
+// moneyAppsDir writes the moneyRegistry apps to a temp dir.
+func moneyAppsDir(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	files := map[string]string{
@@ -33,7 +40,26 @@ func moneyRegistry(t *testing.T) *meta.Registry {
 			t.Fatal(err)
 		}
 	}
-	return load(t, dir)
+	return dir
+}
+
+// moneyRegistryWithOverlay is moneyRegistry plus a site overlay adding money field x_fee to bill.
+func moneyRegistryWithOverlay(t *testing.T) *meta.Registry {
+	t.Helper()
+	apps := moneyAppsDir(t)
+	site := t.TempDir()
+	overlay := moneyHead + "overlay.json\nmodel: bill\nfields:\n  - {name: x_fee, type: money, currency_field: currency, label: {id: Biaya}}\n"
+	if err := os.MkdirAll(filepath.Join(site, "custom"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(site, "custom", "bill.rk"), []byte(overlay), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg, rep := meta.Validate(apps, site, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("metadata errors: %v", rep.All())
+	}
+	return reg
 }
 
 func TestMoneyColumns(t *testing.T) {
@@ -206,5 +232,62 @@ func TestCoerceDecimalIntoOtherTypes(t *testing.T) {
 		if err != nil || got != c.want {
 			t.Errorf("Coerce(%s, %s) = %#v, %v; want %#v", c.typ, c.in, got, err, c.want)
 		}
+	}
+}
+
+// TestFromRowMoneyText: money text that is not canonical numeric (a column left double precision after a
+// retype) is read exactly, rounded to 4 dp half away from zero; text that is no number is a read error.
+func TestFromRowMoneyText(t *testing.T) {
+	bill := moneyRegistry(t).Models["bill"]
+	for in, want := range map[string]string{"1e+15": "1000000000000000", "0.30000000000000004": "0.3", "-1.23455": "-1.2346", "1250.5000": "1250.5"} {
+		r, err := fromRow(bill, map[string]any{"name": "B-1", moneyAlias + "total": in})
+		if err != nil {
+			t.Errorf("%s: %v", in, err)
+			continue
+		}
+		if got := r["total"].(money.Decimal).String(); got != want {
+			t.Errorf("%s read as %s, want %s", in, got, want)
+		}
+	}
+	for _, bad := range []string{"NaN", "abc", "1e+30"} {
+		if _, err := fromRow(bill, map[string]any{"name": "B-1", moneyAlias + "total": bad}); err == nil {
+			t.Errorf("%s: want a read error", bad)
+		}
+	}
+}
+
+// TestOverlayMoneyRoundTrip: an x_ money field added by a company overlay lives in the x JSONB column and reads
+// back as the same exact decimal.
+func TestOverlayMoneyRoundTrip(t *testing.T) {
+	url := testdb.New(t)
+	ctx := context.Background()
+	db, err := pg.NewPool(ctx, url, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	reg := moneyRegistryWithOverlay(t)
+	if _, err := Migrate(ctx, db, reg, false, "test"); err != nil {
+		t.Fatal(err)
+	}
+	bill := reg.Models["bill"]
+	if f := bill.Field("x_fee"); f == nil || f.Type != "money" {
+		t.Fatalf("x_fee = %+v", f)
+	}
+	fee, err := Coerce(bill.Field("x_fee"), "9999999999999999.9999")
+	if err != nil {
+		t.Fatal(err)
+	}
+	r := Record{"name": "B-1", "created_by": "u", "currency": "USD", "rate": 1.0, "x_fee": fee, "items": []any{}}
+	if err := Insert(ctx, db, reg, "org1", bill, r); err != nil {
+		t.Fatal(err)
+	}
+	got, err := Get(ctx, db, reg, "org1", bill, "B-1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	d, ok := got["x_fee"].(money.Decimal)
+	if !ok || d.String() != "9999999999999999.9999" {
+		t.Errorf("x_fee = %#v", got["x_fee"])
 	}
 }

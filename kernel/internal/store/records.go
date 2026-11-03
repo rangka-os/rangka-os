@@ -7,6 +7,7 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
@@ -263,8 +264,23 @@ func ts(v any) string {
 	return fmt.Sprint(v)
 }
 
+// readMoney reads a money column's text. Canonical numeric text parses directly; other numeric text (a
+// column still double precision after a retype gives "1e+15" or "0.30000000000000004") is read exactly and
+// rounded to 4 dp half away from zero. Anything else is an error, never a silent 0.
+func readMoney(m *meta.Model, f *meta.Field, t string) (money.Decimal, error) {
+	if d, err := money.Parse(t); err == nil {
+		return d, nil
+	}
+	if r, ok := new(big.Rat).SetString(strings.TrimSpace(t)); ok {
+		if d, err := money.FromRat(r); err == nil {
+			return d, nil
+		}
+	}
+	return money.Decimal{}, fmt.Errorf("store: %s.%s: cannot read money value %q", m.Name, f.Name, t)
+}
+
 // fromRow builds a record from a table row.
-func fromRow(m *meta.Model, row map[string]any) Record {
+func fromRow(m *meta.Model, row map[string]any) (Record, error) {
 	r := Record{"name": row["name"]}
 	if !m.IsChild {
 		r["created_by"] = str(row["created_by"])
@@ -297,9 +313,11 @@ func fromRow(m *meta.Model, row map[string]any) Record {
 		if f.Type == "money" {
 			d := money.Decimal{}
 			if t, ok := row[moneyAlias+f.Name].(string); ok {
-				if p, err := money.Parse(t); err == nil {
-					d = p
+				p, err := readMoney(m, f, t)
+				if err != nil {
+					return nil, err
 				}
+				d = p
 			}
 			r[f.Name] = d
 			continue
@@ -316,7 +334,7 @@ func fromRow(m *meta.Model, row map[string]any) Record {
 			}
 		}
 	}
-	return r
+	return r, nil
 }
 
 func str(v any) string {
@@ -348,7 +366,10 @@ func Get(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *m
 	if len(res.Rows) == 0 {
 		return nil, ErrNotFound
 	}
-	r := fromRow(m, res.Maps()[0])
+	r, err := fromRow(m, res.Maps()[0])
+	if err != nil {
+		return nil, err
+	}
 	if err := loadChildren(ctx, q, reg, org, m, []Record{r}); err != nil {
 		return nil, err
 	}
@@ -372,7 +393,11 @@ func All(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *m
 	}
 	out := make([]Record, 0, len(res.Rows))
 	for _, row := range res.Maps() {
-		out = append(out, fromRow(m, row))
+		r, err := fromRow(m, row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
 	}
 	if withChildren {
 		if err := loadChildren(ctx, q, reg, org, m, out); err != nil {
@@ -420,8 +445,12 @@ func loadChildren(ctx context.Context, q pg.Querier, reg *meta.Registry, org str
 			if p == nil {
 				continue
 			}
+			cr, err := fromRow(cm, row)
+			if err != nil {
+				return err
+			}
 			l, _ := p[f.Name].([]any)
-			p[f.Name] = append(l, fromRow(cm, row))
+			p[f.Name] = append(l, cr)
 		}
 	}
 	return nil

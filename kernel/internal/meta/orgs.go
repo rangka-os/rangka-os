@@ -26,23 +26,24 @@ func (r *Registry) loadOrgs() {
 	}
 }
 
-// replacedKeys are the config.rk keys an org's value replaces whole instead of merging: orgs are separate
-// legal entities, so identity (org:) must never be inherited from the site, and a numbering map is one
-// scheme set (contract 0010 §2).
+// replacedKeys are the config.rk keys an org's value replaces whole instead of merging: a numbering map is one
+// scheme set (contract 0010 §2). Identity (org:) is stricter still, see OrgConfig.
 var replacedKeys = map[string]bool{"org": true, "numbering": true}
 
 // OrgConfig returns a value by dotted path ("tax.pkp") for org, as a deep copy. The org's config
 // (orgs.<id>.config) is deep-merged over the site's: where both hold a map at a key the maps merge
 // recursively and the org wins; for any other pair of types the org's value replaces the site's. The keys in
 // replacedKeys (org, numbering) are never merged: the org's value wins whole. An unknown org, or a key the
-// org does not set, gives the site's value.
+// org does not set, gives the site's value, with one exception: an org listed in orgs: is its own legal
+// entity, so "org" and "org.<key>" give only its own config.org (nil when it sets none), never the site's
+// identity or PKP status.
 func (r *Registry) OrgConfig(org, path string) any {
 	o := r.Orgs[org]
 	if o == nil {
 		return deepCopy(r.SiteConfig(path))
 	}
 	parts := strings.Split(path, ".")
-	if ov, set := o.Config[parts[0]]; set && replacedKeys[parts[0]] {
+	if ov, set := o.Config[parts[0]]; replacedKeys[parts[0]] && (set || parts[0] == "org") {
 		for _, p := range parts[1:] {
 			ov = asMap(ov)[p]
 		}
@@ -53,6 +54,29 @@ func (r *Registry) OrgConfig(org, path string) any {
 		site = r.Site.Config
 	}
 	return deepCopy(orgLookup(site, o.Config, parts))
+}
+
+// OrgIdentity is the legal identity of org as a deep copy: its org: map (legal_name, npwp, pkp, ...) plus name
+// and code. An org listed in orgs: takes only its own config.org, legal_name falling back to its orgs: name, and
+// gets name and code from its orgs: entry; an unlisted org takes the site's org:. pkp, when org: leaves it out,
+// is the (merged) tax.pkp. Read identity and PKP status through this, not through OrgConfig(org, "org.pkp").
+func (r *Registry) OrgIdentity(org string) map[string]any {
+	out := asMap(r.OrgConfig(org, "org"))
+	if out == nil {
+		out = map[string]any{}
+	}
+	if o := r.Orgs[org]; o != nil {
+		out["name"], out["code"] = o.Name, o.Code
+		if str(out, "legal_name") == "" {
+			out["legal_name"] = o.Name
+		}
+	}
+	if _, ok := out["pkp"]; !ok {
+		if v, ok := r.OrgConfig(org, "tax.pkp").(bool); ok {
+			out["pkp"] = v
+		}
+	}
+	return out
 }
 
 // orgLookup follows parts through site and org together. Once the org does not set a key the rest is the site's

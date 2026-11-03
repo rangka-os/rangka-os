@@ -41,18 +41,24 @@ orgs:
 - `rangka migrate`, `seed` and `serve` upsert `rk_orgs` (id, name, code) from `orgs:`. Orgs created
   only in the database (seed, CLI) keep working with the site config.
 - Kernel code reads org-dependent settings with `Registry.OrgConfig(org, key)`: `config.rk`'s value with
-  `orgs.<org>.config[key]` deep-merged over it (below). S3 (letterhead), S4 (numbering, `{ORG}`) and S8
-  (`org.pkp`) use it instead of `SiteConfig`.
+  `orgs.<org>.config[key]` deep-merged over it (below). S3 (tax), S4 (numbering, `{ORG}`) and S8 use it
+  instead of `SiteConfig`.
+- Identity is read with `Registry.OrgIdentity(org)`, a deep copy holding the org's `org:` keys (`legal_name`,
+  `npwp`, `pkp`, ...) plus `name` and `code` (rules below). Print's `.Org` and letterheads use it. Module
+  authors read PKP status as `tax.pkp` (`OrgConfig`) or `OrgIdentity(org).pkp`, not `OrgConfig(org,
+  "org.pkp")`, which is unset for a listed org without its own `org:`.
 - An org's config is deep-merged over the site's, except `org` and `numbering`. Where both hold a map at a
   key, the maps merge key by key (recursively) and the org wins; for any other pair of types the org's value
   replaces the site's. An org that sets `tax: {ppn_rate: 11}` keeps the site's `tax.pkp` and `tax.dpp_ratio`.
   `OrgConfig` returns deep copies, so callers cannot change the site config.
 - `org` and `numbering` replace: when an org sets them, its value wins whole and nothing is inherited. Orgs
-  are separate legal entities, so identity is never inherited. For an org listed in `orgs:`, identity comes
-  only from its own entry: `legal_name` is its `config.org.legal_name`, else `orgs.<id>.name`; `npwp` is only
-  its own `config.org.npwp`; `pkp` is its own `config.org.pkp`, else the merged `tax.pkp`. The site's `org:`
-  applies only to orgs not listed in `orgs:`. A `numbering` map is one scheme set: an org's map is used
-  whole, so site series are not visible to an org that defines its own.
+  are separate legal entities, so identity is never inherited: for an org listed in `orgs:`,
+  `OrgConfig(org, "org")` and `OrgConfig(org, "org.<key>")` give only its own `config.org` (nothing when it
+  sets none), never the site's `org:`. `OrgIdentity` then fills in: `legal_name` is its
+  `config.org.legal_name`, else `orgs.<id>.name`; `npwp` is only its own `config.org.npwp`; `pkp` is its own
+  `config.org.pkp`, else the merged `tax.pkp`. The site's `org:` applies only to orgs not listed in `orgs:`.
+  A `numbering` map is one scheme set: an org's map is used whole, so site series are not visible to an org
+  that defines its own.
 - A site subkey cannot be unset from an org: the schema rejects a null value (`tax: null` is "not of type
   object"), so an org sets another value instead.
 
@@ -152,7 +158,8 @@ One command, shared with S0's set-up (which spells the email `--email`):
 
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.
-- S3, S4 and S8 read org settings with `OrgConfig`; S4's `{ORG}` is `rk_orgs.code`.
+- S3, S4 and S8 read org settings with `OrgConfig` and identity with `OrgIdentity`; S4's `{ORG}` is
+  `rk_orgs.code`.
 - S9's pilot bundles declare `orgs:` in `config.rk` and create members with `rangka user add`.
 - Several roles per org, business units inside an org, and scope on fields other than outlet-like links
   wait for a later contract.

@@ -781,6 +781,85 @@ def test_forbidden_record(page, ctx):
     page.get_by_role("heading", name=ctx.model_label(other)).first.wait_for(timeout=10000)
 
 
+MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]
+
+
+def tanggal(iso):
+    y, m, d = iso[:10].split("-")
+    return f"{int(d)} {MONTHS[int(m) - 1]} {y}"
+
+
+def held_route(page, pattern, method):
+    """Hold matching requests until the scenario answers them; returns the list of held routes."""
+    held = []
+
+    def hold(route):
+        if route.request.method != method:
+            route.continue_()
+            return
+        held.append(route)
+    page.route(re.compile(pattern), hold)
+    return held
+
+
+def wait_held(page, held, n=1):
+    for _ in range(100):
+        if len(held) >= n:
+            return
+        page.wait_for_timeout(50)
+    raise AssertionError("the request was not sent")
+
+
+def test_late_link_fetch_keeps_server_answer(page, ctx):
+    """On an existing draft (the save keeps the route, nothing remounts) the linked customer's fresh GET answers after the
+    save: the record on screen stays the server's answer, not a browser re-derivation over it."""
+    h = Http(ctx.base).login(*ctx.owner)
+    st, draft = h.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0047", "outlet": "OUT-01", "items": [{"item": "BRG-0101", "qty": 2}]})
+    assert st == 201, f"create draft {st} {draft}"
+    held = held_route(page, r".*/api/v1/r/customer/CUST-0031$", "GET")
+    saved = []
+    page.on("response", lambda r: saved.append(r.status) if r.request.method == "PATCH" and "/api/v1/r/sales_invoice/" in r.url else None)
+    open_route(page, ctx, "#/r/sales_invoice/" + draft["name"])
+    wait_form(page)
+    page.locator(".ap-main .rk-field", has=page.locator("label", has_text=re.compile("^Pelanggan"))).get_by_role("button", name="Kosongkan").click()
+    pick_link(page, "Pelanggan", "Maju Bersama", "Maju Bersama Catering")
+    wait_held(page, held)
+    page.get_by_role("button", name="Simpan draf", exact=True).click()
+    for _ in range(100):
+        if saved:
+            break
+        page.wait_for_timeout(50)
+    assert saved == [200], f"the PATCH was answered, saw {saved}"
+    page.wait_for_timeout(300)
+    # the late answer says 7 payment days (the record was saved with 30): re-deriving would move the due date
+    r = held[0].fetch()
+    cust = r.json()
+    cust["payment_days"] = 7
+    _json(held[0], 200, cust)
+    page.wait_for_timeout(800)
+    _, rec = h.call("GET", "/api/v1/r/sales_invoice/" + draft["name"])
+    assert rec["customer"] == "CUST-0031", f"saved with the new customer: {rec['customer']}"
+    shown_due = page.locator("#f-sales_invoice-due_date").inner_text()
+    assert tanggal(rec["due_date"]) in shown_due, f"due date shows the server's {rec['due_date']}, got {shown_due!r}"
+    assert grand_total(page) == rupiah(rec["grand_total"]), f"total {grand_total(page)} is the server's {rec['grand_total']}"
+    assert main_area(page).locator(".pv-unsaved").count() == 0, "no Belum disimpan after the late answer"
+
+
+def test_editors_disabled_while_saving(page, ctx):
+    held = held_route(page, r".*/api/v1/r/lead$", "POST")
+    open_route(page, ctx, "#/r/lead/new")
+    wait_form(page, "Simpan")
+    by_label(page, "Nama").fill("Tunggu Simpan")
+    by_label(page, "Nomor WhatsApp").fill("0815" + str(int(time.time() * 1000))[-8:])
+    page.get_by_role("button", name="Simpan", exact=True).click()
+    wait_held(page, held)
+    assert by_label(page, "Nama").is_disabled() and by_label(page, "Email").is_disabled(), "inputs are disabled while the save is in flight"
+    assert page.get_by_role("button", name="Simpan", exact=True).is_disabled(), "and the button"
+    held[0].continue_()
+    page.wait_for_function("() => /^#\\/r\\/lead\\/LEAD-\\d+$/.test(location.hash)", timeout=10000)
+    assert by_label(page, "Nama").is_enabled() and by_label(page, "Nama").input_value() == "Tunggu Simpan", "editable again with the saved value"
+
+
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
 PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")

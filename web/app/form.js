@@ -139,6 +139,7 @@
     var ccs = useState(false), confirmCancel = ccs[0], setConfirmCancel = ccs[1];
     var aps = useState(null), approval = aps[0], setApproval = aps[1];
     var recRef = useRef(null), busyRef = useRef(null), dirtyRef = useRef(false);
+    var genRef = useRef(0); // bumped by every server answer: late browser-side work started before it must not touch the record
 
     function put(n) { recRef.current = n; setRecState(n); }
     function markDirty(v) { dirtyRef.current = v; setDirty(v); }
@@ -146,6 +147,7 @@
     /** Take a server answer as the record. */
     function accept(saved) {
       var r = clean(saved);
+      genRef.current++;
       if (r.name != null) ctx.cache.put(m, r);
       put(r);
       markDirty(false);
@@ -183,15 +185,20 @@
       markDirty(true);
       setTouched(function (t) { var x = Object.assign({}, t); x[name] = true; return x; });
       if (srvErr.fields[name]) setSrvErr(function (s) { var f = Object.assign({}, s.fields); delete f[name]; return { fields: f, rest: s.rest }; });
-      // Defaults like posting_date + duration(customer.payment_days) need the linked record in the cache.
-      if (fd && fd.type === "link" && v && !ctx.cache.lookup(fd.to, v)) {
+      // Defaults like posting_date + duration(customer.payment_days) read the linked record: fetch it fresh (a search hit
+      // may be stale) and derive again — only on the same draft the user is editing. Once a server answer has replaced
+      // the record (genRef moved), the answer stands: no client-computed due date or total over a saved record.
+      if (fd && fd.type === "link" && v) {
+        var gen = genRef.current;
         ctx.cache.fetch(fd.to, v).then(function () {
           var now = recRef.current;
-          if (!now || now[name] !== v) return;
+          if (genRef.current !== gen || busyRef.current || !now || now[name] !== v) return;
+          if (mm.is_submittable && Number(now.docstatus || 0) !== 0) return;
           var n2 = clone(now);
           if (dep.length) eng.applyDefaults(m, n2, dep);
           eng.compute(m, n2);
           put(n2);
+          markDirty(true);
         }, function () {});
       }
     }
@@ -444,7 +451,8 @@
         summary.length ? h(R.Alert, { tone: "bad", title: summary.length === 1 ? summary[0] : summary.length + " hal perlu diperbaiki" },
           summary.length > 1 ? h("ul", { className: "ap-errlist" }, summary.map(function (s, i) { return h("li", { key: i }, s); })) : null) : null,
         approvalNote,
-        layout.map(section)),
+        // While a request is in flight every editor is disabled: an edit typed now would be replaced by the answer.
+        h("fieldset", { className: "ap-form-fields", disabled: !!busy, "aria-busy": busy ? "true" : undefined }, layout.map(section))),
       warn ? h(R.Dialog, { variant: "confirm", icon: "warning", title: "Tetap ajukan?", confirmLabel: "Tetap ajukan", cancelLabel: "Kembali",
         onClose: closeWarn, onConfirm: function () { submit(true); } },
         h("ul", { className: "ap-errlist" }, warn.map(function (w, i) { return h("li", { key: i }, w.message); })),

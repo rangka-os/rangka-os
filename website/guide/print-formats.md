@@ -49,14 +49,15 @@ as the reference statement does.
 
 ## Organisation data
 
-`.Org` holds the caller's organisation: its `org:` settings in `config.rk` (`legal_name`, `npwp`, `pkp`) plus
-`name` and `code` from `orgs.<id>`. `.Org.pkp` comes from `org.pkp`, else from `tax.pkp`. The reference invoice
+`.Org` holds the caller's organisation: its `org:` settings in `config.rk` (`legal_name`, `npwp`) plus `name`
+and `code` from `orgs.<id>`. `.Org.pkp` is the organisation's merged `tax.pkp` (an `org:` `pkp` key is ignored),
+the same value as `tax.pkp` in expressions; `.Tax` holds the same `ppn_rate` and `dpp_ratio` as the `tax` global. The reference invoice
 and quotation print the DPP and PPN rows only when `.Org.pkp` is true.
 
 Per-organisation settings are deep-merged over the site's, with two exceptions. `tax: {ppn_rate: 11}` keeps the
 site's `tax.pkp`. But `org:` and `numbering` replace whole: each organisation listed in `orgs:` is its own legal
 entity and never inherits the site's `legal_name` or `npwp`. Its legal name is its own `org.legal_name`, else its
-`name`; its `pkp` is its own `org.pkp`, else `tax.pkp`. A listed organisation without its own
+`name`; its `pkp` is its merged `tax.pkp`. A listed organisation without its own
 `letterheads/<org>.rk` does not use `letterhead.rk` (that holds another entity's bank and signatory); its
 letterhead is built from its own data only.
 

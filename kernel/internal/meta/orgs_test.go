@@ -132,7 +132,7 @@ func TestOrgIdentity(t *testing.T) {
 	if got := reg.OrgIdentity("bebas"); !reflect.DeepEqual(got, want) {
 		t.Errorf("OrgIdentity(bebas) = %v, want %v", got, want)
 	}
-	// kosong sets no tax: pkp falls back to the site's tax.pkp, never the site's org.pkp/npwp
+	// kosong sets no tax: pkp is the site's tax.pkp, never the site's org.pkp/npwp
 	want = map[string]any{"legal_name": "", "name": "", "code": "", "pkp": true}
 	if got := reg.OrgIdentity("kosong"); !reflect.DeepEqual(got, want) {
 		t.Errorf("OrgIdentity(kosong) = %v, want %v", got, want)
@@ -143,7 +143,8 @@ func TestOrgIdentity(t *testing.T) {
 	}
 	reg.Orgs["bebas"].Config["org"] = map[string]any{"legal_name": "CV Bebas Jaya", "npwp": "2", "pkp": true}
 	id := reg.OrgIdentity("bebas")
-	if id["legal_name"] != "CV Bebas Jaya" || id["npwp"] != "2" || id["pkp"] != true {
+	// its org: pkp is ignored: pkp is always the merged tax.pkp (bebas's tax: says false)
+	if id["legal_name"] != "CV Bebas Jaya" || id["npwp"] != "2" || id["pkp"] != false {
 		t.Errorf("own org: = %v", id)
 	}
 	id["npwp"] = "x"

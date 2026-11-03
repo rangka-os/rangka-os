@@ -25,7 +25,7 @@ type Input struct {
 	RelatedTruncated map[string]bool
 	Letterhead       map[string]any         // from Registry.Letterhead (logo = abs path)
 	Org              map[string]any         // config.org
-	Tax              map[string]any         // Registry.OrgConfig(org, "tax"); missing keys take taxDefaults
+	Tax              map[string]any         // Registry.TaxSettings(org); missing keys take taxDefaults
 	Printed          time.Time              // already in the org time zone
 	Children         map[string]*meta.Model // child models of table fields, by model name
 }

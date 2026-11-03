@@ -63,10 +63,10 @@ func TestOrgTaxGlobalsInDefaults(t *testing.T) {
 		org, dpp, who  string
 		rate, siteRate int64
 	}{
-		{"pt_pkp", "11/12", "pt_pkp:PKP:PT Situs", 12, 12},    // a PKP org: tax.pkp true from the site
+		{"pt_pkp", "11/12", "pt_pkp:PKP:PT PKP", 12, 12},      // a PKP org: tax.pkp true from the site
 		{"pt_kecil", "11/12", "pt_kecil:KCL:PT Kecil", 0, 12}, // tax: {pkp: false} keeps the site's rate
-		{"pt_lama", "10/11", "pt_lama::PT Situs", 11, 11},     // its own rate and ratio, the site's pkp
-		{"elsewhere", "11/12", "elsewhere::PT Situs", 12, 12}, // not in orgs: → the site's settings
+		{"pt_lama", "10/11", "pt_lama::PT Lama", 11, 11},      // its own rate and ratio, the site's pkp
+		{"elsewhere", "11/12", "elsewhere::PT Situs", 12, 12}, // not in orgs: → the site's settings and org:
 	}
 	for _, c := range cases {
 		rec := quoteDefaults(e, c.org)

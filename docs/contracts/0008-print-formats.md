@@ -73,7 +73,7 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 
 ### 4. REST
 `GET /api/v1/r/{model}/{name}/print?format={print}&as=html|pdf`
-- `format` defaults to the model's `default: true` format, else the only one; none → 404 `no_print_format`.
+- `format` defaults to the model's `default: true` format, else the first by name; none → 404 `no_print_format`.
 - `as=html` (default): `text/html; charset=utf-8`.
 - `as=pdf`: rendered by headless Chromium (`RANGKA_CHROMIUM` = path, or found on `PATH` / the macOS app path; `RANGKA_CHROMIUM=off` disables). Without it: 501 `pdf_unavailable` with message "PDF belum tersedia di server ini. Buka versi HTML lalu cetak dari browser (Ctrl+P → Simpan sebagai PDF)." and `hint` = the HTML URL. PDF is `inline; filename="<name>.pdf"`.
 - `/api/v1/meta` lists each model's formats as `prints: [{name, label, paper, default}]`.

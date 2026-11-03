@@ -2,6 +2,7 @@ package money
 
 import (
 	"encoding/json"
+	"errors"
 	"math/big"
 	"testing"
 )
@@ -142,5 +143,19 @@ func TestMisc(t *testing.T) {
 	}
 	if r, _ := Rat(0.1); r.Cmp(big.NewRat(1, 10)) != 0 {
 		t.Error("Rat(float) shortest form")
+	}
+}
+
+// TestParseRange: more than 16 integer digits is a range error, not a format error.
+func TestParseRange(t *testing.T) {
+	for _, s := range []string{"12345678901234567", "-12345678901234567.5"} {
+		if _, err := Parse(s); !errors.Is(err, ErrRange) {
+			t.Errorf("Parse(%s) = %v, want ErrRange", s, err)
+		}
+	}
+	for _, s := range []string{"1.23456", "abc", "12345678901234567.12345"} {
+		if _, err := Parse(s); err == nil || errors.Is(err, ErrRange) {
+			t.Errorf("Parse(%s) = %v, want a format error", s, err)
+		}
 	}
 }

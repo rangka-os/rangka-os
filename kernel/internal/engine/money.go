@@ -1,9 +1,9 @@
 package engine
 
 import (
+	"errors"
 	"fmt"
 	"math/big"
-	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/money"
@@ -205,7 +205,4 @@ func (s *scope) computeErr(f *meta.Field) error {
 }
 
 // isRange reports an amount outside numeric(20,4), from CEL decimal arithmetic or from store.Coerce.
-func isRange(err error) bool {
-	m := err.Error()
-	return strings.Contains(m, money.ErrRange.Error()) || strings.HasSuffix(m, " is too large")
-}
+func isRange(err error) bool { return errors.Is(err, money.ErrRange) }

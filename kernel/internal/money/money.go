@@ -27,14 +27,18 @@ func (d Decimal) raw() *big.Int {
 	return d.u
 }
 
-// Parse reads "-"? digits ("." 1-4 digits)? with at most 16 integer digits.
+// Parse reads "-"? digits ("." 1-4 digits)? with at most 16 integer digits; more integer digits in an
+// otherwise valid decimal is ErrRange.
 func Parse(s string) (Decimal, error) {
 	s = strings.TrimSpace(s)
 	neg := strings.HasPrefix(s, "-")
 	body := strings.TrimPrefix(s, "-")
 	ip, fp, hasDot := strings.Cut(body, ".")
-	if ip == "" || len(ip) > 16 || !digits(ip) || (hasDot && (len(fp) < 1 || len(fp) > Scale || !digits(fp))) {
+	if ip == "" || !digits(ip) || (hasDot && (len(fp) < 1 || len(fp) > Scale || !digits(fp))) {
 		return Decimal{}, errors.New("money: invalid decimal " + strconv.Quote(s))
+	}
+	if len(ip) > 16 {
+		return Decimal{}, ErrRange
 	}
 	u, _ := new(big.Int).SetString(ip+fp+strings.Repeat("0", Scale-len(fp)), 10)
 	if neg {

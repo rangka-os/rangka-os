@@ -2,9 +2,9 @@ package store
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -112,14 +112,22 @@ func TestCoerceMoney(t *testing.T) {
 	if got := str(d); got != "5" {
 		t.Errorf("decimal: %s", got)
 	}
-	if _, err := Coerce(f, "1.23456"); err == nil || !strings.Contains(err.Error(), "at most 4 decimals") {
+	// messages are Bahasa Indonesia with the field label (the name when there is none)
+	if _, err := Coerce(f, "1.23456"); err == nil || err.Error() != "total maksimal 4 angka desimal" {
 		t.Errorf("too many decimals: %v", err)
 	}
-	if _, err := Coerce(f, "abc"); err == nil || !strings.Contains(err.Error(), "at most 4 decimals") {
+	if _, err := Coerce(f, "abc"); err == nil || err.Error() != "total maksimal 4 angka desimal" {
 		t.Errorf("junk: %v", err)
 	}
-	if _, err := Coerce(f, int64(1)<<62); err == nil || !strings.Contains(err.Error(), "too large") {
-		t.Errorf("too large: %v", err)
+	labelled := &meta.Field{Name: "total", Type: "money", Label: meta.Label{"id": "Total akhir"}}
+	if _, err := Coerce(labelled, "1.23456"); err == nil || err.Error() != "Total akhir maksimal 4 angka desimal" {
+		t.Errorf("labelled too many decimals: %v", err)
+	}
+	if _, err := Coerce(labelled, int64(1)<<62); err == nil || err.Error() != "Total akhir terlalu besar" || !errors.Is(err, money.ErrRange) {
+		t.Errorf("too large: %v (is ErrRange: %v)", err, errors.Is(err, money.ErrRange))
+	}
+	if _, err := Coerce(labelled, "1.2345"); errors.Is(err, money.ErrRange) {
+		t.Errorf("a valid amount is no range error: %v", err)
 	}
 	if _, err := Coerce(f, true); err == nil {
 		t.Error("bool should fail")

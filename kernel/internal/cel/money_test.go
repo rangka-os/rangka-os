@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
@@ -88,5 +89,19 @@ func TestDecimalConversions(t *testing.T) {
 		if err != nil || got != w {
 			t.Errorf("%s = %#v, %v; want %#v", src, got, err, w)
 		}
+	}
+}
+
+// TestDecimalRangeError: decimal arithmetic out of numeric(20,4) keeps money.ErrRange as its cause.
+func TestDecimalRangeError(t *testing.T) {
+	vars := map[string]any{"big": mustDec(t, "9000000000000000"), "items": []any{mustDec(t, "9000000000000000"), mustDec(t, "9000000000000000")}}
+	for _, src := range []string{"big * 2", "big + big", "sum(items)"} {
+		_, err := Eval(src, env(vars))
+		if err == nil || !errors.Is(err, money.ErrRange) {
+			t.Errorf("%s: %v, want a money.ErrRange cause", src, err)
+		}
+	}
+	if _, err := Eval("big / 0", env(vars)); err == nil || errors.Is(err, money.ErrRange) {
+		t.Errorf("division by zero: %v, want an error that is not ErrRange", err)
 	}
 }

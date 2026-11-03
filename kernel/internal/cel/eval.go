@@ -83,12 +83,21 @@ func Eval(src string, env *Env) (any, error) {
 	return p.Eval(env)
 }
 
-// EvalError is a runtime error.
-type EvalError struct{ Msg string }
+// EvalError is a runtime error. Cause, when set, is the underlying error (money.ErrRange for decimal
+// arithmetic out of range), so callers can test it with errors.Is.
+type EvalError struct {
+	Msg   string
+	Cause error
+}
 
 func (e *EvalError) Error() string { return e.Msg }
 
-func errf(format string, a ...any) error { return &EvalError{fmt.Sprintf(format, a...)} }
+func (e *EvalError) Unwrap() error { return e.Cause }
+
+func errf(format string, a ...any) error { return &EvalError{Msg: fmt.Sprintf(format, a...)} }
+
+// wrapErr is an EvalError carrying err as its cause.
+func wrapErr(err error) error { return &EvalError{Msg: err.Error(), Cause: err} }
 
 // Eval evaluates the program.
 func (p *Program) Eval(env *Env) (any, error) {
@@ -798,7 +807,7 @@ func decimalArith(op string, a, b *big.Rat, l, r any) (any, error) {
 	}
 	d, err := money.FromRat(z)
 	if err != nil {
-		return nil, errf("%v", err)
+		return nil, wrapErr(err)
 	}
 	return d, nil
 }
@@ -1146,7 +1155,7 @@ func sumDecimal(l []any) (any, error) {
 	}
 	d, err := money.FromRat(total)
 	if err != nil {
-		return nil, errf("%v", err)
+		return nil, wrapErr(err)
 	}
 	return d, nil
 }

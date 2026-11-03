@@ -174,13 +174,27 @@ func coerceMoney(f *meta.Field, v any) (any, error) {
 	default:
 		return nil, fmt.Errorf("%s: unexpected value %v", f.Name, v)
 	}
-	if err != nil {
-		return nil, fmt.Errorf("%s needs an amount with at most 4 decimals", f.Name)
+	if err != nil && !errors.Is(err, money.ErrRange) {
+		return nil, errors.New(fieldLabel(f) + " maksimal 4 angka desimal")
 	}
-	if !money.InRange(d) {
-		return nil, fmt.Errorf("%s is too large", f.Name)
+	if err != nil || !money.InRange(d) {
+		return nil, &rangeError{fieldLabel(f) + " terlalu besar"}
 	}
 	return d, nil
+}
+
+// rangeError is a user-facing "too large" message whose cause is money.ErrRange.
+type rangeError struct{ msg string }
+
+func (e *rangeError) Error() string { return e.msg }
+func (e *rangeError) Unwrap() error { return money.ErrRange }
+
+// fieldLabel is the label of f, else its name.
+func fieldLabel(f *meta.Field) string {
+	if l := f.Label.Text(); l != "" {
+		return l
+	}
+	return f.Name
 }
 
 // sqlValue converts a record value into a query parameter ("" becomes NULL).

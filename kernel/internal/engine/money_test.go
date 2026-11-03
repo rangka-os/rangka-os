@@ -365,3 +365,11 @@ func TestMoneyIntoOtherTypes(t *testing.T) {
 		}
 	})
 }
+
+// TestMoneyInputMessages: entered amounts that do not fit are refused with the field label, in Bahasa Indonesia.
+// (Input issues of a row carry the bare field name, as for every field type.)
+func TestMoneyInputMessages(t *testing.T) {
+	e, a := setupMoney(t)
+	_, err := e.Create(context.Background(), a, "bill", map[string]any{"currency": "USD", "rate": 2, "paid_amount": "100000000000000000", "items": []any{line(1, "1.23456")}})
+	wantIssues(t, err, map[string]string{"price": "Harga maksimal 4 angka desimal", "paid_amount": "Dibayar terlalu besar"})
+}

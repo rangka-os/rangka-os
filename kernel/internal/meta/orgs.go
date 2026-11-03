@@ -154,19 +154,22 @@ const (
 )
 
 // ParseDPPRatio parses a DPP ratio such as "11/12" into its numerator and denominator: two positive whole
-// numbers separated by "/", spaces allowed around them. ok is false for anything else.
+// numbers separated by "/", white space (dppSpace) allowed around them. ok is false for anything else.
 func ParseDPPRatio(s string) (num, den int64, ok bool) {
 	a, b, found := strings.Cut(s, "/")
 	if !found {
 		return 0, 0, false
 	}
-	num, ok1 := positiveInt(strings.TrimSpace(a))
-	den, ok2 := positiveInt(strings.TrimSpace(b))
+	num, ok1 := positiveInt(strings.Trim(a, dppSpace))
+	den, ok2 := positiveInt(strings.Trim(b, dppSpace))
 	if !ok1 || !ok2 {
 		return 0, 0, false
 	}
 	return num, den, true
 }
+
+// dppSpace is the space trimmed around a DPP ratio's numbers (Python's str.strip set in rangka_validate.py).
+const dppSpace = " \t\n\r\f\v"
 
 func positiveInt(s string) (int64, bool) {
 	if s == "" || len(s) > 9 {
@@ -182,13 +185,28 @@ func positiveInt(s string) (int64, bool) {
 	return n, n > 0
 }
 
-// TaxVar is the CEL tax global for org (contract 0010 §8): ppn_rate (percent), dpp_num and dpp_den from
-// OrgConfig(org, "tax"): orgs.<org>.config.tax when the org sets it (it replaces the site's whole tax: map,
-// as for every OrgConfig key), else the site's tax:. Missing or malformed values give 12, 11 and 12. pkp is
-// present only when that tax: map sets it (the legacy place for the PKP flag).
+// OrgTax is an org's tax: settings, merged key by key: the site's config.rk tax: with orgs.<org>.config.tax
+// on top, so an org that sets only pkp keeps the site's ppn_rate and dpp_ratio. Unlike OrgConfig (which
+// replaces a top-level key wholesale), tax: is deep-merged (contract 0010 §8).
+func (r *Registry) OrgTax(org string) map[string]any {
+	out := map[string]any{}
+	for k, v := range asMap(r.SiteConfig("tax")) {
+		out[k] = v
+	}
+	if o := r.Orgs[org]; o != nil {
+		for k, v := range asMap(o.Config["tax"]) {
+			out[k] = v
+		}
+	}
+	return out
+}
+
+// TaxVar is the CEL tax global for org (contract 0010 §8): ppn_rate (percent), dpp_num, dpp_den and pkp
+// from OrgTax(org). pkp is the one PKP flag (default false: no PPN unless the org is declared PKP). Missing
+// or malformed values give 12, 11 and 12; a fractional ppn_rate stays a float.
 func (r *Registry) TaxVar(org string) map[string]any {
-	t := asMap(r.OrgConfig(org, "tax"))
-	out := map[string]any{"ppn_rate": int64(DefaultPPNRate), "dpp_num": int64(DefaultDPPNum), "dpp_den": int64(DefaultDPPDen)}
+	t := r.OrgTax(org)
+	out := map[string]any{"ppn_rate": int64(DefaultPPNRate), "dpp_num": int64(DefaultDPPNum), "dpp_den": int64(DefaultDPPDen), "pkp": false}
 	switch v := t["ppn_rate"].(type) {
 	case int64:
 		out["ppn_rate"] = v
@@ -212,20 +230,15 @@ func (r *Registry) TaxVar(org string) map[string]any {
 	return out
 }
 
-// OrgVar is the CEL org global for org (contract 0010 §8): id, code and name from its orgs: entry (the
-// rows SyncOrgs writes to rk_orgs), legal_name, npwp and pkp from OrgConfig(org, "org") (the same data as
-// print's .Org: orgs.<org>.config.org, else the site's org:). pkp falls back to tax.pkp (TaxVar), then to
-// false as in the schema, so PPN is charged only for an org declared PKP; text members default to "".
+// OrgVar is the CEL org global for org (contract 0010 §8), identity only: id, code and name from its orgs:
+// entry (the rows SyncOrgs writes to rk_orgs), legal_name and npwp from OrgConfig(org, "org")
+// (orgs.<org>.config.org, else the site's org:); text members default to "". PKP status is tax.pkp.
+// TODO(S3b): resolve through Registry.OrgIdentity, the single identity source, once it lands.
 func (r *Registry) OrgVar(org string) map[string]any {
 	d := asMap(r.OrgConfig(org, "org"))
 	out := map[string]any{"id": org, "code": "", "name": "", "legal_name": str(d, "legal_name"), "npwp": str(d, "npwp")}
 	if o := r.Orgs[org]; o != nil {
 		out["code"], out["name"] = o.Code, o.Name
 	}
-	pkp, ok := d["pkp"].(bool)
-	if !ok {
-		pkp, _ = r.TaxVar(org)["pkp"].(bool)
-	}
-	out["pkp"] = pkp
 	return out
 }

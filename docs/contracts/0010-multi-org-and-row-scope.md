@@ -165,21 +165,24 @@ One command, shared with S0's set-up (which spells the email `--email`):
 ### 8. CEL globals `org` and `tax` (S8d)
 Every expression that sees `user` (model defaults, computes, rules and action `if:`, flow steps, dashboard
 widget `if:`, role `scope.from`) also reads two read-only globals, resolved per operation from the caller's
-org (`Actor.Org`), the same source as print's `.Org` (contract 0008 §2):
+org (`Actor.Org`):
 
 | Global | Members | Source |
 | --- | --- | --- |
-| `org` | `id`, `code`, `name`, `legal_name`, `npwp`, `pkp` | `id` is the org id; `code` and `name` from its `orgs:` entry (what `rk_orgs` holds), `""` for an org not in `orgs:`. `legal_name`, `npwp`, `pkp` from `OrgConfig(org, "org")`. `pkp` (bool) falls back to `tax.pkp` (legacy), then `false` (the schema default: PPN is charged only for an org declared PKP). Text members default to `""` |
-| `tax` | `ppn_rate`, `dpp_num`, `dpp_den` (+ `pkp` when set) | `OrgConfig(org, "tax")`: `ppn_rate` as a percent (default 12; a whole number arrives as an int, a fractional one such as 11.5 as a float), `dpp_ratio` such as `"11/12"` split into `dpp_num` 11 and `dpp_den` 12 (default 11/12) |
+| `org` | `id`, `code`, `name`, `legal_name`, `npwp` | Identity only. `id` is the org id; `code` and `name` from its `orgs:` entry (what `rk_orgs` holds), `""` for an org not in `orgs:`; `legal_name` and `npwp` from `OrgConfig(org, "org")` (§2: the org's `org:` replaces the site's wholesale). Missing text is `""` |
+| `tax` | `ppn_rate`, `dpp_num`, `dpp_den`, `pkp` | The site's `tax:` with the org's `config.tax` merged over it key by key. `ppn_rate` is a percent (default 12; a whole number arrives as an int, a fractional one such as 11.5 as a float); `dpp_ratio` such as `"11/12"` becomes `dpp_num` 11 and `dpp_den` 12 (default 11/12); `pkp` is always a bool, default `false` |
 
 ```yaml
-- {name: tax_rate, type: int, default: "org.pkp ? tax.ppn_rate : 0"}
+- {name: tax_rate, type: int, default: "tax.pkp ? tax.ppn_rate : 0"}
 ```
-- Both follow §2's rule: an org's `org:` or `tax:` replaces the site's map wholesale. An org with
-  `tax: {ppn_rate: 11}` gets the default DPP 11/12, not the site's `dpp_ratio`.
-- A model field named `org` or `tax` shadows the global inside that model's expressions, as for `user`.
-- Both validators accept `org` and `tax` as globals and do not check their members (as for `user`). A
-  `dpp_ratio` that is not two positive whole numbers around `/` (site `tax:` or an org's `config.tax`) is
+- PKP status has one source, `tax.pkp`: PPN is charged only for an org declared PKP. `org.pkp` in `config.rk`
+  (§2's example) is not read by these globals.
+- `tax:` is the one key that deep-merges, unlike §2's wholesale rule: an org with `config: {tax: {pkp: false}}`
+  keeps the site's `ppn_rate` and `dpp_ratio`. Print (S3b) reads the same merged `tax:`.
+- A model field named `org` or `tax` shadows the global inside that model's expressions, as for `user`, and
+  the validators check it as that field (`org.nope` on a model with a link field `org` is `unknown_field`).
+- Otherwise both validators accept `org` and `tax` as globals and do not check their members (as for `user`).
+  A `dpp_ratio` that is not two positive whole numbers around `/` (site `tax:` or an org's `config.tax`) is
   error `bad_dpp_ratio`; at run time it falls back to 11/12.
 - Imports' `cel:` mappings (contract 0012) see only `row`, not these globals.
 

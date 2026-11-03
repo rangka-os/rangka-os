@@ -22,7 +22,7 @@ if: app_installed('sales')
 | `app_installed('sales')` | Whether an app is installed |
 | `truncate(s, n)`, `s.contains(t)` | Text |
 | `user.name`, `user.roles`, `event.*` | The current user; the triggering event in flows |
-| `org.pkp`, `org.legal_name`, `tax.ppn_rate`, `tax.dpp_num`, `tax.dpp_den` | The current org and its PPN settings, e.g. `org.pkp ? tax.ppn_rate : 0` |
+| `org.code`, `org.legal_name`, `tax.pkp`, `tax.ppn_rate`, `tax.dpp_num`, `tax.dpp_den` | The current org and its PPN settings, e.g. `tax.pkp ? tax.ppn_rate : 0` |
 
 Dates are ISO strings and compare as strings. Missing values are `''` for text, date and link, `0` for numbers and
 `false` for checks. String literals inside YAML need both quotes: `default: "'new'"`.

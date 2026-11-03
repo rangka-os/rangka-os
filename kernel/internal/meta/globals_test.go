@@ -27,44 +27,49 @@ func regWith(cfg map[string]any) *Registry {
 }
 
 func TestTaxVar(t *testing.T) {
-	if got, want := (&Registry{}).TaxVar("x"), map[string]any{"ppn_rate": int64(12), "dpp_num": int64(11), "dpp_den": int64(12)}; !reflect.DeepEqual(got, want) {
+	if got, want := (&Registry{}).TaxVar("x"), map[string]any{"ppn_rate": int64(12), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": false}; !reflect.DeepEqual(got, want) {
 		t.Errorf("no site: %v", got)
 	}
 	r := regWith(map[string]any{
-		"tax": map[string]any{"ppn_rate": int64(11), "dpp_ratio": "bad", "pkp": false},
+		"tax": map[string]any{"ppn_rate": int64(11), "dpp_ratio": "10/11", "pkp": true},
 		"orgs": map[string]any{
-			"pt_a": map[string]any{"name": "PT A", "config": map[string]any{"tax": map[string]any{"ppn_rate": 12.0, "dpp_ratio": "10/11"}}},
+			"pt_kecil": map[string]any{"name": "PT Kecil", "config": map[string]any{"tax": map[string]any{"pkp": false}}},
+			"pt_bad":   map[string]any{"name": "PT Bad", "config": map[string]any{"tax": map[string]any{"dpp_ratio": "bad", "ppn_rate": 12.0}}},
 		},
 	})
-	if got, want := r.TaxVar("other"), map[string]any{"ppn_rate": int64(11), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": false}; !reflect.DeepEqual(got, want) {
-		t.Errorf("site tax: %v", got)
+	cases := map[string]map[string]any{
+		"other": {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": true}, // the site's tax:
+		// a non-PKP org overriding only pkp keeps the site's rate and ratio (deep merge)
+		"pt_kecil": {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": false},
+		// a malformed org dpp_ratio falls back to 11/12, not to the site's; 12.0 is a whole number
+		"pt_bad": {"ppn_rate": int64(12), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": true},
+	}
+	for org, want := range cases {
+		if got := r.TaxVar(org); !reflect.DeepEqual(got, want) {
+			t.Errorf("TaxVar(%s) = %v, want %v", org, got, want)
+		}
 	}
 	if got := regWith(map[string]any{"tax": map[string]any{"ppn_rate": 11.5}}).TaxVar("x")["ppn_rate"]; got != 11.5 {
 		t.Errorf("fractional ppn_rate = %v (%T), want float64 11.5", got, got)
 	}
-	// the org's tax: replaces the site's whole map (OrgConfig), so pkp is not inherited
-	if got, want := r.TaxVar("pt_a"), map[string]any{"ppn_rate": int64(12), "dpp_num": int64(10), "dpp_den": int64(11)}; !reflect.DeepEqual(got, want) {
-		t.Errorf("org tax: %v", got)
-	}
 }
 
 func TestOrgVar(t *testing.T) {
-	if got, want := (&Registry{}).OrgVar("x"), map[string]any{"id": "x", "code": "", "name": "", "legal_name": "", "npwp": "", "pkp": false}; !reflect.DeepEqual(got, want) {
+	if got, want := (&Registry{}).OrgVar("x"), map[string]any{"id": "x", "code": "", "name": "", "legal_name": "", "npwp": ""}; !reflect.DeepEqual(got, want) {
 		t.Errorf("no site: %v", got)
 	}
 	r := regWith(map[string]any{
-		"tax": map[string]any{"pkp": false},
-		"org": map[string]any{"legal_name": "PT Situs", "npwp": "01"},
+		"org": map[string]any{"legal_name": "PT Situs", "npwp": "01", "pkp": true},
 		"orgs": map[string]any{
-			"pt_a": map[string]any{"name": "PT A", "code": "A", "config": map[string]any{"org": map[string]any{"legal_name": "PT A Tbk", "pkp": true}}},
+			"pt_a": map[string]any{"name": "PT A", "code": "A", "config": map[string]any{"org": map[string]any{"legal_name": "PT A Tbk"}}},
 			"pt_b": map[string]any{"name": "PT B"},
 		},
 	})
 	cases := map[string]map[string]any{
-		// the org's own org: wins; npwp is not inherited from the site (the whole org: map is replaced)
-		"pt_a": {"id": "pt_a", "code": "A", "name": "PT A", "legal_name": "PT A Tbk", "npwp": "", "pkp": true},
-		// no org: of its own: the site's org:, pkp from the legacy tax.pkp
-		"pt_b": {"id": "pt_b", "code": "", "name": "PT B", "legal_name": "PT Situs", "npwp": "01", "pkp": false},
+		// the org's own org: wins wholesale; npwp is not inherited from the site
+		"pt_a": {"id": "pt_a", "code": "A", "name": "PT A", "legal_name": "PT A Tbk", "npwp": ""},
+		// no org: of its own: the site's org:; no pkp member (that is tax.pkp)
+		"pt_b": {"id": "pt_b", "code": "", "name": "PT B", "legal_name": "PT Situs", "npwp": "01"},
 	}
 	for org, want := range cases {
 		if got := r.OrgVar(org); !reflect.DeepEqual(got, want) {

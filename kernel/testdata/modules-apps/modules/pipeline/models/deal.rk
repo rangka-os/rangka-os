@@ -31,7 +31,7 @@ fields:
   - name: tax_rate
     type: int
     label: {id: Tarif PPN}
-    default: "org.pkp ? tax.ppn_rate : 0"
+    default: "tax.pkp ? tax.ppn_rate : 0"
 rules:
   - name: value_positive
     on: save

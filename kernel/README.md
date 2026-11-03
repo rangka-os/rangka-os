@@ -150,6 +150,27 @@ DELETE /api/v1/attachments/{id}               → 204
   Downloads send `nosniff` and `Content-Security-Policy: sandbox`, except PDF (Chromium's viewer refuses sandboxed
   documents).
 
+## Print formats
+
+Printable documents (quotation, invoice, PO, statement of account), contract
+[0008](../docs/contracts/0008-print-formats.md). A model gets a format from a `print/<name>.rk` plus a Go
+`html/template`; the reference layouts are in [`../templates/print/`](../templates/print/).
+
+```
+GET /api/v1/r/{model}/{name}/print?format=<print>&as=html|pdf
+```
+
+* `format` defaults to the model's `default: true` format, else the first by name; none → 404 `no_print_format`.
+  `as=html` (default) is `text/html`; `as=pdf` is rendered by headless Chromium.
+* `RANGKA_CHROMIUM` is the path of the browser. Without it the kernel looks for `chromium`, `chromium-browser`,
+  `google-chrome`, `google-chrome-stable` or `headless_shell` on `PATH`, then the macOS Chrome app.
+  `RANGKA_CHROMIUM=off` disables PDF. When no browser is found, `as=pdf` answers 501 `pdf_unavailable` with a
+  `hint` pointing at the HTML version. A conversion is cut off after 30 s.
+* Reading goes through the engine as the caller; when a model declares `permissions:`, the role needs
+  `print: true` (403 `permission_denied` otherwise). Every print is audited as `record.print`.
+* `/api/v1/meta` lists each model's formats as `prints`. `rangka validate` checks formats and letterheads
+  (`template_missing`, `template_outside`, `template_error`, `logo_missing`).
+
 ## Tests
 
 `make test` runs unit tests and integration tests (fresh database per test: `internal/testdb`). Without

@@ -13,6 +13,7 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | GET · PATCH · DELETE | `/r/{model}/{name}` | PATCH merges. Submitted documents return 409 |
 | POST | `/r/{model}/{name}/submit` · `cancel` · `amend` | Document lifecycle; `submit` takes `{"force": true}` to accept warnings |
 | POST | `/r/{model}/{name}/actions/{action}` | Runs the hook; 202 `{job_id}` when the action has `queue:` |
+| GET | `/r/{model}/{name}/print` | `?format=<print>&as=html\|pdf`: the record as a document ([Print formats](/guide/print-formats)); 501 `pdf_unavailable` without Chromium |
 | GET | `/dashboards/{name}?period=30` | Every widget computed; `X-Cache: hit\|miss` when cached |
 | POST | `/flows/{name}/run` | Run a flow now with `{event: {…}}` |
 

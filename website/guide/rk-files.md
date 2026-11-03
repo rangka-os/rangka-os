@@ -47,5 +47,8 @@ There are 14 kinds; each has a schema and a reference page.
 | [theme](/reference/schema/theme), [layout](/reference/schema/layout) | site | 6 |
 | [changeset](/reference/schema/changeset) | sent to the API | — |
 
+Two kinds arrive with schema 0.5 ([contract 0008](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0008-print-formats.md)) and have no generated reference page yet:
+`print/<name>.rk` (apps and site) and `letterhead.rk` / `letterheads/<org>.rk` (site). See [Print formats](/guide/print-formats).
+
 Accepted extensions: `.rk` (preferred), `.rk.yaml`, `.rk.yml`; legacy `.json` still loads, and
 `tools/rk_convert.py` converts it, refusing any file that would not read back identically.

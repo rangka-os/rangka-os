@@ -40,8 +40,8 @@ const invoicePermissions = `permissions:
 `
 
 // printEnv installs the reference invoice format in the sales app, a site letterhead and print permissions
-// on sales_invoice, then signs in as the seeded owner.
-func printEnv(t *testing.T) *env {
+// on sales_invoice, runs extra on the copied apps and site, then signs in as the seeded owner.
+func printEnv(t *testing.T, extra ...func(apps, site string)) *env {
 	t.Helper()
 	e := newEnv(t, false, func(apps, site string) {
 		dir := filepath.Join(apps, "sales", "print")
@@ -66,6 +66,9 @@ func printEnv(t *testing.T) *env {
 			t.Fatal(err)
 		}
 		write(model, string(b)+invoicePermissions)
+		for _, x := range extra {
+			x(apps, site)
+		}
 	})
 	e.login()
 	return e
@@ -157,7 +160,7 @@ func TestPrintPDF(t *testing.T) {
 	name := e.submittedInvoice("CUST-0012")
 	r := e.must(200, "GET", "/api/v1/r/sales_invoice/"+name+"/print?as=pdf", nil)
 	if !strings.HasPrefix(string(r.Body), "%PDF-") || r.Header.Get("Content-Type") != "application/pdf" ||
-		r.Header.Get("Content-Disposition") != `inline; filename="`+name+`.pdf"` || r.Header.Get("Cache-Control") != "no-store" {
+		r.Header.Get("Content-Disposition") != `inline; filename="`+name+`.pdf"; filename*=UTF-8''`+name+`.pdf` || r.Header.Get("Cache-Control") != "no-store" {
 		t.Fatalf("pdf: %v %q", r.Header, r.Body[:min(len(r.Body), 64)])
 	}
 }
@@ -170,10 +173,13 @@ func TestPrintPermissionDenied(t *testing.T) {
 	}
 	e.jar, _ = cookiejar.New(nil)
 	e.must(200, "POST", "/auth/login", map[string]any{"email": "rep@contoh.test", "password": "rahasia-123"})
-	r := e.do("GET", "/api/v1/r/sales_invoice/"+name+"/print", nil)
-	if r.Status != 403 || code(r) != "permission_denied" || get(r.JSON, "error", "model") != "sales_invoice" ||
-		get(r.JSON, "error", "action") != "print" || strings.Contains(string(r.Body), "<html") {
-		t.Fatalf("rep print: %d %s", r.Status, r.Body)
+	// the same 403 whatever format is asked for, so a denied caller cannot probe which formats exist
+	for _, q := range []string{"", "?format=sales_invoice", "?format=nope", "?as=pdf"} {
+		r := e.do("GET", "/api/v1/r/sales_invoice/"+name+"/print"+q, nil)
+		if r.Status != 403 || code(r) != "permission_denied" || get(r.JSON, "error", "model") != "sales_invoice" ||
+			get(r.JSON, "error", "action") != "print" || strings.Contains(string(r.Body), "<html") {
+			t.Fatalf("rep print%s: %d %s", q, r.Status, r.Body)
+		}
 	}
 	res, err := e.s.DB.Query(context.Background(), "select count(*) from rk_audit where kind = 'record.print'")
 	if err != nil {
@@ -213,5 +219,88 @@ func TestPrintEscapes(t *testing.T) {
 	body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+name+"/print", nil).Body)
 	if !strings.Contains(body, "&lt;script&gt;") || strings.Contains(body, "<script") {
 		t.Fatalf("customer name not escaped:\n%s", body)
+	}
+}
+
+const statementRK = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: statement
+model: customer
+label: {id: Laporan tagihan}
+template: statement.html
+related:
+  invoices:
+    model: sales_invoice
+    match: {customer: name}
+    sort: name
+    limit: 3
+`
+
+// statementEnv adds a site format on customer listing the customer's invoices as "<li>name|customer</li>".
+func statementEnv(t *testing.T) *env {
+	return printEnv(t, func(apps, site string) {
+		dir := filepath.Join(site, "print")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for p, s := range map[string]string{"statement.rk": statementRK,
+			"statement.html": `<ul>{{range .Related.invoices}}<li>{{.name}}|{{.customer}}</li>{{end}}</ul>`} {
+			if err := os.WriteFile(filepath.Join(dir, p), []byte(s), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+}
+
+func TestPrintRelatedMatchBeforeLimit(t *testing.T) {
+	e := statementEnv(t)
+	// other customers' invoices come first in the related sort order (name) and outnumber the limit
+	var others []string
+	for i := 0; i < 4; i++ {
+		others = append(others, e.submittedInvoice("CUST-0012"))
+	}
+	c := e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "PT Pelanggan Contoh"}).JSON["name"].(string)
+	var mine []string
+	for i := 0; i < 4; i++ {
+		mine = append(mine, e.submittedInvoice(c))
+	}
+	body := string(e.must(200, "GET", "/api/v1/r/customer/"+c+"/print?format=statement", nil).Body)
+	if got := strings.Count(body, "<li>"); got != 3 {
+		t.Fatalf("want 3 rows (the related limit), got %d:\n%s", got, body)
+	}
+	for _, n := range mine[:3] {
+		if !strings.Contains(body, "<li>"+n+"|"+c+"</li>") {
+			t.Errorf("missing %s:\n%s", n, body)
+		}
+	}
+	for _, n := range append(others, mine[3]) {
+		if strings.Contains(body, n+"|") {
+			t.Errorf("unexpected %s:\n%s", n, body)
+		}
+	}
+	// a customer without invoices gets an empty list
+	c2 := e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "PT Kosong Contoh"}).JSON["name"].(string)
+	if body := string(e.must(200, "GET", "/api/v1/r/customer/"+c2+"/print?format=statement", nil).Body); strings.Contains(body, "<li>") {
+		t.Errorf("empty statement has rows:\n%s", body)
+	}
+}
+
+func TestPrintOtherOrg(t *testing.T) {
+	e := statementEnv(t)
+	ctx := context.Background()
+	if _, err := e.s.DB.Exec(ctx, `insert into r_customer (org_id, name, customer_name) values ('other', 'CUST-9999', 'Rahasia Org Lain')`); err != nil {
+		t.Fatal(err)
+	}
+	// another org's record is not found, as for GET /r/{model}/{name}
+	if r := e.do("GET", "/api/v1/r/customer/CUST-9999/print?format=statement", nil); r.Status != 404 || code(r) != "not_found" {
+		t.Errorf("other org's customer: %d %s", r.Status, r.Body)
+	}
+	// a link pointing at another org's record is left out of .Links: the template prints the raw value
+	name := e.submittedInvoice("CUST-0012")
+	if _, err := e.s.DB.Exec(ctx, `update r_sales_invoice set customer = 'CUST-9999' where org_id = 'kopi-senja' and name = $1`, name); err != nil {
+		t.Fatal(err)
+	}
+	body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+name+"/print", nil).Body)
+	if strings.Contains(body, "Rahasia Org Lain") || !strings.Contains(body, "CUST-9999") {
+		t.Fatalf("other org's link rendered:\n%s", body)
 	}
 }

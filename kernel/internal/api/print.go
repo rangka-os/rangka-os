@@ -6,8 +6,11 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"regexp"
+	"sort"
 	"strings"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/docprint"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -15,9 +18,6 @@ import (
 )
 
 // Print formats (contract 0008 §4, §5): a record rendered as a business document, HTML or PDF.
-
-// relatedFetchLimit bounds the rows read per related list before match filtering (the format's own limit is ≤ 1000).
-const relatedFetchLimit = 1000
 
 func noPrintFormat(w http.ResponseWriter, msg string) {
 	writeError(w, http.StatusNotFound, "no_print_format", msg)
@@ -64,6 +64,10 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 		fail(w, err)
 		return
 	}
+	if !s.Engine.Permits(ctx, c.actor, model, rec, "print") {
+		permissionDenied(w, model, "print")
+		return
+	}
 	reg := s.Engine.Reg()
 	m := reg.Model(model)
 	f := printFormat(reg, model, q.Get("format"))
@@ -73,10 +77,6 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 		} else {
 			noPrintFormat(w, "Belum ada format cetak untuk "+model)
 		}
-		return
-	}
-	if !s.Engine.Permits(ctx, c.actor, model, rec, "print") {
-		permissionDenied(w, model, "print")
 		return
 	}
 	org, _ := reg.SiteConfig("orgs").(map[string]any)
@@ -112,7 +112,8 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 			return
 		}
 		if err != nil {
-			writeError(w, http.StatusInternalServerError, "pdf_failed", err.Error())
+			s.logf("print: pdf %s/%s: %v", model, name, err)
+			writeError(w, http.StatusInternalServerError, "pdf_failed", "PDF gagal dibuat. Coba lagi atau cetak dari versi HTML.")
 			return
 		}
 		contentType = "application/pdf"
@@ -125,7 +126,8 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 	h.Set("Content-Type", contentType)
 	h.Set("Cache-Control", "no-store")
 	if as == "pdf" {
-		h.Set("Content-Disposition", `inline; filename="`+pdfFilename(name)+`"`)
+		fn := pdfFilename(name)
+		h.Set("Content-Disposition", `inline; filename="`+asciiFilename(fn)+`"; `+strings.TrimPrefix(contentDisposition("inline", fn), "inline; "))
 	} else {
 		h.Set("Content-Security-Policy", docprint.CSP)
 	}
@@ -147,6 +149,16 @@ func pdfFilename(name string) string {
 	return name + ".pdf"
 }
 
+// asciiFilename is the filename="" fallback: bytes outside printable ASCII become "_".
+func asciiFilename(name string) string {
+	return strings.Map(func(r rune) rune {
+		if r < 0x20 || r > 0x7e {
+			return '_'
+		}
+		return r
+	}, name)
+}
+
 // printLinks reads each top-level link field's record as the caller; a link that cannot be read is left out.
 func (s *Server) printLinks(ctx context.Context, a engine.Actor, m *meta.Model, rec store.Record) map[string]map[string]any {
 	out := map[string]map[string]any{}
@@ -165,28 +177,64 @@ func (s *Server) printLinks(ctx context.Context, a engine.Actor, m *meta.Model, 
 	return out
 }
 
-// printRelated loads the format's related lists as the caller: rows of the related model passing its filter,
-// in its sort order, whose match fields equal the document's, cut to its limit.
+// printRelated loads the format's related lists as the caller: rows of the related model passing its filter
+// and whose match fields equal the document's, in its sort order, cut to its limit. The match pairs are part
+// of the List filter, so the limit applies to matching rows only.
 func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record) (map[string][]map[string]any, error) {
 	out := map[string][]map[string]any{}
 	for key, rel := range f.Related {
-		rows, _, err := s.Engine.List(ctx, a, rel.Model, engine.ListOpts{Filter: rel.Filter, Sort: rel.Sort, Limit: relatedFetchLimit})
+		list := []map[string]any{}
+		out[key] = list
+		filter, ok, err := relatedFilter(rel, rec)
 		if err != nil {
 			return nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
 		}
-		list := []map[string]any{}
+		if !ok {
+			continue // the document has no value to match on
+		}
+		rows, _, err := s.Engine.List(ctx, a, rel.Model, engine.ListOpts{Filter: filter, Sort: rel.Sort, Limit: rel.Limit})
+		if err != nil {
+			return nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
+		}
 		for _, row := range rows {
-			if !matches(row, rec, rel.Match) {
-				continue
-			}
-			list = append(list, row)
-			if len(list) == rel.Limit {
-				break
+			if matches(row, rec, rel.Match) { // defence in depth: the filter already holds these
+				list = append(list, row)
 			}
 		}
 		out[key] = list
 	}
 	return out, nil
+}
+
+var celIdent = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
+
+// relatedFilter is the related list's filter AND one `field == <literal>` per match pair, the literal being the
+// document's value. ok is false when a matched document value is empty or not a scalar (no row can match).
+func relatedFilter(rel meta.Related, doc store.Record) (filter string, ok bool, err error) {
+	var parts []string
+	if strings.TrimSpace(rel.Filter) != "" {
+		parts = append(parts, "("+rel.Filter+")")
+	}
+	keys := make([]string, 0, len(rel.Match))
+	for k := range rel.Match {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if !celIdent.MatchString(k) {
+			return "", false, fmt.Errorf("match field %q is not a field name", k)
+		}
+		v := doc[rel.Match[k]]
+		if v == nil || v == "" {
+			return "", false, nil
+		}
+		lit, ok := cel.Literal(v)
+		if !ok {
+			return "", false, nil
+		}
+		parts = append(parts, k+" == "+lit)
+	}
+	return strings.Join(parts, " && "), true, nil
 }
 
 // matches reports whether row[k] equals doc[v] for every pair of match (a missing value never matches).

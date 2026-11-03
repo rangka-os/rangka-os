@@ -62,7 +62,7 @@ func newEnv(t *testing.T, devOpen bool, mutate func(apps, site string)) *env {
 	}
 	cfg := Config{AppsDir: apps, SiteDir: site, ConnectorsDir: filepath.Join(dir, "rangka-connectors"), DeployTarget: "docker", DatabaseURL: url, Addr: ":0", DevOpen: devOpen, Schemas: schema.Embedded(), Version: "test",
 		WebDir: filepath.Join(workspace, "rangka-os", "web"), TemplatesDir: filepath.Join(workspace, "rangka-os", "templates"), Now: fixedNow,
-		Logf: func(string, ...any) {}}
+		Logf: func(string, ...any) {}, FilesDir: t.TempDir()}
 	ctx, cancel := context.WithCancel(context.Background())
 	reg, err := LoadRegistry(cfg)
 	if err != nil {

@@ -396,11 +396,40 @@ func (v *validator) site(all map[string]vis) {
 		if ly, _ := c["layout"].(string); ly != "" && s.Layouts[ly] == nil && !templateExists("layouts", ly, tdir) {
 			v.rep.extra("error", cfg.Path, "layout", "unknown_layout", fmt.Sprintf(`layout "%s" has no file layouts/%s.rk%s`, ly, ly, suggest(ly, keysDoc(s.Layouts))))
 		}
-		for _, mn := range sortedKeys(asMap(c["numbering"])) {
+		numbering := asMap(c["numbering"])
+		for _, mn := range sortedKeys(numbering) {
+			if series := asMap(numbering[mn]); series != nil {
+				v.resetNeedsDate(cfg.Path, "numbering/"+mn, series, true)
+				continue
+			}
 			if x, ok := all[mn]; !ok {
 				v.rep.extra("error", cfg.Path, "numbering/"+mn, "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, mn, suggest(mn, keys(all))))
 			} else if !installed[x.app] {
 				v.rep.extra("warn", cfg.Path, "numbering/"+mn, "not_installed", fmt.Sprintf(`"%s" comes from app "%s", which this site does not install`, mn, x.app))
+			}
+		}
+		for _, mn := range sortedKeysM(all) {
+			x := all[mn]
+			if !installed[x.app] {
+				continue
+			}
+			naming := asMap(x.own.Raw["naming"])
+			series, _ := naming["series"].(string)
+			if series == "" {
+				continue
+			}
+			if _, defined := numbering[series].(map[string]any); defined {
+				continue
+			}
+			// the engine resolves config.numbering[<model>] (a string, or an object with a pattern) before the model's own naming
+			if str, _ := numbering[mn].(string); str != "" {
+				continue
+			}
+			if p, _ := asMap(numbering[mn])["pattern"].(string); p != "" {
+				continue
+			}
+			if _, hasPattern := naming["pattern"].(string); !hasPattern {
+				v.rep.extra("error", x.own.Doc.Path, "naming/series", "unknown_series", fmt.Sprintf(`series "%s" is not defined in config.rk numbering and the model gives no default pattern`, series))
 			}
 		}
 		for _, id := range sortedKeys(asMap(c["orgs"])) {
@@ -700,5 +729,31 @@ func (v *validator) overlays(all map[string]vis) {
 				v.rep.extra("error", p, it[0], "compute_cycle", it[1])
 			}
 		}
+	}
+}
+
+// resetNeedsDate reports a series (config.numbering object or model naming map) whose reset period is not
+// spelled out in its pattern, so numbers would repeat. A reset left to default is inferred from the pattern
+// and never fails.
+func (v *validator) resetNeedsDate(path, where string, series map[string]any, extra bool) {
+	pattern, _ := series["pattern"].(string)
+	reset, _ := series["reset"].(string)
+	year := strings.Contains(pattern, "{YY}") || strings.Contains(pattern, "{YYYY}")
+	var what string
+	switch {
+	case pattern == "":
+		return
+	case reset == "yearly" && !year:
+		what = "{YY} or {YYYY}"
+	case reset == "monthly" && (!year || !strings.Contains(pattern, "{MM}")):
+		what = "{MM} and {YY} or {YYYY}"
+	default:
+		return
+	}
+	msg := fmt.Sprintf("reset %s needs %s in the pattern, or numbers repeat", reset, what)
+	if extra {
+		v.rep.extra("error", path, where, "reset_needs_date", msg)
+	} else {
+		v.rep.add("error", path, where, "reset_needs_date", msg)
 	}
 }

@@ -502,7 +502,7 @@
     return h(React.Fragment, null,
       h(R.PageHeader, { title: L(m.label) || m.name, breadcrumb: ["App & model", L(app.title) + " (" + m.app + ")", L(m.label)], onNavigate: function (i) { if (i < 2) ctx.nav("/apps"); }, onBack: function () { ctx.nav("/apps"); },
         tags: [mono(m.name, "cn-tag"), m.is_submittable ? h(R.Lozenge, { key: "s", tone: "info" }, "Bisa diajukan") : null, ovPath ? h(R.Lozenge, { key: "o", tone: "new" }, "+ lapisan perusahaan") : null].concat(uniqCaps(caps).map(capLoz)),
-        subtitle: appFields.length + " field app" + (ovFields.length ? " + " + ovFields.length + " perusahaan" : "") + " · tabel r_" + m.name + (m.naming ? " · penomoran " + m.naming : ""),
+        subtitle: appFields.length + " field app" + (ovFields.length ? " + " + ovFields.length + " perusahaan" : "") + " · tabel r_" + m.name + (m.naming ? " · penomoran " + (typeof m.naming === "object" ? (m.naming.pattern || (m.naming.series ? "seri " + m.naming.series : "")) : m.naming) : ""),
         tabs: h(R.Tabs, { key: tab, value: tab, onChange: function (t) { ctx.nav("/apps/model/" + m.name + "/" + t); }, tabs: [{ value: "fields", label: "Field", count: (m.fields || []).length },
           { value: "views", label: "Tampilan" }, { value: "rules", label: "Aturan dan izin", count: (m.rules || []).length }, { value: "caps", label: "Kapabilitas", count: caps.length }, { value: "source", label: "Sumber .rk" }] }) }),
       h("div", { className: "rk-shell-content" }, body));

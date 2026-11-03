@@ -52,9 +52,28 @@
     "numbering": {
       "type": "object",
       "additionalProperties": {
-        "type": "string"
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "pattern"
+            ],
+            "properties": {
+              "pattern": {
+                "$ref": "model.json#/$defs/number_pattern"
+              },
+              "reset": {
+                "$ref": "model.json#/$defs/number_reset"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
       },
-      "description": "Override naming per model, e.g. sales_invoice: 'INV-{YYYY}-{#####}'"
+      "description": "A series (object) or a per-model naming override (string), e.g. sales_invoice: 'INV-{YYYY}-{#####}'"
     },
     "plan": {
       "$ref": "model.json#/$defs/name"

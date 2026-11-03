@@ -5,9 +5,10 @@ core/app.rk:4:9  error  schema  hooks/0  'Bad Hook' does not match '^[a-z_]+\\.[
 core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must match the file name "item"
 crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', …
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
+crm/models/tanda_terima.rk:4:9  error  reset_needs_date  naming  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
-sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' does not match '^[A-Z0-9-]*(\\{YYYY\\}|\\{YY\\}|\\{MM\\}|[A-Z0-9-])*\\{#{2,8}\\}$'
+sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' is not valid under any of the given schemas
 core/app.rk:9:29  error  unknown_model  menu/0/items/2  "outlet" is not a model in this app or its dependencies
 core/models/customer.rk:7:12  error  not_submittable  on_submit  on_submit hooks need is_submittable: true
 crm/app.rk:10:19  error  unknown_model  menu/0/items/1  "leads" is not a model in this app or its dependencies; did you mean "lead"?
@@ -62,4 +63,4 @@ crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope fiel
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-56 error(s), 7 warning(s)
+57 error(s), 7 warning(s)

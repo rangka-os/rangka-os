@@ -57,10 +57,12 @@ func (s *Server) patchRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 }
 
 func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request, c *caller) {
-	if err := s.Engine.Delete(r.Context(), c.actor, r.PathValue("model"), r.PathValue("name")); err != nil {
+	model, name := r.PathValue("model"), r.PathValue("name")
+	if err := s.Engine.Delete(r.Context(), c.actor, model, name); err != nil {
 		fail(w, err)
 		return
 	}
+	s.removeRecordAttachments(r.Context(), c.actor.Org, model, name)
 	w.WriteHeader(http.StatusNoContent)
 }
 

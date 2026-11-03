@@ -84,7 +84,7 @@ internal/auth (Rangka ID: sessions, rk_ tokens, OIDC)   internal/mcp (JSON-RPC t
 rangka validate --apps <dir> [--site <dir>] [--connectors <dir>] [--json] [app ...]
 rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
-rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--dev-open]
+rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--files-dir <dir>] [--dev-open]
 rangka user add    <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."] --db <url>
 rangka user remove <email> --org <id> --db <url>
 ```
@@ -149,6 +149,30 @@ Contract: [`0010`](../docs/contracts/0010-multi-org-and-row-scope.md).
 * Every model table has row-level security keyed by org: the kernel sets `rangka.org` on each pooled
   connection from the request context. Superusers and `BYPASSRLS` roles skip RLS, so `serve` logs a warning
   when connected as one. Hosted installs must connect as a plain role that owns the tables.
+
+## Attachments
+
+Files on records (a signed BAST on a project, proof of transfer on a payment), contract
+[0011](../docs/contracts/0011-attachments.md). Not to be confused with `/api/v1/files`, which serves the `.rk` files.
+
+```
+POST   /api/v1/r/{model}/{name}/attachments   multipart, part "file"  → 201 {id, filename, content_type, size, sha256, created_by, created_at, url}
+GET    /api/v1/r/{model}/{name}/attachments   → {data: [item…]}, newest first
+GET    /api/v1/attachments/{id}               → the bytes (inline for images and PDF, attachment otherwise)
+DELETE /api/v1/attachments/{id}               → 204
+```
+
+* Bytes live under a root directory, first match wins: `rangka serve --files-dir` / `$RANGKA_FILES_DIR`, then
+  `system.rk files.path`, then `./data/files` (relative to where `serve` runs). Content-addressed per org
+  (`<root>/<orgdir>/<sha[0:2]>/<sha>`, where `<orgdir>` is the org id, or `_` + 16 hex of its sha256 when the id is not a plain slug); metadata is in `rk_attachments`. Back up the root together with the database.
+* Limit `files.max_upload_mb` (default 20): larger uploads get 413 `too_large`. `files: {enabled: false}` answers
+  501 `files_disabled`; `driver: s3` is refused at start-up until a driver exists.
+* Reading needs the record to be visible to the caller (org scope today; role permissions once contract 0005 §4
+  lands), upload and delete need `write`. Upload works in any docstatus; delete
+  is refused (409 `submitted`) once a submittable record is submitted. Attachments follow the record when submit
+  renames it and go with it when it is deleted. Uploads and deletes are audited.
+  Downloads send `nosniff` and `Content-Security-Policy: sandbox`, except PDF (Chromium's viewer refuses sandboxed
+  documents).
 
 ## Tests
 

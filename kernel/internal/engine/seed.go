@@ -116,7 +116,7 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 				}
 				o.prepare(m, rec, true)
 				if name == "" {
-					n, err := store.NextName(o.ctx, o.tx, a.Org, mn, e.naming(m), e.Now().In(e.Location()))
+					n, err := o.nextName(m)
 					if err != nil {
 						return err
 					}

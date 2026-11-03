@@ -73,8 +73,10 @@ func reviseQuotation(h *HookCtx) (map[string]any, error) {
 	if err := needOpen(q); err != nil {
 		return nil, err
 	}
-	if _, err := h.op.cancel(h.Model.Name, name); err != nil {
+	if res, err := h.op.cancel(h.Model.Name, name); err != nil {
 		return nil, err
+	} else if res.Held {
+		return nil, refuse("cancel_held", "Pembatalan penawaran "+name+" menunggu persetujuan; revisi dibuat setelah disetujui")
 	}
 	am, err := h.op.amend(h.Model.Name, name)
 	if err != nil {

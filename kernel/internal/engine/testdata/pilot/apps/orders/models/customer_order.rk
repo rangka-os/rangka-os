@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: customer_order
+is_submittable: true
+naming: SO-{YYYY}-{#####}
+fields:
+  - {name: customer, type: link, to: customer, required: true}
+  - {name: quotation, type: link, to: quotation}
+  - {name: po_number, type: data, required: true}
+  - {name: po_date, type: date, required: true}
+  - {name: items, type: table, of: customer_order_item, min_rows: 1}
+  - {name: subtotal, type: currency, compute: 'items.map(i, i.amount).sum()'}
+  - {name: invoiced_amount, type: currency, read_only: true}
+actions:
+  - {name: make_invoice, label: {id: make_invoice}, hook: invoicing.from_order, if: docstatus == 1}

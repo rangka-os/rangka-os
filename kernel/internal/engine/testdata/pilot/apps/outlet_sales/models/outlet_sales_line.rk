@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: outlet_sales_line
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, required: true}
+  - {name: gross, type: currency, default: round(qty * item.rate)}
+  - {name: discount, type: currency, default: '0'}
+  - {name: net, type: currency, compute: gross - discount}
+  - {name: cogs, type: currency, read_only: true}

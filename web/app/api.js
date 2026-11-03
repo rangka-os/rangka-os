@@ -242,6 +242,19 @@
       o = o || {};
       return base + rec(model, name) + "/print" + qs([["format", o.format], ["as", o.as]]);
     };
+    /** HEAD of the HTML print (S3 answers headers only: no browser, no audit entry) → resolves when the caller may
+     *  print; rejects with ApiError 403 permission_denied, 404 not_found (also an unknown format), or the status. */
+    api.printCheck = function (model, name, format) {
+      var path = rec(model, name) + "/print" + qs([["format", format], ["as", "html"]]);
+      return raw("HEAD", path).then(function (res) {
+        // drain the (empty) body: an unread answer shows up as an aborted request
+        return res.text().then(function () { return res; }, function () { return res; });
+      }).then(function (res) {
+        if (res.status >= 200 && res.status < 300) return true;
+        var code = { 401: "unauthorized", 403: "permission_denied", 404: "not_found" }[res.status] || "http_" + res.status;
+        throw ApiError(res.status, code, res.statusText || "Permintaan gagal", null);
+      });
+    };
     api.printPdf = function (model, name, format) {
       var path = rec(model, name) + "/print" + qs([["format", format], ["as", "pdf"]]);
       return raw("GET", path).then(function (res) {

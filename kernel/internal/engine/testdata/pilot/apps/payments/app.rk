@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+name: payments
+version: 1.0.0
+title: {id: payments}
+requires: {rangka: '>=0.4', contacts: ^1.0, invoicing: ^1.0, procurement: ^1.0}
+hooks: [payments.allocate, payments.unallocate]

@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: stock_negative_alert
+on: stock_move.created
+if: event.negative == true
+steps:
+  - notify: head_office
+    channel: in_app
+    template: 'Stok {event.item} di {event.outlet} minus ({event.balance_qty})'

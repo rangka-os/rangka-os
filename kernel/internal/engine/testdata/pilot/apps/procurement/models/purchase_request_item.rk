@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: purchase_request_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, required: true}
+  - {name: uom, type: link, to: uom, default: item.stock_uom}
+  - {name: packing, type: link, to: uom_conversion}
+  - {name: est_rate, type: currency, default: item.standard_cost}
+  - {name: amount, type: currency, compute: round(qty * est_rate)}

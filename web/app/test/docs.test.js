@@ -33,3 +33,10 @@ test("formatLabel prefers the Indonesian label, then the name", () => {
   assert.strictEqual(D.formatLabel({ name: "a4", label: "Faktur" }), "Faktur");
   assert.strictEqual(D.formatLabel({ name: "struk_a5" }), "Struk a5");
 });
+
+test("printError: 403 and 404 have their own text, others keep the server message", () => {
+  assert.strictEqual(D.printError({ status: 403, code: "permission_denied" }).title, "Kamu tidak punya izin mencetak dokumen ini");
+  assert.strictEqual(D.printError({ status: 404, code: "not_found" }).title, "Dokumen tidak ditemukan");
+  assert.deepStrictEqual(D.printError({ status: 500, code: "pdf_failed", message: "PDF gagal dibuat." }), { tone: "bad", title: "PDF gagal dibuat", body: "PDF gagal dibuat." });
+  assert.strictEqual(D.printError({ status: 0, code: "network" }).title, "Tidak bisa terhubung ke server. Coba lagi.");
+});

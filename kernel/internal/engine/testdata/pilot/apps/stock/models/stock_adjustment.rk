@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: stock_adjustment
+is_submittable: true
+naming: ADJ-{YYYY}-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: adjustment_date, type: date, default: today(), required: true}
+  - {name: reason, type: select, required: true, options: [{value: waste, label: {id: waste}}, {value: damage, label: {id: damage}}, {value: expired, label: {id: expired}}, {value: other, label: {id: other}}]}
+  - {name: items, type: table, of: stock_adjustment_item, min_rows: 1}

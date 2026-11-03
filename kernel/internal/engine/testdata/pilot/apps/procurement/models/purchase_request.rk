@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: purchase_request
+is_submittable: true
+naming: PR-{YYYY}-{#####}
+fields:
+  - {name: outlet, type: link, to: outlet}
+  - {name: needed_by, type: date, required: true}
+  - {name: items, type: table, of: purchase_request_item, min_rows: 1}
+  - {name: state, type: select, default: "'open'", read_only: true, options: [{value: open, label: {id: open}}, {value: ordered, label: {id: ordered}}, {value: closed, label: {id: closed}}]}
+actions:
+  - {name: make_po, label: {id: make_po}, hook: procurement.make_po, if: docstatus == 1}

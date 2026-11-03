@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: customer
+naming: CUST-{####}
+fields:
+  - {name: customer_name, type: data, required: true}
+  - {name: payment_days, type: int, default: '30'}
+  - {name: credit_limit, type: currency}
+  - {name: outstanding, type: currency, read_only: true}

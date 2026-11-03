@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: payment
+is_submittable: true
+naming: PAY-{YYYY}-{#####}
+on_submit: [payments.allocate]
+on_cancel: [payments.unallocate]
+fields:
+  - {name: direction, type: select, required: true, default: "'receive'", options: [{value: receive, label: {id: receive}}, {value: pay, label: {id: pay}}]}
+  - {name: customer, type: link, to: customer}
+  - {name: vendor, type: link, to: vendor}
+  - {name: payment_date, type: date, default: today(), required: true}
+  - {name: amount, type: currency, required: true}
+  - {name: allocations, type: table, of: payment_allocation}
+  - {name: allocated_total, type: currency, compute: 'allocations.map(a, a.amount).sum()'}

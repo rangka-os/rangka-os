@@ -42,7 +42,7 @@ func TestImportScopedOtherOutlet403(t *testing.T) {
 
 	// preview for an outlet outside the member's outlets
 	assertDenied(t, staff.uploadForm(path, "moka.csv", csv, map[string]string{"outlet": "OUT-02"}), "outlet_sales", "import")
-	if n := len(owner.must(200, "GET", path, nil).JSON["imports"].([]any)); n != 0 {
+	if n := len(owner.must(200, "GET", path, nil).JSON["data"].([]any)); n != 0 {
 		t.Fatalf("a refused preview left %d entries", n)
 	}
 
@@ -54,8 +54,11 @@ func TestImportScopedOtherOutlet403(t *testing.T) {
 	id := pv.JSON["id"].(string)
 	assertDenied(t, staff.do("GET", path+"/"+id, nil), "outlet_sales", "import")
 	assertDenied(t, staff.do("POST", path+"/"+id+"/commit", nil), "outlet_sales", "import")
-	if l := staff.must(200, "GET", path, nil).JSON["imports"].([]any); len(l) != 0 {
-		t.Fatalf("member lists another outlet's entries: %v", l)
+	if lj := staff.must(200, "GET", path, nil).JSON; len(lj["data"].([]any)) != 0 || lj["total"] != 0.0 {
+		t.Fatalf("member lists or counts another outlet's entries: %v", lj)
+	}
+	if lj := owner.must(200, "GET", path, nil).JSON; len(lj["data"].([]any)) != 1 || lj["total"] != 1.0 {
+		t.Fatalf("owner list: %v", lj)
 	}
 	if n := countOutletSales(t, owner); n != 0 {
 		t.Fatalf("refused commit wrote %d record(s)", n)
@@ -120,7 +123,7 @@ func TestImportOfOtherOrg404(t *testing.T) {
 	e.must(200, "POST", "/auth/org", map[string]any{"org": "pt_beta"})
 	e.must(404, "GET", path+"/"+id, nil)
 	e.must(404, "POST", path+"/"+id+"/commit", nil)
-	if l := e.must(200, "GET", path, nil).JSON["imports"].([]any); len(l) != 0 {
+	if l := e.must(200, "GET", path, nil).JSON["data"].([]any); len(l) != 0 {
 		t.Fatalf("pt_beta lists kopi-senja entries: %v", l)
 	}
 	if n := countOutletSales(t, e); n != 0 {
@@ -155,13 +158,13 @@ func TestImportScopedPreviewRowsOfOtherOutlet(t *testing.T) {
 	if strings.Contains(string(r.Body), "rahasia") {
 		t.Fatalf("preview leaked: %s", r.Body)
 	}
-	if l := staff.must(200, "GET", path, nil).JSON["imports"].([]any); len(l) != 0 {
+	if l := staff.must(200, "GET", path, nil).JSON["data"].([]any); len(l) != 0 {
 		t.Fatalf("member lists the entry: %v", l)
 	}
 	// an entry with only the member's outlet stays readable
 	own := owner.uploadForm(path, "own.csv", []byte("Date,Outlet,Note\n2026-11-02,OUT-01,siang\n"), nil)
 	staff.must(200, "GET", path+"/"+own.JSON["id"].(string), nil)
-	if l := staff.must(200, "GET", path, nil).JSON["imports"].([]any); len(l) != 1 {
-		t.Fatalf("member list: %v", l)
+	if lj := staff.must(200, "GET", path, nil).JSON; len(lj["data"].([]any)) != 1 || lj["total"] != 1.0 {
+		t.Fatalf("member list: %v (total must count only visible entries)", lj)
 	}
 }

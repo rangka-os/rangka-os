@@ -69,13 +69,10 @@ func (s *Server) getImport(w http.ResponseWriter, r *http.Request, c *caller) {
 }
 
 func (s *Server) listImports(w http.ResponseWriter, r *http.Request, c *caller) {
-	list, err := s.Imports.List(r.Context(), c.actor, r.PathValue("import"))
+	list, total, err := s.Imports.List(r.Context(), c.actor, r.PathValue("import"))
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	if list == nil {
-		list = []imports.ListItem{}
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"imports": list})
+	writeJSON(w, http.StatusOK, map[string]any{"data": list, "total": total})
 }

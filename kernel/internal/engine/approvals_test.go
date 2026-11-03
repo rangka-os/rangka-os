@@ -141,6 +141,14 @@ func wantStatus(t *testing.T, err error, status int, code string) {
 	}
 }
 
+func wantPermission(t *testing.T, err error, model, action string) {
+	t.Helper()
+	var pe *PermissionError
+	if !errors.As(err, &pe) || pe.Model != model || pe.Action != action {
+		t.Fatalf("err = %#v, want permission_denied %s on %s", err, action, model)
+	}
+}
+
 func heldInvoice(t *testing.T, e *Engine) (string, *Result) {
 	t.Helper()
 	name := newInvoice(t, e, rep)
@@ -213,10 +221,7 @@ func TestNonApproverForbidden(t *testing.T) {
 	_, res := heldInvoice(t, e)
 	id := res.Approvals[0].ID
 	_, err := e.Approve(ctx, rep, id)
-	wantStatus(t, err, 403, "permission_denied")
-	if !strings.Contains(err.Error(), "Persetujuan manajer") {
-		t.Fatalf("message = %v", err)
-	}
+	wantPermission(t, err, "sales_invoice", "approve")
 	bot := Actor{Org: "kopi-senja", ID: "bot@x", Roles: []string{"sales_manager"}}
 	_, err = e.Approve(ctx, bot, id)
 	wantStatus(t, err, 403, "human_required")
@@ -369,7 +374,7 @@ func TestTwoPoliciesBothNeeded(t *testing.T) {
 		t.Fatalf("submitted after one of two")
 	}
 	_, err = e.Approve(ctx, mgr, byPolicy["owner_big"])
-	wantStatus(t, err, 403, "permission_denied")
+	wantPermission(t, err, "sales_invoice", "approve")
 	d, err = e.Approve(ctx, owner, byPolicy["owner_big"])
 	if err != nil || d.Record["docstatus"] != int64(1) {
 		t.Fatalf("second approve: %+v %v", d, err)
@@ -809,5 +814,97 @@ func TestSelfApprovedRunMarksUsed(t *testing.T) {
 	l, _, _ := e.ListApprovals(ctx, mgr, store.ApprovalFilter{Model: "sales_invoice", Name: str(res.Record["name"])})
 	if len(l) != 1 || l[0].UsedAt == nil {
 		t.Fatalf("approvals = %+v", l)
+	}
+}
+
+// invoicePerms gives sales_invoice S1 permissions: sales reps may create and edit drafts (submit when submit
+// is true); sales managers may create but not read, so they cannot approve what they cannot see.
+func invoicePerms(submit bool) string {
+	sub := "false"
+	if submit {
+		sub = "true"
+	}
+	return `permissions:
+  - role: sales_rep
+    read: true
+    create: true
+    write: true
+    submit: ` + sub + `
+  - role: sales_manager
+    create: true
+`
+}
+
+func TestSubmitPermissionCheckedBeforeHold(t *testing.T) {
+	e, owner := approvalSetup(t, managerPolicy+invoicePerms(false))
+	ctx := context.Background()
+	name := newInvoice(t, e, rep)
+	_, err := e.Submit(ctx, rep, "sales_invoice", name, true)
+	wantPermission(t, err, "sales_invoice", "submit")
+	if aps, _, _ := e.ListApprovals(ctx, owner, store.ApprovalFilter{Model: "sales_invoice", Name: name}); len(aps) != 0 {
+		t.Fatalf("a refused submit created requests: %+v", aps)
+	}
+}
+
+func TestApprovalPermissions(t *testing.T) {
+	e, owner := approvalSetup(t, managerPolicy+invoicePerms(true))
+	ctx := context.Background()
+	name := newInvoice(t, e, rep)
+	res, err := e.Submit(ctx, rep, "sales_invoice", name, true)
+	if err != nil || !res.Held {
+		t.Fatalf("submit: %+v %v", res, err)
+	}
+	id := res.Approvals[0].ID
+
+	// the manager is an approver but may not read sales_invoice: no list entry, no detail, no decision
+	if aps, total, err := e.ListApprovals(ctx, mgr, store.ApprovalFilter{}); err != nil || total != 0 || len(aps) != 0 {
+		t.Fatalf("manager list: %d %+v %v", total, aps, err)
+	}
+	if aps, total, _ := e.ListApprovals(ctx, rep, store.ApprovalFilter{}); total != 1 || aps[0].ID != id {
+		t.Fatalf("rep list: %d %+v", total, aps)
+	}
+	_, err = e.GetApproval(ctx, mgr, id)
+	wantPermission(t, err, "sales_invoice", "read")
+	_, err = e.Approve(ctx, mgr, id)
+	wantPermission(t, err, "sales_invoice", "read")
+	_, err = e.Reject(ctx, mgr, id, "tidak")
+	wantPermission(t, err, "sales_invoice", "read")
+	_, err = e.Approve(ctx, rep, id)
+	wantPermission(t, err, "sales_invoice", "approve")
+
+	// the verb runs as the requester, checked again at approve time: a requester who lost submit is refused
+	if _, err := e.DB.Exec(ctx, `update rk_approvals set requester = jsonb_set(requester, '{roles}', '[]') where id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	_, err = e.Approve(ctx, owner, id)
+	wantPermission(t, err, "sales_invoice", "submit")
+	if ap, _ := e.GetApproval(ctx, owner, id); ap.State != "pending" {
+		t.Fatalf("state after refused run = %s", ap.State)
+	}
+	if _, err := e.DB.Exec(ctx, `update rk_approvals set requester = jsonb_set(requester, '{roles}', '["sales_rep"]') where id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	if d, err := e.Approve(ctx, owner, id); err != nil || d.Record["docstatus"] != int64(1) {
+		t.Fatalf("owner approve: %+v %v", d, err)
+	}
+}
+
+func TestFlowApprovalVisibility(t *testing.T) {
+	e, owner := approvalSetupFiles(t, approveFlow("lead != null"), "")
+	ctx := context.Background()
+	out, err := e.RunFlow(ctx, rep, "approve_demo", nil)
+	if err != nil || out.WaitingApproval == "" {
+		t.Fatalf("run: %+v %v", out, err)
+	}
+	for _, c := range []struct {
+		a    Actor
+		want int
+	}{{owner, 1}, {mgr, 1}, {rep, 0}} {
+		if _, total, err := e.ListApprovals(ctx, c.a, store.ApprovalFilter{}); err != nil || total != c.want {
+			t.Fatalf("%s sees %d flow requests (%v), want %d", c.a.ID, total, err, c.want)
+		}
+	}
+	if _, err := e.GetApproval(ctx, rep, out.WaitingApproval); !IsNotFound(err) {
+		t.Fatalf("rep get flow request: %v", err)
 	}
 }

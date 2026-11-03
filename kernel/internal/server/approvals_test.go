@@ -100,7 +100,8 @@ func TestApprovalsREST(t *testing.T) {
 	if r := mgr.do("GET", "/api/v1/approvals?state=menunggu", nil); r.Status != 400 || get(r.JSON, "error", "code") != "bad_request" {
 		t.Fatalf("unknown state: %d %s", r.Status, r.Body)
 	}
-	if r := rep.do("POST", "/api/v1/approvals/"+id+"/approve", map[string]any{}); r.Status != 403 || get(r.JSON, "error", "code") != "permission_denied" {
+	if r := rep.do("POST", "/api/v1/approvals/"+id+"/approve", map[string]any{}); r.Status != 403 || get(r.JSON, "error", "code") != "permission_denied" ||
+		get(r.JSON, "error", "model") != "sales_invoice" || get(r.JSON, "error", "action") != "approve" {
 		t.Fatalf("rep approve: %d %s", r.Status, r.Body)
 	}
 	if r := mgr.do("POST", "/api/v1/approvals/"+id+"/reject", map[string]any{}); r.Status != 400 || get(r.JSON, "error", "code") != "bad_request" {

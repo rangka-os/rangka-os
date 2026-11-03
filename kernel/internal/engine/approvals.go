@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"errors"
+	"sort"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
@@ -120,7 +121,9 @@ func CanDecide(a Actor, ap *store.Approval) bool {
 	return false
 }
 
-// ListApprovals lists the requests of the caller's organisation.
+// ListApprovals lists the requests of the caller's organisation that the caller may see: requests on models
+// the caller may read (model-level, a conditional read grant counts, as in /meta) and flow requests when the
+// caller is owner or holds one of their approver roles. Kernel actors and owners see everything.
 func (e *Engine) ListApprovals(ctx context.Context, a Actor, f store.ApprovalFilter) ([]store.Approval, int, error) {
 	switch f.State {
 	case "", "pending", "approved", "rejected", "void":
@@ -128,16 +131,60 @@ func (e *Engine) ListApprovals(ctx context.Context, a Actor, f store.ApprovalFil
 		return nil, 0, badRequest("state harus pending, approved, rejected atau void")
 	}
 	f.Org = a.Org
+	f.Restrict, f.Models, f.FlowRoles = false, nil, nil
+	if !unrestricted(a) {
+		f.Restrict, f.Models, f.FlowRoles = true, e.readableModels(a), append([]string{}, a.Roles...)
+	}
 	return store.ListApprovals(ctx, e.DB, f)
 }
 
-// GetApproval loads one request of the caller's organisation.
+// readableModels lists the models a may read at model level (a child model follows its parent).
+func (e *Engine) readableModels(a Actor) []string {
+	out := []string{}
+	for name := range e.Reg().Models {
+		if pm := e.permModel(name); pm != nil && e.decide(a, pm, "read").maybe() {
+			out = append(out, name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
+// GetApproval loads one request of the caller's organisation. A request on a record needs read on that record
+// (403 permission_denied); a flow request is visible to owner and its approver roles only (404 otherwise).
 func (e *Engine) GetApproval(ctx context.Context, a Actor, id string) (*store.Approval, error) {
 	ap, err := store.GetApproval(ctx, e.DB, a.Org, id, false)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, notFound("approval " + id)
 	}
-	return ap, err
+	if err != nil {
+		return nil, err
+	}
+	if unrestricted(a) {
+		return ap, nil
+	}
+	if isFlowApproval(ap) {
+		if !hasAnyRole(a, ap.Approvers) {
+			return nil, notFound("approval " + id)
+		}
+		return ap, nil
+	}
+	if _, err = e.Get(ctx, a, ap.Model, ap.Name); IsNotFound(err) { // Get checks read on the stored record
+		err = e.Authorize(ctx, a, ap.Model, "read", nil)
+	}
+	if err != nil {
+		return nil, err
+	}
+	return ap, nil
+}
+
+func hasAnyRole(a Actor, roles []string) bool {
+	for _, r := range roles {
+		if hasRole(a, r) {
+			return true
+		}
+	}
+	return false
 }
 
 // Decision is the outcome of Approve or Reject.
@@ -243,7 +290,7 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 		roles := append([]string{}, a.Roles...)
 		ap := store.Approval{Org: a.Org, Model: m.Name, Name: name, Verb: verb, Policy: p.Name, Label: label, Approvers: approvers,
 			State: "pending", Snapshot: snapshot, Args: args, RequestedBy: a.ID,
-			Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human}}
+			Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System}}
 		if CanDecide(a, &ap) {
 			now := o.e.Now()
 			ap.State, ap.DecidedBy, ap.DecidedAt = "approved", a.ID, &now
@@ -350,10 +397,32 @@ func (o *op) decide(id string) (*store.Approval, error) {
 	if ap.State != "pending" {
 		return nil, conflict("not_pending", "Permintaan persetujuan ini sudah diputuskan")
 	}
-	if !CanDecide(a, ap) {
-		return nil, &StatusError{403, "permission_denied", "Kamu tidak termasuk penyetuju " + approvalLabel(ap)}
+	if !CanDecide(a, ap) { // approving is governed by the policy's approvers, not by model permissions
+		return nil, &PermissionError{Model: ap.Model, Action: "approve"}
+	}
+	if !isFlowApproval(ap) { // but the approver must be able to read what they approve (S1)
+		if err := o.authorizeRead(ap.Model, ap.Name); err != nil {
+			return nil, err
+		}
 	}
 	return ap, nil
+}
+
+// authorizeRead checks read on a request's record as o's actor: on the stored record, or model-level when the
+// record is gone (Approve then voids the request).
+func (o *op) authorizeRead(model, name string) error {
+	m, err := o.e.model(model)
+	if err != nil {
+		return err
+	}
+	rec, err := o.load(m, name)
+	if err != nil && !IsNotFound(err) {
+		return err
+	}
+	if rec != nil {
+		rec = o.e.Output(m, copyRecord(rec))
+	}
+	return o.authorize(m, "read", rec)
 }
 
 // requesterActor rebuilds the person who asked for the verb from a request.
@@ -362,6 +431,7 @@ func requesterActor(org string, r map[string]any) Actor {
 	if h, ok := r["human"].(bool); ok { // whether the requester was a person (rows without the key: a person)
 		a.Human = h
 	}
+	a.System, _ = r["system"].(bool) // a kernel-started flow keeps bypassing permission checks
 	switch rs := r["roles"].(type) {
 	case []any:
 		for _, x := range rs {

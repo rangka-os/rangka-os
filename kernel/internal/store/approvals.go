@@ -2,6 +2,7 @@ package store
 
 import (
 	"context"
+	"strconv"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -33,6 +34,11 @@ type Approval struct {
 type ApprovalFilter struct {
 	Org, State, Model, Name, Verb string
 	Limit, Offset                 int
+	// Restrict limits the list to requests on Models and to flow requests (model '') whose approvers share a
+	// role with FlowRoles: what a caller without the owner role may see.
+	Restrict  bool
+	Models    []string
+	FlowRoles []string
 }
 
 const approvalCols = `id, org_id, model, name, verb, policy, label, approvers, state, snapshot, args, requested_by, requester, requested_at, decided_by, decided_at, reason, used_at`
@@ -129,6 +135,12 @@ func ListApprovals(ctx context.Context, q pg.Querier, f ApprovalFilter) ([]Appro
 	}
 	where := ` where org_id = $1 and ($2 = '' or state = $2) and ($3 = '' or model = $3) and ($4 = '' or name = $4) and ($5 = '' or verb = $5)`
 	args := []any{f.Org, f.State, f.Model, f.Name, f.Verb}
+	if f.Restrict {
+		models, roles := append([]string{}, f.Models...), append([]string{}, f.FlowRoles...)
+		where += ` and ((model <> '' and model = any($6)) or (model = '' and approvers && $7))`
+		args = append(args, pg.Array(models), pg.Array(roles))
+	}
+	n := len(args)
 	cnt, err := q.Query(ctx, `select count(*) from rk_approvals`+where, args...)
 	if err != nil {
 		return nil, 0, err
@@ -139,7 +151,7 @@ func ListApprovals(ctx context.Context, q pg.Querier, f ApprovalFilter) ([]Appro
 			total = int(n)
 		}
 	}
-	res, err := q.Query(ctx, `select `+approvalCols+` from rk_approvals`+where+` order by requested_at desc, id desc limit $6 offset $7`,
+	res, err := q.Query(ctx, `select `+approvalCols+` from rk_approvals`+where+` order by requested_at desc, id desc limit $`+strconv.Itoa(n+1)+` offset $`+strconv.Itoa(n+2),
 		append(args, f.Limit, f.Offset)...)
 	if err != nil {
 		return nil, 0, err

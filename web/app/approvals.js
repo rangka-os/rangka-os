@@ -4,17 +4,18 @@
  * each row shows the document (label + number link), the policy label, who asked and when, and for pending requests
  * Setujui / Tolak, enabled only when the item's can_decide is true.
  *
- * RangkaApp.ApprovalBanner({model, name, rev, onDecided, onPending}) — on the form: loads the record's pending requests
+ * RangkaApp.ApprovalBanner({model, name, rev, verbs, editable, onDecided, onPending}) — on the form: loads the record's
+ * pending requests for `verbs` (waitingVerbs: submit on a draft, cancel on a submitted document, the actions otherwise)
  * on mount and whenever `rev` changes (so a reload still shows them), names who must approve, warns that an edit voids
- * the request (the form stays editable: S2 voids pending requests on any update), and shows Setujui / Tolak when the
- * signed-in user may decide. onPending(items) reports the pending list; onDecided(answer|null) runs after a decision
+ * the request when the record is `editable` (S2 voids pending requests on any update), and shows Setujui / Tolak when
+ * the signed-in user may decide. onPending(items) reports that list; onDecided(answer|null) runs after a decision
  * (answer = {approval, record?}) or after a 409 approval_void, so the form reloads the record.
  *
  * Every decision button is disabled while a request is in flight; Tolak opens a dialog whose reason is required.
  * 403 → "Kamu tidak punya akses …"; 409 approval_void → the server's message, and the list refreshes.
  *
  * Pure helpers (unit-tested in test/approvals.test.js): approverText, waitingTitle, policyLabel, decisionError,
- * countDecidable.
+ * countDecidable, waitingVerbs, pendingFor.
  */
 (function (global) {
   "use strict";
@@ -64,6 +65,24 @@
     return (items || []).filter(function (x) { return x && x.state === "pending" && x.can_decide; }).length;
   }
 
+  /** The verbs whose pending requests block what the form offers now: submit on a draft, cancel on a submitted
+   *  document, the model's actions on a non-submittable record. */
+  function waitingVerbs(mm, rec) {
+    mm = mm || {};
+    if (mm.is_submittable) {
+      var ds = Number((rec && rec.docstatus) || 0);
+      return ds === 0 ? ["submit"] : ds === 1 ? ["cancel"] : [];
+    }
+    return (mm.actions || []).map(function (a) { return a.name; });
+  }
+
+  /** The requests among `items` for one of `verbs` (an item without a verb is a submit: the shape before actions). */
+  function pendingFor(items, verbs) {
+    return (items || []).filter(function (x) { return x && (verbs || []).indexOf(x.verb || "submit") >= 0; });
+  }
+
+  RA.waitingVerbs = waitingVerbs;
+  RA.pendingFor = pendingFor;
   RA.approverText = approverText;
   RA.waitingTitle = waitingTitle;
   RA.policyLabel = policyLabel;
@@ -162,7 +181,7 @@
       if (!p.name) { setItems([]); return undefined; }
       ctx.api.approvals({ state: "pending", model: p.model, name: p.name }).then(function (r) {
         if (dead) return;
-        var data = (r && r.data) || [];
+        var data = pendingFor((r && r.data) || [], cbRef.current.verbs || ["submit"]);
         setItems(data);
         if (cbRef.current.onPending) cbRef.current.onPending(data);
       }, function () {
@@ -171,7 +190,7 @@
         if (cbRef.current.onPending) cbRef.current.onPending([]);
       });
       return function () { dead = true; };
-    }, [p.model, p.name, p.rev, tick]);
+    }, [p.model, p.name, p.rev, (p.verbs || []).join(","), tick]);
 
     function decided(item) {
       return function (res, kind) {
@@ -200,7 +219,7 @@
         return h("div", { key: it.id, className: "ap-banner" }, h(R.Alert, { tone: "warn", title: waitingTitle(it, ctx.meta),
           actions: it.can_decide ? h(Decide, { item: it, ctx: ctx, onDecided: decided(it), onFailed: failed }) : null },
           h("span", { className: "ap-banner-meta" }, policyLabel(it) + " · diajukan oleh " + (it.requested_by || "-") + (it.requested_at ? ", " + tanggal(it.requested_at) : "") + "."),
-          " ", "Kalau kamu ubah dokumen ini, permintaan persetujuannya batal dan harus diajukan lagi."));
+          p.editable ? " Kalau kamu ubah dokumen ini, permintaan persetujuannya batal dan harus diajukan lagi." : null));
       }));
   }
 

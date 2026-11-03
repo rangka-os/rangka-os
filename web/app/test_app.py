@@ -128,17 +128,24 @@ def _mock_orgs(page, ctx):
 
 
 APPROVAL_POLICY = {"policy": "manager_check", "label": {"id": "Persetujuan manajer"}, "approvers": ["sales_manager"], "verb": "submit"}
+# (model, verb) → policy: submit and cancel of an invoice, the lead's convert action (S2 holds all three the same way)
+APPROVAL_POLICIES = {
+    ("sales_invoice", "submit"): APPROVAL_POLICY,
+    ("sales_invoice", "cancel"): {"policy": "cancel_check", "label": {"id": "Persetujuan pembatalan"}, "approvers": ["sales_manager"], "verb": "cancel"},
+    ("lead", "convert"): {"policy": "convert_check", "label": {"id": "Persetujuan konversi"}, "approvers": ["sales_manager"], "verb": "convert"},
+}
+HELD_DOCSTATUS = {"submit": 0, "cancel": 1}  # the verb is held only on a record in this state
 
 
 def _mock_approvals(page, ctx):
-    """Contract 0007 (S2) on sales_invoice, emulated with a store kept in ctx.mock_state (so it outlives one page):
-    policy manager_check on submit, approvers [sales_manager] (owner may always decide).
-      - POST /r/sales_invoice/{name}/submit by a non-approver → 202 {approval, approvals, record} (docstatus stays 0);
-        by an approver or owner → the real submit (self-approval, 200).
+    """Contract 0007 (S2), emulated with a store kept in ctx.mock_state (so it outlives one page): APPROVAL_POLICIES
+    (sales_invoice submit and cancel, lead action convert), approvers [sales_manager] (owner may always decide).
+      - POST /r/sales_invoice/{name}/submit|cancel or /r/lead/{name}/actions/convert by a non-approver → 202 {approval,
+        approvals, record} (the record is unchanged); by an approver or owner → the real call (self-approval, 200).
       - PATCH/DELETE of a record voids its pending requests (then the real call runs).
       - GET /approvals?state=&model=&name= → {data, total}; GET /approvals/{id}.
       - approve: 403 permission_denied for a non-approver, 409 approval_void when the record changed since the request,
-        else the real submit runs as the owner (force) and the answer is {approval, record}.
+        else the real verb runs as the owner (submit with force) and the answer is {approval, record}.
       - reject: reason required (400), voids the other pending requests of the record.
     can_decide follows the roles of the user /auth/me last answered for in this page (the signed-in user);
     state["force_can_decide"] makes every pending item claim can_decide (to provoke the server's 403)."""
@@ -173,19 +180,25 @@ def _mock_approvals(page, ctx):
             state["me"] = r.json() or {}
         route.fulfill(response=r)
 
-    def submit(route):
-        name = urllib.parse.unquote(route.request.url.rsplit("/", 2)[-2])
-        if route.request.method != "POST" or may_decide(APPROVAL_POLICY):
+    def verb_path(model, name, verb):
+        base = "/api/v1/r/" + model + "/" + urllib.parse.quote(name)
+        return base + ("/" + verb if verb in HELD_DOCSTATUS else "/actions/" + verb)
+
+    def held(route):
+        m = re.search(r"/api/v1/r/([^/]+)/([^/?]+)/(?:actions/)?([^/?]+)$", route.request.url)
+        model, name, verb = m.group(1), urllib.parse.unquote(m.group(2)), m.group(3)
+        policy = APPROVAL_POLICIES.get((model, verb))
+        if route.request.method != "POST" or not policy or may_decide(policy):
             route.fallback()
             return
-        st, rec = owner.call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(name))
-        if st != 200 or rec.get("docstatus") != 0:
+        st, rec = owner.call("GET", "/api/v1/r/" + model + "/" + urllib.parse.quote(name))
+        if st != 200 or (verb in HELD_DOCSTATUS and rec.get("docstatus") != HELD_DOCSTATUS[verb]):
             route.fallback()
             return
-        item = next((x for x in state["items"] if x["name"] == name and x["state"] == "pending"), None)
+        item = next((x for x in state["items"] if x["model"] == model and x["name"] == name and x["verb"] == verb and x["state"] == "pending"), None)
         if not item:
             state["seq"] += 1
-            item = dict(APPROVAL_POLICY, id=f"apr_mock{state['seq']:04d}", model="sales_invoice", name=name, state="pending",
+            item = dict(policy, id=f"apr_mock{state['seq']:04d}", model=model, name=name, state="pending",
                         snapshot="mock", requested_by=(state["me"].get("user") or {}).get("email", ""), requested_at=now(),
                         reason="", _modified=rec.get("modified_at"))
             state["items"].append(item)
@@ -193,8 +206,8 @@ def _mock_approvals(page, ctx):
 
     def record(route):
         if route.request.method in ("PATCH", "DELETE"):
-            name = urllib.parse.unquote(route.request.url.rsplit("/", 1)[-1])
-            void_pending("sales_invoice", name)
+            m = re.search(r"/api/v1/r/([^/]+)/([^/?]+)$", route.request.url)
+            void_pending(m.group(1), urllib.parse.unquote(m.group(2)))
         route.fallback()
 
     def listing(route):
@@ -235,23 +248,25 @@ def _mock_approvals(page, ctx):
             void_pending(item["model"], item["name"], keep=item["id"])
             _json(route, 200, {"approval": view(item)})
             return
-        path = "/api/v1/r/sales_invoice/" + urllib.parse.quote(item["name"])
+        path = "/api/v1/r/" + item["model"] + "/" + urllib.parse.quote(item["name"])
         st, rec = owner.call("GET", path)
         if st != 200 or rec.get("modified_at") != item["_modified"]:
             item["state"] = "void"
             _json(route, 409, {"error": {"code": "approval_void", "message": "Dokumen berubah setelah diajukan; ajukan ulang"}})
             return
-        st, rec = owner.call("POST", path + "/submit", {"force": True})
+        st, out = owner.call("POST", verb_path(item["model"], item["name"], item["verb"]), {"force": True} if item["verb"] == "submit" else {})
         if st != 200:
-            _json(route, st, rec)
+            _json(route, st, out)
             return
+        rec = out if item["verb"] in HELD_DOCSTATUS else owner.call("GET", path)[1]
         t = now()
         item.update(state="approved", decided_by=(state["me"].get("user") or {}).get("email", ""), decided_at=t, used_at=t)
         _json(route, 200, {"approval": view(item), "record": rec})
 
     page.route(re.compile(r".*/auth/me(\?.*)?$"), me)
-    page.route(re.compile(r".*/api/v1/r/sales_invoice/[^/?]+/submit$"), submit)
-    page.route(re.compile(r".*/api/v1/r/sales_invoice/[^/?]+$"), record)
+    page.route(re.compile(r".*/api/v1/r/sales_invoice/[^/?]+/(submit|cancel)$"), held)
+    page.route(re.compile(r".*/api/v1/r/lead/[^/?]+/actions/convert$"), held)
+    page.route(re.compile(r".*/api/v1/r/(sales_invoice|lead)/[^/?]+$"), record)
     page.route(re.compile(r".*/api/v1/approvals(\?.*)?$"), listing)
     page.route(re.compile(r".*/api/v1/approvals/[^/?]+(/approve|/reject)?$"), one)
 
@@ -1584,6 +1599,64 @@ def test_reject_needs_reason(page, ctx):
     assert rec["docstatus"] == 0, "still a draft"
 
 
+def test_cancel_needs_approval(page, ctx):
+    """A held cancel (202 {approval, record}) keeps the submitted invoice as it is and shows the waiting banner."""
+    approvals_mocked(page, ctx)
+    sales = Http(ctx.base).login(*SALES)
+    owner = Http(ctx.base).login(*ctx.owner)
+    st, draft = sales.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0031", "outlet": "OUT-01", "items": [{"item": "BRG-0210", "qty": 1}]})
+    assert st == 201, f"create draft as sales: {st} {draft}"
+    st, rec = owner.call("POST", f"/api/v1/r/sales_invoice/{urllib.parse.quote(draft['name'])}/submit", {"force": True})
+    assert st == 200 and rec["docstatus"] == 1, f"submit as owner: {st} {rec}"
+    number = rec["name"]
+    open_route(page, ctx, "#/r/sales_invoice/" + number, who=SALES)
+    page.get_by_role("button", name="Batalkan", exact=True).click()
+    dlg = page.get_by_role("alertdialog")
+    dlg.wait_for(timeout=5000)
+    dlg.get_by_role("button", name="Ya, batalkan").click()
+    banner = main_area(page).locator(".ap-banner", has_text=WAITING)
+    banner.first.wait_for(timeout=10000)
+    assert "undefined" not in page.locator("body").inner_text(), "no 'undefined' anywhere (toast, header)"
+    assert page.get_by_text(number + " dibatalkan").count() == 0, "no 'dibatalkan' toast for a held cancel"
+    assert page.evaluate("location.hash") == "#/r/sales_invoice/" + number, "stays on the invoice"
+    assert main_area(page).locator(".rk-pagehead .rk-doc-no", has_text=number).count() == 1, "the header still shows the number (not a new record)"
+    assert banner.get_by_text("Persetujuan pembatalan").count() >= 1, "the cancel policy label shows"
+    assert EDIT_VOIDS not in banner.inner_text(), "no edit-voids warning on a submitted document"
+    assert page.get_by_role("button", name="Batalkan", exact=True).count() == 0, "no second Batalkan while the request waits"
+    assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Menunggu persetujuan").count() == 1, "header lozenge"
+    assert owner.call("GET", "/api/v1/r/sales_invoice/" + number)[1]["docstatus"] == 1, "still submitted on the server"
+    shot(page, ctx, "approval-cancel-held")
+    # a reload still shows it; the manager approves on the form and the invoice is cancelled
+    page.reload()
+    main_area(page).locator(".ap-banner", has_text=WAITING).first.wait_for(timeout=15000)
+    sign_out(page)
+    sign_in_as(page, ctx, MANAGER, "#/r/sales_invoice/" + number)
+    banner = main_area(page).locator(".ap-banner", has_text=WAITING)
+    banner.first.wait_for(timeout=15000)
+    banner.get_by_role("button", name="Setujui").click()
+    main_area(page).locator(".rk-pagehead .rk-chip", has_text="Dibatalkan").wait_for(timeout=10000)
+    assert owner.call("GET", "/api/v1/r/sales_invoice/" + number)[1]["docstatus"] == 2, "cancelled on the server after the approval"
+
+
+def test_action_needs_approval(page, ctx):
+    """A held action is a waiting request, not a background job."""
+    approvals_mocked(page, ctx)
+    sales = Http(ctx.base).login(*SALES)
+    st, lead = sales.call("POST", "/api/v1/r/lead", {"lead_name": "Rina Tahan", "company_name": "Kedai Tahan", "phone": "0812" + str(int(time.time() * 1000))[-8:]})
+    assert st == 201, f"create lead as sales {st} {lead}"
+    open_route(page, ctx, "#/r/lead/" + lead["name"], who=SALES)
+    wait_form(page, "Simpan")
+    page.get_by_role("button", name="Jadikan pelanggan + peluang").click()
+    banner = main_area(page).locator(".ap-banner", has_text=WAITING)
+    banner.first.wait_for(timeout=10000)
+    assert banner.get_by_text("Persetujuan konversi").count() >= 1, "the action's policy label shows"
+    assert page.get_by_text("Diproses di latar belakang").count() == 0, "not reported as a queued job"
+    assert page.evaluate("location.hash") == "#/r/lead/" + lead["name"], "stays on the lead"
+    assert page.get_by_role("button", name="Jadikan pelanggan + peluang").count() == 0, "the held action is not offered again"
+    _, after = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/lead/" + lead["name"])
+    assert not after.get("converted_deal"), f"not converted yet: {after.get('converted_deal')!r}"
+
+
 # ---------------------------------------------------------------------------------------------- print and attachments
 def go_record(page, number):
     page.evaluate("(h) => { location.hash = h; }", "#/r/sales_invoice/" + urllib.parse.quote(number))
@@ -1970,6 +2043,19 @@ approvals:
     on: submit
     approvers: [sales_manager]
     label: {id: Persetujuan manajer}
+  - name: cancel_check
+    on: cancel
+    approvers: [sales_manager]
+    label: {id: Persetujuan pembatalan}
+"""
+
+LEAD_APPROVAL_OVERLAY = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
+model: lead
+approvals:
+  - name: convert_check
+    on: convert
+    approvers: [sales_manager]
+    label: {id: Persetujuan konversi}
 """
 
 
@@ -1982,6 +2068,8 @@ def enable_approval_policy(site):
     os.makedirs(os.path.join(site, "custom"), exist_ok=True)
     with open(os.path.join(site, "custom", "sales_invoice.rk"), "w") as f:
         f.write(APPROVAL_OVERLAY)
+    with open(os.path.join(site, "custom", "lead.rk"), "w") as f:
+        f.write(LEAD_APPROVAL_OVERLAY)
     return True
 
 

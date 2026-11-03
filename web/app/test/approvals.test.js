@@ -39,3 +39,16 @@ test("countDecidable counts pending items the user may decide", () => {
   assert.strictEqual(A.countDecidable([{ state: "pending", can_decide: true }, { state: "pending", can_decide: false }, { state: "approved", can_decide: true }]), 1);
   assert.strictEqual(A.countDecidable(undefined), 0);
 });
+
+test("pendingFor keeps the requests of the verb that applies now", () => {
+  const items = [{ id: "a", verb: "submit" }, { id: "b", verb: "cancel" }, { id: "c", verb: "convert" }, { id: "d" }];
+  const ids = (xs) => xs.map((x) => x.id).join(",");
+  assert.deepStrictEqual(A.waitingVerbs({ is_submittable: true }, { docstatus: 0 }), ["submit"]);
+  assert.deepStrictEqual(A.waitingVerbs({ is_submittable: true }, { docstatus: 1 }), ["cancel"]);
+  assert.deepStrictEqual(A.waitingVerbs({ is_submittable: true }, { docstatus: 2 }), []);
+  assert.deepStrictEqual(A.waitingVerbs({ actions: [{ name: "convert" }] }, {}), ["convert"]);
+  assert.strictEqual(ids(A.pendingFor(items, ["submit"])), "a,d", "an item without a verb is a submit (older shape)");
+  assert.strictEqual(ids(A.pendingFor(items, ["cancel"])), "b");
+  assert.strictEqual(ids(A.pendingFor(items, [])), "");
+  assert.strictEqual(ids(A.pendingFor(undefined, ["submit"])), "");
+});

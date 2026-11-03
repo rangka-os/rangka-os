@@ -6,14 +6,15 @@
  *
  * Buttons: a draft has Simpan draf and Ajukan (saves first when there are unsaved edits); a submitted document Batalkan
  * (confirm dialog); a cancelled one Amandemen. Non-submittable models have Simpan and their actions (api.action; a queued
- * action toasts "Diproses di latar belakang"). meta.models[m].can.{create,write,submit,cancel,amend} === false hides a
+ * action toasts "Diproses di latar belakang"). Submit, cancel and actions may each be held for approval (202). meta.models[m].can.{create,write,submit,cancel,amend} === false hides a
  * button. One request at a time: every button is disabled while one is in flight, and a second click is ignored.
  *
  * Server answers: 422 errors show under their field (a rule error without `field` goes to the first field its check
  * reads) and a summary Alert lists the rest; needs_force opens "Tetap ajukan?" listing the warnings and resubmits with
  * {force: true}; a 202 {approval} shows "Menunggu persetujuan". With approvals.js loaded (and the kernel serving approvals),
- * RangkaApp.ApprovalBanner loads the record's pending requests itself, so a reload shows them too; the form stays
- * editable (an edit voids the request server-side, contract 0007), Ajukan is hidden until the draft changes, and after
+ * RangkaApp.ApprovalBanner loads the record's pending requests for the verb that applies now (waitingVerbs) itself, so a
+ * reload shows them too; a draft stays editable (an edit voids the request server-side, contract 0007), the held button
+ * (Ajukan until the draft changes, Batalkan, the action) is hidden while its request waits, and after
  * a decision the record is reloaded (or opened at its new number). Without approvals.js a 202 keeps the form read-only
  * with an info Alert. 401 is the shell's sign-in dialog, the draft stays. A new record moves to #/r/<model>/<name>;
  * the record the server answered is handed to the next view, so it shows exactly that answer.
@@ -306,8 +307,13 @@
       setConfirmCancel(false);
       run("cancel", function () {
         var cur = recRef.current;
-        return ctx.api.cancel(m, cur.name).then(function (r) {
-          r = accept(r);
+        return ctx.api.cancel(m, cur.name).then(function (res) {
+          var r = res.record ? accept(res.record) : recRef.current;
+          if (res.approval) {
+            ctx.toast("info", "Menunggu persetujuan", "Pembatalan " + r.name + " menunggu persetujuan.");
+            settle(r, { approval: res.approval });
+            return;
+          }
           ctx.toast("info", r.name + " dibatalkan", "Datanya tetap tersimpan. Buat amandemen untuk mengoreksi.");
         });
       });
@@ -329,6 +335,12 @@
         var cur = recRef.current;
         return ctx.api.action(m, cur.name, a.name).then(function (res) {
           res = res || {};
+          if (res.approval) {
+            if (res.record && res.record.name === cur.name) accept(res.record);
+            ctx.toast("info", "Menunggu persetujuan", L(a.label) + " menunggu persetujuan.");
+            settle(recRef.current, { approval: res.approval });
+            return;
+          }
           if (res.queued) { ctx.toast("info", "Diproses di latar belakang", L(a.label) + " berjalan; hasilnya muncul di data ini setelah selesai."); return; }
           ctx.toast("ok", res.message || L(a.label) + " selesai");
           if (res.record && res.record.name === cur.name) accept(res.record);
@@ -360,10 +372,14 @@
     var status = sub ? rec.status || eng.status(m, rec) : null;
     var docstatus = Number(rec.docstatus || 0);
     var bannerOn = !isNew && typeof RA.ApprovalBanner === "function" && !!((ctx.features && ctx.features.approvals) || approval);
-    var waiting = bannerOn ? (pend ? pend.length > 0 : !!approval) : !!approval;
-    var locked = (sub && docstatus !== 0) || (!bannerOn && !!approval);
+    var verbs = RA.waitingVerbs ? RA.waitingVerbs(mm, rec) : ["submit"];
+    var own = approval && verbs.indexOf(approval.verb || "submit") >= 0 ? approval : null; // the 202 we just had, if it still applies
+    var held = bannerOn && pend ? RA.pendingFor(pend, verbs) : own ? [own] : [];
+    var heldVerbs = held.map(function (x) { return x.verb || "submit"; });
+    var waiting = held.length > 0;
+    var locked = (sub && docstatus !== 0) || (!bannerOn && !!own);
     var ro = locked || !allowed(isNew ? "create" : "write");
-    var lockText = approval && !bannerOn ? "Menunggu persetujuan, isi tidak bisa diubah." : docstatus === 2 ? "Dibatalkan. Buat amandemen untuk mengoreksi." : "Sudah diajukan, baris tidak bisa diubah.";
+    var lockText = own && !bannerOn ? "Menunggu persetujuan, isi tidak bisa diubah." : docstatus === 2 ? "Dibatalkan. Buat amandemen untuk mengoreksi." : "Sudah diajukan, baris tidak bisa diubah.";
 
     function visible(f) {
       if (!f.depends_on) return true;
@@ -435,19 +451,19 @@
     var acts = [];
     if (RA.DocTools && !isNew) acts.push(h(RA.DocTools, { key: "tools", model: m, name: rec.name, record: rec }));
     if (sub) {
-      if (approval && !bannerOn) { /* waiting, read-only: no buttons */ }
+      if (own && !bannerOn) { /* waiting, read-only: no buttons */ }
       else if (docstatus === 0) {
         if (allowed(isNew ? "create" : "write")) acts.push(btn("save", "Simpan draf", { onClick: save }));
         // While a request is pending, submitting the unchanged draft again would only ask again: Ajukan returns once it changes.
-        if (allowed("submit") && (!waiting || dirty)) acts.push(btn("submit", "Ajukan", { variant: "primary", icon: "check", onClick: function () { submit(false); } }));
+        if (allowed("submit") && (heldVerbs.indexOf("submit") < 0 || dirty)) acts.push(btn("submit", "Ajukan", { variant: "primary", icon: "check", onClick: function () { submit(false); } }));
       } else if (docstatus === 1) {
-        if (allowed("cancel")) acts.push(btn("cancel", "Batalkan", { variant: "danger", onClick: function () { if (!busyRef.current) setConfirmCancel(true); } }));
+        if (allowed("cancel") && heldVerbs.indexOf("cancel") < 0) acts.push(btn("cancel", "Batalkan", { variant: "danger", onClick: function () { if (!busyRef.current) setConfirmCancel(true); } }));
       } else if (allowed("amend")) {
         acts.push(btn("amend", "Amandemen", { variant: "primary", icon: "amend", onClick: amend }));
       }
     } else {
       if (!isNew) {
-        (mm.actions || []).filter(function (a) { return eng.actionAllowed(m, rec, a); }).forEach(function (a) {
+        (mm.actions || []).filter(function (a) { return eng.actionAllowed(m, rec, a) && heldVerbs.indexOf(a.name) < 0; }).forEach(function (a) {
           acts.push(btn("action:" + a.name, L(a.label), { icon: a.icon, disabled: !!busy || dirty, title: dirty ? "Simpan dulu perubahanmu" : undefined, onClick: function () { runAction(a); } }));
         });
       }
@@ -459,11 +475,11 @@
       var ls = lifecycleSteps(status);
       steps = h(R.Steps, { size: "small", label: "Tahapan dokumen", current: ls.current, status: ls.status, items: ls.items });
     }
-    var lockNote = locked && !approval ? h("div", { className: "rk-doc-lock" }, h(R.Icon, { name: "lock" }),
+    var lockNote = locked && !(own && !bannerOn) ? h("div", { className: "rk-doc-lock" }, h(R.Icon, { name: "lock" }),
       docstatus === 1 ? "Sudah diajukan, isi tidak bisa diubah. Batalkan lalu buat amandemen untuk mengoreksi." : "Dibatalkan. Datanya tetap tersimpan; buat amandemen untuk mengoreksi.") : null;
     var approvalNote = bannerOn
-      ? h(RA.ApprovalBanner, { model: m, name: rec.name, rev: apRev, onPending: setPend, onDecided: afterDecision })
-      : approval ? h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini sudah diajukan dan menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.") : null;
+      ? h(RA.ApprovalBanner, { model: m, name: rec.name, rev: apRev, verbs: verbs, editable: !ro, onPending: setPend, onDecided: afterDecision })
+      : own ? h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.") : null;
 
     return h(React.Fragment, null,
       h(R.PageHeader, { breadcrumb: [label, isNew ? "Baru" : docNo], onNavigate: function (i) { if (i === 0) back(); }, onBack: back,

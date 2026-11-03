@@ -127,6 +127,30 @@ test("action queued vs result, amend", async () => {
   assert.strictEqual((await api.amend("sales_invoice", "INV-1")).name, "INV-1-1");
 });
 
+test("cancel 200 and held 202; a held action is not a queued job", async () => {
+  const held = (verb, rec) => json(202, { approval: { id: "A9", verb }, approvals: [{ id: "A9", verb }], record: rec });
+  const f = stub([
+    json(200, { name: "INV-1", docstatus: 2 }),
+    held("cancel", { name: "INV-1", docstatus: 1 }),
+    held("convert", { name: "LEAD-1" }),
+    json(202, { job_id: 7, status: "queued" })
+  ]);
+  const api = RA({ fetch: f });
+  const a = await api.cancel("sales_invoice", "INV-1");
+  assert.strictEqual(a.record.docstatus, 2);
+  assert.strictEqual(a.approval, null);
+  const b = await api.cancel("sales_invoice", "INV-1");
+  assert.strictEqual(b.record.name, "INV-1", "the held record keeps its name");
+  assert.strictEqual(b.approval.id, "A9");
+  const c = await api.action("lead", "LEAD-1", "convert");
+  assert.ok(!c.queued, "an approval-held action is not queued");
+  assert.strictEqual(c.approval.verb, "convert");
+  assert.strictEqual(c.record.name, "LEAD-1");
+  const d = await api.action("deal", "D1", "mark_won");
+  assert.strictEqual(d.queued, true);
+  assert.strictEqual(d.jobId, 7);
+});
+
 test("me normalises and defaults orgs", async () => {
   const f = stub([json(200, { user: { email: "a@b.id", full_name: "Ani", roles: ["sales_rep"] }, org: "kopi" }), json(200, { user: { email: "c@d.id", org: "o1" } })]);
   const api = RA({ fetch: f });

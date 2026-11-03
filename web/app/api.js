@@ -205,10 +205,19 @@
         return { record: r.body, approval: null };
       });
     };
-    api.cancel = function (model, name) { return json("POST", rec(model, name) + "/cancel", {}); };
+    /** → {record, approval}: a 202 {approval, approvals, record} (S2) means the cancel waits for approval. */
+    api.cancel = function (model, name) {
+      return call("POST", rec(model, name) + "/cancel", {}).then(function (r) {
+        if (r.status === 202) return { record: r.body && r.body.record, approval: (r.body && r.body.approval) || null };
+        return { record: r.body, approval: null };
+      });
+    };
     api.amend = function (model, name) { return json("POST", rec(model, name) + "/amend", {}); };
+    /** → the action's result; {queued, jobId} for a queued job (202 {job_id, status:"queued"}); {record, approval} when
+     *  an approval policy holds the action (202 {approval, approvals, record}). */
     api.action = function (model, name, action, args) {
       return call("POST", rec(model, name) + "/actions/" + enc(action), args || {}).then(function (r) {
+        if (r.status === 202 && r.body && r.body.approval) return { record: r.body.record || null, approval: r.body.approval };
         if (r.status === 202) return { queued: true, jobId: r.body && r.body.job_id };
         return r.body;
       });

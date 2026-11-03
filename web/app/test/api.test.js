@@ -49,6 +49,9 @@ test("parseRupiah: a comma or dot before 3-digit groups groups thousands, otherw
   assert.strictEqual(RA.parseRupiah("-1.500"), -1500);
   assert.strictEqual(RA.parseRupiah("-12,5"), -13, "half-up away from zero for negatives");
   assert.strictEqual(RA.parseRupiah(1250000.4), 1250000);
+  assert.strictEqual(RA.parseRupiah("0,500"), 1, "a leading 0: the separator is a decimal mark (0,5 rounds half-up to 1)");
+  assert.strictEqual(RA.parseRupiah("0.400"), 0);
+  assert.strictEqual(RA.parseRupiah(",5"), 1);
 });
 
 test("rupiah and tanggal", () => {

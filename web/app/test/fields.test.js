@@ -29,7 +29,10 @@ test("parseNumber: a dot groups thousands only before 3-digit groups, otherwise 
   const A = load();
   assert.strictEqual(A.parseNumber("1.5"), 1.5);
   assert.strictEqual(A.parseNumber("2.75"), 2.75);
-  assert.strictEqual(A.parseNumber("0.125"), 125, "0.125 has a 3-digit group, so the dot groups thousands");
+  assert.strictEqual(A.parseNumber("0.125"), 0.125, "a leading 0 before the dot: always a decimal (kg in recipes)");
+  assert.strictEqual(A.parseNumber(".5"), 0.5);
+  assert.strictEqual(A.parseNumber("0.500"), 0.5);
+  assert.strictEqual(A.parseNumber("-0.250"), -0.25);
   assert.strictEqual(A.parseNumber("1.500"), 1500);
   assert.strictEqual(A.parseNumber("1.250.000"), 1250000);
   assert.strictEqual(A.parseNumber("1.250.5"), 1250.5);

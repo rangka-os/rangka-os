@@ -67,7 +67,8 @@
   }
 
   /** "Rp 1.250.000" / "1.250.000" / "1,250,000" / "1250000" / "12,5" → integer rupiah. A "," or "." groups thousands
-   *  when every group after it has exactly 3 digits; otherwise the last one is a decimal mark, rounded half-up. */
+   *  when every group after it has exactly 3 digits and the part before the first separator is not "0" or empty;
+   *  otherwise it is a decimal mark, rounded half-up ("0,500" = 1). */
   function parseRupiah(text) {
     if (typeof text === "number") return Math.round(text);
     var s = String(text == null ? "" : text).replace(/[^0-9,.\-]/g, "");
@@ -76,7 +77,11 @@
     if (s.replace(/[,.]/g, "") === "") return 0;
     var last = Math.max(s.lastIndexOf(","), s.lastIndexOf("."));
     var whole = s, frac = "";
-    if (last >= 0) {
+    var first = s.search(/[,.]/);
+    if (first >= 0 && (first === 0 || s.slice(0, first) === "0")) {
+      // "0,500", ",5": nothing to group before the separator, so it is a decimal mark
+      whole = s.slice(0, first); frac = s.slice(first + 1);
+    } else if (last >= 0) {
       var groups = s.split(s.charAt(last)).slice(1);
       if (!groups.every(function (x) { return x.length === 3; })) { whole = s.slice(0, last); frac = s.slice(last + 1); }
     }

@@ -6,12 +6,17 @@
  * Views are looked up on window.RangkaApp at render time (ListView, FormView, DashboardView, ApprovalInbox,
  * ImportWizard), so later files add them without touching the shell; a missing view shows "Halaman ini belum tersedia".
  *
+ * Org switcher (features.orgs, i.e. /auth/me lists more than one org): picking another org in the user menu calls
+ * POST /auth/org, takes its answer as the new `me`, clears the record cache, reloads meta and features, and goes home.
+ * The sidebar's Persetujuan entry carries the number of pending requests the user may decide (ctx.refreshApprovals()
+ * recounts; it also runs on every route change).
+ *
  * Any kernel answer 401 after sign-in opens a sign-in dialog over the app. The current route stays mounted, so drafts
  * kept in React state survive; nothing is retried (the user presses the button again).
  *
  * Exposes on window.RangkaApp: route, navigate(hash), toast(tone, title, body), Ctx (React context with
- * {api, meta, eng, me, features, cache, reloadMeta, route, navigate, toast}), and the pure helpers parseRoute,
- * homeHash, navGroups, navId, L (unit-tested in test/shell.test.js).
+ * {api, meta, eng, me, features, cache, reloadMeta, refreshApprovals, route, navigate, toast}), and the pure helpers
+ * parseRoute, homeHash, navGroups, navId, orgByLabel, L (unit-tested in test/shell.test.js).
  */
 (function (global) {
   "use strict";
@@ -53,9 +58,11 @@
     return null;
   }
 
-  function navGroups(meta, features) {
+  /** Sidebar groups; counts.approvals (requests the user may decide) shows as a badge on Persetujuan. */
+  function navGroups(meta, features, counts) {
     meta = meta || {};
     features = features || {};
+    counts = counts || {};
     var models = meta.models || {}, dashes = meta.dashboards || {}, groups = [];
     var dashItems = [];
     (meta.apps || []).forEach(function (a) {
@@ -73,7 +80,7 @@
       });
     });
     var more = [];
-    if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check" });
+    if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
     if (features.imports) more.push({ id: "import", label: "Impor data", icon: "download" });
     if (more.length) groups.push({ label: "Lainnya", items: more });
     return groups;
@@ -90,7 +97,13 @@
     }
   }
 
+  /** The org a user-menu entry names (the menu shows names; an org without a name shows its id). */
+  function orgByLabel(orgs, label) {
+    return (orgs || []).filter(function (o) { return o && (o.name || o.id) === label; })[0] || null;
+  }
+
   RA.L = L;
+  RA.orgByLabel = orgByLabel;
   RA.parseRoute = parseRoute;
   RA.homeHash = homeHash;
   RA.navGroups = navGroups;
@@ -159,6 +172,7 @@
   function titleCase(id) { return String(id || "").split(/[-_]/).filter(Boolean).map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" "); }
   function siteName(meta, me) {
     var org = (me && me.org) || (meta && meta.org);
+    if (me && me.org && me.orgName && me.orgName !== me.org) return me.orgName;
     var o = ((me && me.orgs) || []).filter(function (x) { return x.id === org; })[0];
     if (o && o.name && o.name !== o.id) return o.name;
     if (org) return titleCase(org);
@@ -243,7 +257,11 @@
     var es = useState(boot.eng), eng = es[0], setEng = es[1];
     var fs = useState(boot.features), features = fs[0], setFeatures = fs[1];
     var cr = useState(0), setCacheRev = cr[1];
+    var acs = useState(0), approvalCount = acs[0], setApprovalCount = acs[1];
+    var sws = useState(false), switching = sws[0], setSwitching = sws[1];
     var cacheRef = useRef(boot.cache);
+    var featRef = useRef(features);
+    featRef.current = features;
 
     function toast(tone, title, body) {
       var id = Date.now() + Math.random();
@@ -272,6 +290,7 @@
         if (m) m.scrollTop = 0;
         // Keep roles and org fresh; with an expired session this is the call that opens the sign-in dialog.
         api.me().then(setMe, function () {});
+        refreshApprovals();
       }
       global.addEventListener("hashchange", onHash);
       if (route.kind === "home") onHash();
@@ -284,13 +303,44 @@
       try { global.localStorage.setItem("rk-app-theme", theme); } catch (e) {}
     }, [theme]);
 
-    function reloadMeta() {
+    function reloadMeta(who) {
       return api.meta().then(function (m) {
         var e = global.RangkaEngine.create(m, cacheRef.current.lookup);
         cacheRef.current.setEngine(e);
         setMeta(m);
         setEng(e);
-        return api.features(m, me).then(function (f) { setFeatures(f); return m; });
+        return api.features(m, who || me).then(function (f) { setFeatures(f); return m; });
+      });
+    }
+
+    /** Recount the pending requests the user may decide (the sidebar badge). Quiet on failure. */
+    var countSeq = useRef(0);
+    function refreshApprovals() {
+      if (!featRef.current || !featRef.current.approvals) { setApprovalCount(0); return; }
+      var seq = ++countSeq.current;
+      api.approvals({ state: "pending", limit: 100 }).then(function (r) {
+        if (seq === countSeq.current) setApprovalCount(RA.countDecidable ? RA.countDecidable((r && r.data) || []) : 0);
+      }, function () {});
+    }
+    useEffect(refreshApprovals, [features, me && me.org]);
+
+    function switchOrg(o) {
+      if (switching || !o || o.id === me.org) return;
+      setSwitching(true);
+      api.switchOrg(o.id).then(function (m2) {
+        if (!m2.org) m2 = Object.assign({}, me, { org: o.id, orgName: o.name || o.id });
+        cacheRef.current.clear();
+        setMe(m2);
+        return reloadMeta(m2).then(function (m) {
+          setSwitching(false);
+          toast("ok", "Pindah ke " + (m2.orgName || o.name || o.id));
+          var hm = homeHash(m);
+          RA.navigate(hm || "#/");
+        });
+      }).then(null, function (e) {
+        setSwitching(false);
+        if (e && e.status === 401) return;
+        toast("bad", "Tidak bisa pindah organisasi", e && e.status === 403 ? "Kamu bukan anggota organisasi ini." : e && e.code === "org_fixed" ? "Sesi ini terikat ke satu organisasi. Masuk lewat browser untuk pindah." : (e && e.message) || "");
       });
     }
 
@@ -312,8 +362,9 @@
     var name = siteName(meta, me);
     var orgs = (me && me.orgs) || [];
     var current = orgs.filter(function (o) { return o.id === me.org; })[0];
+    var companyName = me.orgName || (current ? current.name || current.id : name);
     var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta,
-      route: route, navigate: RA.navigate, toast: toast };
+      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast };
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 
     return h(RA.Ctx.Provider, { value: ctx },
@@ -322,7 +373,8 @@
           product: { name: name, icon: "store", color: "var(--brand)" }, items: [], createLabel: false, theme: theme,
           searchPlaceholder: "Cari", currentApp: null,
           apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: "apps", color: "var(--primary)" }; }),
-          user: { name: (me && me.name) || "", email: me && me.email, company: current ? current.name : name, companies: orgs.length ? orgs.map(function (o) { return o.name || o.id; }) : [name] },
+          user: { name: (me && me.name) || "", email: me && me.email, company: companyName,
+            companies: features.orgs && orgs.length > 1 ? orgs.map(function (o) { return o.name || o.id; }) : [companyName] },
           actions: h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
           onHome: function () { if (home) RA.navigate(home); },
           onSwitch: function (a) { var h2 = homeHash({ apps: installed.filter(function (x) { return x.name === a.id; }) }); if (h2) RA.navigate(h2); },
@@ -332,17 +384,17 @@
           onAccount: function (k) {
             if (k.indexOf("theme:") === 0) setTheme(k.slice(6));
             else if (k === "logout" || k === "switch") logout();
-            else if (k.indexOf("co:") === 0) { if (k.slice(3) !== (current ? current.name : name)) toast("info", "Pindah organisasi belum tersedia"); }
+            else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
             else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
           }
         }),
         h(R.Sidebar, {
           app: { name: name, type: ((me && me.roles) || []).map(function (r) { return L(((meta.roles || {})[r] || {}).label) || r; }).join(", "), icon: "store", color: "var(--brand)" },
-          groups: navGroups(meta, features), current: navId(route),
+          groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route),
           onNavigate: function (id) { RA.navigate("#/" + (id === "import" ? "import/" + (Object.keys(meta.imports || {})[0] || "") : id)); setNavOpen(false); }
         }),
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
-        h("div", { className: "rk-shell-main" }, h("main", { className: "ap-main", key: JSON.stringify(route) }, h(Page, { route: route, meta: meta, home: home }))),
+        h("div", { className: "rk-shell-main" }, h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route), "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, home: home }))),
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
         h(R.Toaster, { float: true }, toasts.map(function (t) {
           return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, onClose: function () { setToasts(function (x) { return x.filter(function (y) { return y.id !== t.id; }); }); } }, t.body);

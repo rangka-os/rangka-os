@@ -11,8 +11,11 @@
  *
  * Server answers: 422 errors show under their field (a rule error without `field` goes to the first field its check
  * reads) and a summary Alert lists the rest; needs_force opens "Tetap ajukan?" listing the warnings and resubmits with
- * {force: true}; a 202 {approval} keeps the form read-only with "Menunggu persetujuan" (RangkaApp.ApprovalBanner when
- * Task 8's file is loaded); 401 is the shell's sign-in dialog, the draft stays. A new record moves to #/r/<model>/<name>;
+ * {force: true}; a 202 {approval} shows "Menunggu persetujuan". With approvals.js loaded (and the kernel serving approvals),
+ * RangkaApp.ApprovalBanner loads the record's pending requests itself, so a reload shows them too; the form stays
+ * editable (an edit voids the request server-side, contract 0007), Ajukan is hidden until the draft changes, and after
+ * a decision the record is reloaded (or opened at its new number). Without approvals.js a 202 keeps the form read-only
+ * with an info Alert. 401 is the shell's sign-in dialog, the draft stays. A new record moves to #/r/<model>/<name>;
  * the record the server answered is handed to the next view, so it shows exactly that answer.
  *
  * Pure helpers (unit-tested in test/form.test.js): writableBody, ruleField, mapServerErrors, lifecycleSteps.
@@ -138,6 +141,8 @@
     var ws = useState(null), warn = ws[0], setWarn = ws[1];
     var ccs = useState(false), confirmCancel = ccs[0], setConfirmCancel = ccs[1];
     var aps = useState(null), approval = aps[0], setApproval = aps[1];
+    var pps = useState(null), pend = pps[0], setPend = pps[1]; // pending requests the banner found (null: not asked yet)
+    var ars = useState(0), apRev = ars[0], setApRev = ars[1]; // bumped by every server answer: the banner asks again
     var recRef = useRef(null), busyRef = useRef(null), dirtyRef = useRef(false);
     var genRef = useRef(0); // bumped by every server answer: late browser-side work started before it must not touch the record
 
@@ -150,6 +155,7 @@
       genRef.current++;
       if (r.name != null) ctx.cache.put(m, r);
       put(r);
+      setApRev(function (x) { return x + 1; });
       markDirty(false);
       setTouched({});
       return r;
@@ -243,7 +249,20 @@
         ctx.navigate("#/r/" + m + "/" + enc(r.name));
         return;
       }
-      if (extra && extra.approval) setApproval(extra.approval);
+      if (extra && extra.approval) { setApproval(extra.approval); setApRev(function (x) { return x + 1; }); }
+    }
+
+    /** After an approve or reject (or a request that turned void): show the record as it is now. */
+    function afterDecision(res) {
+      setApproval(null);
+      var r = res && res.record ? clean(res.record) : null;
+      if (r && r.name) {
+        if (r.name !== routeName) { handOff(m, r); ctx.navigate("#/r/" + m + "/" + enc(r.name)); return; }
+        accept(r);
+        return;
+      }
+      if (!routeName) return;
+      ctx.api.get(m, routeName).then(accept, function () {});
     }
 
     function save() {
@@ -340,9 +359,11 @@
     var sub = !!mm.is_submittable;
     var status = sub ? rec.status || eng.status(m, rec) : null;
     var docstatus = Number(rec.docstatus || 0);
-    var locked = (sub && docstatus !== 0) || !!approval;
+    var bannerOn = !isNew && typeof RA.ApprovalBanner === "function" && !!((ctx.features && ctx.features.approvals) || approval);
+    var waiting = bannerOn ? (pend ? pend.length > 0 : !!approval) : !!approval;
+    var locked = (sub && docstatus !== 0) || (!bannerOn && !!approval);
     var ro = locked || !allowed(isNew ? "create" : "write");
-    var lockText = approval ? "Menunggu persetujuan, isi tidak bisa diubah." : docstatus === 2 ? "Dibatalkan. Buat amandemen untuk mengoreksi." : "Sudah diajukan, baris tidak bisa diubah.";
+    var lockText = approval && !bannerOn ? "Menunggu persetujuan, isi tidak bisa diubah." : docstatus === 2 ? "Dibatalkan. Buat amandemen untuk mengoreksi." : "Sudah diajukan, baris tidak bisa diubah.";
 
     function visible(f) {
       if (!f.depends_on) return true;
@@ -402,7 +423,7 @@
     var titleText = eng.title(m, rec);
     var docNo = isNew ? (rec.amended_from ? "Amandemen" : "Belum bernomor") : isDraftName(rec.name) ? "Draf" : rec.name;
     var tags = [
-      approval ? h(R.Lozenge, { key: "s", tone: "warn" }, "Menunggu persetujuan") : status ? h(R.StatusChip, { key: "s", status: status }) : null,
+      waiting ? h(R.Lozenge, { key: "s", tone: "warn" }, "Menunggu persetujuan") : status ? h(R.StatusChip, { key: "s", status: status }) : null,
       sub || !isNew ? h("span", { key: "n", className: "rk-doc-no" }, docNo) : null,
       rec.amended_from ? h("span", { key: "a", className: "ap-amended" }, "Amandemen dari ", h("a", { href: "#/r/" + m + "/" + enc(rec.amended_from) }, rec.amended_from)) : null,
       dirty ? h("span", { key: "d", className: "pv-unsaved" }, "Belum disimpan") : null
@@ -414,10 +435,11 @@
     var acts = [];
     if (RA.DocTools && !isNew) acts.push(h(RA.DocTools, { key: "tools", model: m, name: rec.name, record: rec }));
     if (sub) {
-      if (approval) { /* waiting: no buttons */ }
+      if (approval && !bannerOn) { /* waiting, read-only: no buttons */ }
       else if (docstatus === 0) {
         if (allowed(isNew ? "create" : "write")) acts.push(btn("save", "Simpan draf", { onClick: save }));
-        if (allowed("submit")) acts.push(btn("submit", "Ajukan", { variant: "primary", icon: "check", onClick: function () { submit(false); } }));
+        // While a request is pending, submitting the unchanged draft again would only ask again: Ajukan returns once it changes.
+        if (allowed("submit") && (!waiting || dirty)) acts.push(btn("submit", "Ajukan", { variant: "primary", icon: "check", onClick: function () { submit(false); } }));
       } else if (docstatus === 1) {
         if (allowed("cancel")) acts.push(btn("cancel", "Batalkan", { variant: "danger", onClick: function () { if (!busyRef.current) setConfirmCancel(true); } }));
       } else if (allowed("amend")) {
@@ -439,9 +461,9 @@
     }
     var lockNote = locked && !approval ? h("div", { className: "rk-doc-lock" }, h(R.Icon, { name: "lock" }),
       docstatus === 1 ? "Sudah diajukan, isi tidak bisa diubah. Batalkan lalu buat amandemen untuk mengoreksi." : "Dibatalkan. Datanya tetap tersimpan; buat amandemen untuk mengoreksi.") : null;
-    var approvalNote = approval ? (typeof RA.ApprovalBanner === "function"
-      ? h(RA.ApprovalBanner, { approval: approval, model: m, record: rec })
-      : h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini sudah diajukan dan menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.")) : null;
+    var approvalNote = bannerOn
+      ? h(RA.ApprovalBanner, { model: m, name: rec.name, rev: apRev, onPending: setPend, onDecided: afterDecision })
+      : approval ? h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini sudah diajukan dan menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.") : null;
 
     return h(React.Fragment, null,
       h(R.PageHeader, { breadcrumb: [label, isNew ? "Baru" : docNo], onNavigate: function (i) { if (i === 0) back(); }, onBack: back,

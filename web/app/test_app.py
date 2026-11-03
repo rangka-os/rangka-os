@@ -11,7 +11,9 @@ order, each in a fresh browser context; -k keeps those whose name contains NAME.
 on any console error.
 
 Pilot features that other streams build (orgs, approvals, print, attachments, imports) run against the kernel when it
-has them, else against contract mocks: call mock_feature(page, feature) in a scenario. The run ends with
+has them, else against contract mocks. When schema/0.5/overlay.json knows `approvals` (S2 merged), the temp site gets
+custom/sales_invoice.rk with a real policy (manager_check on submit, approvers [sales_manager]) before migrate, so the
+approval scenarios run live: call mock_feature(page, feature) in a scenario. The run ends with
 "live: … · mocked: …"; --require-all turns any mocked feature into a failure.
 
 Every HTTP answer >= 400 and every failed request to the kernel fails the scenario too, except 401 on /auth/*, the missing-route 404 ("no such endpoint") of
@@ -80,24 +82,33 @@ def _json(route, status, body):
     route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
 
 
+ORG_NAMES = {ORG: ("Kopi Senja", "KS"), "contoh-kedua": ("Contoh Kedua", "CK")}
+ORG_PATTERNS = (re.compile(r".*/auth/me(\?.*)?$"), re.compile(r".*/auth/org$"))
+
+
 def _mock_orgs(page, ctx):
-    """/auth/me with two orgs (kopi-senja, contoh-kedua) and POST /auth/org {org} that switches between them."""
-    state = ctx.mock_state.setdefault("orgs", {"org": ORG, "calls": []})
-    names = {ORG: "Kopi Senja", "contoh-kedua": "Contoh Kedua"}
+    """S5 shape: /auth/me with `org` {id, name, code, roles} and `orgs` [{id, name, code, roles}] for kopi-senja and
+    contoh-kedua; POST /auth/org {org} answers the same body as /auth/me, 403 permission_denied for a non-member org."""
+    state = ctx.mock_state.setdefault("orgs", {"org": ORG, "calls": [], "me": None})
+
+    def body_for(base):
+        body = dict(base)
+        user = dict(body.get("user") or {})
+        roles = user.get("roles") or ["owner"]
+        user["org"] = state["org"]
+        body["user"] = user
+        orgs = [{"id": k, "name": n, "code": c, "roles": roles} for k, (n, c) in ORG_NAMES.items()]
+        body["orgs"] = orgs
+        body["org"] = next(o for o in orgs if o["id"] == state["org"])
+        return body
 
     def me(route):
         r = route.fetch()
         if r.status != 200:
             route.fulfill(response=r)
             return
-        body = r.json()
-        user = dict(body.get("user") or {})
-        roles = user.get("roles") or ["owner"]
-        user["org"] = state["org"]
-        body["user"] = user
-        body["org"] = state["org"]
-        body["orgs"] = [{"id": k, "name": v, "roles": roles} for k, v in names.items()]
-        _json(route, 200, body)
+        state["me"] = r.json()
+        _json(route, 200, body_for(state["me"]))
 
     def switch(route):
         try:
@@ -106,19 +117,143 @@ def _mock_orgs(page, ctx):
             payload = {}
         state["calls"].append(payload)
         org = payload.get("org")
-        if org not in names:
+        if org not in ORG_NAMES:
             _json(route, 403, {"error": {"code": "permission_denied", "message": "kamu bukan anggota organisasi ini"}})
             return
         state["org"] = org
-        _json(route, 200, {"org": org, "orgs": [{"id": k, "name": v} for k, v in names.items()]})
+        _json(route, 200, body_for(state["me"] or {"user": {"email": OWNER[0], "roles": ["owner"]}}))
 
-    page.route(re.compile(r".*/auth/me(\?.*)?$"), me)
-    page.route(re.compile(r".*/auth/org$"), switch)
+    page.route(ORG_PATTERNS[0], me)
+    page.route(ORG_PATTERNS[1], switch)
+
+
+APPROVAL_POLICY = {"policy": "manager_check", "label": {"id": "Persetujuan manajer"}, "approvers": ["sales_manager"], "verb": "submit"}
 
 
 def _mock_approvals(page, ctx):
-    """Stub (Task 8 fills it): an empty approval inbox."""
-    page.route(re.compile(r".*/api/v1/approvals(\?.*)?$"), lambda route: _json(route, 200, {"data": [], "total": 0}))
+    """Contract 0007 (S2) on sales_invoice, emulated with a store kept in ctx.mock_state (so it outlives one page):
+    policy manager_check on submit, approvers [sales_manager] (owner may always decide).
+      - POST /r/sales_invoice/{name}/submit by a non-approver → 202 {approval, approvals, record} (docstatus stays 0);
+        by an approver or owner → the real submit (self-approval, 200).
+      - PATCH/DELETE of a record voids its pending requests (then the real call runs).
+      - GET /approvals?state=&model=&name= → {data, total}; GET /approvals/{id}.
+      - approve: 403 permission_denied for a non-approver, 409 approval_void when the record changed since the request,
+        else the real submit runs as the owner (force) and the answer is {approval, record}.
+      - reject: reason required (400), voids the other pending requests of the record.
+    can_decide follows the roles of the user /auth/me last answered for in this page (the signed-in user);
+    state["force_can_decide"] makes every pending item claim can_decide (to provoke the server's 403)."""
+    state = ctx.mock_state.setdefault("approvals", {"items": [], "seq": 0, "me": {}, "force_can_decide": False})
+    owner = Http(ctx.base).login(*ctx.owner)
+
+    def roles():
+        return set((state["me"].get("user") or {}).get("roles") or [])
+
+    def may_decide(item):
+        return "owner" in roles() or bool(roles() & set(item["approvers"]))
+
+    def view(item):
+        v = {k: x for k, x in item.items() if not k.startswith("_")}
+        v["can_decide"] = item["state"] == "pending" and (may_decide(item) or state["force_can_decide"])
+        return v
+
+    def now():
+        return time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+
+    def find(i):
+        return next((x for x in state["items"] if x["id"] == i), None)
+
+    def void_pending(model, name, keep=None):
+        for x in state["items"]:
+            if x["model"] == model and x["name"] == name and x["state"] == "pending" and x["id"] != keep:
+                x["state"] = "void"
+
+    def me(route):
+        r = route.fetch()
+        if r.status == 200:
+            state["me"] = r.json() or {}
+        route.fulfill(response=r)
+
+    def submit(route):
+        name = urllib.parse.unquote(route.request.url.rsplit("/", 2)[-2])
+        if route.request.method != "POST" or may_decide(APPROVAL_POLICY):
+            route.fallback()
+            return
+        st, rec = owner.call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(name))
+        if st != 200 or rec.get("docstatus") != 0:
+            route.fallback()
+            return
+        item = next((x for x in state["items"] if x["name"] == name and x["state"] == "pending"), None)
+        if not item:
+            state["seq"] += 1
+            item = dict(APPROVAL_POLICY, id=f"apr_mock{state['seq']:04d}", model="sales_invoice", name=name, state="pending",
+                        snapshot="mock", requested_by=(state["me"].get("user") or {}).get("email", ""), requested_at=now(),
+                        reason="", _modified=rec.get("modified_at"))
+            state["items"].append(item)
+        _json(route, 202, {"approval": view(item), "approvals": [view(item)], "record": rec})
+
+    def record(route):
+        if route.request.method in ("PATCH", "DELETE"):
+            name = urllib.parse.unquote(route.request.url.rsplit("/", 1)[-1])
+            void_pending("sales_invoice", name)
+        route.fallback()
+
+    def listing(route):
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(route.request.url).query)
+        st = (q.get("state") or [""])[0]
+        if st and st not in ("pending", "approved", "rejected", "void"):
+            _json(route, 400, {"error": {"code": "bad_request", "message": "unknown state " + st}})
+            return
+        rows = [x for x in reversed(state["items"]) if (not st or x["state"] == st)
+                and all(not (q.get(k) or [""])[0] or x[k] == q[k][0] for k in ("model", "name"))]
+        _json(route, 200, {"data": [view(x) for x in rows], "total": len(rows)})
+
+    def one(route):
+        m = re.search(r"/approvals/([^/?]+)(/(approve|reject))?$", route.request.url)
+        item = find(urllib.parse.unquote(m.group(1)))
+        verb = m.group(3)
+        if not item:
+            _json(route, 404, {"error": {"code": "not_found", "message": "approval not found"}})
+            return
+        if not verb:
+            _json(route, 200, view(item))
+            return
+        if item["state"] == "void":
+            _json(route, 409, {"error": {"code": "approval_void", "message": "Dokumen berubah setelah diajukan; ajukan ulang"}})
+            return
+        if item["state"] != "pending":
+            _json(route, 409, {"error": {"code": "conflict", "message": "permintaan ini sudah diputuskan"}})
+            return
+        if not may_decide(item):
+            _json(route, 403, {"error": {"code": "permission_denied", "message": "peran kamu tidak boleh memutuskan permintaan ini"}})
+            return
+        if verb == "reject":
+            reason = str((json.loads(route.request.post_data or "{}") or {}).get("reason") or "").strip()
+            if not reason:
+                _json(route, 400, {"error": {"code": "bad_request", "message": "alasan wajib diisi"}})
+                return
+            item.update(state="rejected", reason=reason, decided_by=(state["me"].get("user") or {}).get("email", ""), decided_at=now())
+            void_pending(item["model"], item["name"], keep=item["id"])
+            _json(route, 200, {"approval": view(item)})
+            return
+        path = "/api/v1/r/sales_invoice/" + urllib.parse.quote(item["name"])
+        st, rec = owner.call("GET", path)
+        if st != 200 or rec.get("modified_at") != item["_modified"]:
+            item["state"] = "void"
+            _json(route, 409, {"error": {"code": "approval_void", "message": "Dokumen berubah setelah diajukan; ajukan ulang"}})
+            return
+        st, rec = owner.call("POST", path + "/submit", {"force": True})
+        if st != 200:
+            _json(route, st, rec)
+            return
+        t = now()
+        item.update(state="approved", decided_by=(state["me"].get("user") or {}).get("email", ""), decided_at=t, used_at=t)
+        _json(route, 200, {"approval": view(item), "record": rec})
+
+    page.route(re.compile(r".*/auth/me(\?.*)?$"), me)
+    page.route(re.compile(r".*/api/v1/r/sales_invoice/[^/?]+/submit$"), submit)
+    page.route(re.compile(r".*/api/v1/r/sales_invoice/[^/?]+$"), record)
+    page.route(re.compile(r".*/api/v1/approvals(\?.*)?$"), listing)
+    page.route(re.compile(r".*/api/v1/approvals/[^/?]+(/approve|/reject)?$"), one)
 
 
 def _mock_attachments(page, ctx):
@@ -925,6 +1060,256 @@ def test_editors_disabled_while_saving(page, ctx):
     assert by_label(page, "Nama").is_enabled() and by_label(page, "Nama").input_value() == "Tunggu Simpan", "editable again with the saved value"
 
 
+# ---------------------------------------------------------------------------------------------- org switcher and approvals (Task 8)
+def account_menu(page):
+    page.locator(".rk-topnav .rk-av-btn").click()
+    menu = page.locator(".rk-account")
+    menu.wait_for(timeout=5000)
+    return menu
+
+
+def test_org_switch(page, ctx):
+    mock_feature(page, "orgs")
+    events = []
+    page.on("request", lambda r: events.append(("org", r.post_data)) if r.method == "POST" and r.url.endswith("/auth/org")
+            else events.append(("meta", None)) if r.method == "GET" and "/api/v1/meta" in r.url else None)
+    open_route(page, ctx, ctx.home()[0])
+    page.wait_for_function("(h) => location.hash === h", arg=ctx.home()[0], timeout=10000)
+    # leave home, so the switch visibly brings us back there
+    page.evaluate("location.hash = '#/r/lead'")
+    page.wait_for_function("() => location.hash === '#/r/lead'")
+    menu = account_menu(page)
+    assert menu.get_by_role("menuitem", name="Kopi Senja").count() == 1 and menu.get_by_role("menuitem", name="Contoh Kedua").count() == 1, "both orgs listed"
+    n = len(events)
+    menu.get_by_role("menuitem", name="Contoh Kedua").click()
+    page.wait_for_function("(h) => location.hash === h", arg=ctx.home()[0], timeout=10000)
+    after = events[n:]
+    posts = [json.loads(b) for k, b in after if k == "org"]
+    assert posts == [{"org": "contoh-kedua"}], f"one POST /auth/org for contoh-kedua, saw {posts}"
+    i = next(i for i, (k, _) in enumerate(after) if k == "org")
+    assert any(k == "meta" for k, _ in after[i + 1:]), f"/api/v1/meta is fetched again after the switch, saw {after}"
+    page.get_by_text("Pindah ke Contoh Kedua").first.wait_for(timeout=5000)
+    menu = account_menu(page)
+    assert menu.get_by_role("menuitem", name="Contoh Kedua").get_by_label("Dipilih").count() == 1, "Contoh Kedua is now the current org"
+    page.keyboard.press("Escape")
+
+    # one org: no switcher
+    for pat in ORG_PATTERNS:
+        page.unroute(pat)
+    page.reload()
+    expect_signed_in(page, ctx)
+    menu = account_menu(page)
+    assert menu.get_by_role("menuitem", name="Contoh Kedua").count() == 0, "a single-org user sees no other org"
+    n = len(events)
+    org_items = menu.locator("[role=menuitem]").filter(has_text=re.compile("Kopi Senja|kopi-senja", re.I))
+    assert org_items.count() == 1, f"exactly the current org, found {org_items.count()}"
+    org_items.first.click()
+    page.wait_for_timeout(300)
+    assert not [e for e in events[n:] if e[0] == "org"], "picking the only org sends nothing"
+
+
+def shot(page, ctx, label):
+    """An extra screenshot in the middle of a scenario (only with --shots)."""
+    if ctx.args.shots:
+        page.screenshot(path=os.path.join(ctx.args.shots, f"{label}-{ctx.args.width}.png"), full_page=True)
+
+
+def approvals_mocked(page, ctx):
+    return mock_feature(page, "approvals")
+
+
+def sign_out(page):
+    account_menu(page).get_by_role("menuitem", name="Keluar").click()
+    page.get_by_role("button", name="Masuk").wait_for(timeout=10000)
+
+
+def sign_in_as(page, ctx, who, hash_=None):
+    sign_in(page, *who)
+    page.locator(".rk-topnav").wait_for(timeout=15000)
+    if hash_:
+        page.evaluate("(h) => { location.hash = h; }", hash_)
+
+
+SALES = ("sales@contoh.test", PASSWORD)
+MANAGER = ("manajer@contoh.test", PASSWORD)
+WAITING = "Menunggu persetujuan Manajer sales"
+EDIT_VOIDS = "Kalau kamu ubah dokumen ini, permintaan persetujuannya batal dan harus diajukan lagi."
+
+
+def ajukan_until_waiting(page):
+    """Press Ajukan as a non-approver; confirm warnings (Tetap ajukan) until the approval banner shows."""
+    page.get_by_role("button", name="Ajukan", exact=True).click()
+    banner = main_area(page).locator(".ap-banner", has_text=WAITING)
+    for _ in range(100):
+        if banner.count():
+            break
+        dlg = page.get_by_role("button", name="Tetap ajukan")
+        if dlg.count() and dlg.is_visible():
+            dlg.click()
+        page.wait_for_timeout(100)
+    banner.first.wait_for(timeout=5000)
+    page.wait_for_function("() => /^#\\/r\\/sales_invoice\\/[^/]+$/.test(location.hash)", timeout=5000)
+    return urllib.parse.unquote(page.evaluate("location.hash").rsplit("/", 1)[-1])
+
+
+def inbox_row(page, name):
+    return main_area(page).locator(".ap-inbox-row", has=page.locator("a", has_text=name))
+
+
+def open_inbox(page):
+    open_nav(page)
+    page.locator(".rk-side").get_by_role("link", name=re.compile("^Persetujuan")).click()
+    page.wait_for_function("() => location.hash === '#/approvals'", timeout=5000)
+    main_area(page).get_by_role("heading", name="Persetujuan").wait_for(timeout=10000)
+
+
+def wait_inbox(page):
+    page.wait_for_function("() => document.querySelector('.ap-inbox, .ap-main .rk-empty') && !document.querySelector('.ap-main .rk-skel')", timeout=10000)
+
+
+def force_can_decide(page, ctx, mocked, on=True):
+    """Make the inbox claim can_decide for every pending item, so a click reaches the server's own check."""
+    if mocked:
+        ctx.mock_state["approvals"]["force_can_decide"] = on
+        return
+    pattern = re.compile(r".*/api/v1/approvals\?.*state=pending.*$")
+    if not on:
+        page.unroute(pattern)
+        return
+
+    def lie(route):
+        r = route.fetch()
+        body = r.json()
+        for x in body.get("data") or []:
+            if x.get("state") == "pending":
+                x["can_decide"] = True
+        _json(route, r.status, body)
+    page.route(pattern, lie)
+
+
+def test_invoice_needs_manager_approval(page, ctx):
+    mocked = approvals_mocked(page, ctx)
+    h = Http(ctx.base).login(*ctx.owner)
+    open_route(page, ctx, "#/r/sales_invoice/new", who=SALES)
+    fill_invoice(page)
+    name = ajukan_until_waiting(page)
+    st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(name))
+    assert st == 200 and rec["docstatus"] == 0, f"held: still a draft on the server, got {st} {rec.get('docstatus')}"
+    banner = main_area(page).locator(".ap-banner", has_text=WAITING)
+    assert banner.get_by_text("Persetujuan manajer").count() >= 1, "the policy label shows"
+    assert EDIT_VOIDS in banner.inner_text(), "the edit-voids warning shows"
+    assert banner.get_by_role("button", name="Setujui").count() == 0, "a sales rep gets no decision buttons on the form"
+    assert main_area(page).locator("fieldset.ap-form-fields:not([disabled]) input:not([disabled])").count() > 0, "the draft stays editable"
+    assert page.get_by_role("button", name="Ajukan", exact=True).count() == 0, "no second Ajukan while the request waits"
+    assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Menunggu persetujuan").count() == 1, "header lozenge"
+
+    shot(page, ctx, "approval-banner")
+    # a reload still shows the request (loaded from GET /approvals?model=&name=)
+    page.reload()
+    main_area(page).locator(".ap-banner", has_text=WAITING).first.wait_for(timeout=15000)
+
+    # the sales rep sees it in the inbox, but cannot decide it
+    open_inbox(page)
+    wait_inbox(page)
+    row = inbox_row(page, name)
+    row.wait_for(timeout=5000)
+    assert row.get_by_role("button", name="Setujui").is_disabled() and row.get_by_role("button", name="Tolak").is_disabled(), "can_decide false → disabled"
+    # the list claims otherwise: the server's 403 is what the user sees
+    force_can_decide(page, ctx, mocked)
+    ctx.allow_http(403, r"/api/v1/approvals/[^/]+/approve$")
+    try:
+        page.get_by_role("tab", name=re.compile("^Disetujui")).click()
+        page.get_by_role("tab", name=re.compile("^Menunggu")).click()
+        wait_inbox(page)
+        btn = inbox_row(page, name).get_by_role("button", name="Setujui")
+        page.wait_for_function("(n) => { const r = [...document.querySelectorAll('.ap-inbox-row')].find(x => x.textContent.includes(n));"
+                               " return r && !r.querySelector('button').disabled; }", arg=name, timeout=5000)
+        btn.click()
+        main_area(page).get_by_text(re.compile("^Kamu tidak punya akses")).first.wait_for(timeout=5000)
+    finally:
+        force_can_decide(page, ctx, mocked, on=False)
+    assert h.call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(name))[1]["docstatus"] == 0, "still a draft after the refused approve"
+
+    # the manager: badge 1, Setujui, the invoice is submitted
+    sign_out(page)
+    sign_in_as(page, ctx, MANAGER)
+    open_nav(page)
+    link = page.locator(".rk-side .rk-navlink", has_text="Persetujuan")
+    page.wait_for_function("() => { const a = [...document.querySelectorAll('.rk-side .rk-navlink')].find(x => x.textContent.startsWith('Persetujuan'));"
+                           " return a && a.querySelector('.rk-count'); }", timeout=10000)
+    assert link.locator(".rk-count").inner_text() == "1", f"badge shows 1, got {link.locator('.rk-count').inner_text()!r}"
+    open_inbox(page)
+    wait_inbox(page)
+    row = inbox_row(page, name)
+    row.wait_for(timeout=5000)
+    assert row.get_by_text("Persetujuan manajer", exact=True).count() == 1 and row.get_by_text("Diajukan oleh sales@contoh.test", exact=False).count() == 1, row.inner_text()
+    shot(page, ctx, "approval-inbox")
+    approve = row.get_by_role("button", name="Setujui")
+    held = held_route(page, r".*/api/v1/approvals/[^/?]+/approve$", "POST")
+    approve.click()
+    wait_held(page, held)
+    assert approve.is_disabled() and row.get_by_role("button", name="Tolak").is_disabled(), "both buttons disabled while the approve is in flight"
+    approve.click(force=True)
+    page.wait_for_timeout(200)
+    assert len(held) == 1, f"one approve request for two clicks, saw {len(held)}"
+    page.unroute(re.compile(r".*/api/v1/approvals/[^/?]+/approve$"))
+    held[0].fallback()
+    inbox_row(page, name).wait_for(state="detached", timeout=10000)
+    page.wait_for_function("() => !document.querySelector('.rk-side .rk-navlink .rk-count')", timeout=10000)
+    page.get_by_role("tab", name=re.compile("^Disetujui")).click()
+    wait_inbox(page)
+    done = main_area(page).locator(".ap-inbox-row", has_text="Disetujui oleh manajer@contoh.test").first
+    done.wait_for(timeout=5000)
+    done.locator(".ap-inbox-doc a").click()
+    page.wait_for_function("() => /^#\\/r\\/sales_invoice\\/INV-\\d{4}-\\d{5}$/.test(location.hash)", timeout=10000)
+    number = page.evaluate("location.hash").rsplit("/", 1)[-1]
+    main_area(page).locator(".rk-pagehead .rk-chip", has_text="Diajukan").wait_for(timeout=10000)
+    st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + number)
+    assert st == 200 and rec["docstatus"] == 1, f"submitted on the server: {st} {rec.get('docstatus')}"
+    assert main_area(page).locator(".ap-banner").count() == 0, "no banner on the submitted invoice"
+
+
+def test_reject_needs_reason(page, ctx):
+    approvals_mocked(page, ctx)
+    sales = Http(ctx.base).login(*SALES)
+    st, draft = sales.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0031", "outlet": "OUT-01", "items": [{"item": "BRG-0210", "qty": 1}]})
+    assert st == 201, f"create draft as sales: {st} {draft}"
+    name = draft["name"]
+    open_route(page, ctx, "#/r/sales_invoice/" + urllib.parse.quote(name), who=SALES)
+    wait_form(page)
+    ajukan_until_waiting(page)
+    sign_out(page)
+    sign_in_as(page, ctx, MANAGER, "#/approvals")
+    wait_inbox(page)
+    row = inbox_row(page, name)
+    row.wait_for(timeout=5000)
+    row.get_by_role("button", name="Tolak").click()
+    dlg = page.get_by_role("dialog", name="Tolak permintaan?")
+    dlg.wait_for(timeout=5000)
+    dlg.get_by_role("button", name="Tolak", exact=True).click()
+    dlg.get_by_text("Alasan wajib diisi").wait_for(timeout=3000)
+    shot(page, ctx, "approval-reject-dialog")
+    assert dlg.is_visible(), "the dialog stays open without a reason"
+    dlg.get_by_label("Alasan").fill("Harga belum sesuai daftar")
+    dlg.get_by_role("button", name="Tolak", exact=True).click()
+    dlg.wait_for(state="detached", timeout=10000)
+    inbox_row(page, name).wait_for(state="detached", timeout=10000)
+    page.get_by_role("tab", name=re.compile("^Ditolak")).click()
+    wait_inbox(page)
+    row = inbox_row(page, name)
+    row.wait_for(timeout=5000)
+    assert "Alasan: Harga belum sesuai daftar" in row.inner_text(), row.inner_text()
+    assert "Ditolak oleh manajer@contoh.test" in row.inner_text(), row.inner_text()
+    # the draft is a draft again: no banner, Ajukan is back
+    row.locator(".ap-inbox-doc a").click()
+    wait_form(page)
+    page.get_by_role("button", name="Ajukan", exact=True).wait_for(timeout=5000)
+    page.wait_for_timeout(300)
+    assert main_area(page).locator(".ap-banner").count() == 0, "no pending banner after the rejection"
+    st, rec = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(name))
+    assert rec["docstatus"] == 0, "still a draft"
+
+
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
 PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")
@@ -948,6 +1333,28 @@ def http_problems(responses, ctx):
                 continue
         out.append(f"{r.status} {r.request.method} {path}")
     return out
+
+
+APPROVAL_OVERLAY = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
+model: sales_invoice
+approvals:
+  - name: manager_check
+    on: submit
+    approvers: [sales_manager]
+    label: {id: Persetujuan manajer}
+"""
+
+
+def enable_approval_policy(site):
+    """When the kernel knows approval policies (S2: schema/0.5 overlay has `approvals`), give the temp site a real one,
+    so the approval scenarios run live; otherwise they run on mock_feature('approvals'). Returns True when written."""
+    schema = os.path.join(ROOT, "schema", "0.5", "overlay.json")
+    if not os.path.exists(schema) or "approvals" not in open(schema).read():
+        return False
+    os.makedirs(os.path.join(site, "custom"), exist_ok=True)
+    with open(os.path.join(site, "custom", "sales_invoice.rk"), "w") as f:
+        f.write(APPROVAL_OVERLAY)
+    return True
 
 
 def main():
@@ -1003,6 +1410,7 @@ def main():
         for src in ("rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites/kopi-senja", "rangka-connectors"):
             shutil.copytree(os.path.join(WS, src), os.path.join(work, src))
         APPS, SITE, CONN = (os.path.join(work, "rangka-apps", "apps"), os.path.join(work, "rangka-apps", "sites", "kopi-senja"), os.path.join(work, "rangka-connectors"))
+        enable_approval_policy(SITE)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

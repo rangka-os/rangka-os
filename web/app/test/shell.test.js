@@ -77,3 +77,17 @@ test("L picks Bahasa Indonesia from a label map", () => {
   assert.strictEqual(A.L("plain"), "plain");
   assert.strictEqual(A.L(null), "");
 });
+
+test("navGroups: Persetujuan carries the pending count as a badge", () => {
+  const items = (g) => plain(g[g.length - 1]).items;
+  assert.strictEqual(items(A.navGroups(META, { approvals: true }, { approvals: 2 }))[0].count, 2);
+  assert.strictEqual(items(A.navGroups(META, { approvals: true }, { approvals: 0 }))[0].count, undefined);
+  assert.strictEqual(items(A.navGroups(META, { approvals: true }))[0].count, undefined);
+});
+
+test("orgByLabel finds the org a user-menu item names", () => {
+  const orgs = [{ id: "kopi-senja", name: "Kopi Senja" }, { id: "contoh-kedua", name: "Contoh Kedua" }, { id: "tanpa-nama" }];
+  assert.strictEqual(A.orgByLabel(orgs, "Contoh Kedua").id, "contoh-kedua");
+  assert.strictEqual(A.orgByLabel(orgs, "tanpa-nama").id, "tanpa-nama");
+  assert.strictEqual(A.orgByLabel(orgs, "Lain"), null);
+});

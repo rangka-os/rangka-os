@@ -253,3 +253,38 @@ test("update uses PATCH and remove uses DELETE", async () => {
   await api.remove("lead", "L1");
   assert.strictEqual(f.calls[1].init.method, "DELETE");
 });
+
+test("me accepts the S5 shape: org as an object, orgs with code and roles", async () => {
+  const body = {
+    user: { email: "ceo@saga.co.id", full_name: "Dede", org: "kopi-senja", roles: ["owner"] },
+    org: { id: "kopi-senja", name: "Kopi Senja", code: "KS", roles: ["owner"] },
+    orgs: [{ id: "kopi-senja", name: "Kopi Senja", code: "KS", roles: ["owner"] }, { id: "contoh-kedua", name: "Contoh Kedua", code: "CK", roles: ["sales_rep"] }],
+  };
+  const f = stub([json(200, body), json(200, Object.assign({}, body, { org: null, user: { email: "x@y.id", roles: [] } }))]);
+  const api = RA({ fetch: f });
+  const m = await api.me();
+  assert.strictEqual(m.org, "kopi-senja");
+  assert.strictEqual(m.orgName, "Kopi Senja");
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(m.roles)), ["owner"]);
+  assert.deepStrictEqual(m.orgs.map((o) => o.id), ["kopi-senja", "contoh-kedua"]);
+  assert.strictEqual(m.orgs[1].code, "CK");
+  // org null (not a member of the cookie's org): no current org, roles from the user
+  const m2 = await api.me();
+  assert.strictEqual(m2.org, undefined);
+  assert.strictEqual(m2.orgName, undefined);
+});
+
+test("me with org as a string keeps orgName from the matching orgs item", async () => {
+  const f = stub([json(200, { user: { email: "a@b.id", roles: ["owner"] }, org: "o2", orgs: [{ id: "o1", name: "Satu" }, { id: "o2", name: "Dua" }] })]);
+  const m = await RA({ fetch: f }).me();
+  assert.strictEqual(m.org, "o2");
+  assert.strictEqual(m.orgName, "Dua");
+});
+
+test("switchOrg answers the normalised /auth/me body", async () => {
+  const f = stub([json(200, { user: { email: "a@b.id", roles: ["sales_rep"] }, org: { id: "o2", name: "Dua", code: "D", roles: ["sales_rep"] }, orgs: [{ id: "o1", name: "Satu" }, { id: "o2", name: "Dua" }] })]);
+  const m = await RA({ fetch: f }).switchOrg("o2");
+  assert.strictEqual(m.org, "o2");
+  assert.strictEqual(m.orgName, "Dua");
+  assert.strictEqual(m.email, "a@b.id");
+});

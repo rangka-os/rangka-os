@@ -118,20 +118,27 @@
     function rec(model, name) { return "/api/v1/r/" + enc(model) + (name === undefined ? "" : "/" + enc(name)); }
 
     /* ----- session */
-    api.me = function () {
-      return json("GET", "/auth/me").then(function (m) {
-        m = m || {};
-        var u = m.user || m;
-        var org = m.org || u.org;
-        var roles = u.roles || [];
-        var orgs = m.orgs || u.orgs;
-        if (!Array.isArray(orgs) || !orgs.length) orgs = org ? [{ id: org, name: org, roles: roles }] : [];
-        return { id: u.id, email: u.email, name: u.full_name || u.email, org: org, roles: roles, orgs: orgs, approver: m.approver, human: m.human !== false };
-      });
-    };
+    /** /auth/me (and POST /auth/org, which answers the same body) → {id, email, name, org, orgName, roles, orgs, approver,
+     *  human}. `org` arrives as an id string or, from S5 on, an object {id, name, code, roles} (null when the session's
+     *  org is not one of the user's); `org` here is always the id and `orgName` its name. */
+    function normaliseMe(m) {
+      m = m || {};
+      var u = m.user || m;
+      var raw = m.org !== undefined ? m.org : u.org;
+      var obj = raw && typeof raw === "object" ? raw : null;
+      var org = obj ? obj.id : raw || undefined;
+      var roles = (u.roles && u.roles.length ? u.roles : obj && obj.roles) || [];
+      var orgs = m.orgs || u.orgs;
+      if (!Array.isArray(orgs) || !orgs.length) orgs = org ? [{ id: org, name: (obj && obj.name) || org, roles: roles }] : [];
+      var mine = orgs.filter(function (o) { return o && o.id === org; })[0];
+      var orgName = org ? (obj && obj.name) || (mine && mine.name) || org : undefined;
+      return { id: u.id, email: u.email, name: u.full_name || u.email, org: org, orgName: orgName, roles: roles, orgs: orgs, approver: m.approver, human: m.human !== false };
+    }
+
+    api.me = function () { return json("GET", "/auth/me").then(normaliseMe); };
     api.login = function (email, password) { return json("POST", "/auth/login", { email: email, password: password }); };
     api.logout = function () { return json("POST", "/auth/logout"); };
-    api.switchOrg = function (org) { return json("POST", "/auth/org", { org: org }); };
+    api.switchOrg = function (org) { return json("POST", "/auth/org", { org: org }).then(normaliseMe); };
 
     api.meta = function () {
       return json("GET", "/api/v1/meta").then(function (m) {

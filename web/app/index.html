@@ -58,6 +58,23 @@
     .ap-main .rk-pagehead-extra { width: 100%; flex-wrap: wrap; }
     .ap-grid-link { min-width: 180px; }
   }
+  /* approvals (approvals.js) */
+  .ap-approvals { display: flex; flex-direction: column; gap: 8px; }
+  .ap-banner-meta { font-weight: 600; }
+  .ap-decide { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+  .ap-reason { display: flex; flex-direction: column; gap: 12px; }
+  .ap-reason textarea { width: 100%; box-sizing: border-box; }
+  .ap-main .rk-tabs { margin-bottom: 0; }
+  .ap-inbox { list-style: none; margin: 0; padding: 0; }
+  .ap-inbox-row { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--line-strong); }
+  .ap-inbox-row:first-child { padding-top: 0; }
+  .ap-inbox-row:last-child { border-bottom: 0; padding-bottom: 0; }
+  .ap-inbox-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; flex: 1 1 280px; }
+  .ap-inbox-doc { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-weight: 600; }
+  .ap-inbox-doc a { color: var(--link); text-decoration: none; overflow-wrap: anywhere; }
+  .ap-inbox-doc a:hover { text-decoration: underline; }
+  .ap-inbox-reason { color: var(--ink-2); overflow-wrap: anywhere; }
+  .ap-inbox .ap-muted { font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
   /* list, form and kanban styles from the prototype (pv-*), kept for the views that move over in later tasks */
   .pv-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
   .pv-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
@@ -122,5 +139,6 @@
 <script src="list.js"></script>
 <script src="fields.js"></script>
 <script src="form.js"></script>
+<script src="approvals.js"></script>
 <script src="dashboard.js"></script>
 <script src="shell.js"></script>

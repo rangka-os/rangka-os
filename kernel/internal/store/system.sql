@@ -166,7 +166,7 @@ create table if not exists rk_approvals (
   snapshot     text not null,              -- sha256 hex
   args         jsonb not null default '{}', -- {force} / action args / flow resume state
   requested_by text not null,
-  requester    jsonb not null,             -- {id, user, roles} the verb runs as
+  requester    jsonb not null,             -- {id, user, roles, human, system} the verb runs as
   requested_at timestamptz not null default now(),
   decided_by   text,
   decided_at   timestamptz,

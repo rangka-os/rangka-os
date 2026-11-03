@@ -110,6 +110,10 @@ scope: {field: outlet, from: user.outlets}
   receipt may write a stock move that head office sees). Because flow steps are not scoped, a member with a
   row scope may not start a flow directly: `POST /api/v1/flows/{name}/run` → 403 `permission_denied`
   `{model: flow, action: run}`. Flows started by automations, the scheduler or jobs are not affected.
+- Approval requests of a flow's approve step are scoped by the record the flow started on (the request's
+  `model`/`name`, else the flow event's `model`/`name`): for a scoped caller an out-of-scope record makes the
+  request invisible in lists, totals and SSE `approval` events and 403 `permission_denied` `{model, action}` on
+  GET, approve and reject; a flow request that names no record is hidden from scoped callers (404).
 - System lists: `GET /api/v1/system/jobs` and `/jobs/{id}` show the current org's jobs and installation-wide
   ones (another org's job id is 404); a member with a row scope sees only jobs they queued
   (`args.actor.id`). `GET /api/v1/system/audit` shows the current org (`?org=` must be a membership, else
@@ -119,7 +123,7 @@ scope: {field: outlet, from: user.outlets}
   `Engine.Guard(ctx, actor, model, record, action)` before acting.
 
 ### 6. Error shape
-`403 {"error": {"code": "permission_denied", "message": "...", "model": "<model>", "action": "<action>"}}`,
+`403 {"error": {"code": "permission_denied", "message": "Kamu tidak punya izin untuk <action> <model>", "model": "<model>", "action": "<action>"}}`,
 shared with S1's model permissions (`engine.PermissionError`).
 
 ### 7. CLI

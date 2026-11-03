@@ -11,6 +11,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -178,17 +179,15 @@ func (e *Engine) ListApprovals(ctx context.Context, a Actor, f store.ApprovalFil
 }
 
 // approvalsNeedRecords reports whether listing requests for a needs each request's record: a has a row scope
-// that narrows one of models, or only a conditional (if:) read grant on one of them.
+// (which also narrows flow requests, see flowScope), or only a conditional (if:) read grant on one of models.
 func (e *Engine) approvalsNeedRecords(a Actor, models []string) bool {
-	if unrestricted(a) && e.RowScope(a) == nil {
+	if e.RowScope(a) != nil {
+		return true
+	}
+	if unrestricted(a) {
 		return false
 	}
-	rs := e.RowScope(a)
 	for _, name := range models {
-		m := e.Reg().Model(name)
-		if rs.Limits(m) {
-			return true
-		}
 		if pm := e.permModel(name); pm != nil && !e.decide(a, pm, "read").all {
 			return true
 		}
@@ -196,11 +195,12 @@ func (e *Engine) approvalsNeedRecords(a Actor, models []string) bool {
 	return false
 }
 
-// approvalVisible reports whether a may see a listed request: a flow request already passed the SQL filter;
-// a request on a record needs read on the record and the record inside a's row scope (GetApproval's rule).
+// approvalVisible reports whether a may see a listed request: a flow request already passed the SQL filter
+// (approver roles) and must pass flowScope; a request on a record needs read on the record and the record inside
+// a's row scope (GetApproval's rule).
 func (e *Engine) approvalVisible(ctx context.Context, a Actor, ap *store.Approval) bool {
 	if isFlowApproval(ap) {
-		return true
+		return e.flowScope(ctx, e.DB, a, ap, "read") == nil
 	}
 	_, err := e.Get(ctx, a, ap.Model, ap.Name)
 	return err == nil || IsNotFound(err)
@@ -234,6 +234,9 @@ func (e *Engine) GetApproval(ctx context.Context, a Actor, id string) (*store.Ap
 	if isFlowApproval(ap) {
 		if !hasAnyRole(a, ap.Approvers) {
 			return nil, notFound("approval " + id)
+		}
+		if err := e.flowScope(ctx, e.DB, a, ap, "read"); err != nil {
+			return nil, err
 		}
 		return ap, nil
 	}
@@ -477,8 +480,45 @@ func (o *op) decide(id, action string) (*store.Approval, error) {
 		if err := o.guardApproval(ap, action); err != nil {
 			return nil, err
 		}
+	} else if err := o.e.flowScope(o.ctx, o.tx, a, ap, action); err != nil {
+		return nil, err
 	}
 	return ap, nil
+}
+
+// flowRecord is the record a flow request was started on: the request's model and name, else the model and
+// name of the flow's event. nil when the request names no record of an installed model.
+func (e *Engine) flowRecord(ap *store.Approval) (*meta.Model, string) {
+	model, name := ap.Model, ap.Name
+	if model == "" || name == "" {
+		ev := meta.AsMap(ap.Args["event"])
+		model, name = str(ev["model"]), str(ev["name"])
+	}
+	if model == "" || name == "" {
+		return nil, ""
+	}
+	return e.Reg().Model(model), name
+}
+
+// flowScope applies a's row scope to a flow request (contract 0010 §5, flow steps themselves are not scoped):
+// nil without a row scope. A request that names no record is hidden from a scoped caller (404); one whose
+// record is outside the scope is Denied(model, action); a record that is gone is not checked.
+func (e *Engine) flowScope(ctx context.Context, q pg.Querier, a Actor, ap *store.Approval, action string) error {
+	if e.RowScope(a) == nil {
+		return nil
+	}
+	m, name := e.flowRecord(ap)
+	if m == nil {
+		return notFound("approval " + ap.ID)
+	}
+	rec, err := store.Get(ctx, q, e.Reg(), a.Org, m, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return e.Guard(ctx, a, m.Name, rec, action)
 }
 
 // authorizeRead checks read on a request's record as o's actor: on the stored record, or model-level when the

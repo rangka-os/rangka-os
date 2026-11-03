@@ -28,7 +28,11 @@ type PermissionError struct {
 	Model, Action string
 }
 
-func (p *PermissionError) Error() string { return "permission denied: " + p.Action + " on " + p.Model }
+// Error is the human message of the 403 body, in Bahasa Indonesia since the web app shows it; code, model and
+// action stay machine-readable (contract 0010 §6).
+func (p *PermissionError) Error() string {
+	return "Kamu tidak punya izin untuk " + p.Action + " " + p.Model
+}
 
 // Denied builds the error for an action the caller may not perform (row scope, contract 0010 §6, uses it too).
 func Denied(model, action string) *PermissionError {

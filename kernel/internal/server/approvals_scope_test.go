@@ -130,3 +130,66 @@ func TestApprovalOfOtherOrg404(t *testing.T) {
 		t.Fatalf("request changed: %v", st)
 	}
 }
+
+// outletFlow is a flow (no on:) whose approve step waits for an outlet_staff approver.
+func outletFlow(apps, _ string) {
+	p := filepath.Join(apps, "sales", "flows", "outlet_check.rk")
+	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+		panic(err)
+	}
+	src := "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json\n" +
+		"name: outlet_check\nlabel: {id: Cek outlet}\nsteps:\n  - approve: {approvers: [outlet_staff], label: {id: Cek outlet}}\n    as: ok\n"
+	if err := os.WriteFile(p, []byte(src), 0o644); err != nil {
+		panic(err)
+	}
+}
+
+// TestFlowApprovalScopedOtherOutlet: a flow request is scoped by the record its flow started on (the event's
+// model and name). A scoped approver does not see or decide another outlet's flow request (list, GET, approve,
+// reject, SSE) nor one that names no record; their own outlet's flow request works.
+func TestFlowApprovalScopedOtherOutlet(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"}, outletFlow)
+	draft := func(outlet string) string {
+		return owner.must(201, "POST", "/api/v1/r/sales_invoice", map[string]any{"customer": "CUST-0012", "outlet": outlet,
+			"items": []any{map[string]any{"item": "BRG-0044", "qty": 1}}}).JSON["name"].(string)
+	}
+	run := func(event map[string]any) string {
+		res := owner.must(200, "POST", "/api/v1/flows/outlet_check/run", map[string]any{"event": event}).JSON
+		id, _ := res["waiting_approval"].(string)
+		if id == "" {
+			t.Fatalf("flow did not wait: %v", res)
+		}
+		return id
+	}
+	events := approvalEvents(t, staff)
+	time.Sleep(200 * time.Millisecond)
+
+	other := run(map[string]any{"model": "sales_invoice", "name": draft("OUT-02")})
+	bare := run(map[string]any{})
+	own := run(map[string]any{"model": "sales_invoice", "name": draft("OUT-01")})
+
+	if ev := waitApprovalEvent(t, events, "pending"); ev["id"] != own {
+		t.Fatalf("flow approval event of another outlet or of no record delivered: %v", ev)
+	}
+	l := staff.must(200, "GET", "/api/v1/approvals?state=pending", nil)
+	if ids := approvalIDs(l); ids[other] || ids[bare] || !ids[own] || l.JSON["total"] != 1.0 {
+		t.Fatalf("scoped list: %s", l.Body)
+	}
+	if ids := approvalIDs(owner.must(200, "GET", "/api/v1/approvals?state=pending", nil)); !ids[other] || !ids[bare] || !ids[own] {
+		t.Fatalf("owner list lacks flow requests: %v", ids)
+	}
+	assertDenied(t, staff.do("GET", "/api/v1/approvals/"+other, nil), "sales_invoice", "read")
+	assertDenied(t, staff.do("POST", "/api/v1/approvals/"+other+"/approve", nil), "sales_invoice", "approve")
+	assertDenied(t, staff.do("POST", "/api/v1/approvals/"+other+"/reject", map[string]any{"reason": "bukan outlet saya"}), "sales_invoice", "reject")
+	staff.must(404, "GET", "/api/v1/approvals/"+bare, nil)
+	staff.must(404, "POST", "/api/v1/approvals/"+bare+"/approve", nil)
+	for _, id := range []string{other, bare} {
+		if st := get(owner.must(200, "GET", "/api/v1/approvals/"+id, nil).JSON, "state"); st != "pending" {
+			t.Fatalf("request %s changed: %v", id, st)
+		}
+	}
+	staff.must(200, "GET", "/api/v1/approvals/"+own, nil)
+	if d := staff.must(200, "POST", "/api/v1/approvals/"+own+"/approve", nil).JSON; get(d, "approval", "state") != "approved" {
+		t.Fatalf("approve own outlet's flow request: %v", d)
+	}
+}

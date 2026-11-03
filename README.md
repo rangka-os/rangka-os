@@ -79,7 +79,7 @@ Then open:
 | URL | What |
 | --- | --- |
 | http://localhost:8080/console/ | Rangka Console (sign in: `ceo@saga.co.id` / `rangka-demo`) |
-| http://localhost:8080/app/ | The apps rendered from metadata |
+| http://localhost:8080/app/ | The end-user web app: dashboards, lists, forms, approvals, imports |
 | http://localhost:8080/api/v1/meta | Metadata API |
 | `POST http://localhost:8080/mcp` | MCP endpoint for AI clients |
 

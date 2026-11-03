@@ -14,7 +14,9 @@ make compare-python   # Go vs rangka_validate.py on the real metadata and two br
 ```
 
 Then open http://localhost:8080/app/, http://localhost:8080/api/v1/meta, or point an MCP client at
-`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`.
+`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`. More people:
+`rangka user add --db $DATABASE_URL --org kopi-senja --email <e> --password <p> --role <role>` (see `rangka user` in
+`cmd/rangka/user.go`; `--reset-password` and `--create-org` are opt-in).
 
 ## Stand-ins (for now)
 

@@ -1996,6 +1996,58 @@ def enable_import_def(site):
     return True
 
 
+SCROLL_JS = """() => ({sw: document.documentElement.scrollWidth, bw: document.body.scrollWidth, vw: window.innerWidth})"""
+SMALL_CONTROLS_JS = """() => {
+  const out = [];
+  for (const el of document.querySelectorAll('button, input, select, textarea, [role=button]')) {
+    if (el.tagName === 'INPUT' && ['checkbox', 'radio', 'file', 'hidden'].includes(el.type)) continue;
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    if (cs.visibility === 'hidden' || cs.display === 'none' || r.width === 0 || r.height === 0) continue;
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+    if (r.height < 39.5) out.push((el.getAttribute('aria-label') || el.textContent || el.name || el.tagName).trim().slice(0, 30) + ' <' + el.tagName.toLowerCase() + '.' + el.className + '> ' + Math.round(r.height) + 'px');
+  }
+  return out;
+}"""
+
+
+def check_fits(page, ctx, label):
+    w = ctx.args.width
+    m = page.evaluate(SCROLL_JS)
+    assert m["sw"] <= w, f"{label}: page scrolls sideways, scrollWidth {m['sw']} > {w}"
+    if w <= 600:
+        small = page.evaluate(SMALL_CONTROLS_JS)
+        assert not small, f"{label}: controls under 40px tall: {small}"
+
+
+def test_no_horizontal_scroll(page, ctx):
+    ensure_records(ctx, "sales_invoice", 3)
+    approvals_mocked(page, ctx)
+    mock_feature(page, "imports")
+    open_route(page, ctx, ctx.home()[0])
+    page.wait_for_timeout(800)
+    check_fits(page, ctx, "dashboard")
+    page.evaluate("() => { location.hash = '#/r/sales_invoice'; }")
+    wait_rows(page)
+    check_fits(page, ctx, "list")
+    page.evaluate("() => { location.hash = '#/r/sales_invoice/new'; }")
+    fill_invoice(page)
+    check_fits(page, ctx, "invoice form with lines")
+    page.evaluate("() => { location.hash = '#/approvals'; }")
+    page.wait_for_function("() => location.hash === '#/approvals'", timeout=5000)
+    page.wait_for_timeout(800)
+    check_fits(page, ctx, "approvals")
+    tmp = tempfile.mkdtemp(prefix="rk-scroll-")
+    try:
+        path = write_csv(ctx, tmp, "barang-lebar.csv", [["Lebar Uji A", "Pcs", "12500"], ["Lebar Uji B", "Box", "1.250.000"]])
+        page.evaluate("(n) => { location.hash = '#/import/' + n; }", IMPORT_NAME)
+        main_area(page).get_by_role("heading", name="Barang dari CSV").wait_for(timeout=10000)
+        check_fits(page, ctx, "import wizard")
+        pick_and_check(page, path)
+        check_fits(page, ctx, "import preview")
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
 def main():
     global CTX
     ap = argparse.ArgumentParser()

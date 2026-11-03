@@ -79,6 +79,11 @@
   @media (max-width: 600px) {
     .ap-main .rk-pagehead-extra { width: 100%; flex-wrap: wrap; }
     .ap-grid-link { min-width: 180px; }
+    /* phone: every button and field is at least 40px tall (links stay inline) */
+    body button, body [role=button], body select, body textarea, body input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: 40px; }
+    body .rk-iconbtn { min-width: 40px; }
+    body .rk-select-btn, body .rk-btn, body .rk-iconbtn { height: auto; min-height: 40px; }
+    body .rk-seg button, body .rk-pager button { min-height: 40px; }
   }
   /* approvals (approvals.js) */
   .ap-approvals { display: flex; flex-direction: column; gap: 8px; }

@@ -4,10 +4,10 @@
   "description": "{{NAME}} on Rangka OS",
   "scripts": {
     "db": "docker compose up -d --wait db",
-    "validate": "rangka validate",
+    "validate": "rangka validate --apps apps --modules modules --site site --connectors connectors",
     "migrate": "rangka migrate",
     "seed": "rangka seed",
-    "setup": "rangka validate && rangka migrate && rangka seed",
+    "setup": "npm run validate && rangka migrate && rangka seed",
     "dev": "rangka serve --dev-open",
     "start": "rangka serve"
   },

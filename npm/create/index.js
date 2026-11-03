@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // npm create @rangka-os@latest [dir] [-- --name "Toko Maju" --template demo|blank --email you@x.id --yes]
-// Writes a Rangka OS project: apps, connectors, a site (config, theme, layout), fixtures, .env,
+// Writes a Rangka OS project: modules, apps, connectors, a site (config, theme, layout), fixtures, .env,
 // docker-compose.yml (Postgres) and package.json scripts that run the kernel from @rangka-os/cli.
 "use strict";
 const fs = require("node:fs");
@@ -50,8 +50,8 @@ async function main() {
   if (args.help) {
     console.log(`Usage: npm create @rangka-os@latest [dir] -- [--name "Toko Maju"] [--template demo|blank] [--email you@x.id] [--yes]
 
-  demo   the Kopi Senja demo company: CRM + sales apps with sample customers, deals and invoices
-  blank  the same apps with your company name and no sample data`);
+  demo   the Kopi Senja demo company: the CRM app with sample customers, leads, deals and invoices
+  blank  the same CRM app with your company name and no sample data`);
     return;
   }
   const tty = process.stdin.isTTY && !args.yes;

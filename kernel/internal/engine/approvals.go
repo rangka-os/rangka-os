@@ -231,7 +231,7 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 		roles := append([]string{}, a.Roles...)
 		ap := store.Approval{Org: a.Org, Model: m.Name, Name: name, Verb: verb, Policy: p.Name, Label: label, Approvers: approvers,
 			State: "pending", Snapshot: snapshot, Args: args, RequestedBy: a.ID,
-			Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles}}
+			Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human}}
 		if CanDecide(a, &ap) {
 			now := o.e.Now()
 			ap.State, ap.DecidedBy, ap.DecidedAt = "approved", a.ID, &now
@@ -334,7 +334,7 @@ func (o *op) decide(id string) (*store.Approval, error) {
 // requesterActor rebuilds the person who asked for the verb from a request.
 func requesterActor(org string, r map[string]any) Actor {
 	a := Actor{Org: org, ID: str(r["id"]), UserName: str(r["user"]), Human: true}
-	if h, ok := r["human"].(bool); ok { // flow requests record whether the flow ran for a person
+	if h, ok := r["human"].(bool); ok { // whether the requester was a person (rows without the key: a person)
 		a.Human = h
 	}
 	switch rs := r["roles"].(type) {

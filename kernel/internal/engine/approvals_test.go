@@ -719,3 +719,39 @@ func TestConcurrentSubmitsOneRequestPerPolicy(t *testing.T) {
 		}
 	}
 }
+
+// directorPolicy matches convert only while the lead's owner (a user record) has role Direktur: data outside
+// the lead's snapshot.
+const directorPolicy = "  - {name: direktur, on: convert, when: \"owner.role == 'Direktur'\", approvers: [sales_manager]}\n"
+
+func makeDirector(t *testing.T, e *Engine, a Actor) {
+	t.Helper()
+	if _, err := e.Update(context.Background(), a, "user", "USR-002", map[string]any{"role": "Direktur"}); err != nil {
+		t.Fatal(err)
+	}
+}
+
+// a request made by a token runs as a non-person: a policy that starts to match at approve time is not
+// self-approved by the requester's role.
+func TestNonHumanRequesterNeverSelfApproves(t *testing.T) {
+	e, owner := approvalSetup(t, "", "approvals:\n  - {name: konversi, on: convert, approvers: [owner]}\n"+directorPolicy)
+	noopConvert(e)
+	ctx := context.Background()
+	bot := Actor{Org: "kopi-senja", ID: "bot@x", Roles: []string{"sales_manager"}}
+	out, err := e.RunAction(ctx, bot, "lead", "LEAD-00031", "convert", nil, ActionOpts{})
+	if err != nil || !out.Held || len(out.Approvals) != 1 || out.Approvals[0].Policy != "konversi" {
+		t.Fatalf("held: %+v %v", out, err)
+	}
+	if h, ok := out.Approvals[0].Requester["human"].(bool); !ok || h {
+		t.Fatalf("requester = %v", out.Approvals[0].Requester)
+	}
+	makeDirector(t, e, owner)
+	d, err := e.Approve(ctx, owner, out.Approvals[0].ID)
+	if err != nil || d.Action != nil {
+		t.Fatalf("approve ran the action: %+v %v", d, err)
+	}
+	p := pendingFor(t, e, owner, "lead", "LEAD-00031")
+	if len(p) != 1 || p[0].Policy != "direktur" {
+		t.Fatalf("pending = %+v", p)
+	}
+}

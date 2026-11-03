@@ -564,3 +564,33 @@ func TestOrgBackup(t *testing.T) {
 		t.Error("org sums differ")
 	}
 }
+
+// TestFilesDir: resolved like rangka serve (contract 0011 §1): override, else system.rk files.path, else
+// ./data/files; a relative path stays relative to the working directory, never to the site dir.
+func TestFilesDir(t *testing.T) {
+	dir := t.TempDir()
+	site := filepath.Join(dir, "site")
+	os.MkdirAll(site, 0o755)
+	apps, _ := filepath.Abs(filepath.Join(workspace, "rangka-apps/apps"))
+	reg, err := loadRegistry(apps, site)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := backup.FilesDir(reg, "/srv/uploads"); got != "/srv/uploads" {
+		t.Errorf("override: got %q", got)
+	}
+	if got := backup.FilesDir(reg, ""); got != "data/files" {
+		t.Errorf("default: got %q, want data/files", got)
+	}
+	if got := backup.FilesDir(nil, ""); got != "data/files" {
+		t.Errorf("no registry: got %q, want data/files", got)
+	}
+	os.WriteFile(filepath.Join(site, "system.rk"), []byte("# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/system.json\n"+
+		"db: {driver: postgres, url: '${DATABASE_URL}'}\nfiles: {driver: local, path: uploads}\n"), 0o644)
+	if reg, err = loadRegistry(apps, site); err != nil {
+		t.Fatal(err)
+	}
+	if got := backup.FilesDir(reg, ""); got != "uploads" {
+		t.Errorf("files.path: got %q, want uploads (relative to the working directory)", got)
+	}
+}

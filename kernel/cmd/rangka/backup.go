@@ -20,7 +20,7 @@ func cmdBackup(args []string) int {
 	c.flags(fs)
 	out := fs.String("out", "", "archive path (default rangka-<org|all>-<YYYYMMDD-HHMMSS>.tar.gz)")
 	org := fs.String("org", "", "back up one organisation (default: the whole database)")
-	files := fs.String("files", envOr("RANGKA_FILES_DIR", ""), "uploads directory (default: $RANGKA_FILES_DIR, else system.rk files.path resolved against the site dir)")
+	files := fs.String("files", envOr("RANGKA_FILES_DIR", ""), "uploads directory (default: $RANGKA_FILES_DIR, else system.rk files.path, else ./data/files; relative to the working directory, like serve)")
 	fs.Parse(reorder(args))
 	ctx := context.Background()
 	now := time.Now()
@@ -31,15 +31,15 @@ func cmdBackup(args []string) int {
 		}
 		*out = fmt.Sprintf("rangka-%s-%s.tar.gz", who, now.Format("20060102-150405"))
 	}
-	if *files == "" && c.site != "" {
-		reg, err := c.registry()
-		if err != nil {
-			fmt.Fprintln(os.Stderr, "rangka: warning: metadata did not load, using the default files dir:", err)
-		}
-		*files = backup.FilesDir(reg, c.site)
-	}
 	if *files == "" {
-		fmt.Fprintln(os.Stderr, "rangka: warning: no --site or --files given, uploaded files are not backed up")
+		var reg *meta.Registry
+		if c.site != "" {
+			var err error
+			if reg, err = c.registry(); err != nil {
+				fmt.Fprintln(os.Stderr, "rangka: warning: metadata did not load, using the default files dir:", err)
+			}
+		}
+		*files = backup.FilesDir(reg, "")
 	}
 	db, err := c.pool(ctx)
 	if err != nil {
@@ -81,7 +81,7 @@ func cmdRestore(args []string) int {
 	var c common
 	c.flags(fs)
 	into := fs.String("into", "", "directory for the archived site/ and apps/ (default ./restore-<archive name>)")
-	files := fs.String("files", "", "uploads directory (default: system.rk files.path resolved against <into>/site)")
+	files := fs.String("files", envOr("RANGKA_FILES_DIR", ""), "uploads directory (default: $RANGKA_FILES_DIR, else the archived system.rk files.path, else ./data/files; relative to the working directory)")
 	fs.Parse(reorder(args))
 	if fs.NArg() != 1 {
 		fmt.Fprintln(os.Stderr, "usage: rangka restore <file> --db <url> [--into dir] [--files dir]")

@@ -15,6 +15,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/api"
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/backup"
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
@@ -189,13 +190,10 @@ func openFiles(cfg Config, reg *meta.Registry) (*files.Local, error) {
 	return l, nil
 }
 
-// filesRoot is the attachments directory: cfg.FilesDir, then system.rk files.path, then data/files. The
-// pre-migrate backup archives the same directory.
+// filesRoot is the attachments directory (backup.FilesDir: cfg.FilesDir, then system.rk files.path, then
+// data/files, relative to the working directory). The pre-migrate backup archives the same directory.
 func (cfg Config) filesRoot(reg *meta.Registry) string {
-	if cfg.FilesDir != "" {
-		return cfg.FilesDir
-	}
-	return strCfg(reg, "files.path", "data/files")
+	return backup.FilesDir(reg, cfg.FilesDir)
 }
 
 func titleCase(id string) string {

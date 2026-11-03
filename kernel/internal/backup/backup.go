@@ -217,18 +217,19 @@ func Sums(ctx context.Context, db *pg.Pool, org string) ([]TableSum, error) {
 	return sums, err
 }
 
-// FilesDir is where uploads live: system.rk files.path (default ./data/files) resolved against the site dir.
-func FilesDir(reg *meta.Registry, siteDir string) string {
-	p := "./data/files"
+// FilesDir is the attachments directory, resolved exactly like rangka serve (contract 0011 §1): override
+// (--files-dir / --files / $RANGKA_FILES_DIR), else system.rk files.path, else data/files. A relative path is
+// relative to the working directory, not to the site dir; deployments set RANGKA_FILES_DIR.
+func FilesDir(reg *meta.Registry, override string) string {
+	if override != "" {
+		return override
+	}
 	if reg != nil {
 		if v, ok := reg.SystemConfig("files.path").(string); ok && v != "" {
-			p = v
+			return v
 		}
 	}
-	if filepath.IsAbs(p) {
-		return p
-	}
-	return filepath.Join(siteDir, p)
+	return "data/files"
 }
 
 // Write archives the database (or one org), the site (minus data/ and backups/), the apps and the files dir

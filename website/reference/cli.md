@@ -58,9 +58,8 @@ rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database>
   when complete.
 - `--org` archives one organisation (rows with that `org_id`). Rows of the installation itself (`org_id` empty) are
   left out, so schedule whole-database backups for disaster recovery. Without `--org` the whole database is archived.
-- `--files` defaults to `$RANGKA_FILES_DIR` (the variable `serve` reads), else `files.path` of `system.rk` resolved
-  against the site directory (`./data/files`). `serve` resolves a relative `files.path` against its working
-  directory, so run it from the site directory or set `RANGKA_FILES_DIR` for both. A symlinked
+- `--files` (backup and restore) resolves like `serve`: `$RANGKA_FILES_DIR`, else `files.path` of `system.rk`, else
+  `./data/files`. Relative paths are relative to the working directory; set `RANGKA_FILES_DIR` in deployments. A symlinked
   file inside the tree is copied as its content; a symlinked directory inside the tree is an error that names it.
 - `restore` needs an empty database. It migrates from the archived `apps/` and `site/`, adds archived columns the
   models no longer have, loads the tables in foreign-key order with `COPY ... FROM STDIN`, resets sequences, then

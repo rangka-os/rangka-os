@@ -24,7 +24,7 @@ import (
 type RestoreOptions struct {
 	Version  string // the binary's version; "dev" skips the archive version check
 	Into     string // the archived site/ and apps/ are extracted here (must not exist or be empty)
-	FilesDir string // uploads go here; "" = system.rk files.path resolved against <Into>/site
+	FilesDir string // uploads go here; "" = FilesDir(registry, ""), like serve (no site archived: <Into>/files)
 	// Registry loads and validates the extracted metadata (rangka's usual loader).
 	Registry func(appsDir, siteDir string) (*meta.Registry, error)
 }
@@ -83,7 +83,7 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 	}
 	files := o.FilesDir
 	if files == "" {
-		files = FilesDir(reg, site)
+		files = FilesDir(reg, "")
 		if site == "" {
 			files = filepath.Join(o.Into, "files")
 		}

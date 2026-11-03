@@ -461,6 +461,35 @@ func (v *validator) site(all map[string]vis) {
 				v.rep.extra("error", cfg.Path, "orgs/"+id+"/config/orgs", "nested_orgs", fmt.Sprintf(`org "%s" config cannot contain orgs`, id))
 			}
 		}
+		type dppAt struct {
+			where string
+			tax   map[string]any // the map holding the key checked
+		}
+		dpp := []dppAt{{"tax/dpp_ratio", asMap(c["tax"])}}
+		for _, id := range sortedKeys(asMap(c["orgs"])) {
+			if oc, ok := asMap(asMap(c["orgs"])[id])["config"].(map[string]any); ok {
+				dpp = append(dpp, dppAt{"orgs/" + id + "/config/tax/dpp_ratio", asMap(oc["tax"])})
+			}
+		}
+		for _, d := range dpp {
+			if r, ok := d.tax["dpp_ratio"].(string); ok {
+				if _, _, ok := ParseDPPRatio(r); !ok {
+					v.rep.extra("error", cfg.Path, d.where, "bad_dpp_ratio", fmt.Sprintf(`dpp_ratio "%s" must be two positive whole numbers like 11/12`, r))
+				}
+			}
+		}
+		// PKP status moved to tax.pkp (contract 0010 §8): an org: pkp key is read by nothing, so say so
+		pkpAt := []dppAt{{"org/pkp", asMap(c["org"])}}
+		for _, id := range sortedKeys(asMap(c["orgs"])) {
+			if oc, ok := asMap(asMap(c["orgs"])[id])["config"].(map[string]any); ok {
+				pkpAt = append(pkpAt, dppAt{"orgs/" + id + "/config/org/pkp", asMap(oc["org"])})
+			}
+		}
+		for _, d := range pkpAt {
+			if _, set := d.tax["pkp"]; set {
+				v.rep.extra("warn", cfg.Path, d.where, "org_pkp_ignored", "pkp pindah ke tax.pkp; org.pkp diabaikan (contract 0010 §8)")
+			}
+		}
 	}
 	for _, tn := range sortedKeysM(s.Themes) {
 		d := s.Themes[tn]

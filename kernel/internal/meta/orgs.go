@@ -56,10 +56,11 @@ func (r *Registry) OrgConfig(org, path string) any {
 	return deepCopy(orgLookup(site, o.Config, parts))
 }
 
-// OrgIdentity is the legal identity of org as a deep copy: its org: map (legal_name, npwp, pkp, ...) plus name
-// and code. An org listed in orgs: takes only its own config.org, legal_name falling back to its orgs: name, and
-// gets name and code from its orgs: entry; an unlisted org takes the site's org:. pkp, when org: leaves it out,
-// is the (merged) tax.pkp. Read identity and PKP status through this, not through OrgConfig(org, "org.pkp").
+// OrgIdentity is the legal identity of org as a deep copy: its org: map (legal_name, npwp, ...) plus name and
+// code. An org listed in orgs: takes only its own config.org, legal_name falling back to its orgs: name, and
+// gets name and code from its orgs: entry; an unlisted org takes the site's org:. pkp is always
+// TaxSettings(org)'s pkp (the merged tax.pkp, contract 0010 §8); an org: pkp key is ignored, so print's
+// .Org.pkp and the CEL tax.pkp cannot disagree.
 func (r *Registry) OrgIdentity(org string) map[string]any {
 	out := asMap(r.OrgConfig(org, "org"))
 	if out == nil {
@@ -71,11 +72,7 @@ func (r *Registry) OrgIdentity(org string) map[string]any {
 			out["legal_name"] = o.Name
 		}
 	}
-	if _, ok := out["pkp"]; !ok {
-		if v, ok := r.OrgConfig(org, "tax.pkp").(bool); ok {
-			out["pkp"] = v
-		}
-	}
+	out["pkp"] = r.TaxSettings(org)["pkp"]
 	return out
 }
 
@@ -144,4 +141,90 @@ func scopeFields(x any) []string {
 		return []string{s}
 	}
 	return strList(x)
+}
+
+// Default PPN figures when config.rk tax leaves them out: 12% on a DPP of 11/12 of the price.
+const (
+	DefaultPPNRate  = 12
+	defaultDPPRatio = "11/12"
+)
+
+// ParseDPPRatio parses a DPP ratio such as "11/12" into its numerator and denominator: two positive whole
+// numbers separated by "/", white space (dppSpace) allowed around them. ok is false for anything else.
+func ParseDPPRatio(s string) (num, den int64, ok bool) {
+	a, b, found := strings.Cut(s, "/")
+	if !found {
+		return 0, 0, false
+	}
+	num, ok1 := positiveInt(strings.Trim(a, dppSpace))
+	den, ok2 := positiveInt(strings.Trim(b, dppSpace))
+	if !ok1 || !ok2 {
+		return 0, 0, false
+	}
+	return num, den, true
+}
+
+// dppSpace is the space trimmed around a DPP ratio's numbers (Python's str.strip set in rangka_validate.py).
+const dppSpace = " \t\n\r\f\v"
+
+func positiveInt(s string) (int64, bool) {
+	if s == "" || len(s) > 9 {
+		return 0, false
+	}
+	var n int64
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int64(c-'0')
+	}
+	return n, n > 0
+}
+
+// TaxSettings is the org's PPN settings, the one source for the CEL tax global, print's .Tax and .Org.pkp
+// (contract 0010 §8): OrgConfig(org, "tax"), i.e. the site's tax: with the org's config.tax deep-merged over
+// it, with the three keys normalised: ppn_rate a number (int64 when whole, else float64; default 12),
+// dpp_ratio a "num/den" string (default "11/12", also for a malformed one) and pkp a bool (default false).
+// Other keys are copied as they are. The result is a fresh map.
+func (r *Registry) TaxSettings(org string) map[string]any {
+	out := asMap(r.OrgConfig(org, "tax"))
+	if out == nil {
+		out = map[string]any{}
+	}
+	switch v := out["ppn_rate"].(type) {
+	case int64:
+	case int:
+		out["ppn_rate"] = int64(v)
+	case float64:
+		if v == float64(int64(v)) {
+			out["ppn_rate"] = int64(v)
+		}
+	default:
+		out["ppn_rate"] = int64(DefaultPPNRate)
+	}
+	if s, _ := out["dpp_ratio"].(string); s != "" {
+		if _, _, ok := ParseDPPRatio(s); !ok {
+			out["dpp_ratio"] = defaultDPPRatio
+		}
+	} else {
+		out["dpp_ratio"] = defaultDPPRatio
+	}
+	pkp, _ := out["pkp"].(bool)
+	out["pkp"] = pkp
+	return out
+}
+
+// TaxVar is the CEL tax global for org (contract 0010 §8): ppn_rate (percent), dpp_num, dpp_den and pkp
+// from TaxSettings(org). pkp is the one PKP flag (default false: no PPN unless the org is declared PKP).
+func (r *Registry) TaxVar(org string) map[string]any {
+	t := r.TaxSettings(org)
+	num, den, _ := ParseDPPRatio(t["dpp_ratio"].(string))
+	return map[string]any{"ppn_rate": t["ppn_rate"], "dpp_num": num, "dpp_den": den, "pkp": t["pkp"]}
+}
+
+// OrgVar is the CEL org global for org (contract 0010 §8), identity only: OrgIdentity(org) cut to id (the
+// org id), code, name, legal_name and npwp, each a string ("" when missing). PKP status is tax.pkp.
+func (r *Registry) OrgVar(org string) map[string]any {
+	d := r.OrgIdentity(org)
+	return map[string]any{"id": org, "code": str(d, "code"), "name": str(d, "name"), "legal_name": str(d, "legal_name"), "npwp": str(d, "npwp")}
 }

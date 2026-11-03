@@ -341,14 +341,15 @@ func orgProbeEnv(t *testing.T, cfg string) *env {
 	})
 }
 
-// .Org.pkp comes from config org.pkp, else tax.pkp: a PKP firm's invoice prints its DPP and PPN rows.
+// .Org.pkp is always the merged tax.pkp (contract 0010 §8): a PKP firm's invoice prints its DPP and PPN rows;
+// an org: pkp key is ignored (an org's own tax: {pkp: false} is api TestPrintOrg and TestPrintAndCELAgreeOnTax).
 func TestPrintOrgPKP(t *testing.T) {
 	for _, tc := range []struct {
 		name, cfg, probe string
 		ppn              bool
 	}{
 		{"tax.pkp", "", "<p>|||true</p>", true},
-		{"org.pkp false", "org: {legal_name: PT Contoh Jasa Teknik, pkp: false}\n", "<p>||PT Contoh Jasa Teknik|false</p>", false},
+		{"org.pkp ignored", "org: {legal_name: PT Contoh Jasa Teknik, pkp: false}\n", "<p>||PT Contoh Jasa Teknik|true</p>", true},
 		{"org without pkp", "org: {legal_name: PT Contoh Jasa Teknik}\n", "<p>||PT Contoh Jasa Teknik|true</p>", true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

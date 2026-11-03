@@ -163,10 +163,7 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 	}
 	if w.If != "" {
 		v, err := cel.Eval(w.If, &cel.Env{Today: dc.e.Today, Apps: dc.e.Reg().IsInstalled, Vars: func(n string) (any, bool) {
-			if n == "user" {
-				return UserVar(dc.a), true
-			}
-			return nil, false
+			return GlobalVar(dc.e.Reg(), dc.a, n)
 		}})
 		if err != nil || !cel.Truthy(v) {
 			return map[string]any{"hidden": true}, nil

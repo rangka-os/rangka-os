@@ -125,10 +125,7 @@ func (r *flowRun) env() *cel.Env {
 		if v, ok := r.vars[n]; ok {
 			return v, true
 		}
-		if n == "user" {
-			return UserVar(r.a), true
-		}
-		return nil, false
+		return GlobalVar(r.e.Reg(), r.a, n)
 	}}
 }
 

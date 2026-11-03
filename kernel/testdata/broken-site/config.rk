@@ -2,7 +2,8 @@
 locale: id-ID
 currency: IDR
 timezone: Asia/Jakarta
-tax: {ppn_rate: 12, dpp_ratio: 11/12, pkp: true}
+tax: {ppn_rate: 12, dpp_ratio: "11:12", pkp: true}
+org: {legal_name: PT Rusak, pkp: true}
 numbering:
   sales_invoice: INV-{YYYY}-{#####}
   faktur: {pattern: "FK/{####}", reset: yearly}
@@ -16,4 +17,5 @@ layout: crm_last
 sso: {domains: [kopisenja.id], required: false}
 ai: {enabled: true, auto_apply: never, approvers: [owner, sales_manager]}
 orgs:
-  pt_beta: {name: PT Beta, code: BETA, config: {orgs: {pt_gamma: {name: PT Gamma}}}}
+  pt_beta: {name: PT Beta, code: BETA, config: {orgs: {pt_gamma: {name: PT Gamma}}, tax: {dpp_ratio: 0/12}}}
+  pt_delta: {name: PT Delta, config: {tax: {ppn_rate: 11, dpp_ratio: " 11 / 12 "}, org: {legal_name: PT Delta, pkp: false}}}

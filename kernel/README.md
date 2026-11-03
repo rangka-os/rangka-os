@@ -217,7 +217,8 @@ GET /api/v1/r/{model}/{name}/print?format=<print>&as=html|pdf
   lacks the `print` permission gets 403 `permission_denied`. Every print is audited as `record.print`; a `HEAD`
   starts no browser and writes no audit entry.
 * `.Org` is `Registry.OrgIdentity`: an org listed in `orgs:` gets only its own `orgs.<id>.config.org` plus
-  `name` and `code` (an unlisted org gets the site's `org:`); `.Org.pkp` falls back to `tax.pkp`.
+  `name` and `code` (an unlisted org gets the site's `org:`); `.Org.pkp` is always the merged `tax.pkp`.
+  `.Tax` and the CEL `tax` global both come from `Registry.TaxSettings` (contract 0010 §8).
 * `/api/v1/meta` lists each model's formats as `prints`. `rangka validate` checks formats and letterheads
   (`template_missing`, `template_outside`, `template_error`, `logo_missing`; warning `letterhead_missing` for
   an org listed in `orgs:` without `letterheads/<id>.rk`).

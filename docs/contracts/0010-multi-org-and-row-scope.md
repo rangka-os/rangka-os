@@ -27,13 +27,15 @@ settings, a database-level guard, and outlet scope.
 ### 2. Per-org settings (`config.rk` key `orgs:`, schema 0.5)
 ```yaml
 # site config.rk
-org: {legal_name: PT Contoh, pkp: false}      # site default (program plan's fixed key)
+org: {legal_name: PT Contoh}                  # site default (program plan's fixed key)
+tax: {pkp: false}                             # PKP status lives in tax: (§8)
 orgs:
   pt_alpha:
     name: PT Alpha Inspeksi
     code: ALP
     config:            # any config.rk key, overriding the site value for this org
-      org: {legal_name: PT Alpha Inspeksi, npwp: "00.000.000.0-000.000", pkp: true}
+      org: {legal_name: PT Alpha Inspeksi, npwp: "00.000.000.0-000.000"}
+      tax: {pkp: true}
       numbering: {invoice: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly}}
 ```
 - No new kind: the program plan fixes `org:` as a `config.rk` key, and one site file holding every org keeps
@@ -44,9 +46,9 @@ orgs:
   `orgs.<org>.config[key]` deep-merged over it (below). S3 (tax), S4 (numbering, `{ORG}`) and S8 use it
   instead of `SiteConfig`.
 - Identity is read with `Registry.OrgIdentity(org)`, a deep copy holding the org's `org:` keys (`legal_name`,
-  `npwp`, `pkp`, ...) plus `name` and `code` (rules below). Print's `.Org` and letterheads use it. Module
-  authors read PKP status as `tax.pkp` (`OrgConfig`) or `OrgIdentity(org).pkp`, not `OrgConfig(org,
-  "org.pkp")`, which is unset for a listed org without its own `org:`.
+  `npwp`, ...) plus `name`, `code` and `pkp` (rules below). Print's `.Org` and letterheads use it. PKP status
+  has one source, the merged `tax.pkp` (`Registry.TaxSettings`, §8): `OrgIdentity(org).pkp` is that value,
+  and an `org:` `pkp` key is ignored.
 - An org's config is deep-merged over the site's, except `org` and `numbering`. Where both hold a map at a
   key, the maps merge key by key (recursively) and the org wins; for any other pair of types the org's value
   replaces the site's. An org that sets `tax: {ppn_rate: 11}` keeps the site's `tax.pkp` and `tax.dpp_ratio`.
@@ -55,8 +57,8 @@ orgs:
   are separate legal entities, so identity is never inherited: for an org listed in `orgs:`,
   `OrgConfig(org, "org")` and `OrgConfig(org, "org.<key>")` give only its own `config.org` (nothing when it
   sets none), never the site's `org:`. `OrgIdentity` then fills in: `legal_name` is its
-  `config.org.legal_name`, else `orgs.<id>.name`; `npwp` is only its own `config.org.npwp`; `pkp` is its own
-  `config.org.pkp`, else the merged `tax.pkp`. The site's `org:` applies only to orgs not listed in `orgs:`.
+  `config.org.legal_name`, else `orgs.<id>.name`; `npwp` is only its own `config.org.npwp`; `pkp` is always the
+  merged `tax.pkp`. The site's `org:` applies only to orgs not listed in `orgs:`.
   A `numbering` map is one scheme set: an org's map is used whole, so site series are not visible to an org
   that defines its own.
 - A site subkey cannot be unset from an org: the schema rejects a null value (`tax: null` is "not of type
@@ -161,6 +163,35 @@ One command, shared with S0's set-up (which spells the email `--email`):
 - `rangka user remove <email> --org <id> [--db <url>]` ends a membership; for a non-member it exits 1 with
   `<email> is not a member of <org>`.
 - Missing or wrong flags exit 2.
+
+### 8. CEL globals `org` and `tax` (S8d)
+Every expression that sees `user` (model defaults, computes, rules and action `if:`, flow steps, dashboard
+widget `if:`, role `scope.from`) also reads two read-only globals, resolved per operation from the caller's
+org (`Actor.Org`):
+
+| Global | Members | Source |
+| --- | --- | --- |
+| `org` | `id`, `code`, `name`, `legal_name`, `npwp` | Identity only: `Registry.OrgIdentity(org)` (§2) cut to these members, each a string (`""` when missing), plus `id`, the org id. A listed org gets its `orgs:` `name`/`code` and only its own `config.org` (`legal_name` falling back to its `name`); an unlisted org gets the site's `org:` and empty `name`/`code` |
+| `tax` | `ppn_rate`, `dpp_num`, `dpp_den`, `pkp` | `Registry.TaxSettings(org)`: `OrgConfig(org, "tax")`, the site's `tax:` with the org's `config.tax` deep-merged over it. `ppn_rate` is a percent (default 12; a whole number arrives as an int, a fractional one such as 11.5 as a float); `dpp_ratio` such as `"11/12"` becomes `dpp_num` 11 and `dpp_den` 12 (default 11/12); `pkp` is always a bool, default `false` |
+
+```yaml
+- {name: tax_rate, type: int, default: "tax.pkp ? tax.ppn_rate : 0"}
+```
+- One source for print and CEL: `TaxSettings` also fills print's `.Tax` (`ppn_rate`, `dpp_ratio`, `pkp`, the
+  same normalised values) and `OrgIdentity(org).pkp` (print's `.Org.pkp`), so a template and a model default
+  cannot disagree. PKP status is `tax.pkp` only: an `org:` `pkp` key is ignored. PPN is charged only for an
+  org declared PKP.
+- An `org:` `pkp` key (site `org/pkp` or an org's `config.org.pkp`) is read by nothing: both validators warn
+  `org_pkp_ignored` ("pkp pindah ke tax.pkp; org.pkp diabaikan (contract 0010 §8)") so a site that set only
+  `org: {pkp: true}` does not silently stop charging PPN.
+- `tax:` deep-merges (§2): an org with `config: {tax: {pkp: false}}` keeps the site's `ppn_rate` and
+  `dpp_ratio`.
+- A model field named `org` or `tax` shadows the global inside that model's expressions, as for `user`, and
+  the validators check it as that field (`org.nope` on a model with a link field `org` is `unknown_field`).
+- Otherwise both validators accept `org` and `tax` as globals and do not check their members (as for `user`).
+  A `dpp_ratio` that is not two positive whole numbers around `/` (site `tax:` or an org's `config.tax`) is
+  error `bad_dpp_ratio`; at run time it falls back to 11/12, in CEL and in print alike.
+- Imports' `cel:` mappings (contract 0012) see only `row`, not these globals.
 
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.

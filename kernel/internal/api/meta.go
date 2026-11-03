@@ -50,6 +50,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 		if m.IsSubmittable && m.Field("status") == nil {
 			raw["status_field"] = true // records carry a derived status
 		}
+		raw["prints"] = printsMeta(reg, m.Name)
 		models[m.Name] = raw
 	}
 	dashboards := map[string]any{}

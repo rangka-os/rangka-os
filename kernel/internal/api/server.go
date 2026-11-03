@@ -114,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.lifecycle))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", a(s.uploadAttachment))
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", a(s.listAttachments))
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", a(s.printRecord))
 	mux.HandleFunc("GET /api/v1/attachments/{id}", a(s.getAttachment))
 	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.runAction))

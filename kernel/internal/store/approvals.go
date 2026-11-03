@@ -26,6 +26,7 @@ type Approval struct {
 	DecidedBy   string         `json:"decided_by,omitempty"`
 	DecidedAt   *time.Time     `json:"decided_at,omitempty"`
 	Reason      string         `json:"reason"`
+	UsedAt      *time.Time     `json:"used_at,omitempty"` // set when the verb ran with this approval (single-use)
 }
 
 // ApprovalFilter narrows ListApprovals; empty fields match everything.
@@ -34,7 +35,7 @@ type ApprovalFilter struct {
 	Limit, Offset                 int
 }
 
-const approvalCols = `id, org_id, model, name, verb, policy, label, approvers, state, snapshot, args, requested_by, requester, requested_at, decided_by, decided_at, reason`
+const approvalCols = `id, org_id, model, name, verb, policy, label, approvers, state, snapshot, args, requested_by, requester, requested_at, decided_by, decided_at, reason, used_at`
 
 func scanApproval(r []any) Approval {
 	a := Approval{ID: str(r[0]), Org: str(r[1]), Model: str(r[2]), Name: str(r[3]), Verb: str(r[4]), Policy: str(r[5]),
@@ -54,6 +55,9 @@ func scanApproval(r []any) Approval {
 	a.RequestedAt, _ = r[13].(time.Time)
 	if t, ok := r[15].(time.Time); ok {
 		a.DecidedAt = &t
+	}
+	if t, ok := r[17].(time.Time); ok {
+		a.UsedAt = &t
 	}
 	return a
 }
@@ -158,6 +162,17 @@ func DecideApproval(ctx context.Context, q pg.Querier, org, id, state, by, reaso
 		return ErrNotFound
 	}
 	return nil
+}
+
+// MarkApprovalsUsed records that the verb ran with these approved requests; a used approval never lets the verb
+// run again (contract 0007 §6).
+func MarkApprovalsUsed(ctx context.Context, q pg.Querier, org string, ids []string, at time.Time) error {
+	if len(ids) == 0 {
+		return nil
+	}
+	_, err := q.Exec(ctx, `update rk_approvals set used_at = $3 where org_id = $1 and id = any($2) and state = 'approved' and used_at is null`,
+		org, pg.Array(ids), at)
+	return err
 }
 
 // VoidApprovals turns the pending requests of a record into void (except exceptID) and returns the voided rows.

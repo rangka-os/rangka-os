@@ -170,7 +170,8 @@ create table if not exists rk_approvals (
   requested_at timestamptz not null default now(),
   decided_by   text,
   decided_at   timestamptz,
-  reason       text not null default ''
+  reason       text not null default '',
+  used_at      timestamptz                 -- set when the verb ran with this approval (single-use)
 );
 create index if not exists rk_approvals_org_state_idx on rk_approvals (org_id, state, requested_at desc);
 create index if not exists rk_approvals_record_idx on rk_approvals (org_id, model, name);

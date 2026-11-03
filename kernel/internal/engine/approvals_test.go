@@ -755,3 +755,46 @@ func TestNonHumanRequesterNeverSelfApproves(t *testing.T) {
 		t.Fatalf("pending = %+v", p)
 	}
 }
+
+// an approval that let the verb run is used up: when another policy starts to match on the unchanged record,
+// the next run asks the first policy again as well.
+func TestUsedApprovalNotReused(t *testing.T) {
+	e, owner := approvalSetup(t, "", convertPolicy+directorPolicy)
+	noopConvert(e)
+	ctx := context.Background()
+	out, err := e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", nil, ActionOpts{})
+	if err != nil || !out.Held || len(out.Approvals) != 1 {
+		t.Fatalf("held: %+v %v", out, err)
+	}
+	first := out.Approvals[0].ID
+	if d, err := e.Approve(ctx, mgr, first); err != nil || d.Action["ok"] != true {
+		t.Fatalf("approve: %+v %v", d, err)
+	}
+	if ap := approval(t, e, first); ap.UsedAt == nil {
+		t.Fatal("used_at not set after the action ran")
+	}
+	makeDirector(t, e, owner)
+	out, err = e.RunAction(ctx, rep, "lead", "LEAD-00031", "convert", nil, ActionOpts{})
+	if err != nil || !out.Held || len(out.Approvals) != 2 {
+		t.Fatalf("second run: %+v %v", out, err)
+	}
+	for _, ap := range out.Approvals {
+		if ap.ID == first || ap.State != "pending" {
+			t.Fatalf("second run reused %s: %+v", first, out.Approvals)
+		}
+	}
+}
+
+// a self-approved run marks its approval used at once.
+func TestSelfApprovedRunMarksUsed(t *testing.T) {
+	e, _ := approvalSetup(t, managerPolicy)
+	ctx := context.Background()
+	name := newInvoice(t, e, mgr)
+	if res, err := e.Submit(ctx, mgr, "sales_invoice", name, true); err != nil || res.Held {
+		t.Fatalf("submit: %+v %v", res, err)
+	}
+	l, _, _ := e.ListApprovals(ctx, mgr, store.ApprovalFilter{Model: "sales_invoice", Name: name})
+	if len(l) != 1 || l[0].UsedAt == nil {
+		t.Fatalf("approvals = %+v", l)
+	}
+}

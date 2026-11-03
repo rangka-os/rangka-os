@@ -154,11 +154,13 @@ func approvalLabel(ap *store.Approval) string {
 }
 
 // hold creates or finds the requests verb needs on rec (the stored record). Requests are bound to the
-// snapshot and the args. Inside Approve's verb run an approved request satisfies its policy. On a direct call
-// approved requests are single-use: they are reused only while another matching policy still waits (so an
-// approved policy is not asked again); when they alone would let the verb run, fresh requests are made. A
-// pending request with the same snapshot and args is reused; otherwise a request is inserted, already approved
-// when the actor may decide it (self-approval). It returns the pending and all requests of the call.
+// snapshot and the args, and approved requests are single-use: once the verb has run with them they are marked
+// used and never satisfy a policy again. Inside Approve's verb run an unused approved request satisfies its
+// policy. On a direct call unused approved requests are reused only while another matching policy still waits
+// (so an approved policy is not asked again); when they alone would let the verb run, fresh requests are made.
+// A pending request with the same snapshot and args is reused; otherwise a request is inserted, already approved
+// when the actor may decide it (self-approval). When nothing waits, the verb runs now: every unused approved
+// request of the call is marked used. It returns the pending and all requests of the call.
 func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args map[string]any) (pending []store.Approval, all []store.Approval, err error) {
 	var pols []meta.Approval
 	for _, p := range m.ApprovalsFor(verb) {
@@ -185,6 +187,7 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 	}
 	approved := map[string]*store.Approval{}
 	waiting := map[string]*store.Approval{}
+	var unused []string // unused approved requests of this call, marked used when the verb runs
 	for i := range existing {
 		x := &existing[i]
 		if x.Snapshot != snapshot || argsKey(x.Args) != key {
@@ -192,6 +195,10 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 		}
 		switch x.State {
 		case "approved":
+			if x.UsedAt != nil {
+				continue // single-use: it already let the verb run once
+			}
+			unused = append(unused, x.ID)
 			if approved[x.Policy] == nil {
 				approved[x.Policy] = x
 			}
@@ -249,6 +256,19 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 		all = append(all, ap)
 		if ap.State == "pending" {
 			pending = append(pending, ap)
+		} else {
+			unused = append(unused, ap.ID)
+		}
+	}
+	if len(pending) == 0 { // the verb runs in this transaction; a failure rolls the mark back
+		if err := store.MarkApprovalsUsed(o.ctx, o.tx, a.Org, unused, o.e.Now()); err != nil {
+			return nil, nil, err
+		}
+		for i := range all {
+			if all[i].UsedAt == nil {
+				now := o.e.Now()
+				all[i].UsedAt = &now
+			}
 		}
 	}
 	return pending, all, nil

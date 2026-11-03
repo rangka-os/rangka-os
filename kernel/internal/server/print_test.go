@@ -365,6 +365,40 @@ func TestPrintOrgPKP(t *testing.T) {
 	}
 }
 
+// The PPN rate comes from the record's tax_rate, else the org's config tax.ppn_rate; dpp_ratio left out of the
+// config prints the default factor.
+func TestPrintTaxFromConfig(t *testing.T) {
+	e := printEnv(t, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		const site12 = "tax: {ppn_rate: 12, dpp_ratio: 11/12, pkp: true}\n"
+		if !strings.Contains(string(b), site12) {
+			t.Fatalf("site config lacks %q", site12)
+		}
+		if err := os.WriteFile(p, []byte(strings.Replace(string(b), site12, "tax: {ppn_rate: 11, pkp: true}\n", 1)), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	// the catalogue invoice stores tax_rate 12 by default: that record prints its own rate
+	own := e.submittedInvoice("CUST-0012")
+	if body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+own+"/print", nil).Body); !strings.Contains(body, "<th>PPN 12%</th>") {
+		t.Errorf("record tax_rate 12 under config 11:\n%s", body)
+	}
+	cfg := e.submittedInvoice("CUST-0012")
+	if _, err := e.s.DB.Exec(context.Background(), `update r_sales_invoice set tax_rate = null where name = $1`, cfg); err != nil {
+		t.Fatal(err)
+	}
+	body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+cfg+"/print", nil).Body)
+	for _, want := range []string{"<th>PPN 11%</th>", "<th>DPP nilai lain (11/12)</th>"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("record without tax_rate under config 11 lacks %q:\n%s", want, body)
+		}
+	}
+}
+
 // Exactly the limit is not truncated.
 func TestPrintRelatedAtLimitNotTruncated(t *testing.T) {
 	e := statementEnv(t)

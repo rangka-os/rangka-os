@@ -81,8 +81,10 @@
   <tr><th>Uang muka</th><td class="num">{{money (sub 0 .Doc.down_payment) $cur}}</td></tr>
   {{- end}}
   {{- if .Org.pkp}}
-  <tr><th>DPP nilai lain (11/12)</th><td class="num">{{money .Doc.dpp $cur}}</td></tr>
-  <tr><th>PPN 12%</th><td class="num">{{money .Doc.ppn $cur}}</td></tr>
+  {{- $rate := .Tax.ppn_rate}}{{with .Doc.tax_rate}}{{$rate = .}}{{end}}{{with .Doc.ppn_rate}}{{$rate = .}}{{end}}
+  {{- $dpp := .Tax.dpp_ratio}}{{with .Doc.dpp_ratio}}{{$dpp = .}}{{end}}
+  <tr><th>{{if or (eq (print $dpp) "1") (eq (print $dpp) "1/1")}}DPP{{else}}DPP nilai lain ({{$dpp}}){{end}}</th><td class="num">{{money .Doc.dpp $cur}}</td></tr>
+  <tr><th>PPN {{number $rate}}%</th><td class="num">{{money .Doc.ppn $cur}}</td></tr>
   {{- end}}
   <tr class="grand"><th>Total</th><td class="num">{{money .Doc.grand_total $cur}}</td></tr>
 </table>

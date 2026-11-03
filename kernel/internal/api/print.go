@@ -84,7 +84,8 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 	}
 	page, err := docprint.Render(docprint.Input{
 		Format: f, Model: m, Doc: rec, Links: s.printLinks(ctx, c.actor, m, rec), Related: related, RelatedTruncated: truncated,
-		Letterhead: reg.Letterhead(c.actor.Org), Org: printOrg(reg, c.actor.Org), Printed: s.Engine.Now().In(s.Engine.Location()),
+		Letterhead: reg.Letterhead(c.actor.Org), Org: printOrg(reg, c.actor.Org),
+		Tax: meta.AsMap(reg.OrgConfig(c.actor.Org, "tax")), Printed: s.Engine.Now().In(s.Engine.Location()),
 		Children: children,
 	})
 	if err != nil {

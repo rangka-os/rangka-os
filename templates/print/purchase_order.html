@@ -77,7 +77,8 @@
 <table class="totals">
   <tr><th>Subtotal</th><td class="num">{{rupiah .Doc.subtotal}}</td></tr>
   {{- if ne (sub .Doc.ppn 0) "0"}}
-  <tr><th>PPN</th><td class="num">{{rupiah .Doc.ppn}}</td></tr>
+  {{- $rate := .Tax.ppn_rate}}{{with .Doc.tax_rate}}{{$rate = .}}{{end}}{{with .Doc.ppn_rate}}{{$rate = .}}{{end}}
+  <tr><th>PPN {{number $rate}}%</th><td class="num">{{rupiah .Doc.ppn}}</td></tr>
   {{- end}}
   <tr class="grand"><th>Total</th><td class="num">{{rupiah .Doc.grand_total}}</td></tr>
 </table>

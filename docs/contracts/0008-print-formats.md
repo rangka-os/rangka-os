@@ -52,7 +52,8 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 
 ### 3. Templates: Go `html/template`
 - The template holds the page body. The kernel wraps it in a full document: `<!doctype html>`, `lang="id"`, title = record name, `@page` size and margins for the paper, base CSS (Rangka tokens: ink text, stone rules, tabular numbers), and a `print-<paper>` class on `<body>`. A template may add CSS with `{{define "style"}}…{{end}}`.
-- Data: `.Doc` (the record with child tables; every model field present, missing ones empty), `.Links` (each top-level link field's record, e.g. `.Links.customer.customer_name`), `.Related.<name>` (lists from `related:`), `.Truncated.<name>` (true when more rows matched than the list's `limit`, so the list was cut; templates should say so), `.Letterhead`, `.Org`, `.Model` (`name`, `label`), `.Format` (`name`, `label`, `paper`), `.Printed` (print time, org time zone).
+- Data: `.Doc` (the record with child tables; every model field present, missing ones empty), `.Links` (each top-level link field's record, e.g. `.Links.customer.customer_name`), `.Related.<name>` (lists from `related:`), `.Truncated.<name>` (true when more rows matched than the list's `limit`, so the list was cut; templates should say so), `.Letterhead`, `.Org`, `.Tax` (the org's config `tax`, deep-merged over the site's: `ppn_rate`, default `12`; `dpp_ratio`, default `"11/12"`; `pkp`), `.Model` (`name`, `label`), `.Format` (`name`, `label`, `paper`), `.Printed` (print time, org time zone).
+- Tax labels: a layout never hard-codes a rate or DPP factor. The rate shown is the record's own `ppn_rate`, else its `tax_rate`, else `.Tax.ppn_rate` (printed with `number`, e.g. `PPN 11%`); the factor is the record's `dpp_ratio`, else `.Tax.dpp_ratio`, labelled `DPP nilai lain (<factor>)` unless it is `1` or `1/1` (then `DPP`). The amounts stay the record's `dpp` and `ppn`: the layout computes no tax.
 - Built-in partials, which a template may redefine: `letterhead` (logo, legal name, address, NPWP, contacts), `bank_accounts`, `signature`.
 - Helpers (exact output, tested):
 
@@ -89,7 +90,7 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 
 ### 6. Reference layouts (rangka-os `templates/print/`)
 Starting points that modules copy next to their `print/*.rk`:
-- `quotation.html`: *Surat Penawaran Harga* with Nomor/Rev., Perihal, Kepada Yth., item table (No, Uraian, Qty, Satuan, Harga satuan, Diskon, Jumlah), subtotal, diskon, DPP nilai lain 11/12, PPN, total, terbilang, syarat (masa berlaku, pembayaran, waktu pelaksanaan), Hormat kami + signatory.
+- `quotation.html`: *Surat Penawaran Harga* with Nomor/Rev., Perihal, Kepada Yth., item table (No, Uraian, Qty, Satuan, Harga satuan, Diskon, Jumlah), subtotal, diskon, DPP (nilai lain per faktor), PPN (tarif dari record atau config), total, terbilang, syarat (masa berlaku, pembayaran, waktu pelaksanaan), Hormat kami + signatory.
 - `sales_invoice.html`: *Faktur / Invoice* with no. faktur, tanggal, jatuh tempo, no. PO pelanggan, Kepada (NPWP), item table, subtotal, uang muka, DPP, PPN (only when `.Org.pkp`), total, PPh 23 note ("Bila pembayaran dipotong PPh Pasal 23, mohon kirimkan bukti potongnya kepada kami"), terbilang, bank accounts, note that the e-Faktur is issued separately.
 - `purchase_order.html`: *Pesanan Pembelian* with vendor, kirim ke, item table, syarat pembayaran, tanggal kirim, disetujui oleh.
 - `statement.html`: *Laporan Tagihan (Statement of Account)* on `customer`, using `related.invoices` (open invoices only, oldest first): per-invoice tagihan, dibayar, sisa, umur; aging summary (belum jatuh tempo, 1–30, 31–60, 61–90, > 90 hari); a note when `.Truncated.invoices`.

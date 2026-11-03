@@ -310,3 +310,64 @@ func TestFixtureTemplatesMatchReference(t *testing.T) {
 		}
 	}
 }
+
+// The PPN rate and DPP factor come from the record (ppn_rate, else tax_rate; dpp_ratio), else from .Tax (the
+// org's merged config tax), else the defaults 12 and 11/12. The layouts never hard-code either.
+func TestGoldenTaxLabels(t *testing.T) {
+	reg := goldenRegistry(t)
+	render := func(name string, tax map[string]any, set map[string]any) string {
+		in := goldenCases(t, reg)[name]
+		in.Doc = map[string]any{"quotation": quotationDoc, "sales_invoice": invoiceDoc, "purchase_order": purchaseOrderDoc}[name].(func() map[string]any)()
+		for k, v := range set {
+			in.Doc[k] = v
+		}
+		in.Tax = tax
+		return renderGolden(t, in)
+	}
+	for _, name := range []string{"quotation", "sales_invoice"} {
+		t.Run(name, func(t *testing.T) {
+			// no .Tax: the defaults
+			mustContain(t, render(name, nil, nil), "<th>PPN 12%</th>", "<th>DPP nilai lain (11/12)</th>")
+			// config 11 with DPP at full value
+			out := render(name, map[string]any{"ppn_rate": 11, "dpp_ratio": "1/1", "pkp": true}, nil)
+			mustContain(t, out, "<th>PPN 11%</th>", "<th>DPP</th>")
+			if strings.Contains(out, "11/12") || strings.Contains(out, "DPP nilai lain") {
+				t.Errorf("DPP 1/1 still printed as nilai lain:\n%s", out)
+			}
+			mustContain(t, render(name, map[string]any{"ppn_rate": float64(11), "dpp_ratio": 1}, nil), "<th>PPN 11%</th>", "<th>DPP</th>")
+			// only some keys set: the rest take the defaults
+			mustContain(t, render(name, map[string]any{"ppn_rate": 11}, nil), "<th>PPN 11%</th>", "<th>DPP nilai lain (11/12)</th>")
+			// the record's own rate and factor win over config
+			mustContain(t, render(name, map[string]any{"ppn_rate": 11, "dpp_ratio": "1/1"}, map[string]any{"ppn_rate": "12"}), "<th>PPN 12%</th>")
+			mustContain(t, render(name, map[string]any{"ppn_rate": 11}, map[string]any{"tax_rate": "12"}), "<th>PPN 12%</th>")
+			mustContain(t, render(name, map[string]any{"ppn_rate": 12}, map[string]any{"tax_rate": "11", "ppn_rate": "11.5"}), "<th>PPN 11,5%</th>")
+			mustContain(t, render(name, map[string]any{"ppn_rate": 11}, map[string]any{"ppn_rate": "", "tax_rate": ""}), "<th>PPN 11%</th>")
+			mustContain(t, render(name, map[string]any{"dpp_ratio": "1/1"}, map[string]any{"dpp_ratio": "11/12"}), "<th>DPP nilai lain (11/12)</th>")
+			mustContain(t, render(name, nil, map[string]any{"dpp_ratio": "1"}), "<th>DPP</th>")
+		})
+	}
+	t.Run("purchase_order", func(t *testing.T) {
+		mustContain(t, render("purchase_order", nil, nil), "<th>PPN 12%</th>")
+		mustContain(t, render("purchase_order", map[string]any{"ppn_rate": 11}, nil), "<th>PPN 11%</th>")
+		mustContain(t, render("purchase_order", map[string]any{"ppn_rate": 11}, map[string]any{"ppn_rate": "12"}), "<th>PPN 12%</th>")
+	})
+}
+
+// No reference layout hard-codes a tax rate or DPP factor.
+func TestReferenceLayoutsHaveNoTaxLiterals(t *testing.T) {
+	files, err := filepath.Glob(filepath.Join(referenceLayout, "*.html"))
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no layouts in %s: %v", referenceLayout, err)
+	}
+	for _, p := range files {
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, lit := range []string{"12%", "11/12"} {
+			if strings.Contains(string(b), lit) {
+				t.Errorf("%s hard-codes %q", filepath.Base(p), lit)
+			}
+		}
+	}
+}

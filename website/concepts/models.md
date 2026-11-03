@@ -43,15 +43,27 @@ fields:
 - The kernel adds a read-only twin `total_idr`: whole rupiah, `round(total × rate)`, half away from zero. Use the
   twin in lists, dashboards and reports. A foreign document without a positive rate is refused.
 - On a child row, such as an invoice line, the rate comes from the parent document only. A line's own `rate`
-  (often its unit price) is ignored, so put `rate` on the header.
+  (often its unit price) is ignored, so put `rate` on the header. A row of a row also reads the top-level
+  document's rate.
+- Computes may read twins: `outstanding_idr: "grand_total_idr - paid_amount_idr"` or
+  `sum(items.map(i, i.amount_idr))` see the twin of the current amount and rate.
+- A money value stored into another field type is converted: `float`/`percent`/`currency` get the nearest double,
+  `int` rounds half away from zero, text gets the decimal string. In CEL, `int(x)` truncates toward zero and
+  `double(x)` converts.
+- `round(x)` and `round(x, n)` on money, and `round(x, n)` on doubles, round half away from zero. `round(x)` on a
+  plain double keeps JavaScript rounding: `round(-2.5)` is `-2` on a double, `-3` on money.
 - A header's twin is `round(header amount × rate)`, not the sum of the line twins. The two may differ by at most
   half a rupiah per line.
 - A money compute that fails (too large, division by zero) blocks the save.
 - Twins are read-only and carry `money_of` in `/api/v1/meta`. Clients drop them when writing a model back, and a
   sent `total_idr` is ignored.
-- IDR documents stay whole rupiah. Foreign values keep up to 4 decimals; more is refused, not rounded.
+- IDR documents stay whole rupiah. Foreign values keep up to 4 decimals; more is refused, not rounded. A default
+  that yields a fraction in an IDR document is refused at save too.
+- Money fields added by an overlay work in expressions, but overlay views cannot show their twins in v0 (the
+  validator reports `unknown_field`).
 - In JSON a `money` value is a string (`"total": "1250.5"`) and the twin is an integer (`"total_idr": 19849812`).
-  Input accepts a string or a number. Never do money arithmetic in client floats.
+  Input accepts a string or a number; send large amounts as strings, because a JSON number above about 15
+  significant digits loses precision. Never do money arithmetic in client floats.
 
 Full rules: [contract 0013](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0013-money-and-currency.md).
 

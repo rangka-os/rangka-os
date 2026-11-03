@@ -40,7 +40,8 @@ fields:
 - Generated twins carry `money_of: <field>` in `/api/v1/meta`. Clients that write a model back (Console, Rangka AI
   change sets) must drop fields with `money_of` first.
 - Money fields added by a company overlay (`site/custom/<model>.rk`) get their twins at runtime, but the validator
-  runs no money checks on overlay fields in v0.
+  runs no money checks on overlay fields in v0. Overlay views cannot reference the twin of an overlay money field
+  in v0 (the validator reports `unknown_field`); use it from expressions only.
 - The kernel reads money columns as text (`"<field>"::text`), so no value passes through `float64`
   (independent of the pgx swap in contract 0005).
 
@@ -60,6 +61,17 @@ fields:
   `total_idr = round(sum(lines.amount) × rate)`. Line twins are each rounded and may not add up to the header
   twin (the difference is at most half a rupiah per line); reports of document totals use the header twin.
 - The rate field is read through its shortest decimal form, exact for rates with up to 15 significant digits.
+- A row of a row reads the rate from the top-level document, whatever its depth. (The validator still resolves
+  `rate_field` on the direct parent in v0, so an intermediate row needs a `rate` field of an allowed type too; the
+  kernel ignores it.)
+- A `default` that yields a fraction in an IDR document is refused at save like an entered fraction (only computes
+  are rounded).
+- **Twins inside computes.** A compute may read `<field>_idr` (its own record's, or a row's through
+  `items.map(i, i.amount_idr)`). Twins are settled before the record's computes and again after each one, and a
+  compute reading a twin runs after the money field (and a computed currency or rate) it depends on, so it sees the
+  twin of the current amount and rate, on create and on update.
+- A decimal stored into a non-money field is converted, never silently 0: into `float`, `percent` or `currency` as
+  the nearest double, into `int` or `rating` rounded half away from zero, into text as its canonical string.
 
 ### 4. CEL
 - A `money` field evaluates to a decimal value (`decimal` in error messages).
@@ -69,7 +81,11 @@ fields:
 - `== != < <= > >=` compare decimals with decimals, ints and doubles exactly.
 - `sum(list)` of decimals (or decimals mixed with ints) is an exact decimal.
 - `round(x)` rounds a decimal to a whole number, `round(x, n)` to `n` decimals (0–4), half away from zero; both stay
-  decimals. `round(x)` on doubles is unchanged.
+  decimals. `round(x, n)` on doubles also rounds half away from zero. `round(x)` on doubles is unchanged: it keeps
+  the prototype's JavaScript rounding (`Math.round`, half up), so `round(-2.5)` on a double is `-2`, while
+  `round(-2.5)` on a decimal is `-3`.
+- `int(x)` of a decimal truncates toward zero, like `int(x)` of a double (`int(-2.7)` is `-2`); `double(x)` of a
+  decimal is the nearest double. Storing a decimal into an `int` field rounds instead (§3).
 - When cel-go replaces the in-tree evaluator (contract 0005 §1), the decimal type and these overloads move with it;
   the semantics here are the contract.
 
@@ -79,8 +95,11 @@ fields:
 ```
 - A `money` value is a JSON **string**: plain decimal, no exponent, no trailing zeros after the point
   (`"1250.5"`, `"1250000"`, `"0"`). The twin is a JSON integer.
-- Input accepts a string (preferred) or a JSON number (read through its shortest decimal form). Clients may send
-  `<field>_idr`; it is ignored and recomputed.
+- Input accepts a string (preferred) or a JSON number (read through its shortest decimal form). Send large amounts
+  as strings: a JSON number above about 15 significant digits has already lost precision when it is decoded.
+  Clients may send `<field>_idr`; it is ignored and recomputed.
+- Input errors are Bahasa Indonesia with the field label: "<label> maksimal 4 angka desimal" (more than 4
+  decimals or no number), "<label> terlalu besar" (outside numeric(20,4)).
 
 ### 6. Validator (Go and `rangka_validate.py`, identical reports)
 - Schema: `money` in the field type enum; `currency_field` and `rate_field` keys; `type: money` requires

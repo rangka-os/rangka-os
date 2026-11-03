@@ -55,6 +55,20 @@ func UserVar(a Actor) map[string]any {
 	return map[string]any{"name": name, "email": a.ID, "roles": roles, "outlets": outlets}
 }
 
+// GlobalVar resolves the read-only globals user, org and tax for a (contract 0010 §8): org and tax come
+// from the actor's org settings. ok is false for any other name.
+func GlobalVar(reg *meta.Registry, a Actor, name string) (any, bool) {
+	switch name {
+	case "user":
+		return UserVar(a), true
+	case "org":
+		return reg.OrgVar(a.Org), true
+	case "tax":
+		return reg.TaxVar(a.Org), true
+	}
+	return nil, false
+}
+
 func (s *scope) env() *cel.Env {
 	return &cel.Env{
 		Vars:  s.lookup,
@@ -102,6 +116,8 @@ func (s *scope) lookup(name string) (any, bool) {
 	switch name {
 	case "user":
 		return UserVar(s.actor), true
+	case "org", "tax":
+		return GlobalVar(s.e.Reg(), s.actor, name)
 	case "name", "created_by", "created_at", "modified_at", "amended_from":
 		return str(s.rec[name]), true
 	case "docstatus":

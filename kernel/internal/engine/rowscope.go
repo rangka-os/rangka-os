@@ -37,13 +37,9 @@ func (e *Engine) RowScope(a Actor) *RowScope {
 				s.Fields = append(s.Fields, f)
 			}
 		}
-		user := UserVar(a)
 		v, err := cel.Eval(rs.From, &cel.Env{
 			Vars: func(name string) (any, bool) {
-				if name == "user" {
-					return user, true
-				}
-				return nil, false
+				return GlobalVar(reg, a, name)
 			},
 			Today: e.Today, Now: e.Now, Apps: reg.IsInstalled,
 		})

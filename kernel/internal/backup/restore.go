@@ -12,6 +12,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 
@@ -299,6 +300,14 @@ func addMissing(ctx context.Context, db *pg.Pool, want []TableSum) error {
 			}
 			if _, err := db.Exec(ctx, fmt.Sprintf("create table %s (%s)", pg.QuoteIdent(t.Name), strings.Join(defs, ", "))); err != nil {
 				return fmt.Errorf("create archived table %s: %w", t.Name, err)
+			}
+			// an archived model table (an org_id column; kernel rk_ tables always exist) keeps the org policy
+			if !strings.HasPrefix(t.Name, "rk_") && slices.ContainsFunc(t.Columns, func(c Column) bool { return c.Name == "org_id" }) {
+				for _, s := range store.RLSStatements(t.Name) {
+					if _, err := db.Exec(ctx, s); err != nil {
+						return fmt.Errorf("row-level security on archived table %s: %w", t.Name, err)
+					}
+				}
 			}
 			continue
 		}

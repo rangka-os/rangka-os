@@ -24,9 +24,10 @@ type ListOpts struct {
 	Children bool
 }
 
-// List returns matching records the actor may read and the total before paging. v0 filters in memory with
-// CEL; a CEL→SQL translation for simple filters is the next step for large tables. Without a read grant the
-// list is denied; rows whose read grant's if: is false are dropped and not counted.
+// List returns matching records the actor may read and the total before paging. Records outside the actor's
+// row scope, and rows whose read grant's if: is false, are left out before filtering and paging and are not
+// counted. Without a read grant the list is denied. v0 filters in memory with CEL; a CEL→SQL translation for
+// simple filters is the next step for large tables.
 func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts) ([]store.Record, int, error) {
 	m, err := e.model(model)
 	if err != nil {
@@ -52,7 +53,11 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	titles := map[string]string{}
 	var out []store.Record
 	q := strings.ToLower(strings.TrimSpace(opts.Q))
+	rs := e.RowScope(a)
 	for _, r := range all {
+		if !rs.Visible(m, r) {
+			continue
+		}
 		e.Output(m, r)
 		if !e.recordAllowed(ctx, e.DB, a, m, readable, r, links) {
 			continue

@@ -47,6 +47,11 @@ func cmdMigrate(args []string) int {
 	if err != nil && !errors.Is(err, store.ErrDestructive) {
 		return fail(err)
 	}
+	if !*dry && err == nil {
+		if err := server.SyncOrgs(ctx, db, reg); err != nil {
+			return fail(err)
+		}
+	}
 	printSteps(res.Steps, res.Refused)
 	for _, n := range res.Notes {
 		fmt.Println("-- note:", n)

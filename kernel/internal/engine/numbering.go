@@ -7,9 +7,10 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// scheme is how m's documents are numbered under the site's config.numbering (contract 0009 §3).
-func (e *Engine) scheme(m *meta.Model) store.Scheme {
-	return resolveScheme(m, meta.AsMap(e.Reg().SiteConfig("numbering")))
+// scheme is how m's documents are numbered in org under its config.numbering (contract 0009 §3; an org's
+// own numbering in config.rk orgs replaces the site's, contract 0010 §2).
+func (e *Engine) scheme(m *meta.Model, org string) store.Scheme {
+	return resolveScheme(m, meta.AsMap(e.Reg().OrgConfig(org, "numbering")))
 }
 
 // resolveScheme applies the resolution order of contract 0009 §3:
@@ -59,7 +60,7 @@ func seriesDef(name string, v any) (store.Scheme, bool) {
 func (o *op) nextName(m *meta.Model) (string, error) {
 	e := o.e
 	now := e.Now().In(e.Location())
-	s := e.scheme(m)
+	s := e.scheme(m, o.actor.Org)
 	if s.Series == "" {
 		return store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, s.Pattern, now)
 	}
@@ -68,7 +69,7 @@ func (o *op) nextName(m *meta.Model) (string, error) {
 	}
 	var tables []string
 	for _, x := range e.Reg().InstalledModels() {
-		if e.scheme(x).Series == s.Series {
+		if e.scheme(x, o.actor.Org).Series == s.Series {
 			tables = append(tables, store.TableName(x.Name))
 		}
 	}
@@ -76,10 +77,9 @@ func (o *op) nextName(m *meta.Model) (string, error) {
 }
 
 // orgCode is the {ORG} token: config.rk orgs.<id>.code when set, else the org id upper-cased.
-// (When Registry.OrgConfig lands with contract 0010, this body becomes a call to it.)
 func (e *Engine) orgCode(org string) string {
-	if code, _ := meta.AsMap(meta.AsMap(e.Reg().SiteConfig("orgs"))[org])["code"].(string); code != "" {
-		return code
+	if o := e.Reg().Orgs[org]; o != nil && o.Code != "" {
+		return o.Code
 	}
 	return strings.ToUpper(org)
 }

@@ -245,7 +245,7 @@ func TestImportsMoka(t *testing.T) {
 	// a token (not a person) may not commit
 	e.token = e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "ai"}).JSON["token"].(string)
 	r = e.must(403, "POST", "/api/v1/imports/moka_item_details/"+bad.JSON["id"].(string)+"/commit", nil)
-	if get(r.JSON, "error", "code") != "permission_denied" || get(r.JSON, "error", "message") != "Impor hanya bisa dijalankan oleh pengguna" {
+	if get(r.JSON, "error", "code") != "permission_denied" || get(r.JSON, "error", "model") != "outlet_sales" || get(r.JSON, "error", "action") != "import" {
 		t.Fatalf("token commit: %s", r.Body)
 	}
 }

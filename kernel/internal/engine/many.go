@@ -23,7 +23,7 @@ type ManyResult struct {
 var errRollback = errors.New("rollback")
 
 // CreateMany runs o.create for every input in one transaction. Validation errors are collected per input
-// and the loop continues; any other error stops and is returned. Without DryRun, any per-input error
+// and the loop continues; any other error (a *PermissionError among them) stops and is returned. Without DryRun, any per-input error
 // rolls everything back. Nothing is committed on a dry run, so no row, NOTIFY, queued job or OnWrite
 // call survives it.
 func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs []map[string]any, opts ManyOpts) ([]ManyResult, error) {
@@ -41,7 +41,9 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 			if _, err := o.tx.Exec(ctx, "savepoint many_input"); err != nil {
 				return err
 			}
-			res, err := o.create(model, in, CreateOpts{})
+			// imports are a public entry point: each record needs create and must be inside the actor's row
+			// scope; a refusal is not a per-input error and rolls back the whole run
+			res, err := o.create(model, in, CreateOpts{authorize: true, Guard: true})
 			var ve *ValidationError
 			if errors.As(err, &ve) {
 				if _, err := o.tx.Exec(ctx, "rollback to savepoint many_input"); err != nil {

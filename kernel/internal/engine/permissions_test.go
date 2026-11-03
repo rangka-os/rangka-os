@@ -79,7 +79,7 @@ func wantPermErr(t *testing.T, err error, model, action string) {
 	if pe.Model != model || pe.Action != action {
 		t.Fatalf("PermissionError = %+v, want {%s %s}", *pe, model, action)
 	}
-	if want := "permission denied: " + action + " on " + model; pe.Error() != want {
+	if want := "Kamu tidak punya izin untuk " + action + " " + model; pe.Error() != want {
 		t.Fatalf("Error() = %q, want %q", pe.Error(), want)
 	}
 }
@@ -272,7 +272,7 @@ func TestDashboardWidgetPermissions(t *testing.T) {
 	}
 	// no role: voucher widget denied, note widget computed
 	w := widgets(permNobody)
-	want := map[string]any{"code": "permission_denied", "message": "permission denied: read on voucher", "model": "voucher", "action": "read"}
+	want := map[string]any{"code": "permission_denied", "message": "Kamu tidak punya izin untuk read voucher", "model": "voucher", "action": "read"}
 	if got := w[0].(map[string]any)["error"]; !mapsEqual(got, want) {
 		t.Fatalf("voucher widget error = %v, want %v", got, want)
 	}

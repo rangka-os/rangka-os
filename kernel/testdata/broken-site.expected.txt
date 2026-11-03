@@ -84,6 +84,7 @@ sales/imports/bad_per.rk:4:6  error  import_per_outlet  per  per: outlet needs a
 sales/imports/bad_per.rk:4:6  warn   import_no_key  per  per: outlet imports should set key so overlapping files are not imported twice
 sales/imports/not_a_map.rk:1:1  error  schema  (root)  [{'name': 'not_a_map'}, {'model': 'invoice'}] is not of type 'object'
 sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_name" must match the file name "wrong_name"
+crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
@@ -100,6 +101,7 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-site/config.rk:9:12  error  reset_needs_date  numbering/bulanan  reset monthly needs {MM} and {YY} or {YYYY} in the pattern, or numbers repeat
 ../broken-site/config.rk:8:11  error  reset_needs_date  numbering/faktur  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activity_log" is not defined in config.rk numbering and the model gives no default pattern
+../broken-site/config.rk:19:55  error  nested_orgs  orgs/pt_beta/config/orgs  org "pt_beta" config cannot contain orgs
 ../broken-site/themes/kopi_senja.rk:9:9  error  low_contrast  color/link  link #aaaaaa on surface #ffffff is 2.32:1 in light; needs 4.5:1
 ../broken-site/themes/kopi_senja.rk:10:13  error  low_contrast  color/selected  selected-ink #f08a6b on selected #579dff is 1.11:1 in dark; needs 4.5:1
 ../broken-site/layouts/crm_first.rk:12:18  error  unknown_model  nav/create/1  "leads" is not a model; did you mean "lead"?
@@ -124,4 +126,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/custom/sales_invoice.rk:27:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
 
-112 error(s), 13 warning(s)
+114 error(s), 13 warning(s)

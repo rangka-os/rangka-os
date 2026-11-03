@@ -30,6 +30,8 @@ create table if not exists rk_members (
   record  text,                         -- the user record (core user model) this member is, e.g. USR-001
   primary key (org_id, user_id)
 );
+alter table rk_orgs add column if not exists code text not null default '';
+alter table rk_members add column if not exists outlets text[] not null default '{}';
 create table if not exists rk_sessions (
   id         text primary key,          -- sha256 of the cookie value
   user_id    bigint not null references rk_users(id) on delete cascade,
@@ -139,6 +141,9 @@ create table if not exists rk_attachments (
 );
 create index if not exists rk_attachments_record_idx on rk_attachments (org_id, model, record);
 create index if not exists rk_attachments_blob_idx on rk_attachments (org_id, sha256);
+-- Row-level security on model tables (contract 0010 §4): with rangka.org set (per pooled connection), rows of
+-- other orgs are invisible and cannot be written; with it empty (migrations, seed, scheduler scans) all pass.
+create or replace function rk_org_ok(o text) returns boolean language sql stable as $$ select coalesce(nullif(current_setting('rangka.org', true), ''), o) = o $$;
 
 create table if not exists rk_imports (
   id text primary key, org_id text not null, import text not null, scope text not null default '',

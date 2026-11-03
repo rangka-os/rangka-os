@@ -26,14 +26,16 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 	if period <= 0 {
 		period = d.DefaultPeriod
 	}
-	key := "dash:" + a.Org + ":" + name + ":" + formatInt(int64(period)) + ":" + e.Today() + ":" + permKey(a)
+	rs := e.RowScope(a)
+	// permissions and row scope both decide what the widgets count
+	key := "dash:" + a.Org + ":" + name + ":" + formatInt(int64(period)) + ":" + e.Today() + ":" + permKey(a) + ":" + scopeKey(rs)
 	ttl := cache.ParseTTL(d.Cache)
 	if ttl > 0 && e.Cache != nil {
 		if v, ok := e.Cache.Get(key); ok {
 			return v.(map[string]any), true, nil
 		}
 	}
-	dc := &dashCtx{e: e, ctx: ctx, a: a, rows: map[string][]store.Record{}, links: map[string]map[string]any{}, titles: map[string]titleInfo{}}
+	dc := &dashCtx{e: e, ctx: ctx, a: a, scope: rs, rows: map[string][]store.Record{}, links: map[string]map[string]any{}, titles: map[string]titleInfo{}}
 	widgets := []any{}
 	for _, w := range d.Widgets {
 		wo := map[string]any{}
@@ -62,6 +64,7 @@ type dashCtx struct {
 	e      *Engine
 	ctx    context.Context
 	a      Actor
+	scope  *RowScope // rows outside it are left out of every widget
 	rows   map[string][]store.Record
 	links  map[string]map[string]any
 	titles map[string]titleInfo
@@ -78,6 +81,9 @@ func (dc *dashCtx) all(m *meta.Model) ([]store.Record, error) {
 	readable := dc.e.decide(dc.a, m, "read")
 	var r []store.Record
 	for _, rec := range all {
+		if !dc.scope.Visible(m, rec) {
+			continue
+		}
 		dc.e.Output(m, rec)
 		if dc.e.recordAllowed(dc.ctx, dc.e.DB, dc.a, m, readable, rec, dc.links) {
 			r = append(r, rec)

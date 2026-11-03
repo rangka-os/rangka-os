@@ -25,6 +25,7 @@ type Actor struct {
 	UserName string   // the user record the person is (USR-001); user.name in CEL
 	Roles    []string // member roles (owner, sales_manager, …)
 	Human    bool     // signed in with a browser session (not a token)
+	Outlets  []string // the member's outlets in Org (user.outlets in CEL; row scope, contract 0010 §5)
 	// System marks kernel-internal actors (seed, flows and automations the kernel starts): they bypass
 	// permission checks. Queue jobs replaying a person's action keep that person's roles and System=false.
 	System bool
@@ -185,6 +186,7 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 		d := toInt(rec["docstatus"])
 		ev.Docstatus = &d
 	}
+	ev.Fields = o.e.eventFields(m, rec)
 	if err := store.Notify(o.ctx, o.tx, ev); err != nil {
 		return err
 	}

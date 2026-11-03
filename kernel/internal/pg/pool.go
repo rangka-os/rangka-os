@@ -9,6 +9,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -151,7 +152,8 @@ func exec(ctx context.Context, c conn, sql string, args []any) (*Result, error) 
 
 // Pool is a connection pool.
 type Pool struct {
-	p *pgxpool.Pool
+	p    *pgxpool.Pool
+	orgs sync.Map // *pgx.Conn → rangka.org as last set on it (see prepareConn)
 }
 
 // NewPool opens a pool of at most size connections and checks one.
@@ -171,6 +173,11 @@ func NewPool(ctx context.Context, url string, size int) (*Pool, error) {
 		registerJSON(c.TypeMap())
 		return nil
 	}
+	pool := &Pool{}
+	// Every pooled connection (plain queries, COPY and transactions alike) runs with rangka.org set from
+	// OrgFrom(ctx) before it is handed out; the listener's dedicated connection is exempt (contract 0010 §4).
+	cfg.PrepareConn = pool.prepareConn
+	cfg.BeforeClose = func(c *pgx.Conn) { pool.orgs.Delete(c) }
 	p, err := pgxpool.NewWithConfig(ctx, cfg)
 	if err != nil {
 		return nil, err
@@ -179,7 +186,8 @@ func NewPool(ctx context.Context, url string, size int) (*Pool, error) {
 		p.Close()
 		return nil, wrapErr(err)
 	}
-	return &Pool{p: p}, nil
+	pool.p = p
+	return pool, nil
 }
 
 // registerJSON makes json and jsonb decode through DecodeJSON (integral numbers as int64).

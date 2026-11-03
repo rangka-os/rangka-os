@@ -11,6 +11,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -135,7 +136,74 @@ func (e *Engine) ListApprovals(ctx context.Context, a Actor, f store.ApprovalFil
 	if !unrestricted(a) {
 		f.Restrict, f.Models, f.FlowRoles = true, e.readableModels(a), append([]string{}, a.Roles...)
 	}
-	return store.ListApprovals(ctx, e.DB, f)
+	if !e.approvalsNeedRecords(a, f.Models) {
+		return store.ListApprovals(ctx, e.DB, f)
+	}
+	// Some requests need their record checked (a conditional read grant, or a row scope that narrows the
+	// model): read every match, keep the visible ones, then page, so total counts visible requests only.
+	limit, offset := f.Limit, f.Offset
+	if limit <= 0 {
+		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
+	}
+	if offset < 0 {
+		offset = 0
+	}
+	var all []store.Approval
+	for f.Offset = 0; ; f.Offset += 500 {
+		f.Limit = 500
+		page, total, err := store.ListApprovals(ctx, e.DB, f)
+		if err != nil {
+			return nil, 0, err
+		}
+		for i := range page {
+			if e.approvalVisible(ctx, a, &page[i]) {
+				all = append(all, page[i])
+			}
+		}
+		if len(page) < 500 || f.Offset+len(page) >= total {
+			break
+		}
+	}
+	total := len(all)
+	if offset >= len(all) {
+		return []store.Approval{}, total, nil
+	}
+	all = all[offset:]
+	if len(all) > limit {
+		all = all[:limit]
+	}
+	return all, total, nil
+}
+
+// approvalsNeedRecords reports whether listing requests for a needs each request's record: a has a row scope
+// (which also narrows flow requests, see flowScope), or only a conditional (if:) read grant on one of models.
+func (e *Engine) approvalsNeedRecords(a Actor, models []string) bool {
+	if e.RowScope(a) != nil {
+		return true
+	}
+	if unrestricted(a) {
+		return false
+	}
+	for _, name := range models {
+		if pm := e.permModel(name); pm != nil && !e.decide(a, pm, "read").all {
+			return true
+		}
+	}
+	return false
+}
+
+// approvalVisible reports whether a may see a listed request: a flow request already passed the SQL filter
+// (approver roles) and must pass flowScope; a request on a record needs read on the record and the record inside
+// a's row scope (GetApproval's rule).
+func (e *Engine) approvalVisible(ctx context.Context, a Actor, ap *store.Approval) bool {
+	if isFlowApproval(ap) {
+		return e.flowScope(ctx, e.DB, a, ap, "read") == nil
+	}
+	_, err := e.Get(ctx, a, ap.Model, ap.Name)
+	return err == nil || IsNotFound(err)
 }
 
 // readableModels lists the models a may read at model level (a child model follows its parent).
@@ -166,6 +234,9 @@ func (e *Engine) GetApproval(ctx context.Context, a Actor, id string) (*store.Ap
 	if isFlowApproval(ap) {
 		if !hasAnyRole(a, ap.Approvers) {
 			return nil, notFound("approval " + id)
+		}
+		if err := e.flowScope(ctx, e.DB, a, ap, "read"); err != nil {
+			return nil, err
 		}
 		return ap, nil
 	}
@@ -370,8 +441,10 @@ func (o *op) voidExcept(model, name, verb, exceptID string) error {
 
 var errApprovalVoid = conflict("approval_void", "Dokumen berubah setelah diajukan; ajukan ulang")
 
-// decide loads and locks a request and applies the guards shared by Approve and Reject.
-func (o *op) decide(id string) (*store.Approval, error) {
+// decide loads and locks a request and applies the guards shared by Approve and Reject (action is approve or
+// reject): a person, one of the policy's approver roles, read on the record (S1) and the record inside the
+// approver's row scope (contract 0010 §5).
+func (o *op) decide(id, action string) (*store.Approval, error) {
 	a := o.actor
 	if !a.Human {
 		return nil, &StatusError{403, "human_required", "Persetujuan harus dilakukan oleh orang yang masuk lewat aplikasi"}
@@ -404,8 +477,48 @@ func (o *op) decide(id string) (*store.Approval, error) {
 		if err := o.authorizeRead(ap.Model, ap.Name); err != nil {
 			return nil, err
 		}
+		if err := o.guardApproval(ap, action); err != nil {
+			return nil, err
+		}
+	} else if err := o.e.flowScope(o.ctx, o.tx, a, ap, action); err != nil {
+		return nil, err
 	}
 	return ap, nil
+}
+
+// flowRecord is the record a flow request was started on: the request's model and name, else the model and
+// name of the flow's event. nil when the request names no record of an installed model.
+func (e *Engine) flowRecord(ap *store.Approval) (*meta.Model, string) {
+	model, name := ap.Model, ap.Name
+	if model == "" || name == "" {
+		ev := meta.AsMap(ap.Args["event"])
+		model, name = str(ev["model"]), str(ev["name"])
+	}
+	if model == "" || name == "" {
+		return nil, ""
+	}
+	return e.Reg().Model(model), name
+}
+
+// flowScope applies a's row scope to a flow request (contract 0010 §5, flow steps themselves are not scoped):
+// nil without a row scope. A request that names no record is hidden from a scoped caller (404); one whose
+// record is outside the scope is Denied(model, action); a record that is gone is not checked.
+func (e *Engine) flowScope(ctx context.Context, q pg.Querier, a Actor, ap *store.Approval, action string) error {
+	if e.RowScope(a) == nil {
+		return nil
+	}
+	m, name := e.flowRecord(ap)
+	if m == nil {
+		return notFound("approval " + ap.ID)
+	}
+	rec, err := store.Get(ctx, q, e.Reg(), a.Org, m, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return e.Guard(ctx, a, m.Name, rec, action)
 }
 
 // authorizeRead checks read on a request's record as o's actor: on the stored record, or model-level when the
@@ -423,6 +536,26 @@ func (o *op) authorizeRead(model, name string) error {
 		rec = o.e.Output(m, copyRecord(rec))
 	}
 	return o.authorize(m, "read", rec)
+}
+
+// guardApproval refuses a request whose record is outside o's actor's row scope: Denied(record model, action).
+// A record that is gone is not checked (Approve then voids the request).
+func (o *op) guardApproval(ap *store.Approval, action string) error {
+	if o.e.RowScope(o.actor) == nil {
+		return nil
+	}
+	m, err := o.e.model(ap.Model)
+	if err != nil {
+		return err
+	}
+	rec, err := o.load(m, ap.Name)
+	if IsNotFound(err) {
+		return nil
+	}
+	if err != nil {
+		return err
+	}
+	return o.e.Guard(o.ctx, o.actor, m.Name, rec, action)
 }
 
 // requesterActor rebuilds the person who asked for the verb from a request.
@@ -449,7 +582,7 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 	var d *Decision
 	var stale *store.Approval
 	err := e.run(ctx, a, func(o *op) error {
-		ap, err := o.decide(id)
+		ap, err := o.decide(id, "approve")
 		if err != nil {
 			return err
 		}
@@ -603,7 +736,7 @@ func (o *op) resumeFlow(ap *store.Approval, d *Decision) error {
 func (e *Engine) Reject(ctx context.Context, a Actor, id, reason string) (*Decision, error) {
 	var d *Decision
 	err := e.run(ctx, a, func(o *op) error {
-		ap, err := o.decide(id)
+		ap, err := o.decide(id, "reject")
 		if err != nil {
 			return err
 		}

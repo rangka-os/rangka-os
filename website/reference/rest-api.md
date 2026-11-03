@@ -38,7 +38,7 @@ its data. `export` and `import` are checked by the code that serves them; there 
 A refusal is `403`:
 
 ```json
-{"error": {"code": "permission_denied", "message": "permission denied: cancel on voucher", "model": "voucher", "action": "cancel"}}
+{"error": {"code": "permission_denied", "message": "Kamu tidak punya izin untuk cancel voucher", "model": "voucher", "action": "cancel"}}
 ```
 
 A single record the caller may not read answers 403 too, never 404; the print and attachments routes answer

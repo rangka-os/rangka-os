@@ -88,7 +88,8 @@ lines:
 - `GET /meta` lists the imports of installed apps and the site under `imports: {<name>: {name, model, label, source,
   per, app}}` (site imports have `app: ""`), so the web app can offer an import wizard.
 - `GET /imports/{import}/{id}` returns the entry. `GET /imports/{import}` returns `{data, total}` (as `/r/{model}`
-  and `/approvals` do): `data` holds the org's 50 most recent entries without `preview`, `total` counts all of them.
+  and `/approvals` do): `data` holds the org's 50 most recent entries without `preview`, `total` counts all of them. For a member
+  with a row scope (contract 0010) both leave out entries it may not read, so `total` counts only visible entries.
 - A file with no data rows previews with `rows: 0`; its commit is refused with 422 `import_empty`.
 - An upload over 20 MB gets 413 `too_large`. A commit whose rows were imported by another commit after its preview
   gets 409 `already_imported` ("Sebagian baris sudah diimpor, unggah ulang file").

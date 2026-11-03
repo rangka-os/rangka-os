@@ -51,7 +51,7 @@ open http://localhost:8080/app/
 ```
 
 Sign in with `ceo@saga.co.id` / `rangka-demo`. Add more people with
-`rangka user add --db … --org kopi-senja --email … --password … --role sales_rep`.
+`RANGKA_USER_PASSWORD=… rangka user add <email> --org kopi-senja --role sales_rep` (`--db` defaults to `$DATABASE_URL`).
 
 ## Test
 

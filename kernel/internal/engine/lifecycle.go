@@ -243,6 +243,7 @@ type CreateOpts struct {
 	KeepName  bool // use input["name"] (seeding, imports)
 	Docstatus int64
 	authorize bool // check create on the new record (public entry points; hooks run inside an allowed op)
+	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
 }
 
 // Result of a write: the record and any warnings. Held is set when the verb waits for approval (0007);
@@ -260,7 +261,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.create(model, input, CreateOpts{authorize: true})
+		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true})
 		return err
 	})
 	return res, err
@@ -290,6 +291,11 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
+	}
+	if opts.Guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "create"); err != nil {
+			return nil, err
+		}
 	}
 	rec["created_by"] = o.actor.ID
 	switch {
@@ -339,6 +345,9 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	if err := e.authorize(ctx, e.DB, nil, a, m.Name, "read", rec); err != nil {
 		return nil, err
 	}
+	if err := e.Guard(ctx, a, m.Name, rec, "read"); err != nil {
+		return nil, err
+	}
 	return rec, nil
 }
 
@@ -356,13 +365,16 @@ func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch 
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.update(model, name, patch, true)
+		res, err = o.update(model, name, patch, true, true)
 		return err
 	})
 	return res, err
 }
 
-func (o *op) update(model, name string, patch map[string]any, authorize bool) (*Result, error) {
+// update merges patch into a record. authorize checks write on the stored and the patched record (public
+// Update, flow steps); guard checks both against the actor's row scope (public Update only). Automations and
+// hooks pass false for both.
+func (o *op) update(model, name string, patch map[string]any, authorize, guard bool) (*Result, error) {
 	m, err := o.e.model(model)
 	if err != nil {
 		return nil, err
@@ -373,6 +385,11 @@ func (o *op) update(model, name string, patch map[string]any, authorize bool) (*
 	}
 	if authorize {
 		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(cur))); err != nil {
+			return nil, err
+		}
+	}
+	if guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, cur, "update"); err != nil {
 			return nil, err
 		}
 	}
@@ -395,6 +412,11 @@ func (o *op) update(model, name string, patch map[string]any, authorize bool) (*
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
+	}
+	if guard {
+		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "update"); err != nil {
+			return nil, err
+		}
 	}
 	if err := store.Update(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name, rec); err != nil {
 		return nil, dbIssue(m, err)
@@ -423,6 +445,9 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 			return err
 		}
 		if err := o.authorize(m, "delete", o.e.Output(m, copyRecord(cur))); err != nil {
+			return err
+		}
+		if err := e.Guard(ctx, a, m.Name, cur, "delete"); err != nil {
 			return err
 		}
 		if m.IsSubmittable && toInt(cur["docstatus"]) == 1 {
@@ -464,6 +489,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		return nil, err
 	}
 	if err := o.authorize(m, "submit", e.Output(m, copyRecord(rec))); err != nil {
+		return nil, err
+	}
+	if err := o.guard(m, rec, "submit"); err != nil {
 		return nil, err
 	}
 	if toInt(rec["docstatus"]) != 0 {
@@ -566,6 +594,9 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	if err := o.authorize(m, "cancel", e.Output(m, copyRecord(rec))); err != nil {
 		return nil, err
 	}
+	if err := o.guard(m, rec, "cancel"); err != nil {
+		return nil, err
+	}
 	if toInt(rec["docstatus"]) != 1 {
 		return nil, conflict("not_submitted", "Hanya dokumen yang sudah diajukan yang bisa dibatalkan")
 	}
@@ -609,6 +640,9 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 			return err
 		}
 		if err := o.authorize(m, "amend", o.e.Output(m, copyRecord(old))); err != nil {
+			return err
+		}
+		if err := e.Guard(ctx, a, m.Name, old, "amend"); err != nil {
 			return err
 		}
 		if toInt(old["docstatus"]) != 2 {

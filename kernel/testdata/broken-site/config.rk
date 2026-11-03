@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/config.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
 locale: id-ID
 currency: IDR
 timezone: Asia/Jakarta
@@ -15,3 +15,5 @@ theme: kopi_senja
 layout: crm_last
 sso: {domains: [kopisenja.id], required: false}
 ai: {enabled: true, auto_apply: never, approvers: [owner, sales_manager]}
+orgs:
+  pt_beta: {name: PT Beta, code: BETA, config: {orgs: {pt_gamma: {name: PT Gamma}}}}

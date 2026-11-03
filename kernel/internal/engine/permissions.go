@@ -22,12 +22,22 @@ var knownAction = func() map[string]bool {
 	return out
 }()
 
-// PermissionError is returned when the actor may not perform action on model (HTTP 403).
+// PermissionError is returned when the actor may not perform action on model: model permissions (contract 0005
+// §4) and row scope (contract 0010 §6) alike. The API answers it with the one 403 permission_denied body.
 type PermissionError struct {
 	Model, Action string
 }
 
-func (p *PermissionError) Error() string { return "permission denied: " + p.Action + " on " + p.Model }
+// Error is the human message of the 403 body, in Bahasa Indonesia since the web app shows it; code, model and
+// action stay machine-readable (contract 0010 §6).
+func (p *PermissionError) Error() string {
+	return "Kamu tidak punya izin untuk " + p.Action + " " + p.Model
+}
+
+// Denied builds the error for an action the caller may not perform (row scope, contract 0010 §6, uses it too).
+func Denied(model, action string) *PermissionError {
+	return &PermissionError{Model: model, Action: action}
+}
 
 // grant is one entry of a model's permissions: list.
 type grant struct {

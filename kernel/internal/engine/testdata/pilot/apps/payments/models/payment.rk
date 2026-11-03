@@ -9,8 +9,6 @@ fields:
   - {name: customer, type: link, to: customer}
   - {name: vendor, type: link, to: vendor}
   - {name: payment_date, type: date, default: today(), required: true}
-  - {name: currency, type: data}
-  - {name: rate, type: float}
   - {name: amount, type: currency, required: true}
   - {name: allocations, type: table, of: payment_allocation}
   - {name: allocated_total, type: currency, compute: 'allocations.map(a, a.amount).sum()'}

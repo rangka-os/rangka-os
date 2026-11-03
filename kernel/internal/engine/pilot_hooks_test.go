@@ -112,8 +112,8 @@ func wantCode(t *testing.T, err error, status int, code string) {
 	}
 }
 
-// money reads a currency value as whole rupiah.
-func money(v any) int64 { return moneyIn(v) }
+// idr reads a stored amount as whole rupiah.
+func rp(v any) int64 { return moneyIn(v) }
 
 // master creates the shared master data: uoms Kg and Karung, items, two outlets, a customer and a vendor.
 type masters struct {
@@ -142,17 +142,17 @@ func (p *pilot) masters() masters {
 }
 
 func TestMoneyRounding(t *testing.T) {
-	cases := []struct {
-		in   float64
-		want int64
-	}{{2.5, 3}, {-2.5, -3}, {2.4999999999, 3}, {12999.17, 12999}, {0.1 * 13000 * 30, 39000}, {-0.5, -1}}
-	for _, c := range cases {
-		if got := roundHalfAway(c.in); got != c.want {
-			t.Errorf("roundHalfAway(%v) = %d, want %d", c.in, got, c.want)
-		}
+	if mulRound(0.1*300, 13000) != 390000 || mulRound(2.5, 1) != 3 || mulRound(-2.5, 1) != -3 || mulRound(0.5, 25) != 13 {
+		t.Error("mulRound")
 	}
-	if mulRound(0.1*300, 13000) != 390000 || divRound(1950000, 150) != 13000 || moneyIn(11100000.0) != 11100000 || moneyIn("1250000") != 1250000 {
-		t.Error("money helpers")
+	if divRound(1950000, 150) != 13000 || divRound(1421000, 117) != 12145 || divRound(5, 2) != 3 || divRound(-5, 2) != -3 {
+		t.Error("divRound")
+	}
+	if percentOff(1000000, 10) != 900000 || percentOff(15, 50) != 8 {
+		t.Error("percentOff")
+	}
+	if moneyIn(11100000.0) != 11100000 || moneyIn("1250000.5") != 1250001 || moneyIn(int64(7)) != 7 || moneyIn(nil) != 0 {
+		t.Error("moneyIn")
 	}
 }
 
@@ -177,17 +177,17 @@ func TestPilotSetSubmitted(t *testing.T) {
 			return nil, err
 		}
 		locked, err := h.Lock("customer", str(h.Record["customer"]))
-		if err != nil || money(locked["outstanding"]) != 600000 {
+		if err != nil || rp(locked["outstanding"]) != 600000 {
 			t.Errorf("lock after write: %v %v", locked["outstanding"], err)
 		}
 		return nil, nil
 	}
 	name := p.submit("sales_invoice", inv)
 	got := p.get("sales_invoice", name)
-	if money(got["paid_amount"]) != 400000 || money(got["outstanding"]) != 600000 || got["status"] != "partly" {
+	if rp(got["paid_amount"]) != 400000 || rp(got["outstanding"]) != 600000 || got["status"] != "partly" {
 		t.Fatalf("invoice after SetSubmitted: paid %v outstanding %v status %v", got["paid_amount"], got["outstanding"], got["status"])
 	}
-	if c := p.get("customer", m.cust); money(c["outstanding"]) != 600000 {
+	if c := p.get("customer", m.cust); rp(c["outstanding"]) != 600000 {
 		t.Fatalf("customer outstanding = %v", c["outstanding"])
 	}
 }
@@ -206,7 +206,7 @@ func (p *pilot) invoice(m masters, cust string, rate int64, ppn bool, extra map[
 
 func (p *pilot) outstanding(model, name string) int64 {
 	p.t.Helper()
-	return money(p.get(model, name)["outstanding"])
+	return rp(p.get(model, name)["outstanding"])
 }
 
 func alloc(inv string, amount int64) map[string]any {
@@ -244,7 +244,7 @@ func TestPilotPaymentAllocation(t *testing.T) {
 	pay := p.doc("payment", map[string]any{"customer": m.cust, "amount": 15000000, "allocations": []any{alloc(inv1, 11100000), alloc(inv2, 3900000)}})
 	for _, inv := range []string{inv1, inv2} {
 		r := p.get("sales_invoice", inv)
-		if money(r["outstanding"]) != 0 || r["status"] != "paid" {
+		if rp(r["outstanding"]) != 0 || r["status"] != "paid" {
 			t.Fatalf("%s after payment: outstanding %v status %v", inv, r["outstanding"], r["status"])
 		}
 	}
@@ -252,7 +252,7 @@ func TestPilotPaymentAllocation(t *testing.T) {
 		t.Fatalf("customer outstanding after payment = %d", got)
 	}
 	for _, row := range rows(p.get("payment", pay)["allocations"]) {
-		if row["applied_idr"] != money(row["amount"]) {
+		if row["applied_idr"] != rp(row["amount"]) {
 			t.Errorf("applied_idr = %v for amount %v", row["applied_idr"], row["amount"])
 		}
 	}
@@ -294,23 +294,30 @@ func TestPilotPaymentRefusals(t *testing.T) {
 	}
 }
 
-// TestPilotForeignPayment: a USD payment applies round(amount × rate) rupiah and cancel reverses exactly that.
-func TestPilotForeignPayment(t *testing.T) {
+// TestPilotAllocationRuling: rows are IDR as entered (applied_idr = amount), non-positive rows and PPh 23
+// withheld twice are refused, and two rows on one invoice are checked cumulatively.
+func TestPilotAllocationRuling(t *testing.T) {
 	p := setupPilot(t)
 	m := p.masters()
 	inv := p.invoice(m, m.cust, 2000000, false, nil)
-	pay := p.doc("payment", map[string]any{"customer": m.cust, "currency": "USD", "rate": 15500.55, "amount": 100, "allocations": []any{alloc(inv, 100)}})
-	if got := p.outstanding("sales_invoice", inv); got != 2000000-1550055 {
-		t.Fatalf("outstanding after USD payment = %d", got)
+	for _, row := range []map[string]any{alloc(inv, 0), alloc(inv, -5), {"sales_invoice": inv, "amount": 1000, "withheld": -1}} {
+		pay := p.create("payment", map[string]any{"customer": m.cust, "amount": 1000000, "allocations": []any{row}})
+		_, err := p.e.Submit(p.ctx, p.a, "payment", pay, true)
+		wantCode(t, err, 409, "negative_allocation")
 	}
-	if r := rows(p.get("payment", pay)["allocations"])[0]; r["applied_idr"] != int64(1550055) {
-		t.Fatalf("applied_idr = %v", r["applied_idr"])
+	withPPh := p.invoice(m, m.cust, 1000000, false, map[string]any{"pph23_applies": true})
+	pay := p.create("payment", map[string]any{"customer": m.cust, "amount": 980000, "allocations": []any{map[string]any{"sales_invoice": withPPh, "amount": 980000, "withheld": 20000}}})
+	_, err := p.e.Submit(p.ctx, p.a, "payment", pay, true)
+	wantCode(t, err, 409, "pph23_already_deducted")
+	// two rows on the same invoice that fit together are applied in order
+	two := p.doc("payment", map[string]any{"customer": m.cust, "amount": 2000000, "allocations": []any{alloc(inv, 1500000), alloc(inv, 500000)}})
+	for _, r := range rows(p.get("payment", two)["allocations"]) {
+		if r["applied_idr"] != rp(r["amount"]) {
+			t.Fatalf("applied_idr %v for amount %v", r["applied_idr"], r["amount"])
+		}
 	}
-	if err := p.cancel("payment", pay); err != nil {
-		t.Fatal(err)
-	}
-	if p.outstanding("sales_invoice", inv) != 2000000 || p.outstanding("customer", m.cust) != 2000000 {
-		t.Fatal("USD payment cancel")
+	if p.outstanding("sales_invoice", inv) != 0 {
+		t.Fatal("two rows on one invoice")
 	}
 }
 
@@ -405,7 +412,7 @@ func TestPilotQuotationRevisionOutcomeOrder(t *testing.T) {
 	o := p.get("customer_order", so)
 	line := rows(o["items"])[0]
 	if o["customer"] != m.cust || o["quotation"] != q1 || o["po_number"] != "PO/BP/0091" || o["po_date"] != "2026-10-29" ||
-		line["qty"] != 2.0 || money(line["rate"]) != 900000 || money(o["subtotal"]) != 1800000 {
+		line["qty"] != 2.0 || rp(line["rate"]) != 900000 || rp(o["subtotal"]) != 1800000 {
 		t.Fatalf("order = %v, line %v", o, line)
 	}
 	if again := opened(p.action("quotation", q1, "make_order", args)); again != so {
@@ -433,7 +440,7 @@ func TestPilotInvoiceFromOrder(t *testing.T) {
 		t.Fatal(err)
 	}
 	i1 := p.submit("sales_invoice", d1)
-	if got := money(p.get("customer_order", so)["invoiced_amount"]); got != 1000000 {
+	if got := rp(p.get("customer_order", so)["invoiced_amount"]); got != 1000000 {
 		t.Fatalf("invoiced_amount = %d", got)
 	}
 	d2 := opened(p.action("customer_order", so, "make_invoice", nil))
@@ -446,7 +453,7 @@ func TestPilotInvoiceFromOrder(t *testing.T) {
 	if err := p.cancel("sales_invoice", i1); err != nil {
 		t.Fatal(err)
 	}
-	if got := money(p.get("customer_order", so)["invoiced_amount"]); got != 2000000 {
+	if got := rp(p.get("customer_order", so)["invoiced_amount"]); got != 2000000 {
 		t.Fatalf("invoiced_amount after cancel = %d", got)
 	}
 }
@@ -460,7 +467,7 @@ func TestPilotPurchaseRequestToPO(t *testing.T) {
 	po := opened(p.action("purchase_request", pr, "make_po", nil))
 	d := p.get("purchase_order", po)
 	line := rows(d["items"])[0]
-	if d["vendor"] != "" || d["purchase_request"] != pr || d["outlet"] != m.outB || line["packing"] != pack || money(line["rate"]) != 11000 || line["stock_qty"] != 100.0 {
+	if d["vendor"] != "" || d["purchase_request"] != pr || d["outlet"] != m.outB || line["packing"] != pack || rp(line["rate"]) != 11000 || line["stock_qty"] != 100.0 {
 		t.Fatalf("draft PO = %v, line %v", d, line)
 	}
 	if st := p.get("purchase_request", pr)["state"]; st != "ordered" {
@@ -498,7 +505,7 @@ func (p *pilot) balance(outlet, item string) store.Record {
 func (p *pilot) wantBalance(outlet, item string, qty float64, value, avg int64) store.Record {
 	p.t.Helper()
 	b := p.balance(outlet, item)
-	if qtyOf(b["qty"]) != qty || money(b["value"]) != value || money(b["avg_cost"]) != avg {
+	if qtyOf(b["qty"]) != qty || rp(b["value"]) != value || rp(b["avg_cost"]) != avg {
 		p.t.Fatalf("balance %s/%s = qty %v value %v avg %v, want %v %d %d", outlet, item, b["qty"], b["value"], b["avg_cost"], qty, value, avg)
 	}
 	return b
@@ -532,7 +539,7 @@ func TestPilotStockAverageTransferSale(t *testing.T) {
 		t.Fatal(err)
 	}
 	p.wantBalance(m.outA, m.beras, 100, 1200000, 12000)
-	if mv := p.moves(gr2); len(mv) != 2 || mv[1]["reason"] != "reversal" || mv[1]["qty"] != -50.0 || money(mv[1]["value"]) != -750000 {
+	if mv := p.moves(gr2); len(mv) != 2 || mv[1]["reason"] != "reversal" || mv[1]["qty"] != -50.0 || rp(mv[1]["value"]) != -750000 {
 		t.Fatalf("reversal moves = %v", mv)
 	}
 	am, err := p.e.Amend(p.ctx, p.a, "goods_receipt", gr2)
@@ -545,7 +552,7 @@ func TestPilotStockAverageTransferSale(t *testing.T) {
 	trf := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 30}}})
 	p.wantBalance(m.outA, m.beras, 120, 1560000, 13000)
 	p.wantBalance(m.outB, m.beras, 30, 390000, 13000)
-	if mv := p.moves(trf); len(mv) != 2 || mv[0]["reason"] != "transfer_out" || money(mv[0]["value"]) != -390000 || mv[1]["reason"] != "transfer_in" || money(mv[1]["unit_cost"]) != 13000 {
+	if mv := p.moves(trf); len(mv) != 2 || mv[0]["reason"] != "transfer_out" || rp(mv[0]["value"]) != -390000 || mv[1]["reason"] != "transfer_in" || rp(mv[1]["unit_cost"]) != 13000 {
 		t.Fatalf("transfer moves = %v", mv)
 	}
 	p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outC, "items": []any{map[string]any{"item": m.beras, "qty": 20}}})
@@ -558,7 +565,7 @@ func TestPilotStockAverageTransferSale(t *testing.T) {
 		t.Fatal("stock_balance.negative not set")
 	}
 	s := p.get("outlet_sales", sale)
-	if line := rows(s["lines"])[0]; money(line["cogs"]) != 390000 || money(s["cogs_total"]) != 390000 || money(s["margin"]) != 7500000-390000 {
+	if line := rows(s["lines"])[0]; rp(line["cogs"]) != 390000 || rp(s["cogs_total"]) != 390000 || rp(s["margin"]) != 7500000-390000 {
 		t.Fatalf("sale cogs = %v total %v margin %v", line["cogs"], s["cogs_total"], s["margin"])
 	}
 	mv := p.moves(sale)
@@ -593,12 +600,12 @@ func TestPilotStockCountWastePacking(t *testing.T) {
 	if l := rows(p.get("stock_count", opn)["items"])[0]; l["system_qty"] != 20.0 || l["difference"] != -2.0 {
 		t.Fatalf("count line = %v", l)
 	}
-	if mv := p.moves(opn); len(mv) != 1 || mv[0]["qty"] != -2.0 || money(mv[0]["value"]) != -26000 || mv[0]["reason"] != "count" {
+	if mv := p.moves(opn); len(mv) != 1 || mv[0]["qty"] != -2.0 || rp(mv[0]["value"]) != -26000 || mv[0]["reason"] != "count" {
 		t.Fatalf("count move = %v", mv)
 	}
 	p.wantBalance(m.outB, m.beras, 18, 234000, 13000)
 	adj := p.doc("stock_adjustment", map[string]any{"outlet": m.outB, "reason": "waste", "items": []any{map[string]any{"item": m.beras, "qty": 1}}})
-	if mv := p.moves(adj); len(mv) != 1 || mv[0]["reason"] != "waste" || money(mv[0]["value"]) != -13000 {
+	if mv := p.moves(adj); len(mv) != 1 || mv[0]["reason"] != "waste" || rp(mv[0]["value"]) != -13000 {
 		t.Fatalf("waste move = %v", mv)
 	}
 	p.wantBalance(m.outB, m.beras, 17, 221000, 13000)
@@ -609,11 +616,11 @@ func TestPilotStockCountWastePacking(t *testing.T) {
 	pack := p.create("uom_conversion", map[string]any{"item": m.beras, "uom": m.karung, "factor": 50})
 	po := p.doc("purchase_order", map[string]any{"vendor": m.vend, "outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 2, "uom": m.karung, "packing": pack, "rate": 600000}}})
 	gr := p.submit("goods_receipt", opened(p.action("purchase_order", po, "receive", nil)))
-	if mv := p.moves(gr); len(mv) != 1 || mv[0]["qty"] != 100.0 || money(mv[0]["unit_cost"]) != 12000 {
+	if mv := p.moves(gr); len(mv) != 1 || mv[0]["qty"] != 100.0 || rp(mv[0]["unit_cost"]) != 12000 {
 		t.Fatalf("packed receipt move = %v", mv)
 	}
 	b := p.balance(m.outB, m.beras)
-	if b["qty"] != 117.0 || money(b["avg_cost"]) != 12145 || money(b["value"]) != 1420965 {
+	if b["qty"] != 117.0 || rp(b["avg_cost"]) != 12145 || rp(b["value"]) != 1420965 {
 		t.Fatalf("balance after packed receipt = %v %v %v", b["qty"], b["avg_cost"], b["value"])
 	}
 	o := p.get("purchase_order", po)

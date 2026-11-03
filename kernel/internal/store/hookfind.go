@@ -48,7 +48,7 @@ func Find(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *
 		args = append(args, v)
 		where = append(where, fmt.Sprintf("%s::text = $%d", pg.QuoteIdent(k), len(args)))
 	}
-	sql := fmt.Sprintf("select * from %s where %s order by name", pg.QuoteIdent(TableName(m.Name)), strings.Join(where, " and "))
+	sql := fmt.Sprintf("select %s from %s where %s order by name", selectList(m), pg.QuoteIdent(TableName(m.Name)), strings.Join(where, " and "))
 	if opts.ForUpdate {
 		sql += " for update"
 	}
@@ -58,7 +58,11 @@ func Find(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *
 	}
 	out := make([]Record, 0, len(res.Rows))
 	for _, row := range res.Maps() {
-		out = append(out, fromRow(m, row))
+		r, err := fromRow(m, row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
 	}
 	if opts.WithChildren {
 		if err := loadChildren(ctx, q, reg, org, m, out); err != nil {

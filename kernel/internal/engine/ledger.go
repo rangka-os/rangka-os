@@ -162,24 +162,8 @@ func sideOf(pay map[string]any) paymentSide {
 	return paymentSide{target: "sales_invoice", link: "sales_invoice", partyModel: "customer", party: str(pay["customer"])}
 }
 
-// toIDR converts a payment amount into whole rupiah: round(amount × rate) when the payment carries a foreign
-// currency and a rate (currency sidecar fields `currency` and `rate`, or `exchange_rate`), else the amount.
-func toIDR(pay map[string]any, amount int64) int64 {
-	cur := strings.ToUpper(str(pay["currency"]))
-	if cur == "" || cur == "IDR" {
-		return amount
-	}
-	rate := num(pay["rate"])
-	if rate <= 0 {
-		rate = num(pay["exchange_rate"])
-	}
-	if rate <= 0 {
-		return amount
-	}
-	return mulRound(rate, amount)
-}
-
-// allocation is one allocation row in rupiah.
+// allocation is one allocation row. Rows and payment.amount are always IDR: a foreign payment converts once
+// at the header (contract 0013 money twin), so the hook applies the row amount as is.
 type allocation struct {
 	row      map[string]any
 	target   string
@@ -197,7 +181,7 @@ func allocations(h *HookCtx, side paymentSide) ([]allocation, error) {
 				Message: fmt.Sprintf("Alokasi baris %d: pilih tagihan yang dibayar", i+1)})
 			continue
 		}
-		out = append(out, allocation{row: row, target: t, applied: toIDR(h.Record, moneyIn(row["amount"])), withheld: toIDR(h.Record, moneyIn(row["withheld"]))})
+		out = append(out, allocation{row: row, target: t, applied: moneyIn(row["amount"]), withheld: moneyIn(row["withheld"])})
 	}
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
@@ -240,8 +224,11 @@ func allocatePayment(h *HookCtx) (map[string]any, error) {
 		return nil, err
 	}
 	var cash int64
-	for _, a := range allocs {
-		cash += moneyIn(a.row["amount"])
+	for i, a := range allocs {
+		if a.applied <= 0 || a.withheld < 0 {
+			return nil, refuse("negative_allocation", fmt.Sprintf("Alokasi baris %d harus lebih dari 0 dan potongan tidak boleh negatif", i+1))
+		}
+		cash += a.applied
 	}
 	if cash > moneyIn(pay["amount"]) {
 		return nil, refuse("over_payment", "Alokasi melebihi jumlah pembayaran")
@@ -260,8 +247,11 @@ func allocatePayment(h *HookCtx) (map[string]any, error) {
 		if str(t[side.partyModel]) != side.party {
 			return nil, refuse("wrong_party", "Tagihan "+a.target+" bukan milik "+side.party)
 		}
+		if a.withheld > 0 && side.target == "sales_invoice" && t["pph23_applies"] == true {
+			return nil, refuse("pph23_already_deducted", "PPh 23 faktur "+a.target+" sudah dipotong di faktur; jangan potong lagi di pembayaran")
+		}
 		settle := a.applied + a.withheld
-		if settle > moneyIn(t["outstanding"]) {
+		if settle > moneyIn(t["outstanding"]) { // the stored outstanding, after earlier rows on the same invoice
 			return nil, refuse("over_allocation", "Alokasi melebihi sisa tagihan "+a.target)
 		}
 		upd, err := h.SetSubmitted(side.target, a.target, map[string]any{"paid_amount": moneyOut(moneyIn(t["paid_amount"]) + settle)})

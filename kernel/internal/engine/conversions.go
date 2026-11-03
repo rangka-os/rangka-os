@@ -153,7 +153,7 @@ func orderFromQuotation(h *HookCtx) (map[string]any, error) {
 	for _, l := range rows(q["items"]) {
 		rate := moneyIn(l["rate"])
 		if d := num(l["discount"]); d != 0 { // the order line has no discount: carry the net rate
-			rate = roundHalfAway(float64(rate) * (1 - d/100))
+			rate = percentOff(rate, d)
 		}
 		items = append(items, map[string]any{"item": l["item"], "description": l["description"], "qty": l["qty"], "uom": l["uom"], "rate": moneyOut(rate)})
 	}

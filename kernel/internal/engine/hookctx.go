@@ -3,52 +3,67 @@ package engine
 import (
 	"errors"
 	"fmt"
-	"math"
-	"strings"
+	"math/big"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// ---------- money: whole rupiah as int64
+// ---------- money: whole rupiah as int64, exact through internal/money
 
-// moneyIn reads a stored currency value as whole rupiah, rounded half away from zero. Currency fields are
-// float64 in the engine today (contract 0013 changes that); this and moneyOut are the only places that know.
+// moneyIn reads a stored amount as whole rupiah, rounded half away from zero: a currency field (float64 in
+// the engine), an IDR twin (int64) or a money field (money.Decimal) all go through money.Rat, so no float
+// arithmetic decides a rupiah. This, moneyOut and the rounding helpers below are the only places that know.
 func moneyIn(v any) int64 {
-	switch x := v.(type) {
-	case int64:
-		return x
-	case int:
-		return int64(x)
-	case float64:
-		return roundHalfAway(x)
-	case string:
-		var f float64
-		if _, err := fmt.Sscan(strings.TrimSpace(x), &f); err == nil {
-			return roundHalfAway(f)
-		}
+	if n, ok := v.(int64); ok {
+		return n
 	}
-	return 0
+	r, ok := money.Rat(v)
+	if !ok {
+		return 0
+	}
+	return ratRound(r)
 }
 
-// moneyOut is the value a hook writes into a currency field.
-func moneyOut(n int64) any { return float64(n) }
+// moneyOut is the value a hook writes into a currency, IDR-twin or money field; store.Coerce turns it into
+// the field's own type (float64 for currency, int64 for a twin, money.Decimal for money).
+func moneyOut(n int64) any { return n }
 
-// roundHalfAway rounds to a whole number, half away from zero. Values below 1e9 are first snapped to 6
-// decimals so binary noise (2.4999999999 for 2.5) does not decide the rounding.
-func roundHalfAway(x float64) int64 {
-	if math.Abs(x) < 1e9 {
-		x = math.Round(x*1e6) / 1e6
+// ratRound rounds a rational to whole rupiah, half away from zero.
+func ratRound(r *big.Rat) int64 {
+	n, err := money.ToIDR(money.FromInt(1), r)
+	if err != nil {
+		return 0
 	}
-	return int64(math.Round(x))
+	return n
+}
+
+// qtyRat is the exact rational of a quantity or factor (its shortest decimal form).
+func qtyRat(q float64) *big.Rat {
+	r, ok := money.Rat(q)
+	if !ok {
+		return new(big.Rat)
+	}
+	return r
 }
 
 // mulRound is round(qty × amount) for a quantity and a whole-rupiah amount.
-func mulRound(qty float64, amount int64) int64 { return roundHalfAway(qty * float64(amount)) }
+func mulRound(qty float64, amount int64) int64 {
+	return ratRound(new(big.Rat).Mul(qtyRat(qty), new(big.Rat).SetInt64(amount)))
+}
 
-// divRound is round(value / qty).
-func divRound(value int64, qty float64) int64 { return roundHalfAway(float64(value) / qty) }
+// divRound is round(value / qty) (qty != 0).
+func divRound(value int64, qty float64) int64 {
+	return ratRound(new(big.Rat).Quo(new(big.Rat).SetInt64(value), qtyRat(qty)))
+}
+
+// percentOff is round(amount × (1 − pct/100)).
+func percentOff(amount int64, pct float64) int64 {
+	f := new(big.Rat).Sub(big.NewRat(1, 1), new(big.Rat).Quo(qtyRat(pct), big.NewRat(100, 1)))
+	return ratRound(new(big.Rat).Mul(new(big.Rat).SetInt64(amount), f))
+}
 
 func qtyOf(v any) float64 { return num(v) }
 

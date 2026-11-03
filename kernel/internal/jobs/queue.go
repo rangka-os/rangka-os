@@ -233,12 +233,14 @@ func jobOut(m map[string]any) map[string]any {
 		"finished_at": ts(m["finalized_at"]), "error": lastErr, "args": m["args"], "org": m["org_id"], "result": m["result"]}
 }
 
-// List returns recent jobs, optionally by state.
-func (q *Queue) List(ctx context.Context, org, state string, limit int) ([]map[string]any, error) {
+// List returns recent jobs of org (and installation-wide ones), optionally by state. A non-empty actor
+// keeps only jobs whose args.actor.id is that actor (members with a row scope see only what they queued).
+func (q *Queue) List(ctx context.Context, org, actor, state string, limit int) ([]map[string]any, error) {
 	if limit <= 0 || limit > 500 {
 		limit = 50
 	}
-	res, err := q.DB.Query(ctx, `select `+jobCols+` from rk_jobs where ($1 = '' or state = $1) and (org_id = $2 or org_id = '') order by id desc limit $3`, state, org, limit)
+	res, err := q.DB.Query(ctx, `select `+jobCols+` from rk_jobs where ($1 = '' or state = $1) and (org_id = $2 or org_id = '')
+		and ($4 = '' or args->'actor'->>'id' = $4) order by id desc limit $3`, state, org, limit, actor)
 	if err != nil {
 		return nil, err
 	}
@@ -249,9 +251,10 @@ func (q *Queue) List(ctx context.Context, org, state string, limit int) ([]map[s
 	return out, nil
 }
 
-// Get returns one job.
-func (q *Queue) Get(ctx context.Context, id int64) (map[string]any, error) {
-	res, err := q.DB.Query(ctx, "select "+jobCols+" from rk_jobs where id = $1", id)
+// Get returns one job when List(org, actor) would show it, else nil.
+func (q *Queue) Get(ctx context.Context, org, actor string, id int64) (map[string]any, error) {
+	res, err := q.DB.Query(ctx, "select "+jobCols+` from rk_jobs where id = $1 and (org_id = $2 or org_id = '')
+		and ($3 = '' or args->'actor'->>'id' = $3)`, id, org, actor)
 	if err != nil || len(res.Rows) == 0 {
 		return nil, err
 	}

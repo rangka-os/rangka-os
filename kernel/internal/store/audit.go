@@ -62,7 +62,9 @@ type AuditFilter struct {
 	Org   string   // ?org=
 	Kind  string   // ?kind= prefix
 	Actor string   // ?actor=
-	Limit int
+	// HideRecordsOf leaves out record.* entries whose target model is in the list (row-scoped members).
+	HideRecordsOf []string
+	Limit         int
 }
 
 // ListAudit returns the newest entries.
@@ -70,9 +72,13 @@ func ListAudit(ctx context.Context, q pg.Querier, f AuditFilter) ([]AuditEntry, 
 	if f.Limit <= 0 || f.Limit > 500 {
 		f.Limit = 50
 	}
+	if f.HideRecordsOf == nil {
+		f.HideRecordsOf = []string{} // a NULL array would hide every record entry
+	}
 	res, err := q.Query(ctx, `select at, actor, kind, target, summary, data, org_id from rk_audit
 		where (org_id = '' or org_id = any($1)) and ($2 = '' or org_id = $2) and ($3 = '' or kind like $3 || '%') and ($4 = '' or actor = $4)
-		order by id desc limit $5`, pg.Array(f.Orgs), f.Org, f.Kind, f.Actor, f.Limit)
+		and not (kind like 'record.%' and split_part(target, '/', 1) = any($6))
+		order by id desc limit $5`, pg.Array(f.Orgs), f.Org, f.Kind, f.Actor, f.Limit, pg.Array(f.HideRecordsOf))
 	if err != nil {
 		return nil, err
 	}

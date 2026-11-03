@@ -101,6 +101,35 @@ func (s *RowScope) Visible(m *meta.Model, rec map[string]any) bool {
 	return true
 }
 
+// Limits reports whether the scope narrows model m (it has a scope field or is a scope field's target).
+func (s *RowScope) Limits(m *meta.Model) bool {
+	if s == nil || m == nil {
+		return false
+	}
+	for _, fn := range s.Fields {
+		if m.Field(fn) != nil {
+			return true
+		}
+	}
+	return s.targets[m.Name]
+}
+
+// ScopedModels lists the installed models the actor's row scope narrows; nil when the actor has no scope.
+func (e *Engine) ScopedModels(a Actor) []string {
+	s := e.RowScope(a)
+	if s == nil {
+		return nil
+	}
+	out := []string{}
+	for _, m := range e.Reg().Models {
+		if s.Limits(m) {
+			out = append(out, m.Name)
+		}
+	}
+	sort.Strings(out)
+	return out
+}
+
 // Guard returns Denied(model, action) when rec is outside the actor's row scope. Public entry points call
 // it on the record they act on; print, import and attachment endpoints call it before acting.
 func (e *Engine) Guard(ctx context.Context, a Actor, model string, rec store.Record, action string) error {

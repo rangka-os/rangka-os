@@ -33,8 +33,13 @@ type FlowResult struct {
 	WaitingJob    int64          `json:"waiting_job,omitempty"` // a wait: step put the rest on the queue
 }
 
-// RunFlow runs a flow from its first step. event is the trigger payload (flows with on:).
+// RunFlow runs a flow from its first step for a caller (REST). event is the trigger payload (flows with on:).
+// Flow steps are not row-scoped, so a member with a row scope may not start a flow directly (contract 0010
+// §5); flows started by automations, the scheduler or jobs go through RunFlowFrom and stay unguarded.
 func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event map[string]any) (*FlowResult, error) {
+	if e.RowScope(a) != nil {
+		return nil, Denied("flow", "run")
+	}
 	return e.RunFlowFrom(ctx, a, flowName, event, 0, nil)
 }
 

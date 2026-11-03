@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 )
 
 // twoOrgEnv adds a second org (pt_beta) next to kopi-senja: the seed user belongs to both,
@@ -425,5 +426,103 @@ func TestSSEScoped(t *testing.T) {
 	}
 	if _, leak := evs[0]["fields"]; leak {
 		t.Fatalf("fields must not reach the client: %v", evs[0])
+	}
+}
+
+// ---------- final review fixes: flow run, jobs, audit
+
+func TestOutletUserCannotRunFlow(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"})
+	ev := map[string]any{"event": map[string]any{"from": "+628129999", "profile_name": "Bu Ani", "text": "Halo", "message_id": "wamid.s1"}}
+	assertDenied(t, staff.do("POST", "/api/v1/flows/whatsapp_to_lead/run", ev), "flow", "run")
+	owner.must(200, "POST", "/api/v1/flows/whatsapp_to_lead/run", ev)
+}
+
+// enqueueLater puts a job on the queue that the workers do not pick up during the test.
+func enqueueLater(t *testing.T, e *env, org string, args map[string]any) string {
+	t.Helper()
+	id, err := e.s.Queue.Enqueue(context.Background(), nil, "action", org, args, engine.EnqueueOpts{RunAt: time.Now().Add(time.Hour)})
+	if err != nil {
+		t.Fatal(err)
+	}
+	return itoa(int(id))
+}
+
+func TestJobOfOtherOrg404(t *testing.T) {
+	e := twoOrgEnv(t)
+	id := enqueueLater(t, e, "kopi-senja", map[string]any{"model": "customer", "name": "CUST-0001", "action": "x"})
+	sys := enqueueLater(t, e, "", map[string]any{"flow": "system"})
+	e.login()
+	e.must(200, "GET", "/api/v1/system/jobs/"+id, nil)
+	e.must(200, "POST", "/auth/org", map[string]any{"org": "pt_beta"})
+	e.must(404, "GET", "/api/v1/system/jobs/"+id, nil)
+	e.must(200, "GET", "/api/v1/system/jobs/"+sys, nil) // installation-wide jobs show in every org, like the list
+	beta := &env{t: t, s: e.s, ts: e.ts, apps: e.apps, site: e.site}
+	beta.jar, _ = cookiejar.New(nil)
+	beta.loginAs("beta@example.test")
+	beta.must(404, "GET", "/api/v1/system/jobs/"+id, nil)
+}
+
+func TestScopedMemberSeesOwnJobsOnly(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"})
+	mine := enqueueLater(t, owner, "kopi-senja", map[string]any{"model": "sales_invoice", "name": "INV-2026-00043", "action": "x",
+		"actor": map[string]any{"id": "staff@example.test"}})
+	theirs := enqueueLater(t, owner, "kopi-senja", map[string]any{"model": "sales_invoice", "name": "INV-2026-00044", "action": "x",
+		"actor": map[string]any{"id": "ceo@saga.co.id"}})
+	l := rowsOf(staff.must(200, "GET", "/api/v1/system/jobs?limit=500", nil))
+	if len(l) != 1 || itoa(int(get(l, 0, "id").(float64))) != mine {
+		t.Fatalf("staff jobs: %v", l)
+	}
+	staff.must(200, "GET", "/api/v1/system/jobs/"+mine, nil)
+	staff.must(404, "GET", "/api/v1/system/jobs/"+theirs, nil)
+	if n := len(rowsOf(owner.must(200, "GET", "/api/v1/system/jobs?limit=500", nil))); n < 2 {
+		t.Fatalf("owner jobs: %d", n)
+	}
+	owner.must(200, "GET", "/api/v1/system/jobs/"+theirs, nil)
+}
+
+func TestAuditCurrentOrgOnly(t *testing.T) {
+	e := twoOrgEnv(t)
+	e.login()
+	e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "Audit Kopi Senja"})
+	e.must(200, "POST", "/auth/org", map[string]any{"org": "pt_beta"})
+	e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "Audit Beta"})
+	for _, x := range rowsOf(e.must(200, "GET", "/api/v1/system/audit?limit=500", nil)) {
+		if o := get(x, "org"); o != "pt_beta" && o != "" {
+			t.Fatalf("audit in pt_beta shows %v: %v", o, x)
+		}
+	}
+	other := e.must(200, "GET", "/api/v1/system/audit?org=kopi-senja&limit=500", nil)
+	if !strings.Contains(string(other.Body), "kopi-senja") {
+		t.Fatalf("explicit org of a membership: %s", other.Body)
+	}
+	beta := &env{t: t, s: e.s, ts: e.ts, apps: e.apps, site: e.site}
+	beta.jar, _ = cookiejar.New(nil)
+	beta.loginAs("beta@example.test")
+	assertDenied(t, beta.do("GET", "/api/v1/system/audit?org=kopi-senja", nil), "org", "read")
+}
+
+func TestAuditScopedLeavesOutScopedRecords(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"})
+	owner.must(201, "POST", "/api/v1/r/sales_invoice", map[string]any{"customer": "CUST-0012", "outlet": "OUT-02",
+		"items": []any{map[string]any{"item": "BRG-0044", "qty": 2}}})
+	owner.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "Audit Pelanggan"})
+	l := rowsOf(staff.must(200, "GET", "/api/v1/system/audit?limit=500", nil))
+	sawCustomer := false
+	for _, x := range l {
+		k, _ := get(x, "kind").(string)
+		tg, _ := get(x, "target").(string)
+		if strings.HasPrefix(k, "record.") && (strings.HasPrefix(tg, "sales_invoice/") || strings.HasPrefix(tg, "outlet/")) {
+			t.Fatalf("scoped member sees %s %s", k, tg)
+		}
+		if strings.HasPrefix(k, "record.") && strings.HasPrefix(tg, "customer/") {
+			sawCustomer = true
+		}
+	}
+	if !sawCustomer {
+		t.Fatalf("unscoped model entries missing: %v", l)
+	}
+	if n := len(rowsOf(owner.must(200, "GET", "/api/v1/system/audit?kind=record.create&limit=500", nil))); n < 2 {
+		t.Fatalf("owner audit: %d", n)
 	}
 }

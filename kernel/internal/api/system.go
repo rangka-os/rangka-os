@@ -120,7 +120,7 @@ func (s *Server) listJobs(w http.ResponseWriter, r *http.Request, c *caller) {
 		writeJSON(w, 200, map[string]any{"data": []any{}})
 		return
 	}
-	list, err := s.Queue.List(r.Context(), c.actor.Org, r.URL.Query().Get("state"), intParam(r, "limit", 50))
+	list, err := s.Queue.List(r.Context(), c.actor.Org, s.jobActor(c), r.URL.Query().Get("state"), intParam(r, "limit", 50))
 	if err != nil {
 		fail(w, err)
 		return
@@ -130,7 +130,7 @@ func (s *Server) listJobs(w http.ResponseWriter, r *http.Request, c *caller) {
 
 func (s *Server) getJob(w http.ResponseWriter, r *http.Request, c *caller) {
 	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
-	j, err := s.Queue.Get(r.Context(), id)
+	j, err := s.Queue.Get(r.Context(), c.actor.Org, s.jobActor(c), id)
 	if err != nil {
 		fail(w, err)
 		return
@@ -142,28 +142,41 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, 200, j)
 }
 
-func (s *Server) memberOrgs(ctx context.Context, email string) []string {
-	res, err := s.DB.Query(ctx, "select m.org_id from rk_members m join rk_users u on u.id = m.user_id where u.email = $1", email)
-	out := []string{}
-	if err == nil {
-		for _, r := range res.Rows {
-			out = append(out, r[0].(string))
-		}
+// jobActor is "" for unscoped callers (every job of the org) and the caller's id for members with a row
+// scope, who see only jobs they queued (job args name records of other outlets).
+func (s *Server) jobActor(c *caller) string {
+	if s.Engine.RowScope(c.actor) == nil {
+		return ""
 	}
-	return out
+	return c.actor.ID
 }
 
 func (s *Server) listAudit(w http.ResponseWriter, r *http.Request, c *caller) {
 	q := r.URL.Query()
-	orgs := s.memberOrgs(r.Context(), c.actor.ID)
-	if c.actor.Org != "" && !containsStr(orgs, c.actor.Org) {
-		orgs = append(orgs, c.actor.Org)
+	// the current org by default; ?org= picks another org the caller belongs to
+	// the current org by default; ?org= picks another org the caller belongs to, read with the role held there
+	org, as := c.actor.Org, c.actor
+	if o := q.Get("org"); o != "" && o != org {
+		ms, err := s.memberships(r.Context(), c)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		found := false
+		for _, m := range ms {
+			if m.ID == o {
+				found, as.Org, as.Roles = true, o, m.Roles
+			}
+		}
+		if !found {
+			fail(w, engine.Denied("org", "read"))
+			return
+		}
+		org = o
 	}
-	if o := q.Get("org"); o != "" && !containsStr(orgs, o) {
-		writeError(w, 403, "forbidden", "you are not a member of "+o)
-		return
-	}
-	list, err := store.ListAudit(r.Context(), s.DB, store.AuditFilter{Orgs: orgs, Org: q.Get("org"), Kind: q.Get("kind"), Actor: q.Get("actor"), Limit: intParam(r, "limit", 50)})
+	// members with a row scope do not see record entries of the models it narrows (contract 0010 §5)
+	list, err := store.ListAudit(r.Context(), s.DB, store.AuditFilter{Orgs: []string{org}, Org: org, Kind: q.Get("kind"), Actor: q.Get("actor"),
+		HideRecordsOf: s.Engine.ScopedModels(as), Limit: intParam(r, "limit", 50)})
 	if err != nil {
 		fail(w, err)
 		return

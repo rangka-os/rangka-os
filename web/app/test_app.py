@@ -941,11 +941,15 @@ def pick_link(page, label, query, option):
     page.locator(".rk-field", has=page.locator("label", has_text=re.compile("^" + re.escape(label)))).locator(".rk-link-val", has_text=option).wait_for(timeout=5000)
 
 
-def grid_line(page, row, item, qty=None):
-    """Fill line `row` (1-based) of the child table: the item select (options come from the server), then qty."""
-    sel = page.locator(f'select[aria-label="Barang baris {row}"]')
-    sel.locator(f'option[value="{item}"]').wait_for(state="attached", timeout=10000)
-    sel.select_option(item)
+def grid_line(page, row, item, qty=None, query=None):
+    """Fill line `row` (1-based) of the child table: type into the item cell's search box (`query`, default the item
+    code; the server searches), pick the option for `item`, then qty."""
+    box = page.get_by_role("combobox", name=f"Barang baris {row}")
+    box.click()
+    box.fill(query or item)
+    page.locator(f'[role=option][data-value="{item}"]').click()
+    page.wait_for_function("([l, v]) => { const b = document.querySelector(`[role=combobox][aria-label='${l}']`); return b && b.dataset.value === v; }",
+                           arg=[f"Barang baris {row}", item], timeout=5000)
     if qty is not None:
         page.locator(f'input[aria-label="Qty baris {row}"]').fill(str(qty))
 
@@ -1087,6 +1091,34 @@ def test_server_errors_win(page, ctx):
     page.wait_for_function("(t) => (document.querySelector('.rk-totals b.grand') || {}).textContent === t", arg=want, timeout=5000)
     assert want != preview, "the stubbed total differs from the preview"
     assert main_area(page).get_by_text("Jatuh tempo tidak boleh sebelum tanggal faktur").count() == 0, "the old error is gone"
+
+
+def test_grid_item_search(page, ctx):
+    """A line's item is found on the server by typing part of its name, past the first 100 items, with the keyboard."""
+    ensure_records(ctx, "item", 105)
+    h = Http(ctx.base).login(*ctx.owner)
+    tag = str(int(time.time() * 1000))[-6:]
+    st, item = h.call("POST", "/api/v1/r/item", {"item_name": f"Teh Telang Cari {tag}", "uom": "Pcs", "rate": 21000})
+    assert st == 201, f"create item {st} {item}"
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice/new")
+    wait_form(page)
+    page.get_by_role("button", name="Tambah baris").click()
+    box = page.get_by_role("combobox", name="Barang baris 1")
+    box.click()
+    box.press_sequentially(f"telang cari {tag}", delay=20)
+    opt = page.locator(f'[role=option][data-value="{item["name"]}"]')
+    opt.wait_for(timeout=10000)
+    assert any(m == "GET" and re.search(r"/api/v1/r/item\?.*q=telang cari " + tag, u) for m, u in reqs), \
+        f"the cell searched the server: {[u for m, u in reqs if '/r/item' in u]}"
+    page.wait_for_function("() => document.querySelectorAll('[role=listbox] [role=option]').length === 1", timeout=5000)
+    box.press("ArrowDown")
+    box.press("Enter")
+    page.wait_for_function("(v) => (document.querySelector('[role=combobox][aria-label=\"Barang baris 1\"]') || {dataset: {}}).dataset.value === v",
+                           arg=item["name"], timeout=5000)
+    assert page.locator("[role=listbox]").count() == 0, "the list closes after the pick"
+    assert box.input_value() == f"Teh Telang Cari {tag}", f"the cell shows the item: {box.input_value()!r}"
+    page.wait_for_function("(t) => (document.querySelector('.rk-totals b.grand') || {}).textContent !== 'Rp 0'", arg=None, timeout=5000)
 
 
 def test_double_submit_sends_one_request(page, ctx):

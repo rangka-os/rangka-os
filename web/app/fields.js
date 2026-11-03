@@ -6,7 +6,8 @@
  *   select    R.Select; check: R.Checkbox; text: R.Textarea
  *   currency  "Rp 1.250.000" text, stored as the integer parseRupiah(text)
  *   int/float/percent  "1.250,5" text ("," is the decimal mark), stored as a number
- *   table     Grid: editable rows (link cells are selects fed by the server), totals from the parent's computed currency fields
+ *   table     Grid: editable rows (link cells are GridLink comboboxes: a debounced GET /api/v1/r/<to>?q=…&limit=20,
+ *             arrow keys + Enter to pick, Escape to close), totals from the parent's computed currency fields
  *   else      a text input (npwp keeps digits only)
  * `error` is the server's word (red, aria-invalid); `hint` is the browser's preview of a rule (never blocks a save).
  * Read-only fields render RangkaApp.fieldText as plain text (links open the record).
@@ -68,7 +69,7 @@
   if (!React || !R || !global.document) return;
   var h = React.createElement, useState = React.useState, useEffect = React.useEffect;
   var API = global.RangkaAppAPI;
-  var SEARCH_MS = 250, OPTIONS_LIMIT = 100;
+  var SEARCH_MS = 250, HITS_LIMIT = 20, gridLinkSeq = 0;
 
   function L(v) { return RA.L ? RA.L(v) : (v && (v.id || v.en)) || (typeof v === "string" ? v : ""); }
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -180,6 +181,71 @@
   }
 
   /* ---------------------------------------------------------------- child table */
+  /** A link cell: a compact combobox searching the server as the user types (any record, not only the first page).
+   *  The list opens inline under the input (the grid scrolls sideways, so a floating list would be clipped). */
+  function GridLink(p) {
+    var ctx = p.ctx, c = p.field, to = c.to, eng = ctx.eng;
+    var qs = useState(null), q = qs[0], setQ = qs[1]; // null: closed, showing the picked record's title
+    var hs = useState(null), hits = hs[0], setHits = hs[1]; // null: not answered yet for this q
+    var as = useState(-1), active = as[0], setActive = as[1];
+    var idRef = React.useRef(null);
+    if (idRef.current === null) idRef.current = "ap-gl-" + (++gridLinkSeq);
+    var listId = idRef.current;
+
+    useEffect(function () {
+      if (q === null) return undefined;
+      var dead = false;
+      var t = setTimeout(function () {
+        ctx.api.list(to, { q: q.trim() || undefined, limit: HITS_LIMIT }).then(function (r) {
+          if (dead) return;
+          (r.data || []).forEach(function (x) { ctx.cache.put(to, x); });
+          setHits(r.data || []);
+          setActive(-1);
+        }, function () { if (!dead) setHits([]); });
+      }, q ? SEARCH_MS : 0);
+      return function () { dead = true; clearTimeout(t); };
+    }, [q]);
+
+    var open = q !== null;
+    var list = hits || [];
+    function close() { setQ(null); setHits(null); setActive(-1); }
+    function pick(r) { ctx.cache.put(to, r); close(); p.onChange(r.name); }
+    function key(e) {
+      if (e.key === "ArrowDown" || e.key === "ArrowUp") {
+        e.preventDefault();
+        if (!open) { setQ(""); return; }
+        if (!list.length) return;
+        var d = e.key === "ArrowDown" ? 1 : -1;
+        setActive((active + d + list.length) % list.length);
+      } else if (e.key === "Enter") {
+        if (open && active >= 0 && list[active]) { e.preventDefault(); pick(list[active]); }
+      } else if (e.key === "Escape") {
+        if (open) { e.preventDefault(); e.stopPropagation(); close(); }
+      }
+    }
+    var shown = p.value ? ctx.cache.title(to, p.value) || p.value : "";
+    var noun = L(c.label).toLowerCase();
+    return h("div", { className: "ap-gl" },
+      h("input", { className: "rk-cell", role: "combobox", "aria-label": p.label, "aria-expanded": open ? "true" : "false",
+        "aria-controls": listId, "aria-autocomplete": "list", "data-value": p.value || "",
+        "aria-activedescendant": open && active >= 0 ? listId + "-" + active : undefined,
+        value: open ? q : shown, placeholder: "Cari " + noun + "…", autoComplete: "off",
+        onFocus: function () { if (!open) setQ(""); },
+        onBlur: close,
+        onChange: function (e) { setQ(e.target.value); },
+        onKeyDown: key }),
+      open ? h("ul", { id: listId, role: "listbox", className: "ap-gl-pop", "aria-label": "Pilihan " + noun },
+        hits === null ? h("li", { className: "ap-gl-note", role: "presentation" }, "Mencari…")
+          : !list.length ? h("li", { className: "ap-gl-note", role: "presentation" }, q ? "Tidak ada " + noun + " untuk “" + q + "”" : "Belum ada " + noun)
+          : list.map(function (r, i) {
+            return h("li", { key: r.name, id: listId + "-" + i, role: "option", "aria-selected": i === active ? "true" : "false", "data-value": r.name,
+              className: cx("ap-gl-opt", i === active && "on"),
+              // mousedown, not click: the input's blur would close the list first
+              onMouseDown: function (e) { e.preventDefault(); pick(r); } },
+              h("span", null, eng.title(to, r) || r.name), h("small", null, r.name));
+          })) : null);
+  }
+
   function GridNum(p) {
     var money = p.field.type === "currency";
     var t = useEditText(p.value, function (v) { return v == null || v === "" ? "" : formatNumber(v, money ? 0 : 3); });
@@ -190,21 +256,7 @@
 
   function Grid(p) {
     var ctx = p.ctx, eng = ctx.eng, f = p.field, cm = ctx.meta.models[f.of], rows = p.rec[f.name] || [], ro = p.readOnly;
-    var os = useState({}), opts = os[0], setOpts = os[1];
     var cols = cm.fields;
-
-    useEffect(function () {
-      if (ro) return undefined;
-      var dead = false;
-      cols.filter(function (c) { return c.type === "link" && !c.compute && !c.read_only; }).forEach(function (c) {
-        ctx.api.list(c.to, { limit: OPTIONS_LIMIT }).then(function (r) {
-          if (dead) return;
-          (r.data || []).forEach(function (x) { ctx.cache.put(c.to, x); });
-          setOpts(function (cur) { var n = Object.assign({}, cur); n[c.name] = r.data || []; return n; });
-        }, function () {});
-      });
-      return function () { dead = true; };
-    }, [f.of, ro]);
 
     function set(i, k, v) {
       var n = rows.map(function (r) { return Object.assign({}, r); });
@@ -221,12 +273,7 @@
       var v = r[c.name], lbl = L(c.label) + " baris " + (i + 1), num = numeric(c);
       if (c.type === "link") {
         if (ro || c.read_only) return h("td", { key: c.name }, h("div", { className: "rk-cell-item" }, h("b", null, v ? ctx.cache.title(c.to, v) : "—"), v ? h("small", null, v) : null));
-        var list = opts[c.name] || [];
-        var has = list.some(function (x) { return x.name === v; });
-        return h("td", { key: c.name, className: "ap-grid-link" }, h("select", { className: "rk-cell", value: v || "", "aria-label": lbl, onChange: function (e) { set(i, c.name, e.target.value); } },
-          h("option", { value: "" }, "Pilih " + L(c.label).toLowerCase() + "…"),
-          v && !has ? h("option", { value: v }, ctx.cache.title(c.to, v) + " · " + v) : null,
-          list.map(function (o) { return h("option", { key: o.name, value: o.name }, (eng.title(c.to, o) || o.name) + " · " + o.name); })));
+        return h("td", { key: c.name, className: "ap-grid-link" }, h(GridLink, { ctx: ctx, field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }));
       }
       if (ro || c.compute || c.read_only) {
         return h("td", { key: c.name, className: num ? "n" : undefined }, h("div", { className: num ? "rk-cell-ro" : "rk-cell-item" }, num ? formatNumber(v, c.type === "currency" ? 0 : 3) : v == null ? "" : String(v)));

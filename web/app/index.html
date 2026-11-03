@@ -67,6 +67,13 @@
   .ap-link { min-width: 0; }
   .ap-check { justify-content: flex-end; }
   .ap-grid-link { min-width: 220px; }
+  .ap-gl { display: flex; flex-direction: column; min-width: 0; }
+  .ap-gl-pop { list-style: none; margin: 2px 0 0; padding: 4px; max-height: 220px; overflow-y: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
+  .ap-gl-opt { display: flex; flex-direction: column; gap: 0; padding: 8px; min-height: 40px; box-sizing: border-box; justify-content: center; border-radius: var(--r-sm); cursor: pointer; }
+  .ap-gl-opt small { color: var(--muted); font-size: 12px; line-height: 16px; }
+  .ap-gl-opt:hover { background: var(--hover); }
+  .ap-gl-opt.on { background: var(--selected); color: var(--selected-ink); }
+  .ap-gl-note { padding: 8px; color: var(--muted); }
   .ap-main .rk-grid-scroll { position: relative; } /* keeps the visually hidden "Aksi" header inside the scroller */
   .ap-grid-empty { color: var(--muted); text-align: center; padding: 12px; }
   .ap-ro-grid { margin-top: 24px; }

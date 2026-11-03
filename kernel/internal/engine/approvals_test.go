@@ -32,7 +32,7 @@ const ownerBigPolicy = `  - name: owner_big
 
 var (
 	mgr = Actor{Org: "kopi-senja", ID: "mgr@x", UserName: "USR-002", Roles: []string{"sales_manager"}, Human: true}
-	rep = Actor{Org: "kopi-senja", ID: "rep@x", Roles: []string{"sales_rep"}, Human: true}
+	rep = Actor{Org: "kopi-senja", ID: "rep@x", UserName: "USR-002", Roles: []string{"sales_rep"}, Human: true}
 )
 
 // approvalSetup is setup with approvals: appended to sales_invoice (and lead, when given) and the submit rule

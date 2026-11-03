@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/template.json
+name: crm
+label: {id: Rangka CRM}
+apps: {legacy: ^1.0}

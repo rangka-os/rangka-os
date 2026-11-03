@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+name: legacy
+version: 1.0.0
+title: {id: Lama}
+requires: {rangka: '>=0.4', contacts: ^1.0, shop: ^1.0}
+menu:
+  - group: {id: Lama}
+    items: [note, customer]

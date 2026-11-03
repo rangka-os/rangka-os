@@ -2,6 +2,7 @@ package meta
 
 import (
 	"fmt"
+	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -88,10 +89,20 @@ func (v *validator) shape() {
 		if v.skip(a.Name) {
 			continue
 		}
+		if a.Kind == KindLegacy {
+			v.rep.add("warn", a.File, "(root)", "deprecated_layout", fmt.Sprintf("0.4 app.rk: split into modules/%s/module.rk and an app (contract 0001)", a.Name))
+		}
+		kind := "app"
+		if a.Kind == KindModule {
+			kind = "module"
+		}
 		if a.Doc != nil {
-			for _, e := range v.schemaErrors("app", a.Doc, false) {
+			for _, e := range v.schemaErrors(kind, a.Doc, false) {
 				v.rep.add("error", a.Doc.Path, e.PathString(), "schema", e.Message)
 			}
+		}
+		if a.Kind == KindApp && len(rk.ListDir(filepath.Join(a.Dir, "models"))) > 0 {
+			v.rep.add("error", a.File, "models", "app_defines_model", fmt.Sprintf(`app "%s" has models/; an app defines no models, move them into a module (contract 0001)`, a.Name))
 		}
 		for _, mn := range a.Models {
 			m := v.reg.Models[mn]
@@ -113,6 +124,12 @@ func (v *validator) shape() {
 			if got, _ := d.Raw["name"].(string); got != dn || d.Raw["name"] == nil {
 				v.rep.add("error", d.Doc.Path, "name", "name_mismatch", fmt.Sprintf(`dashboard name "%s" must match the file name "%s"`, pyStr(d.Raw["name"]), dn))
 			}
+		}
+	}
+	tdir := filepath.Join(filepath.Dir(filepath.Clean(v.reg.AppsDir)), "templates")
+	for _, tn := range sortedDir(tdir) {
+		if tp := rk.Find(filepath.Join(tdir, tn), "template"); tp != "" {
+			v.rep.add("warn", tp, "(root)", "deprecated_template", fmt.Sprintf("template.rk becomes apps/%s/app.rk (contract 0001)", tn))
 		}
 	}
 }
@@ -155,6 +172,22 @@ func (v *validator) meaning() {
 		}
 		for k := range a.Optional {
 			reqs[k] = true
+		}
+		v.dependencies(a)
+		if a.Kind == KindApp { // its modules, their requires (transitively) and its optional
+			var mods []string
+			for _, k := range orderedKeys(a, "modules") {
+				if u := v.reg.App[k]; u != nil && u.IsModule() {
+					mods = append(mods, k)
+				}
+			}
+			reqs = map[string]bool{}
+			for _, k := range v.reg.Closure(mods) {
+				reqs[k] = true
+			}
+			for k := range a.Optional {
+				reqs[k] = true
+			}
 		}
 		visible := map[string]vis{}
 		for mn, x := range all {
@@ -215,6 +248,42 @@ func (v *validator) meaning() {
 				v.rep.add("warn", d.Doc.Path, "name", "unlisted_dashboard", fmt.Sprintf(`add "%s" to dashboards in app.rk or nobody can open it`, dn))
 			}
 			v.dashboard(d, visible, optional, all, a.Name)
+		}
+	}
+}
+
+// dependencies checks a module's requires and an app's modules: each names a module (or a 0.4 unit) whose
+// version satisfies the range. 0.4 units keep missing_dependency (site check) only.
+func (v *validator) dependencies(a *App) {
+	if a.Kind == KindLegacy {
+		for _, k := range orderedKeys(a, "requires") {
+			if u := v.reg.App[k]; u != nil && u.Kind == KindApp {
+				v.rep.add("error", a.File, "requires/"+k, "requires_app", fmt.Sprintf(`"%s" is an app; a unit can require modules only (contract 0001)`, k))
+			}
+		}
+		return
+	}
+	var mods []string
+	for _, u := range v.reg.Apps {
+		if u.IsModule() {
+			mods = append(mods, u.Name)
+		}
+	}
+	for _, key := range []string{"requires", "modules"} {
+		deps := asMap(a.Raw[key])
+		if deps == nil {
+			continue
+		}
+		for _, k := range orderedKeys(a, key) {
+			if k == "rangka" && key == "requires" {
+				continue
+			}
+			u := v.reg.App[k]
+			if u == nil || !u.IsModule() {
+				v.rep.add("error", a.File, key+"/"+k, "unknown_module", fmt.Sprintf(`"%s" is not a module%s`, k, suggest(k, mods)))
+			} else if rng := deps[k]; !Satisfies(u.Raw["version"], rng) {
+				v.rep.add("error", a.File, key+"/"+k, "version_mismatch", fmt.Sprintf(`"%s" is %s; this needs %s`, k, pyStr(u.Raw["version"]), pyStr(rng)))
+			}
 		}
 	}
 }

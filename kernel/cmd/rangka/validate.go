@@ -21,6 +21,7 @@ func cmdValidate(args []string) int {
 	apps := fs.String("apps", "apps", "apps directory")
 	site := fs.String("site", "", "site directory (system.rk, features.rk, config.rk, themes/, layouts/, custom/)")
 	connectors := fs.String("connectors", "", "connectors directory (<name>/connector.rk)")
+	modules := fs.String("modules", os.Getenv("RANGKA_MODULES"), "modules directory (<name>/module.rk; default: modules next to the apps directory)")
 	asJSON := fs.Bool("json", false, "print JSON")
 	schemas := fs.String("schemas", "", "schema directory (default: the schemas built into the binary)")
 	fs.Parse(reorder(args))
@@ -33,7 +34,7 @@ func cmdValidate(args []string) int {
 		fmt.Fprintf(os.Stderr, "apps directory %q not found\n", *apps)
 		return 2
 	}
-	_, rep := meta.ValidateOpts(meta.Options{AppsDir: *apps, SiteDir: *site, ConnectorsDir: *connectors}, fs.Args(), set)
+	_, rep := meta.ValidateOpts(meta.Options{AppsDir: *apps, SiteDir: *site, ConnectorsDir: *connectors, ModulesDir: *modules}, fs.Args(), set)
 	var errs int
 	if *asJSON {
 		errs = rep.JSON(os.Stdout)

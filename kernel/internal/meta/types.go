@@ -169,10 +169,16 @@ type Flow struct {
 	Doc                                      *rk.Doc
 }
 
+// App is a unit of metadata: a module (modules/<m>/module.rk), an app (apps/<a>/app.rk with modules) or a
+// legacy 0.4 app (apps/<a>/app.rk without modules: a module and an app in one). Contract 0001.
 type App struct {
 	Name, Version, Dir string
+	File               string // module.rk or app.rk
+	Kind               string // KindModule, KindApp or KindLegacy
+	Prefix             string // docs key prefix: modules/<m> or apps/<a>
 	Title              Label
 	Requires, Optional map[string]any
+	Modules            map[string]any // an app's modules: name → version range
 	Hooks              []string
 	Dashboards         []string
 	Raw                map[string]any
@@ -181,6 +187,19 @@ type App struct {
 	Roles              []string
 	Flows              []string
 }
+
+// Unit kinds (contract 0001).
+const (
+	KindModule = "module"
+	KindApp    = "app"
+	KindLegacy = "legacy"
+)
+
+// IsModule reports whether other units can depend on the unit (a module or a legacy app).
+func (a *App) IsModule() bool { return a.Kind != KindApp }
+
+// IsApp reports whether a site can install the unit by name (an app or a legacy app).
+func (a *App) IsApp() bool { return a.Kind != KindModule }
 
 // Site is one installation: system.rk, features.rk, config.rk, themes and layouts.
 type Site struct {

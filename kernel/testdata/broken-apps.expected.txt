@@ -1,13 +1,16 @@
 core/models/outlet.rk:6:7  error  ambiguous_value  (syntax)  0812 means different things in different YAML tools; write "0812" in quotes for text, or a number without leading zeros
 core/models/outlet.rk:7:1  error  duplicate_key  (syntax)  "icon" appears twice (first on line 4)
 core/models/outlet.rk:8:7  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
+core/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/core/module.rk and an app (contract 0001)
 core/app.rk:4:9  error  schema  hooks/0  'Bad Hook' does not match '^[a-z_]+\\.[a-z_]+$'
 core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must match the file name "item"
+crm/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/crm/module.rk and an app (contract 0001)
 crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', …
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
 crm/models/tanda_terima.rk:4:9  error  reset_needs_date  naming  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
+sales/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/sales/module.rk and an app (contract 0001)
 sales/models/sales_invoice.rk:67:5  error  schema  fields/13  'currency_field' is a required property
 sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' is not valid under any of the given schemas
 core/app.rk:9:29  error  unknown_model  menu/0/items/2  "outlet" is not a model in this app or its dependencies
@@ -91,4 +94,4 @@ crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope fiel
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-82 error(s), 10 warning(s)
+82 error(s), 13 warning(s)

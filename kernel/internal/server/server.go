@@ -32,6 +32,7 @@ import (
 // Config of a kernel instance.
 type Config struct {
 	AppsDir, SiteDir, ConnectorsDir string
+	ModulesDir                      string // default: modules next to AppsDir (contract 0001)
 	WebDir, TemplatesDir            string
 	DatabaseURL                     string
 	Addr                            string
@@ -62,7 +63,7 @@ type Server struct {
 
 // LoadRegistry validates the metadata directories and refuses to continue on errors.
 func LoadRegistry(cfg Config) (*meta.Registry, error) {
-	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir}, nil, cfg.Schemas)
+	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir, ModulesDir: cfg.ModulesDir}, nil, cfg.Schemas)
 	if rep.Errors() > 0 {
 		var b []byte
 		for _, it := range rep.All() {
@@ -165,7 +166,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	s.Auth = &auth.Service{DB: db, Issuer: issuer, SessionTTL: ttl, DevOpen: cfg.DevOpen, DefaultOrg: cfg.Org, Now: cfg.Now,
 		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }}
-	s.Changes = &changeset.Service{DB: db, AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir,
+	s.Changes = &changeset.Service{DB: db, AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir, ModulesDir: cfg.ModulesDir,
 		Schemas: cfg.Schemas, Reg: e.Reg, Reload: s.Reload, Now: cfg.Now}
 	site := ""
 	if cfg.SiteDir != "" {

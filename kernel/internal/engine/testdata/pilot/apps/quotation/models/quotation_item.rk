@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: quotation_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: description, type: text}
+  - {name: qty, type: float, default: '1'}
+  - {name: uom, type: link, to: uom, default: "item.sales_uom != '' ? item.sales_uom : item.stock_uom"}
+  - {name: rate, type: currency, default: item.rate}
+  - {name: discount, type: percent, default: '0'}
+  - {name: amount, type: currency, compute: round(qty * rate * (1 - discount / 100))}

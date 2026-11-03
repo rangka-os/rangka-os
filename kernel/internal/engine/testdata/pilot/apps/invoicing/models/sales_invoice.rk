@@ -1,0 +1,32 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: sales_invoice
+is_submittable: true
+naming: INV-{YYYY}-{#####}
+on_submit: [ledger.post_receivable]
+on_cancel: [invoicing.reverse_receivable]
+fields:
+  - {name: kind, type: select, default: "'regular'", options: [{value: regular, label: {id: regular}}, {value: down_payment, label: {id: down_payment}}, {value: retention, label: {id: retention}}]}
+  - {name: customer, type: link, to: customer, required: true}
+  - {name: customer_order, type: link, to: customer_order}
+  - {name: po_number, type: data}
+  - {name: posting_date, type: date, default: today(), required: true}
+  - {name: due_date, type: date, default: posting_date + duration(customer.payment_days)}
+  - {name: items, type: table, of: sales_invoice_item, min_rows: 1}
+  - {name: subtotal, type: currency, compute: 'items.map(i, i.amount).sum()'}
+  - {name: discount_amount, type: currency, default: '0'}
+  - {name: dp_invoice, type: link, to: sales_invoice}
+  - {name: dp_deduction, type: currency, default: '0'}
+  - {name: dpp_base, type: currency, compute: subtotal - discount_amount - dp_deduction}
+  - {name: ppn_applies, type: check, default: 'true'}
+  - {name: tax_rate, type: percent, default: '12'}
+  - {name: ppn, type: currency, compute: 'ppn_applies ? round(dpp_base * 11 / 12 * tax_rate / 100) : 0'}
+  - {name: grand_total, type: currency, compute: dpp_base + ppn}
+  - {name: retention_percent, type: percent, default: '0'}
+  - {name: retention_amount, type: currency, compute: round(dpp_base * retention_percent / 100)}
+  - {name: retention_of, type: link, to: sales_invoice}
+  - {name: pph23_applies, type: check, default: 'false'}
+  - {name: pph23_rate, type: percent, default: '2'}
+  - {name: pph23_amount, type: currency, compute: 'pph23_applies ? round(dpp_base * pph23_rate / 100) : 0'}
+  - {name: amount_due, type: currency, compute: grand_total - retention_amount - pph23_amount}
+  - {name: paid_amount, type: currency, read_only: true}
+  - {name: outstanding, type: currency, compute: amount_due - paid_amount}

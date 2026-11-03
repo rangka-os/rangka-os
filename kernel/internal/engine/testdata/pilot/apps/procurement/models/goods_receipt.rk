@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: goods_receipt
+is_submittable: true
+naming: GR-{YYYY}-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+fields:
+  - {name: purchase_order, type: link, to: purchase_order}
+  - {name: vendor, type: link, to: vendor, required: true}
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: received_on, type: date, default: today(), required: true}
+  - {name: items, type: table, of: goods_receipt_item, min_rows: 1}

@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+name: procurement
+version: 1.0.0
+title: {id: procurement}
+requires: {rangka: '>=0.4', contacts: ^1.0, catalogue: ^1.0, outlets: ^1.0}
+hooks: [procurement.make_po, procurement.receive, procurement.post_payable, procurement.reverse_payable, stock.reverse_moves]

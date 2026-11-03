@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: stock_count_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: counted_qty, type: float, required: true}
+  - {name: system_qty, type: float, read_only: true}
+  - {name: difference, type: float, read_only: true}

@@ -1,0 +1,38 @@
+# The npm starter on every push and pull request to main: build the kernel, stage the npm packages with it
+# (this runner's platform only), scaffold each @rangka-os/create template and validate it with the staged CLI.
+# Catches a starter that no longer matches the rangka-apps layout before a release tag does.
+name: npm
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: npm-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  staged-starter:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rangka-os }
+      - uses: actions/checkout@v4
+        with: { repository: rangka-os/rangka-apps, path: rangka-apps }
+      - uses: actions/checkout@v4
+        with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
+
+      - uses: actions/setup-go@v5
+        with: { go-version-file: rangka-os/kernel/go.mod }
+      - uses: actions/setup-node@v4
+        with: { node-version: 20 }
+
+      - name: Build the kernel
+        run: make -C rangka-os/kernel build
+      - name: Stage, scaffold demo and blank, validate
+        run: rangka-os/npm/scripts/check-staged.sh

@@ -387,7 +387,7 @@ func TestPrintReferenceStatementOpenOnly(t *testing.T) {
 			t.Fatal(err)
 		}
 		for _, f := range []string{"statement.rk", "statement.html"} {
-			b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "print-apps", "core", "print", f))
+			b, err := os.ReadFile(filepath.Join("..", "..", "testdata", "print-apps", "modules", "core", "print", f))
 			if err != nil {
 				t.Fatal(err)
 			}

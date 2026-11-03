@@ -15,7 +15,8 @@ import (
 var update = flag.Bool("update", false, "rewrite the golden files in testdata/")
 
 const (
-	goldenApps      = "../../testdata/print-apps"
+	goldenRoot      = "../../testdata/print-apps"
+	goldenApps      = goldenRoot + "/apps"
 	goldenSite      = "../../testdata/print-site"
 	referenceLayout = "../../../templates/print"
 )
@@ -233,6 +234,23 @@ func TestGoldenInvoiceDownPayment(t *testing.T) {
 	mustContain(t, renderGolden(t, in), "Uang muka", "-Rp 5.000.000")
 }
 
+// The terbilang line follows the same rule as money: a lower-case or empty currency is IDR, another code skips it.
+func TestGoldenInvoiceTerbilangCurrency(t *testing.T) {
+	reg := goldenRegistry(t)
+	for _, cur := range []string{"idr", "Idr", ""} {
+		in := goldenCases(t, reg)["sales_invoice"]
+		in.Doc = invoiceDoc()
+		in.Doc["currency"] = cur
+		mustContain(t, renderGolden(t, in), "Terbilang:", "tujuh belas juta empat ratus delapan puluh dua ribu lima ratus rupiah", "Rp 17.482.500")
+	}
+	in := goldenCases(t, reg)["sales_invoice"]
+	in.Doc = invoiceDoc()
+	in.Doc["currency"] = "usd"
+	if out := renderGolden(t, in); strings.Contains(out, "Terbilang:") || !strings.Contains(out, "USD ") {
+		t.Errorf("usd invoice: terbilang present or currency not shown:\n%s", out)
+	}
+}
+
 // The revision arrives as int64 from the database and as float64 from JSON; both print as Rev.NN.
 func TestGoldenQuotationRevision(t *testing.T) {
 	reg := goldenRegistry(t)
@@ -264,7 +282,7 @@ func TestGoldenEmptyRecords(t *testing.T) {
 // The fixtures' templates are byte-identical copies of the reference layouts in templates/print/.
 func TestFixtureTemplatesMatchReference(t *testing.T) {
 	var copies []string
-	for _, root := range []string{goldenApps, goldenSite} {
+	for _, root := range []string{goldenRoot, goldenSite} {
 		err := filepath.Walk(root, func(p string, info os.FileInfo, err error) error {
 			if err == nil && !info.IsDir() && filepath.Ext(p) == ".html" && filepath.Base(filepath.Dir(p)) == "print" {
 				copies = append(copies, p)

@@ -22,7 +22,7 @@
 .footnote{margin-top:6mm;padding-top:2mm;border-top:1px solid #D6D3D1;font-size:9pt}
 .footer{margin-top:4mm;text-align:center}
 {{end}}
-{{- $cur := or .Doc.currency "IDR"}}
+{{- $cur := upper (or .Doc.currency "IDR")}}
 {{template "letterhead" .}}
 <h1 class="doc-title">Faktur</h1>
 <div class="head">

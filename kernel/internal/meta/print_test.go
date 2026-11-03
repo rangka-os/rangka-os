@@ -13,7 +13,8 @@ import (
 )
 
 const (
-	printApps = "../../testdata/print-apps"
+	printRoot = "../../testdata/print-apps" // apps/ and modules/ side by side (contract 0001)
+	printApps = printRoot + "/apps"
 	printSite = "../../testdata/print-site"
 )
 
@@ -198,10 +199,10 @@ func TestLetterheadDeepCopy(t *testing.T) {
 }
 
 func TestLogoOutsideSite(t *testing.T) {
-	for _, logo := range []string{"/etc/hosts", "../print-apps/core/app.rk"} {
+	for _, logo := range []string{"/etc/hosts", "../print-apps/modules/core/module.rk"} {
 		dir := t.TempDir()
 		copyDir(t, printSite, dir+"/site")
-		copyDir(t, printApps, dir+"/print-apps")
+		copyDir(t, printRoot, dir+"/print-apps")
 		editFile(t, dir+"/site/letterhead.rk", "logo: brand/logo.svg", "logo: "+logo)
 		reg, rep := Validate(printApps, dir+"/site", nil, schema.Embedded())
 		var n int
@@ -229,10 +230,10 @@ func TestLogoOutsideSite(t *testing.T) {
 
 func TestSamePrintNameInstalledWins(t *testing.T) {
 	dir := t.TempDir()
-	copyDir(t, printApps, dir+"/apps")
-	writeFile(t, dir+"/apps/aa/app.rk", "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json\nname: aa\nversion: 1.0.0\n")
-	writeFile(t, dir+"/apps/aa/print/quotation.rk", "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\nname: quotation\nmodel: quotation\ntemplate: quotation.html\n")
-	reg := Load(dir+"/apps", printSite, nil) // config.rk installs core and sales, not aa
+	copyDir(t, printRoot, dir)
+	writeFile(t, dir+"/modules/aa/module.rk", "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json\nname: aa\nversion: 1.0.0\n")
+	writeFile(t, dir+"/modules/aa/print/quotation.rk", "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\nname: quotation\nmodel: quotation\ntemplate: quotation.html\n")
+	reg := Load(dir+"/apps", printSite, nil) // config.rk installs the jasa app (sales, core), not aa
 	if p := reg.Print("quotation"); p == nil || p.App != "sales" {
 		t.Fatalf("quotation = %+v", p)
 	}
@@ -251,13 +252,13 @@ func TestValidatePrintsClean(t *testing.T) {
 
 func TestValidatePrintsBroken(t *testing.T) {
 	dir := t.TempDir()
-	copyDir(t, printApps, dir+"/apps")
+	copyDir(t, printRoot, dir)
 	copyDir(t, printSite, dir+"/site")
-	editFile(t, dir+"/apps/sales/print/quotation.rk", "template: quotation.html", "template: ../../config.rk.html")
-	editFile(t, dir+"/apps/sales/print/purchase_order.rk", "template: purchase_order.html", "template: nope.html")
+	editFile(t, dir+"/modules/sales/print/quotation.rk", "template: quotation.html", "template: ../../config.rk.html")
+	editFile(t, dir+"/modules/sales/print/purchase_order.rk", "template: purchase_order.html", "template: nope.html")
 	editFile(t, dir+"/site/print/sales_invoice.html", "{{.Doc.name}}", "{{ .Doc.x | nosuchfunc }}")
-	editFile(t, dir+"/apps/sales/print/sales_invoice.rk", "model: sales_invoice", "model: nope")
-	editFile(t, dir+"/apps/core/print/statement.rk", "match: {customer: name}", "match: {nope: name}")
+	editFile(t, dir+"/modules/sales/print/sales_invoice.rk", "model: sales_invoice", "model: nope")
+	editFile(t, dir+"/modules/core/print/statement.rk", "match: {customer: name}", "match: {nope: name}")
 	editFile(t, dir+"/site/letterhead.rk", "logo: brand/logo.svg", "logo: brand/none.png")
 	writeFile(t, dir+"/site/print/a.rk", `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
 name: b
@@ -285,8 +286,8 @@ template: a.html
 
 func TestPrintSchemaErrors(t *testing.T) {
 	dir := t.TempDir()
-	copyDir(t, printApps, dir+"/apps")
-	writeFile(t, dir+"/apps/sales/print/quotation.rk", `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+	copyDir(t, printRoot, dir)
+	writeFile(t, dir+"/modules/sales/print/quotation.rk", `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
 name: quotation
 model: quotation
 template: quotation.html

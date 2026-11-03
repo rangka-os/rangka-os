@@ -243,7 +243,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				r.Roles[e.Stem] = d
 			}
 		}
-		r.loadPrints(ld, a.Name, a.Dir, "apps/"+a.Name+"/")
+		r.loadPrints(ld, a.Name, a.Dir, a.Prefix+"/")
 	}
 	if siteDir != "" {
 		r.Site = loadSite(siteDir, ld, r)

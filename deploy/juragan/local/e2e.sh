@@ -92,7 +92,7 @@ prepare() {
     cp -R "$APPS_REPO/apps" "$d/apps"
     cp -R "$APPS_REPO/fixtures" "$d/fixtures"
     cp -R "$APPS_REPO/sites/kopi-senja" "$d/site"
-    cp -R "$HERE/fixtures/print" "$d/site/print" # a print format for model lead (the sample apps have none)
+    cp -R "$HERE/fixtures/print/print" "$d/site/print" # a print format for model lead (the sample apps have none)
   done
   # the kernel runs as uid 65532 and writes site/custom and data/
   docker run --rm -v "$WORK/pilots:/p" alpine:3.20 chown -R 65532:65532 /p

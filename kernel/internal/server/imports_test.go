@@ -174,8 +174,8 @@ func TestImportsMoka(t *testing.T) {
 	}
 	id := pv.JSON["id"].(string)
 	e.must(200, "GET", "/api/v1/imports/moka_item_details/"+id, nil)
-	if l := e.must(200, "GET", "/api/v1/imports/moka_item_details", nil).JSON["imports"].([]any); len(l) != 1 {
-		t.Fatalf("list: %v", l)
+	if lj := e.must(200, "GET", "/api/v1/imports/moka_item_details", nil).JSON; len(lj["data"].([]any)) != 1 || lj["total"] != 1.0 {
+		t.Fatalf("list: %v", lj)
 	}
 	cm := e.must(200, "POST", "/api/v1/imports/moka_item_details/"+id+"/commit", nil)
 	if cm.JSON["status"] != "committed" {
@@ -218,7 +218,7 @@ func TestImportsMoka(t *testing.T) {
 		t.Fatalf("outlet_sales after overlap: %d", n)
 	}
 	// list entries carry no preview records
-	for _, it := range e.must(200, "GET", "/api/v1/imports/moka_item_details", nil).JSON["imports"].([]any) {
+	for _, it := range e.must(200, "GET", "/api/v1/imports/moka_item_details", nil).JSON["data"].([]any) {
 		if _, ok := it.(map[string]any)["preview"]; ok {
 			t.Fatalf("list entry with preview: %v", it)
 		}

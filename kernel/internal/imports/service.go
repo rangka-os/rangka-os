@@ -41,6 +41,9 @@ type Entry struct {
 	CreatedBy   string           `json:"created_by"`
 	CreatedAt   time.Time        `json:"created_at"`
 	CommittedAt *time.Time       `json:"committed_at"`
+
+	order   *previewOrder // key order of Preview in JSON (order.go)
+	listing bool          // List leaves the preview out
 }
 
 const (
@@ -370,36 +373,42 @@ func (s *Service) Get(ctx context.Context, a engine.Actor, name, id string) (*En
 		return nil, err
 	}
 	ent, _, err := s.load(ctx, a, name, id, false)
+	if ent != nil {
+		ent.order = orderFor(s.Engine.Reg(), s.Engine.Reg().Imports[name])
+	}
 	return ent, err
 }
 
-// ListItem is an entry as List returns it: without the preview records (Get has them).
-type ListItem struct {
-	*Entry
-	// Preview shadows Entry.Preview and is always nil, so the JSON has no "preview".
-	Preview *struct{} `json:"preview,omitempty"`
-}
-
-// List returns the newest entries of the caller's org for one import.
-func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]ListItem, error) {
+// List returns the newest entries of the caller's org for one import (without their previews; Get has them)
+// and how many entries the import has in all.
+func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]*Entry, int, error) {
 	if _, err := s.imp(ctx, a, name); err != nil {
-		return nil, err
+		return nil, 0, err
 	}
 	sql := strings.Replace(selectEntry, "i.preview::text as preview", "null as preview", 1)
 	res, err := s.DB.Query(ctx, sql+` from rk_imports i where i.org_id = $1 and i.import = $2 order by i.created_at desc, i.id desc limit `+fmt.Sprint(listLimit),
 		a.Org, name)
 	if err != nil {
-		return nil, err
+		return nil, 0, err
 	}
-	out := make([]ListItem, 0, len(res.Rows))
+	out := make([]*Entry, 0, len(res.Rows))
 	for _, row := range res.Maps() {
 		ent, err := scanEntry(row)
 		if err != nil {
-			return nil, err
+			return nil, 0, err
 		}
-		out = append(out, ListItem{Entry: ent})
+		ent.listing = true
+		out = append(out, ent)
 	}
-	return out, nil
+	cnt, err := s.DB.Query(ctx, `select count(*) from rk_imports where org_id = $1 and import = $2`, a.Org, name)
+	if err != nil {
+		return nil, 0, err
+	}
+	total := len(out)
+	if len(cnt.Rows) == 1 {
+		total = int(toInt64(cnt.Rows[0][0]))
+	}
+	return out, total, nil
 }
 
 // selectEntry reads entries with dup_file: another entry committed the same file for the same scope.

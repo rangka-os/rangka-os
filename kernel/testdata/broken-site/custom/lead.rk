@@ -2,3 +2,5 @@
 model: deal
 fields:
   - {name: x_segment, type: select, options: [{value: umkm, label: {id: UMKM}}]}
+approvals:
+  - {name: seg, on: cancel, approvers: [sales_manager]}

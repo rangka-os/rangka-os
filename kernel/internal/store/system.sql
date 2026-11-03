@@ -152,3 +152,26 @@ create unique index if not exists rk_imports_committed_file on rk_imports (org_i
 create table if not exists rk_import_keys (
   org_id text not null, import text not null, scope text not null, key_hash text not null, import_id text not null,
   primary key (org_id, import, scope, key_hash));
+
+create table if not exists rk_approvals (
+  id           text primary key,           -- apr_<random>
+  org_id       text not null,
+  model        text not null default '',   -- '' for flow approvals
+  name         text not null default '',   -- record name at request time
+  verb         text not null,              -- submit, cancel, <action>, or flow:<flow>
+  policy       text not null,              -- approvals[].name, or the flow step label
+  label        jsonb,
+  approvers    text[] not null,
+  state        text not null,              -- pending, approved, rejected, void
+  snapshot     text not null,              -- sha256 hex
+  args         jsonb not null default '{}', -- {force} / action args / flow resume state
+  requested_by text not null,
+  requester    jsonb not null,             -- {id, user, roles, human, system} the verb runs as
+  requested_at timestamptz not null default now(),
+  decided_by   text,
+  decided_at   timestamptz,
+  reason       text not null default '',
+  used_at      timestamptz                 -- set when the verb ran with this approval (single-use)
+);
+create index if not exists rk_approvals_org_state_idx on rk_approvals (org_id, state, requested_at desc);
+create index if not exists rk_approvals_record_idx on rk_approvals (org_id, model, name);

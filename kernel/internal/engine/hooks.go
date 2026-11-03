@@ -90,11 +90,14 @@ type ActionOpts struct {
 	FromQueue bool // the job worker runs a queued action
 }
 
-// ActionResult is a hook's result, or the job that will run it.
+// ActionResult is a hook's result, or the job that will run it, or (Held) the approvals it waits for.
 type ActionResult struct {
-	Queued bool           `json:"queued,omitempty"`
-	JobID  int64          `json:"job_id,omitempty"`
-	Result map[string]any `json:"result,omitempty"`
+	Queued    bool             `json:"queued,omitempty"`
+	JobID     int64            `json:"job_id,omitempty"`
+	Result    map[string]any   `json:"result,omitempty"`
+	Held      bool             `json:"held,omitempty"`
+	Approvals []store.Approval `json:"approvals,omitempty"`
+	Record    store.Record     `json:"record,omitempty"`
 }
 
 // ActionAllowed evaluates an action's if: on a record.
@@ -107,65 +110,83 @@ func (e *Engine) ActionAllowed(ctx context.Context, a Actor, m *meta.Model, act 
 }
 
 // RunAction runs a model action's hook on a record; the actor needs write on it. Actions with queue: are put on the queue unless the
-// worker is running them.
+// worker is running them. A matching approval policy holds the action instead (ActionResult.Held).
 func (e *Engine) RunAction(ctx context.Context, a Actor, model, name, action string, args map[string]any, opts ActionOpts) (*ActionResult, error) {
 	var out *ActionResult
 	err := e.run(ctx, a, func(o *op) error {
-		m, err := e.model(model)
-		if err != nil {
-			return err
-		}
-		act := m.Action(action)
-		if act == nil {
-			return notFound("action " + action + " of " + model)
-		}
-		rec, err := o.load(m, name)
-		if err != nil {
-			return err
-		}
-		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(rec))); err != nil {
-			return err
-		}
-		if act.If != "" {
-			v, err := o.scope(m, rec).eval(act.If)
-			if err != nil || v != true {
-				return conflict("action_not_allowed", "Aksi ini tidak bisa dijalankan pada status sekarang")
-			}
-		}
-		if act.Queue != nil && !opts.FromQueue {
-			if e.Queue == nil {
-				return &StatusError{503, "no_queue", "this action runs in the background but the queue is not running"}
-			}
-			attempts := 0
-			if r, ok := act.Queue["retries"]; ok {
-				attempts = int(toInt(r)) + 1
-			}
-			id, err := e.Queue.Enqueue(o.ctx, o.tx, "action", a.Org, map[string]any{"model": model, "name": name, "action": action, "args": args,
-				"actor": map[string]any{"id": a.ID, "user": a.UserName, "roles": a.Roles}}, EnqueueOpts{MaxAttempts: attempts})
-			if err != nil {
-				return err
-			}
-			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "action.queued", model+"/"+name, action+" queued as job "+itoa(id), nil); err != nil {
-				return err
-			}
-			out = &ActionResult{Queued: true, JobID: id}
-			return nil
-		}
-		hook := e.Hooks[act.Hook]
-		if hook == nil {
-			return &StatusError{501, "hook_not_implemented", "hook " + act.Hook + " is not implemented in this kernel"}
-		}
-		res, err := hook(&HookCtx{op: o, Model: m, Record: rec, Args: args})
-		if err != nil {
-			return err
-		}
-		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "action.run", model+"/"+name, action+" ("+act.Hook+")", nil); err != nil {
-			return err
-		}
-		out = &ActionResult{Result: res}
-		return nil
+		var err error
+		out, err = o.runAction(model, name, action, args, opts)
+		return err
 	})
 	return out, err
+}
+
+func (o *op) runAction(model, name, action string, args map[string]any, opts ActionOpts) (*ActionResult, error) {
+	e, a := o.e, o.actor
+	m, err := e.model(model)
+	if err != nil {
+		return nil, err
+	}
+	act := m.Action(action)
+	if act == nil {
+		return nil, notFound("action " + action + " of " + model)
+	}
+	rec, err := o.load(m, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.authorize(m, "write", e.Output(m, copyRecord(rec))); err != nil {
+		return nil, err
+	}
+	if act.If != "" {
+		v, err := o.scope(m, rec).eval(act.If)
+		if err != nil || v != true {
+			return nil, conflict("action_not_allowed", "Aksi ini tidak bisa dijalankan pada status sekarang")
+		}
+	}
+	if !opts.FromQueue { // the request was held, if at all, before it was queued
+		held := args
+		if held == nil {
+			held = map[string]any{} // no args and empty args are the same call
+		}
+		pending, all, err := o.hold(m, rec, Snapshot(m, rec), action, map[string]any{"args": held})
+		if err != nil {
+			return nil, err
+		}
+		if len(pending) > 0 {
+			return &ActionResult{Held: true, Approvals: all, Record: e.Output(m, rec)}, nil
+		}
+	}
+	if act.Queue != nil && !opts.FromQueue {
+		if e.Queue == nil {
+			return nil, &StatusError{503, "no_queue", "this action runs in the background but the queue is not running"}
+		}
+		attempts := 0
+		if r, ok := act.Queue["retries"]; ok {
+			attempts = int(toInt(r)) + 1
+		}
+		id, err := e.Queue.Enqueue(o.ctx, o.tx, "action", a.Org, map[string]any{"model": model, "name": name, "action": action, "args": args,
+			"actor": map[string]any{"id": a.ID, "user": a.UserName, "roles": a.Roles}}, EnqueueOpts{MaxAttempts: attempts})
+		if err != nil {
+			return nil, err
+		}
+		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "action.queued", model+"/"+name, action+" queued as job "+itoa(id), nil); err != nil {
+			return nil, err
+		}
+		return &ActionResult{Queued: true, JobID: id}, nil
+	}
+	hook := e.Hooks[act.Hook]
+	if hook == nil {
+		return nil, &StatusError{501, "hook_not_implemented", "hook " + act.Hook + " is not implemented in this kernel"}
+	}
+	res, err := hook(&HookCtx{op: o, Model: m, Record: rec, Args: args})
+	if err != nil {
+		return nil, err
+	}
+	if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "action.run", model+"/"+name, action+" ("+act.Hook+")", nil); err != nil {
+		return nil, err
+	}
+	return &ActionResult{Result: res}, nil
 }
 
 func itoa(n int64) string {

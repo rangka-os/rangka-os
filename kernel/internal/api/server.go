@@ -132,6 +132,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		s.Hub.ServeSSE(w, r, c.actor.Org, s.eventAllow(r.Context(), c.actor))
 	}))
+	// approvals
+	mux.HandleFunc("GET /api/v1/approvals", a(s.listApprovals))
+	mux.HandleFunc("GET /api/v1/approvals/{id}", a(s.getApproval))
+	mux.HandleFunc("POST /api/v1/approvals/{id}/approve", a(s.decideApproval(true)))
+	mux.HandleFunc("POST /api/v1/approvals/{id}/reject", a(s.decideApproval(false)))
 	// change sets
 	mux.HandleFunc("GET /api/v1/changesets", a(s.listChangesets))
 	mux.HandleFunc("POST /api/v1/changesets", a(s.proposeChangeset))

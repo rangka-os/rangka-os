@@ -214,6 +214,9 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 		for _, k := range []string{"where", "if"} {
 			v.parens(p, w+"/"+k, st[k])
 		}
+		if ap, ok := st["approve"].(map[string]any); ok {
+			v.parens(p, w+"/approve/when", ap["when"])
+		}
 		if set, ok := st["set"].(map[string]any); ok {
 			for _, fk := range sortedKeys(set) {
 				v.parens(p, w+"/set/"+fk, set[fk])
@@ -655,6 +658,46 @@ func (v *validator) overlays(all map[string]vis) {
 				chk = ""
 			}
 			v.exprTo(true, p, fmt.Sprintf("rules/%d/check", i), chk, merged, visible)
+		}
+		apprNames := map[string]bool{}
+		for _, av := range asList(own.Raw["approvals"]) {
+			apprNames[pyStr(asMap(av)["name"])] = true
+		}
+		roles := map[string]bool{}
+		for _, an := range append([]string{a.Name}, append(keys(a.Requires), keys(a.Optional)...)...) {
+			if ap := v.reg.App[an]; ap != nil {
+				for _, r := range ap.Roles {
+					roles[r] = true
+				}
+			}
+		}
+		for i, av := range asList(o["approvals"]) {
+			am, ok := av.(map[string]any)
+			if !ok {
+				continue
+			}
+			on := pyStr(am["on"])
+			ap := fmt.Sprintf("approvals/%d", i)
+			if on == "submit" || on == "cancel" {
+				if !boolean(own.Raw, "is_submittable") {
+					v.rep.extra("error", p, ap+"/on", "not_submittable", fmt.Sprintf("approvals on %s need is_submittable: true", on))
+				}
+			} else if !contains(actionNames(own), on) {
+				v.rep.extra("error", p, ap+"/on", "unknown_verb", fmt.Sprintf(`"%s" is not submit, cancel or an action of this model`, on))
+			}
+			if n := pyStr(am["name"]); apprNames[n] {
+				v.rep.extra("error", p, ap+"/name", "duplicate_approval", fmt.Sprintf(`"%s" is declared twice`, n))
+			} else {
+				apprNames[n] = true
+			}
+			if e, ok := am["when"]; ok {
+				v.exprTo(true, p, ap+"/when", e, merged, visible)
+			}
+			for j, r := range asList(am["approvers"]) {
+				if !roles[pyStr(r)] {
+					v.rep.extra("warn", p, fmt.Sprintf("%s/approvers/%d", ap, j), "unknown_role", fmt.Sprintf(`role "%s" has no file in roles/ (it must exist at install)`, pyStr(r)))
+				}
+			}
 		}
 		views := asMap(own.Raw["views"])
 		var placed, cols []string

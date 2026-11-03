@@ -21,6 +21,7 @@ crm/models/deal.rk:6:14  error  unknown_field  title_field  "deal_title" is not 
 crm/models/deal.rk:89:12  error  unknown_field  rules/0/check  `stagee` in `stagee != 'lost' || lost_reason != '' || customer.payment_dayz > 0` is not a field; did you mean "stage"?
 crm/models/deal.rk:94:12  error  cel_syntax  rules/1/check  unbalanced parentheses in `todya() == expected_close || (stage == 'won'`
 crm/models/deal.rk:107:11  warn   unknown_role  permissions/1/role  role "sales_director" has no file in roles/ (it must exist at install)
+crm/models/deal.rk:148:19  error  not_submittable  approvals/0/on  approvals on submit need is_submittable: true
 crm/models/deal.rk:122:9  error  unknown_field  views/list/columns/6  "amount" is not a field
 crm/models/deal.rk:125:15  error  bad_group_by  views/kanban/group_by  kanban columns need a select field; "value" is currencyy
 crm/models/deal.rk:128:10  error  not_numeric  views/kanban/sum  "value" cannot be summed
@@ -49,7 +50,13 @@ crm/dashboards/crm_overview.rk:103:13  error  bad_field_type  widgets/10/period 
 crm/dashboards/extra_board.rk:2:7  warn   unlisted_dashboard  name  add "extra_board" to dashboards in app.rk or nobody can open it
 sales/models/sales_invoice.rk:18:9  error  unknown_model  fields/1/to  "outlet" is not a model in this app or its dependencies
 sales/models/sales_invoice.rk:34:9  error  not_child  fields/4/of  "sales_invoice_item" must set is_child: true to be used in a table field
+sales/models/sales_invoice.rk:86:19  error  unknown_verb  approvals/0/on  "post" is not submit, cancel or an action of this model
+sales/models/sales_invoice.rk:86:37  warn   unknown_role  approvals/0/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
+sales/models/sales_invoice.rk:87:12  error  duplicate_approval  approvals/1/name  "a" is declared twice
+sales/models/sales_invoice.rk:87:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
+sales/models/sales_invoice.rk:87:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
 sales/models/sales_invoice.rk:9:3  error  compute_cycle  fields/grand_total/compute  grand_total → grand_total
+crm/flows/approve_gate.rk:5:50  error  cel_syntax  steps/0/approve/when  unbalanced parentheses in `size(x > 0`
 crm/flows/bad_flow.rk:10:5  error  schema  steps/2  {'if': 'size(won) > 0', 'then': [{'find_all': 'leadz', 'where': "status == 'new'", 'as': 'fresh'}, {'call': 'whatsapp_business.send_textt', 'with': {'to': "'…
 crm/flows/bad_flow.rk:17:5  error  schema  steps/4  {'update': 'won', 'set': {'stage': "'won'"}, 'where': '(x'} is not valid under any of the given schemas
 crm/flows/bad_flow.rk:2:7  error  name_mismatch  name  flow name "bad_flows" must match the file name "bad_flow"
@@ -78,4 +85,4 @@ sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-71 error(s), 8 warning(s)
+76 error(s), 10 warning(s)

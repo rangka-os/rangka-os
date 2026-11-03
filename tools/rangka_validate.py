@@ -900,6 +900,14 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             r = tax.get("dpp_ratio") if isinstance(tax, dict) else None
             if isinstance(r, str) and parse_dpp_ratio(r) is None:
                 rep.add("error", cp, where, "bad_dpp_ratio", f'dpp_ratio "{r}" must be two positive whole numbers like 11/12')
+        pkp_where = [("org/pkp", cfg.get("org"))]
+        for oid in sorted(orgs):
+            oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None
+            if isinstance(oc, dict):
+                pkp_where.append((f"orgs/{oid}/config/org/pkp", oc.get("org")))
+        for where, org in pkp_where:
+            if isinstance(org, dict) and "pkp" in org:
+                rep.add("warn", cp, where, "org_pkp_ignored", "pkp pindah ke tax.pkp; org.pkp diabaikan (contract 0010 §8)")
     for tn in sorted(themes):
         p, d = themes[tn]
         ext = d.get("extends") or ""

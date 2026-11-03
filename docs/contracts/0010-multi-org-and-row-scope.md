@@ -181,6 +181,9 @@ org (`Actor.Org`):
   same normalised values) and `OrgIdentity(org).pkp` (print's `.Org.pkp`), so a template and a model default
   cannot disagree. PKP status is `tax.pkp` only: an `org:` `pkp` key is ignored. PPN is charged only for an
   org declared PKP.
+- An `org:` `pkp` key (site `org/pkp` or an org's `config.org.pkp`) is read by nothing: both validators warn
+  `org_pkp_ignored` ("pkp pindah ke tax.pkp; org.pkp diabaikan (contract 0010 §8)") so a site that set only
+  `org: {pkp: true}` does not silently stop charging PPN.
 - `tax:` deep-merges (§2): an org with `config: {tax: {pkp: false}}` keeps the site's `ppn_rate` and
   `dpp_ratio`.
 - A model field named `org` or `tax` shadows the global inside that model's expressions, as for `user`, and

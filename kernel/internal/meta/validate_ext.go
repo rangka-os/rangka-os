@@ -463,7 +463,7 @@ func (v *validator) site(all map[string]vis) {
 		}
 		type dppAt struct {
 			where string
-			tax   map[string]any
+			tax   map[string]any // the map holding the key checked
 		}
 		dpp := []dppAt{{"tax/dpp_ratio", asMap(c["tax"])}}
 		for _, id := range sortedKeys(asMap(c["orgs"])) {
@@ -476,6 +476,18 @@ func (v *validator) site(all map[string]vis) {
 				if _, _, ok := ParseDPPRatio(r); !ok {
 					v.rep.extra("error", cfg.Path, d.where, "bad_dpp_ratio", fmt.Sprintf(`dpp_ratio "%s" must be two positive whole numbers like 11/12`, r))
 				}
+			}
+		}
+		// PKP status moved to tax.pkp (contract 0010 §8): an org: pkp key is read by nothing, so say so
+		pkpAt := []dppAt{{"org/pkp", asMap(c["org"])}}
+		for _, id := range sortedKeys(asMap(c["orgs"])) {
+			if oc, ok := asMap(asMap(c["orgs"])[id])["config"].(map[string]any); ok {
+				pkpAt = append(pkpAt, dppAt{"orgs/" + id + "/config/org/pkp", asMap(oc["org"])})
+			}
+		}
+		for _, d := range pkpAt {
+			if _, set := d.tax["pkp"]; set {
+				v.rep.extra("warn", cfg.Path, d.where, "org_pkp_ignored", "pkp pindah ke tax.pkp; org.pkp diabaikan (contract 0010 §8)")
 			}
 		}
 	}

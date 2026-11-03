@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+locale: id-ID
+currency: IDR
+timezone: Asia/Jakarta
+apps: [stok]
+# two orgs of one installation: the RLS check proves one cannot read the other's rows
+orgs:
+  org_a: {name: PT Alpha Contoh, code: ALP}
+  org_b: {name: PT Beta Contoh, code: BTA}

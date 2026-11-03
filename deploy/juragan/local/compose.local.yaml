@@ -1,0 +1,54 @@
+# Local override: self-signed TLS on *.localhost, Caddy on 8081/8443. The image is rangka:local,
+# built by local/e2e.sh (RANGKA_IMAGE in local/work/.env).
+services:
+  caddy:
+    ports: !override
+      - "8081:80"
+      - "8443:443"
+
+  # Off-box storage for the backup test: a throwaway S3 server (MinIO no longer publishes images).
+  offbox:
+    image: rustfs/rustfs:1.0.4
+    environment:
+      RUSTFS_ACCESS_KEY: ${RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID:?}
+      RUSTFS_SECRET_KEY: ${RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY:?}
+    volumes:
+      - offbox_data:/data
+    healthcheck:
+      test: ["CMD-SHELL", "curl -sf http://127.0.0.1:9000/health"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  # Receives the success ping of backup.sh; every request shows up in `docker compose logs pinger`.
+  pinger:
+    image: python:3.12-alpine
+    command: ["python", "-m", "http.server", "8080", "--directory", "/tmp"]
+
+  # Third kernel for the RLS check (rls-check.sh): its own database `rls`, owned by the plain role `rlsapp`
+  # (created by the check, not by initdb), on the two-org fixture. Started by name, never by `up`.
+  rls:
+    profiles: ["rls"]
+    build:
+      context: ./kernel
+      args:
+        RANGKA_IMAGE: ${RANGKA_IMAGE:?}
+    image: juragan-kernel:${RANGKA_TAG:-custom}
+    init: true
+    shm_size: 256m
+    command: ["serve"]
+    environment:
+      DATABASE_URL: postgres://rlsapp:${RLS_DB_PASSWORD:-}@postgres:5432/rls?sslmode=disable
+      RANGKA_ORG: org_a
+      RANGKA_APPS: /srv/apps
+      RANGKA_SITE: /srv/site
+      RANGKA_ADDR: ":8080"
+    ports: ["127.0.0.1::8080"]
+    volumes:
+      - ${RLS_DIR:-/nonexistent}:/srv
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  offbox_data:

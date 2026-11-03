@@ -1,0 +1,138 @@
+# juragan.ai: two Rangka pilots (jasa, fnb) on one VM. Secrets come from .env (see .env.example).
+name: juragan
+
+x-logging: &logging
+  driver: json-file
+  options:
+    max-size: 10m
+    max-file: "5"
+
+# The pilot kernel = the release binary + headless Chromium for PDF print (kernel/Dockerfile). Chromium needs more
+# /dev/shm than Docker's 64 MB default. Memory: each PDF render is 100-200 MB for up to 30 s; RANGKA_PDF_CONCURRENCY
+# (default 2) caps the renders per kernel, see RUNBOOK section 3.
+x-kernel: &kernel
+  build:
+    context: ./kernel
+    args:
+      RANGKA_IMAGE: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
+  image: juragan-kernel:${RANGKA_TAG:-custom}
+  init: true
+  shm_size: 256m
+  restart: unless-stopped
+  logging: *logging
+  command: ["serve"]
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      JASA_DB_PASSWORD: ${JASA_DB_PASSWORD:?}
+      FNB_DB_PASSWORD: ${FNB_DB_PASSWORD:?}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/initdb:/docker-entrypoint-initdb.d:ro
+    healthcheck: # TCP only: the init-time server listens on the socket alone, so healthy means init is done
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  jasa:
+    <<: *kernel
+    environment:
+      DATABASE_URL: postgres://jasa:${JASA_DB_PASSWORD:?}@postgres:5432/jasa?sslmode=disable
+      RANGKA_ORG: ${JASA_ORG:?}
+      RANGKA_APPS: /srv/apps
+      RANGKA_SITE: /srv/site
+      RANGKA_DEPLOY_TARGET: docker
+      RANGKA_ENV: production
+      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, connectors, site, data only)
+      RANGKA_ADDR: ":8080"
+      RANGKA_OWNER_EMAIL: ${RANGKA_OWNER_EMAIL:-}
+      RANGKA_OWNER_PASSWORD: ${RANGKA_OWNER_PASSWORD:-}
+    volumes:
+      - ${PILOTS_DIR:?}/jasa:/srv
+
+  fnb:
+    <<: *kernel
+    environment:
+      DATABASE_URL: postgres://fnb:${FNB_DB_PASSWORD:?}@postgres:5432/fnb?sslmode=disable
+      RANGKA_ORG: ${FNB_ORG:?}
+      RANGKA_APPS: /srv/apps
+      RANGKA_SITE: /srv/site
+      RANGKA_DEPLOY_TARGET: docker
+      RANGKA_ENV: production
+      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, connectors, site, data only)
+      RANGKA_ADDR: ":8080"
+      RANGKA_OWNER_EMAIL: ${RANGKA_OWNER_EMAIL:-}
+      RANGKA_OWNER_PASSWORD: ${RANGKA_OWNER_PASSWORD:-}
+    volumes:
+      - ${PILOTS_DIR:?}/fnb:/srv
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    logging: *logging
+    environment:
+      JASA_HOST: ${JASA_HOST:?}
+      FNB_HOST: ${FNB_HOST:?}
+      CADDY_TLS: ${CADDY_TLS:?}
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+    depends_on:
+      - jasa
+      - fnb
+
+  # Nightly backup: `docker compose run --rm backup all` (see systemd/). Profile tools: never started by `up`.
+  backup:
+    profiles: ["tools"]
+    logging: *logging
+    build:
+      context: ./backup
+      args:
+        RANGKA_IMAGE: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
+    entrypoint: ["/usr/local/bin/backup.sh"]
+    init: true # PID 1 forwards TERM (docker stop, systemd stop) so backup.sh can clean up
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      JASA_DB_PASSWORD: ${JASA_DB_PASSWORD:?}
+      FNB_DB_PASSWORD: ${FNB_DB_PASSWORD:?}
+      JASA_ORG: ${JASA_ORG:-}
+      FNB_ORG: ${FNB_ORG:-}
+      BACKUP_BUCKET: ${BACKUP_BUCKET:-}
+      BACKUP_METHOD: ${BACKUP_METHOD:-pg_dump}
+      RANGKA_TAG: ${RANGKA_TAG:-}
+      RANGKA_IMAGE: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
+      BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
+      BACKUP_ALLOW_PLAINTEXT: ${BACKUP_ALLOW_PLAINTEXT:-0}
+      BACKUP_KEEP_LOCAL: ${BACKUP_KEEP_LOCAL:-7}
+      BACKUP_PING_URL: ${BACKUP_PING_URL:-}
+      BACKUP_RCLONE_RETRIES: ${BACKUP_RCLONE_RETRIES:-3}
+      BACKUP_RCLONE_LOW_LEVEL_RETRIES: ${BACKUP_RCLONE_LOW_LEVEL_RETRIES:-10}
+      BACKUP_RCLONE_CONTIMEOUT: ${BACKUP_RCLONE_CONTIMEOUT:-30s}
+      RCLONE_CONFIG_OFFBOX_TYPE: ${RCLONE_CONFIG_OFFBOX_TYPE:-s3}
+      RCLONE_CONFIG_OFFBOX_PROVIDER: ${RCLONE_CONFIG_OFFBOX_PROVIDER:-}
+      RCLONE_CONFIG_OFFBOX_REGION: ${RCLONE_CONFIG_OFFBOX_REGION:-}
+      RCLONE_CONFIG_OFFBOX_ENDPOINT: ${RCLONE_CONFIG_OFFBOX_ENDPOINT:-}
+      RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID: ${RCLONE_CONFIG_OFFBOX_ACCESS_KEY_ID:-}
+      RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY: ${RCLONE_CONFIG_OFFBOX_SECRET_ACCESS_KEY:-}
+    volumes:
+      - ${PILOTS_DIR:?}/jasa:/pilots/jasa:ro
+      - ${PILOTS_DIR:?}/fnb:/pilots/fnb:ro
+      - ${BACKUP_DIR:-/opt/juragan/backups}:/backups
+
+volumes:
+  pgdata:
+  caddy_data:

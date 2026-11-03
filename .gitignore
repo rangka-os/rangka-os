@@ -5,3 +5,9 @@
 kernel/bin/
 __pycache__/
 dist/
+
+# juragan.ai deployment: secrets and local test workspace
+deploy/juragan/.env
+deploy/juragan/local/work/
+deploy/juragan/drill.log
+deploy/juragan/backups/

@@ -1,0 +1,22 @@
+# Local test image: the same binary and base as deploy/Dockerfile, built from this checkout.
+# Build context is the rangka-os repo root (or any other checkout, see RANGKA_SRC in e2e.sh):
+#   docker build -t rangka:local -f deploy/juragan/local/Dockerfile.rangka .
+FROM golang:1.24 AS build
+WORKDIR /src
+# modules first: this layer is cached until go.mod or go.sum changes (pgx, x/crypto and the rest)
+COPY kernel/go.mod kernel/go.sum ./kernel/
+RUN cd kernel && go mod download
+COPY kernel ./kernel
+COPY web ./web
+COPY templates ./templates
+COPY tools ./tools
+# bundle-assets warns (does not fail) when the sibling rangka-apps checkout is absent
+RUN cd kernel && sh scripts/bundle-assets.sh && CGO_ENABLED=0 go build -trimpath -o /out/rangka ./cmd/rangka
+
+FROM gcr.io/distroless/static-debian12:nonroot
+COPY --from=build /out/rangka /usr/local/bin/rangka
+WORKDIR /srv
+ENV RANGKA_ADDR=:8080
+EXPOSE 8080
+ENTRYPOINT ["/usr/local/bin/rangka"]
+CMD ["serve"]

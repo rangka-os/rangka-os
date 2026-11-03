@@ -46,3 +46,12 @@ table_stats() {
 stats_to_tables_json() {
   jq -R -s 'split("\n") | map(select(length > 0) | split("\t") | {key: .[0], value: {rows: (.[1] | tonumber), md5: .[2]}}) | from_entries'
 }
+
+# migrate_statements <file>: the number N from the last "-- would apply N statement(s);" line of a
+# `rangka migrate --dry-run` output; fails (prints nothing) when there is no such line.
+migrate_statements() {
+  local n
+  n="$(sed -n 's/^-- would apply \([0-9][0-9]*\) statement(s);.*/\1/p' "$1" | tail -1)"
+  [ -n "$n" ] || return 1
+  echo "$n"
+}

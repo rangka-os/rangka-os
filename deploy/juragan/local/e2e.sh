@@ -20,6 +20,9 @@ OWNER_EMAIL=owner@e2e.localhost
 
 APPS_REPO="${RANGKA_APPS_REPO:-$(cd "$(git -C "$REPO" rev-parse --path-format=absolute --git-common-dir)/../.." && pwd)/rangka-apps}"
 
+# shellcheck source-path=SCRIPTDIR source=../backup/lib.sh
+. "$DEPLOY/backup/lib.sh"
+
 PASS=0
 FAIL=0
 ok() { PASS=$((PASS + 1)); echo "  ok   $*"; }
@@ -49,6 +52,15 @@ cleanup() {
   exit "$rc"
 }
 
+# psql_as <role> <db> <psql args...>: runs psql in the postgres container as a pilot role; the password goes
+# through the environment (PGPASSWORD), never argv.
+psql_as() {
+  local role="$1" db="$2" pw
+  shift 2
+  pw="$(grep "^$(tr '[:lower:]' '[:upper:]' <<<"$role")_DB_PASSWORD=" "$WORK/.env" | cut -d= -f2)"
+  PGPASSWORD="$pw" dc exec -T -e PGPASSWORD postgres psql -h localhost -U "$role" -d "$db" "$@"
+}
+
 # curl against a pilot host on the local HTTPS port, self-signed cert accepted.
 https() { # https <host> <curl args...>
   local host="$1"; shift
@@ -64,7 +76,7 @@ prepare() {
   mkdir -p "$WORK/pilots"
   for p in jasa fnb; do
     local d="$WORK/pilots/$p"
-    mkdir -p "$d/data/files"
+    mkdir -p "$d/data/files" "$d/backups" # backups/ = RANGKA_BACKUP_DIR, must be writable by the kernel
     cp -R "$APPS_REPO/apps" "$d/apps"
     cp -R "$APPS_REPO/fixtures" "$d/fixtures"
     cp -R "$APPS_REPO/sites/kopi-senja" "$d/site"
@@ -154,11 +166,9 @@ section_stack() {
 
   # database isolation: role jasa is refused on database fnb
   local out
-  out="$(dc exec -T -e PGPASSWORD="$(grep '^JASA_DB_PASSWORD=' "$WORK/.env" | cut -d= -f2)" postgres \
-    psql -h localhost -U jasa -d fnb -c 'select 1' 2>&1 || true)"
+  out="$(psql_as jasa fnb -c 'select 1' 2>&1 || true)"
   if grep -q 'permission denied for database' <<<"$out"; then ok "role jasa refused on database fnb"; else bad "isolation: $out"; fi
-  out="$(dc exec -T -e PGPASSWORD="$(grep '^FNB_DB_PASSWORD=' "$WORK/.env" | cut -d= -f2)" postgres \
-    psql -h localhost -U fnb -d jasa -c 'select 1' 2>&1 || true)"
+  out="$(psql_as fnb jasa -c 'select 1' 2>&1 || true)"
   if grep -q 'permission denied for database' <<<"$out"; then ok "role fnb refused on database jasa"; else bad "isolation: $out"; fi
 
   # plain HTTP redirects to HTTPS
@@ -198,7 +208,7 @@ section_stack() {
 # Runs the backup container; stdout of the container, exit status preserved.
 run_backup() { dc run --rm -T backup "$@"; }
 
-# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok members=ok apps=ok rk=<n> total=<rows> lead=<rows> method=<m>".
+# Decrypts an archive from the backups dir inside the backup image and prints "sha=ok members=ok apps=ok nobackups=ok rk=<n> total=<rows> lead=<rows> method=<m>".
 # shellcheck disable=SC2016 # the script runs inside the container
 INSPECT='set -euo pipefail
 d="$(mktemp -d)"; cd "$d"
@@ -206,6 +216,7 @@ age -d -i /age.txt "/backups/$1/$2" | tar -x
 sha256sum -c SHA256SUMS >/dev/null && printf "sha=ok "
 [ "$(ls | LC_ALL=C sort | tr "\n" " ")" = "SHA256SUMS apps.tar db.dump files.tar manifest.json site.tar " ] && printf "members=ok "
 tar -tf apps.tar | grep -q "^apps/" && printf "apps=ok "
+[ -z "$(for t in site files apps; do tar -tf $t.tar; done | grep "^backups")" ] && printf "nobackups=ok "
 jq -r "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method)\"" manifest.json'
 inspect_archive() { # inspect_archive <pilot> <archive file name>
   dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" --entrypoint bash backup -c "$INSPECT" _ "$1" "$2"
@@ -254,8 +265,8 @@ section_backup() {
   s_fnb="$(inspect_archive fnb "$f_fnb" 2>/dev/null)" || s_fnb=""
   for p in jasa fnb; do
     local s="s_$p"
-    if [[ "${!s}" =~ ^sha=ok\ members=ok\ apps=ok\ rk=([0-9]+)\ total=([0-9]+) ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
-      ok "$p archive decrypts, SHA256SUMS verify, members incl. apps.tar, ${BASH_REMATCH[1]} rk_ tables with rows (${!s})"
+    if [[ "${!s}" =~ ^sha=ok\ members=ok\ apps=ok\ nobackups=ok\ rk=([0-9]+)\ total=([0-9]+) ]] && [ "${BASH_REMATCH[1]}" -gt 0 ]; then
+      ok "$p archive decrypts, SHA256SUMS verify, members incl. apps.tar, no backups/, ${BASH_REMATCH[1]} rk_ tables with rows (${!s})"
     else
       bad "$p archive inspection: ${!s}"
     fi
@@ -346,8 +357,10 @@ section_drill() {
   [ "$rc" = 0 ] || echo "$out" >&2
   for p in jasa fnb; do
     if grep -q "^DRILL PASSED $p $p-[0-9TZ]*[.]tar[.]age " <<<"$out"; then ok "DRILL PASSED $p"; else bad "no DRILL PASSED $p"; fi
-    if grep -q '^restore ok: [0-9]* tables, [0-9]* rows match' <<<"$out"; then ok "$p restore compared the manifest"; else bad "$p: no 'restore ok' line"; fi
   done
+  local seq
+  seq="$(grep -oE '^(restore ok: [0-9]+ tables, [0-9]+ rows match|DRILL PASSED [a-z]+)' <<<"$out" | sed -E 's/^restore ok.*/restore ok/' | tr '\n' ',')"
+  same "each pilot: restore ok (manifest compared) right before its DRILL PASSED" "$seq" "restore ok,DRILL PASSED jasa,restore ok,DRILL PASSED fnb,"
   same "drill.log has both lines" "$(grep -c '^DRILL PASSED' "$WORK/drill.log" 2>/dev/null || true)" 2
   same "no drill project left after success" "$(drill_projects)/$(drill_networks)" 0/0
 
@@ -365,23 +378,52 @@ section_drill() {
   fi
   same "no drill project left after the .age tamper" "$(drill_projects)/$(drill_networks)" 0/0
 
-  # the checksum step itself: decrypt, flip a byte in the middle of the plain tar, run with the .tar
+  # the checksum step itself: decrypt, flip one byte in the middle of the db.dump member's data (offset from the
+  # tar header block), run with the plain .tar
   local plain="$tdir/${newest##*/}"
   plain="${plain%.age}"
   # shellcheck disable=SC2016 # the script runs inside the container
+  local tamper='set -euo pipefail
+age -d -i /age.txt -o "/t/$1" "/backups/jasa/$2"
+line="$(tar -tv --block-number -f "/t/$1" | awk "\$NF == \"db.dump\"")"
+blk="$(awk "{gsub(\":\", \"\", \$2); print \$2}" <<<"$line")"; size="$(awk "{print \$5}" <<<"$line")"
+off=$(( (blk + 1) * 512 + size / 2 ))
+b=$(od -An -tu1 -j "$off" -N1 "/t/$1")
+printf "$(printf "\\x%02x" $(( (b + 1) % 256 )))" | dd of="/t/$1" bs=1 seek="$off" conv=notrunc 2>/dev/null
+echo "flipped byte at offset $off of db.dump (size $size)"'
   dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" -v "$tdir:/t" --entrypoint bash backup \
-    -c 'age -d -i /age.txt -o "/t/$1" "/backups/jasa/$2"' _ "$(basename "$plain")" "$(basename "$newest")"
-  flip_byte "$plain"
+    -c "$tamper" _ "$(basename "$plain")" "$(basename "$newest")" || bad "could not prepare the tampered plain archive"
   rc=0; out="$("${drill[@]}" --pilot jasa --archive "$plain" 2>&1)" || rc=$?
   if [ "$rc" != 0 ] && grep -q 'checksum' <<<"$out" && grep -q 'no database was touched' <<<"$out" && ! grep -q 'pg_restore' <<<"$out"; then
-    ok "flipped byte in the plain archive: fails at the checksum step before any database work"
+    ok "flipped byte inside db.dump: fails at the checksum step before any database work"
   else
     bad "tampered plain archive: rc=$rc: $out"
   fi
   same "no drill project left after the checksum failure" "$(drill_projects)/$(drill_networks)" 0/0
 
+  # a manifest without tables is refused (archive rebuilt with valid sums so only that rule can fail it)
+  # shellcheck disable=SC2016 # the script runs inside the container
+  local notables='set -euo pipefail
+d="$(mktemp -d)"; cd "$d"; tar -xf "/t/$1"
+jq ".tables = {}" manifest.json >m && mv m manifest.json
+sha256sum db.dump site.tar files.tar apps.tar manifest.json >SHA256SUMS
+tar -cf "/t/$2" manifest.json db.dump site.tar files.tar apps.tar SHA256SUMS'
+  rm -f "$plain"
+  # shellcheck disable=SC2016 # runs inside the container
+  dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" -v "$tdir:/t" --entrypoint bash backup \
+    -c 'age -d -i /age.txt -o "/t/$1" "/backups/jasa/$2"' _ clean.tar "$(basename "$newest")" >/dev/null 2>&1 || bad "decrypt clean archive"
+  dc run --rm -T --no-deps -v "$tdir:/t" --entrypoint bash backup -c "$notables" _ clean.tar notables.tar >/dev/null 2>&1 \
+    || bad "could not build the no-tables archive"
+  rc=0; out="$("${drill[@]}" --pilot jasa --archive "$tdir/notables.tar" 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'manifest lists no tables' <<<"$out" && ! grep -q 'DRILL PASSED' <<<"$out"; then
+    ok "manifest with zero tables is refused"
+  else
+    bad "no-tables archive: rc=$rc: $out"
+  fi
+  same "no drill project left after the no-tables archive" "$(drill_projects)/$(drill_networks)" 0/0
+
   # truncated archive
-  head -c $(( $(wc -c <"$plain") / 2 )) "$plain" >"$tdir/trunc.tar"
+  head -c $(( $(wc -c <"$tdir/clean.tar") / 2 )) "$tdir/clean.tar" >"$tdir/trunc.tar"
   rc=0; out="$("${drill[@]}" --pilot jasa --archive "$tdir/trunc.tar" 2>&1)" || rc=$?
   if [ "$rc" != 0 ] && grep -qi 'truncated\|damaged\|checksum' <<<"$out" && ! grep -q 'DRILL PASSED' <<<"$out"; then
     ok "truncated archive is rejected"
@@ -390,17 +432,36 @@ section_drill() {
   fi
   same "no drill project left after the truncated archive" "$(drill_projects)/$(drill_networks)" 0/0
 
+  # a bucket prefix with no archive: clear message, nothing left running
+  sed 's/^BACKUP_BUCKET=.*/BACKUP_BUCKET=juragan-empty/' "$WORK/.env" >"$WORK/.env.emptybucket"
+  dc run --rm -T --no-deps --entrypoint rclone backup mkdir offbox:juragan-empty >/dev/null 2>&1 || bad "create the empty bucket"
+  rc=0; out="$("$DEPLOY/restore-drill.sh" --env "$WORK/.env.emptybucket" --identity "$WORK/age-identity.txt" --log "$WORK/drill.log" --pilot jasa 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'no archive for jasa' <<<"$out" && ! grep -q 'DRILL PASSED' <<<"$out"; then
+    ok "empty off-box prefix fails with 'no archive for jasa'"
+  else
+    bad "empty prefix: rc=$rc: $out"
+  fi
+  same "no drill project left after the empty prefix" "$(drill_projects)/$(drill_networks)" 0/0
+
+  # the migrate gate parses the plan: only exactly 0 passes
+  local f="$WORK/migrate.fake"
+  printf 'CREATE TABLE x (a int);\n-- would apply 10 statement(s); 3 metadata file(s), 0 changed since the last migrate\n' >"$f"
+  same "migrate_statements reads 10, not 0, from 'would apply 10 statement(s)'" "$(migrate_statements "$f")" 10
+  printf -- '-- note: x\n-- would apply 0 statement(s); 3 metadata file(s), 0 changed since the last migrate\n' >"$f"
+  same "migrate_statements reads 0" "$(migrate_statements "$f")" 0
+  printf -- '-- applied 0 statement(s); 3 metadata file(s)\n' >"$f"
+  if migrate_statements "$f" >/dev/null; then bad "migrate_statements accepted an 'applied' line"; else ok "migrate_statements fails when the would-apply line is missing"; fi
+  if grep -q 'migrate_statements' "$DEPLOY/restore-drill.sh"; then ok "restore-drill.sh uses migrate_statements"; else bad "drill does not use migrate_statements"; fi
+
   # restore.sh against the live jasa database is refused, and the live data is unchanged
   local before after live="$WORK/live-srv"
   mkdir -p "$live"
-  before="$(dc exec -T -e PGPASSWORD="$(grep '^JASA_DB_PASSWORD=' "$WORK/.env" | cut -d= -f2)" postgres \
-    psql -h localhost -U jasa -d jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
+  before="$(psql_as jasa jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
   rc=0
   out="$(dc run --rm -T -v "$WORK/age-identity.txt:/run/secrets/age-identity:ro" -v "$live:/restore/jasa" \
     --entrypoint /usr/local/bin/restore.sh backup "/backups/jasa/$(basename "$newest")" jasa 2>&1)" || rc=$?
   if [ "$rc" != 0 ] && grep -q 'not empty' <<<"$out"; then ok "restore into the live jasa database is refused (not empty)"; else bad "live restore: rc=$rc: $out"; fi
-  after="$(dc exec -T -e PGPASSWORD="$(grep '^JASA_DB_PASSWORD=' "$WORK/.env" | cut -d= -f2)" postgres \
-    psql -h localhost -U jasa -d jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
+  after="$(psql_as jasa jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
   if [[ "$before" =~ ^[0-9]+$ ]]; then same "live jasa data unchanged after the refused restore" "$after" "$before"; else bad "could not count live leads: $before"; fi
   same "refused restore wrote nothing to the folder" "$(find "$live" -mindepth 1 | wc -l | tr -d ' ')" 0
   if [ "$(drill_projects)" = 0 ]; then ok "no juragan-drill-* container at the end"; else bad "drill containers left"; fi

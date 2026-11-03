@@ -13,6 +13,8 @@
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck source-path=SCRIPTDIR source=backup/lib.sh
+. "$HERE/backup/lib.sh"
 PILOTS=(jasa fnb)
 PILOT=all ARCHIVE="" IDENTITY="" ENV_FILE="$HERE/.env" LOG="$HERE/drill.log" KEEP=0
 EPOCH="$(date +%s)"
@@ -36,8 +38,10 @@ env_get() { # env_get <key> <default>: value from the env file
 
 secret() { head -c 16 /dev/urandom | od -An -tx1 | tr -d ' \n'; }
 
+# env -u: variables exported in the operator's shell must never override the drill's own folders and passwords
 dc() {
-  docker compose -p "$PROJECT" --env-file "$ENV_FILE" --env-file "$TMP/drill.env" \
+  env -u PILOTS_DIR -u BACKUP_DIR -u POSTGRES_PASSWORD -u JASA_DB_PASSWORD -u FNB_DB_PASSWORD -u RANGKA_ENV -u RANGKA_BACKUP_DIR \
+    docker compose -p "$PROJECT" --env-file "$ENV_FILE" --env-file "$TMP/drill.env" \
     -f "$HERE/compose.yaml" -f "$TMP/override.yaml" "$@"
 }
 
@@ -132,7 +136,8 @@ fetch_archive() {
   dc run --rm -T --no-deps --entrypoint bash backup -c '
     set -euo pipefail
     : "${BACKUP_BUCKET:?BACKUP_BUCKET is not set in the env file}"
-    n="$(rclone lsf --files-only "offbox:$BACKUP_BUCKET/$1/" | grep -E "^$1-[0-9]{8}T[0-9]{6}Z[.]tar([.]age)?$" | sort | tail -1)"
+    list="$(rclone lsf --files-only "offbox:$BACKUP_BUCKET/$1/")" || { echo "cannot list offbox:$BACKUP_BUCKET/$1/" >&2; exit 1; }
+    n="$({ grep -E "^$1-[0-9]{8}T[0-9]{6}Z[.]tar([.]age)?$" <<<"$list" || true; } | sort | tail -1)"
     [ -n "$n" ] || { echo "no archive for $1 in offbox:$BACKUP_BUCKET/$1/" >&2; exit 1; }
     rclone copyto "offbox:$BACKUP_BUCKET/$1/$n" "/backups/in/$n" --s3-no-check-bucket
     echo "$n"' _ "$1" | tail -1
@@ -150,11 +155,15 @@ drill_pilot() {
   dc up -d --wait postgres >/dev/null || { log "$p: postgres did not start"; return 1; }
   dc run --rm -T --no-deps -v "$IDENTITY:/run/secrets/age-identity:ro" -v "$TMP/pilots/$p:/restore/$p" \
     --entrypoint /usr/local/bin/restore.sh backup "/backups/in/$name" "$p" || { log "$p: restore failed"; return 1; }
-  docker run --rm -v "$TMP/pilots:/p" alpine:3.20 chown -R 65532:65532 "/p/$p" || return 1
-  # the kernel image must find the restored schema complete: nothing left to migrate
-  if ! dc run --rm -T --no-deps "$p" migrate --dry-run 2>&1 | tee "$TMP/migrate.out" | grep -q '0 statement(s)'; then
-    log "$p: migrate --dry-run does not report 0 statement(s):"; cat "$TMP/migrate.out" >&2; return 1
+  # /srv/backups (pre-migrate backups of the kernel in production mode) lives outside the archive
+  docker run --rm -v "$TMP/pilots:/p" alpine:3.20 sh -c 'mkdir -p "/p/$0/backups" && chown -R 65532:65532 "/p/$0"' "$p" || return 1
+  # the kernel image must find the restored schema complete: exactly 0 statements left to migrate
+  local pending
+  if ! dc run --rm -T --no-deps "$p" migrate --dry-run >"$TMP/migrate.out" 2>&1; then
+    log "$p: migrate --dry-run failed:"; cat "$TMP/migrate.out" >&2; return 1
   fi
+  pending="$(migrate_statements "$TMP/migrate.out")" || { log "$p: no 'would apply N statement(s)' line in the migrate output:"; cat "$TMP/migrate.out" >&2; return 1; }
+  if [ "$pending" != 0 ]; then log "$p: migrate --dry-run would apply $pending statement(s): the restored schema does not match this binary"; cat "$TMP/migrate.out" >&2; return 1; fi
   dc up -d "$p" >/dev/null || { log "$p: kernel did not start"; return 1; }
   port="$(dc port "$p" 8080 | sed 's/.*://')"
   code=000

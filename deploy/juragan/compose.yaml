@@ -34,6 +34,8 @@ services:
       RANGKA_APPS: /srv/apps
       RANGKA_SITE: /srv/site
       RANGKA_DEPLOY_TARGET: docker
+      RANGKA_ENV: production
+      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, connectors, site, data only)
       RANGKA_ADDR: ":8080"
       RANGKA_OWNER_EMAIL: ${RANGKA_OWNER_EMAIL:-}
       RANGKA_OWNER_PASSWORD: ${RANGKA_OWNER_PASSWORD:-}
@@ -48,6 +50,8 @@ services:
       RANGKA_APPS: /srv/apps
       RANGKA_SITE: /srv/site
       RANGKA_DEPLOY_TARGET: docker
+      RANGKA_ENV: production
+      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, connectors, site, data only)
       RANGKA_ADDR: ":8080"
       RANGKA_OWNER_EMAIL: ${RANGKA_OWNER_EMAIL:-}
       RANGKA_OWNER_PASSWORD: ${RANGKA_OWNER_PASSWORD:-}
@@ -86,6 +90,8 @@ services:
     environment:
       JASA_DB_PASSWORD: ${JASA_DB_PASSWORD:?}
       FNB_DB_PASSWORD: ${FNB_DB_PASSWORD:?}
+      JASA_ORG: ${JASA_ORG:-}
+      FNB_ORG: ${FNB_ORG:-}
       BACKUP_BUCKET: ${BACKUP_BUCKET:-}
       BACKUP_AGE_RECIPIENT: ${BACKUP_AGE_RECIPIENT:-}
       BACKUP_ALLOW_PLAINTEXT: ${BACKUP_ALLOW_PLAINTEXT:-0}

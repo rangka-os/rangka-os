@@ -25,9 +25,12 @@ trap 'exit 143' TERM INT
 
 # check_tar <tar> <extended regex the member names must match>: readable tar with only expected paths.
 check_tar() {
-  local names
+  local names kinds
   names="$(tar -tf "$1")" || die "$1 is damaged (cannot be read as tar)"
   if [ -n "$names" ] && grep -Evq "$2" <<<"$names"; then die "$(basename "$1") has unexpected paths"; fi
+  if grep -Eq '(^|/)[.][.](/|$)' <<<"$names"; then die "$(basename "$1") has a '..' path component"; fi
+  kinds="$(tar -tvf "$1" | cut -c1)"
+  if grep -q '[lh]' <<<"$kinds"; then die "$(basename "$1") contains a symlink or hardlink"; fi
 }
 
 # unpack <tar> <dest dir>
@@ -80,6 +83,7 @@ main() {
     *) die "unknown backup method '$method'" ;;
   esac
   [ -f "$dump_file" ] || die "$dump_file missing in the archive"
+  [ "$(jq '.tables | length' manifest.json)" -ge 1 ] || die "manifest lists no tables: not a usable backup"
   # apps.tar is absent in archives made before it existed; the others are always present
   [ ! -f site.tar ] || check_tar site.tar '^site(/|$)'
   [ ! -f files.tar ] || check_tar files.tar '^data(/|$)'
@@ -101,14 +105,11 @@ main() {
 
   # 4. restore the database
   if [ "$method" = rangka ]; then
-    # contract 0005 §2: `rangka restore <file>` into an empty database; it reads apps/ and site/ to check versions
-    mkdir "$WORK_DIR/srv"
-    for n in apps site; do
-      if [ -f "$n.tar" ]; then unpack "$n.tar" "$WORK_DIR/srv"; fi
-    done
+    # S1 CLI: `rangka restore <file> [--into dir] [--files dir]`; the database comes from $DATABASE_URL (environment,
+    # never argv). It migrates the schema from the archived apps+site, verifies its own sums, refuses a non-empty database.
+    # Untested here until the binary ships it. The tars below are unpacked afterwards too (connectors/, same files again).
     DATABASE_URL="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}" \
-      RANGKA_APPS="$WORK_DIR/srv/apps" RANGKA_SITE="$WORK_DIR/srv/site" \
-      rangka restore "$WORK_DIR/x/rangka.backup" || die "rangka restore failed"
+      rangka restore "$WORK_DIR/x/rangka.backup" --into "$srv" --files "$srv/data/files" || die "rangka restore failed"
   else
     # one transaction: a failure leaves the database empty
     pg_restore --no-owner --role="$p" --exit-on-error --single-transaction -d "$url" db.dump \

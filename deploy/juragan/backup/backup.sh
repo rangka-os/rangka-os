@@ -68,13 +68,19 @@ dump_pg() {
 # dump_rangka <pilot> <url> <work dir>: `rangka backup`, run in the pilot folder; counts before and after,
 # one retry when the data changed in between.
 dump_rangka() {
-  local p="$1" url="$2" dir="$3" attempt before after secret_url
+  local p="$1" url="$2" dir="$3" attempt before after secret_url org_var org_args
   for attempt in 1 2; do
     before="$(table_stats "$url")"
     # the kernel takes the password from DATABASE_URL (environment only, never argv)
     secret_url="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}"
+    # S1 CLI: `rangka backup [--out file] [--org id] [--files dir]` writes a tar.gz with its own manifest and sums;
+    # untested here until the binary ships it. Files live in data/files (system.rk files.path).
+    org_args=()
+    org_var="$(tr '[:lower:]' '[:upper:]' <<<"$p")_ORG"
+    [ -z "${!org_var:-}" ] || org_args=(--org "${!org_var}")
     (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
-      rangka backup --out "$dir/rangka.backup") || { log "rangka backup failed"; return 1; }
+      rangka backup --out "$dir/rangka.backup" "${org_args[@]}" --files "$PILOTS_ROOT/$p/data/files") \
+      || { log "rangka backup failed"; return 1; }
     after="$(table_stats "$url")"
     if [ "$before" = "$after" ]; then
       printf '%s\n' "$after" >"$dir/stats.tsv"

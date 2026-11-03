@@ -117,3 +117,4 @@ create table if not exists rk_changesets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table rk_migrations add column if not exists steps jsonb, add column if not exists risk text, add column if not exists rolled_back_at timestamptz;

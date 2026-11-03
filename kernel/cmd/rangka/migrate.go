@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"os"
@@ -16,9 +17,14 @@ func cmdMigrate(args []string) int {
 	fs := flag.NewFlagSet("migrate", flag.ExitOnError)
 	var c common
 	c.flags(fs)
-	dry := fs.Bool("dry-run", false, "print the statements without running them")
+	dry := fs.Bool("dry-run", false, "print the statements and their risk without running them")
+	destructive := fs.Bool("allow-destructive", false, "allow retypes that may lose data, soft deletes of removed columns/tables and drops of soft-deleted ones older than 30 days")
+	rollback := fs.Int("rollback", 0, "undo the last n migrations instead of migrating")
 	fs.Parse(args)
 	ctx := context.Background()
+	if *rollback > 0 {
+		return migrateRollback(ctx, &c, *rollback, *dry)
+	}
 	reg, err := c.registry()
 	if err != nil {
 		return fail(err)
@@ -28,21 +34,53 @@ func cmdMigrate(args []string) int {
 		return fail(err)
 	}
 	defer db.Close()
-	res, err := store.Migrate(ctx, db, reg, *dry, "migrate")
+	res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{DryRun: *dry, AllowDestructive: *destructive, Source: "migrate"})
+	if err != nil && !errors.Is(err, store.ErrDestructive) {
+		return fail(err)
+	}
+	for _, s := range res.Steps {
+		mark := s.Risk
+		if s.Destructive {
+			mark += ", destructive"
+		}
+		fmt.Printf("%s;  -- %s\n", strings.TrimSpace(s.SQL), mark)
+	}
+	for _, s := range res.Refused {
+		fmt.Printf("-- refused (needs --allow-destructive): %s\n", strings.TrimSpace(s.SQL))
+	}
+	for _, n := range res.Notes {
+		fmt.Println("-- note:", n)
+	}
+	verb := "applied"
+	if *dry || err != nil {
+		verb = "would apply"
+	}
+	fmt.Printf("-- risk %s: %s %d statement(s); %d metadata file(s), %d changed since the last migrate\n", res.Risk, verb, len(res.Statements), res.Files, len(res.Changed))
+	if err != nil {
+		return fail(err)
+	}
+	return 0
+}
+
+// migrateRollback undoes the last n migrations (rangka migrate --rollback n).
+func migrateRollback(ctx context.Context, c *common, n int, dry bool) int {
+	db, err := c.pool(ctx)
+	if err != nil {
+		return fail(err)
+	}
+	defer db.Close()
+	res, err := store.Rollback(ctx, db, n, dry)
 	if err != nil {
 		return fail(err)
 	}
 	for _, s := range res.Statements {
 		fmt.Println(strings.TrimSpace(s) + ";")
 	}
-	for _, n := range res.Notes {
-		fmt.Println("-- note:", n)
+	verb := "rolled back"
+	if dry {
+		verb = "would roll back"
 	}
-	verb := "applied"
-	if *dry {
-		verb = "would apply"
-	}
-	fmt.Printf("-- %s %d statement(s); %d metadata file(s), %d changed since the last migrate\n", verb, len(res.Statements), res.Files, len(res.Changed))
+	fmt.Printf("-- %s %d migration(s) %v; %d statement(s)\n", verb, len(res.Migrations), res.Migrations, len(res.Statements))
 	return 0
 }
 

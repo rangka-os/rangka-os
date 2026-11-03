@@ -15,7 +15,7 @@ func usage() {
 
 Usage:
   rangka validate --apps <dir> [--site <dir>] [--json] [app ...]
-  rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run]
+  rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n]
   rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
   rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--dev-open]
   rangka version

@@ -15,8 +15,8 @@ var SystemFields = map[string]bool{"name": true, "status": true, "created_by": t
 // Functions of the CEL dialect (rangka_validate.py FUNCTIONS).
 var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
 
-// Globals readable in expressions.
-var Globals = map[string]bool{"user": true, "true": true, "false": true, "null": true, "event": true}
+// Globals readable in expressions (org and tax: contract 0010 §8).
+var Globals = map[string]bool{"user": true, "org": true, "tax": true, "true": true, "false": true, "null": true, "event": true}
 
 // CoreHooks are hooks the kernel provides to every app.
 var CoreHooks = []string{"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}

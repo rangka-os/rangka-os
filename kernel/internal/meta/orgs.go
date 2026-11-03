@@ -145,3 +145,89 @@ func scopeFields(x any) []string {
 	}
 	return strList(x)
 }
+
+// Default PPN figures when config.rk tax leaves them out: 12% on a DPP of 11/12 of the price.
+const (
+	DefaultPPNRate = 12
+	DefaultDPPNum  = 11
+	DefaultDPPDen  = 12
+)
+
+// ParseDPPRatio parses a DPP ratio such as "11/12" into its numerator and denominator: two positive whole
+// numbers separated by "/", spaces allowed around them. ok is false for anything else.
+func ParseDPPRatio(s string) (num, den int64, ok bool) {
+	a, b, found := strings.Cut(s, "/")
+	if !found {
+		return 0, 0, false
+	}
+	num, ok1 := positiveInt(strings.TrimSpace(a))
+	den, ok2 := positiveInt(strings.TrimSpace(b))
+	if !ok1 || !ok2 {
+		return 0, 0, false
+	}
+	return num, den, true
+}
+
+func positiveInt(s string) (int64, bool) {
+	if s == "" || len(s) > 9 {
+		return 0, false
+	}
+	var n int64
+	for _, c := range s {
+		if c < '0' || c > '9' {
+			return 0, false
+		}
+		n = n*10 + int64(c-'0')
+	}
+	return n, n > 0
+}
+
+// TaxVar is the CEL tax global for org (contract 0010 §8): ppn_rate (percent), dpp_num and dpp_den from
+// OrgConfig(org, "tax"): orgs.<org>.config.tax when the org sets it (it replaces the site's whole tax: map,
+// as for every OrgConfig key), else the site's tax:. Missing or malformed values give 12, 11 and 12. pkp is
+// present only when that tax: map sets it (the legacy place for the PKP flag).
+func (r *Registry) TaxVar(org string) map[string]any {
+	t := asMap(r.OrgConfig(org, "tax"))
+	out := map[string]any{"ppn_rate": int64(DefaultPPNRate), "dpp_num": int64(DefaultDPPNum), "dpp_den": int64(DefaultDPPDen)}
+	switch v := t["ppn_rate"].(type) {
+	case int64:
+		out["ppn_rate"] = v
+	case int:
+		out["ppn_rate"] = int64(v)
+	case float64:
+		if v == float64(int64(v)) {
+			out["ppn_rate"] = int64(v)
+		} else {
+			out["ppn_rate"] = v
+		}
+	}
+	if s, ok := t["dpp_ratio"].(string); ok {
+		if n, d, ok := ParseDPPRatio(s); ok {
+			out["dpp_num"], out["dpp_den"] = n, d
+		}
+	}
+	if v, ok := t["pkp"].(bool); ok {
+		out["pkp"] = v
+	}
+	return out
+}
+
+// OrgVar is the CEL org global for org (contract 0010 §8): id, code and name from its orgs: entry (the
+// rows SyncOrgs writes to rk_orgs), legal_name, npwp and pkp from OrgConfig(org, "org") (the same data as
+// print's .Org: orgs.<org>.config.org, else the site's org:). pkp falls back to tax.pkp (TaxVar), then to
+// true; text members default to "".
+func (r *Registry) OrgVar(org string) map[string]any {
+	d := asMap(r.OrgConfig(org, "org"))
+	out := map[string]any{"id": org, "code": "", "name": "", "legal_name": str(d, "legal_name"), "npwp": str(d, "npwp")}
+	if o := r.Orgs[org]; o != nil {
+		out["code"], out["name"] = o.Code, o.Name
+	}
+	pkp, ok := d["pkp"].(bool)
+	if !ok {
+		if pkp, ok = r.TaxVar(org)["pkp"].(bool); !ok {
+			pkp = true
+		}
+	}
+	out["pkp"] = pkp
+	return out
+}

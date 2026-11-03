@@ -28,6 +28,10 @@ fields:
     type: currency
     label: {id: Nilai}
     in_list: true
+  - name: tax_rate
+    type: int
+    label: {id: Tarif PPN}
+    default: "org.pkp ? tax.ppn_rate : 0"
 rules:
   - name: value_positive
     on: save

@@ -49,8 +49,9 @@ func Workspace() string {
 	}
 }
 
-// Sibling is Workspace()/rel with symlinks resolved (so filepath.WalkDir descends into it); the test is
-// skipped when that path does not exist.
+// Sibling is Workspace()/rel with symlinks resolved (so filepath.WalkDir descends into it). When that path does
+// not exist the test is skipped, or fails when $CI is non-empty or RANGKA_REQUIRE_SIBLINGS=1 (so a CI run without
+// the sibling checkouts cannot pass by skipping).
 func Sibling(t testing.TB, rel string) string {
 	t.Helper()
 	p := filepath.Join(Workspace(), rel)
@@ -59,8 +60,18 @@ func Sibling(t testing.TB, rel string) string {
 	} else if r, err := filepath.EvalSymlinks(p); err == nil {
 		return r
 	}
-	t.Skipf("sibling checkout %s not found; set RANGKA_WORKSPACE", rel)
+	if RequireSiblings() {
+		t.Fatalf("sibling checkout %s not found (required: CI or RANGKA_REQUIRE_SIBLINGS=1); set RANGKA_WORKSPACE", rel)
+	} else {
+		t.Skipf("sibling checkout %s not found; set RANGKA_WORKSPACE", rel)
+	}
 	return p
+}
+
+// RequireSiblings reports whether a missing sibling checkout is a failure rather than a skip: $CI is non-empty
+// or RANGKA_REQUIRE_SIBLINGS=1.
+func RequireSiblings() bool {
+	return os.Getenv("CI") != "" || os.Getenv("RANGKA_REQUIRE_SIBLINGS") == "1"
 }
 
 // SkipHidden reports whether a directory walk should not descend into d: hidden directories such as .git,

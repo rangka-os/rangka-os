@@ -168,7 +168,7 @@ DELETE /api/v1/attachments/{id}               → 204
 ## Tests
 
 `make test` runs unit tests and integration tests (fresh database per test: `internal/testdb`). Without
-`RANGKA_TEST_DATABASE_URL` the database tests skip. Tests and the Makefile find `rangka-apps` and `rangka-connectors` by searching upward from this checkout (so git worktrees work); set `RANGKA_WORKSPACE` to the folder that holds them to override. Notable tests:
+`RANGKA_TEST_DATABASE_URL` the database tests skip. Tests and the Makefile find `rangka-apps` and `rangka-connectors` by searching upward from this checkout (so git worktrees work); set `RANGKA_WORKSPACE` to the folder that holds them to override. Tests that need them skip when they are missing, except when `CI` is set (any non-empty value) or `RANGKA_REQUIRE_SIBLINGS=1`: then a missing checkout fails the test (`testdb.Sibling`), so a CI run cannot pass by skipping. Notable tests:
 
 * `internal/rk` compares data, positions and error codes with `rkfile.py` on every workspace `.rk` file
   and an edge-case corpus (`testdata/yaml`).

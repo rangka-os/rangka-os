@@ -99,7 +99,8 @@ Starting points that modules copy next to their `print/*.rk`:
 - The field names they use are listed in `templates/print/README.md` for S8 to match or adapt.
 
 ### 7. Validation (`rangka validate`, kernel checks)
-`schema`, `name_mismatch`, `unknown_model` (model or related model), `unknown_field` (match fields), `template_missing`, `template_outside` (path escapes its folder), `template_error` (does not parse with the helpers), `logo_missing`.
+`schema`, `name_mismatch`, `unknown_model` (model or related model), `unknown_field` (match fields), `template_missing`, `template_outside` (path escapes its folder), `template_error` (does not parse with the helpers), `logo_missing`; warning `letterhead_missing`
+(an org listed in `orgs:` has no `letterheads/<id>.rk`, so its documents print without address, bank or signatory).
 
 ### 8. Schema 0.5
 `schema/0.5/print.json` and `schema/0.5/letterhead.json` are new files. The kernel embeds `schema/0.5/*.json` next to 0.4; a kind resolves to its 0.4 schema when one exists, else to 0.5. Other 0.5 files from other streams sit next to these.

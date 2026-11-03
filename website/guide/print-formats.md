@@ -94,7 +94,9 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 
 Rangka picks `letterheads/<org>.rk` for the caller's organisation, then (only for an organisation not listed in
 `orgs:`) `letterhead.rk`, then builds one from the organisation's settings (`org.legal_name`, else the org's
-`name`, and `org.npwp`), which also fill a letterhead file that leaves them out. The partials `letterhead`, `bank_accounts` and `signature` render it.
+`name`, and `org.npwp`), which also fill a letterhead file that leaves them out. The partials `letterhead`,
+`bank_accounts` and `signature` render it. `rangka validate` warns (`letterhead_missing`) for each
+organisation listed in `orgs:` that has no `letterheads/<id>.rk`.
 
 ## Helpers
 

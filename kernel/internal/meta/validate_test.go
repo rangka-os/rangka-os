@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"os"
 	"os/exec"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -292,5 +293,27 @@ func TestSuggest(t *testing.T) {
 	}
 	if got := suggest("zzz", []string{"customer"}); got != "" {
 		t.Errorf("got %q", got)
+	}
+}
+
+// An org listed in orgs: without letterheads/<id>.rk is a warning (its documents lose address, bank and
+// signatory); one with its own letterhead is not.
+func TestLetterheadMissingWarning(t *testing.T) {
+	codes := func(site string) []string {
+		_, rep := ValidateOpts(Options{AppsDir: "../../testdata/broken-print-apps/apps", SiteDir: site}, nil, schema.Embedded())
+		var out []string
+		for _, it := range rep.All() {
+			if it.Code == "letterhead_missing" {
+				out = append(out, it.Level+" "+it.Where+" "+it.Message)
+			}
+		}
+		return out
+	}
+	want := []string{`warn orgs/pt_c org "pt_c" has no letterheads/pt_c.rk; its documents print without address, bank or signatory`}
+	if got := codes("../../testdata/broken-print-site"); !reflect.DeepEqual(got, want) {
+		t.Errorf("broken-print-site: %q", got)
+	}
+	if got := codes(overlaySite); got != nil {
+		t.Errorf("overlay-site (pt_alpha has letterheads/pt_alpha.rk): %q", got)
 	}
 }

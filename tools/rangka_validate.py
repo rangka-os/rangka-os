@@ -655,7 +655,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
             check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
-    check_prints(rep, V, allmodels, only, prints, site, letterheads)
+    check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
 
 
 def check_scope(rep, p, r, allmodels):
@@ -1238,7 +1238,7 @@ def field_names(m):
     return {f"{f['name']}" for f in fields if isinstance(f, dict) and "name" in f}
 
 
-def check_prints(rep, V, allmodels, only, prints, site, letterheads):
+def check_prints(rep, V, allmodels, only, prints, site, letterheads, config):
     """Print formats and letterheads (contract 0008). Go template parse errors (template_error) are kernel only:
     this tool does not parse Go templates, so a template that does not parse passes here."""
     for app, uroot, stem, p, d in prints:
@@ -1279,6 +1279,11 @@ def check_prints(rep, V, allmodels, only, prints, site, letterheads):
             rep.add("error", p, "logo", "logo_missing", f'logo "{logo}" must be a file inside the site folder {os.path.relpath(sdir, rep.root)}')
         elif not os.path.isfile(path):
             rep.add("error", p, "logo", "logo_missing", f'logo file "{logo}" does not exist in {os.path.relpath(sdir, rep.root)}')
+    cp, cfg = config if site and config else (None, None)
+    orgs = cfg.get("orgs") if isinstance(cfg, dict) and isinstance(cfg.get("orgs"), dict) else {}
+    for oid in sorted(o for o in orgs if isinstance(orgs[o], dict)):
+        if oid not in letterheads:
+            rep.add("warn", cp, f"orgs/{oid}", "letterhead_missing", f'org "{oid}" has no letterheads/{oid}.rk; its documents print without address, bank or signatory')
 
 
 def check_print_template(rep, p, raw, uroot):

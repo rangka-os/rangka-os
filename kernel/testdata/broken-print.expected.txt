@@ -10,5 +10,6 @@
 ../../broken-print-site/print/missing.rk:4:11  error  template_missing  template  template file "nope.html" does not exist
 ../../broken-print-site/letterhead.rk:3:7  error  logo_missing  logo  logo "../outside.svg" must be a file inside the site folder ../../broken-print-site
 ../../broken-print-site/letterheads/pt-b.rk:3:7  error  logo_missing  logo  logo file "brand/none.svg" does not exist in ../../broken-print-site
+../../broken-print-site/config.rk:7:9  warn   letterhead_missing  orgs/pt_c  org "pt_c" has no letterheads/pt_c.rk; its documents print without address, bank or signatory
 
-12 error(s), 0 warning(s)
+12 error(s), 1 warning(s)

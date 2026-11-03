@@ -39,6 +39,13 @@ func (v *validator) validatePrints() {
 				}
 			}
 		}
+		if cfg := s.Docs["config.rk"]; cfg != nil {
+			for _, id := range sortedKeysM(v.reg.Orgs) {
+				if s.Letterheads[id] == nil {
+					v.rep.extra("warn", cfg.Path, "orgs/"+id, "letterhead_missing", fmt.Sprintf(`org "%s" has no letterheads/%s.rk; its documents print without address, bank or signatory`, id, id))
+				}
+			}
+		}
 	}
 }
 

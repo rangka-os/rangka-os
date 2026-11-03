@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"strings"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -419,4 +420,57 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// TestListSearchHidesUnreadableLinkTitles: q matches a linked record's display title only when the actor may read
+// that record, so searching cannot reveal names of customers the caller cannot see (model-level or row-level).
+func TestListSearchHidesUnreadableLinkTitles(t *testing.T) {
+	e, owner := setup(t)
+	ctx := context.Background()
+	set := func(model string, grants ...any) {
+		e.Reg().Models[model].Raw["permissions"] = grants
+		e.permCache.Delete(e.Reg().Models[model])
+	}
+	grant := func(role string, extra map[string]any) map[string]any {
+		g := map[string]any{"role": role, "read": true}
+		for k, v := range extra {
+			g[k] = v
+		}
+		return g
+	}
+	all, total, err := e.List(ctx, owner, "sales_invoice", ListOpts{Limit: 1000})
+	if err != nil || total == 0 {
+		t.Fatalf("invoices: %d %v", total, err)
+	}
+	cust, err := store.Get(ctx, e.DB, e.Reg(), owner.Org, e.Reg().Models["customer"], str(all[0]["customer"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := e.Title(ctx, owner, "customer", cust, 0)
+	if title == "" || title == str(cust["name"]) {
+		t.Fatalf("customer title %q should differ from its key", title)
+	}
+	q := strings.ToLower(title)
+	rep := Actor{Org: owner.Org, ID: "rep@example.test", UserName: "USR-900", Roles: []string{"rep"}}
+
+	set("sales_invoice", grant("rep", nil), grant("owner", nil))
+	set("customer", grant("owner", nil)) // rep has no grant on customer
+	rows, n, err := e.List(ctx, rep, "sales_invoice", ListOpts{Q: q, Limit: 1000})
+	if err != nil || n != 0 || len(rows) != 0 {
+		t.Fatalf("rep without customer read: q=%q found %d invoices (%v), want 0", q, n, err)
+	}
+	if _, n, err = e.List(ctx, owner, "sales_invoice", ListOpts{Q: q, Limit: 1000}); err != nil || n == 0 {
+		t.Fatalf("owner: q=%q found %d invoices (%v), want some", q, n, err)
+	}
+
+	// Row-level: rep may read only customers whose name is not this one.
+	set("customer", grant("rep", map[string]any{"if": "name != '" + str(cust["name"]) + "'"}), grant("owner", nil))
+	if _, n, err = e.List(ctx, rep, "sales_invoice", ListOpts{Q: q, Limit: 1000}); err != nil || n != 0 {
+		t.Fatalf("rep with row scope excluding the customer: found %d invoices (%v), want 0", n, err)
+	}
+	// And when the row is readable the title matches again.
+	set("customer", grant("rep", nil), grant("owner", nil))
+	if _, n, err = e.List(ctx, rep, "sales_invoice", ListOpts{Q: q, Limit: 1000}); err != nil || n == 0 {
+		t.Fatalf("rep with customer read: found %d invoices (%v), want some", n, err)
+	}
 }

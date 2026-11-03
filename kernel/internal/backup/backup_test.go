@@ -27,7 +27,6 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-
 const version = "0.4.0-dev"
 
 var fixedNow = func() time.Time { return time.Date(2026, 11, 3, 2, 30, 0, 0, time.UTC) }

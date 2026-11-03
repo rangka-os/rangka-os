@@ -17,6 +17,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/backup"
+	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
@@ -124,6 +125,21 @@ func count(t *testing.T, db *pg.Pool, sql string) int64 {
 func TestBackupRestoreRoundTrip(t *testing.T) {
 	ctx := context.Background()
 	s := newSource(t)
+	// an S6 attachment: a row in rk_attachments and its content-addressed blob in the files dir
+	fs, err := files.NewLocal(s.files)
+	if err != nil {
+		t.Fatal(err)
+	}
+	blob := []byte("%PDF-1.4 bast\n")
+	sum, size, err := fs.Put("kopi-senja", bytes.NewReader(blob))
+	if err != nil {
+		t.Fatal(err)
+	}
+	att := &store.Attachment{Org: "kopi-senja", Model: "deal", Record: "DEAL-00011", Filename: "bast.pdf",
+		ContentType: "application/pdf", Size: size, SHA256: sum, CreatedBy: "ceo@saga.co.id"}
+	if err := store.InsertAttachment(ctx, s.db, att); err != nil {
+		t.Fatal(err)
+	}
 	archive := s.backup(t, "")
 
 	dst := pool(t, testdb.New(t))
@@ -164,6 +180,23 @@ func TestBackupRestoreRoundTrip(t *testing.T) {
 	got, err := os.ReadFile(filepath.Join(o.FilesDir, "lead", "LEAD-001", "kartu nama.jpg"))
 	if err != nil || !bytes.Equal(got, want) {
 		t.Errorf("file = %q, %v; want %q", got, err, want)
+	}
+	row, err := store.GetAttachment(ctx, dst, "kopi-senja", att.ID)
+	if err != nil || row.SHA256 != sum || row.Record != "DEAL-00011" || row.Filename != "bast.pdf" {
+		t.Errorf("restored attachment = %+v, %v", row, err)
+	}
+	rfs, err := files.NewLocal(o.FilesDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if f, err := rfs.Open("kopi-senja", sum); err != nil {
+		t.Errorf("restored blob: %v", err)
+	} else {
+		got, _ := io.ReadAll(f)
+		f.Close()
+		if !bytes.Equal(got, blob) {
+			t.Errorf("restored blob = %q, want %q", got, blob)
+		}
 	}
 	if _, err := os.Stat(filepath.Join(o.Into, "site", "system.rk")); err != nil {
 		t.Error("site not extracted:", err)

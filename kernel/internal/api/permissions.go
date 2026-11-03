@@ -52,7 +52,7 @@ func (s *Server) recordGuard(action string, next recordHandler) http.HandlerFunc
 	})
 }
 
-// notImplemented is the guarded routes' handler until their streams add one (print: S3, attachments: S6):
+// notImplemented is the guarded routes' handler until their streams add one (print: S3):
 // the same 404 as the /api/v1/ catch-all.
 func notImplemented(w http.ResponseWriter, r *http.Request, _ *caller, _ store.Record) {
 	writeError(w, 404, "not_found", "no such endpoint "+r.URL.Path)

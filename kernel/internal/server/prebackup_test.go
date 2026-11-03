@@ -77,3 +77,18 @@ func TestPreMigrateBackup(t *testing.T) {
 		t.Fatal("column added despite failed backup")
 	}
 }
+
+// TestFilesRoot: the pre-migrate backup of a running server archives the directory it serves attachments from.
+func TestFilesRoot(t *testing.T) {
+	apps, _ := filepath.Abs(filepath.Join(workspace, "rangka-apps/apps"))
+	reg, err := LoadRegistry(Config{AppsDir: apps, Schemas: schema.Embedded()})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := (Config{FilesDir: "/srv/uploads"}).filesRoot(reg); got != "/srv/uploads" {
+		t.Errorf("--files-dir: got %q", got)
+	}
+	if got := (Config{}).filesRoot(reg); got != "data/files" {
+		t.Errorf("default: got %q, want data/files (relative to where serve runs)", got)
+	}
+}

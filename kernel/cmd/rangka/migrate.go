@@ -143,6 +143,10 @@ func cmdSeed(args []string) int {
 
 // preBackup is the production-mode backup before a migration or rollback (see server.PreMigrateBackup).
 func preBackup(db *pg.Pool, c *common, reg *meta.Registry) func(context.Context, []store.Step) error {
-	return server.PreMigrateBackup(db, backup.Options{SiteDir: c.site, AppsDir: c.apps, FilesDir: backup.FilesDir(reg, c.site), Version: Version},
+	files := os.Getenv("RANGKA_FILES_DIR") // the same directory serve uses with that variable
+	if files == "" {
+		files = backup.FilesDir(reg, c.site)
+	}
+	return server.PreMigrateBackup(db, backup.Options{SiteDir: c.site, AppsDir: c.apps, FilesDir: files, Version: Version},
 		server.BackupDir(c.site))
 }

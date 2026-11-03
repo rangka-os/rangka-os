@@ -78,7 +78,8 @@ func PreMigrateBackup(db *pg.Pool, o backup.Options, dir string) func(ctx contex
 	}
 }
 
-// preBackup is the production backup hook for this server's site, apps and files directory.
+// preBackup is the production backup hook for this server's site, apps and files directory (the one it
+// serves attachments from, filesRoot).
 func (cfg Config) preBackup(db *pg.Pool, reg *meta.Registry) func(context.Context, []store.Step) error {
-	return PreMigrateBackup(db, backup.Options{SiteDir: cfg.SiteDir, AppsDir: cfg.AppsDir, FilesDir: backup.FilesDir(reg, cfg.SiteDir), Version: cfg.Version}, BackupDir(cfg.SiteDir))
+	return PreMigrateBackup(db, backup.Options{SiteDir: cfg.SiteDir, AppsDir: cfg.AppsDir, FilesDir: cfg.filesRoot(reg), Version: cfg.Version}, BackupDir(cfg.SiteDir))
 }

@@ -54,7 +54,7 @@ func newPermEnv(t *testing.T) *env {
 		t.Fatal(err)
 	}
 	cfg := Config{AppsDir: apps, SiteDir: site, DatabaseURL: dbURL, Addr: ":0", Schemas: schema.Embedded(), Version: "test", Now: fixedNow,
-		Logf: func(string, ...any) {}}
+		Logf: func(string, ...any) {}, FilesDir: t.TempDir()}
 	ctx, cancel := context.WithCancel(context.Background())
 	reg, err := LoadRegistry(cfg)
 	if err != nil {
@@ -242,7 +242,7 @@ func TestPermissionMatrix(t *testing.T) {
 					ok := func(action string) bool { return permAllowed(p, action, owner) }
 					expect(t, c, ok("read"), 200, "read", "GET", base, nil)
 					// print and attachments: the guard loads the record (read) and then checks the action; allowed
-					// callers reach the catch-all 404 until S3/S6 add the handlers
+					// callers reach the catch-all 404 for print until S3 adds the handler
 					guarded := func(action string) string {
 						if !ok("read") {
 							return "read"
@@ -250,8 +250,7 @@ func TestPermissionMatrix(t *testing.T) {
 						return action
 					}
 					expect(t, c, ok("print"), 404, guarded("print"), "GET", base+"/print", nil)
-					expect(t, c, ok("read"), 404, "read", "GET", base+"/attachments", nil)
-					expect(t, c, ok("write"), 404, guarded("write"), "POST", base+"/attachments", map[string]any{})
+					attachments(t, c, cookies["manager"], base, ok("read"), ok("write"), guarded("write"))
 					expect(t, c, ok("write"), 200, "write", "PATCH", base, map[string]any{"amount": 2000})
 					// model action: write; the hook is declared but not implemented, so allowed callers get 501
 					expect(t, c, ok("write"), 501, "write", "POST", base+"/actions/stamp", map[string]any{})
@@ -323,6 +322,50 @@ func TestPermissionMatrix(t *testing.T) {
 			t.Fatalf("nobody dashboard: %v", d)
 		}
 	})
+}
+
+// attachments checks the S6 routes on a draft voucher at base for caller c (mgr may write it): list needs read,
+// upload write, download read and delete write on the attachment's record. A caller who cannot read the record
+// gets 403 read everywhere (writeAction is then "read").
+func attachments(t *testing.T, c, mgr *env, base string, canRead, canWrite bool, writeAction string) {
+	t.Helper()
+	data := []byte("nota bensin\n")
+	att := mgr.upload(base+"/attachments", "mgr.txt", data)
+	if att.Status != http.StatusCreated {
+		t.Fatalf("manager upload: %d %s", att.Status, att.Body)
+	}
+	href := att.JSON["url"].(string)
+
+	l := expect(t, c, canRead, 200, "read", "GET", base+"/attachments", nil)
+	if canRead && (len(l.JSON["data"].([]any)) != 1 || dig(l.JSON, "data", 0, "id") != att.JSON["id"] ||
+		dig(l.JSON, "data", 0, "filename") != "mgr.txt" || dig(l.JSON, "data", 0, "size") != float64(len(data))) {
+		t.Fatalf("list: %s", l.Body)
+	}
+
+	up := c.upload(base+"/attachments", "own.txt", data)
+	if !canWrite {
+		want403(t, up, "upload "+base, "voucher", writeAction)
+	} else if up.Status != http.StatusCreated || up.JSON["filename"] != "own.txt" {
+		t.Fatalf("upload %s = %d %s, want 201", base, up.Status, up.Body)
+	}
+
+	dl := c.do("GET", href, nil)
+	if !canRead {
+		want403(t, dl, "download "+href, "voucher", "read")
+	} else if dl.Status != http.StatusOK || string(dl.Body) != string(data) {
+		t.Fatalf("download %s = %d %q, want 200", href, dl.Status, dl.Body)
+	}
+
+	del := c.do("DELETE", href, nil)
+	if !canWrite {
+		want403(t, del, "delete "+href, "voucher", writeAction)
+		mgr.must(http.StatusNoContent, "DELETE", href, nil)
+	} else if del.Status != http.StatusNoContent {
+		t.Fatalf("delete %s = %d %s, want 204", href, del.Status, del.Body)
+	}
+	if canWrite {
+		c.must(http.StatusNoContent, "DELETE", up.JSON["url"].(string), nil)
+	}
 }
 
 // dig is get without panics: nil when a step is missing or of another type.

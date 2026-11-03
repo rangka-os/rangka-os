@@ -182,15 +182,20 @@ func openFiles(cfg Config, reg *meta.Registry) (*files.Local, error) {
 	if d := strCfg(reg, "files.driver", "local"); d != "local" {
 		return nil, fmt.Errorf("files: driver %s is not available yet; use local", d)
 	}
-	root := cfg.FilesDir
-	if root == "" {
-		root = strCfg(reg, "files.path", "data/files")
-	}
-	l, err := files.NewLocal(root)
+	l, err := files.NewLocal(cfg.filesRoot(reg))
 	if err != nil {
 		return nil, fmt.Errorf("files: %w", err)
 	}
 	return l, nil
+}
+
+// filesRoot is the attachments directory: cfg.FilesDir, then system.rk files.path, then data/files. The
+// pre-migrate backup archives the same directory.
+func (cfg Config) filesRoot(reg *meta.Registry) string {
+	if cfg.FilesDir != "" {
+		return cfg.FilesDir
+	}
+	return strCfg(reg, "files.path", "data/files")
 }
 
 func titleCase(id string) string {

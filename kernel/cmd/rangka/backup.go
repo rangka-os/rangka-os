@@ -20,7 +20,7 @@ func cmdBackup(args []string) int {
 	c.flags(fs)
 	out := fs.String("out", "", "archive path (default rangka-<org|all>-<YYYYMMDD-HHMMSS>.tar.gz)")
 	org := fs.String("org", "", "back up one organisation (default: the whole database)")
-	files := fs.String("files", "", "uploads directory (default: system.rk files.path resolved against the site dir)")
+	files := fs.String("files", envOr("RANGKA_FILES_DIR", ""), "uploads directory (default: $RANGKA_FILES_DIR, else system.rk files.path resolved against the site dir)")
 	fs.Parse(reorder(args))
 	ctx := context.Background()
 	now := time.Now()

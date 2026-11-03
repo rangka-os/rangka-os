@@ -31,12 +31,14 @@ func (s *scope) currencyOf(f *meta.Field) string {
 	return ""
 }
 
-// docScope is the scope holding the document's rate: the record itself, or the parent document of a child row.
+// docScope is the scope holding the document's rate: the record itself, or for a child row (at any depth)
+// the document it belongs to.
 func (s *scope) docScope() *scope {
-	if s.m.IsChild {
-		return s.parent
+	d := s
+	for d != nil && d.m.IsChild {
+		d = d.parent
 	}
-	return s
+	return d
 }
 
 // rateOf is the positive IDR rate of money field f, read from rate_field on the document.
@@ -127,8 +129,9 @@ const (
 
 // checkMoney reports money issues of the record and its rows: an invalid currency code, a missing rate for a
 // foreign currency, an entered IDR value with a fraction, and a value or twin out of range. prefix is the
-// record's issue path ("items.0." for a row), docPrefix the path of its document's fields.
-func (s *scope) checkMoney(prefix, docPrefix string, seen map[string]bool) []Issue {
+// record's issue path ("items.0." for a row), parentPrefix the path of its parent row or document (where a
+// row's currency_field may be), docPrefix the path of its top-level document (where the rate is).
+func (s *scope) checkMoney(prefix, parentPrefix, docPrefix string, seen map[string]bool) []Issue {
 	var out []Issue
 	add := func(field, code, msg string) {
 		if !seen[field+"\x00"+code] {
@@ -141,7 +144,7 @@ func (s *scope) checkMoney(prefix, docPrefix string, seen map[string]bool) []Iss
 			continue
 		}
 		code := s.currencyOf(f)
-		cfPath := docPrefix + f.CurrencyField()
+		cfPath := parentPrefix + f.CurrencyField()
 		if s.m.Field(f.CurrencyField()) != nil {
 			cfPath = prefix + f.CurrencyField()
 		}
@@ -181,8 +184,12 @@ func (s *scope) checkMoney(prefix, docPrefix string, seen map[string]bool) []Iss
 			add(prefix+f.Name, "bad_value", labelOr(f)+" terlalu besar")
 		}
 	}
+	doc := prefix
+	if s.m.IsChild {
+		doc = docPrefix
+	}
 	s.childScopes(func(tf *meta.Field, i int, cs *scope) {
-		out = append(out, cs.checkMoney(fmt.Sprintf("%s%s.%d.", prefix, tf.Name, i), prefix, seen)...)
+		out = append(out, cs.checkMoney(fmt.Sprintf("%s%s.%d.", prefix, tf.Name, i), prefix, doc, seen)...)
 	})
 	return out
 }

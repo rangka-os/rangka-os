@@ -144,7 +144,7 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 	}
 	more, err := o.checkValues(m, rec, "")
 	errs = append(errs, more...)
-	return append(errs, s.checkMoney("", "", map[string]bool{})...), warns, err
+	return append(errs, s.checkMoney("", "", "", map[string]bool{})...), warns, err
 }
 
 func (o *op) checkValues(m *meta.Model, rec store.Record, prefix string) ([]Issue, error) {

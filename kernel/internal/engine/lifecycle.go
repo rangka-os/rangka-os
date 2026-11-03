@@ -295,7 +295,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	case m.IsSubmittable:
 		rec["name"] = "DRAFT-" + store.RandomName(5)
 	default:
-		n, err := store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, o.e.naming(m), o.e.Now().In(o.e.Location()))
+		n, err := o.nextName(m)
 		if err != nil {
 			return nil, err
 		}
@@ -317,14 +317,6 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 		return nil, err
 	}
 	return &Result{o.e.Output(m, rec), warns}, nil
-}
-
-// naming returns the naming pattern (config.numbering overrides the model).
-func (e *Engine) naming(m *meta.Model) string {
-	if p, ok := meta.AsMap(e.Reg().SiteConfig("numbering"))[m.Name].(string); ok && p != "" {
-		return p
-	}
-	return m.Naming
 }
 
 // Get loads a record the actor may read.
@@ -477,7 +469,7 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 			if af := str(rec["amended_from"]); af != "" {
 				newName, err = o.amendName(m, af)
 			} else {
-				newName, err = store.NextName(o.ctx, o.tx, a.Org, m.Name, e.naming(m), e.Now().In(e.Location()))
+				newName, err = o.nextName(m)
 			}
 			if err != nil {
 				return err
@@ -486,6 +478,11 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 		rec["name"], rec["docstatus"] = newName, int64(1)
 		if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
 			return dbIssue(m, err)
+		}
+		if newName != name {
+			if err := store.RenameRecordAttachments(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
+				return err
+			}
 		}
 		if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
 			return err

@@ -1,6 +1,6 @@
 {
   "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/config.json",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/config.json",
   "title": "Rangka organisation config",
   "description": "Layer 4: defaults for an organisation (company). Organisations and members themselves are data in the database, managed in Console; this file seeds defaults and is what Rangka AI edits through change sets.",
   "type": "object",
@@ -52,9 +52,28 @@
     "numbering": {
       "type": "object",
       "additionalProperties": {
-        "type": "string"
+        "oneOf": [
+          {
+            "type": "string"
+          },
+          {
+            "type": "object",
+            "required": [
+              "pattern"
+            ],
+            "properties": {
+              "pattern": {
+                "$ref": "model.json#/$defs/number_pattern"
+              },
+              "reset": {
+                "$ref": "model.json#/$defs/number_reset"
+              }
+            },
+            "additionalProperties": false
+          }
+        ]
       },
-      "description": "Override naming per model, e.g. sales_invoice: 'INV-{YYYY}-{#####}'"
+      "description": "A series (object) or a per-model naming override (string), e.g. sales_invoice: 'INV-{YYYY}-{#####}'"
     },
     "plan": {
       "$ref": "model.json#/$defs/name"

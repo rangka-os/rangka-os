@@ -2,7 +2,7 @@
 name: activity
 label: {id: Aktivitas, en: Activity}
 icon: calendar
-naming: ACT-{#####}
+naming: {series: activity_log}
 title_field: subject
 fields:
   - name: activity_type

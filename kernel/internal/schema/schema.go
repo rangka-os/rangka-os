@@ -1,5 +1,5 @@
 // Package schema validates .rk documents against the published JSON Schemas (draft 2020-12 subset used by
-// rangka-os/schema/0.4). Error messages follow Python's jsonschema so output matches rangka_validate.py.
+// rangka-os/schema/0.5). Error messages follow Python's jsonschema so output matches rangka_validate.py.
 package schema
 
 import (
@@ -21,11 +21,11 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
 
-//go:embed 0.4/*.json
+//go:embed 0.5/*.json
 var embedded embed.FS
 
 // Base is the URL prefix of the published schemas.
-const Base = "https://rangka-os.github.io/rangka-os/schema/0.4/"
+const Base = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 
 // OMap is a JSON object that keeps its key order (keyword order matters for error order).
 type OMap struct {
@@ -46,9 +46,9 @@ type Set struct {
 // Embedded returns the schemas compiled into the binary.
 func Embedded() *Set {
 	s := &Set{res: map[string]*OMap{}, re: map[string]*regexp.Regexp{}}
-	ents, _ := embedded.ReadDir("0.4")
+	ents, _ := embedded.ReadDir("0.5")
 	for _, e := range ents {
-		b, _ := embedded.ReadFile("0.4/" + e.Name())
+		b, _ := embedded.ReadFile("0.5/" + e.Name())
 		if err := s.add(e.Name(), b); err != nil {
 			panic(err)
 		}
@@ -56,7 +56,7 @@ func Embedded() *Set {
 	return s
 }
 
-// LoadDir reads schemas from a directory (e.g. rangka-os/schema/0.4).
+// LoadDir reads schemas from a directory (e.g. rangka-os/schema/0.5).
 func LoadDir(dir string) (*Set, error) {
 	s := &Set{res: map[string]*OMap{}, re: map[string]*regexp.Regexp{}}
 	ents, err := os.ReadDir(dir)

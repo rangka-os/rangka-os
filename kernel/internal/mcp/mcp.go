@@ -35,7 +35,7 @@ type Handler struct {
 	Changes *changeset.Service
 	Meta    func(ctx context.Context, a engine.Actor) (any, error)
 	File    func(ctx context.Context, path string) (any, error)
-	Status  func(ctx context.Context) any
+	Status  func(ctx context.Context, org string) any
 }
 
 type request struct {
@@ -288,7 +288,7 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 		d, _, err := e.Dashboard(ctx, c.Actor, sarg(args, "name"), iarg(args, "period"))
 		return d, err
 	case "rangka_system_status":
-		return h.Status(ctx), nil
+		return h.Status(ctx, c.Actor.Org), nil
 	case "rangka_changeset_propose":
 		a := c.Change
 		a.Kind = "ai" // proposals through MCP come from an agent unless the arguments name another author

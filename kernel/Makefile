@@ -33,11 +33,12 @@ vet:
 validate: build
 	$(BIN) validate --apps $(APPS) --site $(SITE) --connectors $(CONN)
 
-# The Go validator and rangka_validate.py must print the same reports: the real apps + site + connectors,
+# The Go validator and rangka_validate.py must print the same reports: the real apps + site + connectors, the overlay and numbering sites,
 # the broken apps copy, and the broken apps + broken site (overlays, theme contrast) + broken connectors.
 compare-python: build
 	@D=$$(mktemp -d); rc=0; \
-	for args in "$(APPS) --site $(SITE) --connectors $(CONN)" "$(APPS) --site testdata/overlay-site --connectors $(CONN)" "testdata/broken-apps" \
+	for args in "$(APPS) --site $(SITE) --connectors $(CONN)" "$(APPS) --site testdata/overlay-site --connectors $(CONN)" \
+	            "$(APPS) --site testdata/numbering-site --connectors $(CONN)" "testdata/broken-apps" \
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \
@@ -59,9 +60,9 @@ run-demo: build proto
 proto:
 	python3 ../tools/build_proto.py $(WS)/rangka-apps ../web/prototype/meta.js
 
-# Copy rangka-os/schema/0.4 into the binary's embedded copy (a test fails when they differ).
+# Copy rangka-os/schema/0.5 into the binary's embedded copy (a test fails when they differ).
 sync-schemas:
-	cp ../schema/0.4/*.json internal/schema/0.4/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
+	cp ../schema/0.5/*.json internal/schema/0.5/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
 
 # Recompute the prototype's dashboard numbers used by the dashboard tests (needs node).
 proto-expected:

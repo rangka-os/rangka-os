@@ -116,6 +116,7 @@ func (v *validator) more() {
 		v.parens(p, "if", f.Raw["if"])
 		v.steps(p, "steps", f.Raw["steps"], all)
 	}
+	v.imports(all, false)
 	for _, a := range v.reg.Apps {
 		if v.skip(a.Name) {
 			continue
@@ -141,6 +142,7 @@ func (v *validator) more() {
 	}
 	if v.reg.Site != nil {
 		v.site(all)
+		v.imports(all, true)
 		v.overlays(all)
 	}
 }

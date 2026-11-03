@@ -59,8 +59,24 @@ crm/flows/bad_flow.rk:9:17  error  unknown_field  steps/1/set/deal_ref  "deal_re
 crm/flows/bad_flow.rk:12:20  error  unknown_model  steps/2/then/0/find_all  "leadz" is not a model; did you mean "lead"?
 crm/flows/bad_flow.rk:17:49  error  cel_syntax  steps/4/where  unbalanced parentheses in `(x`
 crm/flows/no_trigger.rk:1:1  warn   never_runs  (root)  a flow needs on: (an event) or schedule: (cron)
+sales/imports/bad_import.rk:11:10  error  not_a_table  lines/field  "notes" is not a table field of sales_invoice
+sales/imports/bad_import.rk:7:9  error  unknown_field  map/nope  "nope" is not a field of sales_invoice
+sales/imports/bad_import.rk:8:13  error  cel_syntax  map/customer  unbalanced parentheses in `lower(name`
+sales/imports/bad_import.rk:8:43  error  unknown_field  map/customer/match  "nope" is not a field of customer
+sales/imports/bad_import.rk:9:34  error  not_a_link  map/notes/match  "notes" is not a link field
+sales/imports/bad_lines.rk:1:1  error  schema  (root)  'map' is a required property
+sales/imports/bad_lines.rk:5:10  error  unknown_field  lines/field  "ghost" is not a field of sales_invoice
+sales/imports/bad_lines_map.rk:1:1  error  schema  (root)  'map' is a required property
+sales/imports/bad_lines_map.rk:7:12  error  unknown_field  lines/map/ghost  "ghost" is not a field of sales_invoice_item
+sales/imports/bad_lines_map.rk:8:31  error  unknown_field  lines/map/item/match  "nope" is not a field of item
+sales/imports/bad_lines_map.rk:9:10  error  cel_syntax  lines/map/qty  unbalanced parentheses in `int(row['Qty']`
+sales/imports/bad_model.rk:3:8  error  unknown_model  model  "sales_invoce" is not a model; did you mean "sales_invoice"?
+sales/imports/bad_per.rk:4:6  error  import_per_outlet  per  per: outlet needs a link field "outlet" to outlet on customer
+sales/imports/bad_per.rk:4:6  warn   import_no_key  per  per: outlet imports should set key so overlapping files are not imported twice
+sales/imports/not_a_map.rk:1:1  error  schema  (root)  [{'name': 'not_a_map'}, {'model': 'invoice'}] is not of type 'object'
+sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_name" must match the file name "wrong_name"
 crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-57 error(s), 7 warning(s)
+72 error(s), 8 warning(s)

@@ -211,8 +211,8 @@ const outletStaffRole = "# yaml-language-server: $schema=https://rangka-os.githu
 
 // scopedEnv adds role outlet_staff (scoped by outlet) and member staff@example.test working at the given
 // outlets of kopi-senja. It returns the owner's env (logged in) and the staff member's env (logged in).
-// more changes the temp apps copy further.
-func scopedEnv(t *testing.T, outlets []string, more ...func(apps string)) (owner, staff *env) {
+// more changes the temp apps and site copies further.
+func scopedEnv(t *testing.T, outlets []string, more ...func(apps, site string)) (owner, staff *env) {
 	t.Helper()
 	e := newEnv(t, false, func(apps, site string) {
 		dir := filepath.Join(apps, "core", "roles")
@@ -223,7 +223,7 @@ func scopedEnv(t *testing.T, outlets []string, more ...func(apps string)) (owner
 			t.Fatal(err)
 		}
 		for _, f := range more {
-			f(apps)
+			f(apps, site)
 		}
 	})
 	ctx := context.Background()
@@ -326,7 +326,7 @@ func TestOutletUserCannotRepointOutlet(t *testing.T) {
 }
 
 func TestDashboardScopedAndCacheSeparate(t *testing.T) {
-	owner, staff := scopedEnv(t, []string{"OUT-01"}, func(apps string) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"}, func(apps, _ string) {
 		// sales_overview has no cache: in the demo apps; give it one so the cache key is exercised
 		p := filepath.Join(apps, "sales", "dashboards", "sales_overview.rk")
 		b, err := os.ReadFile(p)

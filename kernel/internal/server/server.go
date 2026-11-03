@@ -20,6 +20,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
+	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -171,7 +172,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		site = filepath.Base(filepath.Clean(cfg.SiteDir))
 	}
 	s.API = &api.Server{Version: cfg.Version, Started: time.Now(), Engine: e, DB: db, Auth: s.Auth, Hub: s.Hub, Queue: s.Queue,
-		Sched: s.Sched, Changes: s.Changes, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget,
+		Sched: s.Sched, Changes: s.Changes, Imports: &imports.Service{DB: db, Engine: e}, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget,
 		MaxUploadMB: intCfg(reg, "files.max_upload_mb", 20)}
 	if fstore != nil {
 		s.API.Files = fstore // keep a nil *Local out of the interface

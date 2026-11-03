@@ -14,6 +14,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
+	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/mcp"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -31,6 +32,7 @@ type Server struct {
 	Queue        *jobs.Queue
 	Sched        *jobs.Scheduler
 	Changes      *changeset.Service
+	Imports      *imports.Service
 	WebDir       string      // rangka-os/web, served at /
 	TemplatesDir string      // rangka-os/templates (theme and layout templates)
 	Org          string      // default organisation
@@ -123,6 +125,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", s.recordGuard("write", s.uploadAttachment))
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))
 	mux.HandleFunc("POST /api/v1/flows/{name}/run", a(s.runFlow))
+	// imports
+	mux.HandleFunc("POST /api/v1/imports/{import}", a(s.previewImport))
+	mux.HandleFunc("POST /api/v1/imports/{import}/{id}/commit", a(s.commitImport))
+	mux.HandleFunc("GET /api/v1/imports/{import}/{id}", a(s.getImport))
+	mux.HandleFunc("GET /api/v1/imports/{import}", a(s.listImports))
 	// realtime
 	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		s.Hub.ServeSSE(w, r, c.actor.Org, s.eventAllow(r.Context(), c.actor))

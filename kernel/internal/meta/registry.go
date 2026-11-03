@@ -17,6 +17,7 @@ type Registry struct {
 	Models           map[string]*Model
 	Dashboards       map[string]*Dashboard
 	Flows            map[string]*Flow
+	Imports          map[string]*Import // by name; a site import replaces an app's of the same name
 	Site             *Site
 	Installed        map[string]bool // config.apps (else the plan's apps, else every app)
 	Docs             map[string]*rk.Doc
@@ -113,7 +114,7 @@ type Options struct {
 func LoadOpts(o Options, rep *Report) *Registry {
 	appsDir, siteDir := o.AppsDir, o.SiteDir
 	r := &Registry{AppsDir: appsDir, SiteDir: siteDir, ConnectorsDir: o.ConnectorsDir, App: map[string]*App{}, Models: map[string]*Model{},
-		Dashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
+		Dashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Imports: map[string]*Import{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
 		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}}
 	ld := &loader{rep: rep}
 	names, _ := os.ReadDir(appsDir)
@@ -172,6 +173,14 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				r.Flows[e.Stem] = f
 				a.Flows = append(a.Flows, e.Stem)
 				r.Docs["apps/"+a.Name+"/flows/"+e.Stem+".rk"] = d
+			}
+		}
+		for _, e := range rk.ListDir(filepath.Join(a.Dir, "imports")) {
+			if d := ld.load(e.Path); d != nil {
+				im := parseImport(d, a.Name)
+				im.Name = e.Stem
+				r.Imports[e.Stem] = im
+				r.Docs["apps/"+a.Name+"/imports/"+e.Stem+".rk"] = d
 			}
 		}
 		for _, e := range rk.ListDir(filepath.Join(a.Dir, "roles")) {
@@ -239,6 +248,14 @@ func loadSite(dir string, ld *loader, r *Registry) *Site {
 					s.Layouts[e.Stem] = d
 				}
 			}
+		}
+	}
+	for _, e := range rk.ListDir(filepath.Join(dir, "imports")) {
+		if d := ld.load(e.Path); d != nil {
+			im := parseImport(d, "")
+			im.Name = e.Stem
+			r.Imports[e.Stem] = im
+			r.Docs["imports/"+e.Stem+".rk"] = d
 		}
 	}
 	for _, e := range rk.ListDir(filepath.Join(dir, "custom")) {

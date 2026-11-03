@@ -162,6 +162,27 @@ One command, shared with S0's set-up (which spells the email `--email`):
   `<email> is not a member of <org>`.
 - Missing or wrong flags exit 2.
 
+### 8. CEL globals `org` and `tax` (S8d)
+Every expression that sees `user` (model defaults, computes, rules and action `if:`, flow steps, dashboard
+widget `if:`, role `scope.from`) also reads two read-only globals, resolved per operation from the caller's
+org (`Actor.Org`), the same source as print's `.Org` (contract 0008 §2):
+
+| Global | Members | Source |
+| --- | --- | --- |
+| `org` | `id`, `code`, `name`, `legal_name`, `npwp`, `pkp` | `id` is the org id; `code` and `name` from its `orgs:` entry (what `rk_orgs` holds), `""` for an org not in `orgs:`. `legal_name`, `npwp`, `pkp` from `OrgConfig(org, "org")`. `pkp` (bool) falls back to `tax.pkp` (legacy), then `true`. Text members default to `""` |
+| `tax` | `ppn_rate`, `dpp_num`, `dpp_den` (+ `pkp` when set) | `OrgConfig(org, "tax")`: `ppn_rate` as a whole percent (default 12), `dpp_ratio` such as `"11/12"` split into `dpp_num` 11 and `dpp_den` 12 (default 11/12) |
+
+```yaml
+- {name: tax_rate, type: int, default: "org.pkp ? tax.ppn_rate : 0"}
+```
+- Both follow §2's rule: an org's `org:` or `tax:` replaces the site's map wholesale. An org with
+  `tax: {ppn_rate: 11}` gets the default DPP 11/12, not the site's `dpp_ratio`.
+- A model field named `org` or `tax` shadows the global inside that model's expressions, as for `user`.
+- Both validators accept `org` and `tax` as globals and do not check their members (as for `user`). A
+  `dpp_ratio` that is not two positive whole numbers around `/` (site `tax:` or an org's `config.tax`) is
+  error `bad_dpp_ratio`; at run time it falls back to 11/12.
+- Imports' `cel:` mappings (contract 0012) see only `row`, not these globals.
+
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.
 - S3, S4 and S8 read org settings with `OrgConfig` and identity with `OrgIdentity`; S4's `{ORG}` is

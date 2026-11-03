@@ -35,7 +35,8 @@ Operators `== != < <= > >= && || ! + - * / %`, ternary, `in`, member access on l
 loads the linked record), list literals. Functions: `today()` (ISO date string, org timezone), `now()`,
 `duration('7d')`, date ± duration → date, `round(x)`, `size(x)`, `sum(list)`, `list.map(x, expr)`,
 `option('field', 'attr')` (attribute of the selected option of a select field, e.g. probability), `app_installed('sales')`,
-`truncate(s, n)`, `s.contains(t)`. Globals: `user` (`user.name`, `user.roles`), `event` (flows). Dates are ISO
+`truncate(s, n)`, `s.contains(t)`. Globals: `user` (`user.name`, `user.roles`), `org` and `tax` (the
+current org's PKP status and PPN figures, contract 0010 §8), `event` (flows). Dates are ISO
 strings and compare as strings. Missing values are `''` for data/date/link, `0` for numbers, `false` for check.
 
 ## Records and lifecycle

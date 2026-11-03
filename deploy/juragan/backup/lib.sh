@@ -55,3 +55,15 @@ migrate_statements() {
   [ -n "$n" ] || return 1
   echo "$n"
 }
+
+# newest_archive <pilot>: name of the newest archive in offbox:$BACKUP_BUCKET/<pilot>/ (names sort by timestamp).
+# rclone exit 3 ("directory not found", what S3 returns for a prefix without objects) counts as an empty
+# listing: "no archive for <pilot>". Any other rclone failure is "cannot list".
+newest_archive() {
+  local list rc=0 n
+  list="$(rclone lsf --files-only "offbox:$BACKUP_BUCKET/$1/")" || rc=$?
+  case "$rc" in 0|3) ;; *) echo "cannot list offbox:$BACKUP_BUCKET/$1/ (rclone exit $rc)" >&2; return 1 ;; esac
+  n="$({ grep -E "^$1-[0-9]{8}T[0-9]{6}Z[.]tar([.]age)?$" <<<"$list" || true; } | sort | tail -1)"
+  [ -n "$n" ] || { echo "no archive for $1 in offbox:$BACKUP_BUCKET/$1/" >&2; return 1; }
+  echo "$n"
+}

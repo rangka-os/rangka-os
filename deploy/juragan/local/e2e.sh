@@ -443,6 +443,18 @@ tar -cf "/t/$2" manifest.json db.dump site.tar files.tar apps.tar SHA256SUMS'
   fi
   same "no drill project left after the empty prefix" "$(drill_projects)/$(drill_networks)" 0/0
 
+  # real S3 answers a prefix without objects with rclone exit 3 (directory not found); rustfs may not, so
+  # feed newest_archive a fake rclone: exit 3 -> "no archive", exit 1 -> "cannot list", a listing -> the newest
+  mkdir -p "$WORK/fakeclone"
+  printf '#!/bin/sh\nexit 3\n' >"$WORK/fakeclone/rclone"; chmod 755 "$WORK/fakeclone/rclone"
+  rc=0; out="$(PATH="$WORK/fakeclone:$PATH" BACKUP_BUCKET=b newest_archive jasa 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && [[ "$out" == "no archive for jasa"* ]]; then ok "rclone exit 3 reads as 'no archive for jasa'"; else bad "rclone exit 3: rc=$rc $out"; fi
+  printf '#!/bin/sh\nexit 1\n' >"$WORK/fakeclone/rclone"
+  rc=0; out="$(PATH="$WORK/fakeclone:$PATH" BACKUP_BUCKET=b newest_archive jasa 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && [[ "$out" == "cannot list"* ]]; then ok "rclone exit 1 reads as 'cannot list'"; else bad "rclone exit 1: rc=$rc $out"; fi
+  printf '#!/bin/sh\nprintf "jasa-20261101T020000Z.tar.age\\njasa-20261103T020000Z.tar.age\\nnotes.txt\\n"\n' >"$WORK/fakeclone/rclone"
+  same "newest_archive picks the newest timestamp" "$(PATH="$WORK/fakeclone:$PATH" BACKUP_BUCKET=b newest_archive jasa)" jasa-20261103T020000Z.tar.age
+
   # the migrate gate parses the plan: only exactly 0 passes
   local f="$WORK/migrate.fake"
   printf 'CREATE TABLE x (a int);\n-- would apply 10 statement(s); 3 metadata file(s), 0 changed since the last migrate\n' >"$f"

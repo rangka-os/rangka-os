@@ -136,9 +136,8 @@ fetch_archive() {
   dc run --rm -T --no-deps --entrypoint bash backup -c '
     set -euo pipefail
     : "${BACKUP_BUCKET:?BACKUP_BUCKET is not set in the env file}"
-    list="$(rclone lsf --files-only "offbox:$BACKUP_BUCKET/$1/")" || { echo "cannot list offbox:$BACKUP_BUCKET/$1/" >&2; exit 1; }
-    n="$({ grep -E "^$1-[0-9]{8}T[0-9]{6}Z[.]tar([.]age)?$" <<<"$list" || true; } | sort | tail -1)"
-    [ -n "$n" ] || { echo "no archive for $1 in offbox:$BACKUP_BUCKET/$1/" >&2; exit 1; }
+    . /usr/local/bin/lib.sh
+    n="$(newest_archive "$1")"
     rclone copyto "offbox:$BACKUP_BUCKET/$1/$n" "/backups/in/$n" --s3-no-check-bucket
     echo "$n"' _ "$1" | tail -1
 }

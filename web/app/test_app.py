@@ -386,6 +386,28 @@ map:
 """
 
 
+INVOICE_IMPORT_NAME = "faktur_csv"
+INVOICE_IMPORT_COLUMNS = ("Nomor", "Pelanggan", "Outlet", "Tanggal", "Barang", "Jumlah")
+INVOICE_IMPORT_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/import.json
+name: faktur_csv
+label: {id: Faktur dari CSV, en: Invoices from CSV}
+model: sales_invoice
+source: csv
+per: org
+key: [Nomor, Barang]
+group: [Nomor]
+map:
+  customer: Pelanggan
+  outlet: Outlet
+  posting_date: Tanggal
+lines:
+  field: items
+  map:
+    item: Barang
+    qty: Jumlah
+"""
+
+
 def csv_text(rows, header=IMPORT_COLUMNS):
     return "\n".join(",".join(r) for r in [header] + rows) + "\n"
 
@@ -529,13 +551,37 @@ OUTLET_IMPORT_NAME = "penjualan_outlet"
 OUTLET_IMPORT_DEF = {"name": OUTLET_IMPORT_NAME, "model": "item", "label": {"id": "Penjualan harian outlet", "en": "Daily outlet sales"},
                      "source": "csv", "per": "outlet", "app": ""}
 OUTLET_IMPORT_KNOWN = {"OUT-01"}  # outlets the mock's import accepts; any other answers 422 unknown_outlet
+OUTLET_IMPORT_COLUMNS = ("Nomor", "Pelanggan", "Tanggal", "Barang", "Jumlah")
+OUTLET_IMPORT_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/import.json
+name: penjualan_outlet
+label: {id: Penjualan harian outlet, en: Daily outlet sales}
+model: sales_invoice
+source: csv
+per: outlet
+key: [Nomor, Barang]
+group: [Nomor]
+map:
+  customer: Pelanggan
+  posting_date: Tanggal
+lines:
+  field: items
+  map:
+    item: Barang
+    qty: Jumlah
+"""
 
 
-def _mock_outlet_import(page, ctx):
+def unknown_outlet_message(outlet):
+    return f'Outlet "{outlet}" tidak ditemukan'  # S7's 422 unknown_outlet (kernel/internal/imports/service.go)
+
+
+def _mock_outlet_import(page, ctx, live=False):
     """A `per: outlet` import (pilot B's daily upload per outlet), S7 shapes: meta.imports gains OUTLET_IMPORT_DEF;
     POST /imports/penjualan_outlet without a form field `outlet` → 400 outlet_required, with an outlet not in
     OUTLET_IMPORT_KNOWN → 422 unknown_outlet, else a previewed entry whose scope is the outlet. Each upload's `outlet`
-    field is kept in ctx.mock_state["outlet_import"]["outlets"]."""
+    field is kept in ctx.mock_state["outlet_import"]["outlets"].
+    live: the kernel serves the import (OUTLET_IMPORT_RK); only an upload for an outlet outside OUTLET_IMPORT_KNOWN is
+    answered here with S7's 422, because every outlet the select offers exists, so the kernel cannot refuse one."""
     st = ctx.mock_state.setdefault("outlet_import", {"outlets": []})
 
     def meta(route):
@@ -560,14 +606,17 @@ def _mock_outlet_import(page, ctx):
         elif not outlet:
             _json(route, 400, {"error": {"code": "outlet_required", "message": "outlet wajib untuk impor ini"}})
         elif outlet not in OUTLET_IMPORT_KNOWN:
-            _json(route, 422, {"error": {"code": "unknown_outlet", "message": f"Outlet {outlet} tidak dikenal untuk impor ini"}})
+            _json(route, 422, {"error": {"code": "unknown_outlet", "message": unknown_outlet_message(outlet)}})
+        elif live:
+            route.fallback()
         else:
             _json(route, 200, {"id": uuid.uuid4().hex, "import": OUTLET_IMPORT_NAME, "scope": outlet, "file_name": parts["file"].get_filename() or "file.csv",
                                "file_sha": "mock", "status": "previewed", "rows": 1, "skipped": 0, "duplicate": False, "message": "",
                                "errors": [], "preview": [{"item_name": "Penjualan Uji", "uom": "Pcs", "rate": 12500}], "records": [],
                                "created_by": ctx.owner[0], "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "committed_at": None})
 
-    page.route(re.compile(r".*/api/v1/meta(\?.*)?$"), meta)
+    if not live:
+        page.route(re.compile(r".*/api/v1/meta(\?.*)?$"), meta)
     page.route(re.compile(r".*/api/v1/imports/" + OUTLET_IMPORT_NAME + r"(/.*)?$"), upload)
 
 
@@ -1630,10 +1679,15 @@ def test_invoice_needs_manager_approval(page, ctx):
     st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + number)
     assert st == 200 and rec["docstatus"] == 1, f"submitted on the server: {st} {rec.get('docstatus')}"
     assert main_area(page).locator(".ap-banner").count() == 0, "no banner on the submitted invoice"
+    if not mocked:  # the kernel's request followed the rename (DRAFT-… → number) and records who asked and who decided
+        st, body = h.call("GET", "/api/v1/approvals?state=approved&model=sales_invoice&name=" + urllib.parse.quote(number))
+        items = (body or {}).get("data") or []
+        assert st == 200 and len(items) == 1 and items[0]["name"] == number, f"approval found under the number: {st} {body}"
+        assert SALES[0] in json.dumps(items[0]["requested_by"]) and MANAGER[0] in json.dumps(items[0]["decided_by"]), items[0]
 
 
 def test_reject_needs_reason(page, ctx):
-    approvals_mocked(page, ctx)
+    mocked = approvals_mocked(page, ctx)
     sales = Http(ctx.base).login(*SALES)
     st, draft = sales.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0031", "outlet": "OUT-01", "items": [{"item": "BRG-0210", "qty": 1}]})
     assert st == 201, f"create draft as sales: {st} {draft}"
@@ -1641,6 +1695,12 @@ def test_reject_needs_reason(page, ctx):
     open_route(page, ctx, "#/r/sales_invoice/" + urllib.parse.quote(name), who=SALES)
     wait_form(page)
     ajukan_until_waiting(page)
+    if not mocked:  # the kernel refuses a reject without a reason too, not only the dialog
+        mgr = Http(ctx.base).login(*MANAGER)
+        _, body = mgr.call("GET", "/api/v1/approvals?state=pending&model=sales_invoice&name=" + urllib.parse.quote(name))
+        ap_id = body["data"][0]["id"]
+        st, err = mgr.call("POST", f"/api/v1/approvals/{ap_id}/reject", {"reason": "  "})
+        assert 400 <= st < 500 and mgr.call("GET", f"/api/v1/approvals/{ap_id}")[1]["state"] == "pending", f"blank reason refused: {st} {err}"
     sign_out(page)
     sign_in_as(page, ctx, MANAGER, "#/approvals")
     wait_inbox(page)
@@ -1987,7 +2047,9 @@ def test_import_csv(page, ctx):
         reqs = watch_requests(page)
         open_route(page, ctx, ctx.home()[0])  # signed in on the home page; the sidebar entry opens the wizard
         open_nav(page)
-        page.locator(".rk-side").get_by_text("Impor data", exact=True).click()
+        side = page.locator(".rk-side")
+        own = side.get_by_role("link", name="Barang dari CSV", exact=True)  # several imports: a group of their labels
+        (own if own.count() else side.get_by_text("Impor data", exact=True)).click()
         page.wait_for_function("(n) => location.hash === '#/import/' + n", arg=IMPORT_NAME, timeout=5000)
         main_area(page).get_by_role("heading", name="Barang dari CSV").wait_for(timeout=10000)
         assert main_area(page).locator(".rk-steps .rk-step").count() == 3
@@ -2002,7 +2064,7 @@ def test_import_csv(page, ctx):
         assert main_area(page).get_by_role("button", name="Impor", exact=True).is_enabled()
         page.get_by_role("button", name="Impor", exact=True).click()
         main_area(page).get_by_text("3 data dibuat").wait_for(timeout=10000)
-        assert main_area(page).get_by_text("Data dibuat sebagai draf").count() >= 1
+        assert main_area(page).get_by_text("Data dibuat sebagai draf").count() == 0, "item is not submittable: no draft wording"
         assert len(items_named(ctx, "Impor Uji")) == 3, "three records exist on the kernel"
         main_area(page).get_by_role("link", name=re.compile("^Buka daftar")).click()
         page.wait_for_function("() => location.hash === '#/r/item'", timeout=5000)
@@ -2024,16 +2086,18 @@ def test_import_csv(page, ctx):
 
 def test_import_per_outlet(page, ctx):
     """A `per: outlet` import: the outlet select is shown and required, the upload carries the form field `outlet`, and
-    the server's 422 unknown_outlet (and 400 outlet_required) message is shown. Always on a contract mock: the client's
-    side of the contract (S7 tests the server's)."""
-    if not ctx.features.get("imports"):
-        ctx.mocked.add("imports")
-    _mock_outlet_import(page, ctx)
+    the server's 422 unknown_outlet message is shown. Live when the kernel has imports (OUTLET_IMPORT_RK on
+    sales_invoice), except the 422: the select only offers existing outlets, so that one answer is stubbed."""
+    live = bool(ctx.features.get("imports"))
+    (ctx.live if live else ctx.mocked).add("imports")
+    _mock_outlet_import(page, ctx, live=live)
     ctx.allow_http(422, r"/api/v1/imports/" + OUTLET_IMPORT_NAME + "$")
     sent = ctx.mock_state["outlet_import"]["outlets"]
     tmp = tempfile.mkdtemp(prefix="rk-imp-")
     try:
-        path = write_csv(ctx, tmp, "penjualan-kemang.csv", [["Penjualan Uji", "Pcs", "12500"]])
+        path = os.path.join(tmp, "penjualan-kemang.csv")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(csv_text([[f"OUT-{int(time.time() * 1000)}", "CUST-0031", "2026-11-02", "BRG-0210", "1"]], OUTLET_IMPORT_COLUMNS))
         open_route(page, ctx, "#/import/" + OUTLET_IMPORT_NAME)
         main_area(page).get_by_role("heading", name="Penjualan harian outlet").wait_for(timeout=10000)
         sel = main_area(page).get_by_label("Outlet")
@@ -2049,13 +2113,56 @@ def test_import_per_outlet(page, ctx):
         # an outlet the import does not know: the server's 422 message
         sel.select_option(other)
         check.click()
-        main_area(page).get_by_text(f"Outlet {other} tidak dikenal untuk impor ini").wait_for(timeout=10000)
+        main_area(page).get_by_text(unknown_outlet_message(other)).wait_for(timeout=10000)
         assert sent == [other], f"the upload carried outlet={other}, saw {sent}"
         # the right outlet: the preview
         sel.select_option("OUT-01")
         check.click()
         main_area(page).get_by_text(re.compile(r"1 baris dibaca")).wait_for(timeout=10000)
         assert sent[-1] == "OUT-01", f"the upload carried outlet=OUT-01, saw {sent}"
+        if live:  # the kernel scoped the entry to the outlet and fills the invoice's outlet field from it
+            _, body = owner_http(ctx).call("GET", "/api/v1/imports/" + OUTLET_IMPORT_NAME)
+            e = next(x for x in body["imports"] if x["file_name"] == "penjualan-kemang.csv")
+            assert e["scope"] == "OUT-01" and e["status"] == "previewed" and not e["errors"], e
+            assert main_area(page).locator("table[aria-label='Pratinjau impor']").get_by_text("OUT-01").count() == 1, "preview shows the outlet"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_import_invoice_drafts(page, ctx):
+    """An import into a submittable model (sales_invoice, rows grouped by Nomor into lines) creates DRAFT records and
+    says so. Live only: the contract mock knows one item import."""
+    if mock_feature(page, "imports"):
+        return
+    tmp = tempfile.mkdtemp(prefix="rk-imp-")
+    try:
+        tag = str(int(time.time() * 1000))[-6:]
+        rows = [[f"IMP-{tag}-1", "CUST-0031", "OUT-01", "2026-11-02", "BRG-0210", "2"],
+                [f"IMP-{tag}-1", "CUST-0031", "OUT-01", "2026-11-02", "BRG-0101", "1"],
+                [f"IMP-{tag}-2", "CUST-0031", "OUT-01", "2026-11-02", "BRG-0210", "3"]]
+        path = os.path.join(tmp, "faktur.csv")
+        with open(path, "w", encoding="utf-8") as f:
+            f.write(csv_text(rows, INVOICE_IMPORT_COLUMNS))
+        reqs = watch_requests(page)
+        open_route(page, ctx, "#/import/" + INVOICE_IMPORT_NAME)
+        main_area(page).get_by_role("heading", name="Faktur dari CSV").wait_for(timeout=10000)
+        pick_and_check(page, path)
+        main_area(page).get_by_text("3 baris dibaca").wait_for()
+        assert main_area(page).get_by_text("Data dibuat sebagai draf setelah kamu menekan Impor", exact=False).count() == 1, main_area(page).inner_text()[-600:]
+        page.get_by_role("button", name="Impor", exact=True).click()
+        main_area(page).get_by_text("2 data dibuat").wait_for(timeout=10000)
+        main_area(page).get_by_text("Data dibuat sebagai draf. Periksa lalu ajukan dari daftar.").wait_for(timeout=5000)
+        commit = [r for r in reqs if r[0] == "POST" and r[1].endswith("/commit")]
+        assert len(commit) == 1, f"one commit, saw {len(commit)}"
+        h = owner_http(ctx)
+        _, entries = h.call("GET", "/api/v1/imports/" + INVOICE_IMPORT_NAME)
+        entry = next(e for e in (entries.get("imports") or []) if e.get("status") == "committed" and e.get("file_name") == "faktur.csv")
+        assert len(entry["records"]) == 2, f"two invoices (rows grouped by Nomor): {entry['records']}"
+        for name in entry["records"]:
+            st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(name))
+            assert st == 200 and rec["docstatus"] == 0, f"{name} is a draft: {st} {rec.get('docstatus')}"
+        lines = sorted(len(h.call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(n))[1]["items"]) for n in entry["records"])
+        assert lines == [1, 2], f"lines per invoice: {lines}"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 
@@ -2194,6 +2301,10 @@ def enable_import_def(site):
     os.makedirs(os.path.join(site, "imports"), exist_ok=True)
     with open(os.path.join(site, "imports", IMPORT_NAME + ".rk"), "w") as f:
         f.write(IMPORT_RK)
+    with open(os.path.join(site, "imports", INVOICE_IMPORT_NAME + ".rk"), "w") as f:
+        f.write(INVOICE_IMPORT_RK)
+    with open(os.path.join(site, "imports", OUTLET_IMPORT_NAME + ".rk"), "w") as f:
+        f.write(OUTLET_IMPORT_RK)
     return True
 
 

@@ -40,12 +40,14 @@ orgs:
   them reviewable together. An org's `config` may not itself contain `orgs` (error `nested_orgs`).
 - `rangka migrate`, `seed` and `serve` upsert `rk_orgs` (id, name, code) from `orgs:`. Orgs created
   only in the database (seed, CLI) keep working with the site config.
-- Kernel code reads org-dependent settings with `Registry.OrgConfig(org, key)`: `orgs.<org>.config[key]`
-  when present, else `config.rk`'s value. S3 (letterhead), S4 (numbering, `{ORG}`) and S8
+- Kernel code reads org-dependent settings with `Registry.OrgConfig(org, key)`: `config.rk`'s value with
+  `orgs.<org>.config[key]` deep-merged over it (below). S3 (letterhead), S4 (numbering, `{ORG}`) and S8
   (`org.pkp`) use it instead of `SiteConfig`.
-- An org's value replaces the site's top-level key wholesale; there is no deep merge. An org that sets
-  `org:` must repeat every subkey it needs (`legal_name`, `npwp`, `pkp`, ...): `org: {legal_name: X}` alone
-  leaves that org's `org.pkp` unset, not the site's value.
+- An org's config is deep-merged over the site's: where both hold a map at a key, the maps merge key by key
+  (recursively) and the org wins; for any other pair of types the org's value replaces the site's. An org
+  that sets `tax: {ppn_rate: 11}` keeps the site's `tax.pkp` and `tax.dpp_ratio`, and `org: {legal_name: X}`
+  keeps the site's `org.npwp` and `org.pkp`. There is no way to unset a site subkey from an org; set it to
+  another value instead.
 
 ### 3. Signing in and switching (REST, fixed in the program plan)
 - `GET /auth/me` adds `orgs: [{id, name, code, roles}]` (every membership, sorted by id) and

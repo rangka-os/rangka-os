@@ -49,10 +49,13 @@ as the reference statement does.
 
 ## Organisation data
 
-`.Org` holds the caller's organisation: its `org:` settings in `config.rk` (`orgs.<id>.config.org`, else the
-site-wide `org:`: `legal_name`, `npwp`, `pkp`) plus `name` and `code` from `orgs.<id>`. `.Org.pkp` comes from
-`org.pkp`, else from `tax.pkp`. The reference invoice and quotation print the DPP and PPN rows only when
+`.Org` holds the caller's organisation: its `org:` settings in `config.rk` (`legal_name`, `npwp`, `pkp`) plus
+`name` and `code` from `orgs.<id>`. `.Org.pkp` comes from `org.pkp`, else from `tax.pkp`. The reference invoice and quotation print the DPP and PPN rows only when
 `.Org.pkp` is true.
+
+Per-organisation settings are deep-merged over the site's: an organisation that sets only
+`org: {legal_name: PT Cabang}` keeps the site's `npwp` and `pkp`, and `tax: {ppn_rate: 11}` keeps the site's
+`tax.pkp`. Only the keys an organisation writes differ from the site.
 
 ## Override per site
 

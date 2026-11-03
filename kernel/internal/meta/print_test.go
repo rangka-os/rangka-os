@@ -168,7 +168,7 @@ orgs:
 		"pusat":  {"legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"},
 		"cabang": {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // no config.org: the site's org:
 		"lain":   {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // not in orgs:
-		"tanpa":  {"legal_name": "PT Contoh Tanpa Nama Resmi"},              // config.org without legal_name: the org's name
+		"tanpa":  {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // config.org: {pkp: false} merges over the site's org:
 	} {
 		if got := reg.Letterhead(org); !reflect.DeepEqual(got, want) {
 			t.Errorf("%s = %v, want %v", org, got, want)

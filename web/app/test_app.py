@@ -1830,11 +1830,14 @@ def pdf_available(ctx, number):
         return False
 
 
-def check_browser_print(page, ctx, number):
-    """The 501 dialog explains and its "Cetak dari browser" opens the HTML print view and calls window.print()."""
+def check_browser_print(page, ctx, number, title="PDF belum tersedia di server ini", text=None):
+    """The PDF dialog (501 or 500 pdf_failed) explains and its "Cetak dari browser" opens the HTML print view and calls
+    window.print()."""
     dlg = page.get_by_role("alertdialog")
     dlg.wait_for(timeout=10000)
-    assert "PDF belum tersedia di server ini" in dlg.inner_text(), dlg.inner_text()
+    assert title in dlg.inner_text(), dlg.inner_text()
+    if text:
+        assert text in dlg.inner_text(), dlg.inner_text()
     with page.context.expect_page(timeout=10000) as popup:
         dlg.get_by_role("button", name="Cetak dari browser").click()
     pop = print_tab(ctx, popup, number)
@@ -1928,6 +1931,26 @@ def test_print_invoice(page, ctx):
         pdf_btn.click()
         check_browser_print(page, ctx, number)
         print("     pdf path: server 501 pdf_unavailable → dialog → Cetak dari browser → print()" + (" (mocked)" if mocked else ""))
+
+    # a 500 pdf_failed (a Chromium that cannot launch): the same browser-print way out, with the server's message
+    ctx.allow_http(500, r"/print\?")
+    failed_msg = "PDF gagal dibuat. Coba lagi atau cetak dari versi HTML."
+    page.route(re.compile(r".*/print\?.*as=pdf$"), lambda route: _json(route, 500, {"error": {"code": "pdf_failed", "message": failed_msg}}))
+    pdf_btn.click()
+    check_browser_print(page, ctx, number, title="PDF gagal dibuat di server", text=failed_msg)
+    assert not pdf_btn.is_disabled(), "Unduh PDF enabled again"
+    print("     pdf_failed: 500 forced in the browser → dialog with the server message → Cetak dari browser → print()")
+    page.unroute(re.compile(r".*/print\?.*as=pdf$"))
+
+    # closing the blank tab while the HEAD is in flight: no error, the buttons come back
+    held = held_route(page, r".*/print\?.*as=html$", "HEAD")
+    with page.context.expect_page(timeout=10000) as popup:
+        main_area(page).get_by_role("button", name="Cetak", exact=True).click()
+    wait_held(page, held)
+    popup.value.close()
+    held[0].continue_()
+    page.wait_for_function("() => [...document.querySelectorAll('.ap-main button')].some(b => b.textContent.trim() === 'Cetak' && !b.disabled)", timeout=10000)
+    page.unroute(re.compile(r".*/print\?.*as=html$"))
 
     # a 404 (record gone, or out of the caller's scope) closes the tab and says so
     ctx.allow_http(404, r"/print\?")

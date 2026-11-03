@@ -5,7 +5,8 @@
  * "Cetak" opens a menu of the format labels (default first). Cetak opens a tab at once, asks HEAD
  * /api/v1/r/<model>/<name>/print?as=html (plus &format= for a non-default format), then loads that HTML print view in
  * the tab; a 403 or 404 closes the tab and toasts (printError). "Unduh PDF" fetches ?as=pdf and saves it; a 501
- * pdf_unavailable opens a dialog whose "Cetak dari browser" opens the HTML view and calls the tab's window.print().
+ * pdf_unavailable (or a 500 pdf_failed, with the server's message) opens a dialog whose "Cetak dari browser" opens the
+ * HTML view and calls the tab's window.print().
  * Both buttons are disabled while either request is in flight.
  *
  * RangkaApp.Attachments({model, name, record}) — card "Lampiran" on a saved record: file input and drop zone, the list
@@ -161,7 +162,11 @@
       var url = ctx.api.printUrl(p.model, name, { format: fmtParam(f), as: "html" });
       ctx.api.printCheck(p.model, name, fmtParam(f)).then(function () {
         stop();
-        w.location.replace(url);
+        // the person may have closed the blank tab while the check ran
+        try {
+          if (w.closed) return;
+          w.location.replace(url);
+        } catch (x) { return; }
         if (andPrint) printWhenLoaded(w);
       }, function (e) {
         stop();
@@ -185,7 +190,8 @@
         setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
       }, function (e) {
         stop();
-        if (e && e.code === "pdf_unavailable") setFallback({ format: f, message: e.message });
+        // no renderer (501) or a renderer that failed (500): the browser can still print the HTML view
+        if (e && (e.code === "pdf_unavailable" || e.code === "pdf_failed")) setFallback({ format: f, code: e.code, message: e.message });
         else fail(e);
       });
     }
@@ -200,11 +206,14 @@
 
     return h(React.Fragment, null, printBtn,
       h(R.Button, { key: "pdf", icon: "download", disabled: disabled, loading: busy === "pdf", onClick: pdf }, "Unduh PDF"),
-      fallback ? h(R.Dialog, { key: "fallback", variant: "confirm", icon: "print", title: "PDF belum tersedia di server ini",
+      fallback ? h(R.Dialog, { key: "fallback", variant: "confirm", icon: "print",
+        title: fallback.code === "pdf_failed" ? "PDF gagal dibuat di server" : "PDF belum tersedia di server ini",
         confirmLabel: "Cetak dari browser", cancelLabel: "Tutup",
         onClose: function () { setFallback(null); },
         onConfirm: function () { var f = fallback.format; setFallback(null); printHtml(f, true); } },
-        h("p", null, "Server ini belum bisa membuat PDF. Buka dokumen versi cetak, lalu di jendela cetak browser pilih ",
+        fallback.code === "pdf_failed" && fallback.message ? h("p", null, fallback.message) : null,
+        h("p", null, (fallback.code === "pdf_failed" ? "Kamu tetap bisa mencetak dari browser. " : "Server ini belum bisa membuat PDF. ") +
+          "Buka dokumen versi cetak, lalu di jendela cetak browser pilih ",
           h("b", null, "Simpan sebagai PDF"), " atau printer kamu.")) : null);
   }
 

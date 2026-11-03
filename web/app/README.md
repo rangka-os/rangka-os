@@ -57,13 +57,13 @@ Sign in with `ceo@saga.co.id` / `rangka-demo`. Add more people with
 
 ```bash
 node --test web/app/test/*.test.js
-python3 web/app/test_app.py [--react-dir D] [--width 1280|400] [--require-all] [--shots DIR] [--keep] [-k NAME]
+python3 web/app/test_app.py [--width 1280|400] [--require-all] [--shots DIR] [--keep] [-k NAME]
 ```
 
 `test_app.py` builds the kernel, starts a throwaway Postgres, migrates, seeds, adds a `sales_manager` and a
 `sales_rep`, serves, and runs every scenario in a fresh Chromium context. A scenario fails on an exception, a console
 error or an unexpected HTTP error. `--width 400` runs the same scenarios at phone width (and checks nothing scrolls
-sideways and controls are at least 40px tall). `--react-dir` serves React from local files instead of the CDN.
+sideways and controls are at least 40px tall). React 18.3.1 is vendored in `vendor/` (see `vendor/README.md`); the suite fails on any request to a script CDN.
 
 Features another stream builds run live when the kernel has them and otherwise against `page.route` mocks that answer
 exactly the Fixed-interface shapes. The run ends with `live: … · mocked: …`. `--require-all` fails when anything ran

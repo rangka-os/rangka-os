@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Live suite for the end-user web app (/app/) against a real kernel (Playwright + Chromium + Go + PostgreSQL 16).
 
-    python3 web/app/test_app.py [--react-dir D] [--width 1280|400] [--require-all] [--shots DIR] [--keep] [-k NAME]
+    python3 web/app/test_app.py [--width 1280|400] [--require-all] [--shots DIR] [--keep] [-k NAME]
 
 Builds the kernel into a temp dir, copies rangka-apps/{apps,fixtures,sites/kopi-senja} and rangka-connectors into a
 temp workspace, starts a throwaway Postgres (kernel/scripts/pgtemp.sh), runs migrate, seed (owner ceo@saga.co.id /
@@ -2139,7 +2139,7 @@ def test_no_horizontal_scroll(page, ctx):
 def main():
     global CTX
     ap = argparse.ArgumentParser()
-    ap.add_argument("--react-dir", help="dir with react(.dom).production.min.js; CDN requests are served from it")
+    ap.add_argument("--react-dir", help="ignored (React is vendored in web/app/vendor); kept so older commands still run")
     ap.add_argument("--width", type=int, default=1280)
     ap.add_argument("--require-all", action="store_true", help="fail when any pilot feature ran on a contract mock")
     ap.add_argument("--shots", help="save a screenshot per scenario here")
@@ -2226,9 +2226,6 @@ def main():
         _, meta = Http(base).login(*OWNER).call("GET", "/api/v1/meta")
         CTX = ctx = Ctx(base, meta, args)
         ctx.features = detect_features(base)
-        react = {}
-        if args.react_dir:
-            react = {n: os.path.join(args.react_dir, n) for n in ("react.production.min.js", "react-dom.production.min.js")}
         height = 860 if args.width < 600 else 900
         if args.shots:
             os.makedirs(args.shots, exist_ok=True)
@@ -2239,11 +2236,10 @@ def main():
                 ctx.allowed_http = []
                 bctx = br.new_context(viewport={"width": args.width, "height": height})
                 page = bctx.new_page()
-                if args.react_dir:
-                    page.route("https://cdnjs.cloudflare.com/**", lambda r: r.fulfill(path=react[r.request.url.rsplit("/", 1)[-1]])
-                               if r.request.url.rsplit("/", 1)[-1] in react else r.abort())
-                page.route("https://fonts.googleapis.com/**", lambda r: r.abort())
                 errs, responses = [], []
+                # React is vendored (web/app/vendor): a request to a script CDN would be a regression
+                page.route("https://cdnjs.cloudflare.com/**", lambda r, errs=errs: (errs.append("CDN request: " + r.request.url), r.abort()))
+                page.route("https://fonts.googleapis.com/**", lambda r: r.abort())
                 page.on("pageerror", lambda e: errs.append("pageerror: " + str(e)))
                 # Failed loads are judged from the responses below (aborted font/CDN requests have none).
                 page.on("console", lambda m: errs.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)

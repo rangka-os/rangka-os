@@ -10,7 +10,8 @@ mkdir -p "$B/web" "$B/templates"
 for d in console design-system app; do
   [ -d "../web/$d" ] || continue
   mkdir -p "$B/web/$d"
-  (cd "../web/$d" && find . -type f ! -name '*.py' ! -name 'README.md' ! -name '*.pyc') | while read -r f; do
+  # web/app/test holds the node unit tests: not part of the shipped app
+  (cd "../web/$d" && find . -type f ! -name '*.py' ! -name 'README.md' ! -name '*.pyc' ! -path './test/*') | while read -r f; do
     mkdir -p "$B/web/$d/$(dirname "$f")"; cp "../web/$d/$f" "$B/web/$d/$f"
   done
 done

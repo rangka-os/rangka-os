@@ -13,9 +13,11 @@ import (
 // at the transfer's unit cost (transfer_in) and adds to the lines' received_qty. Without the receipt model a
 // transfer moves both sides at once, as before.
 //
-// Valuation: per item, a receipt is valued round(qty × unit_cost), except the receipt that takes the item's
-// whole remainder, which gets the exact remaining value, so the in-values of an item add up to its out-value.
-// Receipts are checked per item (lines of the same item add up); received_qty fills the item's lines in order.
+// Valuation: per item, a receipt line is valued round(qty × unit_cost), capped at what is still to come in;
+// the line that takes the item's whole remainder gets exactly what is left, so the in-values of an item add
+// up to the value its transfer_out moves took. Receipts are checked per item (lines of the same item add up)
+// and received_qty fills the item's lines in order. Lines of one item that left at different averages come
+// in at their mean, round(out-value / qty).
 
 // twoStepTransfers reports whether transfers wait for a receipt.
 func twoStepTransfers(h *HookCtx) bool { return h.op.e.Reg().Model("stock_transfer_receipt") != nil }
@@ -89,9 +91,9 @@ type sentItem struct {
 	value, unit    int64
 }
 
-func transferItems(h *HookCtx, tr store.Record) (map[string]*sentItem, []string) {
+// transferItems sums a transfer's lines per item; value is what its transfer_out moves actually took.
+func transferItems(h *HookCtx, tr store.Record) (map[string]*sentItem, error) {
 	out := map[string]*sentItem{}
-	var order []string
 	mixed := map[string]bool{}
 	for _, l := range rows(tr["items"]) {
 		q := transferLineQty(h, l)
@@ -104,18 +106,25 @@ func transferItems(h *HookCtx, tr store.Record) (map[string]*sentItem, []string)
 		if si == nil {
 			si = &sentItem{unit: u}
 			out[it] = si
-			order = append(order, it)
 		} else if si.unit != u {
 			mixed[it] = true
 		}
 		si.sent = roundQty(si.sent + q)
 		si.received = roundQty(si.received + qtyOf(l["received_qty"]))
-		si.value += mulRound(q, u) // exactly what the transfer_out move took
+	}
+	moves, err := h.Find("stock_move", map[string]any{"voucher_type": "stock_transfer", "voucher": str(tr["name"]), "reason": "transfer_out"})
+	if err != nil {
+		return nil, err
+	}
+	for _, mv := range moves {
+		if si := out[str(mv["item"])]; si != nil {
+			si.value -= moneyIn(mv["value"])
+		}
 	}
 	for it := range mixed { // lines of one item left at different averages: come in at their mean
 		out[it].unit = divRound(out[it].value, out[it].sent)
 	}
-	return out, order
+	return out, nil
 }
 
 // receivedValues sums, per item, the values already brought in by the transfer's receipts (reversals net out).
@@ -157,12 +166,18 @@ func postTransferReceipt(h *HookCtx) (map[string]any, error) {
 	if toInt(tr["docstatus"]) != 1 || (str(tr["state"]) != "in_transit" && str(tr["state"]) != "partly_received") {
 		return nil, refuse("not_in_transit", "Transfer "+trName+" tidak sedang dalam perjalanan")
 	}
-	items, _ := transferItems(h, tr)
+	items, err := transferItems(h, tr)
+	if err != nil {
+		return nil, err
+	}
 	want := map[string]float64{}
 	for _, l := range rows(rec["items"]) {
 		if q := qtyOf(l["qty"]); q > qtyEps {
 			want[str(l["item"])] = roundQty(want[str(l["item"])] + q)
 		}
+	}
+	if len(want) == 0 {
+		return nil, refuse("empty_receipt", "Penerimaan "+name+" tidak berisi barang dengan jumlah lebih dari 0")
 	}
 	for _, l := range rows(rec["items"]) {
 		it := str(l["item"])
@@ -183,7 +198,10 @@ func postTransferReceipt(h *HookCtx) (map[string]any, error) {
 	if err := s.lockAll(keys); err != nil {
 		return nil, err
 	}
-	var prior map[string]int64   // values brought in by the transfer's other receipts, loaded when needed
+	prior, err := receivedValues(h, trName, name) // values the transfer's other receipts brought in
+	if err != nil {
+		return nil, err
+	}
 	posted := map[string]int64{} // values brought in by this receipt so far
 	for _, l := range rows(rec["items"]) {
 		q := qtyOf(l["qty"])
@@ -192,14 +210,12 @@ func postTransferReceipt(h *HookCtx) (map[string]any, error) {
 		}
 		it := str(l["item"])
 		si := items[it]
-		value := mulRound(q, si.unit)
-		if roundQty(si.sent-si.received-q) <= qtyEps { // the whole remainder: the exact remaining value
-			if prior == nil {
-				if prior, err = receivedValues(h, trName, name); err != nil {
-					return nil, err
-				}
-			}
-			value = si.value - prior[it] - posted[it]
+		// round(qty × unit), never more than is still to come in (a mean unit cost can round up); the line
+		// that takes the whole remainder gets exactly what is left
+		left := si.value - prior[it] - posted[it]
+		value := min(mulRound(q, si.unit), left)
+		if roundQty(si.sent-si.received-q) <= qtyEps {
+			value = left
 		}
 		if _, err := s.move(outlet, it, q, si.unit, &value, "transfer_in"); err != nil {
 			return nil, err

@@ -39,6 +39,9 @@ test("previewColumns labels keys from the model's fields", () => {
   const model = { fields: [{ name: "item_name", label: { id: "Nama barang" }, type: "data" }, { name: "rate", label: { id: "Harga jual" }, type: "currency" }] };
   const cols = A.previewColumns(model, [{ item_name: "A", rate: 1000, extra: 1 }]);
   assert.deepStrictEqual(cols.map((c) => [c.key, c.label]), [["item_name", "Nama barang"], ["rate", "Harga jual"], ["extra", "extra"]]);
+  // the kernel sends keys sorted (item_name, rate, uom); columns follow the model's field order
+  const m3 = { fields: [{ name: "item_name" }, { name: "uom", label: { id: "Satuan" } }, { name: "rate", label: { id: "Harga jual" } }] };
+  assert.deepStrictEqual(A.previewColumns(m3, [{ extra: 1, item_name: "A", rate: 1, uom: "Pcs" }]).map((c) => c.key), ["item_name", "uom", "rate", "extra"]);
   assert.deepStrictEqual(plain(A.previewColumns(null, [])), []);
 });
 

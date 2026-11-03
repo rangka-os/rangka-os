@@ -67,13 +67,18 @@
     return e.message || "Permintaan gagal";
   }
 
-  /** Preview columns: keys of the first preview record, labelled from the target model's fields. */
+  /** Preview columns: the keys of the preview records in the target model's field order (the kernel's JSON objects
+   *  come with sorted keys), keys the model does not know last; labelled from the model's fields. */
   function previewColumns(model, preview) {
-    var fields = {};
-    ((model && model.fields) || []).forEach(function (f) { fields[f.name] = f; });
+    var fields = {}, order = {};
+    ((model && model.fields) || []).forEach(function (f, i) { fields[f.name] = f; order[f.name] = i; });
     var keys = [];
     (preview || []).forEach(function (r) { Object.keys(r || {}).forEach(function (k) { if (keys.indexOf(k) < 0) keys.push(k); }); });
-    if (preview && preview[0]) keys = Object.keys(preview[0]).concat(keys.filter(function (k) { return !(k in preview[0]); }));
+    var seen = keys.slice();
+    keys.sort(function (a, b) {
+      var oa = a in order ? order[a] : Infinity, ob = b in order ? order[b] : Infinity;
+      return oa !== ob ? (oa < ob ? -1 : 1) : seen.indexOf(a) - seen.indexOf(b);
+    });
     return keys.map(function (k) { return { key: k, label: L((fields[k] || {}).label) || k, field: fields[k] || null }; });
   }
 
@@ -131,6 +136,7 @@
     var def = ((ctx.meta.imports || {})[name]) || {};
     var model = (ctx.meta.models || {})[def.model] || null;
     var modelLabel = L(model && model.label) || def.model || "data";
+    var submittable = !!(model && model.is_submittable);
     var perOutlet = def.per === "outlet";
 
     var fs = useState(null), file = fs[0], setFile = fs[1];
@@ -194,7 +200,7 @@
         end();
         setEntry(e || entry);
         setDone(true);
-        ctx.toast("ok", createdText(e), "Data dibuat sebagai draf");
+        ctx.toast("ok", createdText(e), submittable ? "Data dibuat sebagai draf" : undefined);
       }, function (e) {
         end();
         if (e && e.status === 401) return;
@@ -243,7 +249,7 @@
         h(R.Card, { title: "Ringkasan" },
           h("p", { className: "ap-imp-sum" }, h("b", null, (entry.rows || 0) + " baris dibaca"), entry.file_name ? " dari " + entry.file_name : ""),
           skipped ? h("p", { className: "ap-muted" }, skipped) : null,
-          !errs.length && !dup && entry.rows > 0 ? h("p", { className: "ap-muted" }, "Tidak ada kesalahan. Data dibuat sebagai draf setelah kamu menekan Impor.") : null,
+          !errs.length && !dup && entry.rows > 0 ? h("p", { className: "ap-muted" }, submittable ? "Tidak ada kesalahan. Data dibuat sebagai draf setelah kamu menekan Impor." : "Tidak ada kesalahan. Data dibuat setelah kamu menekan Impor.") : null,
           entry.rows === 0 ? h("p", { className: "ap-muted" }, "File ini tidak punya baris data.") : null),
         errs.length ? h(R.Card, { title: errs.length + " baris bermasalah", className: "ap-imp-card" },
           h("p", { className: "ap-muted" }, "Perbaiki file lalu unggah lagi. Impor baru bisa dilakukan kalau semua baris benar."),
@@ -259,7 +265,7 @@
     } else {
       body = h(R.Card, { title: "Selesai" },
         h("p", { className: "ap-imp-sum" }, h("b", null, createdText(entry))),
-        h("p", { className: "ap-muted" }, "Data dibuat sebagai draf. Periksa lalu ajukan dari daftar."),
+        submittable ? h("p", { className: "ap-muted" }, "Data dibuat sebagai draf. Periksa lalu ajukan dari daftar.") : null,
         h("div", { className: "ap-imp-acts" },
           h(R.Button, { variant: "quiet", onClick: again }, "Impor file lain"),
           h("a", { className: "ap-imp-link", href: "#/r/" + def.model }, "Buka daftar " + modelLabel)));

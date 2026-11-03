@@ -169,8 +169,8 @@ org (`Actor.Org`), the same source as print's `.Org` (contract 0008 §2):
 
 | Global | Members | Source |
 | --- | --- | --- |
-| `org` | `id`, `code`, `name`, `legal_name`, `npwp`, `pkp` | `id` is the org id; `code` and `name` from its `orgs:` entry (what `rk_orgs` holds), `""` for an org not in `orgs:`. `legal_name`, `npwp`, `pkp` from `OrgConfig(org, "org")`. `pkp` (bool) falls back to `tax.pkp` (legacy), then `true`. Text members default to `""` |
-| `tax` | `ppn_rate`, `dpp_num`, `dpp_den` (+ `pkp` when set) | `OrgConfig(org, "tax")`: `ppn_rate` as a whole percent (default 12), `dpp_ratio` such as `"11/12"` split into `dpp_num` 11 and `dpp_den` 12 (default 11/12) |
+| `org` | `id`, `code`, `name`, `legal_name`, `npwp`, `pkp` | `id` is the org id; `code` and `name` from its `orgs:` entry (what `rk_orgs` holds), `""` for an org not in `orgs:`. `legal_name`, `npwp`, `pkp` from `OrgConfig(org, "org")`. `pkp` (bool) falls back to `tax.pkp` (legacy), then `false` (the schema default: PPN is charged only for an org declared PKP). Text members default to `""` |
+| `tax` | `ppn_rate`, `dpp_num`, `dpp_den` (+ `pkp` when set) | `OrgConfig(org, "tax")`: `ppn_rate` as a percent (default 12; a whole number arrives as an int, a fractional one such as 11.5 as a float), `dpp_ratio` such as `"11/12"` split into `dpp_num` 11 and `dpp_den` 12 (default 11/12) |
 
 ```yaml
 - {name: tax_rate, type: int, default: "org.pkp ? tax.ppn_rate : 0"}

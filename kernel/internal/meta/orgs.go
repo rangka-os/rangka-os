@@ -215,7 +215,7 @@ func (r *Registry) TaxVar(org string) map[string]any {
 // OrgVar is the CEL org global for org (contract 0010 §8): id, code and name from its orgs: entry (the
 // rows SyncOrgs writes to rk_orgs), legal_name, npwp and pkp from OrgConfig(org, "org") (the same data as
 // print's .Org: orgs.<org>.config.org, else the site's org:). pkp falls back to tax.pkp (TaxVar), then to
-// true; text members default to "".
+// false as in the schema, so PPN is charged only for an org declared PKP; text members default to "".
 func (r *Registry) OrgVar(org string) map[string]any {
 	d := asMap(r.OrgConfig(org, "org"))
 	out := map[string]any{"id": org, "code": "", "name": "", "legal_name": str(d, "legal_name"), "npwp": str(d, "npwp")}
@@ -224,9 +224,7 @@ func (r *Registry) OrgVar(org string) map[string]any {
 	}
 	pkp, ok := d["pkp"].(bool)
 	if !ok {
-		if pkp, ok = r.TaxVar(org)["pkp"].(bool); !ok {
-			pkp = true
-		}
+		pkp, _ = r.TaxVar(org)["pkp"].(bool)
 	}
 	out["pkp"] = pkp
 	return out

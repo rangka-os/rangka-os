@@ -39,6 +39,9 @@ func TestTaxVar(t *testing.T) {
 	if got, want := r.TaxVar("other"), map[string]any{"ppn_rate": int64(11), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": false}; !reflect.DeepEqual(got, want) {
 		t.Errorf("site tax: %v", got)
 	}
+	if got := regWith(map[string]any{"tax": map[string]any{"ppn_rate": 11.5}}).TaxVar("x")["ppn_rate"]; got != 11.5 {
+		t.Errorf("fractional ppn_rate = %v (%T), want float64 11.5", got, got)
+	}
 	// the org's tax: replaces the site's whole map (OrgConfig), so pkp is not inherited
 	if got, want := r.TaxVar("pt_a"), map[string]any{"ppn_rate": int64(12), "dpp_num": int64(10), "dpp_den": int64(11)}; !reflect.DeepEqual(got, want) {
 		t.Errorf("org tax: %v", got)
@@ -46,7 +49,7 @@ func TestTaxVar(t *testing.T) {
 }
 
 func TestOrgVar(t *testing.T) {
-	if got, want := (&Registry{}).OrgVar("x"), map[string]any{"id": "x", "code": "", "name": "", "legal_name": "", "npwp": "", "pkp": true}; !reflect.DeepEqual(got, want) {
+	if got, want := (&Registry{}).OrgVar("x"), map[string]any{"id": "x", "code": "", "name": "", "legal_name": "", "npwp": "", "pkp": false}; !reflect.DeepEqual(got, want) {
 		t.Errorf("no site: %v", got)
 	}
 	r := regWith(map[string]any{

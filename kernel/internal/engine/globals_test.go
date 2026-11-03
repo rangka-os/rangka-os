@@ -26,7 +26,8 @@ func taxEngine(t *testing.T, siteTax string) *Engine {
 			"orgs:\n" +
 			"  pt_pkp: {name: PT PKP, code: PKP}\n" +
 			"  pt_kecil: {name: PT Kecil, code: KCL, config: {org: {legal_name: PT Kecil, pkp: false}}}\n" +
-			"  pt_lama: {name: PT Lama, config: {tax: {ppn_rate: 11, dpp_ratio: 10/11}}}\n",
+			"  pt_lama: {name: PT Lama, config: {tax: {ppn_rate: 11, dpp_ratio: 10/11}}}\n" +
+			"  pt_nada: {name: PT Nada, config: {org: {legal_name: PT Nada}}}\n",
 	}
 	for p, body := range files {
 		full := filepath.Join(root, p)
@@ -59,7 +60,8 @@ func TestOrgTaxGlobalsInDefaults(t *testing.T) {
 		{"pt_pkp", "11/12", "pt_pkp:PKP:PT Situs", 12},    // site org: (pkp true), default tax
 		{"pt_kecil", "11/12", "pt_kecil:KCL:PT Kecil", 0}, // the org's own org: says pkp false
 		{"pt_lama", "10/11", "pt_lama::PT Situs", 11},     // the org's own tax: overrides the rate
-		{"elsewhere", "11/12", "elsewhere::PT Situs", 12}, // not in orgs: → the site's settings
+		{"elsewhere", "11/12", "elsewhere::PT Situs", 12},
+		{"pt_nada", "11/12", "pt_nada::PT Nada", 0}, // nothing declares it PKP → pkp false, no PPN // not in orgs: → the site's settings
 	}
 	for _, c := range cases {
 		rec := quoteDefaults(e, c.org)

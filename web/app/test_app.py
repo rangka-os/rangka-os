@@ -365,19 +365,28 @@ def test_list_search_filter_page(page, ctx):
     assert any(m == "GET" and "limit=20" in u and "/r/sales_invoice" in u for m, u in reqs), "the first page asks for limit=20"
 
     # search: a customer's name narrows the rows and goes out as q=
-    _, body = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/sales_invoice?limit=5")
-    cust = body["data"][0]["customer"]
+    h = Http(ctx.base).login(*ctx.owner)
+    _, allinv = h.call("GET", "/api/v1/r/sales_invoice?limit=500")
+    counts = {}
+    for r in allinv["data"]:
+        counts[r["customer"]] = counts.get(r["customer"], 0) + 1
+    key = min(counts, key=lambda k: counts[k])  # the customer with the fewest invoices
+    _, crec = h.call("GET", "/api/v1/r/customer/" + key)
+    cname = crec["customer_name"]
+    assert cname != key, "the customer's name differs from its key"
+    part = cname[:-1]
     before = table_rows(page).count()
+    assert before == 20 and counts[key] < before, "a full first page to narrow"
     n_req = len(reqs)
     box = page.get_by_label("Cari", exact=True)
-    box.fill(cust)
+    box.fill(part)
     page.wait_for_timeout(700)
-    q_reqs = [u for m, u in reqs[n_req:] if "q=" in u]
-    assert q_reqs and all(("q=" + cust) in u for u in q_reqs[-1:]), f"search sends q=<name>, saw {reqs[n_req:]}"
-    assert len(q_reqs) == 1, f"typing is debounced into one request, saw {len(q_reqs)}"
+    q_reqs = [u for m, u in reqs[n_req:] if "q=" in u and "/r/sales_invoice" in u]
+    assert len(q_reqs) == 1 and ("q=" + part) in q_reqs[0], f"one debounced request with q=<part of the name>, saw {q_reqs}"
     wait_rows(page)
-    after = table_rows(page).count()
-    assert 0 < after <= before, "rows narrowed"
+    texts = table_rows(page).all_inner_texts()
+    assert len(texts) == counts[key] < before, f"search by name narrows {before} rows to {counts[key]}, got {len(texts)}"
+    assert all(cname in t for t in texts), "every row shows that customer"
     box.fill("")
     page.wait_for_timeout(700)
     wait_rows(page)
@@ -442,7 +451,7 @@ def drag_card(page, ctx, title, label):
 def test_kanban_move(page, ctx):
     reqs = watch_requests(page)
     open_route(page, ctx, "#/r/deal")
-    page.locator(".pv-board").wait_for(timeout=10000)
+    page.locator(".pv-card").first.wait_for(timeout=10000)  # past the skeleton board
     open_cards = column(page, "Prospek").locator(".pv-card")
     assert open_cards.count() >= 1, "a seeded deal in Prospek"
     title = open_cards.first.locator("b").inner_text()
@@ -451,22 +460,37 @@ def test_kanban_move(page, ctx):
     patches = [(m, u) for m, u in reqs if m == "PATCH" and "/api/v1/r/deal/" in u]
     assert len(patches) == 1, f"one PATCH for the drop, saw {patches}"
     page.reload()
-    page.locator(".pv-board").wait_for(timeout=10000)
+    page.locator(".pv-card").first.wait_for(timeout=10000)
     assert column(page, "Kualifikasi").locator(".pv-card", has_text=title).count() >= 1, "the card is still in Kualifikasi after a reload"
 
-    # a move the server rejects: card goes back, first error shown, record opens
+    # a move the server rejects (held until we answer): the card sits in Penawaran first, then goes back, the message shows,
+    # and only then does the record open
     ctx.allow_http(422, r"/api/v1/r/deal/")
-    page.route(re.compile(r".*/api/v1/r/deal/[^/?]+$"), lambda route: _json(route, 422, {"errors": [{"code": "rule", "message": "Isi alasan kalah dulu"}]})
-               if route.request.method == "PATCH" else route.continue_())
-    src = column(page, "Kualifikasi")
-    t2 = src.locator(".pv-card").first.locator("b").inner_text()
-    drag_card(page, ctx, t2, "Kalah")
+
+    held = []
+
+    def reject(route):
+        if route.request.method != "PATCH":
+            route.continue_()
+            return
+        held.append(route)
+    page.route(re.compile(r".*/api/v1/r/deal/[^/?]+$"), reject)
+    t2 = column(page, "Kualifikasi").locator(".pv-card").first.locator("b").inner_text()
+    drag_card(page, ctx, t2, "Penawaran")
+    column(page, "Penawaran").locator(".pv-card", has_text=t2).wait_for(timeout=3000)  # optimistic move
+    assert column(page, "Kualifikasi").locator(".pv-card", has_text=t2).count() == 0, "the card left its column while the PATCH is in flight"
+    assert not re.search(r"^#/r/deal/", page.evaluate("location.hash")), "still on the board while waiting"
+    for _ in range(50):
+        if held:
+            break
+        page.wait_for_timeout(50)
+    assert held, "the PATCH was sent"
+    _json(held[0], 422, {"errors": [{"code": "rule", "message": "Isi alasan kalah dulu"}]})
     page.get_by_text("Isi alasan kalah dulu").first.wait_for(timeout=5000)
+    assert column(page, "Kualifikasi").locator(".pv-card", has_text=t2).count() == 1, "the rejected card is back in its column"
+    assert column(page, "Penawaran").locator(".pv-card", has_text=t2).count() == 0, "and not in Penawaran"
+    assert page.evaluate("location.hash") == "#/r/deal", "the board is still mounted when the card is back"
     page.wait_for_function("() => /^#\\/r\\/deal\\/[^/]+$/.test(location.hash)", timeout=5000)  # the record opens
-    page.go_back()
-    page.locator(".pv-board").wait_for(timeout=10000)
-    assert column(page, "Kualifikasi").locator(".pv-card", has_text=t2).count() >= 1, "the rejected card is back in its column"
-    assert column(page, "Kalah").locator(".pv-card", has_text=t2).count() == 0, "and not in Kalah"
     # the toggle switches to the list
     page.evaluate("location.hash = '#/r/deal'")
     page.locator(".pv-board").wait_for(timeout=10000)

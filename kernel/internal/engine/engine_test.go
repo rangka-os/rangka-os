@@ -304,3 +304,42 @@ func TestAutomationMarkWon(t *testing.T) {
 		t.Error("automationFires")
 	}
 }
+
+// TestListSearchMatchesLinkTitle: q finds records by the display title of a linked record (a customer's name), not only by its key.
+func TestListSearchMatchesLinkTitle(t *testing.T) {
+	e, a := setup(t)
+	ctx := context.Background()
+	all, total, err := e.List(ctx, a, "sales_invoice", ListOpts{Limit: 1000})
+	if err != nil || total == 0 {
+		t.Fatalf("invoices: %d %v", total, err)
+	}
+	cm := e.Reg().Models["customer"]
+	cust, err := store.Get(ctx, e.DB, e.Reg(), a.Org, cm, str(all[0]["customer"]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	title := e.Title(ctx, a, "customer", cust, 0)
+	if title == "" || title == str(cust["name"]) {
+		t.Fatalf("customer title %q should differ from its key", title)
+	}
+	want := 0
+	for _, r := range all {
+		if str(r["customer"]) == str(cust["name"]) {
+			want++
+		}
+	}
+	part := strings.ToLower(title[:len(title)-1])
+	rows, got, err := e.List(ctx, a, "sales_invoice", ListOpts{Q: part, Limit: 1000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got < want || got >= total {
+		t.Fatalf("q=%q matched %d of %d invoices, want at least %d and fewer than all", part, got, total, want)
+	}
+	for _, r := range rows {
+		c, _ := store.Get(ctx, e.DB, e.Reg(), a.Org, cm, str(r["customer"]))
+		if !strings.Contains(strings.ToLower(e.Title(ctx, a, "customer", c, 0)), part) {
+			t.Fatalf("invoice %v (customer %v) does not match q", r["name"], r["customer"])
+		}
+	}
+}

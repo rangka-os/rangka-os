@@ -14,7 +14,7 @@
   "use strict";
 
   var RA = global.RangkaApp = global.RangkaApp || {};
-  var PAGE_SIZE = 20, BOARD_LIMIT = 200, DEBOUNCE_MS = 300;
+  var PAGE_SIZE = 20, BOARD_LIMIT = 200, DEBOUNCE_MS = 300, OPEN_DELAY_MS = 1200;
 
   /* ================================================================ pure helpers */
 
@@ -181,7 +181,8 @@
         setOne(name, undefined);
         if (e && e.status === 403) { ctx.toast("bad", "Kamu tidak boleh memindahkan ini", errorMessage(e)); return; }
         ctx.toast(e && e.status === 422 ? "warn" : "bad", errorMessage(e), e && e.status === 422 ? "Buka " + (eng.title(m, rec) || name) + " untuk melengkapinya." : undefined);
-        if (e && e.status === 422) ctx.navigate("#/r/" + m + "/" + encodeURIComponent(name));
+        // Leave the card back in its column and the message on screen for a moment before the record opens.
+        if (e && e.status === 422) setTimeout(function () { ctx.navigate("#/r/" + m + "/" + encodeURIComponent(name)); }, OPEN_DELAY_MS);
       });
     }
 

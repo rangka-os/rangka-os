@@ -7,8 +7,17 @@ x-logging: &logging
     max-size: 10m
     max-file: "5"
 
+# The pilot kernel = the release binary + headless Chromium for PDF print (kernel/Dockerfile). Chromium needs more
+# /dev/shm than Docker's 64 MB default. Memory: each PDF render is 100-200 MB for up to 30 s; RANGKA_PDF_CONCURRENCY
+# (default 2) caps the renders per kernel, see RUNBOOK section 3.
 x-kernel: &kernel
-  image: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
+  build:
+    context: ./kernel
+    args:
+      RANGKA_IMAGE: ${RANGKA_IMAGE:-ghcr.io/rangka-os/rangka:${RANGKA_TAG:?set RANGKA_TAG to a pinned release}}
+  image: juragan-kernel:${RANGKA_TAG:-custom}
+  init: true
+  shm_size: 256m
   restart: unless-stopped
   logging: *logging
   command: ["serve"]

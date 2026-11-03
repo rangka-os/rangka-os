@@ -29,7 +29,13 @@ services:
   # (created by the check, not by initdb), on the two-org fixture. Started by name, never by `up`.
   rls:
     profiles: ["rls"]
-    image: ${RANGKA_IMAGE:?}
+    build:
+      context: ./kernel
+      args:
+        RANGKA_IMAGE: ${RANGKA_IMAGE:?}
+    image: juragan-kernel:${RANGKA_TAG:-custom}
+    init: true
+    shm_size: 256m
     command: ["serve"]
     environment:
       DATABASE_URL: postgres://rlsapp:${RLS_DB_PASSWORD:-}@postgres:5432/rls?sslmode=disable

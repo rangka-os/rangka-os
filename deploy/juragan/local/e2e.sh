@@ -92,6 +92,7 @@ prepare() {
     cp -R "$APPS_REPO/apps" "$d/apps"
     cp -R "$APPS_REPO/fixtures" "$d/fixtures"
     cp -R "$APPS_REPO/sites/kopi-senja" "$d/site"
+    cp -R "$HERE/fixtures/print" "$d/site/print" # a print format for model lead (the sample apps have none)
   done
   # the kernel runs as uid 65532 and writes site/custom and data/
   docker run --rm -v "$WORK/pilots:/p" alpine:3.20 chown -R 65532:65532 /p
@@ -270,9 +271,23 @@ section_backup() {
   local jar="$WORK/cookies.txt" code
   URL_PATH=/auth/login https "$JASA_HOST" -o /dev/null -c "$jar" -X POST -H 'Content-Type: application/json' \
     -d "{\"email\":\"$OWNER_EMAIL\",\"password\":\"$OWNER_PASSWORD\"}"
-  code="$(URL_PATH=/api/v1/r/lead https "$JASA_HOST" -b "$jar" -o /dev/null -w '%{http_code}' -X POST \
+  code="$(URL_PATH=/api/v1/r/lead https "$JASA_HOST" -b "$jar" -o "$WORK/lead.json" -w '%{http_code}' -X POST \
     -H 'Content-Type: application/json' -d '{"lead_name":"Backup Test","phone":"+6281200000001"}')"
   if [[ "$code" == 2?? ]]; then ok "created a lead on jasa ($code)"; else bad "create lead on jasa: $code"; fi
+
+  # print through caddy (contract 0008): the kernel image carries Chromium, so as=pdf must produce a real PDF
+  local lead pdf_hdr html_hdr
+  lead="$(jq -r '.name // .data.name // empty' "$WORK/lead.json" 2>/dev/null || true)"
+  if [ -n "$lead" ]; then
+    pdf_hdr="$(URL_PATH="/api/v1/r/lead/$lead/print?format=lead_card&as=pdf" https "$JASA_HOST" -b "$jar" -D - -o "$WORK/lead.pdf")" || pdf_hdr=""
+    if grep -q '^HTTP/[0-9.]* 200' <<<"$pdf_hdr" && grep -qi '^content-type: application/pdf' <<<"$pdf_hdr"; then ok "print as=pdf: 200 application/pdf"; else bad "print as=pdf headers: $pdf_hdr"; fi
+    same "print as=pdf: body starts with %PDF-" "$(head -c 5 "$WORK/lead.pdf")" "%PDF-"
+    if [ "$(wc -c <"$WORK/lead.pdf")" -gt 1024 ]; then ok "print as=pdf: body is $(wc -c <"$WORK/lead.pdf" | tr -d ' ') bytes (> 1 KB)"; else bad "print as=pdf: body only $(wc -c <"$WORK/lead.pdf") bytes"; fi
+    html_hdr="$(URL_PATH="/api/v1/r/lead/$lead/print?format=lead_card&as=html" https "$JASA_HOST" -b "$jar" -D - -o "$WORK/lead.html")" || html_hdr=""
+    if grep -q '^HTTP/[0-9.]* 200' <<<"$html_hdr" && grep -qi '^content-type: text/html' <<<"$html_hdr" && grep -q 'Backup Test' "$WORK/lead.html"; then ok "print as=html: 200 text/html with the record"; else bad "print as=html: $html_hdr"; fi
+  else
+    bad "print: no record name in the create response: $(head -c 200 "$WORK/lead.json")"
+  fi
 
   local out
   if out="$(run_backup all 2>&1)"; then ok "backup all exits 0"; else bad "backup all failed: $out"; fi

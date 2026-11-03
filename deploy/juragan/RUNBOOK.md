@@ -9,8 +9,8 @@ scripts in this folder (or `local/e2e.sh`) run. Placeholders are in `<angle brac
 chat, tickets or git.
 
 Files in this folder: `compose.yaml`, `.env.example`, `Caddyfile`, `postgres/initdb/10-pilots.sh`,
-`backup/{Dockerfile,lib.sh,backup.sh,restore.sh}`, `restore-drill.sh`, `systemd/`, `local/` (end-to-end test, `local/rls-check.sh`,
-`local/fixtures/rls/`).
+`kernel/Dockerfile`, `backup/{Dockerfile,lib.sh,backup.sh,restore.sh}`, `restore-drill.sh`, `systemd/`, `local/` (end-to-end test, `local/rls-check.sh`,
+`local/fixtures/rls/`, `local/fixtures/print/`: the sample apps have no print format, so the test adds one for `lead`).
 
 ## 1. Provider
 
@@ -135,6 +135,19 @@ Each step has the check that proves it.
    `postgres` is healthy, `jasa`, `fnb` and `caddy` are up. The first start creates one role and one database per
    pilot (`postgres/initdb/10-pilots.sh`): the `jasa` role cannot connect to `fnb` and the reverse, and neither is a
    superuser nor has BYPASSRLS (section 10). The kernels migrate on start.
+
+   **Kernel image (Chromium for PDF print).** `jasa` and `fnb` do not run the release image directly: compose builds
+   `juragan-kernel:<RANGKA_TAG>` from `kernel/Dockerfile` (the release binary copied onto `debian:12.13-slim` with
+   `chromium` and `fonts-noto-core`), because `GET /api/v1/r/{model}/{name}/print?as=pdf` (contract 0008) runs a local
+   headless Chromium. The release image stays distroless; a browser does not belong in it. The first `up -d` after a
+   tag change builds it (a minute or two, needs internet for apt). Cost: the image is about 1 GB on disk instead of
+   about 40 MB, built once per tag and shared by both pilots (and by the restore drill). Compose gives each kernel
+   `shm_size: 256m` (Chromium needs more than Docker's 64 MB `/dev/shm`) and `init: true` (reaps browser processes).
+   The kernel starts Chromium with `--no-sandbox` itself and runs as uid 65532 with `HOME=/tmp`.
+   Memory: one render is 100 to 200 MB for up to 30 s. `RANGKA_PDF_CONCURRENCY` (default 2) caps renders per kernel,
+   so the worst case is about 400 MB per pilot on top of the kernel, 800 MB for both, out of 4 GB shared with Postgres
+   and Caddy. Leave it at 2, or set it to 1 under `environment:` in `compose.yaml` if the VM swaps. `RANGKA_CHROMIUM=off`
+   answers PDF requests with 501 `pdf_unavailable`.
 6. **Seed the owner once per pilot.** **Dede** types the password himself, so it never lands in shell history or
    a file. The two values are passed to this one command only and are not written to `.env`:
    ```bash

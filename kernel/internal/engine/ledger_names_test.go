@@ -3,8 +3,15 @@ package engine
 import (
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"testing"
+)
+
+// whole-token field names (dpp, not ppn_dpp or dpp_x)
+var (
+	dppToken         = regexp.MustCompile(`\bdpp\b`)
+	downPaymentToken = regexp.MustCompile(`\bdown_payment\b`)
 )
 
 // TestPilotDownPaymentOldFieldNames: a catalogue from before the rename (dp_deduction, dpp_base instead of
@@ -25,10 +32,17 @@ func TestPilotDownPaymentOldFieldNames(t *testing.T) {
 			return err
 		}
 		if d.Name() == "sales_invoice.rk" {
-			s := strings.ReplaceAll(string(b), "dpp", "dpp_base")
-			s = strings.ReplaceAll(s, "name: down_payment,", "name: dp_deduction,")
-			s = strings.ReplaceAll(s, "- down_payment}", "- dp_deduction}")
-			if !strings.Contains(s, "name: dp_deduction,") || !strings.Contains(s, "name: dpp_base,") {
+			lines := strings.Split(string(b), "\n")
+			for i, l := range lines {
+				l = dppToken.ReplaceAllString(l, "dpp_base")
+				if !strings.Contains(l, "name: kind,") { // kind keeps its down_payment option
+					l = downPaymentToken.ReplaceAllString(l, "dp_deduction")
+				}
+				lines[i] = l
+			}
+			s := strings.Join(lines, "\n")
+			if !strings.Contains(s, "name: dp_deduction,") || !strings.Contains(s, "name: dpp_base,") || !strings.Contains(s, "value: down_payment") ||
+				dppToken.MatchString(s) {
 				t.Fatalf("old names not restored:\n%s", s)
 			}
 			b = []byte(s)

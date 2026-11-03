@@ -47,8 +47,8 @@ bank:
 signatory: {name: Nama Penandatangan, title: Direktur}
 footer: {id: Terima kasih atas kepercayaan Anda}
 ```
-- Lookup: `letterheads/<org>.rk` for the caller's org, else `letterhead.rk`, else a letterhead built from the org's settings (name, NPWP).
-- Per-org settings live in `config.rk` `orgs:` (id → `{name, code, legal_name, npwp, pkp, …}`, contract 0010, read via `Registry.OrgConfig`); the caller's entry is passed to templates as `.Org`, and fills `legal_name`/`npwp` when the letterhead file leaves them out.
+- Lookup: `letterheads/<org>.rk` for the caller's org, else `letterhead.rk`, else a letterhead built from the org's settings (legal name, NPWP).
+- Org data (contract 0010): `Registry.OrgConfig(org, "org")`, i.e. `config.rk` `orgs.<id>.config.org`, else the site-wide `org:` (`legal_name`, `npwp`, `pkp`). Templates get it as `.Org`, a copy, plus `name` and `code` from `orgs.<id>` when the org is listed there; `.Org.pkp` is `org.pkp`, else `OrgConfig(org, "tax.pkp")`. The same data fills a letterhead's `legal_name` (else the org's `name`) and `npwp` when the letterhead file leaves them out.
 
 ### 3. Templates: Go `html/template`
 - The template holds the page body. The kernel wraps it in a full document: `<!doctype html>`, `lang="id"`, title = record name, `@page` size and margins for the paper, base CSS (Rangka tokens: ink text, stone rules, tabular numbers), and a `print-<paper>` class on `<body>`. A template may add CSS with `{{define "style"}}…{{end}}`.
@@ -69,7 +69,7 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 | `overdue d` | `overdue .Doc.due_date` | whole days past `d` at print time, `0` when not due |
 | `aging rows` | `aging .Related.invoices` | open amounts (`grand_total − paid_amount`) by age past `due_date`: `current`, `d30`, `d60`, `d90`, `over90`, `total` |
 | `upper s` | | upper case |
-- Missing values print as empty. Templates cannot run script: responses carry `Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'`.
+- Missing values print as empty. Templates cannot run script or load anything: the page carries `Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'` as a `<meta http-equiv>` first in `<head>` (so the PDF, rendered from a local file, is bound too) and, for `as=html`, as a response header.
 
 ### 4. REST
 `GET /api/v1/r/{model}/{name}/print?format={print}&as=html|pdf`
@@ -77,20 +77,22 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 - `as=html` (default): `text/html; charset=utf-8`.
 - `as=pdf`: rendered by headless Chromium (`RANGKA_CHROMIUM` = path, or found on `PATH` / the macOS app path; `RANGKA_CHROMIUM=off` disables). Without it: 501 `pdf_unavailable` with message "PDF belum tersedia di server ini. Buka versi HTML lalu cetak dari browser (Ctrl+P → Simpan sebagai PDF)." and `hint` = the HTML URL. PDF is `inline; filename="<name>.pdf"`.
 - `/api/v1/meta` lists each model's formats as `prints: [{name, label, paper, default}]`.
-- Each print writes an audit entry `record.print` (`<model>/<name>`, format, as).
+- `as` other than `html`/`pdf` → 400 `bad_request`. A failed conversion → 500 `pdf_failed` (detail in the server log). At most `RANGKA_PDF_CONCURRENCY` (default 2) Chromium processes run at once; further requests wait for a slot.
+- Each print writes an audit entry `record.print` (`<model>/<name>`, format, as). A `HEAD` request gets the headers only: it starts no browser and writes no audit entry.
 
 ### 5. Permissions
-- The record is read through the engine as the caller (same org, same row scope as `GET /r/{model}/{name}`), so other orgs' records are never printed.
-- If the model declares `permissions:`, the caller needs a role entry with `print: true` whose `if:` (when set) holds on the record; the `owner` role always may. Otherwise 403 `permission_denied` with `{model, action: "print"}`:
-  `{"error": {"code": "permission_denied", "message": "…", "model": "sales_invoice", "action": "print"}}`.
-- Models without `permissions:` stay open to signed-in members, as for reads today. When S1's general permission check lands, print calls it with action `print` and this rule moves there unchanged.
+- The route sits behind S1's record guard (`recordGuard("print")`): the record is read through the engine as the caller, then `Engine.Authorize(actor, model, "print", record)` decides.
+- A record of another org, or one outside the caller's row scope (an outlet the caller is not assigned to, contract 0010), → 404 `not_found`, the same as `GET /r/{model}/{name}`, so a record's existence never leaks.
+- A caller who can see the record but lacks the `print` permission → S1's 403 `permission_denied` with `{model, action: "print"}`:
+  `{"error": {"code": "permission_denied", "message": "…", "model": "sales_invoice", "action": "print"}}`. The format is looked up only after this check, so a denied caller cannot probe which formats exist.
+- Who holds `print` follows S1's rules (contract 0005): a role entry with `print: true` whose `if:` holds on the record, the `owner` role always, and models without `permissions:` open to signed-in members.
 
 ### 6. Reference layouts (rangka-os `templates/print/`)
 Starting points that modules copy next to their `print/*.rk`:
 - `quotation.html`: *Surat Penawaran Harga* with Nomor/Rev., Perihal, Kepada Yth., item table (No, Uraian, Qty, Satuan, Harga satuan, Diskon, Jumlah), subtotal, diskon, DPP nilai lain 11/12, PPN, total, terbilang, syarat (masa berlaku, pembayaran, waktu pelaksanaan), Hormat kami + signatory.
 - `sales_invoice.html`: *Faktur / Invoice* with no. faktur, tanggal, jatuh tempo, no. PO pelanggan, Kepada (NPWP), item table, subtotal, uang muka, DPP, PPN (only when `.Org.pkp`), total, PPh 23 note ("Bila pembayaran dipotong PPh Pasal 23, mohon kirimkan bukti potongnya kepada kami"), terbilang, bank accounts, note that the e-Faktur is issued separately.
 - `purchase_order.html`: *Pesanan Pembelian* with vendor, kirim ke, item table, syarat pembayaran, tanggal kirim, disetujui oleh.
-- `statement.html`: *Laporan Tagihan (Statement of Account)* on `customer`, using `related.invoices`: per-invoice tagihan, dibayar, sisa, umur; aging summary (belum jatuh tempo, 1–30, 31–60, 61–90, > 90 hari).
+- `statement.html`: *Laporan Tagihan (Statement of Account)* on `customer`, using `related.invoices` (open invoices only, oldest first): per-invoice tagihan, dibayar, sisa, umur; aging summary (belum jatuh tempo, 1–30, 31–60, 61–90, > 90 hari); a note when `.Truncated.invoices`.
 - The field names they use are listed in `templates/print/README.md` for S8 to match or adapt.
 
 ### 7. Validation (`rangka validate`, kernel checks)

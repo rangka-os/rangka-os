@@ -35,7 +35,7 @@ crm/models/deal.rk:15:9   error  unknown_model    fields/1/to  "custommer" is no
 
 ## Kinds
 
-There are 14 kinds; each has a schema and a reference page.
+Schema 0.4 has 14 kinds; each has a schema and a reference page.
 
 | Kind | Where | Layer |
 | --- | --- | --- |
@@ -47,8 +47,8 @@ There are 14 kinds; each has a schema and a reference page.
 | [theme](/reference/schema/theme), [layout](/reference/schema/layout) | site | 6 |
 | [changeset](/reference/schema/changeset) | sent to the API | — |
 
-Two kinds arrive with schema 0.5 ([contract 0008](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0008-print-formats.md)) and have no generated reference page yet:
-`print/<name>.rk` (apps and site) and `letterhead.rk` / `letterheads/<org>.rk` (site). See [Print formats](/guide/print-formats).
+Schema 0.5 adds kinds. Two of them come with print formats ([contract 0008](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0008-print-formats.md)):
+[print](/reference/schema/print) (`print/<name>.rk` in apps and the site) and [letterhead](/reference/schema/letterhead) (`letterhead.rk` / `letterheads/<org>.rk` in the site). See [Print formats](/guide/print-formats).
 
 Accepted extensions: `.rk` (preferred), `.rk.yaml`, `.rk.yml`; legacy `.json` still loads, and
 `tools/rk_convert.py` converts it, refusing any file that would not read back identically.

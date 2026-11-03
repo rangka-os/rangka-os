@@ -91,9 +91,15 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 		fail(w, err)
 		return
 	}
+	// HEAD gets the headers only: no browser is started and nothing is audited
+	head := r.Method == http.MethodHead
 	body, contentType := page, "text/html; charset=utf-8"
 	if as == "pdf" {
-		body, err = docprint.PDF(ctx, page)
+		if !head {
+			body, err = docprint.PDF(ctx, page)
+		} else if docprint.FindChromium() == "" {
+			err = docprint.ErrNoChromium
+		}
 		if errors.Is(err, docprint.ErrNoChromium) {
 			hint := "/api/v1/r/" + url.PathEscape(model) + "/" + url.PathEscape(name) + "/print?format=" + url.QueryEscape(f.Name) + "&as=html"
 			writeJSON(w, http.StatusNotImplemented, map[string]any{"error": map[string]any{"code": "pdf_unavailable",
@@ -108,9 +114,11 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 		}
 		contentType = "application/pdf"
 	}
-	if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "record.print", model+"/"+name, f.Name+" ("+as+")",
-		map[string]any{"format": f.Name, "as": as}); err != nil {
-		s.logf("print: audit %s/%s: %v", model, name, err)
+	if !head {
+		if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "record.print", model+"/"+name, f.Name+" ("+as+")",
+			map[string]any{"format": f.Name, "as": as}); err != nil {
+			s.logf("print: audit %s/%s: %v", model, name, err)
+		}
 	}
 	h := w.Header()
 	h.Set("Content-Type", contentType)

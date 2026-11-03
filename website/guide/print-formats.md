@@ -42,8 +42,17 @@ Start from a reference layout in [`templates/print/`](https://github.com/rangka-
 (quotation, invoice, purchase order, statement) and adapt it. That folder lists the field names each layout reads.
 Guard nested values with `{{with}}`: a field that is present but empty stops the render when you reach into it.
 
-For a statement of account, add `related:` to load other records for the template, for example every invoice of
-the customer. They arrive as `.Related.invoices`.
+For a statement of account, add `related:` to load other records for the template, for example the customer's
+open invoices (`filter: docstatus == 1 && grand_total > paid_amount`). They arrive as `.Related.invoices`, cut at
+the list's `limit`. When more records matched than the limit, `.Truncated.invoices` is true; say so on the page,
+as the reference statement does.
+
+## Organisation data
+
+`.Org` holds the caller's organisation: its `org:` settings in `config.rk` (`orgs.<id>.config.org`, else the
+site-wide `org:`: `legal_name`, `npwp`, `pkp`) plus `name` and `code` from `orgs.<id>`. `.Org.pkp` comes from
+`org.pkp`, else from `tax.pkp`. The reference invoice and quotation print the DPP and PPN rows only when
+`.Org.pkp` is true.
 
 ## Override per site
 
@@ -78,7 +87,8 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 ```
 
 Rangka picks `letterheads/<org>.rk` for the caller's organisation, then `letterhead.rk`, then builds one from the
-organisation's settings (name and NPWP). The partials `letterhead`, `bank_accounts` and `signature` render it.
+organisation's settings (`org.legal_name`, else the org's `name`, and `org.npwp`), which also fill a letterhead
+file that leaves them out. The partials `letterhead`, `bank_accounts` and `signature` render it.
 
 ## Helpers
 
@@ -104,9 +114,14 @@ GET /api/v1/r/sales_invoice/INV-2026-00047/print?format=sales_invoice&as=pdf
 ```
 
 HTML is always available. PDF needs Chromium or Chrome on the server: set `RANGKA_CHROMIUM` to its path, or
-install it so it is found on `PATH`. `RANGKA_CHROMIUM=off` turns PDF off. Without a browser the PDF request
-answers 501 `pdf_unavailable`, and the user can open the HTML version and use *Cetak, Simpan sebagai PDF* in the
-browser. See the [REST API](/reference/rest-api) and the kernel README for the full list of codes.
+install it so it is found on `PATH`. `RANGKA_CHROMIUM=off`, or a path that does not exist, turns PDF off. Without a
+browser the PDF request answers 501 `pdf_unavailable`, and the user can open the HTML version and use *Cetak,
+Simpan sebagai PDF* in the browser.
+
+Answers besides 200: 400 `bad_request` (`as` is not `html` or `pdf`), 403 `permission_denied` (the caller can
+read the record but may not print it), 404 `not_found` (no such record for the caller, including another org's),
+404 `no_print_format`, 500 `pdf_failed` (Chromium failed) and 501 `pdf_unavailable`. See also the
+[REST API](/reference/rest-api).
 
 Run `rangka validate` after editing: it reports a missing template, a template path that leaves its folder, a
 template that does not parse and a missing logo.

@@ -406,3 +406,31 @@ func TestPrintReferenceStatementOpenOnly(t *testing.T) {
 		t.Fatalf("want open %s only, not paid %s, not truncated:\n%s", open, paid, body)
 	}
 }
+
+// HEAD answers with the headers of the page but writes no audit entry and starts no browser.
+func TestPrintHead(t *testing.T) {
+	marker := filepath.Join(t.TempDir(), "ran")
+	fake := filepath.Join(t.TempDir(), "chromium")
+	if err := os.WriteFile(fake, []byte("#!/bin/sh\ntouch "+marker+"\nexit 1\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RANGKA_CHROMIUM", fake)
+	e := printEnv(t)
+	name := e.submittedInvoice("CUST-0012")
+	for as, ct := range map[string]string{"html": "text/html; charset=utf-8", "pdf": "application/pdf"} {
+		r := e.do("HEAD", "/api/v1/r/sales_invoice/"+name+"/print?as="+as, nil)
+		if r.Status != 200 || r.Header.Get("Content-Type") != ct || len(r.Body) != 0 {
+			t.Errorf("HEAD as=%s: %d %v", as, r.Status, r.Header)
+		}
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("HEAD as=pdf started the browser")
+	}
+	res, err := e.s.DB.Query(context.Background(), "select count(*) from rk_audit where kind = 'record.print'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := res.Rows[0][0]; n != int64(0) {
+		t.Errorf("HEAD was audited: %v", n)
+	}
+}

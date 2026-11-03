@@ -45,6 +45,9 @@ func TestMoney(t *testing.T) {
 		{1250000, "IDR", "Rp 1.250.000"},
 		{"-10", "USD", "-USD 10,00"},
 		{nil, "USD", ""},
+		{1250000, "idr", "Rp 1.250.000"},
+		{5, "", "Rp 5"},
+		{"7", " usd ", "USD 7,00"},
 	}
 	for _, c := range cases {
 		if got := Money(c.in, c.code); got != c.want {

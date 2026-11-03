@@ -125,14 +125,16 @@ func Rupiah(v any) string {
 	return Money(v, "IDR")
 }
 
-// Money formats an amount with a currency code: IDR is whole rupiah, anything else has two decimals.
+// Money formats an amount with a currency code: IDR is whole rupiah, anything else has two decimals. The code
+// is trimmed and upper-cased; an empty code is IDR.
 func Money(v any, code string) string {
 	r, ok := toRat(v)
 	if !ok {
 		return ""
 	}
+	code = strings.ToUpper(strings.TrimSpace(code))
 	decimals, prefix := 2, code+" "
-	if code == "IDR" {
+	if code == "IDR" || code == "" {
 		decimals, prefix = 0, "Rp "
 	}
 	text, neg := fixed(r, decimals)

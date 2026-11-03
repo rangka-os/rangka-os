@@ -56,7 +56,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - `GET /auth/me` → adds `orgs: [{id, name, roles}]` and `org` (current). `POST /auth/org` `{org}` switches the session's org (cookie `rk_org`); tokens carry a fixed org.
 - `GET /approvals?state=pending|approved|rejected` · `POST /approvals/{id}/approve` · `POST /approvals/{id}/reject` `{reason}`.
 - `GET /r/{model}/{name}/print?format={print}&as=html|pdf`.
-- `POST /r/{model}/{name}/attachments` (multipart `file`) · `GET /r/{model}/{name}/attachments` · `GET /attachments/{id}` · `DELETE /attachments/{id}` (drafts only).
+- `POST /r/{model}/{name}/attachments` (multipart `file`) → 201 `{id, filename, content_type, size, sha256, created_by, created_at, url}` · `GET /r/{model}/{name}/attachments` → `{data: [item…]}` · `GET /attachments/{id}` (bytes) · `DELETE /attachments/{id}` → 204 (drafts only; 409 `submitted` otherwise). 413 `too_large` over `files.max_upload_mb` (default 20), 501 `files_disabled` when `files.enabled` is false. Storage root: `--files-dir` / `$RANGKA_FILES_DIR`, then `system.rk files.path`, then `./data/files`.
 - `POST /imports/{import}` (multipart `file`, form `outlet` optional) → `{id, rows, preview[], errors[], duplicate}` · `POST /imports/{import}/{id}/commit` · `GET /imports/{import}/{id}`.
 - `/api/v1/files` keeps meaning `.rk` files; uploads are "attachments".
 
@@ -64,7 +64,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - Model `approvals:` list of `{name, on: <verb|action>, when: <CEL>, approvers: [<role>], label}`; a matching transition creates an approval request bound to a SHA-256 of the record snapshot; the verb runs only after approval.
 - Flow step `approve: {approvers: [<role>], when: <CEL>, label}`.
 - `print/<name>.rk` (kind `print`) in a module or site: `{name, model, label, paper: A4|A5|80mm, template: <path to .html>}`; templates are Go `html/template` with helpers `rupiah`, `money`, `date`, `terbilang`; site `letterhead.rk` (kind `letterhead`) supplies logo, address, NPWP, bank.
-- `config.rk` `numbering:` series map `{<series>: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly|monthly|never}}` per org; models reference `naming: {series: <series>}`.
+- `config.rk` `numbering:` series map `{<series>: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly|monthly|never}}` per org; models reference `naming: {series: <series>}`. Models may also give a default `{series, pattern, reset}`, and a site object keyed by a model name numbers that model as its own series (contract 0009 §3).
 - `imports/<name>.rk` (kind `import`): `{name, model, source: csv|xlsx, header_row, key: [<cols>], map: {<field>: <column or CEL>}, per: outlet|org}`; duplicates detected by `key` + file SHA-256.
 - Field type `money` (new): `{currency_field: <field>}`; stored as numeric(20,4) plus an IDR integer twin `<field>_idr` computed at the document's `rate`. Existing `currency` stays IDR-only.
 - `config.rk` `org:` `{legal_name, npwp, pkp: true|false}`; `features.rk` unchanged.

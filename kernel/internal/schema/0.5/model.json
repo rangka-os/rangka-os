@@ -27,9 +27,31 @@
       "type": "boolean"
     },
     "naming": {
-      "type": "string",
-      "pattern": "^[A-Z0-9-]*(\\{YYYY\\}|\\{YY\\}|\\{MM\\}|[A-Z0-9-])*\\{#{2,8}\\}$",
-      "description": "e.g. INV-{YYYY}-{#####}"
+      "oneOf": [
+        {
+          "type": "string",
+          "pattern": "^[A-Z0-9-]*(\\{YYYY\\}|\\{YY\\}|\\{MM\\}|[A-Z0-9-])*\\{#{2,8}\\}$"
+        },
+        {
+          "type": "object",
+          "required": [
+            "series"
+          ],
+          "properties": {
+            "series": {
+              "$ref": "#/$defs/name"
+            },
+            "pattern": {
+              "$ref": "#/$defs/number_pattern"
+            },
+            "reset": {
+              "$ref": "#/$defs/number_reset"
+            }
+          },
+          "additionalProperties": false
+        }
+      ],
+      "description": "e.g. INV-{YYYY}-{#####}, or {series: invoice, pattern: 'INV/{ORG}/{YY}/{####}'} (contract 0009)"
     },
     "title_field": {
       "$ref": "#/$defs/name"
@@ -667,6 +689,19 @@
     "listcol": {
       "type": "string",
       "pattern": "^[a-z][a-z0-9_]*$"
+    },
+    "number_pattern": {
+      "type": "string",
+      "pattern": "^([A-Za-z0-9/._-]|\\{YYYY\\}|\\{YY\\}|\\{MM\\}|\\{ORG\\})*\\{#{1,9}\\}([A-Za-z0-9/._-]|\\{YYYY\\}|\\{YY\\}|\\{MM\\}|\\{ORG\\})*$",
+      "description": "Literal text, {YYYY} {YY} {MM} {ORG}, and exactly one counter {###}"
+    },
+    "number_reset": {
+      "type": "string",
+      "enum": [
+        "yearly",
+        "monthly",
+        "never"
+      ]
     }
   }
 }

@@ -22,6 +22,7 @@ func cmdServe(args []string) int {
 	templates := fs.String("templates", os.Getenv("RANGKA_TEMPLATES"), "theme/layout templates (default: rangka-os/templates)")
 	org := fs.String("org", os.Getenv("RANGKA_ORG"), "organisation id (default $RANGKA_ORG, else the site directory name)")
 	deploy := fs.String("deploy-target", envOr("RANGKA_DEPLOY_TARGET", "dev"), "dev, docker, helm, desktop, cloud or partner (shown in /system/status)")
+	filesDir := fs.String("files-dir", envOr("RANGKA_FILES_DIR", ""), "attachments directory (default: system.rk files.path, else ./data/files)")
 	devOpen := fs.Bool("dev-open", false, "serve /api and /mcp without sign-in, as the org owner (local demos only)")
 	fs.Parse(args)
 	set, err := loadSchemas(c.schemas)
@@ -36,7 +37,7 @@ func cmdServe(args []string) int {
 		AppsDir: c.apps, SiteDir: c.site, DatabaseURL: c.db, Addr: *addr, Org: *org, DevOpen: *devOpen, Schemas: set, Version: Version,
 		WebDir:        server.FindDir(*web, "web", "../web", filepath.Join(appsParent, "..", "rangka-os", "web"), bundle.Dir("web")),
 		TemplatesDir:  server.FindDir(*templates, "templates", "../templates", filepath.Join(appsParent, "..", "rangka-os", "templates"), bundle.Dir("templates")),
-		ConnectorsDir: c.connectorsDir(), DeployTarget: *deploy,
+		ConnectorsDir: c.connectorsDir(), DeployTarget: *deploy, FilesDir: *filesDir,
 	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()

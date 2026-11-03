@@ -101,6 +101,44 @@ func (s *RowScope) Visible(m *meta.Model, rec map[string]any) bool {
 	return true
 }
 
+// Writable reports whether the actor may write rec of model m (contract 0010 §5): every scope field of m
+// that holds a value must hold one from Values, and at least one must hold a value; a record of a scope
+// field's target model must be named in Values. Reads use Visible (any field), so a Braga→Dago transfer is
+// readable by Dago staff but only head office (or a member scoped to both) may create or change it.
+func (s *RowScope) Writable(m *meta.Model, rec map[string]any) bool {
+	if s == nil || m == nil {
+		return true
+	}
+	has, filled := false, false
+	for _, fn := range s.Fields {
+		if m.Field(fn) == nil {
+			continue
+		}
+		has = true
+		v := str(rec[fn])
+		if v == "" {
+			continue
+		}
+		if !s.Values[v] {
+			return false
+		}
+		filled = true
+	}
+	if has {
+		return filled
+	}
+	if s.targets[m.Name] {
+		return s.Values[str(rec["name"])]
+	}
+	return true
+}
+
+// writeActions are the guard actions that change a record; they need Writable, the rest Visible.
+var writeActions = map[string]bool{"create": true, "update": true, "write": true, "delete": true, "submit": true,
+	"cancel": true, "amend": true}
+
+func isWrite(action string) bool { return writeActions[action] || strings.HasPrefix(action, "action:") }
+
 // Limits reports whether the scope narrows model m (it has a scope field or is a scope field's target).
 func (s *RowScope) Limits(m *meta.Model) bool {
 	if s == nil || m == nil {
@@ -131,13 +169,20 @@ func (e *Engine) ScopedModels(a Actor) []string {
 }
 
 // Guard returns Denied(model, action) when rec is outside the actor's row scope. Public entry points call
-// it on the record they act on; print, import and attachment endpoints call it before acting.
+// it on the record they act on; print, import and attachment endpoints call it before acting. Writes
+// (create, update, write, delete, submit, cancel, amend, action:<name>) need every filled scope field in
+// scope; reads need any.
 func (e *Engine) Guard(ctx context.Context, a Actor, model string, rec store.Record, action string) error {
 	s := e.RowScope(a)
 	if s == nil {
 		return nil
 	}
-	if !s.Visible(e.Reg().Model(model), rec) {
+	m := e.Reg().Model(model)
+	ok := s.Visible(m, rec)
+	if isWrite(action) {
+		ok = s.Writable(m, rec)
+	}
+	if !ok {
 		return e.Deny(model, action)
 	}
 	return nil

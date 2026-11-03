@@ -129,6 +129,43 @@ func TestTransferVisibleFromEitherSide(t *testing.T) {
 	}
 }
 
+// TestTransferWriteNeedsEveryField: writes need every filled scope field in scope (contract 0010 §5), so
+// Dago staff read a Braga→Dago transfer but cannot create, change, submit or delete it.
+func TestTransferWriteNeedsEveryField(t *testing.T) {
+	e := scopeEngine(t)
+	dago := Actor{Org: "o", ID: "w", Roles: []string{"transfer_staff"}, Outlets: []string{"DAGO"}}
+	both := Actor{Org: "o", ID: "w2", Roles: []string{"transfer_staff"}, Outlets: []string{"DAGO", "BRAGA"}}
+	cross := store.Record{"from_outlet": "BRAGA", "to_outlet": "DAGO"}
+	same := store.Record{"from_outlet": "DAGO", "to_outlet": "DAGO"}
+	half := store.Record{"from_outlet": "DAGO"}
+	for _, c := range []struct {
+		name   string
+		a      Actor
+		rec    store.Record
+		action string
+		ok     bool
+	}{
+		{"dago creates braga→dago", dago, cross, "create", false},
+		{"dago updates braga→dago", dago, cross, "update", false},
+		{"dago submits braga→dago", dago, cross, "submit", false},
+		{"dago cancels braga→dago", dago, cross, "cancel", false},
+		{"dago deletes braga→dago", dago, cross, "delete", false},
+		{"dago runs an action on braga→dago", dago, cross, "action:receive", false},
+		{"dago reads braga→dago", dago, cross, "read", true},
+		{"dago prints braga→dago", dago, cross, "print", true},
+		{"dago creates dago→dago", dago, same, "create", true},
+		{"dago creates with one side empty", dago, half, "create", true},
+		{"dago creates with both sides empty", dago, store.Record{}, "create", false},
+		{"both creates braga→dago", both, cross, "create", true},
+		{"head office creates braga→dago", Actor{Org: "o", ID: "ho", Roles: []string{"owner"}}, cross, "create", true},
+	} {
+		err := e.Guard(context.Background(), c.a, "stock_transfer", c.rec, c.action)
+		if (err == nil) != c.ok {
+			t.Errorf("%s: Guard = %v, want ok=%v", c.name, err, c.ok)
+		}
+	}
+}
+
 func TestNoScopeRoleIsNil(t *testing.T) {
 	e := scopeEngine(t)
 	for _, roles := range [][]string{{"clerk"}, {"owner"}, nil} {

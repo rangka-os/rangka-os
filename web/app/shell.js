@@ -342,7 +342,7 @@
           onNavigate: function (id) { RA.navigate("#/" + (id === "import" ? "import/" + (Object.keys(meta.imports || {})[0] || "") : id)); setNavOpen(false); }
         }),
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
-        h("div", { className: "rk-shell-main" }, h("main", { className: "ap-main", key: global.location.hash }, h(Page, { route: route, meta: meta, home: home }))),
+        h("div", { className: "rk-shell-main" }, h("main", { className: "ap-main", key: JSON.stringify(route) }, h(Page, { route: route, meta: meta, home: home }))),
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
         h(R.Toaster, { float: true }, toasts.map(function (t) {
           return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, onClose: function () { setToasts(function (x) { return x.filter(function (y) { return y.id !== t.id; }); }); } }, t.body);

@@ -141,20 +141,22 @@ func loadLetterheads(dir string, ld *loader, s *Site, r *Registry) {
 }
 
 // Letterhead returns the letterhead of an org: letterheads/<org>.rk, else letterhead.rk, else one built from
-// the org's entry in config.rk orgs: (legal_name, else name, and npwp), else config.org.legal_name. The org's
-// entry fills legal_name and npwp a letterhead file leaves out. logo is an absolute path inside the site
-// folder, or absent when it escapes the folder or the file is missing. The result is a deep copy.
+// the org's data. The org's data is OrgConfig(org, "org") (orgs.<org>.config.org, else the site's org:):
+// legal_name, else the org's name from orgs:, and npwp; it fills legal_name and npwp a letterhead file leaves
+// out. logo is an absolute path inside the site folder, or absent when it escapes the folder or the file is
+// missing. The result is a deep copy.
 func (r *Registry) Letterhead(org string) map[string]any {
 	if r.Site == nil {
 		return map[string]any{"legal_name": ""}
 	}
-	entry := asMap(asMap(r.SiteConfig("orgs"))[org])
+	data := asMap(r.OrgConfig(org, "org"))
+	legal, npwp := str(data, "legal_name"), str(data, "npwp")
+	if o := r.Orgs[org]; legal == "" && o != nil {
+		legal = o.Name
+	}
 	d := r.Site.Letterheads[org]
 	if d == nil {
 		d = r.Site.Letterheads[""]
-	}
-	if d == nil && entry == nil {
-		return map[string]any{"legal_name": str(asMap(r.SiteConfig("org")), "legal_name")}
 	}
 	out := map[string]any{}
 	if d != nil {
@@ -162,17 +164,11 @@ func (r *Registry) Letterhead(org string) map[string]any {
 			out = deepCopy(m).(map[string]any)
 		}
 	}
-	if entry != nil {
-		if str(out, "legal_name") == "" {
-			if n := str(entry, "legal_name"); n != "" {
-				out["legal_name"] = n
-			} else {
-				out["legal_name"] = str(entry, "name")
-			}
-		}
-		if str(out, "npwp") == "" && str(entry, "npwp") != "" {
-			out["npwp"] = str(entry, "npwp")
-		}
+	if str(out, "legal_name") == "" {
+		out["legal_name"] = legal
+	}
+	if str(out, "npwp") == "" && npwp != "" {
+		out["npwp"] = npwp
 	}
 	if logo := str(out, "logo"); logo != "" {
 		if abs, ok := r.siteFile(logo); ok && fileExists(abs) {

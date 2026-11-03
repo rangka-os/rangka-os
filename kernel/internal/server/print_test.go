@@ -37,6 +37,7 @@ signatory: {name: Nama Penandatangan, title: Direktur}
 const invoicePermissions = `permissions:
   - {role: owner, read: true, print: true}
   - {role: sales_manager, read: true, print: true}
+  - {role: sales_rep, read: true}
 `
 
 // printEnv installs the reference invoice format in the sales app, a site letterhead and print permissions
@@ -173,6 +174,8 @@ func TestPrintPermissionDenied(t *testing.T) {
 	}
 	e.jar, _ = cookiejar.New(nil)
 	e.must(200, "POST", "/auth/login", map[string]any{"email": "rep@contoh.test", "password": "rahasia-123"})
+	// the rep can see the record (read) but not print it: S1's 403, not a 404
+	e.must(200, "GET", "/api/v1/r/sales_invoice/"+name, nil)
 	// the same 403 whatever format is asked for, so a denied caller cannot probe which formats exist
 	for _, q := range []string{"", "?format=sales_invoice", "?format=nope", "?as=pdf"} {
 		r := e.do("GET", "/api/v1/r/sales_invoice/"+name+"/print"+q, nil)
@@ -294,6 +297,13 @@ func TestPrintOtherOrg(t *testing.T) {
 	if r := e.do("GET", "/api/v1/r/customer/CUST-9999/print?format=statement", nil); r.Status != 404 || code(r) != "not_found" {
 		t.Errorf("other org's customer: %d %s", r.Status, r.Body)
 	}
+	// a related list holds the caller's org's rows only, even when another org's row matches
+	if _, err := e.s.DB.Exec(ctx, `insert into r_sales_invoice (org_id, name, customer, docstatus) values ('other', 'INV-LAIN-0001', 'CUST-0012', 1)`); err != nil {
+		t.Fatal(err)
+	}
+	if body := string(e.must(200, "GET", "/api/v1/r/customer/CUST-0012/print?format=statement", nil).Body); strings.Contains(body, "INV-LAIN-0001") {
+		t.Errorf("another org's invoice in the related list:\n%s", body)
+	}
 	// a link pointing at another org's record is left out of .Links: the template prints the raw value
 	name := e.submittedInvoice("CUST-0012")
 	if _, err := e.s.DB.Exec(ctx, `update r_sales_invoice set customer = 'CUST-9999' where org_id = 'kopi-senja' and name = $1`, name); err != nil {
@@ -302,5 +312,55 @@ func TestPrintOtherOrg(t *testing.T) {
 	body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+name+"/print", nil).Body)
 	if strings.Contains(body, "Rahasia Org Lain") || !strings.Contains(body, "CUST-9999") {
 		t.Fatalf("other org's link rendered:\n%s", body)
+	}
+}
+
+// orgProbeEnv adds a site format on customer printing .Org, and appends cfg to the site's config.rk
+// (Kopi Senja's has tax: {pkp: true} and no org:).
+func orgProbeEnv(t *testing.T, cfg string) *env {
+	return printEnv(t, func(apps, site string) {
+		dir := filepath.Join(site, "print")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		files := map[string]string{
+			filepath.Join(dir, "org_probe.rk"): "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\n" +
+				"name: org_probe\nmodel: customer\ntemplate: org_probe.html\n",
+			filepath.Join(dir, "org_probe.html"): `<p>{{.Org.name}}|{{.Org.code}}|{{.Org.legal_name}}|{{.Org.pkp}}</p>`,
+		}
+		b, err := os.ReadFile(filepath.Join(site, "config.rk"))
+		if err != nil {
+			t.Fatal(err)
+		}
+		files[filepath.Join(site, "config.rk")] = string(b) + cfg
+		for p, s := range files {
+			if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+}
+
+// .Org.pkp comes from config org.pkp, else tax.pkp: a PKP firm's invoice prints its DPP and PPN rows.
+func TestPrintOrgPKP(t *testing.T) {
+	for _, tc := range []struct {
+		name, cfg, probe string
+		ppn              bool
+	}{
+		{"tax.pkp", "", "<p>|||true</p>", true},
+		{"org.pkp false", "org: {legal_name: PT Contoh Jasa Teknik, pkp: false}\n", "<p>||PT Contoh Jasa Teknik|false</p>", false},
+		{"org without pkp", "org: {legal_name: PT Contoh Jasa Teknik}\n", "<p>||PT Contoh Jasa Teknik|true</p>", true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			e := orgProbeEnv(t, tc.cfg)
+			if body := string(e.must(200, "GET", "/api/v1/r/customer/CUST-0012/print?format=org_probe", nil).Body); !strings.Contains(body, tc.probe) {
+				t.Errorf("want %s in:\n%s", tc.probe, body)
+			}
+			name := e.submittedInvoice("CUST-0012")
+			body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+name+"/print", nil).Body)
+			if got := strings.Contains(body, "DPP nilai lain") && strings.Contains(body, "PPN 12%"); got != tc.ppn {
+				t.Errorf("DPP/PPN rows printed = %v, want %v:\n%s", got, tc.ppn, body)
+			}
+		})
 	}
 }

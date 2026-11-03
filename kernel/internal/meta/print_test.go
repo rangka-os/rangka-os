@@ -115,16 +115,6 @@ func copyDir(t *testing.T, src, dst string) {
 	}
 }
 
-func writeFile(t *testing.T, path, text string) {
-	t.Helper()
-	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(path, []byte(text), 0o644); err != nil {
-		t.Fatal(err)
-	}
-}
-
 func editFile(t *testing.T, path, old, new string) {
 	t.Helper()
 	b, err := os.ReadFile(path)
@@ -134,41 +124,60 @@ func editFile(t *testing.T, path, old, new string) {
 	writeFile(t, path, strings.Replace(string(b), old, new, 1))
 }
 
-const configHead = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/config.json\n"
+const configHead = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json\n"
 
-// config.org / config.orgs arrive with the schema 0.5 bootstrap (another stream); until then these tests
-// load a site with their own config.rk and do not validate it.
 func TestLetterheadFallback(t *testing.T) {
 	dir := t.TempDir()
 	writeFile(t, filepath.Join(dir, "config.rk"), configHead+"org: {legal_name: PT Contoh Jasa Teknik}\n")
-	reg := Load(printApps, dir, nil)
+	reg := validSite(t, dir)
 	if got := reg.Letterhead("x"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Contoh Jasa Teknik"}) {
 		t.Errorf("fallback = %v", got)
 	}
 }
 
+// validSite loads the print apps with the site in dir and fails the test on any validation error.
+func validSite(t *testing.T, dir string) *Registry {
+	t.Helper()
+	reg, rep := Validate(printApps, dir, nil, schema.Embedded())
+	var buf bytes.Buffer
+	if n := rep.Print(&buf); n != 0 {
+		t.Fatalf("site does not validate:\n%s", buf.String())
+	}
+	return reg
+}
+
 func TestLetterheadFromOrgs(t *testing.T) {
 	dir := t.TempDir()
-	writeFile(t, filepath.Join(dir, "config.rk"), configHead+`org: {legal_name: PT Lama}
+	cfg := configHead + `org: {legal_name: PT Lama, npwp: "99.999.999.9-999.999"}
 orgs:
-  pusat: {name: Kantor pusat, code: PST, legal_name: PT Contoh Jasa Teknik, npwp: "00.000.000.0-000.000", pkp: true}
+  pusat:
+    name: Kantor pusat
+    code: PST
+    config:
+      org: {legal_name: PT Contoh Jasa Teknik, npwp: "00.000.000.0-000.000", pkp: true}
   cabang: {name: PT Contoh Cabang}
-`)
-	reg := Load(printApps, dir, nil)
-	if got := reg.Letterhead("pusat"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"}) {
-		t.Errorf("pusat = %v", got)
-	}
-	if got := reg.Letterhead("cabang"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Contoh Cabang"}) {
-		t.Errorf("cabang = %v", got)
-	}
-	if got := reg.Letterhead("lain"); !reflect.DeepEqual(got, map[string]any{"legal_name": "PT Lama"}) {
-		t.Errorf("no orgs entry = %v", got)
+  tanpa:
+    name: PT Contoh Tanpa Nama Resmi
+    config:
+      org: {pkp: false}
+`
+	writeFile(t, filepath.Join(dir, "config.rk"), cfg)
+	reg := validSite(t, dir)
+	for org, want := range map[string]map[string]any{
+		"pusat":  {"legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"},
+		"cabang": {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // no config.org: the site's org:
+		"lain":   {"legal_name": "PT Lama", "npwp": "99.999.999.9-999.999"}, // not in orgs:
+		"tanpa":  {"legal_name": "PT Contoh Tanpa Nama Resmi"},              // config.org without legal_name: the org's name
+	} {
+		if got := reg.Letterhead(org); !reflect.DeepEqual(got, want) {
+			t.Errorf("%s = %v, want %v", org, got, want)
+		}
 	}
 
-	// a letterhead file without legal_name / npwp takes them from the org's entry; its own values win
+	// a letterhead file without legal_name / npwp takes them from the org's data; its own values win
 	writeFile(t, filepath.Join(dir, "letterhead.rk"), "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json\ntagline: Inspeksi\n")
 	writeFile(t, filepath.Join(dir, "letterheads", "cabang.rk"), "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json\nlegal_name: PT Kop Cabang\nnpwp: \"11.111.111.1-111.111\"\n")
-	reg = Load(printApps, dir, nil)
+	reg = validSite(t, dir)
 	if got := reg.Letterhead("pusat"); !reflect.DeepEqual(got, map[string]any{"tagline": "Inspeksi", "legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"}) {
 		t.Errorf("filled = %v", got)
 	}

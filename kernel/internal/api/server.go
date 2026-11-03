@@ -120,7 +120,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.runAction))
 	// guarded record routes: the guard checks the permission, then the stream's handler runs
-	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", s.recordGuard("print", notImplemented))
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", s.recordGuard("print", s.printRecord))
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", s.recordGuard("read", s.listAttachments))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", s.recordGuard("write", s.uploadAttachment))
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))

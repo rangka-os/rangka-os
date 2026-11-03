@@ -46,8 +46,9 @@ func printsMeta(reg *meta.Registry, model string) []any {
 	return out
 }
 
-// GET /api/v1/r/{model}/{name}/print?format=&as=html|pdf
-func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) {
+// GET /api/v1/r/{model}/{name}/print?format=&as=html|pdf, behind recordGuard("print"): rec is already read as
+// the caller (org and row scope) and the caller may print it.
+func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, rec store.Record) {
 	ctx := r.Context()
 	model, name := r.PathValue("model"), r.PathValue("name")
 	q := r.URL.Query()
@@ -57,15 +58,6 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 	}
 	if as != "html" && as != "pdf" {
 		writeError(w, http.StatusBadRequest, "bad_request", "as harus html atau pdf")
-		return
-	}
-	rec, err := s.Engine.Get(ctx, c.actor, model, name)
-	if err != nil {
-		fail(w, err)
-		return
-	}
-	if !s.Engine.Permits(ctx, c.actor, model, rec, "print") {
-		permissionDenied(w, model, "print")
 		return
 	}
 	reg := s.Engine.Reg()
@@ -79,8 +71,6 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 		}
 		return
 	}
-	org, _ := reg.SiteConfig("orgs").(map[string]any)
-	orgCfg, _ := org[c.actor.Org].(map[string]any)
 	related, err := s.printRelated(ctx, c.actor, f, rec)
 	if err != nil {
 		fail(w, err)
@@ -94,7 +84,7 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 	}
 	page, err := docprint.Render(docprint.Input{
 		Format: f, Model: m, Doc: rec, Links: s.printLinks(ctx, c.actor, m, rec), Related: related,
-		Letterhead: reg.Letterhead(c.actor.Org), Org: orgCfg, Printed: s.Engine.Now().In(s.Engine.Location()),
+		Letterhead: reg.Letterhead(c.actor.Org), Org: printOrg(reg, c.actor.Org), Printed: s.Engine.Now().In(s.Engine.Location()),
 		Children: children,
 	})
 	if err != nil {
@@ -133,6 +123,24 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 	}
 	w.WriteHeader(http.StatusOK)
 	w.Write(body)
+}
+
+// printOrg is .Org (contract 0008 §2): the org's config org: (legal_name, npwp, pkp; OrgConfig falls back to
+// the site's), plus name and code from its orgs: entry. pkp falls back to tax.pkp when org: leaves it out.
+func printOrg(reg *meta.Registry, org string) map[string]any {
+	out := map[string]any{}
+	for k, v := range meta.AsMap(reg.OrgConfig(org, "org")) {
+		out[k] = v
+	}
+	if o := reg.Orgs[org]; o != nil {
+		out["name"], out["code"] = o.Name, o.Code
+	}
+	if _, ok := out["pkp"]; !ok {
+		if v, ok := reg.OrgConfig(org, "tax.pkp").(bool); ok {
+			out["pkp"] = v
+		}
+	}
+	return out
 }
 
 // pdfFilename is the record name as a file name: "/" becomes "-", quotes, backslashes and control characters go.

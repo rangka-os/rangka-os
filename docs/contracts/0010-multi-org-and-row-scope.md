@@ -43,6 +43,9 @@ orgs:
 - Kernel code reads org-dependent settings with `Registry.OrgConfig(org, key)`: `orgs.<org>.config[key]`
   when present, else `config.rk`'s value. S3 (letterhead), S4 (numbering, `{ORG}`) and S8
   (`org.pkp`) use it instead of `SiteConfig`.
+- An org's value replaces the site's top-level key wholesale; there is no deep merge. An org that sets
+  `org:` must repeat every subkey it needs (`legal_name`, `npwp`, `pkp`, ...): `org: {legal_name: X}` alone
+  leaves that org's `org.pkp` unset, not the site's value.
 
 ### 3. Signing in and switching (REST, fixed in the program plan)
 - `GET /auth/me` adds `orgs: [{id, name, code, roles}]` (every membership, sorted by id) and
@@ -98,11 +101,20 @@ scope: {field: outlet, from: user.outlets}
     record → 403 `permission_denied` `{model, action}`;
   - creating a record, or changing a scope field, to a value outside `from` → 403 `permission_denied`;
   - SSE `record` events of scoped models reach a scoped subscriber only for visible records. The filter is
-    fixed per connection: role or outlet changes apply when the client reconnects;
+    fixed per connection: role or outlet changes apply when the client reconnects. An update that moves a
+    record out of a subscriber's scope sends that subscriber nothing (no delete-like event), so an open view
+    keeps the stale row until it reloads;
   - a queued action is guarded when it is enqueued, not again in the worker;
   - MCP tools go through the same engine calls.
 - Automations, hooks and flow steps run inside an allowed operation are not scoped (an outlet's goods
-  receipt may write a stock move that head office sees).
+  receipt may write a stock move that head office sees). Because flow steps are not scoped, a member with a
+  row scope may not start a flow directly: `POST /api/v1/flows/{name}/run` → 403 `permission_denied`
+  `{model: flow, action: run}`. Flows started by automations, the scheduler or jobs are not affected.
+- System lists: `GET /api/v1/system/jobs` and `/jobs/{id}` show the current org's jobs and installation-wide
+  ones (another org's job id is 404); a member with a row scope sees only jobs they queued
+  (`args.actor.id`). `GET /api/v1/system/audit` shows the current org (`?org=` must be a membership, else
+  403 `permission_denied` `{model: org, action: read}`) and leaves `record.*` entries of scoped models out
+  for a member with a row scope.
 - Print, import and attachment endpoints (S3, S6, S7) load records through `Engine.Get` or call
   `Engine.Guard(ctx, actor, model, record, action)` before acting.
 
@@ -121,3 +133,7 @@ shared with S1's model permissions (`engine.PermissionError`).
 - S9's pilot bundles declare `orgs:` in `config.rk` and create members with `rangka user add`.
 - Several roles per org, business units inside an org, and scope on fields other than outlet-like links
   wait for a later contract.
+- `config.rk`, including `orgs:`, is a site-level file: a change set that edits it (any org's settings) is
+  approved by a site approver regardless of org. Per-org approval of org settings waits for a later contract.
+- Scheduled flows (`schedule:`) currently register only for the default org (`Cfg.Org`); other orgs do not
+  get them. Per-org schedules are a follow-up in the scheduler work, not S5.

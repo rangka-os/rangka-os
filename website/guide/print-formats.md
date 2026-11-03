@@ -108,6 +108,8 @@ Rangka picks `letterheads/<org>.rk` for the caller's organisation, then (only fo
 | `label "field"`, `option "field" v` | `label "due_date"` | the Indonesian field or option label |
 | `sub a b`, `sum list "field"` | `sub .Doc.grand_total .Doc.paid_amount` | exact money arithmetic |
 | `overdue d`, `aging rows` | `overdue .Doc.due_date` | days past due; open amounts by age |
+| `taxrate doc tax` | `number (taxrate .Doc .Tax)` | the PPN rate: the record's `ppn_rate`, else `tax_rate`, else the org's config (a stored 0 counts) |
+| `dppfactor doc tax` | `dppfactor .Doc .Tax` | the DPP factor (`11/12`), empty when it is exactly 1 |
 | `upper s` | | upper case |
 
 Exact rules (rounding, negatives, limits) are in [contract 0008 §3](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0008-print-formats.md).

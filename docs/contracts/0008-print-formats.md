@@ -53,7 +53,7 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 ### 3. Templates: Go `html/template`
 - The template holds the page body. The kernel wraps it in a full document: `<!doctype html>`, `lang="id"`, title = record name, `@page` size and margins for the paper, base CSS (Rangka tokens: ink text, stone rules, tabular numbers), and a `print-<paper>` class on `<body>`. A template may add CSS with `{{define "style"}}…{{end}}`.
 - Data: `.Doc` (the record with child tables; every model field present, missing ones empty), `.Links` (each top-level link field's record, e.g. `.Links.customer.customer_name`), `.Related.<name>` (lists from `related:`), `.Truncated.<name>` (true when more rows matched than the list's `limit`, so the list was cut; templates should say so), `.Letterhead`, `.Org`, `.Tax` (the org's config `tax`, deep-merged over the site's: `ppn_rate`, default `12`; `dpp_ratio`, default `"11/12"`; `pkp`), `.Model` (`name`, `label`), `.Format` (`name`, `label`, `paper`), `.Printed` (print time, org time zone).
-- Tax labels: a layout never hard-codes a rate or DPP factor. The rate shown is the record's own `ppn_rate`, else its `tax_rate`, else `.Tax.ppn_rate` (printed with `number`, e.g. `PPN 11%`); the factor is the record's `dpp_ratio`, else `.Tax.dpp_ratio`, labelled `DPP nilai lain (<factor>)` unless it is `1` or `1/1` (then `DPP`). The amounts stay the record's `dpp` and `ppn`: the layout computes no tax.
+- Tax labels: a layout never hard-codes a rate or DPP factor. The rate shown is `taxrate .Doc .Tax`, printed with `number` (`PPN 11%`, `PPN 0%`); the DPP row is labelled `DPP nilai lain (<factor>)` with `dppfactor .Doc .Tax`, or `DPP` when that is empty (factor 1). The amounts stay the record's `dpp` and `ppn`: the layout computes no tax.
 - Built-in partials, which a template may redefine: `letterhead` (logo, legal name, address, NPWP, contacts), `bank_accounts`, `signature`.
 - Helpers (exact output, tested):
 
@@ -69,6 +69,8 @@ footer: {id: Terima kasih atas kepercayaan Anda}
 | `sub a b`, `sum list "field"` | `sub .Doc.grand_total .Doc.paid_amount` | exact decimal arithmetic for money columns |
 | `overdue d` | `overdue .Doc.due_date` | whole days past `d` at print time, `0` when not due |
 | `aging rows` | `aging .Related.invoices` | open amounts (`grand_total − paid_amount`) by age past `due_date`: `current`, `d30`, `d60`, `d90`, `over90`, `total` |
+| `taxrate doc tax` | `number (taxrate .Doc .Tax)` | the record's `ppn_rate`, else its `tax_rate`, else `tax.ppn_rate`; a record value is set when present and not null or `""`, so a stored `0` prints `0` |
+| `dppfactor doc tax` | `dppfactor .Doc .Tax` | the record's `dpp_ratio` (same rule), else `tax.dpp_ratio`, as written (`11/12`); `""` when it equals exactly 1 (`1`, `1/1`, `12/12`, `1.0`) |
 | `upper s` | | upper case |
 - Missing values print as empty. Templates cannot run script or load anything: the page carries `Content-Security-Policy: default-src 'none'; img-src data:; style-src 'unsafe-inline'` as a `<meta http-equiv>` first in `<head>` (so the PDF, rendered from a local file, is bound too) and, for `as=html`, as a response header.
 

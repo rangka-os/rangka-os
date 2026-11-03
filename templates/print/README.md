@@ -44,10 +44,13 @@ optional `ppn_rate`, `tax_rate` and `dpp_ratio`; the PO reads `ppn_rate` and `ta
 - **PPN.** The quotation and the invoice show the DPP and PPN rows only when `.Org.pkp` is true; the
   invoice's e-Faktur note likewise. The PO shows its `ppn` row when the amount is not zero (the vendor's tax,
   not the firm's status). No layout hard-codes a rate or factor (a test greps for them):
-  - rate: the record's `ppn_rate`, else its `tax_rate`, else `.Tax.ppn_rate` (default 12), printed with
-    `number` as `PPN 12%`, `PPN 11%` or `PPN 11,5%`;
-  - DPP factor: the record's `dpp_ratio`, else `.Tax.dpp_ratio` (default `11/12`), labelled
-    `DPP nilai lain (11/12)`, or plain `DPP` when the factor is `1` or `1/1`.
+  - rate: `taxrate .Doc .Tax` is the record's `ppn_rate`, else its `tax_rate`, else `.Tax.ppn_rate`
+    (default 12), printed with `number` as `PPN 12%`, `PPN 11,5%` or `PPN 0%`. A stored 0 is a rate: the
+    engine reads an empty numeric column as 0, so a zero-rated record prints `PPN 0%`;
+  - DPP factor: `dppfactor .Doc .Tax` is the record's `dpp_ratio`, else `.Tax.dpp_ratio` (default `11/12`),
+    labelled `DPP nilai lain (11/12)`, or plain `DPP` when the factor equals 1 (`1`, `1/1`, `12/12`);
+  - the PO's rate label falls back to the firm's own config rate unless the PO stores `ppn_rate` or
+    `tax_rate`, although its PPN is the vendor's tax.
 
   `.Tax` is the org's config `tax` deep-merged over the site's, so an org that sets only `ppn_rate` keeps the
   site's `dpp_ratio`. The amounts come from the record's `dpp` and `ppn`; the layout computes no tax.
@@ -79,4 +82,4 @@ Wrap every nested access in `{{with}}` and use its `{{else}}` for a fallback:
 
 Inside `with` and `range` the dot changes; name what you need from outside first (`{{$cur := ...}}`) or
 use `$` for the root. Use the helpers for every value a reader sees: `rupiah`/`money` for amounts,
-`date` for dates, `number` for quantities, `terbilang` for the total in words.
+`date` for dates, `number` for quantities, `terbilang` for the total in words, `taxrate`/`dppfactor` for tax labels.

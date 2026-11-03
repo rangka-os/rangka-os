@@ -9,7 +9,7 @@ import (
 
 // PrintFuncNames are the helpers print templates may call (contract 0008 §3). The renderer (docprint)
 // provides them; validation parses templates with no-op stand-ins of the same names.
-var PrintFuncNames = []string{"rupiah", "money", "number", "date", "terbilang", "label", "option", "sub", "sum", "overdue", "aging", "upper"}
+var PrintFuncNames = []string{"rupiah", "money", "number", "date", "terbilang", "label", "option", "sub", "sum", "overdue", "aging", "upper", "taxrate", "dppfactor"}
 
 func printFuncStubs() template.FuncMap {
 	fm := template.FuncMap{}

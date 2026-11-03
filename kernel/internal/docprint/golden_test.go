@@ -344,12 +344,19 @@ func TestGoldenTaxLabels(t *testing.T) {
 			mustContain(t, render(name, map[string]any{"ppn_rate": 11}, map[string]any{"ppn_rate": "", "tax_rate": ""}), "<th>PPN 11%</th>")
 			mustContain(t, render(name, map[string]any{"dpp_ratio": "1/1"}, map[string]any{"dpp_ratio": "11/12"}), "<th>DPP nilai lain (11/12)</th>")
 			mustContain(t, render(name, nil, map[string]any{"dpp_ratio": "1"}), "<th>DPP</th>")
+			// engine types: float64 rates, NULL as 0
+			mustContain(t, render(name, map[string]any{"ppn_rate": 12}, map[string]any{"tax_rate": float64(0)}), "<th>PPN 0%</th>")
+			mustContain(t, render(name, map[string]any{"ppn_rate": 12}, map[string]any{"tax_rate": float64(11)}), "<th>PPN 11%</th>")
+			for _, f := range []any{1, float64(1), "1/1", "12/12", "1.0"} {
+				mustContain(t, render(name, map[string]any{"dpp_ratio": f}, nil), "<th>DPP</th>")
+			}
 		})
 	}
 	t.Run("purchase_order", func(t *testing.T) {
 		mustContain(t, render("purchase_order", nil, nil), "<th>PPN 12%</th>")
 		mustContain(t, render("purchase_order", map[string]any{"ppn_rate": 11}, nil), "<th>PPN 11%</th>")
 		mustContain(t, render("purchase_order", map[string]any{"ppn_rate": 11}, map[string]any{"ppn_rate": "12"}), "<th>PPN 12%</th>")
+		mustContain(t, render("purchase_order", map[string]any{"ppn_rate": 12}, map[string]any{"ppn_rate": float64(0)}), "<th>PPN 0%</th>")
 	})
 }
 

@@ -29,6 +29,8 @@ func baseFuncs(asOf time.Time) template.FuncMap {
 		"sum":       Sum,
 		"overdue":   func(d any) int { return Overdue(d, asOf) },
 		"aging":     func(rows any) map[string]string { return Aging(rows, asOf) },
+		"taxrate":   TaxRate,
+		"dppfactor": DPPFactor,
 		"upper": func(v any) string {
 			if v == nil {
 				return ""
@@ -359,4 +361,43 @@ func Aging(rows any, asOf time.Time) map[string]string {
 		out[k] = trimDecimal(sums[k])
 	}
 	return out
+}
+
+// recordValue is m[key] when it is set: present and neither nil nor "". Any number, 0 included, is set.
+func recordValue(m any, key string) (any, bool) {
+	mm, _ := m.(map[string]any)
+	v, ok := mm[key]
+	if !ok || v == nil || v == "" {
+		return nil, false
+	}
+	return v, true
+}
+
+// TaxRate is the PPN rate a document prints: the record's ppn_rate, else its tax_rate, else tax's ppn_rate
+// (the org's config tax, defaults filled). A stored 0 is a rate, not a missing one.
+func TaxRate(doc, tax any) any {
+	for _, k := range []string{"ppn_rate", "tax_rate"} {
+		if v, ok := recordValue(doc, k); ok {
+			return v
+		}
+	}
+	v, _ := recordValue(tax, "ppn_rate")
+	return v
+}
+
+// DPPFactor is the DPP factor a document prints: the record's dpp_ratio, else tax's dpp_ratio, as written
+// ("11/12"). It is "" when the factor is exactly 1 (1, "1/1", "12/12", "1.0"): the DPP is the full value.
+func DPPFactor(doc, tax any) string {
+	v, ok := recordValue(doc, "dpp_ratio")
+	if !ok {
+		v, _ = recordValue(tax, "dpp_ratio")
+	}
+	if v == nil {
+		return ""
+	}
+	s := strings.TrimSpace(fmt.Sprint(v))
+	if r, ok := toRat(s); ok && r.Cmp(big.NewRat(1, 1)) == 0 {
+		return ""
+	}
+	return s
 }

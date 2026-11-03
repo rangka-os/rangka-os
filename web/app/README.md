@@ -38,7 +38,7 @@ absent meta key turns it off and its buttons disappear.
 | --- | --- |
 | Org switcher | `GET /auth/me` returns more than one entry in `orgs` |
 | Approvals | `GET /api/v1/approvals` exists |
-| Print | `meta.models[m].prints` (or a top-level `meta.prints`) lists formats |
+| Print | `meta.models[m].prints` (or a top-level `meta.prints`) lists formats and `can.print` is not `false`. Cetak checks with `HEAD …/print?as=html` (403/404 become a message), then opens the HTML view in a new tab; on `501 pdf_unavailable` Unduh PDF offers "Cetak dari browser" (HTML view + `window.print()`) |
 | Attachments | `GET /api/v1/r/<model>/<name>/attachments` exists and is not `501 files_disabled` |
 | Imports | `meta.imports` is not empty |
 | Buttons per action | `meta.models[m].can[action]` when present |
@@ -67,6 +67,8 @@ error or an unexpected HTTP error. `--width 400` runs the same scenarios as a ph
 at least 40px tall. React 18.3.1 is vendored in `vendor/` (see `vendor/README.md`); the suite fails on any request to a script CDN.
 
 Features another stream builds run live when the kernel has them and otherwise against `page.route` mocks that answer
-exactly the Fixed-interface shapes. The run ends with `live: … · mocked: …`. `--require-all` fails when anything ran
+exactly the Fixed-interface shapes. When the kernel has the approvals, imports or print kinds, the harness writes a real
+definition into the temp site copy (approval overlay, import definitions, `print/*.rk` + `letterhead.rk` for the demo
+company) before migrate. The run ends with `live: … · mocked: …`. `--require-all` fails when anything ran
 on a mock: the integrator's gate once the approvals, print, attachments, imports and multi-org streams are merged. Without
 Go, Playwright or the PostgreSQL binaries the suite prints SKIP and exits 0, but with `--require-all` it exits 1.

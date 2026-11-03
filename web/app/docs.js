@@ -1,9 +1,12 @@
 /* Rangka end-user app: print and attachments on the form (streams S3 and S6).
  *
  * RangkaApp.DocTools({model, name}) — header buttons for a saved record. Print formats come from meta
- * (RangkaAppAPI.printFormats): none → nothing is shown; one → "Cetak"; several → "Cetak" opens a menu of the format
- * labels. Cetak opens GET /api/v1/r/<model>/<name>/print?as=html (plus &format= for a non-default format) in a new tab.
- * "Unduh PDF" fetches ?as=pdf and saves it; a 501 pdf_unavailable toasts that the server has no PDF renderer.
+ * (RangkaAppAPI.printFormats): none, or meta.models[m].can.print === false → nothing is shown; one → "Cetak"; several →
+ * "Cetak" opens a menu of the format labels (default first). Cetak opens a tab at once, asks HEAD
+ * /api/v1/r/<model>/<name>/print?as=html (plus &format= for a non-default format), then loads that HTML print view in
+ * the tab; a 403 or 404 closes the tab and toasts (printError). "Unduh PDF" fetches ?as=pdf and saves it; a 501
+ * pdf_unavailable opens a dialog whose "Cetak dari browser" opens the HTML view and calls the tab's window.print().
+ * Both buttons are disabled while either request is in flight.
  *
  * RangkaApp.Attachments({model, name, record}) — card "Lampiran" on a saved record: file input and drop zone, the list
  * (thumbnail for raster images, a PDF icon, name as a link to GET /api/v1/attachments/<id>, size, uploader, date) and a
@@ -11,7 +14,7 @@
  * a 413 shows the same text. Hidden entirely when the kernel has no attachments route or the files capability is off.
  * Upload and delete buttons are disabled while a request is in flight.
  *
- * Pure helpers (unit-tested in test/docs.test.js): checkFile, uploadError, kindOf, formatLabel.
+ * Pure helpers (unit-tested in test/docs.test.js): checkFile, uploadError, kindOf, formatLabel, printError.
  */
 (function (global) {
   "use strict";
@@ -49,6 +52,17 @@
     return "file";
   }
 
+  /** A failed print/PDF request → {tone, title, body} for a toast. */
+  function printError(e) {
+    e = e || {};
+    if (e.status === 0) return { tone: "bad", title: "Tidak bisa terhubung ke server. Coba lagi." };
+    if (e.status === 401) return { tone: "bad", title: "Sesi kamu sudah berakhir", body: "Masuk lagi, lalu cetak ulang." };
+    if (e.status === 403) return { tone: "bad", title: "Kamu tidak punya izin mencetak dokumen ini" };
+    if (e.status === 404) return { tone: "bad", title: "Dokumen tidak ditemukan", body: "Mungkin sudah dihapus atau tidak bisa kamu buka." };
+    if (e.code === "pdf_failed") return { tone: "bad", title: "PDF gagal dibuat", body: e.message };
+    return { tone: "bad", title: "Dokumen tidak bisa dicetak", body: e.message };
+  }
+
   function formatLabel(f) {
     var l = f && f.label;
     if (l && typeof l === "object") l = l.id || l.en || Object.keys(l).map(function (k) { return l[k]; })[0];
@@ -61,6 +75,7 @@
   RA.uploadError = uploadError;
   RA.kindOf = kindOf;
   RA.formatLabel = formatLabel;
+  RA.printError = printError;
 
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
@@ -69,13 +84,47 @@
   var API = global.RangkaAppAPI;
 
   /* ---------------------------------------------------------------- print */
+  /** Opens a same-origin tab synchronously (inside the click, so no popup blocker), then points it at url once the
+   *  server said yes. `w` is kept (not noopener) so "Cetak dari browser" can call w.print(); the tab's opener link is
+   *  cut. Returns the tab or null when the browser blocked it. */
+  function blankTab() {
+    var w = global.open("", "_blank");
+    if (!w) return null;
+    try { w.opener = null; } catch (e) { /* ignore */ }
+    try {
+      w.document.title = "Menyiapkan dokumen…";
+      w.document.body.style.cssText = "font:14px system-ui,sans-serif;color:#44403C;padding:24px";
+      w.document.body.textContent = "Menyiapkan dokumen…";
+    } catch (e) { /* ignore */ }
+    return w;
+  }
+
+  /** Calls w.print() once the print page in w has loaded (the page itself runs no script: CSP default-src 'none'). */
+  function printWhenLoaded(w) {
+    var tries = 0;
+    var t = setInterval(function () {
+      tries++;
+      try {
+        if (w.closed || tries > 300) { clearInterval(t); return; }
+        if (/\/print(\?|$)/.test(w.location.pathname + w.location.search) && w.document.readyState === "complete") {
+          clearInterval(t);
+          w.focus();
+          w.print();
+        }
+      } catch (e) { clearInterval(t); }
+    }, 100);
+  }
+
   function DocTools(p) {
     var ctx = useContext(RA.Ctx);
     var os = useState(false), open = os[0], setOpen = os[1];
-    var bs = useState(false), busy = bs[0], setBusy = bs[1];
+    var bs = useState(null), busy = bs[0], setBusy = bs[1];
+    var fs = useState(null), fallback = fs[0], setFallback = fs[1];
     var wrap = useRef(null);
+    var busyRef = useRef(null);
     var name = p.name || (p.record && p.record.name) || (p.rec && p.rec.name);
     var formats = API.printFormats(ctx.meta, p.model);
+    var mm = (ctx.meta.models || {})[p.model] || {};
 
     useEffect(function () {
       if (!open) return undefined;
@@ -86,44 +135,77 @@
       return function () { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
     }, [open]);
 
-    if (!formats.length || !name) return null;
+    if (!formats.length || !name || (mm.can && mm.can.print === false)) return null;
 
-    function printHtml(f) {
-      var url = ctx.api.printUrl(p.model, name, { format: f && !f.default ? f.name : undefined, as: "html" });
-      global.open(url, "_blank", "noopener");
+    function start(kind) {
+      if (busyRef.current) return false;
+      busyRef.current = kind;
+      setBusy(kind);
+      return true;
+    }
+    function stop() { busyRef.current = null; setBusy(null); }
+    function fmtParam(f) { return f && !f.default ? f.name : undefined; }
+    function fail(e) {
+      var m = printError(e);
+      ctx.toast(m.tone, m.title, m.body);
+    }
+
+    /** Cetak: HEAD first (403/404 become a message here instead of a JSON page in the new tab), then the HTML view.
+     *  andPrint also opens the browser's print dialog ("Cetak dari browser"). */
+    function printHtml(f, andPrint) {
+      setOpen(false);
+      if (busyRef.current) return;
+      var w = blankTab();
+      if (!w) { ctx.toast("warn", "Browser memblokir tab baru", "Izinkan pop-up untuk situs ini, lalu tekan Cetak lagi."); return; }
+      start("print");
+      var url = ctx.api.printUrl(p.model, name, { format: fmtParam(f), as: "html" });
+      ctx.api.printCheck(p.model, name, fmtParam(f)).then(function () {
+        stop();
+        w.location.replace(url);
+        if (andPrint) printWhenLoaded(w);
+      }, function (e) {
+        stop();
+        try { w.close(); } catch (x) { /* ignore */ }
+        fail(e);
+      });
     }
 
     function pdf() {
-      if (busy) return;
-      setBusy(true);
+      if (!start("pdf")) return;
       var f = formats[0];
-      ctx.api.printPdf(p.model, name, f && !f.default ? f.name : undefined).then(function (blob) {
-        setBusy(false);
+      ctx.api.printPdf(p.model, name, fmtParam(f)).then(function (blob) {
+        stop();
         var href = URL.createObjectURL(blob);
         var a = document.createElement("a");
         a.href = href;
-        a.download = name + ".pdf";
+        a.download = String(name).replace(/[\/\\"]/g, "-") + ".pdf";
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
       }, function (e) {
-        setBusy(false);
-        if (e && e.code === "pdf_unavailable") ctx.toast("warn", "PDF belum tersedia di server ini — pakai Cetak lalu simpan sebagai PDF");
-        else if (e && e.status === 403) ctx.toast("bad", "Kamu tidak punya akses untuk mencetak dokumen ini");
-        else ctx.toast("bad", "PDF tidak bisa dibuat", e && e.message);
+        stop();
+        if (e && e.code === "pdf_unavailable") setFallback({ format: f, message: e.message });
+        else fail(e);
       });
     }
 
+    var disabled = !!busy;
     var printBtn = formats.length === 1
-      ? h(R.Button, { key: "print", icon: "print", onClick: function () { printHtml(formats[0]); } }, "Cetak")
+      ? h(R.Button, { key: "print", icon: "print", disabled: disabled, loading: busy === "print", onClick: function () { printHtml(formats[0]); } }, "Cetak")
       : h("span", { key: "print", className: "ap-printmenu", ref: wrap },
-        h(R.Button, { icon: "print", "aria-haspopup": "menu", "aria-expanded": open ? "true" : "false", onClick: function () { setOpen(!open); } }, "Cetak"),
+        h(R.Button, { icon: "print", disabled: disabled, loading: busy === "print", "aria-haspopup": "menu", "aria-expanded": open ? "true" : "false", onClick: function () { setOpen(!open); } }, "Cetak"),
         open ? h("div", { className: "ap-printmenu-pop" }, h(R.Menu, { onClose: function () { setOpen(false); },
           items: formats.map(function (f) { return { label: formatLabel(f) + (f.paper ? " · " + String(f.paper).toUpperCase() : ""), icon: "print", onSelect: function () { printHtml(f); } }; }) })) : null);
 
     return h(React.Fragment, null, printBtn,
-      h(R.Button, { key: "pdf", icon: "download", disabled: busy, loading: busy, onClick: pdf }, "Unduh PDF"));
+      h(R.Button, { key: "pdf", icon: "download", disabled: disabled, loading: busy === "pdf", onClick: pdf }, "Unduh PDF"),
+      fallback ? h(R.Dialog, { key: "fallback", variant: "confirm", icon: "print", title: "PDF belum tersedia di server ini",
+        confirmLabel: "Cetak dari browser", cancelLabel: "Tutup",
+        onClose: function () { setFallback(null); },
+        onConfirm: function () { var f = fallback.format; setFallback(null); printHtml(f, true); } },
+        h("p", null, "Server ini belum bisa membuat PDF. Buka dokumen versi cetak, lalu di jendela cetak browser pilih ",
+          h("b", null, "Simpan sebagai PDF"), " atau printer kamu.")) : null);
   }
 
   /* ---------------------------------------------------------------- attachments */

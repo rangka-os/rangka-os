@@ -5,7 +5,8 @@
 
 Builds the kernel into a temp dir, copies rangka-apps/{apps,fixtures,sites/kopi-senja} and rangka-connectors into a
 temp workspace, starts a throwaway Postgres (kernel/scripts/pgtemp.sh), runs migrate, seed (owner ceo@saga.co.id /
-rangka-demo) and `rangka user add` for manajer@contoh.test (sales_manager) and sales@contoh.test (sales_rep), then
+rangka-demo) and `rangka user add` for manajer@contoh.test (sales_manager) and sales@contoh.test (sales_rep), adds the
+owner to a second org toko-kedua (`--create-org`, for the org switcher), then
 serves on a free port with --web <repo>/web. Scenarios are the functions test_<name>(page, ctx) below, run in file
 order, each in a fresh browser context; -k keeps those whose name contains NAME. A scenario fails on an exception or
 on any console error.
@@ -35,6 +36,8 @@ USERS = [("manajer@contoh.test", "sales_manager", "Manajer Contoh"), ("sales@con
 RECORDS = {"manajer@contoh.test": "USR-003", "sales@contoh.test": "USR-002"}
 PASSWORD = "rangka-demo"
 ORG = "kopi-senja"
+SECOND_ORG = "toko-kedua"  # the owner's second org, for the org switcher; sorts after ORG, since sign-in without
+# an org lands in the first membership by id (contract 0010 §3) and every other scenario expects kopi-senja
 
 
 def L(v):
@@ -84,13 +87,13 @@ def _json(route, status, body):
     route.fulfill(status=status, content_type="application/json", body=json.dumps(body))
 
 
-ORG_NAMES = {ORG: ("Kopi Senja", "KS"), "contoh-kedua": ("Contoh Kedua", "CK")}
+ORG_NAMES = {ORG: ("Kopi Senja", "KS"), SECOND_ORG: ("Toko Kedua", "TK")}
 ORG_PATTERNS = (re.compile(r".*/auth/me(\?.*)?$"), re.compile(r".*/auth/org$"))
 
 
 def _mock_orgs(page, ctx):
     """S5 shape: /auth/me with `org` {id, name, code, roles} and `orgs` [{id, name, code, roles}] for kopi-senja and
-    contoh-kedua; POST /auth/org {org} answers the same body as /auth/me, 403 permission_denied for a non-member org."""
+    toko-kedua; POST /auth/org {org} answers the same body as /auth/me, 403 permission_denied for a non-member org."""
     state = ctx.mock_state.setdefault("orgs", {"org": ORG, "calls": [], "me": None})
 
     def body_for(base):
@@ -788,7 +791,7 @@ def test_user_menu_lists_orgs(page, ctx):
     expect_signed_in(page, ctx)
     page.locator(".rk-topnav .rk-av-btn").click()
     menu = page.locator(".rk-account")
-    for name in ("Kopi Senja", "Contoh Kedua"):
+    for name in ("Kopi Senja", "Toko Kedua"):
         assert menu.get_by_role("menuitem", name=name).count() == 1, f"user menu lists {name}"
 
 
@@ -1477,13 +1480,13 @@ def test_org_switch(page, ctx):
 
     def refuse(route):
         events.append(("org", route.request.post_data))
-        _json(route, 403, {"error": {"code": "permission_denied", "message": "Kamu bukan anggota Contoh Kedua"}})
+        _json(route, 403, {"error": {"code": "permission_denied", "message": "Kamu bukan anggota Toko Kedua"}})
     page.route(ORG_PATTERNS[1], refuse)
     menu = account_menu(page)
-    assert menu.get_by_role("menuitem", name="Kopi Senja").count() == 1 and menu.get_by_role("menuitem", name="Contoh Kedua").count() == 1, "both orgs listed"
-    menu.get_by_role("menuitem", name="Contoh Kedua").click()
+    assert menu.get_by_role("menuitem", name="Kopi Senja").count() == 1 and menu.get_by_role("menuitem", name="Toko Kedua").count() == 1, "both orgs listed"
+    menu.get_by_role("menuitem", name="Toko Kedua").click()
     page.get_by_text("Tidak bisa pindah organisasi").first.wait_for(timeout=5000)
-    page.get_by_text("Kamu bukan anggota Contoh Kedua").first.wait_for(timeout=5000)
+    page.get_by_text("Kamu bukan anggota Toko Kedua").first.wait_for(timeout=5000)
     assert page.evaluate("window.__beforeSwitch") == 1, "no reload after a refused switch"
     assert page.evaluate("location.hash") == "#/r/lead", "still on the same route"
     page.unroute(ORG_PATTERNS[1], refuse)
@@ -1492,26 +1495,29 @@ def test_org_switch(page, ctx):
 
     # the switch: one POST, then the whole app reloads at home and asks the server for me and meta again
     n = len(events)
-    menu.get_by_role("menuitem", name="Contoh Kedua").click()
+    menu.get_by_role("menuitem", name="Toko Kedua").click()
     page.wait_for_function("() => window.__beforeSwitch === undefined", timeout=10000)
     expect_signed_in(page, ctx)
     after = events[n:]
     posts = [json.loads(b) for k, b in after if k == "org"]
-    assert posts == [{"org": "contoh-kedua"}], f"one POST /auth/org for contoh-kedua, saw {posts}"
+    assert posts == [{"org": "toko-kedua"}], f"one POST /auth/org for toko-kedua, saw {posts}"
     i = next(i for i, (k, _) in enumerate(after) if k == "org")
     rest = [k for k, _ in after[i + 1:]]
     assert "me" in rest and "meta" in rest, f"/auth/me and /api/v1/meta are fetched again after the reload, saw {after}"
     menu = account_menu(page)
-    assert menu.get_by_role("menuitem", name="Contoh Kedua").get_by_label("Dipilih").count() == 1, "Contoh Kedua is now the current org"
+    assert menu.get_by_role("menuitem", name="Toko Kedua").get_by_label("Dipilih").count() == 1, "Toko Kedua is now the current org"
     page.keyboard.press("Escape")
 
-    # one org: no switcher
+    # one org: no switcher (live, the owner has two orgs, so a single-org member signs in instead)
     for pat in ORG_PATTERNS:
         page.unroute(pat)
     page.reload()
     expect_signed_in(page, ctx)
+    if "orgs" in ctx.live:
+        sign_out(page)
+        sign_in_as(page, ctx, SALES)
     menu = account_menu(page)
-    assert menu.get_by_role("menuitem", name="Contoh Kedua").count() == 0, "a single-org user sees no other org"
+    assert menu.get_by_role("menuitem", name="Toko Kedua").count() == 0, "a single-org user sees no other org"
     n = len(events)
     org_items = menu.locator("[role=menuitem]").filter(has_text=re.compile("Kopi Senja|kopi-senja", re.I))
     assert org_items.count() == 1, f"exactly the current org, found {org_items.count()}"
@@ -2122,7 +2128,7 @@ def test_import_per_outlet(page, ctx):
         assert sent[-1] == "OUT-01", f"the upload carried outlet=OUT-01, saw {sent}"
         if live:  # the kernel scoped the entry to the outlet and fills the invoice's outlet field from it
             _, body = owner_http(ctx).call("GET", "/api/v1/imports/" + OUTLET_IMPORT_NAME)
-            e = next(x for x in body["imports"] if x["file_name"] == "penjualan-kemang.csv")
+            e = next(x for x in body["data"] if x["file_name"] == "penjualan-kemang.csv")
             assert e["scope"] == "OUT-01" and e["status"] == "previewed" and not e["errors"], e
             assert main_area(page).locator("table[aria-label='Pratinjau impor']").get_by_text("OUT-01").count() == 1, "preview shows the outlet"
     finally:
@@ -2156,7 +2162,7 @@ def test_import_invoice_drafts(page, ctx):
         assert len(commit) == 1, f"one commit, saw {len(commit)}"
         h = owner_http(ctx)
         _, entries = h.call("GET", "/api/v1/imports/" + INVOICE_IMPORT_NAME)
-        entry = next(e for e in (entries.get("imports") or []) if e.get("status") == "committed" and e.get("file_name") == "faktur.csv")
+        entry = next(e for e in (entries.get("data") or []) if e.get("status") == "committed" and e.get("file_name") == "faktur.csv")
         assert len(entry["records"]) == 2, f"two invoices (rows grouped by Nomor): {entry['records']}"
         for name in entry["records"]:
             st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + urllib.parse.quote(name))
@@ -2434,6 +2440,8 @@ def main():
         common = ["--apps", APPS, "--site", SITE, "--db", db, "--connectors", CONN]
         steps = [["migrate"] + common, ["seed"] + common + ["--fixtures", os.path.join(work, "rangka-apps", "fixtures"), "--email", OWNER[0], "--password", OWNER[1]]]
         steps += [["user", "add", "--db", db, "--org", ORG, "--email", e, "--password", PASSWORD, "--role", role, "--name", name, "--record", RECORDS[e]] for e, role, name in USERS]
+        # a second org for the org switcher (S5): the owner is also owner of toko-kedua (existing account, no password)
+        steps += [["user", "add", OWNER[0], "--db", db, "--org", SECOND_ORG, "--role", "owner", "--create-org"]]
         for cmd in steps:
             r = subprocess.run([bin_path] + cmd, capture_output=True, text=True, timeout=180)
             if r.returncode:

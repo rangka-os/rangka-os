@@ -117,7 +117,7 @@ views:
 // approvals: key is parsed, ApprovalsFor filters by verb in declaration order (0007 §1).
 func TestApprovalsParsed(t *testing.T) {
 	dir := t.TempDir()
-	if out, err := exec.Command("cp", "-r", appsDir, dir+"/apps").CombinedOutput(); err != nil {
+	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
 	f := dir + "/apps/sales/models/sales_invoice.rk"
@@ -148,10 +148,10 @@ func TestApprovalsParsed(t *testing.T) {
 // A company overlay adds policies after the app's own (ruling R1) and they are checked like the app's.
 func TestApprovalsOverlay(t *testing.T) {
 	dir := t.TempDir()
-	if out, err := exec.Command("cp", "-r", appsDir, dir+"/apps").CombinedOutput(); err != nil {
+	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
-	if out, err := exec.Command("cp", "-r", siteDir, dir+"/site").CombinedOutput(); err != nil {
+	if out, err := exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), dir+"/site").CombinedOutput(); err != nil {
 		t.Fatal(err, string(out))
 	}
 	f := dir + "/apps/sales/models/sales_invoice.rk"
@@ -188,7 +188,7 @@ approvals:
 // Flow approve steps: schema, and parentheses in when (0007 §4).
 func TestFlowApproveStep(t *testing.T) {
 	dir := t.TempDir()
-	exec.Command("cp", "-r", appsDir, dir+"/apps").Run()
+	exec.Command("cp", "-r", testdb.Sibling(t, "rangka-apps/apps"), dir+"/apps").Run()
 	flow := func(step string) string {
 		mustWrite(t, dir+"/apps/crm/flows/morning_follow_up.rk", []byte("name: morning_follow_up\nschedule: 0 8 * * 1-5\nsteps:\n  - "+step+"\n"))
 		_, rep := ValidateOpts(Options{AppsDir: dir + "/apps"}, nil, schema.Embedded())

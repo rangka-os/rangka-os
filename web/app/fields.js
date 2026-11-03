@@ -20,14 +20,21 @@
 
   /* ================================================================ pure helpers */
 
-  /** "1.250,5" → 1250.5, "2" → 2, "-3,25" → -3.25: dots group thousands, a comma is the decimal mark. */
+  /** "1.250,5" → 1250.5, "1.5" → 1.5, "-3,25" → -3.25. A comma is always the decimal mark. A dot groups thousands only
+   *  when every group after it has exactly 3 digits ("1.500", "1.250.000"); otherwise the last dot is the decimal mark. */
   function parseNumber(text) {
     if (typeof text === "number") return isFinite(text) ? text : 0;
-    var s = String(text == null ? "" : text).replace(/[^0-9,\-]/g, "");
+    var s = String(text == null ? "" : text).replace(/[^0-9,.\-]/g, "");
     var neg = /^-/.test(s);
     s = s.replace(/-/g, "");
     var i = s.indexOf(",");
-    if (i >= 0) s = s.slice(0, i) + "." + s.slice(i + 1).replace(/,/g, "");
+    if (i >= 0) {
+      s = s.slice(0, i).replace(/\./g, "") + "." + s.slice(i + 1).replace(/[,.]/g, "");
+    } else if (s.indexOf(".") >= 0) {
+      var g = s.split(".");
+      if (g.slice(1).every(function (x) { return x.length === 3; })) s = g.join("");
+      else s = g.slice(0, -1).join("") + "." + g[g.length - 1];
+    }
     if (s === "" || s === ".") return 0;
     var n = parseFloat(s);
     if (isNaN(n)) return 0;

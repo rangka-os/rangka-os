@@ -38,6 +38,19 @@ test("parseRupiah", () => {
   assert.strictEqual(RA.parseRupiah("12,5"), 13);
 });
 
+test("parseRupiah: a comma or dot before 3-digit groups groups thousands, otherwise it is a decimal mark (half-up)", () => {
+  assert.strictEqual(RA.parseRupiah("1,250,000"), 1250000);
+  assert.strictEqual(RA.parseRupiah("1,500"), 1500);
+  assert.strictEqual(RA.parseRupiah("12.5"), 13);
+  assert.strictEqual(RA.parseRupiah("12,4"), 12);
+  assert.strictEqual(RA.parseRupiah("1.250.000,50"), 1250001);
+  assert.strictEqual(RA.parseRupiah("1,250,000.49"), 1250000);
+  assert.strictEqual(RA.parseRupiah("Rp 1.250.000"), 1250000);
+  assert.strictEqual(RA.parseRupiah("-1.500"), -1500);
+  assert.strictEqual(RA.parseRupiah("-12,5"), -13, "half-up away from zero for negatives");
+  assert.strictEqual(RA.parseRupiah(1250000.4), 1250000);
+});
+
 test("rupiah and tanggal", () => {
   assert.strictEqual(RA.rupiah(1250000), "Rp 1.250.000");
   assert.strictEqual(RA.rupiah(-5000), "-Rp 5.000");

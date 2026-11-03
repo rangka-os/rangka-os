@@ -66,15 +66,25 @@
     return t + " " + unit[i];
   }
 
-  /** "Rp 1.250.000" / "1.250.000" / "1250000" / "12,5" → integer rupiah. Dots are thousands, a comma is the decimal. */
+  /** "Rp 1.250.000" / "1.250.000" / "1,250,000" / "1250000" / "12,5" → integer rupiah. A "," or "." groups thousands
+   *  when every group after it has exactly 3 digits; otherwise the last one is a decimal mark, rounded half-up. */
   function parseRupiah(text) {
     if (typeof text === "number") return Math.round(text);
-    var s = String(text == null ? "" : text).replace(/[^0-9,\-]/g, "");
+    var s = String(text == null ? "" : text).replace(/[^0-9,.\-]/g, "");
     var neg = /^-/.test(s);
     s = s.replace(/-/g, "");
-    if (s === "") return 0;
-    var n = Math.round(parseFloat(s.replace(",", ".")));
+    if (s.replace(/[,.]/g, "") === "") return 0;
+    var last = Math.max(s.lastIndexOf(","), s.lastIndexOf("."));
+    var whole = s, frac = "";
+    if (last >= 0) {
+      var groups = s.split(s.charAt(last)).slice(1);
+      if (!groups.every(function (x) { return x.length === 3; })) { whole = s.slice(0, last); frac = s.slice(last + 1); }
+    }
+    whole = whole.replace(/[,.]/g, "");
+    frac = frac.replace(/[,.]/g, "");
+    var n = parseFloat((whole || "0") + "." + (frac || "0"));
     if (isNaN(n)) return 0;
+    n = Math.floor(n + 0.5);
     return neg ? -n : n;
   }
 

@@ -25,6 +25,18 @@ test("parseNumber reads the Indonesian way: dots group thousands, a comma is the
   assert.strictEqual(A.parseNumber(7.5), 7.5);
 });
 
+test("parseNumber: a dot groups thousands only before 3-digit groups, otherwise it is the decimal mark", () => {
+  const A = load();
+  assert.strictEqual(A.parseNumber("1.5"), 1.5);
+  assert.strictEqual(A.parseNumber("2.75"), 2.75);
+  assert.strictEqual(A.parseNumber("0.125"), 125, "0.125 has a 3-digit group, so the dot groups thousands");
+  assert.strictEqual(A.parseNumber("1.500"), 1500);
+  assert.strictEqual(A.parseNumber("1.250.000"), 1250000);
+  assert.strictEqual(A.parseNumber("1.250.5"), 1250.5);
+  assert.strictEqual(A.parseNumber("-2.5"), -2.5);
+  assert.strictEqual(A.parseNumber("1.250.000,75"), 1250000.75);
+});
+
 test("formatNumber groups with dots, uses a comma for decimals and drops trailing zeros", () => {
   const A = load();
   assert.strictEqual(A.formatNumber(1250), "1.250");

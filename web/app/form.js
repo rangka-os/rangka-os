@@ -474,7 +474,9 @@
           summary.length > 1 ? h("ul", { className: "ap-errlist" }, summary.map(function (s, i) { return h("li", { key: i }, s); })) : null) : null,
         approvalNote,
         // While a request is in flight every editor is disabled: an edit typed now would be replaced by the answer.
-        h("fieldset", { className: "ap-form-fields", disabled: !!busy, "aria-busy": busy ? "true" : undefined }, layout.map(section))),
+        h("fieldset", { className: "ap-form-fields", disabled: !!busy, "aria-busy": busy ? "true" : undefined }, layout.map(section)),
+        // Files belong to a saved record: attachments (docs.js) show under the sections, never on /new.
+        RA.Attachments && !isNew && rec.name ? h(RA.Attachments, { key: "att:" + rec.name, model: m, name: rec.name, record: rec }) : null),
       warn ? h(R.Dialog, { variant: "confirm", icon: "warning", title: "Tetap ajukan?", confirmLabel: "Tetap ajukan", cancelLabel: "Kembali",
         onClose: closeWarn, onConfirm: function () { submit(true); } },
         h("ul", { className: "ap-errlist" }, warn.map(function (w, i) { return h("li", { key: i }, w.message); })),

@@ -288,3 +288,42 @@ test("switchOrg answers the normalised /auth/me body", async () => {
   assert.strictEqual(m.orgName, "Dua");
   assert.strictEqual(m.email, "a@b.id");
 });
+
+test("printFormats: per-model prints, default first; legacy top-level prints", () => {
+  const meta = { models: { sales_invoice: { prints: [{ name: "a5", label: { id: "Struk A5" }, paper: "a5" }, { name: "a4", label: { id: "Faktur A4" }, paper: "a4", default: true }] }, customer: {} } };
+  const pf = (m, x) => JSON.parse(JSON.stringify(RA.printFormats(m, x)));
+  const f = pf(meta, "sales_invoice");
+  assert.deepStrictEqual(f.map((x) => x.name), ["a4", "a5"]);
+  assert.deepStrictEqual(pf(meta, "customer"), []);
+  assert.deepStrictEqual(pf(meta, "nothing"), []);
+  const legacy = { prints: { inv: { name: "inv", model: "sales_invoice", label: "Faktur", paper: "a4" }, other: { name: "other", model: "customer" } } };
+  assert.deepStrictEqual(pf(legacy, "sales_invoice").map((x) => x.name), ["inv"]);
+  assert.deepStrictEqual(pf({}, "x"), []);
+});
+
+test("features.print is on when any model has a print format", async () => {
+  const f = () => stub([json(200, { data: [], total: 0 })]);
+  const me = { orgs: [{ id: "a" }] };
+  assert.strictEqual((await RA({ fetch: f() }).features({ models: { m: { prints: [{ name: "a4", default: true }] } }, imports: {} }, me)).print, true);
+  assert.strictEqual((await RA({ fetch: f() }).features({ models: { m: { prints: [] } }, prints: {}, imports: {} }, me)).print, false);
+  assert.strictEqual((await RA({ fetch: f() }).features({ models: {}, prints: { x: { name: "x", model: "m" } }, imports: {} }, me)).print, true);
+});
+
+test("attachments are off on 501 files_disabled too", async () => {
+  const f = stub((url) => url.indexOf("/approvals") >= 0 ? json(200, {}) : json(501, { error: { code: "files_disabled", message: "Lampiran tidak aktif" } }));
+  const api = RA({ fetch: f });
+  const e = await rejected(api.attachments("sales_invoice", "INV-1"));
+  assert.strictEqual(RA.isFilesOff(e), true);
+  assert.strictEqual((await api.features({ prints: {}, imports: {} }, { orgs: [] })).attachments, false);
+  assert.strictEqual(RA.isFilesOff({ status: 404, code: "not_found", message: "lampiran tidak ditemukan" }), false);
+  assert.strictEqual(RA.isFilesOff({ status: 404, code: "not_found", message: "no such endpoint /x" }), true);
+});
+
+test("formatSize: Indonesian decimals", () => {
+  assert.strictEqual(RA.formatSize(512 * 1024), "512 KB");
+  assert.strictEqual(RA.formatSize(1.2 * 1024 * 1024), "1,2 MB");
+  assert.strictEqual(RA.formatSize(1024 * 1024), "1 MB");
+  assert.strictEqual(RA.formatSize(900), "900 B");
+  assert.strictEqual(RA.formatSize(0), "0 B");
+  assert.strictEqual(RA.formatSize(20 * 1024 * 1024), "20 MB");
+});

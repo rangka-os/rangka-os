@@ -40,6 +40,22 @@
     .ap-signin-card { padding: 24px 16px; }
   }
   /* form view (fields.js, form.js) */
+  .ap-printmenu { position: relative; display: inline-flex; }
+  .ap-printmenu-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; }
+  .ap-att { margin-top: 16px; }
+  .ap-att-zone { display: flex; flex-wrap: wrap; align-items: center; gap: 8px 12px; padding: 12px; margin-bottom: 12px; border: 1px dashed var(--border); border-radius: var(--r-lg); background: var(--soft); }
+  .ap-att-zone.on { background: var(--selected); border-color: var(--selected-ink); }
+  .ap-att-input { display: none; }
+  .ap-att-empty { padding: 4px 0; }
+  .ap-att-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+  .ap-att-row { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); min-width: 0; }
+  .ap-att-row:first-child { border-top: 0; }
+  .ap-att-open { flex: 0 0 auto; display: block; line-height: 0; }
+  .ap-att-thumb { width: 40px; height: 40px; object-fit: cover; border-radius: var(--r-md); border: 1px solid var(--line-strong); background: var(--soft); }
+  .ap-att-icon { width: 40px; height: 40px; box-sizing: border-box; display: inline-flex; flex-direction: column; align-items: center; justify-content: center; gap: 0; border-radius: var(--r-md); border: 1px solid var(--line-strong); background: var(--soft); color: var(--muted); font: 600 9px/10px var(--font-sans); }
+  .ap-att-icon .rk-icon { width: 16px; height: 16px; }
+  .ap-att-main { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+  .ap-att-name { color: var(--link); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   .ap-fw { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
   .ap-fw > .rk-field { gap: inherit; }
   .ap-link { min-width: 0; }
@@ -141,4 +157,5 @@
 <script src="form.js"></script>
 <script src="approvals.js"></script>
 <script src="dashboard.js"></script>
+<script src="docs.js"></script>
 <script src="shell.js"></script>

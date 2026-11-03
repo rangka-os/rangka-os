@@ -6,7 +6,7 @@
  * Every method returns a Promise. Failures reject with ApiError {status, code, message, body, fieldErrors, warnings,
  * needsForce}. 422 bodies are {errors:[{field?,rule?,code,message}], warnings, needs_force?}; other bodies are
  * {error:{code,message}}; network errors have status 0 and code "network". All requests send credentials.
- * Helpers on the namespace: parseRupiah, rupiah, tanggal, isMissingRoute, ApiError.
+ * Helpers on the namespace: parseRupiah, rupiah, tanggal, isMissingRoute, isFilesOff, printFormats, formatSize, ApiError.
  */
 (function (global) {
   "use strict";
@@ -34,6 +34,36 @@
 
   function isMissingRoute(err) {
     return !!err && err.status === 404 && err.code === "not_found" && /^no such endpoint/.test(err.message || "");
+  }
+
+  /** Attachments are off for this install: the route is missing (404) or the files capability is off (501 files_disabled). */
+  function isFilesOff(err) {
+    return isMissingRoute(err) || (!!err && err.status === 501 && err.code === "files_disabled");
+  }
+
+  /** Print formats of a model, default first: meta.models[m].prints [{name, label, paper, default}] (S3), or the older
+   *  top-level meta.prints {name: {name, model, label, paper}} filtered to the model. */
+  function printFormats(meta, model) {
+    meta = meta || {};
+    var own = ((meta.models || {})[model] || {}).prints;
+    var list = Array.isArray(own) ? own.slice() : [];
+    if (!list.length && meta.prints && !Array.isArray(meta.prints)) {
+      Object.keys(meta.prints).forEach(function (k) {
+        var p = meta.prints[k];
+        if (p && p.model === model) list.push(p);
+      });
+    }
+    var def = list.filter(function (p) { return p.default; });
+    return def.concat(list.filter(function (p) { return !p.default; }));
+  }
+
+  /** 1,2 MB / 512 KB / 900 B (Indonesian decimal comma, one decimal at most). */
+  function formatSize(n) {
+    n = Number(n) || 0;
+    var unit = ["B", "KB", "MB", "GB"], i = 0;
+    while (n >= 1024 && i < unit.length - 1) { n /= 1024; i++; }
+    var t = i === 0 ? String(Math.round(n)) : String(Math.round(n * 10) / 10).replace(".", ",");
+    return t + " " + unit[i];
   }
 
   /** "Rp 1.250.000" / "1.250.000" / "1250000" / "12,5" → integer rupiah. Dots are thousands, a comma is the decimal. */
@@ -200,7 +230,7 @@
     /* ----- attachments */
     api.attachments = function (model, name) {
       return json("GET", rec(model, name) + "/attachments").then(function (r) { return r; }, function (e) {
-        if (isMissingRoute(e)) attachmentsOK = false;
+        if (isFilesOff(e)) attachmentsOK = false;
         throw e;
       });
     };
@@ -229,7 +259,7 @@
       var f = {
         orgs: (me.orgs || []).length > 1,
         approvals: false,
-        print: Object.keys(meta.prints || {}).length > 0,
+        print: Object.keys(meta.prints || {}).length > 0 || Object.keys(meta.models || {}).some(function (m) { return printFormats(meta, m).length > 0; }),
         attachments: attachmentsOK,
         imports: Object.keys(meta.imports || {}).length > 0
       };
@@ -248,6 +278,9 @@
 
   create.ApiError = ApiError;
   create.isMissingRoute = isMissingRoute;
+  create.isFilesOff = isFilesOff;
+  create.printFormats = printFormats;
+  create.formatSize = formatSize;
   create.parseRupiah = parseRupiah;
   create.rupiah = rupiah;
   create.tanggal = tanggal;

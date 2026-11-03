@@ -22,7 +22,7 @@ the feature probes (approvals, attachments) and what a scenario allows with ctx.
 Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure (build,
 Postgres start, migrate, seed, user add, serve, a scenario) exits 1.
 """
-import argparse, http.cookiejar, json, os, re, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request
+import argparse, email, email.policy, http.cookiejar, json, os, re, shutil, socket, struct, subprocess, sys, tempfile, time, traceback, urllib.error, urllib.parse, urllib.request, zlib
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))  # rangka-os checkout (or a worktree of it)
@@ -256,9 +256,100 @@ def _mock_approvals(page, ctx):
     page.route(re.compile(r".*/api/v1/approvals/[^/?]+(/approve|/reject)?$"), one)
 
 
+PRINT_FORMAT = {"name": "a4", "label": {"id": "Faktur A4"}, "paper": "a4", "default": True}
+
+
+def set_prints(page, formats):
+    """Make GET /api/v1/meta answer `formats` as sales_invoice's print formats (S3 shape, default first); [] removes every
+    format, also the older top-level meta.prints. Later calls win over earlier ones."""
+    def meta(route):
+        r = route.fetch()
+        if r.status != 200:
+            route.fulfill(response=r)
+            return
+        body = r.json()
+        body["models"]["sales_invoice"]["prints"] = formats
+        for m in body["models"].values():
+            if m is not body["models"]["sales_invoice"]:
+                m.pop("prints", None)
+        body["prints"] = {}
+        _json(route, 200, body)
+    page.route(re.compile(r".*/api/v1/meta(\?.*)?$"), meta)
+
+
+def _mock_print(page, ctx):
+    """S3 shape: formats in meta.models[m].prints, GET /r/{m}/{n}/print?format=&as=html|pdf (pdf → 501 pdf_unavailable)."""
+    set_prints(page, [PRINT_FORMAT])
+
+    def printed(route):
+        url = route.request.url
+        q = urllib.parse.parse_qs(urllib.parse.urlparse(url).query)
+        if q.get("as", ["html"])[0] == "pdf":
+            _json(route, 501, {"error": {"code": "pdf_unavailable", "message": "PDF belum tersedia di server ini"}})
+            return
+        number = urllib.parse.unquote(re.search(r"/api/v1/r/[^/]+/([^/?]+)/print", url).group(1))
+        route.fulfill(status=200, content_type="text/html; charset=utf-8",
+                      body=f"<!doctype html><meta charset=utf-8><title>{number}</title><h1>Faktur {number}</h1>")
+    page.context.route(re.compile(r".*/api/v1/r/[^/]+/[^/?]+/print(\?.*)?$"), printed)
+
+
 def _mock_attachments(page, ctx):
-    """Stub (Task 9 fills it): no attachments on any record."""
-    page.route(re.compile(r".*/api/v1/r/[^/]+/[^/]+/attachments(\?.*)?$"), lambda route: _json(route, 200, {"data": [], "total": 0}))
+    """S6 shape (contract 0011), kept in ctx.mock_state: list {data}, multipart POST (201 item), GET /attachments/{id}
+    (inline for raster images and PDF, attachment otherwise), DELETE 204, 409 submitted on a submitted record."""
+    st = ctx.mock_state.setdefault("att", {"items": {}, "blobs": {}, "n": 0})
+
+    def listing(route):
+        m = re.search(r"/api/v1/r/([^/]+)/([^/?]+)/attachments", route.request.url)
+        key = (m.group(1), urllib.parse.unquote(m.group(2)))
+        req = route.request
+        if req.method == "GET":
+            _json(route, 200, {"data": list(st["items"].get(key, []))})
+            return
+        ctype = req.headers.get("content-type", "")
+        msg = email.message_from_bytes(f"Content-Type: {ctype}\r\n\r\n".encode() + (req.post_data_buffer or b""), policy=email.policy.default)
+        part = next((x for x in msg.iter_parts() if x.get_param("name", header="content-disposition") == "file"), None)
+        if part is None:
+            _json(route, 400, {"error": {"code": "bad_upload", "message": "Pilih file untuk diunggah"}})
+            return
+        data = part.get_payload(decode=True) or b""
+        if not data and part.get_content_type() == "image/png":
+            data = make_png()  # Chromium hands interceptors no bytes for a File inside FormData: serve a real PNG instead
+        if len(data) > 20 * 1024 * 1024:
+            _json(route, 413, {"error": {"code": "too_large", "message": "Ukuran file melebihi batas 20 MB"}})
+            return
+        st["n"] += 1
+        aid = f"{st['n']:032x}"
+        ct = part.get_content_type()
+        item = {"id": aid, "filename": part.get_filename(), "content_type": ct, "size": len(data), "sha256": "0" * 64,
+                "created_by": ctx.owner[0], "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "url": "/api/v1/attachments/" + aid}
+        st["items"].setdefault(key, []).insert(0, item)
+        st["blobs"][aid] = (key, item, data)
+        _json(route, 201, item)
+
+    def one(route):
+        aid = route.request.url.rsplit("/", 1)[-1].split("?")[0]
+        if aid not in st["blobs"]:
+            _json(route, 404, {"error": {"code": "not_found", "message": "lampiran tidak ditemukan"}})
+            return
+        key, item, data = st["blobs"][aid]
+        if route.request.method == "DELETE":
+            rec = Http(ctx.base).login(*ctx.owner).call("GET", f"/api/v1/r/{key[0]}/{urllib.parse.quote(key[1])}")[1] or {}
+            if rec.get("docstatus", 0) != 0:
+                _json(route, 409, {"error": {"code": "submitted", "message": "Lampiran dokumen yang sudah diajukan tidak bisa dihapus"}})
+                return
+            st["items"][key] = [x for x in st["items"][key] if x["id"] != aid]
+            del st["blobs"][aid]
+            route.fulfill(status=204, body="")
+            return
+        ct = item["content_type"]
+        inline = ct == "application/pdf" or (ct.startswith("image/") and ct != "image/svg+xml")
+        headers = {"Content-Disposition": ("inline" if inline else "attachment") + f"; filename*=UTF-8''{urllib.parse.quote(item['filename'])}", "X-Content-Type-Options": "nosniff"}
+        if ct != "application/pdf":
+            headers["Content-Security-Policy"] = "sandbox"
+        route.fulfill(status=200, content_type=ct, headers=headers, body=data)
+
+    page.route(re.compile(r".*/api/v1/r/[^/]+/[^/?]+/attachments(\?.*)?$"), listing)
+    page.route(re.compile(r".*/api/v1/attachments/[^/?]+(\?.*)?$"), one)
 
 
 def _mock_todo(task):
@@ -270,7 +361,7 @@ def _mock_todo(task):
 MOCKS = {
     "orgs": _mock_orgs,
     "approvals": _mock_approvals,
-    "print": _mock_todo("Task 9"),
+    "print": _mock_print,
     "attachments": _mock_attachments,
     "imports": _mock_todo("Task 10"),
 }
@@ -287,8 +378,8 @@ def detect_features(base):
     return {
         "orgs": isinstance(me, dict) and "orgs" in me and not missing_route(st_org, b_org),
         "approvals": not missing_route(st_ap, b_ap),
-        "print": bool((meta or {}).get("prints")),
-        "attachments": not missing_route(st_at, b_at),
+        "print": bool((meta or {}).get("prints")) or any(m.get("prints") for m in ((meta or {}).get("models") or {}).values()),
+        "attachments": not missing_route(st_at, b_at) and not (st_at == 501 and isinstance(b_at, dict) and (b_at.get("error") or {}).get("code") == "files_disabled"),
         "imports": bool((meta or {}).get("imports")),
     }
 
@@ -755,7 +846,7 @@ def test_invoice_create_submit(page, ctx):
     main_area(page).locator(".rk-steps [aria-current=step]", has_text="Diajukan").wait_for(timeout=5000)
     assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Diajukan").count() == 1, "status chip Diajukan"
     assert main_area(page).locator(".rk-pagehead .rk-doc-no", has_text=number).count() == 1, "the header shows the number"
-    editable = main_area(page).locator("input, textarea, select, [role=combobox]")
+    editable = main_area(page).locator("input:not(.ap-att-input), textarea, select, [role=combobox]")  # the attachments file input is not a form field
     assert editable.count() == 0, f"no editable input on a submitted invoice, found {editable.count()}"
     st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + number)
     assert st == 200 and rec["docstatus"] == 1 and grand_total(page) == rupiah(rec["grand_total"]), f"submitted record {st} {rec}"
@@ -1337,6 +1428,223 @@ def test_reject_needs_reason(page, ctx):
     assert rec["docstatus"] == 0, "still a draft"
 
 
+# ---------------------------------------------------------------------------------------------- print and attachments
+def go_record(page, number):
+    page.evaluate("(h) => { location.hash = h; }", "#/r/sales_invoice/" + urllib.parse.quote(number))
+
+
+def test_print_invoice(page, ctx):
+    ctx.allow_http(501, r"/print\?")  # Unduh PDF on a server without a renderer
+    number = submitted_invoice(ctx)
+    mock_feature(page, "print")
+    open_route(page, ctx, "#/r/sales_invoice/" + number)
+    area = main_area(page)
+    cetak = area.get_by_role("button", name="Cetak", exact=True)
+    cetak.wait_for(timeout=10000)
+    # one format: a plain button that opens the HTML print in a new tab
+    with page.context.expect_page(timeout=10000) as popup:
+        cetak.click()
+    pop = popup.value
+    pop.wait_for_load_state()
+    assert re.search(r"/api/v1/r/sales_invoice/" + re.escape(urllib.parse.quote(number)) + r"/print\?(format=[^&]+&)?as=html$", pop.url), "print URL: " + pop.url
+    assert number in pop.locator("body").inner_text(), "the print shows the invoice number"
+    pop.close()
+    # Unduh PDF: a server without a renderer says 501, the app explains and offers Cetak instead
+    area.get_by_role("button", name="Unduh PDF", exact=True).click()
+    page.locator(".rk-toast", has_text="PDF belum tersedia di server ini — pakai Cetak lalu simpan sebagai PDF").wait_for(timeout=10000)
+    # several formats: Cetak opens a menu of their labels
+    set_prints(page, [PRINT_FORMAT, {"name": "struk", "label": {"id": "Struk kecil"}, "paper": "a6"}])
+    page.reload()
+    cetak = main_area(page).get_by_role("button", name="Cetak", exact=True)
+    cetak.wait_for(timeout=10000)
+    cetak.click()
+    menu = page.get_by_role("menu")
+    menu.wait_for(timeout=5000)
+    labels = [t.strip() for t in menu.get_by_role("menuitem").all_inner_texts()]
+    assert len(labels) == 2 and "Faktur A4" in labels[0] and "Struk kecil" in labels[1], f"format menu: {labels}"
+    with page.context.expect_page(timeout=10000) as popup:
+        menu.get_by_role("menuitem", name=re.compile("Struk kecil")).click()
+    assert "format=struk" in popup.value.url and "as=html" in popup.value.url, "a non-default format passes format=: " + popup.value.url
+    popup.value.close()
+    # no formats in meta: no print buttons at all
+    set_prints(page, [])
+    page.reload()
+    main_area(page).locator(".rk-pagehead").wait_for(timeout=10000)
+    page.wait_for_timeout(300)
+    assert main_area(page).get_by_role("button", name="Cetak", exact=True).count() == 0, "no Cetak without formats"
+    assert main_area(page).get_by_role("button", name="Unduh PDF", exact=True).count() == 0, "no Unduh PDF without formats"
+
+
+def owner_http(ctx):
+    """One signed-in owner session per run (a sign-in costs a password hash, about a second)."""
+    if "owner_http" not in ctx.mock_state:
+        ctx.mock_state["owner_http"] = Http(ctx.base).login(*ctx.owner)
+    return ctx.mock_state["owner_http"]
+
+
+def draft_invoice(ctx):
+    h = owner_http(ctx)
+    st, rec = h.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0031", "outlet": "OUT-01", "items": [{"item": "BRG-0210", "qty": 1}]})
+    assert st == 201, f"create invoice: {st} {rec}"
+    return rec["name"]
+
+
+def make_png(w=24, h=14):
+    """A valid PNG of random pixels, about 1 KB (random bytes do not compress)."""
+    def chunk(tag, data):
+        c = struct.pack(">I", len(data)) + tag + data
+        return c + struct.pack(">I", zlib.crc32(tag + data) & 0xFFFFFFFF)
+    raw = b"".join(b"\x00" + os.urandom(w * 3) for _ in range(h))
+    return b"\x89PNG\r\n\x1a\n" + chunk(b"IHDR", struct.pack(">IIBBBBB", w, h, 8, 2, 0, 0, 0)) + chunk(b"IDAT", zlib.compress(raw, 0)) + chunk(b"IEND", b"")
+
+
+TINY_PDF = (b"%PDF-1.4\n1 0 obj<</Type/Catalog/Pages 2 0 R>>endobj\n2 0 obj<</Type/Pages/Kids[3 0 R]/Count 1>>endobj\n"
+            b"3 0 obj<</Type/Page/Parent 2 0 R/MediaBox[0 0 200 100]>>endobj\ntrailer<</Root 1 0 R/Size 4>>\n%%EOF\n")
+
+
+def att_row(page, filename):
+    return main_area(page).locator(".ap-att-row", has=page.locator(".ap-att-name", has_text=filename))
+
+
+def upload_via_api(ctx, model, name, filename, data, mime):
+    """Upload through the browser-less API (multipart built by hand); returns the item."""
+    boundary = "----rk" + os.urandom(6).hex()
+    body = (f"--{boundary}\r\nContent-Disposition: form-data; name=\"file\"; filename=\"{filename}\"\r\nContent-Type: {mime}\r\n\r\n").encode() + data + f"\r\n--{boundary}--\r\n".encode()
+    h = owner_http(ctx)
+    req = urllib.request.Request(ctx.base + f"/api/v1/r/{model}/{urllib.parse.quote(name)}/attachments", data=body, method="POST",
+                                 headers={"Content-Type": "multipart/form-data; boundary=" + boundary})
+    with h.opener.open(req, timeout=20) as r:
+        return json.loads(r.read().decode())
+
+
+def test_attachment_upload(page, ctx):
+    mock_feature(page, "attachments")
+    tmp = tempfile.mkdtemp(prefix="rk-att-")
+    try:
+        png, pdf, big = os.path.join(tmp, "logo.png"), os.path.join(tmp, "tiny.pdf"), os.path.join(tmp, "besar.bin")
+        open(png, "wb").write(make_png())
+        open(pdf, "wb").write(TINY_PDF)
+        with open(big, "wb") as f:
+            f.truncate(21 * 1024 * 1024)
+        draft = draft_invoice(ctx)
+        reqs = watch_requests(page)
+        open_route(page, ctx, "#/r/sales_invoice/" + draft)
+        wait_form(page)
+        card = main_area(page).locator(".ap-att")
+        card.wait_for(timeout=10000)
+        assert card.get_by_role("heading", name="Lampiran").count() == 1
+        inp = card.locator("input[type=file]")
+        # 21 MB: refused in the browser, no request is sent
+        before = len([r for r in reqs if r[0] == "POST" and "/attachments" in r[1]])
+        inp.set_input_files(big)
+        card.get_by_text("Ukuran file maksimal 20 MB").first.wait_for(timeout=5000)
+        page.wait_for_timeout(300)
+        assert len([r for r in reqs if r[0] == "POST" and "/attachments" in r[1]]) == before, "no upload request for a 21 MB file"
+        # PNG and PDF
+        inp.set_input_files(png)
+        att_row(page, "logo.png").wait_for(timeout=10000)
+        inp.set_input_files(pdf)
+        att_row(page, "tiny.pdf").wait_for(timeout=10000)
+        row = att_row(page, "logo.png")
+        thumb = row.locator("img.ap-att-thumb")
+        thumb.wait_for(timeout=5000)
+        page.wait_for_function("(el) => el.complete && el.naturalWidth > 0", arg=thumb.element_handle(), timeout=10000)
+        assert att_row(page, "tiny.pdf").locator("img").count() == 0 and att_row(page, "tiny.pdf").locator(".ap-att-icon").count() == 1, "a PDF shows an icon, not a thumbnail"
+        meta_png = row.locator(".ap-att-main .ap-muted").inner_text()
+        assert re.search(r"^\d+(,\d)? (B|KB) · ", meta_png), "size is shown Indonesian style: " + meta_png
+        live = "attachments" in ctx.live
+        if live:
+            assert len(owner_http(ctx).call("GET", f"/api/v1/r/sales_invoice/{draft}/attachments")[1]["data"]) == 2, "both are stored on the server"
+        # delete the PDF (confirm), keep the PNG
+        att_row(page, "tiny.pdf").get_by_role("button", name=re.compile("^Hapus lampiran tiny.pdf")).click()
+        dlg = page.get_by_role("alertdialog")
+        dlg.wait_for(timeout=5000)
+        dlg.get_by_role("button", name="Ya, hapus").click()
+        att_row(page, "tiny.pdf").wait_for(state="detached", timeout=10000)
+        assert att_row(page, "logo.png").count() == 1
+        if live:
+            assert len(owner_http(ctx).call("GET", f"/api/v1/r/sales_invoice/{draft}/attachments")[1]["data"]) == 1, "the delete reached the server"
+        # after Ajukan the record is immutable: no delete buttons
+        submit_and_confirm(page)
+        main_area(page).locator(".rk-pagehead .rk-chip", has_text="Diajukan").wait_for(timeout=10000)
+        card = main_area(page).locator(".ap-att")
+        card.wait_for(timeout=10000)
+        if live:
+            att_row(page, "logo.png").wait_for(timeout=10000)  # the attachment followed the new number
+        page.wait_for_timeout(300)
+        assert main_area(page).get_by_role("button", name=re.compile("^Hapus lampiran")).count() == 0, "no delete on a submitted record"
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_attachment_serving(page, ctx):
+    """S6: a PDF previews inline (no CSP sandbox, so Chromium's viewer is not blocked), a PNG is an inline <img>, and
+    HTML / SVG uploads are served as downloads, never rendered."""
+    if mock_feature(page, "attachments"):
+        print("     (skipped: the serving headers are the kernel's, this run has no attachments endpoint)")
+        return
+    draft = draft_invoice(ctx)
+    items = {n: upload_via_api(ctx, "sales_invoice", draft, n, d, m) for n, d, m in [
+        ("tiny.pdf", TINY_PDF, "application/pdf"), ("logo.png", make_png(), "image/png"),
+        ("halaman.html", b"<!doctype html><script>document.title='x'</script><h1>hai</h1>", "text/html"),
+        ("gambar.svg", b'<svg xmlns="http://www.w3.org/2000/svg" width="10" height="10"><script>1</script></svg>', "image/svg+xml")]}
+    if not any(i["content_type"] for i in items.values()):
+        raise AssertionError("no content types")
+    open_route(page, ctx, "#/r/sales_invoice/" + draft)
+    for n in items:
+        att_row(page, n).wait_for(timeout=10000)
+    assert att_row(page, "halaman.html").locator("img").count() == 0 and att_row(page, "gambar.svg").locator("img").count() == 0, "HTML and SVG get no thumbnail"
+    assert att_row(page, "logo.png").locator("img.ap-att-thumb").count() == 1
+
+    def head(n):
+        return page.evaluate("""(u) => fetch(u, {credentials: 'include'}).then(r => ({status: r.status, type: r.headers.get('content-type'),
+            disp: r.headers.get('content-disposition'), csp: r.headers.get('content-security-policy')}))""", ctx.base + items[n]["url"])
+    pdf = head("tiny.pdf")
+    assert pdf["status"] == 200 and pdf["type"].startswith("application/pdf"), f"pdf answer {pdf}"
+    assert pdf["disp"].startswith("inline"), f"pdf is inline: {pdf}"
+    assert not (pdf["csp"] or "").strip(), f"a PDF carries no CSP sandbox header (Chromium's viewer refuses sandboxed documents): {pdf}"
+    png = head("logo.png")
+    assert png["status"] == 200 and png["type"].startswith("image/png") and png["disp"].startswith("inline"), f"png answer {png}"
+    for n in ("halaman.html", "gambar.svg"):
+        r = head(n)
+        assert r["status"] == 200 and r["disp"].startswith("attachment"), f"{n} must download, not render: {r}"
+        assert "sandbox" in (r["csp"] or ""), f"{n} is sandboxed: {r}"
+
+    # Chromium really shows the PDF: open it as a page in a Chromium with its PDF viewer (headless shell has none)
+    state = {"cookies": page.context.cookies()}
+    bt = page.context.browser.browser_type
+    try:
+        full = bt.launch(channel="chromium")
+    except Exception as e:  # the full Chromium build is not installed: the header checks above stand alone
+        print("     (no full Chromium for the PDF viewer check:", str(e).splitlines()[0][:80] + ")")
+        return
+    try:
+        c2 = full.new_context(viewport={"width": 1000, "height": 700})
+        c2.add_cookies(state["cookies"])
+        pg = c2.new_page()
+        responses = []
+        pg.on("response", lambda r: responses.append(r))
+        pg.goto(ctx.base + items["tiny.pdf"]["url"], wait_until="commit")
+        pg.wait_for_timeout(1500)
+        assert not pg.url.startswith("chrome-error:"), "Chromium blocked the PDF: " + pg.url
+        main = next((r for r in responses if r.url == ctx.base + items["tiny.pdf"]["url"]), None)
+        assert main is not None and main.status == 200 and main.headers["content-type"].startswith("application/pdf"), "the PDF response loaded in the main frame"
+        assert any(f.url.startswith("chrome-extension://") for f in pg.frames), "Chromium's PDF viewer rendered the document: " + str([f.url for f in pg.frames])
+        # an HTML upload opened the same way downloads and never renders
+        pg2 = c2.new_page()
+        with pg2.expect_download(timeout=10000) as dl:
+            try:
+                pg2.goto(ctx.base + items["halaman.html"]["url"], wait_until="commit", timeout=5000)
+            except Exception:
+                pass  # "Download is starting": the browser treated it as a download
+        assert dl.value.suggested_filename == "halaman.html", "downloads with its own name"
+        pg2.close()
+        pg.close()
+        c2.close()
+    finally:
+        full.close()
+
+
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
 PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")
@@ -1456,7 +1764,8 @@ def main():
         s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
         log = open(os.path.join(tmp, "serve.log"), "w")
         server = subprocess.Popen([bin_path, "serve"] + common + ["--addr", f"127.0.0.1:{port}", "--web", os.path.join(ROOT, "web"),
-                                   "--templates", os.path.join(ROOT, "templates"), "--org", ORG], stdout=log, stderr=subprocess.STDOUT)
+                                   "--templates", os.path.join(ROOT, "templates"), "--org", ORG,
+                                   "--files-dir", os.path.join(tmp, "files")], stdout=log, stderr=subprocess.STDOUT)
         base = f"http://127.0.0.1:{port}"
         for _ in range(150):
             if server.poll() is not None:

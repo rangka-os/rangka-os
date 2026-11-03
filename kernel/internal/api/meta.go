@@ -77,7 +77,8 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 	}
 	imports := map[string]any{} // for the import wizard (contract 0012); site imports have app ""
 	for name, im := range reg.Imports {
-		if (im.App == "" || reg.IsInstalled(im.App)) && reg.Model(im.Model) != nil {
+		if (im.App == "" || reg.IsInstalled(im.App)) && reg.Model(im.Model) != nil &&
+			s.Engine.Can(ctx, a, im.Model, "import", nil) && s.Engine.Can(ctx, a, im.Model, "create", nil) {
 			imports[name] = map[string]any{"name": name, "model": im.Model, "label": im.Label, "source": im.Source, "per": im.Per, "app": im.App}
 		}
 	}

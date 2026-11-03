@@ -94,8 +94,9 @@ lines:
 - In `errors`, `column` is the file's column header when the failing field is mapped from a column, else the field
   name.
 - Commit needs a person signed in (a session); tokens (AI and CLI) may preview but get 403 `permission_denied` on
-  commit (data that moves money and stock is applied by people). Model `permissions:` checks (create on `model`) come with
-  contract 0005 §4 / stream S1 and apply here like everywhere else.
+  commit (data that moves money and stock is applied by people). Every import endpoint needs the model permission `import`
+  on `model` (contract 0005 §4), and each created record is checked for `create` (403 `permission_denied`).
+  `GET /meta` lists only imports the caller may run (`import` and `create`).
 
 ### 4. Duplicates
 Two layers, both scoped by org, import name and (for `per: outlet`) outlet:

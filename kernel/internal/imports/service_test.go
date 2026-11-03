@@ -231,7 +231,7 @@ func TestPreviewCommitAndDuplicates(t *testing.T) {
 	if _, ok := lj["preview"]; ok || lj["id"] != other.ID || lj["rows"] != float64(8) {
 		t.Fatalf("list entry json: %s", b)
 	}
-	_, err = s.Get(ctx, engine.Actor{Org: "other-org", ID: "x"}, mokaName, p.ID)
+	_, err = s.Get(ctx, engine.Actor{Org: "other-org", ID: "x", Roles: []string{"owner"}}, mokaName, p.ID)
 	wantStatus(t, err, 404, "not_found")
 }
 
@@ -467,5 +467,27 @@ func TestCommitHeaderOnlyFile(t *testing.T) {
 	}
 	if g, _ := s.Get(ctx, a, mokaName, p.ID); g.Status != "previewed" {
 		t.Fatalf("entry: %+v", g)
+	}
+}
+
+func TestImportNeedsImportPermission(t *testing.T) {
+	s, _ := newService(t)
+	ctx := context.Background()
+	staff := engine.Actor{Org: "tahu-dago", ID: "kasir@example.com", Roles: []string{"outlet_staff"}, Human: true}
+	_, err := s.Preview(ctx, staff, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	var pe *engine.PermissionError
+	if !errors.As(err, &pe) || pe.Model != "outlet_sales" || pe.Action != "import" {
+		t.Fatalf("outlet staff preview: %v", err)
+	}
+	if _, err := s.List(ctx, staff, mokaName); !errors.As(err, &pe) {
+		t.Fatalf("outlet staff list: %v", err)
+	}
+	ho := engine.Actor{Org: "tahu-dago", ID: "ho@example.com", Roles: []string{"head_office"}, Human: true}
+	p, err := s.Preview(ctx, ho, mokaName, "moka.csv", mokaBytes(t), "OUT-01")
+	if err != nil || len(p.Errors) != 0 {
+		t.Fatalf("head office preview: %v %+v", err, p)
+	}
+	if _, err := s.Commit(ctx, ho, mokaName, p.ID); err != nil {
+		t.Fatalf("head office commit: %v", err)
 	}
 }

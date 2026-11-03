@@ -71,10 +71,15 @@ func conflict(err error) bool {
 	return pg.IsCode(err, "23505") || pg.IsCode(err, "40P01")
 }
 
-func (s *Service) imp(name string) (*meta.Import, error) {
+// imp resolves an import the caller may run: the model permission "import" on its target model (contract 0005
+// §4); each created record is also checked for "create" by the engine.
+func (s *Service) imp(ctx context.Context, a engine.Actor, name string) (*meta.Import, error) {
 	im := s.Engine.Reg().Imports[name]
 	if im == nil {
 		return nil, &engine.StatusError{Status: 404, Code: "not_found", Msg: fmt.Sprintf(`Impor "%s" tidak ada`, name)}
+	}
+	if err := s.Engine.Authorize(ctx, a, im.Model, "import", nil); err != nil {
+		return nil, err
 	}
 	return im, nil
 }
@@ -98,7 +103,7 @@ func (l *lookup) Find(model, field, value string) ([]string, error) {
 // Preview reads data, maps it, drops rows whose key was already imported, dry-runs the creates and stores
 // the result as a previewed log entry.
 func (s *Service) Preview(ctx context.Context, a engine.Actor, name, fileName string, data []byte, outlet string) (*Entry, error) {
-	im, err := s.imp(name)
+	im, err := s.imp(ctx, a, name)
 	if err != nil {
 		return nil, err
 	}
@@ -270,7 +275,7 @@ func issueSource(im *meta.Import, field string, rows []int) (row int, column str
 
 // Commit creates the records of a previewed entry in one transaction, records its keys and marks it committed.
 func (s *Service) Commit(ctx context.Context, a engine.Actor, name, id string) (*Entry, error) {
-	im, err := s.imp(name)
+	im, err := s.imp(ctx, a, name)
 	if err != nil {
 		return nil, err
 	}
@@ -361,7 +366,7 @@ func errImportErrors() error {
 
 // Get returns one entry of the caller's org.
 func (s *Service) Get(ctx context.Context, a engine.Actor, name, id string) (*Entry, error) {
-	if _, err := s.imp(name); err != nil {
+	if _, err := s.imp(ctx, a, name); err != nil {
 		return nil, err
 	}
 	ent, _, err := s.load(ctx, a, name, id, false)
@@ -377,7 +382,7 @@ type ListItem struct {
 
 // List returns the newest entries of the caller's org for one import.
 func (s *Service) List(ctx context.Context, a engine.Actor, name string) ([]ListItem, error) {
-	if _, err := s.imp(name); err != nil {
+	if _, err := s.imp(ctx, a, name); err != nil {
 		return nil, err
 	}
 	sql := strings.Replace(selectEntry, "i.preview::text as preview", "null as preview", 1)

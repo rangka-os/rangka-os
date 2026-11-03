@@ -6,31 +6,38 @@ import (
 	"reflect"
 	"strings"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
 // Every workspace .rk file survives Load → Dump → Parse with the same data.
 func TestDumpRoundTrip(t *testing.T) {
 	n := 0
-	filepath.WalkDir("../../../..", func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() || !strings.HasSuffix(p, ".rk") || strings.Contains(p, "testdata") {
+	for _, root := range []string{testdb.RepoRoot(), testdb.Sibling(t, "rangka-apps"), testdb.Sibling(t, "rangka-connectors")} {
+		filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+			if err == nil && testdb.SkipHidden(d) {
+				return filepath.SkipDir
+			}
+			if err != nil || d.IsDir() || !strings.HasSuffix(p, ".rk") || strings.Contains(p, "testdata") {
+				return nil
+			}
+			doc, err := Load(p)
+			if err != nil {
+				return nil
+			}
+			out := Dump(doc.Data, doc.Root, "https://rangka-os.github.io/rangka-os/schema/0.4/x.json")
+			back, perr := LoadBytes(p, []byte(out))
+			if perr != nil {
+				t.Errorf("%s: dumped text does not parse: %v\n%s", p, perr, out)
+				return nil
+			}
+			if !reflect.DeepEqual(back.Data, doc.Data) {
+				t.Errorf("%s: round trip changed data\n%s", p, out)
+			}
+			n++
 			return nil
-		}
-		doc, err := Load(p)
-		if err != nil {
-			return nil
-		}
-		out := Dump(doc.Data, doc.Root, "https://rangka-os.github.io/rangka-os/schema/0.4/x.json")
-		back, perr := LoadBytes(p, []byte(out))
-		if perr != nil {
-			t.Errorf("%s: dumped text does not parse: %v\n%s", p, perr, out)
-			return nil
-		}
-		if !reflect.DeepEqual(back.Data, doc.Data) {
-			t.Errorf("%s: round trip changed data\n%s", p, out)
-		}
-		n++
-		return nil
-	})
+		})
+	}
 	if n < 20 {
 		t.Fatalf("only %d files", n)
 	}

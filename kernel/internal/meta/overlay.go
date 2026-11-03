@@ -6,8 +6,8 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
 
-// applyOverlays merges company overlays (<site>/custom/<model>.rk) onto app models: fields and rules are
-// appended, view additions are placed after the named field or column. App files are never changed.
+// applyOverlays merges company overlays (<site>/custom/<model>.rk) onto app models: fields, rules and approvals
+// are appended, view additions are placed after the named field or column. App files are never changed.
 func (r *Registry) applyOverlays() {
 	for _, st := range sortedKeysM(r.Overlays) {
 		d := r.Overlays[st]
@@ -34,6 +34,9 @@ func (r *Registry) applyOverlays() {
 		raw["fields"] = fields
 		if extra := asList(o["rules"]); len(extra) > 0 {
 			raw["rules"] = append(asList(raw["rules"]), deepCopy(extra).([]any)...)
+		}
+		if extra := asList(o["approvals"]); len(extra) > 0 {
+			raw["approvals"] = append(asList(raw["approvals"]), deepCopy(extra).([]any)...)
 		}
 		views := asMap(raw["views"])
 		if views == nil {

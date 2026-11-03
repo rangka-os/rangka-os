@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: make_voucher
+label: {id: Buat voucher}
+on: note.created
+steps:
+  - {find_all: voucher, as: seen}
+  - create: voucher
+    set:
+      title: "'Dari flow'"
+      owner: user.name
+      amount: size(seen)
+    as: made

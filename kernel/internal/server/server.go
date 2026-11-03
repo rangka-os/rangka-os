@@ -15,9 +15,12 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/api"
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/backup"
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/files"
+	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -37,6 +40,7 @@ type Config struct {
 	Schemas                         *schema.Set
 	Version                         string
 	DeployTarget                    string           // dev, docker, helm, desktop, cloud, partner
+	FilesDir                        string           // attachments root (--files-dir); "" = system.rk files.path, else data/files
 	Now                             func() time.Time // fixed clocks in tests
 	Logf                            func(format string, args ...any)
 }
@@ -103,6 +107,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	fstore, err := openFiles(cfg, reg)
+	if err != nil {
+		return nil, err
+	}
 	if cfg.Org == "" {
 		cfg.Org = "default"
 		if cfg.SiteDir != "" {
@@ -113,7 +121,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
 	}
-	if _, err := store.Migrate(ctx, db, reg, false, "serve"); err != nil {
+	if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", Before: cfg.preBackup(db, reg)}); err != nil {
 		db.Close()
 		return nil, fmt.Errorf("migrate: %w", err)
 	}
@@ -159,8 +167,34 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		site = filepath.Base(filepath.Clean(cfg.SiteDir))
 	}
 	s.API = &api.Server{Version: cfg.Version, Started: time.Now(), Engine: e, DB: db, Auth: s.Auth, Hub: s.Hub, Queue: s.Queue,
-		Sched: s.Sched, Changes: s.Changes, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget}
+		Sched: s.Sched, Changes: s.Changes, Imports: &imports.Service{DB: db, Engine: e}, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget,
+		MaxUploadMB: intCfg(reg, "files.max_upload_mb", 20)}
+	if fstore != nil {
+		s.API.Files = fstore // keep a nil *Local out of the interface
+	}
 	return s, nil
+}
+
+// openFiles opens the attachments store (contract 0011 §1). Root: cfg.FilesDir (--files-dir, $RANGKA_FILES_DIR),
+// then system.rk files.path, then data/files; relative to the working directory. nil when files.enabled is false.
+func openFiles(cfg Config, reg *meta.Registry) (*files.Local, error) {
+	if reg.SystemConfig("files.enabled") == false {
+		return nil, nil
+	}
+	if d := strCfg(reg, "files.driver", "local"); d != "local" {
+		return nil, fmt.Errorf("files: driver %s is not available yet; use local", d)
+	}
+	l, err := files.NewLocal(cfg.filesRoot(reg))
+	if err != nil {
+		return nil, fmt.Errorf("files: %w", err)
+	}
+	return l, nil
+}
+
+// filesRoot is the attachments directory (backup.FilesDir: cfg.FilesDir, then system.rk files.path, then
+// data/files, relative to the working directory). The pre-migrate backup archives the same directory.
+func (cfg Config) filesRoot(reg *meta.Registry) string {
+	return backup.FilesDir(reg, cfg.FilesDir)
 }
 
 func titleCase(id string) string {
@@ -212,7 +246,7 @@ func (s *Server) Reload(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if _, err := store.Migrate(ctx, s.DB, reg, false, "changeset"); err != nil {
+	if _, err := store.MigrateWith(ctx, s.DB, reg, store.MigrateOpts{Source: "changeset", Before: s.Cfg.preBackup(s.DB, reg)}); err != nil {
 		return err
 	}
 	s.Engine.SetRegistry(reg)
@@ -223,6 +257,8 @@ func (s *Server) Reload(ctx context.Context) error {
 
 func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 	act := meta.AsMap(j.Args["actor"])
+	// a queued action replays a person's request: same roles, same permission checks (not System). The roles
+	// are the ones captured at enqueue time; a member demoted before the job runs keeps the old grants.
 	a := engine.Actor{Org: j.Org, ID: meta.Str(act, "id"), UserName: meta.Str(act, "user"), Roles: meta.StrList(act["roles"])}
 	if a.ID == "" {
 		a.ID = "queue"
@@ -241,7 +277,17 @@ func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 
 func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	name := meta.Str(j.Args, "flow")
-	a := engine.Actor{Org: j.Org, ID: "flow:" + name, UserName: "system", Roles: []string{"system"}}
+	// a resumed wait: runs as whoever started the flow; schedules and kernel-started flows run as System
+	a := engine.JobActor(j.Org, j.Args["actor"])
+	if a.System {
+		a.Roles = append([]string{"system"}, a.Roles...)
+		if a.ID == "" || a.ID == "system" {
+			a.ID = "flow:" + name
+		}
+		if a.UserName == "" {
+			a.UserName = "system"
+		}
+	}
 	start := 0
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)

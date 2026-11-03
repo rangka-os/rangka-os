@@ -1,5 +1,5 @@
-// Command rangka is the Rangka OS kernel: validate metadata, migrate the database, seed demo data and serve
-// the REST/MCP API.
+// Command rangka is the Rangka OS kernel: validate metadata, migrate the database, seed demo data, serve
+// the REST/MCP API, and back up and restore an installation.
 package main
 
 import (
@@ -15,9 +15,12 @@ func usage() {
 
 Usage:
   rangka validate --apps <dir> [--site <dir>] [--json] [app ...]
-  rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run]
+  rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n]
   rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
   rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--dev-open]
+  rangka backup   [--apps <dir>] [--site <dir>] --db <url> [--out file] [--org id] [--files dir]
+  rangka restore  <file> --db <url> [--into dir] [--files dir]
+  rangka user add --db <url> --org <org> --email <e> --password <p> --role <role> [--name <full name>] [--record <USR-…>]
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:
@@ -44,6 +47,12 @@ func main() {
 		code = cmdSeed(os.Args[2:])
 	case "serve":
 		code = cmdServe(os.Args[2:])
+	case "backup":
+		code = cmdBackup(os.Args[2:])
+	case "restore":
+		code = cmdRestore(os.Args[2:])
+	case "user":
+		code = cmdUser(os.Args[2:])
 	case "version", "--version":
 		fmt.Println("rangka", Version)
 	case "help", "-h", "--help":

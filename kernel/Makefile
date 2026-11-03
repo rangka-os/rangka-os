@@ -2,7 +2,9 @@
 # (initdb/pg_ctl/postgres; scripts/pgtemp.sh finds Debian, Homebrew, DBngin and Postgres.app installs, else set PGBIN).
 
 GO      ?= go
-WS      := $(abspath ../..)
+# Workspace that holds rangka-apps/ and rangka-connectors/: $RANGKA_WORKSPACE, else the first ancestor of this
+# repo's parent with rangka-apps/apps (works from a git worktree), else two levels up.
+WS      ?= $(shell scripts/workspace.sh)
 APPS    ?= $(WS)/rangka-apps/apps
 SITE    ?= $(WS)/rangka-apps/sites/kopi-senja
 CONN    ?= $(WS)/rangka-connectors
@@ -10,7 +12,7 @@ ADDR    ?= :8080
 BIN     := bin/rangka
 MODULE  ?=
 
-.PHONY: build test test-unit vet validate compare-python run-demo proto sync-schemas proto-expected rename-module clean
+.PHONY: build test test-unit vet validate compare-python run-demo sync-schemas proto-expected rename-module clean
 
 build:
 	$(GO) build -o $(BIN) ./cmd/rangka
@@ -33,11 +35,12 @@ vet:
 validate: build
 	$(BIN) validate --apps $(APPS) --site $(SITE) --connectors $(CONN)
 
-# The Go validator and rangka_validate.py must print the same reports: the real apps + site + connectors,
+# The Go validator and rangka_validate.py must print the same reports: the real apps + site + connectors, the overlay and numbering sites,
 # the broken apps copy, and the broken apps + broken site (overlays, theme contrast) + broken connectors.
 compare-python: build
 	@D=$$(mktemp -d); rc=0; \
-	for args in "$(APPS) --site $(SITE) --connectors $(CONN)" "$(APPS) --site testdata/overlay-site --connectors $(CONN)" "testdata/broken-apps" \
+	for args in "$(APPS) --site $(SITE) --connectors $(CONN)" "$(APPS) --site testdata/overlay-site --connectors $(CONN)" \
+	            "$(APPS) --site testdata/numbering-site --connectors $(CONN)" "testdata/broken-apps" \
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \
@@ -46,22 +49,18 @@ compare-python: build
 
 # Temp Postgres → migrate → seed (org kopi-senja, ceo@saga.co.id / rangka-demo) → serve on :8080 with
 # --dev-open. Ctrl-C stops the server and removes the database.
-run-demo: build proto
+run-demo: build
 	@URL=$$(PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh start) || exit 1; \
 	trap 'PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh stop' EXIT INT TERM; \
 	echo "temporary postgres: $$URL"; \
 	$(BIN) migrate --apps $(APPS) --site $(SITE) --db "$$URL" | tail -1 && \
 	$(BIN) seed --apps $(APPS) --site $(SITE) --db "$$URL" && \
-	echo "open http://localhost$(ADDR)/prototype/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
+	echo "open http://localhost$(ADDR)/app/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
 	$(BIN) serve --apps $(APPS) --site $(SITE) --db "$$URL" --addr $(ADDR) --dev-open
 
-# The prototype's metadata + seed (web/prototype/meta.js, not committed) from rangka-apps.
-proto:
-	python3 ../tools/build_proto.py $(WS)/rangka-apps ../web/prototype/meta.js
-
-# Copy rangka-os/schema/0.4 into the binary's embedded copy (a test fails when they differ).
+# Copy rangka-os/schema/0.5 into the binary's embedded copy (a test fails when they differ).
 sync-schemas:
-	cp ../schema/0.4/*.json internal/schema/0.4/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
+	cp ../schema/0.5/*.json internal/schema/0.5/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
 
 # Recompute the prototype's dashboard numbers used by the dashboard tests (needs node).
 proto-expected:

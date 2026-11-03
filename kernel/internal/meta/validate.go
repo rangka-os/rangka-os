@@ -101,6 +101,9 @@ func (v *validator) shape() {
 			if got, _ := m.Raw["name"].(string); got != mn || m.Raw["name"] == nil {
 				v.rep.add("error", m.Doc.Path, "name", "name_mismatch", fmt.Sprintf(`model name "%s" must match the file name "%s"`, pyStr(m.Raw["name"]), mn))
 			}
+			if naming := asMap(m.Raw["naming"]); naming != nil {
+				v.resetNeedsDate(m.Doc.Path, "naming", naming, false)
+			}
 		}
 		for _, dn := range v.appDashboards(a) {
 			d := v.reg.Dashboards[dn]
@@ -342,6 +345,35 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 		role := pyStr(asMap(pv)["role"])
 		if !roles[role] {
 			v.rep.add("warn", p, fmt.Sprintf("permissions/%d/role", i), "unknown_role", fmt.Sprintf(`role "%s" has no file in roles/ (it must exist at install)`, role))
+		}
+	}
+	approvalNames := map[string]bool{}
+	for i, av := range asList(m.Raw["approvals"]) {
+		am := asMap(av)
+		if am == nil {
+			continue
+		}
+		on := pyStr(am["on"])
+		ap := fmt.Sprintf("approvals/%d", i)
+		if on == "submit" || on == "cancel" {
+			if !boolean(m.Raw, "is_submittable") {
+				v.rep.add("error", p, ap+"/on", "not_submittable", fmt.Sprintf("approvals on %s need is_submittable: true", on))
+			}
+		} else if !contains(actionNames(m), on) {
+			v.rep.add("error", p, ap+"/on", "unknown_verb", fmt.Sprintf(`"%s" is not submit, cancel or an action of this model`, on))
+		}
+		if n := pyStr(am["name"]); approvalNames[n] {
+			v.rep.add("error", p, ap+"/name", "duplicate_approval", fmt.Sprintf(`"%s" is declared twice`, n))
+		} else {
+			approvalNames[n] = true
+		}
+		if x, ok := am["when"]; ok {
+			v.expr(p, ap+"/when", x, fields, visible)
+		}
+		for j, r := range asList(am["approvers"]) {
+			if !roles[pyStr(r)] {
+				v.rep.add("warn", p, fmt.Sprintf("%s/approvers/%d", ap, j), "unknown_role", fmt.Sprintf(`role "%s" has no file in roles/ (it must exist at install)`, pyStr(r)))
+			}
 		}
 	}
 	views := asMap(m.Raw["views"])
@@ -624,4 +656,13 @@ func (v *validator) dashboard(d *Dashboard, visible map[string]vis, optional map
 			v.expr(p, at+"/filter", fx, fields, visible)
 		}
 	}
+}
+
+// actionNames lists the names of the model's actions.
+func actionNames(m *Model) []string {
+	var out []string
+	for _, a := range asList(m.Raw["actions"]) {
+		out = append(out, pyStr(asMap(a)["name"]))
+	}
+	return out
 }

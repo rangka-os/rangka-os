@@ -13,6 +13,10 @@ rules:
     on: submit
     check: x_po_number != '' || notes2 != ''
     message: {id: Isi nomor PO}
+approvals:
+  - {name: big, on: ship, when: "grand_totl > 1", approvers: [sales_manager]}
+  - {name: a, on: submit, approvers: [ghost_role]}
+  - {name: big, on: submit, approvers: [sales_manager]}
 views:
   form:
     add:

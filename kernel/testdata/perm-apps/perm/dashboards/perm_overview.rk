@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/dashboard.json
+name: perm_overview
+label: {id: Ringkasan izin, en: Permissions overview}
+default_period: 30
+cache: 5m
+widgets:
+  - name: voucher_total
+    type: number
+    label: {id: Total voucher}
+    model: voucher
+    aggregate: sum
+    field: amount
+    span: 6
+  - name: note_count
+    type: number
+    label: {id: Jumlah catatan}
+    model: note
+    span: 6

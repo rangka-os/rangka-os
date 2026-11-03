@@ -7,18 +7,19 @@ import (
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-// The embedded copy must equal rangka-os/schema/0.4 (run `make sync-schemas` after editing the schemas).
+// The embedded copy must equal rangka-os/schema/0.5 (run `make sync-schemas` after editing the schemas).
 func TestEmbeddedInSync(t *testing.T) {
-	src := "../../../schema/0.4"
+	src := "../../../schema/0.5"
 	ents, err := os.ReadDir(src)
 	if err != nil {
 		t.Skip("schema source dir not found")
 	}
 	for _, e := range ents {
 		a, _ := os.ReadFile(filepath.Join(src, e.Name()))
-		b, err := embedded.ReadFile("0.4/" + e.Name())
+		b, err := embedded.ReadFile("0.5/" + e.Name())
 		if err != nil || !bytes.Equal(a, b) {
 			t.Errorf("%s: embedded copy differs from %s; run make sync-schemas", e.Name(), src)
 		}
@@ -69,36 +70,68 @@ func TestRepr(t *testing.T) {
 func TestWorkspaceFilesValidate(t *testing.T) {
 	s := Embedded()
 	n := 0
-	filepath.WalkDir("../../../..", func(p string, d os.DirEntry, err error) error {
-		if err != nil || d.IsDir() && (d.Name() == "testdata" || d.Name() == "node_modules") {
-			if d != nil && d.IsDir() {
+	for _, root := range []string{testdb.RepoRoot(), testdb.Sibling(t, "rangka-apps"), testdb.Sibling(t, "rangka-connectors")} {
+		filepath.WalkDir(root, func(p string, d os.DirEntry, err error) error {
+			if err == nil && testdb.SkipHidden(d) {
 				return filepath.SkipDir
 			}
+			if err != nil || d.IsDir() && (d.Name() == "testdata" || d.Name() == "node_modules") {
+				if d != nil && d.IsDir() {
+					return filepath.SkipDir
+				}
+				return nil
+			}
+			if d.IsDir() || filepath.Ext(p) != ".rk" {
+				return nil
+			}
+			doc, err := rk.Load(p)
+			if err != nil {
+				t.Errorf("%s: %v", p, err)
+				return nil
+			}
+			kind := doc.Kind()
+			if kind == "" {
+				return nil
+			}
+			if !s.Has(kind) {
+				t.Errorf("%s: no schema %s.json", p, kind)
+				return nil
+			}
+			for _, e := range s.Validate(kind, FromNode(doc.Root)) {
+				t.Errorf("%s: %s %s", p, e.PathString(), e.Message)
+			}
+			n++
 			return nil
-		}
-		if d.IsDir() || filepath.Ext(p) != ".rk" {
-			return nil
-		}
-		doc, err := rk.Load(p)
-		if err != nil {
-			t.Errorf("%s: %v", p, err)
-			return nil
-		}
-		kind := doc.Kind()
-		if kind == "" {
-			return nil
-		}
-		if !s.Has(kind) {
-			t.Errorf("%s: no schema %s.json", p, kind)
-			return nil
-		}
-		for _, e := range s.Validate(kind, FromNode(doc.Root)) {
-			t.Errorf("%s: %s %s", p, e.PathString(), e.Message)
-		}
-		n++
-		return nil
-	})
+		})
+	}
 	if n < 30 {
 		t.Errorf("only %d files checked", n)
+	}
+}
+
+func TestImportSchema(t *testing.T) {
+	s := Embedded()
+	if !s.Has("import") || s.Raw("import") == nil {
+		t.Fatal("kind import has no schema")
+	}
+	if !s.Has("model") {
+		t.Fatal("existing kinds must stay available")
+	}
+	ok := FromData(map[string]any{"name": "moka", "model": "outlet_sales", "map": map[string]any{"date": "Date"}})
+	if errs := s.Validate("import", ok); len(errs) != 0 {
+		t.Errorf("valid import reported %+v", errs)
+	}
+	bad := FromData(map[string]any{"name": "moka", "map": map[string]any{}})
+	got := map[string]string{}
+	for _, e := range s.Validate("import", bad) {
+		got[e.PathString()] = e.Message
+	}
+	if got["(root)"] != "'model' is a required property" || got["map"] != "{} does not have enough properties" || len(got) != 2 {
+		t.Errorf("missing model / empty map: %+v", got)
+	}
+	noValue := FromData(map[string]any{"name": "x", "model": "y", "map": map[string]any{"a": map[string]any{"match": "sku"}}})
+	errs := s.Validate("import", noValue)
+	if len(errs) != 1 || errs[0].PathString() != "map/a" || errs[0].Message != "'value' is a required property" {
+		t.Errorf("missing value: %+v", errs)
 	}
 }

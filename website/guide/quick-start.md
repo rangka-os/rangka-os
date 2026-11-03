@@ -57,7 +57,7 @@ and serves on port 8080. Ctrl-C stops everything and removes the database.
 | Open | What you get |
 | --- | --- |
 | http://localhost:8080/console/ | Rangka Console. Sign in with `ceo@saga.co.id` / `rangka-demo` |
-| http://localhost:8080/prototype/ | The CRM and sales apps, rendered from metadata |
+| http://localhost:8080/app/ | The web app people use every day: dashboards, lists, forms, approvals, imports (sign in the same way) |
 | http://localhost:8080/api/v1/meta | Every model, dashboard and setting as JSON |
 | `POST http://localhost:8080/mcp` | MCP endpoint for AI clients |
 

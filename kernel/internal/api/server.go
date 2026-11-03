@@ -7,11 +7,14 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/files"
+	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/mcp"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -29,12 +32,17 @@ type Server struct {
 	Queue        *jobs.Queue
 	Sched        *jobs.Scheduler
 	Changes      *changeset.Service
-	WebDir       string // rangka-os/web, served at /
-	TemplatesDir string // rangka-os/templates (theme and layout templates)
-	Org          string // default organisation
-	Site         string // site name
-	DeployTarget string // dev, docker, helm, desktop, cloud, partner
+	Imports      *imports.Service
+	WebDir       string      // rangka-os/web, served at /
+	TemplatesDir string      // rangka-os/templates (theme and layout templates)
+	Org          string      // default organisation
+	Site         string      // site name
+	DeployTarget string      // dev, docker, helm, desktop, cloud, partner
+	Files        files.Store // attachments blob store; nil = files capability disabled (501 files_disabled)
+	MaxUploadMB  int         // files.max_upload_mb; 0 = 20
 	Log          func(format string, args ...any)
+
+	blobMu sync.Mutex // orders blob removal against uploads of the same bytes (one process)
 }
 
 type ctxKey struct{}
@@ -106,18 +114,38 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PATCH /api/v1/r/{model}/{name}", a(s.patchRecord))
 	mux.HandleFunc("DELETE /api/v1/r/{model}/{name}", a(s.deleteRecord))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.lifecycle))
+	mux.HandleFunc("GET /api/v1/attachments/{id}", a(s.getAttachment))
+	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.runAction))
+	// guarded record routes: the guard checks the permission, then the stream's handler runs
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", s.recordGuard("print", notImplemented))
+	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", s.recordGuard("read", s.listAttachments))
+	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", s.recordGuard("write", s.uploadAttachment))
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))
 	mux.HandleFunc("POST /api/v1/flows/{name}/run", a(s.runFlow))
+	// imports
+	mux.HandleFunc("POST /api/v1/imports/{import}", a(s.previewImport))
+	mux.HandleFunc("POST /api/v1/imports/{import}/{id}/commit", a(s.commitImport))
+	mux.HandleFunc("GET /api/v1/imports/{import}/{id}", a(s.getImport))
+	mux.HandleFunc("GET /api/v1/imports/{import}", a(s.listImports))
 	// realtime
-	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) { s.Hub.ServeSSE(w, r, c.actor.Org) }))
+	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
+		s.Hub.ServeSSE(w, r, c.actor.Org, s.eventAllow(r.Context(), c.actor))
+	}))
+	// approvals
+	mux.HandleFunc("GET /api/v1/approvals", a(s.listApprovals))
+	mux.HandleFunc("GET /api/v1/approvals/{id}", a(s.getApproval))
+	mux.HandleFunc("POST /api/v1/approvals/{id}/approve", a(s.decideApproval(true)))
+	mux.HandleFunc("POST /api/v1/approvals/{id}/reject", a(s.decideApproval(false)))
 	// change sets
 	mux.HandleFunc("GET /api/v1/changesets", a(s.listChangesets))
 	mux.HandleFunc("POST /api/v1/changesets", a(s.proposeChangeset))
 	mux.HandleFunc("GET /api/v1/changesets/{id}", a(s.getChangeset))
 	mux.HandleFunc("POST /api/v1/changesets/{id}/{verb}", a(s.changesetVerb))
 	// system, orgs, files
-	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) { writeJSON(w, 200, s.Status(r.Context())) }))
+	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
+		writeJSON(w, 200, s.Status(r.Context(), c.actor.Org))
+	}))
 	mux.HandleFunc("GET /api/v1/system/jobs", a(s.listJobs))
 	mux.HandleFunc("GET /api/v1/system/jobs/{id}", a(s.getJob))
 	mux.HandleFunc("GET /api/v1/system/audit", a(s.listAudit))
@@ -152,7 +180,7 @@ func (s *Server) Handler() http.Handler {
 		Changes: s.Changes,
 		Meta:    func(ctx context.Context, a engine.Actor) (any, error) { return s.Meta(ctx, a) },
 		File:    func(ctx context.Context, p string) (any, error) { return s.File(p) },
-		Status:  func(ctx context.Context) any { return s.Status(ctx) },
+		Status:  func(ctx context.Context, org string) any { return s.Status(ctx, org) },
 	}
 	for _, m := range []string{"POST", "GET", "DELETE"} {
 		mux.Handle(m+" /mcp", mcpHandler)
@@ -160,7 +188,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "not_found", "no such endpoint "+r.URL.Path)
 	})
-	// static web (prototype, console, design system)
+	// static web (app, console, design system)
 	if s.WebDir != "" {
 		mux.Handle("GET /", s.static())
 	}
@@ -170,7 +198,16 @@ func (s *Server) Handler() http.Handler {
 func (s *Server) static() http.Handler {
 	fsrv := http.FileServer(http.Dir(s.WebDir))
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// the end-user app moved from /prototype/ to /app/; old links keep working
+		if r.URL.Path == "/prototype" || strings.HasPrefix(r.URL.Path, "/prototype/") {
+			http.Redirect(w, r, "/app/", http.StatusMovedPermanently)
+			return
+		}
 		if r.URL.Path == "/" {
+			if _, err := os.Stat(filepath.Join(s.WebDir, "app", "index.html")); err == nil {
+				http.Redirect(w, r, "/app/", http.StatusFound)
+				return
+			}
 			if _, err := os.Stat(filepath.Join(s.WebDir, "index.html")); err != nil {
 				w.Header().Set("Content-Type", "text/html; charset=utf-8")
 				w.Write([]byte(indexPage(s.WebDir)))

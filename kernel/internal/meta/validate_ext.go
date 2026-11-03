@@ -116,6 +116,7 @@ func (v *validator) more() {
 		v.parens(p, "if", f.Raw["if"])
 		v.steps(p, "steps", f.Raw["steps"], all)
 	}
+	v.imports(all, false)
 	for _, a := range v.reg.Apps {
 		if v.skip(a.Name) {
 			continue
@@ -140,6 +141,7 @@ func (v *validator) more() {
 	}
 	if v.reg.Site != nil {
 		v.site(all)
+		v.imports(all, true)
 		v.overlays(all)
 	}
 }
@@ -211,6 +213,9 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 		}
 		for _, k := range []string{"where", "if"} {
 			v.parens(p, w+"/"+k, st[k])
+		}
+		if ap, ok := st["approve"].(map[string]any); ok {
+			v.parens(p, w+"/approve/when", ap["when"])
 		}
 		if set, ok := st["set"].(map[string]any); ok {
 			for _, fk := range sortedKeys(set) {
@@ -374,11 +379,40 @@ func (v *validator) site(all map[string]vis) {
 		if ly, _ := c["layout"].(string); ly != "" && s.Layouts[ly] == nil && !templateExists("layouts", ly, tdir) {
 			v.rep.extra("error", cfg.Path, "layout", "unknown_layout", fmt.Sprintf(`layout "%s" has no file layouts/%s.rk%s`, ly, ly, suggest(ly, keysDoc(s.Layouts))))
 		}
-		for _, mn := range sortedKeys(asMap(c["numbering"])) {
+		numbering := asMap(c["numbering"])
+		for _, mn := range sortedKeys(numbering) {
+			if series := asMap(numbering[mn]); series != nil {
+				v.resetNeedsDate(cfg.Path, "numbering/"+mn, series, true)
+				continue
+			}
 			if x, ok := all[mn]; !ok {
 				v.rep.extra("error", cfg.Path, "numbering/"+mn, "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, mn, suggest(mn, keys(all))))
 			} else if !installed[x.app] {
 				v.rep.extra("warn", cfg.Path, "numbering/"+mn, "not_installed", fmt.Sprintf(`"%s" comes from app "%s", which this site does not install`, mn, x.app))
+			}
+		}
+		for _, mn := range sortedKeysM(all) {
+			x := all[mn]
+			if !installed[x.app] {
+				continue
+			}
+			naming := asMap(x.own.Raw["naming"])
+			series, _ := naming["series"].(string)
+			if series == "" {
+				continue
+			}
+			if _, defined := numbering[series].(map[string]any); defined {
+				continue
+			}
+			// the engine resolves config.numbering[<model>] (a string, or an object with a pattern) before the model's own naming
+			if str, _ := numbering[mn].(string); str != "" {
+				continue
+			}
+			if p, _ := asMap(numbering[mn])["pattern"].(string); p != "" {
+				continue
+			}
+			if _, hasPattern := naming["pattern"].(string); !hasPattern {
+				v.rep.extra("error", x.own.Doc.Path, "naming/series", "unknown_series", fmt.Sprintf(`series "%s" is not defined in config.rk numbering and the model gives no default pattern`, series))
 			}
 		}
 	}
@@ -625,6 +659,46 @@ func (v *validator) overlays(all map[string]vis) {
 			}
 			v.exprTo(true, p, fmt.Sprintf("rules/%d/check", i), chk, merged, visible)
 		}
+		apprNames := map[string]bool{}
+		for _, av := range asList(own.Raw["approvals"]) {
+			apprNames[pyStr(asMap(av)["name"])] = true
+		}
+		roles := map[string]bool{}
+		for _, an := range append([]string{a.Name}, append(keys(a.Requires), keys(a.Optional)...)...) {
+			if ap := v.reg.App[an]; ap != nil {
+				for _, r := range ap.Roles {
+					roles[r] = true
+				}
+			}
+		}
+		for i, av := range asList(o["approvals"]) {
+			am, ok := av.(map[string]any)
+			if !ok {
+				continue
+			}
+			on := pyStr(am["on"])
+			ap := fmt.Sprintf("approvals/%d", i)
+			if on == "submit" || on == "cancel" {
+				if !boolean(own.Raw, "is_submittable") {
+					v.rep.extra("error", p, ap+"/on", "not_submittable", fmt.Sprintf("approvals on %s need is_submittable: true", on))
+				}
+			} else if !contains(actionNames(own), on) {
+				v.rep.extra("error", p, ap+"/on", "unknown_verb", fmt.Sprintf(`"%s" is not submit, cancel or an action of this model`, on))
+			}
+			if n := pyStr(am["name"]); apprNames[n] {
+				v.rep.extra("error", p, ap+"/name", "duplicate_approval", fmt.Sprintf(`"%s" is declared twice`, n))
+			} else {
+				apprNames[n] = true
+			}
+			if e, ok := am["when"]; ok {
+				v.exprTo(true, p, ap+"/when", e, merged, visible)
+			}
+			for j, r := range asList(am["approvers"]) {
+				if !roles[pyStr(r)] {
+					v.rep.extra("warn", p, fmt.Sprintf("%s/approvers/%d", ap, j), "unknown_role", fmt.Sprintf(`role "%s" has no file in roles/ (it must exist at install)`, pyStr(r)))
+				}
+			}
+		}
 		views := asMap(own.Raw["views"])
 		var placed, cols []string
 		for _, sv := range asList(asMap(views["form"])["layout"]) {
@@ -673,5 +747,31 @@ func (v *validator) overlays(all map[string]vis) {
 				v.rep.extra("error", p, it[0], "compute_cycle", it[1])
 			}
 		}
+	}
+}
+
+// resetNeedsDate reports a series (config.numbering object or model naming map) whose reset period is not
+// spelled out in its pattern, so numbers would repeat. A reset left to default is inferred from the pattern
+// and never fails.
+func (v *validator) resetNeedsDate(path, where string, series map[string]any, extra bool) {
+	pattern, _ := series["pattern"].(string)
+	reset, _ := series["reset"].(string)
+	year := strings.Contains(pattern, "{YY}") || strings.Contains(pattern, "{YYYY}")
+	var what string
+	switch {
+	case pattern == "":
+		return
+	case reset == "yearly" && !year:
+		what = "{YY} or {YYYY}"
+	case reset == "monthly" && (!year || !strings.Contains(pattern, "{MM}")):
+		what = "{MM} and {YY} or {YYYY}"
+	default:
+		return
+	}
+	msg := fmt.Sprintf("reset %s needs %s in the pattern, or numbers repeat", reset, what)
+	if extra {
+		v.rep.extra("error", path, where, "reset_needs_date", msg)
+	} else {
+		v.rep.add("error", path, where, "reset_needs_date", msg)
 	}
 }

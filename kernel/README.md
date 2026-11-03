@@ -4,7 +4,7 @@ The Rangka OS server: one Go binary that validates `.rk` metadata, migrates Post
 document lifecycle, serves the REST API, realtime events, the queue and scheduler, Rangka ID (sessions,
 API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The binding contract is
 [`../docs/contracts.md`](../docs/contracts.md); the reference semantics are the browser prototype
-(`../web/prototype/engine.js`) and `../tools/rangka_validate.py`.
+(`../web/app/engine.js`) and `../tools/rangka_validate.py`.
 
 ```
 make test       # all tests against a throwaway Postgres (started and removed by scripts/pgtemp.sh)
@@ -13,25 +13,30 @@ make validate   # rangka validate on rangka-apps/apps + sites/kopi-senja + rangk
 make compare-python   # Go vs rangka_validate.py on the real metadata and two broken copies (must be identical)
 ```
 
-Then open http://localhost:8080/prototype/, http://localhost:8080/api/v1/meta, or point an MCP client at
-`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`.
+Then open http://localhost:8080/app/, http://localhost:8080/api/v1/meta, or point an MCP client at
+`POST http://localhost:8080/mcp`. Without `--dev-open`, sign in with `ceo@saga.co.id` / `rangka-demo`. More people:
+`rangka user add --db $DATABASE_URL --org kopi-senja --email <e> --password <p> --role <role>` (see `rangka user` in
+`cmd/rangka/user.go`; `--reset-password` and `--create-org` are opt-in).
 
-## Standard library only (for now)
+## Stand-ins (for now)
 
 The decided stack was chi, pgx v5, cel-go, River, santhosh-tekuri/jsonschema and yaml.v3. When this was
-built the sandbox could not reach the Go module proxy (proxy.golang.org answered 403), so the kernel uses
-only the Go standard library. Each library has a small in-tree stand-in behind the same seam, so swapping
-the real one in is local to one package:
+built the sandbox could not reach the Go module proxy (proxy.golang.org answered 403), so the kernel started
+on the Go standard library with a small in-tree stand-in behind each seam. pgx v5 and bcrypt are now the real
+libraries (contract 0005 §1, stream S1); the others are still stand-ins, and swapping each one in is local to
+one package:
 
 | Decided | In-tree stand-in | Seam |
 | --- | --- | --- |
 | chi | `net/http` `ServeMux` patterns (Go 1.22+) | `internal/api/server.go` `Handler()` |
-| pgx v5 | `internal/pg`: wire protocol v3, SCRAM-SHA-256/MD5/cleartext, TLS, extended protocol, pool, tx, LISTEN/NOTIFY | `pg.Querier` (`Query`, `Exec`) |
 | cel-go | `internal/cel`: CEL grammar + macros, heterogeneous numeric equality, CONTRACTS functions | `cel.Compile`, `Program.Eval(*cel.Env)` |
 | River | `internal/jobs`: Postgres queue (`FOR UPDATE SKIP LOCKED`), retries with backoff, River's job states, cron scheduler with unique keys | `engine.Enqueuer`, `jobs.Handler` |
 | jsonschema | `internal/schema`: draft 2020-12 subset used by `schema/0.4`, Python-jsonschema messages | `schema.Set.Validate` |
 | yaml.v3 | `internal/rk`: strict YAML parser with positions + writer | `rk.Load`, `rk.Dump` |
-| bcrypt/argon2 | PBKDF2-HMAC-SHA256 (`crypto/pbkdf2`), self-describing hash format | `auth.HashPassword` |
+
+Done: `internal/pg` is a thin wrapper over pgx v5 (`pg.Querier`: `Query`, `Exec`; pool, tx, LISTEN/NOTIFY, `CopyTo`
+and `CopyFrom`), and passwords use bcrypt (`auth.HashPassword`; PBKDF2 hashes from earlier builds are upgraded at
+the next sign-in).
 
 ## Architecture
 
@@ -56,7 +61,7 @@ internal/auth (Rangka ID: sessions, rk_ tokens, OIDC)   internal/mcp (JSON-RPC t
                      ▲
                internal/api (REST /api/v1, /auth, /oauth, /mcp, static web) ◄── internal/server (wiring, reload)
                      ▲
-               cmd/rangka (validate | migrate | seed | serve)
+               cmd/rangka (validate | migrate | backup | restore | seed | serve)
 ```
 
 | Package | What it does |
@@ -67,7 +72,7 @@ internal/auth (Rangka ID: sessions, rk_ tokens, OIDC)   internal/mcp (JSON-RPC t
 | `internal/theme` | Base design tokens (embedded copy of `web/design-system/tokens.json`), the dark derivation of CONTRACTS v0.1 decision 12 and WCAG contrast; same arithmetic as the Python validator. |
 | `internal/cel` | The CEL dialect: `today()`, `now()`, `duration()`, date ± duration, `round()`, `sum()`, `.map()`, `option()`, `app_installed()`, `truncate()`, `size()`, `.contains()`, `in`, ternary, link traversal (`customer.payment_days` loads the record). |
 | `internal/pg` | The Postgres client. |
-| `internal/store` | Model → table compiler (`r_<model>`, child tables, indexes on links/docstatus/unique), diff-based migrations (add tables, columns, indexes; never drops), `rk_meta_files` hashes, record I/O, naming counters, audit, NOTIFY. |
+| `internal/store` | Model → table compiler (`r_<model>`, child tables, indexes on links/docstatus/unique), diff-based migrations (add tables, columns, indexes; risk levels, reverse steps, destructive steps behind a flag), `rk_meta_files` hashes, record I/O, naming counters, audit, NOTIFY. |
 | `internal/engine` | The lifecycle and everything computed from records (see below). |
 | `internal/jobs` | Queue (`rk_jobs`) and scheduler (flows with `schedule:` in `system.rk scheduler.timezone`). |
 | `internal/realtime` | NOTIFY listener and SSE fan-out with `?models=` filter and 15 s heartbeat. |
@@ -76,22 +81,32 @@ internal/auth (Rangka ID: sessions, rk_ tokens, OIDC)   internal/mcp (JSON-RPC t
 | `internal/changeset` | Change sets, JSON Patch, risk/layer assessment. |
 | `internal/mcp` | MCP over Streamable HTTP (JSON responses), tools fixed by CONTRACTS. |
 | `internal/api` | HTTP handlers. |
-| `internal/server` | Wires the above, live metadata reload; integration tests. |
+| `internal/backup` | `rangka backup` and `rangka restore`: native `COPY` of every table plus site, apps and files, with checksums. |
+| `internal/server` | Wires the above, live metadata reload, the production backup before migrations (`PreMigrateBackup`); integration tests. |
 
 ## Commands
 
 ```
 rangka validate --apps <dir> [--site <dir>] [--connectors <dir>] [--json] [app ...]
-rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run]
+rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n]
+rangka backup   --db <url> [--apps <dir>] [--site <dir>] [--out <file>] [--org <id>] [--files <dir>]
+rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
-rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--dev-open]
+rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--files-dir <dir>] [--dev-open]
 ```
 
 `validate` prints `file:line:col  level  code  path  message` exactly like `rangka_validate.py` and exits 1 on
 errors. `migrate` and `serve` refuse metadata with errors. `seed` creates the org (the site directory name),
 loads `fixtures/*.rk` the way the prototype loads its seed (names and docstatus kept, defaults and computed
 fields filled) and the owner `ceo@saga.co.id` / `rangka-demo` mapped to user record `USR-001`. `serve`
-serves `rangka-os/web` at `/` (prototype at `/prototype/`).
+serves `rangka-os/web` at `/` (app at `/app/`, `/` redirects there).
+
+`migrate --dry-run` prints each statement with its risk and changes nothing; destructive steps need
+`--allow-destructive`; `--rollback n` undoes the last n migrations. `backup` writes one verified archive (every
+table, site, apps, uploads) and `restore` rebuilds it into an empty database and checks the checksums. With
+`RANGKA_ENV=production`, `migrate`, `serve`'s start-up migration and change-set applies first write
+`<RANGKA_BACKUP_DIR or <site>/backups>/rangka-all-<time>-pre-migrate.tar.gz`. Details:
+[CLI reference](../website/reference/cli.md).
 
 ## Records and lifecycle
 
@@ -126,10 +141,34 @@ serves `rangka-os/web` at `/` (prototype at `/prototype/`).
 with a browser session and an approver role (`config.rk ai.approvers`, always `owner`).
 `--dev-open` makes anonymous requests act as the org owner; it is for local demos only.
 
+## Attachments
+
+Files on records (a signed BAST on a project, proof of transfer on a payment), contract
+[0011](../docs/contracts/0011-attachments.md). Not to be confused with `/api/v1/files`, which serves the `.rk` files.
+
+```
+POST   /api/v1/r/{model}/{name}/attachments   multipart, part "file"  → 201 {id, filename, content_type, size, sha256, created_by, created_at, url}
+GET    /api/v1/r/{model}/{name}/attachments   → {data: [item…]}, newest first
+GET    /api/v1/attachments/{id}               → the bytes (inline for images and PDF, attachment otherwise)
+DELETE /api/v1/attachments/{id}               → 204
+```
+
+* Bytes live under a root directory, first match wins: `rangka serve --files-dir` / `$RANGKA_FILES_DIR`, then
+  `system.rk files.path`, then `./data/files` (relative to where `serve` runs). Content-addressed per org
+  (`<root>/<orgdir>/<sha[0:2]>/<sha>`, where `<orgdir>` is the org id, or `_` + 16 hex of its sha256 when the id is not a plain slug); metadata is in `rk_attachments`. Back up the root together with the database.
+* Limit `files.max_upload_mb` (default 20): larger uploads get 413 `too_large`. `files: {enabled: false}` answers
+  501 `files_disabled`; `driver: s3` is refused at start-up until a driver exists.
+* Reading needs the record to be visible to the caller (org scope today; role permissions once contract 0005 §4
+  lands), upload and delete need `write`. Upload works in any docstatus; delete
+  is refused (409 `submitted`) once a submittable record is submitted. Attachments follow the record when submit
+  renames it and go with it when it is deleted. Uploads and deletes are audited.
+  Downloads send `nosniff` and `Content-Security-Policy: sandbox`, except PDF (Chromium's viewer refuses sandboxed
+  documents).
+
 ## Tests
 
 `make test` runs unit tests and integration tests (fresh database per test: `internal/testdb`). Without
-`RANGKA_TEST_DATABASE_URL` the database tests skip. Notable tests:
+`RANGKA_TEST_DATABASE_URL` the database tests skip. Tests and the Makefile find `rangka-apps` and `rangka-connectors` by searching upward from this checkout (so git worktrees work); set `RANGKA_WORKSPACE` to the folder that holds them to override. Tests that need them skip when they are missing, except when `CI` is set (any non-empty value) or `RANGKA_REQUIRE_SIBLINGS=1`: then a missing checkout fails the test (`testdb.Sibling`), so a CI run cannot pass by skipping. Notable tests:
 
 * `internal/rk` compares data, positions and error codes with `rkfile.py` on every workspace `.rk` file
   and an edge-case corpus (`testdata/yaml`).
@@ -141,3 +180,9 @@ with a browser session and an approver role (`config.rk ai.approvers`, always `o
 * `internal/server` drives the HTTP API end to end: REST and lifecycle, dashboards and cache, SSE, queued
   actions, the scheduler, OIDC with PKCE, tokens, change sets (apply and revert on a copy of the files),
   auto-apply of low-risk change sets, and MCP.
+* `internal/backup` seeds the demo, backs it up, restores it into a fresh database and compares every table's
+  checksum, plus corrupt, newer and unsafe archives.
+* `internal/server` also holds the permission matrix and `TestPreMigrateBackup`.
+
+CI (`.github/workflows/kernel.yml`) runs `make vet`, `make test` and `make compare-python` on every push and
+pull request to `main`, with `rangka-apps` and `rangka-connectors` checked out next to this repo.

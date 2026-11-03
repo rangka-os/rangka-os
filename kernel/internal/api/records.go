@@ -57,10 +57,12 @@ func (s *Server) patchRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 }
 
 func (s *Server) deleteRecord(w http.ResponseWriter, r *http.Request, c *caller) {
-	if err := s.Engine.Delete(r.Context(), c.actor, r.PathValue("model"), r.PathValue("name")); err != nil {
+	model, name := r.PathValue("model"), r.PathValue("name")
+	if err := s.Engine.Delete(r.Context(), c.actor, model, name); err != nil {
 		fail(w, err)
 		return
 	}
+	s.removeRecordAttachments(r.Context(), c.actor.Org, model, name)
 	w.WriteHeader(http.StatusNoContent)
 }
 
@@ -92,6 +94,10 @@ func (s *Server) lifecycle(w http.ResponseWriter, r *http.Request, c *caller) {
 		fail(w, err)
 		return
 	}
+	if res.Held {
+		writeHeld(w, c.actor, res.Approvals, res.Record)
+		return
+	}
 	writeJSON(w, 200, recordOut(res))
 }
 
@@ -108,6 +114,10 @@ func (s *Server) runAction(w http.ResponseWriter, r *http.Request, c *caller) {
 	if out.Queued {
 		w.Header().Set("Location", "/api/v1/system/jobs/"+strconv.FormatInt(out.JobID, 10))
 		writeJSON(w, http.StatusAccepted, map[string]any{"job_id": out.JobID, "status": "queued"})
+		return
+	}
+	if out.Held {
+		writeHeld(w, c.actor, out.Approvals, out.Record)
 		return
 	}
 	writeJSON(w, 200, out.Result)

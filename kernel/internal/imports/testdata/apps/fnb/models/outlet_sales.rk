@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: outlet_sales
+label: {id: Penjualan outlet}
+naming: OS-{YYYY}-{####}
+title_field: date
+fields:
+  - name: date
+    type: date
+    label: {id: Tanggal}
+    required: true
+  - name: outlet
+    type: link
+    to: outlet
+    label: {id: Outlet}
+  - name: note
+    type: data
+    label: {id: Catatan}
+  - name: lines
+    type: table
+    of: outlet_sales_line
+    label: {id: Baris}
+permissions:
+  - {role: head_office, read: true, create: true, write: true, submit: true, import: true}
+  - {role: outlet_staff, read: true, create: true}

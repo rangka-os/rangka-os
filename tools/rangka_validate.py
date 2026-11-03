@@ -20,8 +20,8 @@ from jsonschema import Draft202012Validator
 from referencing import Registry, Resource
 
 HERE = os.path.dirname(os.path.abspath(__file__))
-SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.4")
-BASE = "https://rangka-os.github.io/rangka-os/schema/0.4/"
+SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
+BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
 FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
 GLOBALS = {"user", "true", "false", "null", "event"}
@@ -123,6 +123,8 @@ def validate(root, only=None, site=None, connectors=None):
                 rep.add("error", p, where, "schema", msg)
             if m.get("name") != mname:
                 rep.add("error", p, "name", "name_mismatch", f'model name "{m.get("name")}" must match the file name "{mname}"')
+            if isinstance(m.get("naming"), dict):
+                reset_needs_date(rep, p, "naming", m["naming"])
         for dname, (p, db) in a["dashboards"].items():
             for e in sorted(V["dashboard"].iter_errors(db), key=lambda e: list(map(str, e.absolute_path))):
                 rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message if len(e.message) < 160 else e.message[:157] + "…")
@@ -186,6 +188,24 @@ def validate(root, only=None, site=None, connectors=None):
             for i, pr in enumerate(m.get("permissions", [])):
                 if pr.get("role") not in roles:
                     rep.add("warn", p, f"permissions/{i}/role", "unknown_role", f'role "{pr.get("role")}" has no file in roles/ (it must exist at install)')
+            approval_names = set()
+            for i, am in enumerate(m.get("approvals", [])):
+                if not isinstance(am, dict):
+                    continue
+                on = am.get("on")
+                if on in ("submit", "cancel"):
+                    if not m.get("is_submittable"):
+                        rep.add("error", p, f"approvals/{i}/on", "not_submittable", f"approvals on {on} need is_submittable: true")
+                elif on not in [ac.get("name") for ac in m.get("actions", [])]:
+                    rep.add("error", p, f"approvals/{i}/on", "unknown_verb", f'"{on}" is not submit, cancel or an action of this model')
+                if am.get("name") in approval_names:
+                    rep.add("error", p, f"approvals/{i}/name", "duplicate_approval", f'"{am.get("name")}" is declared twice')
+                approval_names.add(am.get("name"))
+                if "when" in am:
+                    check_expr(rep, p, f"approvals/{i}/when", am["when"], m, fields, visible)
+                for j, r in enumerate(am.get("approvers", [])):
+                    if r not in roles:
+                        rep.add("warn", p, f"approvals/{i}/approvers/{j}", "unknown_role", f'role "{r}" has no file in roles/ (it must exist at install)')
             views = m.get("views", {})
             for i, c in enumerate(views.get("list", {}).get("columns", [])):
                 if c not in known:
@@ -363,11 +383,16 @@ def kind_of(path):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
+    app_imports, site_imports = [], []
     for name, a in apps.items():
         for st, p in rkfile.listdir(os.path.join(a["dir"], "flows")):
             f = rep.load(p)
             if f is not None:
                 flows[st] = (name, p, f)
+        for st, p in rkfile.listdir(os.path.join(a["dir"], "imports")):
+            d = rep.load(p)
+            if d is not None:
+                app_imports.append((name, st, p, d))
         for st, p in rkfile.listdir(os.path.join(a["dir"], "roles")):
             r = rep.load(p)
             if r is not None:
@@ -384,6 +409,10 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                 d = rep.load(p)
                 if d is not None:
                     sdocs[f"{sub}/{st}.rk"] = (p, d)
+        for st, p in rkfile.listdir(os.path.join(site, "imports")):
+            d = rep.load(p)
+            if d is not None:
+                site_imports.append(("", st, p, d))
         for st, p in rkfile.listdir(os.path.join(site, "custom")):
             d = rep.load(p)
             if d is not None:
@@ -420,6 +449,12 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         parens(rep, p, "if", f.get("if"))
         check_steps(rep, p, "steps", f.get("steps", []), allmodels, conns)
 
+    # imports
+    for app, st, p, d in sorted(app_imports, key=lambda x: (x[0], x[1])):
+        if only and app not in only:
+            continue
+        check_import(rep, V, allmodels, st, p, d)
+
     # roles
     for app, st, p, r in roles:
         if only and app not in only:
@@ -437,7 +472,80 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
 
     if site:
         check_site(rep, V, root, apps, allmodels, sdocs)
+        for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
+            check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
+
+
+def import_map(d):
+    """(column or CEL text, match) per key of an import map: block, in file order, as meta/imports.go reads it."""
+    out = {}
+    if not isinstance(d, dict):
+        return out
+    for k, v in d.items():
+        match = ""
+        if isinstance(v, dict):
+            match = v.get("match") if isinstance(v.get("match"), str) else ""
+            v = v.get("value")
+        cel = v[1:].strip() if isinstance(v, str) and v.startswith("=") else ""
+        out[k] = (cel, match)
+    return out
+
+
+def check_import_map(rep, p, at, entries, model, fields, allmodels):
+    for k, (cel, match) in entries.items():
+        w = f"{at}/{k}"
+        f = fields.get(k)
+        if f is None and k not in SYSTEM_FIELDS:
+            rep.add("error", p, w, "unknown_field", f'"{k}" is not a field of {model}')
+        if cel:
+            parens(rep, p, w, cel)
+        if not match or f is None:
+            continue
+        if f.get("type") != "link":
+            rep.add("error", p, w + "/match", "not_a_link", f'"{k}" is not a link field')
+            continue
+        to = f.get("to")
+        if isinstance(to, str) and to in allmodels:
+            if match not in {x["name"] for x in allmodels[to][2].get("fields", []) if "name" in x} | SYSTEM_FIELDS:
+                rep.add("error", p, w + "/match", "unknown_field", f'"{match}" is not a field of {to}')
+
+
+def check_import(rep, V, allmodels, stem, p, d):
+    schema_errors(rep, V, "import", p, d)
+    if not isinstance(d, dict):
+        return
+    if d.get("name") != stem:
+        rep.add("error", p, "name", "name_mismatch", f'import name "{d.get("name")}" must match the file name "{stem}"')
+    model = d.get("model")
+    if not isinstance(model, str) or not model:
+        return
+    if model not in allmodels:
+        rep.add("error", p, "model", "unknown_model", f'"{model}" is not a model{suggest(model, allmodels)}')
+        return
+    fields = {f["name"]: f for f in allmodels[model][2].get("fields", []) if "name" in f}
+    lines = d.get("lines") if isinstance(d.get("lines"), dict) else None
+    child, child_name = None, ""
+    if lines and isinstance(lines.get("field"), str) and lines["field"]:
+        lf = lines["field"]
+        if lf not in fields:
+            rep.add("error", p, "lines/field", "unknown_field", f'"{lf}" is not a field of {model}')
+        elif fields[lf].get("type") != "table":
+            rep.add("error", p, "lines/field", "not_a_table", f'"{lf}" is not a table field of {model}')
+        else:
+            of = fields[lf].get("of")
+            if isinstance(of, str) and of in allmodels:
+                child_name = of
+                child = {f["name"]: f for f in allmodels[of][2].get("fields", []) if "name" in f}
+    check_import_map(rep, p, "map", import_map(d.get("map")), model, fields, allmodels)
+    if lines and child is not None:
+        check_import_map(rep, p, "lines/map", import_map(lines.get("map")), child_name, child, allmodels)
+    if d.get("per") == "outlet":
+        o = fields.get("outlet")
+        if not o or o.get("type") != "link" or o.get("to") != "outlet":
+            rep.add("error", p, "per", "import_per_outlet", f'per: outlet needs a link field "outlet" to outlet on {model}')
+        if not d.get("key"):
+            rep.add("warn", p, "per", "import_no_key", "per: outlet imports should set key so overlapping files are not imported twice")
 
 
 def check_steps(rep, p, at, steps, allmodels, conns):
@@ -466,6 +574,8 @@ def check_steps(rep, p, at, steps, allmodels, conns):
                 rep.add("error", p, f"{w}/call", "unknown_action", f'connector {cn} has no action "{act}"')
         for k in ("where", "if"):
             parens(rep, p, f"{w}/{k}", st.get(k))
+        if isinstance(st.get("approve"), dict):
+            parens(rep, p, f"{w}/approve/when", st["approve"].get("when"))
         if isinstance(st.get("set"), dict):
             for fk in sorted(st["set"]):
                 parens(rep, p, f"{w}/set/{fk}", st["set"][fk])
@@ -492,6 +602,21 @@ def template_exists(kind, name):
         if os.path.isfile(os.path.join(TEMPLATES_DIR, kind, n + ".rk")):
             return True
     return not os.path.isdir(TEMPLATES_DIR)
+
+
+def reset_needs_date(rep, path, where, series):
+    """A series whose reset period is not in its pattern repeats numbers (a default reset is inferred, never fails)."""
+    pattern, reset = series.get("pattern"), series.get("reset")
+    if not isinstance(pattern, str) or not pattern:
+        return
+    year = "{YY}" in pattern or "{YYYY}" in pattern
+    if reset == "yearly" and not year:
+        what = "{YY} or {YYYY}"
+    elif reset == "monthly" and not (year and "{MM}" in pattern):
+        what = "{MM} and {YY} or {YYYY}"
+    else:
+        return
+    rep.add("error", path, where, "reset_needs_date", f"reset {reset} needs {what} in the pattern, or numbers repeat")
 
 
 def check_site(rep, V, root, apps, allmodels, sdocs):
@@ -544,11 +669,27 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
         ly = cfg.get("layout")
         if ly and ly not in layouts and not template_exists("layouts", ly):
             rep.add("error", cp, "layout", "unknown_layout", f'layout "{ly}" has no file layouts/{ly}.rk{suggest(ly, layouts)}')
-        for mn in sorted(cfg.get("numbering", {}) or {}):
+        numbering = cfg.get("numbering", {}) or {}
+        for mn in sorted(numbering):
+            if isinstance(numbering[mn], dict):
+                reset_needs_date(rep, cp, f"numbering/{mn}", numbering[mn])
+                continue
             if mn not in allmodels:
                 rep.add("error", cp, f"numbering/{mn}", "unknown_model", f'"{mn}" is not a model{suggest(mn, allmodels)}')
             elif allmodels[mn][0] not in installed:
                 rep.add("warn", cp, f"numbering/{mn}", "not_installed", f'"{mn}" comes from app "{allmodels[mn][0]}", which this site does not install')
+        for mn in sorted(allmodels):
+            app, mp, mm = allmodels[mn]
+            naming = mm.get("naming")
+            series = naming.get("series") if isinstance(naming, dict) else None
+            if app not in installed or not isinstance(series, str) or not series:
+                continue
+            if isinstance(numbering.get(series), dict) or isinstance(naming.get("pattern"), str):
+                continue
+            own = numbering.get(mn)  # the engine resolves config.numbering[<model>] before the model's own naming
+            if (isinstance(own, str) and own) or (isinstance(own, dict) and isinstance(own.get("pattern"), str) and own["pattern"]):
+                continue
+            rep.add("error", mp, "naming/series", "unknown_series", f'series "{series}" is not defined in config.rk numbering and the model gives no default pattern')
     for tn in sorted(themes):
         p, d = themes[tn]
         ext = d.get("extends") or ""
@@ -838,6 +979,25 @@ def check_overlays(rep, V, apps, allmodels, overlays):
         for i, r in enumerate(o.get("rules", [])):
             if isinstance(r, dict):
                 check_expr(rep, p, f"rules/{i}/check", r.get("check", ""), m, merged, visible)
+        appr_names = {a.get("name") for a in m.get("approvals", []) if isinstance(a, dict)}
+        app_roles = set().union(*[apps[x]["roles"] for x in [app, *reqs] if x in apps])
+        for i, am in enumerate(o.get("approvals", [])):
+            if not isinstance(am, dict):
+                continue
+            on = am.get("on")
+            if on in ("submit", "cancel"):
+                if not m.get("is_submittable"):
+                    rep.add("error", p, f"approvals/{i}/on", "not_submittable", f"approvals on {on} need is_submittable: true")
+            elif on not in [ac.get("name") for ac in m.get("actions", [])]:
+                rep.add("error", p, f"approvals/{i}/on", "unknown_verb", f'"{on}" is not submit, cancel or an action of this model')
+            if am.get("name") in appr_names:
+                rep.add("error", p, f"approvals/{i}/name", "duplicate_approval", f'"{am.get("name")}" is declared twice')
+            appr_names.add(am.get("name"))
+            if "when" in am:
+                check_expr(rep, p, f"approvals/{i}/when", am["when"], m, merged, visible)
+            for j, r in enumerate(am.get("approvers", [])):
+                if r not in app_roles:
+                    rep.add("warn", p, f"approvals/{i}/approvers/{j}", "unknown_role", f'role "{r}" has no file in roles/ (it must exist at install)')
         views = m.get("views", {})
         placed = [n for s in views.get("form", {}).get("layout", []) for n in list(s.get("fields", [])) + [x for col in s.get("columns", []) for x in col]]
         cols = list(views.get("list", {}).get("columns", []))

@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: voucher_line
+label: {id: Baris voucher, en: Voucher line}
+is_child: true
+fields:
+  - name: memo
+    type: data
+    label: {id: Memo}

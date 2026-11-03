@@ -2,11 +2,13 @@
 // Builds the npm packages for one release into npm/out/:
 //   cli-<os>-<arch>  one per platform, holding the native binary (os/cpu fields make npm pick one)
 //   cli              @rangka-os/cli: the launcher, with the platform packages as optionalDependencies
-//   create           @rangka-os/create: the project starter, with apps/connectors/demo site copied in
+//   create           @rangka-os/create: the project starter, with modules/apps/connectors/demo site copied in
 //
 //   node npm/scripts/stage.mjs --version 0.5.0 --dist dist            # after goreleaser (dist/artifacts.json)
 //   node npm/scripts/stage.mjs --version 0.5.0 --bin-dir /tmp/bins    # rangka-<goos>-<goarch>[.exe] files
-// Sibling repos (rangka-apps, rangka-connectors) default to ../rangka-apps and ../rangka-connectors.
+// Platforms without a binary are skipped with a warning (npm/scripts/check-staged.sh stages only the local one).
+// Sibling repos (rangka-apps, rangka-connectors) default to ../rangka-apps and ../rangka-connectors
+// (--apps-repo, --connectors-repo).
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync, chmodSync, statSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -71,19 +73,27 @@ cpSync(join(npmDir, "cli"), join(out, "cli"), { recursive: true });
 writeFileSync(join(out, "cli", "package.json"), JSON.stringify({ ...base, version, optionalDependencies: optional }, null, 2) + "\n");
 console.log(`  @rangka-os/cli@${version}`);
 
-// 4. the starter, with the apps, connectors and demo site of this release
+// 4. the starter, with the modules, apps, connectors and demo site of this release (contract 0001 layout:
+// rangka-apps/modules/<m>/module.rk, apps/<a>/app.rk, examples/sites/<site>, examples/fixtures/<site>).
+// DEMOS maps a create template to its example site; its fixtures share the site's name.
+const DEMOS = { demo: "kopi-senja" };
+const need = (p) => { if (!existsSync(p)) { console.error(`stage: ${p} not found (rangka-apps layout changed?)`); process.exit(1); } return p; };
 const cdir = join(out, "create");
 cpSync(join(npmDir, "create"), cdir, { recursive: true, filter: (s) => !s.includes(`${join("create", "template")}`) });
 const T = join(cdir, "template");
 rmSync(join(cdir, "files"), { recursive: true, force: true });
 rmSync(join(cdir, "blank"), { recursive: true, force: true });
 cpSync(join(npmDir, "create", "files"), join(T, "base"), { recursive: true });
-for (const app of readdirSync(join(appsRepo, "apps"))) cpSync(join(appsRepo, "apps", app), join(T, "base", "apps", app), { recursive: true });
-for (const c of readdirSync(connRepo)) {
-  if (existsSync(join(connRepo, c, "connector.rk"))) cpSync(join(connRepo, c), join(T, "base", "connectors", c), { recursive: true });
+for (const d of ["modules", "apps"]) cpSync(need(join(appsRepo, d)), join(T, "base", d), { recursive: true });
+let connectors = 0;
+for (const c of readdirSync(need(connRepo))) {
+  if (existsSync(join(connRepo, c, "connector.rk"))) { cpSync(join(connRepo, c), join(T, "base", "connectors", c), { recursive: true }); connectors++; }
 }
-cpSync(join(appsRepo, "sites", "kopi-senja"), join(T, "demo", "site"), { recursive: true });
-cpSync(join(appsRepo, "fixtures"), join(T, "demo", "fixtures"), { recursive: true });
+if (!connectors) { console.error(`stage: no <name>/connector.rk in ${connRepo}`); process.exit(1); }
+for (const [tpl, site] of Object.entries(DEMOS)) {
+  cpSync(need(join(appsRepo, "examples", "sites", site)), join(T, tpl, "site"), { recursive: true });
+  cpSync(need(join(appsRepo, "examples", "fixtures", site)), join(T, tpl, "fixtures"), { recursive: true });
+}
 cpSync(join(npmDir, "create", "blank"), join(T, "blank"), { recursive: true });
 const cpkg = JSON.parse(readFileSync(join(npmDir, "create", "package.json"), "utf8"));
 writeFileSync(join(cdir, "package.json"), JSON.stringify({ ...cpkg, version }, null, 2) + "\n");

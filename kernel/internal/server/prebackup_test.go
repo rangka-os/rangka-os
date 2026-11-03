@@ -61,6 +61,11 @@ func TestPreMigrateBackup(t *testing.T) {
 	if err := run(); err != nil || count() != 1 {
 		t.Fatalf("pending column: %v, %d archives", err, count())
 	}
+	if m, _ := filepath.Glob(filepath.Join(bdir, "rangka-all-*-pre-migrate.tar.gz")); len(m) == 1 {
+		if st, err := os.Stat(m[0]); err != nil || st.Mode().Perm() != 0o600 {
+			t.Fatalf("pre-migrate archive mode: %v, %v; want 600", st.Mode().Perm(), err)
+		}
+	}
 	// a failing backup stops the migration
 	os.WriteFile(p, []byte(strings.Replace(string(b), "rules:\n", "  - name: area\n    type: data\n    label: {id: Area}\nrules:\n", 1)), 0o644)
 	os.WriteFile(filepath.Join(dir, "blocker"), nil, 0o644)

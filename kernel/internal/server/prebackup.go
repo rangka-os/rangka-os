@@ -57,7 +57,14 @@ func PreMigrateBackup(db *pg.Pool, o backup.Options, dir string) func(ctx contex
 		}
 		tmp := out + ".partial"
 		f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+		if err == nil {
+			err = f.Chmod(0o600) // also when a stale .partial with wider permissions was there
+		}
 		if err != nil {
+			if f != nil {
+				f.Close()
+				os.Remove(tmp)
+			}
 			return fmt.Errorf("pre-migrate backup: %w", err)
 		}
 		_, err = backup.Write(ctx, db, f, o)

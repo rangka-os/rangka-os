@@ -47,9 +47,17 @@ func cmdBackup(args []string) int {
 	}
 	defer db.Close()
 	// write next to the target and rename, so a failed run never leaves a complete-looking archive
+	// 0600: the archive holds password, token and session hashes and the OIDC signing key
 	tmp := *out + ".partial"
-	f, err := os.Create(tmp)
+	f, err := os.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o600)
+	if err == nil {
+		err = f.Chmod(0o600) // also when a stale .partial with wider permissions was there
+	}
 	if err != nil {
+		if f != nil {
+			f.Close()
+			os.Remove(tmp)
+		}
 		return fail(err)
 	}
 	m, err := backup.Write(ctx, db, f, backup.Options{Org: *org, SiteDir: c.site, AppsDir: c.apps, FilesDir: *files, Version: Version,

@@ -1071,24 +1071,51 @@ def account_menu(page):
 def test_org_switch(page, ctx):
     mock_feature(page, "orgs")
     events = []
-    page.on("request", lambda r: events.append(("org", r.post_data)) if r.method == "POST" and r.url.endswith("/auth/org")
-            else events.append(("meta", None)) if r.method == "GET" and "/api/v1/meta" in r.url else None)
-    open_route(page, ctx, ctx.home()[0])
-    page.wait_for_function("(h) => location.hash === h", arg=ctx.home()[0], timeout=10000)
-    # leave home, so the switch visibly brings us back there
-    page.evaluate("location.hash = '#/r/lead'")
+
+    def note(r):
+        if r.method == "POST" and r.url.endswith("/auth/org"):
+            events.append(("org", r.post_data))
+        elif r.method == "GET" and re.search(r"/auth/me(\?|$)", r.url):
+            events.append(("me", None))
+        elif r.method == "GET" and "/api/v1/meta" in r.url:
+            events.append(("meta", None))
+    page.on("request", note)
+    home = ctx.home()[0]
+    open_route(page, ctx, home)
+    page.wait_for_function("(h) => location.hash === h", arg=home, timeout=10000)
+    page.evaluate("location.hash = '#/r/lead'")  # leave home, so the switch visibly brings us back there
     page.wait_for_function("() => location.hash === '#/r/lead'")
+    page.evaluate("window.__beforeSwitch = 1")
+
+    # a refused switch: toast with the server's message, nothing changes, no reload
+    ctx.allow_http(403, r"/auth/org$")
+
+    def refuse(route):
+        events.append(("org", route.request.post_data))
+        _json(route, 403, {"error": {"code": "permission_denied", "message": "Kamu bukan anggota Contoh Kedua"}})
+    page.route(ORG_PATTERNS[1], refuse)
     menu = account_menu(page)
     assert menu.get_by_role("menuitem", name="Kopi Senja").count() == 1 and menu.get_by_role("menuitem", name="Contoh Kedua").count() == 1, "both orgs listed"
+    menu.get_by_role("menuitem", name="Contoh Kedua").click()
+    page.get_by_text("Tidak bisa pindah organisasi").first.wait_for(timeout=5000)
+    page.get_by_text("Kamu bukan anggota Contoh Kedua").first.wait_for(timeout=5000)
+    assert page.evaluate("window.__beforeSwitch") == 1, "no reload after a refused switch"
+    assert page.evaluate("location.hash") == "#/r/lead", "still on the same route"
+    page.unroute(ORG_PATTERNS[1], refuse)
+    menu = account_menu(page)
+    assert menu.get_by_role("menuitem", name="Kopi Senja").get_by_label("Dipilih").count() == 1, "Kopi Senja is still current"
+
+    # the switch: one POST, then the whole app reloads at home and asks the server for me and meta again
     n = len(events)
     menu.get_by_role("menuitem", name="Contoh Kedua").click()
-    page.wait_for_function("(h) => location.hash === h", arg=ctx.home()[0], timeout=10000)
+    page.wait_for_function("() => window.__beforeSwitch === undefined", timeout=10000)
+    expect_signed_in(page, ctx)
     after = events[n:]
     posts = [json.loads(b) for k, b in after if k == "org"]
     assert posts == [{"org": "contoh-kedua"}], f"one POST /auth/org for contoh-kedua, saw {posts}"
     i = next(i for i, (k, _) in enumerate(after) if k == "org")
-    assert any(k == "meta" for k, _ in after[i + 1:]), f"/api/v1/meta is fetched again after the switch, saw {after}"
-    page.get_by_text("Pindah ke Contoh Kedua").first.wait_for(timeout=5000)
+    rest = [k for k, _ in after[i + 1:]]
+    assert "me" in rest and "meta" in rest, f"/auth/me and /api/v1/meta are fetched again after the reload, saw {after}"
     menu = account_menu(page)
     assert menu.get_by_role("menuitem", name="Contoh Kedua").get_by_label("Dipilih").count() == 1, "Contoh Kedua is now the current org"
     page.keyboard.press("Escape")

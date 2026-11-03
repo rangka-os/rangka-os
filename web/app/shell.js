@@ -7,7 +7,8 @@
  * ImportWizard), so later files add them without touching the shell; a missing view shows "Halaman ini belum tersedia".
  *
  * Org switcher (features.orgs, i.e. /auth/me lists more than one org): picking another org in the user menu calls
- * POST /auth/org, takes its answer as the new `me`, clears the record cache, reloads meta and features, and goes home.
+ * POST /auth/org and, once it succeeds, reloads the whole app at #/ (boot loads me, meta and features for the new org);
+ * a refused switch leaves everything as it was and toasts the server's message.
  * The sidebar's Persetujuan entry carries the number of pending requests the user may decide (ctx.refreshApprovals()
  * recounts; it also runs on every route change).
  *
@@ -324,23 +325,20 @@
     }
     useEffect(refreshApprovals, [features, me && me.org]);
 
+    /** Move the session to another org. On success the whole app reloads at #/ so me, meta, features and every view
+     *  come fresh from the server for the new org; nothing from the old org survives. On failure nothing changes. */
     function switchOrg(o) {
       if (switching || !o || o.id === me.org) return;
       setSwitching(true);
-      api.switchOrg(o.id).then(function (m2) {
-        if (!m2.org) m2 = Object.assign({}, me, { org: o.id, orgName: o.name || o.id });
-        cacheRef.current.clear();
-        setMe(m2);
-        return reloadMeta(m2).then(function (m) {
-          setSwitching(false);
-          toast("ok", "Pindah ke " + (m2.orgName || o.name || o.id));
-          var hm = homeHash(m);
-          RA.navigate(hm || "#/");
-        });
-      }).then(null, function (e) {
+      api.switchOrg(o.id).then(function () {
+        onExpired = null;
+        global.history.replaceState(null, "", global.location.pathname + global.location.search + "#/");
+        global.location.reload();
+      }, function (e) {
         setSwitching(false);
         if (e && e.status === 401) return;
-        toast("bad", "Tidak bisa pindah organisasi", e && e.status === 403 ? "Kamu bukan anggota organisasi ini." : e && e.code === "org_fixed" ? "Sesi ini terikat ke satu organisasi. Masuk lewat browser untuk pindah." : (e && e.message) || "");
+        var fallback = e && e.status === 403 ? "Kamu bukan anggota organisasi ini." : e && e.code === "org_fixed" ? "Sesi ini terikat ke satu organisasi. Masuk lewat browser untuk pindah." : "";
+        toast("bad", "Tidak bisa pindah organisasi", (e && e.status === 0 ? "Tidak bisa terhubung ke server. Coba lagi." : e && e.message) || fallback);
       });
     }
 

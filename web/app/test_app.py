@@ -197,6 +197,10 @@ class Ctx:
     def model_label(self, m):
         return L((self.meta["models"].get(m) or {}).get("label")) or m
 
+    def rupiah_text(self, n):
+        n = js_round(n)
+        return ("-" if n < 0 else "") + "Rp " + f"{abs(n):,}".replace(",", ".")
+
     def menu_models(self, app):
         return [m for g in app.get("menu") or [] for m in g.get("items") or []]
 
@@ -779,6 +783,66 @@ def test_forbidden_record(page, ctx):
     page.locator(".rk-side").get_by_role("link", name=ctx.model_label(other), exact=True).click()
     page.wait_for_function("(m) => location.hash === '#/r/' + m", arg=other, timeout=5000)
     page.get_by_role("heading", name=ctx.model_label(other)).first.wait_for(timeout=10000)
+
+
+# ---------------------------------------------------------------------------------------------- dashboards (Task 7)
+def js_round(x):
+    import math
+    return int(math.floor(x + 0.5))
+
+
+def fmt_count(n):
+    return f"{js_round(n):,}".replace(",", ".")
+
+
+def card_value(page, label):
+    """(text, title) of the big number on the number card with this label."""
+    card = page.locator(".rk-numcard").filter(has=page.locator(".rk-stat-label", has_text=re.compile("^" + re.escape(label) + "$"))).first
+    num = card.locator(".rk-stat-num")
+    clean = lambda t: None if t is None else t.replace("\u00a0", " ").strip()  # the design system uses a no-break space after Rp
+    return clean(num.inner_text()), clean(num.get_attribute("title"))
+
+
+def test_dashboard_numbers(page, ctx):
+    hash_, _ = ctx.home()
+    assert hash_.startswith("#/d/"), "the seed has a dashboard home"
+    name = hash_[4:]
+    d = ctx.meta["dashboards"][name]
+    period = d.get("default_period") or 30
+    seen = watch_requests(page)
+    open_route(page, ctx, hash_)
+    page.locator(".rk-numcard").first.wait_for(timeout=10000)
+    http = Http(ctx.base).login(*ctx.owner)
+    st, body = http.call("GET", f"/api/v1/dashboards/{name}?period={period}")
+    assert st == 200, f"dashboard API {st}"
+    assert any(f"/dashboards/{name}" in u and f"period={period}" in u for _, u in seen), "the first request carries the default period"
+    numbers = [w for w in body["widgets"] if w.get("type") == "number" and not w.get("hidden") and not w.get("error")]
+    assert numbers, "dashboard has number widgets"
+    for w in numbers:
+        label = L(w["label"])
+        want = ctx.rupiah_text(w["value"]) if w.get("rupiah") else fmt_count(w["value"])
+        text, title = card_value(page, label)
+        got = title if (w.get("compact") and w.get("rupiah") and title) else text
+        assert got == want, f"{label}: card shows {got!r}, API says {want!r}"
+    # clicking a number card opens its model's list
+    first = numbers[0]
+    page.locator(".rk-numcard").filter(has=page.locator(".rk-stat-label", has_text=re.compile("^" + re.escape(L(first["label"])) + "$"))).first.click()
+    page.wait_for_function("(m) => location.hash === '#/r/' + m", arg=first["model"], timeout=5000)
+    page.go_back()
+    page.wait_for_function("(h) => location.hash === h", arg=hash_, timeout=5000)
+    # switching the period asks the kernel for it
+    page.locator(".rk-numcard").first.wait_for(timeout=10000)
+    mark = len(seen)
+    page.get_by_role("button", name="90 hari", exact=True).click()
+    page.wait_for_function("() => document.querySelector('.rk-seg [aria-pressed=true]').textContent === '90 hari'", timeout=5000)
+    page.locator(".rk-numcard").first.wait_for(timeout=10000)
+    assert any(f"/dashboards/{name}" in u and "period=90" in u for _, u in seen[mark:]), "90 hari sends period=90"
+    st, body90 = http.call("GET", f"/api/v1/dashboards/{name}?period=90")
+    for w in [w for w in body90["widgets"] if w.get("type") == "number" and not w.get("hidden") and not w.get("error")]:
+        want = ctx.rupiah_text(w["value"]) if w.get("rupiah") else fmt_count(w["value"])
+        text, title = card_value(page, L(w["label"]))
+        got = title if (w.get("compact") and w.get("rupiah") and title) else text
+        assert got == want, f"90 hari, {L(w['label'])}: card shows {got!r}, API says {want!r}"
 
 
 MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"]

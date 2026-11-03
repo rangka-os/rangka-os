@@ -57,3 +57,9 @@ test("createdText and skippedText come from the server's answer", () => {
   assert.strictEqual(A.skippedText({ skipped: 2 }), "2 baris dilewati (sudah diimpor)");
   assert.strictEqual(A.skippedText({ skipped: 0 }), "");
 });
+
+test("importError: outlet_required and unknown_outlet (the server's message, else a plain one)", () => {
+  assert.strictEqual(A.importError({ status: 400, code: "outlet_required", message: "outlet wajib" }), "Pilih outlet dulu");
+  assert.strictEqual(A.importError({ status: 422, code: "unknown_outlet", message: "Outlet OUT-09 tidak dikenal" }), "Outlet OUT-09 tidak dikenal");
+  assert.strictEqual(A.importError({ status: 422, code: "unknown_outlet" }), "Outlet ini tidak dikenal untuk impor ini. Pilih outlet lain.");
+});

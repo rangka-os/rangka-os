@@ -62,6 +62,7 @@
     if (e.code === "import_errors") return "Masih ada baris yang salah. Perbaiki file lalu unggah lagi.";
     if (e.status === 409 || e.code === "already_imported") return e.message || "Sebagian baris sudah diimpor, unggah ulang file";
     if (e.code === "outlet_required") return "Pilih outlet dulu";
+    if (e.code === "unknown_outlet") return e.message || "Outlet ini tidak dikenal untuk impor ini. Pilih outlet lain.";
     if (e.code === "file_required") return "Pilih file yang mau diimpor";
     return e.message || "Permintaan gagal";
   }

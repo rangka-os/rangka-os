@@ -523,6 +523,52 @@ def _mock_imports(page, ctx):
     page.route(re.compile(r".*/api/v1/imports(/.*)?$"), handler)
 
 
+OUTLET_IMPORT_NAME = "penjualan_outlet"
+OUTLET_IMPORT_DEF = {"name": OUTLET_IMPORT_NAME, "model": "item", "label": {"id": "Penjualan harian outlet", "en": "Daily outlet sales"},
+                     "source": "csv", "per": "outlet", "app": ""}
+OUTLET_IMPORT_KNOWN = {"OUT-01"}  # outlets the mock's import accepts; any other answers 422 unknown_outlet
+
+
+def _mock_outlet_import(page, ctx):
+    """A `per: outlet` import (pilot B's daily upload per outlet), S7 shapes: meta.imports gains OUTLET_IMPORT_DEF;
+    POST /imports/penjualan_outlet without a form field `outlet` → 400 outlet_required, with an outlet not in
+    OUTLET_IMPORT_KNOWN → 422 unknown_outlet, else a previewed entry whose scope is the outlet. Each upload's `outlet`
+    field is kept in ctx.mock_state["outlet_import"]["outlets"]."""
+    st = ctx.mock_state.setdefault("outlet_import", {"outlets": []})
+
+    def meta(route):
+        resp = route.fetch()
+        body = resp.json()
+        body.setdefault("imports", {})
+        body["imports"] = dict(body["imports"] or {}, **{OUTLET_IMPORT_NAME: dict(OUTLET_IMPORT_DEF)})
+        _json(route, 200, body)
+
+    def upload(route):
+        req = route.request
+        if req.method != "POST":
+            _json(route, 404, {"error": {"code": "not_found", "message": "impor tidak ditemukan"}})
+            return
+        ctype = req.headers.get("content-type", "")
+        msg = email.message_from_bytes(f"Content-Type: {ctype}\r\n\r\n".encode() + (req.post_data_buffer or b""), policy=email.policy.default)
+        parts = {x.get_param("name", header="content-disposition"): x for x in msg.iter_parts()}
+        outlet = parts["outlet"].get_content().strip() if "outlet" in parts else ""
+        st["outlets"].append(outlet)
+        if "file" not in parts:
+            _json(route, 400, {"error": {"code": "file_required", "message": "Pilih file yang mau diimpor"}})
+        elif not outlet:
+            _json(route, 400, {"error": {"code": "outlet_required", "message": "outlet wajib untuk impor ini"}})
+        elif outlet not in OUTLET_IMPORT_KNOWN:
+            _json(route, 422, {"error": {"code": "unknown_outlet", "message": f"Outlet {outlet} tidak dikenal untuk impor ini"}})
+        else:
+            _json(route, 200, {"id": uuid.uuid4().hex, "import": OUTLET_IMPORT_NAME, "scope": outlet, "file_name": parts["file"].get_filename() or "file.csv",
+                               "file_sha": "mock", "status": "previewed", "rows": 1, "skipped": 0, "duplicate": False, "message": "",
+                               "errors": [], "preview": [{"item_name": "Penjualan Uji", "uom": "Pcs", "rate": 12500}], "records": [],
+                               "created_by": ctx.owner[0], "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()), "committed_at": None})
+
+    page.route(re.compile(r".*/api/v1/meta(\?.*)?$"), meta)
+    page.route(re.compile(r".*/api/v1/imports/" + OUTLET_IMPORT_NAME + r"(/.*)?$"), upload)
+
+
 def _mock_todo(task):
     def install(page, ctx):
         raise NotImplementedError(f"contract mock arrives with {task}")
@@ -1975,6 +2021,44 @@ def test_import_csv(page, ctx):
         commits = [r for r in reqs if r[0] == "POST" and r[1].endswith("/commit")]
         assert len(commits) == 1, f"one commit, saw {len(commits)}"
         assert ("imports" in ctx.live) != mocked
+    finally:
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_import_per_outlet(page, ctx):
+    """A `per: outlet` import: the outlet select is shown and required, the upload carries the form field `outlet`, and
+    the server's 422 unknown_outlet (and 400 outlet_required) message is shown. Always on a contract mock: the client's
+    side of the contract (S7 tests the server's)."""
+    if not ctx.features.get("imports"):
+        ctx.mocked.add("imports")
+    _mock_outlet_import(page, ctx)
+    ctx.allow_http(422, r"/api/v1/imports/" + OUTLET_IMPORT_NAME + "$")
+    sent = ctx.mock_state["outlet_import"]["outlets"]
+    tmp = tempfile.mkdtemp(prefix="rk-imp-")
+    try:
+        path = write_csv(ctx, tmp, "penjualan-kemang.csv", [["Penjualan Uji", "Pcs", "12500"]])
+        open_route(page, ctx, "#/import/" + OUTLET_IMPORT_NAME)
+        main_area(page).get_by_role("heading", name="Penjualan harian outlet").wait_for(timeout=10000)
+        sel = main_area(page).get_by_label("Outlet")
+        sel.wait_for(timeout=5000)
+        page.wait_for_function("() => document.querySelectorAll('#ap-imp-outlet option').length > 1", timeout=10000)
+        main_area(page).locator("input[type=file]").set_input_files(path)
+        check = page.get_by_role("button", name="Periksa file", exact=True)
+        assert check.is_disabled(), "no upload without an outlet"
+        assert sent == [], f"nothing sent without an outlet, saw {sent}"
+        outlets = [o for o in sel.locator("option").evaluate_all("os => os.map(o => o.value)") if o]
+        other = next((o for o in outlets if o not in OUTLET_IMPORT_KNOWN), None)
+        assert "OUT-01" in outlets and other, f"outlets from the kernel: {outlets}"
+        # an outlet the import does not know: the server's 422 message
+        sel.select_option(other)
+        check.click()
+        main_area(page).get_by_text(f"Outlet {other} tidak dikenal untuk impor ini").wait_for(timeout=10000)
+        assert sent == [other], f"the upload carried outlet={other}, saw {sent}"
+        # the right outlet: the preview
+        sel.select_option("OUT-01")
+        check.click()
+        main_area(page).get_by_text(re.compile(r"1 baris dibaca")).wait_for(timeout=10000)
+        assert sent[-1] == "OUT-01", f"the upload carried outlet=OUT-01, saw {sent}"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
 

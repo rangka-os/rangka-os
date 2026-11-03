@@ -245,3 +245,57 @@ func TestBaseFuncsBoundToAsOf(t *testing.T) {
 		t.Errorf("upper nil = %q", got)
 	}
 }
+
+// Rates reach the renderer as the engine gives them: float64 (numeric and float8 columns, NULL as 0).
+func TestTaxRate(t *testing.T) {
+	cfg := map[string]any{"ppn_rate": 12}
+	for _, c := range []struct {
+		doc  map[string]any
+		tax  map[string]any
+		want string
+	}{
+		{map[string]any{"tax_rate": float64(0)}, cfg, "0"}, // a stored 0% is set
+		{map[string]any{"tax_rate": float64(11)}, cfg, "11"},
+		{map[string]any{"ppn_rate": float64(11.5), "tax_rate": float64(12)}, cfg, "11,5"},
+		{map[string]any{"ppn_rate": float64(0), "tax_rate": float64(12)}, cfg, "0"},
+		{map[string]any{"ppn_rate": "", "tax_rate": nil}, cfg, "12"},
+		{map[string]any{"tax_rate": "11"}, cfg, "11"},
+		{map[string]any{}, map[string]any{"ppn_rate": float64(11)}, "11"},
+		{nil, map[string]any{"ppn_rate": 11}, "11"},
+	} {
+		if got := Number(TaxRate(c.doc, c.tax)); got != c.want {
+			t.Errorf("TaxRate(%v, %v) = %q, want %q", c.doc, c.tax, got, c.want)
+		}
+	}
+}
+
+func TestDPPFactor(t *testing.T) {
+	cfg := map[string]any{"dpp_ratio": "11/12"}
+	for _, c := range []struct {
+		doc  map[string]any
+		tax  map[string]any
+		want string
+	}{
+		{nil, cfg, "11/12"},
+		{map[string]any{"dpp_ratio": ""}, cfg, "11/12"},
+		{map[string]any{"dpp_ratio": nil}, cfg, "11/12"},
+		{map[string]any{"dpp_ratio": float64(0)}, cfg, "11/12"}, // a NULL numeric column reads as 0: unset
+		{map[string]any{"dpp_ratio": 0}, cfg, "11/12"},
+		{nil, map[string]any{"dpp_ratio": float64(0)}, ""},
+		{map[string]any{"dpp_ratio": "1/1"}, cfg, ""},
+		{map[string]any{"dpp_ratio": "11/12"}, map[string]any{"dpp_ratio": "1/1"}, "11/12"},
+		{nil, map[string]any{"dpp_ratio": 1}, ""},
+		{nil, map[string]any{"dpp_ratio": float64(1)}, ""},
+		{nil, map[string]any{"dpp_ratio": "1"}, ""},
+		{nil, map[string]any{"dpp_ratio": "1/1"}, ""},
+		{nil, map[string]any{"dpp_ratio": "12/12"}, ""},
+		{nil, map[string]any{"dpp_ratio": "1.0"}, ""},
+		{nil, map[string]any{"dpp_ratio": " 11/12 "}, "11/12"},
+		{nil, map[string]any{"dpp_ratio": "nilai lain"}, "nilai lain"}, // not a number: printed as written
+		{nil, map[string]any{}, ""},
+	} {
+		if got := DPPFactor(c.doc, c.tax); got != c.want {
+			t.Errorf("DPPFactor(%v, %v) = %q, want %q", c.doc, c.tax, got, c.want)
+		}
+	}
+}

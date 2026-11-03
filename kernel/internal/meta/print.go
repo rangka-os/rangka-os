@@ -57,7 +57,8 @@ func parsePrint(app, root, stem string, doc *rk.Doc) *Print {
 }
 
 func parseRelated(m map[string]any) Related {
-	r := Related{Model: str(m, "model"), Filter: celText(m["filter"]), Sort: str(m, "sort"), Limit: integer(m, "limit"), Match: map[string]string{}}
+	r := Related{Model: str(m, "model"), Filter: celText(m["filter"]), Sort: str(m, "sort"),
+		Limit: integer(m, "limit"), Match: map[string]string{}}
 	for k, v := range asMap(m["match"]) {
 		if s, ok := v.(string); ok {
 			r.Match[k] = s
@@ -141,21 +142,21 @@ func loadLetterheads(dir string, ld *loader, s *Site, r *Registry) {
 }
 
 // Letterhead returns the letterhead of an org: letterheads/<org>.rk, else letterhead.rk, else one built from
-// the org's data. The org's data is OrgConfig(org, "org") (orgs.<org>.config.org, else the site's org:):
-// legal_name, else the org's name from orgs:, and npwp; it fills legal_name and npwp a letterhead file leaves
-// out. logo is an absolute path inside the site folder, or absent when it escapes the folder or the file is
+// the org's OrgIdentity (legal_name, npwp). An org listed in orgs: is its own legal entity: without its own
+// letterheads/<org>.rk it gets no letterhead file at all (the site's letterhead.rk holds another entity's bank
+// and signatory). An unlisted org uses letterhead.rk. The identity fills legal_name and npwp a letterhead file
+// leaves out.
+// logo is an absolute path inside the site folder, or absent when it escapes the folder or the file is
 // missing. The result is a deep copy.
 func (r *Registry) Letterhead(org string) map[string]any {
 	if r.Site == nil {
 		return map[string]any{"legal_name": ""}
 	}
-	data := asMap(r.OrgConfig(org, "org"))
+	o := r.Orgs[org]
+	data := r.OrgIdentity(org)
 	legal, npwp := str(data, "legal_name"), str(data, "npwp")
-	if o := r.Orgs[org]; legal == "" && o != nil {
-		legal = o.Name
-	}
 	d := r.Site.Letterheads[org]
-	if d == nil {
+	if d == nil && o == nil {
 		d = r.Site.Letterheads[""]
 	}
 	out := map[string]any{}

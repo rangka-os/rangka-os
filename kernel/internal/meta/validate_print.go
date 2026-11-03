@@ -9,7 +9,7 @@ import (
 
 // PrintFuncNames are the helpers print templates may call (contract 0008 §3). The renderer (docprint)
 // provides them; validation parses templates with no-op stand-ins of the same names.
-var PrintFuncNames = []string{"rupiah", "money", "number", "date", "terbilang", "label", "option", "sub", "sum", "overdue", "aging", "upper"}
+var PrintFuncNames = []string{"rupiah", "money", "number", "date", "terbilang", "label", "option", "sub", "sum", "overdue", "aging", "upper", "taxrate", "dppfactor"}
 
 func printFuncStubs() template.FuncMap {
 	fm := template.FuncMap{}
@@ -36,6 +36,13 @@ func (v *validator) validatePrints() {
 					v.rep.extra("error", d.Path, "logo", "logo_missing", fmt.Sprintf(`logo "%s" must be a file inside the site folder %s`, logo, v.rep.rel(s.Dir)))
 				} else if !fileExists(abs) {
 					v.rep.extra("error", d.Path, "logo", "logo_missing", fmt.Sprintf(`logo file "%s" does not exist in %s`, logo, v.rep.rel(s.Dir)))
+				}
+			}
+		}
+		if cfg := s.Docs["config.rk"]; cfg != nil {
+			for _, id := range sortedKeysM(v.reg.Orgs) {
+				if s.Letterheads[id] == nil {
+					v.rep.extra("warn", cfg.Path, "orgs/"+id, "letterhead_missing", fmt.Sprintf(`org "%s" has no letterheads/%s.rk; its documents print without address, bank or signatory`, id, id))
 				}
 			}
 		}

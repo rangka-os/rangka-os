@@ -8,7 +8,9 @@ Pass 2 (meaning): what JSON Schema cannot see across files: links point at real 
 expressions only reference fields that exist, computed fields have no cycles, roles and hooks exist.
 
 Pass 3 (v0.1): flows, roles, connectors, the site (system/features/config/themes/layouts: installed apps vs plan,
-theme and layout names, theme contrast with the dark derivation) and company overlays (<site>/custom/<model>.rk).
+theme and layout names, theme contrast with the dark derivation), company overlays (<site>/custom/<model>.rk),
+print formats (print/*.rk in a module, app or the site) and letterheads (contract 0008). The kernel also parses
+each print template as a Go template (template_error); this tool does not.
 
 Modules and apps (contract 0001): modules/<m>/module.rk (default: the modules dir next to the apps dir) and
 apps/<a>/app.rk with modules: {name: range}. An app.rk without modules is a 0.4 app (a module and an app in one),
@@ -552,7 +554,7 @@ def kind_of(path):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
-    app_imports, site_imports = [], []
+    app_imports, site_imports, prints, letterheads = [], [], [], {}
     for name, a in apps.items():
         for st, p in rkfile.listdir(os.path.join(a["dir"], "flows")):
             f = rep.load(p)
@@ -566,6 +568,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             r = rep.load(p)
             if r is not None:
                 roles.append((name, st, p, r))
+        load_prints(rep, prints, name, a["dir"])
     if site:
         for stem in ("system", "features", "config"):
             p = rkfile.find(site, stem)
@@ -586,6 +589,13 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             d = rep.load(p)
             if d is not None:
                 overlays[st] = (p, d)
+        load_prints(rep, prints, "", site)
+        heads = [("", rkfile.find(site, "letterhead"))] + rkfile.listdir(os.path.join(site, "letterheads"))
+        for org, p in heads:
+            d = rep.load(p) if p else None
+            if d is not None:
+                sdocs["letterheads/" + org + ".rk" if org else "letterhead.rk"] = (p, d)
+                letterheads[org] = (p, d)
     if connectors and os.path.isdir(connectors):
         for cn in sorted(os.listdir(connectors)):
             p = rkfile.find(os.path.join(connectors, cn), "connector")
@@ -645,6 +655,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
             check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
+    check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
 
 
 def check_scope(rep, p, r, allmodels):
@@ -1206,6 +1217,88 @@ def check_overlays(rep, V, apps, allmodels, overlays):
         for item in sub.items:
             if any(x.startswith("x_") for x in item[4].split(" → ")):
                 rep.items.append(item)
+
+
+def load_prints(rep, prints, app, root):
+    """Print formats (contract 0008 §1) in <root>/print: app is "" for the site's."""
+    for st, p in rkfile.listdir(os.path.join(root, "print")):
+        d = rep.load(p)
+        if d is not None:
+            prints.append((app, root, st, p, d))
+
+
+def inside(root, path):
+    """path is root or below it (both absolute and normalised)."""
+    rel = os.path.relpath(path, root)
+    return rel != ".." and not rel.startswith(".." + os.sep)
+
+
+def field_names(m):
+    fields = m.get("fields") if isinstance(m, dict) and isinstance(m.get("fields"), list) else []
+    return {f"{f['name']}" for f in fields if isinstance(f, dict) and "name" in f}
+
+
+def check_prints(rep, V, allmodels, only, prints, site, letterheads, config):
+    """Print formats and letterheads (contract 0008). Go template parse errors (template_error) are kernel only:
+    this tool does not parse Go templates, so a template that does not parse passes here."""
+    for app, uroot, stem, p, d in prints:
+        if only and app and app not in only:
+            continue
+        schema_errors(rep, V, "print", p, d)
+        raw = d if isinstance(d, dict) else {}
+        if not isinstance(raw.get("name"), str) or raw["name"] != stem:
+            rep.add("error", p, "name", "name_mismatch", f'print name "{raw.get("name")}" must match the file name "{stem}"')
+        model = raw["model"] if isinstance(raw.get("model"), str) else ""
+        if "model" in raw and model not in allmodels:
+            rep.add("error", p, "model", "unknown_model", f'"{model}" is not a model{suggest(model, allmodels)}')
+        related = raw["related"] if isinstance(raw.get("related"), dict) else {}
+        for rn in sorted(related):
+            rel = related[rn] if isinstance(related[rn], dict) else {}
+            rmodel = rel["model"] if isinstance(rel.get("model"), str) else ""
+            if rmodel not in allmodels:
+                if rmodel:
+                    rep.add("error", p, f"related/{rn}/model", "unknown_model", f'"{rmodel}" is not a model{suggest(rmodel, allmodels)}')
+                continue
+            rel_fields = field_names(allmodels[rmodel][2]) | SYSTEM_FIELDS
+            match = rel["match"] if isinstance(rel.get("match"), dict) else {}
+            for k in sorted(match):
+                if k not in rel_fields:
+                    rep.add("error", p, f"related/{rn}/match/{k}", "unknown_field", f'"{k}" is not a field of {rmodel}')
+                dv = match[k]
+                if isinstance(dv, str) and model in allmodels and dv not in field_names(allmodels[model][2]) | SYSTEM_FIELDS:
+                    rep.add("error", p, f"related/{rn}/match/{k}", "unknown_field", f'"{dv}" is not a field of {model}')
+        check_print_template(rep, p, raw, os.path.abspath(uroot))
+    for org in sorted(letterheads) if site else ():
+        p, d = letterheads[org]
+        logo = d.get("logo") if isinstance(d, dict) else None
+        if not isinstance(logo, str) or not logo:
+            continue
+        sdir = os.path.abspath(site)
+        path = os.path.normpath(os.path.join(sdir, logo))
+        if os.path.isabs(logo) or not inside(sdir, path):
+            rep.add("error", p, "logo", "logo_missing", f'logo "{logo}" must be a file inside the site folder {os.path.relpath(sdir, rep.root)}')
+        elif not os.path.isfile(path):
+            rep.add("error", p, "logo", "logo_missing", f'logo file "{logo}" does not exist in {os.path.relpath(sdir, rep.root)}')
+    cp, cfg = config if site and config else (None, None)
+    orgs = cfg.get("orgs") if isinstance(cfg, dict) and isinstance(cfg.get("orgs"), dict) else {}
+    for oid in sorted(o for o in orgs if isinstance(orgs[o], dict)):
+        if oid not in letterheads:
+            rep.add("warn", cp, f"orgs/{oid}", "letterhead_missing", f'org "{oid}" has no letterheads/{oid}.rk; its documents print without address, bank or signatory')
+
+
+def check_print_template(rep, p, raw, uroot):
+    t = raw.get("template")
+    if not isinstance(t, str) or not t:
+        return  # the schema reports it
+    path = os.path.normpath(t) if os.path.isabs(t) else os.path.abspath(os.path.join(os.path.dirname(p), t))
+    if os.path.isabs(t) or not inside(uroot, path):
+        rep.add("error", p, "template", "template_outside", f'template "{t}" must stay inside {os.path.relpath(uroot, rep.root)}')
+        return
+    try:
+        with open(path, "rb") as fh:
+            fh.read()
+    except OSError:
+        rep.add("error", p, "template", "template_missing", f'template file "{t}" does not exist')
 
 
 if __name__ == "__main__":

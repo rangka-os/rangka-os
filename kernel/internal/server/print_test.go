@@ -365,6 +365,58 @@ func TestPrintOrgPKP(t *testing.T) {
 	}
 }
 
+// The PPN rate comes from the record's tax_rate, else the org's config tax.ppn_rate; dpp_ratio left out of the
+// config gives the default factor. Rates reach the layout as the engine reads them (float64), so a stored 0 is
+// a 0% rate, not a missing one.
+func TestPrintTaxFromConfig(t *testing.T) {
+	e := printEnv(t, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		const site12 = "tax: {ppn_rate: 12, dpp_ratio: 11/12, pkp: true}\n"
+		if !strings.Contains(string(b), site12) {
+			t.Fatalf("site config lacks %q", site12)
+		}
+		cfg := strings.Replace(string(b), site12, "tax: {ppn_rate: 11, pkp: true}\n", 1)
+		// a site format on customer, a model with no rate or factor field: only the config can answer
+		dir := filepath.Join(site, "print")
+		if err := os.MkdirAll(dir, 0o755); err != nil {
+			t.Fatal(err)
+		}
+		for p, s := range map[string]string{
+			p: cfg,
+			filepath.Join(dir, "tax_probe.rk"): "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\n" +
+				"name: tax_probe\nmodel: customer\ntemplate: tax_probe.html\n",
+			filepath.Join(dir, "tax_probe.html"): `<p>PPN {{number (taxrate .Doc .Tax)}}%|{{dppfactor .Doc .Tax}}</p>`,
+		} {
+			if err := os.WriteFile(p, []byte(s), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	if body := string(e.must(200, "GET", "/api/v1/r/customer/CUST-0012/print?format=tax_probe", nil).Body); !strings.Contains(body, "<p>PPN 11%|11/12</p>") {
+		t.Errorf("config fallback: want <p>PPN 11%%|11/12</p> in:\n%s", body)
+	}
+	// the catalogue invoice stores tax_rate 12 by default: that record prints its own rate under config 11
+	own := e.submittedInvoice("CUST-0012")
+	if body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+own+"/print", nil).Body); !strings.Contains(body, "<th>PPN 12%</th>") {
+		t.Errorf("record tax_rate 12 under config 11:\n%s", body)
+	}
+	// a zero-rated invoice prints PPN 0%, never the config rate
+	zero := e.submittedInvoice("CUST-0012")
+	if _, err := e.s.DB.Exec(context.Background(), `update r_sales_invoice set tax_rate = 0 where name = $1`, zero); err != nil {
+		t.Fatal(err)
+	}
+	body := string(e.must(200, "GET", "/api/v1/r/sales_invoice/"+zero+"/print", nil).Body)
+	for _, want := range []string{"<th>PPN 0%</th>", "<th>DPP nilai lain (11/12)</th>"} {
+		if !strings.Contains(body, want) {
+			t.Errorf("record tax_rate 0 lacks %q:\n%s", want, body)
+		}
+	}
+}
+
 // Exactly the limit is not truncated.
 func TestPrintRelatedAtLimitNotTruncated(t *testing.T) {
 	e := statementEnv(t)

@@ -36,13 +36,28 @@ items[item, description, qty, uom, rate, amount], subtotal, ppn, grand_total, pa
 `name, posting_date, due_date, grand_total, paid_amount`.
 
 All layouts also read `.Letterhead` (through the `letterhead`, `bank_accounts` and `signature` partials,
-plus `footer.id` and `signatory`) and `.Org.pkp`.
+plus `footer.id` and `signatory`), `.Org.pkp` and `.Tax`. The quotation and the invoice also read the record's
+optional `ppn_rate`, `tax_rate` and `dpp_ratio`; the PO reads `ppn_rate` and `tax_rate`.
 
 ## Behaviour worth knowing
 
-- **PPN.** The quotation and the invoice show `DPP nilai lain (11/12)` and `PPN 12%` only when `.Org.pkp`
-  is true; the invoice's e-Faktur note likewise. The amounts come from the record, the layout computes no
-  tax. The PO shows its `ppn` row when the amount is not zero (the vendor's tax, not the firm's status).
+- **PPN.** The quotation and the invoice show the DPP and PPN rows only when `.Org.pkp` is true; the
+  invoice's e-Faktur note likewise. The PO shows its `ppn` row when the amount is not zero (the vendor's tax,
+  not the firm's status). No layout hard-codes a rate or factor (a test greps for them):
+  - rate: `taxrate .Doc .Tax` is the record's `ppn_rate`, else its `tax_rate`, else `.Tax.ppn_rate`
+    (default 12), printed with `number` as `PPN 12%`, `PPN 11,5%` or `PPN 0%`. The engine stores an empty
+    numeric column as 0, so a rate column left empty prints `PPN 0%`, not the config rate: give a rate field
+    a default (or require it), and a zero-rated record prints `PPN 0%` as it should;
+  - DPP factor: `dppfactor .Doc .Tax` is the record's `dpp_ratio`, else `.Tax.dpp_ratio` (default `11/12`),
+    labelled `DPP nilai lain (11/12)`, or plain `DPP` when the factor equals 1 (`1`, `1/1`, `12/12`). A
+    numeric `dpp_ratio` of 0 (an empty number column) counts as unset and falls back to `.Tax`;
+  - the PO's rate label falls back to the firm's own config rate unless the PO stores `ppn_rate` or
+    `tax_rate`, although its PPN is the vendor's tax and the PO has no DPP row, so `PPN 12%` can sit next
+    to an amount the vendor computed at 11/12 of the subtotal. A module that buys from vendors should
+    store the vendor's rate on the PO.
+
+  `.Tax` is the org's config `tax` deep-merged over the site's, so an org that sets only `ppn_rate` keeps the
+  site's `dpp_ratio`. The amounts come from the record's `dpp` and `ppn`; the layout computes no tax.
 - **Optional rows.** Diskon (document level) and Uang muka show only when not zero, as negative amounts.
   Item discount shows as a percent only when not zero.
 - **Currency.** The invoice formats amounts with `money … .Doc.currency` (empty means IDR) and prints
@@ -62,7 +77,8 @@ plus `footer.id` and `signatory`) and `.Org.pkp`.
 ## Writing templates: guard nested values
 
 Missing top-level keys print empty, but a key that is present with a nil value stops the render when the
-template reaches into it: `{{.Doc.contact.name}}` fails with "nil pointer evaluating interface {}.name" when `contact` is null.
+template reaches into it: `{{.Doc.contact.name}}` fails with "nil pointer evaluating interface {}.name" when
+`contact` is null.
 Wrap every nested access in `{{with}}` and use its `{{else}}` for a fallback:
 
 ```html
@@ -71,4 +87,4 @@ Wrap every nested access in `{{with}}` and use its `{{else}}` for a fallback:
 
 Inside `with` and `range` the dot changes; name what you need from outside first (`{{$cur := ...}}`) or
 use `$` for the root. Use the helpers for every value a reader sees: `rupiah`/`money` for amounts,
-`date` for dates, `number` for quantities, `terbilang` for the total in words.
+`date` for dates, `number` for quantities, `terbilang` for the total in words, `taxrate`/`dppfactor` for tax labels.

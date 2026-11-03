@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: sales_invoice
+label: {id: Faktur penjualan}
+naming: INV-{YYYY}-{#####}
+title_field: customer
+fields:
+  - {name: customer, type: link, to: customer, label: {id: Pelanggan}, required: true, in_list: true}
+  - {name: grand_total, type: currency, label: {id: Total}, in_list: true}

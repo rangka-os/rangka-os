@@ -31,9 +31,9 @@ orgs:
 	}
 	reg := meta.Load(t.TempDir(), dir, nil)
 	for org, want := range map[string]map[string]any{
-		"pusat":  {"name": "Kantor pusat", "code": "PST", "legal_name": "PT Contoh Pusat", "pkp": false},
-		"cabang": {"name": "Cabang Contoh", "code": "CBG", "legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000", "pkp": true},
-		"bebas":  {"name": "Bebas PPN", "code": "", "legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000"}, // its tax: has no pkp
+		"pusat":  {"name": "Kantor pusat", "code": "PST", "legal_name": "PT Contoh Pusat", "pkp": false}, // org: replaces the site's: no inherited npwp
+		"cabang": {"name": "Cabang Contoh", "code": "CBG", "legal_name": "Cabang Contoh", "pkp": true},   // listed, no org:: its orgs name, no site identity, pkp from tax
+		"bebas":  {"name": "Bebas PPN", "code": "", "legal_name": "Bebas PPN", "pkp": true},              // its tax: {ppn_rate: 11} merges over the site's, so tax.pkp stays
 		"lain":   {"legal_name": "PT Contoh Jasa Teknik", "npwp": "00.000.000.0-000.000", "pkp": true},
 	} {
 		if got := printOrg(reg, org); !reflect.DeepEqual(got, want) {

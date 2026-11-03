@@ -84,7 +84,8 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 	}
 	page, err := docprint.Render(docprint.Input{
 		Format: f, Model: m, Doc: rec, Links: s.printLinks(ctx, c.actor, m, rec), Related: related, RelatedTruncated: truncated,
-		Letterhead: reg.Letterhead(c.actor.Org), Org: printOrg(reg, c.actor.Org), Printed: s.Engine.Now().In(s.Engine.Location()),
+		Letterhead: reg.Letterhead(c.actor.Org), Org: printOrg(reg, c.actor.Org),
+		Tax: meta.AsMap(reg.OrgConfig(c.actor.Org, "tax")), Printed: s.Engine.Now().In(s.Engine.Location()),
 		Children: children,
 	})
 	if err != nil {
@@ -133,22 +134,10 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 	w.Write(body)
 }
 
-// printOrg is .Org (contract 0008 §2): the org's config org: (legal_name, npwp, pkp; OrgConfig falls back to
-// the site's), plus name and code from its orgs: entry. pkp falls back to tax.pkp when org: leaves it out.
+// printOrg is .Org (contract 0008 §2): Registry.OrgIdentity, so a PT listed in orgs: never prints another
+// entity's legal name, NPWP or PKP status.
 func printOrg(reg *meta.Registry, org string) map[string]any {
-	out := map[string]any{}
-	for k, v := range meta.AsMap(reg.OrgConfig(org, "org")) {
-		out[k] = v
-	}
-	if o := reg.Orgs[org]; o != nil {
-		out["name"], out["code"] = o.Name, o.Code
-	}
-	if _, ok := out["pkp"]; !ok {
-		if v, ok := reg.OrgConfig(org, "tax.pkp").(bool); ok {
-			out["pkp"] = v
-		}
-	}
-	return out
+	return reg.OrgIdentity(org)
 }
 
 // pdfFilename is the record name as a file name: "/" becomes "-", quotes, backslashes and control characters go.

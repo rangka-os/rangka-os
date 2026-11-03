@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: bad_related
+model: customer
+template: ok.html
+related:
+  invoices:
+    model: sales_invoce
+    match: {customer: name}
+  lines:
+    model: sales_invoice
+    match: {customer: nofield, nope: name}

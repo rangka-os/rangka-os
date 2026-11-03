@@ -77,8 +77,8 @@ h2{font-size:11pt;margin:0 0 1.5mm}
   <tr><th>Diskon</th><td class="num">{{rupiah (sub 0 .Doc.discount_amount)}}</td></tr>
   {{- end}}
   {{- if .Org.pkp}}
-  <tr><th>DPP nilai lain (11/12)</th><td class="num">{{rupiah .Doc.dpp}}</td></tr>
-  <tr><th>PPN 12%</th><td class="num">{{rupiah .Doc.ppn}}</td></tr>
+  <tr><th>{{with dppfactor .Doc .Tax}}DPP nilai lain ({{.}}){{else}}DPP{{end}}</th><td class="num">{{rupiah .Doc.dpp}}</td></tr>
+  <tr><th>PPN {{number (taxrate .Doc .Tax)}}%</th><td class="num">{{rupiah .Doc.ppn}}</td></tr>
   {{- end}}
   <tr class="grand"><th>Total</th><td class="num">{{rupiah .Doc.grand_total}}</td></tr>
 </table>

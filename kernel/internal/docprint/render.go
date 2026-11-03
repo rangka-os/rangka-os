@@ -25,6 +25,7 @@ type Input struct {
 	RelatedTruncated map[string]bool
 	Letterhead       map[string]any         // from Registry.Letterhead (logo = abs path)
 	Org              map[string]any         // config.org
+	Tax              map[string]any         // Registry.OrgConfig(org, "tax"); missing keys take taxDefaults
 	Printed          time.Time              // already in the org time zone
 	Children         map[string]*meta.Model // child models of table fields, by model name
 }
@@ -79,6 +80,7 @@ func Render(in Input) ([]byte, error) {
 		"Truncated":  orEmpty(in.RelatedTruncated),
 		"Letterhead": letterhead,
 		"Org":        orEmpty(in.Org),
+		"Tax":        withTaxDefaults(in.Tax),
 		"Model":      map[string]any{"name": m.Name, "label": m.Label.Text()},
 		"Format":     map[string]any{"name": f.Name, "label": f.Label.Text(), "paper": paperName},
 		"Printed":    in.Printed,
@@ -88,6 +90,23 @@ func Render(in Input) ([]byte, error) {
 		return nil, fmt.Errorf("print %s: %w", f.Name, err)
 	}
 	return buf.Bytes(), nil
+}
+
+// taxDefaults are the PPN rate and DPP factor of an org whose config tax leaves them out (schema config.json).
+var taxDefaults = map[string]any{"ppn_rate": 12, "dpp_ratio": "11/12", "pkp": false}
+
+// withTaxDefaults copies tax, filling the keys it lacks (or holds as null) from taxDefaults.
+func withTaxDefaults(tax map[string]any) map[string]any {
+	out := make(map[string]any, len(taxDefaults)+len(tax))
+	for k, v := range tax {
+		out[k] = v
+	}
+	for k, v := range taxDefaults {
+		if out[k] == nil {
+			out[k] = v
+		}
+	}
+	return out
 }
 
 func orEmpty[V any](m map[string]V) map[string]V {

@@ -663,23 +663,11 @@ section_rangka() {
   same "the drill restored with method rangka for both pilots" "$(grep -c '^restore: method: rangka' <<<"$out")" 2
   same "rangka restore: manifest comparison exact (restore ok line) for both pilots" "$(grep -c '^restore ok: [0-9]* tables, [0-9]* rows match' <<<"$out")" 2
   same "no drill project left after the rangka drills" "$(drill_projects)/$(drill_networks)" 0/0
-  # after the hand-back the drill itself ran the ownership check on both pilots
-  same "drill checked object ownership after the rangka restore" "$(grep -c 'every object in public and rk\* is owned by the pilot role' <<<"$out")" 2
+  # the rangka restore ran as the pilot role and the drill checked that it owns everything, on both pilots
+  same "drill checked object ownership after the rangka restore (as the pilot role, no admin)" "$(grep -c 'every object in public and rk\* is owned by the pilot role' <<<"$out")" 2
 
-  # a rangka archive without RESTORE_ADMIN_PASSWORD is refused before any database work, with a clear message
-  local live="$WORK/live-srv" newest before after
-  mkdir -p "$live"
-  newest="$(basename "$(local_archives jasa | tail -1)")"
-  before="$(psql_as jasa jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
-  rc=0
-  out="$(dc run --rm -T -e RESTORE_ADMIN_PASSWORD= -v "$WORK/age-identity.txt:/run/secrets/age-identity:ro" -v "$live:/restore/jasa" \
-    --entrypoint /usr/local/bin/restore.sh backup "/backups/jasa/$newest" jasa 2>&1)" || rc=$?
-  if [ "$rc" != 0 ] && grep -q 'needs RESTORE_ADMIN_PASSWORD' <<<"$out"; then ok "rangka archive without RESTORE_ADMIN_PASSWORD is refused with a clear message"; else bad "missing admin password: rc=$rc: $out"; fi
-  after="$(psql_as jasa jasa -qAtX -c "select count(*) from public.r_lead" 2>&1 || true)"
-  same "refused restore left the live data alone" "$after" "$before"
-
-  # the hand-back: objects of every kind created by the admin end up owned by the pilot role, and the ownership check
-  # sees them before (negative control) and no longer after. Scratch database e2e_hb, owned by the plain role jasa.
+  # the ownership check (run by restore.sh and the drill) must see objects of every kind that someone other than the
+  # pilot role owns (negative control). Scratch database e2e_hb, owned by the plain role jasa.
   local adm=(dc exec -T postgres psql -U postgres -d e2e_hb -qAtX -v ON_ERROR_STOP=1 -v pilot=jasa)
   dc exec -T postgres psql -U postgres -qAtX -v ON_ERROR_STOP=1 -c "create database e2e_hb owner jasa" >/dev/null
   "${adm[@]}" >/dev/null <<'SQL'
@@ -700,12 +688,8 @@ SQL
      && grep -q 'schema rk_x ' <<<"$out" && grep -q 'function public.f1 ' <<<"$out"; then
     ok "ownership check lists tables, views, sequences, functions, domains, enums, ranges and schemas owned by the admin"
   else
-    bad "ownership check before the hand-back: $out"
+    bad "ownership check negative control: $out"
   fi
-  handback_sql | "${adm[@]}" >/dev/null || bad "handback_sql failed"
-  out="$(foreign_owned_sql | "${adm[@]}")"
-  same "after the hand-back nothing in public or rk* is owned by anyone but jasa" "$out" ""
-  same "the domain and the schema are owned by jasa" "$("${adm[@]}" -c "select pg_get_userbyid(typowner) || ',' || (select pg_get_userbyid(nspowner) from pg_namespace where nspname = 'rk_x') from pg_type where typname = 'd1'")" jasa,jasa
   dc exec -T postgres psql -U postgres -qAtX -c "drop database e2e_hb" >/dev/null || bad "drop e2e_hb"
 }
 

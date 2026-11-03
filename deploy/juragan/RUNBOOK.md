@@ -255,17 +255,10 @@ hand any time: `docker compose run --rm backup all` (or `jasa` / `fnb`).
    `backups/`), the pilot folders come from the archive's own `apps.tar`, `site.tar`, `files.tar`. Not proven:
    attachments (the sample data has none).
 
-   **Kernel finding, restore of a `rangka` archive needs the admin role.** With S5 the model tables have row-level
-   security enabled and forced, and Postgres refuses `COPY FROM` on such a table for every role the policy binds
-   (SQLSTATE 0A000, "COPY FROM not supported with row-level security"), the owner included. `rangka restore` loads
-   rows with COPY, so as the pilot role it fails at the first model table. `restore.sh` therefore restores a
-   `rangka` archive as the `postgres` role (`RESTORE_ADMIN_PASSWORD` in its environment; the drill supplies it
-   from its throwaway secrets) and then hands every table, view, sequence, function, type, domain and schema in `public`
-   and `rk*` to the pilot role with `ALTER ... OWNER`, and verifies that nothing there is owned by anyone else
-   (it fails and lists the objects otherwise), so FORCE RLS and the kernel's migrations work exactly as for a `pg_dump` restore. The drill's RLS gate runs
-   after that and still requires the pilot role to be NOSUPERUSER NOBYPASSRLS with RLS enabled and forced.
-   `pg_dump` archives restore as the pilot role as before. A kernel fix (a restore that sets up RLS after the load,
-   or restores through a role that may bypass it) would remove this step.
+   `rangka` archives restore as the pilot role, the same as `pg_dump` archives (since rangka-os #22 `rangka restore`
+   loads tables with forced row-level security as the owner). `restore.sh` then checks that nothing in `public` or
+   `rk*` is owned by anyone but the pilot role, and the drill's RLS gate still requires the role to be NOSUPERUSER
+   NOBYPASSRLS with RLS enabled and forced. No superuser password is needed for any restore.
 
 **Rollback:** set the previous tag in `.env`, `docker compose up -d`. If the new release's migration changed data
 destructively, the old binary is not enough: restore from the pre-upgrade archive (section 6).
@@ -328,23 +321,14 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
      -v "$(grep '^PILOTS_DIR=' .env | cut -d= -f2-)/<pilot>:/restore/<pilot>" \
      --entrypoint /usr/local/bin/restore.sh backup "/backups/<pilot>/<archive name>" <pilot>
    ```
-   For an archive with `method: rangka` (manifest.json) add `-e RESTORE_ADMIN_PASSWORD` and put the postgres
-   superuser password (`POSTGRES_PASSWORD` from `.env`) in your shell for this one command without leaving it in the
-   shell history; see section 5. Without it `restore.sh` stops before touching the database:
-   ```bash
-   read -rs RESTORE_ADMIN_PASSWORD; export RESTORE_ADMIN_PASSWORD   # paste the password, press Enter
-   docker compose run --rm -T --no-deps -e RESTORE_ADMIN_PASSWORD ...   # the command above
-   unset RESTORE_ADMIN_PASSWORD
-   ```
    (`/backups/in/<archive name>` if you copied it in step 1.) Expected last line:
    `restore ok: <N> tables, <M> rows match`. Earlier lines: `restore: checksums ok`,
    `restore: unpacked apps, site and files into /restore/<pilot>`. Any `MISSING`, `MISMATCH` or
    `restored data does not match the manifest` means do not start the pilot: keep the old database and folders,
    and escalate.
 
-   If `restore.sh` fails after the database restore started (a folder or table-comparison error, a killed run, or for
-   a `rangka` archive the hand-back step: `could not hand the restored objects to the pilot role` or `hand-back
-   incomplete: ... not owned by <pilot>`), the database and the folders are no longer empty and it refuses a rerun. Empty them again, then run step 5 once more: stop the
+   If `restore.sh` fails after the database restore started (a folder, ownership or table-comparison error, or a
+   killed run), the database and the folders are no longer empty and it refuses a rerun. Empty them again, then run step 5 once more: stop the
    pilot (it should be stopped), drop and recreate the database as in step 3 (the failed attempt is worthless, so
    `DROP DATABASE <pilot>;` first, then the same `CREATE DATABASE` and `REVOKE` statements), and move the partly
    filled folders aside as in step 4 (use a new `<pilot>-old-<yyyymmdd>b` name).

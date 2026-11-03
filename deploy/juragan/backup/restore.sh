@@ -84,10 +84,6 @@ main() {
   esac
   [ -f "$dump_file" ] || die "$dump_file missing in the archive"
   log "method: $method"
-  # checked before any database work, so a missing password leaves the target untouched
-  if [ "$method" = rangka ] && [ -z "${RESTORE_ADMIN_PASSWORD:-}" ]; then
-    die "this archive was made with BACKUP_METHOD=rangka and needs RESTORE_ADMIN_PASSWORD (the postgres superuser password): rangka restore cannot COPY into tables with row-level security as the pilot role; nothing was restored"
-  fi
   # the drill compares these with its own release (empty in archives made before they were recorded)
   log "manifest: rangka_tag=$(jq -r '.rangka_tag // ""' manifest.json) rangka_image=$(jq -r '.rangka_image // ""' manifest.json)"
   [ "$(jq '.tables | length' manifest.json)" -ge 1 ] || die "manifest lists no tables: not a usable backup"
@@ -117,16 +113,10 @@ main() {
     # must be empty or absent: the pilot folder may already hold backups/), migrates the schema from the archived
     # metadata, loads the rows in one transaction and verifies them. Everything it writes to disk goes to the work
     # dir: the folders come from the tars below, the same way as for pg_dump archives.
-    # KERNEL FINDING (S1 x S5): `rangka restore` loads rows with COPY FROM, and Postgres refuses COPY FROM on a table
-    # with row-level security for any role the policy binds (SQLSTATE 0A000), the forced-RLS owner included. So the
-    # restore runs as the Postgres admin role (RESTORE_ADMIN_PASSWORD, from the operator, never stored) and then hands
-    # every object back to the pilot role, which must own them for FORCE RLS and for the kernel's own migrations.
-    local admin_url="postgres://postgres@${BACKUP_DB_HOST:-postgres}:5432/$p?sslmode=disable"
-    DATABASE_URL="postgres://postgres:$(jq -rn 'env.RESTORE_ADMIN_PASSWORD | @uri')@${url#*@}" \
+    # It runs as the pilot role, like pg_restore: since #22 it loads tables with forced row-level security as the owner.
+    DATABASE_URL="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}" \
       rangka restore "$WORK_DIR/x/rangka.backup" --into "$WORK_DIR/rk-into" --files "$WORK_DIR/rk-files" \
       || die "rangka restore failed"
-    handback_sql | PGPASSWORD="$RESTORE_ADMIN_PASSWORD" psql -qAtX -v ON_ERROR_STOP=1 -v pilot="$p" "$admin_url" >/dev/null \
-      || die "could not hand the restored objects to the pilot role; the database is now half restored: drop and recreate it before retrying (RUNBOOK section 5)"
   else
     # one transaction: a failure leaves the database empty
     pg_restore --no-owner --role="$p" --exit-on-error --single-transaction -d "$url" db.dump \
@@ -137,7 +127,7 @@ main() {
   n="$(foreign_owned_sql | psql -qAtX -v ON_ERROR_STOP=1 -v pilot="$p" "$url")" || die "could not check object ownership"
   if [ -n "$n" ]; then
     echo "$n" >&2
-    die "hand-back incomplete: the objects above are not owned by $p; the database is half restored: drop and recreate it before retrying (RUNBOOK section 5)"
+    die "ownership: the objects above are not owned by $p; the database is half restored: drop and recreate it before retrying (RUNBOOK section 6)"
   fi
   log "every object in public and rk* is owned by $p"
 

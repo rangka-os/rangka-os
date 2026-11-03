@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"sort"
 	"strings"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 )
 
 // Receivables, payables and payment allocation (S8c). Money is whole rupiah in int64 (moneyIn/moneyOut).
@@ -54,6 +56,14 @@ func addInvoiced(h *HookCtx, sign int64) error {
 	return err
 }
 
+// fieldOr is name when m has it, else old (catalogues from before a field was renamed).
+func fieldOr(m *meta.Model, name, old string) string {
+	if has(m, name) || !has(m, old) {
+		return name
+	}
+	return old
+}
+
 // postReceivable is ledger.post_receivable (sales_invoice on_submit).
 func postReceivable(h *HookCtx) (map[string]any, error) {
 	inv := h.Record
@@ -67,11 +77,12 @@ func postReceivable(h *HookCtx) (map[string]any, error) {
 		if err != nil {
 			return nil, err
 		}
+		deduction, base := fieldOr(h.Model, "down_payment", "dp_deduction"), fieldOr(h.Model, "dpp", "dpp_base")
 		var sum int64
 		for _, r := range deducting {
-			sum += moneyIn(r["dp_deduction"])
+			sum += moneyIn(r[deduction])
 		}
-		if sum > moneyIn(dpInv["dpp_base"]) {
+		if sum > moneyIn(dpInv[base]) {
 			return nil, refuse("dp_over_deducted", fmt.Sprintf("Total potongan uang muka %s melebihi DPP faktur uang muka %s", rupiah(sum), dp))
 		}
 	}

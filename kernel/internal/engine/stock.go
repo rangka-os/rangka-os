@@ -198,6 +198,9 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 			return nil, err
 		}
 	case "stock_transfer":
+		if twoStepTransfers(h) {
+			return postTransferOut(h)
+		}
 		s := newStockPost(h, str(rec["transfer_date"]))
 		if err := s.lockAll(lineKeys("from_outlet", "to_outlet")); err != nil {
 			return nil, err
@@ -274,6 +277,8 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 				}
 			}
 		}
+	case "stock_transfer_receipt":
+		return postTransferReceipt(h)
 	case "outlet_sales":
 		return postOutletSales(h)
 	default:
@@ -411,6 +416,22 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 	if h.op.e.Reg().Model("stock_move") == nil {
 		return map[string]any{"message": "stock is not installed"}, nil
 	}
+	var tr store.Record // the transfer a receipt received, locked before any balance
+	switch {
+	case h.Model.Name == "stock_transfer" && twoStepTransfers(h):
+		got, err := h.Find("stock_transfer_receipt", map[string]any{"stock_transfer": str(h.Record["name"]), "docstatus": 1})
+		if err != nil {
+			return nil, err
+		}
+		if len(got) > 0 {
+			return nil, refuse("has_receipts", "Transfer "+str(h.Record["name"])+" sudah diterima di "+str(got[0]["name"])+"; batalkan penerimaannya dulu")
+		}
+	case h.Model.Name == "stock_transfer_receipt":
+		var err error
+		if tr, err = h.Lock("stock_transfer", str(h.Record["stock_transfer"])); err != nil {
+			return nil, err
+		}
+	}
 	moves, err := h.Find("stock_move", map[string]any{"voucher_type": h.Model.Name, "voucher": str(h.Record["name"])})
 	if err != nil {
 		return nil, err
@@ -439,6 +460,11 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 	}
 	if h.Model.Name == "goods_receipt" {
 		if err := receivedOnPO(h, -1); err != nil {
+			return nil, err
+		}
+	}
+	if tr != nil {
+		if err := receivedOnTransfer(h, tr, -1); err != nil {
 			return nil, err
 		}
 	}

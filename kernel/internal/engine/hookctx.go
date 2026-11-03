@@ -13,16 +13,44 @@ import (
 
 // ---------- money: whole rupiah as int64, exact through internal/money
 
+// moneyError is raised (panic) by the money helpers when a value cannot be read or does not fit int64;
+// callHook turns it into the hook's error, so a bad amount fails the operation instead of counting as 0.
+type moneyError struct{ err error }
+
+func moneyFail(format string, args ...any) { panic(moneyError{fmt.Errorf(format, args...)}) }
+
+// callHook runs a hook, returning a money error raised inside it as an error.
+func callHook(fn Hook, h *HookCtx) (res map[string]any, err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			me, ok := r.(moneyError)
+			if !ok {
+				panic(r)
+			}
+			res, err = nil, me.err
+		}
+	}()
+	return fn(h)
+}
+
 // moneyIn reads a stored amount as whole rupiah, rounded half away from zero: a currency field (float64 in
 // the engine), an IDR twin (int64) or a money field (money.Decimal) all go through money.Rat, so no float
-// arithmetic decides a rupiah. This, moneyOut and the rounding helpers below are the only places that know.
+// arithmetic decides a rupiah. nil and "" are 0; anything else unreadable is an error. This, moneyOut and the
+// rounding helpers below are the only places that know.
 func moneyIn(v any) int64 {
-	if n, ok := v.(int64); ok {
-		return n
+	switch x := v.(type) {
+	case nil:
+		return 0
+	case int64:
+		return x
+	case string:
+		if x == "" {
+			return 0
+		}
 	}
 	r, ok := money.Rat(v)
 	if !ok {
-		return 0
+		moneyFail("amount %v (%T) is not a number", v, v)
 	}
 	return ratRound(r)
 }
@@ -31,11 +59,11 @@ func moneyIn(v any) int64 {
 // the field's own type (float64 for currency, int64 for a twin, money.Decimal for money).
 func moneyOut(n int64) any { return n }
 
-// ratRound rounds a rational to whole rupiah, half away from zero.
+// ratRound rounds a rational to whole rupiah, half away from zero; overflowing int64 is an error.
 func ratRound(r *big.Rat) int64 {
 	n, err := money.ToIDR(money.FromInt(1), r)
 	if err != nil {
-		return 0
+		moneyFail("amount %s: %v", r.FloatString(4), err)
 	}
 	return n
 }
@@ -155,7 +183,10 @@ func (h *HookCtx) setSubmitted(model, name string, fields map[string]any, allow 
 		}
 		if f.Type == "table" {
 			cm := o.e.Reg().Models[f.Of]
-			byRow, _ := v.(map[string]map[string]any)
+			byRow, ok := v.(map[string]map[string]any)
+			if !ok {
+				return nil, fmt.Errorf("SetSubmitted %s.%s: rows are map[row name]map[field]value, got %T", model, k, v)
+			}
 			for rowName, vals := range byRow {
 				var row map[string]any
 				for _, r := range rows(rec[k]) {

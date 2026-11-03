@@ -60,9 +60,32 @@ func (s *stockPost) balance(outlet, item string) (store.Record, error) {
 	return r, err
 }
 
-// move posts qty (signed, stock uom) of item at outlet. Incoming moves are valued at cost; outgoing ones at
-// the current average (item.standard_cost when there is none yet). fixed, when set, is the value of a
-// reversal (the original move's value, unsigned) and cost its unit cost. It returns the move.
+// lockAll takes the balance locks of every (outlet, item) a document touches, in sorted order, before any
+// move is posted, so documents moving stock in opposite directions (A→B and B→A) cannot deadlock.
+func (s *stockPost) lockAll(keys [][2]string) error {
+	sort.Slice(keys, func(i, j int) bool {
+		if keys[i][0] != keys[j][0] {
+			return keys[i][0] < keys[j][0]
+		}
+		return keys[i][1] < keys[j][1]
+	})
+	for i, k := range keys {
+		if i > 0 && k == keys[i-1] {
+			continue
+		}
+		if _, err := s.balance(k[0], k[1]); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// move posts qty (signed, stock uom) of item at outlet. fixed, when set, is the move's value (unsigned):
+// a receipt line's amount, the value a transfer took out, or a reversed move's value; cost is then its unit
+// cost (informative). Without fixed, an incoming move is valued round(qty × cost) and an outgoing one
+// round(qty × avg) (item.standard_cost when there is no average yet), each rounded once. The balance value
+// is always the exact sum of move values; avg = round(value / qty) is derived when qty > 0 and kept
+// otherwise. It returns the move.
 func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *int64, reason string) (store.Record, error) {
 	bal, err := s.balance(outlet, item)
 	if err != nil {
@@ -70,43 +93,31 @@ func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *in
 	}
 	bq, bv, avg := qtyOf(bal["qty"]), moneyIn(bal["value"]), moneyIn(bal["avg_cost"])
 	var value, unit int64
-	if qty > 0 {
-		in := mulRound(qty, cost)
-		if fixed != nil {
-			in = *fixed
+	switch {
+	case fixed != nil:
+		unit, value = cost, *fixed
+		if qty < 0 {
+			value = -*fixed
 		}
-		unit, value = cost, in
-		if nq := roundQty(bq + qty); nq > 0 {
-			avg = divRound(bv+in, nq)
-			bq, bv = nq, mulRound(nq, avg)
-		} else {
-			if avg == 0 {
-				avg = cost
+	case qty > 0:
+		unit, value = cost, mulRound(qty, cost)
+	default:
+		a := avg
+		if a == 0 {
+			it, err := s.item(item)
+			if err != nil {
+				return nil, err
 			}
-			bq, bv = nq, bv+in
+			a = moneyIn(it["standard_cost"])
 		}
-	} else {
-		out := -qty
-		if fixed != nil {
-			// reversal of an incoming move: take its value out again and let the average follow
-			unit, value = cost, -*fixed
-			bq, bv = roundQty(bq-out), bv-*fixed
-			if bq > 0 {
-				avg = divRound(bv, bq)
-			}
-		} else {
-			a := avg
-			if a == 0 {
-				it, err := s.item(item)
-				if err != nil {
-					return nil, err
-				}
-				a = moneyIn(it["standard_cost"])
-			}
-			v := mulRound(out, a)
-			unit, value = a, -v
-			bq, bv = roundQty(bq-out), bv-v
-		}
+		unit, value = a, -mulRound(-qty, a)
+	}
+	bq, bv = roundQty(bq+qty), bv+value
+	switch {
+	case bq > 0:
+		avg = divRound(bv, bq)
+	case avg == 0 && qty > 0:
+		avg = unit
 	}
 	mv, _, err := s.h.Create("stock_move", map[string]any{
 		"posting_date": s.date, "outlet": outlet, "item": item, "qty": qty, "unit_cost": moneyOut(unit), "value": moneyOut(value),
@@ -148,14 +159,35 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		return map[string]any{"message": "stock is not installed"}, nil
 	}
 	rec := h.Record
+	// lineKeys are the (outlet, item) pairs of the document's lines for the given outlet fields.
+	lineKeys := func(outletFields ...string) [][2]string {
+		var keys [][2]string
+		for _, l := range rows(rec["items"]) {
+			for _, f := range outletFields {
+				keys = append(keys, [2]string{str(rec[f]), str(l["item"])})
+			}
+		}
+		return keys
+	}
 	switch h.Model.Name {
 	case "goods_receipt":
 		s := newStockPost(h, str(rec["received_on"]))
+		if err := s.lockAll(lineKeys("outlet")); err != nil {
+			return nil, err
+		}
+		hasAmount := has(h.op.e.Reg().Models[h.Model.Field("items").Of], "amount")
 		for _, l := range rows(rec["items"]) {
-			if q := lineQty(h, "items", l); q > qtyEps {
-				if _, err := s.move(str(rec["outlet"]), str(l["item"]), q, moneyIn(l["unit_cost"]), nil, "receipt"); err != nil {
-					return nil, err
-				}
+			q := lineQty(h, "items", l)
+			if q <= qtyEps {
+				continue
+			}
+			var fixed *int64
+			if hasAmount { // the receipt is valued at the line amount; unit_cost is informative
+				v := moneyIn(l["amount"])
+				fixed = &v
+			}
+			if _, err := s.move(str(rec["outlet"]), str(l["item"]), q, moneyIn(l["unit_cost"]), fixed, "receipt"); err != nil {
+				return nil, err
 			}
 		}
 		if err := receivedOnPO(h, 1); err != nil {
@@ -163,6 +195,9 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		}
 	case "stock_transfer":
 		s := newStockPost(h, str(rec["transfer_date"]))
+		if err := s.lockAll(lineKeys("from_outlet", "to_outlet")); err != nil {
+			return nil, err
+		}
 		for _, l := range rows(rec["items"]) {
 			q := lineQty(h, "items", l)
 			if q <= qtyEps {
@@ -178,6 +213,9 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		}
 	case "stock_count":
 		s := newStockPost(h, str(rec["count_date"]))
+		if err := s.lockAll(lineKeys("outlet")); err != nil {
+			return nil, err
+		}
 		lines := map[string]map[string]any{}
 		for _, l := range rows(rec["items"]) {
 			item := str(l["item"])
@@ -214,6 +252,9 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		}
 	case "stock_adjustment":
 		s := newStockPost(h, str(rec["adjustment_date"]))
+		if err := s.lockAll(lineKeys("outlet")); err != nil {
+			return nil, err
+		}
 		reason := "adjustment"
 		if str(rec["reason"]) == "waste" {
 			reason = "waste"
@@ -254,18 +295,28 @@ func postOutletSales(h *HookCtx) (map[string]any, error) {
 	}
 	s := newStockPost(h, date)
 	recipes := map[string][]materialUse{}
+	var keys [][2]string
+	for _, l := range rows(rec["lines"]) {
+		item := str(l["item"])
+		if _, ok := recipes[item]; ok {
+			continue
+		}
+		uses, err := s.consumption(item)
+		if err != nil {
+			return nil, err
+		}
+		recipes[item] = uses
+		for _, u := range uses {
+			keys = append(keys, [2]string{outlet, u.material})
+		}
+	}
+	if err := s.lockAll(keys); err != nil {
+		return nil, err
+	}
 	lines := map[string]map[string]any{}
 	var total int64
 	for _, l := range rows(rec["lines"]) {
-		item := str(l["item"])
-		uses, ok := recipes[item]
-		if !ok {
-			var err error
-			if uses, err = s.consumption(item); err != nil {
-				return nil, err
-			}
-			recipes[item] = uses
-		}
+		uses := recipes[str(l["item"])]
 		var cogs int64
 		for _, u := range uses {
 			q := roundQty(qtyOf(l["qty"]) * u.per)
@@ -355,6 +406,13 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 		return nil, err
 	}
 	s := newStockPost(h, h.op.e.Today())
+	var keys [][2]string
+	for _, mv := range moves {
+		keys = append(keys, [2]string{str(mv["outlet"]), str(mv["item"])})
+	}
+	if err := s.lockAll(keys); err != nil {
+		return nil, err
+	}
 	n := 0
 	for _, mv := range moves {
 		if str(mv["reason"]) == "reversal" {

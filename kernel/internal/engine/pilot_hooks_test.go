@@ -615,7 +615,7 @@ func TestPilotStockCountWastePacking(t *testing.T) {
 		t.Fatalf("packed receipt move = %v", mv)
 	}
 	b := p.balance(m.outB, m.beras)
-	if b["qty"] != 117.0 || rp(b["avg_cost"]) != 12145 || rp(b["value"]) != 1420965 {
+	if b["qty"] != 117.0 || rp(b["avg_cost"]) != 12145 || rp(b["value"]) != 1421000 {
 		t.Fatalf("balance after packed receipt = %v %v %v", b["qty"], b["avg_cost"], b["value"])
 	}
 	o := p.get("purchase_order", po)
@@ -627,9 +627,7 @@ func TestPilotStockCountWastePacking(t *testing.T) {
 	if err := p.cancel("goods_receipt", gr); err != nil {
 		t.Fatal(err)
 	}
-	if b := p.balance(m.outB, m.beras); b["qty"] != 17.0 {
-		t.Fatalf("qty after reversing the packed receipt = %v", b["qty"])
-	}
+	p.wantBalance(m.outB, m.beras, 17, 221000, 13000) // back to the prior balance exactly
 	if o := p.get("purchase_order", po); rows(o["items"])[0]["received_qty"] != 0.0 || o["received_pct"] != 0.0 {
 		t.Fatal("PO received_qty not reverted")
 	}
@@ -718,5 +716,134 @@ func TestPilotHooksUnderRLS(t *testing.T) {
 	other := Actor{Org: "other", ID: "x@other.test", Roles: []string{"owner"}}
 	if rows, _, err := e.List(pg.WithOrg(ctx, "other"), other, "stock_move", ListOpts{}); err != nil || len(rows) != 0 {
 		t.Fatalf("other org sees %d moves, %v", len(rows), err)
+	}
+}
+
+// TestPilotReceiptAtLineAmount: a receipt is valued at its line amount, not at round(stock qty × rounded
+// unit cost): 1 Karung of 3 kg at 100.000 → +3 kg worth 100.000 (unit cost 33.333 is informative).
+func TestPilotReceiptAtLineAmount(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	pack := p.create("uom_conversion", map[string]any{"item": m.minyak, "uom": m.karung, "factor": 3})
+	gr := p.doc("goods_receipt", map[string]any{"vendor": m.vend, "outlet": m.outA, "items": []any{map[string]any{"item": m.minyak, "qty": 1, "uom": m.karung, "packing": pack, "rate": 100000}}})
+	mv := p.moves(gr)
+	if len(mv) != 1 || mv[0]["qty"] != 3.0 || rp(mv[0]["value"]) != 100000 || rp(mv[0]["unit_cost"]) != 33333 {
+		t.Fatalf("receipt move = %v", mv)
+	}
+	p.wantBalance(m.outA, m.minyak, 3, 100000, 33333)
+	if err := p.cancel("goods_receipt", gr); err != nil {
+		t.Fatal(err)
+	}
+	if b := p.balance(m.outA, m.minyak); b["qty"] != 0.0 || rp(b["value"]) != 0 {
+		t.Fatalf("after reversal: %v %v", b["qty"], b["value"])
+	}
+}
+
+// TestPilotCancelRacesAllocation: cancelling an invoice while a payment allocates to it. The row lock makes
+// one wait for the other: either the cancel is refused (has_payments) or the allocation is (not_submitted),
+// never both committed.
+func TestPilotCancelRacesAllocation(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	for i := 0; i < 6; i++ {
+		inv := p.invoice(m, m.cust, 1000000, false, nil)
+		pay := p.create("payment", map[string]any{"customer": m.cust, "amount": 1000000, "allocations": []any{alloc(inv, 1000000)}})
+		cancelErr, payErr := make(chan error, 1), make(chan error, 1)
+		go func() { cancelErr <- p.cancel("sales_invoice", inv) }()
+		go func() { _, err := p.e.Submit(p.ctx, p.a, "payment", pay, true); payErr <- err }()
+		ce, pe := <-cancelErr, <-payErr
+		switch {
+		case ce == nil && pe != nil:
+			wantCode(t, pe, 409, "not_submitted")
+			if r := p.get("sales_invoice", inv); r["docstatus"] != int64(2) || rp(r["paid_amount"]) != 0 {
+				t.Fatalf("cancel won but invoice = %v %v", r["docstatus"], r["paid_amount"])
+			}
+		case pe == nil && ce != nil:
+			wantCode(t, ce, 409, "has_payments")
+			if r := p.get("sales_invoice", inv); r["docstatus"] != int64(1) || rp(r["paid_amount"]) != 1000000 {
+				t.Fatalf("payment won but invoice = %v %v", r["docstatus"], r["paid_amount"])
+			}
+			if err := p.cancel("payment", p.mustSubmittedName("payment", pay)); err != nil {
+				t.Fatal(err)
+			}
+		default:
+			t.Fatalf("round %d: cancel %v, payment %v", i, ce, pe)
+		}
+		if got := p.outstanding("customer", m.cust); got != 0 && got != 1000000 {
+			t.Fatalf("customer outstanding = %d", got)
+		}
+	}
+}
+
+// mustSubmittedName finds the submitted record that was the draft name (Submit renames DRAFT-…).
+func (p *pilot) mustSubmittedName(model, draft string) string {
+	p.t.Helper()
+	rows, _, err := p.e.List(p.ctx, p.a, model, ListOpts{Filter: "docstatus == 1", Sort: "-name", Limit: 1})
+	if err != nil || len(rows) == 0 {
+		p.t.Fatalf("no submitted %s for %s: %v", model, draft, err)
+	}
+	return str(rows[0]["name"])
+}
+
+// TestPilotOppositeTransfers: A→B and B→A of the same item at once; sorted balance locks mean neither
+// deadlocks, and both post.
+func TestPilotOppositeTransfers(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	p.receipt(m, m.outA, 50, 10000)
+	p.receipt(m, m.outB, 50, 10000)
+	for i := 0; i < 4; i++ {
+		ab := p.create("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 5}}})
+		ba := p.create("stock_transfer", map[string]any{"from_outlet": m.outB, "to_outlet": m.outA, "items": []any{map[string]any{"item": m.beras, "qty": 5}}})
+		errs := make(chan error, 2)
+		for _, n := range []string{ab, ba} {
+			go func(n string) { _, err := p.e.Submit(p.ctx, p.a, "stock_transfer", n, true); errs <- err }(n)
+		}
+		if e1, e2 := <-errs, <-errs; e1 != nil || e2 != nil {
+			t.Fatalf("round %d: %v / %v", i, e1, e2)
+		}
+	}
+	p.wantBalance(m.outA, m.beras, 50, 500000, 10000)
+	p.wantBalance(m.outB, m.beras, 50, 500000, 10000)
+}
+
+// runHook calls a hook on a record directly, inside one transaction (for refusals an action's if: hides).
+func (p *pilot) runHook(fn Hook, model, name string, args map[string]any) error {
+	return p.e.run(p.ctx, p.a, func(o *op) error {
+		m := p.e.Reg().Model(model)
+		rec, err := o.lockLoad(m, name)
+		if err != nil {
+			return err
+		}
+		_, err = callHook(fn, &HookCtx{op: o, Model: m, Record: rec, Args: args})
+		return err
+	})
+}
+
+func TestPilotReviewMinors(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	q := p.doc("quotation", map[string]any{"customer": m.cust, "subject": "x", "items": []any{map[string]any{"item": m.jasa}}})
+	wantCode(t, p.runHook(orderFromQuotation, "quotation", q, map[string]any{"po_number": "PO-1", "po_date": "2026-10-30"}), 409, "not_accepted")
+
+	po := p.doc("purchase_order", map[string]any{"vendor": m.vend, "items": []any{map[string]any{"item": m.beras, "qty": 1, "rate": 1000}}})
+	_, err := p.e.RunAction(p.ctx, p.a, "purchase_order", po, "receive", nil, ActionOpts{})
+	wantCode(t, err, 422, "outlet_required")
+
+	// an unreadable amount fails the hook instead of counting as 0
+	bad := func(h *HookCtx) (map[string]any, error) { return map[string]any{"n": moneyIn("12abc")}, nil }
+	if err := p.runHook(bad, "quotation", q, nil); err == nil || !strings.Contains(err.Error(), "not a number") {
+		t.Fatalf("bad amount: %v", err)
+	}
+	huge := func(h *HookCtx) (map[string]any, error) { return map[string]any{"n": mulRound(1e30, 1e9)}, nil }
+	if err := p.runHook(huge, "quotation", q, nil); err == nil {
+		t.Fatal("overflow accepted")
+	}
+	wrong := func(h *HookCtx) (map[string]any, error) {
+		_, err := h.SetSubmitted("quotation", q, map[string]any{"items": map[string]any{"x": 1}})
+		return nil, err
+	}
+	if err := p.runHook(wrong, "quotation", q, nil); err == nil {
+		t.Fatal("SetSubmitted accepted rows of the wrong type")
 	}
 }

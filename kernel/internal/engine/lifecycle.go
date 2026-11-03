@@ -250,9 +250,6 @@ type CreateOpts struct {
 	Docstatus int64
 	authorize bool // check create on the new record (public entry points; hooks run inside an allowed op)
 	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
-	// AllowMissing names required fields a hook may leave empty on a new draft for the user to fill in
-	// (procurement.receive leaves the outlet when the PO has none); saving and submitting the draft still require them.
-	AllowMissing []string
 }
 
 // Result of a write: the record and any warnings. Held is set when the verb waits for approval (0007);
@@ -298,7 +295,6 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err != nil {
 		return nil, err
 	}
-	errs = allowMissing(errs, opts.AllowMissing)
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
 	}
@@ -361,6 +357,17 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	return rec, nil
 }
 
+// lockLoad loads a record with its row locked until the transaction ends (select … for update). Submit,
+// cancel, update and actions use it, so a hook writing the same row in another transaction (an allocation
+// raising paid_amount) is either seen or waits; the full-record write that follows cannot lose it.
+func (o *op) lockLoad(m *meta.Model, name string) (store.Record, error) {
+	rec, err := store.GetForUpdate(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, notFound(m.Name + " " + name)
+	}
+	return rec, err
+}
+
 func (o *op) load(m *meta.Model, name string) (store.Record, error) {
 	rec, err := store.Get(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name)
 	if errors.Is(err, store.ErrNotFound) {
@@ -389,7 +396,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	if err != nil {
 		return nil, err
 	}
-	cur, err := o.load(m, name)
+	cur, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
 	}
@@ -494,7 +501,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
 	}
-	rec, err := o.load(m, name)
+	rec, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
 	}
@@ -597,7 +604,7 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
 	}
-	rec, err := o.load(m, name)
+	rec, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
 	}
@@ -704,25 +711,6 @@ func (o *op) amend(model, name string) (*Result, error) {
 	return &Result{Record: e.Output(m, rec)}, nil
 }
 
-func allowMissing(errs []Issue, fields []string) []Issue {
-	if len(fields) == 0 {
-		return errs
-	}
-	out := errs[:0:0]
-	for _, is := range errs {
-		skip := false
-		for _, f := range fields {
-			if is.Code == "required" && is.Field == f {
-				skip = true
-			}
-		}
-		if !skip {
-			out = append(out, is)
-		}
-	}
-	return out
-}
-
 // copyRecord is a shallow copy (permission checks decorate it with the derived status).
 func copyRecord(r store.Record) store.Record {
 	out := make(store.Record, len(r)+1)
@@ -742,7 +730,7 @@ func (o *op) runHooks(m *meta.Model, rec store.Record, hooks []string) error {
 			}
 			continue
 		}
-		if _, err := fn(&HookCtx{op: o, Model: m, Record: rec}); err != nil {
+		if _, err := callHook(fn, &HookCtx{op: o, Model: m, Record: rec}); err != nil {
 			return fmt.Errorf("hook %s: %w", h, err)
 		}
 	}

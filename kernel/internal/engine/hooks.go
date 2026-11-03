@@ -134,7 +134,7 @@ func (o *op) runAction(model, name, action string, args map[string]any, opts Act
 	if act == nil {
 		return nil, notFound("action " + action + " of " + model)
 	}
-	rec, err := o.load(m, name)
+	rec, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
 	}
@@ -188,7 +188,7 @@ func (o *op) runAction(model, name, action string, args map[string]any, opts Act
 	if hook == nil {
 		return nil, &StatusError{501, "hook_not_implemented", "hook " + act.Hook + " is not implemented in this kernel"}
 	}
-	res, err := hook(&HookCtx{op: o, Model: m, Record: rec, Args: args})
+	res, err := callHook(hook, &HookCtx{op: o, Model: m, Record: rec, Args: args})
 	if err != nil {
 		return nil, err
 	}

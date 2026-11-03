@@ -58,7 +58,7 @@ func (o *op) automations(m *meta.Model, old, rec store.Record, event string) err
 			}
 			continue
 		}
-		res, err := hook(&HookCtx{op: o, Model: m, Record: rec})
+		res, err := callHook(hook, &HookCtx{op: o, Model: m, Record: rec})
 		if err != nil {
 			return fmt.Errorf("automation %s: %w", meta.Str(au, "name"), err)
 		}

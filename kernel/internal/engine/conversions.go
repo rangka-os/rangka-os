@@ -25,19 +25,24 @@ func openResult(model, name, msg string) map[string]any {
 	return map[string]any{"message": msg, "open": map[string]any{"model": model, "name": name}}
 }
 
-// createDraft creates a draft in the hook's transaction, leaving the named required fields for the user.
-func (h *HookCtx) createDraft(model string, input map[string]any, allowMissing ...string) (store.Record, error) {
-	r, err := h.op.create(model, input, CreateOpts{AllowMissing: allowMissing})
+// createDraft creates a draft in the hook's transaction (no permission or scope checks: the action was allowed).
+func (h *HookCtx) createDraft(model string, input map[string]any) (store.Record, error) {
+	r, err := h.op.create(model, input, CreateOpts{})
 	if err != nil {
 		return nil, err
 	}
 	return r.Record, nil
 }
 
-// draftFor returns the first draft of model whose field names the source, or nil.
+// draftFor returns the first draft of model whose field names the source, or nil. It takes an advisory lock
+// on (org, model, source) first, held until the transaction ends, so two concurrent calls cannot both find
+// no draft and each make one.
 func draftFor(h *HookCtx, model, field, source string) (store.Record, error) {
 	if !has(h.op.e.Reg().Model(model), field) {
 		return nil, nil
+	}
+	if err := h.LockKey("draft|" + model + "|" + source); err != nil {
+		return nil, err
 	}
 	found, err := h.Find(model, map[string]any{field: source, "docstatus": 0})
 	if err != nil || len(found) == 0 {
@@ -144,6 +149,9 @@ func orderFromQuotation(h *HookCtx) (map[string]any, error) {
 	}
 	if err := needSubmitted(q, "Penawaran"); err != nil {
 		return nil, err
+	}
+	if has(h.Model, "outcome") && str(q["outcome"]) != "accepted" {
+		return nil, refuse("not_accepted", "Penawaran "+name+" belum diterima pelanggan")
 	}
 	if d, err := draftFor(h, "customer_order", "quotation", name); err != nil || d != nil {
 		if err != nil {
@@ -264,6 +272,9 @@ func receivePO(h *HookCtx) (map[string]any, error) {
 	if err := needSubmitted(po, "PO"); err != nil {
 		return nil, err
 	}
+	if str(po["outlet"]) == "" {
+		return nil, &StatusError{422, "outlet_required", "Outlet tujuan wajib diisi di PO sebelum barang diterima"}
+	}
 	if d, err := draftFor(h, "goods_receipt", "purchase_order", name); err != nil || d != nil {
 		if err != nil {
 			return nil, err
@@ -279,7 +290,7 @@ func receivePO(h *HookCtx) (map[string]any, error) {
 	if len(items) == 0 {
 		return nil, refuse("nothing_to_receive", "Semua barang PO "+name+" sudah diterima")
 	}
-	gr, err := h.createDraft("goods_receipt", map[string]any{"purchase_order": name, "vendor": po["vendor"], "outlet": po["outlet"], "items": items}, "outlet")
+	gr, err := h.createDraft("goods_receipt", map[string]any{"purchase_order": name, "vendor": po["vendor"], "outlet": po["outlet"], "items": items})
 	if err != nil {
 		return nil, err
 	}

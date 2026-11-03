@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: sales_invoice_item
+label: {id: Baris faktur}
+is_child: true
+fields:
+  - {name: item, type: link, to: item, label: {id: Barang}, required: true}
+  - {name: description, type: text, label: {id: Uraian}}
+  - {name: qty, type: float, label: {id: Qty}}
+  - {name: uom, type: data, label: {id: Satuan}}
+  - {name: rate, type: currency, label: {id: Harga satuan}}
+  - {name: discount, type: percent, label: {id: Diskon %}}
+  - {name: amount, type: currency, label: {id: Jumlah}}

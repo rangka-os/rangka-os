@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json
+legal_name: PT Contoh Jasa Teknik
+tagline: Inspeksi dan pengujian
+logo: brand/logo.svg
+address: |
+  Jl. Contoh No. 1
+  Jakarta 10110
+phone: "+62 21 000 0000"
+email: halo@contoh.test
+website: contoh.test
+npwp: "00.000.000.0-000.000"
+bank:
+  - {bank: Bank Contoh, account: "000 000 0000", holder: PT Contoh Jasa Teknik, branch: Jakarta}
+signatory: {name: Nama Penandatangan, title: Direktur}
+footer: {id: Terima kasih atas kepercayaan Anda}

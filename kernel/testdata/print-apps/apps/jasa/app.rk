@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+name: jasa
+version: 1.0.0
+title: {id: Jasa teknik, en: Technical services}
+label: {id: Jasa teknik}
+summary: {id: Penawaran dan faktur penjualan serta pesanan pembelian.}
+rangka: '>=0.5'
+modules: {sales: ^1.0}
+menu:
+  - group: {id: Data induk}
+    items: [customer, item]
+  - group: {id: Penjualan}
+    items: [quotation, sales_invoice]
+  - group: {id: Pembelian}
+    items: [purchase_order, vendor]

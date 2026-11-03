@@ -71,6 +71,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 		if m.IsSubmittable && m.Field("status") == nil {
 			raw["status_field"] = true // records carry a derived status
 		}
+		raw["prints"] = printsMeta(reg, m.Name)
 		raw["can"] = s.Engine.Allowed(a, m.Name) // model level: a conditional grant (if:) counts as true
 		models[m.Name] = raw
 	}

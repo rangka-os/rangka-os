@@ -1,0 +1,32 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/print.json",
+  "title": "Rangka print format",
+  "type": "object",
+  "required": ["name", "model", "template"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "label": {"type": "object", "additionalProperties": {"type": "string"}},
+    "paper": {"enum": ["A4", "A5", "80mm"]},
+    "template": {"type": "string", "pattern": "\\.html$"},
+    "default": {"type": "boolean"},
+    "related": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "object",
+        "required": ["model", "match"],
+        "additionalProperties": false,
+        "properties": {
+          "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "match": {"type": "object", "additionalProperties": {"type": "string"}},
+          "filter": {"type": "string"},
+          "sort": {"type": "string"},
+          "limit": {"type": "integer", "minimum": 1, "maximum": 1000}
+        }
+      }
+    }
+  }
+}

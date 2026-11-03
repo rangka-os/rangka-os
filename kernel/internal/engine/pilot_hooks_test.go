@@ -33,9 +33,15 @@ type pilot struct {
 
 func setupPilot(t *testing.T) *pilot {
 	t.Helper()
+	return setupPilotApps(t, pilotApps)
+}
+
+// setupPilotApps is setupPilot over another copy of the pilot apps.
+func setupPilotApps(t *testing.T, apps string) *pilot {
+	t.Helper()
 	url := testdb.New(t)
 	ctx := context.Background()
-	reg, rep := meta.Validate(pilotApps, pilotSite, nil, schema.Embedded())
+	reg, rep := meta.Validate(apps, pilotSite, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("pilot catalogue errors: %v", rep.All())
 	}
@@ -323,14 +329,19 @@ func TestPilotAllocationRuling(t *testing.T) {
 }
 
 func TestPilotDownPaymentAndRetention(t *testing.T) {
-	p := setupPilot(t)
+	downPaymentAndRetention(t, setupPilot(t), "down_payment")
+}
+
+// downPaymentAndRetention runs the DP and retention checks; deduction is the invoice's DP deduction field
+// (down_payment, or dp_deduction in catalogues from before the rename).
+func downPaymentAndRetention(t *testing.T, p *pilot, deduction string) {
 	m := p.masters()
 	dp := p.invoice(m, m.cust, 3000000, false, map[string]any{"kind": "down_payment"})
-	a := p.invoice(m, m.cust, 5000000, false, map[string]any{"dp_invoice": dp, "dp_deduction": 2000000})
+	a := p.invoice(m, m.cust, 5000000, false, map[string]any{"dp_invoice": dp, deduction: 2000000})
 	if got := p.outstanding("sales_invoice", a); got != 3000000 {
 		t.Fatalf("invoice after DP deduction = %d", got)
 	}
-	b := p.create("sales_invoice", map[string]any{"customer": m.cust, "ppn_applies": false, "dp_invoice": dp, "dp_deduction": 2000000,
+	b := p.create("sales_invoice", map[string]any{"customer": m.cust, "ppn_applies": false, "dp_invoice": dp, deduction: 2000000,
 		"items": []any{map[string]any{"item": m.jasa, "rate": 5000000}}})
 	_, err := p.e.Submit(p.ctx, p.a, "sales_invoice", b, true)
 	wantCode(t, err, 409, "dp_over_deducted")

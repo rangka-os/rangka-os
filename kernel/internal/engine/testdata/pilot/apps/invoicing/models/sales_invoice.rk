@@ -15,18 +15,18 @@ fields:
   - {name: subtotal, type: currency, compute: 'items.map(i, i.amount).sum()'}
   - {name: discount_amount, type: currency, default: '0'}
   - {name: dp_invoice, type: link, to: sales_invoice}
-  - {name: dp_deduction, type: currency, default: '0'}
-  - {name: dpp_base, type: currency, compute: subtotal - discount_amount - dp_deduction}
+  - {name: down_payment, type: currency, default: '0'}
+  - {name: dpp, type: currency, compute: subtotal - discount_amount - down_payment}
   - {name: ppn_applies, type: check, default: 'true'}
   - {name: tax_rate, type: percent, default: '12'}
-  - {name: ppn, type: currency, compute: 'ppn_applies ? round(dpp_base * 11 / 12 * tax_rate / 100) : 0'}
-  - {name: grand_total, type: currency, compute: dpp_base + ppn}
+  - {name: ppn, type: currency, compute: 'ppn_applies ? round(dpp * 11 / 12 * tax_rate / 100) : 0'}
+  - {name: grand_total, type: currency, compute: dpp + ppn}
   - {name: retention_percent, type: percent, default: '0'}
-  - {name: retention_amount, type: currency, compute: round(dpp_base * retention_percent / 100)}
+  - {name: retention_amount, type: currency, compute: round(dpp * retention_percent / 100)}
   - {name: retention_of, type: link, to: sales_invoice}
   - {name: pph23_applies, type: check, default: 'false'}
   - {name: pph23_rate, type: percent, default: '2'}
-  - {name: pph23_amount, type: currency, compute: 'pph23_applies ? round(dpp_base * pph23_rate / 100) : 0'}
+  - {name: pph23_amount, type: currency, compute: 'pph23_applies ? round(dpp * pph23_rate / 100) : 0'}
   - {name: amount_due, type: currency, compute: grand_total - retention_amount - pph23_amount}
   - {name: paid_amount, type: currency, read_only: true}
   - {name: outstanding, type: currency, compute: amount_due - paid_amount}

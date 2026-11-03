@@ -79,3 +79,9 @@ func RequireSiblings() bool {
 func SkipHidden(d os.DirEntry) bool {
 	return d != nil && d.IsDir() && len(d.Name()) > 1 && d.Name()[0] == '.'
 }
+
+// Catalogue is a path inside kernel/testdata/catalogue-v0: rangka-apps as of v0 (0.4 layout: apps/, fixtures/,
+// sites/kopi-senja/), copied so the kernel tests do not follow rangka-apps' move to modules (contract 0001).
+func Catalogue(rel string) string {
+	return filepath.Join(RepoRoot(), "kernel", "testdata", "catalogue-v0", filepath.FromSlash(rel))
+}

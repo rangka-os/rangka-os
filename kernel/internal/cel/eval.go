@@ -3,6 +3,7 @@ package cel
 import (
 	"fmt"
 	"math"
+	"math/big"
 	"reflect"
 	"regexp"
 	"sort"
@@ -11,6 +12,8 @@ import (
 	"sync"
 	"time"
 	"unicode/utf8"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 )
 
 // Duration is a CEL duration. duration(7) and duration('7d') are seven days.
@@ -80,12 +83,21 @@ func Eval(src string, env *Env) (any, error) {
 	return p.Eval(env)
 }
 
-// EvalError is a runtime error.
-type EvalError struct{ Msg string }
+// EvalError is a runtime error. Cause, when set, is the underlying error (money.ErrRange for decimal
+// arithmetic out of range), so callers can test it with errors.Is.
+type EvalError struct {
+	Msg   string
+	Cause error
+}
 
 func (e *EvalError) Error() string { return e.Msg }
 
-func errf(format string, a ...any) error { return &EvalError{fmt.Sprintf(format, a...)} }
+func (e *EvalError) Unwrap() error { return e.Cause }
+
+func errf(format string, a ...any) error { return &EvalError{Msg: fmt.Sprintf(format, a...)} }
+
+// wrapErr is an EvalError carrying err as its cause.
+func wrapErr(err error) error { return &EvalError{Msg: err.Error(), Cause: err} }
 
 // Eval evaluates the program.
 func (p *Program) Eval(env *Env) (any, error) {
@@ -214,6 +226,8 @@ func (e *evaluator) eval(x Expr, f *frame) (any, error) {
 				return -y, nil
 			case Duration:
 				return Duration{-y.D}, nil
+			case money.Decimal:
+				return y.Neg(), nil
 			}
 			return nil, errf("no such overload: -%s", typeName(v))
 		}
@@ -467,6 +481,8 @@ func typeName(v any) string {
 		return "list"
 	case map[string]any:
 		return "map"
+	case money.Decimal:
+		return "decimal"
 	case Duration:
 		return "duration"
 	case time.Time:
@@ -516,6 +532,12 @@ func Equal(l, r any) bool {
 	}
 	if rl, ok := r.(*Link); ok {
 		r = rl.Name
+	}
+	if a, b, ok := decimalPair(l, r); ok {
+		return a.Cmp(b) == 0
+	}
+	if _, ok := l.(money.Decimal); ok {
+		return false
 	}
 	if lf, ok := toFloat(l); ok {
 		if rf, ok := toFloat(r); ok {
@@ -639,6 +661,9 @@ func binary(op string, l, r any) (any, error) {
 			}
 		}
 	}
+	if a, b, ok := decimalPair(l, r); ok {
+		return decimalArith(op, a, b, l, r)
+	}
 	li, lInt := l.(int64)
 	ri, rInt := r.(int64)
 	if lInt && rInt {
@@ -695,6 +720,9 @@ func binary(op string, l, r any) (any, error) {
 }
 
 func compare(l, r any) (int, error) {
+	if a, b, ok := decimalPair(l, r); ok {
+		return a.Cmp(b), nil
+	}
 	if lf, ok := toFloat(l); ok {
 		if rf, ok := toFloat(r); ok {
 			switch {
@@ -731,6 +759,76 @@ func compare(l, r any) (int, error) {
 		}
 	}
 	return 0, errf("no such overload: %s < %s", typeName(l), typeName(r))
+}
+
+// decimalPair returns the exact values of l and r when at least one is a
+// money.Decimal and the other is a Decimal, int64, int or float64 (never a string).
+func decimalPair(l, r any) (*big.Rat, *big.Rat, bool) {
+	_, ld := l.(money.Decimal)
+	_, rd := r.(money.Decimal)
+	if !ld && !rd {
+		return nil, nil, false
+	}
+	a, ok := decimalOperand(l)
+	if !ok {
+		return nil, nil, false
+	}
+	b, ok := decimalOperand(r)
+	if !ok {
+		return nil, nil, false
+	}
+	return a, b, true
+}
+
+func decimalOperand(v any) (*big.Rat, bool) {
+	switch v.(type) {
+	case money.Decimal, int64, int, float64:
+		return money.Rat(v)
+	}
+	return nil, false
+}
+
+func decimalArith(op string, a, b *big.Rat, l, r any) (any, error) {
+	z := new(big.Rat)
+	switch op {
+	case "+":
+		z.Add(a, b)
+	case "-":
+		z.Sub(a, b)
+	case "*":
+		z.Mul(a, b)
+	case "/":
+		if b.Sign() == 0 {
+			return nil, errf("division by zero")
+		}
+		z.Quo(a, b)
+	default:
+		return nil, errf("no such overload: %s %s %s", typeName(l), op, typeName(r))
+	}
+	d, err := money.FromRat(z)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	return d, nil
+}
+
+// roundDouble rounds f to places decimals, half away from zero, using the shortest decimal form of f.
+func roundDouble(f float64, places int) float64 {
+	rat, ok := money.Rat(f)
+	if !ok {
+		return f
+	}
+	scale := new(big.Rat).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(int64(places)), nil))
+	rat.Mul(rat, scale)
+	neg := rat.Sign() < 0
+	rat.Abs(rat)
+	rat.Add(rat, big.NewRat(1, 2))
+	n := new(big.Int).Quo(rat.Num(), rat.Denom())
+	if neg {
+		n.Neg(n)
+	}
+	out, _ := new(big.Rat).Quo(new(big.Rat).SetInt(n), scale).Float64()
+	return out
 }
 
 func cmpInt(a, b int64) int {
@@ -828,10 +926,20 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 		}
 		return nil, errf("duration() needs a number of days or text like '7d'")
 	case "round":
-		if err := need(1); err != nil {
-			return nil, err
+		if len(args) < 1 || len(args) > 2 {
+			return nil, errf("round() takes 1 or 2 arguments, got %d", len(args))
+		}
+		places := 0
+		if len(args) == 2 {
+			p, ok := args[1].(int64)
+			if !ok || p < 0 || p > 4 {
+				return nil, errf("round() places must be a whole number from 0 to 4")
+			}
+			places = int(p)
 		}
 		switch a := args[0].(type) {
+		case money.Decimal:
+			return a.Round(places), nil
 		case int64:
 			return a, nil
 		case nil:
@@ -840,6 +948,9 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 		x, ok := toFloat(args[0])
 		if !ok {
 			return nil, errf("round() needs a number, got %s", typeName(args[0]))
+		}
+		if len(args) == 2 {
+			return roundDouble(x, places), nil
 		}
 		return JSRound(x), nil
 	case "size":
@@ -899,6 +1010,9 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			return v, nil
 		case float64:
 			return int64(a), nil
+		case money.Decimal:
+			r := a.Rat()
+			return new(big.Int).Quo(r.Num(), r.Denom()).Int64(), nil // truncates toward zero, like int(double)
 		case int64:
 			return a, nil
 		case bool:
@@ -917,6 +1031,10 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			if err != nil {
 				return nil, errf("cannot convert '%s' to double", a)
 			}
+			return v, nil
+		}
+		if d, ok := Unwrap(args[0]).(money.Decimal); ok {
+			v, _ := d.Rat().Float64()
 			return v, nil
 		}
 		if v, ok := toFloat(args[0]); ok {
@@ -994,6 +1112,11 @@ func sum(v any) (any, error) {
 		}
 		return nil, errf("sum() needs a list, got %s", typeName(v))
 	}
+	for _, x := range l {
+		if _, ok := x.(money.Decimal); ok {
+			return sumDecimal(l)
+		}
+	}
 	allInt := true
 	var fi int64
 	var ff float64
@@ -1016,6 +1139,25 @@ func sum(v any) (any, error) {
 		return fi, nil
 	}
 	return ff, nil
+}
+
+func sumDecimal(l []any) (any, error) {
+	total := new(big.Rat)
+	for _, x := range l {
+		if x == nil {
+			continue
+		}
+		r, ok := decimalOperand(x)
+		if !ok {
+			return nil, errf("sum() needs numbers, got %s", typeName(x))
+		}
+		total.Add(total, r)
+	}
+	d, err := money.FromRat(total)
+	if err != nil {
+		return nil, wrapErr(err)
+	}
+	return d, nil
 }
 
 func method(name string, t any, args []any) (any, error) {
@@ -1076,6 +1218,8 @@ func Truthy(v any) bool {
 		return false
 	case string:
 		return x != ""
+	case money.Decimal:
+		return !x.IsZero()
 	}
 	if f, ok := toFloat(v); ok {
 		return f != 0

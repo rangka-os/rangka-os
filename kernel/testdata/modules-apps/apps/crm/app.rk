@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+name: crm
+version: 1.0.0
+title: {id: Rangka CRM, en: Rangka CRM}
+label: {id: Rangka CRM}
+summary: {id: Kelola pelanggan dan peluang sampai closing.}
+rangka: '>=0.5'
+modules: {pipeline: ^1.0}
+roles: [sales_rep, sales_manager]
+dashboards: [crm_overview]
+menu:
+  - group: {id: CRM}
+    items: [deal, customer]
+home: {model: deal, view: list}
+onboarding:
+  - ask: {id: 'Berapa orang tim sales kamu?'}
+    sets: seed.users

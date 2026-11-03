@@ -1,0 +1,48 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/module.json",
+  "title": "Rangka module",
+  "description": "A reusable business unit (modules/<name>/module.rk): models, rules, flows and roles. It requires other modules; menus, dashboards, home and onboarding belong to an app.",
+  "type": "object",
+  "required": [
+    "name",
+    "version",
+    "title"
+  ],
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "version": {
+      "type": "string",
+      "pattern": "^\\d+\\.\\d+\\.\\d+$"
+    },
+    "title": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "requires": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "module → version range (^1.0, >=1.2); rangka: '>=0.5' pins the kernel"
+    },
+    "optional": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      }
+    },
+    "hooks": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z_]+\\.[a-z_]+$"
+      }
+    }
+  },
+  "additionalProperties": false
+}

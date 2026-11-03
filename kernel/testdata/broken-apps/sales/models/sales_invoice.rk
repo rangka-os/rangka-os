@@ -58,6 +58,23 @@ fields:
   - name: notes
     type: text
     label: {id: Catatan untuk pelanggan}
+  - name: currency
+    type: data
+    label: {id: Mata uang}
+  - name: rate
+    type: float
+    label: {id: Kurs}
+  - name: deposit
+    type: money
+    label: {id: Uang muka}
+  - name: discount_total
+    type: money
+    currency_field: posting_date
+  - name: shipping
+    type: money
+    currency_field: currency
+  - name: shipping_idr
+    type: currency
 rules:
   - name: due_after_posting
     on: save

@@ -24,18 +24,38 @@ func (s *Server) getMeta(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, 200, m)
 }
 
-// Meta is GET /api/v1/meta: installed apps, models, dashboards, theme (with design tokens) and layout.
+// Meta is GET /api/v1/meta: installed apps and modules, models, dashboards, theme (with design tokens) and
+// layout. apps lists apps and 0.4 units, modules lists modules and 0.4 units (a 0.4 unit is both), every
+// model names its module (contract 0001).
 func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, error) {
 	reg := s.Engine.Reg()
-	apps := []any{}
+	apps, modules := []any{}, []any{}
 	for _, name := range reg.AppOrder() {
 		ap := reg.App[name]
 		dash := ap.Dashboards
 		if dash == nil {
 			dash = []string{}
 		}
-		apps = append(apps, map[string]any{"name": ap.Name, "version": ap.Version, "title": ap.Title, "menu": orEmpty(ap.Raw["menu"]),
-			"dashboards": dash, "requires": ap.Requires, "optional": ap.Optional})
+		if ap.IsApp() {
+			mods := []string{}
+			if ap.Kind == meta.KindLegacy {
+				mods = append(mods, ap.Name)
+			}
+			for _, m := range meta.OrderedKeys(ap, "modules") {
+				if reg.App[m] != nil {
+					mods = append(mods, m)
+				}
+			}
+			apps = append(apps, map[string]any{"name": ap.Name, "kind": ap.Kind, "version": ap.Version, "title": ap.Title, "menu": orEmpty(ap.Raw["menu"]),
+				"dashboards": dash, "requires": ap.Requires, "optional": ap.Optional, "modules": mods})
+		}
+		if ap.IsModule() {
+			req := ap.Requires
+			if req == nil {
+				req = map[string]any{}
+			}
+			modules = append(modules, map[string]any{"name": ap.Name, "kind": ap.Kind, "version": ap.Version, "title": ap.Title, "requires": req})
+		}
 	}
 	models := map[string]any{}
 	for _, m := range reg.InstalledModels() {
@@ -44,6 +64,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 			raw[k] = v
 		}
 		raw["app"] = m.App
+		raw["module"] = m.App
 		if m.Overlay != "" {
 			raw["overlay"] = m.Overlay
 		}
@@ -86,7 +107,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 	roles := map[string]any{}
 	for _, an := range reg.AppOrder() {
 		for _, rn := range reg.App[an].Roles {
-			if d := reg.Docs["apps/"+an+"/roles/"+rn+".rk"]; d != nil {
+			if d := reg.Docs[reg.App[an].Prefix+"/roles/"+rn+".rk"]; d != nil {
 				raw := map[string]any{}
 				for k, v := range meta.AsMap(d.Data) {
 					raw[k] = v
@@ -97,7 +118,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 		}
 	}
 	out := map[string]any{
-		"apps": apps, "models": models, "dashboards": dashboards, "flows": flows, "imports": imports, "roles": roles,
+		"apps": apps, "modules": modules, "models": models, "dashboards": dashboards, "flows": flows, "imports": imports, "roles": roles,
 		"connectors": connectorsMeta(reg), "site": siteMeta(reg),
 		"theme": s.theme(reg), "layout": s.layout(reg),
 		"installed": reg.AppOrder(), "org": a.Org,
@@ -395,6 +416,8 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request, c *caller) {
 		f := map[string]any{"path": p, "kind": d.Kind(), "layer": layerOf(p), "lines": strings.Count(strings.TrimSuffix(d.Text, "\n"), "\n") + 1, "sha": store.FileHash(d.Text)}
 		if strings.HasPrefix(p, "apps/") {
 			f["app"] = strings.SplitN(p, "/", 3)[1]
+		} else if strings.HasPrefix(p, "modules/") {
+			f["module"] = strings.SplitN(p, "/", 3)[1]
 		}
 		out = append(out, f)
 	}
@@ -409,7 +432,7 @@ func layerOf(p string) int {
 		return 3
 	case p == "features.rk" || p == "config.rk" || strings.HasPrefix(p, "custom/"):
 		return 4
-	case strings.HasPrefix(p, "apps/"):
+	case strings.HasPrefix(p, "apps/") || strings.HasPrefix(p, "modules/"):
 		return 5
 	}
 	return 6

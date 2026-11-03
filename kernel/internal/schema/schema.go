@@ -21,11 +21,16 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
 
-//go:embed 0.5/*.json
+//go:embed 0.5/*.json 0.4/app.json
 var embedded embed.FS
 
 // Base is the URL prefix of the published schemas.
 const Base = "https://rangka-os.github.io/rangka-os/schema/0.5/"
+
+// Legacy is the URL prefix of the 0.4 schemas. Only 0.4 app.json is kept, for app.rk files without modules
+// (a module and an app in one, contract 0001) during the deprecation release; its references to other 0.4
+// files resolve to the 0.5 copies, which have the same definitions.
+const Legacy = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 
 // OMap is a JSON object that keeps its key order (keyword order matters for error order).
 type OMap struct {
@@ -53,7 +58,25 @@ func Embedded() *Set {
 			panic(err)
 		}
 	}
+	b, _ := embedded.ReadFile("0.4/app.json")
+	if err := s.addLegacy(b); err != nil {
+		panic(err)
+	}
 	return s
+}
+
+// addLegacy registers 0.4 app.json under its own URL without listing it as a kind.
+func (s *Set) addLegacy(b []byte) error {
+	v, err := decodeOrdered(b)
+	if err != nil {
+		return err
+	}
+	m, ok := v.(*OMap)
+	if !ok {
+		return fmt.Errorf("schema is not an object")
+	}
+	s.res[Legacy+"app.json"] = m
+	return nil
 }
 
 // LoadDir reads schemas from a directory (e.g. rangka-os/schema/0.5).
@@ -74,6 +97,14 @@ func LoadDir(dir string) (*Set, error) {
 		if err := s.add(e.Name(), b); err != nil {
 			return nil, fmt.Errorf("%s: %w", e.Name(), err)
 		}
+	}
+	// 0.4/app.json for legacy app.rk files: the one next to the directory, else the embedded copy
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(filepath.Clean(dir)), "0.4", "app.json"))
+	if err != nil {
+		b, _ = embedded.ReadFile("0.4/app.json")
+	}
+	if err := s.addLegacy(b); err != nil {
+		return nil, fmt.Errorf("0.4/app.json: %w", err)
 	}
 	return s, nil
 }
@@ -289,9 +320,29 @@ func (e Error) PathString() string {
 	return strings.Join(parts, "/")
 }
 
-// Validate checks an instance against the schema of kind ("model", "app", …).
+// URL returns the schema URL an instance of kind is checked against. An app document without a modules key
+// is a 0.4 app (a module and an app in one, contract 0001) and uses 0.4 app.json; everything else uses 0.5.
+func (s *Set) URL(kind string, in *Inst) string {
+	if kind == "app" && !in.Has("modules") {
+		if _, ok := s.res[Legacy+"app.json"]; ok {
+			return Legacy + "app.json"
+		}
+	}
+	return Base + kind + ".json"
+}
+
+// Has reports whether the instance is an object with key k.
+func (in *Inst) Has(k string) bool {
+	if in == nil || in.Kind != 'o' {
+		return false
+	}
+	_, ok := in.Props[k]
+	return ok
+}
+
+// Validate checks an instance against the schema of kind ("model", "app", …), see URL.
 func (s *Set) Validate(kind string, in *Inst) []Error {
-	u := Base + kind + ".json"
+	u := s.URL(kind, in)
 	root, ok := s.res[u]
 	if !ok {
 		return nil
@@ -325,6 +376,9 @@ func (s *Set) resolve(base, ref string) (any, string) {
 		target = b.ResolveReference(r).String()
 	}
 	var cur any = s.res[target]
+	if cur == (*OMap)(nil) && strings.HasPrefix(target, Legacy) {
+		cur = s.res[Base+strings.TrimPrefix(target, Legacy)] // 0.4 app.json's references (model.json)
+	}
 	if cur == (*OMap)(nil) {
 		return nil, target
 	}

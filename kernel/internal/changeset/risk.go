@@ -18,7 +18,7 @@ func Layer(path string) int {
 		return 3
 	case path == "features.rk" || path == "config.rk" || strings.HasPrefix(path, "custom/"):
 		return 4
-	case strings.HasPrefix(path, "apps/"):
+	case unitPath(path):
 		return 5
 	}
 	return 6 // themes, layouts
@@ -40,19 +40,24 @@ func (a *Assessment) raise(level, why string) {
 	a.Reasons = append(a.Reasons, level+": "+why)
 }
 
-// sensitiveField is a money field (money: true; currency fields unless money: false) or a stock field (stock: true).
+// sensitiveField is a money field (money: true; currency and money typed fields unless money: false) or a stock field (stock: true).
 func sensitiveField(f map[string]any) bool {
 	if b, ok := f["money"].(bool); ok {
 		if b {
 			return true
 		}
-	} else if t, _ := f["type"].(string); t == "currency" {
+	} else if t, _ := f["type"].(string); t == "currency" || t == "money" {
 		return true
 	}
 	return f["stock"] == true
 }
 
 func layerOf(path string) int { return Layer(path) }
+
+// unitPath reports whether a change-set path is a file of a module or an app (layer 5, contract 0001).
+func unitPath(p string) bool {
+	return strings.HasPrefix(p, "apps/") || strings.HasPrefix(p, "modules/")
+}
 
 // Assess computes layers and risk (CONTRACTS v0.1 decisions 2 and 3). High: money/stock fields, system.rk,
 // roles and permissions, config.tax (and config.ai, which decides approvals), deletions, existing fields of
@@ -83,12 +88,16 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 				target = model(name)
 			}
 			assessOverlay(a, p, old, existed, nw, target)
-		case strings.HasPrefix(p, "apps/") && existed:
+		case unitPath(p) && existed:
 			if strings.Contains(p, "/models/") {
 				assessModel(a, p, old, nw)
 			}
-			a.raise("high", "edits app file "+p+" (app files belong to app authors; organisations change models through custom/<model>.rk)")
-		case strings.HasPrefix(p, "apps/"):
+			what := "app"
+			if strings.HasPrefix(p, "modules/") {
+				what = "module"
+			}
+			a.raise("high", "edits "+what+" file "+p+" ("+what+" files belong to app authors; organisations change models through custom/<model>.rk)")
+		case unitPath(p):
 			switch {
 			case strings.Contains(p, "/dashboards/"):
 				a.raise("low", "new dashboard "+p)

@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+locale: id-ID
+apps: [shop, pipeline, legacy]
+numbering:
+  invoice: INV-{#####}
+  deal: DEAL-{#####}

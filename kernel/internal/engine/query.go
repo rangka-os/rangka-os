@@ -9,6 +9,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -38,7 +39,7 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	}
 	readable := e.decide(a, m, "read")
 	if !readable.maybe() {
-		return nil, 0, &PermissionError{Model: m.Name, Action: "read"}
+		return nil, 0, e.Deny(m.Name, "read")
 	}
 	if opts.Filter != "" {
 		if _, err := cel.Compile(opts.Filter); err != nil {
@@ -150,8 +151,18 @@ func matchText(m *meta.Model, r store.Record, q string) bool {
 	return false
 }
 
-// compareValues orders numbers numerically, everything else as text (missing values first).
+// compareValues orders numbers numerically (money decimals exactly), everything else as text (missing
+// values first).
 func compareValues(a, b any) int {
+	_, ad := a.(money.Decimal)
+	_, bd := b.(money.Decimal)
+	if ad || bd {
+		ra, aok := exact(a)
+		rb, bok := exact(b)
+		if aok && bok {
+			return ra.Cmp(rb)
+		}
+	}
 	fa, aNum := numeric(a)
 	fb, bNum := numeric(b)
 	if aNum && bNum {

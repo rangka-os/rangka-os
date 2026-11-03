@@ -392,7 +392,8 @@
             "rating",
             "color",
             "json",
-            "signature"
+            "signature",
+            "money"
           ]
         },
         "label": {
@@ -435,6 +436,12 @@
           "$ref": "#/$defs/name"
         },
         "of": {
+          "$ref": "#/$defs/name"
+        },
+        "currency_field": {
+          "$ref": "#/$defs/name"
+        },
+        "rate_field": {
           "$ref": "#/$defs/name"
         },
         "peek": {
@@ -495,6 +502,20 @@
           "then": {
             "required": [
               "to"
+            ]
+          }
+        },
+        {
+          "if": {
+            "properties": {
+              "type": {
+                "const": "money"
+              }
+            }
+          },
+          "then": {
+            "required": [
+              "currency_field"
             ]
           }
         },

@@ -131,6 +131,8 @@ func relItems(items []meta.Item, r roots) []meta.Item {
 			if len(parts) == 2 {
 				f = parts[1]
 			}
+		case strings.HasPrefix(f, "../modules/"):
+			f = strings.TrimPrefix(f, "../")
 		case !strings.HasPrefix(f, "../"):
 			f = "apps/" + f
 		}
@@ -150,7 +152,7 @@ func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func
 		}
 		return nil, nil, roots{}, nil, err
 	}
-	reg, rep := meta.Validate(r.apps, r.site, nil, s.Schemas)
+	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: r.apps, SiteDir: r.site, ModulesDir: r.modules}, nil, s.Schemas)
 	v := &Validation{Errors: []meta.Item{}, Warnings: []meta.Item{}}
 	for _, it := range relItems(rep.All(), r) {
 		if it.Level == "error" {

@@ -18,7 +18,8 @@ concurrency:
 
 jobs:
   test:
-    runs-on: ubuntu-latest
+    # Pinned: ubuntu-latest moved to 26.04, whose apt has no postgresql-16; 24.04 ships it.
+    runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@v4
         with: { path: rangka-os }
@@ -37,12 +38,12 @@ jobs:
           sudo apt-get install -y postgresql-16
           echo "PGBIN=/usr/lib/postgresql/16/bin" >> "$GITHUB_ENV"
 
-      # tools/rangka_validate.py, the reference the Go validator must match byte for byte.
+      # tools/rangka_validate.py, the reference the Go validator must match byte for byte. setup-python gives a
+      # pip that is not blocked by the system Python (PEP 668).
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
       - name: Install Python packages
-        run: python3 -m pip install jsonschema pyyaml
+        run: python -m pip install jsonschema referencing pyyaml
 
-      - name: Vet
-        run: make -C rangka-os/kernel vet
-
-      - name: Test and compare with the Python validator
-        run: make -C rangka-os/kernel test compare-python
+      - name: Vet, test and compare with the Python validator
+        run: make -C rangka-os/kernel vet test compare-python

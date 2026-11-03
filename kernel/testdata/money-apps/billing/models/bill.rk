@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: bill
+label: {id: Tagihan, en: Bill}
+is_submittable: true
+naming: BILL-{#####}
+fields:
+  - {name: currency, type: data, label: {id: Mata uang, en: Currency}, default: "'IDR'"}
+  - {name: rate, type: float, label: {id: Kurs, en: Rate}}
+  - {name: items, type: table, of: bill_line, label: {id: Baris, en: Lines}}
+  - {name: lines_idr, type: int, label: {id: Jumlah baris (IDR), en: Lines (IDR)}, compute: "sum(items.map(i, i.amount_idr))"}
+  - {name: outstanding_idr, type: int, label: {id: Sisa (IDR), en: Outstanding (IDR)}, compute: "grand_total_idr - paid_amount_idr"}
+  - {name: total, type: money, currency_field: currency, label: {id: Total, en: Total}, compute: "sum(items.map(i, i.amount))"}
+  - {name: tax, type: money, currency_field: currency, label: {id: Pajak, en: Tax}, compute: "total * 0.11"}
+  - {name: grand_total, type: money, currency_field: currency, label: {id: Total akhir, en: Grand total}, compute: "total + tax"}
+  - {name: parts, type: float, label: {id: Jumlah bagian, en: Parts}, default: "1"}
+  - {name: per_part, type: money, currency_field: currency, label: {id: Per bagian, en: Per part}, compute: "total / parts"}
+  - {name: paid_amount, type: money, currency_field: currency, label: {id: Dibayar, en: Paid}}
+  - {name: balance, type: currency, label: {id: Saldo, en: Balance}, compute: "grand_total - paid_amount"}
+  - {name: paid_pct, type: percent, label: {id: Persen dibayar, en: Paid %}, compute: "paid_amount / grand_total * 100"}
+  - {name: grand_whole, type: int, label: {id: Total bulat, en: Whole total}, compute: "grand_total"}

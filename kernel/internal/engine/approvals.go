@@ -471,7 +471,7 @@ func (o *op) decide(id, action string) (*store.Approval, error) {
 		return nil, conflict("not_pending", "Permintaan persetujuan ini sudah diputuskan")
 	}
 	if !CanDecide(a, ap) { // approving is governed by the policy's approvers, not by model permissions
-		return nil, &PermissionError{Model: ap.Model, Action: "approve"}
+		return nil, o.e.Deny(ap.Model, "approve")
 	}
 	if !isFlowApproval(ap) { // but the approver must be able to read what they approve (S1)
 		if err := o.authorizeRead(ap.Model, ap.Name); err != nil {

@@ -2,7 +2,10 @@ package engine
 
 import (
 	"context"
+	"crypto/rand"
+	"encoding/hex"
 	"errors"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -652,5 +655,66 @@ func TestPilotConcurrentAllocation(t *testing.T) {
 	wantCode(t, e1, 409, "over_allocation")
 	if p.outstanding("sales_invoice", inv) != 0 || p.outstanding("customer", m.cust) != 0 {
 		t.Fatal("outstanding after concurrent payments")
+	}
+}
+
+// TestPilotHooksUnderRLS runs allocation, a conversion and stock hooks as a plain (non-superuser) role, so the
+// row-level security policy (contract 0010 §4) applies to every locked find and SetSubmitted write.
+func TestPilotHooksUnderRLS(t *testing.T) {
+	dbURL := testdb.New(t)
+	ctx := context.Background()
+	reg, rep := meta.Validate(pilotApps, pilotSite, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("pilot catalogue errors: %v", rep.All())
+	}
+	admin, err := pg.NewPool(ctx, dbURL, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer admin.Close()
+	if _, err := store.Migrate(ctx, admin, reg, false, "test"); err != nil {
+		t.Fatal(err)
+	}
+	b := make([]byte, 4)
+	rand.Read(b)
+	role, pass := "rk_pilot_"+hex.EncodeToString(b), "pw"+hex.EncodeToString(b)
+	for _, s := range []string{"create role " + role + " login password '" + pass + "'", "grant usage on schema public to " + role,
+		"grant all on all tables in schema public to " + role, "grant all on all sequences in schema public to " + role} {
+		if _, err := admin.Exec(ctx, s); err != nil {
+			t.Fatal(err)
+		}
+	}
+	u, _ := url.Parse(dbURL)
+	u.User = url.UserPassword(role, pass)
+	plain, err := pg.NewPool(ctx, u.String(), 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() {
+		plain.Close()
+		admin.Exec(context.Background(), "drop owned by "+role)
+		admin.Exec(context.Background(), "drop role if exists "+role)
+	})
+	e := New(plain, reg)
+	e.Now = FixedNow
+	p := &pilot{t: t, e: e, ctx: pg.WithOrg(ctx, "pilot"), a: Actor{Org: "pilot", ID: "owner@pilot.test", UserName: "USR-001", Roles: []string{"owner"}, Human: true}}
+	m := p.masters()
+	inv := p.invoice(m, m.cust, 1000000, false, nil)
+	pay := p.doc("payment", map[string]any{"customer": m.cust, "amount": 1000000, "allocations": []any{alloc(inv, 1000000)}})
+	if p.outstanding("sales_invoice", inv) != 0 || p.outstanding("customer", m.cust) != 0 {
+		t.Fatal("allocation under RLS")
+	}
+	if err := p.cancel("payment", pay); err != nil || p.outstanding("customer", m.cust) != 1000000 {
+		t.Fatalf("unallocate under RLS: %v", err)
+	}
+	p.receipt(m, m.outA, 10, 12000)
+	p.doc("stock_adjustment", map[string]any{"outlet": m.outA, "reason": "waste", "items": []any{map[string]any{"item": m.beras, "qty": 12}}})
+	if b := p.wantBalance(m.outA, m.beras, -2, -24000, 12000); b["negative"] != true {
+		t.Fatal("negative under RLS")
+	}
+	// another org sees none of it
+	other := Actor{Org: "other", ID: "x@other.test", Roles: []string{"owner"}}
+	if rows, _, err := e.List(pg.WithOrg(ctx, "other"), other, "stock_move", ListOpts{}); err != nil || len(rows) != 0 {
+		t.Fatalf("other org sees %d moves, %v", len(rows), err)
 	}
 }

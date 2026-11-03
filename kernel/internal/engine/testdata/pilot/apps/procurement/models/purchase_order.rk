@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: purchase_order
+is_submittable: true
+naming: PO-{YYYY}-{#####}
+fields:
+  - {name: vendor, type: link, to: vendor, required: true}
+  - {name: purchase_request, type: link, to: purchase_request}
+  - {name: outlet, type: link, to: outlet}
+  - {name: order_date, type: date, default: today(), required: true}
+  - {name: items, type: table, of: purchase_order_item, min_rows: 1}
+  - {name: subtotal, type: currency, compute: 'items.map(i, i.amount).sum()'}
+  - {name: received_pct, type: percent, read_only: true}
+actions:
+  - {name: receive, label: {id: receive}, hook: procurement.receive, if: docstatus == 1}

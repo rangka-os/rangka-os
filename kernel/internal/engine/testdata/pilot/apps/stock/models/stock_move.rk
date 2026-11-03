@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: stock_move
+naming: SM-{YYYY}-{######}
+fields:
+  - {name: posting_date, type: date}
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float}
+  - {name: unit_cost, type: currency}
+  - {name: value, type: currency}
+  - {name: balance_qty, type: float}
+  - {name: balance_value, type: currency}
+  - {name: avg_cost, type: currency}
+  - {name: negative, type: check}
+  - {name: voucher_type, type: data}
+  - {name: voucher, type: data}
+  - {name: reason, type: select, options: [{value: receipt, label: {id: receipt}}, {value: transfer_in, label: {id: transfer_in}}, {value: transfer_out, label: {id: transfer_out}}, {value: sale, label: {id: sale}}, {value: count, label: {id: count}}, {value: waste, label: {id: waste}}, {value: adjustment, label: {id: adjustment}}, {value: reversal, label: {id: reversal}}]}

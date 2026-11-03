@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: stock_balance
+naming: SB-{######}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, read_only: true}
+  - {name: value, type: currency, read_only: true}
+  - {name: avg_cost, type: currency, read_only: true}
+  - {name: negative, type: check, compute: qty < 0}
+  - {name: last_move, type: data, read_only: true}

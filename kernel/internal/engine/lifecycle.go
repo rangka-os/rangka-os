@@ -357,6 +357,24 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	return rec, nil
 }
 
+// lockLoad loads a record with its row locked until the transaction ends (select … for update). Submit,
+// cancel, update and actions use it, so a hook writing the same row in another transaction (an allocation
+// raising paid_amount) is either seen or waits; the full-record write that follows cannot lose it.
+//
+// The record's advisory lock (approvals' lockRecord) is taken first, so every path locks in the same order,
+// advisory lock then row: a re-submit of a held document racing its Approve (which locks the record, then the
+// approval, then the row) queues instead of deadlocking.
+func (o *op) lockLoad(m *meta.Model, name string) (store.Record, error) {
+	if err := o.lockRecord(m.Name, name); err != nil {
+		return nil, err
+	}
+	rec, err := store.GetForUpdate(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return nil, notFound(m.Name + " " + name)
+	}
+	return rec, err
+}
+
 func (o *op) load(m *meta.Model, name string) (store.Record, error) {
 	rec, err := store.Get(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name)
 	if errors.Is(err, store.ErrNotFound) {
@@ -385,7 +403,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	if err != nil {
 		return nil, err
 	}
-	cur, err := o.load(m, name)
+	cur, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
 	}
@@ -446,7 +464,7 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if err != nil {
 			return err
 		}
-		cur, err := o.load(m, name)
+		cur, err := o.lockLoad(m, name) // advisory lock, then row: the same order as Approve
 		if err != nil {
 			return err
 		}
@@ -490,7 +508,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
 	}
-	rec, err := o.load(m, name)
+	rec, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
 	}
@@ -593,7 +611,7 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
 	}
-	rec, err := o.load(m, name)
+	rec, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
 	}
@@ -634,64 +652,70 @@ func (o *op) cancel(model, name string) (*Result, error) {
 func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
-		m, err := o.e.model(model)
-		if err != nil {
-			return err
-		}
-		if !m.IsSubmittable {
-			return badRequest(model + " is not submittable")
-		}
-		old, err := o.load(m, name)
-		if err != nil {
-			return err
-		}
-		if err := o.authorize(m, "amend", o.e.Output(m, copyRecord(old))); err != nil {
-			return err
-		}
-		if err := e.Guard(ctx, a, m.Name, old, "amend"); err != nil {
-			return err
-		}
-		if toInt(old["docstatus"]) != 2 {
-			return conflict("not_cancelled", "Hanya dokumen yang dibatalkan yang bisa di-amend")
-		}
-		rec := store.Record{}
-		for k, v := range old {
-			rec[k] = v
-		}
-		for _, f := range m.Fields {
-			if f.ReadOnly && f.Compute == "" {
-				rec[f.Name] = store.Zero(f)
-			}
-			if f.Type == "table" {
-				var copied []any
-				for _, row := range rows(old[f.Name]) {
-					nr := map[string]any{}
-					for k, v := range row {
-						if k != "name" && k != "parent" && k != "parent_field" && k != "idx" {
-							nr[k] = v
-						}
-					}
-					copied = append(copied, nr)
-				}
-				if copied == nil {
-					copied = []any{}
-				}
-				rec[f.Name] = copied
-			}
-		}
-		rec["name"], rec["docstatus"], rec["amended_from"] = "DRAFT-"+store.RandomName(5), int64(0), name
-		rec["created_by"] = a.ID
-		o.prepare(m, rec, false)
-		if err := store.Insert(o.ctx, o.tx, e.Reg(), a.Org, m, rec); err != nil {
-			return err
-		}
-		if err := o.event(m, rec, "created"); err != nil {
-			return err
-		}
-		res = &Result{Record: e.Output(m, rec)}
-		return nil
+		var err error
+		res, err = o.amend(model, name)
+		return err
 	})
 	return res, err
+}
+
+func (o *op) amend(model, name string) (*Result, error) {
+	e, a := o.e, o.actor
+	m, err := e.model(model)
+	if err != nil {
+		return nil, err
+	}
+	if !m.IsSubmittable {
+		return nil, badRequest(model + " is not submittable")
+	}
+	old, err := o.load(m, name)
+	if err != nil {
+		return nil, err
+	}
+	if err := o.authorize(m, "amend", e.Output(m, copyRecord(old))); err != nil {
+		return nil, err
+	}
+	if err := e.Guard(o.ctx, a, m.Name, old, "amend"); err != nil {
+		return nil, err
+	}
+	if toInt(old["docstatus"]) != 2 {
+		return nil, conflict("not_cancelled", "Hanya dokumen yang dibatalkan yang bisa di-amend")
+	}
+	rec := store.Record{}
+	for k, v := range old {
+		rec[k] = v
+	}
+	for _, f := range m.Fields {
+		if f.ReadOnly && f.Compute == "" {
+			rec[f.Name] = store.Zero(f)
+		}
+		if f.Type == "table" {
+			var copied []any
+			for _, row := range rows(old[f.Name]) {
+				nr := map[string]any{}
+				for k, v := range row {
+					if k != "name" && k != "parent" && k != "parent_field" && k != "idx" {
+						nr[k] = v
+					}
+				}
+				copied = append(copied, nr)
+			}
+			if copied == nil {
+				copied = []any{}
+			}
+			rec[f.Name] = copied
+		}
+	}
+	rec["name"], rec["docstatus"], rec["amended_from"] = "DRAFT-"+store.RandomName(5), int64(0), name
+	rec["created_by"] = a.ID
+	o.prepare(m, rec, false)
+	if err := store.Insert(o.ctx, o.tx, e.Reg(), a.Org, m, rec); err != nil {
+		return nil, err
+	}
+	if err := o.event(m, rec, "created"); err != nil {
+		return nil, err
+	}
+	return &Result{Record: e.Output(m, rec)}, nil
 }
 
 // copyRecord is a shallow copy (permission checks decorate it with the derived status).
@@ -713,7 +737,7 @@ func (o *op) runHooks(m *meta.Model, rec store.Record, hooks []string) error {
 			}
 			continue
 		}
-		if _, err := fn(&HookCtx{op: o, Model: m, Record: rec}); err != nil {
+		if _, err := callHook(fn, &HookCtx{op: o, Model: m, Record: rec}); err != nil {
 			return fmt.Errorf("hook %s: %w", h, err)
 		}
 	}

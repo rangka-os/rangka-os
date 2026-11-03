@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+name: quotation
+version: 1.0.0
+title: {id: quotation}
+requires: {rangka: '>=0.4', contacts: ^1.0, catalogue: ^1.0}
+hooks: [quotation.revise, quotation.mark_outcome, orders.from_quotation]

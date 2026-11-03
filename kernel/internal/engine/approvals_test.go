@@ -46,7 +46,7 @@ func approvalSetup(t *testing.T, policies string, leadPolicies ...string) (*Engi
 func approvalSetupFiles(t *testing.T, files map[string]string, policies string, leadPolicies ...string) (*Engine, Actor) {
 	t.Helper()
 	apps := filepath.Join(t.TempDir(), "apps")
-	if err := os.CopyFS(apps, os.DirFS(testdb.Sibling(t, "rangka-apps/apps"))); err != nil {
+	if err := os.CopyFS(apps, os.DirFS(testdb.Catalogue("apps"))); err != nil {
 		t.Fatal(err)
 	}
 	for rel, text := range files {
@@ -77,7 +77,7 @@ func approvalSetupFiles(t *testing.T, files map[string]string, policies string, 
 	}
 	url := testdb.New(t)
 	ctx := context.Background()
-	reg, rp := meta.Validate(apps, testdb.Sibling(t, "rangka-apps/sites/kopi-senja"), nil, schema.Embedded())
+	reg, rp := meta.Validate(apps, testdb.Catalogue("sites/kopi-senja"), nil, schema.Embedded())
 	if rp.Errors() > 0 {
 		t.Fatalf("metadata errors: %v", rp.All())
 	}
@@ -92,7 +92,7 @@ func approvalSetupFiles(t *testing.T, files map[string]string, policies string, 
 	e := New(db, reg)
 	e.Now = FixedNow
 	a := Actor{Org: "kopi-senja", ID: "ceo@saga.co.id", UserName: "USR-001", Roles: []string{"owner"}, Human: true}
-	fx, err := LoadFixtures(FixturesDir(testdb.Sibling(t, "rangka-apps/apps")))
+	fx, err := LoadFixtures(FixturesDir(testdb.Catalogue("apps")))
 	if err != nil {
 		t.Fatal(err)
 	}

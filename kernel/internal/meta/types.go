@@ -169,10 +169,16 @@ type Flow struct {
 	Doc                                      *rk.Doc
 }
 
+// App is a unit of metadata: a module (modules/<m>/module.rk), an app (apps/<a>/app.rk with modules) or a
+// legacy 0.4 app (apps/<a>/app.rk without modules: a module and an app in one). Contract 0001.
 type App struct {
 	Name, Version, Dir string
+	File               string // module.rk or app.rk
+	Kind               string // KindModule, KindApp or KindLegacy
+	Prefix             string // docs key prefix: modules/<m> or apps/<a>
 	Title              Label
 	Requires, Optional map[string]any
+	Modules            map[string]any // an app's modules: name → version range
 	Hooks              []string
 	Dashboards         []string
 	Raw                map[string]any
@@ -182,16 +188,30 @@ type App struct {
 	Flows              []string
 }
 
-// Site is one installation: system.rk, features.rk, config.rk, themes and layouts.
+// Unit kinds (contract 0001).
+const (
+	KindModule = "module"
+	KindApp    = "app"
+	KindLegacy = "legacy"
+)
+
+// IsModule reports whether other units can depend on the unit (a module or a legacy app).
+func (a *App) IsModule() bool { return a.Kind != KindApp }
+
+// IsApp reports whether a site can install the unit by name (an app or a legacy app).
+func (a *App) IsApp() bool { return a.Kind != KindModule }
+
+// Site is one installation: system.rk, features.rk, config.rk, themes, layouts and letterheads.
 type Site struct {
-	Dir      string
-	Name     string
-	System   map[string]any
-	Features map[string]any
-	Config   map[string]any
-	Themes   map[string]*rk.Doc
-	Layouts  map[string]*rk.Doc
-	Docs     map[string]*rk.Doc // by site-relative path
+	Dir         string
+	Name        string
+	System      map[string]any
+	Features    map[string]any
+	Config      map[string]any
+	Themes      map[string]*rk.Doc
+	Layouts     map[string]*rk.Doc
+	Letterheads map[string]*rk.Doc // "" = letterhead.rk, else the org of letterheads/<org>.rk
+	Docs        map[string]*rk.Doc // by site-relative path
 }
 
 // ---------- raw data helpers
@@ -272,7 +292,7 @@ func celText(v any) string {
 }
 
 func parseModel(app string, doc *rk.Doc) *Model {
-	raw := asMap(doc.Data)
+	raw := withTwinsRaw(asMap(doc.Data)) // the IDR twins of money fields are fields too (contract 0013)
 	m := &Model{Name: str(raw, "name"), App: app, Naming: str(raw, "naming"), TitleField: str(raw, "title_field"),
 		Label: label(raw["label"]), IsSubmittable: boolean(raw, "is_submittable"), IsChild: boolean(raw, "is_child"),
 		Realtime: boolean(raw, "realtime"), Raw: raw, Doc: doc,

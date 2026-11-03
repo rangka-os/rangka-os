@@ -242,14 +242,20 @@ func TestPermissionMatrix(t *testing.T) {
 					ok := func(action string) bool { return permAllowed(p, action, owner) }
 					expect(t, c, ok("read"), 200, "read", "GET", base, nil)
 					// print and attachments: the guard loads the record (read) and then checks the action; allowed
-					// callers reach the catch-all 404 for print until S3 adds the handler
+					// callers reach the print handler, which has no format for voucher (404 no_print_format)
 					guarded := func(action string) string {
 						if !ok("read") {
 							return "read"
 						}
 						return action
 					}
-					expect(t, c, ok("print"), 404, guarded("print"), "GET", base+"/print", nil)
+					if ok("print") {
+						if r := c.do("GET", base+"/print", nil); r.Status != http.StatusNotFound || dig(r.JSON, "error", "code") != "no_print_format" {
+							t.Fatalf("GET %s/print = %d %s, want 404 no_print_format", base, r.Status, r.Body)
+						}
+					} else {
+						want403(t, c.do("GET", base+"/print", nil), "GET "+base+"/print", "voucher", guarded("print"))
+					}
 					attachments(t, c, cookies["manager"], base, ok("read"), ok("write"), guarded("write"))
 					expect(t, c, ok("write"), 200, "write", "PATCH", base, map[string]any{"amount": 2000})
 					// model action: write; the hook is declared but not implemented, so allowed callers get 501

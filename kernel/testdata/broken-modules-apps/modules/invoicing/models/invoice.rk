@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: invoice
+label: {id: Faktur}
+fields:
+  - {name: total, type: currency, label: {id: Total}}

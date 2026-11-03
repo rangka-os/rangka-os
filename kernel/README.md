@@ -9,8 +9,8 @@ API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The b
 ```
 make test       # all tests against a throwaway Postgres (started and removed by scripts/pgtemp.sh)
 make run-demo   # temp Postgres → migrate → seed → serve :8080 with --dev-open; Ctrl-C cleans up
-make validate   # rangka validate on rangka-apps/apps + sites/kopi-senja + rangka-connectors
-make compare-python   # Go vs rangka_validate.py on the real metadata and two broken copies (must be identical)
+make validate   # rangka validate on testdata/catalogue-v0 (rangka-apps as of v0) + rangka-connectors
+make compare-python   # Go vs rangka_validate.py on the v0 catalogue, the broken copies and the modules/apps fixtures (must be identical)
 ```
 
 Then open http://localhost:8080/app/, http://localhost:8080/api/v1/meta, or point an MCP client at
@@ -193,6 +193,33 @@ DELETE /api/v1/attachments/{id}               → 204
   renames it and go with it when it is deleted. Uploads and deletes are audited.
   Downloads send `nosniff` and `Content-Security-Policy: sandbox`, except PDF (Chromium's viewer refuses sandboxed
   documents).
+
+## Print formats
+
+Printable documents (quotation, invoice, PO, statement of account), contract
+[0008](../docs/contracts/0008-print-formats.md). A model gets a format from a `print/<name>.rk` plus a Go
+`html/template`; the reference layouts are in [`../templates/print/`](../templates/print/).
+
+```
+GET /api/v1/r/{model}/{name}/print?format=<print>&as=html|pdf
+```
+
+* `format` defaults to the model's `default: true` format, else the first by name; none → 404 `no_print_format`.
+  `as=html` (default) is `text/html`; `as=pdf` is rendered by headless Chromium; any other `as` → 400 `bad_request`.
+* `RANGKA_CHROMIUM` is the path of the browser. Without it the kernel looks for `chromium`, `chromium-browser`,
+  `google-chrome`, `google-chrome-stable` or `headless_shell` on `PATH`, then the macOS Chrome app.
+  `RANGKA_CHROMIUM=off`, or a path that does not exist, means no browser: `as=pdf` answers 501 `pdf_unavailable`
+  with a `hint` pointing at the HTML version. A conversion is cut off after 30 s; a failed one answers 500
+  `pdf_failed` (the detail goes to the log). At most `RANGKA_PDF_CONCURRENCY` (default 2) browsers run at once;
+  further requests wait for a slot.
+* The route sits behind the record guard (S1): the record is read as the caller, so another org's record or one
+  outside the caller's row scope is 404 `not_found`, as for `GET /r/{model}/{name}`; a caller who can read it but
+  lacks the `print` permission gets 403 `permission_denied`. Every print is audited as `record.print`; a `HEAD`
+  starts no browser and writes no audit entry.
+* `.Org` is the org's `org:` settings (`orgs.<id>.config.org`, else the site's `org:` in `config.rk`) plus `name`
+  and `code` from `orgs.<id>`; `.Org.pkp` falls back to `tax.pkp`.
+* `/api/v1/meta` lists each model's formats as `prints`. `rangka validate` checks formats and letterheads
+  (`template_missing`, `template_outside`, `template_error`, `logo_missing`).
 
 ## Tests
 

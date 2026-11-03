@@ -79,7 +79,8 @@ const where = {
   app: 'apps/<app>/app.rk', model: 'apps/<app>/models/<model>.rk', dashboard: 'apps/<app>/dashboards/<name>.rk', flow: 'apps/<app>/flows/<name>.rk',
   role: 'apps/<app>/roles/<role>.rk', template: 'templates/<name>/template.rk', connector: '<connector>/connector.rk (rangka-connectors)',
   overlay: '<site>/custom/<model>.rk', system: '<site>/system.rk', theme: '<site>/themes/<name>.rk', layout: '<site>/layouts/<name>.rk',
-  features: '<site>/features.rk', config: '<site>/config.rk', changeset: 'sent to /api/v1/changesets (not a file on disk)'
+  features: '<site>/features.rk', config: '<site>/config.rk', changeset: 'sent to /api/v1/changesets (not a file on disk)',
+  print: 'apps/<app>/print/<name>.rk or <site>/print/<name>.rk', letterhead: '<site>/letterhead.rk or <site>/letterheads/<org>.rk'
 }
 const workspace = join(root, '..')
 const index = []

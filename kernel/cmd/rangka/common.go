@@ -13,7 +13,7 @@ import (
 )
 
 type common struct {
-	apps, site, db, schemas, connectors string
+	apps, site, db, schemas, connectors, modules string
 }
 
 func (c *common) flags(fs *flag.FlagSet) {
@@ -21,6 +21,7 @@ func (c *common) flags(fs *flag.FlagSet) {
 	fs.StringVar(&c.site, "site", os.Getenv("RANGKA_SITE"), "site directory")
 	fs.StringVar(&c.db, "db", os.Getenv("DATABASE_URL"), "Postgres URL (default $DATABASE_URL)")
 	fs.StringVar(&c.schemas, "schemas", "", "schema directory (default: built in)")
+	fs.StringVar(&c.modules, "modules", os.Getenv("RANGKA_MODULES"), "modules directory (default: modules next to the apps directory)")
 	fs.StringVar(&c.connectors, "connectors", os.Getenv("RANGKA_CONNECTORS"), "connectors directory (default: rangka-connectors next to rangka-apps)")
 }
 
@@ -37,7 +38,7 @@ func (c *common) registry() (*meta.Registry, error) {
 	if err != nil {
 		return nil, err
 	}
-	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: c.apps, SiteDir: c.site, ConnectorsDir: c.connectorsDir()}, nil, set)
+	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: c.apps, SiteDir: c.site, ConnectorsDir: c.connectorsDir(), ModulesDir: c.modules}, nil, set)
 	if rep.Errors() > 0 {
 		rep.Print(os.Stderr)
 		return nil, fmt.Errorf("metadata has errors; fix them first (rangka validate)")

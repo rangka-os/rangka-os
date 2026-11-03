@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"math"
+	"math/big"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
@@ -23,6 +25,9 @@ var ErrNotFound = errors.New("record not found")
 
 // Zero is the value of a missing field (CONTRACTS: ” for text/date/link, 0 for numbers, false for check).
 func Zero(f *meta.Field) any {
+	if f.MoneyOf() != "" {
+		return int64(0) // an IDR twin is whole rupiah, like its bigint column
+	}
 	switch f.Type {
 	case "int", "rating":
 		return int64(0)
@@ -30,6 +35,8 @@ func Zero(f *meta.Field) any {
 		return float64(0)
 	case "check":
 		return false
+	case "money":
+		return money.Decimal{}
 	case "table", "multiselect":
 		return []any{}
 	case "json", "daterange":
@@ -44,8 +51,12 @@ func Coerce(f *meta.Field, v any) (any, error) {
 		return Zero(f), nil
 	}
 	switch f.Type {
+	case "money":
+		return coerceMoney(f, v)
 	case "int", "rating":
 		switch x := v.(type) {
+		case money.Decimal:
+			return x.Round(0).Rat().Num().Int64(), nil // half away from zero; a numeric(20,4) whole fits int64
 		case int64:
 			return x, nil
 		case int:
@@ -69,6 +80,9 @@ func Coerce(f *meta.Field, v any) (any, error) {
 		}
 	case "float", "percent", "currency":
 		switch x := v.(type) {
+		case money.Decimal:
+			f, _ := x.Rat().Float64()
+			return f, nil
 		case float64:
 			return x, nil
 		case int64:
@@ -127,6 +141,8 @@ func Coerce(f *meta.Field, v any) (any, error) {
 		switch x := v.(type) {
 		case string:
 			return x, nil
+		case money.Decimal:
+			return x.String(), nil
 		case float64:
 			return strconv.FormatFloat(x, 'f', -1, 64), nil
 		case int64:
@@ -138,6 +154,49 @@ func Coerce(f *meta.Field, v any) (any, error) {
 	return nil, fmt.Errorf("%s: unexpected value %v", f.Name, v)
 }
 
+func coerceMoney(f *meta.Field, v any) (any, error) {
+	var d money.Decimal
+	var err error
+	switch x := v.(type) {
+	case money.Decimal:
+		d = x
+	case string:
+		if strings.TrimSpace(x) == "" {
+			return money.Decimal{}, nil
+		}
+		d, err = money.Parse(x)
+	case int64:
+		d = money.FromInt(x)
+	case int:
+		d = money.FromInt(int64(x))
+	case float64:
+		d, err = money.FromFloat(x)
+	default:
+		return nil, fmt.Errorf("%s: unexpected value %v", f.Name, v)
+	}
+	if err != nil && !errors.Is(err, money.ErrRange) {
+		return nil, errors.New(fieldLabel(f) + " maksimal 4 angka desimal")
+	}
+	if err != nil || !money.InRange(d) {
+		return nil, &rangeError{fieldLabel(f) + " terlalu besar"}
+	}
+	return d, nil
+}
+
+// rangeError is a user-facing "too large" message whose cause is money.ErrRange.
+type rangeError struct{ msg string }
+
+func (e *rangeError) Error() string { return e.msg }
+func (e *rangeError) Unwrap() error { return money.ErrRange }
+
+// fieldLabel is the label of f, else its name.
+func fieldLabel(f *meta.Field) string {
+	if l := f.Label.Text(); l != "" {
+		return l
+	}
+	return f.Name
+}
+
 // sqlValue converts a record value into a query parameter ("" becomes NULL).
 func sqlValue(f *meta.Field, v any) any {
 	if v == nil {
@@ -146,7 +205,21 @@ func sqlValue(f *meta.Field, v any) any {
 	if s, ok := v.(string); ok && s == "" {
 		return nil
 	}
+	if f.MoneyOf() != "" {
+		// the IDR twin is a bigint column: whole rupiah
+		switch x := v.(type) {
+		case float64:
+			return int64(math.Round(x))
+		case int:
+			return int64(x)
+		}
+		return v
+	}
 	switch f.Type {
+	case "money":
+		if d, ok := v.(money.Decimal); ok {
+			return d.String()
+		}
 	case "multiselect", "json", "daterange":
 		return pg.JSON{V: v}
 	}
@@ -154,6 +227,15 @@ func sqlValue(f *meta.Field, v any) any {
 }
 
 func fromSQL(f *meta.Field, v any) any {
+	if f.MoneyOf() != "" {
+		switch x := v.(type) {
+		case int64:
+			return x
+		case float64:
+			return int64(math.Round(x))
+		}
+		return int64(0)
+	}
 	if v == nil {
 		return Zero(f)
 	}
@@ -172,6 +254,21 @@ func fromSQL(f *meta.Field, v any) any {
 	return v
 }
 
+// moneyAlias is the select alias under which a money column is also read as text: the pg driver decodes
+// numeric into float64, which would lose digits.
+const moneyAlias = "rk_text__"
+
+// selectList is the select list for a model's table: every column plus each money column as text.
+func selectList(m *meta.Model) string {
+	out := "*"
+	for _, f := range m.Fields {
+		if f.Type == "money" && IsColumn(f) {
+			out += fmt.Sprintf(", %s::text as %s", pg.QuoteIdent(f.Name), pg.QuoteIdent(moneyAlias+f.Name))
+		}
+	}
+	return out
+}
+
 func ts(v any) string {
 	if t, ok := v.(time.Time); ok {
 		return t.UTC().Format(time.RFC3339)
@@ -182,8 +279,23 @@ func ts(v any) string {
 	return fmt.Sprint(v)
 }
 
+// readMoney reads a money column's text. Canonical numeric text parses directly; other numeric text (a
+// column still double precision after a retype gives "1e+15" or "0.30000000000000004") is read exactly and
+// rounded to 4 dp half away from zero. Anything else is an error, never a silent 0.
+func readMoney(m *meta.Model, f *meta.Field, t string) (money.Decimal, error) {
+	if d, err := money.Parse(t); err == nil {
+		return d, nil
+	}
+	if r, ok := new(big.Rat).SetString(strings.TrimSpace(t)); ok {
+		if d, err := money.FromRat(r); err == nil {
+			return d, nil
+		}
+	}
+	return money.Decimal{}, fmt.Errorf("store: %s.%s: cannot read money value %q", m.Name, f.Name, t)
+}
+
 // fromRow builds a record from a table row.
-func fromRow(m *meta.Model, row map[string]any) Record {
+func fromRow(m *meta.Model, row map[string]any) (Record, error) {
 	r := Record{"name": row["name"]}
 	if !m.IsChild {
 		r["created_by"] = str(row["created_by"])
@@ -213,16 +325,31 @@ func fromRow(m *meta.Model, row map[string]any) Record {
 			r[f.Name] = v
 			continue
 		}
+		if f.Type == "money" {
+			d := money.Decimal{}
+			if t, ok := row[moneyAlias+f.Name].(string); ok {
+				p, err := readMoney(m, f, t)
+				if err != nil {
+					return nil, err
+				}
+				d = p
+			}
+			r[f.Name] = d
+			continue
+		}
 		r[f.Name] = fromSQL(f, row[f.Name])
 	}
 	if x, ok := row["x"].(map[string]any); ok {
 		for k, v := range x {
+			if _, isMoney := r[k].(money.Decimal); isMoney {
+				continue
+			}
 			if strings.HasPrefix(k, "x_") {
 				r[k] = v
 			}
 		}
 	}
-	return r
+	return r, nil
 }
 
 func str(v any) string {
@@ -247,14 +374,17 @@ func xData(r Record) map[string]any {
 
 // Get loads one record with its child rows.
 func Get(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *meta.Model, name string) (Record, error) {
-	res, err := q.Query(ctx, fmt.Sprintf("select * from %s where org_id = $1 and name = $2", pg.QuoteIdent(TableName(m.Name))), org, name)
+	res, err := q.Query(ctx, fmt.Sprintf("select %s from %s where org_id = $1 and name = $2", selectList(m), pg.QuoteIdent(TableName(m.Name))), org, name)
 	if err != nil {
 		return nil, err
 	}
 	if len(res.Rows) == 0 {
 		return nil, ErrNotFound
 	}
-	r := fromRow(m, res.Maps()[0])
+	r, err := fromRow(m, res.Maps()[0])
+	if err != nil {
+		return nil, err
+	}
 	if err := loadChildren(ctx, q, reg, org, m, []Record{r}); err != nil {
 		return nil, err
 	}
@@ -272,13 +402,17 @@ func Exists(ctx context.Context, q pg.Querier, org, model, name string) (bool, e
 
 // All loads every record of a model for an org (children when withChildren).
 func All(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *meta.Model, withChildren bool) ([]Record, error) {
-	res, err := q.Query(ctx, fmt.Sprintf("select * from %s where org_id = $1 order by created_at desc, name desc", pg.QuoteIdent(TableName(m.Name))), org)
+	res, err := q.Query(ctx, fmt.Sprintf("select %s from %s where org_id = $1 order by created_at desc, name desc", selectList(m), pg.QuoteIdent(TableName(m.Name))), org)
 	if err != nil {
 		return nil, err
 	}
 	out := make([]Record, 0, len(res.Rows))
 	for _, row := range res.Maps() {
-		out = append(out, fromRow(m, row))
+		r, err := fromRow(m, row)
+		if err != nil {
+			return nil, err
+		}
+		out = append(out, r)
 	}
 	if withChildren {
 		if err := loadChildren(ctx, q, reg, org, m, out); err != nil {
@@ -316,8 +450,8 @@ func loadChildren(ctx context.Context, q pg.Querier, reg *meta.Registry, org str
 			byName[n] = r
 			names = append(names, n)
 		}
-		res, err := q.Query(ctx, fmt.Sprintf("select * from %s where org_id = $1 and parent_field = $2 and parent = any($3) order by parent, idx",
-			pg.QuoteIdent(TableName(cm.Name))), org, f.Name, pg.Array(names))
+		res, err := q.Query(ctx, fmt.Sprintf("select %s from %s where org_id = $1 and parent_field = $2 and parent = any($3) order by parent, idx",
+			selectList(cm), pg.QuoteIdent(TableName(cm.Name))), org, f.Name, pg.Array(names))
 		if err != nil {
 			return err
 		}
@@ -326,8 +460,12 @@ func loadChildren(ctx context.Context, q pg.Querier, reg *meta.Registry, org str
 			if p == nil {
 				continue
 			}
+			cr, err := fromRow(cm, row)
+			if err != nil {
+				return err
+			}
 			l, _ := p[f.Name].([]any)
-			p[f.Name] = append(l, fromRow(cm, row))
+			p[f.Name] = append(l, cr)
 		}
 	}
 	return nil

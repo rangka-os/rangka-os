@@ -56,8 +56,8 @@ func newSource(t *testing.T) *source {
 	t.Helper()
 	auth.BcryptCost = 4
 	dir := t.TempDir()
-	for _, p := range []string{"rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites"} {
-		if err := exec.Command("cp", "-r", testdb.Sibling(t, p), filepath.Join(dir, filepath.Base(p))).Run(); err != nil {
+	for _, p := range []string{testdb.Catalogue("apps"), testdb.Catalogue("fixtures"), testdb.Catalogue("sites")} {
+		if err := exec.Command("cp", "-r", p, filepath.Join(dir, filepath.Base(p))).Run(); err != nil {
 			t.Fatal(err)
 		}
 	}
@@ -626,7 +626,7 @@ func TestFilesDir(t *testing.T) {
 	dir := t.TempDir()
 	site := filepath.Join(dir, "site")
 	os.MkdirAll(site, 0o755)
-	apps, _ := filepath.Abs(testdb.Sibling(t, "rangka-apps/apps"))
+	apps, _ := filepath.Abs(testdb.Catalogue("apps"))
 	reg, err := loadRegistry(apps, site)
 	if err != nil {
 		t.Fatal(err)

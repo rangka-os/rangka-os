@@ -122,7 +122,7 @@ func (v *validator) more() {
 			continue
 		}
 		for _, rn := range a.Roles {
-			d := v.reg.Docs["apps/"+a.Name+"/roles/"+rn+".rk"]
+			d := v.reg.Docs[a.Prefix+"/roles/"+rn+".rk"]
 			if d == nil {
 				continue
 			}
@@ -325,7 +325,13 @@ func (v *validator) site(all map[string]vis) {
 		}
 	}
 	apps := v.reg.App
-	appNames := keys(apps)
+	var appNames []string // apps and 0.4 units: what plans and config.apps name
+	for _, a := range v.reg.Apps {
+		if a.IsApp() {
+			appNames = append(appNames, a.Name)
+		}
+	}
+	isApp := func(n string) bool { return apps[n] != nil && apps[n].IsApp() }
 	plans := map[string]bool{}
 	var planNames []string
 	feat := s.Docs["features.rk"]
@@ -339,7 +345,7 @@ func (v *validator) site(all map[string]vis) {
 		for i, x := range asList(s.Features["plans"]) {
 			for j, a := range asList(asMap(x)["apps"]) {
 				as := pyStr(a)
-				if apps[as] == nil {
+				if !isApp(as) {
 					v.rep.extra("error", feat.Path, fmt.Sprintf("plans/%d/apps/%d", i, j), "unknown_app", fmt.Sprintf(`"%s" is not an app in %s%s`, as, v.reg.AppsDir, suggest(as, appNames)))
 				}
 			}
@@ -351,8 +357,15 @@ func (v *validator) site(all map[string]vis) {
 		}
 	}
 	installed := map[string]bool{}
-	for _, a := range appNames {
+	for a := range apps {
 		installed[a] = true
+	}
+	closure := func(names []string) map[string]bool {
+		out := map[string]bool{}
+		for _, n := range v.reg.Closure(names) {
+			out[n] = true
+		}
+		return out
 	}
 	tdir := TemplatesDir(v.reg.AppsDir)
 	if cfg := s.Docs["config.rk"]; cfg != nil {
@@ -367,33 +380,39 @@ func (v *validator) site(all map[string]vis) {
 			v.rep.extra("error", cfg.Path, "plan", "unknown_plan", fmt.Sprintf(`plan "%s" is not in features.rk%s`, plan, suggest(plan, planNames)))
 		}
 		if list, ok := c["apps"].([]any); ok {
-			installed = map[string]bool{}
-			var listed []string
+			var listed, valid []string
 			for _, x := range list {
 				listed = append(listed, pyStr(x))
+				if isApp(pyStr(x)) {
+					valid = append(valid, pyStr(x))
+				}
 			}
+			installed = closure(valid)
 			for i, a := range listed {
-				if apps[a] == nil {
+				if !isApp(a) {
 					v.rep.extra("error", cfg.Path, fmt.Sprintf("apps/%d", i), "unknown_app", fmt.Sprintf(`"%s" is not an app in %s%s`, a, v.reg.AppsDir, suggest(a, appNames)))
 					continue
 				}
-				installed[a] = true
 				if hasAllowed && !contains(allowed, a) {
 					v.rep.extra("error", cfg.Path, fmt.Sprintf("apps/%d", i), "app_not_in_plan", fmt.Sprintf(`plan "%s" does not include "%s" (it allows %s)`, plan, a, strings.Join(allowed, ", ")))
 				}
-				for _, dep := range orderedKeys(apps[a]) {
-					if apps[dep] != nil && !contains(listed, dep) {
+				for _, dep := range orderedKeys(apps[a], "requires") {
+					if apps[a].Kind != KindLegacy {
+						break // modules come with the app (contract 0001)
+					}
+					if apps[dep] != nil && apps[dep].Kind == KindLegacy && !contains(listed, dep) {
 						v.rep.extra("error", cfg.Path, fmt.Sprintf("apps/%d", i), "missing_dependency", fmt.Sprintf(`"%s" requires "%s"; add it to apps`, a, dep))
 					}
 				}
 			}
 		} else if hasAllowed {
-			installed = map[string]bool{}
+			var valid []string
 			for _, a := range allowed {
-				if apps[a] != nil {
-					installed[a] = true
+				if isApp(a) {
+					valid = append(valid, a)
 				}
 			}
+			installed = closure(valid)
 		}
 		if th, _ := c["theme"].(string); th != "" && s.Themes[th] == nil && !templateExists("themes", th, tdir) {
 			v.rep.extra("error", cfg.Path, "theme", "unknown_theme", fmt.Sprintf(`theme "%s" has no file themes/%s.rk%s`, th, th, suggest(th, keysDoc(s.Themes))))
@@ -465,15 +484,20 @@ func (v *validator) site(all map[string]vis) {
 	}
 }
 
-// orderedKeys returns an app's requires in file order.
-func orderedKeys(a *App) []string {
+// OrderedKeys returns the keys of a unit's map (requires, modules) in file order.
+func OrderedKeys(a *App, key string) []string { return orderedKeys(a, key) }
+
+func orderedKeys(a *App, key string) []string {
+	m := asMap(a.Raw[key])
 	if a.Doc == nil || a.Doc.Root == nil {
-		return sortedKeys(a.Requires)
+		return sortedKeys(m)
 	}
 	var out []string
-	if n := a.Doc.Root.Get("requires"); n != nil && n.Kind == rk.MapNode {
+	if n := a.Doc.Root.Get(key); n != nil && n.Kind == rk.MapNode {
 		for _, k := range n.Keys {
-			out = append(out, k.Value)
+			if !contains(out, k.Value) {
+				out = append(out, k.Value)
+			}
 		}
 	}
 	return out

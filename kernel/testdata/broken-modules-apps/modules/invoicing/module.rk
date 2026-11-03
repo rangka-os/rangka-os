@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: invoicing
+version: 1.0.0
+title: {id: Faktur}
+menu:
+  - group: {id: Faktur}
+    items: [invoice]

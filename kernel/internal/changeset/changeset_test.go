@@ -1,8 +1,13 @@
 package changeset
 
 import (
+	"os"
+	"path/filepath"
 	"reflect"
+	"strings"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 )
 
 func TestApplyPatch(t *testing.T) {
@@ -65,6 +70,7 @@ func TestAssess(t *testing.T) {
 		{"edit a dashboard file", []Op{{Op: "patch", Path: "apps/crm/dashboards/old.rk"}}, before, "high", 5},
 		{"new model", []Op{{Op: "create", Path: "apps/crm/models/visit.rk"}}, with("apps/crm/models/visit.rk", map[string]any{"name": "visit"}), "medium", 5},
 		{"new model with money", []Op{{Op: "create", Path: "apps/crm/models/visit.rk"}}, with("apps/crm/models/visit.rk", map[string]any{"name": "visit", "fields": []any{map[string]any{"name": "fee", "type": "currency"}}}), "high", 5},
+		{"new model with money type", []Op{{Op: "create", Path: "apps/crm/models/visit.rk"}}, with("apps/crm/models/visit.rk", map[string]any{"name": "visit", "fields": []any{map[string]any{"name": "fee", "type": "money", "currency_field": "cur"}}}), "high", 5},
 		{"new overlay", []Op{{Op: "create", Path: "custom/deal.rk"}}, with("custom/deal.rk", map[string]any{"model": "deal", "fields": []any{map[string]any{"name": "x_r", "type": "data"}}}), "medium", 4},
 		{"overlay money field", []Op{{Op: "replace", Path: "custom/sales_invoice.rk"}}, with("custom/sales_invoice.rk", map[string]any{"model": "sales_invoice", "fields": []any{ovl["fields"].([]any)[0], map[string]any{"name": "x_fee", "type": "float", "money": true}}}), "high", 4},
 		{"overlay stock field", []Op{{Op: "create", Path: "custom/deal.rk"}}, with("custom/deal.rk", map[string]any{"model": "deal", "fields": []any{map[string]any{"name": "x_q", "type": "float", "stock": true}}}), "high", 4},
@@ -85,5 +91,26 @@ func TestAssess(t *testing.T) {
 		if a.Risk != c.risk || len(a.Layers) != 1 || a.Layers[0] != c.layer {
 			t.Errorf("%s: risk %s layers %v (%v), want %s %d", c.name, a.Risk, a.Layers, a.Reasons, c.risk, c.layer)
 		}
+	}
+}
+
+// A patched 0.4 app.rk keeps declaring 0.4 app.json; a 0.5 app (with modules) and other kinds declare 0.5.
+func TestPatchKeepsLegacyAppHeader(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "apps", "crm"), 0o755)
+	os.MkdirAll(filepath.Join(dir, "apps", "shop"), 0o755)
+	os.WriteFile(filepath.Join(dir, "apps", "crm", "app.rk"), []byte("# yaml-language-server: $schema="+schema.Legacy+"app.json\nname: crm\nversion: 1.0.0\ntitle: {id: CRM}\n"), 0o644)
+	os.WriteFile(filepath.Join(dir, "apps", "shop", "app.rk"), []byte("# yaml-language-server: $schema="+schema.Base+"app.json\nname: shop\nversion: 1.0.0\ntitle: {id: Toko}\nmodules: {contacts: ^1.0}\n"), 0o644)
+	r := roots{apps: filepath.Join(dir, "apps")}
+	patch := []map[string]any{{"op": "replace", "path": "/title/id", "value": "Baru"}}
+	out, err := r.result([]Op{{Op: "patch", Path: "apps/crm/app.rk", Patch: patch}, {Op: "patch", Path: "apps/shop/app.rk", Patch: patch}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := *out["apps/crm/app.rk"]; !strings.HasPrefix(got, "# yaml-language-server: $schema="+schema.Legacy+"app.json\n") || !strings.Contains(got, "Baru") {
+		t.Errorf("legacy app header: %q", got)
+	}
+	if got := *out["apps/shop/app.rk"]; !strings.HasPrefix(got, "# yaml-language-server: $schema="+schema.Base+"app.json\n") {
+		t.Errorf("0.5 app header: %q", got)
 	}
 }

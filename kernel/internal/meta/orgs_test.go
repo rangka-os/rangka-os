@@ -14,8 +14,8 @@ import (
 const overlaySite = "../../testdata/overlay-site"
 
 func TestOrgConfigFallsBackToSite(t *testing.T) {
-	reg, rep := ValidateOpts(Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: overlaySite}, nil, schema.Embedded())
-	if len(rep.All()) != 0 {
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: overlaySite}, nil, schema.Embedded())
+	if !onlyDeprecations(rep) { // catalogue-v0 is the 0.4 layout (contract 0001)
 		t.Fatalf("problems: %v", rep.All())
 	}
 	o := reg.Orgs["pt_alpha"]
@@ -44,7 +44,7 @@ func writeRole(t *testing.T, body string) *Registry {
 	t.Helper()
 	dir := t.TempDir()
 	apps := filepath.Join(dir, "apps")
-	if err := os.CopyFS(apps, os.DirFS(testdb.Sibling(t, "rangka-apps/apps"))); err != nil {
+	if err := os.CopyFS(apps, os.DirFS(testdb.Catalogue("apps"))); err != nil {
 		t.Fatal(err)
 	}
 	os.MkdirAll(filepath.Join(apps, "crm", "roles"), 0o755)
@@ -82,7 +82,7 @@ func TestOrgSchema(t *testing.T) {
 	b, _ := os.ReadFile(p)
 	b = []byte(strings.Replace(string(b), "code: ALP,", "code: ALP, colour: red,", 1))
 	os.WriteFile(p, b, 0o644)
-	_, rep := ValidateOpts(Options{AppsDir: testdb.Sibling(t, "rangka-apps/apps"), SiteDir: dir}, nil, schema.Embedded())
+	_, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: dir}, nil, schema.Embedded())
 	found := false
 	for _, pr := range rep.All() {
 		if pr.Code == "schema" && pr.Where == "orgs/pt_alpha" && strings.Contains(pr.Message, "colour") {

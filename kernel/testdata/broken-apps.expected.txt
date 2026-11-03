@@ -1,13 +1,17 @@
 core/models/outlet.rk:6:7  error  ambiguous_value  (syntax)  0812 means different things in different YAML tools; write "0812" in quotes for text, or a number without leading zeros
 core/models/outlet.rk:7:1  error  duplicate_key  (syntax)  "icon" appears twice (first on line 4)
 core/models/outlet.rk:8:7  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
+core/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/core/module.rk and an app (contract 0001)
 core/app.rk:4:9  error  schema  hooks/0  'Bad Hook' does not match '^[a-z_]+\\.[a-z_]+$'
 core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must match the file name "item"
+crm/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/crm/module.rk and an app (contract 0001)
 crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', …
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
 crm/models/tanda_terima.rk:4:9  error  reset_needs_date  naming  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
+sales/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/sales/module.rk and an app (contract 0001)
+sales/models/sales_invoice.rk:67:5  error  schema  fields/13  'currency_field' is a required property
 sales/models/sales_invoice.rk:6:9  error  schema  naming  'inv-{YYYY}' is not valid under any of the given schemas
 core/app.rk:9:29  error  unknown_model  menu/0/items/2  "outlet" is not a model in this app or its dependencies
 core/models/customer.rk:7:12  error  not_submittable  on_submit  on_submit hooks need is_submittable: true
@@ -50,12 +54,16 @@ crm/dashboards/crm_overview.rk:103:13  error  bad_field_type  widgets/10/period 
 crm/dashboards/extra_board.rk:2:7  warn   unlisted_dashboard  name  add "extra_board" to dashboards in app.rk or nobody can open it
 sales/models/sales_invoice.rk:18:9  error  unknown_model  fields/1/to  "outlet" is not a model in this app or its dependencies
 sales/models/sales_invoice.rk:34:9  error  not_child  fields/4/of  "sales_invoice_item" must set is_child: true to be used in a table field
-sales/models/sales_invoice.rk:86:19  error  unknown_verb  approvals/0/on  "post" is not submit, cancel or an action of this model
-sales/models/sales_invoice.rk:86:37  warn   unknown_role  approvals/0/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
-sales/models/sales_invoice.rk:87:12  error  duplicate_approval  approvals/1/name  "a" is declared twice
-sales/models/sales_invoice.rk:87:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
-sales/models/sales_invoice.rk:87:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
+sales/models/sales_invoice.rk:72:21  error  bad_currency_field  fields/14/currency_field  currency field "posting_date" must be select, data or link; it is date
+sales/models/sales_invoice.rk:76:5  error  twin_clash  fields/16  "shipping_idr" is generated for money field "shipping"; rename it
+sales/models/sales_invoice.rk:103:19  error  unknown_verb  approvals/0/on  "post" is not submit, cancel or an action of this model
+sales/models/sales_invoice.rk:103:37  warn   unknown_role  approvals/0/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
+sales/models/sales_invoice.rk:104:12  error  duplicate_approval  approvals/1/name  "a" is declared twice
+sales/models/sales_invoice.rk:104:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
+sales/models/sales_invoice.rk:104:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
 sales/models/sales_invoice.rk:9:3  error  compute_cycle  fields/grand_total/compute  grand_total → grand_total
+sales/models/sales_invoice_item.rk:31:21  error  bad_currency_field  fields/6/currency_field  "nope" is not a field of sales_invoice_item
+sales/models/sales_invoice_item.rk:29:5  error  missing_rate_field  fields/6  money fields need a rate field "fx_rate" (float, currency or int) on sales_invoice_item
 crm/flows/approve_gate.rk:5:50  error  cel_syntax  steps/0/approve/when  unbalanced parentheses in `size(x > 0`
 crm/flows/bad_flow.rk:10:5  error  schema  steps/2  {'if': 'size(won) > 0', 'then': [{'find_all': 'leadz', 'where': "status == 'new'", 'as': 'fresh'}, {'call': 'whatsapp_business.send_textt', 'with': {'to': "'…
 crm/flows/bad_flow.rk:17:5  error  schema  steps/4  {'update': 'won', 'set': {'stage': "'won'"}, 'where': '(x'} is not valid under any of the given schemas
@@ -86,4 +94,4 @@ crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope fiel
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-77 error(s), 10 warning(s)
+82 error(s), 13 warning(s)

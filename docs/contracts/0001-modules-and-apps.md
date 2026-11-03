@@ -1,6 +1,6 @@
 # 0001: Modules and apps
 
-Status: proposed (1 Nov 2026) · Owner of the change: rangka-os (schema, validator, kernel) · Affects: rangka-apps
+Status: accepted (3 Nov 2026, S8b) · Owner of the change: rangka-os (schema, validator, kernel) · Affects: rangka-apps
 
 ## Context
 - Today an "app" (`rangka-apps/apps/crm`: lead, deal, activity) is really a reusable business unit.
@@ -42,3 +42,20 @@ Migration from today:
 ## Open
 - Can an app ship small glue flows? Proposed: yes, flows and dashboards are allowed in apps; models are not.
 - Version ranges between modules: caret ranges as today (`^1.0`).
+
+## As built (rangka-os, S8b)
+- Schemas: `schema/0.5/module.json` (0.4 `app.json` without `menu`, `dashboards`) and `schema/0.5/app.json`
+  (0.4 `app.json` + `template.json` fields + required `modules: {name: range}`, optional `rangka`, no `requires`).
+  An `app.rk` without `modules` is a 0.4 app and is checked against `schema/0.4/app.json` (embedded for that rule).
+- Roots: `--modules` / `RANGKA_MODULES`, default the `modules` dir next to the apps dir. Docs and change-set paths
+  `modules/<m>/...` and `apps/<a>/...`; `modules/...` is layer 5 like `apps/...`.
+- Install: `config.apps` (else the plan's apps) names apps and 0.4 units; the kernel adds each app's modules and every
+  unit's `requires`, transitively, dependencies first. Plans limit apps only.
+- Validator codes: `duplicate_unit`, `unknown_module`, `version_mismatch` (`^a.b` same major and at least a.b, `>=a.b`),
+  `app_defines_model`, warnings `deprecated_layout` (0.4 `app.rk`) and `deprecated_template` (`templates/*/template.rk`
+  next to the apps dir). `missing_dependency` stays for 0.4 units. An app's menu and dashboards see its modules, their
+  requires and its optional.
+- `/api/v1/meta`: `apps` (apps and 0.4 units, each with `kind` and `modules`), `modules` (modules and 0.4 units, with
+  `requires`), and `module` on every model.
+- Kernel tests use `kernel/testdata/catalogue-v0` (rangka-apps as of v0) plus `testdata/modules-apps` and
+  `testdata/broken-modules-apps`.

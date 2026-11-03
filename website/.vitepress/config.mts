@@ -50,7 +50,8 @@ export default defineConfig({
           { text: 'Quick start', link: '/guide/quick-start' },
           { text: 'Architecture and layers', link: '/guide/architecture' },
           { text: '.rk files', link: '/guide/rk-files' },
-          { text: 'Your first app', link: '/guide/first-app' }
+          { text: 'Your first app', link: '/guide/first-app' },
+          { text: 'Print formats', link: '/guide/print-formats' }
         ] }
       ],
       '/concepts/': [

@@ -38,7 +38,7 @@ func (h *HookCtx) createDraft(model string, input map[string]any) (store.Record,
 // on (org, model, source) first, held until the transaction ends, so two concurrent calls cannot both find
 // no draft and each make one.
 func draftFor(h *HookCtx, model, field, source string) (store.Record, error) {
-	if !has(h.op.e.Reg().Model(model), field) {
+	if m := h.op.e.Reg().Model(model); !has(m, field) && !(field == "amended_from" && m != nil && m.IsSubmittable) {
 		return nil, nil
 	}
 	if err := h.LockKey("draft|" + model + "|" + source); err != nil {
@@ -72,16 +72,30 @@ func needSubmitted(rec map[string]any, what string) error {
 func reviseQuotation(h *HookCtx) (map[string]any, error) {
 	q := h.Record
 	name := str(q["name"])
-	if err := needSubmitted(q, "Penawaran"); err != nil {
-		return nil, err
-	}
 	if err := needOpen(q); err != nil {
 		return nil, err
 	}
-	if res, err := h.op.cancel(h.Model.Name, name); err != nil {
-		return nil, err
-	} else if res.Held {
-		return nil, refuse("cancel_held", "Pembatalan penawaran "+name+" menunggu persetujuan; revisi dibuat setelah disetujui")
+	switch toInt(q["docstatus"]) {
+	case 1:
+		res, err := h.op.cancel(h.Model.Name, name)
+		if err != nil {
+			return nil, err
+		}
+		if res.Held {
+			// the cancel waits for approval: the request is kept (this transaction commits) and nothing is
+			// amended; once the cancel is approved, revise on the cancelled quotation makes the revision
+			return map[string]any{"held": true, "approvals": res.Approvals,
+				"message": "Pembatalan penawaran " + name + " menunggu persetujuan; jalankan revisi lagi setelah disetujui"}, nil
+		}
+	case 2: // cancelled (an approved held cancel): amend once
+		if d, err := draftFor(h, h.Model.Name, "amended_from", name); err != nil || d != nil {
+			if err != nil {
+				return nil, err
+			}
+			return openResult(h.Model.Name, str(d["name"]), "Draf revisi "+str(d["name"])+" sudah ada"), nil
+		}
+	default:
+		return nil, refuse("not_submitted", "Penawaran "+name+" harus sudah diajukan")
 	}
 	am, err := h.op.amend(h.Model.Name, name)
 	if err != nil {

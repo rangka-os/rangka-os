@@ -159,10 +159,14 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		return map[string]any{"message": "stock is not installed"}, nil
 	}
 	rec := h.Record
-	// lineKeys are the (outlet, item) pairs of the document's lines for the given outlet fields.
+	// lineKeys are the (outlet, item) pairs of the document's lines that move stock, for the given outlet
+	// fields (lines with no quantity get no balance row).
 	lineKeys := func(outletFields ...string) [][2]string {
 		var keys [][2]string
 		for _, l := range rows(rec["items"]) {
+			if lineQty(h, "items", l) <= qtyEps {
+				continue
+			}
 			for _, f := range outletFields {
 				keys = append(keys, [2]string{str(rec[f]), str(l["item"])})
 			}
@@ -213,7 +217,11 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		}
 	case "stock_count":
 		s := newStockPost(h, str(rec["count_date"]))
-		if err := s.lockAll(lineKeys("outlet")); err != nil {
+		var countKeys [][2]string // every counted line reads its balance, so all are locked
+		for _, l := range rows(rec["items"]) {
+			countKeys = append(countKeys, [2]string{str(rec["outlet"]), str(l["item"])})
+		}
+		if err := s.lockAll(countKeys); err != nil {
 			return nil, err
 		}
 		lines := map[string]map[string]any{}
@@ -298,16 +306,18 @@ func postOutletSales(h *HookCtx) (map[string]any, error) {
 	var keys [][2]string
 	for _, l := range rows(rec["lines"]) {
 		item := str(l["item"])
-		if _, ok := recipes[item]; ok {
-			continue
+		uses, ok := recipes[item]
+		if !ok {
+			var err error
+			if uses, err = s.consumption(item); err != nil {
+				return nil, err
+			}
+			recipes[item] = uses
 		}
-		uses, err := s.consumption(item)
-		if err != nil {
-			return nil, err
-		}
-		recipes[item] = uses
 		for _, u := range uses {
-			keys = append(keys, [2]string{outlet, u.material})
+			if roundQty(qtyOf(l["qty"])*u.per) > qtyEps {
+				keys = append(keys, [2]string{outlet, u.material})
+			}
 		}
 	}
 	if err := s.lockAll(keys); err != nil {

@@ -16,3 +16,5 @@ actions:
   - {name: new_revision, label: {id: new_revision}, hook: quotation.revise, if: "docstatus == 1 && outcome == 'open'"}
   - {name: mark_outcome, label: {id: mark_outcome}, hook: quotation.mark_outcome, if: docstatus == 1}
   - {name: make_order, label: {id: make_order}, hook: orders.from_quotation, if: "docstatus == 1 && outcome == 'accepted'"}
+approvals:
+  - {name: cancel_check, on: cancel, when: "subject == 'Perlu persetujuan'", approvers: [owner]}

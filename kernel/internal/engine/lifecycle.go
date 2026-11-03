@@ -360,7 +360,14 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 // lockLoad loads a record with its row locked until the transaction ends (select … for update). Submit,
 // cancel, update and actions use it, so a hook writing the same row in another transaction (an allocation
 // raising paid_amount) is either seen or waits; the full-record write that follows cannot lose it.
+//
+// The record's advisory lock (approvals' lockRecord) is taken first, so every path locks in the same order,
+// advisory lock then row: a re-submit of a held document racing its Approve (which locks the record, then the
+// approval, then the row) queues instead of deadlocking.
 func (o *op) lockLoad(m *meta.Model, name string) (store.Record, error) {
+	if err := o.lockRecord(m.Name, name); err != nil {
+		return nil, err
+	}
 	rec, err := store.GetForUpdate(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, notFound(m.Name + " " + name)

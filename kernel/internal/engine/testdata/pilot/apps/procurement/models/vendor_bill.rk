@@ -14,3 +14,5 @@ fields:
   - {name: amount_due, type: currency, compute: subtotal - pph23_amount}
   - {name: paid_amount, type: currency, read_only: true}
   - {name: outstanding, type: currency, compute: amount_due - paid_amount}
+approvals:
+  - {name: big_bill, on: submit, when: 'subtotal > 100000000', approvers: [owner]}

@@ -16,8 +16,8 @@ type FindOpts struct {
 	WithChildren bool
 }
 
-// Find loads the records of a model whose fields equal the given values (text compare; "docstatus" is allowed
-// for submittable models), ordered by name. With ForUpdate the rows are locked (select … for update) so a
+// Find loads the records of a model whose fields equal the given values (text compare; "docstatus" and
+// "amended_from" are allowed for submittable models), ordered by name. With ForUpdate the rows are locked (select … for update) so a
 // hook can decide on stored values that no concurrent transaction changes.
 func Find(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *meta.Model, eq map[string]any, opts FindOpts) ([]Record, error) {
 	keys := make([]string, 0, len(eq))
@@ -33,7 +33,7 @@ func Find(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *
 			args = append(args, toInt(eq[k]))
 			where = append(where, fmt.Sprintf("docstatus = $%d", len(args)))
 			continue
-		case k == "name":
+		case k == "name", k == "amended_from" && m.IsSubmittable:
 		default:
 			f := m.Field(k)
 			if f == nil || !IsColumn(f) {

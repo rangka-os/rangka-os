@@ -785,26 +785,115 @@ func (p *pilot) mustSubmittedName(model, draft string) string {
 	return str(rows[0]["name"])
 }
 
-// TestPilotOppositeTransfers: A→B and B→A of the same item at once; sorted balance locks mean neither
-// deadlocks, and both post.
-func TestPilotOppositeTransfers(t *testing.T) {
+// TestPilotCrossDocumentStockLocks: a goods receipt with lines [minyak, beras] and a stock adjustment with
+// lines [beras, minyak] at the same outlet, submitted at once (different number series, so nothing else
+// serialises them). Without sorted balance locks they deadlock; with lockAll both post.
+func TestPilotCrossDocumentStockLocks(t *testing.T) {
 	p := setupPilot(t)
 	m := p.masters()
-	p.receipt(m, m.outA, 50, 10000)
-	p.receipt(m, m.outB, 50, 10000)
-	for i := 0; i < 4; i++ {
-		ab := p.create("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "items": []any{map[string]any{"item": m.beras, "qty": 5}}})
-		ba := p.create("stock_transfer", map[string]any{"from_outlet": m.outB, "to_outlet": m.outA, "items": []any{map[string]any{"item": m.beras, "qty": 5}}})
+	p.receipt(m, m.outA, 1000, 10000)
+	p.doc("goods_receipt", map[string]any{"vendor": m.vend, "outlet": m.outA, "items": []any{map[string]any{"item": m.minyak, "qty": 1000, "rate": 20000}}})
+	for i := 0; i < 8; i++ {
+		gr := p.create("goods_receipt", map[string]any{"vendor": m.vend, "outlet": m.outA, "items": []any{
+			map[string]any{"item": m.minyak, "qty": 1, "rate": 20000}, map[string]any{"item": m.beras, "qty": 1, "rate": 10000}}})
+		adj := p.create("stock_adjustment", map[string]any{"outlet": m.outA, "reason": "damage", "items": []any{
+			map[string]any{"item": m.beras, "qty": 1}, map[string]any{"item": m.minyak, "qty": 1}}})
 		errs := make(chan error, 2)
-		for _, n := range []string{ab, ba} {
-			go func(n string) { _, err := p.e.Submit(p.ctx, p.a, "stock_transfer", n, true); errs <- err }(n)
-		}
+		go func() { _, err := p.e.Submit(p.ctx, p.a, "goods_receipt", gr, true); errs <- err }()
+		go func() { _, err := p.e.Submit(p.ctx, p.a, "stock_adjustment", adj, true); errs <- err }()
 		if e1, e2 := <-errs, <-errs; e1 != nil || e2 != nil {
 			t.Fatalf("round %d: %v / %v", i, e1, e2)
 		}
 	}
-	p.wantBalance(m.outA, m.beras, 50, 500000, 10000)
-	p.wantBalance(m.outB, m.beras, 50, 500000, 10000)
+	p.wantBalance(m.outA, m.beras, 1000, 10000000, 10000)
+	p.wantBalance(m.outA, m.minyak, 1000, 20000000, 20000)
+}
+
+// TestPilotHeldResubmitRacesApprove: a held vendor bill submitted again while its approval is approved. The
+// record's advisory lock is always taken before its row, so the two queue instead of deadlocking, and the
+// bill posts its payable once.
+func TestPilotHeldResubmitRacesApprove(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	approver := Actor{Org: "pilot", ID: "boss@pilot.test", UserName: "USR-002", Roles: []string{"owner"}, Human: true}
+	clerk := Actor{Org: "pilot", ID: "clerk@pilot.test", UserName: "USR-003", Roles: []string{"clerk"}, Human: true} // an owner's request approves itself
+	for i := 0; i < 3; i++ {
+		bill := p.create("vendor_bill", map[string]any{"vendor": m.vend, "bill_no": "BIG/" + formatInt(int64(i)), "items": []any{map[string]any{"item": m.beras, "qty": 1, "rate": 200000000}}})
+		res, err := p.e.Submit(p.ctx, clerk, "vendor_bill", bill, true)
+		if err != nil || !res.Held || len(res.Approvals) == 0 {
+			t.Fatalf("first submit not held: %v %v", res, err)
+		}
+		id := res.Approvals[0].ID
+		errs := make(chan error, 2)
+		go func() { _, err := p.e.Submit(p.ctx, clerk, "vendor_bill", bill, true); errs <- err }()
+		go func() { _, err := p.e.Approve(p.ctx, approver, id); errs <- err }()
+		for _, err := range []error{<-errs, <-errs} {
+			if err != nil && (strings.Contains(err.Error(), "deadlock") || !(IsNotFound(err) || isConflict(err))) {
+				t.Fatalf("round %d: %v", i, err)
+			}
+		}
+		if got := p.outstanding("vendor", m.vend); got != int64(i+1)*200000000 {
+			t.Fatalf("round %d: vendor outstanding = %d", i, got)
+		}
+	}
+}
+
+func isConflict(err error) bool {
+	var se *StatusError
+	return errors.As(err, &se) && se.Status == 409
+}
+
+// TestPilotReviseHeldCancel: when cancelling the quotation needs approval, revise keeps the request (held)
+// and amends nothing; after approval, revise on the cancelled quotation makes the revision once.
+func TestPilotReviseHeldCancel(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	q := p.doc("quotation", map[string]any{"customer": m.cust, "subject": "Perlu persetujuan", "items": []any{map[string]any{"item": m.jasa}}})
+	clerk := Actor{Org: "pilot", ID: "clerk@pilot.test", UserName: "USR-003", Roles: []string{"clerk"}, Human: true}
+	out, err := p.e.RunAction(p.ctx, clerk, "quotation", q, "new_revision", nil, ActionOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res := out.Result
+	if res["held"] != true || p.get("quotation", q)["docstatus"] != int64(1) {
+		t.Fatalf("revise with a held cancel = %v", res)
+	}
+	aps, _, err := p.e.ListApprovals(p.ctx, p.a, store.ApprovalFilter{Org: "pilot", Model: "quotation", Name: q})
+	if err != nil || len(aps) != 1 || aps[0].State != "pending" {
+		t.Fatalf("approval request not kept: %v %v", aps, err)
+	}
+	approver := Actor{Org: "pilot", ID: "boss@pilot.test", UserName: "USR-002", Roles: []string{"owner"}, Human: true}
+	if _, err := p.e.Approve(p.ctx, approver, aps[0].ID); err != nil {
+		t.Fatal(err)
+	}
+	if p.get("quotation", q)["docstatus"] != int64(2) {
+		t.Fatal("approved cancel did not run")
+	}
+	// the module's new_revision if: must allow a cancelled quotation for this; the hook is called directly
+	var draft string
+	for i := 0; i < 2; i++ {
+		if err := p.e.run(p.ctx, p.a, func(o *op) error {
+			mq := p.e.Reg().Model("quotation")
+			rec, err := o.lockLoad(mq, q)
+			if err != nil {
+				return err
+			}
+			out, err := callHook(reviseQuotation, &HookCtx{op: o, Model: mq, Record: rec})
+			if err == nil {
+				if draft == "" {
+					draft = opened(out)
+				} else if opened(out) != draft {
+					t.Errorf("second revise made %s, want %s", opened(out), draft)
+				}
+			}
+			return err
+		}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if d := p.get("quotation", draft); d["revision"] != int64(1) || d["amended_from"] != q {
+		t.Fatalf("revision draft = %v %v", d["revision"], d["amended_from"])
+	}
 }
 
 // runHook calls a hook on a record directly, inside one transaction (for refusals an action's if: hides).

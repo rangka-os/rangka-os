@@ -522,9 +522,11 @@ func (p *pilot) receipt(m masters, outlet string, qty, rate int64) string {
 }
 
 // TestPilotStockAverageTransferSale: moving average, reversal back to the prior balance, transfers at the
-// average, and a recipe sale that drives an outlet negative (the negative-stock exception).
+// average, and a recipe sale that drives an outlet negative (the negative-stock exception). Without a
+// stock_transfer_receipt model a transfer moves both sides at once (one-step, before S8e).
 func TestPilotStockAverageTransferSale(t *testing.T) {
 	p := setupPilot(t)
+	delete(p.e.Reg().Models, "stock_transfer_receipt")
 	m := p.masters()
 	p.receipt(m, m.outA, 100, 12000)
 	p.wantBalance(m.outA, m.beras, 100, 1200000, 12000)

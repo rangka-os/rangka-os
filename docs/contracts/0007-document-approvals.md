@@ -77,7 +77,13 @@ Reject (`{reason}` required) sets the request `rejected`; other pending requests
   OIDC (AI) tokens get **403** `human_required`; MCP's `rangka_approve` follows the same rule, so an agent can list
   approvals but never decide one.
 - The caller must hold one of the request's `approvers` roles or `owner`; otherwise **403** `permission_denied`
-  with `code` and `message` only (no `{model, action}` detail until S1's permission error lands).
+  with S1's body `{code, message, model, action}`, `model` the request's model and `action` `approve`. Approving
+  is governed by the policy's approvers, not by model `permissions:`.
+- For a request on a record the approver must also be allowed to **read** that record (contract 0005); otherwise
+  **403** `permission_denied` with `action: read`.
+- S1's permission check for submit, cancel and actions (`write`) runs **before** the hold: a caller without the
+  permission gets 403 and no request is created. When the last approval lands, the verb runs as the requester and
+  that check is made again for the requester at approve time.
 - Only `pending` requests can be decided (**409** `not_pending`).
 
 ### 6. Storage
@@ -95,7 +101,7 @@ create table if not exists rk_approvals (
   snapshot     text not null,              -- sha256 hex
   args         jsonb not null default '{}', -- {force} / action args / flow resume state
   requested_by text not null,
-  requester    jsonb not null,             -- {id, user, roles, human} the verb runs as
+  requester    jsonb not null,             -- {id, user, roles, human, system} the verb runs as
   requested_at timestamptz not null default now(),
   decided_by   text,
   decided_at   timestamptz,
@@ -120,7 +126,12 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
   reason, can_decide}`; `can_decide` is true when the caller may decide it now. Approve/reject return 200 with the
   item, plus `record` when the verb ran.
 - `POST /r/{model}/{name}/submit|cancel` and `/actions/{action}` answer 202 as in §2 when held.
-- SSE: `event: approval` with `{id, model, name, state}` on create and on every state change (org-scoped).
+- Visibility (contract 0005): the list holds requests on models the caller may read (model level: a conditional
+  read grant counts, as in `/meta`) and flow requests (model `''`) when the caller is `owner` or holds one of their
+  approver roles; owners see everything. `GET /approvals/{id}` needs read on the record (403 `permission_denied`)
+  and returns 404 for a flow request the caller may not see. MCP's list applies the same rule.
+- SSE: `event: approval` with `{id, model, name, state}` on create and on every state change, to callers who may
+  see the request (as for `GET /approvals/{id}`).
 - MCP: `rangka_approvals_list` (read-only; `state`, `model`, `name`) and `rangka_approve` (`id`,
   `decision: approve|reject`, `reason`), the latter refused for non-person callers (§5).
 - `GET /api/v1/meta` carries each model's `approvals` unchanged.
@@ -164,4 +175,4 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
 ## Consequences
 - Apps can require approval with metadata only; sites can tighten it through overlays.
 - The web app (S0) gets an inbox from `GET /approvals` and a "Menunggu persetujuan" banner from `?model=&name=`.
-- Row scope on the inbox (outlet, org) follows S1/S5 when they land; until then the inbox lists the org's requests.
+- The inbox follows S1's read permissions (§7); outlet row scope follows S5 when it lands.

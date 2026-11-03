@@ -891,6 +891,15 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None
             if isinstance(oc, dict) and "orgs" in oc:
                 rep.add("error", cp, f"orgs/{oid}/config/orgs", "nested_orgs", f'org "{oid}" config cannot contain orgs')
+        dpp_where = [("tax/dpp_ratio", cfg.get("tax"))]
+        for oid in sorted(orgs):
+            oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None
+            if isinstance(oc, dict):
+                dpp_where.append((f"orgs/{oid}/config/tax/dpp_ratio", oc.get("tax")))
+        for where, tax in dpp_where:
+            r = tax.get("dpp_ratio") if isinstance(tax, dict) else None
+            if isinstance(r, str) and parse_dpp_ratio(r) is None:
+                rep.add("error", cp, where, "bad_dpp_ratio", f'dpp_ratio "{r}" must be two whole numbers like 11/12')
     for tn in sorted(themes):
         p, d = themes[tn]
         ext = d.get("extends") or ""
@@ -904,6 +913,15 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             dashboards[dn] = db
     for ln in sorted(layouts):
         check_layout(rep, layouts[ln][0], layouts[ln][1], allmodels, dashboards, installed)
+
+
+def parse_dpp_ratio(s):
+    """A DPP ratio such as "11/12" as (11, 12): two positive whole numbers around "/" (kernel meta.ParseDPPRatio)."""
+    a, sep, b = s.partition("/")
+    a, b = a.strip(), b.strip()
+    if not sep or not re.fullmatch(r"[0-9]{1,9}", a) or not re.fullmatch(r"[0-9]{1,9}", b) or int(a) == 0 or int(b) == 0:
+        return None
+    return int(a), int(b)
 
 
 def check_layout(rep, p, l, allmodels, dashboards, installed):

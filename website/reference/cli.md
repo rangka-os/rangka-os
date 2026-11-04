@@ -6,7 +6,7 @@ Release binaries carry the Console, design system and theme/layout templates ins
 from the workspace.
 
 ```text
-rangka validate --apps <dir> [--site <dir>] [--connectors <dir>] [--json] [app ...]
+rangka validate --apps <dir> [--site <dir>] [--modules <dir>] [--connectors <dir>] [--json] [app ...]
 rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n] [--files-dir <dir>]
 rangka backup   --db <url> [--apps <dir>] [--modules <dir>] [--site <dir>] [--connectors <dir>] [--out <file>] [--org <id>] [--files-dir <dir>]
 rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
@@ -141,7 +141,7 @@ made by `npm create @rangka-os` needs no flags:
 | Variable | Flag |
 | --- | --- |
 | `DATABASE_URL` | `--db` |
-| `RANGKA_APPS`, `RANGKA_SITE`, `RANGKA_CONNECTORS`, `RANGKA_FIXTURES` | `--apps`, `--site`, `--connectors`, `--fixtures` |
+| `RANGKA_APPS`, `RANGKA_SITE`, `RANGKA_MODULES`, `RANGKA_CONNECTORS`, `RANGKA_FIXTURES` | `--apps`, `--site`, `--modules`, `--connectors`, `--fixtures` (validate too) |
 | `RANGKA_ORG` | `--org` (seed, serve) |
 | `RANGKA_FILES_DIR` | `--files-dir` (serve, migrate, backup), `--files` (restore) |
 | `RANGKA_ENV` | `production` turns on the backup before migrations |

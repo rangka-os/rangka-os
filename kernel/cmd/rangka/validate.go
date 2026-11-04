@@ -16,27 +16,34 @@ func loadSchemas(dir string) (*schema.Set, error) {
 	return schema.LoadDir(dir)
 }
 
-func cmdValidate(args []string) int {
+// validateFlags parses validate's flags. Like migrate, seed and serve, the directories default to RANGKA_APPS,
+// RANGKA_SITE, RANGKA_MODULES and RANGKA_CONNECTORS (set in the environment or .env).
+func validateFlags(args []string) (opts meta.Options, files []string, asJSON bool, schemas string) {
 	fs := flag.NewFlagSet("validate", flag.ExitOnError)
-	apps := fs.String("apps", "apps", "apps directory")
-	site := fs.String("site", "", "site directory (system.rk, features.rk, config.rk, themes/, layouts/, custom/)")
-	connectors := fs.String("connectors", "", "connectors directory (<name>/connector.rk)")
-	modules := fs.String("modules", os.Getenv("RANGKA_MODULES"), "modules directory (<name>/module.rk; default: modules next to the apps directory)")
-	asJSON := fs.Bool("json", false, "print JSON")
-	schemas := fs.String("schemas", "", "schema directory (default: the schemas built into the binary)")
+	fs.StringVar(&opts.AppsDir, "apps", envOr("RANGKA_APPS", "apps"), "apps directory")
+	fs.StringVar(&opts.SiteDir, "site", os.Getenv("RANGKA_SITE"), "site directory (system.rk, features.rk, config.rk, themes/, layouts/, custom/)")
+	fs.StringVar(&opts.ConnectorsDir, "connectors", os.Getenv("RANGKA_CONNECTORS"), "connectors directory (<name>/connector.rk)")
+	fs.StringVar(&opts.ModulesDir, "modules", os.Getenv("RANGKA_MODULES"), "modules directory (<name>/module.rk; default: modules next to the apps directory)")
+	fs.BoolVar(&asJSON, "json", false, "print JSON")
+	fs.StringVar(&schemas, "schemas", "", "schema directory (default: the schemas built into the binary)")
 	fs.Parse(reorder(args))
-	set, err := loadSchemas(*schemas)
+	return opts, fs.Args(), asJSON, schemas
+}
+
+func cmdValidate(args []string) int {
+	opts, files, asJSON, schemas := validateFlags(args)
+	set, err := loadSchemas(schemas)
 	if err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		return 2
 	}
-	if st, err := os.Stat(*apps); err != nil || !st.IsDir() {
-		fmt.Fprintf(os.Stderr, "apps directory %q not found\n", *apps)
+	if st, err := os.Stat(opts.AppsDir); err != nil || !st.IsDir() {
+		fmt.Fprintf(os.Stderr, "apps directory %q not found\n", opts.AppsDir)
 		return 2
 	}
-	_, rep := meta.ValidateOpts(meta.Options{AppsDir: *apps, SiteDir: *site, ConnectorsDir: *connectors, ModulesDir: *modules}, fs.Args(), set)
+	_, rep := meta.ValidateOpts(opts, files, set)
 	var errs int
-	if *asJSON {
+	if asJSON {
 		errs = rep.JSON(os.Stdout)
 	} else {
 		errs = rep.Print(os.Stdout)

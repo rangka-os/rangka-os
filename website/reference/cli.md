@@ -16,6 +16,7 @@ rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <di
 rangka user add <email> --org <org> --role <role> [--outlets a,b] [--name <full name>] [--record <USR-…>]
                 [--reset-password] [--create-org] [--db <url>]
 rangka user remove <email> --org <org> [--db <url>]
+rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--apps <dir>] [--site <dir>] [--db <url>]
 ```
 
 | Command | Does |
@@ -28,6 +29,7 @@ rangka user remove <email> --org <org> [--db <url>]
 | `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/app/`, `/console/`; `/` redirects to `/app/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
 | `user add` | Creates a Rangka ID account and sets its role in an organisation (one role per member), so people can sign in to `/app/`. The email is the first argument (or `--email`). The password comes from `$RANGKA_USER_PASSWORD` (or `--password`, which lands in shell history) and is needed only for a new account or with `--reset-password`; an existing account keeps its password otherwise. `--db` and `--org` default to `$DATABASE_URL` and `$RANGKA_ORG`. An unknown organisation is refused unless `--create-org` is given; `--record` links the member to a core user record; `--outlets a,b` sets the outlets the member works at (`--outlets ""` clears them). Missing flags exit 2. |
 | `user remove` | Ends a membership. Exits 1 with `<email> is not a member of <org>` when it is not one. |
+| `numbering set` | Once at go-live, makes `<next>` the number a series issues next for an org, so Rangka continues the client's own numbering. It applies to the current period in the site timezone, or to `--period` (`2026` for a yearly series, `2026-11` for a monthly one). It exits 1 instead of lowering a counter, reissuing an existing number or going below the series `start`, and prints the next number. Missing arguments exit 2. See [Number series](/concepts/models#number-series). |
 
 ## Migrations
 
@@ -61,7 +63,8 @@ rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database>
 - The archive holds a manifest (kernel version, row counts, SHA-256 per table and per file), every table in schema
   `public` as `COPY` text, `site/` (without `data/` and `backups/`), `apps/`, `modules/` and `connectors/` (the
   directories the loader reads: `--modules` / `$RANGKA_MODULES`, default `modules` next to `--apps`; `--connectors` /
-  `$RANGKA_CONNECTORS`) and the uploads directory.
+  `$RANGKA_CONNECTORS`) and the uploads directory. A modules or connectors directory that does not exist is
+  skipped and listed in the manifest's `absent`; a missing `--apps` directory is an error.
 - Backup is written in Go through the database connection (`COPY ... TO STDOUT`), so the single binary needs no
   Postgres client tools. All tables are read from one snapshot. The file is written as `<out>.partial` and renamed
   when complete. Every archive (also the pre-migrate ones) is created with mode `0600`: it holds password, token and

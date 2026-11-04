@@ -1,9 +1,13 @@
 package engine
 
 import (
+	"context"
+	"fmt"
+	"math"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -52,7 +56,30 @@ func seriesDef(name string, v any) (store.Scheme, bool) {
 		return store.Scheme{}, false
 	}
 	r, _ := d["reset"].(string)
-	return store.Scheme{Series: name, Pattern: p, Reset: r}, true
+	return store.Scheme{Series: name, Pattern: p, Reset: r, Start: wholeNumber(d["start"])}, true
+}
+
+// maxStart is the highest series start the schema accepts (config.json numbering.<series>.start).
+const maxStart = 999999999999999
+
+// wholeNumber is v as an int64 when it is a whole number from 1 to maxStart (YAML gives int64, JSON float64), else 0.
+func wholeNumber(v any) int64 {
+	var n int64
+	switch x := v.(type) {
+	case int64:
+		n = x
+	case int:
+		n = int64(x)
+	case float64:
+		if x != math.Trunc(x) || x < 1 || x > maxStart {
+			return 0
+		}
+		n = int64(x)
+	}
+	if n < 1 || n > maxStart {
+		return 0
+	}
+	return n
 }
 
 // nextName takes the next document name for m inside the op's transaction: a series number, or the v0
@@ -67,13 +94,69 @@ func (o *op) nextName(m *meta.Model) (string, error) {
 	if s.Pattern == "" {
 		return "", conflict("numbering", "Seri nomor \""+s.Series+"\" belum diatur di config.rk")
 	}
+	return store.NextSeriesName(o.ctx, o.tx, o.actor.Org, e.orgCode(o.actor.Org), s, e.seriesTables(o.actor.Org, s.Series), now)
+}
+
+// seriesTables are the record tables of every installed model that uses series in org.
+func (e *Engine) seriesTables(org, series string) []string {
 	var tables []string
 	for _, x := range e.Reg().InstalledModels() {
-		if e.scheme(x, o.actor.Org).Series == s.Series {
+		if e.scheme(x, org).Series == series {
 			tables = append(tables, store.TableName(x.Name))
 		}
 	}
-	return store.NextSeriesName(o.ctx, o.tx, o.actor.Org, e.orgCode(o.actor.Org), s, tables, now)
+	return tables
+}
+
+// seriesScheme is the scheme of series in org as the first installed model using it resolves it; Series is ""
+// when no installed model uses the series.
+func (e *Engine) seriesScheme(org, series string) store.Scheme {
+	for _, x := range e.Reg().InstalledModels() {
+		if sc := e.scheme(x, org); sc.Series == series {
+			return sc
+		}
+	}
+	return store.Scheme{}
+}
+
+// SetNextNumber makes next the number series issues next in org, in period ("" = the current period in the
+// site timezone), and returns that number formatted and the period it resolved ("" for a series that never resets): the one-time go-live step of `rangka numbering set`
+// (contract 0009 §4). It never lowers the counter or reissues an existing name (see store.SetNextSeries)
+// and is audited as numbering.set.
+func (e *Engine) SetNextNumber(ctx context.Context, org, series string, next int64, period string) (string, string, error) {
+	s := e.seriesScheme(org, series)
+	if s.Series == "" {
+		return "", "", fmt.Errorf("numbering: no installed model uses series %q in org %s", series, org)
+	}
+	if s.Pattern == "" {
+		return "", "", fmt.Errorf("numbering: series %q has no pattern in config.rk", series)
+	}
+	if period == "never" {
+		period = ""
+	}
+	ctx = pg.WithOrg(ctx, org)
+	tx, err := e.DB.Begin(ctx)
+	if err != nil {
+		return "", "", err
+	}
+	defer tx.Rollback(ctx)
+	res, err := tx.Query(ctx, `select 1 from rk_orgs where id = $1`, org)
+	if err != nil {
+		return "", "", err
+	}
+	if len(res.Rows) == 0 {
+		return "", "", fmt.Errorf("numbering: org %s does not exist", org)
+	}
+	now := e.Now().In(e.Location())
+	name, resolved, err := store.SetNextSeries(ctx, tx, org, e.orgCode(org), s, e.seriesTables(org, series), now, period, next)
+	if err != nil {
+		return "", "", err
+	}
+	if err := store.Audit(ctx, tx, org, "cli", "numbering.set", "series/"+series, "next number "+name,
+		map[string]any{"next": next, "period": resolved}); err != nil {
+		return "", "", err
+	}
+	return name, resolved, tx.Commit(ctx)
 }
 
 // orgCode is the {ORG} token: config.rk orgs.<id>.code when set, else the org id upper-cased.

@@ -126,6 +126,11 @@ naming: {series: invoice, pattern: "INV-{YYYY}-{#####}"}   # pattern is the app'
 must repeat its reset period in the number: `yearly` needs `{YY}` or `{YYYY}`, `monthly` needs `{MM}` and a year token.
 A counter that outgrows its width is printed in full.
 
+A series may set `start: 1001`, the lowest number it issues in every period (default 1). To continue a client's own
+numbering once at go-live, run `rangka numbering set <org> <series> <next>` instead: the series then issues `<next>`
+in the current period (or in `--period 2026`). It never lowers a counter and never reissues an existing number; the
+earlier numbers stay in the client's old system.
+
 A new number always continues after the highest existing matching name, so data opened with real numbers mid-period is skipped over, never reissued. Changing a pattern or org code mid-period keeps counting, because the counter is per org, series and period. Until `orgs:` is allowed in `config.rk`, `{ORG}` is the org id in upper case.
 
 A model's number is resolved in this order:

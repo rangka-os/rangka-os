@@ -43,7 +43,7 @@ pick_method() {
 # the same night, naming the path.
 check_no_links() {
   local p="$1" name found
-  for name in site data apps connectors; do
+  for name in site data apps modules connectors fixtures; do
     [ -d "$PILOTS_ROOT/$p/$name" ] || continue
     # called as `check_no_links ... || return 1`, so errexit is off here: a failed scan must fail the backup itself
     found="$(find "$PILOTS_ROOT/$p/$name" \( -type l -o \( -type f -links +1 \) \) -print -quit)" \
@@ -102,7 +102,10 @@ dump_pg() {
 # table counts and checksums before and after, one retry when the data changed in between. Called as
 # `dump_rangka ... || return 1`, which switches errexit off in here: every step checks its own status.
 dump_rangka() {
-  local p="$1" url="$2" dir="$3" attempt before after secret_url
+  local p="$1" url="$2" dir="$3" attempt before after secret_url conn="" mods=""
+  # the same folders serve reads; only when they exist (rangka backup refuses a missing --connectors/--modules folder)
+  [ ! -d "$PILOTS_ROOT/$p/connectors" ] || conn="$PILOTS_ROOT/$p/connectors"
+  [ ! -d "$PILOTS_ROOT/$p/modules" ] || mods="$PILOTS_ROOT/$p/modules"
   for attempt in 1 2; do
     before="$(table_stats "$url")" || { log "table stats failed"; return 1; }
     # the kernel takes the database from DATABASE_URL (environment only, never argv)
@@ -111,6 +114,7 @@ dump_rangka() {
     # the tables without an org link (rk_keys, ...), which would never match the manifest. --files is the pilot's
     # files folder (system.rk files.path, ./data/files); a missing one only matters once attachments exist.
     (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
+      RANGKA_CONNECTORS="$conn" RANGKA_MODULES="$mods" \
       rangka backup --out "$dir/rangka.backup" --files "$PILOTS_ROOT/$p/data/files") \
       || { log "rangka backup failed"; return 1; }
     after="$(table_stats "$url")" || { log "table stats failed"; return 1; }
@@ -192,7 +196,7 @@ backup_pilot() {
   require_stats "$WORK_DIR/stats.tsv" || return 1
   tar_dir "$WORK_DIR/site.tar" "$p" site
   tar_dir "$WORK_DIR/files.tar" "$p" data
-  tar_dir "$WORK_DIR/apps.tar" "$p" apps connectors # lets a second machine boot the kernel from the archive alone
+  tar_dir "$WORK_DIR/apps.tar" "$p" apps modules connectors fixtures # lets a second machine boot the kernel from the archive alone
 
   pg_version="$(psql -qAtX -c 'SHOW server_version' "$url")"
   stats_to_tables_json <"$WORK_DIR/stats.tsv" >"$WORK_DIR/tables.json"

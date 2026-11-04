@@ -1,9 +1,13 @@
 package engine
 
 import (
+	"context"
+	"fmt"
+	"math"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -52,7 +56,22 @@ func seriesDef(name string, v any) (store.Scheme, bool) {
 		return store.Scheme{}, false
 	}
 	r, _ := d["reset"].(string)
-	return store.Scheme{Series: name, Pattern: p, Reset: r}, true
+	return store.Scheme{Series: name, Pattern: p, Reset: r, Start: wholeNumber(d["start"])}, true
+}
+
+// wholeNumber is v as an int64 when it is a whole number (YAML gives int64, JSON float64), else 0.
+func wholeNumber(v any) int64 {
+	switch n := v.(type) {
+	case int64:
+		return n
+	case int:
+		return int64(n)
+	case float64:
+		if n == math.Trunc(n) && math.Abs(n) < 1e15 {
+			return int64(n)
+		}
+	}
+	return 0
 }
 
 // nextName takes the next document name for m inside the op's transaction: a series number, or the v0
@@ -67,13 +86,54 @@ func (o *op) nextName(m *meta.Model) (string, error) {
 	if s.Pattern == "" {
 		return "", conflict("numbering", "Seri nomor \""+s.Series+"\" belum diatur di config.rk")
 	}
+	return store.NextSeriesName(o.ctx, o.tx, o.actor.Org, e.orgCode(o.actor.Org), s, e.seriesTables(o.actor.Org, s.Series), now)
+}
+
+// seriesTables are the record tables of every installed model that uses series in org.
+func (e *Engine) seriesTables(org, series string) []string {
 	var tables []string
 	for _, x := range e.Reg().InstalledModels() {
-		if e.scheme(x, o.actor.Org).Series == s.Series {
+		if e.scheme(x, org).Series == series {
 			tables = append(tables, store.TableName(x.Name))
 		}
 	}
-	return store.NextSeriesName(o.ctx, o.tx, o.actor.Org, e.orgCode(o.actor.Org), s, tables, now)
+	return tables
+}
+
+// SetNextNumber makes next the number series issues next in org, in period ("" = the current period in the
+// site timezone), and returns that number formatted: the one-time go-live step of `rangka numbering set`
+// (contract 0009 §4). It never lowers the counter or reissues an existing name (see store.SetNextSeries)
+// and is audited as numbering.set.
+func (e *Engine) SetNextNumber(ctx context.Context, org, series string, next int64, period string) (string, error) {
+	var s store.Scheme
+	for _, x := range e.Reg().InstalledModels() {
+		if sc := e.scheme(x, org); sc.Series == series {
+			s = sc
+			break
+		}
+	}
+	if s.Series == "" {
+		return "", fmt.Errorf("numbering: no installed model uses series %q in org %s", series, org)
+	}
+	if s.Pattern == "" {
+		return "", fmt.Errorf("numbering: series %q has no pattern in config.rk", series)
+	}
+	ctx = pg.WithOrg(ctx, org)
+	tx, err := e.DB.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	now := e.Now().In(e.Location())
+	name, err := store.SetNextSeries(ctx, tx, org, e.orgCode(org), s, e.seriesTables(org, series), now, period, next)
+	if err != nil {
+		return "", err
+	}
+	if err := store.Audit(ctx, tx, org, "cli", "numbering.set", "series/"+series, "next number "+name,
+		map[string]any{"next": next, "period": period}); err != nil {
+		return "", err
+	}
+	return name, tx.Commit(ctx)
 }
 
 // orgCode is the {ORG} token: config.rk orgs.<id>.code when set, else the org id upper-cased.

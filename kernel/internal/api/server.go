@@ -42,6 +42,9 @@ type Server struct {
 	MaxUploadMB  int         // files.max_upload_mb; 0 = 20
 	Log          func(format string, args ...any)
 
+	previewMu sync.Mutex // guards previews (preview.go)
+	previews  []*previewEntry
+
 	blobMu sync.Mutex // orders blob removal against uploads of the same bytes (one process)
 }
 
@@ -144,6 +147,15 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/changesets", a(s.proposeChangeset))
 	mux.HandleFunc("GET /api/v1/changesets/{id}", a(s.getChangeset))
 	mux.HandleFunc("POST /api/v1/changesets/{id}/{verb}", a(s.changesetVerb))
+	// live preview of a change set (contract 0015 §4): read-only
+	mux.HandleFunc("GET /api/v1/preview", a(s.previewRoot))
+	mux.HandleFunc("GET /api/v1/preview/{id}/meta", a(s.previewGuard(s.previewMeta)))
+	mux.HandleFunc("GET /api/v1/preview/{id}/r/{model}", a(s.previewGuard(s.previewList)))
+	mux.HandleFunc("GET /api/v1/preview/{id}/r/{model}/{name}", a(s.previewGuard(s.previewGet)))
+	mux.HandleFunc("GET /api/v1/preview/{id}/dashboards/{name}", a(s.previewGuard(s.previewDashboard)))
+	for _, m := range []string{"POST", "PATCH", "DELETE"} {
+		mux.HandleFunc(m+" /api/v1/preview/{path...}", a(s.previewReadOnly))
+	}
 	// system, orgs, files
 	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		writeJSON(w, 200, s.Status(r.Context(), c.actor.Org))

@@ -132,6 +132,14 @@
             "$ref": "model.json#/$defs/name"
           },
           "description": "Roles that can approve change sets"
+        },
+        "proposers": {
+          "type": "array",
+          "items": {
+            "$ref": "model.json#/$defs/name"
+          },
+          "default": [],
+          "description": "Roles (besides the approvers) that can propose change sets from the web app's Ubah mode"
         }
       }
     },

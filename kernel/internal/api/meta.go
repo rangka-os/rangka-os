@@ -28,7 +28,12 @@ func (s *Server) getMeta(w http.ResponseWriter, r *http.Request, c *caller) {
 // layout. apps lists apps and 0.4 units, modules lists modules and 0.4 units (a 0.4 unit is both), every
 // model names its module (contract 0001).
 func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, error) {
-	reg := s.Engine.Reg()
+	return s.metaFor(ctx, s.Engine, a)
+}
+
+// metaFor builds the /meta body from engine e's registry (the live engine, or a preview engine).
+func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) (map[string]any, error) {
+	reg := e.Reg()
 	apps, modules := []any{}, []any{}
 	for _, name := range reg.AppOrder() {
 		ap := reg.App[name]
@@ -72,7 +77,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 			raw["status_field"] = true // records carry a derived status
 		}
 		raw["prints"] = printsMeta(reg, m.Name)
-		raw["can"] = s.Engine.Allowed(a, m.Name) // model level: a conditional grant (if:) counts as true
+		raw["can"] = e.Allowed(a, m.Name) // model level: a conditional grant (if:) counts as true
 		models[m.Name] = raw
 	}
 	dashboards := map[string]any{}
@@ -100,7 +105,7 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 	imports := map[string]any{} // for the import wizard (contract 0012); site imports have app ""
 	for name, im := range reg.Imports {
 		if (im.App == "" || reg.IsInstalled(im.App)) && reg.Model(im.Model) != nil &&
-			s.Engine.Can(ctx, a, im.Model, "import", nil) && s.Engine.Can(ctx, a, im.Model, "create", nil) {
+			e.Can(ctx, a, im.Model, "import", nil) && e.Can(ctx, a, im.Model, "create", nil) {
 			imports[name] = map[string]any{"name": name, "model": im.Model, "label": im.Label, "source": im.Source, "per": im.Per, "app": im.App}
 		}
 	}
@@ -123,8 +128,9 @@ func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, erro
 		"theme": s.theme(reg), "layout": s.layout(reg),
 		"installed": reg.AppOrder(), "org": a.Org,
 		"config": siteConfig(reg), "capabilities": capabilityList(reg),
-		"user":  map[string]any{"email": a.ID, "name": a.UserName, "roles": a.Roles},
-		"today": s.Engine.Today(),
+		"user":       map[string]any{"email": a.ID, "name": a.UserName, "roles": a.Roles},
+		"changesets": s.changesetsMeta(a),
+		"today":      e.Today(),
 	}
 	return out, nil
 }

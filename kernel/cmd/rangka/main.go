@@ -23,6 +23,8 @@ Usage:
   rangka user add <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."] [--reset-password] [--create-org] [--db <url>]
   rangka user remove <email> --org <id> [--db <url>]
     (the email may also be --email <e>; the password comes from RANGKA_USER_PASSWORD or --password, new accounts or --reset-password only)
+  rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--apps <dir>] [--site <dir>] [--db <url>]
+    (once at go-live: continue the client's own numbering; never lowers a counter or reissues a name)
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:
@@ -49,6 +51,8 @@ func main() {
 		code = cmdSeed(os.Args[2:])
 	case "user":
 		code = cmdUser(os.Args[2:])
+	case "numbering":
+		code = cmdNumbering(os.Args[2:])
 	case "serve":
 		code = cmdServe(os.Args[2:])
 	case "backup":

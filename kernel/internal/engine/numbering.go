@@ -100,18 +100,33 @@ func (e *Engine) seriesTables(org, series string) []string {
 	return tables
 }
 
+// seriesScheme is the scheme of series in org as the first installed model using it resolves it; Series is ""
+// when no installed model uses the series.
+func (e *Engine) seriesScheme(org, series string) store.Scheme {
+	for _, x := range e.Reg().InstalledModels() {
+		if sc := e.scheme(x, org); sc.Series == series {
+			return sc
+		}
+	}
+	return store.Scheme{}
+}
+
+// SeriesPeriod is the current counter period of series in org ("" for a series that never resets).
+func (e *Engine) SeriesPeriod(org, series string) string {
+	s := e.seriesScheme(org, series)
+	reset := s.Reset
+	if reset == "" {
+		reset = store.DefaultReset(s.Pattern)
+	}
+	return store.Period(reset, e.Now().In(e.Location()))
+}
+
 // SetNextNumber makes next the number series issues next in org, in period ("" = the current period in the
 // site timezone), and returns that number formatted: the one-time go-live step of `rangka numbering set`
 // (contract 0009 §4). It never lowers the counter or reissues an existing name (see store.SetNextSeries)
 // and is audited as numbering.set.
 func (e *Engine) SetNextNumber(ctx context.Context, org, series string, next int64, period string) (string, error) {
-	var s store.Scheme
-	for _, x := range e.Reg().InstalledModels() {
-		if sc := e.scheme(x, org); sc.Series == series {
-			s = sc
-			break
-		}
-	}
+	s := e.seriesScheme(org, series)
 	if s.Series == "" {
 		return "", fmt.Errorf("numbering: no installed model uses series %q in org %s", series, org)
 	}

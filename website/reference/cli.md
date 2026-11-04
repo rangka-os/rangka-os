@@ -8,7 +8,7 @@ from the workspace.
 ```text
 rangka validate --apps <dir> [--site <dir>] [--connectors <dir>] [--json] [app ...]
 rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n] [--files-dir <dir>]
-rangka backup   --db <url> [--apps <dir>] [--site <dir>] [--out <file>] [--org <id>] [--files-dir <dir>]
+rangka backup   --db <url> [--apps <dir>] [--modules <dir>] [--site <dir>] [--connectors <dir>] [--out <file>] [--org <id>] [--files-dir <dir>]
 rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>]
@@ -22,7 +22,7 @@ rangka user remove <email> --org <org> [--db <url>]
 | --- | --- |
 | `validate` | Loads every `.rk`, checks syntax, schema and meaning, prints `file:line:col  level  code  path  message`, exits 1 on errors. Output is byte-identical to `tools/rangka_validate.py`. |
 | `migrate` | Compiles models (with overlays) into Postgres DDL: a table per model, child tables, indexes on links, docstatus and unique fields. Idempotent and diff-based. `--dry-run` prints each statement with its risk and changes nothing. `--rollback n` undoes the last n migrations. Destructive steps need `--allow-destructive`. See [Migrations](#migrations). |
-| `backup` | Writes one verified `tar.gz`: every table, `site/`, `apps/` and the uploads directory, with checksums. See [Backup and restore](#backup-and-restore). |
+| `backup` | Writes one verified `tar.gz`: every table, `site/`, `apps/`, `modules/`, `connectors/` and the uploads directory, with checksums. See [Backup and restore](#backup-and-restore). |
 | `restore` | Rebuilds an archive into an empty database and verifies it against the archive's checksums. |
 | `seed` | Creates the organisation (`--org`, `$RANGKA_ORG`, else the site folder name), loads `fixtures/*.rk`, and the owner account (`--email`/`--password`, `$RANGKA_OWNER_EMAIL`/`$RANGKA_OWNER_PASSWORD`; demo default `ceo@saga.co.id` / `rangka-demo`). |
 | `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/app/`, `/console/`; `/` redirects to `/app/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
@@ -59,7 +59,9 @@ rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database>
 ```
 
 - The archive holds a manifest (kernel version, row counts, SHA-256 per table and per file), every table in schema
-  `public` as `COPY` text, `site/` (without `data/` and `backups/`), `apps/` and the uploads directory.
+  `public` as `COPY` text, `site/` (without `data/` and `backups/`), `apps/`, `modules/` and `connectors/` (the
+  directories the loader reads: `--modules` / `$RANGKA_MODULES`, default `modules` next to `--apps`; `--connectors` /
+  `$RANGKA_CONNECTORS`) and the uploads directory.
 - Backup is written in Go through the database connection (`COPY ... TO STDOUT`), so the single binary needs no
   Postgres client tools. All tables are read from one snapshot. The file is written as `<out>.partial` and renamed
   when complete. Every archive (also the pre-migrate ones) is created with mode `0600`: it holds password, token and
@@ -76,10 +78,10 @@ rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database>
   error that names it.
 - Backup fails when an attachment row in scope (`rk_attachments`) has no blob in the uploads directory, also when the
   directory does not exist. Run it where `serve` runs or point `--files-dir` / `RANGKA_FILES_DIR` at the same directory.
-- `restore` needs an empty database. It migrates from the archived `apps/` and `site/`, adds archived columns the
+- `restore` needs an empty database. It migrates from the archived `apps/`, `modules/`, `connectors/` and `site/` only (never the host's), adds archived columns the
   models no longer have, loads the tables in foreign-key order with `COPY ... FROM STDIN`, resets sequences, then
   recomputes the checksums and compares them with the manifest. It also checks that every restored attachment row
-  has its blob. It writes `site/` and `apps/` into `--into` (default `./restore-<archive name>`) and the uploads into
+  has its blob. It writes the archived metadata directories into `--into` (default `./restore-<archive name>`) and the uploads into
   `--files` (directories `0750`, files `0640`, like the files store).
 - An archive written by a newer kernel than the running binary is refused. A corrupt archive (bad checksum, unsafe
   entry, unexpected column type) is refused before anything is written.

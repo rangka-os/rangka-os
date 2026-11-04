@@ -47,7 +47,10 @@ var (
 type Options struct {
 	Org                                 string // "" = the whole database
 	SiteDir, AppsDir, FilesDir, Version string
-	Now                                 func() time.Time // default time.Now
+	// ModulesDir and ConnectorsDir are the other metadata directories the loader read (contract 0001
+	// modules, connectors); "" = none. Restore needs all of them to rebuild the schema.
+	ModulesDir, ConnectorsDir string
+	Now                       func() time.Time // default time.Now
 }
 
 // Manifest is manifest.json, the first entry of an archive.
@@ -77,7 +80,7 @@ type Column struct {
 	Type string `json:"type"`
 }
 
-// FileSum is a non-table archive entry (site/…, apps/…, files/…).
+// FileSum is a non-table archive entry (site/…, apps/…, modules/…, connectors/…, files/…).
 type FileSum struct {
 	Path   string `json:"path"`
 	Size   int64  `json:"size"`
@@ -425,8 +428,10 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 	if err := add("site", o.SiteDir, map[string]bool{"data": true, "backups": true}); err != nil {
 		return nil, err
 	}
-	if err := add("apps", o.AppsDir, nil); err != nil {
-		return nil, err
+	for _, d := range []struct{ name, dir string }{{"apps", o.AppsDir}, {"modules", o.ModulesDir}, {"connectors", o.ConnectorsDir}} {
+		if err := add(d.name, d.dir, nil); err != nil {
+			return nil, err
+		}
 	}
 	filesPrefix, filesDir := "files", o.FilesDir
 	if o.Org != "" && o.FilesDir != "" {

@@ -151,6 +151,7 @@ func cmdSeed(args []string) int {
 // filesDir is --files-dir ($RANGKA_FILES_DIR), resolved like serve.
 func preBackup(db *pg.Pool, c *common, reg *meta.Registry, filesDir string) func(context.Context, []store.Step) error {
 	files := backup.FilesDir(reg, filesDir) // the directory serve uses
-	return server.PreMigrateBackup(db, backup.Options{SiteDir: c.site, AppsDir: c.apps, FilesDir: files, Version: Version},
+	return server.PreMigrateBackup(db, backup.Options{SiteDir: c.site, AppsDir: c.apps, ModulesDir: c.modulesDir(), ConnectorsDir: c.connectorsDir(),
+		FilesDir: files, Version: Version},
 		server.BackupDir(c.site))
 }

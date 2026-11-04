@@ -288,11 +288,14 @@
     return names.length ? clone(models[names[0]].permissions) : undefined;
   }
 
-  /** New table: apps/<app>/models/<name>.rk plus a `nav.side` entry in the layout (group "Tabel baru"). meta (optional):
-   *  the merged metadata, for the permissions copied from a sibling model. */
-  RA.opsAddModel = function (app, spec, layoutName, layoutExisting, meta) {
+  /** New table: <unit>/models/<name>.rk plus a `nav.side` entry in the layout (group "Tabel baru"). home: {unit, kind}
+   *  from RA.tableHome (kind "module" → modules/, "app" → apps/ for a 0.4 app); a bare unit name means apps/. meta
+   *  (optional): the merged metadata, for the permissions copied from a sibling model. */
+  RA.opsAddModel = function (home, spec, layoutName, layoutExisting, meta) {
+    if (!isObj(home)) home = { unit: home, kind: "app" };
+    var app = home.unit;
     var perms = siblingPermissions(meta, app, layoutExisting && layoutExisting.parsed && layoutExisting.parsed.nav && layoutExisting.parsed.nav.side);
-    var name = slugName(spec.label), path = "apps/" + app + "/models/" + name + ".rk";
+    var name = slugName(spec.label), path = (home.kind === "module" ? "modules/" : "apps/") + app + "/models/" + name + ".rk";
     var fields = [], taken = [];
     (spec.fields || []).forEach(function (f) {
       var n = uniqueName(slugName(f.label), taken, 60); taken.push(n);
@@ -399,6 +402,24 @@
     return { unit: unit, kind: isApp ? "app" : "module" };
   };
 
+  /** Where a new table goes (contract 0001: an app defines no models, so its tables live in its modules): the module of
+   *  the model on screen, else the module of the app's first menu model, else the app's first module. A 0.4 app (kind
+   *  legacy) holds its own models → {unit: app, kind: "app"}. */
+  RA.tableHome = function (meta, routeModel, appName) {
+    var apps = (meta && meta.apps) || [], ap = apps.filter(function (a) { return a && a.name === appName; })[0] || {};
+    if (routeModel && ((meta && meta.models) || {})[routeModel]) return RA.unitOf(meta, routeModel);
+    if (ap.kind !== "app") return { unit: appName, kind: "app" };
+    var first = null;
+    (ap.menu || []).forEach(function (g) {
+      (g && g.items || []).forEach(function (it) {
+        var m = isObj(it) ? String(it.to || "").replace(/^model:/, "") : it;
+        if (!first && ((meta.models || {})[m])) first = m;
+      });
+    });
+    if (first) return RA.unitOf(meta, first);
+    return { unit: (ap.modules || [])[0] || appName, kind: (ap.modules || []).length ? "module" : "app" };
+  };
+
   function celLit(f, text, what) {
     var t = f && f.type, v = String(text == null ? "" : text).trim();
     if (t === "check") return v === "true" || v === "1" || v.toLowerCase() === "ya" ? "true" : "false";
@@ -455,13 +476,13 @@
 
   /** A new table and its menu entry. When the layout file has no nav.side yet, the shown menu is written first so the
    *  sidebar keeps every entry it had. */
-  RA.opsAddTable = function (meta, files, app, spec) {
+  RA.opsAddTable = function (meta, files, home, spec) {
     var ex = files.existing, side = ex && ex.parsed && ex.parsed.nav && ex.parsed.nav.side;
-    if (Array.isArray(side) && side.length) return RA.opsAddModel(app, spec, files.name, ex, meta);
+    if (Array.isArray(side) && side.length) return RA.opsAddModel(home, spec, files.name, ex, meta);
     var shown = RA.menuSide(meta), seed = RA.opsMenu(files.name, shown, ex, files.config);
     var after = clone((ex && ex.parsed) || { name: files.name });
     after.nav = Object.assign({}, after.nav || {}, { side: shown });
-    var add = RA.opsAddModel(app, spec, files.name, { parsed: after }, meta);
+    var add = RA.opsAddModel(home, spec, files.name, { parsed: after }, meta);
     return { title: add.title, modelName: add.modelName, ops: add.ops.slice(0, 2).concat(seed.ops, add.ops.slice(2)) };
   };
 

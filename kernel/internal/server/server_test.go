@@ -750,7 +750,7 @@ func TestOverlayFieldThroughLinkAtRuntime(t *testing.T) {
 	e.must(201, "POST", "/api/v1/r/sales_invoice", inv)
 }
 
-// TestDefaultLayout: a site without config.layout gets the side-only shell (contract 0017).
+// TestDefaultLayout: a site without config.layout gets the side-only shell (contract 0019).
 func TestDefaultLayout(t *testing.T) {
 	e := newEnv(t, false, func(apps, site string) {
 		cfg := filepath.Join(site, "config.rk")

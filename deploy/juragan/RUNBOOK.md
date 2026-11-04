@@ -119,7 +119,9 @@ Each step has the check that proves it.
    sudo mkdir -p /opt/juragan/pilots
    for p in jasa fnb; do
      sudo cp -a /opt/juragan/pilots-src/$p /opt/juragan/pilots/$p
-     sudo mkdir -p /opt/juragan/pilots/$p/data/files /opt/juragan/pilots/$p/backups
+     # connectors/ may stay empty, but must exist: the kernel reads RANGKA_CONNECTORS=/srv/connectors, and its
+     # pre-migrate backup (RANGKA_ENV=production) fails on a missing folder
+     sudo mkdir -p /opt/juragan/pilots/$p/data/files /opt/juragan/pilots/$p/backups /opt/juragan/pilots/$p/connectors
    done
    sudo chown -R 65532:65532 /opt/juragan/pilots
    sudo mkdir -p /opt/juragan/backups && sudo chmod 700 /opt/juragan/backups

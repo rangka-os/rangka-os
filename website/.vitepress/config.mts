@@ -33,7 +33,7 @@ export default defineConfig({
       { text: 'Ecosystem', items: [
         { text: 'Rangka Console', link: '/tools/console' },
         { text: 'Rangka AI', link: '/tools/rangka-ai' },
-        { text: 'Apps and templates', link: '/ecosystem/apps' },
+        { text: 'Modules and apps', link: '/ecosystem/apps' },
         { text: 'Connectors', link: '/ecosystem/connectors' },
         { text: 'Rangka Cloud', link: '/ecosystem/cloud' }
       ] },
@@ -92,7 +92,7 @@ export default defineConfig({
       ],
       '/ecosystem/': [
         { text: 'Ecosystem', items: [
-          { text: 'Apps and templates', link: '/ecosystem/apps' },
+          { text: 'Modules and apps', link: '/ecosystem/apps' },
           { text: 'Connectors', link: '/ecosystem/connectors' },
           { text: 'Rangka Cloud', link: '/ecosystem/cloud' }
         ] }

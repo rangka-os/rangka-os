@@ -70,18 +70,24 @@ function rows(obj, self, prefix, depth, acc) {
 }
 
 const examples = {
-  model: 'rangka-apps/apps/crm/models/deal.rk', app: 'rangka-apps/apps/crm/app.rk', dashboard: 'rangka-apps/apps/crm/dashboards/crm_overview.rk',
-  flow: 'rangka-apps/apps/crm/flows/whatsapp_to_lead.rk', role: 'rangka-apps/apps/crm/roles/sales_rep.rk', template: 'rangka-apps/templates/crm/template.rk',
-  connector: 'rangka-connectors/whatsapp_business/connector.rk', system: 'rangka-apps/sites/kopi-senja/system.rk', theme: 'rangka-apps/sites/kopi-senja/themes/kopi_senja.rk',
-  layout: 'rangka-apps/sites/kopi-senja/layouts/crm_first.rk', features: 'rangka-apps/sites/kopi-senja/features.rk', config: 'rangka-apps/sites/kopi-senja/config.rk'
+  model: 'rangka-apps/modules/pipeline/models/deal.rk', module: 'rangka-apps/modules/pipeline/module.rk', app: 'rangka-apps/apps/crm/app.rk',
+  dashboard: 'rangka-apps/apps/crm/dashboards/crm_overview.rk', flow: 'rangka-apps/modules/pipeline/flows/whatsapp_to_lead.rk',
+  role: 'rangka-apps/modules/users/roles/sales_rep.rk', process: 'rangka-apps/apps/crm/processes/lead_to_cash.rk',
+  print: 'rangka-apps/modules/invoicing/print/sales_invoice.rk', import: 'rangka-apps/modules/outlet_sales/imports/daily_form.rk',
+  connector: 'rangka-connectors/whatsapp_business/connector.rk', overlay: 'rangka-apps/examples/sites/demo-jasa/custom/quotation.rk',
+  letterhead: 'rangka-apps/examples/sites/demo-jasa/letterhead.rk', system: 'rangka-apps/examples/sites/kopi-senja/system.rk',
+  theme: 'rangka-apps/examples/sites/kopi-senja/themes/kopi_senja.rk', layout: 'rangka-apps/examples/sites/kopi-senja/layouts/crm_first.rk',
+  features: 'rangka-apps/examples/sites/kopi-senja/features.rk', config: 'rangka-apps/examples/sites/kopi-senja/config.rk'
 }
 const where = {
-  app: 'apps/<app>/app.rk', model: 'apps/<app>/models/<model>.rk', dashboard: 'apps/<app>/dashboards/<name>.rk', flow: 'apps/<app>/flows/<name>.rk',
-  role: 'apps/<app>/roles/<role>.rk', template: 'templates/<name>/template.rk', connector: '<connector>/connector.rk (rangka-connectors)',
-  overlay: '<site>/custom/<model>.rk', system: '<site>/system.rk', theme: '<site>/themes/<name>.rk', layout: '<site>/layouts/<name>.rk',
-  features: '<site>/features.rk', config: '<site>/config.rk', changeset: 'sent to /api/v1/changesets (not a file on disk)',
-  print: 'apps/<app>/print/<name>.rk or <site>/print/<name>.rk', letterhead: '<site>/letterhead.rk or <site>/letterheads/<org>.rk',
-  process: 'apps/<app>/processes/<name>.rk or <site>/processes/<name>.rk'
+  app: 'apps/<app>/app.rk', module: 'modules/<module>/module.rk', model: 'modules/<module>/models/<model>.rk',
+  dashboard: 'apps/<app>/dashboards/<name>.rk', flow: 'modules/<module>/flows/<name>.rk (apps may add glue flows)',
+  role: 'modules/<module>/roles/<role>.rk or apps/<app>/roles/<role>.rk', template: 'templates/<name>/template.rk (0.4, deprecated: now apps/<app>/app.rk)',
+  connector: '<connector>/connector.rk (rangka-connectors)', overlay: '<site>/custom/<model>.rk', system: '<site>/system.rk',
+  theme: '<site>/themes/<name>.rk', layout: '<site>/layouts/<name>.rk', features: '<site>/features.rk', config: '<site>/config.rk',
+  changeset: 'sent to /api/v1/changesets (not a file on disk)', import: 'modules/<module>/imports/<name>.rk',
+  print: 'modules/<module>/print/<name>.rk or <site>/print/<name>.rk', letterhead: '<site>/letterhead.rk or <site>/letterheads/<org>.rk',
+  process: 'apps/<app>/processes/<name>.rk, modules/<module>/processes/<name>.rk or <site>/processes/<name>.rk'
 }
 const workspace = join(root, '..')
 const index = []

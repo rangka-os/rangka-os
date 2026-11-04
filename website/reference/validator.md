@@ -6,7 +6,7 @@ Two implementations print byte-identical reports: the Go kernel (`rangka validat
 optional-app guards).
 
 ```bash
-python3 tools/rangka_validate.py ../rangka-apps/apps --site ../rangka-apps/sites/kopi-senja --connectors ../rangka-connectors
+python3 tools/rangka_validate.py ../rangka-apps/apps --site ../rangka-apps/examples/sites/kopi-senja --connectors ../rangka-connectors
 ```
 
 <!--@include: ./validator-codes.md{4,}-->

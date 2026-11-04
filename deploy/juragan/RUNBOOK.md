@@ -119,14 +119,14 @@ Each step has the check that proves it.
    sudo mkdir -p /opt/juragan/pilots
    for p in jasa fnb; do
      sudo cp -a /opt/juragan/pilots-src/$p /opt/juragan/pilots/$p
-     # connectors/ may stay empty, but must exist: the kernel reads RANGKA_CONNECTORS=/srv/connectors, and its
-     # pre-migrate backup (RANGKA_ENV=production) fails on a missing folder
-     sudo mkdir -p /opt/juragan/pilots/$p/data/files /opt/juragan/pilots/$p/backups /opt/juragan/pilots/$p/connectors
+     sudo mkdir -p /opt/juragan/pilots/$p/data/files /opt/juragan/pilots/$p/backups
    done
    sudo chown -R 65532:65532 /opt/juragan/pilots
    sudo mkdir -p /opt/juragan/backups && sudo chmod 700 /opt/juragan/backups
    ```
    `backups/` receives the kernel's pre-migrate backups (see section 5); the nightly archive does not include it.
+   A pilot without `connectors/` (or `modules/`) needs no empty folder: from `0.5.0-alpha.3` (rangka-os #30) the
+   kernel's backups skip a missing one and list it as `absent` in the manifest.
 4. **`.env`:** `cp .env.example .env`, fill it in (section 2, step 8), then `chmod 600 .env`.
    Check: `docker compose config -q` prints nothing (any missing secret is named in the error).
 5. **Start:**

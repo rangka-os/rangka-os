@@ -63,15 +63,23 @@ and serves on port 8080. Ctrl-C stops everything and removes the database.
 
 ## Change something
 
-1. Open `rangka-apps/apps/crm/models/deal.rk` and add a field:
+`make run-demo` serves the kernel's frozen test catalogue. To run on the real `rangka-apps` (modules + apps, the
+example site `examples/sites/kopi-senja`), pass the folders:
+
+```bash
+make run-demo APPS=../../rangka-apps/apps SITE=../../rangka-apps/examples/sites/kopi-senja \
+  RANGKA_FIXTURES=../../rangka-apps/examples/fixtures/kopi-senja
+```
+
+1. Open `rangka-apps/modules/pipeline/models/deal.rk` and add a field:
    ```yaml
      - {name: next_step, type: data, label: {id: Langkah berikutnya}, in_list: true}
    ```
 2. Validate:
    ```bash
-   make validate
+   make validate APPS=../../rangka-apps/apps SITE=../../rangka-apps/examples/sites/kopi-senja
    ```
-3. Restart `make run-demo`. The field is in the table, the API and the form.
+3. Restart `make run-demo` with the same folders. The field is in the table, the API and the form.
 
 In a running installation you would send the same edit as a [change set](/concepts/change-sets) instead, and it would
 apply without a restart.
@@ -80,7 +88,7 @@ apply without a restart.
 
 ```bash
 make test             # all kernel tests against a throwaway Postgres
-make validate         # rangka validate on rangka-apps + the kopi-senja site + rangka-connectors
+make validate         # rangka validate on the kernel's v0 test catalogue (kernel/testdata/catalogue-v0)
 make compare-python   # Go validator vs tools/rangka_validate.py, must be byte-identical
 ```
 

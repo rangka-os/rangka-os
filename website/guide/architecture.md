@@ -5,7 +5,7 @@ Rangka OS is organised in seven layers. An upper layer may use a lower one, neve
 | Layer | Holds | Files | Who changes it |
 | --- | --- | --- | --- |
 | 6 · Presentation | Themes, layouts, pages built from UI blocks | `themes/*.rk`, `layouts/*.rk` | Owner, Rangka AI (low risk) |
-| 5 · Apps | Models, views, rules, flows, dashboards, roles | `apps/<app>/**.rk` | App authors |
+| 5 · Modules and apps | Modules: models, views, rules, flows, roles. Apps: the modules they use, menu, dashboards, home, onboarding | `modules/<module>/**.rk`, `apps/<app>/**.rk` | App authors |
 | 4 · Organisation | Installed apps, plan, config, company overlays; organisations and members are data | `config.rk`, `features.rk`, `custom/*.rk` | Owner, Rangka AI (medium risk) |
 | 3 · Integrations | Business connectors | `<connector>/connector.rk` | Admin |
 | 2 · System capabilities | db, cache, queue, scheduler, realtime, files, search, notify, auth, secrets, audit, observability | `system.rk` | Admin only |
@@ -17,19 +17,25 @@ through change sets only.
 
 ## An installation
 
-An installation is a **site** folder plus the apps and connectors it uses:
+An installation is a **site** folder plus the apps, modules and connectors it uses. `config.rk` names apps; the
+kernel installs the modules each app lists and everything those modules `require`, dependencies first. The example
+sites live in `rangka-apps/examples/sites/` (`kopi-senja`, `demo-jasa`, `demo-fnb`), their demo data in
+`rangka-apps/examples/fixtures/`.
 
 ```text
-sites/kopi-senja/
+rangka-apps/examples/sites/kopi-senja/
   system.rk        # layer 2: which capabilities and drivers
-  features.rk      # layer 4: plans and what they allow
+  features.rk      # layer 4: plans and the apps they allow
   config.rk        # layer 4: installed apps, locale, tax, approvers, theme, layout
-  custom/          # layer 4: overlays — company fields and rules on app models
+  custom/          # layer 4: overlays — company fields and rules on module models
   themes/          # layer 6
   layouts/         # layer 6
-rangka-apps/apps/{core,sales,crm}/   # layer 5
-rangka-connectors/<connector>/       # layer 3
+rangka-apps/apps/{crm,jasa_proyek,fnb_cabang}/       # layer 5: apps (menu, dashboards, home, onboarding)
+rangka-apps/modules/{contacts,invoicing,stock,…}/    # layer 5: modules (models, rules, flows, roles)
+rangka-connectors/<connector>/                       # layer 3
 ```
+
+The kernel finds `modules/` next to the apps folder (`--modules` or `RANGKA_MODULES` to use another one).
 
 ## Inside the kernel
 

@@ -192,4 +192,17 @@ func TestClockComputesOnRead(t *testing.T) {
 	if err != nil || toInt(list[0]["expired_count"]) != 1 {
 		t.Fatalf("list with children: %v %v", list, err)
 	}
+
+	// a parent without clock computes of its own still serves its rows' current values
+	e.Now = FixedNow
+	cr, err := e.Create(ctx, a, "crew", map[string]any{"crew_name": "Tim A",
+		"certifications": []any{map[string]any{"cert_name": "NDT", "expires_on": "2026-11-10"}}})
+	if err != nil || rows(cr.Record["certifications"])[0]["expired"] != false {
+		t.Fatalf("crew at save: %v %v", cr, err)
+	}
+	e.Now = func() time.Time { return FixedNow().AddDate(0, 1, 0) }
+	crew, err := e.Get(ctx, a, "crew", str(cr.Record["name"]))
+	if err != nil || rows(crew["certifications"])[0]["expired"] != true {
+		t.Fatalf("crew get after the date: %v %v", crew, err)
+	}
 }

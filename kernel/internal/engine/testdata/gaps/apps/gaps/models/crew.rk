@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+# No compute of its own: its certification rows still refresh on read.
+name: crew
+naming: CRW-{###}
+fields:
+  - {name: crew_name, type: data, required: true}
+  - {name: certifications, type: table, of: certification}

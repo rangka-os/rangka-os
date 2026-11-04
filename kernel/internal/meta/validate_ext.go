@@ -147,7 +147,8 @@ func (v *validator) more() {
 	}
 }
 
-// scopeFields reports scope fields (role key scope.field, a name or a list) that no model has.
+// scopeFields reports scope fields (role key scope.field, a name or a list) that no model has: an error when none of
+// the role's fields exists, else a warning.
 func (v *validator) scopeFields(d *rk.Doc, all map[string]vis) {
 	sc, ok := asMap(d.Data)["scope"].(map[string]any)
 	if !ok {
@@ -161,9 +162,17 @@ func (v *validator) scopeFields(d *rk.Doc, all map[string]vis) {
 			}
 		}
 	}
-	for _, f := range scopeFields(sc["field"]) {
+	// A list may name fields that only an optional module has (outlet_staff's from_outlet/to_outlet when stock is
+	// not installed): those narrow nothing, so they are a warning; a scope none of whose fields exists is an error.
+	fields, level := scopeFields(sc["field"]), "error"
+	for _, f := range fields {
+		if known[f] {
+			level = "warning"
+		}
+	}
+	for _, f := range fields {
 		if !known[f] {
-			v.rep.extra("error", d.Path, "scope/field", "unknown_scope_field", fmt.Sprintf(`scope field "%s" is not a field of any installed model`, f))
+			v.rep.extra(level, d.Path, "scope/field", "unknown_scope_field", fmt.Sprintf(`scope field "%s" is not a field of any installed model`, f))
 		}
 	}
 }

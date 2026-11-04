@@ -2740,7 +2740,7 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
     dlg.get_by_role("button", name="Tambah", exact=True).click()
     card = page.locator(".ap-ubah-card")
     card.get_by_role("heading", name="Perlu persetujuan").wait_for(timeout=20000)
-    assert card.get_by_text("Risiko sedang").count() >= 1, card.inner_text()
+    card.get_by_text("Risiko sedang").first.wait_for(timeout=5000)
     sql = card.locator(".ap-ubah-sql").inner_text().lower()
     assert "create table" in sql, "the card shows the dry-run migration: " + sql
     pending = ubah_changesets(ctx, "previewed", "Tambah tabel Kunjungan toko")
@@ -2751,7 +2751,7 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
     banner.wait_for(timeout=15000)
     assert "Kunjungan toko" in banner.inner_text(), banner.inner_text()
     open_nav(page)
-    page.locator(".ap-ubah-side, .rk-side, aside").filter(has_text="Kunjungan toko").first.wait_for(timeout=10000)
+    page.get_by_role("complementary", name=re.compile("^Navigasi")).get_by_text("Kunjungan toko").wait_for(timeout=10000)
     page.get_by_role("button", name="Keluar pratinjau").click()
     page.get_by_role("button", name="Keluar pratinjau").wait_for(state="detached", timeout=10000)
     assert Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/changesets/" + pending[0]["id"])[1]["status"] == "previewed"
@@ -2763,7 +2763,7 @@ def test_ubah_hidden_for_rep(page, ctx):
     sign_in(page, *SALES)
     page.locator(".rk-topnav").wait_for(timeout=15000)
     page.evaluate("() => { location.hash = location.hash.split('?')[0] + '?ubah=1'; }")
-    page.wait_for_timeout(500)
+    page.locator("[data-loading=false]").wait_for(timeout=15000)  # the dashboard rendered with ?ubah=1 in the hash
     assert page.get_by_role("group", name="Mode").count() == 0, "a sales_rep gets no Pakai/Ubah toggle"
     assert page.get_by_role("region", name="Mode ubah").count() == 0, "and no Ubah bar"
     ctx.live.add("ubah")
@@ -2804,6 +2804,24 @@ def test_ubah_embedded_posts_changeset(page, ctx):
     fr.get_by_text("Perubahan dibatalkan", exact=True).wait_for(timeout=15000)
     msgs = page.evaluate("() => window.__msgs")
     assert [m["event"] for m in msgs] == ["created", "applied", "reverted"] and msgs[2]["changeset"]["status"] == "reverted", msgs
+    # approve and apply from the card: a medium change set posts created, then applied
+    fr.locator(".ap-menu-btn").click() if fr.locator(".ap-menu-btn:visible").count() else None
+    fr.get_by_role("button", name="Tambah tabel").click()
+    dlg = fr.get_by_role("dialog")
+    dlg.get_by_label("Nama tabel").fill("Kunjungan embed")
+    dlg.get_by_role("button", name="Tambah", exact=True).click()
+    card = fr.locator(".ap-ubah-card")
+    card.get_by_role("heading", name="Perlu persetujuan").wait_for(timeout=20000)
+    card.get_by_role("button", name="Setujui & terapkan").click()
+    fr.get_by_text("Perubahan diterapkan", exact=True).wait_for(timeout=20000)
+    msgs = page.evaluate("() => window.__msgs")[3:]
+    assert [m["event"] for m in msgs] == ["created", "applied"], msgs
+    cid = msgs[0]["changeset"]["id"]
+    assert msgs[1]["changeset"]["id"] == cid and msgs[0]["changeset"]["risk"] == "medium" and msgs[1]["changeset"]["risk"] == "medium", msgs
+    st, got = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/changesets/" + cid)
+    assert st == 200 and got["status"] == "applied", got
+    st, out = Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{cid}/revert")
+    assert st == 200, f"revert {cid}: {st} {out}"
     ctx.live.add("ubah")
 
 

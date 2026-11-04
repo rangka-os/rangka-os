@@ -4,21 +4,22 @@ Every kind of `.rk` file, generated from `schema/0.5`.
 
 | Kind | Lives in | What it is |
 | --- | --- | --- |
-| [app.rk](./app) | `apps/<app>/app.rk` | Rangka app manifest |
+| [app.rk](./app) | `apps/<app>/app.rk` | What a customer installs (apps/&lt;name&gt;/app.rk): the modules it uses, connectors, roles, menu, dashboards, home and onboarding |
 | [changeset.rk](./changeset) | `sent to /api/v1/changesets (not a file on disk)` | A proposed change to metadata: the only way Rangka AI (and the Console) changes a running installation |
 | [config.rk](./config) | `<site>/config.rk` | Layer 4: defaults for an organisation (company) |
 | [connector.rk](./connector) | `<connector>/connector.rk (rangka-connectors)` | Layer 3: an integration (rangka-connectors/&lt;name&gt;/connector.rk): how to authenticate, the events it triggers and the actions flows can call. |
 | [dashboard.rk](./dashboard) | `apps/<app>/dashboards/<name>.rk` | A dashboard file: apps/&lt;app&gt;/dashboards/&lt;name&gt;.rk |
 | [features.rk](./features) | `<site>/features.rk` | Layer 4: plans and the entitlements they grant (apps, capabilities, limits) |
-| [flow.rk](./flow) | `apps/<app>/flows/<name>.rk` | Durable flow: steps run in order on an event or a schedule, through the queue. |
-| [import.rk](./import) | `` | Turns the rows of an uploaded CSV or XLSX file into records of one model (contract 0012). |
+| [flow.rk](./flow) | `modules/<module>/flows/<name>.rk (apps may add glue flows)` | Durable flow: steps run in order on an event or a schedule, through the queue. |
+| [import.rk](./import) | `modules/<module>/imports/<name>.rk` | Turns the rows of an uploaded CSV or XLSX file into records of one model (contract 0012). |
 | [layout.rk](./layout) | `<site>/layouts/<name>.rk` | Layer 6: the app shell and pages built from UI blocks |
 | [letterhead.rk](./letterhead) | `<site>/letterhead.rk or <site>/letterheads/<org>.rk` | Rangka letterhead |
-| [model.rk](./model) | `apps/<app>/models/<model>.rk` | Rangka model |
+| [model.rk](./model) | `modules/<module>/models/<model>.rk` | Rangka model |
+| [module.rk](./module) | `modules/<module>/module.rk` | A reusable business unit (modules/&lt;name&gt;/module.rk): models, rules, flows and roles |
 | [overlay.rk](./overlay) | `<site>/custom/<model>.rk` | Company layer (layer 4): fields, rules and view tweaks an organisation adds to an app model, in &lt;site&gt;/custom/&lt;model&gt;.rk |
-| [print.rk](./print) | `apps/<app>/print/<name>.rk or <site>/print/<name>.rk` | Rangka print format |
-| [process.rk](./process) | `apps/<app>/processes/<name>.rk or <site>/processes/<name>.rk` | Rangka process |
-| [role.rk](./role) | `apps/<app>/roles/<role>.rk` | A role an app defines (apps/&lt;app&gt;/roles/&lt;role&gt;.rk) |
+| [print.rk](./print) | `modules/<module>/print/<name>.rk or <site>/print/<name>.rk` | Rangka print format |
+| [process.rk](./process) | `apps/<app>/processes/<name>.rk, modules/<module>/processes/<name>.rk or <site>/processes/<name>.rk` | Rangka process |
+| [role.rk](./role) | `modules/<module>/roles/<role>.rk or apps/<app>/roles/<role>.rk` | A role an app defines (apps/&lt;app&gt;/roles/&lt;role&gt;.rk) |
 | [system.rk](./system) | `<site>/system.rk` | Layer 2: which backend capabilities are on and which driver serves each |
-| [template.rk](./template) | `templates/<name>/template.rk` | A starting point for a new installation: the apps to install, connectors, roles, fixtures and onboarding questions. |
+| [template.rk](./template) | `templates/<name>/template.rk (0.4, deprecated: now apps/<app>/app.rk)` | A starting point for a new installation: the apps to install, connectors, roles, fixtures and onboarding questions. |
 | [theme.rk](./theme) | `<site>/themes/<name>.rk` | Layer 6: colours, type and density for an installation or one organisation |

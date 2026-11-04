@@ -67,6 +67,11 @@
               },
               "reset": {
                 "$ref": "model.json#/$defs/number_reset"
+              },
+              "start": {
+                "type": "integer",
+                "minimum": 1,
+                "description": "lowest number the series issues in every period (default 1)"
               }
             },
             "additionalProperties": false

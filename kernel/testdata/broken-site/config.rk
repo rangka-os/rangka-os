@@ -9,6 +9,7 @@ numbering:
   faktur: {pattern: "FK/{####}", reset: yearly}
   bulanan: {pattern: "B/{YY}/{###}", reset: monthly}
   cnt: {pattern: "X-{#}-{#}"}
+  awal: {pattern: "A/{YYYY}/{####}", start: 0}
   kwitansi: INV-{YYYY}-{#####}
 plan: mulai
 apps: [crm, sales, stok]

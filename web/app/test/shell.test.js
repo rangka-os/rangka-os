@@ -93,6 +93,13 @@ test("navId maps a route to its sidebar entry", () => {
   assert.strictEqual(A.navId({ kind: "process", process: "x" }), "proses");
 });
 
+test("navId: the home dashboard is the pinned Beranda when the home hash is given", () => {
+  assert.strictEqual(A.navId({ kind: "dash", dash: "crm_overview" }, "#/d/crm_overview"), "home");
+  assert.strictEqual(A.navId({ kind: "dash", dash: "sales_overview" }, "#/d/crm_overview"), "d/sales_overview");
+  assert.strictEqual(A.navId({ kind: "home" }, "#/d/crm_overview"), "home");
+  assert.strictEqual(A.navId({ kind: "home" }), null);
+});
+
 test("L picks Bahasa Indonesia from a label map", () => {
   assert.strictEqual(A.L({ id: "Lead", en: "Lead EN" }), "Lead");
   assert.strictEqual(A.L({ en: "Only EN" }), "Only EN");

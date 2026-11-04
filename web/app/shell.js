@@ -209,10 +209,12 @@
     return out;
   }
 
-  /** The sidebar entry a route belongs to. */
-  function navId(route) {
+  /** The sidebar entry a route belongs to. With `home` (homeHash: the side-only sidebar's pinned Beranda), the home
+   *  route and the home dashboard are "home". */
+  function navId(route, home) {
     switch (route && route.kind) {
-      case "dash": return "d/" + route.dash;
+      case "home": return home ? "home" : null;
+      case "dash": return home && home === "#/d/" + route.dash ? "home" : "d/" + route.dash;
       case "list": case "form": return "r/" + route.model;
       case "approvals": return "approvals";
       case "processes": case "process": return "proses";
@@ -823,7 +825,7 @@
       side = h(R.Sidebar, {
         switcher: switcher,
         search: { label: "Cari", onOpen: openCmd },
-        pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route), onNavigate: onNavigate,
+        pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route, home || "#/"), onNavigate: onNavigate,
         collapsed: narrow, onToggleCollapse: phone ? undefined : toggleCollapsed,
         footer: !modeToggle || phone ? null : narrow
           ? h(R.IconButton, { icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })

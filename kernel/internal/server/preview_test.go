@@ -308,3 +308,39 @@ fields:
 		t.Fatalf("widgets: %s", r.Body)
 	}
 }
+
+// A new model with a table of an existing child would become that child's parent (the first model, by name, with
+// a table field of it) and lend it no permissions: the preview refuses.
+func TestPreviewRefusesChildParentChange(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	id := proposeCS(e, "Tabel baru dengan baris faktur",
+		map[string]any{"op": "create", "path": "apps/crm/models/a_x.rk", "content": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: a_x
+label: {id: A X}
+fields:
+  - {name: judul, type: data, label: {id: Judul}}
+  - {name: baris, type: table, of: sales_invoice_item, label: {id: Baris}}
+`})
+	r := e.must(409, "GET", "/api/v1/preview/"+id+"/meta", nil)
+	if get(r.JSON, "error", "code") != "preview_permissions" {
+		t.Fatalf("child parent change: %s", r.Body)
+	}
+}
+
+// A change set id of another organisation is not found in this one.
+func TestPreviewOtherOrg404(t *testing.T) {
+	e := twoOrgEnv(t)
+	e.login()
+	id := proposeCS(e, "Urutan widget", map[string]any{"op": "create", "path": "dashboards/crm_overview.rk", "content": siteDashboard})
+	e.must(200, "GET", "/api/v1/preview/"+id+"/meta", nil)
+	e.loginAs("beta@example.test")
+	if me := e.must(200, "GET", "/auth/me", nil).JSON; get(me, "org", "id") != "pt_beta" {
+		t.Fatalf("org: %v", me)
+	}
+	for _, p := range []string{"/api/v1/preview/" + id + "/meta", "/api/v1/preview?changeset=" + id, "/api/v1/preview/" + id + "/r/deal"} {
+		if r := e.must(404, "GET", p, nil); get(r.JSON, "error", "code") != "not_found" {
+			t.Fatalf("%s: %s", p, r.Body)
+		}
+	}
+}

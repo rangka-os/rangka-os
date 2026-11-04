@@ -123,6 +123,15 @@ func (e *Engine) perms(m *meta.Model) *modelPerms {
 	return mp
 }
 
+// PermissionsModel is the name of the model whose permissions apply to model name ("" when not installed): the
+// model itself, or a child model's parent. Preview compares it between registries (contract 0015 §4).
+func (e *Engine) PermissionsModel(name string) string {
+	if m := e.permModel(name); m != nil {
+		return m.Name
+	}
+	return ""
+}
+
 // permModel resolves a model name to the model whose permissions apply: a child model uses its parent's
 // (the first model with a table field of it).
 func (e *Engine) permModel(name string) *meta.Model {

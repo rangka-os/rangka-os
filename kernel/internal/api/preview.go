@@ -27,9 +27,12 @@ type previewEntry struct {
 var errPreviewPermissions = &changeset.Error{Status: 409, Code: "preview_permissions",
 	Msg: "Pratinjau tidak tersedia untuk perubahan hak akses; setujui dulu untuk melihat hasilnya"}
 
-// permissionsChanged reports whether the preview registry grants differently from the live one: any role
-// document added, removed or changed, or a model in both with another effective permissions value.
-func permissionsChanged(live, prev *meta.Registry) bool {
+// permissionsChanged reports whether the preview engine grants differently from the live one: any role
+// document added, removed or changed, a model in both with another effective permissions value, is_child flag
+// or a removed/retyped field, or a live child model whose permissions come from another parent (the parent is
+// the first model, by name, with a table field of it, so a new model can take that place).
+func permissionsChanged(liveEng, prevEng *engine.Engine) bool {
+	live, prev := liveEng.Reg(), prevEng.Reg()
 	roles := func(r *meta.Registry) map[string]string {
 		out := map[string]string{}
 		for p, d := range r.Docs {
@@ -61,6 +64,11 @@ func permissionsChanged(live, prev *meta.Registry) bool {
 			if pf := m.Field(f.Name); pf == nil || pf.Type != f.Type || pf.To != f.To {
 				return true
 			}
+		}
+	}
+	for _, lm := range live.InstalledModels() {
+		if lm.IsChild && liveEng.PermissionsModel(lm.Name) != prevEng.PermissionsModel(lm.Name) {
+			return true
 		}
 	}
 	return false
@@ -127,7 +135,7 @@ func (s *Server) previewEngine(ctx context.Context, org, id string) (*engine.Eng
 	e.Now, e.Log = s.Engine.Now, s.Engine.Log
 	e.Cache, e.TolerateMissingTables = nil, true
 	var deny error
-	if permissionsChanged(liveReg, reg) {
+	if permissionsChanged(s.Engine, e) {
 		deny = errPreviewPermissions
 	}
 	for k, h := range s.Engine.Hooks {

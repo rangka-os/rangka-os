@@ -1,6 +1,6 @@
 /* Rangka process canvas: one business process as stages that expand in place.
  * Plain JS + React 18 UMD (window.React, window.ReactDOM); uses the Rangka design system (window.Rangka) when present
- * and falls back to plain elements otherwise. Exposes window.RangkaCanvas = {Canvas, mount, client}.
+ * and falls back to plain elements otherwise. Exposes window.RangkaCanvas = {Canvas, Mounted, mount, client}.
  * The canvas never writes metadata: an edit becomes change-set ops (onEdit); layout is the only thing it saves. */
 (function () {
   "use strict";
@@ -243,7 +243,8 @@
       res.state === "ok" ? h("div", { className: "rc-result rc-result-ok", role: "status" },
         res.changeset && res.changeset.id
           ? [h("b", { key: "t" }, "Perubahan diusulkan"),
-            h("div", { key: "id", className: "rc-result-row" }, h("code", { className: "rc-mono" }, res.changeset.id),
+            h("div", { key: "id", className: "rc-result-row" },
+              p.changesetHref ? h("a", { className: "rc-link rc-mono", href: p.changesetHref(res.changeset.id) }, res.changeset.id) : h("code", { className: "rc-mono" }, res.changeset.id),
               h(Loz, { tone: "info" }, CS_STATUS[res.changeset.status] || res.changeset.status || "Diusulkan")),
             res.title ? h("div", { key: "ti", className: "rc-small" }, res.title) : null,
             h("ul", { key: "ed", className: "rc-edits" }, res.edits.map(function (e) {
@@ -340,7 +341,7 @@
                 selected: selected, onToggle: toggle, onSelect: setSelected });
             }))
             : h("div", { className: "rc-empty" }, lang === "en" ? "This process has no stages you can see." : "Proses ini belum punya tahap yang bisa kamu lihat.")),
-        selNode ? h(Panel, { key: selNode.id, uid: uid, node: selNode, lang: lang, readOnly: !!props.readOnly || !props.onEdit, sourceHref: props.sourceHref,
+        selNode ? h(Panel, { key: selNode.id, uid: uid, node: selNode, lang: lang, readOnly: !!props.readOnly || !props.onEdit, sourceHref: props.sourceHref, changesetHref: props.changesetHref,
           stageLabel: groupById[selNode.group] ? text(groupById[selNode.group].label, lang, selNode.group) : "",
           onEdit: props.onEdit, onClose: function () { setSelected(null); } }) : null));
   }
@@ -378,7 +379,7 @@
 
   /* ---------------------------------------------------------------- mount: fetch the graph and wire the kernel */
   function Mounted(o) {
-    var api = useMemo(function () { return client(o.baseUrl); }, [o.baseUrl]);
+    var api = useMemo(function () { return o.api || client(o.baseUrl); }, [o.api, o.baseUrl]); // o.api: a client-shaped adapter (get, ops, propose, saveLayout)
     var gs = useState(null), graph = gs[0], setGraph = gs[1];
     var es = useState(null), err = es[0], setErr = es[1];
     var ns = useState(""), notice = ns[0], setNotice = ns[1];
@@ -393,7 +394,7 @@
       h("b", null, "Proses tidak bisa dimuat"), h("span", null, err.message)));
     if (!graph) return h("div", { className: "rc-root" }, h("div", { className: "rc-state", role: "status" }, "Memuat proses…"));
     return h(Canvas, {
-      graph: graph, layout: graph.layout, readOnly: o.readOnly, lang: o.lang, sourceHref: o.sourceHref, notice: notice,
+      graph: graph, layout: graph.layout, readOnly: o.readOnly, lang: o.lang, sourceHref: o.sourceHref, changesetHref: o.changesetHref, notice: notice,
       onEdit: function (edits) {
         return api.ops(graph.name, edits).then(function (r) {
           if (!r || !r.ops || !r.ops.length) return { changeset: null, title: r && r.title, ops: [] };
@@ -401,10 +402,11 @@
         });
       },
       onLayout: function (layout) {
+        if (o.readOnly) return; // a read-only viewer never saves layout; the expand state stays local
         clearTimeout(timer.current);
         timer.current = setTimeout(function () {
           api.saveLayout(graph.name, layout).then(function () { setNotice(""); },
-            function (e) { setNotice("Tata letak tidak tersimpan: " + e.message); });
+            function (e) { if (e && e.status === 403) return; setNotice("Tata letak tidak tersimpan: " + e.message); }); // 403: not the owner, keep the local state quietly
         }, 600);
       }
     });
@@ -417,5 +419,5 @@
     return { unmount: function () { root.unmount(); } };
   }
 
-  window.RangkaCanvas = { Canvas: Canvas, mount: mount, client: client };
+  window.RangkaCanvas = { Canvas: Canvas, Mounted: Mounted, mount: mount, client: client };
 })();

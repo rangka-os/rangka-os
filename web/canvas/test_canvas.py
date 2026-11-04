@@ -215,7 +215,49 @@ def test_mount_kernel(page, w):
           f"ops body {ops}")
 
 
-SCENARIOS = [test_stages_in_order, test_expand_in_place, test_edit_proposes, test_no_page_scroll, test_mount_kernel]
+def _mount_layout(page, query, put_status):
+    golden = open(GOLDEN, encoding="utf-8").read()
+    calls = []
+
+    def api(route):
+        req = route.request
+        path = req.url.split(f"127.0.0.1:{port}", 1)[1]
+        calls.append((req.method, path))
+        if req.method == "GET" and path == "/api/v1/processes/lead_to_cash":
+            route.fulfill(status=200, content_type="application/json", body=golden)
+        elif req.method == "PUT":
+            route.fulfill(status=put_status, content_type="application/json",
+                          body=json.dumps({"error": {"code": "x", "message": "ditolak server"}}) if put_status >= 400 else "{}")
+        else:
+            route.fulfill(status=404, content_type="application/json", body="{}")
+
+    page.route("**/api/v1/**", api)
+    page.goto(BASE + "?process=lead_to_cash" + query)
+    wait_canvas(page)
+    toggle(page, "deal").click()
+    page.wait_for_timeout(900)
+    check(toggle(page, "deal").get_attribute("aria-expanded") == "true", "expand state lost")
+    return [c for c in calls if c[0] == "PUT"], page.locator(".rc-notice").count()
+
+
+def test_readonly_no_layout_put(page, w):
+    puts, notices = _mount_layout(page, "&readonly=1", 200)
+    check(not puts, f"readOnly sent layout PUT {puts}")
+
+
+def test_layout_403_quiet(page, w):
+    puts, notices = _mount_layout(page, "", 403)
+    check(len(puts) == 1, f"layout PUT calls {len(puts)}")
+    check(notices == 0, "403 on layout showed a notice")
+
+
+def test_layout_error_notice(page, w):
+    puts, notices = _mount_layout(page, "", 500)
+    check(len(puts) == 1 and notices == 1, f"500 on layout: puts {len(puts)} notices {notices}")
+
+
+SCENARIOS = [test_stages_in_order, test_expand_in_place, test_edit_proposes, test_no_page_scroll, test_mount_kernel,
+             test_readonly_no_layout_put, test_layout_403_quiet, test_layout_error_notice]
 
 
 def main():

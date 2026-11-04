@@ -146,6 +146,15 @@ func TestLeadToCashStages(t *testing.T) {
 	if strings.Join(handoffs, " ") != "lead_in>deal deal>invoice invoice>paid" {
 		t.Errorf("handoffs = %v", handoffs)
 	}
+	// handoffs leave from the last non-terminal step: lead qualified, deal negotiation, invoice submitted
+	if got := handoffFroms(g); strings.Join(got, " ") != "modules/pipeline/models/lead.rk#/fields/6/options/2 "+
+		"modules/pipeline/models/deal.rk#/fields/3/options/3 modules/invoicing/models/sales_invoice.rk#status/submitted" {
+		t.Errorf("handoff starts = %v", got)
+	}
+	// the condition node owns the automation's if; the trigger does not offer it twice
+	if _, dup := trig.Editable["if"]; dup {
+		t.Errorf("trigger editable repeats if: %v", trig.Editable)
+	}
 	checkPositions(t, reg, g)
 	checkGroupsConsistent(t, g)
 }
@@ -210,6 +219,16 @@ func checkGroupsConsistent(t *testing.T, g *Graph) {
 	}
 }
 
+func handoffFroms(g *Graph) []string {
+	var out []string
+	for _, e := range g.Edges {
+		if e.Kind == EdgeHandoff {
+			out = append(out, e.From)
+		}
+	}
+	return out
+}
+
 func TestQuoteToCash(t *testing.T) {
 	reg := loadReg(t)
 	g := build(t, reg, "quote_to_cash", all)
@@ -228,6 +247,18 @@ func TestQuoteToCash(t *testing.T) {
 	// only the stage's main model brings lifecycle steps: project's four states, none of timesheet/acceptance
 	if c := groupByID(g, "project").Counts; c["step"] != 4 {
 		t.Errorf("project counts = %v", c)
+	}
+	// a quotation has no paid_amount: draft → submitted plus cancelled, and the handoff leaves from submitted
+	for _, v := range []string{"partly", "paid", "overdue"} {
+		if nodeByID(g, "modules/quotation/models/quotation.rk#status/"+v) != nil {
+			t.Errorf("quotation has payment state %s", v)
+		}
+	}
+	if nodeByID(g, "modules/quotation/models/quotation.rk#status/cancelled") == nil {
+		t.Error("quotation has no cancelled step")
+	}
+	if f := handoffFroms(g); len(f) == 0 || f[0] != "modules/quotation/models/quotation.rk#status/submitted" {
+		t.Errorf("handoff starts = %v", f)
 	}
 	// project lifecycle = kanban group_by state
 	if n := nodeByID(g, "modules/projects/models/project.rk#/fields/6/options/0"); n == nil || n.Kind != KindStep {
@@ -288,6 +319,57 @@ func TestOverlayNodeSource(t *testing.T) {
 	if a := nodeByID(g, "modules/invoicing/models/sales_invoice.rk#/rules/0"); a == nil || a.Source.File != "modules/invoicing/models/sales_invoice.rk" {
 		t.Errorf("app rule = %+v", a)
 	}
+}
+
+// An overlay contributes only what the runtime merges (rules, approvals, fields): automations, actions and
+// hooks written in an overlay file are not drawn.
+func TestOverlayIgnoredItems(t *testing.T) {
+	reg := loadReg(t)
+	d := reg.Overlays["sales_invoice"]
+	data := meta.AsMap(d.Data)
+	data["automations"] = []any{map[string]any{"name": "x_auto", "when": "submitted", "do": "x.hook"}}
+	data["actions"] = []any{map[string]any{"name": "x_act", "hook": "x.hook"}}
+	data["on_submit"] = []any{"x.hook"}
+	g := build(t, reg, "lead_to_cash", all)
+	for _, n := range g.Nodes {
+		if n.Source.File == "custom/sales_invoice.rk" && n.Kind != KindRule && n.Kind != KindApproval {
+			t.Errorf("overlay item the runtime ignores is drawn: %s", n.ID)
+		}
+	}
+}
+
+// A flow in a visible stage hides its steps on a model the caller cannot read, keeping the chain.
+func TestHiddenFlowStep(t *testing.T) {
+	reg := loadReg(t)
+	g := build(t, reg, "lead_to_cash", func(m string) bool { return m != "activity" })
+	file := "modules/pipeline/flows/whatsapp_to_lead.rk"
+	if !has(groupByID(g, "lead_in").Nodes, file+"#/") {
+		t.Fatal("whatsapp_to_lead not in lead_in")
+	}
+	for _, n := range g.Nodes {
+		if !strings.HasPrefix(n.ID, file) {
+			continue
+		}
+		leak := strings.Contains(n.Detail, "activity") || strings.Contains(n.Model, "activity") || strings.Contains(n.Label.Text(), "activity")
+		for k, v := range n.Editable {
+			leak = leak || strings.Contains(k, "activity") || strings.Contains(text(v), "activity")
+		}
+		if leak {
+			t.Errorf("hidden model leaks through %s: %+v", n.ID, n)
+		}
+	}
+	h := nodeByID(g, file+"#/steps/3")
+	if h == nil || h.Label.Text() != "Langkah tersembunyi" || h.Detail != "" || h.Model != "" || len(h.Editable) != 0 {
+		t.Errorf("hidden step = %+v", h)
+	}
+	chained := false
+	for _, e := range g.Edges {
+		chained = chained || (e.Kind == EdgeFlow && e.From == file+"#/steps/2" && e.To == file+"#/steps/3")
+	}
+	if !chained {
+		t.Error("flow chain broken at the hidden step")
+	}
+	checkGroupsConsistent(t, g)
 }
 
 func TestHiddenStage(t *testing.T) {

@@ -84,14 +84,17 @@ type Graph struct {
 	Layout   any        `json:"layout"`
 }
 
-// derived are the statuses of a submittable model without a lifecycle field (web/app/list.js STATUSES);
-// the first four form the lifecycle chain, overdue and cancelled are side states.
+// derived are the statuses engine.Status gives a submittable model without a lifecycle field (labels as in
+// web/app/list.js STATUSES). The payment states (partly, paid, overdue) need a paid_amount field, so a model
+// without one gets draft → submitted plus cancelled. chain: on the lifecycle chain; terminal: a handoff to the
+// next stage does not start there (payment states and cancelled).
 var derived = []struct {
-	value, label string
-	chain        bool
+	value, label             string
+	chain, payment, terminal bool
 }{
-	{"draft", "Draf", true}, {"submitted", "Diajukan", true}, {"partly", "Dibayar sebagian", true}, {"paid", "Lunas", true},
-	{"overdue", "Jatuh tempo", false}, {"cancelled", "Dibatalkan", false},
+	{"draft", "Draf", true, false, false}, {"submitted", "Diajukan", true, false, false},
+	{"partly", "Dibayar sebagian", true, true, true}, {"paid", "Lunas", true, true, true},
+	{"overdue", "Jatuh tempo", false, true, true}, {"cancelled", "Dibatalkan", false, false, true},
 }
 
 var whenEquals = regexp.MustCompile(`\b([a-z_][a-z0-9_]*)\s*==\s*'([^']*)'`)
@@ -114,7 +117,9 @@ type builder struct {
 	flows    map[string]bool
 	steps    map[string][]stepRef // model → its lifecycle steps
 	chain    map[string]bool      // step ids on a lifecycle chain
-	cur      string               // group being built
+	terminal map[string]bool      // steps a handoff does not start from (closed, lost, paid, cancelled …)
+	canRead  func(string) bool
+	cur      string // group being built
 	curModel string
 }
 
@@ -125,7 +130,8 @@ func Build(reg *meta.Registry, p *meta.Process, canRead func(model string) bool)
 		canRead = func(string) bool { return true }
 	}
 	b := &builder{reg: reg, keys: map[*rk.Doc]string{}, nodes: map[string]*Node{}, order: map[string][]string{},
-		placed: map[string]bool{}, flows: map[string]bool{}, steps: map[string][]stepRef{}, chain: map[string]bool{}}
+		placed: map[string]bool{}, flows: map[string]bool{}, steps: map[string][]stepRef{}, chain: map[string]bool{},
+		terminal: map[string]bool{}, canRead: canRead}
 	for k, d := range reg.Docs {
 		b.keys[d] = k
 	}
@@ -287,20 +293,26 @@ func (b *builder) stageWhen(p *meta.Process, st meta.Stage) {
 	}
 }
 
-// lastStep is the group's last lifecycle step, else its last node.
+// lastStep is where a handoff leaves a group: its last non-terminal lifecycle step, else its last lifecycle
+// step, else its last node.
 func (b *builder) lastStep(group string) string {
 	ids := b.order[group]
-	for i := len(ids) - 1; i >= 0; i-- {
-		if b.chain[ids[i]] {
-			return ids[i]
+	for _, ok := range []func(string) bool{
+		func(id string) bool { return b.chain[id] && !b.terminal[id] },
+		func(id string) bool { return b.chain[id] },
+	} {
+		for i := len(ids) - 1; i >= 0; i-- {
+			if ok(ids[i]) {
+				return ids[i]
+			}
 		}
 	}
 	return ids[len(ids)-1]
 }
 
 // sources are the files a model's items come from: the app's model file, then the company overlay
-// (custom/<model>.rk naming the model, as meta's applyOverlays merges it; read here whether or not the
-// registry's models were merged already).
+// (custom/<model>.rk naming the model, read here whether or not the registry's models were merged already).
+// Only rules, approvals and fields are read from the overlay: those are what meta's applyOverlays merges.
 func (b *builder) sources(m *meta.Model) []src {
 	out := []src{{file: b.keys[m.Doc], doc: m.Doc, data: meta.AsMap(m.Doc.Data)}}
 	if d := b.reg.Overlays[m.Name]; d != nil && meta.Str(meta.AsMap(d.Data), "model") == m.Name && b.keys[d] != "" {
@@ -317,17 +329,16 @@ func (b *builder) model(m *meta.Model, main bool) {
 	}
 	b.placed[m.Name] = true
 	srcs := b.sources(m)
-	for _, s := range srcs {
-		for i, av := range meta.AsList(s.data["automations"]) {
-			am := meta.AsMap(av)
-			if am == nil {
-				continue
-			}
-			p := fmt.Sprintf("/automations/%d", i)
-			c := b.guard(s, p, am, "if")
-			id := b.node(KindTrigger, s, p, p, labelOr(am["label"], nil, meta.Str(am, "name")), text(am["when"]), editable(am, "when", "do", "if"))
-			b.edge(c, id, EdgeFlow)
+	app := srcs[0] // automations, actions and hooks of an overlay are not merged by the runtime
+	for i, av := range meta.AsList(app.data["automations"]) {
+		am := meta.AsMap(av)
+		if am == nil {
+			continue
 		}
+		p := fmt.Sprintf("/automations/%d", i)
+		c := b.guard(app, p, am, "if") // the condition node owns if
+		id := b.node(KindTrigger, app, p, p, labelOr(am["label"], nil, meta.Str(am, "name")), text(am["when"]), editable(am, "when", "do"))
+		b.edge(c, id, EdgeFlow)
 	}
 	for _, name := range sortedFlows(b.reg) {
 		if f := b.reg.Flows[name]; !b.flows[name] && touches(meta.AsList(f.Raw["steps"]), m.Name, map[string]string{}) {
@@ -343,20 +354,18 @@ func (b *builder) model(m *meta.Model, main bool) {
 			}
 		}
 	}
-	for _, s := range srcs {
-		for i, av := range meta.AsList(s.data["actions"]) {
-			if am := meta.AsMap(av); am != nil {
-				p := fmt.Sprintf("/actions/%d", i)
-				c := b.guard(s, p, am, "if")
-				id := b.node(KindAction, s, p, p, labelOr(am["label"], nil, meta.Str(am, "name")), meta.Str(am, "hook"), editable(am, "label.id", "if"))
-				b.edge(c, id, EdgeFlow)
-			}
+	for i, av := range meta.AsList(app.data["actions"]) {
+		if am := meta.AsMap(av); am != nil {
+			p := fmt.Sprintf("/actions/%d", i)
+			c := b.guard(app, p, am, "if")
+			id := b.node(KindAction, app, p, p, labelOr(am["label"], nil, meta.Str(am, "name")), meta.Str(am, "hook"), editable(am, "label.id", "if"))
+			b.edge(c, id, EdgeFlow)
 		}
-		for _, hk := range []struct{ key, label string }{{"on_submit", "Saat diajukan"}, {"on_cancel", "Saat dibatalkan"}} {
-			for i, h := range meta.AsList(s.data[hk.key]) {
-				p := fmt.Sprintf("/%s/%d", hk.key, i)
-				b.node(KindAction, s, p, p, meta.Label{"id": hk.label}, text(h), nil)
-			}
+	}
+	for _, hk := range []struct{ key, label string }{{"on_submit", "Saat diajukan"}, {"on_cancel", "Saat dibatalkan"}} {
+		for i, h := range meta.AsList(app.data[hk.key]) {
+			p := fmt.Sprintf("/%s/%d", hk.key, i)
+			b.node(KindAction, app, p, p, meta.Label{"id": hk.label}, text(h), nil)
 		}
 	}
 	for _, s := range srcs {
@@ -389,8 +398,9 @@ func lifecycleField(m *meta.Model) string {
 
 func (b *builder) lifecycle(m *meta.Model, srcs []src) {
 	prev := ""
-	link := func(id string, chain bool, field, value string) {
+	link := func(id string, chain, terminal bool, field, value string) {
 		b.steps[m.Name] = append(b.steps[m.Name], stepRef{field, value, id})
+		b.terminal[id] = terminal
 		if chain {
 			b.chain[id] = true
 			b.edge(prev, id, EdgeLifecycle)
@@ -412,7 +422,9 @@ func (b *builder) lifecycle(m *meta.Model, srcs []src) {
 					p := fmt.Sprintf("/fields/%d/options/%d", k, o)
 					value := text(om["value"])
 					id := b.node(KindStep, s, p, p, labelOr(om["label"], nil, value), value, editable(om, "label.id"))
-					link(id, true, name, value)
+					tone := meta.Str(om, "tone")
+					closed, _ := om["closed"].(bool)
+					link(id, true, closed || tone == "muted" || tone == "bad", name, value)
 				}
 				return
 			}
@@ -424,10 +436,14 @@ func (b *builder) lifecycle(m *meta.Model, srcs []src) {
 	}
 	s := srcs[0]
 	line, col := position(s.doc, "/is_submittable")
+	paying := m.Field("paid_amount") != nil
 	for _, d := range derived {
+		if d.payment && !paying {
+			continue
+		}
 		id := b.add(&Node{ID: s.file + "#status/" + d.value, Kind: KindStep, Label: meta.Label{"id": d.label}, Detail: d.value,
 			Source: Source{File: s.file, Line: line, Col: col}})
-		link(id, d.chain, "status", d.value)
+		link(id, d.chain, d.terminal, "status", d.value)
 	}
 }
 
@@ -441,6 +457,7 @@ func (b *builder) flow(f *meta.Flow) {
 	}
 	prev := b.node(KindTrigger, s, "/", "/", labelOr(f.Raw["label"], nil, f.Name), detail, editable(f.Raw, "on", "schedule"))
 	b.edge(c, prev, EdgeFlow)
+	vars := map[string]string{}
 	for j, sv := range meta.AsList(f.Raw["steps"]) {
 		st := meta.AsMap(sv)
 		if st == nil {
@@ -448,8 +465,15 @@ func (b *builder) flow(f *meta.Flow) {
 		}
 		p := fmt.Sprintf("/steps/%d", j)
 		c := b.guard(s, p, st, "if")
-		d := stepDetail(st)
-		id := b.node(KindAction, s, p, p, meta.Label{"id": d}, d, stepEditable(st))
+		var id string
+		if target := stepModel(st, vars); target != "" && !b.canRead(target) {
+			// a step on a model the caller cannot read keeps the chain but shows nothing of that model
+			id = b.node(KindAction, s, p, p, meta.Label{"id": "Langkah tersembunyi"}, "", nil)
+			b.nodes[id].Model = ""
+		} else {
+			d := stepDetail(st)
+			id = b.node(KindAction, s, p, p, meta.Label{"id": d}, d, stepEditable(st))
+		}
 		if c != "" {
 			b.edge(prev, c, EdgeFlow)
 			b.edge(c, id, EdgeFlow)
@@ -458,6 +482,22 @@ func (b *builder) flow(f *meta.Flow) {
 		}
 		prev = id
 	}
+}
+
+// stepModel is the model a step finds, creates or updates ("" for other steps); vars maps as-names to models.
+func stepModel(st map[string]any, vars map[string]string) string {
+	for _, v := range []string{"find", "find_all", "create"} {
+		if t := meta.Str(st, v); t != "" {
+			if as := meta.Str(st, "as"); as != "" {
+				vars[as] = t
+			}
+			return t
+		}
+	}
+	if u := meta.Str(st, "update"); u != "" {
+		return vars[u]
+	}
+	return ""
 }
 
 var stepVerbs = []string{"find", "find_all", "create", "update", "notify", "call"}

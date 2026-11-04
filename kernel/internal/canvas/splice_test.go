@@ -51,6 +51,17 @@ items:
   - name: yy
     check: phone != '' || email != ''  # why
 tail: end
+hashy: a#b
+lit: |
+  line one
+  line two
+fold: >
+  folded
+  text
+mq: "multi
+  line"
+mp: plain start
+  continued
 `
 
 func TestSpliceQuoting(t *testing.T) {
@@ -58,8 +69,8 @@ func TestSpliceQuoting(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	ptrs := []string{"/name", "/block", "/quoted", "/dq", "/flow/id", "/flow/en", "/list/0", "/list/1", "/items/0/check", "/items/1/check", "/tail"}
-	values := []string{"'lost'", "a: b", "x # y", "", "true", "a, b", "{x}", "it's", `back\slash`, "- dash", "plain"}
+	ptrs := []string{"/name", "/block", "/quoted", "/dq", "/flow/id", "/flow/en", "/list/0", "/list/1", "/items/0/check", "/items/1/check", "/tail", "/hashy"}
+	values := []string{"'lost'", "a: b", "x # y", "", "true", "a, b", "{x}", "it's", `back\slash`, "- dash", "plain", "a#b"}
 	for _, ptr := range ptrs {
 		node, inFlow, err := resolve(doc.Root, ptr)
 		if err != nil {
@@ -93,8 +104,12 @@ func TestSpliceQuoting(t *testing.T) {
 			}
 		}
 	}
-	// non-scalar and missing targets refuse
-	for _, ptr := range []string{"/flow", "/list", "/items/0", "/nope", "/list/9"} {
+	// a plain value with # but no space before it is one scalar: splices byte-stably
+	if text, ok := Splice(doc, "/hashy", "a#b"); !ok || text != doc.Text {
+		t.Errorf("a#b: ok=%v\n%s", ok, text)
+	}
+	// non-scalar, missing and multi-line targets (block scalars, multi-line quoted and plain) refuse → patch
+	for _, ptr := range []string{"/flow", "/list", "/items/0", "/nope", "/list/9", "/lit", "/fold", "/mq", "/mp"} {
 		if _, ok := Splice(doc, ptr, "x"); ok {
 			t.Errorf("%s: spliced a non-scalar target", ptr)
 		}

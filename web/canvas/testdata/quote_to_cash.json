@@ -44,9 +44,6 @@
         "modules/quotation/models/quotation.rk#/approvals/0",
         "modules/quotation/models/quotation.rk#status/draft",
         "modules/quotation/models/quotation.rk#status/submitted",
-        "modules/quotation/models/quotation.rk#status/partly",
-        "modules/quotation/models/quotation.rk#status/paid",
-        "modules/quotation/models/quotation.rk#status/overdue",
         "modules/quotation/models/quotation.rk#status/cancelled"
       ],
       "counts": {
@@ -54,7 +51,7 @@
         "approval": 1,
         "condition": 3,
         "rule": 8,
-        "step": 6,
+        "step": 3,
         "trigger": 0
       }
     },
@@ -83,9 +80,6 @@
         "modules/orders/models/customer_order.rk#/actions/0",
         "modules/orders/models/customer_order.rk#status/draft",
         "modules/orders/models/customer_order.rk#status/submitted",
-        "modules/orders/models/customer_order.rk#status/partly",
-        "modules/orders/models/customer_order.rk#status/paid",
-        "modules/orders/models/customer_order.rk#status/overdue",
         "modules/orders/models/customer_order.rk#status/cancelled"
       ],
       "counts": {
@@ -93,7 +87,7 @@
         "approval": 0,
         "condition": 1,
         "rule": 3,
-        "step": 6,
+        "step": 3,
         "trigger": 0
       }
     },
@@ -582,54 +576,6 @@
       "editable": {}
     },
     {
-      "id": "modules/quotation/models/quotation.rk#status/partly",
-      "group": "quotation",
-      "kind": "step",
-      "label": {
-        "id": "Dibayar sebagian"
-      },
-      "detail": "partly",
-      "model": "quotation",
-      "source": {
-        "file": "modules/quotation/models/quotation.rk",
-        "line": 5,
-        "col": 17
-      },
-      "editable": {}
-    },
-    {
-      "id": "modules/quotation/models/quotation.rk#status/paid",
-      "group": "quotation",
-      "kind": "step",
-      "label": {
-        "id": "Lunas"
-      },
-      "detail": "paid",
-      "model": "quotation",
-      "source": {
-        "file": "modules/quotation/models/quotation.rk",
-        "line": 5,
-        "col": 17
-      },
-      "editable": {}
-    },
-    {
-      "id": "modules/quotation/models/quotation.rk#status/overdue",
-      "group": "quotation",
-      "kind": "step",
-      "label": {
-        "id": "Jatuh tempo"
-      },
-      "detail": "overdue",
-      "model": "quotation",
-      "source": {
-        "file": "modules/quotation/models/quotation.rk",
-        "line": 5,
-        "col": 17
-      },
-      "editable": {}
-    },
-    {
       "id": "modules/quotation/models/quotation.rk#status/cancelled",
       "group": "quotation",
       "kind": "step",
@@ -769,54 +715,6 @@
         "id": "Diajukan"
       },
       "detail": "submitted",
-      "model": "customer_order",
-      "source": {
-        "file": "modules/orders/models/customer_order.rk",
-        "line": 5,
-        "col": 17
-      },
-      "editable": {}
-    },
-    {
-      "id": "modules/orders/models/customer_order.rk#status/partly",
-      "group": "order",
-      "kind": "step",
-      "label": {
-        "id": "Dibayar sebagian"
-      },
-      "detail": "partly",
-      "model": "customer_order",
-      "source": {
-        "file": "modules/orders/models/customer_order.rk",
-        "line": 5,
-        "col": 17
-      },
-      "editable": {}
-    },
-    {
-      "id": "modules/orders/models/customer_order.rk#status/paid",
-      "group": "order",
-      "kind": "step",
-      "label": {
-        "id": "Lunas"
-      },
-      "detail": "paid",
-      "model": "customer_order",
-      "source": {
-        "file": "modules/orders/models/customer_order.rk",
-        "line": 5,
-        "col": 17
-      },
-      "editable": {}
-    },
-    {
-      "id": "modules/orders/models/customer_order.rk#status/overdue",
-      "group": "order",
-      "kind": "step",
-      "label": {
-        "id": "Jatuh tempo"
-      },
-      "detail": "overdue",
       "model": "customer_order",
       "source": {
         "file": "modules/orders/models/customer_order.rk",
@@ -1968,16 +1866,6 @@
       "kind": "lifecycle"
     },
     {
-      "from": "modules/quotation/models/quotation.rk#status/submitted",
-      "to": "modules/quotation/models/quotation.rk#status/partly",
-      "kind": "lifecycle"
-    },
-    {
-      "from": "modules/quotation/models/quotation.rk#status/partly",
-      "to": "modules/quotation/models/quotation.rk#status/paid",
-      "kind": "lifecycle"
-    },
-    {
       "from": "modules/orders/models/customer_order.rk#/actions/0/if",
       "to": "modules/orders/models/customer_order.rk#/actions/0",
       "kind": "flow"
@@ -1985,16 +1873,6 @@
     {
       "from": "modules/orders/models/customer_order.rk#status/draft",
       "to": "modules/orders/models/customer_order.rk#status/submitted",
-      "kind": "lifecycle"
-    },
-    {
-      "from": "modules/orders/models/customer_order.rk#status/submitted",
-      "to": "modules/orders/models/customer_order.rk#status/partly",
-      "kind": "lifecycle"
-    },
-    {
-      "from": "modules/orders/models/customer_order.rk#status/partly",
-      "to": "modules/orders/models/customer_order.rk#status/paid",
       "kind": "lifecycle"
     },
     {
@@ -2028,7 +1906,7 @@
       "kind": "lifecycle"
     },
     {
-      "from": "modules/quotation/models/quotation.rk#status/paid",
+      "from": "modules/quotation/models/quotation.rk#status/submitted",
       "to": "modules/orders/models/customer_order.rk#/rules/0",
       "kind": "handoff",
       "label": {
@@ -2036,7 +1914,7 @@
       }
     },
     {
-      "from": "modules/orders/models/customer_order.rk#status/paid",
+      "from": "modules/orders/models/customer_order.rk#status/submitted",
       "to": "modules/projects/models/project.rk#/rules/0",
       "kind": "handoff",
       "label": {
@@ -2052,7 +1930,7 @@
       }
     },
     {
-      "from": "modules/invoicing/models/sales_invoice.rk#status/partly",
+      "from": "modules/invoicing/models/sales_invoice.rk#status/submitted",
       "to": "apps/jasa_proyek/processes/quote_to_cash.rk#/stages/4/when",
       "kind": "handoff"
     }

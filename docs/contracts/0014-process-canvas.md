@@ -50,18 +50,21 @@ Every installed app (kind app or legacy) with a `menu:` and no declared process 
  "nodes": [{"id": "modules/pipeline/models/deal.rk#/automations/0", "group": "deal", "kind": "trigger|condition|rule|action|approval|step",
             "label": {"id": "…"}, "detail": "stage changes to 'won'", "model": "deal",
             "source": {"file": "modules/pipeline/models/deal.rk", "path": "/automations/0", "line": 120, "col": 5},
-            "editable": {"when": "stage changes to 'won'", "if": "app_installed('invoicing')"}}],
+            "editable": {"when": "stage changes to 'won'", "do": "crm.mark_won"}}],
  "edges": [{"from": "<id>", "to": "<id>", "kind": "flow|lifecycle|handoff", "label": {"id": "…"}}],
  "layout": null}
 ```
 - Node id = `<file>#<JSON pointer>`. A guard condition: the guarded item's pointer plus `/if` or `/when`. A lifecycle step: the option's pointer (`…/fields/3/options/4`). A derived-status step: `<model file>#status/<value>`. A stage-level `when` step: `<process file>#/stages/<i>/when`.
 - A node added by a company overlay (`site/custom/<model>.rk`: a rule, approval or field) has the overlay file and pointer as its source, not the app file.
 - `editable` maps key paths (dot-separated, relative to the node's `source.path`, for example `when`, `message.id`, `set.status`, `approvers`) to current values.
-- Edge kinds: `flow` (inside a flow or automation, and from a guard condition to the item it guards), `lifecycle` (status steps of a model), `handoff` (from the last lifecycle step, else the last node, of a stage to the first node of the next; its `label` is the label of the link field joining the two stage models in either direction, absent when there is none).
+- Edge kinds: `flow` (inside a flow or automation, and from a guard condition to the item it guards), `lifecycle` (status steps of a model), `handoff` (from the last non-terminal lifecycle step of a stage to the first node of the next, falling back to the last lifecycle step, then the last node; terminal steps are options with `closed: true` or tone `muted`/`bad`, and the derived `partly`, `paid`, `overdue`, `cancelled`; its `label` is the label of the link field joining the two stage models in either direction, absent when there is none).
 - Node details:
   - `source.line`/`col` are the position of the YAML node the id points at. A guard condition and a stage `when` step have `source.path` = the owning item's pointer (`/automations/0`, `/stages/3`), so their editable key is `if` or `when`.
   - A flow's trigger has pointer `/` (the file root); its steps are `action` nodes (`/steps/<i>`).
-  - A derived-status step has no `path`; its `line`/`col` point at `is_submittable`. The derived steps are `draft → submitted → partly → paid` (a lifecycle chain) plus `overdue` and `cancelled`.
+  - A derived-status step has no `path`; its `line`/`col` point at `is_submittable`. The derived steps follow the kernel's derived status: `draft → submitted → partly → paid` (a lifecycle chain) plus `overdue` and `cancelled` for a submittable model with a `paid_amount` field; `draft → submitted` plus `cancelled` for any other submittable model.
+  - A company overlay contributes only what the runtime merges: its rules, approvals and fields. Automations, actions and `on_submit`/`on_cancel` come from the model's own file.
+  - The `if` of an automation is editable on its condition node only, not on the trigger.
+  - A flow step that finds, creates or updates a model the caller cannot read is an `action` node labelled `Langkah tersembunyi`, with empty `detail`, empty `editable` and `model` "": the flow chain stays whole, nothing of the hidden model shows.
   - Lifecycle steps come from a stage's main `model` only; a `models:` entry adds its other nodes. A model's nodes appear once, in the first visible stage that names it.
   - In a group, a stage `when` step comes first, then the steps it claims, then the model's triggers, rules, actions, approvals and steps.
   - An inferred process's graph `source` is the app manifest at `/menu`; each group's source is its menu item (`/menu/<g>/items/<i>`).

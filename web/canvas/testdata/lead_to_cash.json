@@ -495,7 +495,6 @@
       },
       "editable": {
         "do": "crm.mark_won",
-        "if": "app_installed('invoicing')",
         "when": "stage changes to 'won'"
       }
     },
@@ -1655,7 +1654,7 @@
       "kind": "lifecycle"
     },
     {
-      "from": "modules/pipeline/models/lead.rk#/fields/6/options/3",
+      "from": "modules/pipeline/models/lead.rk#/fields/6/options/2",
       "to": "modules/pipeline/models/deal.rk#/automations/0/if",
       "kind": "handoff",
       "label": {
@@ -1663,12 +1662,12 @@
       }
     },
     {
-      "from": "modules/pipeline/models/deal.rk#/fields/3/options/5",
+      "from": "modules/pipeline/models/deal.rk#/fields/3/options/3",
       "to": "modules/invoicing/models/sales_invoice.rk#/rules/0",
       "kind": "handoff"
     },
     {
-      "from": "modules/invoicing/models/sales_invoice.rk#status/partly",
+      "from": "modules/invoicing/models/sales_invoice.rk#status/submitted",
       "to": "apps/crm/processes/lead_to_cash.rk#/stages/3/when",
       "kind": "handoff"
     }

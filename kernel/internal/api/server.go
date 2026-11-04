@@ -71,10 +71,10 @@ func ChangeActor(p *auth.Principal) changeset.Actor {
 	switch p.Via {
 	case "token":
 		kind = "cli"
-	case "oidc":
+	case "oidc", "ai":
 		kind = "ai"
 	}
-	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind}
+	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind, Assistant: p.Via == "ai"}
 }
 
 func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
@@ -99,6 +99,11 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 		if p == nil {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="rangka"`)
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
+			return
+		}
+		// the embedded assistant only reads over REST; it proposes change sets over MCP (contract 0020 §4)
+		if p.Via == "ai" && r.Method != http.MethodGet && r.Method != http.MethodHead && strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			writeError(w, http.StatusForbidden, "ai_forbidden", auth.AIForbiddenMessage)
 			return
 		}
 		c := &caller{p: p, actor: Actor(p)}

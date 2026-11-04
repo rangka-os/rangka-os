@@ -126,6 +126,7 @@ create table if not exists rk_changesets (
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
+alter table rk_changesets add column if not exists source text not null default ''; -- 'ai' = proposed by the embedded assistant
 alter table rk_migrations add column if not exists steps jsonb, add column if not exists risk text, add column if not exists rolled_back_at timestamptz;
 create table if not exists rk_attachments (
   id           text primary key,

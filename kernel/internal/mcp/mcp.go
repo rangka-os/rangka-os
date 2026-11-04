@@ -152,7 +152,17 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 	case "ping":
 		res.Result = map[string]any{}
 	case "tools/list":
-		res.Result = map[string]any{"tools": tools()}
+		list := tools()
+		if c.Change.Assistant {
+			kept := []any{}
+			for _, t := range list {
+				if assistantTools[t.(map[string]any)["name"].(string)] {
+					kept = append(kept, t)
+				}
+			}
+			list = kept
+		}
+		res.Result = map[string]any{"tools": list}
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`
@@ -164,6 +174,10 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 		}
 		if p.Arguments == nil {
 			p.Arguments = map[string]any{}
+		}
+		if c.Change.Assistant && !assistantTools[p.Name] {
+			res.Error = &rpcError{-32001, auth.AIForbiddenMessage, map[string]any{"code": "ai_forbidden", "tool": p.Name}}
+			break
 		}
 		out, err := h.call(ctx, c, p.Name, p.Arguments)
 		if errors.Is(err, errUnknownTool) {
@@ -226,6 +240,14 @@ func toolResult(out any, err error) map[string]any {
 }
 
 var errUnknownTool = errors.New("unknown tool")
+
+// assistantTools are the tools the embedded assistant (auth Via ai) may call: read, and propose change sets
+// up to preview. Anything else, rangka_approve included, is a JSON-RPC error with data.code ai_forbidden.
+var assistantTools = map[string]bool{
+	"rangka_meta": true, "rangka_get_file": true, "rangka_query": true, "rangka_get_record": true, "rangka_dashboard": true,
+	"rangka_system_status": true, "rangka_changeset_propose": true, "rangka_changeset_validate": true,
+	"rangka_changeset_preview": true, "rangka_changeset_status": true, "rangka_approvals_list": true,
+}
 
 func obj(props map[string]any, required ...string) map[string]any {
 	s := map[string]any{"type": "object", "properties": props, "additionalProperties": false}
@@ -367,12 +389,12 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 	return nil, fmt.Errorf("%w %s", errUnknownTool, name)
 }
 
-// RequireScope is used by the API to accept OIDC tokens on /mcp only with the rangka.mcp scope.
+// RequireScope is used by the API to accept OIDC and assistant tokens on /mcp only with the rangka.mcp scope.
 func RequireScope(p *auth.Principal) bool {
 	if p == nil {
 		return false
 	}
-	if p.Via != "oidc" {
+	if p.Via != "oidc" && p.Via != "ai" {
 		return true
 	}
 	for _, s := range splitFields(p.Scope) {

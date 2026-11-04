@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
@@ -56,10 +57,13 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 	doc := map[string]any{}
 	for k, v := range body {
 		switch k {
-		case "id", "status", "layers", "risk", "validation", "preview", "history":
+		case "id", "status", "layers", "risk", "validation", "preview", "history", "source":
 			continue
 		}
 		doc[k] = v
+	}
+	if a.Assistant {
+		delete(doc, "author") // the assistant proposes as the person it acts for; it cannot name another author
 	}
 	if _, ok := doc["author"]; !ok {
 		kind := a.Kind
@@ -78,6 +82,9 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 	}
 	cs := &ChangeSet{}
 	remarshal(doc, cs)
+	if a.Assistant {
+		cs.Source = "ai"
+	}
 	if cs.Org == "" {
 		cs.Org = a.Org
 	}
@@ -384,6 +391,9 @@ func (s *Service) Reject(ctx context.Context, a Actor, id, note string) (*Change
 // Apply writes the files, migrates and reloads metadata. It needs approval, or config.ai.auto_apply:
 // low_risk for a low-risk validated change set.
 func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, error) {
+	if a.Assistant { // never, not even through config.ai.auto_apply
+		return nil, &Error{403, "ai_forbidden", auth.AIForbiddenMessage, nil}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cs, err := s.Get(ctx, a.Org, id)

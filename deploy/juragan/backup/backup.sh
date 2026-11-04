@@ -102,19 +102,17 @@ dump_pg() {
 # table counts and checksums before and after, one retry when the data changed in between. Called as
 # `dump_rangka ... || return 1`, which switches errexit off in here: every step checks its own status.
 dump_rangka() {
-  local p="$1" url="$2" dir="$3" attempt before after secret_url conn="" mods=""
-  # the same folders serve reads; only when they exist (rangka backup refuses a missing --connectors/--modules folder)
-  [ ! -d "$PILOTS_ROOT/$p/connectors" ] || conn="$PILOTS_ROOT/$p/connectors"
-  [ ! -d "$PILOTS_ROOT/$p/modules" ] || mods="$PILOTS_ROOT/$p/modules"
+  local p="$1" url="$2" dir="$3" attempt before after secret_url
   for attempt in 1 2; do
     before="$(table_stats "$url")" || { log "table stats failed"; return 1; }
-    # the kernel takes the database from DATABASE_URL (environment only, never argv)
+    # the kernel takes the database from DATABASE_URL (environment only, never argv); connectors/ and modules/ are the
+    # folders serve reads, and a missing one is skipped and listed as absent (rangka-os #30, 0.5.0-alpha.3)
     secret_url="postgres://$p:$(jq -rn 'env.PGPASSWORD | @uri')@${url#*@}" || return 1
     # Whole database, no --org: the pilot database is the unit of backup and restore, and an org archive leaves out
     # the tables without an org link (rk_keys, ...), which would never match the manifest. --files is the pilot's
     # files folder (system.rk files.path, ./data/files); a missing one only matters once attachments exist.
     (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
-      RANGKA_CONNECTORS="$conn" RANGKA_MODULES="$mods" \
+      RANGKA_CONNECTORS="$PILOTS_ROOT/$p/connectors" RANGKA_MODULES="$PILOTS_ROOT/$p/modules" \
       rangka backup --out "$dir/rangka.backup" --files "$PILOTS_ROOT/$p/data/files") \
       || { log "rangka backup failed"; return 1; }
     after="$(table_stats "$url")" || { log "table stats failed"; return 1; }

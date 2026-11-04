@@ -217,24 +217,57 @@ func copyDir(src, dst string) error {
 	if src == "" {
 		return nil
 	}
-	return filepath.WalkDir(src, func(p string, d fs.DirEntry, err error) error {
+	root, err := filepath.EvalSymlinks(src)
+	if err != nil {
+		return err
+	}
+	return copyTree(root, dst, map[string]bool{})
+}
+
+// copyTree copies the directory dir into dst, following symlinks to files and directories. active holds the
+// resolved directories on the current path, so a link back to an ancestor is skipped instead of looping.
+func copyTree(dir, dst string, active map[string]bool) error {
+	if active[dir] {
+		return nil
+	}
+	active[dir] = true
+	defer delete(active, dir)
+	if err := os.MkdirAll(dst, 0o755); err != nil {
+		return err
+	}
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		p := filepath.Join(dir, e.Name())
+		target := filepath.Join(dst, e.Name())
+		st, err := os.Stat(p) // follows a symlink
 		if err != nil {
 			return err
 		}
-		rel, _ := filepath.Rel(src, p)
-		target := filepath.Join(dst, rel)
-		if d.IsDir() {
-			if d.Name() == ".git" || d.Name() == "node_modules" {
-				return filepath.SkipDir
+		if st.IsDir() {
+			if e.Name() == ".git" || e.Name() == "node_modules" {
+				continue
 			}
-			return os.MkdirAll(target, 0o755)
+			real, err := filepath.EvalSymlinks(p)
+			if err != nil {
+				return err
+			}
+			if err := copyTree(real, target, active); err != nil {
+				return err
+			}
+			continue
 		}
 		b, err := os.ReadFile(p)
 		if err != nil {
 			return err
 		}
-		return os.WriteFile(target, b, 0o644)
-	})
+		if err := os.WriteFile(target, b, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
 }
 
 // result computes the new text of every op's file under r (nil = deleted).

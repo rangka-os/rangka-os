@@ -167,3 +167,36 @@ func TestAssessUbah(t *testing.T) {
 		t.Error("dashboards layer")
 	}
 }
+
+func TestSandboxFollowsSymlinks(t *testing.T) {
+	tmp := t.TempDir()
+	apps := filepath.Join(tmp, "apps")
+	real := filepath.Join(tmp, "real-connectors")
+	nested := filepath.Join(tmp, "shared")
+	for _, d := range []string{apps, real, nested} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(real, "a.rk"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(nested, "b.rk"), []byte("b"), 0o644)
+	if err := os.Symlink(nested, filepath.Join(real, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	os.Symlink(real, filepath.Join(nested, "loop")) // a cycle must not hang
+	link := filepath.Join(tmp, "connectors")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	s := &Service{AppsDir: apps, ConnectorsDir: link}
+	r, cleanup, _, err := s.sandbox(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	for _, f := range []string{"a.rk", "sub/b.rk"} {
+		if b, err := os.ReadFile(filepath.Join(r.connectors, f)); err != nil || len(b) != 1 {
+			t.Errorf("%s not copied: %v", f, err)
+		}
+	}
+}

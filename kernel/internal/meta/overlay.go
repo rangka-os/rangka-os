@@ -71,6 +71,9 @@ func (r *Registry) applyOverlays() {
 			if list == nil {
 				continue
 			}
+			if contains(strList(asList(list["columns"])), pyStr(ad["field"])) {
+				continue
+			}
 			list["columns"] = insertAfter(asList(list["columns"]), pyStrOr(ad["after"]), ad["field"])
 		}
 		if cols := asList(asMap(ov["kanban"])["columns"]); len(cols) > 0 {
@@ -126,6 +129,17 @@ func placeInForm(views map[string]any, ad map[string]any) {
 		return
 	}
 	layout := asList(form["layout"])
+	for _, sv := range layout {
+		sm := asMap(sv)
+		if contains(strList(asList(sm["fields"])), pyStr(ad["field"])) {
+			return
+		}
+		for _, c := range asList(sm["columns"]) {
+			if contains(strList(asList(c)), pyStr(ad["field"])) {
+				return
+			}
+		}
+	}
 	after := pyStrOr(ad["after"])
 	for _, sv := range layout {
 		sm := asMap(sv)

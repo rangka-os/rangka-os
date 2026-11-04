@@ -220,3 +220,34 @@ views:
 		t.Errorf("errors = %v", got)
 	}
 }
+
+// an add naming a field the replacing layout / columns already hold must not place it twice
+func TestOverlayAddSkipsPlacedField(t *testing.T) {
+	site := viewsSite(t, map[string]string{"custom/deal.rk": rkHint + `overlay.json
+model: deal
+fields:
+  - {name: x_tier, type: text, label: {id: Tingkat}}
+views:
+  form:
+    layout:
+      - section: {id: Utama}
+        fields: [deal_name, x_tier, value]
+    add:
+      - {field: x_tier, after: deal_name}
+  list:
+    columns: [value, x_tier, deal_name]
+    add:
+      - {field: x_tier, after: value}
+`})
+	reg, rep := validateViews(t, site)
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	views := asMap(reg.Model("deal").Raw["views"])
+	if got := strings.Join(strList(asMap(asList(asMap(views["form"])["layout"])[0])["fields"]), ","); got != "deal_name,x_tier,value" {
+		t.Errorf("form fields = %s", got)
+	}
+	if got := strings.Join(strList(asMap(views["list"])["columns"]), ","); got != "value,x_tier,deal_name" {
+		t.Errorf("list columns = %s", got)
+	}
+}

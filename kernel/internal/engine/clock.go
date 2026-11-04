@@ -70,7 +70,7 @@ func (e *Engine) clockFieldsOf(m *meta.Model, visiting map[*meta.Model]bool) map
 // read a table are left as stored.
 func (e *Engine) refreshClock(ctx context.Context, a Actor, m *meta.Model, rec store.Record, children bool, links map[string]map[string]any) {
 	clock := e.clockFields(m)
-	if len(clock) == 0 {
+	if len(clock) == 0 && !(children && e.hasClockRows(m)) {
 		return
 	}
 	s := e.newScope(ctx, e.DB, a, m, rec, links)
@@ -120,6 +120,19 @@ func (s *scope) refreshClock(clock map[string]bool, children bool) {
 		s.rec[f.Name] = c
 		s.settleOwn()
 	}
+}
+
+// hasClockRows tells whether a table of m has rows with clock computes (m itself may have none: a worker whose
+// certifications carry expired).
+func (e *Engine) hasClockRows(m *meta.Model) bool {
+	for _, f := range m.Fields {
+		if f.Type == "table" {
+			if cm := e.Reg().Models[f.Of]; cm != nil && len(e.clockFields(cm)) > 0 {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 func readsTable(f *meta.Field, tables map[string]bool) bool {

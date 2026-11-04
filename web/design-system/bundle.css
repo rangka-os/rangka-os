@@ -9,7 +9,12 @@
 :root[data-density="comfortable"] { --control-sm: 28px; --control: 32px; --field: 32px; --control-lg: 36px; --row: 40px; --row-head: 36px; }
 :root[data-density="compact"] { --control-sm: 20px; --control: 24px; --field: 24px; --control-lg: 28px; --row: 32px; --row-head: 28px; }
 /* phones: everything a finger taps is at least 40px tall, whatever the density */
-@media (max-width: 600px) { :root, :root[data-density] { --control-sm: 40px; --control: 40px; --field: 40px; --control-lg: 40px; } }
+@media (max-width: 600px) {
+  :root, :root[data-density] { --control-sm: 40px; --control: 40px; --field: 40px; --control-lg: 40px; }
+  /* every button and field is a 40px tap target (links stay inline); more phone overrides at the end of the file */
+  button:not(.rk-switch), [role=button], select, textarea, input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: 40px; }
+  .rk-search, .rk-select-btn, .rk-link-btn, .rk-btn { height: auto; min-height: var(--control); }
+}
 
 body { margin: 0; background: var(--surface); color: var(--ink); font: var(--font-size)/var(--line-height) var(--font-sans); -webkit-font-smoothing: antialiased; }
 .rk-stage { display: flex; flex-wrap: wrap; gap: var(--space-2); align-items: center; padding: var(--space-6); }
@@ -85,7 +90,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-req { color: var(--bad); margin-left: 2px; }
 .rk-field > input, .rk-input-affix input, .rk-field textarea, .rk-field select {
   font: var(--font-size)/var(--line-height) var(--font-sans); color: var(--ink); background: var(--neutral); width: 100%; box-sizing: border-box;
-  border: 1px solid transparent; border-radius: var(--r); padding: 3px 8px; min-height: var(--field); transition: background .1s, border-color .1s, box-shadow .1s; }
+  border: 1px solid var(--border); border-radius: var(--r); padding: 3px 8px; min-height: var(--field); transition: background .1s, border-color .1s, box-shadow .1s; }
 .rk-field > input::placeholder, .rk-field textarea::placeholder { color: var(--faint); }
 .rk-field > input:hover, .rk-field textarea:hover, .rk-field select:hover { background: var(--neutral-hover); }
 .rk-field > input:focus, .rk-field textarea:focus, .rk-field select:focus { outline: none; background: var(--surface); border-color: var(--focus); box-shadow: 0 0 0 2px var(--selected); }
@@ -96,7 +101,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-field-error > input:focus { box-shadow: 0 0 0 2px var(--bad-tint); }
 .rk-field-error .rk-field-hint { color: var(--bad); display: flex; gap: 4px; align-items: center; }
 .rk-input-affix { display: flex; align-items: stretch; }
-.rk-input-affix span { padding: 0 8px; color: var(--muted); font: var(--font-size) var(--font-sans); border: 1px solid transparent; border-right: 0; display: grid; place-items: center; background: var(--neutral-hover); border-radius: var(--r) 0 0 var(--r); }
+.rk-input-affix span { padding: 0 8px; color: var(--muted); font: var(--font-size) var(--font-sans); border: 1px solid var(--border); border-right: 0; display: grid; place-items: center; background: var(--neutral-hover); border-radius: var(--r) 0 0 var(--r); }
 .rk-input-affix input { border-radius: 0 var(--r) var(--r) 0; }
 
 /* checkbox, radio, switch: checked is deep Bata */
@@ -136,7 +141,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 /* select, multi-select, link field */
 .rk-select { position: relative; min-width: 0; }
 .rk-select-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-height: var(--field); padding: 2px 8px; box-sizing: border-box;
-  border: 1px solid transparent; border-radius: var(--r); background: var(--neutral); font: var(--font-size)/var(--line-height) var(--font-sans); color: var(--ink); text-align: left; cursor: pointer; flex-wrap: wrap; transition: background .1s, border-color .1s; }
+  border: 1px solid var(--border); border-radius: var(--r); background: var(--neutral); font: var(--font-size)/var(--line-height) var(--font-sans); color: var(--ink); text-align: left; cursor: pointer; flex-wrap: wrap; transition: background .1s, border-color .1s; }
 .rk-select-btn:hover { background: var(--neutral-hover); }
 .rk-select-btn[aria-expanded="true"], .rk-select-btn:focus-visible { outline: none; background: var(--surface); border-color: var(--focus); box-shadow: 0 0 0 2px var(--selected); }
 .rk-select-btn .rk-ph { color: var(--faint); }
@@ -155,12 +160,12 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-opt .rk-check-mark { color: var(--selected-ink); }
 .rk-pop-foot { border-top: 1px solid var(--line); margin: 4px -4px -4px; padding: 4px; }
 .rk-pop-foot .rk-opt { color: var(--ink-2); }
-.rk-tag { display: inline-flex; align-items: center; gap: 4px; height: 20px; padding: 0 2px 0 6px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line-strong);
+.rk-tag { display: inline-flex; align-items: center; gap: 4px; min-height: 20px; padding: 0 2px 0 6px; border-radius: var(--r-sm); background: var(--surface); border: 1px solid var(--line-strong);
   color: var(--ink); font-size: var(--font-size-sm); line-height: 18px; box-sizing: border-box; }
-.rk-tag button { border: 0; background: transparent; color: var(--muted); width: 16px; height: 16px; display: grid; place-items: center; padding: 0; border-radius: var(--r-xs); cursor: pointer; }
+.rk-tag button { border: 0; background: transparent; color: var(--muted); width: 16px; height: 16px; min-height: 0; display: grid; place-items: center; padding: 0; border-radius: var(--r-xs); cursor: pointer; }
 .rk-tag button:hover { color: var(--ink); }
 .rk-tag .rk-icon { width: 12px; height: 12px; }
-.rk-link-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-height: var(--field); padding: 0 2px 0 8px; box-sizing: border-box; border: 1px solid transparent;
+.rk-link-btn { display: flex; align-items: center; gap: 6px; width: 100%; min-height: var(--field); padding: 0 2px 0 8px; box-sizing: border-box; border: 1px solid var(--border);
   border-radius: var(--r); background: var(--neutral); font: var(--font-size)/var(--line-height) var(--font-sans); color: var(--ink); transition: background .1s, border-color .1s; }
 .rk-link-btn:hover { background: var(--neutral-hover); }
 .rk-link-btn:focus-within, .rk-link-btn.open { background: var(--surface); border-color: var(--focus); box-shadow: 0 0 0 2px var(--selected); }
@@ -275,7 +280,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-table-card .rk-tbar { padding: 0 0 8px; }
 .rk-table-card .rk-pager { padding: 8px 0 0; }
 .rk-tbar { display: flex; align-items: center; gap: 6px; padding: 0 0 8px; flex-wrap: wrap; }
-.rk-search { display: flex; align-items: center; gap: 6px; height: var(--control); padding: 0 8px; border: 1px solid transparent; border-radius: var(--r);
+.rk-search { display: flex; align-items: center; gap: 6px; height: var(--control); padding: 0 8px; border: 1px solid var(--border); border-radius: var(--r);
   background: var(--neutral); color: var(--muted); min-width: 0; flex: 0 1 220px; box-sizing: border-box; transition: background .1s, border-color .1s; }
 .rk-search .rk-icon { width: 14px; height: 14px; }
 .rk-search input { border: 0; outline: none; background: transparent; font: var(--font-size) var(--font-sans); color: var(--ink); width: 100%; min-width: 0; padding: 0; }
@@ -296,9 +301,9 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-pager-pages button[aria-current="page"] { background: var(--neutral); color: var(--ink); }
 .rk-pager-pages button:disabled { color: var(--faint); cursor: not-allowed; }
 .rk-pager-pages button:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
-.rk-pager select { font: var(--font-size) var(--font-sans); height: var(--control); border: 1px solid transparent; border-radius: var(--r); background: var(--neutral); color: var(--ink); padding: 0 6px; }
+.rk-pager select { font: var(--font-size) var(--font-sans); height: var(--control); border: 1px solid var(--border); border-radius: var(--r); background: var(--neutral); color: var(--ink); padding: 0 6px; }
 .rk-pager-jump { display: inline-flex; align-items: center; gap: 6px; }
-.rk-pager-jump input { width: 48px; height: var(--control); box-sizing: border-box; border: 1px solid transparent; border-radius: var(--r); padding: 0 8px; font: var(--font-size) var(--font-sans); color: var(--ink); background: var(--neutral); }
+.rk-pager-jump input { width: 48px; height: var(--control); box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r); padding: 0 8px; font: var(--font-size) var(--font-sans); color: var(--ink); background: var(--neutral); }
 .rk-pager-jump input:focus, .rk-pager select:focus { outline: none; background: var(--surface); border-color: var(--focus); }
 .rk-pager b { font-weight: 400; }
 
@@ -626,7 +631,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-viewer-img { flex: 1; min-width: 0; height: 100%; display: flex; align-items: center; justify-content: center; }
 .rk-viewer-img img, .rk-viewer-img .art { max-width: 100%; max-height: 100%; border-radius: var(--r-sm); }
 .rk-viewer-strip { display: flex; gap: 8px; justify-content: center; padding: 12px; overflow-x: auto; }
-.rk-viewer-strip button { width: 48px; height: 48px; padding: 0; border-radius: var(--r); overflow: hidden; border: 2px solid transparent; opacity: .5; cursor: pointer; background: #292524; flex-shrink: 0; }
+.rk-viewer-strip button { width: calc(var(--control) + 20px); height: calc(var(--control) + 20px); padding: 0; border-radius: var(--r); overflow: hidden; border: 2px solid transparent; opacity: .5; cursor: pointer; background: #292524; flex-shrink: 0; }
 .rk-viewer-strip button[aria-current="true"] { border-color: #fafaf9; opacity: 1; }
 
 /* ---------------------------------------------------------------- empty state */
@@ -641,7 +646,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-cal:not(.range) { padding: 0 10px 8px; }
 .rk-cal.range > div:nth-child(2) { padding: 0 10px 8px; }
 .rk-cal.range { width: 432px; max-width: calc(100vw - 32px); display: grid; grid-template-columns: 132px minmax(0, 1fr); gap: 0; }
-.rk-cal-head { display: flex; align-items: center; gap: 4px; height: 40px; margin: 0 -10px 4px; padding: 0 6px; border-bottom: 1px solid var(--line); }
+.rk-cal-head { display: flex; align-items: center; gap: 4px; height: calc(var(--control) + 12px); margin: 0 -10px 4px; padding: 0 6px; border-bottom: 1px solid var(--line); }
 .rk-cal-head b { flex: 1; font-weight: 600; font-size: var(--font-size); text-align: center; order: 1; }
 .rk-cal-head .rk-iconbtn { width: var(--control-sm); height: var(--control-sm); color: var(--muted); }
 .rk-cal-head .rk-iconbtn:first-of-type { order: 0; }
@@ -711,7 +716,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-fb-match { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; font-size: var(--font-size); color: var(--ink-2); margin-bottom: 2px; }
 .rk-fb-row { display: grid; grid-template-columns: 40px minmax(120px, 1fr) minmax(120px, 1fr) minmax(140px, 1.4fr) var(--control); gap: 6px; align-items: center; }
 .rk-fb-join { font: 400 var(--font-size-sm)/16px var(--font-sans); color: var(--muted); text-align: right; }
-.rk-fb-sel { height: var(--control); box-sizing: border-box; border: 1px solid transparent; border-radius: var(--r); background: var(--neutral); color: var(--ink); font: var(--font-size) var(--font-sans); padding: 0 8px; min-width: 0; width: 100%; }
+.rk-fb-sel { height: var(--control); box-sizing: border-box; border: 1px solid var(--border); border-radius: var(--r); background: var(--neutral); color: var(--ink); font: var(--font-size) var(--font-sans); padding: 0 8px; min-width: 0; width: 100%; }
 .rk-fb-match .rk-fb-sel { width: auto; }
 .rk-fb-sel:hover { background: var(--neutral-hover); }
 .rk-fb-sel:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 2px var(--selected); background: var(--surface); }
@@ -784,3 +789,10 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-list-table th:first-child, .rk-list-table td:first-child { padding-left: 16px; }
 .rk-list-table th:last-child, .rk-list-table td:last-child { padding-right: 16px; }
 .rk-list-table tbody tr:last-child td { border-bottom: 0; }
+
+/* ---------------------------------------------------------------- phones: tap targets that override the component rules above */
+@media (max-width: 600px) {
+  .rk-tag button { width: var(--control-sm); height: var(--control-sm); }
+  /* the switch keeps its 28x16 look inside a transparent border that makes a 40px target */
+  .rk-switch, .rk-switch[aria-checked="true"] { box-sizing: content-box; border: 12px solid transparent; background-clip: padding-box; }
+}

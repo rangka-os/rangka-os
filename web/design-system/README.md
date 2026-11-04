@@ -38,7 +38,7 @@ Open `gallery.html` (served over http from `web/`) to see every component in lig
 
 - **Grounds.** `app` and `surface` are white (dark: warm `#1a1715` / `#221e1b`). `soft` is the sunken grey of the side navigation, read-only areas, code and footers. `neutral` is the grey fill of secondary buttons, inputs, tags, count badges and default pills; `neutral-hover` darkens it on hover.
 - **Text.** `ink` (#1C1917, the logo's Ink) for primary text, `ink-2` for nav items and secondary text, `muted` for labels, column headers, metadata and breadcrumbs. `faint` is for placeholders and disabled labels only, because it fails 4.5:1.
-- **Borders.** `line` draws card edges, row dividers, the side navigation edge and tab rules; `line-strong` marks totals and dashed drop targets. `border` outlines checkboxes, radios and the off switch.
+- **Borders.** `line` draws card edges, row dividers, the side navigation edge and tab rules; `line-strong` marks totals and dashed drop targets. `border` outlines inputs, selects, checkboxes, radios and the off switch.
 - **Ink is the action colour.** `primary` (#1C1917) fills the one primary button per view, the selected date and the POS pay key; in dark it flips to warm off-white with dark text. Secondary buttons are grey with no border. Danger buttons are red text on `bad-tint`, or `bad-solid` for the final destructive step, so a destructive action never looks like the main one.
 - **Bata is the selection and link colour.** Selection is the `selected` Kapur background (#F6EDE6) with `selected-ink` deep Bata text (#A33B23): the current nav link, a selected option, active filters, the bulk bar. Checked checkboxes, radios and the on switch are deep Bata. Selected and open table rows take the lighter `row-selected` tint. The current tab gets a 2px Bata underline. `link` and document numbers are the same deep Bata.
 - **Focus** is `focus` (Bata Terang #E0623F): a 2px outline on buttons and controls; inputs turn white with a `focus` border and a Kapur ring.
@@ -66,7 +66,7 @@ Open `gallery.html` (served over http from `web/`) to see every component in lig
 ### Borders, shadows, states
 
 - **Flat by default.** Cards and tables use a 1px `line`, never a shadow. Only floating things (menus, selects, date pickers, popovers, dialogs, drawers, the command menu, toasts) use the soft overlay shadows (`shadow-pop`, `shadow-overlay`, `shadow-toast`).
-- **Inputs are filled.** Text fields, selects, link fields and search boxes are `neutral` grey with no visible border; hover darkens them; focus turns them white with a `focus` border and a Kapur ring. Error fields turn white with a `bad-solid` border.
+- **Inputs are filled and outlined.** Text fields, selects, link fields and search boxes have a `neutral` grey fill inside a 1px `border` outline, so a field reads as a field (3:1 or more against the page); hover darkens the fill; focus turns them white with a `focus` border and a Kapur ring. Error fields turn white with a `bad-solid` border.
 - **Hover:** `hover` (a 5% Ink wash) on nav links, menu items, ghost buttons and table rows; secondary buttons and inputs go to `neutral-hover`.
 - **Focus:** a 2px `focus` outline with 2px offset on buttons and controls.
 - **Disabled:** `disabled-bg` fill with a `faint` label and a not-allowed cursor.

@@ -381,7 +381,7 @@ func (s *Server) theme(reg *meta.Registry) map[string]any {
 func (s *Server) layout(reg *meta.Registry) map[string]any {
 	name, _ := reg.SiteConfig("layout").(string)
 	if name == "" {
-		return map[string]any{"name": "side_only", "shell": "side"}
+		return map[string]any{"name": "side_only", "shell": "side-only"}
 	}
 	l := s.resolve(reg, "layouts", name)
 	if l == nil {

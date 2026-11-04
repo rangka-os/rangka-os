@@ -749,3 +749,28 @@ func TestOverlayFieldThroughLinkAtRuntime(t *testing.T) {
 	inv["customer"], inv["x_po_number"] = "CUST-0031", "" // not wholesale: no PO needed
 	e.must(201, "POST", "/api/v1/r/sales_invoice", inv)
 }
+
+// TestDefaultLayout: a site without config.layout gets the side-only shell (contract 0017).
+func TestDefaultLayout(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		cfg := filepath.Join(site, "config.rk")
+		b, err := os.ReadFile(cfg)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var keep []string
+		for _, ln := range strings.Split(string(b), "\n") {
+			if !strings.HasPrefix(ln, "layout:") {
+				keep = append(keep, ln)
+			}
+		}
+		if err := os.WriteFile(cfg, []byte(strings.Join(keep, "\n")), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	e.login()
+	meta := e.must(200, "GET", "/api/v1/meta", nil).JSON
+	if get(meta, "layout", "name") != "side_only" || get(meta, "layout", "shell") != "side-only" {
+		t.Fatalf("default layout = %v", meta["layout"])
+	}
+}

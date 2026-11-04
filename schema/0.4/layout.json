@@ -2,7 +2,7 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "$id": "https://rangka-os.github.io/rangka-os/schema/0.4/layout.json",
   "title": "Rangka layout",
-  "description": "Layer 6: the app shell and pages built from UI blocks. Templates: top-nav (Atlassian style), side-only, pos (full-screen counter), portal (customers).",
+  "description": "Layer 6: the app shell and pages built from UI blocks. Templates: side-only (Frappe-style sidebar, default), top-nav, pos (full-screen counter), portal (customers).",
   "type": "object",
   "required": [
     "name"
@@ -20,7 +20,7 @@
     },
     "extends": {
       "type": "string",
-      "default": "rangka/top-nav"
+      "default": "rangka/side-only"
     },
     "shell": {
       "enum": [
@@ -29,7 +29,7 @@
         "pos",
         "portal"
       ],
-      "default": "top-nav"
+      "default": "side-only"
     },
     "home": {
       "type": "string",

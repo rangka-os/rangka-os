@@ -49,7 +49,7 @@ func TestUbahAddTableIsValidMedium(t *testing.T) {
 
 		for _, c := range []struct{ path, code string }{
 			{"apps/" + app + "/models/kunjungan_toko.rk", "app_defines_model"}, // an app defines no models
-			{"models/kunjungan_toko.rk", "company_model_name"},                // a company model starts with x_
+			{"models/kunjungan_toko.rk", "company_model_name"},                 // a company model starts with x_
 		} {
 			bad := ChangeSet{Ops: append([]Op{}, cs.Ops...)}
 			for i, op := range bad.Ops {

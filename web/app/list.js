@@ -19,7 +19,8 @@
  * every view shows on a 403 permission_denied.
  *
  * Pure helpers (unit-tested in test/list.test.js): celQuote, inClause, buildFilter, sortParam, nextSort, parseSort,
- * listColumns, kanbanColumns, availableViews, groupFields, sumFields, groupFilter, loadListPrefs, saveListPrefs.
+ * listColumns, kanbanColumns, availableViews, groupFields, sumFields, mergeCheckGroups, groupFilter, loadListPrefs,
+ * saveListPrefs.
  */
 (function (global) {
   "use strict";
@@ -94,14 +95,32 @@
     return (mm.is_submittable ? ["status"] : []).concat((mm.fields || []).filter(function (f) { return GROUP_TYPES[f.type]; }).map(function (f) { return f.name; }));
   }
 
-  /** Number columns of views.list the aggregate can sum: currency, int, float and percent. */
-  function sumFields(meta, model) {
+  /** Columns the aggregate can sum: currency, int, float and percent. `columns` are the person's columns (list prefs);
+   *  without them, the model's views.list columns. The group-by headers and the report footer both use this. */
+  function sumFields(meta, model, columns) {
     var mm = modelOf(meta, model);
-    return listColumns(mm).map(colName).filter(function (c) { var fd = fieldOf(mm, c); return !!fd && !!NUMBER_TYPES[fd.type]; });
+    return (columns || listColumns(mm)).map(colName).filter(function (c) { var fd = fieldOf(mm, c); return !!fd && !!NUMBER_TYPES[fd.type]; });
   }
 
-  /** The CEL clause that opens one group: `field == 'v'` (quoted), `field == true` / `== 3`, or `field == null`. */
-  function groupFilter(field, key) {
+  function isFalseKey(k) { return k === false || k === "false"; }
+
+  /** A check field's groups with the unset (null) group folded into "Tidak" (key false): counts and values added. */
+  function mergeCheckGroups(groups) {
+    var no = null, out = [];
+    (groups || []).forEach(function (g) {
+      if (g.key == null || isFalseKey(g.key)) {
+        if (!no) { no = { key: false, label: g.label, count: 0, values: {} }; out.push(no); }
+        no.count += g.count || 0;
+        Object.keys(g.values || {}).forEach(function (k) { no.values[k] = (no.values[k] || 0) + (Number(g.values[k]) || 0); });
+      } else out.push(g);
+    });
+    return out;
+  }
+
+  /** The CEL clause that opens one group: `field == 'v'` (quoted), `field == true` / `== 3`, or `field == null`. For a
+   *  check field (type "check") the "Tidak" group (key false) holds the unset rows too: `field != true`. */
+  function groupFilter(field, key, type) {
+    if (type === "check" && isFalseKey(key)) return field + " != true";
     if (key === null || key === undefined) return field + " == null";
     if (typeof key === "boolean" || typeof key === "number") return field + " == " + String(key);
     return field + " == " + celQuote(key);
@@ -153,6 +172,7 @@
   RA.groupFields = groupFields;
   RA.sumFields = sumFields;
   RA.groupFilter = groupFilter;
+  RA.mergeCheckGroups = mergeCheckGroups;
   RA.loadListPrefs = loadListPrefs;
   RA.saveListPrefs = saveListPrefs;
 
@@ -415,7 +435,9 @@
     }
     if (!agg) return h("div", { className: "ap-groups-loading" }, [0, 1, 2].map(function (i) { return h(R.Skeleton, { key: i, variant: "text" }); }));
     if (!agg.count) return h("div", { className: "rk-cmd-empty" }, "Tidak ada data yang cocok dengan filter");
-    var groups = (agg.groups || []).map(function (g) {
+    var gfd = ctx.eng.field(m, field);
+    var raw = gfd && gfd.type === "check" ? mergeCheckGroups(agg.groups) : agg.groups || [];
+    var groups = raw.map(function (g) {
       var k = JSON.stringify(g.key), st = p.opened[k];
       return { key: g.key, label: groupLabel(ctx, m, field, g), count: g.count, values: g.values, open: !!st,
         rows: st ? h(GroupRows, { ctx: ctx, model: m, columns: p.columns, state: st, onMore: function () { p.onMore(g.key); } }) : null };
@@ -448,7 +470,7 @@
     var totals;
     if (p.agg) {
       var vals = {};
-      reportSums(ctx, m, p.columns).forEach(function (f) {
+      sumFields(ctx.meta, m, p.columns).forEach(function (f) {
         var v = (p.agg.values || {})["sum:" + f], fd = eng.field(m, f);
         if (v != null) vals[f] = h("span", { className: "rk-amount" }, fd.type === "currency" ? global.RangkaAppAPI.rupiah(v) : fd.type === "percent" ? fmtNum(v) + "%" : fmtNum(v));
       });
@@ -459,11 +481,6 @@
       h(R.ReportTable, { columns: cols, rows: p.rows, totals: totals, emptyText: "Tidak ada data yang cocok dengan filter",
         onColumnsChange: function (next) { p.onColumns(next.map(function (c) { return c.field; })); } }),
       p.footer ? h("div", { className: "ap-pager" }, p.footer) : null);
-  }
-
-  /** Number columns of the report the aggregate can sum (currency, int, float, percent; money is not summable). */
-  function reportSums(ctx, m, columns) {
-    return columns.filter(function (c) { var fd = ctx.eng.field(m, c); return !!fd && !!NUMBER_TYPES[fd.type]; });
   }
 
   /* ---------------------------------------------------------------- the list view */
@@ -541,7 +558,7 @@
     }, [m, dq, filter, sortParam(sort), page, view, reload, ctx.me && ctx.me.org, err && err.status === 401 ? ctx.me : null]);
 
     // totals over every matching row: the report's footer and the group-by headers (none in preview)
-    var sums = view === "group" ? sumFields(ctx.meta, m) : view === "report" ? reportSums(ctx, m, columns) : [];
+    var sums = view === "group" || view === "report" ? sumFields(ctx.meta, m, columns) : [];
     var aggKey = view === "group" || view === "report" ? [view, dq, filter, view === "group" ? gfield : "", sums.join(","), reload].join("|") : "";
     useEffect(function () {
       var mine = ++aseq.current;
@@ -565,7 +582,7 @@
       var k = JSON.stringify(key), mine = (gseq.current[k] || 0) + 1;
       gseq.current[k] = mine;
       setOpened(function (cur) { var n = Object.assign({}, cur); n[k] = Object.assign({ rows: [], total: 0 }, cur[k], { loading: true, error: null }); return n; });
-      ctx.api.list(m, { q: dq || undefined, filter: andFilter(filter, groupFilter(gfield, key)), sort: groupSort, limit: PAGE_SIZE, offset: offset }).then(function (r) {
+      ctx.api.list(m, { q: dq || undefined, filter: andFilter(filter, groupFilter(gfield, key, (ctx.eng.field(m, gfield) || {}).type)), sort: groupSort, limit: PAGE_SIZE, offset: offset }).then(function (r) {
         if (gseq.current[k] !== mine) return;
         (r.data || []).forEach(function (rec) { ctx.cache.put(m, rec); });
         setOpened(function (cur) {

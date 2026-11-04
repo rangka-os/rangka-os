@@ -145,6 +145,36 @@ test("sumFields picks currency columns only", () => {
   assert.deepStrictEqual(plain(A.sumFields(META, "lead")), []);
 });
 
+test("sumFields follows the person's columns when given", () => {
+  const A = load();
+  // the group-by headers and the report footer sum the same columns: the person's, not the metadata default
+  assert.deepStrictEqual(plain(A.sumFields(META, "sales_invoice", ["name", "customer"])), []);
+  assert.deepStrictEqual(plain(A.sumFields(META, "sales_invoice", ["grand_total", "customer"])), ["grand_total"]);
+});
+
+test("mergeCheckGroups folds the unset group into Tidak", () => {
+  const A = load();
+  const merged = plain(A.mergeCheckGroups([
+    { key: true, label: "true", count: 5, values: { "sum:grand_total": 500 } },
+    { key: false, label: "false", count: 3, values: { "sum:grand_total": 300 } },
+    { key: null, label: "(kosong)", count: 2, values: { "sum:grand_total": 20 } },
+  ]));
+  assert.deepStrictEqual(merged, [
+    { key: true, label: "true", count: 5, values: { "sum:grand_total": 500 } },
+    { key: false, label: "false", count: 5, values: { "sum:grand_total": 320 } },
+  ]);
+  // only unset rows: still one "Tidak" group
+  assert.deepStrictEqual(plain(A.mergeCheckGroups([{ key: null, label: "(kosong)", count: 2, values: {} }])),
+    [{ key: false, label: "(kosong)", count: 2, values: {} }]);
+});
+
+test("groupFilter for a check field's Tidak group matches unset rows too", () => {
+  const A = load();
+  assert.strictEqual(A.groupFilter("is_return", false, "check"), "is_return != true");
+  assert.strictEqual(A.groupFilter("is_return", true, "check"), "is_return == true");
+  assert.strictEqual(A.groupFilter("is_return", false), "is_return == false");
+});
+
 test("groupFields: status for submittable models, then select, link and check fields", () => {
   const A = load();
   assert.deepStrictEqual(plain(A.groupFields(META, "sales_invoice")), ["status", "customer", "is_return", "channel"]);

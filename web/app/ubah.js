@@ -225,7 +225,7 @@
   };
 
   /** One more option on a select field (overlay `options.<field>`). ctx (optional): {baseOptions: the model's options of that
-   * field (values or {value}), modelLabel}. Throws an Error (Bahasa Indonesia) when the value already exists. */
+   * field (values or {value}), modelLabel, kanbanColumns: the board's current views.kanban.columns (merged meta)}. Throws an Error (Bahasa Indonesia) when the value already exists. */
   RA.opsAddStatus = function (model, field, opt, existing, ctx) {
     ctx = ctx || {};
     var value = opt.value || rawSlug(opt.label) || "baru";
@@ -233,6 +233,10 @@
       var taken = (ctx.baseOptions || []).concat(ed.get(["options", field]) || []).map(function (o) { return isObj(o) ? o.value : o; });
       if (taken.indexOf(value) >= 0) throw new Error("Tahap " + value + " sudah ada");
       ed.append(["options", field], { value: value, label: lbl(opt.label) });
+      // an ordered board shows only the values in views.kanban.columns: the new stage joins them
+      var cols = ed.get(["views", "kanban", "columns"]);
+      if (Array.isArray(cols) && cols.length) ed.append(["views", "kanban", "columns"], value);
+      else if (Array.isArray(ctx.kanbanColumns) && ctx.kanbanColumns.length) ed.put(["views", "kanban", "columns"], ctx.kanbanColumns.concat([value]));
     });
     return { title: "Tambah status " + opt.label + " di " + (ctx.modelLabel || model), ops: ops };
   };
@@ -249,8 +253,8 @@
     return { title: "Tambah persetujuan " + (spec.label || spec.on) + " di " + model, ops: ops };
   };
 
-  /* A flow on <model>.updated. In record-event flows event = {model, name, op, record}; event.name is the RECORD's name.
-   * A flow on <model>.updated. The triggering record is event; step 1 finds it again as `record` (update needs a variable that
+  /* A flow on <model>.updated. In record-event flows event = the record's fields plus {model, name, op, record, before};
+   * event.name is the RECORD's name. The triggering record is event; step 1 finds it again as `record` (update needs a variable that
    * holds a record), step 2 runs when `when` is true: set {field: CEL} updates it, notify <who> sends a message. */
   RA.opsAddAutomation = function (app, model, spec, unitKind) {
     var name = slugName(spec.name || spec.label);
@@ -271,8 +275,23 @@
     return { title: "Tambah otomatisasi " + (spec.label || name) + " di " + model, ops: ops };
   };
 
-  /** New table: apps/<app>/models/<name>.rk plus a `nav.side` entry in the layout (group "Tabel baru"). */
-  RA.opsAddModel = function (app, spec, layoutName, layoutExisting) {
+  /** The permissions a new table copies: the first model of the menu group it joins when that has permissions, else
+   *  the app's first model that has them; undefined when none has (contract 0015 §2). */
+  function siblingPermissions(meta, app, side) {
+    var models = (meta && meta.models) || {}, group = null;
+    if (Array.isArray(side)) side.forEach(function (g) { if (!group && g && g.group && g.group.id === "Tabel baru") group = g; });
+    var first = group && (group.items || []).map(function (it) { return isObj(it) ? it.to : it; })
+      .filter(function (to) { return typeof to === "string" && to.indexOf("model:") === 0; })[0];
+    var fm = first && models[first.slice(6)];
+    if (fm && Array.isArray(fm.permissions)) return clone(fm.permissions);
+    var names = Object.keys(models).filter(function (n) { return (models[n].app === app || models[n].module === app) && Array.isArray(models[n].permissions); });
+    return names.length ? clone(models[names[0]].permissions) : undefined;
+  }
+
+  /** New table: apps/<app>/models/<name>.rk plus a `nav.side` entry in the layout (group "Tabel baru"). meta (optional):
+   *  the merged metadata, for the permissions copied from a sibling model. */
+  RA.opsAddModel = function (app, spec, layoutName, layoutExisting, meta) {
+    var perms = siblingPermissions(meta, app, layoutExisting && layoutExisting.parsed && layoutExisting.parsed.nav && layoutExisting.parsed.nav.side);
     var name = slugName(spec.label), path = "apps/" + app + "/models/" + name + ".rk";
     var fields = [], taken = [];
     (spec.fields || []).forEach(function (f) {
@@ -288,6 +307,7 @@
         list: { columns: [fields[0].name] },
         form: { layout: [{ section: lbl("Umum"), fields: fields.map(function (f) { return f.name; }) }] }
       });
+      if (perms) ed.put(["permissions"], perms);
     });
     var entry = { to: "model:" + name, label: lbl(spec.label) };
     var menuOps = fileOps("layouts/" + layoutName + ".rk", "layout", "name", layoutName, layoutExisting, function (ed) {
@@ -398,10 +418,11 @@
     if (a.field === a.target) throw new Error("Kolom yang diisi harus berbeda dari kolom pemicu");
     var opt = (f.options || []).filter(function (o) { return o.value === a.value; })[0];
     var shown = opt ? L(opt.label) || a.value : a.value;
-    var set = {};
+    var set = {}, v = celLit(f, a.value, "Nilai pemicu");
     set[a.target] = celLit(t, a.to, "Nilai isian");
     return { label: "Saat " + (L(f.label) || f.name) + " jadi " + shown + ", isi " + (L(t.label) || t.name),
-      when: "record." + f.name + " == " + celLit(f, a.value, "Nilai pemicu"), set: set };
+      // only when the field BECOMES the value (before is null on created), so later edits of the target stick
+      when: "record." + f.name + " == " + v + " && (event.before == null || event.before." + f.name + " != " + v + ")", set: set };
   };
 
   /** A copy of a form layout with one field moved. from/to: {s: section index, c: column index (sections with
@@ -436,11 +457,11 @@
    *  sidebar keeps every entry it had. */
   RA.opsAddTable = function (meta, files, app, spec) {
     var ex = files.existing, side = ex && ex.parsed && ex.parsed.nav && ex.parsed.nav.side;
-    if (Array.isArray(side) && side.length) return RA.opsAddModel(app, spec, files.name, ex);
+    if (Array.isArray(side) && side.length) return RA.opsAddModel(app, spec, files.name, ex, meta);
     var shown = RA.menuSide(meta), seed = RA.opsMenu(files.name, shown, ex, files.config);
     var after = clone((ex && ex.parsed) || { name: files.name });
     after.nav = Object.assign({}, after.nav || {}, { side: shown });
-    var add = RA.opsAddModel(app, spec, files.name, { parsed: after });
+    var add = RA.opsAddModel(app, spec, files.name, { parsed: after }, meta);
     return { title: add.title, modelName: add.modelName, ops: add.ops.slice(0, 2).concat(seed.ops, add.ops.slice(2)) };
   };
 
@@ -709,7 +730,7 @@
     return h(EditDialog, { title: "Tambah tahap", confirmLabel: "Tambah", onClose: p.onClose, onSubmit: function () {
       var l = need(label, "Isi nama tahap dulu");
       return p.u.edit("custom/" + p.model + ".rk", function (ex) {
-        return RA.opsAddStatus(p.model, p.field, { label: l }, ex, { baseOptions: p.baseOptions, modelLabel: L(mm.label) || p.model });
+        return RA.opsAddStatus(p.model, p.field, { label: l }, ex, { baseOptions: p.baseOptions, kanbanColumns: p.kanbanColumns, modelLabel: L(mm.label) || p.model });
       });
     } }, h(R.Field, { id: "ap-ubah-s-label", label: "Nama tahap", value: label, autoFocus: true, onChange: val(setLabel) }));
   };

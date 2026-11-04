@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -166,6 +167,25 @@ func TestAssessUbah(t *testing.T) {
 	}
 	if Layer("dashboards/x.rk") != 6 {
 		t.Error("dashboards layer")
+	}
+}
+
+// A new model without permissions gives every role full access: still medium, with a reason that says so.
+func TestAssessNewModelPermissions(t *testing.T) {
+	none := func(string) (map[string]any, bool) { return nil, false }
+	ops := []Op{{Op: "create", Path: "apps/crm/models/x.rk"}}
+	model := func(string) map[string]any { return nil }
+	after := func(m map[string]any) func(string) (map[string]any, bool) {
+		return func(p string) (map[string]any, bool) { return m, p == "apps/crm/models/x.rk" }
+	}
+	const why = "medium: new model apps/crm/models/x.rk without permissions: every role has full access"
+	a := Assess(ops, none, after(map[string]any{"name": "x"}), model)
+	if a.Risk != "medium" || !slices.Contains(a.Reasons, why) {
+		t.Errorf("without permissions: %s %v", a.Risk, a.Reasons)
+	}
+	a = Assess(ops, none, after(map[string]any{"name": "x", "permissions": []any{map[string]any{"role": "owner", "read": true}}}), model)
+	if a.Risk != "medium" || slices.Contains(a.Reasons, why) {
+		t.Errorf("with permissions: %s %v", a.Risk, a.Reasons)
 	}
 }
 

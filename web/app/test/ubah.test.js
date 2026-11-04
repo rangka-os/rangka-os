@@ -288,9 +288,9 @@ test("automationSpec: when a field becomes a value, set another field", () => {
   const mm = { fields: [{ name: "stage", type: "select", label: { id: "Tahap" }, options: [{ value: "won", label: { id: "Menang" } }] },
     { name: "probability", type: "int", label: { id: "Peluang" } }, { name: "note", type: "data", label: { id: "Catatan" } }, { name: "ok", type: "check" }] };
   assert.deepStrictEqual(RA.automationSpec(mm, { field: "stage", value: "won", target: "probability", to: "100" }),
-    { label: "Saat Tahap jadi Menang, isi Peluang", when: "record.stage == 'won'", set: { probability: "100" } });
+    { label: "Saat Tahap jadi Menang, isi Peluang", when: "record.stage == 'won' && (event.before == null || event.before.stage != 'won')", set: { probability: "100" } });
   assert.deepStrictEqual(RA.automationSpec(mm, { field: "probability", value: "50", target: "note", to: "Separuh 'jalan'" }).set, { note: "'Separuh \\'jalan\\''" });
-  assert.strictEqual(RA.automationSpec(mm, { field: "ok", value: "true", target: "note", to: "x" }).when, "record.ok == true");
+  assert.strictEqual(RA.automationSpec(mm, { field: "ok", value: "true", target: "note", to: "x" }).when, "record.ok == true && (event.before == null || event.before.ok != true)");
   assert.throws(() => RA.automationSpec(mm, { field: "probability", value: "abc", target: "note", to: "x" }), /angka/);
   assert.throws(() => RA.automationSpec(mm, { field: "stage", value: "won", target: "stage", to: "won" }), /berbeda/);
 });
@@ -368,4 +368,46 @@ test("postChangeset posts to the parent only when framed", () => {
   RA.postChangeset("created", cs, {});
   RA.postChangeset("created", null, { parent });
   assert.strictEqual(sent.length, 1);
+});
+
+/* ---------------------------------------------------------------- final fix wave */
+
+test("automationSpec fires on the transition only (before is null on created)", () => {
+  const mm = { fields: [{ name: "stage", type: "select", options: [{ value: "won" }] }, { name: "probability", type: "int" }] };
+  assert.strictEqual(RA.automationSpec(mm, { field: "stage", value: "won", target: "probability", to: "100" }).when,
+    "record.stage == 'won' && (event.before == null || event.before.stage != 'won')");
+});
+
+test("opsAddStatus also appends to views.kanban.columns when the board is ordered", () => {
+  // the overlay already orders the board: the new stage joins its columns
+  let ex = file("custom/deal.rk", "overlay", { model: "deal", views: { kanban: { columns: ["won", "lead"] } } });
+  let r = RA.opsAddStatus("deal", "stage", { label: "Negosiasi" }, ex);
+  let doc = result(r.ops, ex.parsed);
+  assert.deepStrictEqual(doc.views.kanban.columns, ["won", "lead", "negosiasi"]);
+  assert.deepStrictEqual(doc.options.stage, [{ value: "negosiasi", label: { id: "Negosiasi" } }]);
+  // the merged meta orders it (no overlay columns yet): the current columns are written with the new value
+  ex = file("custom/deal.rk", "overlay", { model: "deal" });
+  r = RA.opsAddStatus("deal", "stage", { label: "Negosiasi" }, ex, { kanbanColumns: ["won", "lead"] });
+  doc = result(r.ops, ex.parsed);
+  assert.deepStrictEqual(doc.views.kanban.columns, ["won", "lead", "negosiasi"]);
+  // no column order anywhere: only options
+  r = RA.opsAddStatus("deal", "stage", { label: "Negosiasi" }, ex, { kanbanColumns: [] });
+  assert.strictEqual(result(r.ops, ex.parsed).views, undefined);
+});
+
+test("opsAddModel copies a sibling's permissions; none when no sibling has them", () => {
+  const perms = [{ role: "sales", read: true, create: true }];
+  const meta = { models: { a_first: { app: "crm", permissions: [{ role: "owner", read: true }] }, deal: { app: "crm", permissions: perms }, lead: { app: "crm" } } };
+  const lay = file("layouts/l.rk", "layout", { name: "l", nav: { side: [{ group: { id: "Tabel baru" }, items: [{ to: "model:lead" }, { to: "model:deal" }] }] } });
+  const permsOf = (r) => (r.ops[1].patch.filter((p) => p.path === "/permissions")[0] || {}).value;
+  let r = RA.opsAddModel("crm", { label: "Kunjungan", fields: [] }, "l", lay, meta);
+  assert.deepStrictEqual(permsOf(r), [{ role: "owner", read: true }], "group's first model has none: the app's first model with permissions");
+  const lay2 = file("layouts/l.rk", "layout", { name: "l", nav: { side: [{ group: { id: "Tabel baru" }, items: [{ to: "model:deal" }] }] } });
+  r = RA.opsAddModel("crm", { label: "Kunjungan", fields: [] }, "l", lay2, meta);
+  assert.deepStrictEqual(permsOf(r), perms, "the group's first model");
+  assert.notStrictEqual(permsOf(r), perms, "a copy");
+  r = RA.opsAddModel("sales", { label: "Kunjungan", fields: [] }, "l", null, meta);
+  assert.strictEqual(permsOf(r), undefined, "no sibling with permissions: none written");
+  r = RA.opsAddTable({ ...meta, apps: [], dashboards: {}, layout: { name: "l" } }, { name: "l", existing: lay2, config: {} }, "crm", { label: "K" });
+  assert.deepStrictEqual(permsOf(r), perms, "opsAddTable passes meta");
 });

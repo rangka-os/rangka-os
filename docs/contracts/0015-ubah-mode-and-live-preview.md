@@ -38,7 +38,7 @@ A low-risk Ubah edit by someone with `approve: false` stays a pending change set
 | Add a status / stage | `custom/<model>.rk` `options: {<select field>: [{value, label}]}` | medium (high on a submittable model) |
 | Add an approval | `custom/<model>.rk` `approvals` (contract 0007 shape) | medium |
 | Add an automation | new `apps/<app>/flows/<name>.rk` (or `modules/<m>/flows/…`) with `on: <model>.created|updated` | medium |
-| Add a table (model) | new `apps/<app>/models/<m>.rk` (or `modules/<m>/models/…`) + a `nav.side` entry in the layout | medium (high with money/stock fields) |
+| Add a table (model) | new `apps/<app>/models/<m>.rk` (or `modules/<m>/models/…`) + a `nav.side` entry in the layout; `permissions` copied from a sibling model (the first model of the menu group the table joins, else the app's first model with `permissions`), none when no sibling has them | medium (high with money/stock fields); without `permissions` an extra reason says every role has full access |
 
 An overlay that only changes `views` is low risk whether or not the file is new (this narrows "new overlay → medium"
 in the v0.1 notes to overlays that add fields, rules, approvals or options).

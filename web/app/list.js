@@ -239,7 +239,7 @@
       }),
       u.on ? h("section", { key: "__add", className: "pv-col-k ap-ubah-addcol" },
         h(R.Button, { icon: "add", disabled: u.busy, onClick: function () { setAddingStage(true); } }, "Tambah tahap")) : null,
-      addingStage ? h(RA.AddStatusDialog, { key: "__dlg", model: m, field: kb.group_by, baseOptions: gf.options || [], meta: ctx.meta, u: u, onClose: function () { setAddingStage(false); } }) : null);
+      addingStage ? h(RA.AddStatusDialog, { key: "__dlg", model: m, field: kb.group_by, baseOptions: gf.options || [], kanbanColumns: kb.columns, meta: ctx.meta, u: u, onClose: function () { setAddingStage(false); } }) : null);
   }
 
   /* ---------------------------------------------------------------- list table (own markup: sort, search and paging are the server's) */

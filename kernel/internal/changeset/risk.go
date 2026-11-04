@@ -108,6 +108,9 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 					}
 				}
 				a.raise("medium", "new model "+p)
+				if nw["permissions"] == nil { // absent (or null): the engine grants everything (engine.perms)
+					a.raise("medium", "new model "+p+" without permissions: every role has full access")
+				}
 			default:
 				a.raise("medium", "new file "+p)
 			}

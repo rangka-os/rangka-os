@@ -9,8 +9,12 @@ views:
           - [stage, value]
       - section: {id: Catatan}
         fields: [notes]
+    add:
+      - {field: contact_person, after: customer}
   list:
     columns: [deal_name, stage, value]
+    add:
+      - {field: expected_close, after: stage}
   kanban:
     columns: [won, x_review, prospect]
 options:

@@ -1241,8 +1241,13 @@ def check_overlays(rep, V, apps, allmodels, overlays):
                 if r not in app_roles:
                     rep.add("warn", p, f"approvals/{i}/approvers/{j}", "unknown_role", f'role "{r}" has no file in roles/ (it must exist at install)')
         views = m.get("views", {})
-        placed = [n for s in views.get("form", {}).get("layout", []) for n in list(s.get("fields", [])) + [x for col in s.get("columns", []) for x in col]]
-        cols = list(views.get("list", {}).get("columns", []))
+        oviews = o.get("views") if isinstance(o.get("views"), dict) else {}
+        # add applies after a replacing layout or column list (contract 0015 section 3), so `after` names what is left in it
+        layout = (oviews.get("form") or {}).get("layout") if isinstance(oviews.get("form"), dict) else None
+        layout = layout or views.get("form", {}).get("layout", [])
+        placed = [n for s in layout for n in list(s.get("fields", [])) + [x for col in s.get("columns", []) for x in col]]
+        ocols = (oviews.get("list") or {}).get("columns") if isinstance(oviews.get("list"), dict) else None
+        cols = list(ocols or views.get("list", {}).get("columns", []))
         for view, have in (("form", placed), ("list", cols)):
             for i, ad in enumerate(((o.get("views") or {}).get(view) or {}).get("add", [])):
                 if not isinstance(ad, dict):
@@ -1292,12 +1297,12 @@ def check_overlay_options_views(rep, p, mn, o, m, merged, known):
         for ci, col in enumerate(sec.get("columns", [])):
             places += [(f"views/form/layout/{si}/columns/{ci}/{j}", n) for j, n in enumerate(col)]
         for at, n in places:
-            if n not in merged:
-                rep.add("error", p, at, "unknown_field", f'"{n}" is not a field of {mn}{suggest(n or "", merged)}')
+            if not isinstance(n, str) or n not in merged:
+                rep.add("error", p, at, "unknown_field", f'"{n}" is not a field of {mn}{suggest(n if isinstance(n, str) else "", merged)}')
     lst = ov.get("list") if isinstance(ov.get("list"), dict) else {}
     for i, c in enumerate(lst.get("columns", [])):
-        if c not in known:
-            rep.add("error", p, f"views/list/columns/{i}", "unknown_field", f'"{c}" is not a field of {mn}{suggest(c or "", merged)}')
+        if not isinstance(c, str) or c not in known:
+            rep.add("error", p, f"views/list/columns/{i}", "unknown_field", f'"{c}" is not a field of {mn}{suggest(c if isinstance(c, str) else "", merged)}')
     kcols = (ov.get("kanban") or {}).get("columns", []) if isinstance(ov.get("kanban"), dict) else []
     if not kcols:
         return

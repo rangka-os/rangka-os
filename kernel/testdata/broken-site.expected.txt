@@ -145,12 +145,14 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/custom/sales_invoice.rk:19:12  error  duplicate_approval  approvals/2/name  "big" is declared twice
 ../broken-site/custom/sales_invoice.rk:19:41  warn   unknown_role  approvals/2/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
 ../broken-site/custom/sales_invoice.rk:27:9  error  unknown_field  views/form/add/1  "x_missing" is not a field of sales_invoice
-../broken-site/custom/sales_invoice.rk:33:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
+../broken-site/custom/sales_invoice.rk:28:37  error  unknown_field  views/form/add/2/after  "outlet" is not in the form view of sales_invoice
+../broken-site/custom/sales_invoice.rk:34:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
+../broken-site/custom/sales_invoice.rk:35:37  error  unknown_field  views/list/add/1/after  "status" is not in the list view of sales_invoice
 ../broken-site/custom/sales_invoice.rk:24:28  error  unknown_field  views/form/layout/0/fields/1  "ghost_field" is not a field of sales_invoice
-../broken-site/custom/sales_invoice.rk:31:21  error  unknown_field  views/list/columns/1  "nope_col" is not a field of sales_invoice
-../broken-site/custom/sales_invoice.rk:29:14  error  no_kanban  views/kanban/columns  sales_invoice has no kanban view
+../broken-site/custom/sales_invoice.rk:32:21  error  unknown_field  views/list/columns/1  "nope_col" is not a field of sales_invoice
+../broken-site/custom/sales_invoice.rk:30:14  error  no_kanban  views/kanban/columns  sales_invoice has no kanban view
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
 ../broken-site/config.rk:21:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:22:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-134 error(s), 20 warning(s)
+136 error(s), 20 warning(s)

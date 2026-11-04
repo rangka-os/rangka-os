@@ -2,7 +2,6 @@ package meta
 
 import (
 	"os"
-	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -17,9 +16,7 @@ const rkHint = "# yaml-language-server: $schema=https://rangka-os.github.io/rang
 func viewsSite(t *testing.T, files map[string]string) string {
 	t.Helper()
 	dir := t.TempDir()
-	if out, err := exec.Command("cp", "-r", testdb.Catalogue("sites/kopi-senja"), dir+"/site").CombinedOutput(); err != nil {
-		t.Fatal(err, string(out))
-	}
+	copyDir(t, testdb.Catalogue("sites/kopi-senja"), dir+"/site")
 	for p, body := range files {
 		os.MkdirAll(filepath.Dir(dir+"/site/"+p), 0o755)
 		mustWrite(t, dir+"/site/"+p, []byte(body))
@@ -165,5 +162,61 @@ widgets:
 	}
 	if len(got) != len(want) {
 		t.Errorf("got %d errors, want %d:\n%s", len(got), len(want), have)
+	}
+}
+
+// add applies after a replacing layout / column list: `after` is placed in the replacement, and naming a field
+// only the old layout had is an error.
+func TestOverlayAddAfterReplacement(t *testing.T) {
+	site := viewsSite(t, map[string]string{"custom/deal.rk": rkHint + `overlay.json
+model: deal
+views:
+  form:
+    layout:
+      - section: {id: Utama}
+        fields: [deal_name, value]
+    add:
+      - {field: notes, after: deal_name}
+  list:
+    columns: [value, deal_name]
+    add:
+      - {field: stage, after: value}
+`})
+	reg, rep := validateViews(t, site)
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	views := asMap(reg.Model("deal").Raw["views"])
+	if got := strings.Join(strList(asMap(asList(asMap(views["form"])["layout"])[0])["fields"]), ","); got != "deal_name,notes,value" {
+		t.Errorf("form fields = %s", got)
+	}
+	if got := strings.Join(strList(asMap(views["list"])["columns"]), ","); got != "value,stage,deal_name" {
+		t.Errorf("list columns = %s", got)
+	}
+
+	bad := viewsSite(t, map[string]string{"custom/deal.rk": rkHint + `overlay.json
+model: deal
+views:
+  form:
+    layout:
+      - section: {id: Utama}
+        fields: [deal_name, value]
+    add:
+      - {field: notes, after: customer}
+  list:
+    columns: [value, deal_name]
+    add:
+      - {field: stage, after: expected_close}
+`})
+	_, rep = validateViews(t, bad)
+	var got []string
+	for _, it := range rep.All() {
+		if it.Level == "error" {
+			got = append(got, it.Code+" "+it.Where)
+		}
+	}
+	want := "unknown_field views/form/add/0/after,unknown_field views/list/add/0/after"
+	if strings.Join(got, ",") != want {
+		t.Errorf("errors = %v", got)
 	}
 }

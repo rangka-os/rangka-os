@@ -782,7 +782,16 @@ func (v *validator) overlays(all map[string]vis) {
 		}
 		views := asMap(own.Raw["views"])
 		var placed, cols []string
-		for _, sv := range asList(asMap(views["form"])["layout"]) {
+		// add applies after a replacing layout or column list (contract 0015 §3), so `after` names what is left in it
+		formLayout := asList(asMap(views["form"])["layout"])
+		if l := asList(asMap(asMap(o["views"])["form"])["layout"]); len(l) > 0 {
+			formLayout = l
+		}
+		listCols := asList(asMap(views["list"])["columns"])
+		if l := asList(asMap(asMap(o["views"])["list"])["columns"]); len(l) > 0 {
+			listCols = l
+		}
+		for _, sv := range formLayout {
 			sm := asMap(sv)
 			for _, n := range asList(sm["fields"]) {
 				placed = append(placed, pyStr(n))
@@ -793,7 +802,7 @@ func (v *validator) overlays(all map[string]vis) {
 				}
 			}
 		}
-		for _, c := range asList(asMap(views["list"])["columns"]) {
+		for _, c := range listCols {
 			cols = append(cols, pyStr(c))
 		}
 		for _, view := range []string{"form", "list"} {

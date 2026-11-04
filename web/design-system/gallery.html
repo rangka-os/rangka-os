@@ -79,8 +79,8 @@
     { id: "row2", item: { id: "BRG-014", title: "Susu Oat 1 L" }, qty: 24, uom: "Kotak", rate: 42000, disc: 5, stock: 18 },
     { id: "row3", item: { id: "BRG-022", title: "Gula Aren Cair 500 ml" }, qty: 6, uom: "Botol", rate: 38000, disc: 0, stock: 30 }
   ];
+  var SIDE_PINNED = [{ id: "home", label: "Beranda", icon: "home" }, { id: "approvals", label: "Persetujuan", icon: "check", count: 3 }];
   var SIDE_GROUPS = [
-    { items: [{ id: "home", label: "Beranda", icon: "home" }, { id: "approvals", label: "Persetujuan", icon: "check", count: 3 }] },
     { label: "Penjualan", items: [{ id: "invoice", label: "Faktur", icon: "invoice", count: 12 }, { id: "customer", label: "Pelanggan", icon: "team" }, { id: "payment", label: "Pembayaran", icon: "card" }] },
     { label: "Stok", items: [{ id: "item", label: "Barang", icon: "stock" }, { id: "outlet", label: "Outlet", icon: "store" }] }
   ];
@@ -166,7 +166,15 @@
         h("div", { className: "rk-ctx-target", style: { margin: "12px" } }, "Klik kanan di sini")));
     },
     Sidebar: function () {
-      return h(Frame, { tall: true }, h(R.Sidebar, { company: "Kopi Senja", outlet: "Outlet Dago", product: "Kopi Senja", groups: SIDE_GROUPS, current: "invoice", user: "Dede Kurniawan", role: "Pemilik" }));
+      function Side(q) {
+        var c = useState(!!q.collapsed), col = c[0], setCol = c[1], cur = useState("invoice"), current = cur[0], setCurrent = cur[1];
+        return h(R.Sidebar, { switcher: { title: "Kopi Senja", subtitle: "Outlet Dago", onClick: function () {} }, search: { label: "Cari", onOpen: function () {} },
+          pinned: SIDE_PINNED, groups: SIDE_GROUPS, current: current, onNavigate: setCurrent, collapsed: col, onToggleCollapse: function () { setCol(!col); } });
+      }
+      return h("div", { className: "gx-demo gx-wide" },
+        h("div", { className: "gx-frame tall", style: { flex: "0 0 auto", width: "216px" } }, h(Side)),
+        h("div", { className: "gx-frame tall", style: { flex: "0 0 auto", width: "48px" } }, h(Side, { collapsed: true })),
+        h("div", { className: "gx-frame tall", style: { flex: "0 0 auto", width: "216px" } }, h(R.Sidebar, { app: { name: "Rangka Console", type: "kopi-senja · 0.5.0", icon: "settings", color: "#1c1917" }, groups: SIDE_GROUPS, current: "item" })));
     },
     Topbar: function () { return h("div", { className: "gx-wide" }, h(R.Topbar, { title: "INV-2026-00042", crumbs: ["Penjualan", "Faktur"], unread: true, actions: h(R.Button, { variant: "primary", icon: "add" }, "Buat") })); },
     Tabs: function () { return h("div", { className: "gx-wide" }, h(R.Tabs, { value: "detail", tabs: [{ value: "detail", label: "Detail" }, { value: "items", label: "Barang", count: 3 }, { value: "payment", label: "Pembayaran" }, { value: "activity", label: "Aktivitas", count: 12 }] })); },
@@ -229,14 +237,16 @@
     },
     AppShell: function () {
       return h(Frame, { tall: true }, h(R.AppShell, {
-        sider: h(R.Sidebar, { company: "Kopi Senja", outlet: "Outlet Dago", product: "Kopi Senja", groups: SIDE_GROUPS, current: "invoice" }),
-        pageHeader: h(R.PageHeader, { title: "Faktur penjualan", breadcrumb: ["Penjualan", "Faktur"], extra: h(R.Button, { variant: "primary", icon: "add" }, "Buat faktur") }) },
+        sider: h(R.Sidebar, { switcher: { title: "Kopi Senja", subtitle: "Outlet Dago" }, pinned: SIDE_PINNED, groups: SIDE_GROUPS, current: "invoice" }),
+        pageHeader: h(R.PageHeader, { title: "Faktur", breadcrumbs: [{ label: "Penjualan", onClick: function () {} }], actions: h(R.Button, { variant: "primary", icon: "add" }, "Buat faktur") }) },
         h(R.DataTable, { columns: COLS, rows: INVOICES.slice(0, 4) })));
     },
     PageHeader: function () {
-      return h("div", { className: "gx-wide" }, h(R.PageHeader, { title: "INV-2026-00042", breadcrumb: ["Penjualan", "Faktur", "INV-2026-00042"], tags: h(R.StatusChip, { status: "submitted" }), subtitle: "Warung Bu Sari",
-        onBack: function () {}, extra: [h(R.Button, { key: "p", icon: "print" }, "Cetak"), h(R.Button, { key: "a", variant: "primary" }, "Terima pembayaran")],
-        tabs: h(R.Tabs, { tabs: [{ value: "d", label: "Detail" }, { value: "a", label: "Aktivitas" }] }) }));
+      return h("div", { className: "gx-col gx-wide" },
+        h(R.PageHeader, { title: "INV-2026-00042", breadcrumbs: [{ label: "Penjualan", onClick: function () {} }, { label: "Faktur", onClick: function () {} }], status: h(R.StatusChip, { status: "submitted" }),
+          actions: [h(R.Button, { key: "p", icon: "print" }, "Cetak"), h(R.Button, { key: "a", variant: "primary" }, "Terima pembayaran")],
+          tabs: h(R.Tabs, { tabs: [{ value: "d", label: "Detail" }, { value: "a", label: "Aktivitas" }] }) }),
+        h(R.PageHeader, { title: "Impor pelanggan", subtitle: "Impor pelanggan dari file CSV", breadcrumb: ["Pelanggan", "Impor pelanggan"], onNavigate: function () {}, onBack: function () {} }));
     },
     Card: function () {
       return h("div", { className: "gx-demo gx-wide" }, h("div", { className: "gx-col" }, h(R.Card, { title: "Pelanggan teratas", extra: h(R.IconButton, { icon: "more", label: "Opsi" }) }, "Warung Bu Sari, Kafe Lembayung dan Toko Roti Pak Dadang menyumbang 62% penjualan bulan ini.")),
@@ -306,6 +316,35 @@
     DashGrid: function () {
       return h("div", { className: "gx-wide" }, h(R.DashGrid, null, h(R.NumberCard, { span: 3, label: "Transaksi hari ini", value: 86 }), h(R.NumberCard, { span: 3, label: "Rata-rata belanja", value: 42500, rupiah: true }),
         h(R.NumberCard, { span: 3, label: "Barang terlaris", value: 124, caption: "Es kopi susu gula aren" }), h(R.NumberCard, { span: 3, label: "Stok menipis", value: 4, icon: "stock" })));
+    },
+    ViewSwitcher: function () {
+      var s = useState("list"), v = s[0], setV = s[1];
+      return h(R.ViewSwitcher, { value: v, onChange: setV, options: [{ id: "list", label: "Daftar" }, { id: "kanban", label: "Kanban" }, { id: "group", label: "Kelompok" }, { id: "report", label: "Laporan" }] });
+    },
+    BulkBar: function () {
+      return h("div", { className: "gx-wide" }, h(R.BulkBar, { count: 3, onClear: function () {} }, h(R.Button, { icon: "print" }, "Cetak"), h(R.Button, { icon: "delete", variant: "danger" }, "Hapus draf")));
+    },
+    GroupList: function () {
+      var s = useState({ paid: true }), open = s[0], setOpen = s[1];
+      var rows = h(R.DataTable, { columns: COLS, rows: INVOICES.filter(function (r) { return r.status === "paid"; }) });
+      var groups = [{ key: "paid", label: "Lunas", count: 86, values: { "sum:grand_total": 48250000 } }, { key: "overdue", label: "Jatuh tempo", count: 12, values: { "sum:grand_total": 9640000 } },
+        { key: null, label: "", count: 2, values: { "sum:grand_total": 150000 } }, { key: "__other", label: "Lainnya", count: 4, values: {}, disabled: true }];
+      return h("div", { className: "gx-wide" }, h(R.GroupList, { valueFormat: function (k, v) { return R.formatRupiah(v); },
+        groups: groups.map(function (g) { return Object.assign({}, g, { open: !!open[g.key], rows: open[g.key] ? rows : null }); }),
+        onToggle: function (k) { var n = Object.assign({}, open); n[k] = !n[k]; setOpen(n); } }));
+    },
+    ReportTable: function () {
+      var s = useState([{ field: "id", label: "Nomor", render: function (v) { return h("span", { className: "rk-doc-no" }, v); } }, { field: "customer", label: "Pelanggan" }, { field: "date", label: "Tanggal" },
+        { field: "status", label: "Status", render: function (v) { return h(R.StatusChip, { status: v }); } }, { field: "total", label: "Total", align: "right", render: function (v) { return R.formatRupiah(v); } }]), cols = s[0], setCols = s[1];
+      return h("div", { className: "gx-wide" }, h(R.ReportTable, { columns: cols, rows: INVOICES, onColumnsChange: setCols,
+        totals: { label: "Total semua 142 baris", values: { total: R.formatRupiah(186420000) } } }));
+    },
+    DocPanel: function () {
+      return h("div", { className: "gx-wide rk-docpage" }, h("div", null, h(R.Descriptions, { title: "Faktur INV-2026-00042", column: 2, items: [["Pelanggan", "Warung Bu Sari"], ["Tanggal", "27 Okt 2026"], ["Total", h(R.Amount, { value: 1250000 })], ["Status", h(R.StatusChip, { status: "paid" })]] })),
+        h(R.DocPanel, { sections: [
+          { title: "Info", content: h("dl", { className: "rk-dl" }, h("dt", null, "Dibuat"), h("dd", null, "Dede Kurniawan, 27 Okt 2026"), h("dt", null, "Diubah"), h("dd", null, "Rina Kartika, 28 Okt 2026")) },
+          { title: "Lampiran", content: "struk-27-okt.jpg" },
+          { title: "Persetujuan", content: h(R.StatusChip, { status: "paid" }) }] }));
     },
     Sparkline: function () { return h("div", { className: "gx-row" }, h(R.Sparkline, { data: [38, 41, 39, 45, 48, 51] }), h(R.Sparkline, { data: [12, 9, 11, 7, 5, 3], color: "var(--bad-solid)", width: 120 })); }
   };

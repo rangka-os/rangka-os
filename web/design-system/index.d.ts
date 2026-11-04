@@ -1,5 +1,5 @@
 import type * as React from 'react';
-export type IconName = 'home' | 'store' | 'cart' | 'stock' | 'invoice' | 'card' | 'qris' | 'add' | 'search' | 'print' | 'check' | 'close' | 'lock' | 'amend' | 'left' | 'right' | 'down' | 'sort' | 'more' | 'bell' | 'attach' | 'send' | 'at' | 'copy' | 'delete' | 'edit' | 'eye' | 'download' | 'zoom' | 'image' | 'info' | 'warning' | 'success' | 'error' | 'user' | 'logout' | 'filter' | 'spark' | 'menu' | 'settings' | 'team' | 'sidebar' | 'mic' | 'updown' | 'calendar' | 'open' | 'drag' | 'time' | 'link' | 'apps' | 'chart' | 'dashboard' | 'help' | 'sun' | 'moon' | 'external' | 'refresh' | 'arrowup' | 'arrowdown' | 'funnel' | 'star' | 'switch' | 'pie' | 'line' | 'building' | 'shield' | 'key' | 'plug' | 'globe' | 'palette';
+export type IconName = 'home' | 'store' | 'cart' | 'stock' | 'invoice' | 'card' | 'qris' | 'add' | 'search' | 'print' | 'check' | 'close' | 'lock' | 'amend' | 'left' | 'right' | 'down' | 'sort' | 'more' | 'bell' | 'attach' | 'send' | 'at' | 'copy' | 'delete' | 'edit' | 'eye' | 'download' | 'zoom' | 'image' | 'info' | 'warning' | 'success' | 'error' | 'user' | 'logout' | 'filter' | 'spark' | 'menu' | 'settings' | 'team' | 'sidebar' | 'mic' | 'updown' | 'calendar' | 'open' | 'drag' | 'time' | 'link' | 'apps' | 'chart' | 'dashboard' | 'help' | 'sun' | 'moon' | 'external' | 'refresh' | 'arrowup' | 'arrowdown' | 'funnel' | 'star' | 'switch' | 'pie' | 'line' | 'building' | 'shield' | 'key' | 'plug' | 'globe' | 'palette' | 'list' | 'kanban' | 'group' | 'table' | 'fold' | 'unfold';
 export interface IconProps { name: IconName; size?: number; label?: string; className?: string }
 export declare function Icon(props: IconProps): React.ReactElement | null;
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> { variant?: 'default' | 'primary' | 'quiet' | 'link' | 'danger' | 'danger-solid'; size?: 'sm' | 'md' | 'lg'; icon?: IconName; loading?: boolean }
@@ -51,7 +51,19 @@ export declare function Banner(props: { icon?: IconName; children: Node }): Reac
 export interface ToastProps { title: string; tone?: 'ok' | 'info' | 'warn' | 'bad'; children?: Node; action?: string; onAction?: () => void; onClose?: () => void }
 export declare function Toast(props: ToastProps): React.ReactElement;
 export declare function Toaster(props: { float?: boolean; children: Node }): React.ReactElement;
-export interface SidebarProps { app?: { name: string; type?: string; icon?: IconName; color?: string }; company?: string; outlet?: string; product?: string; groups: { label?: string; items: { id?: string; label: string; icon: IconName; count?: number | null; href?: string }[] }[]; current?: string; user?: string; role?: string; footer?: Node; onNavigate?: (id: string, item: any) => void; onCompany?: () => void }
+export interface NavItem { id?: string; label: string; icon?: IconName; count?: number | null; href?: string }
+/** Frappe side navigation. collapsed: icons only, labels as title tooltips, width --sidebar-collapsed; the footer hides.
+ *  Legacy props: app (mapped to switcher, its tile becomes the mark), product (switcher title), company/outlet/onCompany, user/role. */
+export interface SidebarProps {
+  switcher?: { title: string; subtitle?: Node; mark?: Node; onClick?: () => void };
+  search?: { label?: string; onOpen?: () => void };
+  pinned?: NavItem[];
+  groups?: { label?: string; items: NavItem[] }[];
+  current?: string; onNavigate?: (id: string, item: NavItem) => void;
+  collapsed?: boolean; onToggleCollapse?: () => void;
+  footer?: Node;
+  app?: { name: string; type?: string; icon?: IconName; color?: string }; product?: string; company?: string; outlet?: string; onCompany?: () => void; user?: string; role?: string;
+}
 export declare function Sidebar(props: SidebarProps): React.ReactElement;
 export interface TopbarProps { title: string; crumbs?: string[]; actions?: Node; unread?: boolean; searchPlaceholder?: string; onSearch?: () => void; onMenu?: () => void }
 export declare function Topbar(props: TopbarProps): React.ReactElement;
@@ -106,7 +118,12 @@ export declare function Descriptions(props: DescriptionsProps): React.ReactEleme
 export interface StepsProps { items: { title: Node; description?: Node; status?: 'wait' | 'process' | 'finish' | 'error' }[]; current?: number; status?: 'process' | 'error'; size?: 'default' | 'small'; label?: string }
 export declare function Steps(props: StepsProps): React.ReactElement;
 export declare function Breadcrumb(props: { items: string[]; onNavigate?: (index: number) => void }): React.ReactElement;
-export interface PageHeaderProps { title: Node; breadcrumb?: string[]; subtitle?: Node; tags?: Node; extra?: Node; tabs?: Node; children?: Node; onBack?: () => void; onNavigate?: (index: number) => void }
+/** Slim 48px page header: "Parent / Title", status pill, actions; tabs underneath.
+ *  Legacy aliases: breadcrumb (strings, the last one names this page and is not repeated) + onNavigate(i), tags = status, extra = actions, subTitle / subtitle. */
+export interface PageHeaderProps {
+  title: Node; breadcrumbs?: { label: Node; onClick?: () => void }[]; status?: Node; actions?: Node; tabs?: Node; onBack?: () => void; children?: Node;
+  breadcrumb?: string[]; onNavigate?: (index: number) => void; tags?: Node; extra?: Node; subtitle?: Node; subTitle?: Node;
+}
 export declare function PageHeader(props: PageHeaderProps): React.ReactElement;
 export interface AppShellProps { topNav?: Node; sider: Node; header?: Node; pageHeader?: Node; collapsed?: boolean; children?: Node }
 export declare function AppShell(props: AppShellProps): React.ReactElement;
@@ -143,4 +160,18 @@ export declare function ListCard(props: { title: string; subtitle?: string; extr
 export declare function DashGrid(props: { children?: Node }): React.ReactElement;
 export declare function Sparkline(props: { data: number[]; width?: number; height?: number; color?: string }): React.ReactElement;
 export declare function compactNumber(n: number, rupiah?: boolean): string;
+export type ListView = 'list' | 'kanban' | 'group' | 'report';
+export declare function ViewSwitcher(props: { value: ListView; options: { id: ListView; label: string; icon?: IconName }[]; onChange?: (id: ListView) => void; label?: string }): React.ReactElement;
+/** Renders nothing when count is 0; otherwise "<count> dipilih", the actions (children) and a clear button. */
+export declare function BulkBar(props: { count: number; onClear?: () => void; children?: Node }): React.ReactElement | null;
+/** Groups from GET /api/v1/aggregate: values like {"sum:grand_total": n}, shown through valueFormat(valueKey, v). A group with an empty
+ *  label and a null key reads "(kosong)". disabled (optional) makes a header that cannot be opened, e.g. the "Lainnya" bucket. */
+export interface GroupListGroup { key: string | number | boolean | null; label?: string; count: number; values?: Record<string, any>; open?: boolean; rows?: Node; disabled?: boolean }
+export declare function GroupList(props: { groups: GroupListGroup[]; valueFormat?: (key: string, v: any) => Node; onToggle?: (key: GroupListGroup['key']) => void }): React.ReactElement;
+export interface ReportColumn { field: string; label: string; align?: 'left' | 'right' | 'center'; render?: (value: any, row: Record<string, any>) => Node }
+/** Header 32px, rows 36px, a sticky total row (totals.label in the first cell, totals.values[field] already formatted), scrolls inside its own box.
+ *  onColumnsChange: each header gets a hide button that calls it with the remaining columns. */
+export declare function ReportTable(props: { columns: ReportColumn[]; rows: Record<string, any>[]; totals?: { label: Node; values?: Record<string, Node> }; onColumnsChange?: (columns: ReportColumn[]) => void; emptyText?: string }): React.ReactElement;
+/** 280px right panel; wrap the form and the panel in .rk-docpage so the panel moves below the form at <= 1100px. */
+export declare function DocPanel(props: { sections: { id?: string; title?: Node; content: Node }[]; label?: string }): React.ReactElement;
 declare global { interface Window { Rangka: Record<string, any> } }

@@ -125,6 +125,9 @@ with sync_playwright() as pw:
         ids = page.eval_on_selector_all("[data-group]", "els => els.map(e => e.dataset.group)")
         if ids != ["lead_in", "deal", "invoice", "paid"]:
             fail(f"{width} processes/lead_to_cash: groups {ids}")
+        head = page.locator(".rk-pagehead h1").inner_text()
+        if head != "Dari lead sampai lunas":
+            fail(f"{width} processes/lead_to_cash: header {head!r}, want the process label")
         page.locator('[data-group="deal"] button[aria-expanded]').first.click()
         page.locator('[data-node="modules/pipeline/models/deal.rk#/automations/0"]').click()
         page.locator("[data-panel] input[name=when]").fill("stage changes to 'lost'")

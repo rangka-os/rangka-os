@@ -1265,7 +1265,7 @@ def load_processes(rep, processes, app, root):
 
 
 def check_processes(rep, V, allmodels, only, processes):
-    """Process files (contract 0014 §6). A stage may name any model of any loaded unit, installed or not."""
+    """Process files (contract 0014 §8). A stage may name any model of any loaded unit, installed or not."""
     for app, stem, p, d in processes:
         if only and app and app not in only:
             continue

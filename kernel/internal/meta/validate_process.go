@@ -4,7 +4,7 @@ import (
 	"fmt"
 )
 
-// validateProcesses checks process files (contract 0014 §6): the same checks as check_processes in
+// validateProcesses checks process files (contract 0014 §8): the same checks as check_processes in
 // rangka_validate.py. A stage may name any model of any loaded unit, installed or not.
 func (v *validator) validateProcesses() {
 	all := v.allModels()

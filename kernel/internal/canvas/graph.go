@@ -472,7 +472,7 @@ func (b *builder) flow(f *meta.Flow) {
 		if hidden && c != "" {
 			// the guard's text may name the hidden model: show only that a condition exists
 			n := b.nodes[c]
-			n.Label, n.Detail, n.Editable, n.Model = meta.Label{"id": "Syarat tersembunyi"}, "", nil, ""
+			n.Label, n.Detail, n.Editable, n.Model = meta.Label{"id": "Syarat tersembunyi"}, "", map[string]any{}, ""
 		}
 		var id string
 		if hidden {

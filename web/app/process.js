@@ -12,7 +12,7 @@
   var RA = global.RangkaApp = global.RangkaApp || {};
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
-  var h = React.createElement, useState = React.useState, useEffect = React.useEffect, useContext = React.useContext;
+  var h = React.createElement, useState = React.useState, useEffect = React.useEffect, useContext = React.useContext, useMemo = React.useMemo;
 
   function L(v) { return RA.L ? RA.L(v) : (v && typeof v === "object" ? v.id || v.en || "" : v || ""); }
 
@@ -41,11 +41,19 @@
 
   RA.ProcessView = function ProcessView(p) {
     var name = p.route.process, RC = global.RangkaCanvas;
+    var lb = useState(null), loaded = lb[0], setLoaded = lb[1]; // {name, label} once the graph has loaded
+    // the kernel client, with get() noting the process label for the header (stable, so the canvas loads once)
+    var api = useMemo(function () {
+      if (!RC) return null;
+      var c = RC.client("");
+      return Object.assign({}, c, { get: function (n) { return c.get(n).then(function (g) { setLoaded({ name: n, label: L(g && g.label) }); return g; }); } });
+    }, []);
+    var title = (loaded && loaded.name === name && loaded.label) || name;
     return h(React.Fragment, null,
-      h(R.PageHeader, { title: "Proses bisnis", breadcrumb: ["Proses bisnis", name], onNavigate: function (i) { if (i < 1) RA.navigate("#/proses"); }, onBack: function () { RA.navigate("#/proses"); },
+      h(R.PageHeader, { title: title, breadcrumb: ["Proses bisnis", title], onNavigate: function (i) { if (i < 1) RA.navigate("#/proses"); }, onBack: function () { RA.navigate("#/proses"); },
         subtitle: "Hanya baca. Buka tahap untuk melihat isinya." }),
       h("div", { className: "ap-canvas-wrap" }, RC
-        ? h(RC.Mounted, { process: name, lang: "id", readOnly: true })
+        ? h(RC.Mounted, { api: api, process: name, lang: "id", readOnly: true })
         : h(R.Alert, { tone: "bad", title: "Kanvas tidak termuat" }, "../canvas/canvas.js tidak ditemukan.")));
   };
 })(window);

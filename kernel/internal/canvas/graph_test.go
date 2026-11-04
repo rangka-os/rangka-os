@@ -303,6 +303,21 @@ func TestInferredProcess(t *testing.T) {
 	checkGroupsConsistent(t, g)
 }
 
+// A declared process of an uninstalled unit does not hide the inferred process of an installed app.
+func TestInferredProcessUninstalledDeclared(t *testing.T) {
+	reg := loadReg(t)
+	reg.Processes["crm"] = &meta.Process{Name: "crm", App: "not_installed"}
+	var crm *meta.Process
+	for _, p := range Processes(reg) {
+		if p.Name == "crm" {
+			crm = p
+		}
+	}
+	if crm == nil || crm.File != "" || crm.App != "crm" {
+		t.Fatalf("crm = %+v", crm)
+	}
+}
+
 func TestOverlayNodeSource(t *testing.T) {
 	reg := loadReg(t)
 	g := build(t, reg, "lead_to_cash", all)
@@ -461,6 +476,9 @@ func TestHiddenFlowStepGuard(t *testing.T) {
 	}
 	if n.Label.Text() != "Syarat tersembunyi" || n.Detail != "" || n.Model != "" || len(n.Editable) != 0 {
 		t.Errorf("hidden guard = %+v", n)
+	}
+	if n.Editable == nil || bytes.Contains(mustJSON(t, g), []byte(`"editable":null`)) {
+		t.Error("every node's editable must marshal as an object")
 	}
 	if bytes.Contains(mustJSON(t, g), []byte("activity_guard_marker")) {
 		t.Error("guard text leaks")

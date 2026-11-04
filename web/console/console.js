@@ -560,18 +560,25 @@
   }
   function ProcessDetail(ctx) {
     var name = ctx.name, parts = ctx.route.parts, srcPath = parts[1] === "source" ? parts.slice(2).join("/") : "";
+    var lb = useState(null), loaded = lb[0], setLoaded = lb[1]; // {name, label} of the graph once it has loaded
+    var csChanged = useRef(ctx.csChanged);
+    csChanged.current = ctx.csChanged;
     var adapter = useMemo(function () {
       var demo = api.mode === "demo";
       return {
-        get: function (n) { return api.process(n); },
+        get: function (n) { return api.process(n).then(function (g) { setLoaded({ name: n, label: L(g && g.label) }); return g; }); },
         ops: function (n, edits) { return api.processOps(n, edits); },
-        propose: function (title, ops) { return demo ? Promise.resolve({ id: "cs_demo", status: "proposed" }) : api.proposeChangeset({ title: title, ops: ops }); },
+        propose: function (title, ops) {
+          if (demo) return Promise.resolve({ id: "cs_demo", status: "proposed" });
+          // a new change set: refresh the change-set list and count like the other propose paths
+          return api.proposeChangeset({ title: title, ops: ops }).then(function (cs) { if (csChanged.current) csChanged.current(); return cs; });
+        },
         saveLayout: function (n, layout) { return api.saveProcessLayout(n, layout); }
       };
     }, []);
     var RC = window.RangkaCanvas;
     return h(React.Fragment, null,
-      h(R.PageHeader, { title: name, breadcrumb: ["Proses", name], onNavigate: function (i) { if (i < 1) ctx.nav("/processes"); }, onBack: function () { ctx.nav("/processes"); },
+      h(R.PageHeader, { title: (loaded && loaded.name === name && loaded.label) || name, breadcrumb: ["Proses", (loaded && loaded.name === name && loaded.label) || name], onNavigate: function (i) { if (i < 1) ctx.nav("/processes"); }, onBack: function () { ctx.nav("/processes"); },
         subtitle: "Buka tahap untuk melihat isinya. Ubah nilai di panel samping, lalu usulkan: hasilnya change set." }),
       h("div", { className: "cn-canvas-wrap" }, RC ? h(RC.Mounted, { api: adapter, process: name, lang: "id", readOnly: false,
         sourceHref: function (src) { return src && src.file ? "#/processes/" + encodeURIComponent(name) + "/source/" + src.file.split("/").map(encodeURIComponent).join("/") : null; },

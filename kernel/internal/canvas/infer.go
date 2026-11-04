@@ -17,7 +17,10 @@ func Processes(reg *meta.Registry) []*meta.Process {
 	out := reg.ProcessList()
 	declared := map[string]bool{}
 	for name := range reg.Processes {
-		declared[name] = true
+		// only an installed unit's process counts: an uninstalled one must not hide an installed app's inferred process
+		if reg.Process(name) != nil {
+			declared[name] = true
+		}
 	}
 	for _, a := range reg.Apps {
 		if !a.IsApp() || !reg.Installed[a.Name] || declared[a.Name] {

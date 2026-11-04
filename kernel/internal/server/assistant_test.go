@@ -81,6 +81,7 @@ func TestAssistantCannotApproveApplyOrWrite(t *testing.T) {
 		forbidden("POST", "/api/v1/changesets/"+id+"/"+verb, map[string]any{})
 	}
 	forbidden("POST", "/api/v1/approvals/apr_ANY/approve", map[string]any{})
+	forbidden("POST", "/api/v1/tokens", map[string]any{"name": "raka"})
 	// nothing changed: the lead is still there and the change set still waits for a person
 	e.must(200, "GET", "/api/v1/r/lead/LEAD-00031", nil)
 	if st := e.must(200, "GET", "/api/v1/changesets/"+id, nil).JSON["status"]; st != "previewed" {
@@ -150,5 +151,44 @@ func TestAssistantTokenExpires(t *testing.T) {
 	ai.must(401, "GET", "/api/v1/r/lead", nil)
 	if r := ai.do("POST", "/mcp", map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}); r.Status != 401 {
 		t.Fatalf("mcp with an expired token: %d", r.Status)
+	}
+}
+
+// A change set is filed under the proposer's organisation: a body org naming another tenant is refused for
+// people and assistants alike, and nothing is stored.
+func TestProposeOrgMismatch(t *testing.T) {
+	e := newEnv(t, false, nil)
+	ai := assistantEnv(t, e, 10*time.Minute)
+	count := func() int {
+		t.Helper()
+		res, err := e.s.Auth.DB.Query(context.Background(), "select count(*) from rk_changesets")
+		if err != nil {
+			t.Fatal(err)
+		}
+		return int(res.Rows[0][0].(int64))
+	}
+	before := count()
+	res := rpc(ai, 3, "tools/call", map[string]any{"name": "rangka_changeset_propose", "arguments": map[string]any{
+		"title": "Tambah wilayah", "org": "toko-lain", "ops": get(addRegion(), "ops")}})
+	if res["isError"] != true || get(res, "structuredContent", "error", "code") != "org_mismatch" {
+		t.Fatalf("mcp propose for another org: %v", res)
+	}
+	other := addRegion()
+	other["org"] = "toko-lain"
+	if r := e.do("POST", "/api/v1/changesets", other); r.Status != 403 || get(r.JSON, "error", "code") != "org_mismatch" {
+		t.Fatalf("rest propose for another org: %d %s", r.Status, r.Body)
+	}
+	if n := count(); n != before {
+		t.Fatalf("change sets stored: %d, want %d", n, before)
+	}
+	for _, org := range []string{"kopi-senja", ""} {
+		body := addRegion()
+		body["org"] = org
+		if cs := e.must(201, "POST", "/api/v1/changesets", body).JSON; cs["org"] != "kopi-senja" {
+			t.Fatalf("org %q: stored under %v", org, cs["org"])
+		}
+	}
+	if cs := call(ai, "rangka_changeset_propose", map[string]any{"title": "Tambah wilayah", "org": "kopi-senja", "ops": get(addRegion(), "ops")}); cs["org"] != "kopi-senja" {
+		t.Fatalf("mcp same org: %v", cs["org"])
 	}
 }

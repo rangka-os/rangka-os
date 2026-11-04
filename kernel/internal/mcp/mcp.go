@@ -156,8 +156,10 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 		if c.Change.Assistant {
 			kept := []any{}
 			for _, t := range list {
-				if assistantTools[t.(map[string]any)["name"].(string)] {
-					kept = append(kept, t)
+				if m, ok := t.(map[string]any); ok {
+					if name, ok := m["name"].(string); ok && assistantTools[name] {
+						kept = append(kept, t)
+					}
 				}
 			}
 			list = kept
@@ -342,6 +344,9 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 		}
 		if au, ok := args["author"]; ok {
 			body["author"] = au
+		}
+		if org, ok := args["org"]; ok {
+			body["org"] = org // checked against the caller's organisation (org_mismatch)
 		}
 		return h.Changes.Propose(ctx, a, body)
 	case "rangka_changeset_validate":

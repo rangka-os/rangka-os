@@ -510,10 +510,12 @@ func sortedKeys(m map[string]any) []string {
 }
 
 // recordFlows runs every installed flow whose on: is <model>.<event>, in the write's transaction and as the
-// writer, with event = {model, name, op, record}. Writes made by a flow do not start flows again.
-func (o *op) recordFlows(m *meta.Model, rec store.Record, event string) error {
+// writer. The event is a copy of the record's fields at top level (flows written for 0.4 read event.<field>),
+// with model, name, op, record (the record) and before (the stored record before the write; null on created)
+// on top. Writes made by a flow do not start flows again. ran reports whether a flow ran (not skipped by if:).
+func (o *op) recordFlows(m *meta.Model, before, rec store.Record, event string) (ran bool, err error) {
 	if o.inFlow {
-		return nil
+		return false, nil
 	}
 	reg := o.e.Reg()
 	want := m.Name + "." + event
@@ -525,14 +527,21 @@ func (o *op) recordFlows(m *meta.Model, rec store.Record, event string) error {
 	}
 	sort.Strings(names)
 	for _, n := range names {
-		copied := map[string]any{}
+		ev := map[string]any{}
 		for k, v := range rec {
-			copied[k] = v
+			ev[k] = v
 		}
-		ev := map[string]any{"model": m.Name, "name": str(rec["name"]), "op": event, "record": copied}
-		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, newFlowResult(n)); err != nil {
-			return fmt.Errorf("flow %s: %w", n, err)
+		var prev any
+		if before != nil {
+			prev = map[string]any(copyRecord(before))
 		}
+		ev["model"], ev["name"], ev["op"] = m.Name, str(rec["name"]), event
+		ev["record"], ev["before"] = map[string]any(copyRecord(rec)), prev
+		out := newFlowResult(n)
+		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, out); err != nil {
+			return ran, fmt.Errorf("flow %s: %w", n, err)
+		}
+		ran = ran || !out.Skipped
 	}
-	return nil
+	return ran, nil
 }

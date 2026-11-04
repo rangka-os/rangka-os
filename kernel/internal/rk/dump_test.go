@@ -49,3 +49,18 @@ func TestDumpRoundTrip(t *testing.T) {
 		t.Errorf("tricky values: %v\n%s\n%v", err, out, back)
 	}
 }
+
+func TestScalar(t *testing.T) {
+	for _, c := range []struct {
+		v      any
+		inFlow bool
+		want   string
+	}{
+		{"plain", false, "plain"}, {"a, b", false, "a, b"}, {"a, b", true, "'a, b'"}, {"'won'", false, "'''won'''"},
+		{"", false, "''"}, {"true", false, "'true'"}, {"x # y", false, "'x # y'"}, {true, false, "true"}, {int64(3), true, "3"},
+	} {
+		if got := Scalar(c.v, c.inFlow); got != c.want {
+			t.Errorf("Scalar(%#v, %v) = %s, want %s", c.v, c.inFlow, got, c.want)
+		}
+	}
+}

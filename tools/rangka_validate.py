@@ -554,7 +554,7 @@ def kind_of(path):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
-    app_imports, site_imports, prints, letterheads = [], [], [], {}
+    app_imports, site_imports, prints, letterheads, processes = [], [], [], {}, []
     for name, a in apps.items():
         for st, p in rkfile.listdir(os.path.join(a["dir"], "flows")):
             f = rep.load(p)
@@ -569,6 +569,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             if r is not None:
                 roles.append((name, st, p, r))
         load_prints(rep, prints, name, a["dir"])
+        load_processes(rep, processes, name, a["dir"])
     if site:
         for stem in ("system", "features", "config"):
             p = rkfile.find(site, stem)
@@ -590,6 +591,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             if d is not None:
                 overlays[st] = (p, d)
         load_prints(rep, prints, "", site)
+        load_processes(rep, processes, "", site)
         heads = [("", rkfile.find(site, "letterhead"))] + rkfile.listdir(os.path.join(site, "letterheads"))
         for org, p in heads:
             d = rep.load(p) if p else None
@@ -656,6 +658,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
     check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
+    check_processes(rep, V, allmodels, only, processes)
 
 
 def check_scope(rep, p, r, allmodels):
@@ -1251,6 +1254,52 @@ def load_prints(rep, prints, app, root):
         d = rep.load(p)
         if d is not None:
             prints.append((app, root, st, p, d))
+
+
+def load_processes(rep, processes, app, root):
+    """Processes (contract 0014 §1) in <root>/processes: app is "" for the site's."""
+    for st, p in rkfile.listdir(os.path.join(root, "processes")):
+        d = rep.load(p)
+        if d is not None:
+            processes.append((app, st, p, d))
+
+
+def check_processes(rep, V, allmodels, only, processes):
+    """Process files (contract 0014 §8). A stage may name any model of any loaded unit, installed or not."""
+    for app, stem, p, d in processes:
+        if only and app and app not in only:
+            continue
+        schema_errors(rep, V, "process", p, d)
+        raw = d if isinstance(d, dict) else {}
+        if not isinstance(raw.get("name"), str) or raw["name"] != stem:
+            rep.add("error", p, "name", "process_name_mismatch", f'process name "{raw.get("name")}" must match the file name "{stem}"')
+        stages = raw["stages"] if isinstance(raw.get("stages"), list) else []
+        seen = set()
+        for i, st in enumerate(stages):
+            sm = st if isinstance(st, dict) else {}
+            at = f"stages/{i}"
+            if "name" in sm:
+                n = sm["name"]
+                if isinstance(n, str) and n in seen:
+                    rep.add("error", p, f"{at}/name", "process_duplicate_stage", f'stage "{n}" is declared twice')
+                if isinstance(n, str):
+                    seen.add(n)
+            model = sm["model"] if isinstance(sm.get("model"), str) else ""
+            known = model in allmodels
+            if "model" in sm and not known:
+                rep.add("error", p, f"{at}/model", "process_unknown_model", f'"{model}" is not a model{suggest(model, allmodels)}')
+            models = sm["models"] if isinstance(sm.get("models"), list) else []
+            for j, mn in enumerate(x for x in models if isinstance(x, str)):
+                if mn not in allmodels:
+                    rep.add("error", p, f"{at}/models/{j}", "process_unknown_model", f'"{mn}" is not a model{suggest(mn, allmodels)}')
+            if "when" in sm and known:
+                sub = Report(rep.root)
+                m = allmodels[model][2]
+                fields = {f["name"]: f for f in m.get("fields", []) if "name" in f}
+                if isinstance(sm["when"], str):
+                    check_expr(sub, p, f"{at}/when", sm["when"], m, fields, allmodels)
+                if sub.items:
+                    rep.add("error", p, f"{at}/when", "process_when", sub.items[0][4])
 
 
 def inside(root, path):

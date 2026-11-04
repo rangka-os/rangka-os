@@ -51,6 +51,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 | 0011 | attachments | S6 |
 | 0012 | imports | S7 |
 | 0013 | money-and-currency | S8a |
+| 0014 | process-canvas | S10 |
 
 ### REST additions (`/api/v1`, JSON, same error shape as today)
 - `GET /auth/me` → adds `orgs: [{id, name, roles}]` and `org` (current). `POST /auth/org` `{org}` switches the session's org (cookie `rk_org`); tokens carry a fixed org.
@@ -67,6 +68,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - `config.rk` `numbering:` series map `{<series>: {pattern: "INV/{ORG}/{YY}/{####}", reset: yearly|monthly|never}}` per org; models reference `naming: {series: <series>}`. Models may also give a default `{series, pattern, reset}`, and a site object keyed by a model name numbers that model as its own series (contract 0009 §3).
 - `imports/<name>.rk` (kind `import`): `{name, model, source: csv|xlsx, header_row, key: [<cols>], map: {<field>: <column or CEL>}, per: outlet|org}`; duplicates detected by `key` + file SHA-256.
 - Field type `money` (contract 0013): `{type: money, currency_field: <field>, rate_field: <field>}` (`rate_field` defaults to `rate`; modules use `exchange_rate` on the document header, never a line's `rate`); stored as numeric(20,4) plus a read-only IDR integer twin `<field>_idr`, rounded half away from zero. `currency_field` is a `link` or `data` field. Existing `currency` stays IDR-only.
+- `processes/<name>.rk` (kind `process`) in a module, app or the site: `{name, label, stages: [{name, label, model, when?, models?}]}`; a stage groups the nodes of its model (`when` is a CEL condition on it, `models` adds models); a site process replaces a unit's of the same name; read by the process canvas (contract 0014).
 - `config.rk` `org:` `{legal_name, npwp}` (site identity) and `orgs:` map `{<org id>: {name, code, config: {<any config.rk key>}}}` for per-org overrides, deep-merged except `org` and `numbering` (replaced whole); a PT listed in `orgs:` never inherits the site's identity or letterhead. Identity: `Registry.OrgIdentity(org)`. Tax: `tax: {ppn_rate, dpp_ratio, pkp}`, read with `Registry.TaxSettings(org)`; PKP lives only in `tax.pkp` (`org.pkp` is ignored with warning `org_pkp_ignored`). CEL globals `org` {id, code, name, legal_name, npwp} and `tax` {ppn_rate, dpp_num, dpp_den, pkp} (contract 0010 §8). `{ORG}` is the org's `code`. `features.rk` unchanged.
 
 ### Modules and apps (rangka-apps, contract 0001 layout)

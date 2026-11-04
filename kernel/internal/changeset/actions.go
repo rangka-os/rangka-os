@@ -91,6 +91,9 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 	}
 	live := s.live()
 	files, err := live.result(cs.Ops)
+	if e, ok := err.(*Error); ok {
+		return nil, e
+	}
 	if err != nil {
 		return nil, &Error{422, "bad_ops", err.Error(), nil}
 	}
@@ -146,6 +149,9 @@ func relItems(items []meta.Item, r roots) []meta.Item {
 func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func(), error) {
 	r, cleanup, _, err := s.sandbox(cs.Ops)
 	if err != nil {
+		if e, ok := err.(*Error); ok && e.Code == "stale_base" {
+			return nil, nil, roots{}, nil, e
+		}
 		if e, ok := err.(*Error); ok {
 			v := &Validation{Errors: []meta.Item{{Level: "error", File: "", Pos: "1:1", Where: "ops", Code: e.Code, Message: e.Msg}}, Warnings: []meta.Item{}}
 			return v, nil, roots{}, func() {}, nil
@@ -410,6 +416,9 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	}
 	live := s.live()
 	files, err := live.result(cs.Ops)
+	if e, ok := err.(*Error); ok {
+		return nil, e
+	}
 	if err != nil {
 		return nil, &Error{409, "bad_ops", err.Error(), nil}
 	}

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 func TestApplyPatch(t *testing.T) {
@@ -112,5 +113,28 @@ func TestPatchKeepsLegacyAppHeader(t *testing.T) {
 	}
 	if got := *out["apps/shop/app.rk"]; !strings.HasPrefix(got, "# yaml-language-server: $schema="+schema.Base+"app.json\n") {
 		t.Errorf("0.5 app header: %q", got)
+	}
+}
+
+// An op with base runs only while its file still has that text; without base it runs as before.
+func TestResultStaleBase(t *testing.T) {
+	dir := t.TempDir()
+	os.MkdirAll(filepath.Join(dir, "site", "custom"), 0o755)
+	f := filepath.Join(dir, "site", "custom", "deal.rk")
+	orig := "name: deal\nfields: []\n"
+	os.WriteFile(f, []byte(orig), 0o644)
+	r := roots{apps: filepath.Join(dir, "apps"), site: filepath.Join(dir, "site")}
+	op := Op{Op: "replace", Path: "custom/deal.rk", Content: "name: deal\n", Base: store.FileHash(orig)}
+	if _, err := r.result([]Op{op}); err != nil {
+		t.Fatalf("matching base: %v", err)
+	}
+	os.WriteFile(f, []byte("name: deal\nfields: [x]\n"), 0o644)
+	_, err := r.result([]Op{op})
+	if e, ok := err.(*Error); !ok || e.Status != 409 || e.Code != "stale_base" || !strings.Contains(e.Msg, "custom/deal.rk") {
+		t.Fatalf("stale base: %v", err)
+	}
+	op.Base = ""
+	if _, err := r.result([]Op{op}); err != nil {
+		t.Fatalf("no base: %v", err)
 	}
 }

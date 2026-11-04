@@ -361,6 +361,17 @@
 
   /* ---------- kernel client */
 
+  var DEMO_PROCESSES = ["lead_to_cash", "quote_to_cash"];
+  function demoProcess(name) {
+    if (DEMO_PROCESSES.indexOf(name) < 0) return Promise.reject(ApiError(404, "not_found", "Proses " + name + " tidak ada"));
+    return fetch("../canvas/testdata/" + name + ".json").then(function (r) { if (!r.ok) throw ApiError(404, "not_found", "Contoh proses " + name + " tidak bisa dimuat"); return r.json(); });
+  }
+  function demoProcesses() {
+    return Promise.all(DEMO_PROCESSES.map(function (n) { return demoProcess(n); })).then(function (all) {
+      return all.map(function (g) { return { name: g.name, label: g.label, inferred: !!g.inferred, stages: (g.groups || []).length, source: g.source }; });
+    });
+  }
+
   function RangkaConsoleAPI(opts) {
     opts = opts || {};
     var base = (opts.baseUrl || "").replace(/\/$/, ""), timeout = opts.timeout || 2500;
@@ -445,6 +456,13 @@
       changeset: pick(function (id) { return get("/api/v1/changesets/" + encodeURIComponent(id)); }, function (id) { return demo.changeset(id); }),
       proposeChangeset: pick(function (body) { return post("/api/v1/changesets", body); }, function (body) { return demo.propose(body); }),
       changesetAction: pick(function (id, action, body) { return post("/api/v1/changesets/" + encodeURIComponent(id) + "/" + action, body); }, function (id, action, body) { return demo.transition(id, action, body); }),
+
+      /* process canvas (contract 0014). Demo mode serves the two goldens from ../canvas/testdata/. */
+      processes: pick(function () { return get("/api/v1/processes").then(list); }, function () { return demoProcesses(); }),
+      process: pick(function (name) { return get("/api/v1/processes/" + encodeURIComponent(name)); }, function (name) { return demoProcess(name); }),
+      processOps: pick(function (name, edits) { return post("/api/v1/processes/" + encodeURIComponent(name) + "/ops", { edits: edits }); },
+        function (name, edits) { return Promise.resolve({ title: "Ubah " + edits.length + " nilai di kanvas (demo)", ops: [{ op: "demo" }] }); }),
+      saveProcessLayout: pick(function (name, layout) { return http("PUT", "/api/v1/processes/" + encodeURIComponent(name) + "/layout", layout); }, function (name, layout) { return Promise.resolve(layout); }),
 
       /* organisation */
       orgs: pick(function () { return get("/api/v1/orgs").then(list); }, function () { return demo.orgs().then(list); }),

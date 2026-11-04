@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
+# The firm's own rule: an invoice is not submitted without the customer's PO number.
+model: sales_invoice
+rules:
+  - {name: x_po_required, on: submit, check: "po_number != ''", message: {id: Isi nomor PO pelanggan sebelum faktur dikirim}}

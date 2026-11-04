@@ -25,7 +25,7 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
 
 
 handler = functools.partial(Quiet, directory=WEB)
-httpd = socketserver.TCPServer(("127.0.0.1", 0), handler)
+httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)  # threaded: the browser opens parallel connections
 port = httpd.server_address[1]
 threading.Thread(target=httpd.serve_forever, daemon=True).start()
 BASE = f"http://127.0.0.1:{port}/console/index.html"
@@ -34,7 +34,7 @@ REACT = {"react.production.min.js": os.path.join(args.react_dir, "react.producti
          "react-dom.production.min.js": os.path.join(args.react_dir, "react-dom.production.min.js")}
 ROUTES = ["ringkasan", "system", "system/source", "connectors", "orgs", "orgs/cv-maju-jaya", "apps", "apps/model/deal", "apps/model/deal/views",
           "apps/model/deal/rules", "apps/model/lead/caps", "apps/model/sales_invoice/source", "apps/model/customer", "apps/model/customer/views", "apps/model/customer/source", "apps/dashboard/crm_overview", "apps/flow/whatsapp_to_lead",
-          "apps/app/crm", "appearance", "changesets", "changesets/cs_ai7k2p9q", "changesets/cs_sy9q4w2e", "changesets/cs_tm3x8a1b", "changesets/cs_ai2r7d4n", "changesets/cs_ai5ig3wq", "audit"]
+          "apps/app/crm", "processes", "processes/lead_to_cash", "processes/quote_to_cash", "appearance", "changesets", "changesets/cs_ai7k2p9q", "changesets/cs_sy9q4w2e", "changesets/cs_tm3x8a1b", "changesets/cs_ai2r7d4n", "changesets/cs_ai5ig3wq", "audit"]
 failures, notes = [], []
 
 
@@ -110,6 +110,34 @@ with sync_playwright() as pw:
                     page.screenshot(path=os.path.join(args.shots, f"{width}-{scheme}-{r.replace('/', '_')}.png"), full_page=True)
             ctx.close()
     print("screens checked:", len(ROUTES) * 4)
+
+    # 1b. process canvas screen in demo mode: list, then four stage groups for lead_to_cash at both widths
+    for width in (1440, 390):
+        ctx, page, errs = new_page(browser, width, "light")
+        page.goto(BASE + "?demo=1#/processes")
+        page.wait_for_selector(".rk-pagehead h1", timeout=15000)
+        page.wait_for_selector(".rk-table tbody tr", timeout=5000)
+        txt = page.locator(".cn-main").inner_text()
+        if "lead_to_cash" not in txt or "quote_to_cash" not in txt:
+            fail(f"{width} processes list: missing demo processes")
+        page.locator(".rk-table tbody tr", has_text="lead_to_cash").first.click()
+        page.wait_for_selector("[data-group]", timeout=5000)
+        ids = page.eval_on_selector_all("[data-group]", "els => els.map(e => e.dataset.group)")
+        if ids != ["lead_in", "deal", "invoice", "paid"]:
+            fail(f"{width} processes/lead_to_cash: groups {ids}")
+        head = page.locator(".rk-pagehead h1").inner_text()
+        if head != "Dari lead sampai lunas":
+            fail(f"{width} processes/lead_to_cash: header {head!r}, want the process label")
+        page.locator('[data-group="deal"] button[aria-expanded]').first.click()
+        page.locator('[data-node="modules/pipeline/models/deal.rk#/automations/0"]').click()
+        page.locator("[data-panel] input[name=when]").fill("stage changes to 'lost'")
+        page.locator("[data-panel]").get_by_role("button", name="Usulkan perubahan").click()
+        page.wait_for_function("document.querySelector('[data-panel]').textContent.includes('cs_demo')", timeout=3000)
+        if args.shots:
+            page.screenshot(path=os.path.join(args.shots, f"processes-canvas-{width}.png"))
+        if errs:
+            fail(f"{width} processes: console errors {errs[:3]}")
+        ctx.close()
 
     # 2. no ?demo=1: the static server has no kernel, so the adapter falls back to demo
     ctx, page, errs = new_page(browser, 1440, "light")

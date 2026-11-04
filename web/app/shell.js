@@ -17,7 +17,7 @@
  *
  * Exposes on window.RangkaApp: route, navigate(hash), toast(tone, title, body), Ctx (React context with
  * {api, meta, eng, me, features, cache, reloadMeta, refreshApprovals, route, navigate, toast}), and the pure helpers
- * parseRoute, homeHash, navGroups, navId, orgByLabel, L (unit-tested in test/shell.test.js).
+ * parseRoute, homeHash, navGroups, navFromLayout, navId, orgByLabel, hashQuery, withHashQuery, L (unit-tested in test/shell.test.js).
  */
 (function (global) {
   "use strict";
@@ -36,7 +36,7 @@
 
   /** "#/r/lead/new" → {kind: "form", model: "lead", name: null, isNew: true}; see the header for every form. */
   function parseRoute(hash) {
-    var parts = String(hash || "").replace(/^#/, "").split("/").filter(Boolean).map(dec);
+    var parts = String(hash || "").replace(/^#/, "").split("?")[0].split("/").filter(Boolean).map(dec);
     if (!parts.length) return { kind: "home" };
     if (parts[0] === "d" && parts.length === 2) return { kind: "dash", dash: parts[1] };
     if (parts[0] === "r" && parts.length === 2) return { kind: "list", model: parts[1] };
@@ -59,13 +59,50 @@
     return null;
   }
 
-  /** Sidebar groups; counts.approvals (requests the user may decide) shows as a badge on Persetujuan. */
-  function navGroups(meta, features, counts) {
-    meta = meta || {};
-    features = features || {};
-    counts = counts || {};
-    var models = meta.models || {}, dashes = meta.dashboards || {}, groups = [];
-    var dashItems = [];
+  /** The hash query ("#/d/x?ubah=1&preview=cs_1") → {ubah, preview}. */
+  function hashQuery(hash) {
+    var q = String(hash || "").split("?").slice(1).join("?"), out = { ubah: false, preview: null };
+    q.split("&").forEach(function (kv) {
+      var i = kv.indexOf("="), k = dec(i < 0 ? kv : kv.slice(0, i)), v = i < 0 ? "" : dec(kv.slice(i + 1));
+      if (k === "ubah") out.ubah = v === "1";
+      if (k === "preview" && v) out.preview = v;
+    });
+    return out;
+  }
+
+  /** The same route with ubah / preview set (true / an id) or removed (false / null); other query keys stay. */
+  function withHashQuery(hash, set) {
+    var s = String(hash || "").replace(/^#/, ""), i = s.indexOf("?");
+    var path = (i < 0 ? s : s.slice(0, i)) || "/", rest = i < 0 ? [] : s.slice(i + 1).split("&").filter(Boolean);
+    var touched = {};
+    Object.keys(set || {}).forEach(function (k) { touched[k] = true; });
+    var out = rest.filter(function (kv) { return !touched[dec(kv.split("=")[0])]; });
+    if (set && set.ubah) out.push("ubah=1");
+    if (set && set.preview) out.push("preview=" + encodeURIComponent(set.preview));
+    return "#" + path + (out.length ? "?" + out.join("&") : "");
+  }
+
+  /** Sidebar groups from the site layout's nav.side ([{group, items: [{to: "model:m" | "dashboard:d", label?, icon?}]}]);
+   *  links to models or dashboards that are not installed are left out, and so are empty groups. Null when the layout
+   *  has no nav.side (the app menus are used then). */
+  function navFromLayout(meta) {
+    var side = meta && meta.layout && meta.layout.nav && meta.layout.nav.side;
+    if (!Array.isArray(side) || !side.length) return null;
+    var models = meta.models || {}, dashes = meta.dashboards || {};
+    return side.map(function (g) {
+      var items = ((g && g.items) || []).map(function (it) {
+        var to = String((it && it.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1);
+        if (k === "model" && models[n]) return { id: "r/" + n, label: L(it.label) || L(models[n].label) || n, icon: it.icon || models[n].icon || "invoice" };
+        if (k === "dashboard" && dashes[n]) return { id: "d/" + n, label: L(it.label) || L(dashes[n].label) || n, icon: it.icon || "dashboard" };
+        return null;
+      }).filter(Boolean);
+      return { label: L(g && g.group), items: items };
+    }).filter(function (g) { return g.items.length; });
+  }
+
+  /** The default sidebar: every app's dashboards, then each app's menu groups. */
+  function appGroups(meta) {
+    var models = meta.models || {}, dashes = meta.dashboards || {}, groups = [], dashItems = [];
     (meta.apps || []).forEach(function (a) {
       (a.dashboards || []).forEach(function (d) {
         dashItems.push({ id: "d/" + d, label: L((dashes[d] || {}).label) || d, icon: "dashboard" });
@@ -80,6 +117,15 @@
         if (items.length) groups.push({ label: L(g.group) || L(a.title) || a.name, items: items });
       });
     });
+    return groups;
+  }
+
+  /** Sidebar groups; counts.approvals (requests the user may decide) shows as a badge on Persetujuan. */
+  function navGroups(meta, features, counts) {
+    meta = meta || {};
+    features = features || {};
+    counts = counts || {};
+    var groups = navFromLayout(meta) || appGroups(meta);
     var more = [];
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
@@ -115,6 +161,9 @@
   RA.parseRoute = parseRoute;
   RA.homeHash = homeHash;
   RA.navGroups = navGroups;
+  RA.navFromLayout = navFromLayout;
+  RA.hashQuery = hashQuery;
+  RA.withHashQuery = withHashQuery;
   RA.navId = navId;
 
   /* ================================================================ browser only from here */

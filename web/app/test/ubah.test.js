@@ -213,3 +213,83 @@ test("opsAddModel: reuses the Tabel baru group, creates nav, defaults a field", 
   r = RA.opsAddModel("core", { label: "Catatan", fields: [] }, "l", null);
   assert.deepStrictEqual(r.ops.map((o) => o.op + " " + o.path), ["create apps/core/models/catatan.rk", "patch apps/core/models/catatan.rk", "create layouts/l.rk", "patch layouts/l.rk"]);
 });
+
+/* ---------------------------------------------------------------- Ubah UI helpers (task 6) */
+
+test("riskLabel names each level", () => {
+  assert.strictEqual(RA.riskLabel("low"), "Risiko rendah");
+  assert.strictEqual(RA.riskLabel("medium"), "Risiko sedang");
+  assert.strictEqual(RA.riskLabel("high"), "Risiko tinggi");
+  assert.strictEqual(RA.riskLabel(undefined), "Risiko belum diketahui");
+});
+
+test("riskReasons reads the last proposed history note", () => {
+  const cs = { history: [
+    { status: "proposed", note: "risk low" },
+    { status: "validated" },
+    { status: "proposed", note: "risk medium: medium: new field x_po on deal; low: views overlay custom/deal.rk" },
+  ] };
+  assert.deepStrictEqual(RA.riskReasons(cs), ["new field x_po on deal", "views overlay custom/deal.rk"]);
+  assert.deepStrictEqual(RA.riskReasons({ history: [{ status: "proposed", note: "risk low" }] }), []);
+  assert.deepStrictEqual(RA.riskReasons({}), []);
+});
+
+test("dryRunLines lists migrations, files, affected records and notes", () => {
+  const cs = { preview: {
+    migrations: ["ALTER TABLE deal ADD COLUMN x jsonb"],
+    files: [{ path: "custom/deal.rk", before: null, after: "x" }, { path: "dashboards/d.rk", before: "a", after: "b" }, { path: "old.rk", before: "a", after: null }],
+    affected: { deal: 12, lead: 0 },
+    reversible: false,
+    notes: ["Kolom baru kosong untuk data lama"],
+  } };
+  const meta = { models: { deal: { label: { id: "Peluang" } } } };
+  assert.deepStrictEqual(RA.dryRunLines(cs, meta), [
+    { kind: "migration", text: "ALTER TABLE deal ADD COLUMN x jsonb" },
+    { kind: "file", text: "Buat custom/deal.rk" },
+    { kind: "file", text: "Ubah dashboards/d.rk" },
+    { kind: "file", text: "Hapus old.rk" },
+    { kind: "affected", text: "12 data Peluang terdampak" },
+    { kind: "note", text: "Kolom baru kosong untuk data lama" },
+    { kind: "note", text: "Tidak bisa dibatalkan otomatis" },
+  ]);
+  assert.deepStrictEqual(RA.dryRunLines({}), []);
+  assert.deepStrictEqual(RA.dryRunLines({ preview: { files: [], migrations: null, affected: { lead: 3 }, reversible: true } }), [{ kind: "affected", text: "3 data lead terdampak" }]);
+});
+
+test("sideFromMenus turns the shown menu into nav.side groups", () => {
+  const meta = {
+    apps: [
+      { name: "core", title: { id: "Inti" }, menu: [{ group: { id: "Data induk" }, items: ["customer", "gone"] }], dashboards: [] },
+      { name: "crm", title: { id: "CRM" }, menu: [{ items: ["deal"] }], dashboards: ["crm_overview"] },
+    ],
+    models: { customer: {}, deal: {} },
+    dashboards: { crm_overview: {} },
+  };
+  assert.deepStrictEqual(RA.sideFromMenus(meta), [
+    { group: { id: "Dasbor" }, items: [{ to: "dashboard:crm_overview" }] },
+    { group: { id: "Data induk" }, items: [{ to: "model:customer" }] },
+    { group: { id: "CRM" }, items: [{ to: "model:deal" }] },
+  ]);
+});
+
+test("dashDef keeps only dashboard schema keys and names the dashboard", () => {
+  const meta = { dashboards: { d: { label: { id: "D" }, app: "crm", periods: [7], widgets: [{ name: "a", type: "number", span: 3, model: "deal", extra: 1 }] } } };
+  assert.deepStrictEqual(RA.dashDef(meta, "d"), { name: "d", label: { id: "D" }, periods: [7], widgets: [{ name: "a", type: "number", span: 3, model: "deal" }] });
+});
+
+test("unitOf: the model's app, or its module", () => {
+  const meta = { apps: [{ name: "crm" }], modules: [{ name: "crm" }, { name: "hr" }], models: { deal: { app: "crm", module: "crm" }, leave: { module: "hr" } } };
+  assert.deepStrictEqual(RA.unitOf(meta, "deal"), { unit: "crm", kind: "app" });
+  assert.deepStrictEqual(RA.unitOf(meta, "leave"), { unit: "hr", kind: "module" });
+});
+
+test("automationSpec: when a field becomes a value, set another field", () => {
+  const mm = { fields: [{ name: "stage", type: "select", label: { id: "Tahap" }, options: [{ value: "won", label: { id: "Menang" } }] },
+    { name: "probability", type: "int", label: { id: "Peluang" } }, { name: "note", type: "data", label: { id: "Catatan" } }, { name: "ok", type: "check" }] };
+  assert.deepStrictEqual(RA.automationSpec(mm, { field: "stage", value: "won", target: "probability", to: "100" }),
+    { label: "Saat Tahap jadi Menang, isi Peluang", when: "record.stage == 'won'", set: { probability: "100" } });
+  assert.deepStrictEqual(RA.automationSpec(mm, { field: "probability", value: "50", target: "note", to: "Separuh 'jalan'" }).set, { note: "'Separuh \\'jalan\\''" });
+  assert.strictEqual(RA.automationSpec(mm, { field: "ok", value: "true", target: "note", to: "x" }).when, "record.ok == true");
+  assert.throws(() => RA.automationSpec(mm, { field: "probability", value: "abc", target: "note", to: "x" }), /angka/);
+  assert.throws(() => RA.automationSpec(mm, { field: "stage", value: "won", target: "stage", to: "won" }), /berbeda/);
+});

@@ -278,4 +278,107 @@
     });
     return { title: "Tambah tabel " + spec.label, modelName: name, ops: modelOps.concat(menuOps) };
   };
+
+  /* ---------------------------------------------------------------- helpers for the Ubah UI */
+
+  function L(v) {
+    if (v == null) return "";
+    if (isObj(v)) return v.id || v.en || "";
+    return String(v);
+  }
+
+  var RISK = { low: "Risiko rendah", medium: "Risiko sedang", high: "Risiko tinggi" };
+  RA.riskLabel = function (risk) { return RISK[risk] || "Risiko belum diketahui"; };
+
+  /** The reasons in the last `proposed` history note ("risk medium: medium: new field x; low: views overlay"). */
+  RA.riskReasons = function (cs) {
+    var hist = (cs && cs.history) || [], note = "";
+    for (var i = hist.length - 1; i >= 0; i--) if (hist[i] && hist[i].status === "proposed") { note = hist[i].note || ""; break; }
+    var m = /^risk \w+:\s*(.*)$/.exec(note);
+    if (!m) return [];
+    return m[1].split(/;\s*/).map(function (r) { return r.replace(/^(low|medium|high):\s*/, ""); }).filter(Boolean);
+  };
+
+  /** The change set's dry run as display lines [{kind: migration|file|affected|note, text}]. meta (optional) names models. */
+  RA.dryRunLines = function (cs, meta) {
+    var p = cs && cs.preview, out = [];
+    if (!p) return out;
+    (p.migrations || []).forEach(function (sql) { out.push({ kind: "migration", text: sql }); });
+    (p.files || []).forEach(function (f) {
+      out.push({ kind: "file", text: (f.before == null ? "Buat " : f.after == null ? "Hapus " : "Ubah ") + f.path });
+    });
+    var models = (meta && meta.models) || {};
+    Object.keys(p.affected || {}).forEach(function (m) {
+      var n = p.affected[m];
+      if (n > 0) out.push({ kind: "affected", text: n + " data " + (L((models[m] || {}).label) || m) + " terdampak" });
+    });
+    (p.notes || []).forEach(function (t) { out.push({ kind: "note", text: t }); });
+    if (p.reversible === false) out.push({ kind: "note", text: "Tidak bisa dibatalkan otomatis" });
+    return out;
+  };
+
+  /** nav.side groups for the menu the app shows without a layout nav: dashboards, then each app's menu groups. */
+  RA.sideFromMenus = function (meta) {
+    var models = meta.models || {}, dashes = meta.dashboards || {}, out = [], d = [];
+    (meta.apps || []).forEach(function (a) {
+      (a.dashboards || []).forEach(function (n) { if (dashes[n]) d.push({ to: "dashboard:" + n }); });
+    });
+    if (d.length) out.push({ group: lbl("Dasbor"), items: d });
+    (meta.apps || []).forEach(function (a) {
+      (a.menu || []).forEach(function (g) {
+        var items = (g.items || []).filter(function (m) { return models[m]; }).map(function (m) { return { to: "model:" + m }; });
+        if (items.length) out.push({ group: lbl(L(g.group) || L(a.title) || a.name), items: items });
+      });
+    });
+    return out;
+  };
+
+  var DASH_KEYS = ["label", "description", "periods", "default_period", "roles", "cache"];
+  var WIDGET_KEYS = ["name", "label", "description", "type", "model", "filter", "period", "aggregate", "field", "chart", "group_by", "grain",
+    "sort", "limit", "columns", "span", "good_when", "compact", "if"];
+  function pick(o, keys) {
+    var out = {};
+    keys.forEach(function (k) { if (o && o[k] !== undefined) out[k] = clone(o[k]); });
+    return out;
+  }
+  /** The installed dashboard as a site dashboard definition (only the schema's keys; meta adds `app`). */
+  RA.dashDef = function (meta, name) {
+    var d = ((meta && meta.dashboards) || {})[name] || {};
+    var out = { name: name };
+    Object.keys(pick(d, DASH_KEYS)).forEach(function (k) { out[k] = clone(d[k]); });
+    out.widgets = (d.widgets || []).map(function (w) { return pick(w, WIDGET_KEYS); });
+    return out;
+  };
+
+  /** The unit a model belongs to and whether it is an app (apps/) or a module (modules/). */
+  RA.unitOf = function (meta, model) {
+    var mm = ((meta && meta.models) || {})[model] || {}, unit = mm.app || mm.module;
+    var isApp = ((meta && meta.apps) || []).some(function (a) { return a && a.name === unit; });
+    return { unit: unit, kind: isApp ? "app" : "module" };
+  };
+
+  function celLit(f, text, what) {
+    var t = f && f.type, v = String(text == null ? "" : text).trim();
+    if (t === "check") return v === "true" || v === "1" || v.toLowerCase() === "ya" ? "true" : "false";
+    if (t === "int" || t === "float" || t === "currency" || t === "percent") {
+      if (!/^-?\d+([.,]\d+)?$/.test(v)) throw new Error(what + " harus berupa angka");
+      return v.replace(",", ".");
+    }
+    return "'" + v.replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'";
+  }
+  /** "When <field> becomes <value>, set <target> to <to>" as an opsAddAutomation spec (update flow). Throws in Bahasa
+   *  Indonesia on a bad value. */
+  RA.automationSpec = function (mm, a) {
+    var fields = (mm && mm.fields) || [];
+    function fd(n) { return fields.filter(function (f) { return f.name === n; })[0]; }
+    var f = fd(a.field), t = fd(a.target);
+    if (!f || !t) throw new Error("Pilih kolom pemicu dan kolom yang diisi");
+    if (a.field === a.target) throw new Error("Kolom yang diisi harus berbeda dari kolom pemicu");
+    var opt = (f.options || []).filter(function (o) { return o.value === a.value; })[0];
+    var shown = opt ? L(opt.label) || a.value : a.value;
+    var set = {};
+    set[a.target] = celLit(t, a.to, "Nilai isian");
+    return { label: "Saat " + (L(f.label) || f.name) + " jadi " + shown + ", isi " + (L(t.label) || t.name),
+      when: "record." + f.name + " == " + celLit(f, a.value, "Nilai pemicu"), set: set };
+  };
 })(typeof window !== "undefined" ? window : globalThis);

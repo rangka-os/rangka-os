@@ -71,6 +71,7 @@
               "start": {
                 "type": "integer",
                 "minimum": 1,
+                "maximum": 999999999999999,
                 "description": "lowest number the series issues in every period (default 1)"
               }
             },

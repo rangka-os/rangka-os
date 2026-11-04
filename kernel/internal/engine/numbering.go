@@ -59,19 +59,27 @@ func seriesDef(name string, v any) (store.Scheme, bool) {
 	return store.Scheme{Series: name, Pattern: p, Reset: r, Start: wholeNumber(d["start"])}, true
 }
 
-// wholeNumber is v as an int64 when it is a whole number (YAML gives int64, JSON float64), else 0.
+// maxStart is the highest series start the schema accepts (config.json numbering.<series>.start).
+const maxStart = 999999999999999
+
+// wholeNumber is v as an int64 when it is a whole number from 1 to maxStart (YAML gives int64, JSON float64), else 0.
 func wholeNumber(v any) int64 {
-	switch n := v.(type) {
+	var n int64
+	switch x := v.(type) {
 	case int64:
-		return n
+		n = x
 	case int:
-		return int64(n)
+		n = int64(x)
 	case float64:
-		if n == math.Trunc(n) && math.Abs(n) < 1e15 {
-			return int64(n)
+		if x != math.Trunc(x) || x < 1 || x > maxStart {
+			return 0
 		}
+		n = int64(x)
 	}
-	return 0
+	if n < 1 || n > maxStart {
+		return 0
+	}
+	return n
 }
 
 // nextName takes the next document name for m inside the op's transaction: a series number, or the v0
@@ -111,44 +119,44 @@ func (e *Engine) seriesScheme(org, series string) store.Scheme {
 	return store.Scheme{}
 }
 
-// SeriesPeriod is the current counter period of series in org ("" for a series that never resets).
-func (e *Engine) SeriesPeriod(org, series string) string {
-	s := e.seriesScheme(org, series)
-	reset := s.Reset
-	if reset == "" {
-		reset = store.DefaultReset(s.Pattern)
-	}
-	return store.Period(reset, e.Now().In(e.Location()))
-}
-
 // SetNextNumber makes next the number series issues next in org, in period ("" = the current period in the
-// site timezone), and returns that number formatted: the one-time go-live step of `rangka numbering set`
+// site timezone), and returns that number formatted and the period it resolved ("" for a series that never resets): the one-time go-live step of `rangka numbering set`
 // (contract 0009 §4). It never lowers the counter or reissues an existing name (see store.SetNextSeries)
 // and is audited as numbering.set.
-func (e *Engine) SetNextNumber(ctx context.Context, org, series string, next int64, period string) (string, error) {
+func (e *Engine) SetNextNumber(ctx context.Context, org, series string, next int64, period string) (string, string, error) {
 	s := e.seriesScheme(org, series)
 	if s.Series == "" {
-		return "", fmt.Errorf("numbering: no installed model uses series %q in org %s", series, org)
+		return "", "", fmt.Errorf("numbering: no installed model uses series %q in org %s", series, org)
 	}
 	if s.Pattern == "" {
-		return "", fmt.Errorf("numbering: series %q has no pattern in config.rk", series)
+		return "", "", fmt.Errorf("numbering: series %q has no pattern in config.rk", series)
+	}
+	if period == "never" {
+		period = ""
 	}
 	ctx = pg.WithOrg(ctx, org)
 	tx, err := e.DB.Begin(ctx)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	defer tx.Rollback(ctx)
-	now := e.Now().In(e.Location())
-	name, err := store.SetNextSeries(ctx, tx, org, e.orgCode(org), s, e.seriesTables(org, series), now, period, next)
+	res, err := tx.Query(ctx, `select 1 from rk_orgs where id = $1`, org)
 	if err != nil {
-		return "", err
+		return "", "", err
+	}
+	if len(res.Rows) == 0 {
+		return "", "", fmt.Errorf("numbering: org %s does not exist", org)
+	}
+	now := e.Now().In(e.Location())
+	name, resolved, err := store.SetNextSeries(ctx, tx, org, e.orgCode(org), s, e.seriesTables(org, series), now, period, next)
+	if err != nil {
+		return "", "", err
 	}
 	if err := store.Audit(ctx, tx, org, "cli", "numbering.set", "series/"+series, "next number "+name,
-		map[string]any{"next": next, "period": period}); err != nil {
-		return "", err
+		map[string]any{"next": next, "period": resolved}); err != nil {
+		return "", "", err
 	}
-	return name, tx.Commit(ctx)
+	return name, resolved, tx.Commit(ctx)
 }
 
 // orgCode is the {ORG} token: config.rk orgs.<id>.code when set, else the org id upper-cased.

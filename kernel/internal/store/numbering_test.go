@@ -309,7 +309,7 @@ func setNext(db *pg.Pool, org string, s Scheme, tables []string, now time.Time, 
 		return "", err
 	}
 	defer tx.Rollback(ctx)
-	got, err := SetNextSeries(ctx, tx, org, strings.ToUpper(org), s, tables, now, period, next)
+	got, _, err := SetNextSeries(ctx, tx, org, strings.ToUpper(org), s, tables, now, period, next)
 	if err != nil {
 		return "", err
 	}

@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"context"
 	"strings"
 	"testing"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
@@ -38,6 +40,14 @@ func TestNumberingSet(t *testing.T) {
 	base := []string{"--db", url, "--apps", testdb.Catalogue("apps"), "--site", "../../testdata/numbering-site"}
 	if code := cmdMigrate(base); code != 0 {
 		t.Fatalf("migrate exited %d", code)
+	}
+	db, err := pg.NewPool(context.Background(), url, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(context.Background(), `insert into rk_orgs (id, name) values ('kopi-senja', 'Kopi Senja')`); err != nil {
+		t.Fatal(err)
 	}
 	var out bytes.Buffer
 	numberingOut = &out

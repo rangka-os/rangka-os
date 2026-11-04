@@ -73,17 +73,23 @@ func FormatNumber(prefix, suffix string, digits int, n int64) string {
 	return fmt.Sprintf("%s%0*d%s", prefix, digits, n, suffix)
 }
 
+// existingNames is the union over tables of the record names in $1's org that match the regular expression
+// in parameter $nameParam, selecting cols from each ("name" and/or the captured number as "n").
+func existingNames(tables []string, cols string, nameParam int) string {
+	parts := make([]string, len(tables))
+	for i, t := range tables {
+		parts[i] = fmt.Sprintf("select %s from %s where org_id = $1 and name ~ $%d::text", cols, pg.QuoteIdent(t), nameParam)
+	}
+	return strings.Join(parts, " union all ")
+}
+
 // existingMax is the subquery that finds the highest number among the names in tables matching the
 // regular expression in parameter $4, or "null" when there are no tables.
 func existingMax(tables []string) string {
 	if len(tables) == 0 {
 		return "null"
 	}
-	parts := make([]string, len(tables))
-	for i, t := range tables {
-		parts[i] = fmt.Sprintf("select substring(name from $4::text)::bigint as n from %s where org_id = $1 and name ~ $4::text", pg.QuoteIdent(t))
-	}
-	return "(select max(n) from (" + strings.Join(parts, " union all ") + ") x)"
+	return "(select max(n) from (" + existingNames(tables, "substring(name from $4::text)::bigint as n", 4) + ") x)"
 }
 
 // nameRe matches the names of a rendered series and captures their number.
@@ -136,20 +142,20 @@ func periodTime(reset, period string, now time.Time) (time.Time, error) {
 
 // SetNextSeries makes next the number the series issues next for an org in period ("" = the current period
 // of now, which must already be in the site timezone), inside q's transaction, and returns that number
-// formatted. It is the one-time go-live step that continues a client's own numbering (contract 0009 §4):
+// formatted with the period it resolved. It is the one-time go-live step that continues a client's own numbering (contract 0009 §4):
 // it never lowers the counter and never makes an existing name come out again. Numbers between the old
 // counter and next are skipped on purpose; they live in the client's old system.
-func SetNextSeries(ctx context.Context, q pg.Querier, org, orgCode string, s Scheme, tables []string, now time.Time, period string, next int64) (string, error) {
+func SetNextSeries(ctx context.Context, q pg.Querier, org, orgCode string, s Scheme, tables []string, now time.Time, period string, next int64) (string, string, error) {
 	if next < 1 {
-		return "", fmt.Errorf("numbering: next must be 1 or more, got %d", next)
+		return "", "", fmt.Errorf("numbering: next must be 1 or more, got %d", next)
 	}
 	if next < s.start() {
-		return "", fmt.Errorf("numbering: series %s starts at %d; next cannot be below that", s.Series, s.start())
+		return "", "", fmt.Errorf("numbering: series %s starts at %d; next cannot be below that", s.Series, s.start())
 	}
 	reset := s.reset()
 	at, err := periodTime(reset, period, now)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	period = Period(reset, at)
 	label := period
@@ -160,32 +166,28 @@ func SetNextSeries(ctx context.Context, q pg.Querier, org, orgCode string, s Sch
 	// sees every name they committed and none can be issued between the checks and the update.
 	if _, err := q.Exec(ctx, `insert into rk_number_series (org_id, series, period, last) values ($1, $2, $3, 0)
 		on conflict (org_id, series, period) do nothing`, org, s.Series, period); err != nil {
-		return "", err
+		return "", "", err
 	}
 	res, err := q.Query(ctx, `select last from rk_number_series where org_id = $1 and series = $2 and period = $3 for update`, org, s.Series, period)
 	if err != nil {
-		return "", err
+		return "", "", err
 	}
 	if last := res.Rows[0][0].(int64); last >= next {
-		return "", fmt.Errorf("numbering: series %s of %s already issued up to %d in period %s; next can only go up", s.Series, org, last, label)
+		return "", "", fmt.Errorf("numbering: series %s of %s already issued up to %d in period %s; next can only go up", s.Series, org, last, label)
 	}
 	prefix, suffix, digits := RenderSeries(s.Pattern, orgCode, at)
 	if len(tables) > 0 {
-		parts := make([]string, len(tables))
-		for i, t := range tables {
-			parts[i] = fmt.Sprintf("select name, substring(name from $2::text)::bigint as n from %s where org_id = $1 and name ~ $2::text", pg.QuoteIdent(t))
-		}
-		res, err := q.Query(ctx, "select name, n from ("+strings.Join(parts, " union all ")+") x order by n desc limit 1", org, nameRe(prefix, suffix))
+		res, err := q.Query(ctx, "select name, n from ("+existingNames(tables, "name, substring(name from $2::text)::bigint as n", 2)+") x order by n desc limit 1", org, nameRe(prefix, suffix))
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		if len(res.Rows) > 0 && res.Rows[0][1].(int64) >= next {
-			return "", fmt.Errorf("numbering: %s already exists in series %s of %s; next must be above %d", res.Rows[0][0], s.Series, org, res.Rows[0][1])
+			return "", "", fmt.Errorf("numbering: %s already exists in series %s of %s; next must be above %d", res.Rows[0][0], s.Series, org, res.Rows[0][1])
 		}
 	}
 	if _, err := q.Exec(ctx, `update rk_number_series set last = $4 where org_id = $1 and series = $2 and period = $3 and last < $4`,
 		org, s.Series, period, next-1); err != nil {
-		return "", err
+		return "", "", err
 	}
-	return FormatNumber(prefix, suffix, digits, next), nil
+	return FormatNumber(prefix, suffix, digits, next), period, nil
 }

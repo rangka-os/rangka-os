@@ -18,7 +18,8 @@ var numberingOut io.Writer
 const numberingUsage = `usage: rangka numbering set <org> <series> <next> [--period P] [--apps <dir>] [--site <dir>] [--db <url>]
 Sets the next number a series issues for an org, once at go-live, to continue the client's own numbering
 (contract 0009 §4). It never lowers a counter and never reissues an existing name. --period targets another
-period than the current one (2026 for a yearly series, 2026-11 for a monthly one).`
+period than the current one (2026 for a yearly series, 2026-11 for a monthly one,
+never or "" for a series that never resets).`
 
 // numberingArgs are the parsed arguments of `rangka numbering set`.
 type numberingArgs struct {
@@ -98,13 +99,9 @@ func runNumbering(args []string) error {
 	}
 	defer db.Close()
 	e := engine.New(db, reg)
-	name, err := e.SetNextNumber(ctx, na.Org, na.Series, na.Next, na.Period)
+	name, period, err := e.SetNextNumber(ctx, na.Org, na.Series, na.Next, na.Period)
 	if err != nil {
 		return err
-	}
-	period := na.Period
-	if period == "" {
-		period = e.SeriesPeriod(na.Org, na.Series)
 	}
 	if period == "" {
 		period = "never"

@@ -184,22 +184,33 @@ func TestSeriesDefStart(t *testing.T) {
 func TestSetNextNumber(t *testing.T) {
 	e, a := setupSite(t, numberingSite)
 	ctx := context.Background()
-	got, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 154, "")
-	if err != nil || got != "INV/KOPI-SENJA/2610/0154" {
-		t.Fatalf("SetNextNumber = %q, %v", got, err)
+	if _, err := e.DB.Exec(ctx, `insert into rk_orgs (id, name) values ('kopi-senja', 'Kopi Senja') on conflict (id) do nothing`); err != nil {
+		t.Fatal(err)
+	}
+	got, period, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 154, "")
+	if err != nil || got != "INV/KOPI-SENJA/2610/0154" || period != "2026-10" {
+		t.Fatalf("SetNextNumber = %q, %q, %v", got, period, err)
 	}
 	if got := submitName(t, e, a, newDraftInvoice(t, e, a)); got != "INV/KOPI-SENJA/2610/0154" {
 		t.Fatalf("submit after set = %q", got)
 	}
-	if _, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 100, ""); err == nil || !strings.Contains(err.Error(), "next can only go up") {
+	if _, _, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 100, ""); err == nil || !strings.Contains(err.Error(), "next can only go up") {
 		t.Fatalf("lowering: %v", err)
 	}
-	if got, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 7, "2026-11"); err != nil || got != "INV/KOPI-SENJA/2611/0007" {
-		t.Fatalf("next period = %q, %v", got, err)
+	if got, period, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 7, "2026-11"); err != nil || got != "INV/KOPI-SENJA/2611/0007" || period != "2026-11" {
+		t.Fatalf("next period = %q, %q, %v", got, period, err)
 	}
-	_, err = e.SetNextNumber(ctx, "kopi-senja", "tidak_ada", 5, "")
+	_, _, err = e.SetNextNumber(ctx, "kopi-senja", "tidak_ada", 5, "")
 	if err == nil || err.Error() != `numbering: no installed model uses series "tidak_ada" in org kopi-senja` {
 		t.Fatalf("unknown series: %v", err)
+	}
+	_, _, err = e.SetNextNumber(ctx, "kopi-senja-typo", "sales_invoice", 5, "")
+	if err == nil || err.Error() != "numbering: org kopi-senja-typo does not exist" {
+		t.Fatalf("unknown org: %v", err)
+	}
+	res, qerr := e.DB.Query(context.Background(), `select count(*) from rk_number_series where org_id = 'kopi-senja-typo'`)
+	if qerr != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("rows for unknown org: %v %v", res, qerr)
 	}
 }
 

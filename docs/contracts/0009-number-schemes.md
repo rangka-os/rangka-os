@@ -88,7 +88,9 @@ A series must repeat its reset period in the number, or numbers collide: `reset:
   `<next>` (named in the error), or when `<next>` is below the series `start`; otherwise it sets `last = next - 1`.
   Allocations queue on the same row, so none is issued twice. Setting the same `<next>` again is a no-op. Raising
   the counter leaves a hole in Rangka's own sequence by design: the numbers before `<next>` live in the client's old
-  system. The change is audited as `numbering.set`.
+  system. The change is audited as `numbering.set`. `--period never` is the same as the empty period. A yearly series
+  whose pattern contains `{MM}` renders `--period` numbers with month `01`, and the existing-name check only covers the
+  rendered prefix, as allocation does.
 - Amendments keep the v0 rule (`<original>-1`, `-2`, …) and take no new number.
 - Legacy string patterns keep their v0 counters in `rk_naming` (keyed by rendered prefix); nothing renumbers.
 

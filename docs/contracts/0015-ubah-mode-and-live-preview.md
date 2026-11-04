@@ -82,4 +82,18 @@ exist yet lists no records; a field whose column does not exist yet is absent fr
 `/api/v1/preview` (any method but GET) answer 405 `preview_read_only`. A change set that edits a role or a model's `permissions` has no preview (409 `preview_permissions`): the preview would apply rights the installation does not have yet. A dashboard widget over a table that does not exist yet carries `error` instead of a value. Responses carry `X-Rangka-Preview: <id>`.
 
 The app enters preview with `#/<route>?preview=<id>` (S12 links there) and leaves it with "Keluar pratinjau". It
-enters Ubah with `?ubah=1` when `meta.changesets.propose` is true.
+enters Ubah with `?mode=ubah` on the page URL (`/app/?mode=ubah#/…`) or `?ubah=1` in the hash query, when
+`meta.changesets.propose` is true. A client detects the preview feature by `GET /api/v1/preview` answering
+anything but 404 `no such endpoint`.
+
+## 5. Embedding (Rangka Cloud)
+
+When the app runs inside a frame (`window.parent !== window`) it posts to the parent, for every change set it
+creates, applies or reverts:
+
+```json
+{"type": "rangka:changeset", "event": "created|applied|reverted", "changeset": {"id": "cs_…", "title": "…", "status": "…", "risk": "low|medium|high"}}
+```
+
+`created` fires once the change set is proposed (also for one that is then applied in the same step, followed by
+`applied`). The message carries no record data, so it is posted with target origin `*`.

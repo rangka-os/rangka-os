@@ -1,8 +1,25 @@
 # Your first app
 
-Build a tiny **service tickets** app on top of `core`, in four files.
+Build a tiny **service tickets** app on the `contacts` module, in five files.
 
-## 1. The manifest
+## 1. A module and an app
+
+Since [contract 0001](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0001-modules-and-apps.md) metadata comes in two levels, both in `rangka-apps`:
+
+- a **module** (`modules/<name>/module.rk`) holds models, rules, flows and roles, and `requires` other modules;
+- an **app** (`apps/<name>/app.rk`) is what a site installs: the modules it uses, the menu, dashboards and home page.
+  An app never defines models.
+
+Modules and apps share one namespace, so the module is `tickets` and the app is `service`:
+
+```yaml
+# modules/tickets/module.rk
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: tickets
+version: 0.1.0
+title: {id: Tiket servis, en: Service tickets}
+requires: {rangka: '>=0.5', contacts: ^1.0, users: ^1.0}
+```
 
 ```yaml
 # apps/service/app.rk
@@ -10,17 +27,19 @@ Build a tiny **service tickets** app on top of `core`, in four files.
 name: service
 version: 0.1.0
 title: {id: Servis, en: Service}
-requires: {rangka: '>=0.4', core: ^1.0}
+rangka: '>=0.5'
+modules: {contacts: ^1.0, users: ^1.0, tickets: ^0.1}
 dashboards: [service_overview]
 menu:
   - group: {id: Servis}
-    items: [ticket]
+    items: [ticket, customer]
+home: {model: ticket, view: kanban}
 ```
 
-## 2. A model
+## 2. A model in the module
 
 ```yaml
-# apps/service/models/ticket.rk
+# modules/tickets/models/ticket.rk
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
 name: ticket
 label: {id: Tiket servis, en: Service ticket}
@@ -52,7 +71,7 @@ views:
   kanban: {group_by: priority}
 ```
 
-## 3. A dashboard
+## 3. A dashboard in the app
 
 ```yaml
 # apps/service/dashboards/service_overview.rk
@@ -75,11 +94,22 @@ widgets:
 
 ## 4. Install and validate
 
-Add `service` to the site's `config.rk` (`apps: [core, crm, sales, service]`) and to the plan in `features.rk`, then:
+Add the app to a site. In `examples/sites/kopi-senja`, add `service` to `apps:` in `config.rk`
+(`apps: [crm, service]`) and to the `apps:` of each plan in `features.rk`. The kernel installs the app's modules
+(`contacts`, `users`, `tickets`) and whatever they `require`. Then, with the repos cloned side by side:
 
 ```bash
-cd rangka-os/kernel && make validate && make run-demo
+cd rangka-os/kernel
+make validate APPS=../../rangka-apps/apps SITE=../../rangka-apps/examples/sites/kopi-senja
+RANGKA_FIXTURES=../../rangka-apps/examples/fixtures/kopi-senja \
+  make run-demo APPS=../../rangka-apps/apps SITE=../../rangka-apps/examples/sites/kopi-senja
 ```
 
-The validator checks every reference: the `customer` link, the CEL in the rule and filters, the dashboard columns,
-and that the plan allows the app.
+Both commands find `modules/` next to `apps/` (pass `--modules` to `rangka` to use another folder). The validator
+checks every reference: the `customer` link (the `tickets` module must `require` `contacts`), the CEL in the rule and
+filters, the dashboard columns, that the app defines no models, and that the plan allows the app. The Python
+reference gives the same report:
+
+```bash
+python3 tools/rangka_validate.py ../rangka-apps/apps --site ../rangka-apps/examples/sites/kopi-senja --connectors ../rangka-connectors
+```

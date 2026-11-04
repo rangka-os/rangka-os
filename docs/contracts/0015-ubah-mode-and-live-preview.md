@@ -49,8 +49,8 @@ in the v0.1 notes to overlays that add fields, rules, approvals or options).
 
 - `views.form.layout`: replaces the app model's form layout (same shape as model `views.form.layout`). Fields the
   layout leaves out are not shown on the form; `views.form.add` still applies after it.
-- `views.list.columns`: replaces the list columns (field names, or `{field, …}` list columns); `views.list.add`
-  applies after it.
+- `views.list.columns`: replaces the list columns: a list of field names (schema `listcol`, strings only);
+  `views.list.add` applies after it.
 - `views.kanban.columns`: the order of the kanban's `group_by` option values; values left out are hidden.
 - `options: {<field>: [{value, label, color?}]}`: options appended to a `select` field of the model.
 
@@ -79,12 +79,18 @@ All read-only, for callers of the change set's org with `meta.changesets.propose
 The kernel loads the metadata from a temporary copy of the installation with the change set's ops applied (the
 same copy validate uses) and answers from the live database without migrating it: a model whose table does not
 exist yet lists no records; a field whose column does not exist yet is absent from records. Writes under
-`/api/v1/preview` (any method but GET) answer 405 `preview_read_only`. A change set that edits a role or a model's `permissions` has no preview (409 `preview_permissions`): the preview would apply rights the installation does not have yet. A dashboard widget over a table that does not exist yet carries `error` instead of a value. Responses carry `X-Rangka-Preview: <id>`.
+`/api/v1/preview` (any method but GET) answer 405 `preview_read_only`. A change set that changes who may do what has no preview (409 `preview_permissions`): the preview would apply rights the installation does not have yet. That covers editing a role or a model's `permissions`, flipping `is_child`, removing or retyping a field of an existing model (row scope reads fields), and giving an existing child model another parent (a child uses the permissions of the first model, by name, with a `table` field of it, so a new model with such a table can take that place). An `invalid` change set whose ops do not apply answers 422 `bad_ops`. A dashboard widget over a table that does not exist yet carries `error` instead of a value. Responses carry `X-Rangka-Preview: <id>`.
 
 The app enters preview with `#/<route>?preview=<id>` (S12 links there) and leaves it with "Keluar pratinjau". It
 enters Ubah with `?mode=ubah` on the page URL (`/app/?mode=ubah#/…`) or `?ubah=1` in the hash query, when
 `meta.changesets.propose` is true. A client detects the preview feature by `GET /api/v1/preview` answering
 anything but 404 `no such endpoint`.
+
+**Record-event flows.** An automation added in Ubah is a flow on `<model>.updated` (§2). Such flows run in the
+writer's transaction, as the writer; the event carries the record's fields plus `model`, `name`, `op`, `record` and
+`before`. The automation Ubah writes fires on the transition only
+(`record.<f> == <v> && (event.before == null || event.before.<f> != <v>)`). See the docs page
+[Flows and automations](../../website/concepts/flows.md).
 
 ## 5. Embedding (Rangka Cloud)
 

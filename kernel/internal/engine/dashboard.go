@@ -90,6 +90,7 @@ func (dc *dashCtx) all(m *meta.Model) ([]store.Record, error) {
 		if !dc.scope.Visible(m, rec) {
 			continue
 		}
+		dc.e.refreshClock(dc.ctx, dc.a, m, rec, false, dc.links)
 		dc.e.Output(m, rec)
 		if dc.e.recordAllowed(dc.ctx, dc.e.DB, dc.a, m, readable, rec, dc.links) {
 			r = append(r, rec)

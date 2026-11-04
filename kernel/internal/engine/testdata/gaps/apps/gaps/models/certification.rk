@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: certification
+is_child: true
+fields:
+  - {name: cert_name, type: data, required: true}
+  - {name: expires_on, type: date}
+  - {name: expired, type: check, compute: "expires_on != '' && expires_on < today()"}

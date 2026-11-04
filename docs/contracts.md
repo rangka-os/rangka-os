@@ -102,6 +102,9 @@ Additive; nothing above changed. Clients may rely on these.
   `required`, `min_rows`, `rule`, `link_not_found`, `bad_option`, `bad_value`, `unique`. Successful writes may carry
   `_warnings:[…]` (save rules with `level: warn`).
 - `POST …/submit` with warnings and no `force` → 422 `{errors:[], warnings:[…], needs_force:true}`.
+- (Nov 2026) `read_only` fields, also on child rows, are ignored in client writes; `min_rows` is checked on a
+  client create (and on a PATCH that sends the table) as well as on submit; date-dependent computes are
+  recomputed on read. See kernel/README.md.
 - Submittable records carry a derived `status`; `/meta` models get `app` and, for those, `status_field: true`.
   `/meta` also returns `installed`, `org`, `user`, `today`, `config` (locale, currency, timezone, tax, plan, theme, layout)
   and `capabilities` (from the site's plan).

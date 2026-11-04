@@ -121,6 +121,15 @@ table, site, apps, uploads) and `restore` rebuilds it into an empty database and
   fields (children first, dependency order), save rules, required fields, link targets exist, select values
   are options. Submittable models get `DRAFT-XXXXX`; others take their naming pattern
   (`config.rk numbering` overrides the model). Counters start after the highest existing name.
+* Client writes (REST create and PATCH, imports) cannot set `read_only` fields, on the document or on its
+  child rows: a sent value is dropped, so a new record or row gets its default and a stored one keeps its value
+  (a row is matched by `name`; an unknown row name counts as a new row). Hooks, automations and flows still write
+  them. A client create needs `min_rows` rows in each table; a PATCH that sends a table must leave `min_rows`
+  rows in it. A hook may still make an empty draft (`crm.mark_won`); submit refuses it.
+* Computed fields that depend on the date (`today()`/`now()`, directly or through another compute or a child
+  row) are recomputed on read (get, list before its filter, dashboards), so `expired` stays current without a
+  save. The stored column keeps the value of the last save; a list read without children leaves computes over
+  tables as stored.
 * Submit: submit + save rules, `min_rows`; warnings return 422 with `needs_force: true` unless
   `{"force": true}`; then the naming pattern (`INV-2026-00047`), docstatus 1, `on_submit` hooks. Submitted
   records are immutable (PATCH/DELETE → 409). Cancel → 2; amend → new draft with `amended_from`, read-only

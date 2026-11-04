@@ -73,6 +73,11 @@ Full rules: [contract 0013](https://github.com/rangka-os/rangka-os/blob/main/doc
 `hidden`, `in_list`, `in_filter`, `unique`, `index`, `help`, `depends_on` (CEL: show the field only when true).
 `money: true` and `stock: true` mark fields whose changes are high risk; `currency` and `money` fields are money by default.
 
+A client (REST, imports) cannot write a `read_only` field, on the document or on a child row: the value it sends
+is dropped and the default or the stored value stays. A table's `min_rows` is checked when a client saves the
+document and again on submit. A compute that reads `today()` or `now()` is recomputed whenever the record is read,
+so a flag like `expired` stays current without a save.
+
 ## Views
 
 Every model gets a list and a form without configuration. The `views` block only overrides them:

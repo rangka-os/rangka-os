@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: bill
+naming: BILL-{###}
+fields:
+  - {name: bill_no, type: data, required: true}
+  - {name: pph23_applies, type: check, default: 'false'}

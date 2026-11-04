@@ -111,7 +111,7 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 						continue
 					}
 				}
-				rec, issues := e.normalize(m, in, nil)
+				rec, issues := e.normalize(m, in, nil, false)
 				if len(issues) > 0 {
 					return fmt.Errorf("fixture %s %s: %s", mn, name, issues[0].Message)
 				}

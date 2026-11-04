@@ -518,7 +518,8 @@
     function exclusive(fn) { return exclusiveRef.current(fn); }
     function undo(cs) {
       exclusive(function () {
-        return api.csVerb(cs.id, "revert").then(function () {
+        return api.csVerb(cs.id, "revert").then(function (done) {
+          RA.postChangeset("reverted", done || cs);
           return refresh().then(function () { toast("info", "Perubahan dibatalkan", cs.title); },
             function () { toast("info", "Perubahan dibatalkan", cs.title + " · Muat ulang halaman untuk melihat hasilnya."); });
         });
@@ -526,13 +527,15 @@
     }
     /** After an apply: reload and toast with Urungkan. A failed reload does not turn the apply into a failure. */
     function applied(cs) {
+      RA.postChangeset("applied", cs);
       var undoAct = { action: "Urungkan", onAction: function () { undo(cs); } };
       return refresh().then(function () { toast("ok", "Perubahan diterapkan", cs.title, undoAct); },
         function () { toast("ok", "Perubahan diterapkan", cs.title + " · Muat ulang halaman untuk melihat hasilnya.", undoAct); });
     }
     /** Propose, and apply when low risk and the caller approves; else open the card. Rejects on a kernel error. */
     function runInner(change) {
-      return api.runChange(change, { canApprove: caps.approve, canApproveHigh: caps.approveHigh }).then(function (res) {
+      return api.runChange(change, { canApprove: caps.approve, canApproveHigh: caps.approveHigh,
+        onCreated: function (c) { RA.postChangeset("created", c); } }).then(function (res) {
         if (res.applied) return applied(res.cs).then(function () { return res; });
         setCard({ cs: res.cs });
         return res;
@@ -674,7 +677,7 @@
           cache.setEngine(eng);
           return api.features(meta, m).then(function (f) {
             setBoot({ meta: meta, eng: eng, features: f, cache: cache, cacheListener: listener, previewCs: previewCs, previewErr: previewErr,
-              ubah: q.ubah && !!(meta.changesets && meta.changesets.propose) });
+              ubah: (q.ubah || /(^|[?&])mode=ubah(&|$)/.test(global.location.search || "")) && !!(meta.changesets && meta.changesets.propose) });
             setPhase("ready");
           });
         });

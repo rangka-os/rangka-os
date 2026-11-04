@@ -7,10 +7,23 @@ so deep links survive a reload and the kernel needs no SPA fallback:
 
 `#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>`
 
-The UI is Bahasa Indonesia first and works from 400px (phone) to desktop. People who may propose change sets
-(`meta.changesets.propose`) get a Pakai / Ubah toggle: in Ubah they rearrange dashboards, forms, list and kanban columns
-and the menu, and add fields, stages, approvals, automations and tables; every edit is a change set (contract 0015).
-`?ubah=1` opens in Ubah, `?preview=<change set>` opens a read-only preview of a pending change set.
+The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
+
+### Ubah (change and preview)
+
+- **Who sees it.** Only people with `meta.changesets.propose` (a browser session and the owner, or a role in
+  `config.ai.approvers` / `config.ai.proposers`) get the Pakai / Ubah toggle. Everyone else gets no toggle, and `?ubah=1` does nothing.
+- **What it does.** In Ubah people rearrange dashboards, forms, list and kanban columns and the menu, and add fields,
+  stages, approvals, automations and tables. Every edit is a change set (contract 0015). A low-risk edit by an approver is
+  applied at once with an "Urungkan" toast (undo is the change set's `revert`). Medium and high risk edits stop at
+  `previewed` and open a card with the risk and the dry run; "Setujui & terapkan" is for approvers (the owner for high risk).
+- **Deep links.** `/app/?mode=ubah#/d/<dashboard>` or `#/d/<dashboard>?ubah=1` opens in Ubah.
+  `#/<route>?preview=<change set id>` opens a read-only preview of a pending change set (reads go to `/api/v1/preview/{id}/…`,
+  writes are refused); "Keluar pratinjau" leaves it.
+- **Embedding (Rangka Cloud).** In a frame the app posts to `window.parent`, with target origin `*` and no record data,
+  for every change set it creates, applies or reverts:
+  `{type: "rangka:changeset", event: "created" | "applied" | "reverted", changeset: {id, title, status, risk}}`.
+  `created` comes right after the proposal; an edit that is applied in the same step posts `applied` next.
 
 ## Files
 

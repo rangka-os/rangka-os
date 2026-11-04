@@ -2606,6 +2606,146 @@ def test_no_horizontal_scroll(page, ctx):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+# ---------------------------------------------------------------------------------------------- Ubah mode (S11, contract 0015)
+def ubah_changesets(ctx, status, title_prefix):
+    """Change sets of the owner's org with `status` whose title starts with `title_prefix`, newest first."""
+    st, body = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/changesets?status=" + status)
+    assert st == 200, f"list change sets: {st} {body}"
+    return [c for c in body["data"] if str(c.get("title", "")).startswith(title_prefix)]
+
+
+def widget_order(ctx, dash):
+    """The widget names of a dashboard as the kernel serves them now."""
+    _, meta = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/meta")
+    return [w["name"] for w in meta["dashboards"][dash]["widgets"]]
+
+
+def ubah_on(page):
+    page.get_by_role("group", name="Mode").get_by_role("button", name="Ubah", exact=True).click()
+    page.get_by_role("region", name="Mode ubah").wait_for(timeout=5000)
+
+
+def dom_widgets(page):
+    page.locator("[data-widget]").first.wait_for(timeout=10000)
+    return page.evaluate("() => [...document.querySelectorAll('[data-widget]')].map(e => e.getAttribute('data-widget'))")
+
+
+def test_ubah_move_widget_applies_and_undoes(page, ctx):
+    hash_, _ = ctx.home()
+    dash = hash_.split("/d/")[1]
+    before = widget_order(ctx, dash)
+    assert len(before) >= 2, "the home dashboard has at least two widgets: " + str(before)
+    want = [before[1], before[0]] + before[2:]
+    ctx.allow_http(404, r"/api/v1/files/dashboards/")  # the first edit finds no site dashboard yet
+    applied_before = len(ubah_changesets(ctx, "applied", "Ubah tata letak dasbor"))
+    reverted_before = len(ubah_changesets(ctx, "reverted", "Ubah tata letak dasbor"))
+    open_route(page, ctx, hash_)
+    ubah_on(page)
+    assert dom_widgets(page) == before, "Ubah shows the widgets in the served order"
+    # move, then undo from the toast: the original order is back after a reload and the change set is reverted
+    page.locator("[data-widget]").first.get_by_role("button", name="Geser kanan").click()
+    page.get_by_text("Perubahan diterapkan", exact=True).wait_for(timeout=15000)
+    assert widget_order(ctx, dash) == want, "the kernel serves the new order"
+    page.get_by_role("button", name="Urungkan").click()
+    page.get_by_text("Perubahan dibatalkan", exact=True).wait_for(timeout=15000)
+    page.reload()
+    assert dom_widgets(page) == before, "after Urungkan and a reload the original order is back: " + str(dom_widgets(page))
+    assert widget_order(ctx, dash) == before
+    reverted = ubah_changesets(ctx, "reverted", "Ubah tata letak dasbor")
+    assert len(reverted) == reverted_before + 1, "the undone change set is reverted"
+    # move again and keep it: applied, low risk, still there after a reload
+    page.locator("[data-widget]").first.get_by_role("button", name="Geser kanan").click()
+    page.get_by_text("Perubahan diterapkan", exact=True).wait_for(timeout=15000)
+    page.reload()
+    assert dom_widgets(page) == want, "after a reload the page shows the new order: " + str(dom_widgets(page))
+    done = ubah_changesets(ctx, "applied", "Ubah tata letak dasbor")
+    assert len(done) == applied_before + 1, "one applied change set more"
+    assert done[0]["risk"] == "low", "moving a widget is low risk: " + str(done[0].get("risk"))
+    # leave the demo dashboard as it was for the scenarios after this one
+    st, out = Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{done[0]['id']}/revert")
+    assert st == 200, f"revert {done[0]['id']}: {st} {out}"
+    assert widget_order(ctx, dash) == before, "reverting restores the original order"
+    ctx.live.add("ubah")
+
+
+def test_ubah_add_table_medium_with_dry_run(page, ctx):
+    open_route(page, ctx, ctx.home()[0])
+    ubah_on(page)
+    open_nav(page)
+    page.get_by_role("button", name="Tambah tabel").click()
+    dlg = page.get_by_role("dialog")
+    dlg.get_by_label("Nama tabel").fill("Kunjungan toko")
+    dlg.get_by_label("Kolom 1", exact=True).fill("Catatan")
+    dlg.get_by_role("button", name="Tambah", exact=True).click()
+    card = page.locator(".ap-ubah-card")
+    card.get_by_role("heading", name="Perlu persetujuan").wait_for(timeout=20000)
+    assert card.get_by_text("Risiko sedang").count() >= 1, card.inner_text()
+    sql = card.locator(".ap-ubah-sql").inner_text().lower()
+    assert "create table" in sql, "the card shows the dry-run migration: " + sql
+    pending = ubah_changesets(ctx, "previewed", "Tambah tabel Kunjungan toko")
+    assert len(pending) == 1 and pending[0]["risk"] == "medium", pending
+    assert not ubah_changesets(ctx, "applied", "Tambah tabel Kunjungan toko"), "a medium change set is not applied by itself"
+    card.get_by_role("button", name="Pratinjau").click()
+    banner = page.get_by_role("status").filter(has_text="Pratinjau: ")
+    banner.wait_for(timeout=15000)
+    assert "Kunjungan toko" in banner.inner_text(), banner.inner_text()
+    open_nav(page)
+    page.locator(".ap-ubah-side, .rk-side, aside").filter(has_text="Kunjungan toko").first.wait_for(timeout=10000)
+    page.get_by_role("button", name="Keluar pratinjau").click()
+    page.get_by_role("button", name="Keluar pratinjau").wait_for(state="detached", timeout=10000)
+    assert Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/changesets/" + pending[0]["id"])[1]["status"] == "previewed"
+    ctx.live.add("ubah")
+
+
+def test_ubah_hidden_for_rep(page, ctx):
+    page.goto(ctx.base + "/app/?mode=ubah")
+    sign_in(page, *SALES)
+    page.locator(".rk-topnav").wait_for(timeout=15000)
+    page.evaluate("() => { location.hash = location.hash.split('?')[0] + '?ubah=1'; }")
+    page.wait_for_timeout(500)
+    assert page.get_by_role("group", name="Mode").count() == 0, "a sales_rep gets no Pakai/Ubah toggle"
+    assert page.get_by_role("region", name="Mode ubah").count() == 0, "and no Ubah bar"
+    ctx.live.add("ubah")
+
+
+def test_ubah_mode_query(page, ctx):
+    hash_ = ctx.home()[0]
+    page.goto(ctx.base + "/app/?mode=ubah" + hash_)
+    sign_in(page, *ctx.owner)
+    page.get_by_role("region", name="Mode ubah").wait_for(timeout=15000)
+    ctx.live.add("ubah")
+
+
+def test_ubah_embedded_posts_changeset(page, ctx):
+    """Framed, the app posts rangka:changeset to its parent for created, applied and reverted (contract 0015 §5)."""
+    ctx.allow_http(404, r"/api/v1/files/dashboards/")
+    hash_ = ctx.home()[0]
+    page.goto(ctx.base + "/app/")
+    sign_in(page, *ctx.owner)
+    expect_signed_in(page, ctx)
+    page.locator("[data-loading=false]").wait_for(timeout=15000)  # no request in flight when the page navigates away
+    page.wait_for_load_state("networkidle")
+    host = "<!doctype html><meta charset=utf-8><title>host</title><script>window.__msgs=[];addEventListener('message',e=>window.__msgs.push(e.data));</script>" \
+           "<iframe id=f style='width:100%;height:800px;border:0' src='/app/?mode=ubah" + hash_ + "'></iframe>"
+    page.route(ctx.base + "/embed-host.html", lambda r: r.fulfill(status=200, content_type="text/html", body=host))
+    page.goto(ctx.base + "/embed-host.html")
+    fr = page.frame_locator("#f")
+    fr.get_by_role("region", name="Mode ubah").wait_for(timeout=15000)
+    fr.locator("[data-widget]").first.wait_for(timeout=10000)
+    fr.locator("[data-widget]").first.get_by_role("button", name="Geser kanan").click()
+    fr.get_by_text("Perubahan diterapkan", exact=True).wait_for(timeout=15000)
+    msgs = page.evaluate("() => window.__msgs")
+    assert [m["event"] for m in msgs] == ["created", "applied"], msgs
+    for m in msgs:
+        assert m["type"] == "rangka:changeset" and sorted(m["changeset"]) == ["id", "risk", "status", "title"], m
+    assert msgs[0]["changeset"]["id"] == msgs[1]["changeset"]["id"] and msgs[1]["changeset"]["status"] == "applied" and msgs[1]["changeset"]["risk"] == "low", msgs
+    fr.get_by_role("button", name="Urungkan").click()
+    fr.get_by_text("Perubahan dibatalkan", exact=True).wait_for(timeout=15000)
+    msgs = page.evaluate("() => window.__msgs")
+    assert [m["event"] for m in msgs] == ["created", "applied", "reverted"] and msgs[2]["changeset"]["status"] == "reverted", msgs
+    ctx.live.add("ubah")
+
+
 def main():
     global CTX
     ap = argparse.ArgumentParser()

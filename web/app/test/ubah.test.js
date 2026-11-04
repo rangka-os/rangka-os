@@ -353,3 +353,19 @@ test("pendingChangesets lists previewed and approved once, newest first", () => 
   assert.deepStrictEqual(r.map((c) => c.id), ["b", "c", "a"]);
   assert.deepStrictEqual(RA.pendingChangesets(null, undefined), []);
 });
+
+test("postChangeset posts to the parent only when framed", () => {
+  const sent = [];
+  const parent = { postMessage: (m, o) => sent.push([m, o]) };
+  const cs = { id: "cs_1", title: "T", status: "applied", risk: "low", ops: [{ x: 1 }], created_at: "x" };
+  RA.postChangeset("applied", cs, { parent });
+  assert.strictEqual(sent.length, 1);
+  assert.deepStrictEqual(sent[0][0], { type: "rangka:changeset", event: "applied", changeset: { id: "cs_1", title: "T", status: "applied", risk: "low" } });
+  assert.deepStrictEqual(Object.keys(sent[0][0].changeset), ["id", "title", "status", "risk"]);
+  assert.strictEqual(sent[0][1], "*");
+  const top = {}; top.parent = top;
+  RA.postChangeset("created", cs, top);
+  RA.postChangeset("created", cs, {});
+  RA.postChangeset("created", null, { parent });
+  assert.strictEqual(sent.length, 1);
+});

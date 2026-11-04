@@ -317,6 +317,7 @@
       caps = caps || {};
       var cs;
       return api.propose(change).then(function (c) {
+        if (caps.onCreated) caps.onCreated(c);
         return api.csVerb(c.id, "validate");
       }).then(function (c) {
         cs = c;

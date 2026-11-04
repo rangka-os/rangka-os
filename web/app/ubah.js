@@ -444,6 +444,17 @@
     return { title: add.title, modelName: add.modelName, ops: add.ops.slice(0, 2).concat(seed.ops, add.ops.slice(2)) };
   };
 
+  /** Embedding (contract 0015 §5): tell the framing page about a change set. No-op when the app is not in a frame.
+   *  event: created | applied | reverted. The message carries no record data, hence target origin "*". */
+  RA.postChangeset = function (event, cs, win) {
+    win = win || global;
+    if (!cs || !win.parent || win.parent === win) return;
+    try {
+      win.parent.postMessage({ type: "rangka:changeset", event: event,
+        changeset: { id: cs.id, title: cs.title, status: cs.status, risk: cs.risk } }, "*");
+    } catch (e) { /* a frame that refuses the message is not our failure */ }
+  };
+
   /** One Ubah edit at a time. run(fn) calls fn (which returns a value or a Promise) unless an edit is still running, in
    *  which case it rejects with code "busy" (a second click in the same tick included). onBusy(true) when fn starts,
    *  onBusy(false) once its Promise settles, success or failure. */

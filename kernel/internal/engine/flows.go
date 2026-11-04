@@ -87,6 +87,9 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 		vars = map[string]any{}
 	}
 	vars["event"] = event
+	prevInFlow := o.inFlow
+	o.inFlow = true
+	defer func() { o.inFlow = prevInFlow }()
 	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out}
 	if c := flowConnector(e, f); start == 0 && c != "" && len(event) > 0 {
 		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+c, f.On+" → flow "+f.Name, nil); err != nil {
@@ -504,4 +507,32 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// recordFlows runs every installed flow whose on: is <model>.<event>, in the write's transaction and as the
+// writer, with event = {model, name, op, record}. Writes made by a flow do not start flows again.
+func (o *op) recordFlows(m *meta.Model, rec store.Record, event string) error {
+	if o.inFlow {
+		return nil
+	}
+	reg := o.e.Reg()
+	want := m.Name + "." + event
+	names := make([]string, 0, len(reg.Flows))
+	for n, f := range reg.Flows {
+		if f.On == want && reg.IsInstalled(f.App) {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		copied := map[string]any{}
+		for k, v := range rec {
+			copied[k] = v
+		}
+		ev := map[string]any{"model": m.Name, "name": str(rec["name"]), "op": event, "record": copied}
+		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, newFlowResult(n)); err != nil {
+			return fmt.Errorf("flow %s: %w", n, err)
+		}
+	}
+	return nil
 }

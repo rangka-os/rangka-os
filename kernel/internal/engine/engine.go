@@ -153,6 +153,8 @@ type op struct {
 	links   map[string]map[string]any
 	// approving is set while Approve runs the approved verb: earlier approved requests then satisfy hold.
 	approving bool
+	// inFlow is set while a flow runs: its own writes do not start record-event flows again.
+	inFlow bool
 }
 
 func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {

@@ -331,6 +331,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.automations(m, nil, rec, "created"); err != nil {
 		return nil, err
 	}
+	if err := o.recordFlows(m, rec, "created"); err != nil {
+		return nil, err
+	}
 	return &Result{Record: o.e.Output(m, rec), Warnings: warns}, nil
 }
 
@@ -454,6 +457,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	if err := o.automations(m, cur, rec, "updated"); err != nil {
 		return nil, err
 	}
+	if err := o.recordFlows(m, rec, "updated"); err != nil {
+		return nil, err
+	}
 	return &Result{Record: o.e.Output(m, rec), Warnings: warns}, nil
 }
 
@@ -574,6 +580,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	if err := o.automations(m, rec, rec, "submitted"); err != nil {
 		return nil, err
 	}
+	if err := o.recordFlows(m, rec, "submitted"); err != nil {
+		return nil, err
+	}
 	return &Result{Record: e.Output(m, rec), Warnings: warns}, nil
 }
 
@@ -642,6 +651,9 @@ func (o *op) cancel(model, name string) (*Result, error) {
 		return nil, err
 	}
 	if err := o.automations(m, rec, rec, "cancelled"); err != nil {
+		return nil, err
+	}
+	if err := o.recordFlows(m, rec, "cancelled"); err != nil {
 		return nil, err
 	}
 	return &Result{Record: e.Output(m, rec)}, nil

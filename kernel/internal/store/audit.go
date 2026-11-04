@@ -70,8 +70,11 @@ type AuditFilter struct {
 
 // ListAudit returns the newest entries.
 func ListAudit(ctx context.Context, q pg.Querier, f AuditFilter) ([]AuditEntry, error) {
-	if f.Limit <= 0 || f.Limit > 500 {
+	if f.Limit <= 0 {
 		f.Limit = 50
+	}
+	if f.Limit > 500 {
+		f.Limit = 500
 	}
 	if f.HideRecordsOf == nil {
 		f.HideRecordsOf = []string{} // a NULL array would hide every record entry

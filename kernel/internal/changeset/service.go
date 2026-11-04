@@ -477,8 +477,11 @@ func (s *Service) Get(ctx context.Context, org, id string) (*ChangeSet, error) {
 
 // List returns change sets, newest first, optionally by status.
 func (s *Service) List(ctx context.Context, org, status string, limit int) ([]*ChangeSet, error) {
-	if limit <= 0 || limit > 200 {
+	if limit <= 0 {
 		limit = 50
+	}
+	if limit > 200 {
+		limit = 200
 	}
 	res, err := s.DB.Query(ctx, `select * from rk_changesets where (org_id = $1 or org_id = '') and ($2 = '' or status = $2) order by created_at desc limit $3`, org, status, limit)
 	if err != nil {

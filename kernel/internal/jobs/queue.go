@@ -236,8 +236,11 @@ func jobOut(m map[string]any) map[string]any {
 // List returns recent jobs of org (and installation-wide ones), optionally by state. A non-empty actor
 // keeps only jobs whose args.actor.id is that actor (members with a row scope see only what they queued).
 func (q *Queue) List(ctx context.Context, org, actor, state string, limit int) ([]map[string]any, error) {
-	if limit <= 0 || limit > 500 {
+	if limit <= 0 {
 		limit = 50
+	}
+	if limit > 500 {
+		limit = 500
 	}
 	res, err := q.DB.Query(ctx, `select `+jobCols+` from rk_jobs where ($1 = '' or state = $1) and (org_id = $2 or org_id = '')
 		and ($4 = '' or args->'actor'->>'id' = $4) order by id desc limit $3`, state, org, limit, actor)

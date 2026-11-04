@@ -1,6 +1,7 @@
 core/models/outlet.rk:6:7  error  ambiguous_value  (syntax)  0812 means different things in different YAML tools; write "0812" in quotes for text, or a number without leading zeros
 core/models/outlet.rk:7:1  error  duplicate_key  (syntax)  "icon" appears twice (first on line 4)
 core/models/outlet.rk:8:7  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
+core/models/outlet.rk:9:37  error  ambiguous_value  (syntax)  no means different things in different YAML tools; write "no" in quotes for text, or true or false
 core/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/core/module.rk and an app (contract 0001)
 core/app.rk:4:9  error  schema  hooks/0  'Bad Hook' does not match '^[a-z_]+\\.[a-z_]+$'
 core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must match the file name "item"
@@ -156,4 +157,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:21:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:22:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-137 error(s), 20 warning(s)
+138 error(s), 20 warning(s)

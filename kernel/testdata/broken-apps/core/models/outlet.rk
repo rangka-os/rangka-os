@@ -6,6 +6,7 @@ title_field: outlet_name
 code: 0812
 icon: shop
 open: yes
+note: {id: Cabang · Kemang — ☕, en: no}
 fields:
   - name: outlet_name
     type: data

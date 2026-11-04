@@ -92,7 +92,7 @@ func TestTaxSettings(t *testing.T) {
 	r := regWith(map[string]any{
 		"tax": map[string]any{"ppn_rate": 11.0, "dpp_ratio": "11:12", "efaktur": "x"},
 		"orgs": map[string]any{
-			"pt_a": map[string]any{"name": "PT A", "config": map[string]any{"tax": map[string]any{"pkp": true, "dpp_ratio": "10/11"}}},
+			"pt_a": map[string]any{"name": "PT A", "config": map[string]any{"tax": map[string]any{"pkp": true, "dpp_ratio": " 10 / 11 "}}},
 		},
 	})
 	// malformed dpp_ratio → the default; whole float → int; pkp always a bool; other keys copied

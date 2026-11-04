@@ -397,3 +397,107 @@ test("formatSize: Indonesian decimals", () => {
   assert.strictEqual(RA.formatSize(0), "0 B");
   assert.strictEqual(RA.formatSize(20 * 1024 * 1024), "20 MB");
 });
+
+/* ----- S11: change sets and preview */
+function csAnswer(risk, opts) {
+  opts = opts || {};
+  return (url, init) => {
+    const verb = url.split("/").pop();
+    if (url === "/api/v1/changesets" && init.method === "POST") return json(201, { id: "cs1", status: "proposed", risk });
+    if (verb === "validate") return json(200, { id: "cs1", status: opts.invalid ? "invalid" : "validated", risk });
+    if (verb === "preview") return opts.previewInvalid ? json(409, { error: { code: "invalid", message: "tidak valid" }, changeset: { id: "cs1", status: "invalid", risk } }) : json(200, { id: "cs1", status: "previewed", risk, preview: { reversible: true } });
+    if (verb === "approve") return json(200, { id: "cs1", status: "approved", risk });
+    if (verb === "apply") return json(200, { id: "cs1", status: "applied", risk });
+    return json(404, { error: { code: "not_found", message: "x" } });
+  };
+}
+const steps = (f) => f.calls.map((c) => c.init.method + " " + c.url.replace("/api/v1/changesets", "").replace(/^\/cs1/, "") || "/");
+
+test("runChange: low risk with an approver goes propose, validate, preview, approve, apply", async () => {
+  const f = stub(csAnswer("low"));
+  const r = await RA({ fetch: f }).runChange({ title: "t", reason: "r", ops: [] }, { canApprove: true });
+  assert.strictEqual(r.applied, true);
+  assert.strictEqual(r.cs.status, "applied");
+  assert.deepStrictEqual(steps(f), ["POST ", "POST /validate", "POST /preview", "POST /approve", "POST /apply"]);
+});
+
+test("runChange: low risk without approve rights, and medium or high, stop after preview", async () => {
+  for (const [risk, caps] of [["low", { canApprove: false }], ["medium", { canApprove: true }], ["high", { canApprove: true, canApproveHigh: true }]]) {
+    const f = stub(csAnswer(risk));
+    const r = await RA({ fetch: f }).runChange({ title: "t", ops: [] }, caps);
+    assert.strictEqual(r.applied, false, risk);
+    assert.strictEqual(r.cs.status, "previewed");
+    assert.strictEqual(f.calls.length, 3);
+  }
+});
+
+test("runChange: an invalid validate stops before preview; an invalid preview (409) resolves with the change set", async () => {
+  const f = stub(csAnswer("low", { invalid: true }));
+  const r = await RA({ fetch: f }).runChange({ title: "t", ops: [] }, { canApprove: true });
+  assert.strictEqual(r.cs.status, "invalid");
+  assert.strictEqual(r.applied, false);
+  assert.strictEqual(f.calls.length, 2);
+  const g = stub(csAnswer("low", { previewInvalid: true }));
+  const r2 = await RA({ fetch: g }).runChange({ title: "t", ops: [] }, { canApprove: true });
+  assert.strictEqual(r2.cs.status, "invalid");
+  assert.strictEqual(r2.applied, false);
+  assert.strictEqual(g.calls.length, 3);
+});
+
+test("runChange rejects with the ApiError of a failing step", async () => {
+  const f = stub(() => json(403, { error: { code: "permission_denied", message: "tidak boleh" } }));
+  const e = await rejected(RA({ fetch: f }).runChange({ title: "t", ops: [] }, { canApprove: true }));
+  assert.strictEqual(e.status, 403);
+  assert.strictEqual(e.code, "permission_denied");
+});
+
+test("changesets, changeset, propose, csVerb and file", async () => {
+  const f = stub((url, init) => {
+    if (url.indexOf("/files/") >= 0) return url.indexOf("missing") >= 0 ? json(404, { error: { code: "not_found", message: "x" } }) : json(200, { path: "custom/lead.rk", text: "a: 1", parsed: { a: 1 } });
+    return json(200, { ok: true });
+  });
+  const api = RA({ fetch: f });
+  await api.changesets({ status: "previewed" });
+  await api.changeset("cs 1");
+  await api.csVerb("cs1", "reject", "salah");
+  assert.strictEqual(f.calls[0].url, "/api/v1/changesets?status=previewed");
+  assert.strictEqual(f.calls[1].url, "/api/v1/changesets/cs%201");
+  assert.strictEqual(f.calls[2].url, "/api/v1/changesets/cs1/reject");
+  assert.deepStrictEqual(JSON.parse(f.calls[2].init.body), { note: "salah" });
+  assert.strictEqual((await api.file("custom/lead.rk")).parsed.a, 1);
+  assert.strictEqual(f.calls[3].url, "/api/v1/files/custom/lead.rk");
+  assert.strictEqual(await api.file("custom/missing.rk"), null);
+});
+
+test("meta fills changesets capabilities when absent", async () => {
+  const api = RA({ fetch: stub([json(200, { models: {} }), json(200, { models: {}, changesets: { propose: true, approve: true, approve_high: false } })]) });
+  assert.deepStrictEqual(JSON.parse(JSON.stringify((await api.meta()).changesets)), { propose: false, approve: false, approve_high: false });
+  assert.strictEqual((await api.meta()).changesets.propose, true);
+});
+
+test("preview mode prefixes the four reads and refuses every write without a request", async () => {
+  const f = stub(() => json(200, { data: [], total: 0 }));
+  const api = RA({ fetch: f });
+  assert.strictEqual(api.previewId(), null);
+  api.setPreview("cs1");
+  assert.strictEqual(api.previewId(), "cs1");
+  await api.meta(); await api.list("lead", { q: "a" }); await api.get("lead", "L 1"); await api.dashboard("sales", 30);
+  assert.deepStrictEqual(f.calls.map((c) => c.url), [
+    "/api/v1/preview/cs1/meta", "/api/v1/preview/cs1/r/lead?q=a", "/api/v1/preview/cs1/r/lead/L%201", "/api/v1/preview/cs1/dashboards/sales?period=30"]);
+  const n = f.calls.length;
+  const writes = [
+    () => api.create("lead", {}), () => api.update("lead", "a", {}), () => api.remove("lead", "a"), () => api.submit("lead", "a"),
+    () => api.cancel("lead", "a"), () => api.amend("lead", "a"), () => api.action("lead", "a", "x"), () => api.upload("lead", "a", new Blob(["x"])),
+    () => api.removeAttachment("1"), () => api.importUpload("i", new Blob(["x"])), () => api.importCommit("i", "1"), () => api.approve("1"),
+    () => api.reject("1", "x"), () => api.propose({ title: "t", ops: [] }), () => api.csVerb("cs1", "apply"), () => api.runChange({ title: "t", ops: [] }, {})];
+  for (const w of writes) {
+    const e = await rejected(w());
+    assert.strictEqual(e.status, 405);
+    assert.strictEqual(e.code, "preview_read_only");
+    assert.strictEqual(e.message, "Pratinjau hanya untuk dilihat");
+  }
+  assert.strictEqual(f.calls.length, n, "no request was made");
+  api.setPreview(null);
+  await api.get("lead", "a");
+  assert.strictEqual(f.calls[n].url, "/api/v1/r/lead/a");
+});

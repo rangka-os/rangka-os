@@ -108,9 +108,14 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 					}
 				}
 				a.raise("medium", "new model "+p)
+				if nw["permissions"] == nil { // absent (or null): the engine grants everything (engine.perms)
+					a.raise("medium", "new model "+p+" without permissions: every role has full access")
+				}
 			default:
 				a.raise("medium", "new file "+p)
 			}
+		case strings.HasPrefix(p, "dashboards/"):
+			a.raise("low", "site dashboard ("+p+")")
 		case strings.HasPrefix(p, "themes/") || strings.HasPrefix(p, "layouts/"):
 			a.raise("low", "presentation ("+p+")")
 		case p == "config.rk":
@@ -239,10 +244,37 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 	submittable, _ := target["is_submittable"].(bool)
 	if !existed {
 		old = map[string]any{}
-		a.raise("medium", "new overlay "+p)
+		for _, k := range []string{"fields", "rules", "approvals", "options"} {
+			if !isEmpty(nw[k]) {
+				a.raise("medium", "new overlay "+p+" with "+k)
+				break
+			}
+		}
 	}
 	assessFields(a, p, old, nw, submittable && existed)
+	if !reflect.DeepEqual(normalize(old["approvals"]), normalize(nw["approvals"])) {
+		a.raise("medium", "changes approvals of "+p)
+	}
+	if !reflect.DeepEqual(normalize(old["options"]), normalize(nw["options"])) {
+		if submittable {
+			a.raise("high", "changes select options of a submittable model ("+p+")")
+		} else {
+			a.raise("medium", "changes select options of "+p)
+		}
+	}
 	if !reflect.DeepEqual(normalize(old["views"]), normalize(nw["views"])) {
 		a.raise("low", "changes views of "+p)
 	}
+}
+
+func isEmpty(v any) bool {
+	switch x := v.(type) {
+	case nil:
+		return true
+	case []any:
+		return len(x) == 0
+	case map[string]any:
+		return len(x) == 0
+	}
+	return false
 }

@@ -113,3 +113,41 @@ test("orgByLabel finds the org a user-menu item names", () => {
   assert.strictEqual(A.orgByLabel(orgs, "tanpa-nama").id, "tanpa-nama");
   assert.strictEqual(A.orgByLabel(orgs, "Lain"), null);
 });
+
+test("parseRoute ignores the hash query", () => {
+  assert.deepStrictEqual(plain(A.parseRoute("#/d/crm_overview?ubah=1")), { kind: "dash", dash: "crm_overview" });
+  assert.deepStrictEqual(plain(A.parseRoute("#/r/lead/new?preview=cs_1")), { kind: "form", model: "lead", name: null, isNew: true });
+  assert.deepStrictEqual(plain(A.parseRoute("#/?ubah=1")), { kind: "home" });
+});
+
+test("hashQuery reads ubah and preview; withHashQuery writes them and keeps the route", () => {
+  assert.deepStrictEqual(plain(A.hashQuery("#/d/crm_overview?ubah=1")), { ubah: true, preview: null });
+  assert.deepStrictEqual(plain(A.hashQuery("#/r/deal?preview=cs%2F9&x=1")), { ubah: false, preview: "cs/9" });
+  assert.deepStrictEqual(plain(A.hashQuery("#/r/deal")), { ubah: false, preview: null });
+  assert.deepStrictEqual(plain(A.hashQuery("#/r/deal?ubah=0")), { ubah: false, preview: null });
+  assert.strictEqual(A.withHashQuery("#/d/x", { ubah: true }), "#/d/x?ubah=1");
+  assert.strictEqual(A.withHashQuery("#/d/x?ubah=1&k=v", { ubah: false }), "#/d/x?k=v");
+  assert.strictEqual(A.withHashQuery("#/d/x?ubah=1", { ubah: false, preview: "a b" }), "#/d/x?preview=a%20b");
+  assert.strictEqual(A.withHashQuery("#/d/x?preview=a", { preview: null }), "#/d/x");
+  assert.strictEqual(A.withHashQuery("", { ubah: true }), "#/?ubah=1");
+});
+
+test("navFromLayout: sidebar groups from meta.layout.nav.side, else null", () => {
+  assert.strictEqual(A.navFromLayout(META), null);
+  assert.strictEqual(A.navFromLayout({ ...META, layout: { nav: { side: [] } } }), null);
+  const meta = { ...META, layout: { name: "l", nav: { side: [
+    { group: { id: "Utama" }, items: [{ to: "dashboard:crm_overview" }, { to: "model:deal", label: { id: "Deal saya" } }, { to: "model:nope" }, { to: "url:https://x" }] },
+    { items: [{ to: "model:customer", icon: "user" }] },
+    { group: { id: "Kosong" }, items: [{ to: "model:nope" }] },
+  ] } } };
+  assert.deepStrictEqual(plain(A.navFromLayout(meta)), [
+    { label: "Utama", items: [
+      { id: "d/crm_overview", label: "Ringkasan CRM", icon: "dashboard" },
+      { id: "r/deal", label: "Deal saya", icon: "invoice" },
+    ] },
+    { label: "", items: [{ id: "r/customer", label: "Pelanggan", icon: "user" }] },
+  ]);
+  // navGroups uses the layout's groups and keeps Lainnya after them
+  const g = plain(A.navGroups(meta, { approvals: true }));
+  assert.deepStrictEqual(g.map((x) => x.label), ["Utama", "", "Lainnya"]);
+});

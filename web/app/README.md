@@ -7,8 +7,23 @@ so deep links survive a reload and the kernel needs no SPA fallback:
 
 `#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>` · `#/proses` · `#/proses/<process>`
 
-The UI is Bahasa Indonesia first and works from 400px (phone) to desktop. Metadata changes are not made here: they go
-through the Console and change sets.
+The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
+
+### Ubah (change and preview)
+
+- **Who sees it.** Only people with `meta.changesets.propose` (a browser session and the owner, or a role in
+  `config.ai.approvers` / `config.ai.proposers`) get the Pakai / Ubah toggle. Everyone else gets no toggle, and `?ubah=1` does nothing.
+- **What it does.** In Ubah people rearrange dashboards, forms, list and kanban columns and the menu, and add fields,
+  stages, approvals, automations and tables. Every edit is a change set (contract 0015). A low-risk edit by an approver is
+  applied at once with an "Urungkan" toast (undo is the change set's `revert`). Medium and high risk edits stop at
+  `previewed` and open a card with the risk and the dry run; "Setujui & terapkan" is for approvers (the owner for high risk).
+- **Deep links.** `/app/?mode=ubah#/d/<dashboard>` or `#/d/<dashboard>?ubah=1` opens in Ubah.
+  `#/<route>?preview=<change set id>` opens a read-only preview of a pending change set (reads go to `/api/v1/preview/{id}/…`,
+  writes are refused); "Keluar pratinjau" leaves it.
+- **Embedding (Rangka Cloud).** In a frame the app posts to `window.parent`, with target origin `*` and no record data,
+  for every change set it creates, applies or reverts:
+  `{type: "rangka:changeset", event: "created" | "applied" | "reverted", changeset: {id, title, status, risk}}`.
+  `created` comes right after the proposal; an edit that is applied in the same step posts `applied` next.
 
 ## Files
 
@@ -18,7 +33,8 @@ through the Console and change sets.
 | `tokens.css` | Design tokens (Ink, Bata, Kapur), light and dark |
 | `engine.js` | CEL subset, defaults, computed fields, rules and status; `RangkaEngine.create(meta, lookup)`. Reference semantics for the kernel |
 | `api.js` | `RangkaAppAPI`: every kernel call, `ApiError`, feature detection, `parseRupiah` / `rupiah` |
-| `shell.js` | Router, sign-in, top nav, sidebar from `meta.apps[].menu`, org switcher, 401 handling; mounts last |
+| `shell.js` | Router, sign-in, top nav, sidebar from the layout's `nav.side` (else `meta.apps[].menu`), org switcher, 401 handling, Ubah state and the menu editor; mounts last |
+| `ubah.js` | Change-set op builders (pure), Ubah helpers, and the shared Ubah UI: mode toggle, bar, preview banner, change-set card, add dialogs |
 | `list.js` | List (server search, quick filters, sort, pages) and kanban |
 | `form.js` | Form, field editors, link search, child grid, live preview, lifecycle bar, actions, server errors |
 | `fields.js` | Field editors and read-only renderers |
@@ -44,6 +60,7 @@ absent meta key turns it off and its buttons disappear.
 | Imports | `meta.imports` is not empty |
 | Processes | `GET /api/v1/processes` answers 200 with at least one process; 404, 403 or any failure turns the "Proses bisnis" entry and `#/proses` off. The canvas is read only: no edit form, no layout save |
 | Buttons per action | `meta.models[m].can[action]` when present |
+| Ubah | `meta.changesets.propose`; "Setujui & terapkan" needs `approve` (and `approve_high` for high risk) |
 
 ## Run
 

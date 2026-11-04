@@ -32,7 +32,10 @@ diff of `.rk` files — and only a person can approve it. Reference: [changeset.
 | Risk | When |
 | --- | --- |
 | High — owner only | `system.rk`, roles and permissions, `config.tax`, money or stock fields, existing fields of document models, edits to existing app files, any delete |
-| Medium | New overlay fields and rules, flows, `features.rk`, `config.apps` |
-| Low | Themes, layouts, labels, dashboards |
+| Medium | New overlay fields and rules, overlay approvals, overlay select `options` (high on a document model), new tables, flows, `features.rk`, `config.apps` |
+| Low | Themes, layouts, labels, dashboards (app and site `dashboards/<d>.rk`), overlays that only change `views` (form layout, list columns, kanban order) |
+
+A new table (model) without `permissions` stays medium but its reasons say so: every role has full access to it.
+Ubah's "Tambah tabel" copies `permissions` from a sibling model to avoid that.
 
 Every transition is written to the audit log and shown in the Console with the diff.

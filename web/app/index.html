@@ -121,6 +121,75 @@
   .ap-inbox-doc a:hover { text-decoration: underline; }
   .ap-inbox-reason { color: var(--ink-2); overflow-wrap: anywhere; }
   .ap-inbox .ap-muted { font-size: 12px; line-height: 16px; overflow-wrap: anywhere; }
+  /* Ubah mode (ubah.js, shell.js and the per-view affordances); Bata marks everything that edits the app */
+  .ap-ubah-mode { display: inline-flex; padding: 2px; border-radius: var(--r); background: var(--neutral); flex-shrink: 0; }
+  .ap-ubah-mode button { min-height: 28px; border: 0; background: transparent; border-radius: var(--r-sm); padding: 0 10px; font: 500 14px/28px var(--font-sans); color: var(--ink-2); cursor: pointer; }
+  .ap-ubah-mode button:hover { color: var(--ink); }
+  .ap-ubah-mode button[aria-pressed="true"] { background: var(--surface); color: var(--selected-ink); box-shadow: var(--shadow-seg); }
+  .ap-ubah-mode button:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
+  .ap-ubah-bar, .ap-ubah-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 4px 16px; min-height: 36px; box-sizing: border-box; font-size: 13px; line-height: 18px; }
+  .ap-ubah-bar { background: var(--selected); color: var(--selected-ink); border-bottom: 2px solid var(--selected-ink); }
+  .ap-ubah-bar-t, .ap-ubah-preview-t { flex: 1 1 200px; min-width: 0; font-weight: 600; overflow-wrap: anywhere; }
+  .ap-ubah-preview { background: var(--info-tint); color: var(--ink); border-bottom: 2px solid var(--info); }
+  .ap-ubah-preview .rk-icon { color: var(--info); }
+  .ap-ubah-tools { display: inline-flex; align-items: center; gap: 2px; flex-shrink: 0; }
+  .ap-ubah-handle { display: inline-flex; color: var(--muted); cursor: grab; }
+  /* dashboard widgets */
+  .ap-ubah-w { display: flex; flex-direction: column; gap: 4px; min-width: 0; border-radius: var(--r-lg); outline: 1px dashed var(--selected-ink); outline-offset: 2px; }
+  .ap-ubah-w.dragging { opacity: .5; }
+  .ap-ubah-w.over { outline: 2px solid var(--focus); }
+  .ap-ubah-w > :last-child { flex: 1; }
+  .ap-ubah-wbar { display: flex; align-items: center; gap: 6px; padding: 2px 4px; border-radius: var(--r); background: var(--selected); color: var(--selected-ink); cursor: grab; }
+  .ap-ubah-wname { flex: 1; min-width: 0; font-weight: 600; font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .ap-ubah-wname small { font-weight: 400; color: var(--muted); }
+  /* list columns, kanban columns */
+  .ap-ubah-chips { display: flex; flex-wrap: wrap; gap: 8px; padding: 8px; border: 1px dashed var(--selected-ink); border-radius: var(--r-lg); background: var(--selected); }
+  .ap-ubah-chip { display: inline-flex; align-items: center; gap: 2px; padding: 2px 2px 2px 8px; border-radius: var(--r); background: var(--surface); box-shadow: var(--shadow-float); }
+  .ap-ubah-chip-t { font-weight: 600; margin-right: 4px; white-space: nowrap; }
+  .ap-ubah-coltools { margin-left: auto; }
+  .ap-ubah-addcol { align-items: center; justify-content: center; border: 1px dashed var(--selected-ink); background: var(--selected); }
+  /* form rows */
+  .ap-ubah-rows { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .ap-ubah-row { display: flex; align-items: center; gap: 8px; padding: 4px 4px 4px 8px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface); cursor: grab; }
+  .ap-ubah-row.dragging { opacity: .5; }
+  .ap-ubah-row.over { box-shadow: inset 0 2px 0 var(--focus); }
+  .ap-ubah-row-t { flex: 1; min-width: 0; display: flex; flex-direction: column; overflow-wrap: anywhere; }
+  .ap-ubah-row-t small { font: 12px/16px var(--font-mono); color: var(--muted); }
+  /* sidebar */
+  .ap-ubah-side { border-right: 2px solid var(--selected-ink); }
+  .ap-ubah-group { display: flex; align-items: center; justify-content: space-between; gap: 4px; margin: 12px 0 2px; padding: 0 8px; min-height: 28px; border: 1px dashed transparent; border-radius: var(--r); background: none; font: 700 11px/16px var(--font-sans); text-transform: uppercase; color: var(--selected-ink); cursor: text; text-align: left; }
+  .ap-ubah-group:hover { border-color: var(--selected-ink); }
+  .ap-ubah-group .rk-icon { width: 12px; height: 12px; }
+  .ap-ubah-rename { margin: 12px 0 2px; min-height: 28px; padding: 0 8px; font: 600 13px/20px var(--font-sans); border: 1px solid var(--focus); border-radius: var(--r); background: var(--surface); color: var(--ink); }
+  .ap-ubah-navitem { display: flex; align-items: center; gap: 2px; min-width: 0; }
+  .ap-ubah-navitem > .rk-navlink { flex: 1; min-width: 0; }
+  .ap-ubah-navitem .ap-ubah-tools .rk-iconbtn { width: 28px; height: 28px; }
+  .ap-ubah-navadd { padding: 12px 0 0; }
+  /* change-set card */
+  .ap-ubah-card { position: fixed; z-index: 45; right: 16px; bottom: 16px; width: min(440px, calc(100vw - 32px)); max-height: calc(100vh - var(--topbar) - 32px); display: flex; flex-direction: column;
+    background: var(--surface); border: 1px solid var(--line-strong); border-top: 3px solid var(--selected-ink); border-radius: var(--r-dialog); box-shadow: var(--shadow-overlay); }
+  .ap-ubah-card-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 12px 0 16px; }
+  .ap-ubah-card-head h2 { margin: 0; font: 600 16px/24px var(--font-sans); }
+  .ap-ubah-card-body { padding: 8px 16px; overflow-y: auto; display: flex; flex-direction: column; gap: 8px; min-height: 0; }
+  .ap-ubah-card-cs { margin: 0; display: flex; flex-wrap: wrap; align-items: center; gap: 6px; overflow-wrap: anywhere; }
+  .ap-ubah-reasons, .ap-ubah-dry { margin: 0; padding-left: 18px; color: var(--ink-2); overflow-wrap: anywhere; }
+  .ap-ubah-dry .k-file { font-family: var(--font-mono); font-size: 12px; }
+  .ap-ubah-sql { margin: 0; padding: 8px; max-height: 160px; overflow: auto; background: var(--soft); border: 1px solid var(--line-strong); border-radius: var(--r); font: 12px/18px var(--font-mono); white-space: pre; }
+  .ap-ubah-card-acts { display: flex; flex-wrap: wrap; justify-content: flex-end; gap: 8px; padding: 12px 16px 16px; border-top: 1px solid var(--line); }
+  .ap-ubah-pending { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+  .ap-ubah-pending button { width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 40px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--r); background: var(--surface); color: var(--ink); font: inherit; text-align: left; cursor: pointer; }
+  .ap-ubah-pending button:hover { background: var(--hover); }
+  /* dialogs */
+  .ap-ubah-form { display: flex; flex-direction: column; gap: 12px; }
+  .ap-ubah-tcol { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
+  @media (max-width: 600px) {
+    .ap-ubah-mode button { min-height: 40px; padding: 0 8px; }
+    .ap-ubah-bar, .ap-ubah-preview { padding: 4px 12px; }
+    .ap-ubah-navitem .ap-ubah-tools .rk-iconbtn { width: 40px; height: 40px; }
+    .ap-ubah-group, .ap-ubah-rename { min-height: 40px; }
+    .ap-ubah-card { left: 8px; right: 8px; bottom: 8px; width: auto; max-height: calc(100vh - var(--topbar) - 16px); }
+    .ap-ubah-tcol { grid-template-columns: minmax(0, 1fr); }
+  }
   /* list, form and kanban styles from the prototype (pv-*), kept for the views that move over in later tasks */
   .pv-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
   .pv-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
@@ -187,6 +256,7 @@
 <script src="fields.js"></script>
 <script src="form.js"></script>
 <script src="approvals.js"></script>
+<script src="ubah.js"></script>
 <script src="dashboard.js"></script>
 <script src="docs.js"></script>
 <script src="import.js"></script>

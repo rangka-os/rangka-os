@@ -8,16 +8,21 @@ import (
 )
 
 func (s *Server) listRecords(w http.ResponseWriter, r *http.Request, c *caller) {
-	q := r.URL.Query()
-	rows, total, err := s.Engine.List(r.Context(), c.actor, r.PathValue("model"), engine.ListOpts{
-		Filter: q.Get("filter"), Sort: q.Get("sort"), Limit: intParam(r, "limit", 50), Offset: intParam(r, "offset", 0), Q: q.Get("q"),
-		Children: q.Get("children") == "1" || q.Get("children") == "true",
-	})
+	rows, total, err := s.Engine.List(r.Context(), c.actor, r.PathValue("model"), listOptsOf(r))
 	if err != nil {
 		fail(w, err)
 		return
 	}
 	writeJSON(w, 200, map[string]any{"data": rows, "total": total})
+}
+
+// listOptsOf reads the list query parameters.
+func listOptsOf(r *http.Request) engine.ListOpts {
+	q := r.URL.Query()
+	return engine.ListOpts{
+		Filter: q.Get("filter"), Sort: q.Get("sort"), Limit: intParam(r, "limit", 50), Offset: intParam(r, "offset", 0), Q: q.Get("q"),
+		Children: q.Get("children") == "1" || q.Get("children") == "true",
+	}
 }
 
 func (s *Server) createRecord(w http.ResponseWriter, r *http.Request, c *caller) {

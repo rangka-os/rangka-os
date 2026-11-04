@@ -146,6 +146,8 @@
     var ars = useState(0), apRev = ars[0], setApRev = ars[1]; // bumped by every server answer: the banner asks again
     var recRef = useRef(null), busyRef = useRef(null), dirtyRef = useRef(false);
     var genRef = useRef(0); // bumped by every server answer: late browser-side work started before it must not touch the record
+    var u = RA.useUbah ? RA.useUbah() : { on: false };
+    var dls = useState(null), ubahDialog = dls[0], setUbahDialog = dls[1]; // "field" | "approval" | "automation"
 
     function put(n) { recRef.current = n; setRecState(n); }
     function markDirty(v) { dirtyRef.current = v; setDirty(v); }
@@ -378,7 +380,7 @@
     var heldVerbs = held.map(function (x) { return x.verb || "submit"; });
     var waiting = held.length > 0;
     var locked = (sub && docstatus !== 0) || (!bannerOn && !!own);
-    var ro = locked || !allowed(isNew ? "create" : "write");
+    var ro = locked || !allowed(isNew ? "create" : "write") || !!ctx.readOnly;
     var lockText = own && !bannerOn ? "Menunggu persetujuan, isi tidak bisa diubah." : docstatus === 2 ? "Dibatalkan. Buat amandemen untuk mengoreksi." : "Sudah diajukan, baris tidak bisa diubah.";
 
     function visible(f) {
@@ -450,7 +452,8 @@
     }
     var acts = [];
     if (RA.DocTools && !isNew) acts.push(h(RA.DocTools, { key: "tools", model: m, name: rec.name, record: rec }));
-    if (sub) {
+    if (ctx.readOnly) { /* preview: nothing is written */ }
+    else if (sub) {
       if (own && !bannerOn) { /* waiting, read-only: no buttons */ }
       else if (docstatus === 0) {
         if (allowed(isNew ? "create" : "write")) acts.push(btn("save", "Simpan draf", { onClick: save }));
@@ -481,6 +484,21 @@
       ? h(RA.ApprovalBanner, { model: m, name: rec.name, rev: apRev, verbs: verbs, editable: !ro, onPending: setPend, onDecided: afterDecision })
       : own ? h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.") : null;
 
+    if (u.on) {
+      var ubahActs = [
+        h(R.Button, { key: "uf", icon: "add", disabled: u.busy, onClick: function () { setUbahDialog("field"); } }, "Tambah kolom isian"),
+        sub ? h(R.Button, { key: "ua", icon: "check", disabled: u.busy, onClick: function () { setUbahDialog("approval"); } }, "Tambah persetujuan") : null,
+        h(R.Button, { key: "uo", icon: "spark", disabled: u.busy, onClick: function () { setUbahDialog("automation"); } }, "Tambah otomasi")].filter(Boolean);
+      var dlgProps = { model: m, meta: ctx.meta, u: u, onClose: function () { setUbahDialog(null); } };
+      return h(React.Fragment, null,
+        h(R.PageHeader, { breadcrumb: [label, isNew ? "Baru" : docNo], onNavigate: function (i) { if (i === 0) back(); }, onBack: back,
+          title: sub ? label + (titleText ? " · " + titleText : "") : titleText || label + " baru", tags: tags, extra: ubahActs }),
+        h("div", { className: "rk-shell-content" }, h(UbahFormLayout, { ctx: ctx, model: m, u: u })),
+        ubahDialog === "field" ? h(RA.AddFieldDialog, dlgProps) : null,
+        ubahDialog === "approval" ? h(RA.AddApprovalDialog, dlgProps) : null,
+        ubahDialog === "automation" ? h(RA.AddAutomationDialog, dlgProps) : null);
+    }
+
     return h(React.Fragment, null,
       h(R.PageHeader, { breadcrumb: [label, isNew ? "Baru" : docNo], onNavigate: function (i) { if (i === 0) back(); }, onBack: back,
         title: sub ? label + (titleText ? " · " + titleText : "") : titleText || label + " baru", tags: tags, extra: acts },
@@ -500,6 +518,52 @@
       confirmCancel ? h(R.Dialog, { variant: "danger", icon: "warning", title: "Batalkan " + rec.name + "?", confirmLabel: "Ya, batalkan", cancelLabel: "Kembali",
         onClose: function () { setConfirmCancel(false); }, onConfirm: cancelDoc },
         "Dokumen yang dibatalkan tetap tersimpan tapi tidak berlaku lagi. Untuk mengoreksi isinya, buat amandemen setelah ini.") : null);
+  }
+
+  /* ---------------------------------------------------------------- Ubah: the form's layout as rows to reorder */
+  /** The model's form layout (views.form.layout, else one section of every stored field). */
+  function baseLayout(mm) {
+    var l = mm.views && mm.views.form && mm.views.form.layout, seen = {};
+    function once(names) { return names.filter(function (n) { if (seen[n]) return false; seen[n] = 1; return true; }); }
+    // a field listed twice (an overlay's add on top of a layout that already has it) is edited once
+    if (l && l.length) return l.map(function (sec) { return sec.columns ? Object.assign({}, sec, { columns: sec.columns.map(once) }) : Object.assign({}, sec, { fields: once(sec.fields || []) }); });
+    return [{ section: { id: "Rincian" }, fields: (mm.fields || []).filter(function (f) { return !f.compute; }).map(function (f) { return f.name; }) }];
+  }
+
+  function UbahFormLayout(p) {
+    var ctx = p.ctx, m = p.model, u = p.u, mm = ctx.meta.models[m], eng = ctx.eng;
+    var layout = baseLayout(mm);
+    var ds = useState(null), drag = ds[0], setDrag = ds[1];
+    var os = useState(null), over = os[0], setOver = os[1];
+    function save(next) { u.quiet(u.edit("custom/" + m + ".rk", function (ex) { return RA.opsFormLayout(m, next, ex); })); }
+    function move(from, to) {
+      if (from.s === to.s && (from.c || 0) === (to.c || 0) && from.i === to.i) return;
+      save(RA.moveInLayout(layout, from, to));
+    }
+    function key(at) { return at.s + ":" + (at.c || 0) + ":" + at.i; }
+    function rows(names, s, c) {
+      return h("ol", { className: "ap-ubah-rows" }, names.map(function (n, i) {
+        var at = { s: s, c: c, i: i }, f = eng.field(m, n);
+        return h("li", { key: n, className: cx("ap-ubah-row", drag && key(drag) === key(at) && "dragging", over === key(at) && drag && key(drag) !== key(at) && "over"),
+            "data-field": n, draggable: !u.busy,
+            onDragStart: function (e) { try { e.dataTransfer.setData("text/plain", n); e.dataTransfer.effectAllowed = "move"; } catch (x) { /* some browsers refuse */ } setDrag(at); },
+            onDragEnd: function () { setDrag(null); setOver(null); },
+            onDragOver: function (e) { e.preventDefault(); setOver(key(at)); },
+            onDrop: function (e) { e.preventDefault(); var from = drag; setDrag(null); setOver(null); if (from) move(from, at); } },
+          h("span", { className: "ap-ubah-handle", "aria-hidden": "true" }, h(R.Icon, { name: "drag" })),
+          h("span", { className: "ap-ubah-row-t" }, f ? L(f.label) || n : n, h("small", null, n)),
+          h("span", { className: "ap-ubah-tools" },
+            h(R.IconButton, { icon: "arrowup", label: "Naik", disabled: u.busy || i === 0, onClick: function () { move(at, { s: s, c: c, i: i - 1 }); } }),
+            h(R.IconButton, { icon: "arrowdown", label: "Turun", disabled: u.busy || i === names.length - 1, onClick: function () { move(at, { s: s, c: c, i: i + 1 }); } })));
+      }));
+    }
+    return h(React.Fragment, null,
+      h(R.Alert, { tone: "info", title: "Geser kolom isian untuk mengubah urutan formulir" }, "Perubahan jadi change set dan langsung berlaku untuk semua orang."),
+      layout.map(function (sec, s) {
+        return h(R.Card, { key: s, title: L(sec.section) || "Rincian" },
+          sec.columns ? h("div", { className: "rk-form-grid" }, sec.columns.map(function (col, c) { return h("div", { key: c, className: "pv-col" }, rows(col, s, c)); }))
+            : rows(sec.fields || [], s, undefined));
+      }));
   }
 
   RA.FormView = FormView;

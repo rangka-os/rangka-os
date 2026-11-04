@@ -61,6 +61,25 @@
     return null;
   }
 
+  /* ---------------------------------------------------------------- Ubah: one widget with its move and width buttons */
+  function UbahWidget(p) {
+    var dis = p.busy;
+    return h("div", { className: "ap-ubah-w" + (p.dragging ? " dragging" : "") + (p.over ? " over" : ""), "data-widget": p.name, draggable: !dis,
+        onDragStart: function (e) { try { e.dataTransfer.setData("text/plain", p.name); e.dataTransfer.effectAllowed = "move"; } catch (x) { /* some browsers refuse */ } p.onDrag(p.index); },
+        onDragEnd: function () { p.onDrag(null); },
+        onDragOver: function (e) { e.preventDefault(); p.onOver(p.index); },
+        onDrop: function (e) { e.preventDefault(); p.onDrop(p.index); } },
+      h("div", { className: "ap-ubah-wbar" },
+        h("span", { className: "ap-ubah-handle", "aria-hidden": "true" }, h(R.Icon, { name: "drag" })),
+        h("span", { className: "ap-ubah-wname" }, p.title, h("small", null, " · lebar " + p.span + "/12")),
+        h("span", { className: "ap-ubah-tools" },
+          h(R.IconButton, { icon: "left", label: "Geser kiri", disabled: dis || p.index === 0, onClick: function () { p.onMove(p.index, p.index - 1); } }),
+          h(R.IconButton, { icon: "right", label: "Geser kanan", disabled: dis || p.index === p.count - 1, onClick: function () { p.onMove(p.index, p.index + 1); } }),
+          h(R.Button, { size: "sm", "aria-label": "Lebar −", title: "Lebar −", disabled: dis || p.span <= 1, onClick: function () { p.onSpan(p.index, -1); } }, "−"),
+          h(R.Button, { size: "sm", "aria-label": "Lebar +", title: "Lebar +", disabled: dis || p.span >= 12, onClick: function () { p.onSpan(p.index, 1); } }, "+"))),
+      p.children);
+  }
+
   function DashboardView(p) {
     var ctx = useContext(RA.Ctx);
     var name = p.name || (p.route && p.route.dash);
@@ -74,7 +93,10 @@
     var ls = useState(true), loading = ls[0], setLoading = ls[1];
     var es = useState(null), err = es[0], setErr = es[1];
     var rs = useState(0), reload = rs[0], setReload = rs[1];
+    var drs = useState(null), drag = drs[0], setDrag = drs[1];
+    var ovs = useState(null), over = ovs[0], setOver = ovs[1];
     var seq = useRef(0);
+    var u = RA.useUbah ? RA.useUbah() : { on: false };
 
     useEffect(function () {
       var mine = ++seq.current;
@@ -106,10 +128,27 @@
 
     var defs = (def.widgets || []);
     var results = (data && data.widgets) || [];
+    function saveWidgets(list) {
+      u.quiet(u.edit("dashboards/" + name + ".rk", function (ex) { return RA.opsDashboard(RA.dashDef(ctx.meta, name), list, ex); }));
+    }
+    function widgetsNow() { return RA.dashDef(ctx.meta, name).widgets; }
+    function onMove(from, to) { if (from !== to && to >= 0 && to < defs.length) saveWidgets(RA.moveItem(widgetsNow(), from, to)); }
+    function onSpan(i, d) {
+      var list = widgetsNow(), sp = Math.max(1, Math.min(12, (list[i].span || 3) + d));
+      if (sp === (list[i].span || 3)) return;
+      list[i].span = sp;
+      saveWidgets(list);
+    }
     var cards = defs.map(function (w, i) {
       var r = results[i];
       if (r && r.hidden) return null;
-      return widgetCard(ctx, w, r, days, loading || !data, ctx.navigate);
+      var card = widgetCard(ctx, w, r, days, loading || !data, ctx.navigate);
+      if (!card || !u.on) return card;
+      return h(UbahWidget, { key: w.name, span: w.span || 3, name: w.name, title: L(w.label) || w.name, index: i, count: defs.length, busy: u.busy,
+        dragging: drag === i, over: over === i && drag !== null && drag !== i,
+        onDrag: function (x) { setDrag(x); if (x === null) setOver(null); }, onOver: setOver,
+        onDrop: function (to) { var from = drag; setDrag(null); setOver(null); if (from !== null) onMove(from, to); },
+        onMove: onMove, onSpan: onSpan }, card);
     }).filter(Boolean);
     return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" }, h(R.DashGrid, null, cards)));
   }

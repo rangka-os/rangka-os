@@ -4,6 +4,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -113,6 +114,111 @@ func TestPatchKeepsLegacyAppHeader(t *testing.T) {
 	}
 	if got := *out["apps/shop/app.rk"]; !strings.HasPrefix(got, "# yaml-language-server: $schema="+schema.Base+"app.json\n") {
 		t.Errorf("0.5 app header: %q", got)
+	}
+}
+
+func TestAssessUbah(t *testing.T) {
+	deal := map[string]any{"name": "deal", "fields": []any{map[string]any{"name": "notes", "type": "text"}}}
+	inv := map[string]any{"name": "sales_invoice", "is_submittable": true}
+	files := map[string]map[string]any{
+		"dashboards/crm_overview.rk": {"name": "crm_overview"},
+		"custom/deal.rk":             {"model": "deal", "views": map[string]any{"list": map[string]any{"columns": []any{"a"}}}},
+		"layouts/crm_first.rk":       {"name": "crm_first"},
+	}
+	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
+	with := func(p string, m map[string]any) func(string) (map[string]any, bool) {
+		return func(q string) (map[string]any, bool) {
+			if q == p {
+				return m, true
+			}
+			return before(q)
+		}
+	}
+	model := func(n string) map[string]any { return map[string]map[string]any{"deal": deal, "sales_invoice": inv}[n] }
+	views := map[string]any{"form": map[string]any{"layout": []any{"a"}}}
+	appr := []any{map[string]any{"name": "a1"}}
+	opts := map[string]any{"stage": []any{map[string]any{"value": "x", "label": "X"}}}
+	cases := []struct {
+		name  string
+		ops   []Op
+		after func(string) (map[string]any, bool)
+		risk  string
+		layer int
+	}{
+		{"create dashboard", []Op{{Op: "create", Path: "dashboards/new_one.rk"}}, with("dashboards/new_one.rk", map[string]any{"name": "n"}), "low", 6},
+		{"patch dashboard", []Op{{Op: "patch", Path: "dashboards/crm_overview.rk"}}, with("dashboards/crm_overview.rk", map[string]any{"name": "crm_overview", "widgets": []any{}}), "low", 6},
+		{"new views-only overlay", []Op{{Op: "create", Path: "custom/invoice_x.rk"}}, with("custom/invoice_x.rk", map[string]any{"model": "deal", "views": views}), "low", 4},
+		{"new overlay with fields", []Op{{Op: "create", Path: "custom/invoice_x.rk"}}, with("custom/invoice_x.rk", map[string]any{"model": "deal", "fields": []any{map[string]any{"name": "x_a", "type": "data"}}}), "medium", 4},
+		{"approvals added to existing overlay", []Op{{Op: "patch", Path: "custom/deal.rk"}}, with("custom/deal.rk", map[string]any{"model": "deal", "views": files["custom/deal.rk"]["views"], "approvals": appr}), "medium", 4},
+		{"new overlay with approvals", []Op{{Op: "create", Path: "custom/x.rk"}}, with("custom/x.rk", map[string]any{"model": "deal", "approvals": appr}), "medium", 4},
+		{"options on non-submittable", []Op{{Op: "create", Path: "custom/deal2.rk"}}, with("custom/deal2.rk", map[string]any{"model": "deal", "options": opts}), "medium", 4},
+		{"options on existing overlay", []Op{{Op: "patch", Path: "custom/deal.rk"}}, with("custom/deal.rk", map[string]any{"model": "deal", "views": files["custom/deal.rk"]["views"], "options": opts}), "medium", 4},
+		{"options on submittable", []Op{{Op: "create", Path: "custom/sales_invoice.rk"}}, with("custom/sales_invoice.rk", map[string]any{"model": "sales_invoice", "options": opts}), "high", 4},
+		{"new flow", []Op{{Op: "create", Path: "apps/crm/flows/x.rk"}}, with("apps/crm/flows/x.rk", map[string]any{"name": "x", "on": "deal.updated"}), "medium", 5},
+		{"new plain model", []Op{{Op: "create", Path: "apps/crm/models/x.rk"}}, with("apps/crm/models/x.rk", map[string]any{"name": "x", "fields": []any{map[string]any{"name": "t", "type": "data"}}}), "medium", 5},
+		{"layout patch", []Op{{Op: "patch", Path: "layouts/crm_first.rk"}}, with("layouts/crm_first.rk", map[string]any{"name": "crm_first", "nav": map[string]any{}}), "low", 6},
+		{"delete dashboard", []Op{{Op: "delete", Path: "dashboards/crm_overview.rk"}}, before, "high", 6},
+	}
+	for _, c := range cases {
+		a := Assess(c.ops, before, c.after, model)
+		if a.Risk != c.risk || len(a.Layers) != 1 || a.Layers[0] != c.layer {
+			t.Errorf("%s: risk %s layers %v (%v), want %s %d", c.name, a.Risk, a.Layers, a.Reasons, c.risk, c.layer)
+		}
+	}
+	if Layer("dashboards/x.rk") != 6 {
+		t.Error("dashboards layer")
+	}
+}
+
+// A new model without permissions gives every role full access: still medium, with a reason that says so.
+func TestAssessNewModelPermissions(t *testing.T) {
+	none := func(string) (map[string]any, bool) { return nil, false }
+	ops := []Op{{Op: "create", Path: "apps/crm/models/x.rk"}}
+	model := func(string) map[string]any { return nil }
+	after := func(m map[string]any) func(string) (map[string]any, bool) {
+		return func(p string) (map[string]any, bool) { return m, p == "apps/crm/models/x.rk" }
+	}
+	const why = "medium: new model apps/crm/models/x.rk without permissions: every role has full access"
+	a := Assess(ops, none, after(map[string]any{"name": "x"}), model)
+	if a.Risk != "medium" || !slices.Contains(a.Reasons, why) {
+		t.Errorf("without permissions: %s %v", a.Risk, a.Reasons)
+	}
+	a = Assess(ops, none, after(map[string]any{"name": "x", "permissions": []any{map[string]any{"role": "owner", "read": true}}}), model)
+	if a.Risk != "medium" || slices.Contains(a.Reasons, why) {
+		t.Errorf("with permissions: %s %v", a.Risk, a.Reasons)
+	}
+}
+
+func TestSandboxFollowsSymlinks(t *testing.T) {
+	tmp := t.TempDir()
+	apps := filepath.Join(tmp, "apps")
+	real := filepath.Join(tmp, "real-connectors")
+	nested := filepath.Join(tmp, "shared")
+	for _, d := range []string{apps, real, nested} {
+		if err := os.MkdirAll(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	os.WriteFile(filepath.Join(real, "a.rk"), []byte("a"), 0o644)
+	os.WriteFile(filepath.Join(nested, "b.rk"), []byte("b"), 0o644)
+	if err := os.Symlink(nested, filepath.Join(real, "sub")); err != nil {
+		t.Fatal(err)
+	}
+	os.Symlink(real, filepath.Join(nested, "loop")) // a cycle must not hang
+	link := filepath.Join(tmp, "connectors")
+	if err := os.Symlink(real, link); err != nil {
+		t.Fatal(err)
+	}
+	s := &Service{AppsDir: apps, ConnectorsDir: link}
+	r, cleanup, _, err := s.sandbox(nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cleanup()
+	for _, f := range []string{"a.rk", "sub/b.rk"} {
+		if b, err := os.ReadFile(filepath.Join(r.connectors, f)); err != nil || len(b) != 1 {
+			t.Errorf("%s not copied: %v", f, err)
+		}
 	}
 }
 

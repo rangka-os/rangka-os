@@ -60,6 +60,7 @@ Streams build against these. A stream that needs to change one edits this sectio
 - `POST /r/{model}/{name}/attachments` (multipart `file`) → 201 `{id, filename, content_type, size, sha256, created_by, created_at, url}` · `GET /r/{model}/{name}/attachments` → `{data: [item…]}` · `GET /attachments/{id}` (bytes) · `DELETE /attachments/{id}` → 204 (drafts only; 409 `submitted` otherwise). 413 `too_large` over `files.max_upload_mb` (default 20), 501 `files_disabled` when `files.enabled` is false. Storage root: `--files-dir` / `$RANGKA_FILES_DIR`, then `system.rk files.path`, then `./data/files`.
 - `POST /imports/{import}` (multipart `file`, form `outlet` optional) → `{id, rows, preview[], errors[], duplicate}` · `POST /imports/{import}/{id}/commit` · `GET /imports/{import}/{id}`.
 - `/api/v1/files` keeps meaning `.rk` files; uploads are "attachments".
+- `GET /meta` adds `changesets: {propose, approve, approve_high, auto_apply}`; read-only preview of a pending change set: `GET /preview?changeset={id}` · `GET /preview/{id}/meta` · `/preview/{id}/r/{model}[/{name}]` · `/preview/{id}/dashboards/{name}` (writes 405 `preview_read_only`, answers carry `X-Rangka-Preview`); contract 0015.
 
 ### `.rk` keys (schema 0.5)
 - Model `approvals:` list of `{name, on: <verb|action>, when: <CEL>, approvers: [<role>], label}`; a matching transition creates an approval request bound to a SHA-256 of the record snapshot; the verb runs only after approval.

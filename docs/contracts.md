@@ -63,6 +63,7 @@ Computed fields recomputed on every save. Status for invoices: draft, submitted,
 | GET | `/events` | SSE. `event: record` `{model,name,op:created|updated|deleted|submitted|cancelled,docstatus}`; `event: changeset` `{id,status}`; `event: job` `{id,kind,state}`. `?models=deal,lead` filters. Heartbeat comment every 15s. |
 | GET/POST | `/changesets` | list / propose (body = changeset.json without computed fields) → 201 with `layers`, `risk`, `status: proposed`. An op may carry `base` (SHA-256 hex of the file text it was computed from): propose, validate, preview and apply answer 409 `stale_base` when the file has changed since |
 | GET | `/changesets/{id}` | full change set incl. history |
+| | Ubah mode, `meta.changesets` and the read-only live preview (`/preview…`) | see contract 0015 (`docs/contracts/0015-ubah-mode-and-live-preview.md`) |
 | POST | `/changesets/{id}/{validate,preview,approve,reject,apply,revert}` | validate → `validated`/`invalid`; preview → dry run on a copy, `preview:{migrations,affected,reversible}`; approve needs a human session with an approver role (config.ai.approvers or owner); apply only after approve (or `auto_apply: low_risk` and risk low); revert re-applies the previous file versions |
 | GET | `/processes` · `/processes/{name}` | process canvas graph (contract 0014 §4); only stages the caller may read; unknown or fully hidden → 404 |
 | POST | `/processes/{name}/ops` | `{edits:[{node,key,value}]}` → `{title,ops}`, compute only (400 `bad_edit`); the client proposes the ops as a change set |

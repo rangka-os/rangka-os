@@ -63,6 +63,14 @@
               "items": {
                 "$ref": "#/$defs/add"
               }
+            },
+            "layout": {
+              "type": "array",
+              "items": {
+                "$ref": "model.json#/$defs/section"
+              },
+              "minItems": 1,
+              "description": "Replaces the app model's form layout; fields it leaves out are not shown (views.form.add still applies after it)"
             }
           }
         },
@@ -75,8 +83,40 @@
               "items": {
                 "$ref": "#/$defs/add"
               }
+            },
+            "columns": {
+              "type": "array",
+              "items": {
+                "$ref": "model.json#/$defs/listcol"
+              },
+              "minItems": 1,
+              "description": "Replaces the list columns (views.list.add still applies after it)"
             }
           }
+        },
+        "kanban": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "columns": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "minItems": 1,
+              "description": "Order of the kanban group_by option values; values left out are hidden"
+            }
+          }
+        }
+      }
+    },
+    "options": {
+      "type": "object",
+      "description": "Options appended to a select field of the model, by field name",
+      "additionalProperties": {
+        "type": "array",
+        "items": {
+          "$ref": "model.json#/$defs/option"
         }
       }
     }

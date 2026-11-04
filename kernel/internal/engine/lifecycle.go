@@ -331,6 +331,13 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.automations(m, nil, rec, "created"); err != nil {
 		return nil, err
 	}
+	if ran, err := o.recordFlows(m, nil, rec, "created"); err != nil {
+		return nil, err
+	} else if ran { // a flow may have written the record: answer with what is stored now
+		if rec, err = o.load(m, str(rec["name"])); err != nil {
+			return nil, err
+		}
+	}
 	return &Result{Record: o.e.Output(m, rec), Warnings: warns}, nil
 }
 
@@ -454,6 +461,13 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	if err := o.automations(m, cur, rec, "updated"); err != nil {
 		return nil, err
 	}
+	if ran, err := o.recordFlows(m, cur, rec, "updated"); err != nil {
+		return nil, err
+	} else if ran { // a flow may have written the record: answer with what is stored now
+		if rec, err = o.load(m, name); err != nil {
+			return nil, err
+		}
+	}
 	return &Result{Record: o.e.Output(m, rec), Warnings: warns}, nil
 }
 
@@ -574,6 +588,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	if err := o.automations(m, rec, rec, "submitted"); err != nil {
 		return nil, err
 	}
+	if _, err := o.recordFlows(m, stored, rec, "submitted"); err != nil {
+		return nil, err
+	}
 	return &Result{Record: e.Output(m, rec), Warnings: warns}, nil
 }
 
@@ -631,6 +648,7 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	if len(pending) > 0 {
 		return &Result{Record: e.Output(m, rec), Held: true, Approvals: all}, nil
 	}
+	before := copyRecord(rec)
 	rec["docstatus"] = int64(2)
 	if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
 		return nil, err
@@ -642,6 +660,9 @@ func (o *op) cancel(model, name string) (*Result, error) {
 		return nil, err
 	}
 	if err := o.automations(m, rec, rec, "cancelled"); err != nil {
+		return nil, err
+	}
+	if _, err := o.recordFlows(m, before, rec, "cancelled"); err != nil {
 		return nil, err
 	}
 	return &Result{Record: e.Output(m, rec)}, nil

@@ -87,6 +87,9 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 		vars = map[string]any{}
 	}
 	vars["event"] = event
+	prevInFlow := o.inFlow
+	o.inFlow = true
+	defer func() { o.inFlow = prevInFlow }()
 	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out}
 	if c := flowConnector(e, f); start == 0 && c != "" && len(event) > 0 {
 		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+c, f.On+" → flow "+f.Name, nil); err != nil {
@@ -504,4 +507,41 @@ func sortedKeys(m map[string]any) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// recordFlows runs every installed flow whose on: is <model>.<event>, in the write's transaction and as the
+// writer. The event is a copy of the record's fields at top level (flows written for 0.4 read event.<field>),
+// with model, name, op, record (the record) and before (the stored record before the write; null on created)
+// on top. Writes made by a flow do not start flows again. ran reports whether a flow ran (not skipped by if:).
+func (o *op) recordFlows(m *meta.Model, before, rec store.Record, event string) (ran bool, err error) {
+	if o.inFlow {
+		return false, nil
+	}
+	reg := o.e.Reg()
+	want := m.Name + "." + event
+	names := make([]string, 0, len(reg.Flows))
+	for n, f := range reg.Flows {
+		if f.On == want && reg.IsInstalled(f.App) {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		ev := map[string]any{}
+		for k, v := range rec {
+			ev[k] = v
+		}
+		var prev any
+		if before != nil {
+			prev = map[string]any(copyRecord(before))
+		}
+		ev["model"], ev["name"], ev["op"] = m.Name, str(rec["name"]), event
+		ev["record"], ev["before"] = map[string]any(copyRecord(rec)), prev
+		out := newFlowResult(n)
+		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, out); err != nil {
+			return ran, fmt.Errorf("flow %s: %w", n, err)
+		}
+		ran = ran || !out.Skipped
+	}
+	return ran, nil
 }

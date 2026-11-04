@@ -121,6 +121,7 @@
     var base = opts.baseUrl || "";
     var doFetch = opts.fetch || (global.fetch && global.fetch.bind(global));
     var attachmentsOK = true;
+    var previewing = null;
     var api = {};
 
     function raw(method, path, body, extra) {
@@ -160,7 +161,10 @@
     }
     function json(method, path, body) { return call(method, path, body).then(function (r) { return r.body; }); }
 
-    function rec(model, name) { return "/api/v1/r/" + enc(model) + (name === undefined ? "" : "/" + enc(name)); }
+    /** "/api/v1" or, while a change set is previewed, "/api/v1/preview/{id}": the four read routes only. */
+    function root() { return previewing ? "/api/v1/preview/" + enc(previewing) : "/api/v1"; }
+    function rec(model, name) { return root() + "/r/" + enc(model) + (name === undefined ? "" : "/" + enc(name)); }
+    function wrec(model, name) { return "/api/v1/r/" + enc(model) + (name === undefined ? "" : "/" + enc(name)); }
 
     /* ----- session */
     /** /auth/me (and POST /auth/org, which answers the same body) → {id, email, name, org, orgName, roles, orgs, approver,
@@ -186,8 +190,9 @@
     api.switchOrg = function (org) { return json("POST", "/auth/org", { org: org }).then(normaliseMe); };
 
     api.meta = function () {
-      return json("GET", "/api/v1/meta").then(function (m) {
+      return json("GET", root() + "/meta").then(function (m) {
         m = m || {};
+        if (!m.changesets) m.changesets = { propose: false, approve: false, approve_high: false };
         if (!m.prints) m.prints = {};
         if (!m.imports) m.imports = {};
         return m;
@@ -200,34 +205,34 @@
       return json("GET", rec(model) + qs([["q", o.q], ["filter", o.filter], ["sort", o.sort], ["limit", o.limit], ["offset", o.offset]]));
     };
     api.get = function (model, name) { return json("GET", rec(model, name)); };
-    api.create = function (model, r) { return json("POST", rec(model), r); };
-    api.update = function (model, name, patch) { return json("PATCH", rec(model, name), patch); };
-    api.remove = function (model, name) { return json("DELETE", rec(model, name)); };
+    api.create = function (model, r) { return json("POST", wrec(model), r); };
+    api.update = function (model, name, patch) { return json("PATCH", wrec(model, name), patch); };
+    api.remove = function (model, name) { return json("DELETE", wrec(model, name)); };
     api.submit = function (model, name, o) {
       var body = o && o.force ? { force: true } : {};
-      return call("POST", rec(model, name) + "/submit", body).then(function (r) {
+      return call("POST", wrec(model, name) + "/submit", body).then(function (r) {
         if (r.status === 202) return { record: r.body && r.body.record, approval: (r.body && r.body.approval) || null };
         return { record: r.body, approval: null };
       });
     };
     /** → {record, approval}: a 202 {approval, approvals, record} (S2) means the cancel waits for approval. */
     api.cancel = function (model, name) {
-      return call("POST", rec(model, name) + "/cancel", {}).then(function (r) {
+      return call("POST", wrec(model, name) + "/cancel", {}).then(function (r) {
         if (r.status === 202) return { record: r.body && r.body.record, approval: (r.body && r.body.approval) || null };
         return { record: r.body, approval: null };
       });
     };
-    api.amend = function (model, name) { return json("POST", rec(model, name) + "/amend", {}); };
+    api.amend = function (model, name) { return json("POST", wrec(model, name) + "/amend", {}); };
     /** → the action's result; {queued, jobId} for a queued job (202 {job_id, status:"queued"}); {record, approval} when
      *  an approval policy holds the action (202 {approval, approvals, record}). */
     api.action = function (model, name, action, args) {
-      return call("POST", rec(model, name) + "/actions/" + enc(action), args || {}).then(function (r) {
+      return call("POST", wrec(model, name) + "/actions/" + enc(action), args || {}).then(function (r) {
         if (r.status === 202 && r.body && r.body.approval) return { record: r.body.record || null, approval: r.body.approval };
         if (r.status === 202) return { queued: true, jobId: r.body && r.body.job_id };
         return r.body;
       });
     };
-    api.dashboard = function (name, period) { return json("GET", "/api/v1/dashboards/" + enc(name) + qs([["period", period]])); };
+    api.dashboard = function (name, period) { return json("GET", root() + "/dashboards/" + enc(name) + qs([["period", period]])); };
 
     /* ----- approvals */
     api.approvals = function (o) {
@@ -240,12 +245,12 @@
     /* ----- print */
     api.printUrl = function (model, name, o) {
       o = o || {};
-      return base + rec(model, name) + "/print" + qs([["format", o.format], ["as", o.as]]);
+      return base + wrec(model, name) + "/print" + qs([["format", o.format], ["as", o.as]]);
     };
     /** HEAD of the HTML print (S3 answers headers only: no browser, no audit entry) → resolves when the caller may
      *  print; rejects with ApiError 403 permission_denied, 404 not_found (also an unknown format), or the status. */
     api.printCheck = function (model, name, format) {
-      var path = rec(model, name) + "/print" + qs([["format", format], ["as", "html"]]);
+      var path = wrec(model, name) + "/print" + qs([["format", format], ["as", "html"]]);
       return raw("HEAD", path).then(function (res) {
         // drain the (empty) body: an unread answer shows up as an aborted request
         return res.text().then(function () { return res; }, function () { return res; });
@@ -256,7 +261,7 @@
       });
     };
     api.printPdf = function (model, name, format) {
-      var path = rec(model, name) + "/print" + qs([["format", format], ["as", "pdf"]]);
+      var path = wrec(model, name) + "/print" + qs([["format", format], ["as", "pdf"]]);
       return raw("GET", path).then(function (res) {
         if (res.status === 501) return failure(res).then(function (e) { throw ApiError(501, "pdf_unavailable", e.message, e.body); });
         if (res.status < 200 || res.status >= 300) return failure(res).then(function (e) { throw e; });
@@ -266,7 +271,7 @@
 
     /* ----- attachments */
     api.attachments = function (model, name) {
-      return json("GET", rec(model, name) + "/attachments").then(function (r) { return r; }, function (e) {
+      return json("GET", wrec(model, name) + "/attachments").then(function (r) { return r; }, function (e) {
         if (isFilesOff(e)) attachmentsOK = false;
         throw e;
       });
@@ -274,7 +279,7 @@
     api.upload = function (model, name, file) {
       var fd = new FormData();
       fd.append("file", file);
-      return json("POST", rec(model, name) + "/attachments", fd);
+      return json("POST", wrec(model, name) + "/attachments", fd);
     };
     api.attachmentUrl = function (id) { return base + "/api/v1/attachments/" + enc(id); };
     api.removeAttachment = function (id) { return json("DELETE", "/api/v1/attachments/" + enc(id)); };
@@ -289,6 +294,57 @@
     api.importCommit = function (name, id) { return json("POST", "/api/v1/imports/" + enc(name) + "/" + enc(id) + "/commit", {}); };
     api.importList = function (name) { return json("GET", "/api/v1/imports/" + enc(name)); };
     api.importGet = function (name, id) { return json("GET", "/api/v1/imports/" + enc(name) + "/" + enc(id)); };
+
+    /* ----- change sets (contract 0015) */
+    api.changesets = function (o) { return json("GET", "/api/v1/changesets" + qs([["status", o && o.status]])); };
+    api.changeset = function (id) { return json("GET", "/api/v1/changesets/" + enc(id)); };
+    api.propose = function (c) { return json("POST", "/api/v1/changesets", { title: c.title, reason: c.reason, ops: c.ops }); };
+    /** verb: validate | preview | approve | reject | apply | revert; `note` rides along when given. */
+    api.csVerb = function (id, verb, note) {
+      return json("POST", "/api/v1/changesets/" + enc(id) + "/" + enc(verb), note ? { note: note } : {});
+    };
+    /** GET /files/{path} → {path, kind, layer, text, parsed}, or null when the file does not exist yet. */
+    api.file = function (path) {
+      return json("GET", "/api/v1/files/" + String(path).split("/").map(enc).join("/")).then(null, function (e) {
+        if (e && e.status === 404 && e.code === "not_found") return null;
+        throw e;
+      });
+    };
+    /** propose → validate → preview; a low-risk change set continues approve → apply when the caller may approve.
+     *  Medium and high stop at "previewed" (the UI approves them separately). → {cs, applied}. An invalid change set
+     *  (from validate, or a 409 invalid from preview) resolves with cs.status "invalid" and applied false. */
+    api.runChange = function (change, caps) {
+      caps = caps || {};
+      var cs;
+      return api.propose(change).then(function (c) {
+        if (caps.onCreated) caps.onCreated(c);
+        return api.csVerb(c.id, "validate");
+      }).then(function (c) {
+        cs = c;
+        if (cs.status === "invalid") return null;
+        return api.csVerb(cs.id, "preview").then(function (p) { cs = p; return p; }, function (e) {
+          if (e && e.status === 409 && e.code === "invalid" && e.body && e.body.changeset) { cs = e.body.changeset; return null; }
+          throw e;
+        });
+      }).then(function (p) {
+        if (!p || cs.status !== "previewed" || cs.risk !== "low" || !caps.canApprove) return { cs: cs, applied: false };
+        return api.csVerb(cs.id, "approve").then(function () {
+          return api.csVerb(cs.id, "apply");
+        }).then(function (done) { return { cs: done, applied: true }; });
+      });
+    };
+
+    /* ----- preview mode: reads go to /preview/{id}, every write is refused */
+    api.setPreview = function (id) { previewing = id || null; };
+    api.previewId = function () { return previewing; };
+    [ "create", "update", "remove", "submit", "cancel", "amend", "action", "upload", "removeAttachment", "importUpload",
+      "importCommit", "approve", "reject", "propose", "csVerb" ].forEach(function (name) {
+      var inner = api[name];
+      api[name] = function () {
+        if (previewing) return Promise.reject(ApiError(405, "preview_read_only", "Pratinjau hanya untuk dilihat"));
+        return inner.apply(api, arguments);
+      };
+    });
 
     /* ----- process canvas (contract 0014, stream S10): the list; the canvas itself talks to the kernel through RangkaCanvas */
     api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };

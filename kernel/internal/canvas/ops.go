@@ -8,6 +8,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // Edit sets one editable key of a node.
@@ -30,7 +31,7 @@ type fileEdit struct {
 }
 
 // Ops turns edits of graph g into change-set ops (contract 0014 §5): one op per file, in the order the files are
-// first edited. Scalar edits are spliced into the file text (op replace, every other byte kept); when any edit of
+// first edited, each with base = the hash of the file text it was computed from. Scalar edits are spliced into the file text (op replace, every other byte kept); when any edit of
 // a file cannot be spliced (a list, a multi-line value), the file gets one patch op with all its edits. Edits
 // whose value equals the current one produce nothing. title names the first changed edit.
 func Ops(reg *meta.Registry, g *Graph, edits []Edit) (string, []changeset.Op, error) {
@@ -93,10 +94,10 @@ func fileOp(doc *rk.Doc, file string, edits []fileEdit) changeset.Op {
 			for i, x := range edits {
 				patch[i] = map[string]any{"op": "replace", "path": x.pointer, "value": x.value}
 			}
-			return changeset.Op{Op: "patch", Path: file, Patch: patch}
+			return changeset.Op{Op: "patch", Path: file, Patch: patch, Base: store.FileHash(doc.Text)}
 		}
 	}
-	return changeset.Op{Op: "replace", Path: file, Content: cur.Text}
+	return changeset.Op{Op: "replace", Path: file, Content: cur.Text, Base: store.FileHash(doc.Text)}
 }
 
 func title(g *Graph, edits []Edit, byID map[string]*Node) string {

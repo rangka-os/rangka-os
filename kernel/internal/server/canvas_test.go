@@ -243,6 +243,54 @@ func TestProcessOpsToChangeset(t *testing.T) {
 	}
 }
 
+// Two change sets computed from the same file text: once the first is applied, the second answers stale_base
+// instead of silently reverting it (a lost update). The same op without base still runs as before.
+func TestProcessOpsStaleBase(t *testing.T) {
+	e, root := canvasEnv(t, nil)
+	flow := "modules/pipeline/flows/whatsapp_to_lead.rk"
+	edit := func(key, value string) map[string]any {
+		return e.must(200, "POST", "/api/v1/processes/lead_to_cash/ops", map[string]any{"edits": []any{
+			map[string]any{"node": flow + "#/steps/2", "key": key, "value": value}}}).JSON
+	}
+	first, second := edit("set.source", "'web'"), edit("set.status", "'contacted'")
+	if b, _ := get(second, "ops", 0, "base").(string); len(b) != 64 || b != get(first, "ops", 0, "base") {
+		t.Fatalf("base: %v / %v", get(first, "ops", 0, "base"), get(second, "ops", 0, "base"))
+	}
+	propose := func(ops map[string]any) string {
+		return e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": ops["title"], "ops": ops["ops"]}).JSON["id"].(string)
+	}
+	a, b, d := propose(first), propose(second), propose(second)
+	for _, id := range []string{a, b} {
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/approve", map[string]any{"note": "ok"})
+	}
+	if ap := e.must(200, "POST", "/api/v1/changesets/"+a+"/apply", nil).JSON; ap["status"] != "applied" {
+		t.Fatalf("apply first: %v", ap)
+	}
+	stale := func(what string, r *resp) {
+		t.Helper()
+		if msg, _ := get(r.JSON, "error", "message").(string); get(r.JSON, "error", "code") != "stale_base" || !strings.Contains(msg, flow) {
+			t.Errorf("%s: %s", what, r.Body)
+		}
+	}
+	stale("apply approved second", e.must(409, "POST", "/api/v1/changesets/"+b+"/apply", nil))
+	stale("validate proposed second", e.must(409, "POST", "/api/v1/changesets/"+d+"/validate", nil))
+	stale("preview proposed second", e.must(409, "POST", "/api/v1/changesets/"+d+"/preview", nil))
+	stale("propose again", e.must(409, "POST", "/api/v1/changesets", map[string]any{"title": second["title"], "ops": second["ops"]}))
+	text, _ := os.ReadFile(filepath.Join(root, flow))
+	if !strings.Contains(string(text), `source: "'web'"`) || strings.Contains(string(text), "contacted") {
+		t.Fatalf("file lost the first edit:\n%s", text)
+	}
+	// without base the op is the old full-file replace: it validates (and would overwrite)
+	op := get(second, "ops", 0).(map[string]any)
+	delete(op, "base")
+	c := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": second["title"], "ops": []any{op}}).JSON["id"].(string)
+	if v := e.must(200, "POST", "/api/v1/changesets/"+c+"/validate", nil).JSON; v["status"] != "validated" {
+		t.Fatalf("no base: %v", v)
+	}
+}
+
 func toAnyList(v any) []any {
 	l, _ := v.([]any)
 	return l

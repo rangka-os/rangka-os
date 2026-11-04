@@ -29,6 +29,9 @@ type Op struct {
 	Path    string           `json:"path"`
 	Content string           `json:"content,omitempty"`
 	Patch   []map[string]any `json:"patch,omitempty"`
+	// Base is store.FileHash of the file text the op was computed from (contract 0014 §5). When set, the op
+	// only runs while the file still has that text: otherwise validate, preview and apply answer stale_base.
+	Base string `json:"base,omitempty"`
 }
 
 // Author proposed the change set.
@@ -237,7 +240,8 @@ func copyDir(src, dst string) error {
 	})
 }
 
-// result computes the new text of every op's file under r (nil = deleted).
+// result computes the new text of every op's file under r (nil = deleted). An op whose base no longer matches
+// its file on disk answers stale_base (*Error, 409).
 func (r roots) result(ops []Op) (map[string]*string, error) {
 	out := map[string]*string{}
 	for i, op := range ops {
@@ -248,6 +252,9 @@ func (r roots) result(ops []Op) (map[string]*string, error) {
 		cur, err := readFile(f)
 		if err != nil {
 			return nil, err
+		}
+		if op.Base != "" && (cur == nil || store.FileHash(*cur) != op.Base) {
+			return nil, staleBase(op.Path)
 		}
 		if prev, ok := out[op.Path]; ok {
 			cur = prev
@@ -290,6 +297,12 @@ func (r roots) result(ops []Op) (map[string]*string, error) {
 		}
 	}
 	return out, nil
+}
+
+// staleBase is the 409 an op answers when its file changed after the op was computed: applying it would
+// silently undo that change (a lost update).
+func staleBase(path string) *Error {
+	return &Error{409, "stale_base", "Berkas " + path + " sudah berubah sejak perubahan ini dibuat; buat ulang dari kanvas.", map[string]any{"path": path}}
 }
 
 // headerURL is the schema URL a re-dumped document declares: 0.5, except an app without modules, which is a
@@ -342,6 +355,9 @@ func (s *Service) sandbox(ops []Op) (roots, func(), map[string]*string, error) {
 	files, err := r.result(ops)
 	if err != nil {
 		cleanup()
+		if e, ok := err.(*Error); ok {
+			return roots{}, nil, nil, e
+		}
 		return roots{}, nil, nil, &Error{422, "bad_ops", err.Error(), nil}
 	}
 	for p, c := range files {

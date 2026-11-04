@@ -33,9 +33,18 @@ h(RangkaCanvas.Canvas, {
 
 // Fetch a graph from the kernel and wire everything. Returns {unmount()}.
 RangkaCanvas.mount(el, {baseUrl: "", process: "lead_to_cash", readOnly, sourceHref, changesetHref, lang});
-// The same as a React component (for a host app that already renders with React). `api` replaces the client with any
-// object shaped like client() (get, ops, propose, saveLayout); the Console uses it to go through its own adapter.
+// The same as a React component (for a host app that already renders with React). mount(el, opts) renders
+// Mounted with opts. `api` replaces client(baseUrl) with any object shaped like it; the Console uses it to go
+// through its own adapter (and demo data).
 h(RangkaCanvas.Mounted, {process, readOnly, lang, sourceHref, changesetHref, baseUrl: "", api});
+
+// The `api` adapter: four functions, each returning a Promise. A rejection should be an Error whose message is shown.
+const api = {
+  get(name),               // → the graph body of GET /api/v1/processes/{name} (layout included)
+  ops(name, edits),        // → {title, ops} as POST /api/v1/processes/{name}/ops answers
+  propose(title, ops),     // → the created change set, or {data: changeSet}; its id is shown (and linked by changesetHref)
+  saveLayout(name, layout) // → anything; only success or failure is used (a rejection with .status 403 is quiet)
+};
 
 // The kernel client (fetch, credentials: "include"). Errors are Error(message) with .status and .code
 // taken from the kernel body {error: {code, message}}.
@@ -47,7 +56,9 @@ c.propose(title, ops);     // POST /api/v1/changesets {title, ops} → change se
 c.saveLayout(name, layout);// PUT  /api/v1/processes/{name}/layout
 ```
 
-`mount` turns `onEdit` into `ops` and then `propose`. If `ops` comes back empty, it proposes nothing and the panel
+`mount` turns `onEdit` into `ops` and then `propose`. Every op carries `base`, the hash of the file text it was
+computed from: if that file changes before the change set is validated, previewed or applied, the kernel answers
+409 `stale_base` and the edit has to be made again from a freshly loaded canvas. If `ops` comes back empty, it proposes nothing and the panel
 says so. `onLayout` becomes `saveLayout`, debounced by 600 ms. A failed save (a non-owner gets 403) shows a short
 notice in the canvas bar and never blocks the canvas. With `readOnly` the layout is never saved (the expand state stays
 local), and a 403 on save is silent: the local state stays and no notice shows.

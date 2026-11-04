@@ -76,6 +76,7 @@ Every installed app (kind app or legacy) with a `menu:` and no declared process 
 
 - Ops carry the full text of the edited file, which may include steps of models the caller cannot read. Metadata files are not secret: `GET /api/v1/files/{path}` already returns any `.rk` text to every signed-in user.
 - **Byte-stable edits (ruling 3).** A scalar edit splices the re-quoted scalar into the original text at its exact span (comments and formatting kept) and emits op `replace` with the full new text. A non-scalar or multi-line target falls back to op `patch` (JSON Patch, re-dumped by `rk.Dump`).
+- **No lost updates.** Every op the canvas emits (`replace` and `patch`) carries `base`: the SHA-256 (hex, `store.FileHash`) of the file text it was computed from. `base` is an optional key of any change-set op (`schema/0.5/changeset.json`). When a change set is proposed, validated, previewed or applied, an op whose `base` differs from the current file's hash fails with 409 `stale_base` ("Berkas <path> sudah berubah sejak perubahan ini dibuat; buat ulang dari kanvas."), so two change sets built from the same original cannot silently revert each other. An op without `base` behaves as before.
 
 ### 6. Layout (ruling 5: layout is not metadata)
 `PUT /processes/{name}/layout` `{groups: {<id>: {collapsed?: bool, x?: number, y?: number}}, nodes: {<id>: {x, y}}}` → 200 with the stored layout.
@@ -98,7 +99,7 @@ Every installed app (kind app or legacy) with a `menu:` and no declared process 
 - `process_when`: `when` is not a valid condition over the stage model (unbalanced parentheses, unknown function or field, `option()` on a non-select field). The message is that of the same check applied to a rule's `check`. It is not checked when the stage's model is unknown (that is reported once, as `process_unknown_model`).
 
 ### 9. Web
-`window.RangkaCanvas = {Canvas, mount(el, opts), client(baseUrl)}` from `web/canvas/canvas.js` and `web/canvas/canvas.css`, using design-system tokens and the React UMD already in use. On a narrow screen the canvas scrolls horizontally inside its own container; the page never does.
+`window.RangkaCanvas = {Canvas, Mounted, mount(el, opts), client(baseUrl)}` from `web/canvas/canvas.js` and `web/canvas/canvas.css`, using design-system tokens and the React UMD already in use. `Mounted` is the React component `mount` renders (props = `opts`: `process`, `readOnly`, `lang`, `sourceHref`, `changesetHref`, `baseUrl`, `api`); it fetches the graph and wires edits and layout. `opts.api` replaces `client(baseUrl)` with any adapter of the same shape, each function returning a Promise: `get(name)` → graph, `ops(name, edits)` → `{title, ops}`, `propose(title, ops)` → change set (or `{data}`), `saveLayout(name, layout)`. A read-only `Mounted` never saves layout. On a narrow screen the canvas scrolls horizontally inside its own container; the page never does.
 
 ### 10. Files proposed for rangka-apps (ruling 6)
 - `apps/crm/processes/lead_to_cash.rk`: the example in §1.

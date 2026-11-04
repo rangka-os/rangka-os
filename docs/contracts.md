@@ -61,7 +61,7 @@ Computed fields recomputed on every save. Status for invoices: draft, submitted,
 | POST | `/r/{model}/{name}/actions/{action}` | runs the hook; queued if `queue:` → 202 `{job_id}` |
 | GET | `/dashboards/{name}?period=30` | `{name,label,period,widgets:[{name,type,label,span, …computed}]}`; computed shape = prototype `computeWidget()` (number: value,rupiah,count,prev,trend,delta; chart: data[{key,label,value,count,color}],rupiah; list: rows,total) |
 | GET | `/events` | SSE. `event: record` `{model,name,op:created|updated|deleted|submitted|cancelled,docstatus}`; `event: changeset` `{id,status}`; `event: job` `{id,kind,state}`. `?models=deal,lead` filters. Heartbeat comment every 15s. |
-| GET/POST | `/changesets` | list / propose (body = changeset.json without computed fields) → 201 with `layers`, `risk`, `status: proposed` |
+| GET/POST | `/changesets` | list / propose (body = changeset.json without computed fields) → 201 with `layers`, `risk`, `status: proposed`. An op may carry `base` (SHA-256 hex of the file text it was computed from): propose, validate, preview and apply answer 409 `stale_base` when the file has changed since |
 | GET | `/changesets/{id}` | full change set incl. history |
 | POST | `/changesets/{id}/{validate,preview,approve,reject,apply,revert}` | validate → `validated`/`invalid`; preview → dry run on a copy, `preview:{migrations,affected,reversible}`; approve needs a human session with an approver role (config.ai.approvers or owner); apply only after approve (or `auto_apply: low_risk` and risk low); revert re-applies the previous file versions |
 | GET | `/processes` · `/processes/{name}` | process canvas graph (contract 0014 §4); only stages the caller may read; unknown or fully hidden → 404 |

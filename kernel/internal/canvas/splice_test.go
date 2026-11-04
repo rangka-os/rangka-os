@@ -9,6 +9,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 func TestRoundTripByteStable(t *testing.T) {
@@ -160,7 +161,7 @@ func TestOpsEditFlowStep(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if len(ops) != 1 || ops[0].Op != "replace" || ops[0].Path != file {
+	if len(ops) != 1 || ops[0].Op != "replace" || ops[0].Path != file || ops[0].Base != store.FileHash(reg.Docs[file].Text) {
 		t.Fatalf("ops = %+v", ops)
 	}
 	if title != "Kanvas lead_to_cash: ubah set.status di create lead" {
@@ -219,7 +220,7 @@ func TestOpsFallbackPatch(t *testing.T) {
 	want := []changeset.Op{{Op: "patch", Path: file, Patch: []map[string]any{
 		{"op": "replace", "path": "/approvals/0/when", "value": "grand_total > 50000000"},
 		{"op": "replace", "path": "/approvals/0/approvers", "value": []any{"finance_manager", "sales_manager"}},
-	}}}
+	}, Base: store.FileHash(reg.Docs[file].Text)}}
 	if !reflect.DeepEqual(ops, want) {
 		t.Errorf("ops = %+v", ops)
 	}

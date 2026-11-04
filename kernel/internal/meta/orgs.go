@@ -1,6 +1,7 @@
 package meta
 
 import (
+	"fmt"
 	"strings"
 )
 
@@ -184,7 +185,7 @@ func positiveInt(s string) (int64, bool) {
 // TaxSettings is the org's PPN settings, the one source for the CEL tax global, print's .Tax and .Org.pkp
 // (contract 0010 §8): OrgConfig(org, "tax"), i.e. the site's tax: with the org's config.tax deep-merged over
 // it, with the three keys normalised: ppn_rate a number (int64 when whole, else float64; default 12),
-// dpp_ratio a "num/den" string (default "11/12", also for a malformed one) and pkp a bool (default false).
+// dpp_ratio a "num/den" string written as "%d/%d" (default "11/12", also for a malformed one) and pkp a bool (default false).
 // Other keys are copied as they are. The result is a fresh map.
 func (r *Registry) TaxSettings(org string) map[string]any {
 	out := asMap(r.OrgConfig(org, "tax"))
@@ -202,12 +203,10 @@ func (r *Registry) TaxSettings(org string) map[string]any {
 	default:
 		out["ppn_rate"] = int64(DefaultPPNRate)
 	}
-	if s, _ := out["dpp_ratio"].(string); s != "" {
-		if _, _, ok := ParseDPPRatio(s); !ok {
-			out["dpp_ratio"] = defaultDPPRatio
-		}
-	} else {
-		out["dpp_ratio"] = defaultDPPRatio
+	raw, _ := out["dpp_ratio"].(string)
+	out["dpp_ratio"] = defaultDPPRatio
+	if n, d, ok := ParseDPPRatio(raw); ok {
+		out["dpp_ratio"] = fmt.Sprintf("%d/%d", n, d) // " 11 / 12 " prints as 11/12
 	}
 	pkp, _ := out["pkp"].(bool)
 	out["pkp"] = pkp

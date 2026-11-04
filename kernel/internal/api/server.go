@@ -157,6 +157,11 @@ func (s *Server) Handler() http.Handler {
 		mux.HandleFunc(m+" /api/v1/preview/{path...}", a(s.previewReadOnly))
 		mux.HandleFunc(m+" /api/v1/preview", a(s.previewReadOnly))
 	}
+	// process canvas (contract 0014)
+	mux.HandleFunc("GET /api/v1/processes", a(s.listProcesses))
+	mux.HandleFunc("GET /api/v1/processes/{name}", a(s.getProcess))
+	mux.HandleFunc("POST /api/v1/processes/{name}/ops", a(s.processOps))
+	mux.HandleFunc("PUT /api/v1/processes/{name}/layout", a(s.putProcessLayout))
 	// system, orgs, files
 	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		writeJSON(w, 200, s.Status(r.Context(), c.actor.Org))
@@ -255,7 +260,7 @@ func cors(h http.Handler) http.Handler {
 			w.Header().Set("Access-Control-Allow-Origin", o)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
 			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version")
-			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PATCH, DELETE, OPTIONS")
+			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Vary", "Origin")
 			if r.Method == http.MethodOptions {
 				w.WriteHeader(http.StatusNoContent)

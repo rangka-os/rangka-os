@@ -1,0 +1,29 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/process.json",
+  "title": "Rangka process",
+  "type": "object",
+  "required": ["name", "stages"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {"type": "string"},
+    "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+    "label": {"type": "object", "additionalProperties": {"type": "string"}},
+    "stages": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": ["name", "model"],
+        "additionalProperties": false,
+        "properties": {
+          "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "label": {"type": "object", "additionalProperties": {"type": "string"}},
+          "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
+          "when": {"type": "string"},
+          "models": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
+        }
+      }
+    }
+  }
+}

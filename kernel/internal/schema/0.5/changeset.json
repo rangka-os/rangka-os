@@ -84,6 +84,11 @@
             "type": "string",
             "description": "Full .rk text for create/replace"
           },
+          "base": {
+            "type": "string",
+            "pattern": "^[0-9a-f]{64}$",
+            "description": "SHA-256 (hex) of the file text the op was computed from; when the file has changed since, validate, preview and apply answer stale_base"
+          },
           "patch": {
             "type": "array",
             "description": "RFC 6902 JSON Patch against the parsed file, for patch",

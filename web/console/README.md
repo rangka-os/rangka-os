@@ -8,7 +8,7 @@ Plain JS on React 18 UMD and the Rangka design system (`../design-system/bundle.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | Loads React (cdnjs), the DS bundle, `tokens.css`, `demo-data.js`, `api.js`, `console.js`; local `cn-*` styles on DS tokens |
+| `index.html` | Loads React (cdnjs), the DS bundle, `tokens.css`, the canvas (`../canvas/canvas.js` and `.css`), `demo-data.js`, `api.js`, `console.js`; local `cn-*` styles on DS tokens |
 | `console.js` | Screens, shell (TopNav + Sidebar grouped by layer), ⌘K command menu, theme switch |
 | `api.js` | `RangkaConsoleAPI({baseUrl})`: the data adapter for `docs/contracts.md` `/api/v1`, with an in-memory demo backend |
 | `build_demo.py` | Builds `demo-data.js` and `tokens.css` from the real `.rk` files and `tokens.json` |
@@ -49,6 +49,14 @@ The top bar shows **Mode demo** (purple) or **Terhubung** (green); the side pane
   company overlays, dashboards, flows, roles; per model: the app's fields and rules, and separately the
   **Lapisan perusahaan** (fields/rules/view additions from `custom/<model>.rk`, split back out of the merged model the
   kernel serves, with the overlay source), views with overlay additions marked, permissions, capabilities used, source.
+- **Proses** (`#/processes`, `#/processes/<name>`, `#/processes/<name>/source/<file>`; Lapis 5, under App & model):
+  the processes the user may see (`GET /api/v1/processes`: label, number of stages, **Disimpulkan** when inferred), and
+  per process the shared canvas (`../canvas`, `RangkaCanvas.Mounted`) full width. Stages open in place; a node opens a
+  side panel whose edits go to `POST /processes/<name>/ops` and then `POST /changesets` and link to
+  `#/changesets/<id>`; the source link opens the file in a drawer. Layout (open stages) is saved with the owner's
+  `PUT …/layout`; a 403 keeps the local state quietly. Demo mode lists `lead_to_cash` and `quote_to_cash` from
+  `../canvas/testdata/` and answers an edit with a fake change set `cs_demo`. Adapter: `api.processes / process /
+  processOps / saveProcessLayout`.
 - **Change set** (`#/changesets`, `#/changesets/<id>`): filterable list; detail with lifecycle Steps, ops (readable
   JSON Patch before preview, line diff of the `.rk` text after), validation findings, preview SQL + affected counts,
   risk and layers, history timeline. Buttons Validasi / Pratinjau / Tolak / Setujui / Terapkan / Kembalikan follow

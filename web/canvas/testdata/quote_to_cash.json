@@ -1,0 +1,1939 @@
+{
+  "name": "quote_to_cash",
+  "label": {
+    "en": "Quote to cash",
+    "id": "Dari penawaran sampai lunas"
+  },
+  "inferred": false,
+  "source": {
+    "file": "apps/jasa_proyek/processes/quote_to_cash.rk"
+  },
+  "groups": [
+    {
+      "id": "quotation",
+      "label": {
+        "en": "Quotation",
+        "id": "Penawaran"
+      },
+      "model": "quotation",
+      "models": [
+        "quotation"
+      ],
+      "when": "",
+      "source": {
+        "file": "apps/jasa_proyek/processes/quote_to_cash.rk",
+        "path": "/stages/0",
+        "line": 5,
+        "col": 5
+      },
+      "nodes": [
+        "modules/quotation/models/quotation.rk#/rules/0",
+        "modules/quotation/models/quotation.rk#/rules/1",
+        "modules/quotation/models/quotation.rk#/rules/2",
+        "modules/quotation/models/quotation.rk#/rules/3",
+        "modules/quotation/models/quotation.rk#/rules/4",
+        "modules/quotation/models/quotation.rk#/rules/5",
+        "modules/quotation/models/quotation.rk#/rules/6",
+        "modules/quotation/models/quotation.rk#/rules/7",
+        "modules/quotation/models/quotation.rk#/actions/0/if",
+        "modules/quotation/models/quotation.rk#/actions/0",
+        "modules/quotation/models/quotation.rk#/actions/1/if",
+        "modules/quotation/models/quotation.rk#/actions/1",
+        "modules/quotation/models/quotation.rk#/actions/2/if",
+        "modules/quotation/models/quotation.rk#/actions/2",
+        "modules/quotation/models/quotation.rk#/approvals/0",
+        "modules/quotation/models/quotation.rk#status/draft",
+        "modules/quotation/models/quotation.rk#status/submitted",
+        "modules/quotation/models/quotation.rk#status/cancelled"
+      ],
+      "counts": {
+        "action": 3,
+        "approval": 1,
+        "condition": 3,
+        "rule": 8,
+        "step": 3,
+        "trigger": 0
+      }
+    },
+    {
+      "id": "order",
+      "label": {
+        "en": "Order",
+        "id": "Pesanan"
+      },
+      "model": "customer_order",
+      "models": [
+        "customer_order"
+      ],
+      "when": "",
+      "source": {
+        "file": "apps/jasa_proyek/processes/quote_to_cash.rk",
+        "path": "/stages/1",
+        "line": 6,
+        "col": 5
+      },
+      "nodes": [
+        "modules/orders/models/customer_order.rk#/rules/0",
+        "modules/orders/models/customer_order.rk#/rules/1",
+        "modules/orders/models/customer_order.rk#/rules/2",
+        "modules/orders/models/customer_order.rk#/actions/0/if",
+        "modules/orders/models/customer_order.rk#/actions/0",
+        "modules/orders/models/customer_order.rk#status/draft",
+        "modules/orders/models/customer_order.rk#status/submitted",
+        "modules/orders/models/customer_order.rk#status/cancelled"
+      ],
+      "counts": {
+        "action": 1,
+        "approval": 0,
+        "condition": 1,
+        "rule": 3,
+        "step": 3,
+        "trigger": 0
+      }
+    },
+    {
+      "id": "project",
+      "label": {
+        "en": "Project",
+        "id": "Proyek"
+      },
+      "model": "project",
+      "models": [
+        "project",
+        "assignment",
+        "timesheet",
+        "acceptance"
+      ],
+      "when": "",
+      "source": {
+        "file": "apps/jasa_proyek/processes/quote_to_cash.rk",
+        "path": "/stages/2",
+        "line": 7,
+        "col": 5
+      },
+      "nodes": [
+        "modules/projects/models/project.rk#/rules/0",
+        "modules/projects/models/project.rk#/rules/1",
+        "modules/projects/models/project.rk#/fields/6/options/0",
+        "modules/projects/models/project.rk#/fields/6/options/1",
+        "modules/projects/models/project.rk#/fields/6/options/2",
+        "modules/projects/models/project.rk#/fields/6/options/3",
+        "modules/projects/models/assignment.rk#/rules/0",
+        "modules/projects/models/timesheet.rk#/rules/0",
+        "modules/projects/models/acceptance.rk#/rules/0"
+      ],
+      "counts": {
+        "action": 0,
+        "approval": 0,
+        "condition": 0,
+        "rule": 5,
+        "step": 4,
+        "trigger": 0
+      }
+    },
+    {
+      "id": "invoice",
+      "label": {
+        "en": "Invoice",
+        "id": "Faktur"
+      },
+      "model": "sales_invoice",
+      "models": [
+        "sales_invoice"
+      ],
+      "when": "",
+      "source": {
+        "file": "apps/jasa_proyek/processes/quote_to_cash.rk",
+        "path": "/stages/3",
+        "line": 8,
+        "col": 5
+      },
+      "nodes": [
+        "modules/invoicing/models/sales_invoice.rk#/rules/0",
+        "modules/invoicing/models/sales_invoice.rk#/rules/1",
+        "modules/invoicing/models/sales_invoice.rk#/rules/2",
+        "modules/invoicing/models/sales_invoice.rk#/rules/3",
+        "modules/invoicing/models/sales_invoice.rk#/rules/4",
+        "modules/invoicing/models/sales_invoice.rk#/rules/5",
+        "modules/invoicing/models/sales_invoice.rk#/rules/6",
+        "modules/invoicing/models/sales_invoice.rk#/rules/7",
+        "modules/invoicing/models/sales_invoice.rk#/rules/8",
+        "modules/invoicing/models/sales_invoice.rk#/rules/9",
+        "modules/invoicing/models/sales_invoice.rk#/rules/10",
+        "modules/invoicing/models/sales_invoice.rk#/rules/11",
+        "modules/invoicing/models/sales_invoice.rk#/rules/12",
+        "modules/invoicing/models/sales_invoice.rk#/rules/13",
+        "modules/invoicing/models/sales_invoice.rk#/rules/14",
+        "modules/invoicing/models/sales_invoice.rk#/rules/15",
+        "modules/invoicing/models/sales_invoice.rk#/rules/16",
+        "modules/invoicing/models/sales_invoice.rk#/rules/17",
+        "modules/invoicing/models/sales_invoice.rk#/rules/18",
+        "modules/invoicing/models/sales_invoice.rk#/rules/19",
+        "modules/invoicing/models/sales_invoice.rk#/rules/20",
+        "modules/invoicing/models/sales_invoice.rk#/rules/21",
+        "modules/invoicing/models/sales_invoice.rk#/rules/22",
+        "custom/sales_invoice.rk#/rules/0",
+        "modules/invoicing/models/sales_invoice.rk#/on_submit/0",
+        "modules/invoicing/models/sales_invoice.rk#/on_cancel/0",
+        "modules/invoicing/models/sales_invoice.rk#/approvals/0",
+        "modules/invoicing/models/sales_invoice.rk#status/draft",
+        "modules/invoicing/models/sales_invoice.rk#status/submitted",
+        "modules/invoicing/models/sales_invoice.rk#status/partly",
+        "modules/invoicing/models/sales_invoice.rk#status/overdue",
+        "modules/invoicing/models/sales_invoice.rk#status/cancelled"
+      ],
+      "counts": {
+        "action": 2,
+        "approval": 1,
+        "condition": 0,
+        "rule": 24,
+        "step": 5,
+        "trigger": 0
+      }
+    },
+    {
+      "id": "paid",
+      "label": {
+        "en": "Paid",
+        "id": "Lunas"
+      },
+      "model": "sales_invoice",
+      "models": [
+        "sales_invoice",
+        "payment",
+        "payment_allocation",
+        "withholding"
+      ],
+      "when": "status == 'paid'",
+      "source": {
+        "file": "apps/jasa_proyek/processes/quote_to_cash.rk",
+        "path": "/stages/4",
+        "line": 9,
+        "col": 5
+      },
+      "nodes": [
+        "apps/jasa_proyek/processes/quote_to_cash.rk#/stages/4/when",
+        "modules/invoicing/models/sales_invoice.rk#status/paid",
+        "modules/payments/models/payment.rk#/rules/0",
+        "modules/payments/models/payment.rk#/rules/1",
+        "modules/payments/models/payment.rk#/rules/2",
+        "modules/payments/models/payment.rk#/rules/3",
+        "modules/payments/models/payment.rk#/rules/4",
+        "modules/payments/models/payment.rk#/rules/5",
+        "modules/payments/models/payment.rk#/rules/6",
+        "modules/payments/models/payment.rk#/rules/7",
+        "modules/payments/models/payment.rk#/rules/8",
+        "modules/payments/models/payment.rk#/rules/9",
+        "modules/payments/models/payment.rk#/rules/10",
+        "modules/payments/models/payment.rk#/on_submit/0",
+        "modules/payments/models/payment.rk#/on_cancel/0",
+        "modules/payments/models/withholding.rk#/rules/0"
+      ],
+      "counts": {
+        "action": 2,
+        "approval": 0,
+        "condition": 0,
+        "rule": 12,
+        "step": 2,
+        "trigger": 0
+      }
+    }
+  ],
+  "nodes": [
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/0",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Dokumen valas wajib diisi kursnya (rupiah per 1 unit mata uang asing)"
+      },
+      "detail": "currency == '' || currency == 'IDR' || exchange_rate > 1",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/0",
+        "line": 117,
+        "col": 5
+      },
+      "editable": {
+        "check": "currency == '' || currency == 'IDR' || exchange_rate > 1",
+        "message.id": "Dokumen valas wajib diisi kursnya (rupiah per 1 unit mata uang asing)"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/1",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Tarif PPN atau faktor DPP tidak valid"
+      },
+      "detail": "dpp_den > 0 && dpp_num > 0 && dpp_num <= dpp_den && tax_rate >= 0 && tax_rate <= 100",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/1",
+        "line": 121,
+        "col": 5
+      },
+      "editable": {
+        "check": "dpp_den > 0 && dpp_num > 0 && dpp_num <= dpp_den && tax_rate >= 0 && tax_rate <= 100",
+        "message.id": "Tarif PPN atau faktor DPP tidak valid"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/2",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Perusahaan bukan PKP tidak boleh memungut PPN (tarif PPN harus 0)"
+      },
+      "detail": "tax.pkp || tax_rate == 0",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/2",
+        "line": 125,
+        "col": 5
+      },
+      "editable": {
+        "check": "tax.pkp || tax_rate == 0",
+        "message.id": "Perusahaan bukan PKP tidak boleh memungut PPN (tarif PPN harus 0)"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/3",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Masa berlaku tidak boleh sebelum tanggal penawaran"
+      },
+      "detail": "valid_until >= quotation_date",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/3",
+        "line": 129,
+        "col": 5
+      },
+      "editable": {
+        "check": "valid_until >= quotation_date",
+        "message.id": "Masa berlaku tidak boleh sebelum tanggal penawaran"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/4",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Penawaran yang belum disubmit harus berstatus menunggu"
+      },
+      "detail": "docstatus != 0 || outcome == 'open' || outcome == ''",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/4",
+        "line": 133,
+        "col": 5
+      },
+      "editable": {
+        "check": "docstatus != 0 || outcome == 'open' || outcome == ''",
+        "message.id": "Penawaran yang belum disubmit harus berstatus menunggu"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/5",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Jumlah barang harus lebih dari 0"
+      },
+      "detail": "items.map(i, i.qty <= 0 ? 1 : 0).sum() == 0",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/5",
+        "line": 137,
+        "col": 5
+      },
+      "editable": {
+        "check": "items.map(i, i.qty <= 0 ? 1 : 0).sum() == 0",
+        "message.id": "Jumlah barang harus lebih dari 0"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/6",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Harga tidak boleh negatif"
+      },
+      "detail": "items.map(i, i.rate < 0 || i.rate_fx < 0 ? 1 : 0).sum() == 0",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/6",
+        "line": 141,
+        "col": 5
+      },
+      "editable": {
+        "check": "items.map(i, i.rate < 0 || i.rate_fx < 0 ? 1 : 0).sum() == 0",
+        "message.id": "Harga tidak boleh negatif"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/rules/7",
+      "group": "quotation",
+      "kind": "rule",
+      "label": {
+        "id": "Diskon baris antara 0 dan 100 persen"
+      },
+      "detail": "items.map(i, i.discount < 0 || i.discount > 100 ? 1 : 0).sum() == 0",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/rules/7",
+        "line": 145,
+        "col": 5
+      },
+      "editable": {
+        "check": "items.map(i, i.discount < 0 || i.discount > 100 ? 1 : 0).sum() == 0",
+        "message.id": "Diskon baris antara 0 dan 100 persen"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/actions/0/if",
+      "group": "quotation",
+      "kind": "condition",
+      "label": {
+        "id": "Syarat"
+      },
+      "detail": "(docstatus == 1 || docstatus == 2) && (outcome == 'open' || outcome == '')",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/actions/0",
+        "line": 154,
+        "col": 9
+      },
+      "editable": {
+        "if": "(docstatus == 1 || docstatus == 2) && (outcome == 'open' || outcome == '')"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/actions/0",
+      "group": "quotation",
+      "kind": "action",
+      "label": {
+        "en": "New revision",
+        "id": "Buat revisi"
+      },
+      "detail": "quotation.revise",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/actions/0",
+        "line": 150,
+        "col": 5
+      },
+      "editable": {
+        "if": "(docstatus == 1 || docstatus == 2) && (outcome == 'open' || outcome == '')",
+        "label.id": "Buat revisi"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/actions/1/if",
+      "group": "quotation",
+      "kind": "condition",
+      "label": {
+        "id": "Syarat"
+      },
+      "detail": "docstatus == 1 && (outcome == 'open' || outcome == '')",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/actions/1",
+        "line": 161,
+        "col": 9
+      },
+      "editable": {
+        "if": "docstatus == 1 && (outcome == 'open' || outcome == '')"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/actions/1",
+      "group": "quotation",
+      "kind": "action",
+      "label": {
+        "en": "Record outcome",
+        "id": "Catat hasil penawaran"
+      },
+      "detail": "quotation.mark_outcome",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/actions/1",
+        "line": 157,
+        "col": 5
+      },
+      "editable": {
+        "if": "docstatus == 1 && (outcome == 'open' || outcome == '')",
+        "label.id": "Catat hasil penawaran"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/actions/2/if",
+      "group": "quotation",
+      "kind": "condition",
+      "label": {
+        "id": "Syarat"
+      },
+      "detail": "docstatus == 1 && outcome == 'accepted'",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/actions/2",
+        "line": 167,
+        "col": 9
+      },
+      "editable": {
+        "if": "docstatus == 1 && outcome == 'accepted'"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/actions/2",
+      "group": "quotation",
+      "kind": "action",
+      "label": {
+        "en": "Create customer order",
+        "id": "Buat pesanan pelanggan"
+      },
+      "detail": "orders.from_quotation",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/actions/2",
+        "line": 162,
+        "col": 5
+      },
+      "editable": {
+        "if": "docstatus == 1 && outcome == 'accepted'",
+        "label.id": "Buat pesanan pelanggan"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#/approvals/0",
+      "group": "quotation",
+      "kind": "approval",
+      "label": {
+        "en": "Manager approval",
+        "id": "Persetujuan manajer"
+      },
+      "detail": "submit",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "path": "/approvals/0",
+        "line": 169,
+        "col": 5
+      },
+      "editable": {
+        "approvers": [
+          "sales_manager"
+        ],
+        "label.id": "Persetujuan manajer"
+      }
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#status/draft",
+      "group": "quotation",
+      "kind": "step",
+      "label": {
+        "id": "Draf"
+      },
+      "detail": "draft",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#status/submitted",
+      "group": "quotation",
+      "kind": "step",
+      "label": {
+        "id": "Diajukan"
+      },
+      "detail": "submitted",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/quotation/models/quotation.rk#status/cancelled",
+      "group": "quotation",
+      "kind": "step",
+      "label": {
+        "id": "Dibatalkan"
+      },
+      "detail": "cancelled",
+      "model": "quotation",
+      "source": {
+        "file": "modules/quotation/models/quotation.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#/rules/0",
+      "group": "order",
+      "kind": "rule",
+      "label": {
+        "id": "Penawaran harus milik pelanggan yang sama"
+      },
+      "detail": "quotation == '' || quotation.customer == customer",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "path": "/rules/0",
+        "line": 63,
+        "col": 5
+      },
+      "editable": {
+        "check": "quotation == '' || quotation.customer == customer",
+        "message.id": "Penawaran harus milik pelanggan yang sama"
+      }
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#/rules/1",
+      "group": "order",
+      "kind": "rule",
+      "label": {
+        "id": "Pesanan dari penawaran valas belum didukung; buat faktur valas langsung dari penawaran"
+      },
+      "detail": "quotation == '' || quotation.currency == '' || quotation.currency == 'IDR'",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "path": "/rules/1",
+        "line": 69,
+        "col": 5
+      },
+      "editable": {
+        "check": "quotation == '' || quotation.currency == '' || quotation.currency == 'IDR'",
+        "message.id": "Pesanan dari penawaran valas belum didukung; buat faktur valas langsung dari penawaran"
+      }
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#/rules/2",
+      "group": "order",
+      "kind": "rule",
+      "label": {
+        "id": "Tanggal selesai tidak boleh sebelum tanggal mulai"
+      },
+      "detail": "start_date == '' || end_date == '' || end_date >= start_date",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "path": "/rules/2",
+        "line": 73,
+        "col": 5
+      },
+      "editable": {
+        "check": "start_date == '' || end_date == '' || end_date >= start_date",
+        "message.id": "Tanggal selesai tidak boleh sebelum tanggal mulai"
+      }
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#/actions/0/if",
+      "group": "order",
+      "kind": "condition",
+      "label": {
+        "id": "Syarat"
+      },
+      "detail": "docstatus == 1 && app_installed('invoicing')",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "path": "/actions/0",
+        "line": 83,
+        "col": 9
+      },
+      "editable": {
+        "if": "docstatus == 1 && app_installed('invoicing')"
+      }
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#/actions/0",
+      "group": "order",
+      "kind": "action",
+      "label": {
+        "en": "Create invoice",
+        "id": "Buat faktur"
+      },
+      "detail": "invoicing.from_order",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "path": "/actions/0",
+        "line": 78,
+        "col": 5
+      },
+      "editable": {
+        "if": "docstatus == 1 && app_installed('invoicing')",
+        "label.id": "Buat faktur"
+      }
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#status/draft",
+      "group": "order",
+      "kind": "step",
+      "label": {
+        "id": "Draf"
+      },
+      "detail": "draft",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#status/submitted",
+      "group": "order",
+      "kind": "step",
+      "label": {
+        "id": "Diajukan"
+      },
+      "detail": "submitted",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/orders/models/customer_order.rk#status/cancelled",
+      "group": "order",
+      "kind": "step",
+      "label": {
+        "id": "Dibatalkan"
+      },
+      "detail": "cancelled",
+      "model": "customer_order",
+      "source": {
+        "file": "modules/orders/models/customer_order.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/projects/models/project.rk#/rules/0",
+      "group": "project",
+      "kind": "rule",
+      "label": {
+        "id": "Tanggal selesai tidak boleh sebelum tanggal mulai"
+      },
+      "detail": "start_date == '' || end_date == '' || end_date >= start_date",
+      "model": "project",
+      "source": {
+        "file": "modules/projects/models/project.rk",
+        "path": "/rules/0",
+        "line": 57,
+        "col": 5
+      },
+      "editable": {
+        "check": "start_date == '' || end_date == '' || end_date >= start_date",
+        "message.id": "Tanggal selesai tidak boleh sebelum tanggal mulai"
+      }
+    },
+    {
+      "id": "modules/projects/models/project.rk#/rules/1",
+      "group": "project",
+      "kind": "rule",
+      "label": {
+        "id": "Pesanan harus milik pelanggan yang sama"
+      },
+      "detail": "customer_order == '' || customer_order.customer == customer",
+      "model": "project",
+      "source": {
+        "file": "modules/projects/models/project.rk",
+        "path": "/rules/1",
+        "line": 61,
+        "col": 5
+      },
+      "editable": {
+        "check": "customer_order == '' || customer_order.customer == customer",
+        "message.id": "Pesanan harus milik pelanggan yang sama"
+      }
+    },
+    {
+      "id": "modules/projects/models/project.rk#/fields/6/options/0",
+      "group": "project",
+      "kind": "step",
+      "label": {
+        "id": "Direncanakan"
+      },
+      "detail": "planned",
+      "model": "project",
+      "source": {
+        "file": "modules/projects/models/project.rk",
+        "path": "/fields/6/options/0",
+        "line": 45,
+        "col": 9
+      },
+      "editable": {
+        "label.id": "Direncanakan"
+      }
+    },
+    {
+      "id": "modules/projects/models/project.rk#/fields/6/options/1",
+      "group": "project",
+      "kind": "step",
+      "label": {
+        "id": "Berjalan"
+      },
+      "detail": "running",
+      "model": "project",
+      "source": {
+        "file": "modules/projects/models/project.rk",
+        "path": "/fields/6/options/1",
+        "line": 46,
+        "col": 9
+      },
+      "editable": {
+        "label.id": "Berjalan"
+      }
+    },
+    {
+      "id": "modules/projects/models/project.rk#/fields/6/options/2",
+      "group": "project",
+      "kind": "step",
+      "label": {
+        "id": "Selesai"
+      },
+      "detail": "done",
+      "model": "project",
+      "source": {
+        "file": "modules/projects/models/project.rk",
+        "path": "/fields/6/options/2",
+        "line": 47,
+        "col": 9
+      },
+      "editable": {
+        "label.id": "Selesai"
+      }
+    },
+    {
+      "id": "modules/projects/models/project.rk#/fields/6/options/3",
+      "group": "project",
+      "kind": "step",
+      "label": {
+        "id": "Ditutup"
+      },
+      "detail": "closed",
+      "model": "project",
+      "source": {
+        "file": "modules/projects/models/project.rk",
+        "path": "/fields/6/options/3",
+        "line": 48,
+        "col": 9
+      },
+      "editable": {
+        "label.id": "Ditutup"
+      }
+    },
+    {
+      "id": "modules/projects/models/assignment.rk#/rules/0",
+      "group": "project",
+      "kind": "rule",
+      "label": {
+        "id": "Tanggal selesai tidak boleh sebelum tanggal mulai"
+      },
+      "detail": "end_date >= start_date",
+      "model": "assignment",
+      "source": {
+        "file": "modules/projects/models/assignment.rk",
+        "path": "/rules/0",
+        "line": 48,
+        "col": 5
+      },
+      "editable": {
+        "check": "end_date >= start_date",
+        "message.id": "Tanggal selesai tidak boleh sebelum tanggal mulai"
+      }
+    },
+    {
+      "id": "modules/projects/models/timesheet.rk#/rules/0",
+      "group": "project",
+      "kind": "rule",
+      "label": {
+        "id": "Hari kerja harus lebih dari 0 dan paling banyak 1,5"
+      },
+      "detail": "days > 0 && days <= 1.5",
+      "model": "timesheet",
+      "source": {
+        "file": "modules/projects/models/timesheet.rk",
+        "path": "/rules/0",
+        "line": 63,
+        "col": 5
+      },
+      "editable": {
+        "check": "days > 0 && days <= 1.5",
+        "message.id": "Hari kerja harus lebih dari 0 dan paling banyak 1,5"
+      }
+    },
+    {
+      "id": "modules/projects/models/acceptance.rk#/rules/0",
+      "group": "project",
+      "kind": "rule",
+      "label": {
+        "id": "Periode selesai tidak boleh sebelum periode mulai"
+      },
+      "detail": "period_from == '' || period_to == '' || period_to >= period_from",
+      "model": "acceptance",
+      "source": {
+        "file": "modules/projects/models/acceptance.rk",
+        "path": "/rules/0",
+        "line": 50,
+        "col": 5
+      },
+      "editable": {
+        "check": "period_from == '' || period_to == '' || period_to >= period_from",
+        "message.id": "Periode selesai tidak boleh sebelum periode mulai"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/0",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Jumlah barang harus lebih dari 0"
+      },
+      "detail": "items.map(i, i.qty <= 0 ? 1 : 0).sum() == 0",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/0",
+        "line": 163,
+        "col": 5
+      },
+      "editable": {
+        "check": "items.map(i, i.qty <= 0 ? 1 : 0).sum() == 0",
+        "message.id": "Jumlah barang harus lebih dari 0"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/1",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Harga tidak boleh negatif"
+      },
+      "detail": "items.map(i, i.rate < 0 || i.rate_fx < 0 ? 1 : 0).sum() == 0",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/1",
+        "line": 167,
+        "col": 5
+      },
+      "editable": {
+        "check": "items.map(i, i.rate < 0 || i.rate_fx < 0 ? 1 : 0).sum() == 0",
+        "message.id": "Harga tidak boleh negatif"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/2",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Diskon baris antara 0 dan 100 persen"
+      },
+      "detail": "items.map(i, i.discount < 0 || i.discount > 100 ? 1 : 0).sum() == 0",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/2",
+        "line": 171,
+        "col": 5
+      },
+      "editable": {
+        "check": "items.map(i, i.discount < 0 || i.discount > 100 ? 1 : 0).sum() == 0",
+        "message.id": "Diskon baris antara 0 dan 100 persen"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/3",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Dokumen valas wajib diisi kursnya (rupiah per 1 unit mata uang asing)"
+      },
+      "detail": "currency == '' || currency == 'IDR' || exchange_rate > 1",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/3",
+        "line": 175,
+        "col": 5
+      },
+      "editable": {
+        "check": "currency == '' || currency == 'IDR' || exchange_rate > 1",
+        "message.id": "Dokumen valas wajib diisi kursnya (rupiah per 1 unit mata uang asing)"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/4",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur uang muka harus milik pelanggan yang sama"
+      },
+      "detail": "dp_invoice == '' || dp_invoice.customer == customer",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/4",
+        "line": 180,
+        "col": 5
+      },
+      "editable": {
+        "check": "dp_invoice == '' || dp_invoice.customer == customer",
+        "message.id": "Faktur uang muka harus milik pelanggan yang sama"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/5",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur asal retensi harus milik pelanggan yang sama"
+      },
+      "detail": "retention_of == '' || retention_of.customer == customer",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/5",
+        "line": 184,
+        "col": 5
+      },
+      "editable": {
+        "check": "retention_of == '' || retention_of.customer == customer",
+        "message.id": "Faktur asal retensi harus milik pelanggan yang sama"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/6",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Pesanan pelanggan harus milik pelanggan yang sama"
+      },
+      "detail": "customer_order == '' || customer_order.customer == customer",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/6",
+        "line": 188,
+        "col": 5
+      },
+      "editable": {
+        "check": "customer_order == '' || customer_order.customer == customer",
+        "message.id": "Pesanan pelanggan harus milik pelanggan yang sama"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/7",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Proyek harus milik pelanggan yang sama"
+      },
+      "detail": "project == '' || project.customer == customer",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/7",
+        "line": 192,
+        "col": 5
+      },
+      "editable": {
+        "check": "project == '' || project.customer == customer",
+        "message.id": "Proyek harus milik pelanggan yang sama"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/8",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Berita acara harus untuk proyek pelanggan yang sama"
+      },
+      "detail": "acceptance == '' || acceptance.project.customer == customer",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/8",
+        "line": 196,
+        "col": 5
+      },
+      "editable": {
+        "check": "acceptance == '' || acceptance.project.customer == customer",
+        "message.id": "Berita acara harus untuk proyek pelanggan yang sama"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/9",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Tarif PPN atau faktor DPP tidak valid"
+      },
+      "detail": "dpp_den > 0 && dpp_num > 0 && dpp_num <= dpp_den && tax_rate >= 0 && tax_rate <= 100",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/9",
+        "line": 200,
+        "col": 5
+      },
+      "editable": {
+        "check": "dpp_den > 0 && dpp_num > 0 && dpp_num <= dpp_den && tax_rate >= 0 && tax_rate <= 100",
+        "message.id": "Tarif PPN atau faktor DPP tidak valid"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/10",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Perusahaan bukan PKP tidak boleh memungut PPN (tarif PPN harus 0)"
+      },
+      "detail": "tax.pkp || tax_rate == 0",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/10",
+        "line": 204,
+        "col": 5
+      },
+      "editable": {
+        "check": "tax.pkp || tax_rate == 0",
+        "message.id": "Perusahaan bukan PKP tidak boleh memungut PPN (tarif PPN harus 0)"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/11",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Jatuh tempo tidak boleh sebelum tanggal faktur"
+      },
+      "detail": "due_date >= posting_date",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/11",
+        "line": 208,
+        "col": 5
+      },
+      "editable": {
+        "check": "due_date >= posting_date",
+        "message.id": "Jatuh tempo tidak boleh sebelum tanggal faktur"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/12",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Melebihi batas kredit pelanggan"
+      },
+      "detail": "customer.outstanding + amount_due <= customer.credit_limit",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/12",
+        "line": 212,
+        "col": 5
+      },
+      "editable": {
+        "check": "customer.outstanding + amount_due <= customer.credit_limit",
+        "level": "warn",
+        "message.id": "Melebihi batas kredit pelanggan"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/13",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Diskon tidak boleh melebihi subtotal"
+      },
+      "detail": "discount_amount <= subtotal",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/13",
+        "line": 217,
+        "col": 5
+      },
+      "editable": {
+        "check": "discount_amount <= subtotal",
+        "message.id": "Diskon tidak boleh melebihi subtotal"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/14",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Potongan uang muka melebihi nilai DPP faktur uang muka"
+      },
+      "detail": "dp_invoice == '' || down_payment <= dp_invoice.dpp",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/14",
+        "line": 221,
+        "col": 5
+      },
+      "editable": {
+        "check": "dp_invoice == '' || down_payment <= dp_invoice.dpp",
+        "message.id": "Potongan uang muka melebihi nilai DPP faktur uang muka"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/15",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Pilih faktur uang muka yang dipotong"
+      },
+      "detail": "down_payment == 0 || dp_invoice != ''",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/15",
+        "line": 225,
+        "col": 5
+      },
+      "editable": {
+        "check": "down_payment == 0 || dp_invoice != ''",
+        "message.id": "Pilih faktur uang muka yang dipotong"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/16",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur uang muka harus berjenis uang muka dan sudah disubmit"
+      },
+      "detail": "dp_invoice == '' || (dp_invoice.kind == 'down_payment' && dp_invoice.docstatus == 1)",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/16",
+        "line": 229,
+        "col": 5
+      },
+      "editable": {
+        "check": "dp_invoice == '' || (dp_invoice.kind == 'down_payment' && dp_invoice.docstatus == 1)",
+        "message.id": "Faktur uang muka harus berjenis uang muka dan sudah disubmit"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/17",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur uang muka tidak boleh memotong uang muka"
+      },
+      "detail": "kind != 'down_payment' || down_payment == 0",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/17",
+        "line": 233,
+        "col": 5
+      },
+      "editable": {
+        "check": "kind != 'down_payment' || down_payment == 0",
+        "message.id": "Faktur uang muka tidak boleh memotong uang muka"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/18",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur retensi harus menunjuk faktur asalnya"
+      },
+      "detail": "kind != 'retention' || retention_of != ''",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/18",
+        "line": 237,
+        "col": 5
+      },
+      "editable": {
+        "check": "kind != 'retention' || retention_of != ''",
+        "message.id": "Faktur retensi harus menunjuk faktur asalnya"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/19",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur asal retensi harus sudah disubmit dan tidak dibatalkan"
+      },
+      "detail": "retention_of == '' || retention_of.docstatus == 1",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/19",
+        "line": 241,
+        "col": 5
+      },
+      "editable": {
+        "check": "retention_of == '' || retention_of.docstatus == 1",
+        "message.id": "Faktur asal retensi harus sudah disubmit dan tidak dibatalkan"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/20",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur retensi tanpa PPN dan DPP-nya tidak boleh melebihi retensi yang ditahan di faktur asal"
+      },
+      "detail": "kind != 'retention' || retention_of == '' || (tax_rate == 0 && dpp <= retention_of.retention_amount)",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/20",
+        "line": 246,
+        "col": 5
+      },
+      "editable": {
+        "check": "kind != 'retention' || retention_of == '' || (tax_rate == 0 && dpp <= retention_of.retention_amount)",
+        "message.id": "Faktur retensi tanpa PPN dan DPP-nya tidak boleh melebihi retensi yang ditahan di faktur asal"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/21",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Retensi antara 0 dan 20 persen"
+      },
+      "detail": "retention_percent >= 0 && retention_percent <= 20",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/21",
+        "line": 250,
+        "col": 5
+      },
+      "editable": {
+        "check": "retention_percent >= 0 && retention_percent <= 20",
+        "message.id": "Retensi antara 0 dan 20 persen"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/rules/22",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "DPP tidak boleh negatif; kurangi potongan atau diskon"
+      },
+      "detail": "dpp >= 0",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/rules/22",
+        "line": 254,
+        "col": 5
+      },
+      "editable": {
+        "check": "dpp >= 0",
+        "message.id": "DPP tidak boleh negatif; kurangi potongan atau diskon"
+      }
+    },
+    {
+      "id": "custom/sales_invoice.rk#/rules/0",
+      "group": "invoice",
+      "kind": "rule",
+      "label": {
+        "id": "Isi nomor PO pelanggan sebelum faktur dikirim"
+      },
+      "detail": "po_number != ''",
+      "model": "sales_invoice",
+      "source": {
+        "file": "custom/sales_invoice.rk",
+        "path": "/rules/0",
+        "line": 5,
+        "col": 5
+      },
+      "editable": {
+        "check": "po_number != ''",
+        "message.id": "Isi nomor PO pelanggan sebelum faktur dikirim"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/on_submit/0",
+      "group": "invoice",
+      "kind": "action",
+      "label": {
+        "id": "Saat diajukan"
+      },
+      "detail": "ledger.post_receivable",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/on_submit/0",
+        "line": 8,
+        "col": 13
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/on_cancel/0",
+      "group": "invoice",
+      "kind": "action",
+      "label": {
+        "id": "Saat dibatalkan"
+      },
+      "detail": "invoicing.reverse_receivable",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/on_cancel/0",
+        "line": 9,
+        "col": 13
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#/approvals/0",
+      "group": "invoice",
+      "kind": "approval",
+      "label": {
+        "en": "Finance approval for large invoices",
+        "id": "Persetujuan keuangan untuk faktur besar"
+      },
+      "detail": "submit: grand_total > 100000000",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "path": "/approvals/0",
+        "line": 259,
+        "col": 5
+      },
+      "editable": {
+        "approvers": [
+          "finance_manager"
+        ],
+        "label.id": "Persetujuan keuangan untuk faktur besar",
+        "when": "grand_total > 100000000"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#status/draft",
+      "group": "invoice",
+      "kind": "step",
+      "label": {
+        "id": "Draf"
+      },
+      "detail": "draft",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#status/submitted",
+      "group": "invoice",
+      "kind": "step",
+      "label": {
+        "id": "Diajukan"
+      },
+      "detail": "submitted",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#status/partly",
+      "group": "invoice",
+      "kind": "step",
+      "label": {
+        "id": "Dibayar sebagian"
+      },
+      "detail": "partly",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#status/overdue",
+      "group": "invoice",
+      "kind": "step",
+      "label": {
+        "id": "Jatuh tempo"
+      },
+      "detail": "overdue",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#status/cancelled",
+      "group": "invoice",
+      "kind": "step",
+      "label": {
+        "id": "Dibatalkan"
+      },
+      "detail": "cancelled",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "apps/jasa_proyek/processes/quote_to_cash.rk#/stages/4/when",
+      "group": "paid",
+      "kind": "step",
+      "label": {
+        "id": "Syarat tahap"
+      },
+      "detail": "status == 'paid'",
+      "model": "sales_invoice",
+      "source": {
+        "file": "apps/jasa_proyek/processes/quote_to_cash.rk",
+        "path": "/stages/4",
+        "line": 9,
+        "col": 76
+      },
+      "editable": {
+        "when": "status == 'paid'"
+      }
+    },
+    {
+      "id": "modules/invoicing/models/sales_invoice.rk#status/paid",
+      "group": "paid",
+      "kind": "step",
+      "label": {
+        "id": "Lunas"
+      },
+      "detail": "paid",
+      "model": "sales_invoice",
+      "source": {
+        "file": "modules/invoicing/models/sales_invoice.rk",
+        "line": 5,
+        "col": 17
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/0",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Dokumen valas wajib diisi kursnya (rupiah per 1 unit mata uang asing)"
+      },
+      "detail": "currency == '' || currency == 'IDR' || exchange_rate > 1",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/0",
+        "line": 87,
+        "col": 5
+      },
+      "editable": {
+        "check": "currency == '' || currency == 'IDR' || exchange_rate > 1",
+        "message.id": "Dokumen valas wajib diisi kursnya (rupiah per 1 unit mata uang asing)"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/1",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Jumlah pembayaran harus lebih dari 0"
+      },
+      "detail": "amount > 0",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/1",
+        "line": 91,
+        "col": 5
+      },
+      "editable": {
+        "check": "amount > 0",
+        "message.id": "Jumlah pembayaran harus lebih dari 0"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/2",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Alokasi melebihi jumlah pembayaran"
+      },
+      "detail": "allocated_total <= amount",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/2",
+        "line": 95,
+        "col": 5
+      },
+      "editable": {
+        "check": "allocated_total <= amount",
+        "message.id": "Alokasi melebihi jumlah pembayaran"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/3",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Jumlah rupiah harus sama dengan jumlah valas x kurs"
+      },
+      "detail": "currency == 'IDR' || amount == round(amount_fx * exchange_rate)",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/3",
+        "line": 99,
+        "col": 5
+      },
+      "editable": {
+        "check": "currency == 'IDR' || amount == round(amount_fx * exchange_rate)",
+        "message.id": "Jumlah rupiah harus sama dengan jumlah valas x kurs"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/4",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Pilih pelanggan"
+      },
+      "detail": "direction != 'receive' || customer != ''",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/4",
+        "line": 103,
+        "col": 5
+      },
+      "editable": {
+        "check": "direction != 'receive' || customer != ''",
+        "message.id": "Pilih pelanggan"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/5",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Pilih pemasok"
+      },
+      "detail": "direction != 'pay' || vendor != ''",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/5",
+        "line": 107,
+        "col": 5
+      },
+      "editable": {
+        "check": "direction != 'pay' || vendor != ''",
+        "message.id": "Pilih pemasok"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/6",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Jumlah alokasi harus lebih dari 0"
+      },
+      "detail": "allocations.map(a, a.amount <= 0 ? 1 : 0).sum() == 0",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/6",
+        "line": 111,
+        "col": 5
+      },
+      "editable": {
+        "check": "allocations.map(a, a.amount <= 0 ? 1 : 0).sum() == 0",
+        "message.id": "Jumlah alokasi harus lebih dari 0"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/7",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Alokasi dan PPh 23 dipotong tidak boleh negatif"
+      },
+      "detail": "allocations.map(a, a.amount < 0 || a.withheld < 0 ? 1 : 0).sum() == 0",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/7",
+        "line": 115,
+        "col": 5
+      },
+      "editable": {
+        "check": "allocations.map(a, a.amount < 0 || a.withheld < 0 ? 1 : 0).sum() == 0",
+        "message.id": "Alokasi dan PPh 23 dipotong tidak boleh negatif"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/8",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "PPh 23 sudah dipotong di faktur ini"
+      },
+      "detail": "allocations.map(a, a.withheld > 0 && a.pph23_applies ? 1 : 0).sum() == 0",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/8",
+        "line": 121,
+        "col": 5
+      },
+      "editable": {
+        "check": "allocations.map(a, a.withheld > 0 && a.pph23_applies ? 1 : 0).sum() == 0",
+        "message.id": "PPh 23 sudah dipotong di faktur ini"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/9",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Alokasi melebihi sisa tagihan"
+      },
+      "detail": "allocations.map(a, a.amount + a.withheld > a.outstanding ? 1 : 0).sum() == 0",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/9",
+        "line": 126,
+        "col": 5
+      },
+      "editable": {
+        "check": "allocations.map(a, a.amount + a.withheld > a.outstanding ? 1 : 0).sum() == 0",
+        "message.id": "Alokasi melebihi sisa tagihan"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/rules/10",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Pilih faktur penjualan (terima) atau tagihan pemasok (bayar) untuk setiap baris alokasi"
+      },
+      "detail": "allocations.map(a, (direction == 'receive' ? a.sales_invoice == '' || a.vendor_bill != '' : a.vendor_bill == '' || a.sales_invoice != '') ? 1 : 0).sum() == 0",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/rules/10",
+        "line": 131,
+        "col": 5
+      },
+      "editable": {
+        "check": "allocations.map(a, (direction == 'receive' ? a.sales_invoice == '' || a.vendor_bill != '' : a.vendor_bill == '' || a.sales_invoice != '') ? 1 : 0).sum() == 0",
+        "message.id": "Pilih faktur penjualan (terima) atau tagihan pemasok (bayar) untuk setiap baris alokasi"
+      }
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/on_submit/0",
+      "group": "paid",
+      "kind": "action",
+      "label": {
+        "id": "Saat diajukan"
+      },
+      "detail": "payments.allocate",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/on_submit/0",
+        "line": 8,
+        "col": 13
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/payments/models/payment.rk#/on_cancel/0",
+      "group": "paid",
+      "kind": "action",
+      "label": {
+        "id": "Saat dibatalkan"
+      },
+      "detail": "payments.unallocate",
+      "model": "payment",
+      "source": {
+        "file": "modules/payments/models/payment.rk",
+        "path": "/on_cancel/0",
+        "line": 9,
+        "col": 13
+      },
+      "editable": {}
+    },
+    {
+      "id": "modules/payments/models/withholding.rk#/rules/0",
+      "group": "paid",
+      "kind": "rule",
+      "label": {
+        "id": "Faktur bukan milik pelanggan ini"
+      },
+      "detail": "sales_invoice.customer == customer",
+      "model": "withholding",
+      "source": {
+        "file": "modules/payments/models/withholding.rk",
+        "path": "/rules/0",
+        "line": 55,
+        "col": 5
+      },
+      "editable": {
+        "check": "sales_invoice.customer == customer",
+        "message.id": "Faktur bukan milik pelanggan ini"
+      }
+    }
+  ],
+  "edges": [
+    {
+      "from": "modules/quotation/models/quotation.rk#/actions/0/if",
+      "to": "modules/quotation/models/quotation.rk#/actions/0",
+      "kind": "flow"
+    },
+    {
+      "from": "modules/quotation/models/quotation.rk#/actions/1/if",
+      "to": "modules/quotation/models/quotation.rk#/actions/1",
+      "kind": "flow"
+    },
+    {
+      "from": "modules/quotation/models/quotation.rk#/actions/2/if",
+      "to": "modules/quotation/models/quotation.rk#/actions/2",
+      "kind": "flow"
+    },
+    {
+      "from": "modules/quotation/models/quotation.rk#status/draft",
+      "to": "modules/quotation/models/quotation.rk#status/submitted",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/orders/models/customer_order.rk#/actions/0/if",
+      "to": "modules/orders/models/customer_order.rk#/actions/0",
+      "kind": "flow"
+    },
+    {
+      "from": "modules/orders/models/customer_order.rk#status/draft",
+      "to": "modules/orders/models/customer_order.rk#status/submitted",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/projects/models/project.rk#/fields/6/options/0",
+      "to": "modules/projects/models/project.rk#/fields/6/options/1",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/projects/models/project.rk#/fields/6/options/1",
+      "to": "modules/projects/models/project.rk#/fields/6/options/2",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/projects/models/project.rk#/fields/6/options/2",
+      "to": "modules/projects/models/project.rk#/fields/6/options/3",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/invoicing/models/sales_invoice.rk#status/draft",
+      "to": "modules/invoicing/models/sales_invoice.rk#status/submitted",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/invoicing/models/sales_invoice.rk#status/submitted",
+      "to": "modules/invoicing/models/sales_invoice.rk#status/partly",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/invoicing/models/sales_invoice.rk#status/partly",
+      "to": "modules/invoicing/models/sales_invoice.rk#status/paid",
+      "kind": "lifecycle"
+    },
+    {
+      "from": "modules/quotation/models/quotation.rk#status/submitted",
+      "to": "modules/orders/models/customer_order.rk#/rules/0",
+      "kind": "handoff",
+      "label": {
+        "id": "Penawaran"
+      }
+    },
+    {
+      "from": "modules/orders/models/customer_order.rk#status/submitted",
+      "to": "modules/projects/models/project.rk#/rules/0",
+      "kind": "handoff",
+      "label": {
+        "id": "Pesanan pelanggan"
+      }
+    },
+    {
+      "from": "modules/projects/models/project.rk#/fields/6/options/3",
+      "to": "modules/invoicing/models/sales_invoice.rk#/rules/0",
+      "kind": "handoff",
+      "label": {
+        "id": "Proyek"
+      }
+    },
+    {
+      "from": "modules/invoicing/models/sales_invoice.rk#status/submitted",
+      "to": "apps/jasa_proyek/processes/quote_to_cash.rk#/stages/4/when",
+      "kind": "handoff"
+    }
+  ],
+  "layout": null
+}

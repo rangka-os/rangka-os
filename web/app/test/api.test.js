@@ -227,6 +227,20 @@ test("features: attachments off only on the missing-route 404", async () => {
   assert.strictEqual((await api.features(meta, me)).attachments, false);
 });
 
+test("features: processes on only when GET /api/v1/processes answers 200 with data", async () => {
+  const meta = { prints: {}, imports: {} }, me = { orgs: [] };
+  const run = async (answer) => {
+    const f = stub((url) => (url.indexOf("/api/v1/processes") === 0 ? answer : json(200, {})));
+    const r = await RA({ fetch: f }).features(meta, me);
+    return [r.processes, f.calls.filter((c) => c.url === "/api/v1/processes").length];
+  };
+  assert.deepStrictEqual(await run(json(200, { data: [{ name: "lead_to_cash", stages: 4 }] })), [true, 1]);
+  assert.deepStrictEqual(await run(json(200, { data: [] })), [false, 1], "empty list: off");
+  assert.deepStrictEqual(await run(json(404, { error: { code: "not_found", message: "no such endpoint /api/v1/processes" } })), [false, 1]);
+  assert.deepStrictEqual(await run(json(403, { error: { code: "permission_denied", message: "x" } })), [false, 1]);
+  assert.deepStrictEqual(await run(json(500, { error: { code: "internal", message: "x" } })), [false, 1]);
+});
+
 test("isMissingRoute", () => {
   assert.strictEqual(RA.isMissingRoute({ status: 404, code: "not_found", message: "no such endpoint /api/v1/x" }), true);
   assert.strictEqual(RA.isMissingRoute({ status: 404, code: "not_found", message: "no such record" }), false);

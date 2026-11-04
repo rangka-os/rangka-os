@@ -2,7 +2,7 @@
  *
  * Boot: api.me() (401 → sign-in screen) → api.meta() → RangkaEngine.create(meta, cache.lookup) → api.features().
  * Then TopNav + Sidebar (each installed app's menu, plus Persetujuan / Impor data when the kernel has them) and a hash
- * router (#/d/<dashboard>, #/r/<model>, #/r/<model>/new, #/r/<model>/<name>, #/approvals, #/import/<name>).
+ * router (#/d/<dashboard>, #/r/<model>, #/r/<model>/new, #/r/<model>/<name>, #/approvals, #/import/<name>, #/proses, #/proses/<name>).
  * Views are looked up on window.RangkaApp at render time (ListView, FormView, DashboardView, ApprovalInbox,
  * ImportWizard), so later files add them without touching the shell; a missing view shows "Halaman ini belum tersedia".
  *
@@ -44,6 +44,8 @@
       return parts[2] === "new" ? { kind: "form", model: parts[1], name: null, isNew: true } : { kind: "form", model: parts[1], name: parts[2], isNew: false };
     }
     if (parts[0] === "approvals" && parts.length === 1) return { kind: "approvals" };
+    if (parts[0] === "proses" && parts.length === 1) return { kind: "processes" };
+    if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
     return { kind: "notfound" };
   }
@@ -128,6 +130,7 @@
     var groups = navFromLayout(meta) || appGroups(meta);
     var more = [];
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
+    if (features.processes) more.push({ id: "proses", label: "Proses bisnis", icon: "time" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
     if (more.length) groups.push({ label: "Lainnya", items: more });
@@ -146,6 +149,7 @@
       case "dash": return "d/" + route.dash;
       case "list": case "form": return "r/" + route.model;
       case "approvals": return "approvals";
+      case "processes": case "process": return "proses";
       case "import": return "import/" + route.import;
       default: return null;
     }
@@ -282,23 +286,24 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
   }
 
-  function routeKnown(route, meta) {
+  function routeKnown(route, meta, features) {
     if (route.kind === "list" || route.kind === "form") return !!(meta.models || {})[route.model];
     if (route.kind === "dash") return !!(meta.dashboards || {})[route.dash];
     if (route.kind === "import") return !!(meta.imports || {})[route.import];
+    if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
     return route.kind === "approvals";
   }
 
   function Page(p) {
     var route = p.route, meta = p.meta;
     if (route.kind === "home") return null;
-    if (route.kind === "notfound" || !routeKnown(route, meta)) return h(Placeholder, { title: "Halaman tidak ditemukan", home: p.home }, "Alamat ini tidak cocok dengan halaman mana pun.");
+    if (route.kind === "notfound" || !routeKnown(route, meta, p.features)) return h(Placeholder, { title: "Halaman tidak ditemukan", home: p.home }, "Alamat ini tidak cocok dengan halaman mana pun.");
     var View = RA[VIEWS[route.kind]];
     if (typeof View !== "function") return h(Placeholder, { title: "Halaman ini belum tersedia", home: p.home }, "Bagian ini sedang disiapkan.");
     return h(View, { route: route, readOnly: !!p.readOnly });
@@ -635,7 +640,7 @@
         h("div", { className: "rk-shell-main" },
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
-          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, home: home, readOnly: !!previewCs }))),
+          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs }))),
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,

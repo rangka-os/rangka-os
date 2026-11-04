@@ -346,6 +346,9 @@
       };
     });
 
+    /* ----- process canvas (contract 0014, stream S10): the list; the canvas itself talks to the kernel through RangkaCanvas */
+    api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };
+
     /* ----- feature detection */
     api.features = function (meta, me) {
       meta = meta || {};
@@ -355,12 +358,16 @@
         approvals: false,
         print: Object.keys(meta.prints || {}).length > 0 || Object.keys(meta.models || {}).some(function (m) { return printFormats(meta, m).length > 0; }),
         attachments: attachmentsOK,
-        imports: Object.keys(meta.imports || {}).length > 0
+        imports: Object.keys(meta.imports || {}).length > 0,
+        processes: false
       };
       return api.approvals({ state: "pending", limit: 1 }).then(function () {
         f.approvals = true;
       }, function (e) {
         f.approvals = !isMissingRoute(e);
+      }).then(function () {
+        // processes: on only for a 200 with at least one process; 404, 403 or any failure leaves it off
+        return Promise.resolve().then(function () { return api.processes(); }).then(function (list) { f.processes = list.length > 0; }, function () { f.processes = false; });
       }).then(function () {
         f.attachments = attachmentsOK;
         return f;

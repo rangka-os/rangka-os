@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Kanvas proses · Rangka</title>
+<meta name="description" content="Kanvas proses Rangka: satu proses bisnis sebagai tahap yang bisa dibuka di tempat.">
+<link rel="stylesheet" href="../console/tokens.css">
+<link rel="stylesheet" href="../design-system/bundle.css">
+<link rel="stylesheet" href="canvas.css">
+<style>
+  html, body { height: 100%; margin: 0; overflow: hidden; }
+  body { background: var(--app); color: var(--ink); font: 14px/20px var(--font-sans); }
+  #rc-app { height: 100%; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); box-sizing: border-box; }
+  .rc-pick { max-width: 640px; margin: 0 auto; padding: 32px 16px; }
+  .rc-pick h1 { font: 600 20px/28px var(--font-sans); margin: 0 0 8px; }
+  .rc-pick ul { list-style: none; padding: 0; margin: 16px 0 0; display: flex; flex-direction: column; gap: 8px; }
+  .rc-pick li a { display: block; padding: 12px 16px; border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); }
+</style>
+</head>
+<body>
+<div id="rc-app"></div>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.3.1/umd/react.production.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.3.1/umd/react-dom.production.min.js"></script>
+<script src="../design-system/bundle.js"></script>
+<script src="canvas.js"></script>
+<script>
+/* Standalone page. ?process=<name> talks to the kernel on this origin; ?demo=1 (lead_to_cash) or ?demo=<golden>
+ * renders testdata/<name>.json and answers edits with a fake change set. */
+(function () {
+  "use strict";
+  var h = React.createElement, RC = window.RangkaCanvas, el = document.getElementById("rc-app");
+  var q = new URLSearchParams(location.search), demo = q.get("demo"), process = q.get("process"), lang = q.get("lang") || "id";
+  var root = null;
+  function render(x) { (root = root || ReactDOM.createRoot(el)).render(x); }
+
+  if (demo) {
+    var name = demo === "1" || demo === "true" ? "lead_to_cash" : demo.replace(/[^a-z0-9_]/gi, "");
+    fetch("testdata/" + name + ".json").then(function (r) {
+      if (!r.ok) throw new Error("Contoh " + name + " tidak ditemukan");
+      return r.json();
+    }).then(function (graph) {
+      render(h(RC.Canvas, {
+        graph: graph, layout: graph.layout, lang: lang, readOnly: q.get("readonly") === "1",
+        sourceHref: function () { return null; },
+        onEdit: function (edits) {
+          return new Promise(function (resolve) {
+            setTimeout(function () { resolve({ changeset: { id: "cs_demo", status: "proposed" }, title: "Ubah " + edits.length + " nilai di kanvas (demo)" }); }, 250);
+          });
+        },
+        onLayout: function () {}
+      }));
+    }, function (e) {
+      render(h("div", { className: "rc-pick" }, h("h1", null, "Contoh tidak bisa dimuat"), h("p", null, e.message)));
+    });
+    return;
+  }
+  if (process) {
+    RC.mount(el, { baseUrl: q.get("base") || "", process: process, lang: lang, readOnly: q.get("readonly") === "1" });
+    return;
+  }
+  /* no process chosen: list what the kernel offers */
+  RC.client(q.get("base") || "").list().then(function (list) {
+    render(h("div", { className: "rc-pick" },
+      h("h1", null, "Pilih proses"),
+      list.length ? h("ul", null, list.map(function (p) {
+        return h("li", { key: p.name }, h("a", { className: "rc-link", href: "?process=" + encodeURIComponent(p.name) },
+          (p.label && (p.label.id || p.label.en)) || p.name));
+      })) : h("p", { className: "rc-muted" }, "Belum ada proses yang bisa kamu lihat.")));
+  }, function () {
+    render(h("div", { className: "rc-pick" }, h("h1", null, "Kanvas proses"),
+      h("p", { className: "rc-muted" }, "Buka dengan ?process=<nama> dari kernel, atau ?demo=1 untuk contoh.")));
+  });
+})();
+</script>
+</body>
+</html>

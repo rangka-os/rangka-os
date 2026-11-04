@@ -5,7 +5,7 @@ attachments and CSV imports. It is plain React (UMD) plus the design system, wit
 a Rangka kernel over `/api/v1`. The kernel serves this folder at `/app/` (`/` redirects there). Routes are hash routes,
 so deep links survive a reload and the kernel needs no SPA fallback:
 
-`#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>`
+`#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>` · `#/proses` · `#/proses/<process>`
 
 The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 
@@ -42,6 +42,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `approvals.js` | Approval inbox and the "Menunggu persetujuan" banner |
 | `docs.js` | Print menu and attachments panel |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
+| `process.js` | "Proses bisnis": the process list and the read-only canvas (`../canvas`, `RangkaCanvas.Mounted` with `readOnly: true`) |
 | `test/*.test.js` | `node --test` units for the pure parts of each file |
 | `test_app.py` | Live Playwright suite against a real kernel |
 
@@ -57,6 +58,7 @@ absent meta key turns it off and its buttons disappear.
 | Print | `meta.models[m].prints` (or a top-level `meta.prints`) lists formats and `can.print` is not `false`. Cetak checks with `HEAD …/print?as=html` (403/404 become a message), then opens the HTML view in a new tab; on `501 pdf_unavailable` Unduh PDF offers "Cetak dari browser" (HTML view + `window.print()`) |
 | Attachments | `GET /api/v1/r/<model>/<name>/attachments` exists and is not `501 files_disabled` |
 | Imports | `meta.imports` is not empty |
+| Processes | `GET /api/v1/processes` answers 200 with at least one process; 404, 403 or any failure turns the "Proses bisnis" entry and `#/proses` off. The canvas is read only: no edit form, no layout save |
 | Buttons per action | `meta.models[m].can[action]` when present |
 | Ubah | `meta.changesets.propose`; "Setujui & terapkan" needs `approve` (and `approve_high` for high risk) |
 

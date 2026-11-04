@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: customer
+label: {id: Pelanggan}
+naming: CUST-{####}
+title_field: customer_name
+fields:
+  - {name: customer_name, type: data, label: {id: Nama pelanggan}, required: true, in_list: true}
+  - {name: city, type: data, label: {id: Kota}, in_list: true}

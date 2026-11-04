@@ -288,3 +288,7 @@ func scalar(v any, inFlow bool) string {
 	}
 	return quote(fmt.Sprint(v))
 }
+
+// Scalar renders one scalar the way Dump writes it: plain when that reads back as the same string, else quoted.
+// inFlow is true inside a flow collection ({…} or […]), where , [ ] { } need quoting too.
+func Scalar(v any, inFlow bool) string { return scalar(v, inFlow) }

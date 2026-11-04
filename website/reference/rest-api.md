@@ -73,6 +73,17 @@ data: {"id":"cs_rzlzncahuf","status":"applied"}
 | GET | `/changesets/{id}` | Full change set with validation, preview (`migrations`, `affected`, `files[{path, before, after}]`) and history |
 | POST | `/changesets/{id}/validate` · `preview` · `approve` · `reject` · `apply` · `revert` | Approve only from `previewed`, by a signed-in approver; high risk owner only (403 `owner_required`) |
 
+## Process canvas
+
+A process is a declared `processes/<name>.rk` file or one inferred from an app's menu (contract 0014). The graph shows only stages whose model the caller may read.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/processes` | `{data: [{name, label, inferred, stages, source}]}`, only processes with a stage the caller may read |
+| GET | `/processes/{name}` | `{name, label, inferred, source, groups, nodes, edges, layout}`; 404 `not_found` for an unknown process or one with no visible stage |
+| POST | `/processes/{name}/ops` | `{edits: [{node, key, value}]}` → `{title, ops}`; compute only. 400 `bad_edit` for an unknown or hidden node or key. Send the result to `POST /changesets` |
+| PUT | `/processes/{name}/layout` | `{groups: {id: {collapsed?, x?, y?}}, nodes: {id: {x, y}}}` → 200 layout, written to `site/canvas/<name>.json`. Owner only (403 `permission_denied`); 400 `bad_layout` for other keys |
+
 ## System and organisation
 
 | Method | Path | Notes |

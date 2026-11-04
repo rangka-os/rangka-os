@@ -42,6 +42,8 @@ test("parseRoute covers every hash form", () => {
   assert.deepStrictEqual(plain(p("#/r/lead/LEAD%2F1")), { kind: "form", model: "lead", name: "LEAD/1", isNew: false });
   assert.deepStrictEqual(plain(p("#/approvals")), { kind: "approvals" });
   assert.deepStrictEqual(plain(p("#/import/pelanggan_csv")), { kind: "import", import: "pelanggan_csv" });
+  assert.deepStrictEqual(plain(p("#/proses")), { kind: "processes" });
+  assert.deepStrictEqual(plain(p("#/proses/lead_to_cash")), { kind: "process", process: "lead_to_cash" });
   assert.strictEqual(p("#/nope/x").kind, "notfound");
 });
 
@@ -72,11 +74,23 @@ test("navGroups: dashboards, each app's menu groups, then approvals and imports 
   assert.deepStrictEqual(grp.items.map((i) => [i.id, i.label]), [["import/a", "Alfa"], ["import/b", "Zebra"]]);
 });
 
+test("navGroups: Proses bisnis only when the kernel has processes", () => {
+  const off = plain(A.navGroups(META, { processes: false }));
+  assert.ok(!off.some((g) => g.items.some((i) => i.id === "proses")));
+  const on = plain(A.navGroups(META, { processes: true }));
+  const last = on[on.length - 1];
+  assert.deepStrictEqual(last.items.map((i) => [i.id, i.label]), [["proses", "Proses bisnis"]]);
+  const both = plain(A.navGroups(META, { approvals: true, processes: true }));
+  assert.deepStrictEqual(both[both.length - 1].items.map((i) => i.id), ["approvals", "proses"]);
+});
+
 test("navId maps a route to its sidebar entry", () => {
   assert.strictEqual(A.navId({ kind: "form", model: "lead", name: "X" }), "r/lead");
   assert.strictEqual(A.navId({ kind: "dash", dash: "crm_overview" }), "d/crm_overview");
   assert.strictEqual(A.navId({ kind: "import", import: "x" }), "import/x");
   assert.strictEqual(A.navId({ kind: "approvals" }), "approvals");
+  assert.strictEqual(A.navId({ kind: "processes" }), "proses");
+  assert.strictEqual(A.navId({ kind: "process", process: "x" }), "proses");
 });
 
 test("L picks Bahasa Indonesia from a label map", () => {

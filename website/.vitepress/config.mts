@@ -51,7 +51,8 @@ export default defineConfig({
           { text: 'Architecture and layers', link: '/guide/architecture' },
           { text: '.rk files', link: '/guide/rk-files' },
           { text: 'Your first app', link: '/guide/first-app' },
-          { text: 'Print formats', link: '/guide/print-formats' }
+          { text: 'Print formats', link: '/guide/print-formats' },
+          { text: 'Process canvas', link: '/guide/process-canvas' }
         ] }
       ],
       '/concepts/': [

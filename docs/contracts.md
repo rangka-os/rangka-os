@@ -61,10 +61,13 @@ Computed fields recomputed on every save. Status for invoices: draft, submitted,
 | POST | `/r/{model}/{name}/actions/{action}` | runs the hook; queued if `queue:` → 202 `{job_id}` |
 | GET | `/dashboards/{name}?period=30` | `{name,label,period,widgets:[{name,type,label,span, …computed}]}`; computed shape = prototype `computeWidget()` (number: value,rupiah,count,prev,trend,delta; chart: data[{key,label,value,count,color}],rupiah; list: rows,total) |
 | GET | `/events` | SSE. `event: record` `{model,name,op:created|updated|deleted|submitted|cancelled,docstatus}`; `event: changeset` `{id,status}`; `event: job` `{id,kind,state}`. `?models=deal,lead` filters. Heartbeat comment every 15s. |
-| GET/POST | `/changesets` | list / propose (body = changeset.json without computed fields) → 201 with `layers`, `risk`, `status: proposed` |
+| GET/POST | `/changesets` | list / propose (body = changeset.json without computed fields) → 201 with `layers`, `risk`, `status: proposed`. An op may carry `base` (SHA-256 hex of the file text it was computed from): propose, validate, preview and apply answer 409 `stale_base` when the file has changed since |
 | GET | `/changesets/{id}` | full change set incl. history |
 | | Ubah mode, `meta.changesets` and the read-only live preview (`/preview…`) | see contract 0015 (`docs/contracts/0015-ubah-mode-and-live-preview.md`) |
 | POST | `/changesets/{id}/{validate,preview,approve,reject,apply,revert}` | validate → `validated`/`invalid`; preview → dry run on a copy, `preview:{migrations,affected,reversible}`; approve needs a human session with an approver role (config.ai.approvers or owner); apply only after approve (or `auto_apply: low_risk` and risk low); revert re-applies the previous file versions |
+| GET | `/processes` · `/processes/{name}` | process canvas graph (contract 0014 §4); only stages the caller may read; unknown or fully hidden → 404 |
+| POST | `/processes/{name}/ops` | `{edits:[{node,key,value}]}` → `{title,ops}`, compute only (400 `bad_edit`); the client proposes the ops as a change set |
+| PUT | `/processes/{name}/layout` | `{groups,nodes}` → stored in `site/canvas/<name>.json`; owner only, 400 `bad_layout` |
 | GET | `/system/status` | for Console: `{version,uptime_s,site,capabilities:{db:{driver,ok,latency_ms},cache:{driver,ok,hits,misses,keys},queue:{driver,ok,counts:{available,running,retryable,completed,discarded}},scheduler:{driver,ok,schedules:[{name,source,cron,next_run,last_run,last_status}]},realtime:{driver,transports,connections},files:{driver,ok},search:{driver,ok},notify:{email:{driver},push:{…},whatsapp:{…}},auth:{issuer,clients:[id]}},apps:[{name,version,models,dashboards}],orgs:n,members:n}` |
 | GET | `/system/jobs?state=` | queue jobs |
 | GET | `/system/audit?limit=50` | `{data:[{at,actor,kind,target,summary}]}` |

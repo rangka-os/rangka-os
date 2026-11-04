@@ -164,6 +164,9 @@ func hasRole(a Actor, role string) bool {
 // unrestricted reports actors every check lets through: kernel-internal actors and owners.
 func unrestricted(a Actor) bool { return a.System || hasRole(a, "owner") }
 
+// Unrestricted reports whether a passes every check: a kernel-internal actor or an owner.
+func Unrestricted(a Actor) bool { return unrestricted(a) }
+
 // decision is the model-level answer for one actor and action: all (some grant applies without if:), or the
 // if: conditions of the conditional grants that apply. Neither means denied.
 type decision struct {

@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/dashboard.json
+name: crm_overview
+label: {id: Ringkasan CRM saya}
+widgets:
+  - {name: pipeline, type: number, label: {id: Nilai pipeline}, model: deal, aggregate: sum, field: value, span: 6}
+  - {name: activities_due, type: list, label: {id: Aktivitas belum selesai}, model: activity, columns: [subject, due_date], span: 6}

@@ -4,3 +4,13 @@ fields:
   - {name: x_segment, type: select, options: [{value: umkm, label: {id: UMKM}}]}
 approvals:
   - {name: seg, on: cancel, approvers: [sales_manager]}
+options:
+  x_segment:
+    - {value: umkm, label: {id: UMKM lagi}}
+  owner:
+    - {value: a, label: {id: A}}
+  ghost:
+    - {value: b, label: {id: B}}
+views:
+  kanban:
+    columns: [a]

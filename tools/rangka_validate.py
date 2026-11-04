@@ -589,6 +589,10 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             d = rep.load(p)
             if d is not None:
                 overlays[st] = (p, d)
+        for st, p in rkfile.listdir(os.path.join(site, "dashboards")):
+            d = rep.load(p)
+            if d is not None:
+                sdocs[f"dashboards/{st}.rk"] = (p, d)
         load_prints(rep, prints, "", site)
         heads = [("", rkfile.find(site, "letterhead"))] + rkfile.listdir(os.path.join(site, "letterheads"))
         for org, p in heads:
@@ -820,7 +824,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
         kind = kind_of(p) or (key[:-3] if "/" not in key else key.split("/")[0][:-1])
         if kind in V:
             schema_errors(rep, V, kind, p, d)
-        if kind in ("theme", "layout"):
+        if kind in ("theme", "layout", "dashboard"):
             stem = key.split("/", 1)[1][:-3]
             if d.get("name") != stem:
                 rep.add("error", p, "name", "name_mismatch", f'{kind} name "{d.get("name")}" must match the file name "{stem}"')
@@ -915,12 +919,23 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             rep.add("warn", p, "extends", "unknown_template", f'no theme template "{ext}" in rangka-os/templates/themes')
         if d.get("contrast_check", True) is not False:
             check_contrast(rep, p, d)
-    dashboards = {}
-    for a in apps.values():
+    dashboards, dash_app = {}, {}
+    for an, a in apps.items():
         for dn, (dp, db) in a["dashboards"].items():
+            dashboards[dn] = db
+            dash_app[dn] = an
+    site_dash = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("dashboards/")}
+    for dn, (dp, db) in site_dash.items():
+        if dn in dash_app:  # a site dashboard replaces the installed one of its name (contract 0015 section 3)
             dashboards[dn] = db
     for ln in sorted(layouts):
         check_layout(rep, layouts[ln][0], layouts[ln][1], allmodels, dashboards, installed)
+    for dn in sorted(site_dash):
+        dp, db = site_dash[dn]
+        if dn not in dash_app:
+            rep.add("error", dp, "name", "unknown_dashboard", f'"{dn}" is not an installed dashboard{suggest(dn, sorted(dash_app))}')
+            continue
+        check_dashboard(rep, dp, db, allmodels, set(), allmodels, dash_app[dn])
 
 
 def parse_dpp_ratio(s):
@@ -1237,12 +1252,64 @@ def check_overlays(rep, V, apps, allmodels, overlays):
                     rep.add("error", p, f"views/{view}/add/{i}", "unknown_field", f'"{fn}" is not a field of {mn}{suggest(fn or "", merged)}')
                 if ad.get("after") and ad["after"] not in have:
                     rep.add("error", p, f"views/{view}/add/{i}/after", "unknown_field", f'"{ad["after"]}" is not in the {view} view of {mn}')
+        check_overlay_options_views(rep, p, mn, o, m, merged, known)
         sub = Report(rep.root)
         sub.at = rep.at
         check_cycles(sub, p, merged)
         for item in sub.items:
             if any(x.startswith("x_") for x in item[4].split(" → ")):
                 rep.items.append(item)
+
+
+def check_overlay_options_views(rep, p, mn, o, m, merged, known):
+    """Contract 0015 section 3: options for select fields, a replacing form layout and list columns, the kanban order."""
+    added = {}  # select field -> option values the overlay adds
+    opts = o.get("options")
+    opts = opts if isinstance(opts, dict) else {}
+    for fn in sorted(opts):
+        at = f"options/{fn}"
+        f = merged.get(fn)
+        if f is None:
+            rep.add("error", p, at, "unknown_field", f'"{fn}" is not a field of {mn}{suggest(fn, merged)}')
+            continue
+        if f.get("type") != "select":
+            rep.add("error", p, at, "not_select", f'"{fn}" is {f.get("type")}; options only apply to select fields')
+            continue
+        have = {x.get("value") for x in f.get("options", []) if isinstance(x, dict)}
+        for i, ov in enumerate(opts[fn] if isinstance(opts[fn], list) else []):
+            val = ov.get("value") if isinstance(ov, dict) else None
+            if val in have:
+                rep.add("error", p, f"{at}/{i}/value", "bad_option", f'"{val}" is already an option of {fn}')
+                continue
+            have.add(val)
+            added.setdefault(fn, []).append(val)
+    ov = o.get("views") if isinstance(o.get("views"), dict) else {}
+    form = ov.get("form") if isinstance(ov.get("form"), dict) else {}
+    for si, sec in enumerate(form.get("layout", [])):
+        if not isinstance(sec, dict):
+            continue
+        places = [(f"views/form/layout/{si}/fields/{j}", n) for j, n in enumerate(sec.get("fields", []))]
+        for ci, col in enumerate(sec.get("columns", [])):
+            places += [(f"views/form/layout/{si}/columns/{ci}/{j}", n) for j, n in enumerate(col)]
+        for at, n in places:
+            if n not in merged:
+                rep.add("error", p, at, "unknown_field", f'"{n}" is not a field of {mn}{suggest(n or "", merged)}')
+    lst = ov.get("list") if isinstance(ov.get("list"), dict) else {}
+    for i, c in enumerate(lst.get("columns", [])):
+        if c not in known:
+            rep.add("error", p, f"views/list/columns/{i}", "unknown_field", f'"{c}" is not a field of {mn}{suggest(c or "", merged)}')
+    kcols = (ov.get("kanban") or {}).get("columns", []) if isinstance(ov.get("kanban"), dict) else []
+    if not kcols:
+        return
+    kb = (m.get("views") or {}).get("kanban")
+    if not isinstance(kb, dict):
+        rep.add("error", p, "views/kanban/columns", "no_kanban", f"{mn} has no kanban view")
+        return
+    gb = kb.get("group_by")
+    valid = {x.get("value") for x in (merged.get(gb) or {}).get("options", []) if isinstance(x, dict)} | set(added.get(gb, []))
+    for i, c in enumerate(kcols):
+        if c not in valid:
+            rep.add("error", p, f"views/kanban/columns/{i}", "bad_option", f'"{c}" is not an option of {gb}')
 
 
 def load_prints(rep, prints, app, root):

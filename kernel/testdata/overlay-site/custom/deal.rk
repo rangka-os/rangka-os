@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
+model: deal
+views:
+  form:
+    layout:
+      - section: {id: Peluang}
+        columns:
+          - [deal_name, customer]
+          - [stage, value]
+      - section: {id: Catatan}
+        fields: [notes]
+  list:
+    columns: [deal_name, stage, value]
+  kanban:
+    columns: [won, x_review, prospect]
+options:
+  stage:
+    - {value: x_review, label: {id: Tinjau}}

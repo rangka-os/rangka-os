@@ -210,8 +210,9 @@ type Site struct {
 	Config      map[string]any
 	Themes      map[string]*rk.Doc
 	Layouts     map[string]*rk.Doc
-	Letterheads map[string]*rk.Doc // "" = letterhead.rk, else the org of letterheads/<org>.rk
-	Docs        map[string]*rk.Doc // by site-relative path
+	Letterheads map[string]*rk.Doc    // "" = letterhead.rk, else the org of letterheads/<org>.rk
+	Docs        map[string]*rk.Doc    // by site-relative path
+	Dashboards  map[string]*Dashboard // dashboards/<name>.rk by name; one that names no installed dashboard is unknown_dashboard
 }
 
 // ---------- raw data helpers

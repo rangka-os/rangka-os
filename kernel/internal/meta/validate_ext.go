@@ -317,7 +317,7 @@ func (v *validator) site(all map[string]vis) {
 		if v.S.Has(kind) {
 			v.schemaErr(kind, d)
 		}
-		if kind == "theme" || kind == "layout" {
+		if kind == "theme" || kind == "layout" || kind == "dashboard" {
 			stem := strings.TrimSuffix(strings.SplitN(key, "/", 2)[1], ".rk")
 			if got, ok := asMap(d.Data)["name"].(string); !ok || got != stem {
 				v.rep.extra("error", d.Path, "name", "name_mismatch", fmt.Sprintf(`%s name "%s" must match the file name "%s"`, kind, pyStr(asMap(d.Data)["name"]), stem))
@@ -511,6 +511,7 @@ func (v *validator) site(all map[string]vis) {
 	for _, ln := range sortedKeysM(s.Layouts) {
 		v.layout(s.Layouts[ln].Path, asMap(s.Layouts[ln].Data), all, dashboards, installed)
 	}
+	v.siteDashboards(all)
 }
 
 // OrderedKeys returns the keys of a unit's map (requires, modules) in file order.
@@ -818,6 +819,7 @@ func (v *validator) overlays(all map[string]vis) {
 				}
 			}
 		}
+		v.overlayOptionsAndViews(p, mn, o, own, merged, mergedNames, known)
 		for _, it := range cycleItems(mergedList) {
 			hasX := false
 			for _, n := range strings.Split(it[1], " → ") {
@@ -827,6 +829,100 @@ func (v *validator) overlays(all map[string]vis) {
 				v.rep.extra("error", p, it[0], "compute_cycle", it[1])
 			}
 		}
+	}
+}
+
+// overlayOptionsAndViews checks the contract 0015 §3 keys of an overlay: options for select fields, a replacing form
+// layout and list columns, and the kanban column order. Mirrors check_overlays in rangka_validate.py.
+func (v *validator) overlayOptionsAndViews(p, mn string, o map[string]any, own *Model, merged map[string]map[string]any, mergedNames, known map[string]bool) {
+	added := map[string][]string{} // select field -> option values the overlay adds (first occurrence only)
+	opts := asMap(o["options"])
+	for _, fn := range sortedKeys(opts) {
+		at := "options/" + fn
+		f, ok := merged[fn]
+		if !ok {
+			v.rep.extra("error", p, at, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, fn, mn, suggest(fn, keys(merged))))
+			continue
+		}
+		if pyStr(f["type"]) != "select" {
+			v.rep.extra("error", p, at, "not_select", fmt.Sprintf(`"%s" is %s; options only apply to select fields`, fn, pyStr(f["type"])))
+			continue
+		}
+		have := map[string]bool{}
+		for _, ov := range asList(f["options"]) {
+			have[pyStr(asMap(ov)["value"])] = true
+		}
+		for i, ov := range asList(opts[fn]) {
+			val := pyStr(asMap(ov)["value"])
+			if have[val] {
+				v.rep.extra("error", p, fmt.Sprintf("%s/%d/value", at, i), "bad_option", fmt.Sprintf(`"%s" is already an option of %s`, val, fn))
+				continue
+			}
+			have[val] = true
+			added[fn] = append(added[fn], val)
+		}
+	}
+	ov := asMap(o["views"])
+	for si, sv := range asList(asMap(ov["form"])["layout"]) {
+		sm := asMap(sv)
+		check := func(at string, n any) {
+			if fn := pyStr(n); !mergedNames[fn] {
+				v.rep.extra("error", p, at, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, fn, mn, suggest(fn, keys(merged))))
+			}
+		}
+		for j, n := range asList(sm["fields"]) {
+			check(fmt.Sprintf("views/form/layout/%d/fields/%d", si, j), n)
+		}
+		for ci, col := range asList(sm["columns"]) {
+			for j, n := range asList(col) {
+				check(fmt.Sprintf("views/form/layout/%d/columns/%d/%d", si, ci, j), n)
+			}
+		}
+	}
+	for i, c := range asList(asMap(ov["list"])["columns"]) {
+		if fn := pyStr(c); !known[fn] {
+			v.rep.extra("error", p, fmt.Sprintf("views/list/columns/%d", i), "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, fn, mn, suggest(fn, keys(merged))))
+		}
+	}
+	cols := asList(asMap(ov["kanban"])["columns"])
+	if len(cols) == 0 {
+		return
+	}
+	kb := asMap(asMap(own.Raw["views"])["kanban"])
+	if kb == nil {
+		v.rep.extra("error", p, "views/kanban/columns", "no_kanban", fmt.Sprintf(`%s has no kanban view`, mn))
+		return
+	}
+	gb := pyStr(kb["group_by"])
+	valid := map[string]bool{}
+	for _, ov := range asList(merged[gb]["options"]) {
+		valid[pyStr(asMap(ov)["value"])] = true
+	}
+	for _, val := range added[gb] {
+		valid[val] = true
+	}
+	for i, c := range cols {
+		if val := pyStr(c); !valid[val] {
+			v.rep.extra("error", p, fmt.Sprintf("views/kanban/columns/%d", i), "bad_option", fmt.Sprintf(`"%s" is not an option of %s`, val, gb))
+		}
+	}
+}
+
+// siteDashboards checks <site>/dashboards/<name>.rk (contract 0015 §3): the name must be an installed dashboard,
+// and the widgets are checked like an app dashboard's with every model visible.
+func (v *validator) siteDashboards(all map[string]vis) {
+	s := v.reg.Site
+	for _, dn := range sortedKeysM(s.Dashboards) {
+		d := s.Dashboards[dn]
+		base := v.reg.BaseDashboards[dn]
+		if base == nil {
+			v.rep.extra("error", d.Doc.Path, "name", "unknown_dashboard", fmt.Sprintf(`"%s" is not an installed dashboard%s`, dn, suggest(dn, sortedKeysM(v.reg.BaseDashboards))))
+			continue
+		}
+		n := len(v.rep.Items)
+		v.dashboard(d, all, map[string]bool{}, all, base.App)
+		v.rep.Extra = append(v.rep.Extra, v.rep.Items[n:]...)
+		v.rep.Items = v.rep.Items[:n]
 	}
 }
 

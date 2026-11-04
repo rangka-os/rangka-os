@@ -118,7 +118,7 @@ func (v *validator) shape() {
 			}
 		}
 		for _, dn := range v.appDashboards(a) {
-			d := v.reg.Dashboards[dn]
+			d := v.reg.BaseDashboards[dn]
 			for _, e := range v.schemaErrors("dashboard", d.Doc, true) {
 				v.rep.add("error", d.Doc.Path, e.PathString(), "schema", truncMsg(e.Message))
 			}
@@ -145,8 +145,8 @@ func pyStr(x any) string {
 
 func (v *validator) appDashboards(a *App) []string {
 	var out []string
-	for _, dn := range sortedKeysM(v.reg.Dashboards) {
-		if v.reg.Dashboards[dn].App == a.Name {
+	for _, dn := range sortedKeysM(v.reg.BaseDashboards) {
+		if v.reg.BaseDashboards[dn].App == a.Name {
 			out = append(out, dn)
 		}
 	}
@@ -230,7 +230,7 @@ func (v *validator) meaning() {
 		listed := a.Dashboards
 		appDash := v.appDashboards(a)
 		for i, dn := range listed {
-			if v.reg.Dashboards[dn] == nil || v.reg.Dashboards[dn].App != a.Name {
+			if v.reg.BaseDashboards[dn] == nil || v.reg.BaseDashboards[dn].App != a.Name {
 				v.rep.add("error", appPath, fmt.Sprintf("dashboards/%d", i), "unknown_dashboard",
 					fmt.Sprintf(`"%s" has no file dashboards/%s.rk%s`, dn, dn, suggest(dn, appDash)))
 			}
@@ -240,7 +240,7 @@ func (v *validator) meaning() {
 			optional[k] = true
 		}
 		for _, dn := range appDash {
-			d := v.reg.Dashboards[dn]
+			d := v.reg.BaseDashboards[dn]
 			isListed := false
 			for _, l := range listed {
 				isListed = isListed || l == dn

@@ -19,9 +19,15 @@ approvals:
   - {name: big, on: submit, approvers: [sales_manager]}
 views:
   form:
+    layout:
+      - section: {id: Utama}
+        fields: [customer, ghost_field]
     add:
       - {field: x_po_number, after: customer}
       - {field: x_missing}
+  kanban:
+    columns: [a]
   list:
+    columns: [name, nope_col]
     add:
       - {field: x_po_number, after: nope}

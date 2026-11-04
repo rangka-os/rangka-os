@@ -120,10 +120,18 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/themes/kopi_senja.rk:10:13  error  low_contrast  color/selected  selected-ink #f08a6b on selected #579dff is 1.11:1 in dark; needs 4.5:1
 ../broken-site/layouts/crm_first.rk:12:18  error  unknown_model  nav/create/1  "leads" is not a model; did you mean "lead"?
 ../broken-site/layouts/crm_first.rk:23:77  error  unknown_widget  pages/0/blocks/1/children/1/props/widget  dashboard crm_overview has no widget "activities"; did you mean "activities_due"?
+../broken-site/dashboards/crm_overview.rk:5:61  error  unknown_model  widgets/0/model  "ghost" is not a model in this app or its dependencies
+../broken-site/dashboards/crm_overview.rk:6:86  error  unknown_field  widgets/1/field  "zzz" is not a field of deal
+../broken-site/dashboards/crm_overview.rk:7:101  error  bad_field_type  widgets/2/field  "value" is currencyy; sum needs a number field (currency, int, float, percent)
+../broken-site/dashboards/nope.rk:2:7  error  unknown_dashboard  name  "nope" is not an installed dashboard
 ../broken-site/imports/site_bad.rk:5:14  error  unknown_field  map/x_missing  "x_missing" is not a field of customer
 ../broken-site/custom/dealz.rk:2:8  error  unknown_model  model  "dealz" is not a model; did you mean "deal"?
 ../broken-site/custom/lead.rk:2:8  error  name_mismatch  model  overlay model "deal" must match the file name "lead"
 ../broken-site/custom/lead.rk:6:21  error  not_submittable  approvals/0/on  approvals on cancel need is_submittable: true
+../broken-site/custom/lead.rk:13:5  error  unknown_field  options/ghost  "ghost" is not a field of deal
+../broken-site/custom/lead.rk:11:5  error  not_select  options/owner  "owner" is link; options only apply to select fields
+../broken-site/custom/lead.rk:9:15  error  bad_option  options/x_segment/0/value  "umkm" is already an option of x_segment
+../broken-site/custom/lead.rk:16:15  error  bad_option  views/kanban/columns/0  "a" is not an option of value
 ../broken-site/custom/sales_invoice.rk:5:12  error  schema  fields/1/name  'po_ref' does not match '^x_[a-z0-9_]{1,60}$'
 ../broken-site/custom/sales_invoice.rk:6:38  error  unknown_model  fields/2/to  "regionn" is not a model in this app or its dependencies
 ../broken-site/custom/sales_invoice.rk:7:41  error  unknown_field  fields/3/default  `custmer` in `posting_date + duration(custmer.payment_days)` is not a field; did you mean "customer"?
@@ -136,10 +144,13 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/custom/sales_invoice.rk:18:39  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
 ../broken-site/custom/sales_invoice.rk:19:12  error  duplicate_approval  approvals/2/name  "big" is declared twice
 ../broken-site/custom/sales_invoice.rk:19:41  warn   unknown_role  approvals/2/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
-../broken-site/custom/sales_invoice.rk:24:9  error  unknown_field  views/form/add/1  "x_missing" is not a field of sales_invoice
-../broken-site/custom/sales_invoice.rk:27:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
+../broken-site/custom/sales_invoice.rk:27:9  error  unknown_field  views/form/add/1  "x_missing" is not a field of sales_invoice
+../broken-site/custom/sales_invoice.rk:33:37  error  unknown_field  views/list/add/0/after  "nope" is not in the list view of sales_invoice
+../broken-site/custom/sales_invoice.rk:24:28  error  unknown_field  views/form/layout/0/fields/1  "ghost_field" is not a field of sales_invoice
+../broken-site/custom/sales_invoice.rk:31:21  error  unknown_field  views/list/columns/1  "nope_col" is not a field of sales_invoice
+../broken-site/custom/sales_invoice.rk:29:14  error  no_kanban  views/kanban/columns  sales_invoice has no kanban view
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
 ../broken-site/config.rk:21:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:22:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-123 error(s), 20 warning(s)
+134 error(s), 20 warning(s)

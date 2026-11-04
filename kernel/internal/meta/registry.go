@@ -18,6 +18,7 @@ type Registry struct {
 	App              map[string]*App
 	Models           map[string]*Model
 	Dashboards       map[string]*Dashboard
+	BaseDashboards   map[string]*Dashboard // the apps' own dashboards, before a site dashboard replaces one in Dashboards
 	Flows            map[string]*Flow
 	Imports          map[string]*Import // by name; a site import replaces an app's of the same name
 	Site             *Site
@@ -141,7 +142,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		o.ModulesDir = DefaultModulesDir(appsDir)
 	}
 	r := &Registry{AppsDir: appsDir, SiteDir: siteDir, ConnectorsDir: o.ConnectorsDir, ModulesDir: o.ModulesDir, App: map[string]*App{}, Models: map[string]*Model{},
-		Dashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Imports: map[string]*Import{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
+		Dashboards: map[string]*Dashboard{}, BaseDashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Imports: map[string]*Import{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
 		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}, Prints: map[string]*Print{}}
 	ld := &loader{rep: rep}
 	// modules first, then apps (rangka_validate.py order); a name in both is reported on the app
@@ -211,6 +212,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				db := parseDashboard(name, d)
 				db.Name = e.Stem
 				r.Dashboards[e.Stem] = db
+				r.BaseDashboards[e.Stem] = db
 				r.Docs[u.prefix+"/dashboards/"+e.Stem+".rk"] = d
 			}
 		}
@@ -272,7 +274,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 
 func loadSite(dir string, ld *loader, r *Registry) *Site {
 	s := &Site{Dir: dir, Name: filepath.Base(dir), Themes: map[string]*rk.Doc{}, Layouts: map[string]*rk.Doc{}, Docs: map[string]*rk.Doc{},
-		Letterheads: map[string]*rk.Doc{}}
+		Letterheads: map[string]*rk.Doc{}, Dashboards: map[string]*Dashboard{}}
 	for _, stem := range []string{"system", "features", "config"} {
 		p := rk.Find(dir, stem)
 		if p == "" {
@@ -319,6 +321,23 @@ func loadSite(dir string, ld *loader, r *Registry) *Site {
 		if d := ld.load(e.Path); d != nil {
 			r.Overlays[e.Stem] = d
 			r.Docs["custom/"+e.Stem+".rk"] = d
+		}
+	}
+	for _, e := range rk.ListDir(filepath.Join(dir, "dashboards")) {
+		if d := ld.load(e.Path); d != nil {
+			key := "dashboards/" + e.Stem + ".rk"
+			s.Docs[key] = d
+			r.Docs[key] = d
+			app := ""
+			if base := r.BaseDashboards[e.Stem]; base != nil {
+				app = base.App
+			}
+			db := parseDashboard(app, d)
+			db.Name = e.Stem
+			s.Dashboards[e.Stem] = db
+			if app != "" { // a site dashboard replaces the installed one of its name (contract 0015 §3)
+				r.Dashboards[e.Stem] = db
+			}
 		}
 	}
 	r.loadPrints(ld, "", dir, "")

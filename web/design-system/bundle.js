@@ -93,7 +93,7 @@
     return h("button", rest, p.icon ? h(Icon, { name: p.icon }) : null, p.children);
   }
 
-  /* Document statuses map to Omilo chip tones. Words always shown: colour never carries the meaning alone. */
+  /* Document statuses map to pill tones. Words always shown: colour never carries the meaning alone. */
   var STATUS = {
     draft: ["draft", "Draf", null], submitted: ["info", "Diajukan", null], paid: ["ok", "Lunas", null],
     partly: ["warn", "Dibayar sebagian", null], overdue: ["bad", "Jatuh tempo", null], cancelled: ["cancelled", "Dibatalkan", null],
@@ -101,12 +101,13 @@
   };
   function StatusChip(p) {
     var s = STATUS[p.status] || ["", p.status, null];
-    return h("span", { className: cx("rk-chip", s[0] && "rk-chip-" + s[0], p.bold && "bold", p.className) }, s[2] ? h(Icon, { name: s[2] }) : null, p.children || s[1]);
+    return h("span", { className: cx("rk-pill", s[0] || "draft", "rk-chip", p.bold && "bold", p.className) }, s[2] ? h(Icon, { name: s[2] }) : null, p.children || s[1]);
   }
-  /* Lozenge: a status word in a tinted box. tone: default | ok | info | warn | bad | new. */
+  /* Lozenge: a status word in a tinted pill with a dot, text in its own case. tone: default | ok | info | warn | bad | new.
+     rk-chip stays on the element as the older class name, for selectors outside the design system. */
   function Lozenge(p) {
-    var t = p.tone && p.tone !== "default" ? "rk-chip-" + p.tone : "rk-chip-draft";
-    return h("span", { className: cx("rk-chip", t, p.bold && "bold", p.className), title: typeof p.children === "string" ? p.children : undefined }, p.children);
+    var t = p.tone && p.tone !== "default" ? p.tone : "draft";
+    return h("span", { className: cx("rk-pill", t, "rk-chip", p.bold && "bold", p.className), title: typeof p.children === "string" ? p.children : undefined }, p.children);
   }
   function Badge(p) { return h("span", { className: cx("rk-badge", p.appearance), "aria-label": p.label }, p.max && p.children > p.max ? p.max + "+" : p.children); }
 
@@ -150,7 +151,7 @@
   function DataTable(p) {
     var st = React.useState(p.selected), sel = st[0], setSel = st[1];
     return h("div", { className: "rk-tw" }, h("table", { className: "rk-table" },
-      h("thead", null, h("tr", null, p.columns.map(function (c) { return h("th", { key: c.key, className: c.numeric ? "rk-num" : undefined }, c.label); }))),
+      h("thead", null, h("tr", null, p.columns.map(function (c) { return h("th", { key: c.key, className: c.numeric || c.rupiah ? "rk-num" : undefined }, c.label); }))),
       h("tbody", null, p.rows.map(function (r) {
         return h("tr", { key: r.id, "aria-selected": sel === r.id ? "true" : undefined, onClick: function () { setSel(r.id); if (p.onSelect) p.onSelect(r); } },
           p.columns.map(function (c) {

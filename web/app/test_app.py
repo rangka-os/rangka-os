@@ -1125,6 +1125,110 @@ def test_kanban_move(page, ctx):
     wait_rows(page)
 
 
+# ---------------------------------------------------------------------------------------------- group-by, report, saved settings (Task 8)
+def field_label(ctx, m, f):
+    fd = next((x for x in ctx.meta["models"][m]["fields"] if x["name"] == f), None)
+    return L(fd.get("label")) if fd else f
+
+
+def switch_view(page, label):
+    page.locator(".rk-viewswitch").get_by_role("button", name=label, exact=True).click()
+
+
+def test_list_group_by(page, ctx):
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Kelompok")
+    heads = page.locator(".rk-group-head")
+    heads.first.wait_for(timeout=10000)
+    assert any("/api/v1/aggregate/sales_invoice" in u and "group=status" in u and "fn=count,sum:grand_total" in u for m, u in reqs), \
+        f"the headers come from one aggregate grouped by status, saw {[u for m, u in reqs if 'aggregate' in u]}"
+    h = Http(ctx.base).login(*ctx.owner)
+    _, lst = h.call("GET", "/api/v1/r/sales_invoice?limit=1")
+    counts = [int(t.replace(".", "")) for t in page.locator(".rk-group-head .rk-count").all_inner_texts()]
+    assert sum(counts) == lst["total"], f"header counts {counts} add up to the list total {lst['total']}"
+    labels = [t.strip() for t in page.locator(".rk-group-head .l").all_inner_texts()]
+    assert "Lunas" in labels, f"a Lunas group, got {labels}"
+    assert all(re.search(r"Rp\s", t) for t in page.locator(".rk-group-head .rk-group-vals").all_inner_texts()), "each header shows its rupiah total"
+    _, agg = h.call("GET", "/api/v1/aggregate/sales_invoice?group=status&fn=count")
+    paid = next(g["count"] for g in agg["groups"] if g["key"] == "paid")
+
+    n_req = len(reqs)
+    lunas = page.locator(".rk-group", has=page.locator(".rk-group-head .l", has_text=re.compile("^Lunas$")))
+    lunas.locator(".rk-group-head").click()
+    lunas.locator(".rk-table tbody tr:not([aria-hidden])").first.wait_for(timeout=10000)
+    assert any("/r/sales_invoice" in u and "filter=status == 'paid'" in u and "limit=20" in u for m, u in reqs[n_req:]), \
+        f"opening Lunas lists its rows with status == 'paid', saw {reqs[n_req:]}"
+    rows = lunas.locator(".rk-table tbody tr:not([aria-hidden])")
+    assert rows.count() == min(paid, 20), f"{min(paid, 20)} Lunas rows, got {rows.count()}"
+    chips = [c.lower() for c in lunas.locator(".rk-table tbody .rk-chip").all_inner_texts()]
+    assert chips and set(chips) == {"lunas"}, f"every row in the group is Lunas, got {sorted(set(chips))}"
+    shot(page, ctx, "list-group-by")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(300)  # let the colour transitions finish
+    shot(page, ctx, "list-group-by-dark")
+    page.emulate_media(color_scheme="light")
+    # closing the group hides its rows; the group field picker lists the groupable fields
+    lunas.locator(".rk-group-head").click()
+    assert lunas.locator(".rk-table").count() == 0, "the group closed"
+    page.get_by_role("button", name=re.compile("^Kelompok: ")).click()
+    assert page.locator(".ap-toolmenu-pop").get_by_role("menuitem", name=field_label(ctx, "sales_invoice", "customer")).count() == 1, "customer is a group field"
+    page.keyboard.press("Escape")
+
+
+def test_report_totals(page, ctx):
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Laporan")
+    total_row = page.locator(".rk-report-total")
+    total_row.wait_for(timeout=10000)
+    h = Http(ctx.base).login(*ctx.owner)
+    st, agg = h.call("GET", "/api/v1/aggregate/sales_invoice?fn=count,sum:grand_total")
+    assert st == 200, f"aggregate: {st} {agg}"
+    label = total_row.locator("th").inner_text().strip()
+    assert label == f"Total semua {agg['count']:,} baris".replace(",", "."), f"footer label {label!r}, aggregate count {agg['count']}"
+    want = ctx.rupiah_text(agg["values"]["sum:grand_total"])
+    cells = [t.strip() for t in total_row.locator("td").all_inner_texts()]
+    assert want in cells, f"the footer shows {want} (aggregate sum:grand_total), got {cells}"
+    rows = page.locator(".rk-report tbody tr")
+    assert rows.count() == min(agg["count"], 20), f"the report shows the current page, got {rows.count()} rows"
+    shot(page, ctx, "list-report")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(300)  # let the colour transitions finish
+    shot(page, ctx, "list-report-dark")
+    page.emulate_media(color_scheme="light")
+    # Kolom adds any model field; the header's hide button takes it away again
+    due = field_label(ctx, "sales_invoice", "due_date")
+    page.get_by_role("button", name="Kolom", exact=True).click()
+    page.locator(".ap-toolmenu-pop").get_by_role("menuitem", name=due).click()
+    page.locator(".rk-report thead th", has_text=due).wait_for(timeout=5000)
+    if ctx.args.width >= 800:
+        page.get_by_role("button", name="Sembunyikan kolom " + due).click()
+    else:  # phones have no hover, so the header's hide button is not shown: Kolom takes it away again
+        page.get_by_role("button", name="Kolom", exact=True).click()
+        page.locator(".ap-toolmenu-pop").get_by_role("menuitem", name=due).click()
+    page.wait_for_function("(t) => ![...document.querySelectorAll('.rk-report thead th')].some((th) => th.textContent.includes(t))", arg=due, timeout=5000)
+    assert want in [t.strip() for t in total_row.locator("td").all_inner_texts()], "the total stays"
+
+
+def test_list_prefs_persist(page, ctx):
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Laporan")
+    page.locator(".rk-report-total").wait_for(timeout=10000)
+    saved = page.evaluate("() => localStorage.getItem('rk.list.' + %s + '.sales_invoice')" % json.dumps(ORG))
+    assert saved and json.loads(saved)["view"] == "report", f"the view is saved per person and org, got {saved}"
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    page.locator(".rk-report-total").wait_for(timeout=10000)
+    pressed = page.locator(".rk-viewswitch [aria-pressed=true]").get_attribute("aria-label")
+    assert pressed == "Laporan", f"still the report after a reload, switcher shows {pressed}"
+    switch_view(page, "Daftar")
+    wait_rows(page)
+
+
 def test_forbidden_list(page, ctx):
     ctx.allow_http(403, r"/api/v1/r/deal")
     page.route(re.compile(r".*/api/v1/r/deal(\?.*)?$"), lambda route: _json(route, 403, {"error": {"code": "permission_denied", "message": "Peran kamu tidak boleh membaca peluang"}}))

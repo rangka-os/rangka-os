@@ -501,3 +501,31 @@ test("preview mode prefixes the four reads and refuses every write without a req
   await api.get("lead", "a");
   assert.strictEqual(f.calls[n].url, "/api/v1/r/lead/a");
 });
+
+test("aggregate builds the query string", async () => {
+  const body = { count: 3, values: { count: 3, "sum:grand_total": 900 }, groups: [] };
+  const f = stub([json(200, body)]);
+  const api = RA({ fetch: f });
+  const r = await api.aggregate("sales_invoice", { q: "kopi", group: "status", fns: ["count", "sum:grand_total"] });
+  assert.strictEqual(f.calls[0].url, "/api/v1/aggregate/sales_invoice?q=kopi&group=status&fn=count%2Csum%3Agrand_total");
+  assert.strictEqual(f.calls[0].init.method, "GET");
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(r)), body);
+});
+
+test("aggregate sends the filter and defaults fn to count", async () => {
+  const f = stub(() => json(200, { count: 0, values: { count: 0 }, groups: [] }));
+  const api = RA({ fetch: f });
+  await api.aggregate("lead", { filter: "city == null" });
+  assert.strictEqual(f.calls[0].url, "/api/v1/aggregate/lead?filter=city+%3D%3D+null&fn=count");
+});
+
+test("aggregate resolves null in preview", async () => {
+  const f = stub(() => json(200, { count: 1, values: {}, groups: [] }));
+  const api = RA({ fetch: f });
+  api.setPreview("cs1");
+  assert.strictEqual(await api.aggregate("sales_invoice", { fns: ["count"] }), null);
+  assert.strictEqual(f.calls.length, 0, "no request in preview (contract 0018 §5: no preview variant)");
+  api.setPreview(null);
+  await api.aggregate("sales_invoice", { fns: ["count"] });
+  assert.strictEqual(f.calls[0].url, "/api/v1/aggregate/sales_invoice?fn=count");
+});

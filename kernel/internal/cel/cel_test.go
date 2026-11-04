@@ -34,6 +34,11 @@ func TestEval(t *testing.T) {
 		want any
 	}{
 		{"npwp == '' || size(npwp) == 16", true},
+		{"npwp == null", true},
+		{"stage == null", false},
+		{"npwp != null", false},
+		{"null == null", true},
+		{"deal == null && lead != null", true},
 		{"stage != 'won' && stage != 'lost'", true},
 		{"round(value * probability / 100)", 6250000.0},
 		{"posting_date + duration(customer.payment_days)", "2026-11-03"},

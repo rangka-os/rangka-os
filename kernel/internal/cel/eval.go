@@ -576,12 +576,21 @@ func Equal(l, r any) bool {
 	return l == r
 }
 
+// equalOrEmpty is ==: a comparison with null also matches an empty string, since a record stores an empty field as
+// either (the list's `field == null` finds the same rows as the aggregate's "(kosong)" group, contract 0018).
+func equalOrEmpty(l, r any) bool {
+	if l == nil || r == nil {
+		return (l == nil || l == "") && (r == nil || r == "")
+	}
+	return Equal(l, r)
+}
+
 func binary(op string, l, r any) (any, error) {
 	switch op {
 	case "==":
-		return Equal(l, r), nil
+		return equalOrEmpty(l, r), nil
 	case "!=":
-		return !Equal(l, r), nil
+		return !equalOrEmpty(l, r), nil
 	case "in":
 		switch c := r.(type) {
 		case []any:

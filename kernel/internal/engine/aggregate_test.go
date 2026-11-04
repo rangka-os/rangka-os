@@ -200,3 +200,46 @@ func TestAggregateMatchesListUnderRowScope(t *testing.T) {
 		t.Fatalf("staff groups = %+v", res.Groups)
 	}
 }
+
+// TestListFilterEqualsNull: the group-by view opens the "(kosong)" group with `field == null`; it matches the rows
+// whose field is empty (missing or ""), the same rows Aggregate puts in its null-key group.
+func TestListFilterEqualsNull(t *testing.T) {
+	e, a := setup(t)
+	ctx := context.Background()
+	if _, err := e.Create(ctx, a, "lead", map[string]any{"lead_name": "Tanpa kota", "phone": "081200000002"}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Create(ctx, a, "lead", map[string]any{"lead_name": "Kota kosong", "phone": "081200000003", "city": ""}); err != nil {
+		t.Fatal(err)
+	}
+	rows, total, err := e.List(ctx, a, "lead", ListOpts{Filter: "city == null", Limit: 500})
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range rows {
+		if c, _ := r["city"].(string); c != "" {
+			t.Errorf("city == null matched %v (city %q)", r["name"], c)
+		}
+	}
+	res, err := e.Aggregate(ctx, a, "lead", ListOpts{}, "city", []AggFn{{Kind: "count"}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	var empty int64
+	for _, g := range res.Groups {
+		if g.Key == nil {
+			empty = g.Count
+		}
+	}
+	if total < 2 || int64(total) != empty {
+		t.Fatalf("city == null: %d rows, the empty group has %d", total, empty)
+	}
+	// and != null is the rest
+	_, rest, err := e.List(ctx, a, "lead", ListOpts{Filter: "city != null"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if int64(rest+total) != res.Count {
+		t.Fatalf("city != null %d + city == null %d != %d", rest, total, res.Count)
+	}
+}

@@ -247,6 +247,21 @@
   .ap-list tbody tr { cursor: pointer; }
   .ap-list tbody tr:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
   .ap-pager .rk-pager select { display: none; } /* the server page size is fixed at 20 */
+  /* list toolbar: search and filters on the left; Kelompok, Urutkan, Kolom and the view switcher on the right */
+  .ap-list-bar { align-items: center; }
+  .ap-list-bar > .rk-filterbar { flex: 1 1 320px; }
+  .ap-list-tools { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-left: auto; max-width: 100%; }
+  .ap-toolmenu { position: relative; display: inline-flex; }
+  .ap-toolmenu-pop { position: absolute; top: calc(100% + 4px); right: 0; z-index: 30; max-height: 60vh; overflow: auto; border-radius: var(--r-lg); box-shadow: var(--shadow-pop); }
+  .ap-toolmenu-pop .rk-menu { box-shadow: none; }
+  .ap-groupview { border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; }
+  .ap-groupview .rk-groups { border-top: 0; }
+  .ap-groupview .rk-group:last-child { border-bottom: 0; }
+  .ap-group-more { padding: 8px 12px 0; }
+  .ap-groups-loading { display: flex; flex-direction: column; gap: 12px; padding: 12px 0; }
+  .rk-bulkbar + .rk-table-card, .rk-bulkbar + .rk-report { margin-top: 8px; }
+  .rk-report + .ap-pager { margin-top: 8px; }
+  .rk-report-table th.rk-num .rk-report-th { flex-direction: row-reverse; } /* the hover-only hide button must not push a number header off its column's edge */
   .rk-table .rk-doc-no { white-space: nowrap; }
   .pv-code { width: 100%; min-height: 60vh; box-sizing: border-box; font: 12px/1.6 var(--font-mono); color: var(--ink); background: var(--soft); border: 1px solid var(--border); border-radius: var(--r); padding: 12px; resize: vertical; }
   .pv-code:focus { outline: none; border-color: var(--focus); box-shadow: var(--focus-soft); }

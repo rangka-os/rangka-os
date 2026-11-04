@@ -232,6 +232,15 @@
         return r.body;
       });
     };
+    /** GET /api/v1/aggregate/{model} (contract 0018) with the list's q and filter, an optional group field and fns like
+     *  ["count", "sum:grand_total"] (default ["count"]) → {count, values, groups, other?}. Resolves null while a change
+     *  set is previewed: the endpoint has no preview variant, so totals are hidden there. */
+    api.aggregate = function (model, o) {
+      o = o || {};
+      if (previewing) return Promise.resolve(null);
+      var fns = o.fns && o.fns.length ? o.fns : ["count"];
+      return json("GET", "/api/v1/aggregate/" + enc(model) + qs([["q", o.q], ["filter", o.filter], ["group", o.group], ["fn", fns.join(",")]]));
+    };
     api.dashboard = function (name, period) { return json("GET", root() + "/dashboards/" + enc(name) + qs([["period", period]])); };
 
     /* ----- approvals */

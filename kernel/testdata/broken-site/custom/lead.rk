@@ -14,3 +14,6 @@ options:
 views:
   kanban:
     columns: [a]
+  form:
+    layout: {oops: 1}
+    add: [{field: x_segment, after: owner}]

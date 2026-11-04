@@ -1246,13 +1246,19 @@ def check_overlays(rep, V, apps, allmodels, overlays):
         views = m.get("views", {})
         oviews = o.get("views") if isinstance(o.get("views"), dict) else {}
         # add applies after a replacing layout or column list (contract 0015 section 3), so `after` names what is left in it
-        layout = (oviews.get("form") or {}).get("layout") if isinstance(oviews.get("form"), dict) else None
-        layout = layout or views.get("form", {}).get("layout", [])
-        placed = [n for s in layout for n in list(s.get("fields", [])) + [x for col in s.get("columns", []) for x in col]]
-        ocols = (oviews.get("list") or {}).get("columns") if isinstance(oviews.get("list"), dict) else None
-        cols = list(ocols or views.get("list", {}).get("columns", []))
+        # malformed overlays (schema errors) must not crash: wrong shapes count as empty, like the Go validator
+        def as_list(v):
+            return v if isinstance(v, list) else []
+
+        def as_dict(v):
+            return v if isinstance(v, dict) else {}
+        layout = as_list(as_dict(oviews.get("form")).get("layout")) or as_list(as_dict(views.get("form")).get("layout"))
+        placed = [n for s in layout if isinstance(s, dict)
+                  for n in as_list(s.get("fields")) + [x for col in as_list(s.get("columns")) for x in as_list(col)]]
+        ocols = as_list(as_dict(oviews.get("list")).get("columns"))
+        cols = list(ocols or as_list(as_dict(views.get("list")).get("columns")))
         for view, have in (("form", placed), ("list", cols)):
-            for i, ad in enumerate(((o.get("views") or {}).get(view) or {}).get("add", [])):
+            for i, ad in enumerate(as_list(as_dict(oviews.get(view)).get("add"))):
                 if not isinstance(ad, dict):
                     continue
                 fn = ad.get("field")

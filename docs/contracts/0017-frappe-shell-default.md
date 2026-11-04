@@ -11,8 +11,10 @@ layout. The web app does not yet render `layout.shell`.
 
 ## Decision
 
-1. **Schema default.** In `schema/0.4/layout.json`, `shell` defaults to `side-only` instead of `top-nav`. The enum is
-   unchanged: `top-nav`, `side-only`, `pos`, `portal`.
+1. **Schema default.** In `layout.json`, `shell` defaults to `side-only` instead of `top-nav`, and `extends` defaults to
+   `rangka/side-only` instead of `rangka/top-nav`. The enum is unchanged: `top-nav`, `side-only`, `pos`, `portal`.
+   The live schema is `schema/0.5` (the kernel embeds it); `schema/0.4` keeps only `app.json` for legacy `app.rk`
+   and a `layout.json` copy. The same edit is made in both.
 2. **Description.** The layout description changes from "top-nav (Atlassian style)" to "side-only (Frappe-style
    sidebar, default)". The other templates keep their descriptions.
 3. **`top-nav` stays valid.** Layouts that name it keep working and render as before.
@@ -23,8 +25,8 @@ layout. The web app does not yet render `layout.shell`.
 
 ## Contract changes (rangka-os)
 
-- `schema/0.4/layout.json`: `shell.default` and the top-level description (run `make sync-schemas` so the kernel copy
-  follows).
+- `schema/0.5/layout.json` and `schema/0.4/layout.json`: `shell.default`, `extends.default` and the top-level
+  description, identical in both. `make sync-schemas` copies `schema/0.5` into `kernel/internal/schema/0.5`.
 - `kernel/internal/api/meta.go`: the no-layout fallback value.
 - `web/app`: shell selection from `layout.shell`.
 - Validator (Go and Python): no new codes; reports stay identical (`make compare-python`).

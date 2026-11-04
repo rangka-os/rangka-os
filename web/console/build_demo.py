@@ -37,6 +37,8 @@ FIX_DIR = os.path.join(WS, "rangka-apps", "fixtures")
 sys.path.insert(0, os.path.join(OS_DIR, "tools"))
 import rkfile  # noqa: E402
 import rangka_validate  # noqa: E402  (also the source of the decision-12 theme derivation)
+sys.path.insert(0, os.path.join(OS_DIR, "web", "design-system"))
+import tokens_css  # noqa: E402
 
 SCHEMA = "https://rangka-os.github.io/rangka-os/schema/0.5/{}.json"
 TZ = dt.timezone(dt.timedelta(hours=7))
@@ -205,16 +207,7 @@ def apply_overlays():
 
 
 # ------------------------------------------------------------------ tokens: design system + theme (decision 12)
-tokens_json = json.load(open(os.path.join(OS_DIR, "web", "design-system", "tokens.json")))
-
-
-def base_tokens():
-    light, dark = {}, {}
-    for t in tokens_json["color"]["tokens"]:
-        v = t["value"]
-        light[t["name"]] = v["light"] if isinstance(v, dict) else v
-        dark[t["name"]] = v["dark"] if isinstance(v, dict) else v
-    return light, dark
+tokens_json = tokens_css.load_tokens()
 
 
 def resolve_theme(th):
@@ -242,29 +235,10 @@ if layout_name in layouts:
     base = {k: v for k, v in templates.get(layouts[layout_name].get("extends", ""), {}).items() if k not in ("name", "label")}
     layout_meta = {**base, **{k: v for k, v in layouts[layout_name].items() if k != "$schema"}}
 
-lt, dk = base_tokens()
+lt, dk = tokens_css.base_tokens(tokens_json)
 
 
-def css_block(vals):
-    return " ".join(f"--{k}: {re.sub(r'^[{]([a-z0-9-]+)[}]$', r'var(--\1)', str(v))};" for k, v in vals.items())
-
-
-fixed, fixed_dark = {}, {}
-for group in ("spacing", "radius", "size", "shadow"):
-    for t in tokens_json[group]["tokens"]:
-        v = t["value"]
-        fixed[t["name"]] = v["light"] if isinstance(v, dict) else v
-        if isinstance(v, dict):
-            fixed_dark[t["name"]] = v["dark"]
-for k, v in tokens_json["type"]["families"].items():
-    fixed["font-" + k] = v
-fixed.setdefault("focus-ring", "0 0 0 2px var(--focus)")
-lt2, dk2 = dict(lt, **fixed), dict(dk, **fixed_dark)
-dark_only = {k: v for k, v in dk2.items() if lt2.get(k) != v}
-css = ("/* Rangka tokens, compiled by web/console/build_demo.py from web/design-system/tokens.json. Do not edit by hand. */\n"
-       f":root {{ {css_block(lt2)} }}\n"
-       f"@media (prefers-color-scheme: dark) {{ :root:not([data-theme=\"light\"]) {{ {css_block(dark_only)} color-scheme: dark; }} }}\n"
-       f":root[data-theme=\"dark\"] {{ {css_block(dark_only)} color-scheme: dark; }}\n").replace("--space-1.5", "--space-1_5")
+css = tokens_css.compile_css(tokens_json)
 open(os.path.join(args.out, "tokens.css"), "w").write(css)
 
 

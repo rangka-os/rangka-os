@@ -1,6 +1,6 @@
 # 0009: Number schemes
 
-Status: proposed (3 Nov 2026) · Owner: rangka-os · Stream S4 of the first-pilots program
+Status: proposed (3 Nov 2026, amended 4 Nov 2026: series `start`, `rangka numbering set`) · Owner: rangka-os · Stream S4 of the first-pilots program
 
 ## Context
 Pilot firms number their documents their own way (`INV/PTA/26/0012`, `PO/OUT-02/2611/007`), reset every year or
@@ -19,6 +19,7 @@ numbering:
   invoice:                                  # a series
     pattern: "INV/{ORG}/{YY}/{####}"
     reset: yearly                           # yearly | monthly | never
+    start: 1001                             # optional: lowest number in every period (default 1)
   purchase_order: {pattern: "PO/{ORG}/{YY}{MM}/{###}", reset: monthly}
   sales_invoice: INV-{YYYY}-{#####}         # legacy: per-model override, unchanged
 ```
@@ -76,6 +77,20 @@ A series must repeat its reset period in the number, or numbers collide: `reset:
   per org + series + period, not per rendered prefix.
 - **Locks:** a transaction that numbers documents of two series takes two counter locks, and Postgres aborts one of two
   such transactions that cross; the retry is safe.
+- **Start:** a series' `start` (an integer of 1 or more, default 1) is the lowest number it issues in **every**
+  period, for firms that number from 1001: the first allocation of a period is
+  `greatest(highest + 1, start)`, and the floor also lifts an existing period's counter. It is not a way to continue
+  a client's numbering once; that is the go-live command below.
+- **Go-live:** `rangka numbering set <org> <series> <next> [--period P]` makes `<next>` the number the series issues
+  next for that org, in the current period (site timezone) or in `--period` (`2026` yearly, `2026-11` monthly; a
+  period of the wrong shape is refused). In one transaction it locks the counter row, then refuses (exit 1) when the
+  counter is already at or past `<next>` ("next can only go up"), when an existing matching name is at or above
+  `<next>` (named in the error), or when `<next>` is below the series `start`; otherwise it sets `last = next - 1`.
+  Allocations queue on the same row, so none is issued twice. Setting the same `<next>` again is a no-op. Raising
+  the counter leaves a hole in Rangka's own sequence by design: the numbers before `<next>` live in the client's old
+  system. The change is audited as `numbering.set`. `--period never` is the same as the empty period. A yearly series
+  whose pattern contains `{MM}` renders `--period` numbers with month `01`, and the existing-name check only covers the
+  rendered prefix, as allocation does.
 - Amendments keep the v0 rule (`<original>-1`, `-2`, …) and take no new number.
 - Legacy string patterns keep their v0 counters in `rk_naming` (keyed by rendered prefix); nothing renumbers.
 
@@ -85,7 +100,7 @@ No REST, MCP or SSE change: the number appears as the record `name`. AI tools ne
 
 ## Schema
 `model.json` `naming` becomes `string | {series, pattern?, reset?}`; `config.json` `numbering` values become
-`string | {pattern, reset?}`. These are existing keys whose values widen, so S4 edits them in `schema/0.5`
+`string | {pattern, reset?, start?}`. These are existing keys whose values widen, so S4 edits them in `schema/0.5`
 only; `schema/0.4` keeps its published content.
 
 ## Open

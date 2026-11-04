@@ -5,7 +5,7 @@ timezone: Asia/Jakarta
 tax: {ppn_rate: 12, dpp_ratio: 11/12, pkp: true}
 numbering:
   sales_invoice: {pattern: "INV/{ORG}/{YY}{MM}/{####}", reset: monthly}
-  deal: {pattern: "{####}/DEAL/{YYYY}", reset: yearly}
+  deal: {pattern: "{####}/DEAL/{YYYY}", reset: yearly, start: 1001}
 apps: [core, crm, sales]
 plan: tumbuh
 theme: kopi_senja

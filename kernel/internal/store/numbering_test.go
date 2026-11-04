@@ -287,3 +287,181 @@ func TestNextSeriesNameSharedSeriesTwoTables(t *testing.T) {
 	got = append(got, nextSeries(t, db, "pt-a", s, tables, now))
 	expectNames(t, got, "INV-2026-0001", "INV-2026-0004")
 }
+
+func TestSeriesStart(t *testing.T) {
+	db := seriesDB(t, 2)
+	s := Scheme{Series: "inv", Pattern: "INV-{YYYY}-{####}", Reset: "yearly", Start: 1001}
+	now := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	tables := []string{"t_doc"}
+	got := []string{nextSeries(t, db, "pt-a", s, tables, now)}
+	if _, err := db.Exec(context.Background(), `insert into t_doc values ('pt-a', 'INV-2026-1005')`); err != nil {
+		t.Fatal(err)
+	}
+	got = append(got, nextSeries(t, db, "pt-a", s, tables, now), nextSeries(t, db, "pt-a", s, tables, time.Date(2027, 1, 2, 9, 0, 0, 0, time.UTC)))
+	expectNames(t, got, "INV-2026-1001", "INV-2026-1006", "INV-2027-1001")
+}
+
+// setNext runs SetNextSeries in its own transaction, like the engine does.
+func setNext(db *pg.Pool, org string, s Scheme, tables []string, now time.Time, period string, next int64) (string, error) {
+	ctx := context.Background()
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		return "", err
+	}
+	defer tx.Rollback(ctx)
+	got, _, err := SetNextSeries(ctx, tx, org, strings.ToUpper(org), s, tables, now, period, next)
+	if err != nil {
+		return "", err
+	}
+	return got, tx.Commit(ctx)
+}
+
+func TestSetNextSeries(t *testing.T) {
+	db := seriesDB(t, 2)
+	s := Scheme{Series: "inv", Pattern: "INV/{ORG}/{YY}/{####}", Reset: "yearly"}
+	now := time.Date(2026, 10, 30, 10, 0, 0, 0, time.UTC)
+	tables := []string{"t_doc"}
+	if got, err := setNext(db, "pt-a", s, tables, now, "", 154); err != nil || got != "INV/PT-A/26/0154" {
+		t.Fatalf("set 154 = %q, %v", got, err)
+	}
+	// running the same go-live command twice is harmless
+	if got, err := setNext(db, "pt-a", s, tables, now, "", 154); err != nil || got != "INV/PT-A/26/0154" {
+		t.Fatalf("set 154 again = %q, %v", got, err)
+	}
+	expectNames(t, []string{nextSeries(t, db, "pt-a", s, tables, now)}, "INV/PT-A/26/0154")
+	_, err := setNext(db, "pt-a", s, tables, now, "", 100)
+	if err == nil || err.Error() != "numbering: series inv of pt-a already issued up to 154 in period 2026; next can only go up" {
+		t.Fatalf("lowering: %v", err)
+	}
+	// an existing name at or above next is never issued again
+	if _, err := db.Exec(context.Background(), `insert into t_doc values ('pt-b', 'INV/PT-B/26/0200')`); err != nil {
+		t.Fatal(err)
+	}
+	_, err = setNext(db, "pt-b", s, tables, now, "", 150)
+	if err == nil || !strings.Contains(err.Error(), "INV/PT-B/26/0200") {
+		t.Fatalf("existing name: %v", err)
+	}
+	// another period: rendered inside that period, the current one untouched
+	if got, err := setNext(db, "pt-a", s, tables, now, "2027", 50); err != nil || got != "INV/PT-A/27/0050" {
+		t.Fatalf("set 2027 = %q, %v", got, err)
+	}
+	expectNames(t, []string{nextSeries(t, db, "pt-a", s, tables, now), nextSeries(t, db, "pt-a", s, tables, time.Date(2027, 2, 1, 9, 0, 0, 0, time.UTC))},
+		"INV/PT-A/26/0155", "INV/PT-A/27/0050")
+	for _, bad := range []struct {
+		period string
+		next   int64
+	}{{"2026-11", 300}, {"26", 300}, {"2026", 0}} {
+		if _, err := setNext(db, "pt-c", s, tables, now, bad.period, bad.next); err == nil {
+			t.Errorf("period %q next %d: want an error", bad.period, bad.next)
+		}
+	}
+	// below the series start the counter would not move: refused
+	if _, err := setNext(db, "pt-c", Scheme{Series: "k", Pattern: "K-{####}", Start: 1001}, nil, now, "", 500); err == nil {
+		t.Error("next below start: want an error")
+	}
+	m := Scheme{Series: "m", Pattern: "M/{YY}{MM}/{###}", Reset: "monthly"}
+	if got, err := setNext(db, "pt-c", m, nil, now, "2026-12", 7); err != nil || got != "M/2612/007" {
+		t.Fatalf("monthly set = %q, %v", got, err)
+	}
+}
+
+func TestSetNextSeriesConcurrent(t *testing.T) {
+	db := seriesDB(t, 25)
+	ctx := context.Background()
+	s := Scheme{Series: "inv", Pattern: "{####}", Reset: "never"}
+	now := time.Date(2026, 11, 2, 9, 0, 0, 0, time.UTC)
+	tables := []string{"t_doc"}
+	const workers, each = 10, 5
+	var (
+		mu       sync.Mutex
+		before   []string // allocations that may have started before the set committed
+		after    []string // allocations started after it
+		setDone  bool
+		wg       sync.WaitGroup
+		setErr   error
+		errCount int
+	)
+	errs := make(chan error, workers*each)
+	for i := 0; i < workers; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for j := 0; j < each; j++ {
+				mu.Lock()
+				started := setDone
+				mu.Unlock()
+				tx, err := db.Begin(ctx)
+				if err != nil {
+					errs <- err
+					return
+				}
+				name, err := NextSeriesName(ctx, tx, "pt-a", "PT-A", s, tables, now)
+				if err == nil {
+					_, err = tx.Exec(ctx, `insert into t_doc values ('pt-a', $1)`, name)
+				}
+				if err == nil {
+					err = tx.Commit(ctx)
+				}
+				if err != nil {
+					_ = tx.Rollback(ctx)
+					errs <- err
+					return
+				}
+				mu.Lock()
+				if started {
+					after = append(after, name)
+				} else {
+					before = append(before, name)
+				}
+				mu.Unlock()
+			}
+		}()
+	}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		_, setErr = setNext(db, "pt-a", s, tables, now, "", 500)
+		mu.Lock()
+		setDone = true
+		mu.Unlock()
+	}()
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		errCount++
+		t.Error(err)
+	}
+	if setErr != nil || errCount > 0 {
+		t.Fatalf("set: %v", setErr)
+	}
+	all := append(append([]string{}, before...), after...)
+	seen := map[string]bool{}
+	low, high := 0, 0
+	for _, n := range all {
+		if seen[n] {
+			t.Fatalf("duplicate %s in %v", n, all)
+		}
+		seen[n] = true
+		if n < "0500" {
+			low++
+		} else {
+			high++
+		}
+	}
+	for _, n := range after {
+		if n < "0500" {
+			t.Fatalf("%s allocated after the set (all: %v)", n, all)
+		}
+	}
+	// both runs are gap free: 0001…low, then 0500…
+	for i := 1; i <= low; i++ {
+		if !seen[fmt.Sprintf("%04d", i)] {
+			t.Fatalf("gap at %04d: %v", i, all)
+		}
+	}
+	for i := 0; i < high; i++ {
+		if !seen[fmt.Sprintf("%04d", 500+i)] {
+			t.Fatalf("gap at %04d: %v", 500+i, all)
+		}
+	}
+}

@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -154,16 +155,62 @@ func TestSeriesConcurrentSubmits(t *testing.T) {
 	}
 }
 
-func TestSeriesNonSubmittable(t *testing.T) {
-	// The deal fixtures are all named DEAL-000xx, which do not match the series, so the series starts at 0001.
+// TestSeriesStartFromConfig: numbering-site's deal series has start: 1001. The deal fixtures are all named
+// DEAL-000xx, which do not match the series, so the first deal is 1001 (deal is not submittable: named on create).
+func TestSeriesStartFromConfig(t *testing.T) {
 	e, a := setupSite(t, numberingSite)
 	res, err := e.Create(context.Background(), a, "deal", map[string]any{"deal_name": "Baru", "customer": "CUST-0012", "value": "2000000"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	name := res.Record["name"].(string)
-	if name != "0001/DEAL/2026" {
+	if name != "1001/DEAL/2026" {
 		t.Fatalf("deal name = %q", name)
+	}
+}
+
+func TestSeriesDefStart(t *testing.T) {
+	for v, want := range map[any]int64{int64(1001): 1001, 1001: 1001, float64(1001): 1001, nil: 0} {
+		sc, ok := seriesDef("d", map[string]any{"pattern": "D-{####}", "start": v})
+		if !ok || sc.Start != want {
+			t.Errorf("start %#v: got %+v, %v", v, sc, ok)
+		}
+	}
+	if sc, _ := seriesDef("d", map[string]any{"pattern": "D-{####}", "start": 10.5}); sc.Start != 0 {
+		t.Errorf("fractional start read as %d", sc.Start)
+	}
+}
+
+func TestSetNextNumber(t *testing.T) {
+	e, a := setupSite(t, numberingSite)
+	ctx := context.Background()
+	if _, err := e.DB.Exec(ctx, `insert into rk_orgs (id, name) values ('kopi-senja', 'Kopi Senja') on conflict (id) do nothing`); err != nil {
+		t.Fatal(err)
+	}
+	got, period, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 154, "")
+	if err != nil || got != "INV/KOPI-SENJA/2610/0154" || period != "2026-10" {
+		t.Fatalf("SetNextNumber = %q, %q, %v", got, period, err)
+	}
+	if got := submitName(t, e, a, newDraftInvoice(t, e, a)); got != "INV/KOPI-SENJA/2610/0154" {
+		t.Fatalf("submit after set = %q", got)
+	}
+	if _, _, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 100, ""); err == nil || !strings.Contains(err.Error(), "next can only go up") {
+		t.Fatalf("lowering: %v", err)
+	}
+	if got, period, err := e.SetNextNumber(ctx, "kopi-senja", "sales_invoice", 7, "2026-11"); err != nil || got != "INV/KOPI-SENJA/2611/0007" || period != "2026-11" {
+		t.Fatalf("next period = %q, %q, %v", got, period, err)
+	}
+	_, _, err = e.SetNextNumber(ctx, "kopi-senja", "tidak_ada", 5, "")
+	if err == nil || err.Error() != `numbering: no installed model uses series "tidak_ada" in org kopi-senja` {
+		t.Fatalf("unknown series: %v", err)
+	}
+	_, _, err = e.SetNextNumber(ctx, "kopi-senja-typo", "sales_invoice", 5, "")
+	if err == nil || err.Error() != "numbering: org kopi-senja-typo does not exist" {
+		t.Fatalf("unknown org: %v", err)
+	}
+	res, qerr := e.DB.Query(context.Background(), `select count(*) from rk_number_series where org_id = 'kopi-senja-typo'`)
+	if qerr != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("rows for unknown org: %v %v", res, qerr)
 	}
 }
 

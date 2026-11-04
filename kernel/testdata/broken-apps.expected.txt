@@ -1,6 +1,7 @@
 core/models/outlet.rk:6:7  error  ambiguous_value  (syntax)  0812 means different things in different YAML tools; write "0812" in quotes for text, or a number without leading zeros
 core/models/outlet.rk:7:1  error  duplicate_key  (syntax)  "icon" appears twice (first on line 4)
 core/models/outlet.rk:8:7  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
+core/models/outlet.rk:9:37  error  ambiguous_value  (syntax)  no means different things in different YAML tools; write "no" in quotes for text, or true or false
 core/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/core/module.rk and an app (contract 0001)
 core/app.rk:4:9  error  schema  hooks/0  'Bad Hook' does not match '^[a-z_]+\\.[a-z_]+$'
 core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must match the file name "item"
@@ -95,4 +96,4 @@ crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope fiel
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-83 error(s), 13 warning(s)
+84 error(s), 13 warning(s)

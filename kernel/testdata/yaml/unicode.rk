@@ -1,0 +1,6 @@
+# Non-ASCII text before other values on a line: positions count characters, not bytes.
+outlet:
+  - {name: OUT-01, outlet_name: Kopi Senja · Kemang, code: KMG, city: Jakarta Selatan}
+  - {name: Café Éclair, note: Kopi Susu Gula Aren — ☕ 😀, qty: 2}
+menu: [Es Kopi Susu — besar, Teh Tarik, "Kue Lapis · legit", 12]
+toko: Warung Bu Sri — ramai   # komentar

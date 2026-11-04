@@ -161,6 +161,10 @@ section_stack() {
     | jq -r '.services | to_entries | map("\(.key)=\(.value.logging.driver)/\(.value.logging.options["max-size"])/\(.value.logging.options["max-file"])") | sort | join(" ")')" || logcfg=""
   same "every service has json-file logging 10m x 5" "$logcfg" "backup=json-file/10m/5 caddy=json-file/10m/5 fnb=json-file/10m/5 jasa=json-file/10m/5 postgres=json-file/10m/5"
 
+  # serve and the backup read the same connectors folder: the pilot's own connectors/
+  same "jasa and fnb set RANGKA_CONNECTORS=/srv/connectors" \
+    "$(dc config --format json | jq -r '[.services.jasa, .services.fnb] | map(.environment.RANGKA_CONNECTORS) | join(",")')" "/srv/connectors,/srv/connectors"
+
   dc up -d postgres >/dev/null
   local seed_out
   for p in jasa fnb; do
@@ -249,7 +253,7 @@ esac
 tar -tf apps.tar >apps.list; grep -q "^apps/" apps.list && grep -q "^modules/e2e_marker/module.rk$" apps.list && grep -q "^fixtures/" apps.list && printf "apps=ok "
 [ -z "$(for t in site files apps; do tar -tf $t.tar; done | grep "^backups")" ] && printf "nobackups=ok "
 rka=none
-if [ -f rangka.backup ]; then tar -tzf rangka.backup >rk.list; if grep -qx manifest.json rk.list; then rka=ok; else rka=bad; fi; fi
+if [ -f rangka.backup ]; then tar -tzf rangka.backup >rk.list; if grep -qx manifest.json rk.list && grep -q "^modules/e2e_marker/module.rk$" rk.list; then rka=ok; else rka=bad; fi; fi
 jq -r --arg rka "$rka" "\"rk=\(.tables | to_entries | map(select((.key | test(\"[.]rk_\")) and .value.rows > 0)) | length) total=\([.tables[].rows] | add) lead=\([.tables | to_entries[] | select(.key | test(\"[.]r_lead\$\")) | .value.rows] | add // 0) method=\(.method) tag=\(.rangka_tag) image=\(.rangka_image) rkarchive=\(\$rka)\"" manifest.json'
 inspect_archive() { # inspect_archive <pilot> <archive file name>
   dc run --rm -T --no-deps -v "$WORK/age-identity.txt:/age.txt:ro" --entrypoint bash backup -c "$INSPECT" _ "$1" "$2"

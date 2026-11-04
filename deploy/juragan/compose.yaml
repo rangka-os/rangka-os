@@ -50,9 +50,10 @@ services:
       RANGKA_ORG: ${JASA_ORG:?}
       RANGKA_APPS: /srv/apps
       RANGKA_SITE: /srv/site
+      RANGKA_CONNECTORS: /srv/connectors # the bundle's connectors/ (absent is fine); backup.sh uses the same folder
       RANGKA_DEPLOY_TARGET: docker
       RANGKA_ENV: production
-      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, connectors, site, data only)
+      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, modules, connectors, fixtures, site, data)
       RANGKA_ADDR: ":8080"
       RANGKA_OWNER_EMAIL: ${RANGKA_OWNER_EMAIL:-}
       RANGKA_OWNER_PASSWORD: ${RANGKA_OWNER_PASSWORD:-}
@@ -66,9 +67,10 @@ services:
       RANGKA_ORG: ${FNB_ORG:?}
       RANGKA_APPS: /srv/apps
       RANGKA_SITE: /srv/site
+      RANGKA_CONNECTORS: /srv/connectors # the bundle's connectors/ (absent is fine); backup.sh uses the same folder
       RANGKA_DEPLOY_TARGET: docker
       RANGKA_ENV: production
-      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, connectors, site, data only)
+      RANGKA_BACKUP_DIR: /srv/backups # pre-migrate backups; outside the nightly archive (it packs apps, modules, connectors, fixtures, site, data)
       RANGKA_ADDR: ":8080"
       RANGKA_OWNER_EMAIL: ${RANGKA_OWNER_EMAIL:-}
       RANGKA_OWNER_PASSWORD: ${RANGKA_OWNER_PASSWORD:-}

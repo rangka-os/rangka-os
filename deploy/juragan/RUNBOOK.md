@@ -268,8 +268,10 @@ hand any time: `docker compose run --rm backup all` (or `jasa` / `fnb`).
 
    Every archive's `apps.tar` holds the bundle's `apps/`, `modules/`, `connectors/` and `fixtures/` (whichever
    exist), so a restore on a second machine boots the kernel from the archive alone. With `BACKUP_METHOD=rangka`,
-   `rangka restore` also migrates the schema from the metadata inside `rangka.backup`: until the release you run
-   has S1's change that puts `modules/` into that file, stay on `pg_dump` for a bundle with `modules/`.
+   `rangka restore` migrates the schema from the metadata inside `rangka.backup` only; from release `0.5.0-alpha.2`
+   (rangka-os #27) that file also holds `modules/` and `connectors/`. Use `BACKUP_METHOD=rangka` only with
+   `0.5.0-alpha.2` or later. Both the kernels and the backup read connectors from the pilot's `connectors/`
+   (`RANGKA_CONNECTORS`), modules from its `modules/`.
 
    `rangka` archives restore as the pilot role, the same as `pg_dump` archives (since rangka-os #22 `rangka restore`
    loads tables with forced row-level security as the owner). `restore.sh` then checks that nothing in `public` or

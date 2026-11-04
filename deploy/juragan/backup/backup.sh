@@ -111,6 +111,7 @@ dump_rangka() {
     # the tables without an org link (rk_keys, ...), which would never match the manifest. --files is the pilot's
     # files folder (system.rk files.path, ./data/files); a missing one only matters once attachments exist.
     (cd "$PILOTS_ROOT/$p" && DATABASE_URL="$secret_url" RANGKA_APPS="$PILOTS_ROOT/$p/apps" RANGKA_SITE="$PILOTS_ROOT/$p/site" \
+      RANGKA_CONNECTORS="$PILOTS_ROOT/$p/connectors" RANGKA_MODULES="$PILOTS_ROOT/$p/modules" \
       rangka backup --out "$dir/rangka.backup" --files "$PILOTS_ROOT/$p/data/files") \
       || { log "rangka backup failed"; return 1; }
     after="$(table_stats "$url")" || { log "table stats failed"; return 1; }

@@ -109,7 +109,7 @@
     } else {
       var seed = {}; seed[keyName] = keyValue;
       ed = editor({ parsed: seed }, true);
-      ops.push({ op: "create", path: path, content: header(kind) + keyName + ": " + keyValue + "\n" });
+      ops.push({ op: "create", path: path, content: header(kind) + keyName + ": '" + String(keyValue).replace(/'/g, "''") + "'\n" });
     }
     edit(ed);
     if (ed.ops.length) ops.push({ op: "patch", path: path, patch: ed.ops });
@@ -152,10 +152,15 @@
 
   /* ---------------------------------------------------------------- menu */
 
-  /** layouts/<layoutName>.rk nav.side. configLayout (optional) is config.layout: when the layout file is new and differs, config.rk is pointed at it. */
-  RA.opsMenu = function (layoutName, side, existing, configLayout) {
+  /** layouts/<layoutName>.rk nav.side. `config` (optional) is the parsed config.rk (or just its layout name): when the layout
+   * file is new and config.layout differs, config.rk is pointed at it with `replace` if it has a layout key, else `add`. */
+  RA.opsMenu = function (layoutName, side, existing, config) {
     var ops = fileOps("layouts/" + layoutName + ".rk", "layout", "name", layoutName, existing, function (ed) { ed.put(["nav", "side"], side); });
-    if (!existing && configLayout !== layoutName) ops.push({ op: "patch", path: "config.rk", patch: [{ op: "replace", path: "/layout", value: layoutName }] });
+    var current = isObj(config) ? config.layout : config;
+    if (!existing && current !== layoutName) {
+      var present = isObj(config) ? has(config, "layout") : typeof config === "string";
+      ops.push({ op: "patch", path: "config.rk", patch: [{ op: present ? "replace" : "add", path: "/layout", value: layoutName }] });
+    }
     return { title: "Ubah menu samping", ops: ops };
   };
 
@@ -199,13 +204,17 @@
     return { title: "Tambah kolom isian " + spec.label + " di " + modelLabel(model, spec.modelLabel), fieldName: name, ops: ops };
   };
 
-  /** One more option on a select field (overlay `options.<field>`). */
-  RA.opsAddStatus = function (model, field, opt, existing) {
+  /** One more option on a select field (overlay `options.<field>`). ctx (optional): {baseOptions: the model's options of that
+   * field (values or {value}), modelLabel}. Throws an Error (Bahasa Indonesia) when the value already exists. */
+  RA.opsAddStatus = function (model, field, opt, existing, ctx) {
+    ctx = ctx || {};
     var value = opt.value || rawSlug(opt.label) || "baru";
     var ops = overlayOps(model, existing, function (ed) {
+      var taken = (ctx.baseOptions || []).concat(ed.get(["options", field]) || []).map(function (o) { return isObj(o) ? o.value : o; });
+      if (taken.indexOf(value) >= 0) throw new Error("Tahap " + value + " sudah ada");
       ed.append(["options", field], { value: value, label: lbl(opt.label) });
     });
-    return { title: "Tambah status " + opt.label + " di " + model, ops: ops };
+    return { title: "Tambah status " + opt.label + " di " + (ctx.modelLabel || model), ops: ops };
   };
 
   /** One approval policy (contract 0007 shape) appended to the overlay's approvals. */
@@ -220,7 +229,8 @@
     return { title: "Tambah persetujuan " + (spec.label || spec.on) + " di " + model, ops: ops };
   };
 
-  /* A flow on <model>.updated. The triggering record is event; step 1 finds it again as `record` (update needs a variable that
+  /* A flow on <model>.updated. In record-event flows event = {model, name, op, record}; event.name is the RECORD's name.
+   * A flow on <model>.updated. The triggering record is event; step 1 finds it again as `record` (update needs a variable that
    * holds a record), step 2 runs when `when` is true: set {field: CEL} updates it, notify <who> sends a message. */
   RA.opsAddAutomation = function (app, model, spec, unitKind) {
     var name = slugName(spec.name || spec.label);

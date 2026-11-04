@@ -26,7 +26,7 @@ function apply(doc, patch) {
       else cur[+k] = p.value;
     } else {
       if (p.op === "replace") assert.ok(k in cur, "replace of absent " + p.path);
-      else assert.ok(!(k in cur) || true);
+      else assert.ok(!(k in cur), "add over an existing key " + p.path + " (use replace)");
       cur[k] = p.value;
     }
   }
@@ -52,10 +52,13 @@ test("moveItem", () => {
 
 test("opsDashboard: new file is create + patch, keeps every widget key", () => {
   const def = { name: "crm_overview", label: { id: "Ringkasan CRM" }, periods: [7, 30], default_period: 30 };
-  const widgets = [{ name: "b", type: "number", model: "deal", span: 6, extra: { x: 1 } }, { name: "a", type: "list", span: 12, columns: ["x"] }];
+  const orig = [{ name: "a", type: "list", span: 12, columns: ["x"] }, { name: "b", type: "number", model: "deal", span: 6, extra: { x: 1 } }];
+  const widgets = RA.moveItem(orig, 0, 1);
+  assert.strictEqual(widgets[0].name, "b");
+  assert.deepStrictEqual(widgets[1], orig[0]);
   const r = RA.opsDashboard(def, widgets, null);
   assert.strictEqual(r.title, "Ubah tata letak dasbor Ringkasan CRM");
-  assert.deepStrictEqual(r.ops[0], { op: "create", path: "dashboards/crm_overview.rk", content: HDR("dashboard") + "name: crm_overview\n" });
+  assert.deepStrictEqual(r.ops[0], { op: "create", path: "dashboards/crm_overview.rk", content: HDR("dashboard") + "name: 'crm_overview'\n" });
   assert.strictEqual(r.ops[1].op, "patch");
   assert.strictEqual(r.ops[1].path, "dashboards/crm_overview.rk");
   assert.deepStrictEqual(r.ops[1].patch, [
@@ -74,7 +77,7 @@ test("opsDashboard: existing file gets one replace of /widgets", () => {
 
 test("views overlays: absent file creates parents once; existing file adds or replaces", () => {
   let r = RA.opsFormLayout("deal", [{ section: { id: "Umum" }, fields: ["a"] }], null);
-  assert.deepStrictEqual(r.ops[0], { op: "create", path: "custom/deal.rk", content: HDR("overlay") + "model: deal\n" });
+  assert.deepStrictEqual(r.ops[0], { op: "create", path: "custom/deal.rk", content: HDR("overlay") + "model: 'deal'\n" });
   assert.deepStrictEqual(r.ops[1].patch, [{ op: "add", path: "/views", value: { form: { layout: [{ section: { id: "Umum" }, fields: ["a"] }] } } }]);
 
   r = RA.opsListColumns("deal", ["a", "b"], file("custom/deal.rk", "overlay", { model: "deal", views: { form: { add: [] } } }));
@@ -98,16 +101,20 @@ test("opsMenu: replaces /nav/side; new layout also points config at it", () => {
 
   r = RA.opsMenu("site_menu", side, null, "crm_first");
   assert.strictEqual(r.ops.length, 3);
-  assert.deepStrictEqual(r.ops[0], { op: "create", path: "layouts/site_menu.rk", content: HDR("layout") + "name: site_menu\n" });
+  assert.deepStrictEqual(r.ops[0], { op: "create", path: "layouts/site_menu.rk", content: HDR("layout") + "name: 'site_menu'\n" });
   assert.deepStrictEqual(r.ops[1].patch, [{ op: "add", path: "/nav", value: { side } }]);
   assert.deepStrictEqual(r.ops[2], { op: "patch", path: "config.rk", patch: [{ op: "replace", path: "/layout", value: "site_menu" }] });
   assert.strictEqual(RA.opsMenu("crm_first", side, null, "crm_first").ops.length, 2);
+  assert.strictEqual(RA.opsMenu("crm_first", side, null, { layout: "crm_first" }).ops.length, 2);
+  assert.deepStrictEqual(RA.opsMenu("m", side, null, { layout: "x" }).ops[2].patch, [{ op: "replace", path: "/layout", value: "m" }]);
+  assert.deepStrictEqual(RA.opsMenu("m", side, null, { locale: "id-ID" }).ops[2].patch, [{ op: "add", path: "/layout", value: "m" }]);
+  assert.deepStrictEqual(RA.opsMenu("m", side, null).ops[2].patch, [{ op: "add", path: "/layout", value: "m" }]);
 });
 
 test("opsAddField on an absent overlay", () => {
   const r = RA.opsAddField("deal", { label: "Nomor PO", type: "Teks" }, null);
   assert.strictEqual(r.title, "Tambah kolom isian Nomor PO di deal");
-  assert.deepStrictEqual(r.ops[0], { op: "create", path: "custom/deal.rk", content: HDR("overlay") + "model: deal\n" });
+  assert.deepStrictEqual(r.ops[0], { op: "create", path: "custom/deal.rk", content: HDR("overlay") + "model: 'deal'\n" });
   assert.deepStrictEqual(r.ops[1].patch, [
     { op: "add", path: "/fields", value: [{ name: "x_nomor_po", type: "data", label: { id: "Nomor PO" } }] },
     { op: "add", path: "/views", value: { form: { add: [{ field: "x_nomor_po" }] } } },
@@ -143,6 +150,14 @@ test("opsAddStatus appends to options.<field>", () => {
   assert.deepStrictEqual(r.ops[0].patch, [{ op: "add", path: "/options/stage", value: [{ value: "sedang_review", label: { id: "Sedang Review" } }] }]);
 });
 
+test("opsAddStatus refuses an existing value; created keys are quoted", () => {
+  assert.throws(() => RA.opsAddStatus("deal", "stage", { value: "a", label: "A" }, file("custom/deal.rk", "overlay", { model: "deal", options: { stage: [{ value: "a" }] } })), /Tahap a sudah ada/);
+  assert.throws(() => RA.opsAddStatus("deal", "stage", { label: "Baru" }, null, { baseOptions: [{ value: "baru" }] }), /Tahap baru sudah ada/);
+  assert.strictEqual(RA.opsAddStatus("deal", "stage", { label: "Z" }, null, { modelLabel: "Peluang" }).title, "Tambah status Z di Peluang");
+  const r = RA.opsAddModel("crm", { label: "No", fields: [] }, "l", null);
+  assert.strictEqual(r.ops[0].content, HDR("model") + "name: 'no'\n");
+});
+
 test("opsAddApproval appends a contract 0007 policy", () => {
   const spec = { on: "submit", when: "grand_total > 10000000", approvers: ["sales_manager"], label: "Persetujuan manajer" };
   let r = RA.opsAddApproval("deal", spec, null);
@@ -154,7 +169,7 @@ test("opsAddApproval appends a contract 0007 policy", () => {
 test("opsAddAutomation: update flow in an app, notify flow in a module", () => {
   let r = RA.opsAddAutomation("crm", "deal", { name: "Tandai Menang", label: "Tandai menang", when: "record.amount > 1000", set: { status: "'won'" } }, "app");
   assert.strictEqual(r.title, "Tambah otomatisasi Tandai menang di deal");
-  assert.deepStrictEqual(r.ops[0], { op: "create", path: "apps/crm/flows/tandai_menang.rk", content: HDR("flow") + "name: tandai_menang\n" });
+  assert.deepStrictEqual(r.ops[0], { op: "create", path: "apps/crm/flows/tandai_menang.rk", content: HDR("flow") + "name: 'tandai_menang'\n" });
   assert.deepStrictEqual(r.ops[1].path, "apps/crm/flows/tandai_menang.rk");
   assert.deepStrictEqual(r.ops[1].patch, [
     { op: "add", path: "/label", value: { id: "Tandai menang" } },
@@ -172,7 +187,7 @@ test("opsAddAutomation: update flow in an app, notify flow in a module", () => {
 test("opsAddModel: model file plus a menu entry in a new group", () => {
   const r = RA.opsAddModel("crm", { label: "Kunjungan Toko", fields: [{ label: "Nama Toko", type: "Teks" }, { label: "Tanggal", type: "Tanggal" }] }, "crm_first",
     file("layouts/crm_first.rk", "layout", { name: "crm_first", nav: { side: [{ group: { id: "CRM" }, items: [] }] } }));
-  assert.deepStrictEqual(r.ops[0], { op: "create", path: "apps/crm/models/kunjungan_toko.rk", content: HDR("model") + "name: kunjungan_toko\n" });
+  assert.deepStrictEqual(r.ops[0], { op: "create", path: "apps/crm/models/kunjungan_toko.rk", content: HDR("model") + "name: 'kunjungan_toko'\n" });
   assert.deepStrictEqual(r.ops[1].patch, [
     { op: "add", path: "/label", value: { id: "Kunjungan Toko" } },
     { op: "add", path: "/title_field", value: "nama_toko" },

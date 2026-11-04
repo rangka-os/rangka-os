@@ -1,0 +1,7 @@
+../modules/core/processes/bad_model.rk:4:24  error  process_unknown_model  stages/0/model  "custmer" is not a model; did you mean "customer"?
+../modules/core/processes/bad_name.rk:2:7  error  process_name_mismatch  name  process name "other_name" must match the file name "bad_name"
+../modules/core/processes/bad_schema.rk:3:9  error  schema  stages  [] should be non-empty
+../modules/core/processes/bad_when.rk:4:45  error  process_when  stages/0/when  `statu` in `statu == 'paid'` is not a field; did you mean "status"?
+../modules/core/processes/dup_stage.rk:5:12  error  process_duplicate_stage  stages/1/name  stage "step" is declared twice
+
+5 error(s), 0 warning(s)

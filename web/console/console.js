@@ -210,6 +210,7 @@
     { id: "connectors", label: "Konektor", icon: "plug", group: "Lapis 3 · Integrasi" },
     { id: "orgs", label: "Organisasi & member", icon: "building", group: "Lapis 4 · Organisasi" },
     { id: "apps", label: "App & model", icon: "apps", group: "Lapis 5 · Aplikasi" },
+    { id: "processes", label: "Proses", icon: "time", group: "Lapis 5 · Aplikasi" },
     { id: "appearance", label: "Tampilan", icon: "palette", group: "Lapis 6 · Presentasi" },
     { id: "changesets", label: "Change set", icon: "amend", group: "Tata kelola" },
     { id: "audit", label: "Audit log", icon: "shield", group: "Tata kelola" }
@@ -537,6 +538,47 @@
     return h(React.Fragment, null,
       h(R.PageHeader, { title: title, breadcrumb: ["App & model", app, n], onNavigate: function (i) { if (i < 2) ctx.nav("/apps"); }, onBack: function () { ctx.nav("/apps"); }, tags: [mono(path, "cn-tag")] }),
       h("div", { className: "rk-shell-content" }, info, h(R.Card, { title: "Sumber" }, h(SourcePanel, { path: path, rev: ctx.csRev }))));
+  }
+
+  /* ================================================================ Proses (process canvas, contract 0014) */
+  function ProcessesScreen(ctx) {
+    var name = ctx.route.parts[0];
+    if (name) return h(ProcessDetail, Object.assign({ name: name }, ctx));
+    var list = useLoad(function () { return api.processes(); }, [ctx.csRev]);
+    var rows = (list.data || []).map(function (x) { return Object.assign({ id: x.name, lbl: L(x.label) || x.name }, x); });
+    return h(React.Fragment, null,
+      h(R.PageHeader, { title: "Proses", breadcrumb: ["Rangka Console", "Lapis 5", "Proses"], onNavigate: function () {},
+        subtitle: "Satu proses bisnis sebagai tahap yang bisa dibuka di tempat. Perubahan dari kanvas menjadi change set." }),
+      h("div", { className: "rk-shell-content" }, list.error ? h(ErrorBox, { error: list.error, onRetry: list.reload }) :
+        h(R.Card, { flush: true, title: "Proses (" + rows.length + ")" }, !list.data ? h(Loading) : !rows.length ? h("p", { className: "cn-empty-line cn-card-pad" }, "Belum ada proses yang bisa kamu lihat.") :
+          h(R.Table, { card: false, searchPlaceholder: "Cari proses…", rows: rows, onOpen: function (r) { ctx.nav("/processes/" + encodeURIComponent(r.name)); }, emptyText: "Tidak ada proses",
+            columns: [
+              { key: "lbl", label: "Proses", render: function (v, r) { return h("a", { className: "cn-cell-title cn-link", href: "#/processes/" + encodeURIComponent(r.name), onClick: function (e) { e.stopPropagation(); } }, h("b", null, v), h("small", null, mono(r.name))); } },
+              { key: "stages", label: "Tahap", numeric: true },
+              { key: "inferred", label: "Asal", sortable: false, render: function (v) { return v ? h(R.Lozenge, { tone: "new" }, "Disimpulkan") : h(R.Lozenge, null, "Dideklarasikan"); } },
+              { key: "source", label: "Sumber", sortable: false, render: function (v) { return v && v.file ? mono(v.file) : h("span", { className: "cn-faint" }, "—"); } }] }))));
+  }
+  function ProcessDetail(ctx) {
+    var name = ctx.name, parts = ctx.route.parts, srcPath = parts[1] === "source" ? parts.slice(2).join("/") : "";
+    var adapter = useMemo(function () {
+      var demo = api.mode === "demo";
+      return {
+        get: function (n) { return api.process(n); },
+        ops: function (n, edits) { return api.processOps(n, edits); },
+        propose: function (title, ops) { return demo ? Promise.resolve({ id: "cs_demo", status: "proposed" }) : api.proposeChangeset({ title: title, ops: ops }); },
+        saveLayout: function (n, layout) { return api.saveProcessLayout(n, layout); }
+      };
+    }, []);
+    var RC = window.RangkaCanvas;
+    return h(React.Fragment, null,
+      h(R.PageHeader, { title: name, breadcrumb: ["Proses", name], onNavigate: function (i) { if (i < 1) ctx.nav("/processes"); }, onBack: function () { ctx.nav("/processes"); },
+        subtitle: "Buka tahap untuk melihat isinya. Ubah nilai di panel samping, lalu usulkan: hasilnya change set." }),
+      h("div", { className: "cn-canvas-wrap" }, RC ? h(RC.Mounted, { api: adapter, process: name, lang: "id", readOnly: false,
+        sourceHref: function (src) { return src && src.file ? "#/processes/" + encodeURIComponent(name) + "/source/" + src.file.split("/").map(encodeURIComponent).join("/") : null; },
+        changesetHref: function (id) { return api.mode === "demo" ? "#/changesets" : "#/changesets/" + encodeURIComponent(id); } })
+        : h(ErrorBox, { title: "Kanvas tidak termuat", error: { message: "../canvas/canvas.js tidak ditemukan." } })),
+      srcPath ? h(R.Drawer, { title: "Sumber", subtitle: srcPath, icon: "invoice", wide: true, onClose: function () { ctx.nav("/processes/" + encodeURIComponent(name)); } },
+        h(R.DrawerSection, null, h(SourcePanel, { path: srcPath }))) : null);
   }
 
   /* ================================================================ Change sets */
@@ -969,6 +1011,7 @@
     else if (screen === "connectors") body = h(ConnectorsScreen, ctx);
     else if (screen === "orgs") body = h(OrgsScreen, ctx);
     else if (screen === "apps") body = h(AppsScreen, ctx);
+    else if (screen === "processes") body = h(ProcessesScreen, ctx);
     else if (screen === "appearance") body = h(AppearanceScreen, ctx);
     else if (screen === "changesets") body = h(ChangesetList, ctx);
     else if (screen === "audit") body = h(AuditScreen, ctx);

@@ -17,6 +17,7 @@ Every kind of `.rk` file, generated from `schema/0.5`.
 | [model.rk](./model) | `apps/<app>/models/<model>.rk` | Rangka model |
 | [overlay.rk](./overlay) | `<site>/custom/<model>.rk` | Company layer (layer 4): fields, rules and view tweaks an organisation adds to an app model, in &lt;site&gt;/custom/&lt;model&gt;.rk |
 | [print.rk](./print) | `apps/<app>/print/<name>.rk or <site>/print/<name>.rk` | Rangka print format |
+| [process.rk](./process) | `apps/<app>/processes/<name>.rk or <site>/processes/<name>.rk` | Rangka process |
 | [role.rk](./role) | `apps/<app>/roles/<role>.rk` | A role an app defines (apps/&lt;app&gt;/roles/&lt;role&gt;.rk) |
 | [system.rk](./system) | `<site>/system.rk` | Layer 2: which backend capabilities are on and which driver serves each |
 | [template.rk](./template) | `templates/<name>/template.rk` | A starting point for a new installation: the apps to install, connectors, roles, fixtures and onboarding questions. |

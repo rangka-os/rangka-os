@@ -636,7 +636,30 @@ MOCKS = {
     "print": _mock_print,
     "attachments": _mock_attachments,
     "imports": _mock_imports,
+    "processes": None,  # set below, after _mock_processes
 }
+
+
+CANVAS_GOLDEN = os.path.join(ROOT, "web", "canvas", "testdata", "lead_to_cash.json")
+
+
+def _mock_processes(page, ctx):
+    """S10 shape (contract 0014): GET /api/v1/processes and /{name} answer the lead_to_cash golden of web/canvas."""
+    golden = json.load(open(CANVAS_GOLDEN, encoding="utf-8"))
+    row = {"name": golden["name"], "label": golden["label"], "inferred": golden["inferred"], "stages": len(golden["groups"]), "source": golden["source"]}
+
+    def handle(route):
+        path = re.sub(r"^https?://[^/]+", "", route.request.url).split("?")[0]
+        if path == "/api/v1/processes":
+            _json(route, 200, {"data": [row]})
+        elif path == "/api/v1/processes/" + golden["name"]:
+            _json(route, 200, golden)
+        else:
+            _json(route, 404, {"error": {"code": "not_found", "message": "no such process"}})
+    page.route(re.compile(r".*/api/v1/processes(/.*)?$"), handle)
+
+
+MOCKS["processes"] = _mock_processes
 
 
 def detect_features(base):
@@ -647,7 +670,9 @@ def detect_features(base):
     st_org, b_org = h.call("POST", "/auth/org", {"org": ORG})
     st_ap, b_ap = h.call("GET", "/api/v1/approvals?state=pending&limit=1")
     st_at, b_at = h.call("GET", "/api/v1/r/sales_invoice/__probe__/attachments")
+    st_pr, b_pr = h.call("GET", "/api/v1/processes")
     return {
+        "processes": st_pr == 200 and bool((b_pr or {}).get("data")),
         "orgs": isinstance(me, dict) and "orgs" in me and not missing_route(st_org, b_org),
         "approvals": not missing_route(st_ap, b_ap),
         "print": bool((meta or {}).get("prints")) or any(m.get("prints") for m in ((meta or {}).get("models") or {}).values()),
@@ -2405,7 +2430,7 @@ def test_import_file_too_large(page, ctx):
 
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
-PROBE_404 = re.compile(r"/api/v1/(approvals|r/[^/]+/[^/]+/attachments)(\?|$)")
+PROBE_404 = re.compile(r"/api/v1/(approvals|processes|r/[^/]+/[^/]+/attachments)(\?|$)")
 
 
 def http_problems(responses, ctx):
@@ -2571,6 +2596,42 @@ def check_fits(page, ctx, label):
     if w <= 600:
         small = page.evaluate(SMALL_CONTROLS_JS)
         assert not small, f"{label}: controls under 40px tall: {small}"
+
+
+def test_process_canvas(page, ctx):
+    """S10: "Proses bisnis" in the sidebar only when the kernel lists processes; #/proses/<name> is the read-only canvas:
+    stages open in place, a node opens a panel with no edit form, and no layout PUT or ops POST is ever sent."""
+    mocked = mock_feature(page, "processes")
+    seen = watch_requests(page)
+    open_route(page, ctx, ctx.home()[0])
+    open_nav(page)
+    entry = page.locator(".rk-side").get_by_text("Proses bisnis")
+    entry.first.wait_for(timeout=10000)
+    entry.first.click()
+    page.wait_for_function("() => location.hash === '#/proses'", timeout=5000)
+    item = page.locator(".ap-proc-item").first
+    item.wait_for(timeout=10000)
+    name = item.get_attribute("href").split("/")[-1]
+    item.click()
+    page.wait_for_function("(n) => location.hash === '#/proses/' + n", arg=name, timeout=5000)
+    page.wait_for_selector("[data-group]", timeout=10000)
+    groups = page.locator("[data-group]")
+    assert groups.count() >= 1 and (not mocked or groups.count() == 4), f"stage cards: {groups.count()}"
+    toggle = groups.first.locator("button[aria-expanded]").first
+    assert toggle.get_attribute("aria-expanded") == "false", "stage cards start collapsed"
+    toggle.click()
+    page.wait_for_timeout(200)
+    assert toggle.get_attribute("aria-expanded") == "true", "stage did not open in place"
+    nodes = page.locator("[data-node]")
+    if nodes.count():
+        nodes.first.click()
+        panel = page.locator("[data-panel]")
+        panel.wait_for(timeout=3000)
+        assert panel.get_by_role("button", name="Usulkan perubahan").count() == 0, "read-only canvas offers an edit button"
+    page.wait_for_timeout(900)  # a layout save would be debounced 600 ms
+    writes = [u for m, u in seen if m in ("PUT", "POST") and "/api/v1/processes" in u]
+    assert not writes, f"read-only canvas wrote: {writes}"
+    check_fits(page, ctx, "process canvas")
 
 
 def test_no_horizontal_scroll(page, ctx):

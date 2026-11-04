@@ -10,7 +10,7 @@ No build step: plain JS on React 18 UMD, the same setup as the Console. It uses 
 
 | File | What |
 | --- | --- |
-| `canvas.js` | One IIFE that exposes `window.RangkaCanvas = {Canvas, mount, client}` |
+| `canvas.js` | One IIFE that exposes `window.RangkaCanvas = {Canvas, Mounted, mount, client}` |
 | `canvas.css` | Styles. Every class starts with `rc-`; colours come from `tokens.css` variables |
 | `index.html` | Standalone page: `?process=<name>` against the kernel on the same origin, `?demo=1` / `?demo=quote_to_cash` from `testdata/` |
 | `test_canvas.py` | Playwright check at 1280×900 and 400×800 |
@@ -27,11 +27,15 @@ h(RangkaCanvas.Canvas, {
   lang: "id",            // "id" (default) or "en": label.id / label.en, falling back to the other, then the id
   sourceHref(source),    // → URL string or null. source = {file, path, line, col}. Turns "file:line" into a link
   onEdit(edits),         // edits = [{node, key, value}] → Promise<{changeset?: {id, status}, title?}>; a rejection's message is shown
+  changesetHref(id),     // → URL string: makes the change set id in the result a link (Console: #/changesets/<id>)
   onLayout(layout),      // called on every expand/collapse with the full new layout (unknown x/y entries round-trip unchanged)
 });
 
 // Fetch a graph from the kernel and wire everything. Returns {unmount()}.
-RangkaCanvas.mount(el, {baseUrl: "", process: "lead_to_cash", readOnly, sourceHref, lang});
+RangkaCanvas.mount(el, {baseUrl: "", process: "lead_to_cash", readOnly, sourceHref, changesetHref, lang});
+// The same as a React component (for a host app that already renders with React). `api` replaces the client with any
+// object shaped like client() (get, ops, propose, saveLayout); the Console uses it to go through its own adapter.
+h(RangkaCanvas.Mounted, {process, readOnly, lang, sourceHref, changesetHref, baseUrl: "", api});
 
 // The kernel client (fetch, credentials: "include"). Errors are Error(message) with .status and .code
 // taken from the kernel body {error: {code, message}}.
@@ -45,7 +49,8 @@ c.saveLayout(name, layout);// PUT  /api/v1/processes/{name}/layout
 
 `mount` turns `onEdit` into `ops` and then `propose`. If `ops` comes back empty, it proposes nothing and the panel
 says so. `onLayout` becomes `saveLayout`, debounced by 600 ms. A failed save (a non-owner gets 403) shows a short
-notice in the canvas bar and never blocks the canvas.
+notice in the canvas bar and never blocks the canvas. With `readOnly` the layout is never saved (the expand state stays
+local), and a 403 on save is silent: the local state stays and no notice shows.
 
 DOM hooks for tests and embedders: a stage card is `[data-group="<id>"]`, an item is `[data-node="<id>"]` (ids
 contain `/` and `#`, so use `CSS.escape` or a quoted attribute selector), and the side panel is `[data-panel]`.
@@ -74,16 +79,17 @@ python3 web/canvas/test_canvas.py --react-dir <dir with react.production.min.js 
 Get React with `npm pack react@18.3.1 react-dom@18.3.1` and untar (`package/umd/*.production.min.js`). The test
 serves `web/` on a free port and routes the cdnjs URLs to the local files. Each scenario runs at 1280 and 400 px:
 stages in order, expand in place, edit and propose, no page scroll (the canvas scrolls inside its own
-container), and `mount` against a stubbed kernel (403 message, ops body, one debounced layout PUT). Any console
+container), and `mount` against a stubbed kernel (403 message, ops body, one debounced layout PUT; no PUT when read
+only; a 403 on the PUT is quiet, a 500 shows the notice). Any console
 error fails the run. It prints one line per scenario and exits 1 on failure.
 
 ## Embedding
 
-- **Console:** load `canvas.css` and `canvas.js` after `design-system/bundle.js`, then render
-  `h(RangkaCanvas.Canvas, {graph, layout, onEdit, onLayout, sourceHref})` inside a box with a fixed height. The
-  Console already has its own API client. `sourceHref` can point at the Console source view.
-- **End-user app (`web/app`):** use `RangkaCanvas.mount(el, {baseUrl: "", process, readOnly: true})` for people
-  who can only look. The kernel already hides the stages they can't read.
+- **Console:** `console/index.html` loads `canvas.css` and `canvas.js`; the Proses screen renders
+  `h(RangkaCanvas.Mounted, {api, process, sourceHref, changesetHref})` inside a box with a fixed height, where `api` is
+  an adapter over the Console's own `RangkaConsoleAPI` (demo mode answers from `testdata/`).
+- **End-user app (`web/app`):** `process.js` renders `RangkaCanvas.Mounted` with `readOnly: true` at `#/proses/<name>`
+  for people who can only look. The kernel already hides the stages they can't read.
 - **Rangka Cloud (S12):** `mount(el, {baseUrl: "https://<site>", process})` with a cookie session on that origin,
   or use `client()` with your own fetch layer and render `Canvas` directly.
 

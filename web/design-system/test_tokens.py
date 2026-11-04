@@ -2,7 +2,6 @@
 """Checks tokens.json values and that both tokens.css files are compiled from it."""
 import json
 import os
-import subprocess
 import sys
 
 HERE = os.path.dirname(os.path.abspath(__file__))
@@ -10,8 +9,9 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 sys.path.insert(0, HERE)
 import tokens_css  # noqa: E402
 
-# the commit this redesign branched from; stays fixed so the check survives new commits
-BASE_COMMIT = "662c79a"
+# token-names.txt: every token name before the redesign (from tokens.json at commit 662c79a), one per line.
+# A committed list, so the check works after squash/rebase merges and in shallow clones.
+NAMES_FILE = os.path.join(HERE, "token-names.txt")
 
 fails = []
 
@@ -32,9 +32,9 @@ def flat(tokens):
 cur_tokens = json.load(open(os.path.join(HERE, "tokens.json")))
 cur = flat(cur_tokens)
 
-old = json.loads(subprocess.check_output(["git", "show", f"{BASE_COMMIT}:web/design-system/tokens.json"], cwd=ROOT))
-for name in flat(old):
-    check(name in cur, f"token {name} existed at {BASE_COMMIT} and is gone")
+old_names = [n.strip() for n in open(NAMES_FILE) if n.strip()]
+for name in old_names:
+    check(name in cur, f"token {name} existed before the redesign and is gone")
 
 expect = {
     "control": "28px", "control-sm": "24px", "control-lg": "32px", "field": "28px",

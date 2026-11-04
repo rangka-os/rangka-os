@@ -411,3 +411,47 @@ test("opsAddModel copies a sibling's permissions; none when no sibling has them"
   r = RA.opsAddTable({ ...meta, apps: [], dashboards: {}, layout: { name: "l" } }, { name: "l", existing: lay2, config: {} }, "crm", { label: "K" });
   assert.deepStrictEqual(permsOf(r), perms, "opsAddTable passes meta");
 });
+
+/* Contract 0001 layout: an app (kind "app") defines no models, so a new table goes into a module. */
+const canvasMeta = {
+  apps: [
+    { name: "crm", kind: "app", modules: ["contacts", "catalogue", "pipeline", "invoicing", "outlets", "users"],
+      menu: [{ group: { id: "CRM" }, items: ["deal", "lead", "activity"] }, { group: { id: "Penjualan" }, items: ["sales_invoice"] }], dashboards: [] },
+    { name: "jasa_proyek", kind: "app", modules: ["contacts", "catalogue", "quotation", "projects", "invoicing"],
+      menu: [{ group: { id: "Penjualan" }, items: ["quotation", "customer_order", "sales_invoice"] }, { group: { id: "Proyek" }, items: ["project"] }], dashboards: [] }
+  ],
+  modules: ["contacts", "catalogue", "pipeline", "invoicing", "outlets", "users", "quotation", "projects", "orders"].map((n) => ({ name: n, kind: "module" })),
+  models: {
+    deal: { app: "pipeline", module: "pipeline", permissions: [{ role: "sales_manager", read: true, create: true, write: true, delete: true }] },
+    lead: { app: "pipeline", module: "pipeline" }, activity: { app: "pipeline", module: "pipeline" },
+    sales_invoice: { app: "invoicing", module: "invoicing" },
+    quotation: { app: "quotation", module: "quotation", permissions: [{ role: "sales_manager", read: true, create: true, write: true }] },
+    customer_order: { app: "orders", module: "orders" }, project: { app: "projects", module: "projects" }
+  },
+  dashboards: {}, layout: { name: "utama" }
+};
+
+test("tableHome: the route model's module, else the module of the app's first menu model; a 0.4 app keeps apps/", () => {
+  assert.deepStrictEqual(RA.tableHome(canvasMeta, null, "crm"), { unit: "pipeline", kind: "module" });
+  assert.deepStrictEqual(RA.tableHome(canvasMeta, null, "jasa_proyek"), { unit: "quotation", kind: "module" });
+  assert.deepStrictEqual(RA.tableHome(canvasMeta, "project", "jasa_proyek"), { unit: "projects", kind: "module" });
+  const legacy = { apps: [{ name: "crm", kind: "legacy", menu: [{ items: ["deal"] }] }], modules: [{ name: "crm", kind: "legacy" }], models: { deal: { app: "crm", module: "crm" } } };
+  assert.deepStrictEqual(RA.tableHome(legacy, null, "crm"), { unit: "crm", kind: "app" });
+  assert.deepStrictEqual(RA.tableHome(legacy, "deal", "crm"), { unit: "crm", kind: "app" });
+});
+
+/* The ops for "Tambah tabel" on the crm and jasa_proyek apps of kernel/testdata/canvas; the kernel test
+ * TestUbahAddTableIsValidMedium validates the same files (UPDATE_FIXTURES=1 rewrites them). */
+test("opsAddTable on 0.5 apps writes into a module (fixtures for the kernel check)", () => {
+  const fs = require("node:fs"), path = require("node:path");
+  for (const app of ["crm", "jasa_proyek"]) {
+    const home = RA.tableHome(canvasMeta, null, app);
+    const r = RA.opsAddTable(canvasMeta, { name: "utama", existing: null, config: {} }, home, { label: "Kunjungan Toko", fields: [{ label: "Tanggal", type: "Tanggal" }] });
+    assert.ok(r.ops[0].path.startsWith("modules/" + home.unit + "/models/"), r.ops[0].path);
+    assert.ok(r.ops.every((o) => !o.path.startsWith("apps/")), "no op touches apps/");
+    const fx = path.join(__dirname, "../../../kernel/testdata/ubah/add_table_" + app + ".json");
+    const body = JSON.stringify({ title: r.title, ops: r.ops }, null, 2) + "\n";
+    if (process.env.UPDATE_FIXTURES) { fs.mkdirSync(path.dirname(fx), { recursive: true }); fs.writeFileSync(fx, body); }
+    assert.strictEqual(fs.readFileSync(fx, "utf8"), body, "fixture " + fx + " is stale; run with UPDATE_FIXTURES=1");
+  }
+});

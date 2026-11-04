@@ -1,0 +1,182 @@
+{
+  "title": "Tambah tabel Kunjungan Toko",
+  "ops": [
+    {
+      "op": "create",
+      "path": "modules/pipeline/models/kunjungan_toko.rk",
+      "content": "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json\nname: 'kunjungan_toko'\n"
+    },
+    {
+      "op": "patch",
+      "path": "modules/pipeline/models/kunjungan_toko.rk",
+      "patch": [
+        {
+          "op": "add",
+          "path": "/label",
+          "value": {
+            "id": "Kunjungan Toko"
+          }
+        },
+        {
+          "op": "add",
+          "path": "/title_field",
+          "value": "tanggal"
+        },
+        {
+          "op": "add",
+          "path": "/fields",
+          "value": [
+            {
+              "name": "tanggal",
+              "type": "date",
+              "label": {
+                "id": "Tanggal"
+              }
+            }
+          ]
+        },
+        {
+          "op": "add",
+          "path": "/views",
+          "value": {
+            "list": {
+              "columns": [
+                "tanggal"
+              ]
+            },
+            "form": {
+              "layout": [
+                {
+                  "section": {
+                    "id": "Umum"
+                  },
+                  "fields": [
+                    "tanggal"
+                  ]
+                }
+              ]
+            }
+          }
+        },
+        {
+          "op": "add",
+          "path": "/permissions",
+          "value": [
+            {
+              "role": "sales_manager",
+              "read": true,
+              "create": true,
+              "write": true,
+              "delete": true
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "op": "create",
+      "path": "layouts/utama.rk",
+      "content": "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/layout.json\nname: 'utama'\n"
+    },
+    {
+      "op": "patch",
+      "path": "layouts/utama.rk",
+      "patch": [
+        {
+          "op": "add",
+          "path": "/nav",
+          "value": {
+            "side": [
+              {
+                "group": {
+                  "id": "CRM"
+                },
+                "items": [
+                  {
+                    "to": "model:deal"
+                  },
+                  {
+                    "to": "model:lead"
+                  },
+                  {
+                    "to": "model:activity"
+                  }
+                ]
+              },
+              {
+                "group": {
+                  "id": "Penjualan"
+                },
+                "items": [
+                  {
+                    "to": "model:sales_invoice"
+                  }
+                ]
+              },
+              {
+                "group": {
+                  "id": "Penjualan"
+                },
+                "items": [
+                  {
+                    "to": "model:quotation"
+                  },
+                  {
+                    "to": "model:customer_order"
+                  },
+                  {
+                    "to": "model:sales_invoice"
+                  }
+                ]
+              },
+              {
+                "group": {
+                  "id": "Proyek"
+                },
+                "items": [
+                  {
+                    "to": "model:project"
+                  }
+                ]
+              }
+            ]
+          }
+        }
+      ]
+    },
+    {
+      "op": "patch",
+      "path": "config.rk",
+      "patch": [
+        {
+          "op": "add",
+          "path": "/layout",
+          "value": "utama"
+        }
+      ]
+    },
+    {
+      "op": "patch",
+      "path": "layouts/utama.rk",
+      "patch": [
+        {
+          "op": "add",
+          "path": "/nav/side/-",
+          "value": {
+            "group": {
+              "id": "Tabel baru"
+            },
+            "items": [
+              {
+                "to": "model:kunjungan_toko",
+                "label": {
+                  "id": "Kunjungan Toko"
+                }
+              }
+            ]
+          }
+        }
+      ]
+    }
+  ]
+}

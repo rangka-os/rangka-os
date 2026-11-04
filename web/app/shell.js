@@ -349,10 +349,10 @@
       save(next);
     }
     function addTable(spec) {
-      var unit = p.route && p.route.model ? RA.unitOf(meta, p.route.model) : null;
       var apps = (meta.apps || []).filter(function (a) { return (a.menu || []).length; });
-      var app = unit && unit.kind === "app" ? unit.unit : ((apps[apps.length - 1] || (meta.apps || [])[0] || {}).name);
-      return u.menu(function (f) { return RA.opsAddTable(meta, f, app, spec); });
+      var app = (apps[apps.length - 1] || (meta.apps || [])[0] || {}).name;
+      var home = RA.tableHome(meta, p.route && p.route.model, app);
+      return u.menu(function (f) { return RA.opsAddTable(meta, f, home, spec); });
     }
     var more = navGroups({ imports: meta.imports }, p.features, p.counts); // Persetujuan and Impor data stay as they are
     var dis = !!u.busy;

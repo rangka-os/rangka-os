@@ -74,11 +74,13 @@ Every installed app (kind app or legacy) with a `menu:` and no declared process 
 ### 5. Edits: change sets only
 `POST /processes/{name}/ops` `{edits: [{node, key, value}]}` → `{title, ops}`. Compute only, nothing is written. `400 bad_edit` for an unknown node or key, an empty `edits`, or a node the caller cannot see (the graph is built for the caller). `ops` is empty when every value equals the current one. The client then `POST /api/v1/changesets {title, ops}`; the change set goes through the normal states (proposed, validated, previewed, approved, applied). Nothing on the canvas writes metadata directly, and AI never approves or applies.
 
+- Ops carry the full text of the edited file, which may include steps of models the caller cannot read. Metadata files are not secret: `GET /api/v1/files/{path}` already returns any `.rk` text to every signed-in user.
 - **Byte-stable edits (ruling 3).** A scalar edit splices the re-quoted scalar into the original text at its exact span (comments and formatting kept) and emits op `replace` with the full new text. A non-scalar or multi-line target falls back to op `patch` (JSON Patch, re-dumped by `rk.Dump`).
 
 ### 6. Layout (ruling 5: layout is not metadata)
 `PUT /processes/{name}/layout` `{groups: {<id>: {collapsed?: bool, x?: number, y?: number}}, nodes: {<id>: {x, y}}}` → 200 with the stored layout.
 - Written to `<site>/canvas/<name>.json`: 2-space JSON, sorted keys, trailing newline. It is stored directly, never through a change set, and never changes behaviour.
+- `GET /processes/{name}` returns only the layout entries of groups and nodes the caller sees. An unknown process is 404 before the owner check; an empty body (`{}`, `null`, or neither `groups` nor `nodes`) is 400 `bad_layout`, while `{"groups":{},"nodes":{}}` clears the layout.
 - Owner (or system) only: 403 `permission_denied` (model `process`, action `layout`) otherwise. 400 `bad_layout` for any top-level key other than `groups` and `nodes`, a non-object value, a group entry with a key other than `collapsed` (bool), `x`, `y` (numbers), or a node entry without numeric `x` and `y`. The process name must be a known process (404) and match `^[a-z][a-z0-9_]*$`; the file is written atomically (temp file and rename). `GET /processes/{name}` reads the file on every request.
 - `<site>/canvas/` is not metadata: the site loader reads named directories only, so the validator and registry ignore it; a backup carries it with the rest of the site.
 - A layout file that is missing, empty or not valid JSON is not an error: the graph answers with `layout: null`.

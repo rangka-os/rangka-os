@@ -132,13 +132,33 @@ func TestProcessPermissionFilter(t *testing.T) {
 	if n := len(groupIDs(e.must(200, "GET", "/api/v1/processes/lead_to_cash", nil).JSON)); n != 4 {
 		t.Fatalf("owner groups = %d", n)
 	}
+	// the owner stores a layout that positions a hidden stage and a hidden node
+	dealNode := "modules/pipeline/models/deal.rk#/automations/0"
+	e.must(200, "PUT", "/api/v1/processes/lead_to_cash/layout", map[string]any{
+		"groups": map[string]any{"deal": map[string]any{"x": 1, "y": 2}, "lead_in": map[string]any{"x": 3, "y": 4}},
+		"nodes":  map[string]any{dealNode: map[string]any{"x": 5, "y": 6}}})
+	og := e.must(200, "GET", "/api/v1/processes/lead_to_cash", nil).JSON
+	if get(og, "layout", "groups", "deal") == nil || get(og, "layout", "nodes", dealNode) == nil {
+		t.Fatalf("owner layout = %v", og["layout"])
+	}
 	g := rep.must(200, "GET", "/api/v1/processes/lead_to_cash", nil).JSON
+	if l := string(mustJSON(g["layout"])); strings.Contains(l, "deal") || get(g, "layout", "groups", "lead_in") == nil {
+		t.Fatalf("rep layout leaks or lost a visible entry: %s", l)
+	}
 	if len(groupIDs(g)) != 3 {
 		t.Fatalf("rep groups = %v", groupIDs(g))
 	}
 	for _, x := range g["nodes"].([]any) {
 		if get(x, "model") == "deal" || strings.Contains(get(x, "id").(string), "/deal.rk") {
 			t.Fatalf("deal leaks: %v", x)
+		}
+	}
+	// every visible node's text is free of "deal", apart from two legitimate lead strings: its converted_deal
+	// field and the English label of the lead's convert action ("Convert to customer + deal")
+	for _, x := range g["nodes"].([]any) {
+		txt := string(mustJSON(map[string]any{"label": get(x, "label"), "detail": get(x, "detail"), "editable": get(x, "editable")}))
+		if strings.Contains(strings.NewReplacer("converted_deal", "", "Convert to customer + deal", "").Replace(txt), "deal") {
+			t.Fatalf("deal in node text: %v", x)
 		}
 	}
 	for _, x := range g["edges"].([]any) {
@@ -263,6 +283,14 @@ func TestLayoutPut(t *testing.T) {
 	// the new layout does not disturb the registry: the graph still builds and /meta loads
 	e.must(200, "GET", "/api/v1/meta", nil)
 
+	for name, body := range map[string]any{"empty object": map[string]any{}, "null": nil} {
+		if r := e.must(400, "PUT", "/api/v1/processes/lead_to_cash/layout", body); get(r.JSON, "error", "code") != "bad_layout" {
+			t.Errorf("%s: %s", name, r.Body)
+		}
+	}
+	e.must(200, "PUT", "/api/v1/processes/lead_to_cash/layout", map[string]any{"groups": map[string]any{}, "nodes": map[string]any{}})
+	e.must(404, "PUT", "/api/v1/processes/nope/layout", layout)
+	rep.must(404, "PUT", "/api/v1/processes/nope/layout", layout) // unknown before forbidden
 	assertDenied(t, rep.do("PUT", "/api/v1/processes/lead_to_cash/layout", layout), "process", "layout")
 	for name, body := range map[string]any{
 		"unknown top key": map[string]any{"groups": map[string]any{}, "positions": map[string]any{}},

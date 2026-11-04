@@ -82,7 +82,7 @@ func (s *Server) getProcess(w http.ResponseWriter, r *http.Request, c *caller) {
 		noProcess(w, name)
 		return
 	}
-	g.Layout = readLayout(reg, name)
+	g.Layout = visibleLayout(readLayout(reg, name), g)
 	writeJSON(w, http.StatusOK, g)
 }
 
@@ -118,13 +118,13 @@ func (s *Server) processOps(w http.ResponseWriter, r *http.Request, c *caller) {
 
 func (s *Server) putProcessLayout(w http.ResponseWriter, r *http.Request, c *caller) {
 	name := r.PathValue("name")
-	if !engine.Unrestricted(c.actor) {
-		permissionDenied(w, engine.Denied("process", "layout"))
-		return
-	}
 	reg := s.Engine.Reg()
 	if findProcess(reg, name) == nil {
 		noProcess(w, name)
+		return
+	}
+	if !engine.Unrestricted(c.actor) {
+		permissionDenied(w, engine.Denied("process", "layout"))
 		return
 	}
 	if reg.SiteDir == "" {
@@ -134,6 +134,10 @@ func (s *Server) putProcessLayout(w http.ResponseWriter, r *http.Request, c *cal
 	var raw map[string]any
 	if err := readJSON(r, &raw); err != nil {
 		writeError(w, http.StatusBadRequest, "bad_json", "body must be a JSON object: "+err.Error())
+		return
+	}
+	if raw["groups"] == nil && raw["nodes"] == nil {
+		writeError(w, http.StatusBadRequest, "bad_layout", "a layout needs groups or nodes; send {\"groups\":{},\"nodes\":{}} to clear it")
 		return
 	}
 	layout, err := checkLayout(raw)
@@ -168,6 +172,44 @@ func readLayout(reg *meta.Registry, name string) any {
 		return nil
 	}
 	return m
+}
+
+// visibleLayout keeps only the layout entries of groups and nodes the caller sees in g, so a stored layout
+// does not leak the ids of hidden stages and nodes. A nil layout stays nil.
+func visibleLayout(layout any, g *canvas.Graph) any {
+	m, ok := layout.(map[string]any)
+	if !ok {
+		return layout
+	}
+	groups := map[string]bool{}
+	for _, gr := range g.Groups {
+		groups[gr.ID] = true
+	}
+	nodes := map[string]bool{}
+	for _, n := range g.Nodes {
+		nodes[n.ID] = true
+	}
+	out := map[string]any{}
+	for k, v := range m {
+		keep := map[string]map[string]bool{"groups": groups, "nodes": nodes}[k]
+		if keep == nil {
+			out[k] = v
+			continue
+		}
+		em, ok := v.(map[string]any)
+		if !ok {
+			out[k] = v
+			continue
+		}
+		f := map[string]any{}
+		for id, e := range em {
+			if keep[id] {
+				f[id] = e
+			}
+		}
+		out[k] = f
+	}
+	return out
 }
 
 func opsOrEmpty[T any](ops []T) []T {

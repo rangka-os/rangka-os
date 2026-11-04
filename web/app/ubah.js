@@ -444,11 +444,40 @@
     return { title: add.title, modelName: add.modelName, ops: add.ops.slice(0, 2).concat(seed.ops, add.ops.slice(2)) };
   };
 
+  /** One Ubah edit at a time. run(fn) calls fn (which returns a value or a Promise) unless an edit is still running, in
+   *  which case it rejects with code "busy" (a second click in the same tick included). onBusy(true) when fn starts,
+   *  onBusy(false) once its Promise settles, success or failure. */
+  RA.makeExclusive = function (onBusy) {
+    var running = false;
+    function done() { running = false; if (onBusy) onBusy(false); }
+    return function run(fn) {
+      if (running) {
+        var e = new Error("Perubahan sebelumnya masih diproses");
+        e.code = "busy";
+        return Promise.reject(e);
+      }
+      running = true;
+      if (onBusy) onBusy(true);
+      return Promise.resolve().then(fn).then(function (r) { done(); return r; }, function (e) { done(); throw e; });
+    };
+  };
+
+  /** The change sets the pending list shows: previewed (waiting for a decision) and approved (an apply that did not
+   *  happen or failed), newest first, each id once. */
+  RA.pendingChangesets = function (previewed, approved) {
+    var seen = {}, out = [];
+    (previewed || []).concat(approved || []).forEach(function (c) { if (c && !seen[c.id]) { seen[c.id] = 1; out.push(c); } });
+    return out.sort(function (a, b) { var x = a.updated_at || a.created_at || "", y = b.updated_at || b.created_at || ""; return x < y ? 1 : x > y ? -1 : 0; });
+  };
+
   /* ================================================================ browser only from here
    * RA.UbahCtx (provided by the shell): {on, preview, busy, canApprove, canApproveHigh, run(change), edit(path, build),
-   * menu(build), showPending()}. on is false while previewing. run proposes and, for a low-risk change by an approver,
-   * applies it (toast "Perubahan diterapkan" + "Urungkan"); anything else opens the change-set card. edit fetches the
-   * target file first and hands it to build(existing) → {title, ops}; a build that throws rejects with its message.
+   * menu(build), quiet(promise), toggle(), showPending()}. on is false while previewing or without changesets.propose;
+   * preview is the previewed change set or null; busy is true from an edit's first request until the app has reloaded.
+   * run proposes and, for a low-risk change by an approver, applies it (toast "Perubahan diterapkan" + "Urungkan");
+   * anything else opens the change-set card. edit fetches the target file first and hands it to build(existing) →
+   * {title, ops}; menu hands build the layout files {name, existing, config}; a build that throws rejects with its
+   * message. run/edit/menu reject with code "busy" while another edit runs. quiet turns a rejection into a toast.
    * Components: ModeToggle, UbahBar, PreviewBanner, ChangeSetCard, EditDialog and the add dialogs (field, approval,
    * automation, status, table). */
   var React = global.React, R = global.Rangka;
@@ -505,8 +534,9 @@
       if (!p.list) return undefined;
       var dead = false;
       setList(null);
-      p.api.changesets({ status: "previewed" }).then(function (r) { if (!dead) setList((r && r.data) || []); },
-        function (e) { if (!dead) { setList([]); setErr(errText(e)); } });
+      Promise.all([p.api.changesets({ status: "previewed" }), p.api.changesets({ status: "approved" })]).then(function (rs) {
+        if (!dead) setList(RA.pendingChangesets((rs[0] && rs[0].data) || [], (rs[1] && rs[1].data) || []));
+      }, function (e) { if (!dead) { setList([]); setErr(errText(e)); } });
       return function () { dead = true; };
     }, [p.list]);
 
@@ -514,7 +544,12 @@
       if (busy) return;
       setBusy(kind);
       setErr(null);
-      Promise.resolve().then(fn).then(function () { setBusy(null); }, function (e) { setBusy(null); setErr(errText(e)); });
+      Promise.resolve().then(fn).then(function () { setBusy(null); }, function (e) {
+        setBusy(null);
+        if (e && e.code === "busy") return;
+        setErr(errText(e));
+        if (cs && p.onReload) p.onReload(cs.id); // its status may have moved (approved, then the apply failed)
+      });
     }
     function frame(title, body, acts) {
       return h("div", { className: "ap-ubah-card", role: "dialog", "aria-labelledby": "ap-ubah-card-t" },
@@ -529,7 +564,7 @@
         : !list.length ? h("p", { className: "ap-muted" }, "Tidak ada perubahan yang menunggu.")
           : h("ul", { className: "ap-ubah-pending" }, list.map(function (c) {
             return h("li", { key: c.id }, h("button", { type: "button", onClick: function () { p.onOpen(c.id); } },
-              h("span", null, c.title || c.id), h(R.Lozenge, { tone: TONE[c.risk] }, RA.riskLabel(c.risk))));
+              h("span", null, c.title || c.id), h(R.Lozenge, { tone: c.status === "approved" ? "info" : TONE[c.risk] }, c.status === "approved" ? "Disetujui" : RA.riskLabel(c.risk))));
           }));
       return frame("Perubahan menunggu", rows, h(R.Button, { onClick: p.onClose }, "Tutup"));
     }
@@ -537,7 +572,8 @@
     var invalid = cs.status === "invalid";
     var reasons = RA.riskReasons(cs), lines = RA.dryRunLines(cs, p.meta);
     var errs = (cs.validation && cs.validation.errors) || [];
-    var canApprove = !!p.caps.approve && cs.status === "previewed" && (cs.risk !== "high" || !!p.caps.approveHigh);
+    var mayDecide = !!p.caps.approve && (cs.risk !== "high" || !!p.caps.approveHigh);
+    var canApprove = mayDecide && cs.status === "previewed", canApply = mayDecide && cs.status === "approved";
     function group(kind) { return lines.filter(function (l) { return l.kind === kind; }); }
     var mig = group("migration"), files = group("file"), aff = group("affected"), notes = group("note");
     var body = h(React.Fragment, null,
@@ -552,9 +588,10 @@
     var acts = [];
     if (!invalid && OPEN[cs.status]) acts.push(h(R.Button, { key: "p", icon: "eye", disabled: !!busy, onClick: function () { p.onPreview(cs); } }, "Pratinjau"));
     if (canApprove) acts.push(h(R.Button, { key: "a", variant: "primary", loading: busy === "a", disabled: !!busy, onClick: function () { act("a", function () { return p.onApprove(cs); }); } }, "Setujui & terapkan"));
+    if (canApply) acts.push(h(R.Button, { key: "t", variant: "primary", loading: busy === "t", disabled: !!busy, onClick: function () { act("t", function () { return p.onApply(cs); }); } }, "Terapkan"));
     if (OPEN[cs.status]) acts.push(h(R.Button, { key: "r", variant: "danger", loading: busy === "r", disabled: !!busy, onClick: function () { act("r", function () { return p.onReject(cs); }); } }, "Tolak"));
     acts.push(h(R.Button, { key: "c", variant: "quiet", onClick: p.onClose }, "Tutup"));
-    return frame(invalid ? "Belum valid" : "Perlu persetujuan", body, acts);
+    return frame(invalid ? "Belum valid" : cs.status === "approved" ? "Disetujui, belum diterapkan" : "Perlu persetujuan", body, acts);
   };
 
   /* ---------------------------------------------------------------- dialogs */

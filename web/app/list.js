@@ -345,7 +345,8 @@
 
     var filterBar = h(R.FilterBar, { key: "f", search: true, searchPlaceholder: "Cari " + lower(label) + "…", query: query, onQuery: setQuery, filters: filters, value: fval, onChange: onFilter });
 
-    if (!loading && !data.total && !filtered) {
+    // in Ubah an empty board still shows its columns, so stages can be added and ordered before the first record
+    if (!loading && !data.total && !filtered && !(u.on && mode === "kanban")) {
       return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips,
         h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", onClick: create }, "Buat yang pertama") : null })));
     }

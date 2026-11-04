@@ -331,3 +331,25 @@ test("opsFormLayout / opsListColumns drop from add the fields the new list alrea
   const n = RA.opsListColumns("deal", ["name"], file("custom/deal.rk", "overlay", parsed));
   assert.strictEqual(n.ops[0].patch.length, 1);
 });
+
+test("makeExclusive runs one edit at a time and clears busy after it settles", async () => {
+  const seen = [];
+  const run = RA.makeExclusive((b) => seen.push(b));
+  let release;
+  const first = run(() => new Promise((r) => { release = r; }));
+  await assert.rejects(run(() => 1), (e) => e.code === "busy" && /masih diproses/.test(e.message));
+  assert.deepStrictEqual(seen, [true]);
+  release("ok");
+  assert.strictEqual(await first, "ok");
+  assert.deepStrictEqual(seen, [true, false]);
+  await assert.rejects(run(() => { throw new Error("x"); }), /x/);
+  assert.deepStrictEqual(seen, [true, false, true, false]);
+  assert.strictEqual(await run(() => 2), 2, "free again after a failure");
+});
+
+test("pendingChangesets lists previewed and approved once, newest first", () => {
+  const r = RA.pendingChangesets([{ id: "a", updated_at: "2026-11-04T01:00:00Z" }, { id: "b", updated_at: "2026-11-04T03:00:00Z" }],
+    [{ id: "c", status: "approved", updated_at: "2026-11-04T02:00:00Z" }, { id: "a" }]);
+  assert.deepStrictEqual(r.map((c) => c.id), ["b", "c", "a"]);
+  assert.deepStrictEqual(RA.pendingChangesets(null, undefined), []);
+});

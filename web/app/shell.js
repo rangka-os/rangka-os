@@ -318,7 +318,7 @@
       return { id: null, label: L(it.label) || to, icon: it.icon || "link" };
     }
     function save(next) {
-      return u.quiet(RA.menuFiles(p.api || RA.api).then(function (f) { return u.run(RA.opsMenu(f.name, next, f.existing, f.config)); }));
+      return u.quiet(u.menu(function (f) { return RA.opsMenu(f.name, next, f.existing, f.config); }));
     }
     function moveItem(g, i, d) {
       var next = side.map(function (x) { return Object.assign({}, x, { items: (x.items || []).slice() }); });
@@ -347,7 +347,7 @@
       var unit = p.route && p.route.model ? RA.unitOf(meta, p.route.model) : null;
       var apps = (meta.apps || []).filter(function (a) { return (a.menu || []).length; });
       var app = unit && unit.kind === "app" ? unit.unit : ((apps[apps.length - 1] || (meta.apps || [])[0] || {}).name);
-      return RA.menuFiles(RA.api).then(function (f) { return u.run(RA.opsAddTable(meta, f, app, spec)); });
+      return u.menu(function (f) { return RA.opsAddTable(meta, f, app, spec); });
     }
     var more = navGroups({ imports: meta.imports }, p.features, p.counts); // Persetujuan and Impor data stay as they are
     var dis = !!u.busy;
@@ -421,6 +421,8 @@
       boot.cacheListener.fn = function () { setCacheRev(function (x) { return x + 1; }); };
       onExpired = function () { setExpired(true); };
       toastImpl = toast;
+      // ?preview=<id> that could not be opened (403, 404, 409 preview_permissions …): say why, the live app is shown
+      if (boot.previewErr) toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError ? RA.ubahError(boot.previewErr) : boot.previewErr.message);
       return function () { onExpired = null; toastImpl = null; boot.cacheListener.fn = null; };
     }, []);
 
@@ -510,35 +512,50 @@
     var caps = { approve: !!cs8.approve, approveHigh: !!cs8.approve_high };
     function setQuery(set) { global.history.replaceState(null, "", withHashQuery(global.location.hash, set)); }
     function refresh() { cacheRef.current.clear(); return reloadMeta().then(function () { setRev(function (x) { return x + 1; }); }); }
+    // one edit at a time, busy from the first request until the app has reloaded (a second click builds nothing)
+    var exclusiveRef = useRef(null);
+    if (!exclusiveRef.current) exclusiveRef.current = RA.makeExclusive ? RA.makeExclusive(setUbahBusy) : function (fn) { return Promise.resolve().then(fn); };
+    function exclusive(fn) { return exclusiveRef.current(fn); }
     function undo(cs) {
-      api.csVerb(cs.id, "revert").then(refresh).then(function () { toast("info", "Perubahan dibatalkan", cs.title); },
-        function (e) { toast("bad", "Perubahan tidak bisa dibatalkan", RA.ubahError(e)); });
+      exclusive(function () {
+        return api.csVerb(cs.id, "revert").then(function () {
+          return refresh().then(function () { toast("info", "Perubahan dibatalkan", cs.title); },
+            function () { toast("info", "Perubahan dibatalkan", cs.title + " · Muat ulang halaman untuk melihat hasilnya."); });
+        });
+      }).then(null, function (e) { if (e && e.code !== "busy") toast("bad", "Perubahan tidak bisa dibatalkan", RA.ubahError(e)); });
     }
+    /** After an apply: reload and toast with Urungkan. A failed reload does not turn the apply into a failure. */
     function applied(cs) {
-      return refresh().then(function () { toast("ok", "Perubahan diterapkan", cs.title, { action: "Urungkan", onAction: function () { undo(cs); } }); });
+      var undoAct = { action: "Urungkan", onAction: function () { undo(cs); } };
+      return refresh().then(function () { toast("ok", "Perubahan diterapkan", cs.title, undoAct); },
+        function () { toast("ok", "Perubahan diterapkan", cs.title + " · Muat ulang halaman untuk melihat hasilnya.", undoAct); });
     }
     /** Propose, and apply when low risk and the caller approves; else open the card. Rejects on a kernel error. */
-    function runUbah(change) {
-      setUbahBusy(true);
+    function runInner(change) {
       return api.runChange(change, { canApprove: caps.approve, canApproveHigh: caps.approveHigh }).then(function (res) {
-        setUbahBusy(false);
         if (res.applied) return applied(res.cs).then(function () { return res; });
         setCard({ cs: res.cs });
         return res;
-      }, function (e) { setUbahBusy(false); throw e; });
+      });
     }
+    function runUbah(change) { return exclusive(function () { return runInner(change); }); }
     function editUbah(path, build) {
-      return api.file(path).then(function (ex) { return runUbah(build(ex)); });
+      return exclusive(function () { return api.file(path).then(function (ex) { return runInner(build(ex)); }); });
     }
-    /** For buttons without a dialog: a failure becomes a toast. */
-    function quiet(p) { return p.then(null, function (e) { toast("bad", "Perubahan gagal", RA.ubahError(e)); }); }
+    /** The menu: build(files) gets {name, existing, config} of the layout (RA.menuFiles). */
+    function menuUbah(build) {
+      return exclusive(function () { return RA.menuFiles(api).then(function (f) { return runInner(build(f)); }); });
+    }
+    /** For buttons without a dialog: a failure becomes a toast (a click while busy is ignored). */
+    function quiet(p) { return p.then(null, function (e) { if (e && e.code !== "busy") toast("bad", "Perubahan gagal", RA.ubahError(e)); }); }
     function enterPreview(cs) {
       api.setPreview(cs.id);
       return reloadMeta().then(function () {
         setPreviewCs(cs); setCard(null); setQuery({ preview: cs.id }); cacheRef.current.clear(); setRev(function (x) { return x + 1; });
-      }, function (e) {
+      }).then(null, function (e) {
+        // back to the live metadata: no preview meta on screen without the banner
         api.setPreview(null);
-        toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError(e));
+        return reloadMeta().then(null, function () {}).then(function () { toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError(e)); });
       });
     }
     function exitPreview() {
@@ -547,10 +564,17 @@
       setQuery({ preview: null });
       return refresh().then(null, function (e) { toast("bad", "Aplikasi tidak bisa dimuat ulang", RA.ubahError(e)); });
     }
+    function applyCs(cs) {
+      return exclusive(function () {
+        return api.csVerb(cs.id, "apply").then(function (done) { setCard(null); return applied(done || cs); });
+      });
+    }
     function approveCs(cs) {
-      var leave = previewCs && previewCs.id === cs.id ? exitPreview() : Promise.resolve();
-      return leave.then(function () { return api.csVerb(cs.id, "approve"); }).then(function () { return api.csVerb(cs.id, "apply"); })
-        .then(function (done) { setCard(null); return applied(done || cs); });
+      return exclusive(function () {
+        var leave = previewCs && previewCs.id === cs.id ? exitPreview() : Promise.resolve();
+        return leave.then(function () { return api.csVerb(cs.id, "approve"); }).then(function () { return api.csVerb(cs.id, "apply"); })
+          .then(function (done) { setCard(null); return applied(done || cs); });
+      });
     }
     function rejectCs(cs) {
       return api.csVerb(cs.id, "reject").then(function () {
@@ -560,10 +584,12 @@
       });
     }
     function openCs(id) { api.changeset(id).then(function (cs) { setCard({ cs: cs }); }, function (e) { toast("bad", "Change set tidak bisa dibuka", RA.ubahError(e)); }); }
+    /** After a failed action in the card: show the change set as it is now (an approve may have gone through). */
+    function reloadCs(id) { return api.changeset(id).then(function (cs) { setCard(function (c) { return c && c.cs && c.cs.id === id ? { cs: cs } : c; }); }, function () {}); }
     function toggleUbah(on) { setUbah(on); setQuery({ ubah: on }); }
     var ubahOn = ubah && !previewCs && !!cs8.propose && !!RA.UbahCtx;
     var uctx = { on: ubahOn, preview: previewCs, busy: ubahBusy, canApprove: caps.approve, canApproveHigh: caps.approveHigh,
-      run: runUbah, edit: editUbah, quiet: quiet, toggle: function () { toggleUbah(!ubah); }, showPending: function () { setCard({ list: true }); } };
+      run: runUbah, edit: editUbah, menu: menuUbah, quiet: quiet, toggle: function () { toggleUbah(!ubah); }, showPending: function () { setCard({ list: true }); } };
 
     var home = homeHash(meta);
     var name = siteName(meta, me);
@@ -607,8 +633,8 @@
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, home: home, readOnly: !!previewCs }))),
-        card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id + card.cs.status, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
-          onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onReject: rejectCs }) : null,
+        card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
+          onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
         h(R.Toaster, { float: true }, toasts.map(function (t) {
           return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, action: t.action, onAction: t.onAction ? function () { dropToast(t.id); t.onAction(); } : undefined,
@@ -628,15 +654,16 @@
     function start() {
       setPhase("boot");
       setErr(null);
-      var q = hashQuery(global.location.hash), previewCs = null;
+      var q = hashQuery(global.location.hash), previewCs = null, previewErr = null;
       api.me().then(function (m) {
         setMe(m);
         // ?preview=<id>: read through the change set; one that cannot be previewed opens the app as it is
         var pv = !q.preview ? Promise.resolve(null) : api.changeset(q.preview).then(function (cs) {
           api.setPreview(cs.id);
           return api.meta().then(function (pm) { previewCs = cs; return pm; });
-        }).then(null, function () {
+        }).then(null, function (e) {
           api.setPreview(null);
+          previewErr = e;
           global.history.replaceState(null, "", withHashQuery(global.location.hash, { preview: null }));
           return null;
         });
@@ -646,7 +673,7 @@
           var eng = global.RangkaEngine.create(meta, cache.lookup);
           cache.setEngine(eng);
           return api.features(meta, m).then(function (f) {
-            setBoot({ meta: meta, eng: eng, features: f, cache: cache, cacheListener: listener, previewCs: previewCs,
+            setBoot({ meta: meta, eng: eng, features: f, cache: cache, cacheListener: listener, previewCs: previewCs, previewErr: previewErr,
               ubah: q.ubah && !!(meta.changesets && meta.changesets.propose) });
             setPhase("ready");
           });

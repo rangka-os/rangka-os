@@ -49,8 +49,18 @@ func permissionsChanged(live, prev *meta.Registry) bool {
 		}
 	}
 	for _, m := range prev.InstalledModels() {
-		if lm := live.Model(m.Name); lm != nil && !reflect.DeepEqual(lm.Raw["permissions"], m.Raw["permissions"]) {
+		lm := live.Model(m.Name)
+		if lm == nil {
+			continue
+		}
+		if !reflect.DeepEqual(lm.Raw["permissions"], m.Raw["permissions"]) || lm.IsChild != m.IsChild {
 			return true
+		}
+		// row scope depends on fields (a scope field, its type and link target): refuse edits of existing ones
+		for _, f := range lm.Fields {
+			if pf := m.Field(f.Name); pf == nil || pf.Type != f.Type || pf.To != f.To {
+				return true
+			}
 		}
 	}
 	return false
@@ -102,7 +112,10 @@ func (s *Server) previewEngine(ctx context.Context, org, id string) (*engine.Eng
 		if p.id == cs.ID && p.updated == cs.UpdatedAt && p.live == liveReg {
 			s.previews = append(append(s.previews[:i:i], s.previews[i+1:]...), p) // most recently used last
 			s.previewMu.Unlock()
-			return p.eng, cs, p.deny
+			if p.deny != nil {
+				return nil, cs, p.deny
+			}
+			return p.eng, cs, nil
 		}
 	}
 	s.previewMu.Unlock()
@@ -115,12 +128,10 @@ func (s *Server) previewEngine(ctx context.Context, org, id string) (*engine.Eng
 	e.Cache, e.TolerateMissingTables = nil, true
 	var deny error
 	if permissionsChanged(liveReg, reg) {
-		deny, e = errPreviewPermissions, nil
+		deny = errPreviewPermissions
 	}
 	for k, h := range s.Engine.Hooks {
-		if e != nil {
-			e.Hooks[k] = h
-		}
+		e.Hooks[k] = h
 	}
 	s.previewMu.Lock()
 	defer s.previewMu.Unlock()
@@ -135,7 +146,10 @@ func (s *Server) previewEngine(ctx context.Context, org, id string) (*engine.Eng
 		kept = kept[len(kept)-maxPreviewEngines:]
 	}
 	s.previews = kept
-	return e, fresh, deny
+	if deny != nil {
+		return nil, fresh, deny
+	}
+	return e, fresh, nil
 }
 
 type previewHandler func(w http.ResponseWriter, r *http.Request, c *caller, e *engine.Engine, cs *changeset.ChangeSet)

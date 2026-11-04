@@ -231,6 +231,27 @@ func TestPreviewPermissionChanges(t *testing.T) {
 		}
 		e.must(409, "GET", "/api/v1/preview/"+id+"/r/deal", nil) // cached denial
 	}
+	// removing a field (a scope field would unscope the model), retyping one, flipping is_child
+	deal := e.must(200, "GET", "/api/v1/files/apps/crm/models/deal.rk", nil).JSON
+	idx := -1
+	for i, f := range get(deal, "parsed", "fields").([]any) {
+		if get(f, "name") == "owner" {
+			idx = i
+		}
+	}
+	if idx < 0 {
+		t.Fatal("no owner field")
+	}
+	path := "/fields/" + itoa(idx)
+	rm := proposeCS(e, "Hapus kolom", map[string]any{"op": "patch", "path": "apps/crm/models/deal.rk", "patch": []any{map[string]any{"op": "remove", "path": path}}})
+	retype := proposeCS(e, "Ganti tipe", map[string]any{"op": "patch", "path": "apps/crm/models/deal.rk", "patch": []any{map[string]any{"op": "replace", "path": path + "/type", "value": "data"}}})
+	child := proposeCS(e, "Bukan child", map[string]any{"op": "patch", "path": "apps/sales/models/sales_invoice_item.rk", "patch": []any{map[string]any{"op": "replace", "path": "/is_child", "value": false}}})
+	for _, id := range []string{rm, retype, child} {
+		r := e.must(409, "GET", "/api/v1/preview/"+id+"/r/deal", nil)
+		if get(r.JSON, "error", "code") != "preview_permissions" {
+			t.Fatalf("%s: %s", id, r.Body)
+		}
+	}
 	// a label-only edit of a model keeps its permissions: preview works
 	ok := proposeCS(e, "Label", map[string]any{"op": "patch", "path": "apps/crm/models/deal.rk",
 		"patch": []any{map[string]any{"op": "replace", "path": "/label/id", "value": "Peluang usaha"}}})

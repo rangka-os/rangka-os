@@ -311,6 +311,8 @@ func planApps(features map[string]any, plan string) []string {
 	return apps
 }
 
+func isSite(a *App) bool { return a != nil && a.Kind == KindSite }
+
 func (v *validator) site(all map[string]vis) {
 	s := v.reg.Site
 	for _, key := range sortedKeysM(s.Docs) {
@@ -397,6 +399,7 @@ func (v *validator) site(all map[string]vis) {
 				}
 			}
 			installed = closure(valid)
+			installed[SiteUnit] = installed[SiteUnit] || isSite(apps[SiteUnit])
 			for i, a := range listed {
 				if !isApp(a) {
 					v.rep.extra("error", cfg.Path, fmt.Sprintf("apps/%d", i), "unknown_app", fmt.Sprintf(`"%s" is not an app in %s%s`, a, v.reg.AppsDir, suggest(a, appNames)))
@@ -422,6 +425,7 @@ func (v *validator) site(all map[string]vis) {
 				}
 			}
 			installed = closure(valid)
+			installed[SiteUnit] = installed[SiteUnit] || isSite(apps[SiteUnit])
 		}
 		if th, _ := c["theme"].(string); th != "" && s.Themes[th] == nil && !templateExists("themes", th, tdir) {
 			v.rep.extra("error", cfg.Path, "theme", "unknown_theme", fmt.Sprintf(`theme "%s" has no file themes/%s.rk%s`, th, th, suggest(th, keysDoc(s.Themes))))
@@ -664,7 +668,7 @@ func (v *validator) overlays(all map[string]vis) {
 		for k, y := range all {
 			_, r := a.Requires[y.app]
 			_, op := a.Optional[y.app]
-			if y.app == x.app || r || op {
+			if y.app == x.app || r || op || a.Kind == KindSite {
 				visible[k] = y
 			}
 		}
@@ -754,7 +758,11 @@ func (v *validator) overlays(all map[string]vis) {
 			apprNames[pyStr(asMap(av)["name"])] = true
 		}
 		roles := map[string]bool{}
-		for _, an := range append([]string{a.Name}, append(keys(a.Requires), keys(a.Optional)...)...) {
+		roleUnits := append([]string{a.Name}, append(keys(a.Requires), keys(a.Optional)...)...)
+		if a.Kind == KindSite {
+			roleUnits = keys(v.reg.App)
+		}
+		for _, an := range roleUnits {
 			if ap := v.reg.App[an]; ap != nil {
 				for _, r := range ap.Roles {
 					roles[r] = true

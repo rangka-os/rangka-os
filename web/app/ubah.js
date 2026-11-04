@@ -258,7 +258,7 @@
    * holds a record), step 2 runs when `when` is true: set {field: CEL} updates it, notify <who> sends a message. */
   RA.opsAddAutomation = function (app, model, spec, unitKind) {
     var name = slugName(spec.name || spec.label);
-    var path = (unitKind === "module" ? "modules/" : "apps/") + app + "/flows/" + name + ".rk";
+    var path = unitPath({ unit: app, kind: unitKind }) + "flows/" + name + ".rk";
     var step = {};
     if (spec.when) step["if"] = spec.when;
     if (spec.set) { step.update = "record"; step.set = clone(spec.set); }
@@ -275,8 +275,15 @@
     return { title: "Tambah otomatisasi " + (spec.label || name) + " di " + model, ops: ops };
   };
 
+  /** The folder of a unit's files as a change-set path prefix: the site company module (contract 0016) is the site
+   *  itself, a module modules/<m>/, a 0.4 app apps/<a>/. */
+  function unitPath(home) {
+    if (home.kind === "site") return "";
+    return (home.kind === "module" ? "modules/" : "apps/") + home.unit + "/";
+  }
+
   /** The permissions a new table copies: the first model of the menu group it joins when that has permissions, else
-   *  the app's first model that has them; undefined when none has (contract 0015 §2). */
+   *  the first model of `app` (a unit name) that has them; undefined when none has (contract 0015 §2, 0016). */
   function siblingPermissions(meta, app, side) {
     var models = (meta && meta.models) || {}, group = null;
     if (Array.isArray(side)) side.forEach(function (g) { if (!group && g && g.group && g.group.id === "Tabel baru") group = g; });
@@ -288,14 +295,16 @@
     return names.length ? clone(models[names[0]].permissions) : undefined;
   }
 
-  /** New table: <unit>/models/<name>.rk plus a `nav.side` entry in the layout (group "Tabel baru"). home: {unit, kind}
-   *  from RA.tableHome (kind "module" → modules/, "app" → apps/ for a 0.4 app); a bare unit name means apps/. meta
-   *  (optional): the merged metadata, for the permissions copied from a sibling model. */
+  /** New table: models/<name>.rk plus a `nav.side` entry in the layout (group "Tabel baru"). home: {unit, kind, near}
+   *  from RA.tableHome: kind "site" → the site company module, models/x_<slug>.rk (contract 0016); "module" →
+   *  modules/<m>/, "app" → apps/<a>/ (a bare unit name means apps/). near: the unit whose models lend their permissions.
+   *  meta (optional): the merged metadata, for the permissions copied from a sibling model. */
   RA.opsAddModel = function (home, spec, layoutName, layoutExisting, meta) {
     if (!isObj(home)) home = { unit: home, kind: "app" };
-    var app = home.unit;
-    var perms = siblingPermissions(meta, app, layoutExisting && layoutExisting.parsed && layoutExisting.parsed.nav && layoutExisting.parsed.nav.side);
-    var name = slugName(spec.label), path = (home.kind === "module" ? "modules/" : "apps/") + app + "/models/" + name + ".rk";
+    var perms = siblingPermissions(meta, home.near || home.unit, layoutExisting && layoutExisting.parsed && layoutExisting.parsed.nav && layoutExisting.parsed.nav.side);
+    var name = slugName(spec.label);
+    if (home.kind === "site") name = ("x_" + name).slice(0, 60).replace(/_+$/, "");
+    var path = unitPath(home) + "models/" + name + ".rk";
     var fields = [], taken = [];
     (spec.fields || []).forEach(function (f) {
       var n = uniqueName(slugName(f.label), taken, 60); taken.push(n);
@@ -395,20 +404,21 @@
     return out;
   };
 
-  /** The unit a model belongs to and whether it is an app (apps/) or a module (modules/). */
+  /** The unit a model belongs to and whether it is an app (apps/), a module (modules/) or the site company module
+   *  (kind "site", contract 0016). */
   RA.unitOf = function (meta, model) {
     var mm = ((meta && meta.models) || {})[model] || {}, unit = mm.app || mm.module;
     var isApp = ((meta && meta.apps) || []).some(function (a) { return a && a.name === unit; });
-    return { unit: unit, kind: isApp ? "app" : "module" };
+    var isSite = ((meta && meta.modules) || []).some(function (m) { return m && m.name === unit && m.kind === "site"; });
+    return { unit: unit, kind: isSite ? "site" : isApp ? "app" : "module" };
   };
 
-  /** Where a new table goes (contract 0001: an app defines no models, so its tables live in its modules): the module of
-   *  the model on screen, else the module of the app's first menu model, else the app's first module. A 0.4 app (kind
-   *  legacy) holds its own models → {unit: app, kind: "app"}. */
-  RA.tableHome = function (meta, routeModel, appName) {
+  /** The unit a new table sits next to: the unit of the model on screen, else the module of the app's first menu model,
+   *  else the app's first module; a 0.4 app (kind legacy) is its own unit. */
+  function nearUnit(meta, routeModel, appName) {
     var apps = (meta && meta.apps) || [], ap = apps.filter(function (a) { return a && a.name === appName; })[0] || {};
-    if (routeModel && ((meta && meta.models) || {})[routeModel]) return RA.unitOf(meta, routeModel);
-    if (ap.kind !== "app") return { unit: appName, kind: "app" };
+    if (routeModel && ((meta && meta.models) || {})[routeModel]) return RA.unitOf(meta, routeModel).unit;
+    if (ap.kind !== "app") return appName;
     var first = null;
     (ap.menu || []).forEach(function (g) {
       (g && g.items || []).forEach(function (it) {
@@ -416,8 +426,14 @@
         if (!first && ((meta.models || {})[m])) first = m;
       });
     });
-    if (first) return RA.unitOf(meta, first);
-    return { unit: (ap.modules || [])[0] || appName, kind: (ap.modules || []).length ? "module" : "app" };
+    if (first) return RA.unitOf(meta, first).unit;
+    return (ap.modules || [])[0] || appName;
+  }
+
+  /** Where a new table goes: always the site company module (contract 0016: company changes never edit apps or
+   *  catalogue modules). near is the unit next to it (nearUnit), whose models lend their permissions. */
+  RA.tableHome = function (meta, routeModel, appName) {
+    return { unit: "site", kind: "site", near: nearUnit(meta, routeModel, appName) };
   };
 
   function celLit(f, text, what) {
@@ -733,10 +749,10 @@
     return h(EditDialog, { title: "Tambah otomasi", confirmLabel: "Tambah", onClose: p.onClose, onSubmit: function () {
       need(value, "Isi nilai pemicu dulu");
       var spec = RA.automationSpec(mm, { field: field, value: value, target: target, to: to });
-      var unit = RA.unitOf(p.meta, p.model), flows = p.meta.flows || {}, base = RA.slugName(spec.label), name = base, i = 2;
+      var flows = p.meta.flows || {}, base = RA.slugName(spec.label), name = base, i = 2;
       while (flows[name]) name = base.slice(0, 56) + "_" + i++;
       spec.name = name;
-      return p.u.run(RA.opsAddAutomation(unit.unit, p.model, spec, unit.kind));
+      return p.u.run(RA.opsAddAutomation("site", p.model, spec, "site")); // a company automation (contract 0016)
     } },
       h(R.NativeSelect, { id: "ap-ubah-o-field", label: "Saat kolom", value: field, options: opts(all), onChange: function (e) { setField(e.target.value); setValue(""); } }),
       valueInput("ap-ubah-o-value", "Berubah menjadi", fd(field), value, setValue),

@@ -221,6 +221,9 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		r.Apps = append(r.Apps, a)
 		r.App[name] = a
 	}
+	if siteDir != "" {
+		r.loadSiteUnit(ld, siteDir)
+	}
 	// kernel extensions to the Python reference: flows, roles as documents, the site
 	ld.extra = true
 	for _, a := range r.Apps {
@@ -230,8 +233,11 @@ func LoadOpts(o Options, rep *Report) *Registry {
 				f.Name = e.Stem
 				r.Flows[e.Stem] = f
 				a.Flows = append(a.Flows, e.Stem)
-				r.Docs[a.Prefix+"/flows/"+e.Stem+".rk"] = d
+				r.Docs[a.DocKey("flows/"+e.Stem+".rk")] = d
 			}
+		}
+		if a.Kind == KindSite { // the rest of the site is loaded by loadSite
+			continue
 		}
 		for _, e := range rk.ListDir(filepath.Join(a.Dir, "imports")) {
 			if d := ld.load(e.Path); d != nil {
@@ -274,6 +280,42 @@ func LoadOpts(o Options, rep *Report) *Registry {
 	r.resolvePrints()
 	r.resolveProcesses()
 	return r
+}
+
+// loadSiteUnit adds the site company module (contract 0016): <site>/models/<m>.rk and <site>/flows/<f>.rk as the
+// unit "site", when either folder holds a file. A model named like a unit's model is duplicate_model and not loaded.
+func (r *Registry) loadSiteUnit(ld *loader, dir string) {
+	models, flows := rk.ListDir(filepath.Join(dir, "models")), rk.ListDir(filepath.Join(dir, "flows"))
+	if len(models) == 0 && len(flows) == 0 {
+		return
+	}
+	if prev := r.App[SiteUnit]; prev != nil {
+		if ld.rep != nil {
+			first := append(models, flows...)[0].Path
+			ld.rep.add("error", first, "(root)", "duplicate_unit", fmt.Sprintf(`"%s" is already a unit (%s); the site company module is named %s (contract 0016)`, SiteUnit, ld.rep.rel(prev.File), SiteUnit))
+		}
+		return
+	}
+	a := &App{Name: SiteUnit, Dir: dir, Kind: KindSite, Raw: map[string]any{}, Title: Label{"id": "Perusahaan", "en": "Company"}}
+	for _, e := range models {
+		d := ld.load(e.Path)
+		if d == nil {
+			continue
+		}
+		if prev := r.Models[e.Stem]; prev != nil {
+			if ld.rep != nil {
+				ld.rep.add("error", e.Path, "name", "duplicate_model", fmt.Sprintf(`"%s" is already a model of %s; a company model needs its own name (x_…), contract 0016`, e.Stem, prev.App))
+			}
+			continue
+		}
+		m := parseModel(SiteUnit, d)
+		m.Name = e.Stem
+		r.Models[e.Stem] = m
+		a.Models = append(a.Models, e.Stem)
+		r.Docs["models/"+e.Stem+".rk"] = d
+	}
+	r.Apps = append(r.Apps, a)
+	r.App[SiteUnit] = a
 }
 
 func loadSite(dir string, ld *loader, r *Registry) *Site {
@@ -433,6 +475,12 @@ func (r *Registry) resolveInstalled() {
 				want = append(want, a.Name)
 			}
 		}
+	}
+	if r.App[SiteUnit] != nil && r.App[SiteUnit].Kind == KindSite {
+		defer func() { // after every app: nothing depends on it (contract 0016)
+			r.Installed[SiteUnit] = true
+			r.order = append(r.order, SiteUnit)
+		}()
 	}
 	var visit func(string, int)
 	visit = func(name string, depth int) {

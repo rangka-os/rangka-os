@@ -38,4 +38,8 @@ diff of `.rk` files — and only a person can approve it. Reference: [changeset.
 A new table (model) without `permissions` stays medium but its reasons say so: every role has full access to it.
 Ubah's "Tambah tabel" copies `permissions` from a sibling model to avoid that.
 
+A company's own tables and automations live in the site company module (contract 0016): `models/x_<name>.rk` and
+`flows/<name>.rk` in the site folder, layer 4. Ubah writes them there, never into `apps/` or a catalogue module, so a
+module upgrade never touches them. Changing a company table is judged field by field, like an overlay.
+
 Every transition is written to the audit log and shown in the Console with the diff.

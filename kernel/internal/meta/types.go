@@ -169,8 +169,9 @@ type Flow struct {
 	Doc                                      *rk.Doc
 }
 
-// App is a unit of metadata: a module (modules/<m>/module.rk), an app (apps/<a>/app.rk with modules) or a
-// legacy 0.4 app (apps/<a>/app.rk without modules: a module and an app in one). Contract 0001.
+// App is a unit of metadata: a module (modules/<m>/module.rk), an app (apps/<a>/app.rk with modules), a
+// legacy 0.4 app (apps/<a>/app.rk without modules: a module and an app in one), contract 0001, or the site
+// company module (<site>/models and <site>/flows, no manifest), contract 0016.
 type App struct {
 	Name, Version, Dir string
 	File               string // module.rk or app.rk
@@ -193,13 +194,25 @@ const (
 	KindModule = "module"
 	KindApp    = "app"
 	KindLegacy = "legacy"
+	KindSite   = "site" // the site company module: <site>/models and <site>/flows (contract 0016)
 )
 
+// SiteUnit is the name of the site company module (contract 0016).
+const SiteUnit = "site"
+
+// DocKey is the registry docs key of a file of the unit: <prefix>/<rel>, or rel for the site company module.
+func (a *App) DocKey(rel string) string {
+	if a.Prefix == "" {
+		return rel
+	}
+	return a.Prefix + "/" + rel
+}
+
 // IsModule reports whether other units can depend on the unit (a module or a legacy app).
-func (a *App) IsModule() bool { return a.Kind != KindApp }
+func (a *App) IsModule() bool { return a.Kind == KindModule || a.Kind == KindLegacy }
 
 // IsApp reports whether a site can install the unit by name (an app or a legacy app).
-func (a *App) IsApp() bool { return a.Kind != KindModule }
+func (a *App) IsApp() bool { return a.Kind == KindApp || a.Kind == KindLegacy }
 
 // Site is one installation: system.rk, features.rk, config.rk, themes, layouts and letterheads.
 type Site struct {

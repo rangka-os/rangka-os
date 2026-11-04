@@ -114,6 +114,9 @@ func (v *validator) shape() {
 			if got, _ := m.Raw["name"].(string); got != mn || m.Raw["name"] == nil {
 				v.rep.add("error", m.Doc.Path, "name", "name_mismatch", fmt.Sprintf(`model name "%s" must match the file name "%s"`, pyStr(m.Raw["name"]), mn))
 			}
+			if a.Kind == KindSite && !strings.HasPrefix(mn, "x_") {
+				v.rep.add("error", m.Doc.Path, "name", "company_model_name", fmt.Sprintf(`company model "%s" must start with x_ (x_%s), so a module upgrade never brings a model of the same name (contract 0016)`, mn, mn))
+			}
 			if naming := asMap(m.Raw["naming"]); naming != nil {
 				v.resetNeedsDate(m.Doc.Path, "naming", naming, false)
 			}
@@ -189,6 +192,11 @@ func (v *validator) meaning() {
 			}
 			for k := range a.Optional {
 				reqs[k] = true
+			}
+		}
+		if a.Kind == KindSite { // the company module sees every unit (contract 0016)
+			for _, u := range v.reg.Apps {
+				reqs[u.Name] = true
 			}
 		}
 		visible := map[string]vis{}

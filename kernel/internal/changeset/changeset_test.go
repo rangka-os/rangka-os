@@ -124,6 +124,7 @@ func TestAssessUbah(t *testing.T) {
 		"dashboards/crm_overview.rk": {"name": "crm_overview"},
 		"custom/deal.rk":             {"model": "deal", "views": map[string]any{"list": map[string]any{"columns": []any{"a"}}}},
 		"layouts/crm_first.rk":       {"name": "crm_first"},
+		"models/x_kunjungan.rk":      {"name": "x_kunjungan", "fields": []any{map[string]any{"name": "toko", "type": "data"}}},
 	}
 	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
 	with := func(p string, m map[string]any) func(string) (map[string]any, bool) {
@@ -158,6 +159,14 @@ func TestAssessUbah(t *testing.T) {
 		{"new plain model", []Op{{Op: "create", Path: "apps/crm/models/x.rk"}}, with("apps/crm/models/x.rk", map[string]any{"name": "x", "fields": []any{map[string]any{"name": "t", "type": "data"}}}), "medium", 5},
 		{"layout patch", []Op{{Op: "patch", Path: "layouts/crm_first.rk"}}, with("layouts/crm_first.rk", map[string]any{"name": "crm_first", "nav": map[string]any{}}), "low", 6},
 		{"delete dashboard", []Op{{Op: "delete", Path: "dashboards/crm_overview.rk"}}, before, "high", 6},
+		// the site company module (contract 0016): layer 4, the company's own files
+		{"new company model", []Op{{Op: "create", Path: "models/x_baru.rk"}}, with("models/x_baru.rk", map[string]any{"name": "x_baru", "fields": []any{map[string]any{"name": "t", "type": "data"}}, "permissions": []any{}}), "medium", 4},
+		{"new company model with money", []Op{{Op: "create", Path: "models/x_baru.rk"}}, with("models/x_baru.rk", map[string]any{"name": "x_baru", "fields": []any{map[string]any{"name": "t", "type": "currency"}}}), "high", 4},
+		{"field added to a company model", []Op{{Op: "patch", Path: "models/x_kunjungan.rk"}}, with("models/x_kunjungan.rk", map[string]any{"name": "x_kunjungan", "fields": []any{map[string]any{"name": "toko", "type": "data"}, map[string]any{"name": "kota", "type": "data"}}}), "medium", 4},
+		{"company model relabelled", []Op{{Op: "patch", Path: "models/x_kunjungan.rk"}}, with("models/x_kunjungan.rk", map[string]any{"name": "x_kunjungan", "fields": []any{map[string]any{"name": "toko", "type": "data", "label": "Toko"}}}), "low", 4},
+		{"company model permissions", []Op{{Op: "patch", Path: "models/x_kunjungan.rk"}}, with("models/x_kunjungan.rk", map[string]any{"name": "x_kunjungan", "fields": files["models/x_kunjungan.rk"]["fields"], "permissions": []any{map[string]any{"role": "owner"}}}), "high", 4},
+		{"new company flow", []Op{{Op: "create", Path: "flows/x_a.rk"}}, with("flows/x_a.rk", map[string]any{"name": "x_a", "on": "deal.updated"}), "medium", 4},
+		{"delete company model", []Op{{Op: "delete", Path: "models/x_kunjungan.rk"}}, before, "high", 4},
 	}
 	for _, c := range cases {
 		a := Assess(c.ops, before, c.after, model)

@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/layout.json
+name: utama
+nav:
+  side:
+    - group: {id: Tabel baru}
+      items:
+        - {to: 'model:x_kunjungan_toko', label: {id: Kunjungan Toko}}

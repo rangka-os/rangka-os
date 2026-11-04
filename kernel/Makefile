@@ -53,7 +53,9 @@ compare-python: build
 	            "testdata/print-apps/apps --site testdata/print-site" \
 	            "testdata/broken-print-apps/apps --site testdata/broken-print-site" \
 	            "testdata/canvas/apps --site testdata/canvas/site" \
-	            "testdata/broken-canvas/apps --site testdata/broken-canvas/site"; do \
+	            "testdata/broken-canvas/apps --site testdata/broken-canvas/site" \
+	            "testdata/modules-apps/apps --site testdata/site-module" \
+	            "testdata/modules-apps/apps --site testdata/broken-site-module"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \
 	  if diff $$D/py.txt $$D/go.txt; then echo "identical ($$(tail -1 $$D/go.txt)): $$args"; else rc=1; fi; \

@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
+model: x_kunjungan_toko
+fields:
+  - {name: x_catatan, type: text, label: {id: Catatan}}
+  - {name: x_pelanggan_lain, type: link, to: customer, label: {id: Pelanggan lain}}

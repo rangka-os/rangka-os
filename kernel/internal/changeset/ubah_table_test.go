@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -11,7 +12,9 @@ import (
 )
 
 // "Tambah tabel" on the 0.5 apps of testdata/canvas: the ops the app builds (web/app/test/ubah.test.js writes them to
-// testdata/ubah) validate and are medium risk. The same table under apps/<app>/models is what an app may not hold.
+// testdata/ubah) put the table into the site company module (contract 0016), validate, and are medium risk in layer 4
+// (with the layout, layer 6). The same table under apps/<app>/models is what an app may not hold, and a company
+// model without the x_ prefix is refused.
 func TestUbahAddTableIsValidMedium(t *testing.T) {
 	canvas := filepath.Join("..", "..", "testdata", "canvas")
 	for _, app := range []string{"crm", "jasa_proyek"} {
@@ -22,6 +25,9 @@ func TestUbahAddTableIsValidMedium(t *testing.T) {
 		var cs ChangeSet
 		if err := json.Unmarshal(b, &cs); err != nil {
 			t.Fatal(err)
+		}
+		if cs.Ops[0].Path != "models/x_kunjungan_toko.rk" {
+			t.Fatalf("%s: table at %s, want the site company module", app, cs.Ops[0].Path)
 		}
 		s := &Service{AppsDir: filepath.Join(canvas, "apps"), SiteDir: filepath.Join(canvas, "site"), ModulesDir: filepath.Join(canvas, "modules"), Schemas: schema.Embedded()}
 		v, _, _, cleanup, err := s.check(&cs)
@@ -37,27 +43,34 @@ func TestUbahAddTableIsValidMedium(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if a := Assess(cs.Ops, parsed(live, nil), parsed(live, files), s.appModel); a.Risk != "medium" {
-			t.Errorf("%s: risk %s (%v), want medium", app, a.Risk, a.Reasons)
+		if a := Assess(cs.Ops, parsed(live, nil), parsed(live, files), s.appModel); a.Risk != "medium" || !slices.Equal(a.Layers, []int{4, 6}) {
+			t.Errorf("%s: risk %s layers %v (%v), want medium [4 6]", app, a.Risk, a.Layers, a.Reasons)
 		}
 
-		// the same table in the app's own directory is refused
-		bad := ChangeSet{Ops: append([]Op{}, cs.Ops...)}
-		for i, op := range bad.Ops {
-			if strings.HasPrefix(op.Path, "modules/") && strings.Contains(op.Path, "/models/") {
-				op.Path = "apps/" + app + "/models/" + filepath.Base(op.Path)
-				bad.Ops[i] = op
+		for _, c := range []struct{ path, code string }{
+			{"apps/" + app + "/models/kunjungan_toko.rk", "app_defines_model"}, // an app defines no models
+			{"models/kunjungan_toko.rk", "company_model_name"},                 // a company model starts with x_
+		} {
+			bad := ChangeSet{Ops: append([]Op{}, cs.Ops...)}
+			for i, op := range bad.Ops {
+				if op.Path == cs.Ops[0].Path {
+					op.Path = c.path
+					op.Content = strings.Replace(op.Content, "x_kunjungan_toko", "kunjungan_toko", 1)
+					bad.Ops[i] = op
+				}
 			}
-		}
-		v, _, _, cleanup, err = s.check(&bad)
-		if err != nil {
-			t.Fatal(err)
-		}
-		cleanup()
-		if len(v.Errors) == 0 {
-			t.Errorf("%s: a model under apps/%s/models validated", app, app)
-		} else if v.Errors[0].Code != "app_defines_model" {
-			t.Errorf("%s: apps/ model refused with %s, want app_defines_model", app, v.Errors[0].Code)
+			v, _, _, cleanup, err = s.check(&bad)
+			if err != nil {
+				t.Fatal(err)
+			}
+			cleanup()
+			var codes []string
+			for _, e := range v.Errors {
+				codes = append(codes, e.Code)
+			}
+			if !slices.Contains(codes, c.code) {
+				t.Errorf("%s: %s refused with %v, want %s", app, c.path, codes, c.code)
+			}
 		}
 	}
 }

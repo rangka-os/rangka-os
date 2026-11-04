@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_kunjungan_menang
+label: {id: Catat kunjungan saat menang}
+on: deal.updated
+steps:
+  - {find: deal, where: "name == event.name", as: record}
+  - {if: "record.stage == 'won'", create: x_kunjungan_toko, set: {toko: "record.deal_name", peluang: "record.name"}}

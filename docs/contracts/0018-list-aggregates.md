@@ -1,0 +1,51 @@
+# 0018 List aggregates
+
+Status: proposed (4 Nov 2026) · Owner of the change: rangka-os (kernel, web app) · Affects: nothing in rangka-apps
+
+## Context
+
+The redesigned list view shows totals and group summaries above the rows (for example the sum of invoice totals, or
+counts per customer). `GET /api/v1/r/{model}` returns pages, so the client cannot compute these without loading every
+row. The kernel should answer them in one query that matches the list exactly.
+
+## Decision
+
+1. **Endpoint.** `GET /api/v1/aggregate/{model}?q=&filter=&group=<field>&fn=<kind>:<field>[,…]`
+   - `kind` is one of `count|sum|avg|min|max`. `count` needs no field.
+   - It matches the same rows as `GET /api/v1/r/{model}` with the same `q` and `filter`, under the same read grant and
+     row scope. There is no paging.
+2. **Response.**
+
+   ```json
+   {
+     "count": 142,
+     "values": {"sum:total": 51250000},
+     "groups": [
+       {"key": "CUST-0012", "label": "CV Maju Jaya", "count": 4, "values": {"sum:total": 3900000}}
+     ],
+     "other": {"count": 0, "values": {}}
+   }
+   ```
+
+3. **Group rules.**
+   - The 50 largest groups by count are returned, ties broken by key.
+   - The remaining groups are summed into `other`.
+   - Empty values share one group with `key: null, label: "(kosong)"`.
+   - For a link field, `label` is the linked record's title.
+4. **Errors.**
+   - `400` when `group` is not a field of the model, or when `sum|avg|min|max` names a non-number field (currency,
+     int, float and percent are numbers).
+   - `400` on a bad `filter`.
+   - `404` for an unknown model.
+   - `403` without a read grant.
+5. **No preview variant.** There is no aggregate under `/preview…`. In preview mode the app hides totals.
+
+## Contract changes (rangka-os)
+
+- Kernel: new route `/api/v1/aggregate/{model}` sharing the list's `q`, `filter`, grant and row-scope code.
+- Web app: list totals and group summaries read this endpoint.
+
+## Open
+
+- Grouping by more than one field.
+- Date grains for `group` on date fields (the dashboard engine already has them).

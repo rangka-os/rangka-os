@@ -9,7 +9,8 @@
  * HTML view and calls the tab's window.print().
  * Both buttons are disabled while either request is in flight.
  *
- * RangkaApp.Attachments({model, name, record}) — card "Lampiran" on a saved record: file input and drop zone, the list
+ * RangkaApp.Attachments({model, name, record, panel}) — card "Lampiran" on a saved record (panel: no card, for the form's
+ * side panel section "Lampiran"): file input and drop zone, the list
  * (thumbnail for raster images, a PDF icon, name as a link to GET /api/v1/attachments/<id>, size, uploader, date) and a
  * delete button (confirm dialog) only while record.docstatus === 0. Files over 20 MB are refused before any request;
  * a 413 shows the same text. Hidden entirely when the kernel has no attachments route or the files capability is off.
@@ -340,10 +341,12 @@
         canDelete ? h(R.IconButton, { icon: "delete", label: "Hapus lampiran " + a.filename, disabled: !!busy, onClick: function () { if (!busyRef.current) setConfirmDel(a); } }) : null);
     }));
 
+    var inner = [msg ? h(R.Alert, { key: "msg", tone: "bad", title: msg.title, onClose: function () { setMsg(null); } }, msg.body) : null,
+      zone ? h(React.Fragment, { key: "zone" }, zone) : null, h(React.Fragment, { key: "body" }, body)];
     return h(React.Fragment, null,
-      h(R.Card, { title: "Lampiran" + (items && items.length ? " (" + items.length + ")" : ""), className: "ap-att" },
-        msg ? h(R.Alert, { tone: "bad", title: msg.title, onClose: function () { setMsg(null); } }, msg.body) : null,
-        zone, body),
+      // panel: the form's side panel gives the section its title; else a card of its own
+      p.panel ? h("div", { className: "ap-att ap-att-panel" }, inner)
+        : h(R.Card, { title: "Lampiran" + (items && items.length ? " (" + items.length + ")" : ""), className: "ap-att" }, inner),
       confirmDel ? h(R.Dialog, { variant: "danger", icon: "warning", title: "Hapus lampiran?", confirmLabel: "Ya, hapus", cancelLabel: "Kembali",
         onClose: function () { if (!busyRef.current) setConfirmDel(null); }, onConfirm: function () { remove(confirmDel); } },
         confirmDel.filename + " dihapus dari dokumen ini.") : null);

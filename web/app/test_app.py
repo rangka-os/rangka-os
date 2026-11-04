@@ -1278,6 +1278,29 @@ def wait_form(page, button="Simpan draf"):
     page.get_by_role("button", name=button, exact=True).wait_for(timeout=10000)
 
 
+def more_item(page, name, wait=True):
+    """The document header's ⋯ menu entry `name` (Batalkan, the model's actions); opens the menu when it is closed.
+    wait: first wait for the ⋯ button (the form is still loading). Returns a locator with count() == 0 when the menu or
+    the entry is missing."""
+    more = main_area(page).locator(".rk-pagehead").get_by_role("button", name="Tindakan lain")
+    if wait:
+        more.wait_for(timeout=10000)
+    if more.count() and more.get_attribute("aria-expanded") != "true":
+        more.click()
+    return main_area(page).locator(".rk-pagehead").get_by_role("menuitem", name=name, exact=True)
+
+
+def close_more(page):
+    more = main_area(page).locator(".rk-pagehead").get_by_role("button", name="Tindakan lain")
+    if more.count() and more.get_attribute("aria-expanded") == "true":
+        page.keyboard.press("Escape")
+
+
+def panel_section(page, title):
+    """The document side panel's section headed `title` (Info, Lampiran, Persetujuan, Cetak)."""
+    return main_area(page).locator(".rk-docpanel-sec", has=page.locator("h3", has_text=re.compile("^" + re.escape(title) + "$")))
+
+
 def by_label(page, label):
     """A form control by its label; required fields carry a "*" after the label text."""
     return page.get_by_label(re.compile("^" + re.escape(label) + r"\s*\*?$"))
@@ -1371,7 +1394,7 @@ def test_invoice_create_submit(page, ctx):
     assert re.fullmatch(r"INV-\d{4}-\d{5}", number), number
     main_area(page).locator(".rk-steps [aria-current=step]", has_text="Diajukan").wait_for(timeout=5000)
     assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Diajukan").count() == 1, "status chip Diajukan"
-    assert main_area(page).locator(".rk-pagehead .rk-doc-no", has_text=number).count() == 1, "the header shows the number"
+    assert main_area(page).locator(".rk-pagehead h1", has_text=number).count() == 1, "the header shows the number"
     editable = main_area(page).locator("input:not(.ap-att-input), textarea, select, [role=combobox]")  # the attachments file input is not a form field
     assert editable.count() == 0, f"no editable input on a submitted invoice, found {editable.count()}"
     st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + number)
@@ -1382,7 +1405,7 @@ def test_invoice_create_submit(page, ctx):
 def test_cancel_amend(page, ctx):
     number = submitted_invoice(ctx)
     open_route(page, ctx, "#/r/sales_invoice/" + number)
-    page.get_by_role("button", name="Batalkan", exact=True).click()
+    more_item(page, "Batalkan").click()
     dlg = page.get_by_role("alertdialog")
     dlg.wait_for(timeout=5000)
     dlg.get_by_role("button", name="Ya, batalkan").click()
@@ -1394,7 +1417,7 @@ def test_cancel_amend(page, ctx):
     draft = urllib.parse.unquote(page.evaluate("location.hash").rsplit("/", 1)[-1])
     st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + draft)
     assert st == 200 and rec["amended_from"] == number and rec["docstatus"] == 0, f"the amendment: {st} {rec}"
-    link = main_area(page).locator(".rk-pagehead a", has_text=number)
+    link = panel_section(page, "Info").locator("a", has_text=number)
     link.wait_for(timeout=5000)
     assert link.get_attribute("href") == "#/r/sales_invoice/" + number, "amended_from links back"
     wait_form(page)
@@ -1519,7 +1542,7 @@ def test_action_convert_lead(page, ctx):
     assert st == 201, f"create lead {st} {lead}"
     open_route(page, ctx, "#/r/lead/" + lead["name"])
     wait_form(page, "Simpan")
-    page.get_by_role("button", name="Jadikan pelanggan + peluang").click()
+    more_item(page, "Jadikan pelanggan + peluang").click()
     page.wait_for_function("() => /^#\\/r\\/deal\\/DEAL-\\d+$/.test(location.hash)", timeout=10000)
     main_area(page).get_by_role("heading", name="Peluang Kedai Aksi").wait_for(timeout=10000)
     _, after = h.call("GET", "/api/v1/r/lead/" + lead["name"])
@@ -2000,7 +2023,7 @@ def test_cancel_needs_approval(page, ctx):
     assert st == 200 and rec["docstatus"] == 1, f"submit as owner: {st} {rec}"
     number = rec["name"]
     open_route(page, ctx, "#/r/sales_invoice/" + number, who=SALES)
-    page.get_by_role("button", name="Batalkan", exact=True).click()
+    more_item(page, "Batalkan").click()
     dlg = page.get_by_role("alertdialog")
     dlg.wait_for(timeout=5000)
     dlg.get_by_role("button", name="Ya, batalkan").click()
@@ -2009,10 +2032,11 @@ def test_cancel_needs_approval(page, ctx):
     assert "undefined" not in page.locator("body").inner_text(), "no 'undefined' anywhere (toast, header)"
     assert page.get_by_text(number + " dibatalkan").count() == 0, "no 'dibatalkan' toast for a held cancel"
     assert page.evaluate("location.hash") == "#/r/sales_invoice/" + number, "stays on the invoice"
-    assert main_area(page).locator(".rk-pagehead .rk-doc-no", has_text=number).count() == 1, "the header still shows the number (not a new record)"
+    assert main_area(page).locator(".rk-pagehead h1", has_text=number).count() == 1, "the header still shows the number (not a new record)"
     assert banner.get_by_text("Persetujuan pembatalan").count() >= 1, "the cancel policy label shows"
     assert EDIT_VOIDS not in banner.inner_text(), "no edit-voids warning on a submitted document"
-    assert page.get_by_role("button", name="Batalkan", exact=True).count() == 0, "no second Batalkan while the request waits"
+    assert more_item(page, "Batalkan", wait=False).count() == 0, "no second Batalkan while the request waits"
+    close_more(page)
     assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Menunggu persetujuan").count() == 1, "header lozenge"
     assert owner.call("GET", "/api/v1/r/sales_invoice/" + number)[1]["docstatus"] == 1, "still submitted on the server"
     shot(page, ctx, "approval-cancel-held")
@@ -2037,13 +2061,14 @@ def test_action_needs_approval(page, ctx):
     assert st == 201, f"create lead as sales {st} {lead}"
     open_route(page, ctx, "#/r/lead/" + lead["name"], who=SALES)
     wait_form(page, "Simpan")
-    page.get_by_role("button", name="Jadikan pelanggan + peluang").click()
+    more_item(page, "Jadikan pelanggan + peluang").click()
     banner = main_area(page).locator(".ap-banner", has_text=WAITING)
     banner.first.wait_for(timeout=10000)
     assert banner.get_by_text("Persetujuan konversi").count() >= 1, "the action's policy label shows"
     assert page.get_by_text("Diproses di latar belakang").count() == 0, "not reported as a queued job"
     assert page.evaluate("location.hash") == "#/r/lead/" + lead["name"], "stays on the lead"
-    assert page.get_by_role("button", name="Jadikan pelanggan + peluang").count() == 0, "the held action is not offered again"
+    assert more_item(page, "Jadikan pelanggan + peluang", wait=False).count() == 0, "the held action is not offered again"
+    close_more(page)
     _, after = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/lead/" + lead["name"])
     assert not after.get("converted_deal"), f"not converted yet: {after.get('converted_deal')!r}"
 
@@ -2315,8 +2340,8 @@ def test_attachment_upload(page, ctx):
         reqs = watch_requests(page)
         open_route(page, ctx, "#/r/sales_invoice/" + draft)
         wait_form(page)
-        card = main_area(page).locator(".ap-att")
-        card.wait_for(timeout=10000)
+        card = panel_section(page, "Lampiran")
+        card.locator(".ap-att").wait_for(timeout=10000)
         assert card.get_by_role("heading", name="Lampiran").count() == 1
         inp = card.locator("input[type=file]")
         # 21 MB: refused in the browser, no request is sent

@@ -205,6 +205,7 @@ drill_pilot() {
   dc run --rm -T --no-deps -v "$IDENTITY:/run/secrets/age-identity:ro" -v "$TMP/pilots/$p:/restore/$p" \
     --entrypoint /usr/local/bin/restore.sh backup "/backups/in/$name" "$p" 2>&1 | tee "$TMP/restore.out" >&2 || { log "$p: restore failed"; return 1; }
   warn_release "$p"
+  log "$p: restored folders: $(cd "$TMP/pilots/$p" && find . -mindepth 1 -maxdepth 1 -type d | sed 's#^./##' | LC_ALL=C sort | tr '\n' ' ')"
   # /srv/backups (pre-migrate backups of the kernel in production mode) lives outside the archive
   docker run --rm -v "$TMP/pilots:/p" alpine:3.20 sh -c 'mkdir -p "/p/$0/backups" && chown -R 65532:65532 "/p/$0"' "$p" || return 1
   # the kernel image must find the restored schema complete: exactly 0 statements left to migrate

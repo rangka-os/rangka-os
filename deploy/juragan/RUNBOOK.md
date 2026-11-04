@@ -112,7 +112,7 @@ Each step has the check that proves it.
    cd /opt/juragan/rangka-os/deploy/juragan
    ```
 3. **Pilot folders** from the private repo `rangka-os/juragan-pilots` (stream S9), one folder per pilot with
-   `apps/`, `site/`, `fixtures/`. Clone it to `/opt/juragan/pilots-src` (**Dede** adds a read-only deploy key
+   `apps/`, `modules/`, `site/`, `fixtures/` (and `opening/`, used from the checkout, not the VM). Clone it to `/opt/juragan/pilots-src` (**Dede** adds a read-only deploy key
    for that repo too), copy each folder to `/opt/juragan/pilots/<pilot>`, then create the writable folders and hand them to the kernel (distroless nonroot, uid 65532):
    ```bash
    sudo git clone <juragan-pilots repo URL> /opt/juragan/pilots-src
@@ -148,17 +148,28 @@ Each step has the check that proves it.
    so the worst case is about 400 MB per pilot on top of the kernel, 800 MB for both, out of 4 GB shared with Postgres
    and Caddy. Leave it at 2, or set it to 1 under `environment:` in `compose.yaml` if the VM swaps. `RANGKA_CHROMIUM=off`
    answers PDF requests with 501 `pdf_unavailable`.
-6. **Seed the owner once per pilot.** **Dede** types the password himself, so it never lands in shell history or
-   a file. The two values are passed to this one command only and are not written to `.env`:
+6. **Seed every org of each pilot, with its reference data.** A bundle can hold several orgs (pilot A has one per
+   PT, under `orgs:` in `site/config.rk`). `seed-orgs.sh` seeds the owner into each of them, with the org's
+   `fixtures/<org>/` from the bundle (units, base reference data). Seeding is idempotent: a rerun reports
+   "already there". **Dede** types the owner password when asked (no echo), so it never lands in shell history, argv
+   or `.env`:
    ```bash
-   read -r -p 'owner email: ' RANGKA_OWNER_EMAIL
-   read -r -s -p 'owner password: ' RANGKA_OWNER_PASSWORD; echo
-   export RANGKA_OWNER_EMAIL RANGKA_OWNER_PASSWORD
-   docker compose run --rm -e RANGKA_OWNER_EMAIL -e RANGKA_OWNER_PASSWORD jasa seed
-   docker compose run --rm -e RANGKA_OWNER_EMAIL -e RANGKA_OWNER_PASSWORD fnb seed
-   unset RANGKA_OWNER_EMAIL RANGKA_OWNER_PASSWORD
+   ./seed-orgs.sh --list jasa   # the orgs it will seed, read from the bundle
+   ./seed-orgs.sh jasa
+   ./seed-orgs.sh fnb
    ```
-   Leave `RANGKA_OWNER_EMAIL` and `RANGKA_OWNER_PASSWORD` blank in `.env`.
+   Check: the last line of each run is `seed-orgs: done: <org> ...` with every org of that bundle, and signing in
+   on `https://jasa.juragan.ai/app/` shows the org switcher with each PT. Leave `RANGKA_OWNER_EMAIL` and
+   `RANGKA_OWNER_PASSWORD` blank in `.env`. An org added to the bundle later: rerun `./seed-orgs.sh <pilot>` (or
+   `./seed-orgs.sh <pilot> <org>`).
+
+   Then load each org's **opening data and staff** with the bundle's own tools, from a checkout of
+   `rangka-os/juragan-pilots` (dry run first). The exact per-org commands are in that repo's `jasa/GO-LIVE.md` and
+   `fnb/GO-LIVE.md` §3: `tools/opening.py --base https://<host> --org <org> --dir <pilot>/opening/data/<org> --email
+   <owner email> --dry-run`, then without `--dry-run`; staff with `tools/users.py ... --rangka "docker compose
+   --project-directory /opt/juragan/rangka-os/deploy/juragan run --rm -T -e RANGKA_USER_PASSWORD <pilot>"`
+   (first passwords go to a 0600 file outside git: hand them over, then delete the file). Order for fnb: outlets
+   before staff. Take a backup by hand afterwards (section 5) so the first archive already has the opening data.
 7. **Verify HTTPS** (DNS must already resolve; the first certificate takes a short while):
    ```bash
    curl -sS -o /dev/null -w '%{http_code}\n' https://jasa.juragan.ai/.well-known/openid-configuration
@@ -255,6 +266,11 @@ hand any time: `docker compose run --rm backup all` (or `jasa` / `fnb`).
    `backups/`), the pilot folders come from the archive's own `apps.tar`, `site.tar`, `files.tar`. Not proven:
    attachments (the sample data has none).
 
+   Every archive's `apps.tar` holds the bundle's `apps/`, `modules/`, `connectors/` and `fixtures/` (whichever
+   exist), so a restore on a second machine boots the kernel from the archive alone. With `BACKUP_METHOD=rangka`,
+   `rangka restore` also migrates the schema from the metadata inside `rangka.backup`: until the release you run
+   has S1's change that puts `modules/` into that file, stay on `pg_dump` for a bundle with `modules/`.
+
    `rangka` archives restore as the pilot role, the same as `pg_dump` archives (since rangka-os #22 `rangka restore`
    loads tables with forced row-level security as the owner). `restore.sh` then checks that nothing in `public` or
    `rk*` is owned by anyone but the pilot role, and the drill's RLS gate still requires the role to be NOSUPERUSER
@@ -268,7 +284,7 @@ security group; `CADDY_TLS` must be a valid email; read `docker compose logs cad
 
 ## 6. Restore in production
 
-Restore only goes into a **fresh** database and **empty** `apps`, `site`, `data`, `connectors` folders:
+Restore only goes into a **fresh** database and **empty** `apps`, `modules`, `site`, `data`, `connectors`, `fixtures` folders:
 `restore.sh` refuses anything else (`database <pilot> is not empty ...` or `<folder> is not empty ...`) and has
 no override. It verifies the archive checksums before touching any database. Do the pilots one at a time. The
 procedure is modelled on `restore-drill.sh`.
@@ -307,9 +323,9 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
    ```bash
    cd "$(grep '^PILOTS_DIR=' .env | cut -d= -f2-)"/<pilot>
    sudo mkdir ../<pilot>-old-<yyyymmdd>
-   # a pilot may have no connectors/ folder: `|| true` only skips a missing folder; the next step's
+   # a pilot may have no connectors/ (or modules/, fixtures/) folder: `|| true` only skips a missing folder; the next step's
    # "not empty" refusal in restore.sh still catches anything left behind
-   sudo mv apps site data connectors ../<pilot>-old-<yyyymmdd>/ 2>/dev/null || true
+   sudo mv apps modules site data connectors fixtures ../<pilot>-old-<yyyymmdd>/ 2>/dev/null || true
    cd /opt/juragan/rangka-os/deploy/juragan
    ```
    If a folder does not exist, that is fine.
@@ -323,7 +339,7 @@ for example `/root/juragan-backup.key`, mode 600). **Delete it afterwards.**
    ```
    (`/backups/in/<archive name>` if you copied it in step 1.) Expected last line:
    `restore ok: <N> tables, <M> rows match`. Earlier lines: `restore: checksums ok`,
-   `restore: unpacked apps, site and files into /restore/<pilot>`. Any `MISSING`, `MISMATCH` or
+   `restore: unpacked apps, modules, site and files into /restore/<pilot>`. Any `MISSING`, `MISMATCH` or
    `restored data does not match the manifest` means do not start the pilot: keep the old database and folders,
    and escalate.
 
@@ -441,7 +457,8 @@ Mapped to the program's go-live gate (per pilot). All of it before Dede signs of
 - [ ] healthchecks.io ping alert set for `BACKUP_PING_URL` and verified green.
 - [ ] Bucket: Object Lock (governance, 30 days), versioning, 35-day expiry rule, Block Public Access all confirmed.
 - [ ] Bundle (S9): `auth.issuer` is `https://<host>`, `files.path: ./data/files`, `db.url: '${DATABASE_URL}'`.
-- [ ] Owner seeded; `RANGKA_OWNER_*` blank in `.env`.
+- [ ] Every org of each bundle seeded (`./seed-orgs.sh <pilot>` printed `done:` with all of them), opening data and
+      staff imported per GO-LIVE.md; `RANGKA_OWNER_*` blank in `.env`.
 - [ ] The restore drill (same run) printed `database role ... NOSUPERUSER NOBYPASSRLS` as ok and, with S5, `row-level security is enabled and forced on all N model tables (r_*)`; `docker compose logs jasa fnb | grep 'row-level security is not enforced'` prints nothing.
 - [ ] Gate items owned elsewhere: the spec's day-one list works with the pilot's real opening data, the permission matrix test passes (cross-org and cross-outlet requests return 403), the Review Focus tests pass (`local/e2e.sh`).
 - [ ] Dede signs off.

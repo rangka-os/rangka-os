@@ -90,7 +90,7 @@ main() {
   # apps.tar is absent in archives made before it existed; the others are always present
   [ ! -f site.tar ] || check_tar site.tar '^site(/|$)'
   [ ! -f files.tar ] || check_tar files.tar '^data(/|$)'
-  [ ! -f apps.tar ] || check_tar apps.tar '^(apps|connectors)(/|$)'
+  [ ! -f apps.tar ] || check_tar apps.tar '^(apps|modules|connectors|fixtures)(/|$)'
   [ -f apps.tar ] || log "no apps.tar in this archive (older format): apps/ must come from elsewhere"
 
   # 3. refuse when the target is not empty (database first, then the folder)
@@ -100,7 +100,7 @@ main() {
          + (SELECT count(*) FROM pg_namespace WHERE nspname LIKE 'rk%')")" \
     || die "cannot connect to database $p"
   [ "$n" = 0 ] || die "database $p is not empty ($n objects in public or rk* schemas); restore only into a fresh database"
-  for n in apps site data connectors; do
+  for n in apps modules site data connectors fixtures; do
     if [ -n "$(find "$srv/$n" -mindepth 1 -print -quit 2>/dev/null)" ]; then
       die "$srv/$n is not empty; restore only into a fresh folder"
     fi
@@ -135,7 +135,7 @@ main() {
   for n in apps site files; do
     if [ -f "$n.tar" ]; then unpack "$n.tar" "$srv"; fi
   done
-  log "unpacked apps, site and files into $srv"
+  log "unpacked apps, modules, site and files into $srv"
 
   # 6. compare with the manifest, exactly
   jq -r '.tables | to_entries[] | "\(.key)\t\(.value.rows)\t\(.value.md5)"' manifest.json | LC_ALL=C sort >"$WORK_DIR/expected.tsv"

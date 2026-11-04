@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+# The org list as the pilot bundles write it (block style); only the keys matter to seed-orgs.sh --list.
+locale: id-ID
+orgs:
+  pt_contoh_a:
+    name: PT Contoh A
+    code: CTA
+    config:
+      org: {legal_name: PT Contoh A, pkp: true}
+  # a comment between orgs
+  pt_contoh_b:
+    name: PT Contoh B
+    code: CTB
+timezone: Asia/Jakarta

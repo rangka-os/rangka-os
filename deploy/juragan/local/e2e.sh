@@ -90,6 +90,9 @@ prepare() {
     local d="$WORK/pilots/$p"
     mkdir -p "$d/data/files" "$d/backups" # backups/ = RANGKA_BACKUP_DIR, must be writable by the kernel
     cp -R "$APPS_REPO/apps" "$d/apps"
+    mkdir -p "$d/modules"
+    if [ -d "$APPS_REPO/modules" ]; then cp -R "$APPS_REPO/modules/." "$d/modules/"; fi
+    cp -R "$HERE/fixtures/modules/e2e_marker" "$d/modules/e2e_marker" # must survive backup and restore
     cp -R "$APPS_REPO/fixtures" "$d/fixtures"
     cp -R "$APPS_REPO/sites/kopi-senja" "$d/site"
     cp -R "$HERE/fixtures/print/print" "$d/site/print" # a print format for model lead (the sample apps have none)
@@ -243,7 +246,7 @@ sha256sum -c SHA256SUMS >/dev/null && printf "sha=ok "
 case "$(ls | LC_ALL=C sort | tr "\n" " ")" in
   "SHA256SUMS apps.tar db.dump files.tar manifest.json site.tar "|"SHA256SUMS apps.tar files.tar manifest.json rangka.backup site.tar ") printf "members=ok " ;;
 esac
-tar -tf apps.tar | grep -q "^apps/" && printf "apps=ok "
+tar -tf apps.tar >apps.list; grep -q "^apps/" apps.list && grep -q "^modules/e2e_marker/module.rk$" apps.list && grep -q "^fixtures/" apps.list && printf "apps=ok "
 [ -z "$(for t in site files apps; do tar -tf $t.tar; done | grep "^backups")" ] && printf "nobackups=ok "
 rka=none
 if [ -f rangka.backup ]; then tar -tzf rangka.backup >rk.list; if grep -qx manifest.json rk.list; then rka=ok; else rka=bad; fi; fi
@@ -464,6 +467,11 @@ section_drill() {
   local seq
   seq="$(grep -oE '^(restore ok: [0-9]+ tables, [0-9]+ rows match|DRILL PASSED [a-z]+)' <<<"$out" | sed -E 's/^restore ok.*/restore ok/' | tr '\n' ',')"
   same "each pilot: restore ok (manifest compared) right before its DRILL PASSED" "$seq" "restore ok,DRILL PASSED jasa,restore ok,DRILL PASSED fnb,"
+  for p in jasa fnb; do
+    if grep -qE "^drill: $p: restored folders: (.* )?modules " <<<"$out" && grep -qE "^drill: $p: restored folders: (.* )?fixtures " <<<"$out"; then
+      ok "$p: the drill restored modules/ and fixtures/ from the archive"
+    else bad "$p: modules/ or fixtures/ not restored: $(grep "restored folders" <<<"$out" | tr '\n' ' ')"; fi
+  done
   if grep -q 'archive is [0-9]* hour(s) old (limit 48)' <<<"$out"; then ok "drill prints the archive age with the default limit"; else bad "no archive age line"; fi
   if grep -q 'WARNING archive was made with' <<<"$out"; then bad "release warning on a matching release"; else ok "no release warning when tag and image match"; fi
   same "drill.log has both lines" "$(grep -c '^DRILL PASSED' "$WORK/drill.log" 2>/dev/null || true)" 2
@@ -693,10 +701,45 @@ SQL
   dc exec -T postgres psql -U postgres -qAtX -c "drop database e2e_hb" >/dev/null || bad "drop e2e_hb"
 }
 
+# seed-orgs.sh: the org list from a bundle-style config.rk, then two orgs seeded into one pilot with the owner in both.
+section_orgs() {
+  echo "== orgs (seed-orgs.sh)"
+  local out rc=0
+  out="$("$DEPLOY/seed-orgs.sh" --env "$WORK/.env" --config "$HERE/fixtures/orgs/config.rk" --list jasa)" || rc=$?
+  same "seed-orgs --list reads the block-style orgs: keys" "$rc:$(tr '\n' ' ' <<<"$out")" "0:pt_contoh_a pt_contoh_b "
+  out="$("$DEPLOY/seed-orgs.sh" --env "$WORK/.env" --list jasa)"
+  same "seed-orgs --list falls back to the default org when the site has no orgs:" "$out" "kopi-senja"
+  rc=0
+  printf 'orgs: {a: {name: A}}\n' >"$WORK/flow-config.rk"
+  out="$("$DEPLOY/seed-orgs.sh" --env "$WORK/.env" --config "$WORK/flow-config.rk" --list jasa 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'flow style' <<<"$out"; then ok "seed-orgs refuses a flow-style orgs: it cannot read"; else bad "flow-style orgs: rc=$rc $out"; fi
+  # two orgs into jasa: the existing one (idempotent) and a new one with its own, empty fixtures/e2e_b/ (so the
+  # per-org --fixtures path is used and jasa's records stay as the backup section expects); the owner is then in both
+  docker run --rm -v "$WORK/pilots/jasa:/p" alpine:3.20 sh -c 'mkdir -p /p/fixtures/e2e_b && chown -R 65532:65532 /p/fixtures' \
+    || bad "cannot create fixtures/e2e_b"
+  rc=0
+  out="$(COMPOSE_PROJECT_NAME="$PROJECT" COMPOSE_FILE="$DEPLOY/compose.yaml:$DEPLOY/local/compose.local.yaml" \
+    RANGKA_OWNER_EMAIL="$OWNER_EMAIL" RANGKA_OWNER_PASSWORD="$OWNER_PASSWORD" \
+    "$DEPLOY/seed-orgs.sh" --env "$WORK/.env" jasa kopi-senja e2e_b </dev/null 2>&1)" || rc=$?
+  same "seed-orgs jasa kopi-senja e2e_b exits 0" "$rc" 0
+  [ "$rc" = 0 ] || echo "$out" >&2
+  if grep -q 'already there' <<<"$out" && grep -q 'seed-orgs: e2e_b: seeded' <<<"$out" && ! grep -q 'e2e_b: no fixtures' <<<"$out"; then ok "existing org reseeded idempotently, new org seeded"; else bad "seed-orgs output: $out"; fi
+  local jar="$WORK/orgs-cookies.txt" me
+  URL_PATH=/auth/login https "$JASA_HOST" -o /dev/null -c "$jar" -X POST -H 'Content-Type: application/json' \
+    -d "{\"email\":\"$OWNER_EMAIL\",\"password\":\"$OWNER_PASSWORD\",\"org\":\"e2e_b\"}"
+  me="$(URL_PATH=/auth/me https "$JASA_HOST" -b "$jar")"
+  same "owner signs in to the new org e2e_b" "$(jq -r '.org.id // empty' <<<"$me")" e2e_b
+  same "owner belongs to both orgs" "$(jq -r '[.orgs[].id] | sort | join(",")' <<<"$me")" "e2e_b,kopi-senja"
+  rc=0
+  out="$("$DEPLOY/seed-orgs.sh" --env "$WORK/.env" jasa x </dev/null 2>&1)" || rc=$?
+  if [ "$rc" != 0 ] && grep -q 'RANGKA_OWNER_EMAIL is not set and there is no terminal' <<<"$out"; then ok "seed-orgs without owner credentials and no terminal stops"; else bad "no-credentials: rc=$rc $out"; fi
+}
+
 main() {
   trap cleanup EXIT
   prepare
   section_stack
+  section_orgs
   section_backup
   section_drill
   section_rangka

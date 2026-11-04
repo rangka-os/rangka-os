@@ -43,7 +43,7 @@ pick_method() {
 # the same night, naming the path.
 check_no_links() {
   local p="$1" name found
-  for name in site data apps connectors; do
+  for name in site data apps modules connectors fixtures; do
     [ -d "$PILOTS_ROOT/$p/$name" ] || continue
     # called as `check_no_links ... || return 1`, so errexit is off here: a failed scan must fail the backup itself
     found="$(find "$PILOTS_ROOT/$p/$name" \( -type l -o \( -type f -links +1 \) \) -print -quit)" \
@@ -192,7 +192,7 @@ backup_pilot() {
   require_stats "$WORK_DIR/stats.tsv" || return 1
   tar_dir "$WORK_DIR/site.tar" "$p" site
   tar_dir "$WORK_DIR/files.tar" "$p" data
-  tar_dir "$WORK_DIR/apps.tar" "$p" apps connectors # lets a second machine boot the kernel from the archive alone
+  tar_dir "$WORK_DIR/apps.tar" "$p" apps modules connectors fixtures # lets a second machine boot the kernel from the archive alone
 
   pg_version="$(psql -qAtX -c 'SHOW server_version' "$url")"
   stats_to_tables_json <"$WORK_DIR/stats.tsv" >"$WORK_DIR/tables.json"

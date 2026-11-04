@@ -153,8 +153,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/preview/{id}/r/{model}", a(s.previewGuard(s.previewList)))
 	mux.HandleFunc("GET /api/v1/preview/{id}/r/{model}/{name}", a(s.previewGuard(s.previewGet)))
 	mux.HandleFunc("GET /api/v1/preview/{id}/dashboards/{name}", a(s.previewGuard(s.previewDashboard)))
-	for _, m := range []string{"POST", "PATCH", "DELETE"} {
+	for _, m := range []string{"POST", "PUT", "PATCH", "DELETE"} {
 		mux.HandleFunc(m+" /api/v1/preview/{path...}", a(s.previewReadOnly))
+		mux.HandleFunc(m+" /api/v1/preview", a(s.previewReadOnly))
 	}
 	// system, orgs, files
 	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) {

@@ -54,6 +54,10 @@ type Engine struct {
 	OnWrite func(org, model string)
 	Log     func(format string, args ...any)
 
+	// TolerateMissingTables makes a dashboard widget over a table that does not exist yet carry an error
+	// instead of failing the dashboard (live preview of a change set, contract 0015 §4).
+	TolerateMissingTables bool
+
 	permCache   sync.Map // *meta.Model → *modelPerms
 	parentCache sync.Map // child *meta.Model → parent *meta.Model
 }

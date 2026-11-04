@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"reflect"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
@@ -18,7 +19,41 @@ const maxPreviewEngines = 8
 
 type previewEntry struct {
 	id, updated string
+	live        *meta.Registry // the live registry this was built against
 	eng         *engine.Engine
+	deny        error // permissions differ from the live installation: no preview
+}
+
+var errPreviewPermissions = &changeset.Error{Status: 409, Code: "preview_permissions",
+	Msg: "Pratinjau tidak tersedia untuk perubahan hak akses; setujui dulu untuk melihat hasilnya"}
+
+// permissionsChanged reports whether the preview registry grants differently from the live one: any role
+// document added, removed or changed, or a model in both with another effective permissions value.
+func permissionsChanged(live, prev *meta.Registry) bool {
+	roles := func(r *meta.Registry) map[string]string {
+		out := map[string]string{}
+		for p, d := range r.Docs {
+			if strings.Contains(p, "/roles/") {
+				out[p] = d.Text
+			}
+		}
+		return out
+	}
+	lr, pr := roles(live), roles(prev)
+	if len(lr) != len(pr) {
+		return true
+	}
+	for p, t := range lr {
+		if o, ok := pr[p]; !ok || o != t {
+			return true
+		}
+	}
+	for _, m := range prev.InstalledModels() {
+		if lm := live.Model(m.Name); lm != nil && !reflect.DeepEqual(lm.Raw["permissions"], m.Raw["permissions"]) {
+			return true
+		}
+	}
+	return false
 }
 
 // changesetsMeta is meta.changesets (contract 0015 §1).
@@ -61,12 +96,13 @@ func (s *Server) previewEngine(ctx context.Context, org, id string) (*engine.Eng
 	if err := changeset.CheckPreviewable(cs); err != nil {
 		return nil, cs, err
 	}
+	liveReg := s.Engine.Reg()
 	s.previewMu.Lock()
 	for i, p := range s.previews {
-		if p.id == cs.ID && p.updated == cs.UpdatedAt {
+		if p.id == cs.ID && p.updated == cs.UpdatedAt && p.live == liveReg {
 			s.previews = append(append(s.previews[:i:i], s.previews[i+1:]...), p) // most recently used last
 			s.previewMu.Unlock()
-			return p.eng, cs, nil
+			return p.eng, cs, p.deny
 		}
 	}
 	s.previewMu.Unlock()
@@ -76,8 +112,15 @@ func (s *Server) previewEngine(ctx context.Context, org, id string) (*engine.Eng
 	}
 	e := engine.New(s.DB, reg)
 	e.Now, e.Log = s.Engine.Now, s.Engine.Log
+	e.Cache, e.TolerateMissingTables = nil, true
+	var deny error
+	if permissionsChanged(liveReg, reg) {
+		deny, e = errPreviewPermissions, nil
+	}
 	for k, h := range s.Engine.Hooks {
-		e.Hooks[k] = h
+		if e != nil {
+			e.Hooks[k] = h
+		}
 	}
 	s.previewMu.Lock()
 	defer s.previewMu.Unlock()
@@ -87,12 +130,12 @@ func (s *Server) previewEngine(ctx context.Context, org, id string) (*engine.Eng
 			kept = append(kept, p)
 		}
 	}
-	kept = append(kept, &previewEntry{id: fresh.ID, updated: fresh.UpdatedAt, eng: e})
+	kept = append(kept, &previewEntry{id: fresh.ID, updated: fresh.UpdatedAt, live: liveReg, eng: e, deny: deny})
 	if len(kept) > maxPreviewEngines {
 		kept = kept[len(kept)-maxPreviewEngines:]
 	}
 	s.previews = kept
-	return e, fresh, nil
+	return e, fresh, deny
 }
 
 type previewHandler func(w http.ResponseWriter, r *http.Request, c *caller, e *engine.Engine, cs *changeset.ChangeSet)
@@ -106,6 +149,10 @@ func (s *Server) previewGuard(h previewHandler) func(w http.ResponseWriter, r *h
 
 func (s *Server) previewResolve(w http.ResponseWriter, r *http.Request, c *caller, id string, h previewHandler) {
 	w.Header().Set("X-Rangka-Preview", id)
+	if c.actor.Org == "" || s.changesetsMeta(c.actor)["propose"] != true {
+		writeError(w, 403, "permission_denied", "Pratinjau perubahan hanya untuk yang boleh mengusulkan perubahan")
+		return
+	}
 	e, cs, err := s.previewEngine(r.Context(), c.actor.Org, id)
 	if err != nil {
 		csFail(w, err)
@@ -186,7 +233,7 @@ func (s *Server) previewGet(w http.ResponseWriter, r *http.Request, c *caller, e
 func (s *Server) previewDashboard(w http.ResponseWriter, r *http.Request, c *caller, e *engine.Engine, cs *changeset.ChangeSet) {
 	name, period := r.PathValue("name"), intParam(r, "period", 0)
 	d, cached, err := e.Dashboard(r.Context(), c.actor, name, period)
-	if missingTable(err) || missingColumn(err) {
+	if missingColumn(err) {
 		d, cached, err = s.Engine.Dashboard(r.Context(), c.actor, name, period)
 	}
 	if err != nil {

@@ -9,6 +9,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -45,6 +46,11 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 			}
 		}
 		res, err := dc.widget(w, period)
+		if err != nil && e.TolerateMissingTables && pg.IsCode(err, "42P01") {
+			wo["error"] = "Tabel belum ada sampai perubahan diterapkan" // a live preview of a model not migrated yet
+			widgets = append(widgets, wo)
+			continue
+		}
 		if err != nil {
 			return nil, false, err
 		}

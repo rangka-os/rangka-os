@@ -65,7 +65,7 @@ dashboard is `unknown_dashboard` (error). Change-set path `dashboards/<d>.rk`, l
 
 ## 4. Live preview
 
-All read-only, any signed-in caller of the change set's org, change set status `proposed`, `validated`, `invalid`,
+All read-only, for callers of the change set's org with `meta.changesets.propose` (else 403 `permission_denied`), change set status `proposed`, `validated`, `invalid`,
 `previewed` or `approved` (else 409 `bad_status`; unknown id 404 `not_found`):
 
 | Method | Path | Answer |
@@ -79,7 +79,7 @@ All read-only, any signed-in caller of the change set's org, change set status `
 The kernel loads the metadata from a temporary copy of the installation with the change set's ops applied (the
 same copy validate uses) and answers from the live database without migrating it: a model whose table does not
 exist yet lists no records; a field whose column does not exist yet is absent from records. Writes under
-`/api/v1/preview/` answer 405 `preview_read_only`. Responses carry `X-Rangka-Preview: <id>`.
+`/api/v1/preview` (any method but GET) answer 405 `preview_read_only`. A change set that edits a role or a model's `permissions` has no preview (409 `preview_permissions`): the preview would apply rights the installation does not have yet. A dashboard widget over a table that does not exist yet carries `error` instead of a value. Responses carry `X-Rangka-Preview: <id>`.
 
 The app enters preview with `#/<route>?preview=<id>` (S12 links there) and leaves it with "Keluar pratinjau". It
 enters Ubah with `?ubah=1` when `meta.changesets.propose` is true.

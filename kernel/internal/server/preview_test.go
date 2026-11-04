@@ -111,7 +111,10 @@ func TestPreviewReadOnly(t *testing.T) {
 	e := newEnv(t, false, nil)
 	e.login()
 	id := proposeCS(e, "Dashboard", map[string]any{"op": "create", "path": "dashboards/crm_overview.rk", "content": siteDashboard})
-	for _, m := range []string{"POST", "PATCH", "DELETE"} {
+	for _, m := range []string{"POST", "PUT", "PATCH", "DELETE"} {
+		if r := e.must(405, m, "/api/v1/preview", map[string]any{}); get(r.JSON, "error", "code") != "preview_read_only" {
+			t.Fatalf("bare %s: %s", m, r.Body)
+		}
 		r := e.must(405, m, "/api/v1/preview/"+id+"/r/deal", map[string]any{})
 		if get(r.JSON, "error", "code") != "preview_read_only" || r.Header.Get("X-Rangka-Preview") != id {
 			t.Fatalf("%s: %s", m, r.Body)
@@ -167,3 +170,120 @@ func TestMetaChangesets(t *testing.T) {
 }
 
 func newJar() http.CookieJar { j, _ := cookiejar.New(nil); return j }
+
+func repEnv(t *testing.T, e *env) *env {
+	t.Helper()
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "rep@example.test", "Rep", "rangka-demo", "kopi-senja", "sales_rep", "USR-001"); err != nil {
+		t.Fatal(err)
+	}
+	rep := &env{t: t, ts: e.ts, jar: newJar()}
+	rep.must(200, "POST", "/auth/login", map[string]any{"email": "rep@example.test", "password": "rangka-demo"})
+	return rep
+}
+
+func TestPreviewNeedsPropose(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	id := proposeCS(e, "Dashboard", map[string]any{"op": "create", "path": "dashboards/crm_overview.rk", "content": siteDashboard})
+	rep := repEnv(t, e)
+	for _, p := range []string{"/api/v1/preview?changeset=" + id, "/api/v1/preview/" + id + "/meta", "/api/v1/preview/" + id + "/r/deal", "/api/v1/preview/" + id + "/dashboards/crm_overview"} {
+		r := rep.must(403, "GET", p, nil)
+		if get(r.JSON, "error", "code") != "permission_denied" {
+			t.Fatalf("%s: %s", p, r.Body)
+		}
+	}
+	// an API token has no browser session
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "ai"}).JSON["token"].(string)
+	(&env{t: t, ts: e.ts, token: tok}).must(403, "GET", "/api/v1/preview/"+id+"/meta", nil)
+}
+
+func TestPreviewProposersMayPreview(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, _ := os.ReadFile(p)
+		txt := strings.Replace(string(b), "schema/0.4/config.json", "schema/0.5/config.json", 1)
+		txt = strings.Replace(txt, "approvers: [owner, sales_manager]}", "approvers: [owner, sales_manager], proposers: [sales_rep]}", 1)
+		if err := os.WriteFile(p, []byte(txt), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	e.login()
+	id := proposeCS(e, "Dashboard", map[string]any{"op": "create", "path": "dashboards/crm_overview.rk", "content": siteDashboard})
+	rep := repEnv(t, e)
+	cs := get(rep.must(200, "GET", "/api/v1/meta", nil).JSON, "changesets").(map[string]any)
+	if cs["propose"] != true || cs["approve"] != false {
+		t.Fatalf("proposer: %v", cs)
+	}
+	rep.must(200, "GET", "/api/v1/preview/"+id+"/meta", nil)
+}
+
+func TestPreviewPermissionChanges(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	role, _ := os.ReadFile(filepath.Join(e.apps, "crm", "roles", "sales_rep.rk"))
+	roleCS := proposeCS(e, "Ubah peran", map[string]any{"op": "replace", "path": "apps/crm/roles/sales_rep.rk", "content": string(role) + "# edited\n"})
+	permCS := proposeCS(e, "Ubah hak akses", map[string]any{"op": "patch", "path": "apps/crm/models/deal.rk",
+		"patch": []any{map[string]any{"op": "add", "path": "/permissions/0/delete", "value": true}}})
+	for _, id := range []string{roleCS, permCS} {
+		r := e.must(409, "GET", "/api/v1/preview/"+id+"/meta", nil)
+		if get(r.JSON, "error", "code") != "preview_permissions" || r.Header.Get("X-Rangka-Preview") != id {
+			t.Fatalf("%s: %s", id, r.Body)
+		}
+		e.must(409, "GET", "/api/v1/preview/"+id+"/r/deal", nil) // cached denial
+	}
+	// a label-only edit of a model keeps its permissions: preview works
+	ok := proposeCS(e, "Label", map[string]any{"op": "patch", "path": "apps/crm/models/deal.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/label/id", "value": "Peluang usaha"}}})
+	e.must(200, "GET", "/api/v1/preview/"+ok+"/meta", nil)
+}
+
+func TestPreviewFollowsLiveBase(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	id := proposeCS(e, "Dashboard", map[string]any{"op": "create", "path": "dashboards/crm_overview.rk", "content": siteDashboard})
+	brand := func() any {
+		return get(e.must(200, "GET", "/api/v1/preview/"+id+"/meta", nil).JSON, "theme", "tokens", "light", "brand")
+	}
+	before := brand()
+	other := proposeCS(e, "Warna", map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/color/brand", "value": "#7a4520"}}})
+	for _, v := range []string{"validate", "preview", "approve", "apply"} {
+		e.must(200, "POST", "/api/v1/changesets/"+other+"/"+v, nil)
+	}
+	after := brand()
+	live := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "theme", "tokens", "light", "brand")
+	if after == before || after != live {
+		t.Fatalf("preview brand before %v after %v live %v", before, after, live)
+	}
+}
+
+func TestPreviewDashboardNewModel(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	dash := siteDashboard + "  - name: visits\n    type: number\n    label: {id: Kunjungan}\n    model: visit\n    span: 3\n"
+	id := proposeCS(e, "Kunjungan",
+		map[string]any{"op": "create", "path": "apps/crm/models/visit.rk", "content": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: visit
+label: {id: Kunjungan}
+naming: VIS-{#####}
+title_field: place
+fields:
+  - {name: place, type: data, label: {id: Tempat}, required: true, in_list: true}
+`},
+		map[string]any{"op": "create", "path": "dashboards/crm_overview.rk", "content": dash})
+	r := e.must(200, "GET", "/api/v1/preview/"+id+"/dashboards/crm_overview", nil)
+	errs := 0
+	for _, w := range r.JSON["widgets"].([]any) {
+		if get(w, "name") == "visits" {
+			if get(w, "error") != "Tabel belum ada sampai perubahan diterapkan" {
+				t.Fatalf("visits widget: %v", w)
+			}
+			errs++
+		} else if get(w, "error") != nil {
+			t.Fatalf("widget %v has an error: %v", get(w, "name"), get(w, "error"))
+		}
+	}
+	if errs != 1 {
+		t.Fatalf("widgets: %s", r.Body)
+	}
+}

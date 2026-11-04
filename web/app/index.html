@@ -11,14 +11,18 @@
   html, body { height: 100%; margin: 0; }
   body { background: var(--app); color: var(--ink); font: 14px/20px var(--font-sans); }
   #rk-app { height: 100%; }
-  /* app shell (shell.js) */
+  /* app shell (shell.js): .ap-side = side-only (Frappe sidebar), .ap-top = top-nav */
   .ap-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
   .ap-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
   .ap-shell > .rk-side nav { flex: 0 0 auto; overflow: visible; }
+  .ap-side > .rk-side nav { flex: 1 0 auto; } /* footer and collapse sit at the bottom */
+  .ap-side-foot { padding: 8px; }
   .ap-shell .rk-shell-main { min-height: 0; }
   .ap-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
   .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { max-width: var(--page-max); box-sizing: border-box; width: 100%; }
-  .ap-menu-btn, .ap-nav-scrim { display: none; }
+  .ap-menu-btn, .ap-nav-scrim, .ap-mhead { display: none; }
+  .ap-mhead-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .ap-switch-menu .rk-menu { width: var(--menu-w); }
   .ap-splash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); padding: 24px; box-sizing: border-box; }
   .ap-splash > .rk-alert { max-width: 480px; }
   .ap-muted { margin: 0; color: var(--muted); }
@@ -31,12 +35,26 @@
   .ap-signin-form { display: flex; flex-direction: column; gap: 16px; }
   .ap-signin-dialog { width: min(var(--dialog-w), calc(100vw - 32px)); }
   .ap-signin-dialog .rk-dialog-main { display: flex; flex-direction: column; gap: 16px; }
+  @media (min-width: 601px) and (max-width: 860px) {
+    /* side-only keeps its sidebar down to phone width (the design system hides it at 860px for the top-nav shell) */
+    .ap-shell.ap-side { grid-template-columns: var(--sidebar) minmax(0, 1fr); }
+    .ap-shell.ap-side > .rk-side { display: flex; }
+  }
   @media (max-width: 860px) {
-    .ap-shell { height: auto; min-height: 100%; }
-    .ap-main { overflow: visible; }
-    .ap-menu-btn { display: inline-flex; }
-    .ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: var(--topbar); left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
-    .ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: var(--topbar) 0 0 0; background: var(--scrim); z-index: 39; }
+    .ap-top { height: auto; min-height: 100%; }
+    .ap-top .ap-main { overflow: visible; }
+    .ap-top .ap-menu-btn { display: inline-flex; }
+    .ap-top.ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: var(--topbar); left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
+    .ap-top.ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: var(--topbar) 0 0 0; background: var(--scrim); z-index: 39; }
+  }
+  @media (max-width: 600px) {
+    /* side-only on a phone: a 48px bar with the menu button, the sidebar as a drawer over the page */
+    .ap-side { height: auto; min-height: 100%; }
+    .ap-side .ap-main { overflow: visible; }
+    .ap-side .ap-mhead { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 8px; box-sizing: border-box; position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+    .ap-side .ap-menu-btn { display: inline-flex; }
+    .ap-side.ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
+    .ap-side.ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
   }
   @media (max-width: 640px) {
     .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Bantuan"], .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Notifikasi"] { display: none; }

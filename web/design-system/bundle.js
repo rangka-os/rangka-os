@@ -447,7 +447,7 @@
       items.forEach(function (it) { flat.push(it); });
       return { label: g.label, items: items };
     });
-    var askItem = q ? { label: "Tanya Raka: “" + q + "”", icon: "spark", ai: true, sub: "AI" } : null;
+    var askItem = q && p.ask !== false ? { label: "Tanya Raka: “" + q + "”", icon: "spark", ai: true, sub: "AI" } : null;
     if (askItem) flat.push(askItem);
     function key(e) {
       if (e.key === "ArrowDown") { e.preventDefault(); setIdx(Math.min(flat.length - 1, idx + 1)); }
@@ -464,13 +464,14 @@
     return h(React.Fragment, null, h("div", { className: "rk-scrim", onClick: p.onClose }),
       h("div", { className: "rk-cmd", role: "dialog", "aria-modal": "true", "aria-label": "Menu perintah", onKeyDown: key },
         h("div", { className: "rk-cmd-input" }, h(Icon, { name: "search" }),
-          h("input", { autoFocus: true, value: q, onChange: function (e) { setQ(e.target.value); setIdx(0); }, placeholder: p.placeholder || "Cari faktur, pelanggan, barang, atau ketik perintah…", "aria-label": "Cari" }),
+          h("input", { autoFocus: true, value: q, onChange: function (e) { setQ(e.target.value); setIdx(0); if (p.onQuery) p.onQuery(e.target.value); }, placeholder: p.placeholder || "Cari faktur, pelanggan, barang, atau ketik perintah…", "aria-label": "Cari" }),
           h(Kbd, null, "Esc")),
         h("div", { className: "rk-cmd-list", role: "listbox" },
           groups.map(function (g) { return g.items.length ? h("div", { key: g.label, role: "group", "aria-label": g.label }, h("div", { className: "rk-cmd-group" }, g.label), g.items.map(item)) : null; }),
           askItem ? h("div", { role: "group" }, h("div", { className: "rk-cmd-group" }, "Tanya"), item(askItem)) : null,
           !flat.length ? h("div", { className: "rk-cmd-empty" }, "Tidak ada hasil") : null),
-        h("div", { className: "rk-cmd-foot" }, h("span", null, h(Kbd, null, "↑"), h(Kbd, null, "↓"), "pilih"), h("span", null, h(Kbd, null, "↵"), "buka"), h("span", null, h(Kbd, null, ">"), "perintah"), h("span", null, h(Kbd, null, "@"), "helper Omilo"))));
+        h("div", { className: "rk-cmd-foot" }, h("span", null, h(Kbd, null, "↑"), h(Kbd, null, "↓"), "pilih"), h("span", null, h(Kbd, null, "↵"), "buka"),
+          p.ask !== false ? h("span", null, h(Kbd, null, ">"), "perintah") : null, p.ask !== false ? h("span", null, h(Kbd, null, "@"), "helper Omilo") : null)));
   }
 
   /* ---- Menu / ContextMenu (Omilo .cm-i) */
@@ -480,7 +481,8 @@
         if (it === "-") return h("div", { key: i, className: "rk-msep", role: "separator" });
         if (it.heading) return h("div", { key: i, className: "rk-mh" }, it.heading);
         return h("button", { key: i, type: "button", role: "menuitem", disabled: it.disabled, className: cx("rk-mi", it.danger && "danger"), onClick: function () { if (it.onSelect) it.onSelect(); if (p.onClose) p.onClose(); } },
-          it.icon ? h(Icon, { name: it.icon }) : h("span", { style: { width: "16px" } }), h("span", { className: "l" }, it.label), it.kbd ? h("span", { className: "k" }, it.kbd) : null);
+          it.icon ? h(Icon, { name: it.icon }) : h("span", { style: { width: "16px" } }), h("span", { className: "l" }, it.label),
+          it.checked ? h(Icon, { name: "check", label: "Dipilih" }) : it.kbd ? h("span", { className: "k" }, it.kbd) : null);
       }));
   }
   function ContextMenu(p) {

@@ -745,7 +745,17 @@ def open_nav(page):
 def expect_signed_in(page, ctx):
     hash_, _ = ctx.home()
     page.wait_for_function("(h) => location.hash === h", arg=hash_, timeout=15000)
-    page.locator(".rk-topnav").wait_for(timeout=10000)
+    page.locator(".ap-shell").wait_for(timeout=10000)
+
+
+def account_menu(page):
+    """The business switcher's menu (side-only shell): apps, companies, theme, help, account. On a phone the switcher
+    sits in the navigation drawer."""
+    open_nav(page)
+    page.locator(".rk-side .rk-side-switch").click()
+    menu = page.locator(".ap-switch-menu [role=menu]")
+    menu.wait_for(timeout=5000)
+    return menu
 
 
 def me_status(page):
@@ -780,8 +790,7 @@ def test_logout(page, ctx):
     page.goto(ctx.base + "/app/")
     sign_in(page)
     expect_signed_in(page, ctx)
-    page.locator(".rk-topnav .rk-av-btn").click()
-    page.get_by_role("menuitem", name="Keluar").click()
+    account_menu(page).get_by_role("menuitem", name="Keluar").click()
     page.get_by_role("button", name="Masuk").wait_for(timeout=10000)
     assert page.get_by_label("Kata sandi").is_visible(), "sign-in form after Keluar"
     assert me_status(page) == 401, "GET /auth/me after logout should be 401"
@@ -800,7 +809,7 @@ def test_session_expiry_returns_to_route(page, ctx):
     page.locator(".rk-side").get_by_role("link", name=ctx.model_label(target), exact=True).click()
     dlg = page.locator(".ap-signin-dialog")
     dlg.wait_for(timeout=10000)
-    assert page.locator(".rk-topnav").is_visible(), "the app stays mounted under the sign-in dialog"
+    assert page.locator(".ap-shell").count() == 1, "the app stays mounted under the sign-in dialog"
     assert page.evaluate("location.hash") == "#/r/" + target, "route kept while the dialog is open"
     sign_in(page, within=".ap-signin-dialog")
     dlg.wait_for(state="detached", timeout=10000)
@@ -815,10 +824,100 @@ def test_user_menu_lists_orgs(page, ctx):
     page.goto(ctx.base + "/app/")
     sign_in(page)
     expect_signed_in(page, ctx)
-    page.locator(".rk-topnav .rk-av-btn").click()
-    menu = page.locator(".rk-account")
+    menu = account_menu(page)
     for name in ("Kopi Senja", "Toko Kedua"):
         assert menu.get_by_role("menuitem", name=name).count() == 1, f"user menu lists {name}"
+
+
+def test_sidebar_collapse(page, ctx):
+    """Side-only shell: the sidebar collapses to icons and stays collapsed after a reload (localStorage); on a phone it
+    is a drawer behind the 48px bar's menu button and has no collapse control."""
+    home, app = ctx.home()
+    model = "sales_invoice" if "sales_invoice" in ctx.meta["models"] else ctx.menu_models(app)[0]
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    side = page.locator(".ap-shell > .rk-side")
+    if ctx.args.width < 600:
+        assert not side.is_visible(), "a phone shows no sidebar until the menu button opens it"
+        assert page.locator(".ap-mhead").is_visible(), "the 48px bar"
+        assert page.locator(".ap-mhead").bounding_box()["height"] == 48
+        open_nav(page)
+        side.wait_for(state="visible", timeout=5000)
+        assert side.get_by_role("button", name="Ciutkan navigasi").count() == 0, "no collapse on a phone"
+        side.get_by_role("link", name=ctx.model_label(model), exact=True).click()
+        page.wait_for_function("(h) => location.hash === h", arg="#/r/" + model, timeout=5000)
+        assert not side.is_visible(), "picking an entry closes the drawer"
+        return
+    assert side.get_by_role("link", name="Beranda").is_visible() and side.get_by_role("button", name="Cari").is_visible()
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    shot(page, ctx, "shell-dashboard-expanded")
+    page.evaluate("(h) => { location.hash = h; }", "#/r/" + model)
+    page.wait_for_load_state("networkidle")
+    shot(page, ctx, "shell-list-expanded")
+    w = side.bounding_box()["width"]
+    side.get_by_role("button", name="Ciutkan navigasi").click()
+    page.wait_for_function("() => document.querySelector('.ap-shell > .rk-side').classList.contains('collapsed')", timeout=5000)
+    assert side.bounding_box()["width"] < w, "collapsed is narrower"
+    assert side.get_by_role("link", name=ctx.model_label(model)).count() == 1, "entries keep their names as labels"
+    page.reload()
+    page.locator(".ap-shell > .rk-side.collapsed").wait_for(timeout=15000)
+    page.wait_for_load_state("networkidle")
+    shot(page, ctx, "shell-list-collapsed")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(200)
+    shot(page, ctx, "shell-list-collapsed-dark")
+    side.get_by_role("button", name="Bentangkan navigasi").click()
+    page.evaluate("(h) => { location.hash = h; }", home)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    shot(page, ctx, "shell-dashboard-expanded-dark")
+    page.reload()
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    assert not page.locator(".ap-shell > .rk-side.collapsed").count(), "expanded again after a reload"
+
+
+def test_command_menu(page, ctx):
+    """⌘K (Ctrl+K) opens the command menu; typing searches records; Enter opens the first one."""
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.keyboard.press("Control+k")
+    dlg = page.get_by_role("dialog", name="Menu perintah")
+    dlg.wait_for(timeout=5000)
+    assert dlg.get_by_role("group", name="Halaman").count() == 1, "pages first"
+    assert dlg.get_by_text("Tanya Raka").count() == 0, "no Tanya Raka without features.ai"
+    page.keyboard.type("Maju")
+    data = dlg.get_by_role("group", name="Data")
+    data.locator(".rk-cmd-item").first.wait_for(timeout=10000)
+    first = data.locator(".rk-cmd-item").first
+    label = first.locator(".l").inner_text()
+    assert "maju" in label.lower(), label
+    assert first.locator(".s").inner_text().startswith(ctx.model_label("customer")), "the first match is a customer: " + first.inner_text()
+    shot(page, ctx, "shell-command-menu")
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => /^#\\/r\\/customer\\/[^/]+$/.test(location.hash)", timeout=5000)
+    assert dlg.count() == 0, "the menu closes"
+    main_area(page).get_by_text(label).first.wait_for(timeout=10000)
+
+
+def test_top_nav_shell(page, ctx):
+    """layout.shell top-nav keeps the TopNav (mocked meta): account menu, search opens ⌘K, no phone bar."""
+    def meta(route):
+        r = route.fetch()
+        body = r.json()
+        body["layout"] = dict(body.get("layout") or {}, shell="top-nav")
+        _json(route, 200, body)
+    page.route(re.compile(r".*/api/v1/meta$"), meta)
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    assert page.locator(".rk-topnav").is_visible() and page.locator(".ap-shell.ap-top").count() == 1
+    assert not page.locator(".ap-mhead").is_visible(), "no phone bar in top-nav"
+    page.locator(".rk-topnav .rk-ask").click()
+    page.get_by_role("dialog", name="Menu perintah").wait_for(timeout=5000)
+    page.keyboard.press("Escape")
+    page.locator(".rk-topnav .rk-av-btn").click()
+    assert page.locator(".rk-account").get_by_role("menuitem", name="Keluar").count() == 1
 
 
 # ---------------------------------------------------------------------------------------------- lists and kanban (Task 5)
@@ -1475,13 +1574,6 @@ def test_editors_disabled_while_saving(page, ctx):
 
 
 # ---------------------------------------------------------------------------------------------- org switcher and approvals (Task 8)
-def account_menu(page):
-    page.locator(".rk-topnav .rk-av-btn").click()
-    menu = page.locator(".rk-account")
-    menu.wait_for(timeout=5000)
-    return menu
-
-
 def test_org_switch(page, ctx):
     mock_feature(page, "orgs")
     events = []
@@ -1569,7 +1661,7 @@ def sign_out(page):
 
 def sign_in_as(page, ctx, who, hash_=None):
     sign_in(page, *who)
-    page.locator(".rk-topnav").wait_for(timeout=15000)
+    page.locator(".ap-shell").wait_for(timeout=15000)
     if hash_:
         page.evaluate("(h) => { location.hash = h; }", hash_)
 
@@ -2575,6 +2667,20 @@ def enable_print_formats(site):
     return True
 
 
+def use_side_only(site):
+    """The demo site's layout (crm_first) names `shell: top-nav`; the suite runs the default shell (side-only, contract
+    0017), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
+    d = os.path.join(site, "layouts")
+    for fn in os.listdir(d) if os.path.isdir(d) else []:
+        path = os.path.join(d, fn)
+        with open(path) as f:
+            text = f.read()
+        text = re.sub(r"(?m)^shell: top-nav$", "shell: side-only", text)
+        text = re.sub(r"(?m)^extends: rangka/top-nav$", "extends: rangka/side-only", text)
+        with open(path, "w") as f:
+            f.write(text)
+
+
 SCROLL_JS = """() => ({sw: document.documentElement.scrollWidth, bw: document.body.scrollWidth, vw: window.innerWidth})"""
 SMALL_CONTROLS_JS = """() => {
   const out = [];
@@ -2761,7 +2867,7 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
 def test_ubah_hidden_for_rep(page, ctx):
     page.goto(ctx.base + "/app/?mode=ubah")
     sign_in(page, *SALES)
-    page.locator(".rk-topnav").wait_for(timeout=15000)
+    page.locator(".ap-shell").wait_for(timeout=15000)
     page.evaluate("() => { location.hash = location.hash.split('?')[0] + '?ubah=1'; }")
     page.locator("[data-loading=false]").wait_for(timeout=15000)  # the dashboard rendered with ?ubah=1 in the hash
     assert page.get_by_role("group", name="Mode").count() == 0, "a sales_rep gets no Pakai/Ubah toggle"
@@ -2885,6 +2991,7 @@ def main():
         enable_approval_policy(SITE)
         enable_import_def(SITE)
         enable_print_formats(SITE)
+        use_side_only(SITE)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

@@ -270,8 +270,7 @@
       if (d.refresh) { refreshCount(ctx); setTick(function (x) { return x + 1; }); }
     }
 
-    var head = h(R.PageHeader, { title: "Persetujuan" });
-    if (err && err.status === 403) return h(React.Fragment, null, head, h(RA.ForbiddenState || "div", { what: "Persetujuan" }));
+    if (err && err.status === 403) return h(React.Fragment, null, h(R.PageHeader, { title: "Persetujuan" }), h(RA.ForbiddenState || "div", { what: "Persetujuan" }));
 
     var body;
     if (err) {
@@ -300,11 +299,12 @@
     }
 
     var tabs = TABS.map(function (t) { return t.value === tab && data ? Object.assign({ count: data.length }, t) : t; });
+    var head = h(R.PageHeader, { title: "Persetujuan",
+      tabs: h(R.Tabs, { tabs: tabs, value: tab, onChange: function (v) { setMsg(null); setTab(v); } }) });
     return h(React.Fragment, null, head,
       h("div", { className: "rk-shell-content" },
-        h(R.Tabs, { tabs: tabs, value: tab, onChange: function (v) { setMsg(null); setTab(v); } }),
         msg ? h(R.Alert, { tone: "bad", title: msg, onClose: function () { setMsg(null); } }) : null,
-        h(R.Card, null, body)));
+        body));
   }
 
   RA.ApprovalBanner = ApprovalBanner;

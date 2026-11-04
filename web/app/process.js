@@ -26,8 +26,9 @@
       return function () { live = false; };
     }, []);
     return h(React.Fragment, null,
-      h(R.PageHeader, { title: "Proses bisnis", subtitle: "Dari lead sampai lunas: tiap proses dibagi jadi tahap yang bisa dibuka." }),
+      h(R.PageHeader, { title: "Proses bisnis" }),
       h("div", { className: "rk-shell-content" },
+        h("p", { className: "ap-muted" }, "Dari lead sampai lunas: tiap proses dibagi jadi tahap yang bisa dibuka."),
         s.error ? h(R.Alert, { tone: "bad", title: "Proses tidak bisa dimuat" }, s.error.message)
           : s.loading ? h(R.Skeleton, { lines: 3 })
           : !s.rows.length ? h(R.EmptyState, { title: "Belum ada proses yang bisa kamu lihat" })
@@ -50,8 +51,8 @@
     }, []);
     var title = (loaded && loaded.name === name && loaded.label) || name;
     return h(React.Fragment, null,
-      h(R.PageHeader, { title: title, breadcrumb: ["Proses bisnis", title], onNavigate: function (i) { if (i < 1) RA.navigate("#/proses"); }, onBack: function () { RA.navigate("#/proses"); },
-        subtitle: "Hanya baca. Buka tahap untuk melihat isinya." }),
+      h(R.PageHeader, { title: title, breadcrumbs: [{ label: "Proses bisnis", onClick: function () { RA.navigate("#/proses"); } }], onBack: function () { RA.navigate("#/proses"); },
+        status: h(R.Lozenge, null, "Hanya baca") }),
       h("div", { className: "ap-canvas-wrap" }, RC
         ? h(RC.Mounted, { api: api, process: name, lang: "id", readOnly: true })
         : h(R.Alert, { tone: "bad", title: "Kanvas tidak termuat" }, "../canvas/canvas.js tidak ditemukan.")));

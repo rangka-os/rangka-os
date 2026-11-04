@@ -130,6 +130,11 @@
       }))));
   }
 
+  /** A titled section divided by a line, as on the document page (form.js .ap-docsec). */
+  function Section(p) {
+    return h("section", { className: "ap-docsec ap-imp-sec" }, h("h2", { className: "ap-docsec-t" }, p.title), p.children);
+  }
+
   function ImportWizard(p) {
     var ctx = useContext(RA.Ctx);
     var name = p.route && p.route.import;
@@ -215,7 +220,8 @@
     }
 
     var head = h(R.PageHeader, { title: importLabel(def, name),
-      subtitle: "Impor " + modelLabel.toLowerCase() + " dari file " + (def.source === "xlsx" ? "Excel" : "CSV") });
+      breadcrumbs: def.model ? [{ label: modelLabel, onClick: function () { ctx.navigate("#/r/" + def.model); } }] : undefined });
+    var intro = h("p", { className: "ap-muted ap-imp-intro" }, "Impor " + modelLabel.toLowerCase() + " dari file " + (def.source === "xlsx" ? "Excel" : "CSV") + ".");
     var steps = h(R.Steps, { label: "Langkah impor", current: step, items: [{ title: "Pilih file" }, { title: "Periksa" }, { title: "Selesai" }] });
 
     var alert = msg ? h(R.Alert, { tone: "bad", title: msg.title, onClose: function () { setMsg(null); } }, msg.body) : null;
@@ -223,7 +229,7 @@
 
     if (step === 0) {
       var outletOpts = [{ value: "", label: outlets ? "Pilih outlet" : "Memuat outlet…" }].concat((outlets || []).map(function (o) { return { value: o.name, label: titleOf(ctx, "outlet", o) }; }));
-      body = h(R.Card, { title: "Pilih file" },
+      body = h(Section, { title: "Pilih file" },
         alert,
         perOutlet ? h(R.NativeSelect, { id: "ap-imp-outlet", label: "Outlet", value: outlet, options: outletOpts, disabled: !!busy,
           onChange: function (e) { setOutlet(e.target.value); } }) : null,
@@ -246,24 +252,24 @@
       body = h(React.Fragment, null,
         alert,
         dup ? h(R.Alert, { tone: "warn", title: entry.message || "File ini sudah diimpor" }, "Tidak ada data baru yang bisa dibuat dari file ini.") : null,
-        h(R.Card, { title: "Ringkasan" },
+        h(Section, { title: "Ringkasan" },
           h("p", { className: "ap-imp-sum" }, h("b", null, (entry.rows || 0) + " baris dibaca"), entry.file_name ? " dari " + entry.file_name : ""),
           skipped ? h("p", { className: "ap-muted" }, skipped) : null,
           !errs.length && !dup && entry.rows > 0 ? h("p", { className: "ap-muted" }, submittable ? "Tidak ada kesalahan. Data dibuat sebagai draf setelah kamu menekan Impor." : "Tidak ada kesalahan. Data dibuat setelah kamu menekan Impor.") : null,
           entry.rows === 0 ? h("p", { className: "ap-muted" }, "File ini tidak punya baris data.") : null),
-        errs.length ? h(R.Card, { title: errs.length + " baris bermasalah", className: "ap-imp-card" },
+        errs.length ? h(Section, { title: errs.length + " baris bermasalah" },
           h("p", { className: "ap-muted" }, "Perbaiki file lalu unggah lagi. Impor baru bisa dilakukan kalau semua baris benar."),
           h(Table, { label: "Kesalahan impor", rows: errs, columns: [
             { key: "row", label: "Baris", num: true, cell: function (r) { return r.row; } },
             { key: "column", label: "Kolom", cell: function (r) { return r.column || "-"; } },
             { key: "message", label: "Pesan", cell: function (r) { return r.message; } }] })) : null,
-        preview.length ? h(R.Card, { title: "Pratinjau (" + preview.length + (entry.rows > preview.length ? " dari " + entry.rows : "") + " baris pertama)", className: "ap-imp-card" },
+        preview.length ? h(Section, { title: "Pratinjau (" + preview.length + (entry.rows > preview.length ? " dari " + entry.rows : "") + " baris pertama)" },
           h(Table, { label: "Pratinjau impor", rows: preview, columns: cols })) : null,
         h("div", { className: "ap-imp-acts" },
           h(R.Button, { variant: "quiet", disabled: !!busy, onClick: again }, "Pilih file lain"),
           dup ? null : h(R.Button, { variant: "primary", icon: "check", disabled: blocked || !!busy, loading: busy === "commit", onClick: commit }, "Impor")));
     } else {
-      body = h(R.Card, { title: "Selesai" },
+      body = h(Section, { title: "Selesai" },
         h("p", { className: "ap-imp-sum" }, h("b", null, createdText(entry))),
         submittable ? h("p", { className: "ap-muted" }, "Data dibuat sebagai draf. Periksa lalu ajukan dari daftar.") : null,
         h("div", { className: "ap-imp-acts" },
@@ -272,7 +278,7 @@
     }
 
     return h(React.Fragment, null, head,
-      h("div", { className: "rk-shell-content ap-imp" }, steps, body));
+      h("div", { className: "rk-shell-content ap-imp" }, intro, steps, h("div", { className: "ap-imp-body" }, body)));
   }
 
   RA.ImportWizard = ImportWizard;

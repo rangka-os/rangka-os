@@ -23,6 +23,15 @@ layout. The web app does not yet render `layout.shell`.
 5. **Web app.** `web/app` renders `layout.shell`: `side-only` and `top-nav`. `pos` and `portal` fall back to
    `side-only` until project 2.
 
+## Clarifications (5 Nov 2026)
+
+- **Form layout `tab`.** A form layout section's `tab` label starts a tab that holds for the sections after it until
+  the next section with a `tab`. Sections before the first `tab` form the first tab, labelled "Rincian". A section
+  whose `tab` repeats an earlier label joins that earlier tab. A label given as `{id, en}` shows its `id` text. A
+  layout where no section has a `tab` shows no tab bar. The catch-all "Lainnya" section (fields the layout does not
+  place) is appended after the last section without a `tab`, so it joins the last tab. This is `formTabs` in
+  `web/app/form.js`.
+
 ## Contract changes (rangka-os)
 
 - `schema/0.5/layout.json` and `schema/0.4/layout.json`: `shell.default`, `extends.default` and the top-level

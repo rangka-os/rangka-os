@@ -346,6 +346,14 @@
           { title: "Lampiran", content: "struk-27-okt.jpg" },
           { title: "Persetujuan", content: h(R.StatusChip, { status: "paid" }) }] }));
     },
+    Logo: function () { return h("div", { className: "gx-row" }, h(R.Logo, null), h(R.Logo, { word: false, size: 32 }), h("span", { style: { background: "#b4432a", padding: 8, borderRadius: 6 } }, h(R.Logo, { reversed: true }))); },
+    AuthLayout: function () {
+      return h("div", { className: "gx-wide", style: { height: 520, border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" } },
+        h(R.AuthLayout, { chip: "Kopi Senja", title: "Masuk ke akunmu", footer: [h("a", { key: "h", href: "#" }, "Bantuan"), h("span", { key: "p" }, "Rangka ID")] },
+          h(R.Field, { label: "Email", type: "email", defaultValue: "dede@kopisenja.id" }),
+          h(R.Field, { label: "Kata sandi", type: "password" }),
+          h(R.Button, { variant: "primary", size: "lg" }, "Masuk")));
+    },
     Sparkline: function () { return h("div", { className: "gx-row" }, h(R.Sparkline, { data: [38, 41, 39, 45, 48, 51] }), h(R.Sparkline, { data: [12, 9, 11, 7, 5, 3], color: "var(--bad-solid)", width: 120 })); }
   };
 

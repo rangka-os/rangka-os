@@ -592,6 +592,8 @@ func TestAuth(t *testing.T) {
 	anon.jar, _ = cookiejar.New(nil)
 	if r := anon.do("GET", "/oauth/authorize?"+q.Encode(), nil); r.Status != 200 || !bytes.Contains(r.Body, []byte(`name="password"`)) {
 		t.Fatalf("login form: %d", r.Status)
+	} else if !bytes.Contains(r.Body, []byte(`class="brand"`)) || !bytes.Contains(r.Body, []byte(`Jadi juragan, bukan admin.`)) {
+		t.Fatalf("login form has no brand panel")
 	}
 	// unknown redirect, missing PKCE
 	bq := url.Values{}

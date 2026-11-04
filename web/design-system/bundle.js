@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -960,6 +960,36 @@
     }));
   }
 
+  /* ---- Logo: the Sendi symbol (logo kit v1.0), Bata by default, white when reversed, with an optional wordmark */
+  var SENDI = "M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z";
+  function Logo(p) {
+    var size = p.size || 24;
+    var mark = h("svg", { className: "rk-logo-mark", viewBox: "0 0 256 256", width: size, height: size, "aria-hidden": p.word === false ? undefined : "true",
+      role: p.word === false ? "img" : undefined, "aria-label": p.word === false ? "Rangka" : undefined },
+      h("path", { fill: "currentColor", fillRule: "evenodd", d: SENDI }));
+    return h("span", { className: cx("rk-logo", p.reversed && "reversed", p.className) }, mark, p.word === false ? null : h("span", { className: "rk-logo-word" }, "rangka"));
+  }
+
+  /* ---- AuthLayout: sign-in and other account pages. A Bata brand panel (Sendi joint, headline) beside the form;
+   * on phones the panel shrinks to a strip above the form. */
+  function AuthLayout(p) {
+    var b = p.brand || {};
+    return h("div", { className: "rk-auth" },
+      h("div", { className: "rk-auth-brand" },
+        h(Logo, { reversed: true, size: 22 }),
+        h("svg", { className: "rk-auth-joint", viewBox: "0 0 256 256", "aria-hidden": "true" }, h("path", { fill: "currentColor", fillRule: "evenodd", d: SENDI })),
+        h("div", { className: "rk-auth-pitch" },
+          h("h2", null, b.title || "Jadi juragan, bukan admin."),
+          b.text === null ? null : h("p", null, b.text || "Raka menyusun alur bisnismu dan ikut menjalankannya. Uang tetap kamu yang setujui."))),
+      h("main", { className: "rk-auth-side" },
+        h("div", { className: "rk-auth-form" },
+          p.chip ? h("span", { className: "rk-auth-chip" }, p.chip) : null,
+          p.title ? h("h1", null, p.title) : null,
+          p.subtitle ? h("p", { className: "rk-auth-sub" }, p.subtitle) : null,
+          p.children),
+        p.footer ? h("div", { className: "rk-auth-foot" }, p.footer) : null));
+  }
+
   /* ---- App switcher: every Rangka app and Omilo on one account (single sign-on) */
   var RANGKA_APPS = [
     { id: "crm", name: "Rangka CRM", desc: "Lead, peluang, aktivitas", icon: "card", color: "#5e4db2" },
@@ -1302,5 +1332,6 @@
     DataTable: DataTable, DocumentHeader: DocumentHeader, PosKeypad: PosKeypad, Raka: Raka, formatRupiah: formatRupiah, Card: Card, Descriptions: Descriptions, Steps: Steps, Breadcrumb: Breadcrumb, PageHeader: PageHeader, AppShell: AppShell, LinkField: LinkField, ChildTable: ChildTable, DatePicker: DatePicker, DateRangePicker: DateRangePicker, formatTanggal: formatTanggal, Table: Table, Pagination: Pagination, Dialog: Dialog, Drawer: Drawer, DrawerSection: DrawerSection, CommandMenu: CommandMenu, Menu: Menu, ContextMenu: ContextMenu, Alert: Alert, Banner: Banner, Toast: Toast, Toaster: Toaster, Sidebar: Sidebar, Topbar: Topbar, Checkbox: Checkbox, RadioGroup: RadioGroup, Switch: Switch, Textarea: Textarea, NativeSelect: NativeSelect, Select: Select, MultiSelect: MultiSelect, Form: Form, FormSection: FormSection, ChatComposer: ChatComposer, Avatar: Avatar, AvatarGroup: AvatarGroup, ImagePreview: ImagePreview, ImageViewer: ImageViewer, Tabs: Tabs, EmptyState: EmptyState, Kbd: Kbd, IconButton: IconButton, ICONS: Object.keys(ICONS) };
   api.Lozenge = Lozenge; api.Badge = Badge; api.TopNav = TopNav; api.AppSwitcher = AppSwitcher; api.AccountMenu = AccountMenu; api.Spinner = Spinner; api.Skeleton = Skeleton; api.FilterBar = FilterBar; api.FilterBuilder = FilterBuilder; api.SettingsLayout = SettingsLayout; api.SettingsSection = SettingsSection; api.SettingsRow = SettingsRow; api.NumberCard = NumberCard; api.Chart = Chart; api.ChartCard = ChartCard; api.ListCard = ListCard; api.DashGrid = DashGrid; api.Sparkline = Sparkline; api.filterCel = filterCel; api.compactNumber = compact;
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
+  api.Logo = Logo; api.AuthLayout = AuthLayout;
   window.Rangka = Object.assign(window.Rangka || {}, api);
 })();

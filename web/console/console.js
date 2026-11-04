@@ -955,14 +955,15 @@
   function Login(p) {
     var es = useState("ceo@saga.co.id"), email = es[0], setEmail = es[1], ps = useState(""), pw = ps[0], setPw = ps[1], er = useState(null), err = er[0], setErr = er[1], bs = useState(false), busy = bs[0], setBusy = bs[1];
     function go(e) { if (e) e.preventDefault(); setBusy(true); setErr(null); api.login(email, pw).then(function () { setBusy(false); p.onDone(); }, function (x) { setBusy(false); setErr(x.status === 401 ? "Email atau kata sandi salah" : x.message); }); }
-    return h("div", { className: "cn-login" }, h("form", { onSubmit: go, className: "cn-login-card" },
-      h(R.Raka, { size: 40, withName: true, company: "Rangka Console" }),
-      h("h1", null, "Masuk ke Console"), h("p", { className: "cn-muted" }, "Kernel di " + (api.baseUrl || location.origin) + " meminta sesi."),
-      err ? h(R.Alert, { tone: "bad", title: err }) : null,
-      h(R.Field, { label: "Email", type: "email", value: email, onChange: function (e) { setEmail(e.target.value); }, autoComplete: "username" }),
-      h(R.Field, { label: "Kata sandi", type: "password", value: pw, onChange: function (e) { setPw(e.target.value); }, autoComplete: "current-password" }),
-      h(R.Button, { variant: "primary", type: "submit", loading: busy, size: "lg" }, "Masuk"),
-      h("a", { className: "cn-link", href: "?demo=1" }, "Buka mode demo tanpa kernel")));
+    return h("div", { className: "cn-login" }, h(R.AuthLayout, { chip: "Rangka Console", title: "Masuk ke Console",
+      subtitle: "Kernel di " + (api.baseUrl || location.origin) + " meminta sesi.",
+      brand: { title: "Semua lapisan, satu panel.", text: "Lihat aplikasi, change set, konektor dan audit di kernel ini." },
+      footer: [h("a", { key: "demo", href: "?demo=1" }, "Buka mode demo tanpa kernel")] },
+      h("form", { onSubmit: go, className: "cn-login-form" },
+        err ? h(R.Alert, { tone: "bad", title: err }) : null,
+        h(R.Field, { label: "Email", type: "email", value: email, onChange: function (e) { setEmail(e.target.value); }, autoComplete: "username" }),
+        h(R.Field, { label: "Kata sandi", type: "password", value: pw, onChange: function (e) { setPw(e.target.value); }, autoComplete: "current-password" }),
+        h(R.Button, { variant: "primary", type: "submit", loading: busy, size: "lg" }, "Masuk"))));
   }
 
   /* ================================================================ app shell */

@@ -24,11 +24,17 @@ import (
 // RestoreOptions say where Restore puts what is not in the database.
 type RestoreOptions struct {
 	Version  string // the binary's version; "dev" skips the archive version check
-	Into     string // the archived site/ and apps/ are extracted here (must not exist or be empty)
+	Into     string // the archived metadata (site/, apps/, modules/, connectors/) is extracted here (must not exist or be empty)
 	FilesDir string // uploads go here; "" = FilesDir(registry, ""), like serve (no site archived: <Into>/files)
 	// Registry loads and validates the extracted metadata (rangka's usual loader).
-	Registry func(appsDir, siteDir string) (*meta.Registry, error)
+	Registry func(d Dirs) (*meta.Registry, error)
 }
+
+// archivedTop are the top-level directories an archive may hold besides manifest.json and data/.
+var archivedTop = map[string]bool{"site": true, "apps": true, "modules": true, "connectors": true, "files": true}
+
+// Dirs are the extracted metadata directories; "" = not in the archive.
+type Dirs struct{ Apps, Site, Modules, Connectors string }
 
 // Restore rebuilds an archive into an empty database: it checks every checksum and the version, migrates
 // from the archived metadata, loads the tables in one transaction in foreign-key order, resets sequences,
@@ -69,16 +75,20 @@ func Restore(ctx context.Context, db *pg.Pool, archive string, o RestoreOptions)
 	if o.FilesDir != "" && !emptyDir(o.FilesDir) {
 		return nil, fmt.Errorf("backup: files dir %s is not empty; pick another --files directory", o.FilesDir)
 	}
-	apps, site := filepath.Join(o.Into, "apps"), ""
-	for _, d := range []string{"site", "apps"} {
-		if err := copyTree(filepath.Join(tmp, d), filepath.Join(o.Into, d), 0o755, 0o644); err != nil {
+	dirs := Dirs{Apps: filepath.Join(o.Into, "apps")}
+	for _, d := range []struct {
+		name string
+		to   *string
+	}{{"site", &dirs.Site}, {"apps", nil}, {"modules", &dirs.Modules}, {"connectors", &dirs.Connectors}} {
+		if err := copyTree(filepath.Join(tmp, d.name), filepath.Join(o.Into, d.name), 0o755, 0o644); err != nil {
 			return nil, err
 		}
+		if st, err := os.Stat(filepath.Join(o.Into, d.name)); d.to != nil && err == nil && st.IsDir() {
+			*d.to = filepath.Join(o.Into, d.name)
+		}
 	}
-	if st, err := os.Stat(filepath.Join(o.Into, "site")); err == nil && st.IsDir() {
-		site = filepath.Join(o.Into, "site")
-	}
-	reg, err := o.Registry(apps, site)
+	site := dirs.Site
+	reg, err := o.Registry(dirs)
 	if err != nil {
 		return nil, fmt.Errorf("archived metadata: %w", err)
 	}
@@ -223,7 +233,7 @@ func check(m *Manifest, dir string, names map[string]bool) error {
 	}
 	for _, f := range m.Files {
 		top, _, _ := strings.Cut(f.Path, "/")
-		if !cleanEntry(f.Path) || (top != "site" && top != "apps" && top != "files") {
+		if !cleanEntry(f.Path) || !archivedTop[top] {
 			return fmt.Errorf("%w: bad path %q in the manifest", ErrCorrupt, f.Path)
 		}
 		if sum, size, err := hashFile(filepath.Join(dir, filepath.FromSlash(f.Path))); err != nil || sum != f.SHA256 || size != f.Size {

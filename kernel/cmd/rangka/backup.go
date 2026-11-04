@@ -61,7 +61,8 @@ func cmdBackup(args []string) int {
 		}
 		return fail(err)
 	}
-	m, err := backup.Write(ctx, db, f, backup.Options{Org: *org, SiteDir: c.site, AppsDir: c.apps, FilesDir: *files, Version: Version,
+	m, err := backup.Write(ctx, db, f, backup.Options{Org: *org, SiteDir: c.site, AppsDir: c.apps, ModulesDir: c.modulesDir(), ConnectorsDir: c.connectorsDir(),
+		FilesDir: *files, Version: Version,
 		Now: func() time.Time { return now }})
 	if err == nil {
 		err = f.Sync() // on disk before the rename makes it look complete
@@ -89,7 +90,7 @@ func cmdRestore(args []string) int {
 	fs := flag.NewFlagSet("restore", flag.ExitOnError)
 	var c common
 	c.flags(fs)
-	into := fs.String("into", "", "directory for the archived site/ and apps/ (default ./restore-<archive name>)")
+	into := fs.String("into", "", "directory for the archived site/, apps/, modules/ and connectors/ (default ./restore-<archive name>)")
 	files := fs.String("files", envOr("RANGKA_FILES_DIR", ""), "uploads directory (default: $RANGKA_FILES_DIR, else the archived system.rk files.path, else ./data/files; relative to the working directory)")
 	fs.Parse(reorder(args))
 	if fs.NArg() != 1 {
@@ -109,9 +110,10 @@ func cmdRestore(args []string) int {
 	}
 	defer db.Close()
 	m, err := backup.Restore(ctx, db, archive, backup.RestoreOptions{Version: Version, Into: *into, FilesDir: *files,
-		Registry: func(apps, site string) (*meta.Registry, error) {
+		Registry: func(d backup.Dirs) (*meta.Registry, error) {
+			// only what the archive holds: never the host's modules or connectors next to --apps
 			rc := c
-			rc.apps, rc.site = apps, site
+			rc.apps, rc.site, rc.modules, rc.connectors = d.Apps, d.Site, d.Modules, d.Connectors
 			return rc.registry()
 		}})
 	if err != nil {

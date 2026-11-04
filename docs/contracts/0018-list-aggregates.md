@@ -40,6 +40,15 @@ row. The kernel should answer them in one query that matches the list exactly.
    - `403` without a read grant.
 5. **No preview variant.** There is no aggregate under `/preview…`. In preview mode the app hides totals.
 
+## Clarifications (4 Nov 2026)
+
+- A child model answers `400`, the same as the list.
+- The aggregate reuses the list's exact matching code: a `filter` that fails to evaluate on a row leaves that row
+  out, as the list does. Only a `filter` that does not compile (a syntax error) is a `400`.
+- `count` always equals the list's `total` for the same `q` and `filter`.
+- Any field present on the output record may be grouped, including system and computed columns such as `status` and
+  `docstatus`. A name that is neither a model field nor a known system column is a `400`.
+
 ## Contract changes (rangka-os)
 
 - Kernel: new route `/api/v1/aggregate/{model}` sharing the list's `q`, `filter`, grant and row-scope code.

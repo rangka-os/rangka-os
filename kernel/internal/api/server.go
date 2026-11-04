@@ -114,6 +114,7 @@ func (s *Server) Handler() http.Handler {
 	// records
 	mux.HandleFunc("GET /api/v1/meta", a(s.getMeta))
 	mux.HandleFunc("GET /api/v1/r/{model}", a(s.listRecords))
+	mux.HandleFunc("GET /api/v1/aggregate/{model}", a(s.aggregateRecords))
 	mux.HandleFunc("POST /api/v1/r/{model}", a(s.createRecord))
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}", a(s.getRecord))
 	mux.HandleFunc("PATCH /api/v1/r/{model}/{name}", a(s.patchRecord))

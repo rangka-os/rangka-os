@@ -303,6 +303,44 @@ func TestREST(t *testing.T) {
 	}
 }
 
+// TestAggregateOverHTTP: GET /api/v1/aggregate/{model} counts what the list shows and labels link groups with
+// the linked record's title (contract 0018).
+func TestAggregateOverHTTP(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	agg := e.must(200, "GET", "/api/v1/aggregate/sales_invoice?group=customer&fn=count,sum:grand_total", nil).JSON
+	list := e.must(200, "GET", "/api/v1/r/sales_invoice", nil).JSON
+	if agg["count"] != list["total"] || get(agg, "values", "count") != list["total"] || get(agg, "values", "sum:grand_total").(float64) <= 0 {
+		t.Fatalf("aggregate %v, list total %v", agg, list["total"])
+	}
+	if _, ok := agg["other"]; ok {
+		t.Fatalf("other present without overflow: %v", agg["other"])
+	}
+	labelled := false
+	for _, g := range agg["groups"].([]any) {
+		key, _ := get(g, "key").(string)
+		if strings.HasPrefix(key, "CUST-") {
+			label, _ := get(g, "label").(string)
+			if label == "" || label == key {
+				t.Fatalf("group %v: label %q", key, label)
+			}
+			labelled = true
+		}
+	}
+	if !labelled {
+		t.Fatalf("no CUST- group: %v", agg["groups"])
+	}
+	filtered := e.must(200, "GET", "/api/v1/aggregate/sales_invoice?filter="+url.QueryEscape("docstatus == 1"), nil).JSON
+	if fl := e.must(200, "GET", "/api/v1/r/sales_invoice?filter="+url.QueryEscape("docstatus == 1"), nil).JSON; filtered["count"] != fl["total"] {
+		t.Fatalf("filtered aggregate %v, list total %v", filtered["count"], fl["total"])
+	}
+	e.must(400, "GET", "/api/v1/aggregate/sales_invoice?group=nope", nil)
+	e.must(400, "GET", "/api/v1/aggregate/sales_invoice?fn=sum:customer", nil)
+	e.must(400, "GET", "/api/v1/aggregate/sales_invoice?fn=median:grand_total", nil)
+	e.must(400, "GET", "/api/v1/aggregate/sales_invoice?filter="+url.QueryEscape("docstatus =="), nil)
+	e.must(404, "GET", "/api/v1/aggregate/nope", nil)
+}
+
 func TestDashboardsOverHTTP(t *testing.T) {
 	e := newEnv(t, false, nil)
 	e.login()

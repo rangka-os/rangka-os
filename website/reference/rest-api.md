@@ -9,6 +9,7 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | --- | --- | --- |
 | GET | `/meta` | Apps, models (with `app`, merged overlays and `can`), dashboards, flows, roles, connectors, theme tokens (light + dark), layout, `site` (config, features, redacted system), `installed`, `user`, `today` |
 | GET | `/r/{model}` | `?filter=<CEL>&sort=-field&limit=50&offset=0&q=text` → `{data, total}` |
+| GET | `/aggregate/{model}` | `?filter=<CEL>&q=text&group=<field>&fn=count,sum:<field>` → `{count, values, groups, other?}` over the same rows as the list, no paging ([below](#list-aggregates)) |
 | POST | `/r/{model}` | Create → 201. Defaults and computed fields applied, save rules run |
 | GET · PATCH · DELETE | `/r/{model}/{name}` | PATCH merges. Submitted documents return 409 |
 | POST | `/r/{model}/{name}/submit` · `cancel` · `amend` | Document lifecycle; `submit` takes `{"force": true}` to accept warnings |
@@ -17,13 +18,40 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | GET | `/dashboards/{name}?period=30` | Every widget computed; `X-Cache: hit\|miss` when cached |
 | POST | `/flows/{name}/run` | Run a flow now with `{event: {…}}` |
 
+## List aggregates
+
+`GET /aggregate/{model}` answers totals and group summaries for a list view in one request (contract 0018). It
+matches exactly the rows `GET /r/{model}` returns for the same `q` and `filter`, under the same read grant and row
+scope, so `count` always equals the list's `total`.
+
+- `fn` is a comma-separated list of `count`, `sum:<field>`, `avg:<field>`, `min:<field>` and `max:<field>`
+  (default `count`). Values are keyed `count` and `<kind>:<field>`.
+- `group` names a field of the model or a system column such as `status` or `docstatus`. The 50 largest groups by
+  count are returned, ties broken by key; the rest are summed into `other`, which is left out when nothing
+  overflowed. Empty values share one group with `key: null, label: "(kosong)"`. For a link field, `label` is the
+  linked record's title.
+
+```json
+{
+  "count": 142,
+  "values": {"count": 142, "sum:grand_total": 51250000},
+  "groups": [
+    {"key": "CUST-0012", "label": "CV Maju Jaya", "count": 4, "values": {"count": 4, "sum:grand_total": 3900000}}
+  ]
+}
+```
+
+Errors: 400 for an unknown or table `group`, a `sum|avg|min|max` over a field that is not currency, int, float or percent, a
+bad `fn`, a `filter` that does not compile, or a child model; 404 for an unknown model; 403 without a read grant.
+There is no preview variant.
+
 ## Permissions
 
 Model `permissions:` are enforced on every route below, for people, API tokens and MCP alike. Mapping:
 
 | Request | Action |
 | --- | --- |
-| `GET` record, list, `/events` | `read` |
+| `GET` record, list, `/aggregate/{model}`, `/events` | `read` |
 | `POST /r/{model}` | `create` |
 | `PATCH`, `actions/{action}`, any other lifecycle verb | `write` |
 | `DELETE` | `delete` |

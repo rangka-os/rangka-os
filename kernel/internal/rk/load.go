@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"unicode/utf8"
 )
 
 // Exts are the metadata file extensions, in preference order (.rk first, legacy .json last).
@@ -95,8 +96,8 @@ func lineCol(text string, off int) (int, int) {
 		off = len(text)
 	}
 	line := strings.Count(text[:off], "\n") + 1
-	col := off - strings.LastIndex(text[:off], "\n")
-	return line, col
+	start := strings.LastIndex(text[:off], "\n") + 1
+	return line, utf8.RuneCountInString(text[start:off]) + 1
 }
 
 // normalizeJSON turns float64 integers into int64 so JSON and YAML data look the same.

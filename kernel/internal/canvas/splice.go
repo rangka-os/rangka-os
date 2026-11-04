@@ -167,7 +167,7 @@ func span(text string, n *rk.Node, inFlow bool) (int, int, bool) {
 		off += i + 1
 		line++
 	}
-	start := off + n.Col - 1
+	start := off + n.Byte - 1
 	if start > len(text) {
 		return 0, 0, false
 	}

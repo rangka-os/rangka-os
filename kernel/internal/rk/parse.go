@@ -85,6 +85,7 @@ func Parse(text, path string) (root *Node, err *Error) {
 	if root == nil {
 		return nil, nil
 	}
+	p.charCols(root)
 	if probs := anchorProblem(root, path); probs != nil {
 		return nil, probs
 	}
@@ -103,7 +104,38 @@ func newErr(path string, line, col int, code, msg string) *Error {
 }
 
 func (p *parser) fail(li, col int, msg string) {
-	panic(syntaxErr{li + 1, col + 1, msg})
+	panic(syntaxErr{li + 1, charCol(p.lines[li], col+1), msg})
+}
+
+// charCol turns a 1-based byte column on line into a 1-based character column (Unicode code points,
+// as Python counts str indexes). Columns past the end of the line count one per byte.
+func charCol(line string, byteCol int) int {
+	n := byteCol - 1
+	if n <= 0 {
+		return byteCol
+	}
+	if n > len(line) {
+		return utf8.RuneCountInString(line) + n - len(line) + 1
+	}
+	return utf8.RuneCountInString(line[:n]) + 1
+}
+
+// charCols keeps the parser's byte columns in Byte and sets Col to character columns.
+func (p *parser) charCols(n *Node) {
+	if n == nil || n.Byte != 0 {
+		return
+	}
+	n.Byte = n.Col
+	if n.Line >= 1 && n.Line <= len(p.lines) {
+		n.Col = charCol(p.lines[n.Line-1], n.Col)
+	}
+	for i := range n.Keys {
+		p.charCols(n.Keys[i])
+		p.charCols(n.Vals[i])
+	}
+	for _, it := range n.Items {
+		p.charCols(it)
+	}
 }
 
 func (p *parser) indent(li int) int {

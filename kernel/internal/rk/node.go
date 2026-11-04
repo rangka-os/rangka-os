@@ -21,10 +21,12 @@ const (
 	AliasNode
 )
 
-// Node is a parsed YAML node with its 1-based position.
+// Node is a parsed YAML node with its 1-based position. Col counts characters (Unicode code points),
+// like PyYAML and rkfile.py; Byte is the same column in bytes, for slicing the source text.
 type Node struct {
 	Kind      Kind
 	Line, Col int
+	Byte      int
 	Value     string // scalar text (after unquoting) or alias name
 	Style     byte   // 0 plain, '\'' single, '"' double, '|' literal, '>' folded
 	Tag       string // resolved scalar tag: str, int, float, bool, null
@@ -34,7 +36,7 @@ type Node struct {
 	Items     []*Node // SeqNode items
 }
 
-// Error is a problem in a .rk file at a position, with a stable code.
+// Error is a problem in a .rk file at a position, with a stable code. Col counts characters.
 type Error struct {
 	Path      string
 	Line, Col int

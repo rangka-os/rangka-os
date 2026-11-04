@@ -853,7 +853,7 @@
       h("div", { className: "rk-shell-main" }, p.header || null, p.pageHeader || null, h("main", { className: "rk-shell-content" }, p.children)));
   }
 
-  /* ================================================================ v4: Atlassian navigation, loaders, filters, settings, dashboards */
+  /* ================================================================ v4: top navigation, loaders, filters, settings, dashboards */
 
   /* ---- Side navigation (Frappe): business switcher, search, pinned entries, grouped 28px links, collapse to icons.
      Legacy props: app {name, type, icon, color} = switcher with the app tile; product = switcher title; company/outlet/onCompany; user/role. */

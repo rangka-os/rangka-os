@@ -1100,7 +1100,7 @@
     return h("div", { className: cx("rk-shell cn-shell", navOpen && "cn-nav-open") },
       h(R.Sidebar, {
         switcher: { title: "Rangka Console", subtitle: [status.site || meta.site, status.version].filter(Boolean).join(" · ") || undefined,
-          mark: h("span", { className: "tile", style: { background: "#1c1917" } }, h(R.Icon, { name: "settings" })),
+          mark: h("span", { className: "tile", style: { background: "var(--brand)" } }, h(R.Icon, { name: "settings" })),
           onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } },
         search: { label: "Cari", onOpen: openCmd },
         pinned: pinned, groups: groups, current: screen, onNavigate: function (id) { nav("/" + id); },

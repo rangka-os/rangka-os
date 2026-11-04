@@ -6,7 +6,7 @@
  * when the model has views.kanban, Kelompok, Laporan). The view, sort, columns and group field are kept per person in
  * localStorage (rk.list.<org>.<model>); in Ubah, Kolom also offers "Jadikan bawaan untuk semua" (a change set on
  * views.list.columns).
- * - Daftar: a checkbox column; selected rows show the bulk bar with the model's own actions.
+ * - Daftar: a checkbox column; selected rows show the bulk bar (count and "Hapus pilihan").
  * - Kelompok: group headers (count and the sums of the views.list number columns) from GET /api/v1/aggregate; opening
  *   a group lists its rows (`field == 'v'` added to the filter), 20 at a time with "Muat lagi". The "Lainnya" bucket
  *   past the 50 largest groups cannot be opened. Not offered while a change set is previewed (no preview aggregate).
@@ -503,7 +503,6 @@
     var aes = useState(null), aggErr = aes[0], setAggErr = aes[1];
     var gos = useState({}), opened = gos[0], setOpened = gos[1];
     var sls = useState({}), selected = sls[0], setSelected = sls[1];
-    var bbs = useState(false), bulkBusy = bbs[0], setBulkBusy = bbs[1];
     var seq = useRef(0), aseq = useRef(0), gseq = useRef({});
     var filters = useQuickFilters(ctx, m, mm);
     var filter = buildFilter(fval, filters);
@@ -641,8 +640,9 @@
 
     var total = view === "group" ? (agg ? agg.count : 0) : data.total;
     var busy = view === "group" ? !agg && !aggErr : loading;
-    // in Ubah an empty board still shows its columns, so stages can be added and ordered before the first record
-    if (!busy && !total && !filtered && !(u.on && board)) {
+    // in Ubah an empty board still shows its columns, so stages can be added and ordered before the first record;
+    // a failed aggregate is not an empty list: the group view shows its error and "Coba lagi"
+    if (!busy && !total && !filtered && !(u.on && board) && !(view === "group" && aggErr)) {
       return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, toolbar,
         h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", onClick: create }, "Buat yang pertama") : null })));
     }
@@ -650,29 +650,13 @@
     var pager = !board && view !== "group" && data.total > PAGE_SIZE
       ? h(R.Pagination, { key: "pg:" + dq + "|" + filter + "|" + sortParam(sort), total: data.total, page: page, pageSize: PAGE_SIZE, jumper: false, onChange: setPage }) : null;
 
-    /* ---- bulk actions: the model's own actions, run one record at a time on the selected rows that allow them */
+    /* ---- selection: the bulk bar shows the count and clears it (bulk actions need their own design) */
     var picked = data.rows.filter(function (r) { return selected[r.name]; });
-    var bulkActs = ctx.readOnly || mm.is_submittable ? [] : (mm.actions || []).filter(function (a) { return picked.some(function (r) { return eng.actionAllowed(m, r, a); }); });
-    function runBulk(a) {
-      var todo = picked.filter(function (r) { return eng.actionAllowed(m, r, a); }), ok = 0, held = 0, failed = 0;
-      setBulkBusy(true);
-      todo.reduce(function (prev, r) {
-        return prev.then(function () {
-          return ctx.api.action(m, r.name, a.name).then(function (res) { if (res && res.approval) held++; else ok++; }, function () { failed++; });
-        });
-      }, Promise.resolve()).then(function () {
-        setBulkBusy(false);
-        setSelected({});
-        setReload(function (n) { return n + 1; });
-        var parts = [ok ? ok + " selesai" : "", held ? held + " menunggu persetujuan" : "", failed ? failed + " gagal" : ""].filter(Boolean);
-        ctx.toast(failed ? "warn" : "ok", L(a.label) + ": " + parts.join(", "));
-      });
-    }
     function onSelect(names, on) {
       setSelected(function (cur) { var n = Object.assign({}, cur); names.forEach(function (x) { if (on) n[x] = true; else delete n[x]; }); return n; });
     }
-    var bulk = view === "list" ? h(R.BulkBar, { count: picked.length, onClear: function () { setSelected({}); } },
-      bulkActs.map(function (a) { return h(R.Button, { key: a.name, size: "sm", icon: a.icon, disabled: bulkBusy, loading: bulkBusy, onClick: function () { runBulk(a); } }, L(a.label)); })) : null;
+    var bulk = view === "list" ? h(R.BulkBar, { count: picked.length },
+      h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setSelected({}); } }, "Hapus pilihan")) : null;
 
     var body;
     if (board) {

@@ -48,6 +48,9 @@ row. The kernel should answer them in one query that matches the list exactly.
 - `count` always equals the list's `total` for the same `q` and `filter`.
 - Any field present on the output record may be grouped, including system and computed columns such as `status` and
   `docstatus`. A name that is neither a model field nor a known system column is a `400`.
+- The group-by view opens the empty group with the filter `field == null`. In CEL, `x == null` is true for a missing or
+  empty value (`''`), and `x != null` is its negation; this holds in the kernel and in `web/app/engine.js`. `in` keeps
+  plain equality, so `x in [null]` does not match `''`.
 
 ## Contract changes (rangka-os)
 

@@ -1177,6 +1177,27 @@ def test_list_group_by(page, ctx):
     page.keyboard.press("Escape")
 
 
+def test_list_group_by_error(page, ctx):
+    """A failed aggregate shows the group view's error with Coba lagi, not the "Belum ada" empty state."""
+    ctx.allow_http(500, r"/api/v1/aggregate/")
+    fail = {"on": True}
+
+    def agg(route):
+        if fail["on"]:
+            _json(route, 500, {"error": {"code": "internal", "message": "Server sedang bermasalah"}})
+        else:
+            route.continue_()
+    page.route(re.compile(r".*/api/v1/aggregate/.*"), agg)
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Kelompok")
+    page.get_by_text("Ringkasan per kelompok tidak bisa dimuat").wait_for(timeout=10000)
+    assert page.get_by_text("Belum ada " + ctx.model_label("sales_invoice").lower()).count() == 0, "no empty state for a failed aggregate"
+    fail["on"] = False
+    page.get_by_role("button", name="Coba lagi").click()
+    page.locator(".rk-group-head").first.wait_for(timeout=10000)
+
+
 def test_report_totals(page, ctx):
     reqs = watch_requests(page)
     open_route(page, ctx, "#/r/sales_invoice")

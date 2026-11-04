@@ -94,7 +94,9 @@ sales/imports/bad_per.rk:4:6  error  import_per_outlet  per  per: outlet needs a
 sales/imports/bad_per.rk:4:6  warn   import_no_key  per  per: outlet imports should set key so overlapping files are not imported twice
 sales/imports/not_a_map.rk:1:1  error  schema  (root)  [{'name': 'not_a_map'}, {'model': 'invoice'}] is not of type 'object'
 sales/imports/wrong_name.rk:2:7  error  name_mismatch  name  import name "other_name" must match the file name "wrong_name"
-crm/roles/sales_rep.rk:5:16  error  unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
+crm/roles/sales_rep.rk:5:16  warn   unknown_scope_field  scope/field  scope field "outlett" is not a field of any installed model
+crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope field "territori" is not a field of any installed model
+crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope field "wilayah" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
@@ -157,4 +159,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:21:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:22:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-138 error(s), 20 warning(s)
+139 error(s), 21 warning(s)

@@ -666,7 +666,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
 
 
 def check_scope(rep, p, r, allmodels):
-    """Role scope (contract 0010): every scope field must be a field of some model."""
+    """Role scope (contract 0010): at least one scope field must be a field of some installed model."""
     sc = r.get("scope")
     if not isinstance(sc, dict):
         return
@@ -674,9 +674,11 @@ def check_scope(rep, p, r, allmodels):
     fields = [f] if isinstance(f, str) else [x for x in f if isinstance(x, str)] if isinstance(f, list) else []
     known = {fd.get("name") for _, _, m in allmodels.values() if isinstance(m, dict)
              for fd in (m.get("fields") if isinstance(m.get("fields"), list) else []) if isinstance(fd, dict)}
+    # a list may name fields only an optional module has: those narrow nothing (warning); none existing is an error
+    level = "warning" if any(name in known for name in fields) else "error"
     for name in fields:
         if name not in known:
-            rep.add("error", p, "scope/field", "unknown_scope_field", f'scope field "{name}" is not a field of any installed model')
+            rep.add(level, p, "scope/field", "unknown_scope_field", f'scope field "{name}" is not a field of any installed model')
 
 
 def import_map(d):

@@ -103,6 +103,9 @@ scope: {field: outlet, from: user.outlets}
 ```
 - `field` is a field name or a list of names (`[from_outlet, to_outlet]`). `from` is CEL over `user`
   returning a list of record names; `user.outlets` is the member's outlets in the current org.
+- Validation (`unknown_scope_field`): a scope none of whose fields is a field of an installed model is an
+  error. A list may name fields that only an optional module has (`from_outlet`, `to_outlet` when stock is
+  not installed); each such field is a warning, since it narrows nothing (amended 4 Nov 2026).
 - For a member whose role has `scope`:
   - a record of a model that has one of the fields is visible when any of those fields holds a value from
     `from`;

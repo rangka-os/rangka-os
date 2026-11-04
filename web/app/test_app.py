@@ -2387,6 +2387,22 @@ def test_attachment_upload(page, ctx):
         shutil.rmtree(tmp, ignore_errors=True)
 
 
+def test_attachment_files_off(page, ctx):
+    """A kernel with files off answers the attachments list with 501 files_disabled: the side panel then drops its
+    "Lampiran" section instead of leaving an empty title."""
+    page.route(re.compile(r".*/api/v1/r/[^/]+/[^/?]+/attachments(\?.*)?$"), lambda route: route.fulfill(
+        status=501, content_type="application/json",
+        body=json.dumps({"error": {"code": "files_disabled", "message": "files are off"}})) if route.request.method == "GET" else route.continue_())
+    ctx.allow_http(501, r"/attachments")
+    draft = draft_invoice(ctx)
+    open_route(page, ctx, "#/r/sales_invoice/" + draft)
+    wait_form(page)
+    panel_section(page, "Info").wait_for(timeout=10000)
+    page.wait_for_function("() => !document.querySelector('.rk-docpanel-sec h3') || ![...document.querySelectorAll('.rk-docpanel-sec h3')].some(e => e.textContent.trim() === 'Lampiran')", timeout=10000)
+    page.wait_for_timeout(300)
+    assert panel_section(page, "Lampiran").count() == 0, "no empty Lampiran section when files are off"
+
+
 def test_attachment_serving(page, ctx):
     """S6: a PDF previews inline (no CSP sandbox, so Chromium's viewer is not blocked), a PNG is an inline <img>, and
     HTML / SVG uploads are served as downloads, never rendered."""

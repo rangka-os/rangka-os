@@ -13,7 +13,8 @@
  * side panel section "Lampiran"): file input and drop zone, the list
  * (thumbnail for raster images, a PDF icon, name as a link to GET /api/v1/attachments/<id>, size, uploader, date) and a
  * delete button (confirm dialog) only while record.docstatus === 0. Files over 20 MB are refused before any request;
- * a 413 shows the same text. Hidden entirely when the kernel has no attachments route or the files capability is off.
+ * a 413 shows the same text. Hidden entirely when the kernel has no attachments route or the files capability is off;
+ * p.onOff() is then called so a host (the form's side panel) can drop its section too.
  * Upload and delete buttons are disabled while a request is in flight.
  *
  * Pure helpers (unit-tested in test/docs.test.js): checkFile, uploadError, kindOf, formatLabel, printError.
@@ -252,7 +253,7 @@
       if (!name) return undefined;
       ctx.api.attachments(p.model, name).then(function (r) { if (!dead) setItems((r && r.data) || []); }, function (e) {
         if (dead) return;
-        if (API.isFilesOff(e)) setOff(true);
+        if (API.isFilesOff(e)) { setOff(true); if (p.onOff) p.onOff(); }
         else setErr(e);
       });
       return function () { dead = true; };
@@ -287,7 +288,7 @@
         ctx.toast("ok", done.length === 1 ? "Lampiran ditambahkan" : done.length + " lampiran ditambahkan", done.length === 1 ? done[0].filename : undefined);
       }, function (e) {
         stop();
-        if (API.isFilesOff(e)) { setOff(true); return; }
+        if (API.isFilesOff(e)) { setOff(true); if (p.onOff) p.onOff(); return; }
         setMsg({ title: uploadError(e), body: done.length ? done.length + " file sebelumnya sudah terunggah." : undefined });
       });
     }

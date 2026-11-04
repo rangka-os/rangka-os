@@ -193,6 +193,7 @@
     var u = RA.useUbah ? RA.useUbah() : { on: false };
     var dls = useState(null), ubahDialog = dls[0], setUbahDialog = dls[1]; // "field" | "approval" | "automation"
     var tbs = useState(null), tab = tbs[0], setTab = tbs[1]; // the form layout's tab on show (null: the first)
+    var fos = useState(false), filesOff = fos[0], setFilesOff = fos[1]; // Attachments found files off: drop "Lampiran"
 
     function put(n) { recRef.current = n; setRecState(n); }
     function markDirty(v) { dirtyRef.current = v; setDirty(v); }
@@ -557,12 +558,13 @@
         rows.length ? h("dl", { className: "ap-docinfo" }, rows.map(function (r) { return h("div", { key: r[0] }, h("dt", null, r[0]), h("dd", null, r[1])); })) : null);
     }
     var feats = Object.assign({}, ctx.features || {}, { approvals: bannerOn });
-    if (!RA.Attachments) feats.attachments = false;
+    if (!RA.Attachments || filesOff) feats.attachments = false;
     var prints = RA.DocTools && API ? API.printFormats(ctx.meta, m) : [];
     var panel = docPanelSections(rec, feats, Object.assign({}, mm, { prints: prints })).map(function (s) {
       var content = s.id === "info" ? infoBody()
         // Files belong to a saved record: never on /new.
-        : s.id === "attachments" ? h(RA.Attachments, { key: "att:" + rec.name, model: m, name: rec.name, record: rec, panel: true })
+        : s.id === "attachments" ? h(RA.Attachments, { key: "att:" + rec.name, model: m, name: rec.name, record: rec, panel: true,
+            onOff: function () { setFilesOff(true); } })
         : s.id === "approvals" ? h(RA.ApprovalBanner, { model: m, name: rec.name, rev: apRev, verbs: verbs, editable: !ro, panel: true, onPending: setPend, onDecided: afterDecision })
         : h("div", { className: "ap-docprint" }, h(RA.DocTools, { model: m, name: rec.name, record: rec }));
       return { id: s.id, title: s.title, content: content };

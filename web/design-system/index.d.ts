@@ -52,7 +52,8 @@ export interface ToastProps { title: string; tone?: 'ok' | 'info' | 'warn' | 'ba
 export declare function Toast(props: ToastProps): React.ReactElement;
 export declare function Toaster(props: { float?: boolean; children: Node }): React.ReactElement;
 export interface NavItem { id?: string; label: string; icon?: IconName; count?: number | null; href?: string }
-/** Frappe side navigation. collapsed: icons only, labels as title tooltips, width --sidebar-collapsed; the footer hides.
+/** Frappe side navigation. collapsed: icons only, labels as title tooltips, width --sidebar-collapsed; the footer stays, compact:
+ *  a custom footer renders centred and clipped in .rk-side-foot.collapsed (give it icon-only content), the legacy user shows only the avatar.
  *  Legacy props: app (mapped to switcher, its tile becomes the mark), product (switcher title), company/outlet/onCompany, user/role. */
 export interface SidebarProps {
   switcher?: { title: string; subtitle?: Node; mark?: Node; onClick?: () => void };

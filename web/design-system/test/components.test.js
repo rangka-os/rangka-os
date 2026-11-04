@@ -60,6 +60,26 @@ test("Sidebar collapsed renders no labels", () => {
   assert.strictEqual(nodes(tree, (n) => n.props["aria-current"] === "page").length, 1, "current item marked");
 });
 
+test("Sidebar collapsed keeps a compact footer and the expand button", () => {
+  const unfold = (t) => nodes(t, (n) => n.type === "button" && n.props["aria-label"] === "Bentangkan navigasi").length;
+  const withUser = render(R.Sidebar({ groups: GROUPS, collapsed: true, user: "Dede Kurniawan", role: "Pemilik", onToggleCollapse() {} }));
+  const foot = nodes(withUser, (n) => hasClass(n, "rk-side-foot") && hasClass(n, "collapsed"));
+  assert.strictEqual(foot.length, 1, "user footer stays");
+  assert.strictEqual(foot[0].props.title, "Dede Kurniawan");
+  assert.ok(texts(foot[0]).indexOf("Pemilik") < 0, "only the avatar, no role text");
+  assert.strictEqual(unfold(withUser), 1);
+
+  const withFooter = render(R.Sidebar({ groups: GROUPS, collapsed: true, footer: { type: "span", props: { className: "my-foot" }, children: [] }, onToggleCollapse() {} }));
+  const f2 = nodes(withFooter, (n) => hasClass(n, "rk-side-foot") && hasClass(n, "collapsed"));
+  assert.strictEqual(f2.length, 1, "custom footer stays");
+  assert.strictEqual(nodes(f2[0], (n) => hasClass(n, "my-foot")).length, 1);
+  assert.strictEqual(unfold(withFooter), 1);
+
+  const links = nodes(withUser, (n) => n.type === "a");
+  assert.ok(links.every((a) => a.props["aria-label"] && a.props["aria-label"] === a.props.title), "collapsed links carry aria-label");
+  assert.strictEqual(nodes(withUser, (n) => n.type === "aside")[0].props["aria-label"], "Navigasi", "no trailing space without a switcher");
+});
+
 test("Sidebar expanded renders labels, counts and the collapse button", () => {
   let toggled = 0;
   const tree = render(R.Sidebar({ switcher: { title: "Kopi Senja" }, groups: GROUPS, current: "r/sales_invoice", onToggleCollapse() { toggled++; } }));
@@ -112,6 +132,7 @@ test("ViewSwitcher marks value as aria-pressed", () => {
     { id: "list", label: "Daftar", icon: "list" }, { id: "kanban", label: "Kanban", icon: "kanban" }, { id: "report", label: "Laporan", icon: "table" }] }));
   const btns = nodes(tree, (n) => n.type === "button");
   assert.deepStrictEqual(btns.map((b) => b.props["aria-pressed"]), ["false", "true", "false"]);
+  assert.deepStrictEqual(btns.map((b) => b.props["aria-label"]), ["Daftar", "Kanban", "Laporan"], "named when phones hide the label");
   btns[2].props.onClick();
   assert.deepStrictEqual(got, ["report"]);
 });

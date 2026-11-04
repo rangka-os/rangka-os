@@ -868,7 +868,7 @@
     }
     function link(it) {
       var id = it.id || it.label;
-      return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined,
+      return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined, "aria-label": col ? it.label : undefined,
         "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
         onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(id, it); } },
         col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: it.icon }),
@@ -876,7 +876,7 @@
         it.count ? (col ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : h("span", { className: "rk-count" }, it.count)) : null);
     }
     var search = p.search, searchLabel = (search && search.label) || "Cari";
-    return h("aside", { className: cx("rk-side", col && "collapsed"), "aria-label": "Navigasi " + (sw ? sw.title : "") },
+    return h("aside", { className: cx("rk-side", col && "collapsed"), "aria-label": sw ? "Navigasi " + sw.title : "Navigasi" },
       sw ? head() : null,
       p.company && !col ? h("button", { type: "button", className: "rk-company", onClick: p.onCompany }, h(Icon, { name: "store" }), h("span", { className: "g" }, p.company, p.outlet ? h("small", null, p.outlet) : null), h(Icon, { name: "updown" })) : null,
       search ? h("button", { type: "button", className: "rk-side-search", onClick: search.onOpen, title: col ? searchLabel : undefined, "aria-label": col ? searchLabel : undefined },
@@ -889,7 +889,9 @@
             g.label ? (col ? (lead ? h("div", { className: "rk-navsep", role: "separator" }) : null) : h("p", null, g.label)) : null,
             g.items.map(link));
         })),
-      col ? null : p.footer || (p.user ? h("div", { className: "rk-side-foot" }, h(Avatar, { name: p.user, size: 28, presence: "online" }),
+      col ? (p.footer ? h("div", { className: "rk-side-foot collapsed" }, p.footer)
+          : p.user ? h("div", { className: "rk-side-foot collapsed", title: p.user, "aria-label": p.user, role: "group" }, h(Avatar, { name: p.user, size: 28, presence: "online" })) : null)
+        : p.footer || (p.user ? h("div", { className: "rk-side-foot" }, h(Avatar, { name: p.user, size: 28, presence: "online" }),
         h("span", { className: "g" }, h("b", null, p.user), p.role ? h("small", null, p.role) : null), h(IconButton, { icon: "settings", label: "Pengaturan" })) : null),
       p.onToggleCollapse ? h("div", { className: "rk-side-collapse" },
         h(IconButton, { icon: col ? "unfold" : "fold", label: col ? "Bentangkan navigasi" : "Ciutkan navigasi", onClick: p.onToggleCollapse })) : null);
@@ -900,7 +902,7 @@
   function ViewSwitcher(p) {
     return h("div", { className: "rk-viewswitch", role: "group", "aria-label": p.label || "Tampilan" }, p.options.map(function (o) {
       var on = o.id === p.value;
-      return h("button", { key: o.id, type: "button", className: "rk-viewswitch-btn", "aria-pressed": on ? "true" : "false", title: o.label,
+      return h("button", { key: o.id, type: "button", className: "rk-viewswitch-btn", "aria-pressed": on ? "true" : "false", title: o.label, "aria-label": o.label,
         onClick: function () { if (!on && p.onChange) p.onChange(o.id); } },
         h(Icon, { name: o.icon || VIEW_ICON[o.id] }), h("span", { className: "l" }, o.label));
     }));

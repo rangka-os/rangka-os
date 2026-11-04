@@ -169,7 +169,7 @@
       function Side(q) {
         var c = useState(!!q.collapsed), col = c[0], setCol = c[1], cur = useState("invoice"), current = cur[0], setCurrent = cur[1];
         return h(R.Sidebar, { switcher: { title: "Kopi Senja", subtitle: "Outlet Dago", onClick: function () {} }, search: { label: "Cari", onOpen: function () {} },
-          pinned: SIDE_PINNED, groups: SIDE_GROUPS, current: current, onNavigate: setCurrent, collapsed: col, onToggleCollapse: function () { setCol(!col); } });
+          pinned: SIDE_PINNED, groups: SIDE_GROUPS, current: current, onNavigate: setCurrent, collapsed: col, onToggleCollapse: function () { setCol(!col); }, user: "Dede Kurniawan", role: "Pemilik" });
       }
       return h("div", { className: "gx-demo gx-wide" },
         h("div", { className: "gx-frame tall", style: { flex: "0 0 auto", width: "216px" } }, h(Side)),

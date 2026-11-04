@@ -603,6 +603,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-side.collapsed nav { padding: 4px 6px 12px; }
 .rk-side.collapsed .rk-navlink { justify-content: center; padding: 0; }
 .rk-side.collapsed .rk-navlink .rk-dot { top: 4px; right: 6px; }
+.rk-side-foot.collapsed { justify-content: center; padding: 8px 4px; overflow: hidden; min-width: 0; }
 .rk-side.collapsed .rk-side-collapse { justify-content: center; padding: 4px 0 8px; }
 .rk-shell:has(> .rk-side.collapsed) { grid-template-columns: var(--sidebar-collapsed) minmax(0, 1fr); }
 .rk-side-foot { display: flex; align-items: center; gap: 8px; padding: 8px 12px; border-top: 1px solid var(--line); font-size: var(--font-size); }

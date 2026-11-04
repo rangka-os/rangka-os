@@ -14,15 +14,16 @@
   #rk-app { height: 100%; }
   .cn-shell { height: 100%; min-height: 0; box-sizing: border-box; padding-left: env(safe-area-inset-left, 0px); padding-right: env(safe-area-inset-right, 0px); }
   .cn-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
-  .cn-shell > .rk-side nav { flex: 0 0 auto; overflow: visible; }
+  .cn-shell > .rk-side nav { flex: 1 0 auto; overflow: visible; } /* footer and collapse sit at the bottom */
   .cn-shell .rk-shell-main { min-height: 0; }
   .cn-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
   .cn-main > .rk-shell-content, .cn-main > .rk-pagehead { max-width: var(--page-max); box-sizing: border-box; width: 100%; }
   .cn-splash, .cn-fatal { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); padding: 24px; box-sizing: border-box; }
-  .cn-menu-btn { display: none; }
-  .cn-mode { display: inline-flex; align-items: center; margin: 0 4px; }
-  .cn-mode .short { display: none; }
-  .cn-nav-scrim { display: none; }
+  .cn-menu-btn, .cn-nav-scrim, .cn-mhead { display: none; }
+  .cn-mhead-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+  .cn-mode { display: inline-flex; align-items: center; }
+  .cn-switch-menu .rk-menu { width: var(--menu-w); }
+  .cn-shell .rk-side-head small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; } /* site · version on one line */
   .cn-canvas-wrap { height: calc(100vh - 168px); min-height: 480px; border-top: 1px solid var(--line); }
 
   /* text helpers */
@@ -227,12 +228,10 @@
   .cn-lp-main .chart span { flex: 1; background: var(--pv-chart-1, var(--chart-1)); border-radius: 2px 2px 0 0; }
 
   /* side footer and login */
-  .cn-side-foot { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line-strong); padding-top: 8px; }
+  .cn-side-foot { display: flex; flex-direction: column; gap: 8px; border-top: 1px solid var(--line-strong); padding-top: 8px; flex-shrink: 0; }
   .cn-side-foot .rk-side-foot { border-top: 0; }
   .cn-demo-note { margin: 0 8px; padding: 8px 12px; border-radius: var(--r); font-size: 12px; line-height: 16px; color: var(--ink-2); background: var(--discovery-tint); display: flex; flex-direction: column; gap: 6px; }
   .cn-demo-note.ok { background: var(--ok-tint); }
-  .cn-demo-note b { color: var(--discovery); }
-  .cn-demo-note.ok b { color: var(--ok); }
   .cn-demo-note label { font-weight: 600; color: var(--ink-2); }
   .cn-demo-note span { overflow-wrap: anywhere; }
   .cn-login { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: var(--soft); }
@@ -244,19 +243,24 @@
     .cn-detail { grid-template-columns: minmax(0, 1fr); }
     .cn-layer { grid-template-columns: minmax(0, 1fr); }
   }
+  @media (min-width: 601px) and (max-width: 860px) {
+    /* the sidebar stays down to phone width (the design system hides it at 860px for the top-nav shell) */
+    .cn-shell { grid-template-columns: var(--sidebar) minmax(0, 1fr); }
+    .cn-shell > .rk-side { display: flex; }
+  }
   @media (max-width: 860px) {
-    .cn-shell { height: auto; min-height: 100%; }
-    .cn-main { overflow: visible; }
-    .cn-menu-btn { display: inline-flex; }
-    .cn-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: var(--topbar); left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
-    .cn-nav-open > .cn-nav-scrim { display: block; position: fixed; inset: var(--topbar) 0 0 0; background: var(--scrim); z-index: 39; }
     .cn-grid2 { grid-template-columns: minmax(0, 1fr); }
   }
+  @media (max-width: 600px) {
+    /* phone: a 48px bar with the menu button, the sidebar as a drawer over the page */
+    .cn-shell { height: auto; min-height: 100%; }
+    .cn-main { overflow: visible; }
+    .cn-mhead { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 8px; box-sizing: border-box; position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+    .cn-menu-btn { display: inline-flex; }
+    .cn-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
+    .cn-nav-open > .cn-nav-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
+  }
   @media (max-width: 640px) {
-    .cn-shell .rk-topnav-end .rk-iconbtn[aria-label="Bantuan"], .cn-shell .rk-topnav-end .rk-iconbtn[aria-label="Notifikasi"] { display: none; }
-    .cn-shell .rk-topnav > .rk-iconbtn[aria-label="Pindah aplikasi"] { display: none; }
-    .cn-mode .full { display: none; }
-    .cn-mode .short { display: inline; }
     .cn-hide-sm { display: none; }
     .cn-swatch-groups { grid-template-columns: minmax(0, 1fr); }
     .cn-lp-side { flex-basis: 40%; }

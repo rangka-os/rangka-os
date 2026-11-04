@@ -7,7 +7,7 @@ React comes from cdnjs in index.html; the sandbox may block it, so the test serv
 (get them with: npm pack react@18.3.1 react-dom@18.3.1 and untar). Checks every screen at 1440 and 390 px in light
 and dark: no console errors, a page title, no horizontal page scroll and no content clipped outside a scroller.
 Then walks a change set proposed -> validated -> previewed -> approved -> applied -> reverted, the owner-only rule,
-the command menu, the theme switch and proposing a change.
+the command menu, the theme switch, proposing a change, the sidebar (pinned, collapse) and the phone drawer.
 """
 import argparse, functools, http.server, os, socketserver, sys, threading
 from playwright.sync_api import sync_playwright
@@ -57,7 +57,7 @@ def route_react(page):
 OVERFLOW_JS = """() => {
   const W = window.innerWidth, out = [];
   const doc = document.documentElement.scrollWidth;
-  for (const el of document.querySelectorAll('.cn-main *, .rk-topnav *')) {
+  for (const el of document.querySelectorAll('.cn-main *, .cn-mhead *')) {
     const r = el.getBoundingClientRect();
     if (!r.width || r.right <= W + 1) continue;
     let p = el.parentElement, clipped = false;
@@ -252,16 +252,19 @@ with sync_playwright() as pw:
     if "#/apps/model/deal" not in page.url:
         fail("cmdk: did not open the deal model (" + page.url + ")")
 
-    # 6. theme via account menu
-    page.locator(".rk-av-btn").click()
-    page.locator(".rk-account .rk-mi", has_text="Gelap").click()
+    # 6. theme via the switcher menu
+    page.locator(".rk-side-switch").click()
+    page.locator(".cn-switch-menu .rk-mi", has_text="Gelap").click()
     if page.evaluate("document.documentElement.getAttribute('data-theme')") != "dark":
         fail("theme: dark not applied")
-    page.locator(".rk-av-btn").click()
-    page.locator(".rk-account .rk-mi", has_text="Terang").click()
+    if page.locator(".cn-switch-menu").count():
+        fail("switcher: menu still open after a pick")
+    page.locator(".rk-side-switch").click()
+    page.locator(".cn-switch-menu .rk-mi", has_text="Terang").click()
 
-    # 7. propose a change from the Console
-    page.locator(".rk-topnav-create").click()
+    # 7. propose a change from the switcher menu
+    page.locator(".rk-side-switch").click()
+    page.locator(".cn-switch-menu .rk-mi", has_text="Usulkan perubahan").click()
     page.wait_for_selector("#cn-editor")
     page.wait_for_function("document.querySelector('#cn-editor').value.length > 10")
     page.locator(".rk-dialog input").first.fill("Coba warna aksen")
@@ -273,6 +276,57 @@ with sync_playwright() as pw:
         fail("propose: new change set not proposed")
     if errs:
         fail(f"interactions: console errors {errs[:3]}")
+    ctx.close()
+
+    # 8. sidebar: pinned entries, switcher, ⌘K from the search row, collapse kept across a reload
+    ctx, page, errs = new_page(browser, 1280, "light")
+    page.goto(BASE + "?demo=1#/ringkasan")
+    page.wait_for_selector(".rk-pagehead h1", timeout=15000)
+    if page.locator(".rk-topnav").count():
+        fail("sidebar: TopNav still rendered")
+    pinned = page.eval_on_selector_all(".rk-side nav > .rk-navgroup:first-child .rk-navlink", "els => els.map(e => e.textContent)")
+    if [p_.rstrip("0123456789") for p_ in pinned] != ["Ringkasan", "Change set", "Audit log"]:
+        fail(f"sidebar: pinned {pinned}")
+    heads = page.eval_on_selector_all(".rk-side nav .rk-navgroup > p", "els => els.map(e => e.textContent)")
+    if heads != ["Lapis 0–2 · Kernel dan sistem", "Lapis 3 · Integrasi", "Lapis 4 · Organisasi", "Lapis 5 · Aplikasi", "Lapis 6 · Presentasi"]:
+        fail(f"sidebar: groups {heads}")
+    sw = page.locator(".rk-side-switch").inner_text()
+    if "Rangka Console" not in sw or "kopi-senja" not in sw:
+        fail(f"sidebar: switcher text {sw!r}")
+    if page.locator('.rk-side [aria-current=page]').inner_text() != "Ringkasan":
+        fail("sidebar: Ringkasan not current")
+    page.locator(".rk-side-search").click()
+    page.wait_for_selector(".rk-cmd input")
+    page.keyboard.press("Escape")
+    page.locator(".rk-side-collapse button").click()
+    if not page.locator(".rk-side.collapsed").count():
+        fail("sidebar: did not collapse")
+    page.reload()
+    page.wait_for_selector(".rk-pagehead h1", timeout=15000)
+    if not page.locator(".rk-side.collapsed").count():
+        fail("sidebar: collapse not kept after reload")
+    if args.shots:
+        page.screenshot(path=os.path.join(args.shots, "1280-collapsed.png"))
+    page.locator(".rk-side-collapse button").click()
+    if errs:
+        fail(f"sidebar: console errors {errs[:3]}")
+    ctx.close()
+
+    # 9. phone: the 48px bar opens the sidebar as a drawer; picking a screen closes it
+    ctx, page, errs = new_page(browser, 390, "light")
+    page.goto(BASE + "?demo=1#/ringkasan")
+    page.wait_for_selector(".rk-pagehead h1", timeout=15000)
+    if page.locator(".rk-side").is_visible():
+        fail("phone: sidebar visible before opening the drawer")
+    page.locator(".cn-mhead .cn-menu-btn").click()
+    if not page.locator(".rk-side").is_visible() or page.locator(".rk-side-collapse").count():
+        fail("phone: drawer not open, or it offers collapse")
+    page.locator(".rk-side .rk-navlink", has_text="Audit log").click()
+    page.wait_for_function("location.hash === '#/audit'", timeout=3000)
+    if page.locator(".cn-nav-open").count():
+        fail("phone: drawer still open after navigating")
+    if errs:
+        fail(f"phone: console errors {errs[:3]}")
     ctx.close()
     browser.close()
 

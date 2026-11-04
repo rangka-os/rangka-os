@@ -215,6 +215,7 @@
     { id: "changesets", label: "Change set", icon: "amend", group: "Tata kelola" },
     { id: "audit", label: "Audit log", icon: "shield", group: "Tata kelola" }
   ];
+  var PINNED = ["ringkasan", "changesets", "audit"];
   function screenOf(id) { return SCREENS.filter(function (s) { return s.id === id; })[0] || SCREENS[0]; }
   function parseRoute() {
     var p = (location.hash || "#/ringkasan").replace(/^#\/?/, "").split("/").map(decodeURIComponent);
@@ -228,7 +229,7 @@
     var rows = [
       { n: 6, to: "/appearance", files: "themes/*.rk · layouts/*.rk", chips: [
         { label: "Tema " + ((meta.theme || {}).name || "—"), tone: meta.theme ? "ok" : "default", word: meta.theme ? "Aktif" : "Tidak ada" },
-        { label: "Layout " + ((meta.layout || {}).name || "—"), tone: meta.layout && meta.layout.name ? "ok" : "default", word: meta.layout && meta.layout.name ? (meta.layout.shell || "top-nav") : "Tidak ada" }] },
+        { label: "Layout " + ((meta.layout || {}).name || "—"), tone: meta.layout && meta.layout.name ? "ok" : "default", word: meta.layout && meta.layout.name ? (meta.layout.shell || "side-only") : "Tidak ada" }] },
       { n: 5, to: "/apps", files: "apps/*/app.rk · models · dashboards · flows", chips: (meta.apps || []).map(function (a) {
         var st = (s.apps || []).filter(function (x) { return x.name === a.name; })[0];
         return { label: a.name + " " + (a.version || ""), tone: st || !s.apps ? "ok" : "warn", word: st || !s.apps ? "Terpasang" : "Tidak dimuat", to: "/apps" };
@@ -894,7 +895,7 @@
         h(Section, { title: "Layout " + (L(layout.label) || layout.name || "—"), tags: layout.name ? mono("layouts/" + layout.name + ".rk", "cn-tag") : null,
             extra: layout.name ? h(R.Button, { size: "sm", icon: "eye", onClick: function () { ctx.nav("/appearance/source/layouts/" + layout.name + ".rk"); } }, "Sumber") : null },
           h("div", { className: "cn-grid2" },
-            h(R.Card, { title: "Pengaturan" }, h(R.Descriptions, { column: 1, items: [["Shell", layout.shell || "top-nav"], ["Turunan dari", layout.extends || "—"], ["Halaman awal", layout.home ? mono(layout.home) : "—"],
+            h(R.Card, { title: "Pengaturan" }, h(R.Descriptions, { column: 1, items: [["Shell", layout.shell || "side-only"], ["Turunan dari", layout.extends || "—"], ["Halaman awal", layout.home ? mono(layout.home) : "—"],
               ["Tombol Buat", ((layout.nav || {}).create || []).join(", ") || "—"], ["Pindah aplikasi", (layout.nav || {}).app_switcher === false ? "Mati" : "Aktif"], ["Halaman khusus", (layout.pages || []).map(function (p) { return L(p.label) + " (" + p.blocks.length + " blok)"; }).join(", ") || "—"]] })),
             h(R.Card, { title: "Pratinjau shell", extra: h("span", { className: "rk-card-sub" }, dark ? "Gelap" : "Terang") }, h(LayoutPreview, { layout: layout, meta: meta, theme: meta.theme, dark: dark })))),
         ctx.route.parts[0] === "source" ? h(R.Drawer, { title: "Sumber", subtitle: ctx.route.parts.slice(1).join("/"), icon: "invoice", wide: true, onClose: function () { ctx.nav("/appearance"); } },
@@ -966,12 +967,48 @@
 
   /* ================================================================ app shell */
   function readTheme() { try { return localStorage.getItem("rk-console-theme") || "system"; } catch (e) { return "system"; } }
+  var COLLAPSE_KEY = "rk.console.sidebar.collapsed", PHONE = "(max-width: 600px)";
+  function readCollapsed() { try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch (e) { return false; } }
+  function writeCollapsed(on) { try { localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (e) {} }
+  function isPhone() { return !!(window.matchMedia && window.matchMedia(PHONE).matches); }
+  /** Below 600px the sidebar is a drawer behind the 48px bar: no collapse there. */
+  function usePhone() {
+    var ps = useState(isPhone()), phone = ps[0], setPhone = ps[1];
+    useEffect(function () {
+      if (!window.matchMedia) return undefined;
+      var mq = window.matchMedia(PHONE), on = function () { setPhone(mq.matches); };
+      if (mq.addEventListener) mq.addEventListener("change", on); else mq.addListener(on);
+      return function () { if (mq.removeEventListener) mq.removeEventListener("change", on); else mq.removeListener(on); };
+    }, []);
+    return phone;
+  }
+  /** R.Menu under the sidebar's switcher (p.at: its rect); closes on a pick, a click outside it or Escape. */
+  function SwitcherMenu(p) {
+    var ref = useRef(null);
+    useEffect(function () {
+      function down(e) {
+        if (ref.current && ref.current.contains(e.target)) return;
+        if (e.target.closest && e.target.closest(".rk-side-switch")) return; // the switcher toggles it itself
+        p.onClose();
+      }
+      function key(e) { if (e.key === "Escape") p.onClose(); }
+      document.addEventListener("mousedown", down);
+      document.addEventListener("keydown", key);
+      return function () { document.removeEventListener("mousedown", down); document.removeEventListener("keydown", key); };
+    }, []);
+    var top = Math.round(p.at.bottom + 4), left = Math.max(8, Math.round(p.at.left));
+    return h("div", { ref: ref, className: "cn-switch-menu" },
+      h(R.Menu, { float: true, items: p.items, onClose: p.onClose,
+        style: { top: top + "px", left: left + "px", maxHeight: "calc(100vh - " + (top + 8) + "px)", overflowY: "auto" } }));
+  }
   function App(p) {
     var rs = useState(parseRoute()), route = rs[0], setRoute = rs[1];
     var ms = useState(null), meta = ms[0], setMeta = ms[1], ss = useState(null), status = ss[0], setStatus = ss[1], es = useState(null), err = es[0], setErr = es[1];
     var mes = useState(null), me = mes[0], setMe = mes[1], cl = useState([]), csList = cl[0], setCsList = cl[1], cr = useState(0), csRev = cr[0], setCsRev = cr[1];
     var ts = useState(readTheme()), theme = ts[0], setTheme = ts[1], ks = useState(false), cmd = ks[0], setCmd = ks[1], nv = useState(false), navOpen = nv[0], setNavOpen = nv[1];
     var tt = useState([]), toasts = tt[0], setToasts = tt[1], lv = useState([]), live = lv[0], setLive = lv[1], po = useState(false), propose = po[0], setPropose = po[1];
+    var cls = useState(readCollapsed()), collapsed = cls[0], setCollapsed = cls[1], sms = useState(null), switchAt = sms[0], setSwitchAt = sms[1]; // the switcher's rect while its menu is open
+    var phone = usePhone();
     var mq = useState(window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)").matches : false), sysDark = mq[0], setSysDark = mq[1];
     var demo = api.mode === "demo";
 
@@ -993,7 +1030,7 @@
         if (ev.event === "job") loadStatus();
       });
     }, []);
-    useEffect(function () { function k(e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setCmd(true); } } document.addEventListener("keydown", k); return function () { document.removeEventListener("keydown", k); }; }, []);
+    useEffect(function () { function k(e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSwitchAt(null); setNavOpen(false); setCmd(true); } } document.addEventListener("keydown", k); return function () { document.removeEventListener("keydown", k); }; }, []);
     useEffect(function () {
       if (theme === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", theme);
       try { localStorage.setItem("rk-console-theme", theme); } catch (e) {}
@@ -1004,10 +1041,13 @@
     if (!meta || !status) return h("div", { className: "cn-splash" }, h(R.Spinner, { size: "lg", label: "Memuat Console" }), h("span", null, "Memuat Rangka Console…"));
 
     var pending = csList.filter(function (c) { return ["proposed", "validated", "previewed", "approved"].indexOf(c.status) >= 0; }).length;
-    var groups = [];
+    // Ringkasan, Change set and Audit log are pinned above the layer groups
+    var pinned = [], groups = [];
     SCREENS.forEach(function (s) {
+      var it = { id: s.id, label: s.label, icon: s.icon, count: s.id === "changesets" ? pending || null : null };
+      if (PINNED.indexOf(s.id) >= 0) { pinned.push(it); return; }
       var g = groups.filter(function (x) { return x.label === s.group; })[0]; if (!g) groups.push(g = { label: s.group, items: [] });
-      g.items.push({ id: s.id, label: s.label, icon: s.icon, count: s.id === "changesets" ? pending || null : null });
+      g.items.push(it);
     });
     var isDark = theme === "dark" || (theme === "system" && sysDark);
     var ctx = { route: route, meta: meta, status: status, me: me, csList: csList, csRev: csRev, live: live, nav: nav, toast: toast, isDark: isDark,
@@ -1032,32 +1072,47 @@
       { label: "Change set", items: csList.map(function (c) { return { label: c.title, icon: "amend", sub: c.id + " · " + (CS_STATUS[c.status] || [0, c.status])[1], onSelect: function () { nav("/changesets/" + c.id); } }; }) }];
     var role = me && me.roles && me.roles[0];
 
-    return h("div", { className: cx("rk-shell top cn-shell", navOpen && "cn-nav-open") },
-      h(R.TopNav, { product: { name: "Rangka Console", icon: "settings", color: "#1c1917" }, items: [{ id: "ringkasan", label: "Ringkasan" }, { id: "changesets", label: "Change set" }, { id: "audit", label: "Audit" }],
-        current: ["ringkasan", "changesets", "audit"].indexOf(screen) >= 0 ? screen : null, createLabel: "Usulkan perubahan", theme: theme, unread: pending > 0, searchPlaceholder: "Cari layar, model, change set",
-        user: { name: (me && me.name) || "…", email: me && me.email, company: "Kopi Senja", companies: ["Kopi Senja", "CV Maju Jaya"] }, currentApp: "console",
-        apps: [{ id: "console", name: "Rangka Console", desc: "Kontrol instalasi", icon: "settings", color: "#1c1917" }, { id: "crm", name: "Rangka CRM", desc: "Lead, peluang, aktivitas", icon: "card", color: "#5e4db2" }, { id: "sales", name: "Rangka Penjualan", desc: "Faktur, piutang", icon: "invoice", color: "#0c66e4" }],
-        actions: h(React.Fragment, null,
-          h("span", { className: "cn-mode", title: demo ? "Data demo dari demo-data.js: " + api.modeReason : "Terhubung ke kernel " + api.modeReason }, h(R.Lozenge, { tone: demo ? "new" : "ok", bold: demo }, h("span", { className: "full" }, demo ? "Mode demo" : "Terhubung"), h("span", { className: "short" }, demo ? "Demo" : "Live"))),
-          h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "cn-menu-btn", onClick: function () { setNavOpen(!navOpen); } })),
-        onHome: function () { nav("/ringkasan"); }, onNavigate: function (id) { nav("/" + id); }, onCreate: function () { setPropose(true); }, onSearch: function () { setCmd(true); },
-        onNotifications: function () { nav("/changesets"); }, onHelp: function () { toast("info", "Bantuan", "Console membaca /api/v1 sesuai CONTRACTS.md. Tekan ⌘K untuk lompat ke layar mana pun."); },
-        onSwitch: function (a) { if (a.id !== "console") toast("info", "Membuka " + a.name, "Di instalasi asli, app terbuka di tab baru dengan sesi yang sama."); },
-        onAccount: function (k) {
-          if (k.indexOf("theme:") === 0) setTheme(k.slice(6));
-          else if (k.indexOf("co:") === 0) nav("/orgs/" + (k === "co:CV Maju Jaya" ? "cv-maju-jaya" : "kopi-senja"));
-          else if (k === "logout") api.logout().then(function () { toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri."); if (!demo) location.reload(); });
-          else toast("info", "Belum ada di Console v0", "Profil dan keamanan akun ada di Rangka ID.");
-        } }),
-      h(R.Sidebar, { app: { name: "Rangka Console", type: (status.site || meta.site || "") + " · " + (status.version || ""), icon: "settings", color: "#1c1917" }, groups: groups, current: screen === "ringkasan" ? "ringkasan" : screen, onNavigate: function (id) { nav("/" + id); },
-        footer: h("div", { className: "cn-side-foot" },
-          demo ? h("div", { className: "cn-demo-note" }, h("b", null, "Mode demo"), h("span", null, "Data dari file .rk asli; status disimulasikan. " + (api.modeReason === "?demo=1" ? "Dibuka dengan ?demo=1." : "Kernel tidak terjangkau: " + api.modeReason + ".")),
+    function help() { toast("info", "Bantuan", "Console membaca /api/v1 sesuai CONTRACTS.md. Tekan ⌘K untuk lompat ke layar mana pun."); }
+    function openCmd() { setSwitchAt(null); setNavOpen(false); setCmd(true); }
+    function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
+    function logout() { api.logout().then(function () { toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri."); if (!demo) location.reload(); }); }
+    /** The switcher's menu: propose a change, theme, help and the account (Console has no org switch). */
+    function switcherItems() {
+      return [{ label: "Usulkan perubahan", icon: "add", onSelect: function () { setNavOpen(false); setPropose(true); } }, "-", { heading: "Tema" }].concat(
+        [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
+          return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { setTheme(t[0]); } };
+        }), ["-", { label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
+        { label: "Profil", icon: "user", onSelect: function () { toast("info", "Belum ada di Console v0", "Profil dan keamanan akun ada di Rangka ID."); } },
+        { label: "Keluar", icon: "logout", onSelect: logout }]);
+    }
+    var narrow = collapsed && !phone;
+    var mode = h("span", { className: "cn-mode", title: demo ? "Data demo dari demo-data.js: " + api.modeReason : "Terhubung ke kernel " + api.modeReason },
+      h(R.Lozenge, { tone: demo ? "new" : "ok", bold: demo }, demo ? "Mode demo" : "Terhubung"));
+    var footer = narrow
+      ? (me ? h("span", { title: (me.name || "") + (demo ? " · Mode demo" : ""), role: "img", "aria-label": me.name || "Akun" }, h(R.Avatar, { name: me.name || "?", size: 28, presence: "online" })) : null)
+      : h("div", { className: "cn-side-foot" },
+          demo ? h("div", { className: "cn-demo-note" }, mode, h("span", null, "Data dari file .rk asli; status disimulasikan. " + (api.modeReason === "?demo=1" ? "Dibuka dengan ?demo=1." : "Kernel tidak terjangkau: " + api.modeReason + ".")),
             h("label", null, "Masuk sebagai"), h(R.Segmented, { label: "Peran demo", value: role || "owner", options: [{ value: "owner", label: "Pemilik" }, { value: "sales_manager", label: "Manajer sales" }],
               onChange: function (v) { api.setDemoRole(v); toast("info", "Peran demo: " + (ROLE_LABEL[v] || v), v === "owner" ? "Bisa menyetujui semua risiko." : "Tidak bisa menyetujui risiko tinggi."); } }))
-            : h("div", { className: "cn-demo-note ok" }, h("b", null, "Kernel"), h("span", null, api.modeReason)),
-          me ? h("div", { className: "rk-side-foot" }, h(R.Avatar, { name: me.name || "?", size: 28, presence: "online" }), h("span", { className: "g" }, h("b", null, me.name), h("small", null, (me.roles || []).map(function (r) { return ROLE_LABEL[r] || r; }).join(", ")))) : null) }),
+            : h("div", { className: "cn-demo-note ok" }, mode, h("span", null, api.modeReason)),
+          me ? h("div", { className: "rk-side-foot" }, h(R.Avatar, { name: me.name || "?", size: 28, presence: "online" }), h("span", { className: "g" }, h("b", null, me.name), h("small", null, (me.roles || []).map(function (r) { return ROLE_LABEL[r] || r; }).join(", ")))) : null);
+
+    return h("div", { className: cx("rk-shell cn-shell", navOpen && "cn-nav-open") },
+      h(R.Sidebar, {
+        switcher: { title: "Rangka Console", subtitle: [status.site || meta.site, status.version].filter(Boolean).join(" · ") || undefined,
+          mark: h("span", { className: "tile", style: { background: "#1c1917" } }, h(R.Icon, { name: "settings" })),
+          onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } },
+        search: { label: "Cari", onOpen: openCmd },
+        pinned: pinned, groups: groups, current: screen, onNavigate: function (id) { nav("/" + id); },
+        collapsed: narrow, onToggleCollapse: phone ? undefined : toggleCollapsed, footer: footer }),
       navOpen ? h("div", { className: "cn-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
-      h("div", { className: "rk-shell-main" }, h("main", { className: "cn-main", key: screen + "/" + route.parts.join("/") }, body)),
+      h("div", { className: "rk-shell-main" },
+        h("header", { className: "cn-mhead" }, // phone only: the sidebar opens as a drawer
+          h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "cn-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
+          h("b", { className: "cn-mhead-t" }, "Rangka Console"),
+          h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd })),
+        h("main", { className: "cn-main", key: screen + "/" + route.parts.join("/") }, body)),
+      switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
       cmd ? h(R.CommandMenu, { groups: cmdGroups, placeholder: "Cari layar, model, dasbor, flow atau change set…", onClose: function () { setCmd(false); },
         onSelect: function (it, q) { if (it.ai) toast("info", "Raka", "Di Console v0, pertanyaan ke Raka belum tersedia. Gunakan Omilo untuk “" + q + "”."); } }) : null,
       propose ? h(ProposeDialog, Object.assign({}, ctx, { onClose: function () { setPropose(false); } })) : null,

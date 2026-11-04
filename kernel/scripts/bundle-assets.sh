@@ -1,13 +1,14 @@
 #!/bin/sh
 # Copy rangka-os/web and rangka-os/templates into the binary's bundle (internal/bundle/files) for a release
-# build. `scripts/bundle-assets.sh clean` empties it again. Run from rangka-os/kernel.
+# build (web/console, design-system, app, canvas; canvas/testdata ships for the Console demo mode).
+# `scripts/bundle-assets.sh clean` empties it again. Run from rangka-os/kernel.
 set -e
 cd "$(dirname "$0")/.."
 B=internal/bundle/files
 find "$B" -mindepth 1 -maxdepth 1 ! -name README.md -exec rm -rf {} +
 [ "$1" = "clean" ] && exit 0
 mkdir -p "$B/web" "$B/templates"
-for d in console design-system app; do
+for d in console design-system app canvas; do
   [ -d "../web/$d" ] || continue
   mkdir -p "$B/web/$d"
   # web/app/test holds the node unit tests: not part of the shipped app

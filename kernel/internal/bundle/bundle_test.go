@@ -19,8 +19,11 @@ func TestDirExtracts(t *testing.T) {
 	if d == "" {
 		t.Fatal("no directory")
 	}
-	if _, err := os.Stat(filepath.Join(d, "console", "index.html")); err != nil {
-		t.Fatal(err)
+	// the Console embeds web/canvas and its demo mode fetches ../canvas/testdata/*.json
+	for _, f := range []string{"console/index.html", "canvas/canvas.js", "canvas/testdata/lead_to_cash.json"} {
+		if _, err := os.Stat(filepath.Join(d, filepath.FromSlash(f))); err != nil {
+			t.Fatal(err)
+		}
 	}
 	if again := Dir("web"); again != d {
 		t.Fatalf("second call %s, want %s", again, d)

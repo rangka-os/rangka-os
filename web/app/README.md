@@ -7,8 +7,10 @@ so deep links survive a reload and the kernel needs no SPA fallback:
 
 `#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>`
 
-The UI is Bahasa Indonesia first and works from 400px (phone) to desktop. Metadata changes are not made here: they go
-through the Console and change sets.
+The UI is Bahasa Indonesia first and works from 400px (phone) to desktop. People who may propose change sets
+(`meta.changesets.propose`) get a Pakai / Ubah toggle: in Ubah they rearrange dashboards, forms, list and kanban columns
+and the menu, and add fields, stages, approvals, automations and tables; every edit is a change set (contract 0015).
+`?ubah=1` opens in Ubah, `?preview=<change set>` opens a read-only preview of a pending change set.
 
 ## Files
 
@@ -18,7 +20,8 @@ through the Console and change sets.
 | `tokens.css` | Design tokens (Ink, Bata, Kapur), light and dark |
 | `engine.js` | CEL subset, defaults, computed fields, rules and status; `RangkaEngine.create(meta, lookup)`. Reference semantics for the kernel |
 | `api.js` | `RangkaAppAPI`: every kernel call, `ApiError`, feature detection, `parseRupiah` / `rupiah` |
-| `shell.js` | Router, sign-in, top nav, sidebar from `meta.apps[].menu`, org switcher, 401 handling; mounts last |
+| `shell.js` | Router, sign-in, top nav, sidebar from the layout's `nav.side` (else `meta.apps[].menu`), org switcher, 401 handling, Ubah state and the menu editor; mounts last |
+| `ubah.js` | Change-set op builders (pure), Ubah helpers, and the shared Ubah UI: mode toggle, bar, preview banner, change-set card, add dialogs |
 | `list.js` | List (server search, quick filters, sort, pages) and kanban |
 | `form.js` | Form, field editors, link search, child grid, live preview, lifecycle bar, actions, server errors |
 | `fields.js` | Field editors and read-only renderers |
@@ -42,6 +45,7 @@ absent meta key turns it off and its buttons disappear.
 | Attachments | `GET /api/v1/r/<model>/<name>/attachments` exists and is not `501 files_disabled` |
 | Imports | `meta.imports` is not empty |
 | Buttons per action | `meta.models[m].can[action]` when present |
+| Ubah | `meta.changesets.propose`; "Setujui & terapkan" needs `approve` (and `approve_high` for high risk) |
 
 ## Run
 

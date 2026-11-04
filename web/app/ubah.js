@@ -140,11 +140,31 @@
     return fileOps("custom/" + model + ".rk", "overlay", "model", model, existing, edit);
   }
 
+  /* The kernel applies views.<view>.add after a replaced layout or column list, so a field the new list already places
+   * (the app shows merged metadata, added fields included) is dropped from add; else it would show twice. */
+  function dropPlaced(ed, view, placed) {
+    var add = ed.get(["views", view, "add"]);
+    if (!Array.isArray(add)) return;
+    var keep = add.filter(function (a) { return placed.indexOf(isObj(a) ? a.field : a) < 0; });
+    if (keep.length !== add.length) ed.put(["views", view, "add"], keep);
+  }
+  function layoutFields(layout) {
+    var out = [];
+    (layout || []).forEach(function (s) { (s.columns ? [].concat.apply([], s.columns) : s.fields || []).forEach(function (n) { out.push(n); }); });
+    return out;
+  }
+
   RA.opsFormLayout = function (model, layout, existing) {
-    return { title: "Ubah urutan isian formulir " + model, ops: overlayOps(model, existing, function (ed) { ed.put(["views", "form", "layout"], layout); }) };
+    return { title: "Ubah urutan isian formulir " + model, ops: overlayOps(model, existing, function (ed) {
+      ed.put(["views", "form", "layout"], layout);
+      dropPlaced(ed, "form", layoutFields(layout));
+    }) };
   };
   RA.opsListColumns = function (model, columns, existing) {
-    return { title: "Ubah kolom daftar " + model, ops: overlayOps(model, existing, function (ed) { ed.put(["views", "list", "columns"], columns); }) };
+    return { title: "Ubah kolom daftar " + model, ops: overlayOps(model, existing, function (ed) {
+      ed.put(["views", "list", "columns"], columns);
+      dropPlaced(ed, "list", (columns || []).map(function (c) { return isObj(c) ? c.field : c; }));
+    }) };
   };
   RA.opsKanbanColumns = function (model, values, existing) {
     return { title: "Ubah urutan kolom papan " + model, ops: overlayOps(model, existing, function (ed) { ed.put(["views", "kanban", "columns"], values); }) };
@@ -296,7 +316,9 @@
     for (var i = hist.length - 1; i >= 0; i--) if (hist[i] && hist[i].status === "proposed") { note = hist[i].note || ""; break; }
     var m = /^risk \w+:\s*(.*)$/.exec(note);
     if (!m) return [];
-    return m[1].split(/;\s*/).map(function (r) { return r.replace(/^(low|medium|high):\s*/, ""); }).filter(Boolean);
+    var seen = {};
+    return m[1].split(/;\s*/).map(function (r) { return r.replace(/^(low|medium|high):\s*/, ""); })
+      .filter(function (r) { if (!r || seen[r]) return false; seen[r] = 1; return true; }); // one reason per op: a create + patch repeats it
   };
 
   /** The change set's dry run as display lines [{kind: migration|file|affected|note, text}]. meta (optional) names models. */
@@ -381,4 +403,285 @@
     return { label: "Saat " + (L(f.label) || f.name) + " jadi " + shown + ", isi " + (L(t.label) || t.name),
       when: "record." + f.name + " == " + celLit(f, a.value, "Nilai pemicu"), set: set };
   };
+
+  /** A copy of a form layout with one field moved. from/to: {s: section index, c: column index (sections with
+   *  `columns`), i: position}. Within one list `to.i` is the final position; into another list the field goes before i. */
+  RA.moveInLayout = function (layout, from, to) {
+    var out = clone(layout || []);
+    function list(at) { var sec = out[at.s] || {}; return sec.columns ? sec.columns[at.c || 0] : sec.fields; }
+    var src = list(from), dst = list(to);
+    if (!src || !dst || from.i < 0 || from.i >= src.length) return out;
+    var it = src.splice(from.i, 1)[0];
+    dst.splice(Math.max(0, Math.min(dst.length, to.i)), 0, it);
+    return out;
+  };
+
+  /* ---------------------------------------------------------------- menu (layout nav.side) */
+
+  /** The menu as nav.side: the layout's when it has one, else the app menus converted. */
+  RA.menuSide = function (meta) {
+    var side = meta.layout && meta.layout.nav && meta.layout.nav.side;
+    return Array.isArray(side) && side.length ? clone(side) : RA.sideFromMenus(meta);
+  };
+
+  /** config.rk and the layout file the menu lives in → {name, existing, config}. */
+  RA.menuFiles = function (api) {
+    return api.file("config.rk").then(function (cfg) {
+      var conf = (cfg && cfg.parsed) || {}, name = conf.layout || "utama";
+      return api.file("layouts/" + name + ".rk").then(function (ex) { return { name: name, existing: ex, config: conf }; });
+    });
+  };
+
+  /** A new table and its menu entry. When the layout file has no nav.side yet, the shown menu is written first so the
+   *  sidebar keeps every entry it had. */
+  RA.opsAddTable = function (meta, files, app, spec) {
+    var ex = files.existing, side = ex && ex.parsed && ex.parsed.nav && ex.parsed.nav.side;
+    if (Array.isArray(side) && side.length) return RA.opsAddModel(app, spec, files.name, ex);
+    var shown = RA.menuSide(meta), seed = RA.opsMenu(files.name, shown, ex, files.config);
+    var after = clone((ex && ex.parsed) || { name: files.name });
+    after.nav = Object.assign({}, after.nav || {}, { side: shown });
+    var add = RA.opsAddModel(app, spec, files.name, { parsed: after });
+    return { title: add.title, modelName: add.modelName, ops: add.ops.slice(0, 2).concat(seed.ops, add.ops.slice(2)) };
+  };
+
+  /* ================================================================ browser only from here
+   * RA.UbahCtx (provided by the shell): {on, preview, busy, canApprove, canApproveHigh, run(change), edit(path, build),
+   * menu(build), showPending()}. on is false while previewing. run proposes and, for a low-risk change by an approver,
+   * applies it (toast "Perubahan diterapkan" + "Urungkan"); anything else opens the change-set card. edit fetches the
+   * target file first and hands it to build(existing) → {title, ops}; a build that throws rejects with its message.
+   * Components: ModeToggle, UbahBar, PreviewBanner, ChangeSetCard, EditDialog and the add dialogs (field, approval,
+   * automation, status, table). */
+  var React = global.React, R = global.Rangka;
+  if (!React || !R || !global.document) return;
+  var h = React.createElement, useState = React.useState, useEffect = React.useEffect, useContext = React.useContext;
+
+  function errText(e) {
+    var first = e && e.body && Array.isArray(e.body.errors) && e.body.errors[0];
+    if (e && e.status === 0) return "Tidak bisa terhubung ke server. Coba lagi.";
+    return (first && first.message) || (e && e.message) || "Permintaan gagal";
+  }
+  RA.ubahError = errText;
+
+  RA.UbahCtx = React.createContext(null);
+  var OFF = { on: false, preview: null, busy: false };
+  RA.useUbah = function () { return useContext(RA.UbahCtx) || OFF; };
+
+  /* ---------------------------------------------------------------- top bar pieces */
+
+  /** Pakai / Ubah. Own markup (not Segmented) so the views' `.rk-seg` selectors keep matching one control. */
+  RA.ModeToggle = function (p) {
+    return h("div", { className: "ap-ubah-mode", role: "group", "aria-label": "Mode" }, [["pakai", "Pakai"], ["ubah", "Ubah"]].map(function (o) {
+      var on = (o[0] === "ubah") === !!p.on;
+      return h("button", { key: o[0], type: "button", "aria-pressed": on ? "true" : "false", onClick: function () { if (!on) p.onChange(o[0] === "ubah"); } }, o[1]);
+    }));
+  };
+
+  RA.UbahBar = function (p) {
+    return h("div", { className: "ap-ubah-bar", role: "region", "aria-label": "Mode ubah" },
+      h("span", { className: "ap-ubah-bar-t" }, "Mode ubah · perubahan jadi change set"),
+      p.busy ? h(R.Spinner, { size: "sm", label: "Menyimpan perubahan" }) : null,
+      h(R.Button, { size: "sm", variant: "quiet", icon: "time", onClick: p.onPending }, "Perubahan menunggu"));
+  };
+
+  RA.PreviewBanner = function (p) {
+    return h("div", { className: "ap-ubah-preview", role: "status" },
+      h(R.Icon, { name: "eye" }), h("span", { className: "ap-ubah-preview-t" }, "Pratinjau: " + (p.cs.title || p.cs.id)),
+      h(R.Button, { size: "sm", onClick: p.onExit }, "Keluar pratinjau"));
+  };
+
+  /* ---------------------------------------------------------------- change-set card */
+
+  var TONE = { low: "ok", medium: "warn", high: "bad" };
+  var OPEN = { proposed: 1, validated: 1, invalid: 1, previewed: 1, approved: 1 };
+
+  /** One change set (p.cs) or the pending list (p.list). Actions: onPreview(cs), onApprove(cs) → Promise,
+   *  onReject(cs) → Promise, onOpen(id), onClose. */
+  RA.ChangeSetCard = function (p) {
+    var bs = useState(null), busy = bs[0], setBusy = bs[1];
+    var es = useState(null), err = es[0], setErr = es[1];
+    var ls = useState(null), list = ls[0], setList = ls[1];
+    var cs = p.cs;
+    useEffect(function () {
+      if (!p.list) return undefined;
+      var dead = false;
+      setList(null);
+      p.api.changesets({ status: "previewed" }).then(function (r) { if (!dead) setList((r && r.data) || []); },
+        function (e) { if (!dead) { setList([]); setErr(errText(e)); } });
+      return function () { dead = true; };
+    }, [p.list]);
+
+    function act(kind, fn) {
+      if (busy) return;
+      setBusy(kind);
+      setErr(null);
+      Promise.resolve().then(fn).then(function () { setBusy(null); }, function (e) { setBusy(null); setErr(errText(e)); });
+    }
+    function frame(title, body, acts) {
+      return h("div", { className: "ap-ubah-card", role: "dialog", "aria-labelledby": "ap-ubah-card-t" },
+        h("div", { className: "ap-ubah-card-head" }, h("h2", { id: "ap-ubah-card-t" }, title),
+          h(R.IconButton, { icon: "close", label: "Tutup kartu", onClick: p.onClose })),
+        h("div", { className: "ap-ubah-card-body" }, err ? h(R.Alert, { tone: "bad", title: err }) : null, body),
+        h("div", { className: "ap-ubah-card-acts" }, acts));
+    }
+
+    if (p.list) {
+      var rows = list == null ? h(R.Spinner, { label: "Memuat" })
+        : !list.length ? h("p", { className: "ap-muted" }, "Tidak ada perubahan yang menunggu.")
+          : h("ul", { className: "ap-ubah-pending" }, list.map(function (c) {
+            return h("li", { key: c.id }, h("button", { type: "button", onClick: function () { p.onOpen(c.id); } },
+              h("span", null, c.title || c.id), h(R.Lozenge, { tone: TONE[c.risk] }, RA.riskLabel(c.risk))));
+          }));
+      return frame("Perubahan menunggu", rows, h(R.Button, { onClick: p.onClose }, "Tutup"));
+    }
+
+    var invalid = cs.status === "invalid";
+    var reasons = RA.riskReasons(cs), lines = RA.dryRunLines(cs, p.meta);
+    var errs = (cs.validation && cs.validation.errors) || [];
+    var canApprove = !!p.caps.approve && cs.status === "previewed" && (cs.risk !== "high" || !!p.caps.approveHigh);
+    function group(kind) { return lines.filter(function (l) { return l.kind === kind; }); }
+    var mig = group("migration"), files = group("file"), aff = group("affected"), notes = group("note");
+    var body = h(React.Fragment, null,
+      h("p", { className: "ap-ubah-card-cs" }, h("b", null, cs.title || cs.id), " ", h(R.Lozenge, { tone: invalid ? "bad" : TONE[cs.risk] }, invalid ? "Belum valid" : RA.riskLabel(cs.risk))),
+      invalid ? h("ul", { className: "ap-errlist" }, (errs.length ? errs : [{ message: "Change set ini tidak lolos validasi." }]).map(function (x, i) {
+        return h("li", { key: i }, x.message, x.file ? h("span", { className: "ap-muted" }, " (" + x.file + ")") : null);
+      })) : null,
+      reasons.length ? h("ul", { className: "ap-ubah-reasons" }, reasons.map(function (r, i) { return h("li", { key: i }, r); })) : null,
+      mig.length ? h("pre", { className: "ap-ubah-sql" }, h("code", null, mig.map(function (l) { return l.text; }).join("\n"))) : null,
+      files.length || aff.length || notes.length ? h("ul", { className: "ap-ubah-dry" }, files.concat(aff, notes).map(function (l, i) { return h("li", { key: i, className: "k-" + l.kind }, l.text); })) : null,
+      !canApprove && !invalid && cs.status === "previewed" ? h("p", { className: "ap-muted" }, cs.risk === "high" ? "Perubahan berisiko tinggi hanya bisa disetujui pemilik usaha." : "Menunggu persetujuan orang yang berwenang.") : null);
+    var acts = [];
+    if (!invalid && OPEN[cs.status]) acts.push(h(R.Button, { key: "p", icon: "eye", disabled: !!busy, onClick: function () { p.onPreview(cs); } }, "Pratinjau"));
+    if (canApprove) acts.push(h(R.Button, { key: "a", variant: "primary", loading: busy === "a", disabled: !!busy, onClick: function () { act("a", function () { return p.onApprove(cs); }); } }, "Setujui & terapkan"));
+    if (OPEN[cs.status]) acts.push(h(R.Button, { key: "r", variant: "danger", loading: busy === "r", disabled: !!busy, onClick: function () { act("r", function () { return p.onReject(cs); }); } }, "Tolak"));
+    acts.push(h(R.Button, { key: "c", variant: "quiet", onClick: p.onClose }, "Tutup"));
+    return frame(invalid ? "Belum valid" : "Perlu persetujuan", body, acts);
+  };
+
+  /* ---------------------------------------------------------------- dialogs */
+
+  /** A form dialog: p.onSubmit() → Promise; success closes it, a failure (or a thrown builder error) shows inline. */
+  function EditDialog(p) {
+    var bs = useState(false), busy = bs[0], setBusy = bs[1];
+    var es = useState(null), err = es[0], setErr = es[1];
+    function go(e) {
+      if (e) e.preventDefault();
+      if (busy) return;
+      setBusy(true);
+      setErr(null);
+      Promise.resolve().then(p.onSubmit).then(function () { setBusy(false); p.onClose(); }, function (x) { setBusy(false); setErr(errText(x)); });
+    }
+    return h(R.Dialog, { title: p.title, onClose: p.onClose, footer: [
+      h(R.Button, { key: "c", variant: "quiet", onClick: p.onClose }, "Batal"),
+      h(R.Button, { key: "o", variant: "primary", loading: busy, disabled: busy, onClick: go }, p.confirmLabel || "Simpan")] },
+      h("form", { className: "ap-ubah-form", onSubmit: go, noValidate: true },
+        err ? h(R.Alert, { tone: "bad", title: err }) : null, p.children,
+        h("button", { type: "submit", style: { display: "none" }, tabIndex: -1, "aria-hidden": "true" })));
+  }
+  RA.EditDialog = EditDialog;
+
+  function need(v, msg) { if (!String(v || "").trim()) throw new Error(msg); return String(v).trim(); }
+  function val(set) { return function (e) { set(e.target.value); }; }
+  var TYPES_UI = [{ value: "Teks", label: "Teks" }, { value: "Angka", label: "Angka" }, { value: "Tanggal", label: "Tanggal" }, { value: "Pilihan", label: "Pilihan" }, { value: "Ya-tidak", label: "Ya-tidak" }];
+  function lines(t) { return String(t || "").split(/\n|,/).map(function (x) { return x.trim(); }).filter(Boolean); }
+
+  /** "Tambah kolom isian": p.model, p.u, p.meta, p.onClose. */
+  RA.AddFieldDialog = function (p) {
+    var ls = useState(""), label = ls[0], setLabel = ls[1];
+    var ts = useState("Teks"), type = ts[0], setType = ts[1];
+    var os = useState(""), opts = os[0], setOpts = os[1];
+    var mm = p.meta.models[p.model] || {};
+    return h(EditDialog, { title: "Tambah kolom isian", confirmLabel: "Tambah", onClose: p.onClose, onSubmit: function () {
+      var l = need(label, "Isi nama kolom dulu");
+      if (type === "Pilihan" && !lines(opts).length) throw new Error("Isi pilihan dulu, satu per baris");
+      return p.u.edit("custom/" + p.model + ".rk", function (ex) {
+        return RA.opsAddField(p.model, { label: l, type: type, options: lines(opts), modelLabel: L(mm.label) || p.model }, ex);
+      });
+    } },
+      h(R.Field, { id: "ap-ubah-f-label", label: "Nama kolom", value: label, autoFocus: true, onChange: val(setLabel) }),
+      h(R.NativeSelect, { id: "ap-ubah-f-type", label: "Jenis", value: type, options: TYPES_UI, onChange: val(setType) }),
+      type === "Pilihan" ? h(R.Textarea, { id: "ap-ubah-f-opts", label: "Pilihan", hint: "Satu per baris", rows: 4, value: opts, onChange: val(setOpts) }) : null);
+  };
+
+  /** "Tambah persetujuan": saat Kirim/Batal, syarat (CEL, optional), penyetuju (a role). */
+  RA.AddApprovalDialog = function (p) {
+    var roles = Object.keys(p.meta.roles || {});
+    if (roles.indexOf("owner") < 0) roles.unshift("owner");
+    var os = useState("submit"), on = os[0], setOn = os[1];
+    var ws = useState(""), when = ws[0], setWhen = ws[1];
+    var rs = useState(roles[0]), role = rs[0], setRole = rs[1];
+    return h(EditDialog, { title: "Tambah persetujuan", confirmLabel: "Tambah", onClose: p.onClose, onSubmit: function () {
+      return p.u.edit("custom/" + p.model + ".rk", function (ex) {
+        return RA.opsAddApproval(p.model, { on: on, when: when.trim() || undefined, approvers: [role], label: "Persetujuan " + (on === "submit" ? "kirim" : "batal") }, ex);
+      });
+    } },
+      h(R.NativeSelect, { id: "ap-ubah-a-on", label: "Saat", value: on, options: [{ value: "submit", label: "Kirim" }, { value: "cancel", label: "Batal" }], onChange: val(setOn) }),
+      h(R.Field, { id: "ap-ubah-a-when", label: "Syarat (opsional)", hint: "Contoh: grand_total > 10000000", value: when, onChange: val(setWhen) }),
+      h(R.NativeSelect, { id: "ap-ubah-a-role", label: "Penyetuju", value: role, onChange: val(setRole),
+        options: roles.map(function (r) { return { value: r, label: L(((p.meta.roles || {})[r] || {}).label) || r }; }) }));
+  };
+
+  function valueInput(id, label, f, v, set) {
+    if (f && f.type === "select") {
+      return h(R.NativeSelect, { id: id, label: label, value: v, onChange: val(set),
+        options: [{ value: "", label: "Pilih…" }].concat((f.options || []).map(function (o) { return { value: o.value, label: L(o.label) || o.value }; })) });
+    }
+    if (f && f.type === "check") return h(R.NativeSelect, { id: id, label: label, value: v, onChange: val(set), options: [{ value: "", label: "Pilih…" }, { value: "true", label: "Ya" }, { value: "false", label: "Tidak" }] });
+    return h(R.Field, { id: id, label: label, value: v, onChange: val(set) });
+  }
+
+  /** "Tambah otomasi": saat <kolom> berubah menjadi <nilai> → isi <kolom lain> dengan <nilai>. */
+  RA.AddAutomationDialog = function (p) {
+    var mm = p.meta.models[p.model] || {};
+    var all = (mm.fields || []).filter(function (f) { return f.type !== "table" && f.type !== "link_multi"; });
+    var writable = all.filter(function (f) { return !f.compute && !f.read_only; });
+    var fs = useState(""), field = fs[0], setField = fs[1];
+    var vs = useState(""), value = vs[0], setValue = vs[1];
+    var ts = useState(""), target = ts[0], setTarget = ts[1];
+    var tos = useState(""), to = tos[0], setTo = tos[1];
+    function fd(n) { return all.filter(function (f) { return f.name === n; })[0]; }
+    function opts(list) { return [{ value: "", label: "Pilih kolom…" }].concat(list.map(function (f) { return { value: f.name, label: L(f.label) || f.name }; })); }
+    return h(EditDialog, { title: "Tambah otomasi", confirmLabel: "Tambah", onClose: p.onClose, onSubmit: function () {
+      need(value, "Isi nilai pemicu dulu");
+      var spec = RA.automationSpec(mm, { field: field, value: value, target: target, to: to });
+      var unit = RA.unitOf(p.meta, p.model), flows = p.meta.flows || {}, base = RA.slugName(spec.label), name = base, i = 2;
+      while (flows[name]) name = base.slice(0, 56) + "_" + i++;
+      spec.name = name;
+      return p.u.run(RA.opsAddAutomation(unit.unit, p.model, spec, unit.kind));
+    } },
+      h(R.NativeSelect, { id: "ap-ubah-o-field", label: "Saat kolom", value: field, options: opts(all), onChange: function (e) { setField(e.target.value); setValue(""); } }),
+      valueInput("ap-ubah-o-value", "Berubah menjadi", fd(field), value, setValue),
+      h(R.NativeSelect, { id: "ap-ubah-o-target", label: "Isi kolom", value: target, options: opts(writable), onChange: function (e) { setTarget(e.target.value); setTo(""); } }),
+      valueInput("ap-ubah-o-to", "Dengan nilai", fd(target), to, setTo));
+  };
+
+  /** "Tambah tahap" on a kanban: one more option on its group_by field. */
+  RA.AddStatusDialog = function (p) {
+    var ls = useState(""), label = ls[0], setLabel = ls[1];
+    var mm = p.meta.models[p.model] || {};
+    return h(EditDialog, { title: "Tambah tahap", confirmLabel: "Tambah", onClose: p.onClose, onSubmit: function () {
+      var l = need(label, "Isi nama tahap dulu");
+      return p.u.edit("custom/" + p.model + ".rk", function (ex) {
+        return RA.opsAddStatus(p.model, p.field, { label: l }, ex, { baseOptions: p.baseOptions, modelLabel: L(mm.label) || p.model });
+      });
+    } }, h(R.Field, { id: "ap-ubah-s-label", label: "Nama tahap", value: label, autoFocus: true, onChange: val(setLabel) }));
+  };
+
+  /** "Tambah tabel": nama tabel and up to 5 kolom. p.onSubmit(spec) → Promise. */
+  RA.AddTableDialog = function (p) {
+    var ns = useState(""), label = ns[0], setLabel = ns[1];
+    var cs = useState([{ label: "", type: "Teks" }]), cols = cs[0], setCols = cs[1];
+    function setCol(i, k, v) { setCols(cols.map(function (c, j) { if (j !== i) return c; var n = Object.assign({}, c); n[k] = v; return n; })); }
+    return h(EditDialog, { title: "Tambah tabel", confirmLabel: "Tambah", onClose: p.onClose, onSubmit: function () {
+      var l = need(label, "Isi nama tabel dulu");
+      return p.onSubmit({ label: l, fields: cols.filter(function (c) { return c.label.trim(); }).map(function (c) { return { label: c.label.trim(), type: c.type }; }) });
+    } },
+      h(R.Field, { id: "ap-ubah-t-label", label: "Nama tabel", value: label, autoFocus: true, onChange: val(setLabel) }),
+      cols.map(function (c, i) {
+        return h("div", { key: i, className: "ap-ubah-tcol" },
+          h(R.Field, { id: "ap-ubah-t-c" + i, label: "Kolom " + (i + 1), value: c.label, onChange: function (e) { setCol(i, "label", e.target.value); } }),
+          h(R.NativeSelect, { id: "ap-ubah-t-t" + i, label: "Jenis kolom " + (i + 1), value: c.type, options: TYPES_UI, onChange: function (e) { setCol(i, "type", e.target.value); } }));
+      }),
+      cols.length < 5 ? h(R.Button, { icon: "add", variant: "quiet", onClick: function () { setCols(cols.concat([{ label: "", type: "Teks" }])); } }, "Tambah kolom") : null);
+  };
+
 })(typeof window !== "undefined" ? window : globalThis);

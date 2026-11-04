@@ -232,6 +232,7 @@ test("riskReasons reads the last proposed history note", () => {
   assert.deepStrictEqual(RA.riskReasons(cs), ["new field x_po on deal", "views overlay custom/deal.rk"]);
   assert.deepStrictEqual(RA.riskReasons({ history: [{ status: "proposed", note: "risk low" }] }), []);
   assert.deepStrictEqual(RA.riskReasons({}), []);
+  assert.deepStrictEqual(RA.riskReasons({ history: [{ status: "proposed", note: "risk medium: medium: new file a; medium: new file a" }] }), ["new file a"]);
 });
 
 test("dryRunLines lists migrations, files, affected records and notes", () => {
@@ -292,4 +293,41 @@ test("automationSpec: when a field becomes a value, set another field", () => {
   assert.strictEqual(RA.automationSpec(mm, { field: "ok", value: "true", target: "note", to: "x" }).when, "record.ok == true");
   assert.throws(() => RA.automationSpec(mm, { field: "probability", value: "abc", target: "note", to: "x" }), /angka/);
   assert.throws(() => RA.automationSpec(mm, { field: "stage", value: "won", target: "stage", to: "won" }), /berbeda/);
+});
+
+test("moveInLayout moves a field within a section, across columns and sections", () => {
+  const layout = [{ section: { id: "A" }, fields: ["a", "b", "c"] }, { section: { id: "B" }, columns: [["d"], ["e", "f"]] }];
+  const j = (x) => JSON.parse(JSON.stringify(x));
+  assert.deepStrictEqual(j(RA.moveInLayout(layout, { s: 0, i: 0 }, { s: 0, i: 2 }))[0].fields, ["b", "c", "a"]);
+  assert.deepStrictEqual(j(RA.moveInLayout(layout, { s: 0, i: 2 }, { s: 0, i: 1 }))[0].fields, ["a", "c", "b"]);
+  const across = j(RA.moveInLayout(layout, { s: 1, c: 1, i: 1 }, { s: 1, c: 0, i: 0 }));
+  assert.deepStrictEqual(across[1].columns, [["f", "d"], ["e"]]);
+  const sec = j(RA.moveInLayout(layout, { s: 0, i: 1 }, { s: 1, c: 1, i: 2 }));
+  assert.deepStrictEqual(sec[0].fields, ["a", "c"]);
+  assert.deepStrictEqual(sec[1].columns[1], ["e", "f", "b"]);
+  assert.deepStrictEqual(layout[0].fields, ["a", "b", "c"], "the input is not changed");
+});
+
+test("opsAddTable writes the shown menu first when the layout has no nav.side", () => {
+  const meta = { apps: [{ name: "crm", menu: [{ group: { id: "CRM" }, items: ["deal"] }], dashboards: [] }], models: { deal: {} }, dashboards: {}, layout: { name: "l" } };
+  const files = { name: "l", existing: file("layouts/l.rk", "layout", { name: "l", shell: "top-nav" }), config: { layout: "l" } };
+  const r = RA.opsAddTable(meta, files, "crm", { label: "Kunjungan", fields: [] });
+  assert.deepStrictEqual(r.ops.map((o) => o.op + " " + o.path), ["create apps/crm/models/kunjungan.rk", "patch apps/crm/models/kunjungan.rk", "patch layouts/l.rk", "patch layouts/l.rk"]);
+  const doc = result([r.ops[2], r.ops[3]], files.existing.parsed);
+  assert.deepStrictEqual(doc.nav.side, [{ group: { id: "CRM" }, items: [{ to: "model:deal" }] }, { group: { id: "Tabel baru" }, items: [{ to: "model:kunjungan", label: { id: "Kunjungan" } }] }]);
+  // a layout that already has nav.side gets one patch
+  const ex = file("layouts/l.rk", "layout", { name: "l", nav: { side: [{ group: { id: "A" }, items: [] }] } });
+  assert.strictEqual(RA.opsAddTable(meta, { name: "l", existing: ex, config: {} }, "crm", { label: "K" }).ops.length, 3);
+  assert.deepStrictEqual(RA.menuSide({ ...meta, layout: { nav: { side: [{ items: [{ to: "model:deal" }] }] } } }), [{ items: [{ to: "model:deal" }] }]);
+});
+
+test("opsFormLayout / opsListColumns drop from add the fields the new list already places", () => {
+  const parsed = { model: "deal", views: { form: { add: [{ field: "x_po" }, { field: "x_other" }] }, list: { add: [{ field: "x_po" }] } } };
+  const f = RA.opsFormLayout("deal", [{ section: { id: "A" }, columns: [["x_po"], ["deal_name"]] }], file("custom/deal.rk", "overlay", parsed));
+  assert.deepStrictEqual(result(f.ops, parsed).views.form.add, [{ field: "x_other" }]);
+  const l = RA.opsListColumns("deal", ["name", "x_po"], file("custom/deal.rk", "overlay", parsed));
+  assert.deepStrictEqual(result(l.ops, parsed).views.list.add, []);
+  // nothing placed twice: add untouched
+  const n = RA.opsListColumns("deal", ["name"], file("custom/deal.rk", "overlay", parsed));
+  assert.strictEqual(n.ops[0].patch.length, 1);
 });

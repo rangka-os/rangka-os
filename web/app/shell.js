@@ -217,10 +217,12 @@
   RA.navigate = function (hash) {
     hash = String(hash || "#/");
     if (hash.charAt(0) !== "#") hash = "#" + (hash.charAt(0) === "/" ? "" : "/") + hash;
+    var q = hashQuery(global.location.hash); // Ubah and preview survive moving around (and a reload)
+    if (hash.indexOf("?") < 0 && (q.ubah || q.preview)) hash = withHashQuery(hash, q);
     if (global.location.hash === hash) return;
     global.location.hash = hash;
   };
-  RA.toast = function (tone, title, body) { if (toastImpl) toastImpl(tone, title, body); };
+  RA.toast = function (tone, title, body, opts) { if (toastImpl) toastImpl(tone, title, body, opts); };
   RA.route = parseRoute(global.location.hash);
   RA.Ctx = React.createContext(null);
   RA.api = api;
@@ -299,7 +301,88 @@
     if (route.kind === "notfound" || !routeKnown(route, meta)) return h(Placeholder, { title: "Halaman tidak ditemukan", home: p.home }, "Alamat ini tidak cocok dengan halaman mana pun.");
     var View = RA[VIEWS[route.kind]];
     if (typeof View !== "function") return h(Placeholder, { title: "Halaman ini belum tersedia", home: p.home }, "Bagian ini sedang disiapkan.");
-    return h(View, { route: route });
+    return h(View, { route: route, readOnly: !!p.readOnly });
+  }
+
+  /* ---------------------------------------------------------------- the sidebar in Ubah: the menu as layout nav.side */
+  function UbahSidebar(p) {
+    var meta = p.meta, u = p.u, models = meta.models || {}, dashes = meta.dashboards || {};
+    var side = RA.menuSide(meta);
+    var ds = useState(false), adding = ds[0], setAdding = ds[1];
+    var rs = useState(null), renaming = rs[0], setRenaming = rs[1]; // {g, text}
+    var escRef = useRef(false); // Escape: the blur that follows cancels instead of saving
+    function itemOf(it) {
+      var to = String((it && it.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1);
+      if (k === "model") return { id: "r/" + n, label: L(it.label) || L((models[n] || {}).label) || n, icon: it.icon || (models[n] || {}).icon || "invoice" };
+      if (k === "dashboard") return { id: "d/" + n, label: L(it.label) || L((dashes[n] || {}).label) || n, icon: it.icon || "dashboard" };
+      return { id: null, label: L(it.label) || to, icon: it.icon || "link" };
+    }
+    function save(next) {
+      return u.quiet(RA.menuFiles(p.api || RA.api).then(function (f) { return u.run(RA.opsMenu(f.name, next, f.existing, f.config)); }));
+    }
+    function moveItem(g, i, d) {
+      var next = side.map(function (x) { return Object.assign({}, x, { items: (x.items || []).slice() }); });
+      next[g].items = RA.moveItem(next[g].items, i, i + d);
+      save(next);
+    }
+    function hide(g, i) {
+      var next = side.map(function (x, j) { return Object.assign({}, x, { items: (x.items || []).filter(function (_, k) { return j !== g || k !== i; }) }); })
+        .filter(function (x) { return x.items.length; });
+      save(next);
+    }
+    function rename() {
+      var r = renaming, cancelled = escRef.current;
+      escRef.current = false;
+      setRenaming(null);
+      if (cancelled || !r || r.text.trim() === L(side[r.g].group)) return;
+      var next = side.map(function (x, j) {
+        if (j !== r.g) return x;
+        var n = Object.assign({}, x);
+        if (r.text.trim()) n.group = { id: r.text.trim() }; else delete n.group;
+        return n;
+      });
+      save(next);
+    }
+    function addTable(spec) {
+      var unit = p.route && p.route.model ? RA.unitOf(meta, p.route.model) : null;
+      var apps = (meta.apps || []).filter(function (a) { return (a.menu || []).length; });
+      var app = unit && unit.kind === "app" ? unit.unit : ((apps[apps.length - 1] || (meta.apps || [])[0] || {}).name);
+      return RA.menuFiles(RA.api).then(function (f) { return u.run(RA.opsAddTable(meta, f, app, spec)); });
+    }
+    var more = navGroups({ imports: meta.imports }, p.features, p.counts); // Persetujuan and Impor data stay as they are
+    var dis = !!u.busy;
+    return h("aside", { className: "rk-side ap-ubah-side", "aria-label": "Navigasi " + p.name },
+      h("div", { className: "rk-side-head" }, h("span", { className: "tile", style: { background: "var(--brand)" } }, h(R.Icon, { name: "store" })),
+        h("span", { className: "g" }, h("b", null, p.name), h("small", null, "Ubah menu"))),
+      h("nav", null, side.map(function (g, gi) {
+        var items = g.items || [];
+        var label = L(g.group);
+        return h("div", { key: gi, className: "rk-navgroup ap-ubah-navgroup" },
+          renaming && renaming.g === gi
+            ? h("input", { className: "ap-ubah-rename", "aria-label": "Nama grup", value: renaming.text, autoFocus: true,
+              onChange: function (e) { setRenaming({ g: gi, text: e.target.value }); }, onBlur: rename,
+              onKeyDown: function (e) { if (e.key === "Enter") { e.preventDefault(); e.target.blur(); } if (e.key === "Escape") { escRef.current = true; e.target.blur(); } } })
+            : h("button", { type: "button", className: "ap-ubah-group", disabled: dis, title: "Ganti nama grup", onClick: function () { setRenaming({ g: gi, text: label }); } },
+              label || "Tanpa nama", h(R.Icon, { name: "edit" })),
+          items.map(function (it, i) {
+            var x = itemOf(it);
+            return h("div", { key: i, className: "ap-ubah-navitem" + (x.id && x.id === p.current ? " on" : "") },
+              h("a", { href: x.id ? "#/" + x.id : "#", className: "rk-navlink", "aria-current": x.id && x.id === p.current ? "page" : undefined,
+                onClick: function (e) { e.preventDefault(); if (x.id) p.onNavigate(x.id); } }, h(R.Icon, { name: x.icon }), x.label),
+              h("span", { className: "ap-ubah-tools" },
+                h(R.IconButton, { icon: "arrowup", label: "Naik", disabled: dis || i === 0, onClick: function () { moveItem(gi, i, -1); } }),
+                h(R.IconButton, { icon: "arrowdown", label: "Turun", disabled: dis || i === items.length - 1, onClick: function () { moveItem(gi, i, 1); } }),
+                h(R.IconButton, { icon: "eye", label: "Sembunyikan", disabled: dis, onClick: function () { hide(gi, i); } })));
+          }));
+      }),
+      h("div", { className: "ap-ubah-navadd" }, h(R.Button, { icon: "add", disabled: dis, onClick: function () { setAdding(true); } }, "Tambah tabel")),
+      more.map(function (g) {
+        return h("div", { key: "m" + g.label, className: "rk-navgroup" }, h("p", null, g.label), g.items.map(function (it) {
+          return h("a", { key: it.id, href: "#/" + it.id, className: "rk-navlink", "aria-current": it.id === p.current ? "page" : undefined,
+            onClick: function (e) { e.preventDefault(); p.onNavigate(it.id); } }, h(R.Icon, { name: it.icon }), it.label, it.count ? h("span", { className: "rk-count" }, it.count) : null);
+        }));
+      })),
+      adding ? h(RA.AddTableDialog, { onClose: function () { setAdding(false); }, onSubmit: addTable }) : null);
   }
 
   /* ---------------------------------------------------------------- the signed-in app */
@@ -316,15 +399,23 @@
     var cr = useState(0), setCacheRev = cr[1];
     var acs = useState(0), approvalCount = acs[0], setApprovalCount = acs[1];
     var sws = useState(false), switching = sws[0], setSwitching = sws[1];
+    var ubs = useState(!!boot.ubah), ubah = ubs[0], setUbah = ubs[1];
+    var pvs = useState(boot.previewCs || null), previewCs = pvs[0], setPreviewCs = pvs[1];
+    var cds = useState(null), card = cds[0], setCard = cds[1]; // {cs} | {list: true}
+    var ubz = useState(false), ubahBusy = ubz[0], setUbahBusy = ubz[1];
+    var rvs = useState(0), rev = rvs[0], setRev = rvs[1]; // bumped after an apply, undo or preview change: the view remounts
     var cacheRef = useRef(boot.cache);
     var featRef = useRef(features);
     featRef.current = features;
 
-    function toast(tone, title, body) {
+    /** opts (optional): {action, onAction} adds a button to the toast (it then stays 10 s). */
+    function toast(tone, title, body, opts) {
       var id = Date.now() + Math.random();
-      setToasts(function (t) { return t.concat([{ id: id, tone: tone || "info", title: title, body: body }]).slice(-3); });
-      setTimeout(function () { setToasts(function (t) { return t.filter(function (x) { return x.id !== id; }); }); }, 5000);
+      opts = opts || {};
+      setToasts(function (t) { return t.concat([{ id: id, tone: tone || "info", title: title, body: body, action: opts.action, onAction: opts.onAction }]).slice(-3); });
+      setTimeout(function () { setToasts(function (t) { return t.filter(function (x) { return x.id !== id; }); }); }, opts.action ? 10000 : 5000);
     }
+    function dropToast(id) { setToasts(function (x) { return x.filter(function (y) { return y.id !== id; }); }); }
 
     useEffect(function () {
       boot.cacheListener.fn = function () { setCacheRev(function (x) { return x + 1; }); };
@@ -338,7 +429,7 @@
         var r = parseRoute(global.location.hash);
         if (r.kind === "home") {
           var home = homeHash(meta);
-          if (home) { global.history.replaceState(null, "", home); r = parseRoute(home); }
+          if (home) { global.history.replaceState(null, "", withHashQuery(home, hashQuery(global.location.hash))); r = parseRoute(home); }
         }
         RA.route = r;
         setRoute(r);
@@ -414,24 +505,85 @@
       api.logout().then(null, function () {}).then(function () { p.onSignedOut(); });
     }
 
+    /* ---------------------------------------------------------------- Ubah (contract 0015) */
+    var cs8 = meta.changesets || {};
+    var caps = { approve: !!cs8.approve, approveHigh: !!cs8.approve_high };
+    function setQuery(set) { global.history.replaceState(null, "", withHashQuery(global.location.hash, set)); }
+    function refresh() { cacheRef.current.clear(); return reloadMeta().then(function () { setRev(function (x) { return x + 1; }); }); }
+    function undo(cs) {
+      api.csVerb(cs.id, "revert").then(refresh).then(function () { toast("info", "Perubahan dibatalkan", cs.title); },
+        function (e) { toast("bad", "Perubahan tidak bisa dibatalkan", RA.ubahError(e)); });
+    }
+    function applied(cs) {
+      return refresh().then(function () { toast("ok", "Perubahan diterapkan", cs.title, { action: "Urungkan", onAction: function () { undo(cs); } }); });
+    }
+    /** Propose, and apply when low risk and the caller approves; else open the card. Rejects on a kernel error. */
+    function runUbah(change) {
+      setUbahBusy(true);
+      return api.runChange(change, { canApprove: caps.approve, canApproveHigh: caps.approveHigh }).then(function (res) {
+        setUbahBusy(false);
+        if (res.applied) return applied(res.cs).then(function () { return res; });
+        setCard({ cs: res.cs });
+        return res;
+      }, function (e) { setUbahBusy(false); throw e; });
+    }
+    function editUbah(path, build) {
+      return api.file(path).then(function (ex) { return runUbah(build(ex)); });
+    }
+    /** For buttons without a dialog: a failure becomes a toast. */
+    function quiet(p) { return p.then(null, function (e) { toast("bad", "Perubahan gagal", RA.ubahError(e)); }); }
+    function enterPreview(cs) {
+      api.setPreview(cs.id);
+      return reloadMeta().then(function () {
+        setPreviewCs(cs); setCard(null); setQuery({ preview: cs.id }); cacheRef.current.clear(); setRev(function (x) { return x + 1; });
+      }, function (e) {
+        api.setPreview(null);
+        toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError(e));
+      });
+    }
+    function exitPreview() {
+      api.setPreview(null);
+      setPreviewCs(null);
+      setQuery({ preview: null });
+      return refresh().then(null, function (e) { toast("bad", "Aplikasi tidak bisa dimuat ulang", RA.ubahError(e)); });
+    }
+    function approveCs(cs) {
+      var leave = previewCs && previewCs.id === cs.id ? exitPreview() : Promise.resolve();
+      return leave.then(function () { return api.csVerb(cs.id, "approve"); }).then(function () { return api.csVerb(cs.id, "apply"); })
+        .then(function (done) { setCard(null); return applied(done || cs); });
+    }
+    function rejectCs(cs) {
+      return api.csVerb(cs.id, "reject").then(function () {
+        setCard(null);
+        toast("info", "Perubahan ditolak", cs.title);
+        if (previewCs && previewCs.id === cs.id) exitPreview();
+      });
+    }
+    function openCs(id) { api.changeset(id).then(function (cs) { setCard({ cs: cs }); }, function (e) { toast("bad", "Change set tidak bisa dibuka", RA.ubahError(e)); }); }
+    function toggleUbah(on) { setUbah(on); setQuery({ ubah: on }); }
+    var ubahOn = ubah && !previewCs && !!cs8.propose && !!RA.UbahCtx;
+    var uctx = { on: ubahOn, preview: previewCs, busy: ubahBusy, canApprove: caps.approve, canApproveHigh: caps.approveHigh,
+      run: runUbah, edit: editUbah, quiet: quiet, toggle: function () { toggleUbah(!ubah); }, showPending: function () { setCard({ list: true }); } };
+
     var home = homeHash(meta);
     var name = siteName(meta, me);
     var orgs = (me && me.orgs) || [];
     var current = orgs.filter(function (o) { return o.id === me.org; })[0];
     var companyName = me.orgName || (current ? current.name || current.id : name);
     var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta,
-      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast };
+      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs };
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 
-    return h(RA.Ctx.Provider, { value: ctx },
-      h("div", { className: cx("rk-shell top ap-shell", navOpen && "ap-nav-open") },
+    var shell = h("div", { className: cx("rk-shell top ap-shell", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on") },
         h(R.TopNav, {
           product: { name: name, icon: "store", color: "var(--brand)" }, items: [], createLabel: false, theme: theme,
           searchPlaceholder: "Cari", currentApp: null,
           apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: "apps", color: "var(--primary)" }; }),
           user: { name: (me && me.name) || "", email: me && me.email, company: companyName,
             companies: features.orgs && orgs.length > 1 ? orgs.map(function (o) { return o.name || o.id; }) : [companyName] },
-          actions: h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
+          actions: h(React.Fragment, null,
+            cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null,
+            h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } })),
           onHome: function () { if (home) RA.navigate(home); },
           onSwitch: function (a) { var h2 = homeHash({ apps: installed.filter(function (x) { return x.name === a.id; }) }); if (h2) RA.navigate(h2); },
           onSearch: function () { toast("info", "Pencarian belum tersedia", "Buka daftar dari menu di samping untuk mencari data."); },
@@ -444,17 +596,26 @@
             else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
           }
         }),
-        h(R.Sidebar, {
+        ubahOn ? h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
+          onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } }) : h(R.Sidebar, {
           app: { name: name, type: ((me && me.roles) || []).map(function (r) { return L(((meta.roles || {})[r] || {}).label) || r; }).join(", "), icon: "store", color: "var(--brand)" },
           groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route),
           onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); }
         }),
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
-        h("div", { className: "rk-shell-main" }, h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route), "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, home: home }))),
+        h("div", { className: "rk-shell-main" },
+          previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
+          ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
+          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, home: home, readOnly: !!previewCs }))),
+        card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id + card.cs.status, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
+          onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onReject: rejectCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
         h(R.Toaster, { float: true }, toasts.map(function (t) {
-          return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, onClose: function () { setToasts(function (x) { return x.filter(function (y) { return y.id !== t.id; }); }); } }, t.body);
-        }))));
+          return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, action: t.action, onAction: t.onAction ? function () { dropToast(t.id); t.onAction(); } : undefined,
+            onClose: function () { dropToast(t.id); } }, t.body);
+        })));
+    var inner = RA.UbahCtx ? h(RA.UbahCtx.Provider, { value: uctx }, shell) : shell;
+    return h(RA.Ctx.Provider, { value: ctx }, inner);
   }
 
   /* ---------------------------------------------------------------- root: boot, sign-in screen, app */
@@ -467,15 +628,26 @@
     function start() {
       setPhase("boot");
       setErr(null);
+      var q = hashQuery(global.location.hash), previewCs = null;
       api.me().then(function (m) {
         setMe(m);
-        return api.meta().then(function (meta) {
+        // ?preview=<id>: read through the change set; one that cannot be previewed opens the app as it is
+        var pv = !q.preview ? Promise.resolve(null) : api.changeset(q.preview).then(function (cs) {
+          api.setPreview(cs.id);
+          return api.meta().then(function (pm) { previewCs = cs; return pm; });
+        }).then(null, function () {
+          api.setPreview(null);
+          global.history.replaceState(null, "", withHashQuery(global.location.hash, { preview: null }));
+          return null;
+        });
+        return pv.then(function (pm) { return pm || api.meta(); }).then(function (meta) {
           var listener = { fn: null };
           var cache = makeCache(function () { if (listener.fn) listener.fn(); });
           var eng = global.RangkaEngine.create(meta, cache.lookup);
           cache.setEngine(eng);
           return api.features(meta, m).then(function (f) {
-            setBoot({ meta: meta, eng: eng, features: f, cache: cache, cacheListener: listener });
+            setBoot({ meta: meta, eng: eng, features: f, cache: cache, cacheListener: listener, previewCs: previewCs,
+              ubah: q.ubah && !!(meta.changesets && meta.changesets.propose) });
             setPhase("ready");
           });
         });

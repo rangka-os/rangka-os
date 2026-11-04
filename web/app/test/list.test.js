@@ -45,3 +45,11 @@ test("listColumns uses views.list.columns, else name + in_list fields", () => {
   assert.deepStrictEqual(JSON.parse(JSON.stringify(A.listColumns({ views: { list: { columns: ["name", "x"] } }, fields: [] }))), ["name", "x"]);
   assert.deepStrictEqual(JSON.parse(JSON.stringify(A.listColumns({ fields: [{ name: "a", in_list: true }, { name: "b" }] }))), ["name", "a"]);
 });
+
+test("kanbanColumns: views.kanban.columns order, values left out hidden; else every option", () => {
+  const A = load();
+  const plain = (x) => JSON.parse(JSON.stringify(x));
+  const gf = { options: [{ value: "a" }, { value: "b" }, { value: "c" }] };
+  assert.deepStrictEqual(plain(A.kanbanColumns({ group_by: "s" }, gf)).map((o) => o.value), ["a", "b", "c"]);
+  assert.deepStrictEqual(plain(A.kanbanColumns({ group_by: "s", columns: ["c", "a", "zz"] }, gf)).map((o) => o.value), ["c", "a"]);
+});

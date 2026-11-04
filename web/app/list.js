@@ -42,6 +42,14 @@
   /** Clicking a header: a new column starts ascending, the same column flips. */
   function nextSort(cur, key) { return cur && cur.key === key ? { key: key, dir: cur.dir === "asc" ? "desc" : "asc" } : { key: key, dir: "asc" }; }
 
+  /** The kanban's columns in order: views.kanban.columns (an overlay's order; values left out are hidden), else every
+   *  option of group_by. */
+  function kanbanColumns(kb, gf) {
+    var opts = (gf && gf.options) || [];
+    if (!kb || !Array.isArray(kb.columns) || !kb.columns.length) return opts;
+    return kb.columns.map(function (v) { return opts.filter(function (o) { return o.value === v; })[0]; }).filter(Boolean);
+  }
+
   /** views.list.columns, else name + the in_list fields. */
   function listColumns(mm) {
     var v = (mm.views || {}).list || {};
@@ -57,6 +65,7 @@
   RA.parseSort = parseSort;
   RA.nextSort = nextSort;
   RA.listColumns = listColumns;
+  RA.kanbanColumns = kanbanColumns;
 
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
@@ -70,6 +79,7 @@
   function lower(s) { return String(s || "").toLowerCase(); }
 
   var live = null; // the Ctx of the view that rendered last; cellFor falls back to it
+  var ubahMode = {}; // model → "kanban" | "list" last shown
 
   /* ---------------------------------------------------------------- cells */
   function optChip(fd, v) {
@@ -161,8 +171,15 @@
     var os = useState(null), over = os[0], setOver = os[1];
     var ms = useState({}), moved = ms[0], setMoved = ms[1]; // optimistic: name → column value while the PATCH is in flight
     var inflight = useRef({});
+    var u = RA.useUbah ? RA.useUbah() : { on: false };
+    var ads = useState(false), addingStage = ads[0], setAddingStage = ads[1];
+    var cols = kanbanColumns(kb, gf), ro = !!ctx.readOnly;
 
     function stop(e) { e.stopPropagation(); }
+    function moveCol(i, d) {
+      var order = RA.moveItem(cols.map(function (o) { return o.value; }), i, i + d);
+      u.quiet(u.edit("custom/" + m + ".rk", function (ex) { return RA.opsKanbanColumns(m, order, ex); }));
+    }
     function groupOf(r) { return Object.prototype.hasOwnProperty.call(moved, r.name) ? moved[r.name] : r[kb.group_by]; }
     function setOne(name, val) { setMoved(function (cur) { var n = Object.assign({}, cur); if (val === undefined) delete n[name]; else n[name] = val; return n; }); }
 
@@ -189,18 +206,21 @@
     }
 
     return h("div", { className: "pv-board", role: "list", "aria-label": "Papan " + L(mm.label) },
-      (gf.options || []).map(function (o) {
+      cols.map(function (o, ci) {
         var items = p.rows.filter(function (r) { return groupOf(r) === o.value; });
         var total = sumF ? items.reduce(function (s, r) { return s + (Number(r[kb.sum]) || 0); }, 0) : null;
         return h("section", { key: o.value, className: cx("pv-col-k", over === o.value && "over", o.closed && "closed"), role: "listitem", "aria-label": L(o.label),
             onDragOver: function (e) { e.preventDefault(); setOver(o.value); }, onDragLeave: function () { setOver(null); },
-            onDrop: function (e) { e.preventDefault(); setOver(null); var n = drag || (e.dataTransfer && e.dataTransfer.getData("text/plain")); if (n) move(n, o.value); setDrag(null); } },
+            onDrop: function (e) { e.preventDefault(); setOver(null); var n = drag || (e.dataTransfer && e.dataTransfer.getData("text/plain")); if (n && !ro) move(n, o.value); setDrag(null); } },
           h("header", null, h("b", null, L(o.label)), h("span", { className: "n" }, items.length),
-            o.probability != null ? h("span", { className: "pv-prob" }, o.probability + "%") : null),
+            o.probability != null ? h("span", { className: "pv-prob" }, o.probability + "%") : null,
+            u.on ? h("span", { className: "ap-ubah-tools ap-ubah-coltools" },
+              h(R.Button, { size: "sm", "aria-label": "Geser " + L(o.label) + " ke kiri", title: "Geser ke kiri", disabled: u.busy || ci === 0, onClick: function () { moveCol(ci, -1); } }, "←"),
+              h(R.Button, { size: "sm", "aria-label": "Geser " + L(o.label) + " ke kanan", title: "Geser ke kanan", disabled: u.busy || ci === cols.length - 1, onClick: function () { moveCol(ci, 1); } }, "→")) : null),
           total != null ? h("div", { className: "pv-sum" }, R.formatRupiah(total)) : null,
           h("div", { className: "pv-cards" }, items.map(function (r) {
             var open = function () { ctx.navigate("#/r/" + m + "/" + encodeURIComponent(r.name)); };
-            return h("article", { key: r.name, className: cx("pv-card", drag === r.name && "dragging"), draggable: true, tabIndex: 0,
+            return h("article", { key: r.name, className: cx("pv-card", drag === r.name && "dragging"), draggable: !ro, tabIndex: 0,
                 onDragStart: function (e) { setDrag(r.name); try { e.dataTransfer.setData("text/plain", r.name); } catch (x) { /* some browsers refuse */ } },
                 onDragEnd: function () { setDrag(null); setOver(null); },
                 onClick: open, onKeyDown: function (e) { if (e.key === "Enter") open(); } },
@@ -211,12 +231,15 @@
                 return h("div", { key: c, className: "pv-card-row" }, fd && fd.type === "currency" ? h("span", { className: "rk-amount" }, R.formatRupiah(v)) : cellFor(m, c, r, ctx));
               }),
               // Touch screens and keyboards cannot drag: the same move as a drop, from a select on the card.
-              h("select", { className: "pv-card-move", value: "", "aria-label": "Pindah " + (r[kb.title] || r.name) + " ke",
+              ro ? null : h("select", { className: "pv-card-move", value: "", "aria-label": "Pindah " + (r[kb.title] || r.name) + " ke",
                   onClick: stop, onKeyDown: stop, onChange: function (e) { var to = e.target.value; if (to) move(r.name, to); } },
                 h("option", { value: "" }, "Pindah ke…"),
-                (gf.options || []).filter(function (x) { return x.value !== o.value; }).map(function (x) { return h("option", { key: x.value, value: x.value }, L(x.label)); })));
+                cols.filter(function (x) { return x.value !== o.value; }).map(function (x) { return h("option", { key: x.value, value: x.value }, L(x.label)); })));
           })));
-      }));
+      }),
+      u.on ? h("section", { key: "__add", className: "pv-col-k ap-ubah-addcol" },
+        h(R.Button, { icon: "add", disabled: u.busy, onClick: function () { setAddingStage(true); } }, "Tambah tahap")) : null,
+      addingStage ? h(RA.AddStatusDialog, { key: "__dlg", model: m, field: kb.group_by, baseOptions: gf.options || [], meta: ctx.meta, u: u, onClose: function () { setAddingStage(false); } }) : null);
   }
 
   /* ---------------------------------------------------------------- list table (own markup: sort, search and paging are the server's) */
@@ -262,8 +285,11 @@
     var ctx = p.ctx, m = p.model, eng = ctx.eng;
     live = ctx;
     var mm = ctx.meta.models[m], views = mm.views || {}, label = L(mm.label);
-    var canCreate = !(mm.can && mm.can.create === false);
-    var ms = useState(views.kanban && views.default !== "list" ? "kanban" : "list"), mode = ms[0], setMode = ms[1];
+    var canCreate = !(mm.can && mm.can.create === false) && !ctx.readOnly;
+    var u = RA.useUbah ? RA.useUbah() : { on: false };
+    // in Ubah the view remounts after every applied edit: it keeps the board / list choice
+    var ms = useState(u.on && ubahMode[m] ? ubahMode[m] : views.kanban && views.default !== "list" ? "kanban" : "list"), mode = ms[0], setMode = ms[1];
+    ubahMode[m] = mode;
     var qs = useState(""), query = qs[0], setQuery = qs[1];
     var dqs = useState(""), dq = dqs[0], setDq = dqs[1];
     var fs = useState({}), fval = fs[0], setFval = fs[1];
@@ -315,11 +341,12 @@
     var toggle = views.kanban ? h(R.Segmented, { key: "v:" + mode, label: "Tampilan", value: mode, options: [{ value: "kanban", label: "Papan" }, { value: "list", label: "Daftar" }],
       onChange: function (v) { setMode(v); setPage(1); } }) : null;
     var header = h(R.PageHeader, { title: label, extra: [toggle, newBtn].filter(Boolean) });
+    var chips = u.on && mode === "list" ? h(ColumnChips, { ctx: ctx, model: m, columns: columns, u: u }) : null;
 
     var filterBar = h(R.FilterBar, { key: "f", search: true, searchPlaceholder: "Cari " + lower(label) + "…", query: query, onQuery: setQuery, filters: filters, value: fval, onChange: onFilter });
 
     if (!loading && !data.total && !filtered) {
-      return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" },
+      return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips,
         h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", onClick: create }, "Buat yang pertama") : null })));
     }
 
@@ -335,7 +362,23 @@
         onSort: function (key) { setSort(nextSort(sort, key)); setPage(1); },
         pager: data.total > PAGE_SIZE ? h(R.Pagination, { key: "pg:" + dq + "|" + filter + "|" + sortParam(sort), total: data.total, page: page, pageSize: PAGE_SIZE, jumper: false, onChange: setPage }) : null });
     }
-    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, body));
+    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, body));
+  }
+
+  /* ---------------------------------------------------------------- Ubah: list columns as chips (order, hide) */
+  function ColumnChips(p) {
+    var ctx = p.ctx, m = p.model, u = p.u, seen = {};
+    function key(c) { return typeof c === "string" ? c : c && c.field; }
+    var cols = p.columns.filter(function (c) { if (seen[key(c)]) return false; seen[key(c)] = 1; return true; });
+    function save(next) { u.quiet(u.edit("custom/" + m + ".rk", function (ex) { return RA.opsListColumns(m, next, ex); })); }
+    return h("div", { className: "ap-ubah-chips", role: "list", "aria-label": "Kolom daftar" }, cols.map(function (c, i) {
+      var lab = colLabel(ctx.eng, m, key(c));
+      return h("div", { key: key(c), className: "ap-ubah-chip", role: "listitem" },
+        h("span", { className: "ap-ubah-chip-t" }, lab),
+        h(R.Button, { size: "sm", "aria-label": "Geser " + lab + " ke kiri", title: "Geser ke kiri", disabled: u.busy || i === 0, onClick: function () { save(RA.moveItem(cols, i, i - 1)); } }, "←"),
+        h(R.Button, { size: "sm", "aria-label": "Geser " + lab + " ke kanan", title: "Geser ke kanan", disabled: u.busy || i === cols.length - 1, onClick: function () { save(RA.moveItem(cols, i, i + 1)); } }, "→"),
+        h(R.Button, { size: "sm", variant: "quiet", "aria-label": "Sembunyikan " + lab, disabled: u.busy || cols.length < 2, onClick: function () { save(cols.filter(function (_, j) { return j !== i; })); } }, "Sembunyikan"));
+    }));
   }
 
   RA.ListView = ListView;

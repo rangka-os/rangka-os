@@ -16,7 +16,7 @@ func Layer(path string) int {
 		return 2
 	case strings.HasPrefix(path, "connectors/"):
 		return 3
-	case path == "features.rk" || path == "config.rk" || strings.HasPrefix(path, "custom/"):
+	case path == "features.rk" || path == "config.rk" || strings.HasPrefix(path, "custom/") || CompanyPath(path):
 		return 4
 	case unitPath(path):
 		return 5
@@ -54,6 +54,12 @@ func sensitiveField(f map[string]any) bool {
 
 func layerOf(path string) int { return Layer(path) }
 
+// CompanyPath reports whether a change-set path is a file of the site company module: models/<m>.rk or
+// flows/<f>.rk in the site (layer 4, contract 0016).
+func CompanyPath(p string) bool {
+	return strings.HasPrefix(p, "models/") || strings.HasPrefix(p, "flows/")
+}
+
 // unitPath reports whether a change-set path is a file of a module or an app (layer 5, contract 0001).
 func unitPath(p string) bool {
 	return strings.HasPrefix(p, "apps/") || strings.HasPrefix(p, "modules/")
@@ -88,6 +94,10 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 				target = model(name)
 			}
 			assessOverlay(a, p, old, existed, nw, target)
+		case strings.HasPrefix(p, "models/") && existed: // the company's own table: judged like an overlay
+			assessModel(a, p, old, nw)
+		case strings.HasPrefix(p, "flows/"):
+			a.raise("medium", "company automation "+p)
 		case unitPath(p) && existed:
 			if strings.Contains(p, "/models/") {
 				assessModel(a, p, old, nw)
@@ -97,11 +107,11 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 				what = "module"
 			}
 			a.raise("high", "edits "+what+" file "+p+" ("+what+" files belong to app authors; organisations change models through custom/<model>.rk)")
-		case unitPath(p):
+		case unitPath(p) || strings.HasPrefix(p, "models/"):
 			switch {
 			case strings.Contains(p, "/dashboards/"):
 				a.raise("low", "new dashboard "+p)
-			case strings.Contains(p, "/models/"):
+			case strings.Contains(p, "/models/") || strings.HasPrefix(p, "models/"):
 				for _, f := range meta.AsList(nw["fields"]) {
 					if sensitiveField(meta.AsMap(f)) {
 						a.raise("high", "new model "+p+" with money/stock field "+meta.Str(meta.AsMap(f), "name"))

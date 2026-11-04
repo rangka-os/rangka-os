@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# A company table (contract 0016): its own module "site", links to catalogue models, permissions with catalogue roles.
+name: x_kunjungan_toko
+label: {id: Kunjungan Toko}
+title_field: toko
+fields:
+  - {name: toko, type: data, label: {id: Nama toko}, required: true}
+  - {name: tanggal, type: date, label: {id: Tanggal}}
+  - {name: pelanggan, type: link, to: customer, label: {id: Pelanggan}}
+  - {name: peluang, type: link, to: deal, label: {id: Peluang}}
+views:
+  list: {columns: [toko, tanggal]}
+  form:
+    layout:
+      - {section: {id: Umum}, fields: [toko, tanggal, pelanggan, peluang]}
+permissions:
+  - {role: sales_manager, read: true, create: true, write: true, delete: true}
+  - {role: sales_rep, read: true, create: true}

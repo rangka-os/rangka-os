@@ -69,7 +69,7 @@ func (s *Scheduler) SetFlows(reg *meta.Registry, org string) {
 			bad = append(bad, name+": "+err.Error())
 			continue
 		}
-		items = append(items, &Schedule{Name: name, Source: reg.App[f.App].Prefix + "/flows/" + name + ".rk", Cron: c, Org: org, next: c.Next(now)})
+		items = append(items, &Schedule{Name: name, Source: reg.App[f.App].DocKey("flows/" + name + ".rk"), Cron: c, Org: org, next: c.Next(now)})
 	}
 	s.mu.Lock()
 	s.items, s.Bad = items, bad

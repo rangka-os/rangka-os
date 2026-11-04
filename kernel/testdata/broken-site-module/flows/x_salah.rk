@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_salah
+on: kunjungan.closed
+steps:
+  - {find: kunjungan, where: "name == event.name", as: record}

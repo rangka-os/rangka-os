@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
@@ -54,7 +55,7 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 			apps = append(apps, map[string]any{"name": ap.Name, "kind": ap.Kind, "version": ap.Version, "title": ap.Title, "menu": orEmpty(ap.Raw["menu"]),
 				"dashboards": dash, "requires": ap.Requires, "optional": ap.Optional, "modules": mods})
 		}
-		if ap.IsModule() {
+		if ap.IsModule() || ap.Kind == meta.KindSite {
 			req := ap.Requires
 			if req == nil {
 				req = map[string]any{}
@@ -112,7 +113,7 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 	roles := map[string]any{}
 	for _, an := range reg.AppOrder() {
 		for _, rn := range reg.App[an].Roles {
-			if d := reg.Docs[reg.App[an].Prefix+"/roles/"+rn+".rk"]; d != nil {
+			if d := reg.Docs[reg.App[an].DocKey("roles/"+rn+".rk")]; d != nil {
 				raw := map[string]any{}
 				for k, v := range meta.AsMap(d.Data) {
 					raw[k] = v
@@ -430,16 +431,5 @@ func (s *Server) listFiles(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, 200, map[string]any{"data": out})
 }
 
-func layerOf(p string) int {
-	switch {
-	case p == "system.rk":
-		return 2
-	case strings.HasPrefix(p, "connectors/"):
-		return 3
-	case p == "features.rk" || p == "config.rk" || strings.HasPrefix(p, "custom/"):
-		return 4
-	case strings.HasPrefix(p, "apps/") || strings.HasPrefix(p, "modules/"):
-		return 5
-	}
-	return 6
-}
+// layerOf is the change-set layer of a metadata path (changeset.Layer).
+func layerOf(p string) int { return changeset.Layer(p) }

@@ -143,6 +143,36 @@ def default_modules(root):
     return d if os.path.isdir(d) else None
 
 
+SITE_UNIT = "site"
+
+
+def load_site_unit(rep, apps, site):
+    """The site company module (contract 0016): <site>/models and <site>/flows as the unit "site", kind "site"."""
+    models, flows = rkfile.listdir(os.path.join(site, "models")), rkfile.listdir(os.path.join(site, "flows"))
+    if not models and not flows:
+        return
+    if SITE_UNIT in apps:
+        rep.add("error", (models + flows)[0][1], "(root)", "duplicate_unit", f'"{SITE_UNIT}" is already a unit ({os.path.relpath(apps[SITE_UNIT]["app_path"], rep.root)}); the site company module is named {SITE_UNIT} (contract 0016)')
+        return
+    a = {"dir": site, "app_path": None, "manifest": {}, "kind": "site", "models": {}, "roles": set(), "dashboards": {}}
+    for st, p in models:
+        m = rep.load(p)
+        if m is None:
+            continue
+        owners = [n for n, u in apps.items() if st in u["models"]]  # the last one wins, as in allmodels
+        if owners:
+            owner = owners[-1]
+            rep.add("error", p, "name", "duplicate_model", f'"{st}" is already a model of {owner}; a company model needs its own name (x_…), contract 0016')
+            continue
+        a["models"][st] = (p, m)
+    apps[SITE_UNIT] = a
+
+
+def is_app(u):
+    """A unit a site installs by name: an app or a 0.4 app (not a module, not the site company module)."""
+    return u["kind"] in ("app", "legacy")
+
+
 def validate(root, only=None, site=None, connectors=None, modules=None):
     V = load_schemas()
     rep = Report(root)
@@ -175,6 +205,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
             if db is not None:
                 a["dashboards"][st] = (p, db)
         apps[app] = a
+    if site:
+        load_site_unit(rep, apps, site)
 
     # ---------- pass 1: shape
     for name, a in apps.items():
@@ -183,7 +215,7 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
         p = a["app_path"]
         if a["kind"] == "legacy":
             rep.add("warn", p, "(root)", "deprecated_layout", f"0.4 app.rk: split into modules/{name}/module.rk and an app (contract 0001)")
-        for e in schema_for(V, "module" if a["kind"] == "module" else "app", a["manifest"]).iter_errors(a["manifest"]):
+        for e in schema_for(V, "module" if a["kind"] == "module" else "app", a["manifest"]).iter_errors(a["manifest"]) if p else ():
             rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message)
         if a["kind"] == "app" and rkfile.listdir(os.path.join(a["dir"], "models")):
             rep.add("error", p, "models", "app_defines_model", f'app "{name}" has models/; an app defines no models, move them into a module (contract 0001)')
@@ -194,6 +226,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                 rep.add("error", p, where, "schema", msg)
             if m.get("name") != mname:
                 rep.add("error", p, "name", "name_mismatch", f'model name "{m.get("name")}" must match the file name "{mname}"')
+            if a["kind"] == "site" and not mname.startswith("x_"):
+                rep.add("error", p, "name", "company_model_name", f'company model "{mname}" must start with x_ (x_{mname}), so a module upgrade never brings a model of the same name (contract 0016)')
             if isinstance(m.get("naming"), dict):
                 reset_needs_date(rep, p, "naming", m["naming"])
         for dname, (p, db) in a["dashboards"].items():
@@ -222,7 +256,7 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
             continue
         man = a["manifest"]
         reqs = set(man.get("requires", {})) | set(man.get("optional", {}))
-        mods = [k for k, u in apps.items() if u["kind"] != "app"]  # modules and 0.4 units
+        mods = [k for k, u in apps.items() if u["kind"] in ("module", "legacy")]  # modules and 0.4 units
         for key in ("requires", "modules") if a["kind"] != "legacy" else ():
             deps = man.get(key)
             for k in deps if isinstance(deps, dict) else {}:
@@ -239,6 +273,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
         if a["kind"] == "app":
             listed = man.get("modules") if isinstance(man.get("modules"), dict) else {}
             reqs = set(closure(apps, [k for k in listed if k in mods])) | set(man.get("optional", {}))
+        if a["kind"] == "site":  # the company module sees every unit (contract 0016)
+            reqs = set(apps)
         visible = {m: v for m, v in allmodels.items() if v[0] == name or v[0] in reqs}
         roles = set().union(*[apps[x]["roles"] for x in [name, *reqs] if x in apps])
         hooks = CORE_HOOKS | set(a["manifest"].get("hooks", []))
@@ -560,6 +596,8 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             f = rep.load(p)
             if f is not None:
                 flows[st] = (name, p, f)
+        if a["kind"] == "site":
+            continue  # the rest of the site is loaded below
         for st, p in rkfile.listdir(os.path.join(a["dir"], "imports")):
             d = rep.load(p)
             if d is not None:
@@ -839,22 +877,23 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
     if features[0]:
         for i, pl in enumerate(features[1].get("plans", [])):
             for j, a in enumerate(pl.get("apps", [])):
-                if a not in apps or apps[a]["kind"] == "module":
-                    rep.add("error", features[0], f"plans/{i}/apps/{j}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, [k for k, u in apps.items() if u["kind"] != "module"])}')
+                if a not in apps or not is_app(apps[a]):
+                    rep.add("error", features[0], f"plans/{i}/apps/{j}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, [k for k, u in apps.items() if is_app(u)])}')
         for i, pl in enumerate(features[1].get("plans", [])):
             ext = pl.get("extends")
             if ext and ext not in plans:
                 rep.add("error", features[0], f"plans/{i}/extends", "unknown_plan", f'plan "{ext}" does not exist')
     cp, cfg = config
     installed = list(apps)
-    app_names = [k for k, u in apps.items() if u["kind"] != "module"]
+    app_names = [k for k, u in apps.items() if is_app(u)]
+    company = [SITE_UNIT] if SITE_UNIT in apps and apps[SITE_UNIT]["kind"] == "site" else []
     if cp:
         plan = cfg.get("plan")
         allowed = plan_info(features[1], plan) if plan and plan in plans else None
         if plan and features[0] and plan not in plans:
             rep.add("error", cp, "plan", "unknown_plan", f'plan "{plan}" is not in features.rk{suggest(plan, plans)}')
         if isinstance(cfg.get("apps"), list):
-            installed = closure(apps, [a for a in cfg["apps"] if a in app_names])
+            installed = closure(apps, [a for a in cfg["apps"] if a in app_names]) + company
             for i, a in enumerate(cfg["apps"]):
                 if a not in app_names:
                     rep.add("error", cp, f"apps/{i}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, app_names)}')
@@ -865,7 +904,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
                     if dep in apps and apps[dep]["kind"] == "legacy" and dep not in cfg["apps"]:
                         rep.add("error", cp, f"apps/{i}", "missing_dependency", f'"{a}" requires "{dep}"; add it to apps')
         elif allowed is not None:
-            installed = closure(apps, [a for a in allowed if a in app_names])
+            installed = closure(apps, [a for a in allowed if a in app_names]) + company
         th = cfg.get("theme")
         if th and th not in themes and not template_exists("themes", th):
             rep.add("error", cp, "theme", "unknown_theme", f'theme "{th}" has no file themes/{th}.rk{suggest(th, themes)}')
@@ -1193,6 +1232,8 @@ def check_overlays(rep, V, apps, allmodels, overlays):
         m = apps[app]["models"][mn][1]  # the app's own model: overlay fields are checked against it
         man = apps[app]["manifest"]
         reqs = set(man.get("requires", {})) | set(man.get("optional", {}))
+        if apps[app]["kind"] == "site":  # the company module sees every unit (contract 0016)
+            reqs = set(apps)
         visible = {k: v for k, v in allmodels.items() if v[0] == app or v[0] in reqs}
         base = {f["name"]: f for f in m.get("fields", []) if isinstance(f, dict) and "name" in f}
         merged = dict(base)

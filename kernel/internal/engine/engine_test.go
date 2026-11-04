@@ -198,8 +198,14 @@ func TestInvoiceLifecycle(t *testing.T) {
 	if res, err = e.Submit(ctx, a, "sales_invoice", res.Record["name"].(string), false); err != nil || res.Record["name"] != "INV-2026-00048" {
 		t.Fatalf("next number: %v %v", res, err)
 	}
-	// min_rows and required on submit
-	res, err = e.Create(ctx, a, "sales_invoice", map[string]any{"customer": "CUST-0031", "outlet": "OUT-02"})
+	// min_rows on a client create, and on submit of a draft a hook made without lines (crm.mark_won)
+	if _, err := e.Create(ctx, a, "sales_invoice", map[string]any{"customer": "CUST-0031", "outlet": "OUT-02"}); !errors.As(err, &ve) || ve.Errors[0].Code != "min_rows" {
+		t.Fatalf("min_rows on create: %v", err)
+	}
+	err = e.run(ctx, a, func(o *op) error {
+		res, err = o.create("sales_invoice", map[string]any{"customer": "CUST-0031", "outlet": "OUT-02"}, CreateOpts{})
+		return err
+	})
 	if err != nil {
 		t.Fatal(err)
 	}

@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: receipt
+is_submittable: true
+naming: RCP-{YYYY}-{#####}
+fields:
+  - {name: note, type: data}
+  - {name: checked_by, type: data, read_only: true}
+  - {name: allocations, type: table, of: receipt_allocation, min_rows: 1, label: {id: Alokasi}}
+  - {name: allocated_total, type: currency, compute: 'allocations.map(a, a.amount).sum()'}
+rules:
+  - name: no_double_pph23
+    on: save
+    check: "allocations.map(a, a.withheld > 0 && a.pph23_applies ? 1 : 0).sum() == 0"
+    message: {id: PPh 23 sudah dipotong di faktur ini}

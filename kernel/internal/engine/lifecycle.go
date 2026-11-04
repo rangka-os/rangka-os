@@ -19,7 +19,13 @@ var SystemKeys = map[string]bool{"name": true, "docstatus": true, "amended_from"
 
 // normalize keeps known fields (and x_ company fields) of input, coerced to their types. Missing fields stay
 // missing so defaults can apply.
-func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Record) (store.Record, []Issue) {
+//
+// client marks a write from outside the kernel (REST create and update, imports): read_only fields are not
+// writable there, on the document and on its child rows. A client-sent read_only value is dropped, so a new
+// record or row gets its default and a stored one keeps its value: a row keeps the read_only values of the
+// stored row of the same name (base), and a row whose name is not among the stored rows is a new row (its
+// name is dropped, so defaults apply). Hooks, automations and flows write read_only fields (client false).
+func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Record, client bool) (store.Record, []Issue) {
 	rec := store.Record{}
 	for k, v := range base {
 		rec[k] = v
@@ -39,10 +45,19 @@ func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Recor
 		if f.MoneyOf() != "" {
 			continue // IDR twins are computed by the kernel; a client-sent value is ignored
 		}
+		if client && f.ReadOnly {
+			continue // the stored value (base) or the default stays
+		}
 		if f.Type == "table" {
 			cm := e.Reg().Models[f.Of]
 			if cm == nil {
 				continue
+			}
+			stored := map[string]map[string]any{}
+			for _, sr := range rows(base[k]) {
+				if n := str(sr["name"]); n != "" {
+					stored[n] = sr
+				}
 			}
 			var out []any
 			list, _ := v.([]any)
@@ -55,9 +70,20 @@ func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Recor
 				if row == nil {
 					continue
 				}
-				nr, is := e.normalize(cm, row, nil)
+				nr, is := e.normalize(cm, row, nil, client)
 				if n := str(row["name"]); n != "" {
-					nr["name"] = n
+					if sr, ok := stored[n]; client && ok {
+						for _, cf := range cm.Fields {
+							if cf.ReadOnly && cf.Type != "table" {
+								if v, ok := sr[cf.Name]; ok {
+									nr[cf.Name] = v
+								}
+							}
+						}
+						nr["name"] = n
+					} else if !client {
+						nr["name"] = n
+					}
 				}
 				issues = append(issues, is...)
 				out = append(out, map[string]any(nr))
@@ -106,8 +132,8 @@ func (o *op) prepare(m *meta.Model, rec store.Record, isNew bool) {
 	o.settleMoney(m, rec)
 }
 
-// check runs rules (on save, or on submit = submit + save rules), required fields, min_rows (submit),
-// link targets and select options.
+// check runs rules (on save, or on submit = submit + save rules), required fields, min_rows (submit; a
+// client save checks it in create and update), link targets and select options.
 func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Issue, err error) {
 	s := o.scope(m, rec)
 	var req []Issue
@@ -120,9 +146,9 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 			}
 			req = append(req, Issue{Field: f.Name, Code: "required", Message: lbl + " wajib diisi"})
 		}
-		if f.Type == "table" && f.MinRows > 0 && on == "submit" && len(rows(v)) < f.MinRows {
-			errs = append(errs, Issue{Field: f.Name, Code: "min_rows", Message: fmt.Sprintf("Tambahkan minimal %d baris %s", f.MinRows, strings.ToLower(f.Label.Text()))})
-		}
+	}
+	if on == "submit" {
+		errs = append(errs, minRows(m, rec, nil)...)
 	}
 	errs = append(req, errs...)
 	for _, r := range m.Rules {
@@ -145,6 +171,21 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 	more, err := o.checkValues(m, rec, "")
 	errs = append(errs, more...)
 	return append(errs, s.checkMoney("", "", "", map[string]bool{})...), warns, err
+}
+
+// minRows reports the table fields of rec with fewer rows than their min_rows. only limits the check to
+// some table fields (nil: all of them).
+func minRows(m *meta.Model, rec store.Record, only func(field string) bool) []Issue {
+	var errs []Issue
+	for _, f := range m.Fields {
+		if f.Type != "table" || f.MinRows <= 0 || (only != nil && !only(f.Name)) {
+			continue
+		}
+		if len(rows(rec[f.Name])) < f.MinRows {
+			errs = append(errs, Issue{Field: f.Name, Code: "min_rows", Message: fmt.Sprintf("Tambahkan minimal %d baris %s", f.MinRows, strings.ToLower(labelOr(f)))})
+		}
+	}
+	return errs
 }
 
 func (o *op) checkValues(m *meta.Model, rec store.Record, prefix string) ([]Issue, error) {
@@ -250,6 +291,7 @@ type CreateOpts struct {
 	Docstatus int64
 	authorize bool // check create on the new record (public entry points; hooks run inside an allowed op)
 	Guard     bool // check the new record against the actor's row scope (public Create, not automations)
+	client    bool // a client write (public Create, imports): read_only fields are dropped, min_rows is checked
 }
 
 // Result of a write: the record and any warnings. Held is set when the verb waits for approval (0007);
@@ -267,7 +309,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true})
+		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
 		return err
 	})
 	return res, err
@@ -281,7 +323,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if m.IsChild {
 		return nil, badRequest(model + " rows are saved through their parent document")
 	}
-	rec, issues := o.e.normalize(m, input, nil)
+	rec, issues := o.e.normalize(m, input, nil, opts.client)
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
@@ -294,6 +336,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err
+	}
+	if opts.client { // a client cannot save a document with fewer rows than min_rows; a hook's draft may start empty
+		errs = append(errs, minRows(m, rec, nil)...)
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
@@ -403,8 +448,9 @@ func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch 
 }
 
 // update merges patch into a record. authorize checks write on the stored and the patched record (public
-// Update, flow steps); guard checks both against the actor's row scope (public Update only). Automations and
-// hooks pass false for both.
+// Update, flow steps); guard marks the public Update: both records are checked against the actor's row scope,
+// read_only fields of the patch are dropped and a table sent in the patch must keep min_rows rows.
+// Automations and hooks pass false for both.
 func (o *op) update(model, name string, patch map[string]any, authorize, guard bool) (*Result, error) {
 	m, err := o.e.model(model)
 	if err != nil {
@@ -427,7 +473,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	if m.IsSubmittable && toInt(cur["docstatus"]) != 0 {
 		return nil, conflict("immutable", "Dokumen yang sudah diajukan tidak bisa diubah; batalkan lalu ubah (amend)")
 	}
-	rec, issues := o.e.normalize(m, patch, cur)
+	rec, issues := o.e.normalize(m, patch, cur, guard)
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
@@ -440,6 +486,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err
+	}
+	if guard { // a client patch that sends a table must leave at least min_rows rows in it
+		errs = append(errs, minRows(m, rec, func(f string) bool { _, sent := patch[f]; return sent })...)
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)

@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: worker
+naming: WRK-{###}
+fields:
+  - {name: worker_name, type: data, required: true}
+  - {name: review_on, type: date}
+  - {name: review_due, type: check, compute: "review_on != '' && review_on < today()"}
+  - {name: certifications, type: table, of: certification}
+  - {name: expired_count, type: int, compute: 'certifications.map(c, c.expired ? 1 : 0).sum()'}
+  - {name: cert_count, type: int, compute: 'size(certifications)'}

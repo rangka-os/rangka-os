@@ -43,7 +43,7 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 			}
 			// imports are a public entry point: each record needs create and must be inside the actor's row
 			// scope; a refusal is not a per-input error and rolls back the whole run
-			res, err := o.create(model, in, CreateOpts{authorize: true, Guard: true})
+			res, err := o.create(model, in, CreateOpts{authorize: true, Guard: true, client: true})
 			var ve *ValidationError
 			if errors.As(err, &ve) {
 				if _, err := o.tx.Exec(ctx, "rollback to savepoint many_input"); err != nil {

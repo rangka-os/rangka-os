@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: receipt_allocation
+is_child: true
+fields:
+  - {name: bill, type: link, to: bill}
+  - {name: amount, type: currency, required: true}
+  - {name: withheld, type: currency, default: '0'}
+  - {name: pph23_applies, type: check, default: "bill != '' ? bill.pph23_applies : false", read_only: true}
+  - {name: applied, type: currency, read_only: true}

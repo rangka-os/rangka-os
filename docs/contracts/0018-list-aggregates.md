@@ -23,18 +23,21 @@ row. The kernel should answer them in one query that matches the list exactly.
      "groups": [
        {"key": "CUST-0012", "label": "CV Maju Jaya", "count": 4, "values": {"sum:total": 3900000}}
      ],
-     "other": {"count": 0, "values": {}}
+     "other": {"count": 9, "values": {"sum:total": 1150000}}
    }
    ```
 
+   `other` is present only when groups overflowed (more than 50); otherwise the key is left out.
+
 3. **Group rules.**
    - The 50 largest groups by count are returned, ties broken by key.
-   - The remaining groups are summed into `other`.
+   - The remaining groups are summed into `other` (present only when groups overflowed).
    - Empty values share one group with `key: null, label: "(kosong)"`.
    - For a link field, `label` is the linked record's title.
 4. **Errors.**
-   - `400` when `group` is not a field of the model, or when `sum|avg|min|max` names a non-number field (currency,
-     int, float and percent are numbers).
+   - `400` when `group` is not a field of the model, or is a `table` field.
+   - `400` when `sum|avg|min|max` names a non-number field. Currency, int, float and percent are numbers; `money`
+     (Decimal) fields are not and are refused.
    - `400` on a bad `filter`.
    - `404` for an unknown model.
    - `403` without a read grant.
@@ -48,8 +51,11 @@ row. The kernel should answer them in one query that matches the list exactly.
 - `count` always equals the list's `total` for the same `q` and `filter`.
 - Any field present on the output record may be grouped, including system and computed columns such as `status` and
   `docstatus`. A name that is neither a model field nor a known system column is a `400`.
+- `sum|avg|min|max` count a record whose field is empty as `0` (`avg` divides by every matched record, `min` can be
+  `0` because of an empty value). This is the dashboard engine's aggregate, shared so both answer the same.
 - The group-by view opens the empty group with the filter `field == null`. In CEL, `x == null` is true for a missing or
-  empty value (`''`), and `x != null` is its negation; this holds in the kernel and in `web/app/engine.js`. `in` keeps
+  empty value (`''`), and `x != null` is its negation; this holds in the kernel and in `web/app/engine.js`, in every CEL
+  context (list and aggregate `filter`, rules, automations, dashboard widget filters and permission `if:`). `in` keeps
   plain equality, so `x in [null]` does not match `''`.
 
 ## Contract changes (rangka-os)

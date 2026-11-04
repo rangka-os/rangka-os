@@ -37,8 +37,8 @@ A low-risk Ubah edit by someone with `approve: false` stays a pending change set
 | Add a field | `custom/<model>.rk` `fields` (`x_` name) + `views.form.add` (+ `views.list.add`) | medium (high for money/stock) |
 | Add a status / stage | `custom/<model>.rk` `options: {<select field>: [{value, label}]}` | medium (high on a submittable model) |
 | Add an approval | `custom/<model>.rk` `approvals` (contract 0007 shape) | medium |
-| Add an automation | new `modules/<m>/flows/<name>.rk` in the model's module (`apps/<app>/flows/…` for a 0.4 app) with `on: <model>.created|updated` | medium |
-| Add a table (model) | new `modules/<m>/models/<name>.rk` in a module the app already includes (contract 0001: an app defines no models): the module of the model on screen, else of the app's first menu model (`apps/<app>/models/…` only for a 0.4 app); the app itself gets only a `nav.side` entry in the layout; `permissions` copied from a sibling model (the first model of the menu group the table joins, else the app's first model with `permissions`), none when no sibling has them | medium (high with money/stock fields); without `permissions` an extra reason says every role has full access |
+| Add an automation | new `flows/<name>.rk` in the site company module (contract 0016) with `on: <model>.created|updated` | medium |
+| Add a table (model) | new `models/x_<name>.rk` in the site company module (contract 0016; never `apps/` or a catalogue module) + a `nav.side` entry in the layout; `permissions` copied from a sibling model (the first model of the menu group the table joins, else the first model with `permissions` of the module of the model on screen, else of the app's first menu model), none when no sibling has them | medium (high with money/stock fields); without `permissions` an extra reason says every role has full access |
 
 An overlay that only changes `views` is low risk whether or not the file is new (this narrows "new overlay → medium"
 in the v0.1 notes to overlays that add fields, rules, approvals or options).

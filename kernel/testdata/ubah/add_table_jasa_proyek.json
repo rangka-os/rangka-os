@@ -3,12 +3,12 @@
   "ops": [
     {
       "op": "create",
-      "path": "modules/quotation/models/kunjungan_toko.rk",
-      "content": "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json\nname: 'kunjungan_toko'\n"
+      "path": "models/x_kunjungan_toko.rk",
+      "content": "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json\nname: 'x_kunjungan_toko'\n"
     },
     {
       "op": "patch",
-      "path": "modules/quotation/models/kunjungan_toko.rk",
+      "path": "models/x_kunjungan_toko.rk",
       "patch": [
         {
           "op": "add",
@@ -167,7 +167,7 @@
             },
             "items": [
               {
-                "to": "model:kunjungan_toko",
+                "to": "model:x_kunjungan_toko",
                 "label": {
                   "id": "Kunjungan Toko"
                 }

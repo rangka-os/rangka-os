@@ -182,6 +182,9 @@ test("opsAddAutomation: update flow in an app, notify flow in a module", () => {
   r = RA.opsAddAutomation("hr", "leave", { name: "kabari", label: "Kabari", when: "record.days > 3", notify: "hr_manager", channel: "email", template: "Cuti panjang" }, "module");
   assert.strictEqual(r.ops[0].path, "modules/hr/flows/kabari.rk");
   assert.deepStrictEqual(r.ops[1].patch[2].value[1], { if: "record.days > 3", notify: "hr_manager", channel: "email", template: { id: "Cuti panjang" } });
+  r = RA.opsAddAutomation("site", "deal", { name: "kabari", label: "Kabari", when: "record.amount > 1", notify: "owner" }, "site");
+  assert.strictEqual(r.ops[0].path, "flows/kabari.rk", "a company automation lives in the site (contract 0016)");
+  assert.strictEqual(r.ops[1].path, "flows/kabari.rk");
 });
 
 test("opsAddModel: model file plus a menu entry in a new group", () => {
@@ -431,24 +434,44 @@ const canvasMeta = {
   dashboards: {}, layout: { name: "utama" }
 };
 
-test("tableHome: the route model's module, else the module of the app's first menu model; a 0.4 app keeps apps/", () => {
-  assert.deepStrictEqual(RA.tableHome(canvasMeta, null, "crm"), { unit: "pipeline", kind: "module" });
-  assert.deepStrictEqual(RA.tableHome(canvasMeta, null, "jasa_proyek"), { unit: "quotation", kind: "module" });
-  assert.deepStrictEqual(RA.tableHome(canvasMeta, "project", "jasa_proyek"), { unit: "projects", kind: "module" });
+test("tableHome: always the site company module, next to the route model's unit, else the app's first menu model's", () => {
+  const site = (near) => ({ unit: "site", kind: "site", near });
+  assert.deepStrictEqual(RA.tableHome(canvasMeta, null, "crm"), site("pipeline"));
+  assert.deepStrictEqual(RA.tableHome(canvasMeta, null, "jasa_proyek"), site("quotation"));
+  assert.deepStrictEqual(RA.tableHome(canvasMeta, "project", "jasa_proyek"), site("projects"));
   const legacy = { apps: [{ name: "crm", kind: "legacy", menu: [{ items: ["deal"] }] }], modules: [{ name: "crm", kind: "legacy" }], models: { deal: { app: "crm", module: "crm" } } };
-  assert.deepStrictEqual(RA.tableHome(legacy, null, "crm"), { unit: "crm", kind: "app" });
-  assert.deepStrictEqual(RA.tableHome(legacy, "deal", "crm"), { unit: "crm", kind: "app" });
+  assert.deepStrictEqual(RA.tableHome(legacy, null, "crm"), site("crm"), "a 0.4 app's tables go to the site too");
+  assert.deepStrictEqual(RA.tableHome(legacy, "deal", "crm"), site("crm"));
+});
+
+test("unitOf: a company model belongs to the site company module", () => {
+  const meta = { apps: [], modules: [{ name: "pipeline", kind: "module" }, { name: "site", kind: "site" }],
+    models: { deal: { app: "pipeline" }, x_kunjungan: { app: "site", module: "site" } } };
+  assert.deepStrictEqual(RA.unitOf(meta, "x_kunjungan"), { unit: "site", kind: "site" });
+  assert.deepStrictEqual(RA.unitOf(meta, "deal"), { unit: "pipeline", kind: "module" });
+});
+
+test("opsAddModel in the site: models/x_<slug>.rk, permissions from the near unit", () => {
+  const perms = [{ role: "sales_manager", read: true, create: true, write: true, delete: true }];
+  const r = RA.opsAddModel({ unit: "site", kind: "site", near: "pipeline" }, { label: "Kunjungan Toko", fields: [] }, "l", null, canvasMeta);
+  assert.strictEqual(r.modelName, "x_kunjungan_toko");
+  assert.strictEqual(r.ops[0].path, "models/x_kunjungan_toko.rk");
+  assert.strictEqual(r.ops[0].content, HDR("model") + "name: 'x_kunjungan_toko'\n");
+  assert.deepStrictEqual(r.ops[1].patch.filter((p) => p.path === "/permissions")[0].value, perms);
+  assert.ok(JSON.stringify(r.ops.filter((o) => o.path === "layouts/l.rk")).includes('"to":"model:x_kunjungan_toko"'), "menu entry");
+  const long = RA.opsAddModel({ unit: "site", kind: "site" }, { label: "a".repeat(80), fields: [] }, "l", null);
+  assert.strictEqual(long.modelName.length, 60);
 });
 
 /* The ops for "Tambah tabel" on the crm and jasa_proyek apps of kernel/testdata/canvas; the kernel test
  * TestUbahAddTableIsValidMedium validates the same files (UPDATE_FIXTURES=1 rewrites them). */
-test("opsAddTable on 0.5 apps writes into a module (fixtures for the kernel check)", () => {
+test("opsAddTable writes into the site company module (fixtures for the kernel check)", () => {
   const fs = require("node:fs"), path = require("node:path");
   for (const app of ["crm", "jasa_proyek"]) {
     const home = RA.tableHome(canvasMeta, null, app);
     const r = RA.opsAddTable(canvasMeta, { name: "utama", existing: null, config: {} }, home, { label: "Kunjungan Toko", fields: [{ label: "Tanggal", type: "Tanggal" }] });
-    assert.ok(r.ops[0].path.startsWith("modules/" + home.unit + "/models/"), r.ops[0].path);
-    assert.ok(r.ops.every((o) => !o.path.startsWith("apps/")), "no op touches apps/");
+    assert.strictEqual(r.ops[0].path, "models/x_kunjungan_toko.rk");
+    assert.ok(r.ops.every((o) => !o.path.startsWith("apps/") && !o.path.startsWith("modules/")), "no op touches apps/ or modules/");
     const fx = path.join(__dirname, "../../../kernel/testdata/ubah/add_table_" + app + ".json");
     const body = JSON.stringify({ title: r.title, ops: r.ops }, null, 2) + "\n";
     if (process.env.UPDATE_FIXTURES) { fs.mkdirSync(path.dirname(fx), { recursive: true }); fs.writeFileSync(fx, body); }

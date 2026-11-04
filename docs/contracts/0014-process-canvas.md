@@ -57,7 +57,15 @@ Every installed app (kind app or legacy) with a `menu:` and no declared process 
 - Node id = `<file>#<JSON pointer>`. A guard condition: the guarded item's pointer plus `/if` or `/when`. A lifecycle step: the option's pointer (`…/fields/3/options/4`). A derived-status step: `<model file>#status/<value>`. A stage-level `when` step: `<process file>#/stages/<i>/when`.
 - A node added by a company overlay (`site/custom/<model>.rk`: a rule, approval or field) has the overlay file and pointer as its source, not the app file.
 - `editable` maps key paths (dot-separated, relative to the node's `source.path`, for example `when`, `message.id`, `set.status`, `approvers`) to current values.
-- Edge kinds: `flow` (inside a flow or automation), `lifecycle` (status steps of a model), `handoff` (from the last node of a stage to the first of the next).
+- Edge kinds: `flow` (inside a flow or automation, and from a guard condition to the item it guards), `lifecycle` (status steps of a model), `handoff` (from the last lifecycle step, else the last node, of a stage to the first node of the next; its `label` is the label of the link field joining the two stage models in either direction, absent when there is none).
+- Node details:
+  - `source.line`/`col` are the position of the YAML node the id points at. A guard condition and a stage `when` step have `source.path` = the owning item's pointer (`/automations/0`, `/stages/3`), so their editable key is `if` or `when`.
+  - A flow's trigger has pointer `/` (the file root); its steps are `action` nodes (`/steps/<i>`).
+  - A derived-status step has no `path`; its `line`/`col` point at `is_submittable`. The derived steps are `draft → submitted → partly → paid` (a lifecycle chain) plus `overdue` and `cancelled`.
+  - Lifecycle steps come from a stage's main `model` only; a `models:` entry adds its other nodes. A model's nodes appear once, in the first visible stage that names it.
+  - In a group, a stage `when` step comes first, then the steps it claims, then the model's triggers, rules, actions, approvals and steps.
+  - An inferred process's graph `source` is the app manifest at `/menu`; each group's source is its menu item (`/menu/<g>/items/<i>`).
+- `editable` holds only keys present in the file (a rule without `level` has no `level` key); values are scalars or lists of scalars.
 
 ### 5. Edits: change sets only
 `POST /processes/{name}/ops` `{edits: [{node, key, value}]}` → `{title, ops}`. Compute only, nothing is written. `400 bad_edit` for an unknown node or key. `ops` is empty when every value equals the current one. The client then `POST /api/v1/changesets {title, ops}`; the change set goes through the normal states (proposed, validated, previewed, approved, applied). Nothing on the canvas writes metadata directly, and AI never approves or applies.

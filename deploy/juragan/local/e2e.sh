@@ -80,7 +80,7 @@ https() { # https <host> <curl args...>
 }
 
 prepare() {
-  [ -d "$APPS_REPO/apps" ] || { echo "rangka-apps not found at $APPS_REPO (set RANGKA_APPS_REPO)" >&2; exit 2; }
+  [ -d "$APPS_REPO/apps" ] && [ -d "$APPS_REPO/examples/sites/kopi-senja" ] || { echo "rangka-apps (modules + apps layout) not found at $APPS_REPO (set RANGKA_APPS_REPO)" >&2; exit 2; }
   echo "== build rangka:local from $SRC"
   docker build -q -t rangka:local -f "$HERE/Dockerfile.rangka" "$SRC" >/dev/null
   echo "== prepare pilot folders from $APPS_REPO"
@@ -93,8 +93,9 @@ prepare() {
     mkdir -p "$d/modules"
     if [ -d "$APPS_REPO/modules" ]; then cp -R "$APPS_REPO/modules/." "$d/modules/"; fi
     cp -R "$HERE/fixtures/modules/e2e_marker" "$d/modules/e2e_marker" # must survive backup and restore
-    cp -R "$APPS_REPO/fixtures" "$d/fixtures"
-    cp -R "$APPS_REPO/sites/kopi-senja" "$d/site"
+    mkdir -p "$d/fixtures" # the kernel's default fixtures: <apps>/../fixtures
+    cp -R "$APPS_REPO/examples/fixtures/kopi-senja/." "$d/fixtures/"
+    cp -R "$APPS_REPO/examples/sites/kopi-senja" "$d/site"
     cp -R "$HERE/fixtures/print/print" "$d/site/print" # a print format for model lead (the sample apps have none)
   done
   # the kernel runs as uid 65532 and writes site/custom and data/
@@ -165,6 +166,9 @@ section_stack() {
   same "jasa and fnb set RANGKA_CONNECTORS=/srv/connectors" \
     "$(dc config --format json | jq -r '[.services.jasa, .services.fnb] | map(.environment.RANGKA_CONNECTORS) | join(",")')" "/srv/connectors,/srv/connectors"
 
+  # juragan-kernel:local wraps rangka:local; compose reuses an existing image of that tag, so rebuild it from
+  # the rangka:local just built (a stale one from an earlier run tests an old kernel)
+  dc build -q jasa fnb >/dev/null || { echo "cannot build juragan-kernel:local" >&2; exit 2; }
   dc up -d postgres >/dev/null
   local seed_out
   for p in jasa fnb; do

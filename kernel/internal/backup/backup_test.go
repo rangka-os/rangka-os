@@ -39,8 +39,9 @@ type source struct {
 	dir, apps, site, files, fx string
 }
 
-func loadRegistry(apps, site string) (*meta.Registry, error) {
-	return server.LoadRegistry(server.Config{AppsDir: apps, SiteDir: site, Schemas: schema.Embedded()})
+func loadRegistry(d backup.Dirs) (*meta.Registry, error) {
+	return server.LoadRegistry(server.Config{AppsDir: d.Apps, SiteDir: d.Site, ModulesDir: d.Modules, ConnectorsDir: d.Connectors,
+		Schemas: schema.Embedded()})
 }
 
 func pool(t *testing.T, url string) *pg.Pool {
@@ -70,7 +71,7 @@ func newSource(t *testing.T) *source {
 	if err := os.WriteFile(filepath.Join(s.files, "lead", "LEAD-001", "kartu nama.jpg"), []byte("\xff\xd8\xff not really a jpeg \x00\x01"), 0o644); err != nil {
 		t.Fatal(err)
 	}
-	reg, err := loadRegistry(s.apps, s.site)
+	reg, err := loadRegistry(backup.Dirs{Apps: s.apps, Site: s.site})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -628,7 +629,7 @@ func TestFilesDir(t *testing.T) {
 	site := filepath.Join(dir, "site")
 	os.MkdirAll(site, 0o755)
 	apps, _ := filepath.Abs(testdb.Catalogue("apps"))
-	reg, err := loadRegistry(apps, site)
+	reg, err := loadRegistry(backup.Dirs{Apps: apps, Site: site})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -643,7 +644,7 @@ func TestFilesDir(t *testing.T) {
 	}
 	os.WriteFile(filepath.Join(site, "system.rk"), []byte("# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/system.json\n"+
 		"db: {driver: postgres, url: '${DATABASE_URL}'}\nfiles: {driver: local, path: uploads}\n"), 0o644)
-	if reg, err = loadRegistry(apps, site); err != nil {
+	if reg, err = loadRegistry(backup.Dirs{Apps: apps, Site: site}); err != nil {
 		t.Fatal(err)
 	}
 	if got := backup.FilesDir(reg, ""); got != "uploads" {
@@ -740,6 +741,27 @@ func TestRestoreMissingBlob(t *testing.T) {
 	}
 }
 
+// ownerPool is a fresh empty database owned by, and connected as, a NOSUPERUSER NOBYPASSRLS role.
+func ownerPool(t *testing.T) *pg.Pool {
+	t.Helper()
+	ctx := context.Background()
+	admin := pool(t, os.Getenv("RANGKA_TEST_DATABASE_URL"))
+	role := "rk_owner_" + strings.ToLower(store.RandomName(8))
+	if _, err := admin.Exec(ctx, "create role "+role+" login nosuperuser nobypassrls"); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { admin.Exec(context.Background(), "drop role if exists "+role) })
+	u, err := url.Parse(testdb.New(t)) // dropped before the role (cleanups run last-in first-out)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := admin.Exec(ctx, "alter database "+pg.QuoteIdent(strings.TrimPrefix(u.Path, "/"))+" owner to "+role); err != nil {
+		t.Fatal(err)
+	}
+	u.User = url.User(role)
+	return pool(t, u.String())
+}
+
 // A hosted install connects as the database owner, a role RLS applies to (NOSUPERUSER NOBYPASSRLS, contract
 // 0010 §4). Postgres refuses COPY FROM into a table whose RLS binds the caller, so restore must still load
 // every row as that role and leave RLS forced afterwards.
@@ -748,23 +770,7 @@ func TestRestoreAsTableOwner(t *testing.T) {
 	s := newSource(t)
 	archive := s.backup(t, "")
 
-	admin := pool(t, os.Getenv("RANGKA_TEST_DATABASE_URL"))
-	role := "rk_owner_" + strings.ToLower(store.RandomName(8))
-	if _, err := admin.Exec(ctx, "create role "+role+" login nosuperuser nobypassrls"); err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { admin.Exec(context.Background(), "drop role if exists "+role) })
-	dstURL := testdb.New(t) // dropped before the role (cleanups run last-in first-out)
-	u, err := url.Parse(dstURL)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err := admin.Exec(ctx, "alter database "+pg.QuoteIdent(strings.TrimPrefix(u.Path, "/"))+" owner to "+role); err != nil {
-		t.Fatal(err)
-	}
-	u.User = url.User(role)
-	dst := pool(t, u.String())
-
+	dst := ownerPool(t)
 	if _, err := backup.Restore(ctx, dst, archive, restoreOpts(t)); err != nil {
 		t.Fatalf("restore as the owner role: %v", err)
 	}
@@ -786,5 +792,78 @@ func TestRestoreAsTableOwner(t *testing.T) {
 	if n := count(t, dst, `select count(*) from pg_class where relnamespace = 'public'::regnamespace
 		and relkind = 'r' and relforcerowsecurity`); n == 0 {
 		t.Errorf("no table has forced row-level security; the test does not exercise RLS")
+	}
+}
+
+// The contract 0001 layout: models live in modules/ next to apps/. The archive must carry modules/ (and
+// connectors/), and restore must rebuild from them alone, as the owner role a hosted install runs as.
+func TestModulesAppsRoundTripAsOwner(t *testing.T) {
+	ctx := context.Background()
+	auth.BcryptCost = 4
+	dir := t.TempDir()
+	if err := exec.Command("cp", "-r", filepath.Join(testdb.RepoRoot(), "kernel", "testdata", "modules-apps")+"/.", dir).Run(); err != nil {
+		t.Fatal(err)
+	}
+	conn := filepath.Join(dir, "connectors", "probe")
+	if err := os.MkdirAll(conn, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(conn, "README.md"), []byte("not a connector, only an archived file\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	d := backup.Dirs{Apps: filepath.Join(dir, "apps"), Site: filepath.Join(dir, "site"), Modules: filepath.Join(dir, "modules")}
+	reg, err := loadRegistry(d)
+	if err != nil {
+		t.Fatal(err)
+	}
+	src := pool(t, testdb.New(t))
+	if _, err := server.Seed(ctx, src, reg, server.SeedOptions{Org: "demo", FixturesDir: filepath.Join(dir, "fixtures"),
+		Email: "ceo@saga.co.id", Password: "rangka-demo", UserRecord: "USR-001", Now: fixedNow}); err != nil {
+		t.Fatal(err)
+	}
+	path := filepath.Join(t.TempDir(), "a.tar.gz")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := backup.Write(ctx, src, f, backup.Options{SiteDir: d.Site, AppsDir: d.Apps, ModulesDir: d.Modules,
+		ConnectorsDir: filepath.Join(dir, "connectors"), FilesDir: filepath.Join(dir, "files"), Version: version, Now: fixedNow})
+	if err != nil {
+		t.Fatal(err)
+	}
+	f.Close()
+	have := map[string]bool{}
+	for _, fs := range m.Files {
+		have[fs.Path] = true
+	}
+	for _, p := range []string{"modules/pipeline/module.rk", "modules/contacts/module.rk", "apps/crm/app.rk", "site/config.rk", "connectors/probe/README.md"} {
+		if !have[p] {
+			t.Errorf("%s is not in the archive manifest", p)
+		}
+	}
+
+	dst := ownerPool(t)
+	o := restoreOpts(t)
+	if _, err := backup.Restore(ctx, dst, path, o); err != nil {
+		t.Fatalf("restore a modules + apps install as the owner role: %v", err)
+	}
+	a, err := backup.Sums(ctx, src, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	b, err := backup.Sums(ctx, dst, "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !reflect.DeepEqual(a, b) {
+		t.Errorf("sums differ after restoring a modules + apps install")
+	}
+	if n := count(t, dst, "select count(*) from r_deal"); n == 0 || n != count(t, src, "select count(*) from r_deal") {
+		t.Errorf("r_deal (a module model): restored %d rows", n)
+	}
+	for _, p := range []string{"modules/pipeline/models/deal.rk", "connectors/probe/README.md"} {
+		if _, err := os.Stat(filepath.Join(o.Into, filepath.FromSlash(p))); err != nil {
+			t.Errorf("%s was not restored: %v", p, err)
+		}
 	}
 }

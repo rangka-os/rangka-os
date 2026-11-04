@@ -83,6 +83,14 @@ func fail(err error) int {
 var errNoDB = fmt.Errorf("no database: pass --db or set DATABASE_URL")
 
 // connectorsDir is --connectors, else rangka-connectors next to the apps repo when it exists.
+// modulesDir is the modules directory the loader reads: --modules, else modules next to the apps directory.
+func (c *common) modulesDir() string {
+	if c.modules != "" {
+		return c.modules
+	}
+	return meta.DefaultModulesDir(c.apps)
+}
+
 func (c *common) connectorsDir() string {
 	if c.connectors != "" {
 		return c.connectors

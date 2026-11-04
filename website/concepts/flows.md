@@ -4,7 +4,7 @@ A flow is a list of steps that runs on an event or on a schedule, through the qu
 Reference: [flow.rk](/reference/schema/flow).
 
 ```yaml
-# apps/crm/flows/morning_follow_up.rk
+# modules/pipeline/flows/morning_follow_up.rk
 name: morning_follow_up
 label: {id: Pengingat follow-up pagi}
 schedule: 0 8 * * 1-5          # cron, in system.rk scheduler.timezone
@@ -17,7 +17,7 @@ steps:
 ```
 
 ```yaml
-# apps/crm/flows/whatsapp_to_lead.rk
+# modules/pipeline/flows/whatsapp_to_lead.rk
 on: whatsapp_business.message_received
 steps:
   - {find: lead, where: phone == event.from, as: lead}

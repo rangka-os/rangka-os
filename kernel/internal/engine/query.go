@@ -46,7 +46,8 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 			return nil, 0, badRequest("filter: " + err.Error())
 		}
 	}
-	all, err := store.All(ctx, e.DB, e.Reg(), a.Org, m, opts.Children || strings.Contains(opts.Filter, "."))
+	children := opts.Children || strings.Contains(opts.Filter, ".")
+	all, err := store.All(ctx, e.DB, e.Reg(), a.Org, m, children)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -59,6 +60,7 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 		if !rs.Visible(m, r) {
 			continue
 		}
+		e.refreshClock(ctx, a, m, r, children, links)
 		e.Output(m, r)
 		if !e.recordAllowed(ctx, e.DB, a, m, readable, r, links) {
 			continue

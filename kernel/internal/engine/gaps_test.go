@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -150,5 +151,45 @@ func TestMinRowsOnClientSave(t *testing.T) {
 	}
 	if got := issueCodes(func() error { _, err := e.Submit(ctx, a, "receipt", draft, true); return err }()); len(got) != 1 || got[0] != "min_rows:allocations" {
 		t.Fatalf("submit: want min_rows, got %v", got)
+	}
+}
+
+func TestClockComputesOnRead(t *testing.T) {
+	e, a, ctx := setupGaps(t)
+	// any compute reading a table with clock rows counts (cert_count too: recomputing it is harmless)
+	if got := e.clockFields(e.Reg().Model("worker")); !got["review_due"] || !got["expired_count"] || !got["cert_count"] || len(got) != 3 {
+		t.Fatalf("worker clock fields: %v", got)
+	}
+	res, err := e.Create(ctx, a, "worker", map[string]any{"worker_name": "Citra", "review_on": "2026-11-15",
+		"certifications": []any{map[string]any{"cert_name": "NDT", "expires_on": "2026-11-10"}, map[string]any{"cert_name": "K3"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := str(res.Record["name"])
+	if c := rows(res.Record["certifications"]); c[0]["expired"] != false || res.Record["review_due"] != false || toInt(res.Record["expired_count"]) != 0 {
+		t.Fatalf("at save: %v", res.Record)
+	}
+
+	// a month later nobody saved the worker: reads serve today's value
+	e.Now = func() time.Time { return FixedNow().AddDate(0, 1, 0) }
+	got, err := e.Get(ctx, a, "worker", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	c := rows(got["certifications"])
+	if c[0]["expired"] != true || c[1]["expired"] != false || got["review_due"] != true || toInt(got["expired_count"]) != 1 || toInt(got["cert_count"]) != 2 {
+		t.Fatalf("get after the date: review_due=%v expired_count=%v certs=%v", got["review_due"], got["expired_count"], c)
+	}
+	list, _, err := e.List(ctx, a, "worker", ListOpts{Filter: "review_due", Limit: 10})
+	if err != nil || len(list) != 1 || list[0]["review_due"] != true {
+		t.Fatalf("list filter on a clock compute: %v %v", list, err)
+	}
+	// without children the table-reading compute keeps its stored value; with them it is current
+	if toInt(list[0]["expired_count"]) != 0 {
+		t.Fatalf("list without children: expired_count %v", list[0]["expired_count"])
+	}
+	list, _, err = e.List(ctx, a, "worker", ListOpts{Children: true, Limit: 10})
+	if err != nil || toInt(list[0]["expired_count"]) != 1 {
+		t.Fatalf("list with children: %v %v", list, err)
 	}
 }

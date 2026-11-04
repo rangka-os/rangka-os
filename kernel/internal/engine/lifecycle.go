@@ -399,6 +399,7 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	if err != nil {
 		return nil, err
 	}
+	e.refreshClock(ctx, a, m, rec, true, nil)
 	rec = e.Output(m, rec)
 	if err := e.authorize(ctx, e.DB, nil, a, m.Name, "read", rec); err != nil {
 		return nil, err

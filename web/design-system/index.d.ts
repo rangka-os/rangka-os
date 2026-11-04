@@ -38,8 +38,9 @@ export interface DrawerProps { title: string; subtitle?: string; icon?: IconName
 export declare function Drawer(props: DrawerProps): React.ReactElement | null;
 export declare function DrawerSection(props: { title?: string; children?: Node }): React.ReactElement;
 export interface CommandItem { label: string; icon?: IconName; sub?: string; kbd?: string; onSelect?: (query: string) => void }
-/** ask: false drops the built-in "Tanya Raka" item and the > / @ hints; onQuery gets every keystroke (for a server search). */
-export interface CommandMenuProps { groups: { label: string; items: CommandItem[] }[]; query?: string; placeholder?: string; open?: boolean; ask?: boolean; onQuery?: (q: string) => void; onClose?: () => void }
+/** ask: false drops the built-in "Tanya Raka" item and the > / @ hints; onQuery gets every keystroke (for a server search).
+ *  A group with filter: false is shown as given (its items already match, e.g. server results); others filter by label + sub. */
+export interface CommandMenuProps { groups: { label: string; items: CommandItem[]; filter?: boolean }[]; query?: string; placeholder?: string; open?: boolean; ask?: boolean; onQuery?: (q: string) => void; onClose?: () => void }
 export declare function CommandMenu(props: CommandMenuProps): React.ReactElement | null;
 export type MenuItem = '-' | { heading: string } | { label: string; icon?: IconName; kbd?: string; checked?: boolean; danger?: boolean; disabled?: boolean; onSelect?: () => void };
 export interface MenuProps { items: MenuItem[]; float?: boolean; style?: React.CSSProperties; onClose?: () => void }

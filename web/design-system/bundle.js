@@ -443,7 +443,8 @@
     var qs = useState(p.query || ""), q = qs[0], setQ = qs[1], is = useState(0), idx = is[0], setIdx = is[1];
     if (p.open === false) return null;
     var flat = [], groups = p.groups.map(function (g) {
-      var items = g.items.filter(function (it) { return !q || (it.label + " " + (it.sub || "")).toLowerCase().indexOf(q.toLowerCase()) >= 0; });
+      // filter: false = the caller already matched these (a server search): shown as given
+      var items = g.filter === false ? g.items : g.items.filter(function (it) { return !q || (it.label + " " + (it.sub || "")).toLowerCase().indexOf(q.toLowerCase()) >= 0; });
       items.forEach(function (it) { flat.push(it); });
       return { label: g.label, items: items };
     });

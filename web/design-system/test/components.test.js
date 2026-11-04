@@ -182,3 +182,14 @@ test("DocPanel renders one titled section per entry", () => {
   assert.strictEqual(nodes(tree, (n) => n.type === "section").length, 2);
   assert.ok(["Info", "Lampiran", "dibuat", "file"].every((x) => texts(tree).indexOf(x) >= 0));
 });
+
+test("CommandMenu: a filter:false group keeps its items whatever the query; others filter by label and sub", () => {
+  const tree = render(R.CommandMenu({ query: "maju", ask: false, groups: [
+    { label: "Halaman", items: [{ label: "Pelanggan" }, { label: "Maju terus", sub: "x" }] },
+    { label: "Data", filter: false, items: [{ label: "CV Sinar", sub: "Pelanggan · CUST-1" }] },
+  ] }));
+  const t = texts(tree);
+  assert.ok(t.includes("CV Sinar"), "server match kept though its title lacks the query");
+  assert.ok(t.includes("Maju terus") && !t.includes("Pelanggan"), "the local group still filters");
+  assert.ok(!t.some((x) => /Tanya Raka/.test(x)), "ask: false drops Tanya Raka");
+});

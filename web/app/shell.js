@@ -175,9 +175,10 @@
   function lowerFirst(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
   function recHash(model, name) { return "#/r/" + encodeURIComponent(model) + "/" + encodeURIComponent(name); }
 
-  /** ⌘K groups: Halaman (every sidebar entry once, nav = sideNav(…)), Buat baru (layout.nav.create), Data (found:
-   *  [{model, name, title}] from the record search), and Tanya Raka when meta.features.ai. Items: {id, label, sub, icon, hash}. */
-  function commandGroups(meta, features, nav, found) {
+  /** ⌘K groups: Halaman (every sidebar entry once, nav = sideNav(…)), Buat baru (layout.nav.create models the user may
+   *  create; none while readOnly, i.e. a preview), Data (found: [{model, name, title}] from the record search, already
+   *  matched by the server so filter: false), and Tanya Raka when meta.features.ai. Items: {id, label, sub, icon, hash}. */
+  function commandGroups(meta, features, nav, found, readOnly) {
     meta = meta || {};
     nav = nav || { pinned: [], groups: [] };
     var models = meta.models || {}, seen = {}, pages = [], out = [];
@@ -189,14 +190,16 @@
     (nav.pinned || []).forEach(function (it) { add(it, ""); });
     (nav.groups || []).forEach(function (g) { g.items.forEach(function (it) { add(it, g.label); }); });
     if (pages.length) out.push({ label: "Halaman", items: pages });
-    var create = ((meta.layout && meta.layout.nav && meta.layout.nav.create) || []).filter(function (m) { return models[m]; });
-    if (create.length) {
+    var create = ((meta.layout && meta.layout.nav && meta.layout.nav.create) || []).filter(function (m) {
+      return models[m] && !(models[m].can && models[m].can.create === false);
+    });
+    if (create.length && !readOnly) {
       out.push({ label: "Buat baru", items: create.map(function (m) {
         return { id: "new/" + m, label: "Buat " + lowerFirst(L(models[m].label) || m), icon: "add", hash: "#/r/" + m + "/new" };
       }) });
     }
     if (found && found.length) {
-      out.push({ label: "Data", items: found.map(function (r) {
+      out.push({ label: "Data", filter: false, items: found.map(function (r) {
         var title = String(r.title || r.name), kind = L((models[r.model] || {}).label) || r.model;
         return { id: "rec/" + r.model + "/" + r.name, label: title, sub: title === String(r.name) ? kind : kind + " · " + r.name,
           icon: (models[r.model] || {}).icon || "invoice", hash: recHash(r.model, r.name) };
@@ -440,8 +443,12 @@
     var more = navGroups({ imports: meta.imports }, p.features, p.counts); // Persetujuan and Impor data stay as they are
     var dis = !!u.busy;
     return h("aside", { className: "rk-side ap-ubah-side", "aria-label": "Navigasi " + p.name },
-      h("div", { className: "rk-side-head" }, h("span", { className: "tile", style: { background: "var(--brand)" } }, h(R.Icon, { name: "store" })),
-        h("span", { className: "g" }, h("b", null, p.name), h("small", null, "Ubah menu"))),
+      p.switcher // side-only: the same business switcher as the Sidebar, so theme, apps, org and Keluar stay reachable
+        ? h("button", { type: "button", className: "rk-side-head rk-side-switch", onClick: p.switcher.onClick },
+          h("span", { className: "rk-side-mark", "aria-hidden": "true" }),
+          h("span", { className: "g" }, h("b", null, p.switcher.title), h("small", null, "Ubah menu")), h(R.Icon, { name: "updown" }))
+        : h("div", { className: "rk-side-head" }, h("span", { className: "tile", style: { background: "var(--brand)" } }, h(R.Icon, { name: "store" })),
+          h("span", { className: "g" }, h("b", null, p.name), h("small", null, "Ubah menu"))),
       h("nav", null, side.map(function (g, gi) {
         var items = g.items || [];
         var label = L(g.group);
@@ -498,8 +505,8 @@
         })).then(function (lists) { if (s === seq.current) setFound([].concat.apply([], lists)); });
       }, 200);
     }
-    var groups = commandGroups(p.meta, p.features, p.nav, found).map(function (g) {
-      return { label: g.label, items: g.items.map(function (it) {
+    var groups = commandGroups(p.meta, p.features, p.nav, found, p.readOnly).map(function (g) {
+      return { label: g.label, filter: g.filter, items: g.items.map(function (it) {
         return Object.assign({}, it, { onSelect: function () { if (it.hash) RA.navigate(it.hash); else if (p.onAsk) p.onAsk(); } });
       }) };
     });
@@ -601,10 +608,14 @@
 
     useEffect(function () { global.document.documentElement.dataset.density = densityOf(meta); }, [meta]);
 
-    // ⌘K / Ctrl+K opens the command menu from anywhere in the app
+    // ⌘K on a Mac, Ctrl+K elsewhere, opens the command menu from anywhere in the app (not under the sign-in dialog)
+    var expiredRef = useRef(expired);
+    expiredRef.current = expired;
     useEffect(function () {
+      var mac = /Mac|iPhone|iPad|iPod/.test((global.navigator && global.navigator.platform) || "");
       function key(e) {
-        if ((e.metaKey || e.ctrlKey) && !e.altKey && String(e.key).toLowerCase() === "k") { e.preventDefault(); setSwitchAt(null); setCmdOpen(true); }
+        if (expiredRef.current || e.altKey || String(e.key).toLowerCase() !== "k" || !(mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey)) return;
+        e.preventDefault(); setSwitchAt(null); setCmdOpen(true);
       }
       global.addEventListener("keydown", key);
       return function () { global.removeEventListener("keydown", key); };
@@ -794,10 +805,13 @@
     }
 
     var sideNavItems = sideNav(meta, features, { approvals: approvalCount });
+    var switcher = { title: companyName, subtitle: roleText || undefined,
+      onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } };
     var narrow = collapsed && !phone;
     var side;
     if (ubahOn) {
       side = h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
+        switcher: kind === "side-only" ? switcher : null,
         footer: kind === "side-only" && modeToggle && !phone ? h("div", { className: "rk-side-foot ap-side-foot" }, modeToggle) : null,
         onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } });
     } else if (kind === "top-nav") {
@@ -807,8 +821,7 @@
       });
     } else {
       side = h(R.Sidebar, {
-        switcher: { title: companyName, subtitle: roleText || undefined,
-          onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } },
+        switcher: switcher,
         search: { label: "Cari", onOpen: openCmd },
         pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route), onNavigate: onNavigate,
         collapsed: narrow, onToggleCollapse: phone ? undefined : toggleCollapsed,
@@ -845,7 +858,7 @@
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs }))),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
-        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, onClose: function () { setCmdOpen(false); } }) : null,
+        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onClose: function () { setCmdOpen(false); } }) : null,
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,

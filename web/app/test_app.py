@@ -804,6 +804,7 @@ def test_session_expiry_returns_to_route(page, ctx):
     target = ctx.menu_models(app)[0]
     ctx.allow_http(401, r"/api/v1/")  # the list behind the dialog is asked for while the session is gone
     page.evaluate("window.__noReload = 1")
+    page.wait_for_load_state("networkidle")  # the home dashboard's lookups must not be the ones that meet the 401
     page.context.clear_cookies(name="rk_session")
     open_nav(page)
     page.locator(".rk-side").get_by_role("link", name=ctx.model_label(target), exact=True).click()
@@ -874,18 +875,24 @@ def test_sidebar_collapse(page, ctx):
     page.reload()
     page.locator("[data-loading=false]").first.wait_for(timeout=15000)
     assert not page.locator(".ap-shell > .rk-side.collapsed").count(), "expanded again after a reload"
+    # Ubah swaps in the menu editor; the business switcher (theme, apps, org, Keluar) stays at its top
+    ubah_on(page)
+    page.locator(".ap-ubah-side").wait_for(timeout=5000)
+    assert account_menu(page).get_by_role("menuitem", name="Keluar").count() == 1, "switcher menu reachable in Ubah"
+    page.keyboard.press("Escape")
 
 
 def test_command_menu(page, ctx):
-    """⌘K (Ctrl+K) opens the command menu; typing searches records; Enter opens the first one."""
+    """⌘K (Ctrl+K off a Mac) opens the command menu; typing searches records; Enter opens the first one."""
     page.goto(ctx.base + "/app/")
     sign_in(page)
     expect_signed_in(page, ctx)
-    page.keyboard.press("Control+k")
+    page.keyboard.press("ControlOrMeta+k")  # ⌘K on a Mac, Ctrl+K elsewhere
     dlg = page.get_by_role("dialog", name="Menu perintah")
     dlg.wait_for(timeout=5000)
     assert dlg.get_by_role("group", name="Halaman").count() == 1, "pages first"
     assert dlg.get_by_text("Tanya Raka").count() == 0, "no Tanya Raka without features.ai"
+    page.mouse.move(1, 1)  # keyboard only: a resting pointer over the results would pick the row under it (hover selects)
     page.keyboard.type("Maju")
     data = dlg.get_by_role("group", name="Data")
     data.locator(".rk-cmd-item").first.wait_for(timeout=10000)
@@ -2670,15 +2677,17 @@ def enable_print_formats(site):
 def use_side_only(site):
     """The demo site's layout (crm_first) names `shell: top-nav`; the suite runs the default shell (side-only, contract
     0017), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
-    d = os.path.join(site, "layouts")
+    d, changed = os.path.join(site, "layouts"), 0
     for fn in os.listdir(d) if os.path.isdir(d) else []:
         path = os.path.join(d, fn)
         with open(path) as f:
             text = f.read()
-        text = re.sub(r"(?m)^shell: top-nav$", "shell: side-only", text)
+        text, n = re.subn(r"(?m)^shell: top-nav$", "shell: side-only", text)
+        changed += n
         text = re.sub(r"(?m)^extends: rangka/top-nav$", "extends: rangka/side-only", text)
         with open(path, "w") as f:
             f.write(text)
+    assert changed, "no layout in the temp site names shell: top-nav; use_side_only has nothing to switch (update it)"
 
 
 SCROLL_JS = """() => ({sw: document.documentElement.scrollWidth, bw: document.body.scrollWidth, vw: window.innerWidth})"""

@@ -198,9 +198,14 @@ test("commandGroups: every nav item once under Halaman, Buat baru per layout.nav
   assert.strictEqual(pages.find((i) => i.id === "r/lead").hash, "#/r/lead");
   assert.strictEqual(pages.find((i) => i.id === "r/lead").sub, "CRM", "the group as subtitle");
   assert.deepStrictEqual(g[1].items.map((i) => [i.label, i.hash]), [["Buat peluang", "#/r/deal/new"], ["Buat lead", "#/r/lead/new"]], "uninstalled models are left out");
+  // a model the user may not create is left out; a preview (readOnly) has no Buat baru at all
+  const noDeal = { ...meta, models: { ...meta.models, deal: { ...meta.models.deal, can: { create: false } } } };
+  assert.deepStrictEqual(plain(A.commandGroups(noDeal, {}, nav)).find((x) => x.label === "Buat baru").items.map((i) => i.id), ["new/lead"]);
+  assert.ok(!plain(A.commandGroups(meta, {}, nav, [], true)).some((x) => x.label === "Buat baru"), "no create in a preview");
   const found = [{ model: "customer", name: "CUST-1", title: "CV Maju Jaya" }];
   const withData = plain(A.commandGroups(meta, {}, nav, found));
   const data = withData.find((x) => x.label === "Data");
+  assert.strictEqual(data.filter, false, "server matches are not filtered again by title");
   assert.deepStrictEqual(data.items.map((i) => [i.label, i.sub, i.hash]), [["CV Maju Jaya", "Pelanggan · CUST-1", "#/r/customer/CUST-1"]], "the record name follows the model when the title differs");
   const plainName = plain(A.commandGroups(meta, {}, nav, [{ model: "lead", name: "L-1", title: "L-1" }])).find((x) => x.label === "Data");
   assert.strictEqual(plainName.items[0].sub, "Lead");

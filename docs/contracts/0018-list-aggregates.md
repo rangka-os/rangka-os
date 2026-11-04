@@ -1,6 +1,6 @@
 # 0018 List aggregates
 
-Status: proposed (4 Nov 2026) · Owner of the change: rangka-os (kernel, web app) · Affects: nothing in rangka-apps
+Status: accepted (5 Nov 2026) · Owner of the change: rangka-os (kernel, web app) · Affects: nothing in rangka-apps
 
 ## Context
 

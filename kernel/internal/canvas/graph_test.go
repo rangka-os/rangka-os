@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -436,4 +437,45 @@ func TestGolden(t *testing.T) {
 			t.Errorf("%s: %v layout %v", path, err, back["layout"])
 		}
 	}
+}
+
+// The guard of a hidden flow step shows no text of its condition (it may name the hidden model).
+func TestHiddenFlowStepGuard(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("cp", "-r", "../../testdata/canvas/.", dir).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	file := filepath.Join(dir, "modules/pipeline/flows/whatsapp_to_lead.rk")
+	b, _ := os.ReadFile(file)
+	changed := strings.Replace(string(b), "  - create: activity\n", "  - if: activity_guard_marker != null\n    create: activity\n", 1)
+	if changed == string(b) {
+		t.Fatal("fixture changed: no activity step")
+	}
+	os.WriteFile(file, []byte(changed), 0o644)
+	reg := meta.LoadOpts(meta.Options{AppsDir: filepath.Join(dir, "apps"), SiteDir: filepath.Join(dir, "site")}, nil)
+	g := build(t, reg, "lead_to_cash", func(m string) bool { return m != "activity" })
+	id := "modules/pipeline/flows/whatsapp_to_lead.rk#/steps/3/if"
+	n := nodeByID(g, id)
+	if n == nil {
+		t.Fatalf("guard node %s missing", id)
+	}
+	if n.Label.Text() != "Syarat tersembunyi" || n.Detail != "" || n.Model != "" || len(n.Editable) != 0 {
+		t.Errorf("hidden guard = %+v", n)
+	}
+	if bytes.Contains(mustJSON(t, g), []byte("activity_guard_marker")) {
+		t.Error("guard text leaks")
+	}
+	shown := build(t, reg, "lead_to_cash", all)
+	if s := nodeByID(shown, id); s == nil || s.Detail != "activity_guard_marker != null" || len(s.Editable) == 0 {
+		t.Errorf("visible guard = %+v", s)
+	}
+}
+
+func mustJSON(t *testing.T, v any) []byte {
+	t.Helper()
+	b, err := json.Marshal(v)
+	if err != nil {
+		t.Fatal(err)
+	}
+	return b
 }

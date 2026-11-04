@@ -464,9 +464,18 @@ func (b *builder) flow(f *meta.Flow) {
 			continue
 		}
 		p := fmt.Sprintf("/steps/%d", j)
-		c := b.guard(s, p, st, "if")
-		var id string
+		hidden := false
 		if target := stepModel(st, vars); target != "" && !b.canRead(target) {
+			hidden = true
+		}
+		c := b.guard(s, p, st, "if")
+		if hidden && c != "" {
+			// the guard's text may name the hidden model: show only that a condition exists
+			n := b.nodes[c]
+			n.Label, n.Detail, n.Editable, n.Model = meta.Label{"id": "Syarat tersembunyi"}, "", nil, ""
+		}
+		var id string
+		if hidden {
 			// a step on a model the caller cannot read keeps the chain but shows nothing of that model
 			id = b.node(KindAction, s, p, p, meta.Label{"id": "Langkah tersembunyi"}, "", nil)
 			b.nodes[id].Model = ""

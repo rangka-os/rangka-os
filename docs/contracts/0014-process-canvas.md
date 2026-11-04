@@ -65,20 +65,22 @@ Every installed app (kind app or legacy) with a `menu:` and no declared process 
   - A company overlay contributes only what the runtime merges: its rules, approvals and fields. Automations, actions and `on_submit`/`on_cancel` come from the model's own file.
   - The `if` of an automation is editable on its condition node only, not on the trigger.
   - A flow step that finds, creates or updates a model the caller cannot read is an `action` node labelled `Langkah tersembunyi`, with empty `detail`, empty `editable` and `model` "": the flow chain stays whole, nothing of the hidden model shows.
+  - The guard (`if`) of such a hidden step is a `condition` node labelled `Syarat tersembunyi` with empty `detail`, empty `editable` and `model` "": its text may name the hidden model.
   - Lifecycle steps come from a stage's main `model` only; a `models:` entry adds its other nodes. A model's nodes appear once, in the first visible stage that names it.
   - In a group, a stage `when` step comes first, then the steps it claims, then the model's triggers, rules, actions, approvals and steps.
   - An inferred process's graph `source` is the app manifest at `/menu`; each group's source is its menu item (`/menu/<g>/items/<i>`).
 - `editable` holds only keys present in the file (a rule without `level` has no `level` key); values are scalars or lists of scalars.
 
 ### 5. Edits: change sets only
-`POST /processes/{name}/ops` `{edits: [{node, key, value}]}` → `{title, ops}`. Compute only, nothing is written. `400 bad_edit` for an unknown node or key. `ops` is empty when every value equals the current one. The client then `POST /api/v1/changesets {title, ops}`; the change set goes through the normal states (proposed, validated, previewed, approved, applied). Nothing on the canvas writes metadata directly, and AI never approves or applies.
+`POST /processes/{name}/ops` `{edits: [{node, key, value}]}` → `{title, ops}`. Compute only, nothing is written. `400 bad_edit` for an unknown node or key, an empty `edits`, or a node the caller cannot see (the graph is built for the caller). `ops` is empty when every value equals the current one. The client then `POST /api/v1/changesets {title, ops}`; the change set goes through the normal states (proposed, validated, previewed, approved, applied). Nothing on the canvas writes metadata directly, and AI never approves or applies.
 
 - **Byte-stable edits (ruling 3).** A scalar edit splices the re-quoted scalar into the original text at its exact span (comments and formatting kept) and emits op `replace` with the full new text. A non-scalar or multi-line target falls back to op `patch` (JSON Patch, re-dumped by `rk.Dump`).
 
 ### 6. Layout (ruling 5: layout is not metadata)
 `PUT /processes/{name}/layout` `{groups: {<id>: {collapsed?: bool, x?: number, y?: number}}, nodes: {<id>: {x, y}}}` → 200 with the stored layout.
 - Written to `<site>/canvas/<name>.json`: 2-space JSON, sorted keys, trailing newline. It is stored directly, never through a change set, and never changes behaviour.
-- Owner (or system) only: 403 `permission_denied` otherwise. 400 `bad_layout` for other keys.
+- Owner (or system) only: 403 `permission_denied` (model `process`, action `layout`) otherwise. 400 `bad_layout` for any top-level key other than `groups` and `nodes`, a non-object value, a group entry with a key other than `collapsed` (bool), `x`, `y` (numbers), or a node entry without numeric `x` and `y`. The process name must be a known process (404) and match `^[a-z][a-z0-9_]*$`; the file is written atomically (temp file and rename). `GET /processes/{name}` reads the file on every request.
+- `<site>/canvas/` is not metadata: the site loader reads named directories only, so the validator and registry ignore it; a backup carries it with the rest of the site.
 - A layout file that is missing, empty or not valid JSON is not an error: the graph answers with `layout: null`.
 
 ### 7. Permissions (ruling 4)

@@ -867,3 +867,40 @@ func TestModulesAppsRoundTripAsOwner(t *testing.T) {
 		}
 	}
 }
+
+// RANGKA_CONNECTORS or the modules dir may name a folder that does not exist (serve and the loader tolerate
+// it). Backup skips such a folder and lists it as absent; restore rebuilds without it. Missing apps/ is still
+// an error: nothing loads without it.
+func TestMissingOptionalDirs(t *testing.T) {
+	ctx := context.Background()
+	s := newSource(t)
+	gone := filepath.Join(t.TempDir(), "does-not-exist")
+	path := filepath.Join(t.TempDir(), "a.tar.gz")
+	f, err := os.Create(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	m, err := backup.Write(ctx, s.db, f, backup.Options{SiteDir: s.site, AppsDir: s.apps, ModulesDir: gone + "/modules",
+		ConnectorsDir: gone + "/connectors", FilesDir: s.files, Version: version, Now: fixedNow})
+	if err != nil {
+		t.Fatalf("backup with missing modules and connectors dirs: %v", err)
+	}
+	f.Close()
+	if !reflect.DeepEqual(m.Absent, []string{"modules", "connectors"}) {
+		t.Errorf("absent = %v, want [modules connectors]", m.Absent)
+	}
+	o := restoreOpts(t)
+	if _, err := backup.Restore(ctx, pool(t, testdb.New(t)), path, o); err != nil {
+		t.Fatalf("restore an archive without modules and connectors: %v", err)
+	}
+	for _, d := range []string{"modules", "connectors"} {
+		if _, err := os.Stat(filepath.Join(o.Into, d)); !errors.Is(err, os.ErrNotExist) {
+			t.Errorf("%s/ should not be created by restore: %v", d, err)
+		}
+	}
+
+	_, err = backup.Write(ctx, s.db, io.Discard, backup.Options{SiteDir: s.site, AppsDir: gone + "/apps", FilesDir: s.files, Version: version, Now: fixedNow})
+	if err == nil {
+		t.Errorf("backup with a missing apps dir should fail")
+	}
+}

@@ -63,7 +63,8 @@ rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database>
 - The archive holds a manifest (kernel version, row counts, SHA-256 per table and per file), every table in schema
   `public` as `COPY` text, `site/` (without `data/` and `backups/`), `apps/`, `modules/` and `connectors/` (the
   directories the loader reads: `--modules` / `$RANGKA_MODULES`, default `modules` next to `--apps`; `--connectors` /
-  `$RANGKA_CONNECTORS`) and the uploads directory.
+  `$RANGKA_CONNECTORS`) and the uploads directory. A modules or connectors directory that does not exist is
+  skipped and listed in the manifest's `absent`; a missing `--apps` directory is an error.
 - Backup is written in Go through the database connection (`COPY ... TO STDOUT`), so the single binary needs no
   Postgres client tools. All tables are read from one snapshot. The file is written as `<out>.partial` and renamed
   when complete. Every archive (also the pre-migrate ones) is created with mode `0600`: it holds password, token and

@@ -64,6 +64,9 @@ type Manifest struct {
 	// Excluded lists the tables an org archive leaves out: installation-level tables without an org link
 	// (rk_keys, …). Restore starts them empty; the kernel fills them as on first start.
 	Excluded []string `json:"excluded"`
+	// Absent lists the optional metadata directories (modules, connectors) that were configured but do not
+	// exist; the loader tolerates them, so the archive does too and restore rebuilds without them.
+	Absent []string `json:"absent,omitempty"`
 }
 
 // TableSum is a table's row count and the SHA-256 of its canonical COPY text (see Sums).
@@ -429,6 +432,10 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 		return nil, err
 	}
 	for _, d := range []struct{ name, dir string }{{"apps", o.AppsDir}, {"modules", o.ModulesDir}, {"connectors", o.ConnectorsDir}} {
+		if _, err := os.Stat(d.dir); d.name != "apps" && d.dir != "" && errors.Is(err, fs.ErrNotExist) {
+			m.Absent = append(m.Absent, d.name)
+			continue
+		}
 		if err := add(d.name, d.dir, nil); err != nil {
 			return nil, err
 		}

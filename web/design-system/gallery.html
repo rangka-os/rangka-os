@@ -1,0 +1,377 @@
+<!doctype html>
+<html lang="id">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Galeri komponen Rangka</title>
+<link rel="stylesheet" href="../app/tokens.css">
+<link rel="stylesheet" href="bundle.css">
+<style>
+  /* Gallery chrome only; every component look comes from bundle.css. */
+  html, body { background: var(--app); }
+  .gx-bar { position: sticky; top: 0; z-index: 40; display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 8px 20px; min-height: var(--header); box-sizing: border-box;
+    background: var(--surface); border-bottom: 1px solid var(--line); }
+  .gx-bar h1 { font: 600 15px/20px var(--font-sans); margin: 0; margin-right: auto; color: var(--ink); }
+  .gx-bar label { display: inline-flex; align-items: center; gap: 8px; font-size: var(--font-size-sm); color: var(--muted); }
+  .gx-main { max-width: 1120px; margin: 0 auto; padding: 8px 20px 64px; box-sizing: border-box; }
+  .gx-sec { padding: 20px 0; border-bottom: 1px solid var(--line); min-width: 0; }
+  .gx-sec > h2 { font: 600 14px/20px var(--font-sans); margin: 0 0 12px; color: var(--ink); }
+  .gx-sec > h2 small { font-weight: 400; color: var(--muted); margin-left: 8px; }
+  .gx-demo { display: flex; flex-wrap: wrap; gap: 12px; align-items: flex-start; min-width: 0; }
+  .gx-col { display: flex; flex-direction: column; gap: 12px; flex: 1 1 220px; min-width: 0; }
+  .gx-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; min-width: 0; }
+  .gx-wide { flex: 1 1 100%; min-width: 0; }
+  .gx-pop { min-height: 300px; }
+  /* overlays (fixed) render inside this box: a transformed ancestor contains position: fixed */
+  .gx-frame { position: relative; flex: 1 1 100%; height: 380px; overflow: hidden; transform: translateZ(0); border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--app); }
+  .gx-frame.tall { height: 460px; }
+  .gx-icons { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 4px; flex: 1 1 100%; }
+  .gx-icons span { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 8px 4px; font-size: 11px; color: var(--muted); border-radius: var(--r); }
+  .gx-icons .rk-icon { color: var(--ink-2); }
+  @media (max-width: 600px) { .gx-bar, .gx-main { padding-left: 16px; padding-right: 16px; } }
+</style>
+<script>
+  /* ?theme=dark|light and ?density=compact|standard|comfortable, applied before first paint */
+  (function () {
+    var q = new URLSearchParams(location.search), d = document.documentElement;
+    d.dataset.theme = q.get("theme") === "dark" ? "dark" : "light";
+    d.dataset.density = ["compact", "comfortable"].indexOf(q.get("density")) >= 0 ? q.get("density") : "standard";
+  })();
+</script>
+</head>
+<body>
+<div id="root"></div>
+<script src="../app/vendor/react.production.min.js"></script>
+<script src="../app/vendor/react-dom.production.min.js"></script>
+<script src="bundle.js"></script>
+<script>
+(function () {
+  var R = window.Rangka, h = React.createElement, useState = React.useState;
+
+  function setParam(k, v) {
+    document.documentElement.dataset[k] = v;
+    var q = new URLSearchParams(location.search); q.set(k, v); history.replaceState(null, "", "?" + q.toString());
+  }
+
+  /* Kopi Senja demo data */
+  var CUSTOMERS = [
+    { id: "CUS-0001", title: "Warung Bu Sari", sub: "Bandung · 0812-2345-6789", fields: [["Kota", "Bandung"], ["Piutang", h(R.Amount, { value: 1250000 })], ["Termin", "14 hari"]] },
+    { id: "CUS-0002", title: "Kafe Lembayung", sub: "Sumedang · 0813-9876-5432", fields: [["Kota", "Sumedang"], ["Piutang", h(R.Amount, { value: 0 })], ["Termin", "Tunai"]] },
+    { id: "CUS-0003", title: "Toko Roti Pak Dadang", sub: "Cimahi · 0857-1122-3344", fields: [["Kota", "Cimahi"], ["Piutang", h(R.Amount, { value: 480000 })], ["Termin", "7 hari"]] }
+  ];
+  var INVOICES = [
+    { id: "INV-2026-00042", customer: "Warung Bu Sari", date: "27 Okt 2026", status: "paid", total: 1250000 },
+    { id: "INV-2026-00041", customer: "Kafe Lembayung", date: "26 Okt 2026", status: "partly", total: 3480000 },
+    { id: "INV-2026-00040", customer: "Toko Roti Pak Dadang", date: "24 Okt 2026", status: "overdue", total: 480000 },
+    { id: "INV-2026-00039", customer: "Warung Bu Sari", date: "21 Okt 2026", status: "submitted", total: 920000 },
+    { id: "INV-2026-00038", customer: "Kedai Senja Dago", date: "20 Okt 2026", status: "draft", total: 2150000 },
+    { id: "INV-2026-00037", customer: "Kafe Lembayung", date: "18 Okt 2026", status: "cancelled", total: 760000 }
+  ];
+  var COLS = [
+    { key: "id", label: "Nomor", render: function (v) { return h("span", { className: "rk-doc-no" }, v); } },
+    { key: "customer", label: "Pelanggan" },
+    { key: "date", label: "Tanggal" },
+    { key: "status", label: "Status", sortable: false, render: function (v) { return h(R.StatusChip, { status: v }); } },
+    { key: "total", label: "Total", rupiah: true }
+  ];
+  var ITEMS = [
+    { id: "row1", item: { id: "BRG-001", title: "Kopi Arabika Gayo 250 g" }, qty: 12, uom: "Bungkus", rate: 85000, disc: 0, stock: 40 },
+    { id: "row2", item: { id: "BRG-014", title: "Susu Oat 1 L" }, qty: 24, uom: "Kotak", rate: 42000, disc: 5, stock: 18 },
+    { id: "row3", item: { id: "BRG-022", title: "Gula Aren Cair 500 ml" }, qty: 6, uom: "Botol", rate: 38000, disc: 0, stock: 30 }
+  ];
+  var SIDE_PINNED = [{ id: "home", label: "Beranda", icon: "home" }, { id: "approvals", label: "Persetujuan", icon: "check", count: 3 }];
+  var SIDE_GROUPS = [
+    { label: "Penjualan", items: [{ id: "invoice", label: "Faktur", icon: "invoice", count: 12 }, { id: "customer", label: "Pelanggan", icon: "team" }, { id: "payment", label: "Pembayaran", icon: "card" }] },
+    { label: "Stok", items: [{ id: "item", label: "Barang", icon: "stock" }, { id: "outlet", label: "Outlet", icon: "store" }] }
+  ];
+  var HOLIDAYS = { "2026-11-10": "Hari Pahlawan (bukan libur)", "2026-12-25": "Natal" };
+  var TOOLBAR_FILTERS = [
+    { key: "status", label: "Status", options: [{ value: "paid", label: "Lunas", tone: "ok", count: 18 }, { value: "overdue", label: "Jatuh tempo", tone: "bad", count: 3 }, { value: "draft", label: "Draf", count: 5 }] },
+    { key: "owner", label: "Sales", options: [{ value: "rina", label: "Rina Kartika", avatar: true }, { value: "budi", label: "Budi Santoso", avatar: true }] }
+  ];
+  var FB_FIELDS = [
+    { name: "status", label: "Status", type: "select", options: [{ value: "paid", label: "Lunas" }, { value: "overdue", label: "Jatuh tempo" }] },
+    { name: "customer", label: "Pelanggan", type: "link" },
+    { name: "grand_total", label: "Total", type: "currency" },
+    { name: "posting_date", label: "Tanggal", type: "date" }
+  ];
+  var SALES = [{ label: "Mei", value: 38200000 }, { label: "Jun", value: 41500000 }, { label: "Jul", value: 39800000 }, { label: "Agu", value: 45100000 }, { label: "Sep", value: 48900000 }, { label: "Okt", value: 51100000 }];
+  var CHANNELS = [{ label: "Kasir outlet", value: 28400000 }, { label: "GoFood", value: 12100000 }, { label: "GrabFood", value: 7300000 }, { label: "Tokopedia", value: 3300000 }];
+  var FUNNEL = [{ label: "Lead", value: 120 }, { label: "Dihubungi", value: 74 }, { label: "Penawaran", value: 31 }, { label: "Menang", value: 12 }];
+
+  function Frame(p) { return h("div", { className: "gx-frame" + (p.tall ? " tall" : "") }, p.children); }
+
+  /* One demo per component, keyed by the names in the @ds-bundle header (same order). */
+  var DEMOS = {
+    Button: function () {
+      return h("div", { className: "gx-col" },
+        h("div", { className: "gx-row" }, h(R.Button, { variant: "primary", icon: "add" }, "Buat faktur"), h(R.Button, null, "Simpan draf"), h(R.Button, { variant: "quiet", icon: "filter" }, "Filter"),
+          h(R.Button, { variant: "link" }, "Lihat semua"), h(R.Button, { variant: "danger" }, "Batalkan"), h(R.Button, { variant: "danger-solid" }, "Hapus permanen")),
+        h("div", { className: "gx-row" }, h(R.Button, { size: "sm" }, "Kecil"), h(R.Button, null, "Sedang"), h(R.Button, { size: "lg", variant: "primary" }, "Besar"),
+          h(R.Button, { loading: true }, "Memuat"), h(R.Button, { disabled: true }, "Nonaktif"), h(R.IconButton, { icon: "more", label: "Opsi" }), h(R.IconButton, { icon: "bell", label: "Notifikasi", dot: true })));
+    },
+    Icon: function () { return h("div", { className: "gx-icons" }, R.ICONS.map(function (n) { return h("span", { key: n }, h(R.Icon, { name: n }), n); })); },
+    StatusChip: function () {
+      return h("div", { className: "gx-row" }, ["draft", "submitted", "paid", "partly", "overdue", "cancelled", "syncing", "instock", "lowstock", "outstock", "new"].map(function (s) { return h(R.StatusChip, { key: s, status: s }); }));
+    },
+    Amount: function () { return h("div", { className: "gx-row" }, h(R.Amount, { value: 1250000 }), h(R.Amount, { value: -75000 }), h(R.Amount, { value: 51100000 })); },
+    Field: function () {
+      return h("div", { className: "gx-demo gx-wide" },
+        h("div", { className: "gx-col" }, h(R.Field, { label: "Nama pelanggan", required: true, defaultValue: "Warung Bu Sari" }), h(R.Field, { label: "Nomor PO", placeholder: "Contoh: PO-0815", hint: "Dari pesanan pelanggan" })),
+        h("div", { className: "gx-col" }, h(R.Field, { label: "NPWP", defaultValue: "01.234.567", error: "NPWP harus 16 angka" }), h(R.Field, { label: "Harga satuan", numeric: true, defaultValue: "85.000" })),
+        h("div", { className: "gx-col" }, h(R.Checkbox, { label: "Kirim faktur lewat WhatsApp", defaultChecked: true }), h(R.Checkbox, { label: "Pelanggan grosir", hint: "Harga grosir dipakai otomatis" }),
+          h(R.RadioGroup, { name: "bayar", label: "Cara bayar", value: "qris", options: [{ value: "qris", label: "QRIS" }, { value: "transfer", label: "Transfer bank" }, { value: "tunai", label: "Tunai" }] }),
+          h(R.Switch, { label: "Stok minus diizinkan", description: "Kasir tetap bisa menjual saat stok habis", checked: true })),
+        h("div", { className: "gx-col" }, h(R.Textarea, { label: "Catatan", defaultValue: "Antar sebelum jam 10.00" }),
+          h(R.NativeSelect, { label: "Outlet", options: [{ value: "dago", label: "Kopi Senja Dago" }, { value: "braga", label: "Kopi Senja Braga" }] })));
+    },
+    Segmented: function () { return h(R.Segmented, { label: "Periode", value: "30", options: [{ value: "7", label: "7 hari" }, { value: "30", label: "30 hari" }, { value: "90", label: "90 hari" }] }); },
+    StatCard: function () {
+      return h("div", { className: "gx-demo gx-wide" }, h("div", { className: "gx-col" }, h(R.StatCard, { label: "Penjualan Oktober", value: 51100000, rupiah: true, delta: "+4,5% dari September", trend: "up" })),
+        h("div", { className: "gx-col" }, h(R.StatCard, { label: "Faktur jatuh tempo", value: 3, delta: "2 lebih banyak", trend: "down" })));
+    },
+    DataTable: function () {
+      return h("div", { className: "gx-wide" }, h(R.DataTable, { columns: COLS.slice(0, 3).concat([COLS[4]]), rows: INVOICES.slice(0, 4), selected: "INV-2026-00041", footer: { customer: "Total", total: 6130000 } }));
+    },
+    DocumentHeader: function () {
+      return h("div", { className: "gx-col gx-wide" }, h(R.DocumentHeader, { number: "INV-2026-00042", title: "Warung Bu Sari", status: "paid" }),
+        h(R.DocumentHeader, { number: "INV-2026-00038", title: "Kedai Senja Dago", status: "draft" }));
+    },
+    PosKeypad: function () { return h("div", { className: "gx-demo gx-wide" }, h(R.PosKeypad, { initial: 85000 }), h(R.PosKeypad, { offline: true, queued: 3, payLabel: "Bayar tunai", payIcon: "card" })); },
+    Raka: function () { return h("div", { className: "gx-row" }, h(R.Raka, { size: 32 }), h(R.Raka, { size: 56 }), h(R.Raka, { size: 32, withName: true, company: "Kopi Senja" })); },
+    Table: function () {
+      return h("div", { className: "gx-wide" }, h(R.Table, { columns: COLS, rows: INVOICES, checked: ["INV-2026-00041", "INV-2026-00040"], sort: { key: "date", dir: "desc" }, searchPlaceholder: "Cari faktur…",
+        filters: h(R.Button, { icon: "filter" }, "Filter"), actions: h(R.Button, { variant: "primary", icon: "add" }, "Buat faktur"),
+        bulkActions: [{ label: "Cetak", icon: "print" }, { label: "Hapus", icon: "delete", danger: true }],
+        pagination: h(R.Pagination, { total: 248, page: 3, pageSize: 20 }) }));
+    },
+    Pagination: function () { return h("div", { className: "gx-wide" }, h(R.Pagination, { total: 248, page: 1, pageSize: 20 })); },
+    Dialog: function () {
+      return h("div", { className: "gx-demo gx-wide" },
+        h(Frame, null, h(R.Dialog, { variant: "danger", title: "Batalkan faktur INV-2026-00042?", confirmLabel: "Batalkan faktur", cancelLabel: "Kembali", onClose: function () {} }, "Stok kembali ke gudang dan piutang Warung Bu Sari berkurang Rp 1.250.000. Faktur yang dibatalkan tidak bisa diajukan lagi; buat amandemen bila perlu.")),
+        h(Frame, null, h(R.Dialog, { title: "Tambah pelanggan", onClose: function () {} }, h(R.Field, { label: "Nama", required: true, defaultValue: "Kafe Lembayung" }), h(R.Field, { label: "Nomor WhatsApp", defaultValue: "0813-9876-5432" }))));
+    },
+    Drawer: function () {
+      return h(Frame, { tall: true }, h(R.Drawer, { title: "Warung Bu Sari", subtitle: "Pelanggan · CUS-0001", footer: [h(R.Button, { key: "a" }, "Buka halaman"), h(R.Button, { key: "b", variant: "primary" }, "Buat faktur")], onClose: function () {} },
+        h(R.DrawerSection, { title: "Ringkasan" }, h("dl", { className: "rk-dl" }, h("dt", null, "Kota"), h("dd", null, "Bandung"), h("dt", null, "Piutang"), h("dd", null, h(R.Amount, { value: 1250000 })), h("dt", null, "Termin"), h("dd", null, "14 hari"))),
+        h(R.DrawerSection, { title: "Riwayat" }, h("ol", { className: "rk-tl" }, h("li", null, "Faktur INV-2026-00042 lunas", h("time", null, "27 Okt 2026")), h("li", { className: "last" }, "Pelanggan dibuat", h("time", null, "2 Sep 2026"))))));
+    },
+    CommandMenu: function () {
+      return h(Frame, { tall: true }, h(R.CommandMenu, { query: "", onClose: function () {}, groups: [
+        { label: "Buka", items: [{ label: "Faktur penjualan", icon: "invoice", sub: "Penjualan" }, { label: "Warung Bu Sari", icon: "user", sub: "Pelanggan" }, { label: "Kopi Arabika Gayo 250 g", icon: "stock", sub: "Barang" }] },
+        { label: "Perintah", items: [{ label: "Buat faktur", icon: "add", kbd: "F" }, { label: "Ganti tema", icon: "moon" }] }] }));
+    },
+    ContextMenu: function () {
+      return h(Frame, null, h(R.ContextMenu, { at: { x: 24, y: 64 }, items: [{ heading: "Faktur INV-2026-00042" }, { label: "Buka", icon: "open" }, { label: "Salin nomor", icon: "copy", kbd: "⌘C" }, { label: "Cetak", icon: "print" }, "-", { label: "Hapus draf", icon: "delete", danger: true }, { label: "Ajukan ulang", icon: "send", disabled: true }] },
+        h("div", { className: "rk-ctx-target", style: { margin: "12px" } }, "Klik kanan di sini")));
+    },
+    Sidebar: function () {
+      function Side(q) {
+        var c = useState(!!q.collapsed), col = c[0], setCol = c[1], cur = useState("invoice"), current = cur[0], setCurrent = cur[1];
+        return h(R.Sidebar, { switcher: { title: "Kopi Senja", subtitle: "Outlet Dago", onClick: function () {} }, search: { label: "Cari", onOpen: function () {} },
+          pinned: SIDE_PINNED, groups: SIDE_GROUPS, current: current, onNavigate: setCurrent, collapsed: col, onToggleCollapse: function () { setCol(!col); }, user: "Dede Kurniawan", role: "Pemilik" });
+      }
+      return h("div", { className: "gx-demo gx-wide" },
+        h("div", { className: "gx-frame tall", style: { flex: "0 0 auto", width: "216px" } }, h(Side)),
+        h("div", { className: "gx-frame tall", style: { flex: "0 0 auto", width: "48px" } }, h(Side, { collapsed: true })),
+        h("div", { className: "gx-frame tall", style: { flex: "0 0 auto", width: "216px" } }, h(R.Sidebar, { app: { name: "Rangka Console", type: "kopi-senja · 0.5.0", icon: "settings", color: "#1c1917" }, groups: SIDE_GROUPS, current: "item" })));
+    },
+    Topbar: function () { return h("div", { className: "gx-wide" }, h(R.Topbar, { title: "INV-2026-00042", crumbs: ["Penjualan", "Faktur"], unread: true, actions: h(R.Button, { variant: "primary", icon: "add" }, "Buat") })); },
+    Tabs: function () { return h("div", { className: "gx-wide" }, h(R.Tabs, { value: "detail", tabs: [{ value: "detail", label: "Detail" }, { value: "items", label: "Barang", count: 3 }, { value: "payment", label: "Pembayaran" }, { value: "activity", label: "Aktivitas", count: 12 }] })); },
+    Alert: function () {
+      return h("div", { className: "gx-col gx-wide" },
+        h(R.Alert, { tone: "info", title: "Faktur ini menunggu persetujuan manajer" }),
+        h(R.Alert, { tone: "ok", title: "Pembayaran diterima", actions: h(R.Button, null, "Lihat bukti") }, "Rp 1.250.000 lewat QRIS, 27 Okt 2026 14.30."),
+        h(R.Alert, { tone: "warn", title: "Stok Susu Oat 1 L menipis", onClose: function () {} }, "Tersisa 18 kotak di Outlet Dago."),
+        h(R.Alert, { tone: "bad", title: "NPWP pelanggan belum diisi" }),
+        h(R.Banner, null, "Kamu sedang offline. Transaksi disimpan dan dikirim saat tersambung lagi."));
+    },
+    Toast: function () {
+      return h("div", { className: "gx-demo gx-wide" },
+        h(R.Toaster, null, h(R.Toast, { title: "Faktur diajukan", onClose: function () {} }, "INV-2026-00042 untuk Warung Bu Sari."),
+          h(R.Toast, { tone: "bad", title: "Gagal menyimpan", action: "Coba lagi", onClose: function () {} }, "Periksa sambungan internet.")),
+        h(Frame, null, h(R.Toaster, { float: true }, h(R.Toast, { tone: "info", title: "Ekspor siap diunduh", action: "Unduh", onClose: function () {} }))));
+    },
+    Form: function () {
+      return h("div", { className: "gx-wide" }, h(R.Form, { note: "Disimpan otomatis sebagai draf", submitLabel: "Simpan pelanggan" },
+        h(R.FormSection, { title: "Data pelanggan", description: "Dipakai di faktur dan pengingat WhatsApp." },
+          h(R.Field, { label: "Nama", required: true, defaultValue: "Warung Bu Sari" }), h(R.Field, { label: "Nomor WhatsApp", defaultValue: "0812-2345-6789" })),
+        h(R.FormSection, { title: "Pajak" }, h(R.Field, { label: "NPWP", placeholder: "16 angka" }), h(R.NativeSelect, { label: "Status PKP", options: [{ value: "non", label: "Bukan PKP" }, { value: "pkp", label: "PKP" }] }))));
+    },
+    Select: function () {
+      return h("div", { className: "gx-demo gx-wide gx-pop" },
+        h("div", { className: "gx-col" }, h(R.Select, { label: "Outlet", value: "dago", defaultOpen: true, searchable: true, options: [{ value: "dago", label: "Kopi Senja Dago", hint: "Bandung" }, { value: "braga", label: "Kopi Senja Braga", hint: "Bandung" }, { value: "jatinangor", label: "Kopi Senja Jatinangor", hint: "Sumedang" }] })),
+        h("div", { className: "gx-col" }, h(R.Select, { label: "Termin", placeholder: "Pilih termin…", options: [{ value: "0", label: "Tunai" }, { value: "14", label: "14 hari" }] })));
+    },
+    MultiSelect: function () {
+      return h("div", { className: "gx-demo gx-wide gx-pop" }, h("div", { className: "gx-col" }, h(R.MultiSelect, { label: "Kategori barang", value: ["kopi", "susu"], hint: "Pilih satu atau lebih", defaultOpen: true,
+        options: [{ value: "kopi", label: "Kopi" }, { value: "susu", label: "Susu dan nabati" }, { value: "pemanis", label: "Pemanis" }, { value: "kemasan", label: "Kemasan" }] })));
+    },
+    ChatComposer: function () {
+      return h("div", { className: "gx-wide" }, h(R.ChatComposer, { value: "Raka, tolong buat rekap penjualan minggu ini untuk ", attachments: [{ name: "struk-27-okt.jpg", size: "240 KB", kind: "image" }, { name: "rekap-oktober.xlsx", size: "18 KB" }], mentions: ["Raka", "Rina Kartika"] }));
+    },
+    Avatar: function () {
+      return h("div", { className: "gx-row" }, h(R.Avatar, { name: "Dede Kurniawan", size: 32, presence: "online" }), h(R.Avatar, { name: "Rina Kartika", size: 28 }), h(R.Avatar, { name: "Budi Santoso", size: 24, presence: "busy" }),
+        h(R.Avatar, { name: "Kopi Senja", size: 32, square: true }), h(R.AvatarGroup, { names: ["Dede Kurniawan", "Rina Kartika", "Budi Santoso", "Sari Wulandari", "Asep Hidayat", "Nina Lestari"], max: 4 }));
+    },
+    ImagePreview: function () {
+      var imgs = [{ name: "Etalase Dago", fill: "var(--chart-1)", size: "1,2 MB", badge: "Utama" }, { name: "Menu baru", fill: "var(--chart-4)", size: "860 KB" }, { name: "Struk 27 Okt", fill: "var(--chart-2)", size: "240 KB" }];
+      return h("div", { className: "gx-demo gx-wide" }, h("div", { className: "gx-col" }, h(R.ImagePreview, { images: imgs })), h(Frame, null, h(R.ImageViewer, { images: imgs, index: 0, onClose: function () {} })));
+    },
+    EmptyState: function () { return h("div", { className: "gx-wide" }, h(R.EmptyState, { title: "Belum ada faktur", actions: [h(R.Button, { key: "a", variant: "primary", icon: "add" }, "Buat faktur"), h(R.Button, { key: "b" }, "Impor dari Excel")] }, "Faktur yang kamu buat atau impor muncul di sini.")); },
+    LinkField: function () {
+      return h("div", { className: "gx-demo gx-wide gx-pop" },
+        h("div", { className: "gx-col" }, h(R.LinkField, { label: "Pelanggan", doctype: "Pelanggan", records: CUSTOMERS, required: true, defaultOpen: true, query: "ka" })),
+        h("div", { className: "gx-col" }, h(R.LinkField, { label: "Pelanggan (terpilih)", doctype: "Pelanggan", records: CUSTOMERS, value: "CUS-0001" })));
+    },
+    ChildTable: function () {
+      return h("div", { className: "gx-col gx-wide" }, h(R.ChildTable, { label: "Barang", rows: ITEMS, tax: { rate: 12, dpp: 11 / 12, label: "PPN 12% × DPP 11/12" } }),
+        h(R.ChildTable, { label: "Barang (sudah diajukan)", rows: ITEMS.slice(0, 2), readOnly: true, tax: false }));
+    },
+    DatePicker: function () {
+      return h("div", { className: "gx-demo gx-wide gx-pop", style: { minHeight: "400px" } }, h("div", { className: "gx-col" }, h(R.DatePicker, { label: "Jatuh tempo", value: "2026-11-10", today: "2026-11-04", relativeTo: "2026-10-27", holidays: HOLIDAYS, presets: [["14 hari", 14], ["30 hari", 30]], defaultOpen: true })),
+        h("div", { className: "gx-col" }, h(R.DatePicker, { label: "Tanggal faktur", value: "2026-10-27", today: "2026-11-04" })));
+    },
+    DateRangePicker: function () {
+      return h("div", { className: "gx-demo gx-wide", style: { minHeight: "380px" } }, h("div", { className: "gx-col" }, h(R.DateRangePicker, { label: "Periode laporan", value: ["2026-10-01", "2026-10-31"], preset: "Bulan lalu", today: "2026-11-04", holidays: HOLIDAYS, defaultOpen: true })));
+    },
+    AppShell: function () {
+      return h(Frame, { tall: true }, h(R.AppShell, {
+        sider: h(R.Sidebar, { switcher: { title: "Kopi Senja", subtitle: "Outlet Dago" }, pinned: SIDE_PINNED, groups: SIDE_GROUPS, current: "invoice" }),
+        pageHeader: h(R.PageHeader, { title: "Faktur", breadcrumbs: [{ label: "Penjualan", onClick: function () {} }], actions: h(R.Button, { variant: "primary", icon: "add" }, "Buat faktur") }) },
+        h(R.DataTable, { columns: COLS, rows: INVOICES.slice(0, 4) })));
+    },
+    PageHeader: function () {
+      return h("div", { className: "gx-col gx-wide" },
+        h(R.PageHeader, { title: "INV-2026-00042", breadcrumbs: [{ label: "Penjualan", onClick: function () {} }, { label: "Faktur", onClick: function () {} }], status: h(R.StatusChip, { status: "submitted" }),
+          actions: [h(R.Button, { key: "p", icon: "print" }, "Cetak"), h(R.Button, { key: "a", variant: "primary" }, "Terima pembayaran")],
+          tabs: h(R.Tabs, { tabs: [{ value: "d", label: "Detail" }, { value: "a", label: "Aktivitas" }] }) }),
+        h(R.PageHeader, { title: "Impor pelanggan", subtitle: "Impor pelanggan dari file CSV", breadcrumb: ["Pelanggan", "Impor pelanggan"], onNavigate: function () {}, onBack: function () {} }));
+    },
+    Card: function () {
+      return h("div", { className: "gx-demo gx-wide" }, h("div", { className: "gx-col" }, h(R.Card, { title: "Pelanggan teratas", extra: h(R.IconButton, { icon: "more", label: "Opsi" }) }, "Warung Bu Sari, Kafe Lembayung dan Toko Roti Pak Dadang menyumbang 62% penjualan bulan ini.")),
+        h("div", { className: "gx-col" }, h(R.Card, null, "Kartu tanpa judul untuk isi yang dikelompokkan.")));
+    },
+    Descriptions: function () {
+      var items = [["Pelanggan", "Warung Bu Sari"], ["Tanggal", "27 Okt 2026"], ["Jatuh tempo", "10 Nov 2026"], ["Outlet", "Kopi Senja Dago"], ["Total", h(R.Amount, { value: 1250000 })], ["Status", h(R.StatusChip, { status: "paid" })], ["Catatan", "Antar sebelum jam 10.00", 3]];
+      return h("div", { className: "gx-col gx-wide" }, h(R.Descriptions, { title: "Ringkasan faktur", items: items, column: 3 }), h(R.Descriptions, { items: items.slice(0, 4), column: 4, bordered: false }));
+    },
+    Steps: function () {
+      return h("div", { className: "gx-col gx-wide" }, h(R.Steps, { current: 1, items: [{ title: "Draf", description: "27 Okt 2026" }, { title: "Diajukan" }, { title: "Lunas" }] }),
+        h(R.Steps, { size: "small", current: 2, status: "error", items: [{ title: "Draf" }, { title: "Diajukan" }, { title: "Dibatalkan" }] }));
+    },
+    Lozenge: function () {
+      return h("div", { className: "gx-col" }, h("div", { className: "gx-row" }, ["default", "ok", "info", "warn", "bad", "new"].map(function (t) { return h(R.Lozenge, { key: t, tone: t }, { "default": "Draf", ok: "Lunas", info: "Diajukan", warn: "Dibayar sebagian", bad: "Jatuh tempo", "new": "Baru" }[t]); })),
+        h("div", { className: "gx-row" }, ["default", "ok", "info", "warn", "bad", "new"].map(function (t) { return h(R.Lozenge, { key: t, tone: t, bold: true }, { "default": "Draf", ok: "Lunas", info: "Diajukan", warn: "Dibayar sebagian", bad: "Jatuh tempo", "new": "Baru" }[t]); })));
+    },
+    Badge: function () { return h("div", { className: "gx-row" }, h(R.Badge, null, 3), h(R.Badge, { appearance: "primary" }, 12), h(R.Badge, { appearance: "important", max: 99 }, 120)); },
+    TopNav: function () {
+      return h("div", { className: "gx-wide" }, h(R.TopNav, { product: { name: "Rangka Penjualan", icon: "invoice", color: "#1c1917" }, items: [{ id: "home", label: "Beranda" }, { id: "invoice", label: "Faktur" }, { id: "customer", label: "Pelanggan" }, { id: "report", label: "Laporan", menu: true }],
+        current: "invoice", unread: true, user: { name: "Dede Kurniawan", email: "dede@kopisenja.id", company: "Kopi Senja" } }));
+    },
+    AppSwitcher: function () { return h(R.AppSwitcher, { current: "sales", recent: [{ name: "INV-2026-00042", sub: "Faktur · Warung Bu Sari", icon: "invoice" }] }); },
+    AccountMenu: function () { return h(R.AccountMenu, { name: "Dede Kurniawan", email: "dede@kopisenja.id", company: "Kopi Senja", companies: ["Kopi Senja", "Toko Kedua"], theme: "light" }); },
+    Spinner: function () { return h("div", { className: "gx-row" }, h(R.Spinner, { size: "sm" }), h(R.Spinner, null), h(R.Spinner, { size: "lg" })); },
+    Skeleton: function () {
+      return h("div", { className: "gx-demo gx-wide" }, h("div", { className: "gx-col" }, h(R.Skeleton, { lines: 4 })), h("div", { className: "gx-col" }, h(R.Skeleton, { variant: "number" })),
+        h("div", { className: "gx-col" }, h(R.Skeleton, { variant: "card", height: 80 })), h(R.Skeleton, { variant: "avatar", size: 32 }));
+    },
+    FilterBar: function () {
+      return h("div", { className: "gx-wide gx-pop" }, h(R.FilterBar, { filters: TOOLBAR_FILTERS, value: { status: ["overdue"] }, search: true, searchPlaceholder: "Cari faktur…", defaultOpen: "status", extra: h(R.Button, { variant: "quiet", icon: "star" }, "Simpan tampilan") }));
+    },
+    FilterBuilder: function () {
+      return h("div", { className: "gx-wide" }, h(R.FilterBuilder, { fields: FB_FIELDS, value: { match: "all", rules: [{ field: "status", op: "==", value: "overdue" }, { field: "grand_total", op: ">", value: "1000000" }] }, showCel: true }));
+    },
+    SettingsLayout: function () {
+      return h("div", { className: "gx-wide", style: { border: "1px solid var(--line)", borderRadius: "var(--r-lg)", overflow: "hidden" } }, h(R.SettingsLayout, {
+        nav: [{ label: "Bisnis", items: [{ id: "company", label: "Perusahaan", icon: "building" }, { id: "outlet", label: "Outlet", icon: "store" }] }, { label: "Akses", items: [{ id: "sso", label: "Login tunggal", icon: "key" }, { id: "roles", label: "Peran", icon: "shield" }] }],
+        current: "company", title: "Perusahaan", description: "Data ini muncul di faktur dan struk." },
+        h(R.SettingsSection, { title: "Identitas", description: "Nama dan pajak" }, h(R.SettingsRow, { label: "Nama usaha" }, h(R.Field, { label: "Nama usaha", defaultValue: "Kopi Senja" })),
+          h(R.SettingsRow, { label: "PKP", description: "Faktur memakai PPN 12%" }, h(R.Switch, { label: "PKP", checked: false })))));
+    },
+    SettingsSection: function () {
+      return h("div", { className: "gx-wide" }, h(R.SettingsSection, { title: "Pengingat WhatsApp", description: "Dikirim lewat konektor WhatsApp Business", extra: h(R.Button, null, "Uji kirim") },
+        h(R.SettingsRow, { label: "Pengingat jatuh tempo", description: "3 hari sebelum jatuh tempo" }, h(R.Switch, { label: "Pengingat jatuh tempo", checked: true }))));
+    },
+    SettingsRow: function () {
+      return h("div", { className: "gx-wide rk-set-sec" }, h("div", { className: "rk-set-body" }, h(R.SettingsRow, { label: "Mata uang", description: "Rupiah tanpa desimal" }, h(R.Select, { value: "idr", options: [{ value: "idr", label: "Rupiah (Rp)" }] }))));
+    },
+    NumberCard: function () {
+      return h("div", { className: "gx-wide" }, h(R.DashGrid, null,
+        h(R.NumberCard, { span: 4, label: "Penjualan bulan ini", value: 51100000, rupiah: true, compact: true, delta: "4,5%", trend: "up", caption: "dari September", spark: [38, 41, 39, 45, 48, 51] }),
+        h(R.NumberCard, { span: 4, label: "Faktur jatuh tempo", value: 3, delta: "2", trend: "up", goodWhen: "down", caption: "dari minggu lalu", icon: "warning" }),
+        h(R.NumberCard, { span: 4, label: "Pelanggan baru", value: 14, delta: "0", trend: "flat", onClick: function () {} })));
+    },
+    Chart: function () {
+      return h("div", { className: "gx-demo gx-wide" }, h("div", { className: "gx-col" }, h(R.Chart, { type: "bar", data: SALES, rupiah: true, label: "Penjualan per bulan" })),
+        h("div", { className: "gx-col" }, h(R.Chart, { type: "line", data: SALES, rupiah: true, label: "Tren penjualan" })));
+    },
+    ChartCard: function () {
+      return h("div", { className: "gx-wide" }, h(R.DashGrid, null, h(R.ChartCard, { span: 6, title: "Penjualan per kanal", subtitle: "Oktober 2026", type: "donut", data: CHANNELS, rupiah: true, totalLabel: "Total" }),
+        h(R.ChartCard, { span: 6, title: "Corong lead", subtitle: "30 hari", type: "funnel", data: FUNNEL })));
+    },
+    ListCard: function () {
+      return h("div", { className: "gx-wide" }, h(R.ListCard, { title: "Faktur jatuh tempo", subtitle: "3 faktur", columns: [{ key: "id", label: "Nomor", render: function (v) { return h("span", { className: "rk-doc-no" }, v); } }, { key: "customer", label: "Pelanggan" }, { key: "total", label: "Total", rupiah: true }], rows: INVOICES.slice(1, 4) }));
+    },
+    DashGrid: function () {
+      return h("div", { className: "gx-wide" }, h(R.DashGrid, null, h(R.NumberCard, { span: 3, label: "Transaksi hari ini", value: 86 }), h(R.NumberCard, { span: 3, label: "Rata-rata belanja", value: 42500, rupiah: true }),
+        h(R.NumberCard, { span: 3, label: "Barang terlaris", value: 124, caption: "Es kopi susu gula aren" }), h(R.NumberCard, { span: 3, label: "Stok menipis", value: 4, icon: "stock" })));
+    },
+    ViewSwitcher: function () {
+      var s = useState("list"), v = s[0], setV = s[1];
+      return h(R.ViewSwitcher, { value: v, onChange: setV, options: [{ id: "list", label: "Daftar" }, { id: "kanban", label: "Kanban" }, { id: "group", label: "Kelompok" }, { id: "report", label: "Laporan" }] });
+    },
+    BulkBar: function () {
+      return h("div", { className: "gx-wide" }, h(R.BulkBar, { count: 3, onClear: function () {} }, h(R.Button, { icon: "print" }, "Cetak"), h(R.Button, { icon: "delete", variant: "danger" }, "Hapus draf")));
+    },
+    GroupList: function () {
+      var s = useState({ paid: true }), open = s[0], setOpen = s[1];
+      var rows = h(R.DataTable, { columns: COLS, rows: INVOICES.filter(function (r) { return r.status === "paid"; }) });
+      var groups = [{ key: "paid", label: "Lunas", count: 86, values: { "sum:grand_total": 48250000 } }, { key: "overdue", label: "Jatuh tempo", count: 12, values: { "sum:grand_total": 9640000 } },
+        { key: null, label: "", count: 2, values: { "sum:grand_total": 150000 } }, { key: "__other", label: "Lainnya", count: 4, values: {}, disabled: true }];
+      return h("div", { className: "gx-wide" }, h(R.GroupList, { valueFormat: function (k, v) { return R.formatRupiah(v); },
+        groups: groups.map(function (g) { return Object.assign({}, g, { open: !!open[g.key], rows: open[g.key] ? rows : null }); }),
+        onToggle: function (k) { var n = Object.assign({}, open); n[k] = !n[k]; setOpen(n); } }));
+    },
+    ReportTable: function () {
+      var s = useState([{ field: "id", label: "Nomor", render: function (v) { return h("span", { className: "rk-doc-no" }, v); } }, { field: "customer", label: "Pelanggan" }, { field: "date", label: "Tanggal" },
+        { field: "status", label: "Status", render: function (v) { return h(R.StatusChip, { status: v }); } }, { field: "total", label: "Total", align: "right", render: function (v) { return R.formatRupiah(v); } }]), cols = s[0], setCols = s[1];
+      return h("div", { className: "gx-wide" }, h(R.ReportTable, { columns: cols, rows: INVOICES, onColumnsChange: setCols,
+        totals: { label: "Total semua 142 baris", values: { total: R.formatRupiah(186420000) } } }));
+    },
+    DocPanel: function () {
+      return h("div", { className: "gx-wide rk-docpage" }, h("div", null, h(R.Descriptions, { title: "Faktur INV-2026-00042", column: 2, items: [["Pelanggan", "Warung Bu Sari"], ["Tanggal", "27 Okt 2026"], ["Total", h(R.Amount, { value: 1250000 })], ["Status", h(R.StatusChip, { status: "paid" })]] })),
+        h(R.DocPanel, { sections: [
+          { title: "Info", content: h("dl", { className: "rk-dl" }, h("dt", null, "Dibuat"), h("dd", null, "Dede Kurniawan, 27 Okt 2026"), h("dt", null, "Diubah"), h("dd", null, "Rina Kartika, 28 Okt 2026")) },
+          { title: "Lampiran", content: "struk-27-okt.jpg" },
+          { title: "Persetujuan", content: h(R.StatusChip, { status: "paid" }) }] }));
+    },
+    Sparkline: function () { return h("div", { className: "gx-row" }, h(R.Sparkline, { data: [38, 41, 39, 45, 48, 51] }), h(R.Sparkline, { data: [12, 9, 11, 7, 5, 3], color: "var(--bad-solid)", width: 120 })); }
+  };
+
+  function Bar() {
+    var t = useState(document.documentElement.dataset.theme), theme = t[0], setTheme = t[1];
+    var d = useState(document.documentElement.dataset.density), density = d[0], setDensity = d[1];
+    return h("header", { className: "gx-bar" }, h("h1", null, "Galeri komponen Rangka"),
+      h("label", null, "Tema", h(R.Segmented, { label: "Tema", value: theme, options: [{ value: "light", label: "Terang" }, { value: "dark", label: "Gelap" }], onChange: function (v) { setParam("theme", v); setTheme(v); } })),
+      h("label", null, "Kepadatan", h(R.Segmented, { label: "Kepadatan", value: density, options: [{ value: "compact", label: "Rapat" }, { value: "standard", label: "Standar" }, { value: "comfortable", label: "Lega" }], onChange: function (v) { setParam("density", v); setDensity(v); } })));
+  }
+
+  function Gallery(p) {
+    return h(React.Fragment, null, h(Bar), h("main", { className: "gx-main" }, p.names.map(function (n) {
+      var demo = DEMOS[n];
+      return h("section", { key: n, className: "gx-sec", "data-component": n, id: n },
+        h("h2", null, n, demo ? null : h("small", null, "belum ada contoh")), demo ? h("div", { className: "gx-demo" }, h(demo)) : null);
+    })));
+  }
+
+  /* component order = the @ds-bundle header of bundle.js */
+  fetch("bundle.js").then(function (r) { return r.text(); }).then(function (src) {
+    var m = /\/\* @ds-bundle: (\{.*?\}) \*\//.exec(src.split("\n")[0]);
+    var names = m ? JSON.parse(m[1]).components.map(function (c) { return c.name; }) : Object.keys(DEMOS);
+    ReactDOM.createRoot(document.getElementById("root")).render(h(Gallery, { names: names }));
+  });
+})();
+</script>
+</body>
+</html>

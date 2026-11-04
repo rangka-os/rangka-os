@@ -4,7 +4,8 @@
  * each row shows the document (label + number link), the policy label, who asked and when, and for pending requests
  * Setujui / Tolak, enabled only when the item's can_decide is true.
  *
- * RangkaApp.ApprovalBanner({model, name, rev, verbs, editable, onDecided, onPending}) — on the form: loads the record's
+ * RangkaApp.ApprovalBanner({model, name, rev, verbs, editable, panel, onDecided, onPending}) — on the form (panel: compact
+ * entries for the side panel's Persetujuan section; nothing when none waits): loads the record's
  * pending requests for `verbs` (waitingVerbs: submit on a draft, cancel on a submitted document, the actions otherwise)
  * on mount and whenever `rev` changes (so a reload still shows them), names who must approve, warns that an edit voids
  * the request when the record is `editable` (S2 voids pending requests on any update), and shows Setujui / Tolak when
@@ -213,6 +214,18 @@
 
     var list = items || [];
     if (!list.length && !msg) return null;
+    if (p.panel) {
+      return h("div", { className: "ap-approvals ap-approvals-panel" },
+        msg ? h(R.Alert, { tone: "bad", title: msg, onClose: function () { setMsg(null); } }) : null,
+        list.map(function (it) {
+          return h("div", { key: it.id, className: "ap-banner" },
+            h("b", { className: "ap-banner-t" }, h(R.Icon, { name: "time" }), waitingTitle(it, ctx.meta)),
+            h("span", { className: "ap-banner-meta" }, policyLabel(it)),
+            h("span", { className: "ap-muted" }, "Diajukan oleh " + (it.requested_by || "-") + (it.requested_at ? ", " + tanggal(it.requested_at) : "")),
+            p.editable ? h("span", { className: "ap-muted" }, "Kalau kamu ubah dokumen ini, permintaan persetujuannya batal dan harus diajukan lagi.") : null,
+            it.can_decide ? h(Decide, { item: it, ctx: ctx, onDecided: decided(it), onFailed: failed }) : null);
+        }));
+    }
     return h("div", { className: "ap-approvals" },
       msg ? h(R.Alert, { tone: "bad", title: msg, onClose: function () { setMsg(null); } }) : null,
       list.map(function (it) {
@@ -257,8 +270,7 @@
       if (d.refresh) { refreshCount(ctx); setTick(function (x) { return x + 1; }); }
     }
 
-    var head = h(R.PageHeader, { title: "Persetujuan" });
-    if (err && err.status === 403) return h(React.Fragment, null, head, h(RA.ForbiddenState || "div", { what: "Persetujuan" }));
+    if (err && err.status === 403) return h(React.Fragment, null, h(R.PageHeader, { title: "Persetujuan" }), h(RA.ForbiddenState || "div", { what: "Persetujuan" }));
 
     var body;
     if (err) {
@@ -287,11 +299,12 @@
     }
 
     var tabs = TABS.map(function (t) { return t.value === tab && data ? Object.assign({ count: data.length }, t) : t; });
+    var head = h(R.PageHeader, { title: "Persetujuan",
+      tabs: h(R.Tabs, { tabs: tabs, value: tab, onChange: function (v) { setMsg(null); setTab(v); } }) });
     return h(React.Fragment, null, head,
       h("div", { className: "rk-shell-content" },
-        h(R.Tabs, { tabs: tabs, value: tab, onChange: function (v) { setMsg(null); setTab(v); } }),
         msg ? h(R.Alert, { tone: "bad", title: msg, onClose: function () { setMsg(null); } }) : null,
-        h(R.Card, null, body)));
+        body));
   }
 
   RA.ApprovalBanner = ApprovalBanner;

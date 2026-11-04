@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -75,7 +75,13 @@
     open: "M16.0037 9.41421L7.39712 18.0208L5.98291 16.6066L14.5895 8H7.00373V6H18.0037V17H16.0037V9.41421Z",
     drag: "M8.5 7C9.32843 7 10 6.32843 10 5.5C10 4.67157 9.32843 4 8.5 4C7.67157 4 7 4.67157 7 5.5C7 6.32843 7.67157 7 8.5 7ZM8.5 13.5C9.32843 13.5 10 12.8284 10 12C10 11.1716 9.32843 10.5 8.5 10.5C7.67157 10.5 7 11.1716 7 12C7 12.8284 7.67157 13.5 8.5 13.5ZM10 18.5C10 19.3284 9.32843 20 8.5 20C7.67157 20 7 19.3284 7 18.5C7 17.6716 7.67157 17 8.5 17C9.32843 17 10 17.6716 10 18.5ZM15.5 7C16.3284 7 17 6.32843 17 5.5C17 4.67157 16.3284 4 15.5 4C14.6716 4 14 4.67157 14 5.5C14 6.32843 14.6716 7 15.5 7ZM17 12C17 12.8284 16.3284 13.5 15.5 13.5C14.6716 13.5 14 12.8284 14 12C14 11.1716 14.6716 10.5 15.5 10.5C16.3284 10.5 17 11.1716 17 12ZM15.5 20C16.3284 20 17 19.3284 17 18.5C17 17.6716 16.3284 17 15.5 17C14.6716 17 14 17.6716 14 18.5C14 19.3284 14.6716 20 15.5 20Z",
     time: "M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM13 12H17V14H11V7H13V12Z",
-    link: "M13.0607 8.11097L14.4749 9.52518C17.2086 12.2589 17.2086 16.691 14.4749 19.4247L14.1214 19.7782C11.3877 22.5119 6.95555 22.5119 4.22188 19.7782C1.48821 17.0446 1.48821 12.6124 4.22188 9.87874L5.6361 11.293C3.68348 13.2456 3.68348 16.4114 5.6361 18.364C7.58872 20.3166 10.7545 20.3166 12.7072 18.364L13.0607 18.0105C15.0133 16.0578 15.0133 12.892 13.0607 10.9394L11.6465 9.52518L13.0607 8.11097ZM19.7782 14.1214L18.364 12.7072C20.3166 10.7545 20.3166 7.58872 18.364 5.6361C16.4114 3.68348 13.2456 3.68348 11.293 5.6361L10.9394 5.98965C8.98678 7.94227 8.98678 11.1081 10.9394 13.0607L12.3536 14.4749L10.9394 15.8891L9.52518 14.4749C6.79151 11.7413 6.79151 7.30911 9.52518 4.57544L9.87874 4.22188C12.6124 1.48821 17.0446 1.48821 19.7782 4.22188C22.5119 6.95555 22.5119 11.3877 19.7782 14.1214Z"
+    link: "M13.0607 8.11097L14.4749 9.52518C17.2086 12.2589 17.2086 16.691 14.4749 19.4247L14.1214 19.7782C11.3877 22.5119 6.95555 22.5119 4.22188 19.7782C1.48821 17.0446 1.48821 12.6124 4.22188 9.87874L5.6361 11.293C3.68348 13.2456 3.68348 16.4114 5.6361 18.364C7.58872 20.3166 10.7545 20.3166 12.7072 18.364L13.0607 18.0105C15.0133 16.0578 15.0133 12.892 13.0607 10.9394L11.6465 9.52518L13.0607 8.11097ZM19.7782 14.1214L18.364 12.7072C20.3166 10.7545 20.3166 7.58872 18.364 5.6361C16.4114 3.68348 13.2456 3.68348 11.293 5.6361L10.9394 5.98965C8.98678 7.94227 8.98678 11.1081 10.9394 13.0607L12.3536 14.4749L10.9394 15.8891L9.52518 14.4749C6.79151 11.7413 6.79151 7.30911 9.52518 4.57544L9.87874 4.22188C12.6124 1.48821 17.0446 1.48821 19.7782 4.22188C22.5119 6.95555 22.5119 11.3877 19.7782 14.1214Z",
+    list: "M8 4H21V6H8V4ZM4.5 6.5C3.67157 6.5 3 5.82843 3 5C3 4.17157 3.67157 3.5 4.5 3.5C5.32843 3.5 6 4.17157 6 5C6 5.82843 5.32843 6.5 4.5 6.5ZM4.5 13.5C3.67157 13.5 3 12.8284 3 12C3 11.1716 3.67157 10.5 4.5 10.5C5.32843 10.5 6 11.1716 6 12C6 12.8284 5.32843 13.5 4.5 13.5ZM4.5 20.4C3.67157 20.4 3 19.7284 3 18.9C3 18.0716 3.67157 17.4 4.5 17.4C5.32843 17.4 6 18.0716 6 18.9C6 19.7284 5.32843 20.4 4.5 20.4ZM8 11H21V13H8V11ZM8 18H21V20H8V18Z",
+    kanban: "M3 3C2.44772 3 2 3.44772 2 4V20C2 20.5523 2.44772 21 3 21H21C21.5523 21 22 20.5523 22 20V4C22 3.44772 21.5523 3 21 3H3ZM4 19V5H20V19H4ZM9 7H7V15H9V7ZM15 7H17V13H15V7ZM13 7H11V17H13V7Z",
+    group: "M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z",
+    table: "M4 8H20V5H4V8ZM14 19V10H10V19H14ZM16 19H20V10H16V19ZM8 19V10H4V19H8ZM3 3H21C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3Z",
+    fold: "M5 5H13V19H5V5ZM19 19H15V5H19V19ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4C21 3.44772 20.5523 3 20 3H4ZM7 12L11 8.5V15.5L7 12Z",
+    unfold: "M5 5H13V19H5V5ZM19 19H15V5H19V19ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4C21 3.44772 20.5523 3 20 3H4ZM11 12L7 8.5V15.5L11 12Z"
   };
 
   function Icon(p) {
@@ -93,7 +99,7 @@
     return h("button", rest, p.icon ? h(Icon, { name: p.icon }) : null, p.children);
   }
 
-  /* Document statuses map to Omilo chip tones. Words always shown: colour never carries the meaning alone. */
+  /* Document statuses map to pill tones. Words always shown: colour never carries the meaning alone. */
   var STATUS = {
     draft: ["draft", "Draf", null], submitted: ["info", "Diajukan", null], paid: ["ok", "Lunas", null],
     partly: ["warn", "Dibayar sebagian", null], overdue: ["bad", "Jatuh tempo", null], cancelled: ["cancelled", "Dibatalkan", null],
@@ -101,12 +107,13 @@
   };
   function StatusChip(p) {
     var s = STATUS[p.status] || ["", p.status, null];
-    return h("span", { className: cx("rk-chip", s[0] && "rk-chip-" + s[0], p.bold && "bold", p.className) }, s[2] ? h(Icon, { name: s[2] }) : null, p.children || s[1]);
+    return h("span", { className: cx("rk-pill", s[0] || "draft", "rk-chip", p.bold && "bold", p.className) }, s[2] ? h(Icon, { name: s[2] }) : null, p.children || s[1]);
   }
-  /* Lozenge: a status word in a tinted box. tone: default | ok | info | warn | bad | new. */
+  /* Lozenge: a status word in a tinted pill with a dot, text in its own case. tone: default | ok | info | warn | bad | new.
+     rk-chip stays on the element as the older class name, for selectors outside the design system. */
   function Lozenge(p) {
-    var t = p.tone && p.tone !== "default" ? "rk-chip-" + p.tone : "rk-chip-draft";
-    return h("span", { className: cx("rk-chip", t, p.bold && "bold", p.className), title: typeof p.children === "string" ? p.children : undefined }, p.children);
+    var t = p.tone && p.tone !== "default" ? p.tone : "draft";
+    return h("span", { className: cx("rk-pill", t, "rk-chip", p.bold && "bold", p.className), title: typeof p.children === "string" ? p.children : undefined }, p.children);
   }
   function Badge(p) { return h("span", { className: cx("rk-badge", p.appearance), "aria-label": p.label }, p.max && p.children > p.max ? p.max + "+" : p.children); }
 
@@ -150,7 +157,7 @@
   function DataTable(p) {
     var st = React.useState(p.selected), sel = st[0], setSel = st[1];
     return h("div", { className: "rk-tw" }, h("table", { className: "rk-table" },
-      h("thead", null, h("tr", null, p.columns.map(function (c) { return h("th", { key: c.key, className: c.numeric ? "rk-num" : undefined }, c.label); }))),
+      h("thead", null, h("tr", null, p.columns.map(function (c) { return h("th", { key: c.key, className: c.numeric || c.rupiah ? "rk-num" : undefined }, c.label); }))),
       h("tbody", null, p.rows.map(function (r) {
         return h("tr", { key: r.id, "aria-selected": sel === r.id ? "true" : undefined, onClick: function () { setSel(r.id); if (p.onSelect) p.onSelect(r); } },
           p.columns.map(function (c) {
@@ -436,11 +443,12 @@
     var qs = useState(p.query || ""), q = qs[0], setQ = qs[1], is = useState(0), idx = is[0], setIdx = is[1];
     if (p.open === false) return null;
     var flat = [], groups = p.groups.map(function (g) {
-      var items = g.items.filter(function (it) { return !q || (it.label + " " + (it.sub || "")).toLowerCase().indexOf(q.toLowerCase()) >= 0; });
+      // filter: false = the caller already matched these (a server search): shown as given
+      var items = g.filter === false ? g.items : g.items.filter(function (it) { return !q || (it.label + " " + (it.sub || "")).toLowerCase().indexOf(q.toLowerCase()) >= 0; });
       items.forEach(function (it) { flat.push(it); });
       return { label: g.label, items: items };
     });
-    var askItem = q ? { label: "Tanya Raka: “" + q + "”", icon: "spark", ai: true, sub: "AI" } : null;
+    var askItem = q && p.ask !== false ? { label: "Tanya Raka: “" + q + "”", icon: "spark", ai: true, sub: "AI" } : null;
     if (askItem) flat.push(askItem);
     function key(e) {
       if (e.key === "ArrowDown") { e.preventDefault(); setIdx(Math.min(flat.length - 1, idx + 1)); }
@@ -457,13 +465,14 @@
     return h(React.Fragment, null, h("div", { className: "rk-scrim", onClick: p.onClose }),
       h("div", { className: "rk-cmd", role: "dialog", "aria-modal": "true", "aria-label": "Menu perintah", onKeyDown: key },
         h("div", { className: "rk-cmd-input" }, h(Icon, { name: "search" }),
-          h("input", { autoFocus: true, value: q, onChange: function (e) { setQ(e.target.value); setIdx(0); }, placeholder: p.placeholder || "Cari faktur, pelanggan, barang, atau ketik perintah…", "aria-label": "Cari" }),
+          h("input", { autoFocus: true, value: q, onChange: function (e) { setQ(e.target.value); setIdx(0); if (p.onQuery) p.onQuery(e.target.value); }, placeholder: p.placeholder || "Cari faktur, pelanggan, barang, atau ketik perintah…", "aria-label": "Cari" }),
           h(Kbd, null, "Esc")),
         h("div", { className: "rk-cmd-list", role: "listbox" },
           groups.map(function (g) { return g.items.length ? h("div", { key: g.label, role: "group", "aria-label": g.label }, h("div", { className: "rk-cmd-group" }, g.label), g.items.map(item)) : null; }),
           askItem ? h("div", { role: "group" }, h("div", { className: "rk-cmd-group" }, "Tanya"), item(askItem)) : null,
           !flat.length ? h("div", { className: "rk-cmd-empty" }, "Tidak ada hasil") : null),
-        h("div", { className: "rk-cmd-foot" }, h("span", null, h(Kbd, null, "↑"), h(Kbd, null, "↓"), "pilih"), h("span", null, h(Kbd, null, "↵"), "buka"), h("span", null, h(Kbd, null, ">"), "perintah"), h("span", null, h(Kbd, null, "@"), "helper Omilo"))));
+        h("div", { className: "rk-cmd-foot" }, h("span", null, h(Kbd, null, "↑"), h(Kbd, null, "↓"), "pilih"), h("span", null, h(Kbd, null, "↵"), "buka"),
+          p.ask !== false ? h("span", null, h(Kbd, null, ">"), "perintah") : null, p.ask !== false ? h("span", null, h(Kbd, null, "@"), "helper Omilo") : null)));
   }
 
   /* ---- Menu / ContextMenu (Omilo .cm-i) */
@@ -473,7 +482,8 @@
         if (it === "-") return h("div", { key: i, className: "rk-msep", role: "separator" });
         if (it.heading) return h("div", { key: i, className: "rk-mh" }, it.heading);
         return h("button", { key: i, type: "button", role: "menuitem", disabled: it.disabled, className: cx("rk-mi", it.danger && "danger"), onClick: function () { if (it.onSelect) it.onSelect(); if (p.onClose) p.onClose(); } },
-          it.icon ? h(Icon, { name: it.icon }) : h("span", { style: { width: "16px" } }), h("span", { className: "l" }, it.label), it.kbd ? h("span", { className: "k" }, it.kbd) : null);
+          it.icon ? h(Icon, { name: it.icon }) : h("span", { style: { width: "16px" } }), h("span", { className: "l" }, it.label),
+          it.checked ? h(Icon, { name: "check", label: "Dipilih" }) : it.kbd ? h("span", { className: "k" }, it.kbd) : null);
       }));
   }
   function ContextMenu(p) {
@@ -817,13 +827,24 @@
       return last ? h("b", { key: i, "aria-current": "page" }, c) : h(React.Fragment, { key: i }, h("a", { href: "#", onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(i); } }, c), h("span", { className: "sep", "aria-hidden": "true" }, "/"));
     }));
   }
+  /* ---- Page header (Frappe): one 48px row, "Parent / Title" with the status pill and actions; tabs underneath.
+     Legacy props: breadcrumb (strings, last one = this page) + onNavigate(i), tags = status, extra = actions, subtitle / subTitle. */
   function PageHeader(p) {
-    return h("div", { className: "rk-pagehead" },
-      p.breadcrumb ? h(Breadcrumb, { items: p.breadcrumb, onNavigate: p.onNavigate }) : null,
+    var crumbs = p.breadcrumbs || (p.breadcrumb || []).slice(0, -1).map(function (c, i) {
+      return { label: c, onClick: p.onNavigate ? function () { p.onNavigate(i); } : undefined };
+    });
+    var status = p.status || p.tags, actions = p.actions || p.extra, sub = p.subTitle || p.subtitle;
+    return h("div", { className: cx("rk-pagehead", p.tabs && "has-tabs") },
       h("div", { className: "rk-pagehead-row" },
         p.onBack ? h(IconButton, { icon: "left", label: "Kembali", onClick: p.onBack }) : null,
-        h("h1", null, p.title), p.tags || null, p.subtitle ? h("span", { className: "rk-pagehead-sub" }, p.subtitle) : null,
-        p.extra ? h("div", { className: "rk-pagehead-extra" }, p.extra) : null),
+        crumbs.length ? h("nav", { className: "rk-crumbs", "aria-label": "Lokasi" }, crumbs.map(function (c, i) {
+          return h(React.Fragment, { key: i },
+            c.onClick ? h("a", { href: "#", onClick: function (e) { e.preventDefault(); c.onClick(); } }, c.label) : h("span", null, c.label),
+            h("span", { className: "sep", "aria-hidden": "true" }, "/"));
+        })) : null,
+        h("h1", null, p.title), status || null,
+        actions ? h("div", { className: "rk-pagehead-extra" }, actions) : null),
+      sub ? h("p", { className: "rk-pagehead-sub" }, sub) : null,
       p.children ? h("div", { className: "rk-pagehead-content" }, p.children) : null,
       p.tabs || null);
   }
@@ -832,27 +853,111 @@
       h("div", { className: "rk-shell-main" }, p.header || null, p.pageHeader || null, h("main", { className: "rk-shell-content" }, p.children)));
   }
 
-  /* ================================================================ v4: Atlassian navigation, loaders, filters, settings, dashboards */
+  /* ================================================================ v4: top navigation, loaders, filters, settings, dashboards */
 
-  /* ---- Side navigation: app header (tile + name), company switcher, grouped links */
+  /* ---- Side navigation (Frappe): business switcher, search, pinned entries, grouped 28px links, collapse to icons.
+     Legacy props: app {name, type, icon, color} = switcher with the app tile; product = switcher title; company/outlet/onCompany; user/role. */
   function Sidebar(p) {
-    var app = p.app;
-    return h("aside", { className: "rk-side", "aria-label": "Navigasi " + (app ? app.name : "") },
-      app ? h("div", { className: "rk-side-head" }, h("span", { className: "tile", style: { background: app.color || "var(--primary)" } }, h(Icon, { name: app.icon || "dashboard" })),
-          h("span", { className: "g" }, h("b", null, app.name), app.type ? h("small", null, app.type) : null))
-        : h("div", { className: "rk-side-head" }, h(Raka, { size: 28, withName: true, company: p.product || "Bisnis" })),
-      p.company ? h("button", { type: "button", className: "rk-company", onClick: p.onCompany }, h(Icon, { name: "store" }), h("span", { className: "g" }, p.company, p.outlet ? h("small", null, p.outlet) : null), h(Icon, { name: "updown" })) : null,
-      h("nav", null, p.groups.map(function (g) {
-        return h("div", { key: g.label || "main", className: "rk-navgroup" }, g.label ? h("p", null, g.label) : null,
-          g.items.map(function (it) {
-            var id = it.id || it.label;
-            return h("a", { key: id, href: it.href || "#", className: "rk-navlink", "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
-              onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(id, it); } },
-              h(Icon, { name: it.icon }), it.label, it.count ? h("span", { className: "rk-count" }, it.count) : null);
-          }));
-      })),
-      p.footer || (p.user ? h("div", { className: "rk-side-foot" }, h(Avatar, { name: p.user, size: 28, presence: "online" }),
-        h("span", { className: "g" }, h("b", null, p.user), p.role ? h("small", null, p.role) : null), h(IconButton, { icon: "settings", label: "Pengaturan" })) : null));
+    var app = p.app, col = !!p.collapsed;
+    var sw = p.switcher || (app ? { title: app.name, subtitle: app.type,
+      mark: h("span", { className: "tile", style: { background: app.color || "var(--primary)" } }, h(Icon, { name: app.icon || "dashboard" })) }
+      : p.product ? { title: p.product } : null);
+    function head() {
+      var props = { className: cx("rk-side-head", sw.onClick && "rk-side-switch"), title: col ? sw.title : undefined };
+      if (sw.onClick) Object.assign(props, { type: "button", onClick: sw.onClick, "aria-label": col ? sw.title : undefined });
+      return h(sw.onClick ? "button" : "div", props, sw.mark || h("span", { className: "rk-side-mark", "aria-hidden": "true" }),
+        col ? null : h("span", { className: "g" }, h("b", null, sw.title), sw.subtitle ? h("small", null, sw.subtitle) : null),
+        !col && sw.onClick ? h(Icon, { name: "updown" }) : null);
+    }
+    function link(it) {
+      var id = it.id || it.label;
+      return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined, "aria-label": col ? it.label : undefined,
+        "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
+        onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(id, it); } },
+        col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: it.icon }),
+        col ? null : h("span", { className: "l" }, it.label),
+        it.count ? (col ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : h("span", { className: "rk-count" }, it.count)) : null);
+    }
+    var search = p.search, searchLabel = (search && search.label) || "Cari";
+    return h("aside", { className: cx("rk-side", col && "collapsed"), "aria-label": sw ? "Navigasi " + sw.title : "Navigasi" },
+      sw ? head() : null,
+      p.company && !col ? h("button", { type: "button", className: "rk-company", onClick: p.onCompany }, h(Icon, { name: "store" }), h("span", { className: "g" }, p.company, p.outlet ? h("small", null, p.outlet) : null), h(Icon, { name: "updown" })) : null,
+      search ? h("button", { type: "button", className: "rk-side-search", onClick: search.onOpen, title: col ? searchLabel : undefined, "aria-label": col ? searchLabel : undefined },
+        h(Icon, { name: "search" }), col ? null : h("span", { className: "l" }, searchLabel), col ? null : h(Kbd, null, "⌘K")) : null,
+      h("nav", null,
+        p.pinned && p.pinned.length ? h("div", { key: "pinned", className: "rk-navgroup" }, p.pinned.map(link)) : null,
+        (p.groups || []).map(function (g, i) {
+          var lead = i > 0 || (p.pinned && p.pinned.length);
+          return h("div", { key: g.label || "main", className: "rk-navgroup" },
+            g.label ? (col ? (lead ? h("div", { className: "rk-navsep", role: "separator" }) : null) : h("p", null, g.label)) : null,
+            g.items.map(link));
+        })),
+      col ? (p.footer ? h("div", { className: "rk-side-foot collapsed" }, p.footer)
+          : p.user ? h("div", { className: "rk-side-foot collapsed", title: p.user, "aria-label": p.user, role: "group" }, h(Avatar, { name: p.user, size: 28, presence: "online" })) : null)
+        : p.footer || (p.user ? h("div", { className: "rk-side-foot" }, h(Avatar, { name: p.user, size: 28, presence: "online" }),
+        h("span", { className: "g" }, h("b", null, p.user), p.role ? h("small", null, p.role) : null), h(IconButton, { icon: "settings", label: "Pengaturan" })) : null),
+      p.onToggleCollapse ? h("div", { className: "rk-side-collapse" },
+        h(IconButton, { icon: col ? "unfold" : "fold", label: col ? "Bentangkan navigasi" : "Ciutkan navigasi", onClick: p.onToggleCollapse })) : null);
+  }
+
+  /* ---- List views: switcher, bulk bar, group-by list, report table */
+  var VIEW_ICON = { list: "list", kanban: "kanban", group: "group", report: "table" };
+  function ViewSwitcher(p) {
+    return h("div", { className: "rk-viewswitch", role: "group", "aria-label": p.label || "Tampilan" }, p.options.map(function (o) {
+      var on = o.id === p.value;
+      return h("button", { key: o.id, type: "button", className: "rk-viewswitch-btn", "aria-pressed": on ? "true" : "false", title: o.label, "aria-label": o.label,
+        onClick: function () { if (!on && p.onChange) p.onChange(o.id); } },
+        h(Icon, { name: o.icon || VIEW_ICON[o.id] }), h("span", { className: "l" }, o.label));
+    }));
+  }
+  function thousands(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
+  function BulkBar(p) {
+    if (!(p.count > 0)) return null;
+    return h("div", { className: "rk-bulkbar", role: "region", "aria-label": "Aksi untuk baris terpilih" },
+      h("span", { className: "rk-bulkbar-count", "aria-live": "polite" }, thousands(p.count) + " dipilih"),
+      p.children ? h("div", { className: "rk-bulkbar-acts" }, p.children) : null,
+      p.onClear ? h(IconButton, { icon: "close", label: "Batalkan pilihan", onClick: p.onClear }) : null);
+  }
+  /* groups come from the aggregate endpoint: values {"sum:grand_total": n}; the caller formats them (valueFormat). */
+  function GroupList(p) {
+    var fmt = p.valueFormat || function (k, v) { return v; };
+    return h("div", { className: "rk-groups" }, p.groups.map(function (g) {
+      var label = g.label || (g.key == null ? "(kosong)" : String(g.key));
+      var canOpen = !!p.onToggle && !g.disabled, vals = Object.keys(g.values || {}).filter(function (k) { return k !== "count"; });
+      return h("section", { key: g.key == null ? "null" : "k:" + g.key, className: cx("rk-group", g.open && "open") },
+        h("button", { type: "button", className: "rk-group-head", disabled: !canOpen, "aria-expanded": canOpen ? (g.open ? "true" : "false") : undefined,
+          onClick: function () { if (canOpen) p.onToggle(g.key); } },
+          canOpen ? h(Icon, { name: g.open ? "down" : "right" }) : h("span", { className: "rk-group-pad", "aria-hidden": "true" }),
+          h("span", { className: "l" }, label), h("span", { className: "rk-count" }, thousands(g.count || 0)),
+          vals.length ? h("span", { className: "rk-group-vals" }, vals.map(function (k) { return h("span", { key: k }, fmt(k, g.values[k])); })) : null),
+        g.open && g.rows ? h("div", { className: "rk-group-rows" }, g.rows) : null);
+    }));
+  }
+  function ReportTable(p) {
+    var cols = p.columns, rows = p.rows || [];
+    function al(c) { return c.align === "right" ? "rk-num" : c.align === "center" ? "rk-center" : undefined; }
+    function hide(i) { p.onColumnsChange(cols.filter(function (_, j) { return j !== i; })); }
+    return h("div", { className: "rk-report" }, h("table", { className: "rk-table rk-report-table" },
+      h("thead", null, h("tr", null, cols.map(function (c, i) {
+        return h("th", { key: c.field, scope: "col", className: al(c) }, h("span", { className: "rk-report-th" }, c.label,
+          p.onColumnsChange && cols.length > 1 ? h(IconButton, { icon: "close", label: "Sembunyikan kolom " + c.label, className: "rk-report-hide", onClick: function () { hide(i); } }) : null));
+      }))),
+      h("tbody", null, rows.length ? rows.map(function (r, i) {
+        return h("tr", { key: r.id || r.name || i }, cols.map(function (c) {
+          var v = r[c.field]; return h("td", { key: c.field, className: al(c) }, c.render ? c.render(v, r) : v == null ? "" : v);
+        }));
+      }) : h("tr", null, h("td", { colSpan: cols.length, className: "rk-report-empty" }, p.emptyText || "Tidak ada data"))),
+      p.totals ? h("tfoot", null, h("tr", { className: "rk-report-total" }, cols.map(function (c, i) {
+        var v = (p.totals.values || {})[c.field];
+        return i === 0 ? h("th", { key: c.field, scope: "row" }, p.totals.label) : h("td", { key: c.field, className: al(c) }, v == null ? "" : v);
+      }))) : null));
+  }
+
+  /* ---- Document side panel: 280px on the right of the form; below it on narrow screens (wrap both in .rk-docpage) */
+  function DocPanel(p) {
+    return h("aside", { className: "rk-docpanel", "aria-label": p.label || "Info dokumen" }, (p.sections || []).map(function (s, i) {
+      return h("section", { key: s.id || s.title || i, className: "rk-docpanel-sec" }, s.title ? h("h3", null, s.title) : null, h("div", { className: "rk-docpanel-body" }, s.content));
+    }));
   }
 
   /* ---- App switcher: every Rangka app and Omilo on one account (single sign-on) */
@@ -1196,5 +1301,6 @@
   var api = { Button: Button, Icon: Icon, StatusChip: StatusChip, Amount: Amount, Field: Field, Segmented: Segmented, StatCard: StatCard,
     DataTable: DataTable, DocumentHeader: DocumentHeader, PosKeypad: PosKeypad, Raka: Raka, formatRupiah: formatRupiah, Card: Card, Descriptions: Descriptions, Steps: Steps, Breadcrumb: Breadcrumb, PageHeader: PageHeader, AppShell: AppShell, LinkField: LinkField, ChildTable: ChildTable, DatePicker: DatePicker, DateRangePicker: DateRangePicker, formatTanggal: formatTanggal, Table: Table, Pagination: Pagination, Dialog: Dialog, Drawer: Drawer, DrawerSection: DrawerSection, CommandMenu: CommandMenu, Menu: Menu, ContextMenu: ContextMenu, Alert: Alert, Banner: Banner, Toast: Toast, Toaster: Toaster, Sidebar: Sidebar, Topbar: Topbar, Checkbox: Checkbox, RadioGroup: RadioGroup, Switch: Switch, Textarea: Textarea, NativeSelect: NativeSelect, Select: Select, MultiSelect: MultiSelect, Form: Form, FormSection: FormSection, ChatComposer: ChatComposer, Avatar: Avatar, AvatarGroup: AvatarGroup, ImagePreview: ImagePreview, ImageViewer: ImageViewer, Tabs: Tabs, EmptyState: EmptyState, Kbd: Kbd, IconButton: IconButton, ICONS: Object.keys(ICONS) };
   api.Lozenge = Lozenge; api.Badge = Badge; api.TopNav = TopNav; api.AppSwitcher = AppSwitcher; api.AccountMenu = AccountMenu; api.Spinner = Spinner; api.Skeleton = Skeleton; api.FilterBar = FilterBar; api.FilterBuilder = FilterBuilder; api.SettingsLayout = SettingsLayout; api.SettingsSection = SettingsSection; api.SettingsRow = SettingsRow; api.NumberCard = NumberCard; api.Chart = Chart; api.ChartCard = ChartCard; api.ListCard = ListCard; api.DashGrid = DashGrid; api.Sparkline = Sparkline; api.filterCel = filterCel; api.compactNumber = compact;
+  api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   window.Rangka = Object.assign(window.Rangka || {}, api);
 })();

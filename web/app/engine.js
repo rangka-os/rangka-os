@@ -41,7 +41,7 @@
       if (x.k === "num") return { n: x.v };
       if (x.k === "str") return { s: x.v };
       if (x.k === "op" && x.v === "(") { var e = bin(1); eat(")"); return e; }
-      if (x.k === "id") { if (peek("(")) return { call: x.v, args: args() }; return { ref: x.v }; }
+      if (x.k === "id") { if (peek("(")) return { call: x.v, args: args() }; if (x.v === "null") return { nul: true }; return { ref: x.v }; }
       throw new Error("Unexpected " + x.v + " in " + src);
     }
     var ast = bin(1);
@@ -51,6 +51,9 @@
   var cache = {};
   function addDays(iso, n) { var d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function clockISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+  /* == and != with the kernel's rule (cel equalOrEmpty): against null, a missing value and "" count as null */
+  function isEmpty(v) { return v === null || v === undefined || v === ""; }
+  function equal(l, r) { return l == null || r == null ? isEmpty(l) && isEmpty(r) : l == r; }
   function isDate(v) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); }
 
   /* create(meta, lookup): the pure engine for live /api/v1/meta metadata.
@@ -63,6 +66,7 @@
   function ev(e, scope) {
     if ("n" in e) return e.n;
     if ("s" in e) return e.s;
+    if (e.nul) return null;
     if (e.ref) return scope(e.ref);
     if (e.not) return !ev(e.not, scope);
     if (e.get) { var o = ev(e.on, scope); return o == null ? null : o[e.get]; }
@@ -92,7 +96,7 @@
       case "-": return (Number(l) || 0) - (Number(r) || 0);
       case "*": return (Number(l) || 0) * (Number(r) || 0);
       case "/": return (Number(l) || 0) / (Number(r) || 1);
-      case "==": return l == r; case "!=": return l != r;
+      case "==": return equal(l, r); case "!=": return !equal(l, r);
       case ">=": return l >= r; case "<=": return l <= r; case ">": return l > r; case "<": return l < r;
     }
   }

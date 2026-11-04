@@ -118,7 +118,7 @@
     if (err && err.status === 401) return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Menunggu masuk" }));
 
     var header = h(R.PageHeader, { title: label,
-      extra: [h(R.Segmented, { key: "p", label: "Periode", value: String(days), options: periodOptions(def), onChange: function (v) { setDays(Number(v)); } }),
+      actions: [h(R.Segmented, { key: "p", label: "Periode", value: String(days), options: periodOptions(def), onChange: function (v) { setDays(Number(v)); } }),
         h(R.Button, { key: "r", icon: "refresh", onClick: function () { setReload(reload + 1); } }, "Muat ulang")] });
 
     if (err && !loading) {

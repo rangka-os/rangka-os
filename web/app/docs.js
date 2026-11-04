@@ -9,10 +9,12 @@
  * HTML view and calls the tab's window.print().
  * Both buttons are disabled while either request is in flight.
  *
- * RangkaApp.Attachments({model, name, record}) — card "Lampiran" on a saved record: file input and drop zone, the list
+ * RangkaApp.Attachments({model, name, record, panel}) — card "Lampiran" on a saved record (panel: no card, for the form's
+ * side panel section "Lampiran"): file input and drop zone, the list
  * (thumbnail for raster images, a PDF icon, name as a link to GET /api/v1/attachments/<id>, size, uploader, date) and a
  * delete button (confirm dialog) only while record.docstatus === 0. Files over 20 MB are refused before any request;
- * a 413 shows the same text. Hidden entirely when the kernel has no attachments route or the files capability is off.
+ * a 413 shows the same text. Hidden entirely when the kernel has no attachments route or the files capability is off;
+ * p.onOff() is then called so a host (the form's side panel) can drop its section too.
  * Upload and delete buttons are disabled while a request is in flight.
  *
  * Pure helpers (unit-tested in test/docs.test.js): checkFile, uploadError, kindOf, formatLabel, printError.
@@ -251,7 +253,7 @@
       if (!name) return undefined;
       ctx.api.attachments(p.model, name).then(function (r) { if (!dead) setItems((r && r.data) || []); }, function (e) {
         if (dead) return;
-        if (API.isFilesOff(e)) setOff(true);
+        if (API.isFilesOff(e)) { setOff(true); if (p.onOff) p.onOff(); }
         else setErr(e);
       });
       return function () { dead = true; };
@@ -286,7 +288,7 @@
         ctx.toast("ok", done.length === 1 ? "Lampiran ditambahkan" : done.length + " lampiran ditambahkan", done.length === 1 ? done[0].filename : undefined);
       }, function (e) {
         stop();
-        if (API.isFilesOff(e)) { setOff(true); return; }
+        if (API.isFilesOff(e)) { setOff(true); if (p.onOff) p.onOff(); return; }
         setMsg({ title: uploadError(e), body: done.length ? done.length + " file sebelumnya sudah terunggah." : undefined });
       });
     }
@@ -340,10 +342,12 @@
         canDelete ? h(R.IconButton, { icon: "delete", label: "Hapus lampiran " + a.filename, disabled: !!busy, onClick: function () { if (!busyRef.current) setConfirmDel(a); } }) : null);
     }));
 
+    var inner = [msg ? h(R.Alert, { key: "msg", tone: "bad", title: msg.title, onClose: function () { setMsg(null); } }, msg.body) : null,
+      zone ? h(React.Fragment, { key: "zone" }, zone) : null, h(React.Fragment, { key: "body" }, body)];
     return h(React.Fragment, null,
-      h(R.Card, { title: "Lampiran" + (items && items.length ? " (" + items.length + ")" : ""), className: "ap-att" },
-        msg ? h(R.Alert, { tone: "bad", title: msg.title, onClose: function () { setMsg(null); } }, msg.body) : null,
-        zone, body),
+      // panel: the form's side panel gives the section its title; else a card of its own
+      p.panel ? h("div", { className: "ap-att ap-att-panel" }, inner)
+        : h(R.Card, { title: "Lampiran" + (items && items.length ? " (" + items.length + ")" : ""), className: "ap-att" }, inner),
       confirmDel ? h(R.Dialog, { variant: "danger", icon: "warning", title: "Hapus lampiran?", confirmLabel: "Ya, hapus", cancelLabel: "Kembali",
         onClose: function () { if (!busyRef.current) setConfirmDel(null); }, onConfirm: function () { remove(confirmDel); } },
         confirmDel.filename + " dihapus dari dokumen ini.") : null);

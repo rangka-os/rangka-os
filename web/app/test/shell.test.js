@@ -93,6 +93,13 @@ test("navId maps a route to its sidebar entry", () => {
   assert.strictEqual(A.navId({ kind: "process", process: "x" }), "proses");
 });
 
+test("navId: the home dashboard is the pinned Beranda when the home hash is given", () => {
+  assert.strictEqual(A.navId({ kind: "dash", dash: "crm_overview" }, "#/d/crm_overview"), "home");
+  assert.strictEqual(A.navId({ kind: "dash", dash: "sales_overview" }, "#/d/crm_overview"), "d/sales_overview");
+  assert.strictEqual(A.navId({ kind: "home" }, "#/d/crm_overview"), "home");
+  assert.strictEqual(A.navId({ kind: "home" }), null);
+});
+
 test("L picks Bahasa Indonesia from a label map", () => {
   assert.strictEqual(A.L({ id: "Lead", en: "Lead EN" }), "Lead");
   assert.strictEqual(A.L({ en: "Only EN" }), "Only EN");
@@ -150,4 +157,67 @@ test("navFromLayout: sidebar groups from meta.layout.nav.side, else null", () =>
   // navGroups uses the layout's groups and keeps Lainnya after them
   const g = plain(A.navGroups(meta, { approvals: true }));
   assert.deepStrictEqual(g.map((x) => x.label), ["Utama", "", "Lainnya"]);
+});
+
+test("shellKind: top-nav when the layout names it, else side-only (side, pos, portal and none)", () => {
+  const k = (layout) => A.shellKind({ layout });
+  assert.strictEqual(k({ shell: "side" }), "side-only");
+  assert.strictEqual(k({ shell: "side-only" }), "side-only");
+  assert.strictEqual(k({ shell: "top-nav" }), "top-nav");
+  assert.strictEqual(k({}), "side-only");
+  assert.strictEqual(k(undefined), "side-only");
+  assert.strictEqual(k({ shell: "pos" }), "side-only");
+  assert.strictEqual(k({ shell: "portal" }), "side-only");
+  assert.strictEqual(A.shellKind(null), "side-only");
+});
+
+test("densityOf: the theme's density, standard when missing or unknown", () => {
+  assert.strictEqual(A.densityOf({ theme: { density: "compact" } }), "compact");
+  assert.strictEqual(A.densityOf({ theme: { density: "comfortable" } }), "comfortable");
+  assert.strictEqual(A.densityOf({ theme: { density: "standard" } }), "standard");
+  assert.strictEqual(A.densityOf({ theme: { density: "huge" } }), "standard");
+  assert.strictEqual(A.densityOf({ theme: {} }), "standard");
+  assert.strictEqual(A.densityOf({}), "standard");
+  assert.strictEqual(A.densityOf(null), "standard");
+});
+
+test("sideNav: Beranda and the feature entries pinned, the app groups below", () => {
+  const n = plain(A.sideNav(META, { approvals: true, processes: true, imports: true }, { approvals: 3 }));
+  assert.deepStrictEqual(n.pinned.map((i) => [i.id, i.label, i.count]), [["home", "Beranda", undefined], ["approvals", "Persetujuan", 3], ["proses", "Proses bisnis", undefined], ["import/pelanggan_csv", "Impor data", undefined]]);
+  assert.deepStrictEqual(n.groups.map((g) => g.label), ["Dasbor", "Data induk", "CRM", "Penjualan"]);
+  const off = plain(A.sideNav(META, {}));
+  assert.deepStrictEqual(off.pinned.map((i) => i.id), ["home"]);
+  // several imports: their own group, nothing pinned for them
+  const many = plain(A.sideNav({ ...META, imports: { b: { label: { id: "Zebra" } }, a: { label: { id: "Alfa" } } } }, { imports: true }));
+  assert.deepStrictEqual(many.pinned.map((i) => i.id), ["home"]);
+  assert.deepStrictEqual(many.groups[many.groups.length - 1].items.map((i) => i.id), ["import/a", "import/b"]);
+});
+
+test("commandGroups: every nav item once under Halaman, Buat baru per layout.nav.create model, Data from found records", () => {
+  const meta = { ...META, layout: { shell: "side-only", nav: { create: ["deal", "lead", "nope"] } } };
+  const nav = A.sideNav(meta, { approvals: true });
+  const g = plain(A.commandGroups(meta, { approvals: true }, nav));
+  assert.deepStrictEqual(g.map((x) => x.label), ["Halaman", "Buat baru"]);
+  const pages = g[0].items;
+  const navIds = [].concat(nav.pinned, ...nav.groups.map((x) => x.items)).map((i) => i.id);
+  assert.deepStrictEqual(pages.map((i) => i.id), [...new Set(navIds)], "each nav entry once, in sidebar order");
+  assert.strictEqual(pages.find((i) => i.id === "home").hash, "#/d/crm_overview", "Beranda opens home");
+  assert.strictEqual(pages.find((i) => i.id === "r/lead").hash, "#/r/lead");
+  assert.strictEqual(pages.find((i) => i.id === "r/lead").sub, "CRM", "the group as subtitle");
+  assert.deepStrictEqual(g[1].items.map((i) => [i.label, i.hash]), [["Buat peluang", "#/r/deal/new"], ["Buat lead", "#/r/lead/new"]], "uninstalled models are left out");
+  // a model the user may not create is left out; a preview (readOnly) has no Buat baru at all
+  const noDeal = { ...meta, models: { ...meta.models, deal: { ...meta.models.deal, can: { create: false } } } };
+  assert.deepStrictEqual(plain(A.commandGroups(noDeal, {}, nav)).find((x) => x.label === "Buat baru").items.map((i) => i.id), ["new/lead"]);
+  assert.ok(!plain(A.commandGroups(meta, {}, nav, [], true)).some((x) => x.label === "Buat baru"), "no create in a preview");
+  const found = [{ model: "customer", name: "CUST-1", title: "CV Maju Jaya" }];
+  const withData = plain(A.commandGroups(meta, {}, nav, found));
+  const data = withData.find((x) => x.label === "Data");
+  assert.strictEqual(data.filter, false, "server matches are not filtered again by title");
+  assert.deepStrictEqual(data.items.map((i) => [i.label, i.sub, i.hash]), [["CV Maju Jaya", "Pelanggan · CUST-1", "#/r/customer/CUST-1"]], "the record name follows the model when the title differs");
+  const plainName = plain(A.commandGroups(meta, {}, nav, [{ model: "lead", name: "L-1", title: "L-1" }])).find((x) => x.label === "Data");
+  assert.strictEqual(plainName.items[0].sub, "Lead");
+  // no create list: no Buat baru group; Tanya Raka only with features.ai in meta
+  assert.deepStrictEqual(plain(A.commandGroups(META, {}, A.sideNav(META, {}))).map((x) => x.label), ["Halaman"]);
+  const ai = plain(A.commandGroups({ ...META, features: { ai: true } }, {}, A.sideNav(META, {})));
+  assert.deepStrictEqual(ai.map((x) => x.label), ["Halaman", "Tanya Raka"]);
 });

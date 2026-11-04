@@ -16,6 +16,28 @@ func (s *Server) listRecords(w http.ResponseWriter, r *http.Request, c *caller) 
 	writeJSON(w, 200, map[string]any{"data": rows, "total": total})
 }
 
+// aggregateRecords answers GET /api/v1/aggregate/{model}: totals and group summaries over the rows the list
+// matches for the same q and filter (contract 0018).
+func (s *Server) aggregateRecords(w http.ResponseWriter, r *http.Request, c *caller) {
+	q := r.URL.Query()
+	fn := q.Get("fn")
+	if fn == "" {
+		fn = "count"
+	}
+	fns, err := engine.ParseAggFns(fn)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	opts := engine.ListOpts{Filter: q.Get("filter"), Q: q.Get("q")}
+	res, err := s.Engine.Aggregate(r.Context(), c.actor, r.PathValue("model"), opts, q.Get("group"), fns)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, res)
+}
+
 // listOptsOf reads the list query parameters.
 func listOptsOf(r *http.Request) engine.ListOpts {
 	q := r.URL.Query()

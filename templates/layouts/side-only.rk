@@ -1,4 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/layout.json
+# Frappe-style sidebar. The default shell (contract 0017).
 name: side_only
 label: {id: side-only}
 shell: side-only

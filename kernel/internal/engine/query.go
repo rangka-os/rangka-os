@@ -34,53 +34,9 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	if err != nil {
 		return nil, 0, err
 	}
-	if m.IsChild {
-		return nil, 0, badRequest(model + " rows are read through their parent document")
-	}
-	readable := e.decide(a, m, "read")
-	if !readable.maybe() {
-		return nil, 0, e.Deny(m.Name, "read")
-	}
-	if opts.Filter != "" {
-		if _, err := cel.Compile(opts.Filter); err != nil {
-			return nil, 0, badRequest("filter: " + err.Error())
-		}
-	}
-	children := opts.Children || strings.Contains(opts.Filter, ".")
-	all, err := store.All(ctx, e.DB, e.Reg(), a.Org, m, children)
+	out, err := e.matching(ctx, a, m, opts)
 	if err != nil {
 		return nil, 0, err
-	}
-	links := map[string]map[string]any{}
-	titles := map[string]string{}
-	var out []store.Record
-	q := strings.ToLower(strings.TrimSpace(opts.Q))
-	rs := e.RowScope(a)
-	for _, r := range all {
-		if !rs.Visible(m, r) {
-			continue
-		}
-		e.refreshClock(ctx, a, m, r, children, links)
-		e.Output(m, r)
-		if !e.recordAllowed(ctx, e.DB, a, m, readable, r, links) {
-			continue
-		}
-		if opts.Filter != "" {
-			v, err := e.newScope(ctx, e.DB, a, m, r, links).eval(opts.Filter)
-			if err != nil {
-				if _, ok := err.(*cel.SyntaxError); ok {
-					return nil, 0, badRequest(err.Error())
-				}
-				continue
-			}
-			if v != true {
-				continue
-			}
-		}
-		if q != "" && !matchText(m, r, q) && !e.matchLinkTitle(ctx, a, m, r, q, titles, links) {
-			continue
-		}
-		out = append(out, r)
 	}
 	if opts.Sort != "" {
 		desc := strings.HasPrefix(opts.Sort, "-")
@@ -113,6 +69,61 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	return out, total, nil
 }
 
+// matching returns every row List would return for opts before sorting and paging (Sort, Limit and Offset are
+// ignored): the actor's read grant, row scope, filter and q all apply. A filter that does not compile is a 400; a
+// filter that fails to evaluate on a row leaves that row out.
+func (e *Engine) matching(ctx context.Context, a Actor, m *meta.Model, opts ListOpts) ([]store.Record, error) {
+	if m.IsChild {
+		return nil, badRequest(m.Name + " rows are read through their parent document")
+	}
+	readable := e.decide(a, m, "read")
+	if !readable.maybe() {
+		return nil, e.Deny(m.Name, "read")
+	}
+	if opts.Filter != "" {
+		if _, err := cel.Compile(opts.Filter); err != nil {
+			return nil, badRequest("filter: " + err.Error())
+		}
+	}
+	children := opts.Children || strings.Contains(opts.Filter, ".")
+	all, err := store.All(ctx, e.DB, e.Reg(), a.Org, m, children)
+	if err != nil {
+		return nil, err
+	}
+	links := map[string]map[string]any{}
+	titles := map[string]string{}
+	var out []store.Record
+	q := strings.ToLower(strings.TrimSpace(opts.Q))
+	rs := e.RowScope(a)
+	for _, r := range all {
+		if !rs.Visible(m, r) {
+			continue
+		}
+		e.refreshClock(ctx, a, m, r, children, links)
+		e.Output(m, r)
+		if !e.recordAllowed(ctx, e.DB, a, m, readable, r, links) {
+			continue
+		}
+		if opts.Filter != "" {
+			v, err := e.newScope(ctx, e.DB, a, m, r, links).eval(opts.Filter)
+			if err != nil {
+				if _, ok := err.(*cel.SyntaxError); ok {
+					return nil, badRequest(err.Error())
+				}
+				continue
+			}
+			if v != true {
+				continue
+			}
+		}
+		if q != "" && !matchText(m, r, q) && !e.matchLinkTitle(ctx, a, m, r, q, titles, links) {
+			continue
+		}
+		out = append(out, r)
+	}
+	return out, nil
+}
+
 // matchLinkTitle reports whether q occurs in the display title of any record a link field points at, so lists are
 // searchable by what users see (a customer's name) and not only by the stored key. titles caches model/name → title.
 // A target the actor may not read (model-level or record-level) never matches, so q cannot reveal its title.
@@ -121,21 +132,27 @@ func (e *Engine) matchLinkTitle(ctx context.Context, a Actor, m *meta.Model, r s
 		if f.Type != "link" || str(r[f.Name]) == "" {
 			continue
 		}
-		key := f.To + "/" + str(r[f.Name])
-		t, ok := titles[key]
-		if !ok {
-			if tm := e.Reg().Models[f.To]; tm != nil {
-				if l, err := store.Get(ctx, e.DB, e.Reg(), a.Org, tm, str(r[f.Name])); err == nil && e.recordAllowed(ctx, e.DB, a, tm, e.decide(a, e.permModel(tm.Name), "read"), l, links) {
-					t = strings.ToLower(e.Title(ctx, a, f.To, l, 0))
-				}
-			}
-			titles[key] = t
-		}
-		if t != "" && strings.Contains(t, q) {
+		if t := strings.ToLower(e.linkTitle(ctx, a, f.To, str(r[f.Name]), titles, links)); t != "" && strings.Contains(t, q) {
 			return true
 		}
 	}
 	return false
+}
+
+// linkTitle returns the display title of record name of model to, or "" when it is missing or the actor may not read
+// it (model-level or record-level). titles caches model/name → title.
+func (e *Engine) linkTitle(ctx context.Context, a Actor, to, name string, titles map[string]string, links map[string]map[string]any) string {
+	key := to + "/" + name
+	t, ok := titles[key]
+	if !ok {
+		if tm := e.Reg().Models[to]; tm != nil {
+			if l, err := store.Get(ctx, e.DB, e.Reg(), a.Org, tm, name); err == nil && e.recordAllowed(ctx, e.DB, a, tm, e.decide(a, e.permModel(tm.Name), "read"), l, links) {
+				t = e.Title(ctx, a, to, l, 0)
+			}
+		}
+		titles[key] = t
+	}
+	return t
 }
 
 func matchText(m *meta.Model, r store.Record, q string) bool {

@@ -745,7 +745,17 @@ def open_nav(page):
 def expect_signed_in(page, ctx):
     hash_, _ = ctx.home()
     page.wait_for_function("(h) => location.hash === h", arg=hash_, timeout=15000)
-    page.locator(".rk-topnav").wait_for(timeout=10000)
+    page.locator(".ap-shell").wait_for(timeout=10000)
+
+
+def account_menu(page):
+    """The business switcher's menu (side-only shell): apps, companies, theme, help, account. On a phone the switcher
+    sits in the navigation drawer."""
+    open_nav(page)
+    page.locator(".rk-side .rk-side-switch").click()
+    menu = page.locator(".ap-switch-menu [role=menu]")
+    menu.wait_for(timeout=5000)
+    return menu
 
 
 def me_status(page):
@@ -780,8 +790,7 @@ def test_logout(page, ctx):
     page.goto(ctx.base + "/app/")
     sign_in(page)
     expect_signed_in(page, ctx)
-    page.locator(".rk-topnav .rk-av-btn").click()
-    page.get_by_role("menuitem", name="Keluar").click()
+    account_menu(page).get_by_role("menuitem", name="Keluar").click()
     page.get_by_role("button", name="Masuk").wait_for(timeout=10000)
     assert page.get_by_label("Kata sandi").is_visible(), "sign-in form after Keluar"
     assert me_status(page) == 401, "GET /auth/me after logout should be 401"
@@ -795,12 +804,13 @@ def test_session_expiry_returns_to_route(page, ctx):
     target = ctx.menu_models(app)[0]
     ctx.allow_http(401, r"/api/v1/")  # the list behind the dialog is asked for while the session is gone
     page.evaluate("window.__noReload = 1")
+    page.wait_for_load_state("networkidle")  # the home dashboard's lookups must not be the ones that meet the 401
     page.context.clear_cookies(name="rk_session")
     open_nav(page)
     page.locator(".rk-side").get_by_role("link", name=ctx.model_label(target), exact=True).click()
     dlg = page.locator(".ap-signin-dialog")
     dlg.wait_for(timeout=10000)
-    assert page.locator(".rk-topnav").is_visible(), "the app stays mounted under the sign-in dialog"
+    assert page.locator(".ap-shell").count() == 1, "the app stays mounted under the sign-in dialog"
     assert page.evaluate("location.hash") == "#/r/" + target, "route kept while the dialog is open"
     sign_in(page, within=".ap-signin-dialog")
     dlg.wait_for(state="detached", timeout=10000)
@@ -815,10 +825,106 @@ def test_user_menu_lists_orgs(page, ctx):
     page.goto(ctx.base + "/app/")
     sign_in(page)
     expect_signed_in(page, ctx)
-    page.locator(".rk-topnav .rk-av-btn").click()
-    menu = page.locator(".rk-account")
+    menu = account_menu(page)
     for name in ("Kopi Senja", "Toko Kedua"):
         assert menu.get_by_role("menuitem", name=name).count() == 1, f"user menu lists {name}"
+
+
+def test_sidebar_collapse(page, ctx):
+    """Side-only shell: the sidebar collapses to icons and stays collapsed after a reload (localStorage); on a phone it
+    is a drawer behind the 48px bar's menu button and has no collapse control."""
+    home, app = ctx.home()
+    model = "sales_invoice" if "sales_invoice" in ctx.meta["models"] else ctx.menu_models(app)[0]
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    side = page.locator(".ap-shell > .rk-side")
+    if ctx.args.width < 600:
+        assert not side.is_visible(), "a phone shows no sidebar until the menu button opens it"
+        assert page.locator(".ap-mhead").is_visible(), "the 48px bar"
+        assert page.locator(".ap-mhead").bounding_box()["height"] == 48
+        open_nav(page)
+        side.wait_for(state="visible", timeout=5000)
+        assert side.get_by_role("button", name="Ciutkan navigasi").count() == 0, "no collapse on a phone"
+        side.get_by_role("link", name=ctx.model_label(model), exact=True).click()
+        page.wait_for_function("(h) => location.hash === h", arg="#/r/" + model, timeout=5000)
+        assert not side.is_visible(), "picking an entry closes the drawer"
+        return
+    assert side.get_by_role("link", name="Beranda").is_visible() and side.get_by_role("button", name="Cari").is_visible()
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    shot(page, ctx, "shell-dashboard-expanded")
+    page.evaluate("(h) => { location.hash = h; }", "#/r/" + model)
+    page.wait_for_load_state("networkidle")
+    shot(page, ctx, "shell-list-expanded")
+    w = side.bounding_box()["width"]
+    side.get_by_role("button", name="Ciutkan navigasi").click()
+    page.wait_for_function("() => document.querySelector('.ap-shell > .rk-side').classList.contains('collapsed')", timeout=5000)
+    assert side.bounding_box()["width"] < w, "collapsed is narrower"
+    assert side.get_by_role("link", name=ctx.model_label(model)).count() == 1, "entries keep their names as labels"
+    page.reload()
+    page.locator(".ap-shell > .rk-side.collapsed").wait_for(timeout=15000)
+    page.wait_for_load_state("networkidle")
+    shot(page, ctx, "shell-list-collapsed")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(200)
+    shot(page, ctx, "shell-list-collapsed-dark")
+    side.get_by_role("button", name="Bentangkan navigasi").click()
+    page.evaluate("(h) => { location.hash = h; }", home)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    shot(page, ctx, "shell-dashboard-expanded-dark")
+    page.reload()
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    assert not page.locator(".ap-shell > .rk-side.collapsed").count(), "expanded again after a reload"
+    # Ubah swaps in the menu editor; the business switcher (theme, apps, org, Keluar) stays at its top
+    ubah_on(page)
+    page.locator(".ap-ubah-side").wait_for(timeout=5000)
+    assert account_menu(page).get_by_role("menuitem", name="Keluar").count() == 1, "switcher menu reachable in Ubah"
+    page.keyboard.press("Escape")
+
+
+def test_command_menu(page, ctx):
+    """⌘K (Ctrl+K off a Mac) opens the command menu; typing searches records; Enter opens the first one."""
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.keyboard.press("ControlOrMeta+k")  # ⌘K on a Mac, Ctrl+K elsewhere
+    dlg = page.get_by_role("dialog", name="Menu perintah")
+    dlg.wait_for(timeout=5000)
+    assert dlg.get_by_role("group", name="Halaman").count() == 1, "pages first"
+    assert dlg.get_by_text("Tanya Raka").count() == 0, "no Tanya Raka without features.ai"
+    page.mouse.move(1, 1)  # keyboard only: a resting pointer over the results would pick the row under it (hover selects)
+    page.keyboard.type("Maju")
+    data = dlg.get_by_role("group", name="Data")
+    data.locator(".rk-cmd-item").first.wait_for(timeout=10000)
+    first = data.locator(".rk-cmd-item").first
+    label = first.locator(".l").inner_text()
+    assert "maju" in label.lower(), label
+    assert first.locator(".s").inner_text().startswith(ctx.model_label("customer")), "the first match is a customer: " + first.inner_text()
+    shot(page, ctx, "shell-command-menu")
+    page.keyboard.press("Enter")
+    page.wait_for_function("() => /^#\\/r\\/customer\\/[^/]+$/.test(location.hash)", timeout=5000)
+    assert dlg.count() == 0, "the menu closes"
+    main_area(page).get_by_text(label).first.wait_for(timeout=10000)
+
+
+def test_top_nav_shell(page, ctx):
+    """layout.shell top-nav keeps the TopNav (mocked meta): account menu, search opens ⌘K, no phone bar."""
+    def meta(route):
+        r = route.fetch()
+        body = r.json()
+        body["layout"] = dict(body.get("layout") or {}, shell="top-nav")
+        _json(route, 200, body)
+    page.route(re.compile(r".*/api/v1/meta$"), meta)
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    assert page.locator(".rk-topnav").is_visible() and page.locator(".ap-shell.ap-top").count() == 1
+    assert not page.locator(".ap-mhead").is_visible(), "no phone bar in top-nav"
+    page.locator(".rk-topnav .rk-ask").click()
+    page.get_by_role("dialog", name="Menu perintah").wait_for(timeout=5000)
+    page.keyboard.press("Escape")
+    page.locator(".rk-topnav .rk-av-btn").click()
+    assert page.locator(".rk-account").get_by_role("menuitem", name="Keluar").count() == 1
 
 
 # ---------------------------------------------------------------------------------------------- lists and kanban (Task 5)
@@ -1019,6 +1125,131 @@ def test_kanban_move(page, ctx):
     wait_rows(page)
 
 
+# ---------------------------------------------------------------------------------------------- group-by, report, saved settings (Task 8)
+def field_label(ctx, m, f):
+    fd = next((x for x in ctx.meta["models"][m]["fields"] if x["name"] == f), None)
+    return L(fd.get("label")) if fd else f
+
+
+def switch_view(page, label):
+    page.locator(".rk-viewswitch").get_by_role("button", name=label, exact=True).click()
+
+
+def test_list_group_by(page, ctx):
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Kelompok")
+    heads = page.locator(".rk-group-head")
+    heads.first.wait_for(timeout=10000)
+    assert any("/api/v1/aggregate/sales_invoice" in u and "group=status" in u and "fn=count,sum:grand_total" in u for m, u in reqs), \
+        f"the headers come from one aggregate grouped by status, saw {[u for m, u in reqs if 'aggregate' in u]}"
+    h = Http(ctx.base).login(*ctx.owner)
+    _, lst = h.call("GET", "/api/v1/r/sales_invoice?limit=1")
+    counts = [int(t.replace(".", "")) for t in page.locator(".rk-group-head .rk-count").all_inner_texts()]
+    assert sum(counts) == lst["total"], f"header counts {counts} add up to the list total {lst['total']}"
+    labels = [t.strip() for t in page.locator(".rk-group-head .l").all_inner_texts()]
+    assert "Lunas" in labels, f"a Lunas group, got {labels}"
+    assert all(re.search(r"Rp\s", t) for t in page.locator(".rk-group-head .rk-group-vals").all_inner_texts()), "each header shows its rupiah total"
+    _, agg = h.call("GET", "/api/v1/aggregate/sales_invoice?group=status&fn=count")
+    paid = next(g["count"] for g in agg["groups"] if g["key"] == "paid")
+
+    n_req = len(reqs)
+    lunas = page.locator(".rk-group", has=page.locator(".rk-group-head .l", has_text=re.compile("^Lunas$")))
+    lunas.locator(".rk-group-head").click()
+    lunas.locator(".rk-table tbody tr:not([aria-hidden])").first.wait_for(timeout=10000)
+    assert any("/r/sales_invoice" in u and "filter=status == 'paid'" in u and "limit=20" in u for m, u in reqs[n_req:]), \
+        f"opening Lunas lists its rows with status == 'paid', saw {reqs[n_req:]}"
+    rows = lunas.locator(".rk-table tbody tr:not([aria-hidden])")
+    assert rows.count() == min(paid, 20), f"{min(paid, 20)} Lunas rows, got {rows.count()}"
+    chips = [c.lower() for c in lunas.locator(".rk-table tbody .rk-chip").all_inner_texts()]
+    assert chips and set(chips) == {"lunas"}, f"every row in the group is Lunas, got {sorted(set(chips))}"
+    shot(page, ctx, "list-group-by")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(300)  # let the colour transitions finish
+    shot(page, ctx, "list-group-by-dark")
+    page.emulate_media(color_scheme="light")
+    # closing the group hides its rows; the group field picker lists the groupable fields
+    lunas.locator(".rk-group-head").click()
+    assert lunas.locator(".rk-table").count() == 0, "the group closed"
+    page.get_by_role("button", name=re.compile("^Kelompok: ")).click()
+    assert page.locator(".ap-toolmenu-pop").get_by_role("menuitem", name=field_label(ctx, "sales_invoice", "customer")).count() == 1, "customer is a group field"
+    page.keyboard.press("Escape")
+
+
+def test_list_group_by_error(page, ctx):
+    """A failed aggregate shows the group view's error with Coba lagi, not the "Belum ada" empty state."""
+    ctx.allow_http(500, r"/api/v1/aggregate/")
+    fail = {"on": True}
+
+    def agg(route):
+        if fail["on"]:
+            _json(route, 500, {"error": {"code": "internal", "message": "Server sedang bermasalah"}})
+        else:
+            route.continue_()
+    page.route(re.compile(r".*/api/v1/aggregate/.*"), agg)
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Kelompok")
+    page.get_by_text("Ringkasan per kelompok tidak bisa dimuat").wait_for(timeout=10000)
+    assert page.get_by_text("Belum ada " + ctx.model_label("sales_invoice").lower()).count() == 0, "no empty state for a failed aggregate"
+    fail["on"] = False
+    page.get_by_role("button", name="Coba lagi").click()
+    page.locator(".rk-group-head").first.wait_for(timeout=10000)
+
+
+def test_report_totals(page, ctx):
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Laporan")
+    total_row = page.locator(".rk-report-total")
+    total_row.wait_for(timeout=10000)
+    h = Http(ctx.base).login(*ctx.owner)
+    st, agg = h.call("GET", "/api/v1/aggregate/sales_invoice?fn=count,sum:grand_total")
+    assert st == 200, f"aggregate: {st} {agg}"
+    label = total_row.locator("th").inner_text().strip()
+    assert label == f"Total semua {agg['count']:,} baris".replace(",", "."), f"footer label {label!r}, aggregate count {agg['count']}"
+    want = ctx.rupiah_text(agg["values"]["sum:grand_total"])
+    cells = [t.strip() for t in total_row.locator("td").all_inner_texts()]
+    assert want in cells, f"the footer shows {want} (aggregate sum:grand_total), got {cells}"
+    rows = page.locator(".rk-report tbody tr")
+    assert rows.count() == min(agg["count"], 20), f"the report shows the current page, got {rows.count()} rows"
+    shot(page, ctx, "list-report")
+    page.emulate_media(color_scheme="dark")
+    page.wait_for_timeout(300)  # let the colour transitions finish
+    shot(page, ctx, "list-report-dark")
+    page.emulate_media(color_scheme="light")
+    # Kolom adds any model field; the header's hide button takes it away again
+    due = field_label(ctx, "sales_invoice", "due_date")
+    page.get_by_role("button", name="Kolom", exact=True).click()
+    page.locator(".ap-toolmenu-pop").get_by_role("menuitem", name=due).click()
+    page.locator(".rk-report thead th", has_text=due).wait_for(timeout=5000)
+    if ctx.args.width >= 800:
+        page.get_by_role("button", name="Sembunyikan kolom " + due).click()
+    else:  # phones have no hover, so the header's hide button is not shown: Kolom takes it away again
+        page.get_by_role("button", name="Kolom", exact=True).click()
+        page.locator(".ap-toolmenu-pop").get_by_role("menuitem", name=due).click()
+    page.wait_for_function("(t) => ![...document.querySelectorAll('.rk-report thead th')].some((th) => th.textContent.includes(t))", arg=due, timeout=5000)
+    assert want in [t.strip() for t in total_row.locator("td").all_inner_texts()], "the total stays"
+
+
+def test_list_prefs_persist(page, ctx):
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    switch_view(page, "Laporan")
+    page.locator(".rk-report-total").wait_for(timeout=10000)
+    saved = page.evaluate("() => localStorage.getItem('rk.list.' + %s + '.sales_invoice')" % json.dumps(ORG))
+    assert saved and json.loads(saved)["view"] == "report", f"the view is saved per person and org, got {saved}"
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    page.locator(".rk-report-total").wait_for(timeout=10000)
+    pressed = page.locator(".rk-viewswitch [aria-pressed=true]").get_attribute("aria-label")
+    assert pressed == "Laporan", f"still the report after a reload, switcher shows {pressed}"
+    switch_view(page, "Daftar")
+    wait_rows(page)
+
+
 def test_forbidden_list(page, ctx):
     ctx.allow_http(403, r"/api/v1/r/deal")
     page.route(re.compile(r".*/api/v1/r/deal(\?.*)?$"), lambda route: _json(route, 403, {"error": {"code": "permission_denied", "message": "Peran kamu tidak boleh membaca peluang"}}))
@@ -1045,6 +1276,29 @@ def main_area(page):
 
 def wait_form(page, button="Simpan draf"):
     page.get_by_role("button", name=button, exact=True).wait_for(timeout=10000)
+
+
+def more_item(page, name, wait=True):
+    """The document header's ⋯ menu entry `name` (Batalkan, the model's actions); opens the menu when it is closed.
+    wait: first wait for the ⋯ button (the form is still loading). Returns a locator with count() == 0 when the menu or
+    the entry is missing."""
+    more = main_area(page).locator(".rk-pagehead").get_by_role("button", name="Tindakan lain")
+    if wait:
+        more.wait_for(timeout=10000)
+    if more.count() and more.get_attribute("aria-expanded") != "true":
+        more.click()
+    return main_area(page).locator(".rk-pagehead").get_by_role("menuitem", name=name, exact=True)
+
+
+def close_more(page):
+    more = main_area(page).locator(".rk-pagehead").get_by_role("button", name="Tindakan lain")
+    if more.count() and more.get_attribute("aria-expanded") == "true":
+        page.keyboard.press("Escape")
+
+
+def panel_section(page, title):
+    """The document side panel's section headed `title` (Info, Lampiran, Persetujuan, Cetak)."""
+    return main_area(page).locator(".rk-docpanel-sec", has=page.locator("h3", has_text=re.compile("^" + re.escape(title) + "$")))
 
 
 def by_label(page, label):
@@ -1140,7 +1394,7 @@ def test_invoice_create_submit(page, ctx):
     assert re.fullmatch(r"INV-\d{4}-\d{5}", number), number
     main_area(page).locator(".rk-steps [aria-current=step]", has_text="Diajukan").wait_for(timeout=5000)
     assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Diajukan").count() == 1, "status chip Diajukan"
-    assert main_area(page).locator(".rk-pagehead .rk-doc-no", has_text=number).count() == 1, "the header shows the number"
+    assert main_area(page).locator(".rk-pagehead h1", has_text=number).count() == 1, "the header shows the number"
     editable = main_area(page).locator("input:not(.ap-att-input), textarea, select, [role=combobox]")  # the attachments file input is not a form field
     assert editable.count() == 0, f"no editable input on a submitted invoice, found {editable.count()}"
     st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + number)
@@ -1151,7 +1405,7 @@ def test_invoice_create_submit(page, ctx):
 def test_cancel_amend(page, ctx):
     number = submitted_invoice(ctx)
     open_route(page, ctx, "#/r/sales_invoice/" + number)
-    page.get_by_role("button", name="Batalkan", exact=True).click()
+    more_item(page, "Batalkan").click()
     dlg = page.get_by_role("alertdialog")
     dlg.wait_for(timeout=5000)
     dlg.get_by_role("button", name="Ya, batalkan").click()
@@ -1163,7 +1417,7 @@ def test_cancel_amend(page, ctx):
     draft = urllib.parse.unquote(page.evaluate("location.hash").rsplit("/", 1)[-1])
     st, rec = h.call("GET", "/api/v1/r/sales_invoice/" + draft)
     assert st == 200 and rec["amended_from"] == number and rec["docstatus"] == 0, f"the amendment: {st} {rec}"
-    link = main_area(page).locator(".rk-pagehead a", has_text=number)
+    link = panel_section(page, "Info").locator("a", has_text=number)
     link.wait_for(timeout=5000)
     assert link.get_attribute("href") == "#/r/sales_invoice/" + number, "amended_from links back"
     wait_form(page)
@@ -1288,7 +1542,7 @@ def test_action_convert_lead(page, ctx):
     assert st == 201, f"create lead {st} {lead}"
     open_route(page, ctx, "#/r/lead/" + lead["name"])
     wait_form(page, "Simpan")
-    page.get_by_role("button", name="Jadikan pelanggan + peluang").click()
+    more_item(page, "Jadikan pelanggan + peluang").click()
     page.wait_for_function("() => /^#\\/r\\/deal\\/DEAL-\\d+$/.test(location.hash)", timeout=10000)
     main_area(page).get_by_role("heading", name="Peluang Kedai Aksi").wait_for(timeout=10000)
     _, after = h.call("GET", "/api/v1/r/lead/" + lead["name"])
@@ -1475,13 +1729,6 @@ def test_editors_disabled_while_saving(page, ctx):
 
 
 # ---------------------------------------------------------------------------------------------- org switcher and approvals (Task 8)
-def account_menu(page):
-    page.locator(".rk-topnav .rk-av-btn").click()
-    menu = page.locator(".rk-account")
-    menu.wait_for(timeout=5000)
-    return menu
-
-
 def test_org_switch(page, ctx):
     mock_feature(page, "orgs")
     events = []
@@ -1569,7 +1816,7 @@ def sign_out(page):
 
 def sign_in_as(page, ctx, who, hash_=None):
     sign_in(page, *who)
-    page.locator(".rk-topnav").wait_for(timeout=15000)
+    page.locator(".ap-shell").wait_for(timeout=15000)
     if hash_:
         page.evaluate("(h) => { location.hash = h; }", hash_)
 
@@ -1776,7 +2023,7 @@ def test_cancel_needs_approval(page, ctx):
     assert st == 200 and rec["docstatus"] == 1, f"submit as owner: {st} {rec}"
     number = rec["name"]
     open_route(page, ctx, "#/r/sales_invoice/" + number, who=SALES)
-    page.get_by_role("button", name="Batalkan", exact=True).click()
+    more_item(page, "Batalkan").click()
     dlg = page.get_by_role("alertdialog")
     dlg.wait_for(timeout=5000)
     dlg.get_by_role("button", name="Ya, batalkan").click()
@@ -1785,10 +2032,11 @@ def test_cancel_needs_approval(page, ctx):
     assert "undefined" not in page.locator("body").inner_text(), "no 'undefined' anywhere (toast, header)"
     assert page.get_by_text(number + " dibatalkan").count() == 0, "no 'dibatalkan' toast for a held cancel"
     assert page.evaluate("location.hash") == "#/r/sales_invoice/" + number, "stays on the invoice"
-    assert main_area(page).locator(".rk-pagehead .rk-doc-no", has_text=number).count() == 1, "the header still shows the number (not a new record)"
+    assert main_area(page).locator(".rk-pagehead h1", has_text=number).count() == 1, "the header still shows the number (not a new record)"
     assert banner.get_by_text("Persetujuan pembatalan").count() >= 1, "the cancel policy label shows"
     assert EDIT_VOIDS not in banner.inner_text(), "no edit-voids warning on a submitted document"
-    assert page.get_by_role("button", name="Batalkan", exact=True).count() == 0, "no second Batalkan while the request waits"
+    assert more_item(page, "Batalkan", wait=False).count() == 0, "no second Batalkan while the request waits"
+    close_more(page)
     assert main_area(page).locator(".rk-pagehead .rk-chip", has_text="Menunggu persetujuan").count() == 1, "header lozenge"
     assert owner.call("GET", "/api/v1/r/sales_invoice/" + number)[1]["docstatus"] == 1, "still submitted on the server"
     shot(page, ctx, "approval-cancel-held")
@@ -1813,13 +2061,14 @@ def test_action_needs_approval(page, ctx):
     assert st == 201, f"create lead as sales {st} {lead}"
     open_route(page, ctx, "#/r/lead/" + lead["name"], who=SALES)
     wait_form(page, "Simpan")
-    page.get_by_role("button", name="Jadikan pelanggan + peluang").click()
+    more_item(page, "Jadikan pelanggan + peluang").click()
     banner = main_area(page).locator(".ap-banner", has_text=WAITING)
     banner.first.wait_for(timeout=10000)
     assert banner.get_by_text("Persetujuan konversi").count() >= 1, "the action's policy label shows"
     assert page.get_by_text("Diproses di latar belakang").count() == 0, "not reported as a queued job"
     assert page.evaluate("location.hash") == "#/r/lead/" + lead["name"], "stays on the lead"
-    assert page.get_by_role("button", name="Jadikan pelanggan + peluang").count() == 0, "the held action is not offered again"
+    assert more_item(page, "Jadikan pelanggan + peluang", wait=False).count() == 0, "the held action is not offered again"
+    close_more(page)
     _, after = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/r/lead/" + lead["name"])
     assert not after.get("converted_deal"), f"not converted yet: {after.get('converted_deal')!r}"
 
@@ -2091,8 +2340,8 @@ def test_attachment_upload(page, ctx):
         reqs = watch_requests(page)
         open_route(page, ctx, "#/r/sales_invoice/" + draft)
         wait_form(page)
-        card = main_area(page).locator(".ap-att")
-        card.wait_for(timeout=10000)
+        card = panel_section(page, "Lampiran")
+        card.locator(".ap-att").wait_for(timeout=10000)
         assert card.get_by_role("heading", name="Lampiran").count() == 1
         inp = card.locator("input[type=file]")
         # 21 MB: refused in the browser, no request is sent
@@ -2136,6 +2385,22 @@ def test_attachment_upload(page, ctx):
         assert main_area(page).get_by_role("button", name=re.compile("^Hapus lampiran")).count() == 0, "no delete on a submitted record"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_attachment_files_off(page, ctx):
+    """A kernel with files off answers the attachments list with 501 files_disabled: the side panel then drops its
+    "Lampiran" section instead of leaving an empty title."""
+    page.route(re.compile(r".*/api/v1/r/[^/]+/[^/?]+/attachments(\?.*)?$"), lambda route: route.fulfill(
+        status=501, content_type="application/json",
+        body=json.dumps({"error": {"code": "files_disabled", "message": "files are off"}})) if route.request.method == "GET" else route.continue_())
+    ctx.allow_http(501, r"/attachments")
+    draft = draft_invoice(ctx)
+    open_route(page, ctx, "#/r/sales_invoice/" + draft)
+    wait_form(page)
+    panel_section(page, "Info").wait_for(timeout=10000)
+    page.wait_for_function("() => !document.querySelector('.rk-docpanel-sec h3') || ![...document.querySelectorAll('.rk-docpanel-sec h3')].some(e => e.textContent.trim() === 'Lampiran')", timeout=10000)
+    page.wait_for_timeout(300)
+    assert panel_section(page, "Lampiran").count() == 0, "no empty Lampiran section when files are off"
 
 
 def test_attachment_serving(page, ctx):
@@ -2575,6 +2840,22 @@ def enable_print_formats(site):
     return True
 
 
+def use_side_only(site):
+    """The demo site's layout (crm_first) names `shell: top-nav`; the suite runs the default shell (side-only, contract
+    0017), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
+    d, changed = os.path.join(site, "layouts"), 0
+    for fn in os.listdir(d) if os.path.isdir(d) else []:
+        path = os.path.join(d, fn)
+        with open(path) as f:
+            text = f.read()
+        text, n = re.subn(r"(?m)^shell: top-nav$", "shell: side-only", text)
+        changed += n
+        text = re.sub(r"(?m)^extends: rangka/top-nav$", "extends: rangka/side-only", text)
+        with open(path, "w") as f:
+            f.write(text)
+    assert changed, "no layout in the temp site names shell: top-nav; use_side_only has nothing to switch (update it)"
+
+
 SCROLL_JS = """() => ({sw: document.documentElement.scrollWidth, bw: document.body.scrollWidth, vw: window.innerWidth})"""
 SMALL_CONTROLS_JS = """() => {
   const out = [];
@@ -2761,7 +3042,7 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
 def test_ubah_hidden_for_rep(page, ctx):
     page.goto(ctx.base + "/app/?mode=ubah")
     sign_in(page, *SALES)
-    page.locator(".rk-topnav").wait_for(timeout=15000)
+    page.locator(".ap-shell").wait_for(timeout=15000)
     page.evaluate("() => { location.hash = location.hash.split('?')[0] + '?ubah=1'; }")
     page.locator("[data-loading=false]").wait_for(timeout=15000)  # the dashboard rendered with ?ubah=1 in the hash
     assert page.get_by_role("group", name="Mode").count() == 0, "a sales_rep gets no Pakai/Ubah toggle"
@@ -2885,6 +3166,7 @@ def main():
         enable_approval_policy(SITE)
         enable_import_def(SITE)
         enable_print_formats(SITE)
+        use_side_only(SITE)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

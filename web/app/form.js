@@ -4,10 +4,19 @@
  * loads GET /api/v1/r/<model>/<name>. Every edit runs eng.compute for the preview only; the browser's rule check shows as
  * a hint under the field the user touched and never blocks a save. Every server answer replaces the local record.
  *
- * Buttons: a draft has Simpan draf and Ajukan (saves first when there are unsaved edits); a submitted document Batalkan
- * (confirm dialog); a cancelled one Amandemen. Non-submittable models have Simpan and their actions (api.action; a queued
- * action toasts "Diproses di latar belakang"). Submit, cancel and actions may each be held for approval (202). meta.models[m].can.{create,write,submit,cancel,amend} === false hides a
- * button. One request at a time: every button is disabled while one is in flight, and a second click is ignored.
+ * Page (Frappe document page): the header has the breadcrumb (app / model), the document number as title (a draft or
+ * a non-submittable record: its title), the status pill and the actions; the form layout's tabs (a section's `tab`
+ * holds for the sections after it) sit under it. Sections are titled groups divided by a line, fields in two columns
+ * from 900px, child tables inline. Rangka.DocPanel on the right (below the form at <= 1100px) holds the sections of
+ * docPanelSections: Info (lifecycle steps, number, amended from, created by/at, modified at), Lampiran (docs.js),
+ * Persetujuan (approvals.js) and Cetak (docs.js DocTools).
+ *
+ * Buttons: one primary verb is a button, the other steps and the model's actions are in the ⋯ menu ("Tindakan lain").
+ * A draft has Simpan draf and Ajukan (saves first when there are unsaved edits); a submitted document Batalkan in the
+ * menu (confirm dialog); a cancelled one Amandemen. Non-submittable models have Simpan and their actions in the menu
+ * (api.action; disabled while there are unsaved edits; a queued action toasts "Diproses di latar belakang"). Submit,
+ * cancel and actions may each be held for approval (202). meta.models[m].can.{create,write,submit,cancel,amend} === false
+ * hides a button. One request at a time: every button is disabled while one is in flight, and a second click is ignored.
  *
  * Server answers: 422 errors show under their field (a rule error without `field` goes to the first field its check
  * reads) and a summary Alert lists the rest; needs_force opens "Tetap ajukan?" listing the warnings and resubmits with
@@ -19,7 +28,8 @@
  * with an info Alert. 401 is the shell's sign-in dialog, the draft stays. A new record moves to #/r/<model>/<name>;
  * the record the server answered is handed to the next view, so it shows exactly that answer.
  *
- * Pure helpers (unit-tested in test/form.test.js): writableBody, ruleField, mapServerErrors, lifecycleSteps.
+ * Pure helpers (unit-tested in test/form.test.js): writableBody, ruleField, mapServerErrors, lifecycleSteps, docPanelSections,
+ * formTabs.
  */
 (function (global) {
   "use strict";
@@ -84,10 +94,44 @@
     };
   }
 
+  /** The side panel's sections for a record, in order: info always; on a saved record attachments (on unless the kernel
+   *  said files are off: features.attachments === false), approvals (features.approvals) and print (model.prints, the
+   *  formats RangkaAppAPI.printFormats resolved, unless can.print === false). */
+  function docPanelSections(record, features, model) {
+    record = record || {};
+    features = features || {};
+    model = model || {};
+    var saved = !!record.name, out = [{ id: "info", title: "Info" }];
+    if (saved && features.attachments !== false) out.push({ id: "attachments", title: "Lampiran" });
+    if (saved && features.approvals) out.push({ id: "approvals", title: "Persetujuan" });
+    if (saved && (model.prints || []).length && !(model.can && model.can.print === false)) out.push({ id: "print", title: "Cetak" });
+    return out;
+  }
+
+  function labelText(v) {
+    if (v && typeof v === "object") return v.id || v.en || "";
+    return v == null ? "" : String(v);
+  }
+
+  /** The form layout's tabs: [{value, label, sections: [index]}], [] when no section names a tab. A section's `tab` holds
+   *  for the sections after it until another tab is named; sections before the first tab go to "Rincian". */
+  function formTabs(layout) {
+    if (!(layout || []).some(function (s) { return s && s.tab; })) return [];
+    var tabs = [], byName = {}, cur = "Rincian";
+    layout.forEach(function (s, i) {
+      if (s.tab) cur = labelText(s.tab) || cur;
+      if (!byName[cur]) { byName[cur] = { value: cur, label: cur, sections: [] }; tabs.push(byName[cur]); }
+      byName[cur].sections.push(i);
+    });
+    return tabs;
+  }
+
   RA.writableBody = writableBody;
   RA.ruleField = ruleField;
   RA.mapServerErrors = mapServerErrors;
   RA.lifecycleSteps = lifecycleSteps;
+  RA.docPanelSections = docPanelSections;
+  RA.formTabs = formTabs;
 
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
@@ -148,6 +192,8 @@
     var genRef = useRef(0); // bumped by every server answer: late browser-side work started before it must not touch the record
     var u = RA.useUbah ? RA.useUbah() : { on: false };
     var dls = useState(null), ubahDialog = dls[0], setUbahDialog = dls[1]; // "field" | "approval" | "automation"
+    var tbs = useState(null), tab = tbs[0], setTab = tbs[1]; // the form layout's tab on show (null: the first)
+    var fos = useState(false), filesOff = fos[0], setFilesOff = fos[1]; // Attachments found files off: drop "Lampiran"
 
     function put(n) { recRef.current = n; setRecState(n); }
     function markDirty(v) { dirtyRef.current = v; setDirty(v); }
@@ -404,9 +450,16 @@
     var extra = mm.fields.filter(function (f) { return !placed[f.name] && !f.compute && !f.read_only && f.type !== "percent"; }).map(function (f) { return f.name; });
     if (extra.length) layout = layout.concat([{ section: { id: "Lainnya" }, fields: extra }]);
 
+    var tabs = formTabs(layout);
+    var activeTab = tabs.filter(function (t) { return t.value === tab; })[0] || tabs[0] || null;
+    function onTab(i) { return !activeTab || activeTab.sections.indexOf(i) >= 0; }
+    function namesOf(s) { return s.columns ? [].concat.apply([], s.columns) : s.fields || []; }
+
+    // Fields the user can see and fix now: an error on a field elsewhere (another tab, read only) goes to the summary.
     var shown = {};
-    layout.forEach(function (s) {
-      (s.columns ? [].concat.apply([], s.columns) : s.fields || []).forEach(function (n) {
+    layout.forEach(function (s, i) {
+      if (!onTab(i)) return;
+      namesOf(s).forEach(function (n) {
         var f = eng.field(m, n);
         if (f && visible(f) && !ro && !f.compute && !f.read_only) shown[n] = 1;
       });
@@ -420,69 +473,109 @@
       return h(RA.FieldEditor, { key: n, ctx: ctx, model: m, field: f, rec: rec, readOnly: ro, lockText: lockText,
         error: srvErr.fields[n], hint: hints[n], onChange: change });
     }
+    /** One cell of the two-column grid: child tables and long text take the whole row. */
+    function cell(n) {
+      var el = fieldEl(n), f = eng.field(m, n);
+      if (!el) return null;
+      return h("div", { key: n, className: f.type === "table" || f.type === "text" ? "ap-span" : undefined }, el);
+    }
 
-    function section(s, i) {
-      var title = L(s.section) || "Rincian";
-      var names = s.columns ? [].concat.apply([], s.columns) : (s.fields || []);
+    function section(i) {
+      var s = layout[i], title = L(s.section) || "Rincian", body;
       if (ro) {
-        var fs = names.map(function (n) { return eng.field(m, n); }).filter(function (f) { return f && visible(f); });
+        var fs = namesOf(s).map(function (n) { return eng.field(m, n); }).filter(function (f) { return f && visible(f); });
         var flat = fs.filter(function (f) { return f.type !== "table"; }), grids = fs.filter(function (f) { return f.type === "table"; });
-        return h(R.Card, { key: i, title: title },
-          flat.length ? h(R.Descriptions, { column: s.columns && global.innerWidth > 600 ? 2 : 1, items: flat.map(function (f) {
+        body = h(React.Fragment, null,
+          flat.length ? h(R.Descriptions, { column: global.innerWidth >= 900 ? 2 : 1, items: flat.map(function (f) {
             return [L(f.label), f.type === "select" && f.chip && rec[f.name] ? RA.cellFor(m, f.name, rec, ctx) : RA.fieldText(ctx, f, rec[f.name]), f.type === "text" ? 2 : 1];
           }) }) : null,
           grids.map(function (f) { return h("div", { key: f.name, className: flat.length ? "ap-ro-grid" : undefined }, fieldEl(f.name)); }));
+      } else {
+        body = h("div", { className: "ap-docgrid" }, s.columns
+          ? s.columns.map(function (col, j) { return h("div", { key: j, className: "pv-col" }, col.map(fieldEl)); })
+          : (s.fields || []).map(cell));
       }
-      var body = s.columns ? s.columns.map(function (col, j) { return h("div", { key: j, className: "pv-col" }, col.map(fieldEl)); }) : (s.fields || []).map(fieldEl);
-      return h(R.Card, { key: i, title: title }, h("div", { className: s.columns ? "rk-form-grid" : "pv-stack" }, body));
+      return h("section", { key: i, className: "ap-docsec" }, h("h2", { className: "ap-docsec-t" }, title), body);
     }
 
-    /* header: title, tags, buttons */
+    /* header: app / model, the document number, status pill, actions */
     var titleText = eng.title(m, rec);
-    var docNo = isNew ? (rec.amended_from ? "Amandemen" : "Belum bernomor") : isDraftName(rec.name) ? "Draf" : rec.name;
-    var tags = [
+    var title = isNew ? (rec.amended_from ? "Amandemen " + rec.amended_from : label + " baru") : sub ? (isDraftName(rec.name) ? titleText || "Draf " + lower(label) : rec.name) : titleText || rec.name;
+    var crumbs = [], appName = appLabel(ctx.meta, mm);
+    if (appName) crumbs.push({ label: appName });
+    crumbs.push({ label: label, onClick: back });
+    var pills = [
       waiting ? h(R.Lozenge, { key: "s", tone: "warn" }, "Menunggu persetujuan") : status ? h(R.StatusChip, { key: "s", status: status }) : null,
-      sub || !isNew ? h("span", { key: "n", className: "rk-doc-no" }, docNo) : null,
-      rec.amended_from ? h("span", { key: "a", className: "ap-amended" }, "Amandemen dari ", h("a", { href: "#/r/" + m + "/" + enc(rec.amended_from) }, rec.amended_from)) : null,
       dirty ? h("span", { key: "d", className: "pv-unsaved" }, "Belum disimpan") : null
     ];
 
     function btn(key, text, o) {
       return h(R.Button, Object.assign({ key: key, disabled: !!busy, loading: busy === key }, o), text);
     }
-    var acts = [];
-    if (RA.DocTools && !isNew) acts.push(h(RA.DocTools, { key: "tools", model: m, name: rec.name, record: rec }));
+    // The one primary verb is a button; the other lifecycle steps and the model's actions sit in the ⋯ menu.
+    var acts = [], more = [];
     if (ctx.readOnly) { /* preview: nothing is written */ }
     else if (sub) {
       if (own && !bannerOn) { /* waiting, read-only: no buttons */ }
       else if (docstatus === 0) {
-        if (allowed(isNew ? "create" : "write")) acts.push(btn("save", "Simpan draf", { onClick: save }));
         // While a request is pending, submitting the unchanged draft again would only ask again: Ajukan returns once it changes.
-        if (allowed("submit") && (heldVerbs.indexOf("submit") < 0 || dirty)) acts.push(btn("submit", "Ajukan", { variant: "primary", icon: "check", onClick: function () { submit(false); } }));
+        var canSubmit = allowed("submit") && (heldVerbs.indexOf("submit") < 0 || dirty);
+        if (allowed(isNew ? "create" : "write")) acts.push(btn("save", "Simpan draf", { variant: canSubmit ? undefined : "primary", onClick: save }));
+        if (canSubmit) acts.push(btn("submit", "Ajukan", { variant: "primary", icon: "check", onClick: function () { submit(false); } }));
       } else if (docstatus === 1) {
-        if (allowed("cancel") && heldVerbs.indexOf("cancel") < 0) acts.push(btn("cancel", "Batalkan", { variant: "danger", onClick: function () { if (!busyRef.current) setConfirmCancel(true); } }));
+        if (allowed("cancel") && heldVerbs.indexOf("cancel") < 0) more.push({ label: "Batalkan", icon: "close", danger: true, onSelect: function () { if (!busyRef.current) setConfirmCancel(true); } });
       } else if (allowed("amend")) {
         acts.push(btn("amend", "Amandemen", { variant: "primary", icon: "amend", onClick: amend }));
       }
     } else {
       if (!isNew) {
-        (mm.actions || []).filter(function (a) { return eng.actionAllowed(m, rec, a) && heldVerbs.indexOf(a.name) < 0; }).forEach(function (a) {
-          acts.push(btn("action:" + a.name, L(a.label), { icon: a.icon, disabled: !!busy || dirty, title: dirty ? "Simpan dulu perubahanmu" : undefined, onClick: function () { runAction(a); } }));
+        var offered = (mm.actions || []).filter(function (a) { return eng.actionAllowed(m, rec, a) && heldVerbs.indexOf(a.name) < 0; });
+        if (offered.length && dirty) more.push({ heading: "Simpan dulu perubahanmu" });
+        offered.forEach(function (a) {
+          more.push({ label: L(a.label), icon: a.icon, disabled: dirty, onSelect: function () { runAction(a); } });
         });
       }
       if (allowed(isNew ? "create" : "write")) acts.push(btn("save", "Simpan", { variant: "primary", icon: "check", onClick: save }));
     }
+    if (more.length) acts.unshift(h(MoreMenu, { key: "more", items: more, disabled: !!busy }));
 
-    var steps = null;
-    if (sub) {
-      var ls = lifecycleSteps(status);
-      steps = h(R.Steps, { size: "small", label: "Tahapan dokumen", current: ls.current, status: ls.status, items: ls.items });
-    }
     var lockNote = locked && !(own && !bannerOn) ? h("div", { className: "rk-doc-lock" }, h(R.Icon, { name: "lock" }),
       docstatus === 1 ? "Sudah diajukan, isi tidak bisa diubah. Batalkan lalu buat amandemen untuk mengoreksi." : "Dibatalkan. Datanya tetap tersimpan; buat amandemen untuk mengoreksi.") : null;
-    var approvalNote = bannerOn
-      ? h(RA.ApprovalBanner, { model: m, name: rec.name, rev: apRev, verbs: verbs, editable: !ro, onPending: setPend, onDecided: afterDecision })
-      : own ? h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.") : null;
+
+    /* the side panel: info, attachments, approvals, print */
+    var API = global.RangkaAppAPI;
+    function infoBody() {
+      var day = API ? API.tanggal : function (x) { return String(x || "").slice(0, 10); };
+      var rows = [];
+      if (!isNew && title !== rec.name && !isDraftName(rec.name)) rows.push(["Nomor", rec.name]);
+      if (rec.amended_from) rows.push(["Amandemen dari", h("a", { href: "#/r/" + m + "/" + enc(rec.amended_from) }, rec.amended_from)]);
+      if (rec.created_by || rec.created_at) rows.push(["Dibuat", [rec.created_by, day(rec.created_at)].filter(Boolean).join(" · ")]);
+      if (rec.modified_at) rows.push(["Diubah", day(rec.modified_at)]);
+      if (isNew) rows.push(["Status", "Belum disimpan"]);
+      var ls = sub ? lifecycleSteps(status) : null;
+      return h(React.Fragment, null,
+        ls ? h(R.Steps, { size: "small", label: "Tahapan dokumen", current: ls.current, status: ls.status, items: ls.items }) : null,
+        rows.length ? h("dl", { className: "ap-docinfo" }, rows.map(function (r) { return h("div", { key: r[0] }, h("dt", null, r[0]), h("dd", null, r[1])); })) : null);
+    }
+    var feats = Object.assign({}, ctx.features || {}, { approvals: bannerOn });
+    if (!RA.Attachments || filesOff) feats.attachments = false;
+    var prints = RA.DocTools && API ? API.printFormats(ctx.meta, m) : [];
+    var panel = docPanelSections(rec, feats, Object.assign({}, mm, { prints: prints })).map(function (s) {
+      var content = s.id === "info" ? infoBody()
+        // Files belong to a saved record: never on /new.
+        : s.id === "attachments" ? h(RA.Attachments, { key: "att:" + rec.name, model: m, name: rec.name, record: rec, panel: true,
+            onOff: function () { setFilesOff(true); } })
+        : s.id === "approvals" ? h(RA.ApprovalBanner, { model: m, name: rec.name, rev: apRev, verbs: verbs, editable: !ro, panel: true, onPending: setPend, onDecided: afterDecision })
+        : h("div", { className: "ap-docprint" }, h(RA.DocTools, { model: m, name: rec.name, record: rec }));
+      return { id: s.id, title: s.title, content: content };
+    });
+    var heldNote = own && !bannerOn ? h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.") : null;
+
+    var tabBar = tabs.length ? h(R.Tabs, { tabs: tabs.map(function (t) {
+      var errs = 0;
+      t.sections.forEach(function (i) { namesOf(layout[i]).forEach(function (n) { if (srvErr.fields[n]) errs++; }); });
+      return { value: t.value, label: t.label, count: errs || undefined };
+    }), value: activeTab.value, onChange: setTab }) : null;
 
     if (u.on) {
       var ubahActs = [
@@ -491,8 +584,7 @@
         h(R.Button, { key: "uo", icon: "spark", disabled: u.busy, onClick: function () { setUbahDialog("automation"); } }, "Tambah otomasi")].filter(Boolean);
       var dlgProps = { model: m, meta: ctx.meta, u: u, onClose: function () { setUbahDialog(null); } };
       return h(React.Fragment, null,
-        h(R.PageHeader, { breadcrumb: [label, isNew ? "Baru" : docNo], onNavigate: function (i) { if (i === 0) back(); }, onBack: back,
-          title: sub ? label + (titleText ? " · " + titleText : "") : titleText || label + " baru", tags: tags, extra: ubahActs }),
+        h(R.PageHeader, { breadcrumbs: crumbs, onBack: back, title: title, status: pills, actions: ubahActs }),
         h("div", { className: "rk-shell-content" }, h(UbahFormLayout, { ctx: ctx, model: m, u: u })),
         ubahDialog === "field" ? h(RA.AddFieldDialog, dlgProps) : null,
         ubahDialog === "approval" ? h(RA.AddApprovalDialog, dlgProps) : null,
@@ -500,17 +592,18 @@
     }
 
     return h(React.Fragment, null,
-      h(R.PageHeader, { breadcrumb: [label, isNew ? "Baru" : docNo], onNavigate: function (i) { if (i === 0) back(); }, onBack: back,
-        title: sub ? label + (titleText ? " · " + titleText : "") : titleText || label + " baru", tags: tags, extra: acts },
-        steps || lockNote ? h("div", { className: "pv-headbody" }, steps, lockNote) : null),
+      h(R.PageHeader, { breadcrumbs: crumbs, onBack: back, title: title, status: pills, actions: acts, tabs: tabBar }),
       h("div", { className: "rk-shell-content" },
         summary.length ? h(R.Alert, { tone: "bad", title: summary.length === 1 ? summary[0] : summary.length + " hal perlu diperbaiki" },
           summary.length > 1 ? h("ul", { className: "ap-errlist" }, summary.map(function (s, i) { return h("li", { key: i }, s); })) : null) : null,
-        approvalNote,
-        // While a request is in flight every editor is disabled: an edit typed now would be replaced by the answer.
-        h("fieldset", { className: "ap-form-fields", disabled: !!busy, "aria-busy": busy ? "true" : undefined }, layout.map(section)),
-        // Files belong to a saved record: attachments (docs.js) show under the sections, never on /new.
-        RA.Attachments && !isNew && rec.name ? h(RA.Attachments, { key: "att:" + rec.name, model: m, name: rec.name, record: rec }) : null),
+        heldNote,
+        h("div", { className: "rk-docpage" },
+          h("div", { className: "ap-docmain" },
+            lockNote,
+            // While a request is in flight every editor is disabled: an edit typed now would be replaced by the answer.
+            h("fieldset", { className: "ap-form-fields", disabled: !!busy, "aria-busy": busy ? "true" : undefined },
+              layout.map(function (s, i) { return onTab(i) ? section(i) : null; }))),
+          h(R.DocPanel, { sections: panel }))),
       warn ? h(R.Dialog, { variant: "confirm", icon: "warning", title: "Tetap ajukan?", confirmLabel: "Tetap ajukan", cancelLabel: "Kembali",
         onClose: closeWarn, onConfirm: function () { submit(true); } },
         h("ul", { className: "ap-errlist" }, warn.map(function (w, i) { return h("li", { key: i }, w.message); })),
@@ -518,6 +611,33 @@
       confirmCancel ? h(R.Dialog, { variant: "danger", icon: "warning", title: "Batalkan " + rec.name + "?", confirmLabel: "Ya, batalkan", cancelLabel: "Kembali",
         onClose: function () { setConfirmCancel(false); }, onConfirm: cancelDoc },
         "Dokumen yang dibatalkan tetap tersimpan tapi tidak berlaku lagi. Untuk mengoreksi isinya, buat amandemen setelah ini.") : null);
+  }
+
+  /** The ⋯ button of the header and its menu of secondary steps and actions. */
+  function MoreMenu(p) {
+    var os = useState(false), open = os[0], setOpen = os[1];
+    var wrap = useRef(null);
+    useEffect(function () {
+      if (!open) return undefined;
+      function away(e) { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); }
+      function esc(e) { if (e.key === "Escape") setOpen(false); }
+      document.addEventListener("mousedown", away);
+      document.addEventListener("keydown", esc);
+      return function () { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+    }, [open]);
+    useEffect(function () { if (p.disabled) setOpen(false); }, [p.disabled]);
+    return h("span", { className: "ap-toolmenu", ref: wrap },
+      h(R.IconButton, { icon: "more", label: "Tindakan lain", className: "ap-morebtn", disabled: p.disabled, "aria-haspopup": "menu",
+        "aria-expanded": open ? "true" : "false", onClick: function () { setOpen(!open); } }),
+      open ? h("div", { className: "ap-toolmenu-pop" }, h(R.Menu, { items: p.items, onClose: function () { setOpen(false); } })) : null);
+  }
+
+  /** The label of the app (or module) a model belongs to, for the breadcrumb; "" when meta does not say. */
+  function appLabel(meta, mm) {
+    var a = (mm && mm.app) || "";
+    if (!a) return "";
+    var unit = (meta.apps || []).concat(meta.modules || []).filter(function (x) { return x && x.name === a; })[0];
+    return unit ? L(unit.title) || unit.name : "";
   }
 
   /* ---------------------------------------------------------------- Ubah: the form's layout as rows to reorder */

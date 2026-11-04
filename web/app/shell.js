@@ -1,12 +1,13 @@
 /* Rangka end-user app: the shell. Loads last and mounts #rk-app.
  *
  * Boot: api.me() (401 → sign-in screen) → api.meta() → RangkaEngine.create(meta, cache.lookup) → api.features().
- * Then TopNav + Sidebar (each installed app's menu, plus Persetujuan / Impor data when the kernel has them) and a hash
+ * Then the shell layout.shell names (shellKind: the Frappe Sidebar for side-only, the default; TopNav + Sidebar for
+ * top-nav), ⌘K (CommandPalette over commandGroups), data-density from the theme, and a hash
  * router (#/d/<dashboard>, #/r/<model>, #/r/<model>/new, #/r/<model>/<name>, #/approvals, #/import/<name>, #/proses, #/proses/<name>).
  * Views are looked up on window.RangkaApp at render time (ListView, FormView, DashboardView, ApprovalInbox,
  * ImportWizard), so later files add them without touching the shell; a missing view shows "Halaman ini belum tersedia".
  *
- * Org switcher (features.orgs, i.e. /auth/me lists more than one org): picking another org in the user menu calls
+ * Org switcher (features.orgs, i.e. /auth/me lists more than one org): picking another org in the switcher (or TopNav's user) menu calls
  * POST /auth/org and, once it succeeds, reloads the whole app at #/ (boot loads me, meta and features for the new org);
  * a refused switch leaves everything as it was and toasts the server's message.
  * The sidebar's Persetujuan entry carries the number of pending requests the user may decide (ctx.refreshApprovals()
@@ -17,7 +18,8 @@
  *
  * Exposes on window.RangkaApp: route, navigate(hash), toast(tone, title, body), Ctx (React context with
  * {api, meta, eng, me, features, cache, reloadMeta, refreshApprovals, route, navigate, toast}), and the pure helpers
- * parseRoute, homeHash, navGroups, navFromLayout, navId, orgByLabel, hashQuery, withHashQuery, L (unit-tested in test/shell.test.js).
+ * parseRoute, homeHash, navGroups, sideNav, navFromLayout, navId, orgByLabel, hashQuery, withHashQuery, shellKind, densityOf,
+ * commandGroups, L (unit-tested in test/shell.test.js).
  */
 (function (global) {
   "use strict";
@@ -122,31 +124,97 @@
     return groups;
   }
 
-  /** Sidebar groups; counts.approvals (requests the user may decide) shows as a badge on Persetujuan. */
-  function navGroups(meta, features, counts) {
-    meta = meta || {};
-    features = features || {};
-    counts = counts || {};
-    var groups = navFromLayout(meta) || appGroups(meta);
-    var more = [];
+  /** The entries the kernel's features add: Persetujuan (counts.approvals as a badge), Proses bisnis, and Impor data
+   *  (one entry for a single import, else a group of the imports by label). */
+  function featureNav(meta, features, counts) {
+    var more = [], imports = null;
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
     if (features.processes) more.push({ id: "proses", label: "Proses bisnis", icon: "time" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
-    if (more.length) groups.push({ label: "Lainnya", items: more });
     if (imps.length > 1) {
-      groups.push({ label: "Impor data", items: imps.map(function (k) {
+      imports = { label: "Impor data", items: imps.map(function (k) {
         var l = (meta.imports[k] || {}).label;
         return { id: "import/" + k, label: L(l) || k, icon: "download" };
-      }).sort(function (a, b) { return a.label < b.label ? -1 : a.label > b.label ? 1 : 0; }) });
+      }).sort(function (a, b) { return a.label < b.label ? -1 : a.label > b.label ? 1 : 0; }) };
     }
+    return { more: more, imports: imports };
+  }
+
+  /** Sidebar groups (top-nav shell and the Ubah sidebar): the layout's or the apps' groups, then Lainnya with the
+   *  feature entries; counts.approvals (requests the user may decide) shows as a badge on Persetujuan. */
+  function navGroups(meta, features, counts) {
+    meta = meta || {};
+    var groups = navFromLayout(meta) || appGroups(meta), f = featureNav(meta, features || {}, counts || {});
+    if (f.more.length) groups.push({ label: "Lainnya", items: f.more });
+    if (f.imports) groups.push(f.imports);
     return groups;
   }
 
-  /** The sidebar entry a route belongs to. */
-  function navId(route) {
+  /** The side-only sidebar: Beranda and the feature entries pinned on top, the layout's or the apps' groups below. */
+  function sideNav(meta, features, counts) {
+    meta = meta || {};
+    var groups = navFromLayout(meta) || appGroups(meta), f = featureNav(meta, features || {}, counts || {});
+    if (f.imports) groups.push(f.imports);
+    return { pinned: [{ id: "home", label: "Beranda", icon: "home" }].concat(f.more), groups: groups };
+  }
+
+  /** layout.shell → the shell drawn: top-nav when named, side-only otherwise (side, pos and portal until they exist). */
+  function shellKind(meta) {
+    var l = meta && meta.layout;
+    return l && l.shell === "top-nav" ? "top-nav" : "side-only";
+  }
+
+  var DENSITIES = { compact: 1, standard: 1, comfortable: 1 };
+  /** theme.density → data-density on <html>; standard when missing or unknown. */
+  function densityOf(meta) {
+    var d = meta && meta.theme && meta.theme.density;
+    return DENSITIES[d] ? d : "standard";
+  }
+
+  function lowerFirst(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
+  function recHash(model, name) { return "#/r/" + encodeURIComponent(model) + "/" + encodeURIComponent(name); }
+
+  /** ⌘K groups: Halaman (every sidebar entry once, nav = sideNav(…)), Buat baru (layout.nav.create models the user may
+   *  create; none while readOnly, i.e. a preview), Data (found: [{model, name, title}] from the record search, already
+   *  matched by the server so filter: false), and Tanya Raka when meta.features.ai. Items: {id, label, sub, icon, hash}. */
+  function commandGroups(meta, features, nav, found, readOnly) {
+    meta = meta || {};
+    nav = nav || { pinned: [], groups: [] };
+    var models = meta.models || {}, seen = {}, pages = [], out = [];
+    function add(it, sub) {
+      if (seen[it.id]) return;
+      seen[it.id] = true;
+      pages.push({ id: it.id, label: it.label, sub: sub || undefined, icon: it.icon, hash: it.id === "home" ? homeHash(meta) || "#/" : "#/" + it.id });
+    }
+    (nav.pinned || []).forEach(function (it) { add(it, ""); });
+    (nav.groups || []).forEach(function (g) { g.items.forEach(function (it) { add(it, g.label); }); });
+    if (pages.length) out.push({ label: "Halaman", items: pages });
+    var create = ((meta.layout && meta.layout.nav && meta.layout.nav.create) || []).filter(function (m) {
+      return models[m] && !(models[m].can && models[m].can.create === false);
+    });
+    if (create.length && !readOnly) {
+      out.push({ label: "Buat baru", items: create.map(function (m) {
+        return { id: "new/" + m, label: "Buat " + lowerFirst(L(models[m].label) || m), icon: "add", hash: "#/r/" + m + "/new" };
+      }) });
+    }
+    if (found && found.length) {
+      out.push({ label: "Data", filter: false, items: found.map(function (r) {
+        var title = String(r.title || r.name), kind = L((models[r.model] || {}).label) || r.model;
+        return { id: "rec/" + r.model + "/" + r.name, label: title, sub: title === String(r.name) ? kind : kind + " · " + r.name,
+          icon: (models[r.model] || {}).icon || "invoice", hash: recHash(r.model, r.name) };
+      }) });
+    }
+    if (meta.features && meta.features.ai === true) out.push({ label: "Tanya Raka", items: [{ id: "ask", label: "Tanya Raka", sub: "AI", icon: "spark", hash: null }] });
+    return out;
+  }
+
+  /** The sidebar entry a route belongs to. With `home` (homeHash: the side-only sidebar's pinned Beranda), the home
+   *  route and the home dashboard are "home". */
+  function navId(route, home) {
     switch (route && route.kind) {
-      case "dash": return "d/" + route.dash;
+      case "home": return home ? "home" : null;
+      case "dash": return home && home === "#/d/" + route.dash ? "home" : "d/" + route.dash;
       case "list": case "form": return "r/" + route.model;
       case "approvals": return "approvals";
       case "processes": case "process": return "proses";
@@ -165,6 +233,10 @@
   RA.parseRoute = parseRoute;
   RA.homeHash = homeHash;
   RA.navGroups = navGroups;
+  RA.sideNav = sideNav;
+  RA.shellKind = shellKind;
+  RA.densityOf = densityOf;
+  RA.commandGroups = commandGroups;
   RA.navFromLayout = navFromLayout;
   RA.hashQuery = hashQuery;
   RA.withHashQuery = withHashQuery;
@@ -232,6 +304,22 @@
   RA.api = api;
 
   function readTheme() { try { return global.localStorage.getItem("rk-app-theme") || "system"; } catch (e) { return "system"; } }
+  var COLLAPSE_KEY = "rk.sidebar.collapsed";
+  function readCollapsed() { try { return global.localStorage.getItem(COLLAPSE_KEY) === "1"; } catch (e) { return false; } }
+  function writeCollapsed(on) { try { global.localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (e) {} }
+  var PHONE = "(max-width: 600px)";
+  function isPhone() { return !!(global.matchMedia && global.matchMedia(PHONE).matches); }
+  /** True at phone width (≤ 600px), kept up to date. */
+  function usePhone() {
+    var ps = useState(isPhone()), phone = ps[0], setPhone = ps[1];
+    useEffect(function () {
+      if (!global.matchMedia) return undefined;
+      var mq = global.matchMedia(PHONE), on = function () { setPhone(mq.matches); };
+      if (mq.addEventListener) mq.addEventListener("change", on); else mq.addListener(on);
+      return function () { if (mq.removeEventListener) mq.removeEventListener("change", on); else mq.removeListener(on); };
+    }, []);
+    return phone;
+  }
   function titleCase(id) { return String(id || "").split(/[-_]/).filter(Boolean).map(function (w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(" "); }
   function siteName(meta, me) {
     var org = (me && me.org) || (meta && meta.org);
@@ -357,8 +445,12 @@
     var more = navGroups({ imports: meta.imports }, p.features, p.counts); // Persetujuan and Impor data stay as they are
     var dis = !!u.busy;
     return h("aside", { className: "rk-side ap-ubah-side", "aria-label": "Navigasi " + p.name },
-      h("div", { className: "rk-side-head" }, h("span", { className: "tile", style: { background: "var(--brand)" } }, h(R.Icon, { name: "store" })),
-        h("span", { className: "g" }, h("b", null, p.name), h("small", null, "Ubah menu"))),
+      p.switcher // side-only: the same business switcher as the Sidebar, so theme, apps, org and Keluar stay reachable
+        ? h("button", { type: "button", className: "rk-side-head rk-side-switch", onClick: p.switcher.onClick },
+          h("span", { className: "rk-side-mark", "aria-hidden": "true" }),
+          h("span", { className: "g" }, h("b", null, p.switcher.title), h("small", null, "Ubah menu")), h(R.Icon, { name: "updown" }))
+        : h("div", { className: "rk-side-head" }, h("span", { className: "tile", style: { background: "var(--brand)" } }, h(R.Icon, { name: "store" })),
+          h("span", { className: "g" }, h("b", null, p.name), h("small", null, "Ubah menu"))),
       h("nav", null, side.map(function (g, gi) {
         var items = g.items || [];
         var label = L(g.group);
@@ -373,7 +465,7 @@
             var x = itemOf(it);
             return h("div", { key: i, className: "ap-ubah-navitem" + (x.id && x.id === p.current ? " on" : "") },
               h("a", { href: x.id ? "#/" + x.id : "#", className: "rk-navlink", "aria-current": x.id && x.id === p.current ? "page" : undefined,
-                onClick: function (e) { e.preventDefault(); if (x.id) p.onNavigate(x.id); } }, h(R.Icon, { name: x.icon }), x.label),
+                onClick: function (e) { e.preventDefault(); if (x.id) p.onNavigate(x.id); } }, h(R.Icon, { name: x.icon }), h("span", { className: "l", title: x.label }, x.label)),
               h("span", { className: "ap-ubah-tools" },
                 h(R.IconButton, { icon: "arrowup", label: "Naik", disabled: dis || i === 0, onClick: function () { moveItem(gi, i, -1); } }),
                 h(R.IconButton, { icon: "arrowdown", label: "Turun", disabled: dis || i === items.length - 1, onClick: function () { moveItem(gi, i, 1); } }),
@@ -387,7 +479,61 @@
             onClick: function (e) { e.preventDefault(); p.onNavigate(it.id); } }, h(R.Icon, { name: it.icon }), it.label, it.count ? h("span", { className: "rk-count" }, it.count) : null);
         }));
       })),
+      p.footer || null,
       adding ? h(RA.AddTableDialog, { onClose: function () { setAdding(false); }, onSubmit: addTable }) : null);
+  }
+
+  /* ---------------------------------------------------------------- ⌘K: pages, create, records */
+  /** CommandMenu over commandGroups(); typing searches the records of every model in the sidebar (first 5 each). */
+  function CommandPalette(p) {
+    var fs = useState([]), found = fs[0], setFound = fs[1];
+    var seq = useRef(0), timer = useRef(null);
+    useEffect(function () { return function () { seq.current++; clearTimeout(timer.current); }; }, []);
+    var models = p.meta.models || {}, searchable = [];
+    [].concat.apply([], p.nav.groups.map(function (g) { return g.items; })).forEach(function (it) {
+      var m = it.id.indexOf("r/") === 0 ? it.id.slice(2) : null;
+      if (m && models[m] && searchable.indexOf(m) < 0 && !(models[m].can && models[m].can.read === false)) searchable.push(m);
+    });
+    function onQuery(q) {
+      var s = ++seq.current;
+      clearTimeout(timer.current);
+      q = q.trim();
+      if (!q) { setFound([]); return; }
+      timer.current = setTimeout(function () {
+        Promise.all(searchable.map(function (m) {
+          return p.api.list(m, { q: q, limit: 5 }).then(function (r) {
+            return ((r && r.data) || []).slice(0, 5).map(function (rec) { return { model: m, name: rec.name, title: (p.eng && p.eng.title(m, rec)) || rec.name }; });
+          }, function () { return []; });
+        })).then(function (lists) { if (s === seq.current) setFound([].concat.apply([], lists)); });
+      }, 200);
+    }
+    var groups = commandGroups(p.meta, p.features, p.nav, found, p.readOnly).map(function (g) {
+      return { label: g.label, filter: g.filter, items: g.items.map(function (it) {
+        return Object.assign({}, it, { onSelect: function () { if (it.hash) RA.navigate(it.hash); else if (p.onAsk) p.onAsk(); } });
+      }) };
+    });
+    return h(R.CommandMenu, { groups: groups, ask: false, onQuery: onQuery, placeholder: "Cari halaman atau data, atau buat baru…", onClose: p.onClose });
+  }
+
+  /* ---------------------------------------------------------------- the business switcher's menu */
+  /** R.Menu under the sidebar's switcher (p.at: its rect); closes on a pick, a click outside it or Escape. */
+  function SwitcherMenu(p) {
+    var ref = useRef(null);
+    useEffect(function () {
+      function down(e) {
+        if (ref.current && ref.current.contains(e.target)) return;
+        if (e.target.closest && e.target.closest(".rk-side-switch")) return; // the switcher toggles it itself
+        p.onClose();
+      }
+      function key(e) { if (e.key === "Escape") p.onClose(); }
+      global.document.addEventListener("mousedown", down);
+      global.document.addEventListener("keydown", key);
+      return function () { global.document.removeEventListener("mousedown", down); global.document.removeEventListener("keydown", key); };
+    }, []);
+    var top = Math.round(p.at.bottom + 4), left = Math.max(8, Math.round(p.at.left));
+    return h("div", { ref: ref, className: "ap-switch-menu" },
+      h(R.Menu, { float: true, items: p.items, onClose: p.onClose,
+        style: { top: top + "px", left: left + "px", maxHeight: "calc(100vh - " + (top + 8) + "px)", overflowY: "auto" } }));
   }
 
   /* ---------------------------------------------------------------- the signed-in app */
@@ -409,6 +555,10 @@
     var cds = useState(null), card = cds[0], setCard = cds[1]; // {cs} | {list: true}
     var ubz = useState(false), ubahBusy = ubz[0], setUbahBusy = ubz[1];
     var rvs = useState(0), rev = rvs[0], setRev = rvs[1]; // bumped after an apply, undo or preview change: the view remounts
+    var cls = useState(readCollapsed()), collapsed = cls[0], setCollapsed = cls[1];
+    var cms = useState(false), cmdOpen = cms[0], setCmdOpen = cms[1];
+    var sms = useState(null), switchAt = sms[0], setSwitchAt = sms[1]; // the switcher's rect while its menu is open
+    var phone = usePhone();
     var cacheRef = useRef(boot.cache);
     var featRef = useRef(features);
     featRef.current = features;
@@ -457,6 +607,21 @@
       if (theme === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", theme);
       try { global.localStorage.setItem("rk-app-theme", theme); } catch (e) {}
     }, [theme]);
+
+    useEffect(function () { global.document.documentElement.dataset.density = densityOf(meta); }, [meta]);
+
+    // ⌘K on a Mac, Ctrl+K elsewhere, opens the command menu from anywhere in the app (not under the sign-in dialog)
+    var expiredRef = useRef(expired);
+    expiredRef.current = expired;
+    useEffect(function () {
+      var mac = /Mac|iPhone|iPad|iPod/.test((global.navigator && global.navigator.platform) || "");
+      function key(e) {
+        if (expiredRef.current || e.altKey || String(e.key).toLowerCase() !== "k" || !(mac ? e.metaKey && !e.ctrlKey : e.ctrlKey && !e.metaKey)) return;
+        e.preventDefault(); setSwitchAt(null); setCmdOpen(true);
+      }
+      global.addEventListener("keydown", key);
+      return function () { global.removeEventListener("keydown", key); };
+    }, []);
 
     function reloadMeta(who) {
       return api.meta().then(function (m) {
@@ -608,39 +773,94 @@
       refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs };
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 
-    var shell = h("div", { className: cx("rk-shell top ap-shell", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on") },
-        h(R.TopNav, {
-          product: { name: name, icon: "store", color: "var(--brand)" }, items: [], createLabel: false, theme: theme,
-          searchPlaceholder: "Cari", currentApp: null,
-          apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: "apps", color: "var(--primary)" }; }),
-          user: { name: (me && me.name) || "", email: me && me.email, company: companyName,
-            companies: features.orgs && orgs.length > 1 ? orgs.map(function (o) { return o.name || o.id; }) : [companyName] },
-          actions: h(React.Fragment, null,
-            cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null,
-            h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } })),
-          onHome: function () { if (home) RA.navigate(home); },
-          onSwitch: function (a) { var h2 = homeHash({ apps: installed.filter(function (x) { return x.name === a.id; }) }); if (h2) RA.navigate(h2); },
-          onSearch: function () { toast("info", "Pencarian belum tersedia", "Buka daftar dari menu di samping untuk mencari data."); },
-          onNotifications: function () { toast("info", "Belum ada notifikasi"); },
-          onHelp: function () { toast("info", "Bantuan", "Hubungi pemilik usaha atau admin kalau kamu butuh akses ke halaman lain."); },
-          onAccount: function (k) {
-            if (k.indexOf("theme:") === 0) setTheme(k.slice(6));
-            else if (k === "logout" || k === "switch") logout();
-            else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
-            else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
-          }
-        }),
-        ubahOn ? h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
-          onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } }) : h(R.Sidebar, {
-          app: { name: name, type: ((me && me.roles) || []).map(function (r) { return L(((meta.roles || {})[r] || {}).label) || r; }).join(", "), icon: "store", color: "var(--brand)" },
-          groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route),
-          onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); }
-        }),
+    var kind = shellKind(meta);
+    var roleText = ((me && me.roles) || []).map(function (r) { return L(((meta.roles || {})[r] || {}).label) || r; }).join(", ");
+    var companies = features.orgs && orgs.length > 1 ? orgs.map(function (o) { return o.name || o.id; }) : [companyName];
+    function goApp(a) { var h2 = homeHash({ apps: installed.filter(function (x) { return x.name === a.id; }) }); if (h2) RA.navigate(h2); }
+    function help() { toast("info", "Bantuan", "Hubungi pemilik usaha atau admin kalau kamu butuh akses ke halaman lain."); }
+    function account(k) {
+      if (k.indexOf("theme:") === 0) setTheme(k.slice(6));
+      else if (k === "logout" || k === "switch") logout();
+      else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
+      else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
+    }
+    function onNavigate(id) { RA.navigate(id === "home" ? home || "#/" : "#/" + id); setNavOpen(false); }
+    function openCmd() { setSwitchAt(null); setNavOpen(false); setCmdOpen(true); }
+    function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
+    var modeToggle = cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
+
+    /** The switcher's menu: the apps (what TopNav's app switcher listed), companies, theme, help and the account. */
+    function switcherItems() {
+      var items = [];
+      if (installed.length) items = items.concat([{ heading: "Beralih ke" }], installed.map(function (a) {
+        return { label: L(a.title) || a.name, icon: "apps", onSelect: function () { goApp({ id: a.name }); } };
+      }), ["-"]);
+      items = items.concat([{ heading: "Perusahaan" }], companies.map(function (c) {
+        return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
+      }), ["-", { heading: "Tema" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
+        return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
+      }), ["-", { label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
+        { label: "Profil", icon: "user", onSelect: function () { account("profile"); } },
+        { label: "Ganti akun", icon: "switch", onSelect: function () { account("switch"); } },
+        { label: "Keluar", icon: "logout", onSelect: function () { account("logout"); } }]);
+      return items;
+    }
+
+    var sideNavItems = sideNav(meta, features, { approvals: approvalCount });
+    var switcher = { title: companyName, subtitle: roleText || undefined,
+      onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } };
+    var narrow = collapsed && !phone;
+    var side;
+    if (ubahOn) {
+      side = h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
+        switcher: kind === "side-only" ? switcher : null,
+        footer: kind === "side-only" && modeToggle && !phone ? h("div", { className: "rk-side-foot ap-side-foot" }, modeToggle) : null,
+        onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } });
+    } else if (kind === "top-nav") {
+      side = h(R.Sidebar, {
+        app: { name: name, type: roleText, icon: "store", color: "var(--brand)" },
+        groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route), onNavigate: onNavigate
+      });
+    } else {
+      side = h(R.Sidebar, {
+        switcher: switcher,
+        search: { label: "Cari", onOpen: openCmd },
+        pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route, home || "#/"), onNavigate: onNavigate,
+        collapsed: narrow, onToggleCollapse: phone ? undefined : toggleCollapsed,
+        footer: !modeToggle || phone ? null : narrow
+          ? h(R.IconButton, { icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })
+          : h("div", { className: "rk-side-foot ap-side-foot" }, modeToggle)
+      });
+    }
+
+    var top = kind !== "top-nav" ? null : h(R.TopNav, {
+      product: { name: name, icon: "store", color: "var(--brand)" }, items: [], createLabel: false, theme: theme,
+      searchPlaceholder: "Cari", currentApp: null,
+      apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: "apps", color: "var(--primary)" }; }),
+      user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },
+      actions: h(React.Fragment, null, modeToggle,
+        h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } })),
+      onHome: function () { if (home) RA.navigate(home); },
+      onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
+      onNotifications: function () { toast("info", "Belum ada notifikasi"); }
+    });
+    // side-only on a phone: a 48px bar with the menu button; the sidebar opens as a drawer
+    var phoneBar = kind === "top-nav" ? null : h("header", { className: "ap-mhead" },
+      h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
+      h("b", { className: "ap-mhead-t" }, companyName),
+      h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }),
+      phone ? modeToggle : null);
+
+    var shell = h("div", { className: cx("rk-shell ap-shell", kind === "top-nav" ? "top ap-top" : "ap-side", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on") },
+        top, side,
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
         h("div", { className: "rk-shell-main" },
+          phoneBar,
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs }))),
+        switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
+        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onClose: function () { setCmdOpen(false); } }) : null,
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,

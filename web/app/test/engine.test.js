@@ -90,3 +90,15 @@ test("legacy global init keeps the store-backed API", () => {
   assert.strictEqual(typeof E.create, "function");
   assert.strictEqual(E.evaluate("app_installed('sales')", () => undefined), true);
 });
+
+test("== null and != null match a missing or empty value, like the kernel (cel_test.go)", () => {
+  const E = load({}).create(META, lookup);
+  const vars = { npwp: "", stage: "proposal", deal: "", lead: "LEAD-1", zero: 0 };
+  const scope = (n) => vars[n];
+  const cases = [
+    ["npwp == null", true], ["stage == null", false], ["npwp != null", false], ["null == null", true],
+    ["deal == null && lead != null", true], ["missing == null", true], ["missing != null", false],
+    ["zero == null", false], ["npwp == ''", true], ["stage != ''", true],
+  ];
+  for (const [src, want] of cases) assert.strictEqual(E.evaluate(src, scope), want, src);
+});

@@ -564,7 +564,7 @@
   var OFF = { on: false, preview: null, busy: false };
   RA.useUbah = function () { return useContext(RA.UbahCtx) || OFF; };
 
-  /* ---------------------------------------------------------------- top bar pieces */
+  /* ---------------------------------------------------------------- the 40px strips under the header and the mode toggle */
 
   /** Pakai / Ubah. Own markup (not Segmented) so the views' `.rk-seg` selectors keep matching one control. */
   RA.ModeToggle = function (p) {
@@ -576,7 +576,7 @@
 
   RA.UbahBar = function (p) {
     return h("div", { className: "ap-ubah-bar", role: "region", "aria-label": "Mode ubah" },
-      h("span", { className: "ap-ubah-bar-t" }, "Mode ubah · perubahan jadi change set"),
+      h(R.Icon, { name: "edit" }), h("span", { className: "ap-ubah-bar-t" }, "Mode ubah · perubahan jadi change set"),
       p.busy ? h(R.Spinner, { size: "sm", label: "Menyimpan perubahan" }) : null,
       h(R.Button, { size: "sm", variant: "quiet", icon: "time", onClick: p.onPending }, "Perubahan menunggu"));
   };

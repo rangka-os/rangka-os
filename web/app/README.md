@@ -9,6 +9,22 @@ so deep links survive a reload and the kernel needs no SPA fallback:
 
 The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 
+### Shell
+
+`layout.shell` from `GET /api/v1/meta` picks the frame (contract 0017):
+
+- **`side-only`** (the default; also `side`, `pos` and `portal` until those exist): the Frappe sidebar. On top the
+  business switcher (Sendi tile, company, your role); it opens a menu with the apps, the org switch (when you belong to
+  more than one org), theme, help, profile and sign-out. Then search (⌘K), the pinned entries (Beranda, Persetujuan with
+  its count, Proses bisnis, Impor data) and the layout's `nav.side` groups (else each app's menu). The footer holds the
+  Pakai / Ubah toggle and the collapse button; collapsed state is kept in `localStorage["rk.sidebar.collapsed"]`.
+  At 600px and below the sidebar is a drawer opened from a 48px bar (menu, company, search, Pakai / Ubah).
+- **`top-nav`**: the TopNav (app switcher, search, account menu) with the sidebar below it.
+
+⌘K or Ctrl+K opens the command menu in both: Halaman (every sidebar entry), Buat baru (`layout.nav.create`) and Data
+(the first 5 matches per model in the sidebar, from `GET /api/v1/r/<model>?q=`). `theme.density` sets
+`data-density` on `<html>` (`compact`, `standard`, `comfortable`).
+
 ### Ubah (change and preview)
 
 - **Who sees it.** Only people with `meta.changesets.propose` (a browser session and the owner, or a role in
@@ -33,7 +49,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `tokens.css` | Design tokens (Ink, Bata, Kapur), light and dark |
 | `engine.js` | CEL subset, defaults, computed fields, rules and status; `RangkaEngine.create(meta, lookup)`. Reference semantics for the kernel |
 | `api.js` | `RangkaAppAPI`: every kernel call, `ApiError`, feature detection, `parseRupiah` / `rupiah` |
-| `shell.js` | Router, sign-in, top nav, sidebar from the layout's `nav.side` (else `meta.apps[].menu`), org switcher, 401 handling, Ubah state and the menu editor; mounts last |
+| `shell.js` | Router, sign-in, the shell from `layout.shell` (sidebar or top nav), ⌘K, density, org switcher, 401 handling, Ubah state and the menu editor; mounts last |
 | `ubah.js` | Change-set op builders (pure), Ubah helpers, and the shared Ubah UI: mode toggle, bar, preview banner, change-set card, add dialogs |
 | `list.js` | List (server search, quick filters, sort, pages) and kanban |
 | `form.js` | Form, field editors, link search, child grid, live preview, lifecycle bar, actions, server errors |

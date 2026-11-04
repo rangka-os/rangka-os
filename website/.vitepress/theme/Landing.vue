@@ -43,7 +43,7 @@ const tabs = [
 ]
 
 const features = [
-  { title: 'Familiar, modern interface', text: 'Atlassian-grade lists, boards and forms with quick filters, pagination and skeleton loading.', shot: 'kanban', pos: '30% 30%', icon: 'M3 4h18v4H3zM3 10h8v10H3zM13 10h8v10h-8z' },
+  { title: 'Familiar, modern interface', text: 'Compact lists, boards and forms with quick filters, pagination and skeleton loading.', shot: 'kanban', pos: '30% 30%', icon: 'M3 4h18v4H3zM3 10h8v10H3zM13 10h8v10h-8z' },
   { title: 'Search and ask in one place', text: '⌘K finds any record or screen, or hands the question to Raka.', shot: 'command', pos: '50% 20%', icon: 'M10 4a6 6 0 104.47 10l4.77 4.77 1.41-1.41-4.77-4.77A6 6 0 0010 4z' },
   { title: 'Every change is a diff', text: 'See the file, the lines and the SQL before anything goes live.', shot: 'console-changeset', pos: '20% 62%', icon: 'M6 3v12a3 3 0 103 3V9h6a3 3 0 10-3-3H9V3z' },
   { title: 'Documents that behave', text: 'Numbering at submit, cancel and amend, PPN and payments, generated from the model.', shot: 'invoice', pos: '40% 25%', icon: 'M6 2h9l5 5v15H6zM14 3v5h5' },

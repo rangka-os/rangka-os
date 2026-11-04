@@ -99,3 +99,36 @@ test("lifecycleSteps: Draf → Diajukan → Lunas / Dibatalkan", () => {
   assert.strictEqual(cancelled.current, 2);
   assert.strictEqual(cancelled.status, "error");
 });
+
+test("docPanelSections: info, attachments, approvals, print in that order, each gated", () => {
+  const A = load();
+  const ids = (r, f, m) => A.docPanelSections(r, f, m).map((s) => s.id).join(",");
+  const saved = { name: "INV-2026-00001", docstatus: 1 };
+  const printable = { prints: [{ name: "faktur", default: true }] };
+  assert.strictEqual(ids(saved, { attachments: true, approvals: true }, printable), "info,attachments,approvals,print");
+  assert.ok(A.docPanelSections(saved, {}, {}).every((s) => s.title), "every section has a title");
+  assert.strictEqual(ids({}, { attachments: true, approvals: true }, printable), "info", "a new record has only info");
+  assert.strictEqual(ids(saved, { attachments: false, approvals: false }, printable), "info,print", "features off → no section");
+  assert.strictEqual(ids(saved, {}, {}), "info,attachments", "attachments are on until the kernel says files are off; approvals only when detected");
+  assert.strictEqual(ids(saved, undefined, undefined), "info,attachments");
+  assert.strictEqual(ids(saved, { approvals: true }, { prints: [] }), "info,attachments,approvals", "no print formats → no print");
+  assert.strictEqual(ids(saved, {}, { prints: printable.prints, can: { print: false } }), "info,attachments", "can.print false → no print");
+});
+
+test("formTabs: a section's tab carries to the sections after it; untabbed sections before any tab go to Rincian", () => {
+  const A = load();
+  assert.deepStrictEqual(plain(A.formTabs([{ section: "A", fields: [] }, { section: "B", fields: [] }])), [], "no tab → no tabs");
+  const t = A.formTabs([
+    { section: "Pelanggan", fields: ["customer"] },
+    { section: "Barang", tab: "Barang", fields: ["items"] },
+    { section: "Total", fields: ["total"] },
+    { section: "Catatan", tab: { id: "Lainnya", en: "More" }, fields: ["notes"] }
+  ]);
+  assert.deepStrictEqual(plain(t), [
+    { value: "Rincian", label: "Rincian", sections: [0] },
+    { value: "Barang", label: "Barang", sections: [1, 2] },
+    { value: "Lainnya", label: "Lainnya", sections: [3] }
+  ]);
+  assert.deepStrictEqual(plain(A.formTabs([{ section: "X", tab: "Satu", fields: [] }, { section: "Y", tab: "Satu", fields: [] }])),
+    [{ value: "Satu", label: "Satu", sections: [0, 1] }], "same tab twice is one tab");
+});

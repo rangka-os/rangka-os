@@ -1,15 +1,26 @@
-/* Rangka end-user app: server-backed list view and kanban.
+/* Rangka end-user app: server-backed list views (list, kanban, group-by, report).
  *
  * RangkaApp.ListView({model | route.model}) pages through GET /api/v1/r/<model> (q, filter, sort, limit, offset). Search is
- * debounced 300 ms, the quick filters become one CEL clause per filter (`field in ['a','b']`, joined with ` && `), the
- * column headers sort on the server and the page size is 20. A model with views.kanban gets a Papan / Daftar toggle.
+ * debounced 300 ms, the quick filters become one CEL clause per filter (`field in ['a','b']`, joined with ` && `), and
+ * the page size is 20. The toolbar has search and quick filters, Urutkan, Kolom and the view switcher (Daftar, Papan
+ * when the model has views.kanban, Kelompok, Laporan). The view, sort, columns and group field are kept per person in
+ * localStorage (rk.list.<org>.<model>); in Ubah, Kolom also offers "Jadikan bawaan untuk semua" (a change set on
+ * views.list.columns).
+ * - Daftar: a checkbox column; selected rows show the bulk bar (count and "Hapus pilihan").
+ * - Kelompok: group headers (count and the sums of the views.list number columns) from GET /api/v1/aggregate; opening
+ *   a group lists its rows (`field == 'v'` added to the filter), 20 at a time with "Muat lagi". The "Lainnya" bucket
+ *   past the 50 largest groups cannot be opened. Not offered while a change set is previewed (no preview aggregate).
+ * - Laporan: the chosen columns for the current page and a footer "Total semua n baris" with the sums of every
+ *   matching row (hidden in preview).
  * RangkaApp.Kanban({model, rows, onMoved}) PATCHes {<group_by>: value} when a card is dropped on another column (or picked
  * in the card's "Pindah ke…" select, for touch and keyboard); the card
  * moves at once and goes back when the kernel refuses (a 422 also toasts the first error and opens the record).
  * RangkaApp.cellFor(model, field, rec) renders one list cell; RangkaApp.ForbiddenState({what}) is the "no access" screen
  * every view shows on a 403 permission_denied.
  *
- * Pure helpers (unit-tested in test/list.test.js): celQuote, inClause, buildFilter, sortParam, nextSort, parseSort, listColumns.
+ * Pure helpers (unit-tested in test/list.test.js): celQuote, inClause, buildFilter, sortParam, nextSort, parseSort,
+ * listColumns, kanbanColumns, availableViews, groupFields, sumFields, mergeCheckGroups, groupFilter, loadListPrefs,
+ * saveListPrefs.
  */
 (function (global) {
   "use strict";
@@ -56,6 +67,97 @@
     return v.columns && v.columns.length ? v.columns : ["name"].concat((mm.fields || []).filter(function (f) { return f.in_list; }).map(function (f) { return f.name; }));
   }
 
+  /* ---------------------------------------------------------------- list views and per-person settings */
+  var VIEWS = ["list", "kanban", "group", "report"];
+  var NUMBER_TYPES = { currency: 1, int: 1, float: 1, percent: 1 }; // money (Decimal) is not summable (contract 0018)
+  var GROUP_TYPES = { select: 1, link: 1, check: 1 };
+
+  function modelOf(meta, model) { return ((meta && meta.models) || {})[model] || {}; }
+  function fieldOf(mm, f) { return (mm.fields || []).filter(function (x) { return x.name === f; })[0]; }
+  function colName(c) { return c && typeof c === "object" ? c.field : c; }
+  /** A column the list can show: name, the derived status of a submittable model, or any field that is not a table. */
+  function knownColumn(mm, f) {
+    if (f === "name") return true;
+    if (f === "status" && mm.is_submittable) return true;
+    var fd = fieldOf(mm, f);
+    return !!fd && fd.type !== "table";
+  }
+
+  /** list, group and report always; kanban only when the model has views.kanban. */
+  function availableViews(meta, model) {
+    var v = modelOf(meta, model).views || {};
+    return VIEWS.filter(function (x) { return x !== "kanban" || !!v.kanban; });
+  }
+
+  /** Fields the group-by view can group on: the derived status of a submittable model, then select, link and check fields. */
+  function groupFields(meta, model) {
+    var mm = modelOf(meta, model);
+    return (mm.is_submittable ? ["status"] : []).concat((mm.fields || []).filter(function (f) { return GROUP_TYPES[f.type]; }).map(function (f) { return f.name; }));
+  }
+
+  /** Columns the aggregate can sum: currency, int, float and percent. `columns` are the person's columns (list prefs);
+   *  without them, the model's views.list columns. The group-by headers and the report footer both use this. */
+  function sumFields(meta, model, columns) {
+    var mm = modelOf(meta, model);
+    return (columns || listColumns(mm)).map(colName).filter(function (c) { var fd = fieldOf(mm, c); return !!fd && !!NUMBER_TYPES[fd.type]; });
+  }
+
+  function isFalseKey(k) { return k === false || k === "false"; }
+
+  /** A check field's groups with the unset (null) group folded into "Tidak" (key false): counts and values added. */
+  function mergeCheckGroups(groups) {
+    var no = null, out = [];
+    (groups || []).forEach(function (g) {
+      if (g.key == null || isFalseKey(g.key)) {
+        if (!no) { no = { key: false, label: g.label, count: 0, values: {} }; out.push(no); }
+        no.count += g.count || 0;
+        Object.keys(g.values || {}).forEach(function (k) { no.values[k] = (no.values[k] || 0) + (Number(g.values[k]) || 0); });
+      } else out.push(g);
+    });
+    return out;
+  }
+
+  /** The CEL clause that opens one group: `field == 'v'` (quoted), `field == true` / `== 3`, or `field == null`. For a
+   *  check field (type "check") the "Tidak" group (key false) holds the unset rows too: `field != true`. */
+  function groupFilter(field, key, type) {
+    if (type === "check" && isFalseKey(key)) return field + " != true";
+    if (key === null || key === undefined) return field + " == null";
+    if (typeof key === "boolean" || typeof key === "number") return field + " == " + String(key);
+    return field + " == " + celQuote(key);
+  }
+
+  function prefsKey(org, model) { return "rk.list." + (org || "default") + "." + model; }
+
+  function defaultView(mm) {
+    var v = mm.views || {};
+    if (v.default && VIEWS.indexOf(v.default) >= 0 && (v.default !== "kanban" || v.kanban)) return v.default;
+    return v.kanban && v.default !== "list" ? "kanban" : "list";
+  }
+
+  /** The person's list settings for a model, read from storage key rk.list.<org>.<model>: {view, sort, columns, group}.
+   *  Anything the model no longer has (a field, a view, a group) is dropped and replaced by the default from
+   *  views.default / views.list; unreadable storage gives the defaults. */
+  function loadListPrefs(storage, org, model, meta) {
+    var mm = modelOf(meta, model), lv = (mm.views || {}).list || {};
+    var saved = null;
+    try { saved = storage ? JSON.parse(storage.getItem(prefsKey(org, model)) || "null") : null; } catch (e) { saved = null; }
+    if (!saved || typeof saved !== "object") saved = {};
+    var cols = Array.isArray(saved.columns) ? saved.columns.filter(function (c) { return typeof c === "string" && knownColumn(mm, c); }) : [];
+    var sort = typeof saved.sort === "string" && saved.sort && knownColumn(mm, saved.sort.replace(/^-/, "")) ? saved.sort : (lv.sort || null);
+    return {
+      view: availableViews(meta, model).indexOf(saved.view) >= 0 ? saved.view : defaultView(mm),
+      sort: sort,
+      columns: cols.length ? cols : listColumns(mm).map(colName),
+      group: groupFields(meta, model).indexOf(saved.group) >= 0 ? saved.group : null
+    };
+  }
+
+  function saveListPrefs(storage, org, model, prefs) {
+    try {
+      if (storage) storage.setItem(prefsKey(org, model), JSON.stringify({ view: prefs.view, sort: prefs.sort || null, columns: prefs.columns || [], group: prefs.group || null }));
+    } catch (e) { /* private window or full storage: the settings last for this visit only */ }
+  }
+
   var STATUSES = [["draft", "Draf", ""], ["submitted", "Diajukan", "info"], ["paid", "Lunas", "ok"], ["partly", "Dibayar sebagian", "warn"], ["overdue", "Jatuh tempo", "bad"], ["cancelled", "Dibatalkan", ""]];
 
   RA.celQuote = celQuote;
@@ -66,6 +168,13 @@
   RA.nextSort = nextSort;
   RA.listColumns = listColumns;
   RA.kanbanColumns = kanbanColumns;
+  RA.availableViews = availableViews;
+  RA.groupFields = groupFields;
+  RA.sumFields = sumFields;
+  RA.groupFilter = groupFilter;
+  RA.mergeCheckGroups = mergeCheckGroups;
+  RA.loadListPrefs = loadListPrefs;
+  RA.saveListPrefs = saveListPrefs;
 
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
@@ -79,7 +188,6 @@
   function lower(s) { return String(s || "").toLowerCase(); }
 
   var live = null; // the Ctx of the view that rendered last; cellFor falls back to it
-  var ubahMode = {}; // model → "kanban" | "list" last shown
 
   /* ---------------------------------------------------------------- cells */
   function optChip(fd, v) {
@@ -242,36 +350,137 @@
       addingStage ? h(RA.AddStatusDialog, { key: "__dlg", model: m, field: kb.group_by, baseOptions: gf.options || [], kanbanColumns: kb.columns, meta: ctx.meta, u: u, onClose: function () { setAddingStage(false); } }) : null);
   }
 
+  /* ---------------------------------------------------------------- toolbar menus (Urutkan, Kolom, Kelompok) */
+  function ToolMenu(p) {
+    var os = useState(false), open = os[0], setOpen = os[1], wrap = useRef(null);
+    useEffect(function () {
+      if (!open) return undefined;
+      function away(e) { if (wrap.current && !wrap.current.contains(e.target)) setOpen(false); }
+      function esc(e) { if (e.key === "Escape") setOpen(false); }
+      document.addEventListener("mousedown", away);
+      document.addEventListener("keydown", esc);
+      return function () { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
+    }, [open]);
+    return h("span", { className: "ap-toolmenu", ref: wrap },
+      h(R.Button, { icon: p.icon, title: p.title, "aria-haspopup": "menu", "aria-expanded": open ? "true" : "false", onClick: function () { setOpen(!open); } }, p.label),
+      open ? h("div", { className: "ap-toolmenu-pop" }, h(R.Menu, { items: p.items(), onClose: function () { setOpen(false); } })) : null);
+  }
+
   /* ---------------------------------------------------------------- list table (own markup: sort, search and paging are the server's) */
-  function ListTable(p) {
-    var ctx = p.ctx, m = p.model, eng = ctx.eng;
-    var cols = p.columns.map(function (c) {
-      var fd = eng.field(m, c), on = p.sort && p.sort.key === c;
-      var numeric = fd && (fd.type === "currency" || eng.numeric(fd));
-      return { key: c, numeric: numeric, on: on, label: colLabel(eng, m, c) };
+  function tableCols(ctx, m, columns, sort) {
+    var eng = ctx.eng;
+    return columns.map(function (c) {
+      var fd = eng.field(m, c);
+      return { key: c, numeric: !!fd && (fd.type === "currency" || eng.numeric(fd)), on: !!sort && sort.key === c, label: colLabel(eng, m, c) };
     });
+  }
+
+  function ListTable(p) {
+    var ctx = p.ctx, m = p.model;
+    var cols = tableCols(ctx, m, p.columns, p.sort), sel = p.selected, pick = !!p.onSelect;
+    var names = p.rows.map(function (r) { return r.name; });
+    var all = pick && names.length > 0 && names.every(function (n) { return sel[n]; }), some = pick && !all && names.some(function (n) { return sel[n]; });
     function open(r) { ctx.navigate("#/r/" + m + "/" + encodeURIComponent(r.name)); }
+    function stop(e) { e.stopPropagation(); }
     return h("div", { className: "rk-table-card ap-list" },
-      h("div", { className: "rk-tbar" }, p.filterBar),
       h("div", { className: "rk-tw" }, h("table", { className: "rk-table", "aria-busy": p.loading ? "true" : undefined },
-        h("thead", null, h("tr", null, cols.map(function (c) {
-          return h("th", { key: c.key, className: c.numeric ? "rk-num" : undefined, "aria-sort": c.on ? (p.sort.dir === "asc" ? "ascending" : "descending") : undefined },
-            h("button", { type: "button", className: cx("rk-th-sort", c.on && "on"), onClick: function () { p.onSort(c.key); } },
-              c.label, h(R.Icon, { name: c.on ? (p.sort.dir === "asc" ? "send" : "down") : "sort" })));
-        }))),
+        h("thead", null, h("tr", null,
+          pick ? h("th", { className: "rk-cb-cell" }, h(R.Checkbox, { checked: all, indeterminate: some, "aria-label": "Pilih semua", disabled: p.loading || !names.length,
+            onChange: function () { p.onSelect(names, !all); } })) : null,
+          cols.map(function (c) {
+            return h("th", { key: c.key, className: c.numeric ? "rk-num" : undefined, "aria-sort": c.on ? (p.sort.dir === "asc" ? "ascending" : "descending") : undefined },
+              p.onSort ? h("button", { type: "button", className: cx("rk-th-sort", c.on && "on"), onClick: function () { p.onSort(c.key); } },
+                c.label, h(R.Icon, { name: c.on ? (p.sort.dir === "asc" ? "send" : "down") : "sort" })) : c.label);
+          }))),
         h("tbody", null, p.loading
-          ? Array.apply(null, Array(6)).map(function (_, i) {
-            return h("tr", { key: "sk" + i, "aria-hidden": "true" }, cols.map(function (c, j) {
+          ? Array.apply(null, Array(p.skeleton || 6)).map(function (_, i) {
+            return h("tr", { key: "sk" + i, "aria-hidden": "true" }, pick ? h("td", { className: "rk-cb-cell" }) : null, cols.map(function (c, j) {
               return h("td", { key: c.key, className: c.numeric ? "rk-num" : undefined }, h("span", { className: "rk-skel", style: { width: (c.numeric ? 64 : 60 + ((i * 7 + j * 13) % 5) * 16) + "px" } }));
             }));
           })
           : p.rows.map(function (r) {
-            return h("tr", { key: r.name, tabIndex: 0, onClick: function () { open(r); }, onKeyDown: function (e) { if (e.key === "Enter") open(r); } },
+            var on = pick && !!sel[r.name];
+            return h("tr", { key: r.name, tabIndex: 0, className: on ? "rk-checked" : undefined, onClick: function () { open(r); }, onKeyDown: function (e) { if (e.key === "Enter" && e.target === e.currentTarget) open(r); } },
+              pick ? h("td", { className: "rk-cb-cell", onClick: stop }, h(R.Checkbox, { checked: on, "aria-label": "Pilih " + r.name, onChange: function () { p.onSelect([r.name], !on); } })) : null,
               cols.map(function (c) { return h("td", { key: c.key, className: c.numeric ? "rk-num" : undefined }, cellFor(m, c.key, r, ctx)); }));
           })))),
       p.loading ? h("span", { className: "rk-sr", role: "status" }, "Memuat data…")
-        : p.rows.length ? null : h("div", { className: "rk-cmd-empty" }, "Tidak ada data yang cocok dengan filter"),
-      p.pager ? h("div", { className: "ap-pager" }, p.pager) : null);
+        : p.rows.length ? null : h("div", { className: "rk-cmd-empty" }, p.emptyText || "Tidak ada data yang cocok dengan filter"),
+      p.footer ? h("div", { className: "ap-pager" }, p.footer) : null);
+  }
+
+  /* ---------------------------------------------------------------- group-by: headers from the aggregate, rows on demand */
+  function groupLabel(ctx, m, field, g) {
+    if (g.key == null) return "";
+    if (field === "status" && ctx.meta.models[m].is_submittable) {
+      var s = STATUSES.filter(function (x) { return x[0] === g.key; })[0];
+      return s ? s[1] : String(g.key);
+    }
+    var fd = ctx.eng.field(m, field);
+    if (fd && fd.type === "select") { var o = opt(fd, g.key); return o ? L(o.label) : String(g.key); }
+    if (fd && fd.type === "check") return g.key === true || g.key === "true" ? "Ya" : "Tidak";
+    return g.label || String(g.key);
+  }
+
+  function valueText(ctx, m, key, v) {
+    var f = String(key).replace(/^\w+:/, ""), fd = ctx.eng.field(m, f);
+    var text = fd && fd.type === "currency" ? global.RangkaAppAPI.rupiah(v) : fd && fd.type === "percent" ? fmtNum(v) + "%" : fmtNum(v);
+    return (fd ? L(fd.label) : f) + " " + text;
+  }
+
+  function GroupView(p) {
+    var ctx = p.ctx, m = p.model, field = p.field, agg = p.agg;
+    if (p.error) {
+      return h(R.Alert, { tone: "bad", title: "Ringkasan per kelompok tidak bisa dimuat", actions: h(R.Button, { onClick: p.onRetry }, "Coba lagi") }, errorMessage(p.error));
+    }
+    if (!agg) return h("div", { className: "ap-groups-loading" }, [0, 1, 2].map(function (i) { return h(R.Skeleton, { key: i, variant: "text" }); }));
+    if (!agg.count) return h("div", { className: "rk-cmd-empty" }, "Tidak ada data yang cocok dengan filter");
+    var gfd = ctx.eng.field(m, field);
+    var raw = gfd && gfd.type === "check" ? mergeCheckGroups(agg.groups) : agg.groups || [];
+    var groups = raw.map(function (g) {
+      var k = JSON.stringify(g.key), st = p.opened[k];
+      return { key: g.key, label: groupLabel(ctx, m, field, g), count: g.count, values: g.values, open: !!st,
+        rows: st ? h(GroupRows, { ctx: ctx, model: m, columns: p.columns, state: st, onMore: function () { p.onMore(g.key); } }) : null };
+    });
+    if (agg.other && agg.other.count) groups.push({ key: "__other", label: "Lainnya", count: agg.other.count, values: agg.other.values, disabled: true });
+    return h("div", { className: "ap-groupview" }, h(R.GroupList, { groups: groups,
+      valueFormat: function (k, v) { return valueText(ctx, m, k, v); },
+      onToggle: function (key) { if (key !== "__other") p.onToggle(key); } }));
+  }
+
+  function GroupRows(p) {
+    var st = p.state;
+    if (st.error) return h(R.Alert, { tone: "bad", title: "Baris kelompok ini tidak bisa dimuat" }, errorMessage(st.error));
+    return h(React.Fragment, null,
+      h(ListTable, { ctx: p.ctx, model: p.model, columns: p.columns, rows: st.rows, loading: st.loading && !st.rows.length, skeleton: 3 }),
+      st.rows.length < st.total ? h("div", { className: "ap-group-more" },
+        h(R.Button, { size: "sm", loading: st.loading, disabled: st.loading, onClick: p.onMore }, "Muat lagi")) : null);
+  }
+
+  /* ---------------------------------------------------------------- report: chosen columns, the page's rows, totals of every row */
+  function ReportView(p) {
+    var ctx = p.ctx, m = p.model, eng = ctx.eng;
+    var cols = p.columns.map(function (c) {
+      var fd = eng.field(m, c), numeric = !!fd && (fd.type === "currency" || eng.numeric(fd));
+      return { field: c, label: colLabel(eng, m, c), align: numeric ? "right" : undefined, render: function (v, r) {
+        if (c === "name") return h("a", { className: "rk-doc-no", href: "#/r/" + m + "/" + encodeURIComponent(r.name) }, /^DRAFT-/.test(r.name) ? "Draf baru" : r.name);
+        return cellFor(m, c, r, ctx);
+      } };
+    });
+    var totals;
+    if (p.agg) {
+      var vals = {};
+      sumFields(ctx.meta, m, p.columns).forEach(function (f) {
+        var v = (p.agg.values || {})["sum:" + f], fd = eng.field(m, f);
+        if (v != null) vals[f] = h("span", { className: "rk-amount" }, fd.type === "currency" ? global.RangkaAppAPI.rupiah(v) : fd.type === "percent" ? fmtNum(v) + "%" : fmtNum(v));
+      });
+      totals = { label: "Total semua " + fmtNum(p.agg.count) + " baris", values: vals };
+    }
+    if (p.loading) return h("div", { className: "rk-report ap-report-loading" }, h(R.Skeleton, { variant: "text", lines: 6 }));
+    return h(React.Fragment, null,
+      h(R.ReportTable, { columns: cols, rows: p.rows, totals: totals, emptyText: "Tidak ada data yang cocok dengan filter",
+        onColumnsChange: function (next) { p.onColumns(next.map(function (c) { return c.field; })); } }),
+      p.footer ? h("div", { className: "ap-pager" }, p.footer) : null);
   }
 
   /* ---------------------------------------------------------------- the list view */
@@ -281,36 +490,57 @@
     return h(ListBody, { key: m, ctx: ctx, model: m });
   }
 
+  var VIEW_LABEL = { list: "Daftar", kanban: "Papan", group: "Kelompok", report: "Laporan" };
+  function localStore() { try { return global.localStorage; } catch (e) { return null; } }
+  function andFilter(a, b) { return a && b ? "(" + a + ") && " + b : a || b; }
+
   function ListBody(p) {
     var ctx = p.ctx, m = p.model, eng = ctx.eng;
     live = ctx;
     var mm = ctx.meta.models[m], views = mm.views || {}, label = L(mm.label);
     var canCreate = !(mm.can && mm.can.create === false) && !ctx.readOnly;
     var u = RA.useUbah ? RA.useUbah() : { on: false };
-    // in Ubah the view remounts after every applied edit: it keeps the board / list choice
-    var ms = useState(u.on && ubahMode[m] ? ubahMode[m] : views.kanban && views.default !== "list" ? "kanban" : "list"), mode = ms[0], setMode = ms[1];
-    ubahMode[m] = mode;
+    var org = (ctx.me && ctx.me.org) || "default";
+    var ps = useState(function () { return loadListPrefs(localStore(), org, m, ctx.meta); }), prefs = ps[0], setPrefsState = ps[1];
+    // the aggregate has no preview variant (contract 0018): group-by needs it, so it is not offered while previewing
+    var viewIds = availableViews(ctx.meta, m).filter(function (v) { return v !== "group" || !ctx.readOnly; });
+    var view = viewIds.indexOf(prefs.view) >= 0 ? prefs.view : "list";
+    var gfields = groupFields(ctx.meta, m), gfield = prefs.group || gfields[0] || null;
+    if (view === "group" && !gfield) view = "list";
+    var sort = parseSort(prefs.sort), columns = prefs.columns;
     var qs = useState(""), query = qs[0], setQuery = qs[1];
     var dqs = useState(""), dq = dqs[0], setDq = dqs[1];
     var fs = useState({}), fval = fs[0], setFval = fs[1];
-    var ss = useState(parseSort((views.list || {}).sort)), sort = ss[0], setSort = ss[1];
     var pgs = useState(1), page = pgs[0], setPage = pgs[1];
     var ds = useState({ rows: [], total: 0 }), data = ds[0], setData = ds[1];
     var ls = useState(true), loading = ls[0], setLoading = ls[1];
     var es = useState(null), err = es[0], setErr = es[1];
     var rs = useState(0), reload = rs[0], setReload = rs[1];
-    var seq = useRef(0);
+    var as = useState(null), agg = as[0], setAgg = as[1];
+    var aes = useState(null), aggErr = aes[0], setAggErr = aes[1];
+    var gos = useState({}), opened = gos[0], setOpened = gos[1];
+    var sls = useState({}), selected = sls[0], setSelected = sls[1];
+    var seq = useRef(0), aseq = useRef(0), gseq = useRef({});
     var filters = useQuickFilters(ctx, m, mm);
     var filter = buildFilter(fval, filters);
-    var columns = listColumns(mm);
+    var board = view === "kanban";
+
+    function setPrefs(patch) {
+      var next = Object.assign({}, prefs, patch);
+      setPrefsState(next);
+      saveListPrefs(localStore(), org, m, next);
+    }
 
     useEffect(function () {
       var t = setTimeout(function () { setDq(query.trim()); setPage(1); }, DEBOUNCE_MS);
       return function () { clearTimeout(t); };
     }, [query]);
 
+    // rows: the page of the list and report, every card of the board; the group-by view loads rows per group
     useEffect(function () {
-      var mine = ++seq.current, board = mode === "kanban";
+      var mine = ++seq.current;
+      setSelected({});
+      if (view === "group") { setLoading(false); return; }
       setLoading(true);
       ctx.api.list(m, { q: dq || undefined, filter: filter || undefined, sort: board ? undefined : sortParam(sort),
         limit: board ? BOARD_LIMIT : PAGE_SIZE, offset: board ? 0 : (page - 1) * PAGE_SIZE }).then(function (r) {
@@ -325,7 +555,52 @@
         setLoading(false);
       });
       // refetch for another org, or once the user has signed in again after this list was refused with 401
-    }, [m, dq, filter, sortParam(sort), page, mode, reload, ctx.me && ctx.me.org, err && err.status === 401 ? ctx.me : null]);
+    }, [m, dq, filter, sortParam(sort), page, view, reload, ctx.me && ctx.me.org, err && err.status === 401 ? ctx.me : null]);
+
+    // totals over every matching row: the report's footer and the group-by headers (none in preview)
+    var sums = view === "group" || view === "report" ? sumFields(ctx.meta, m, columns) : [];
+    var aggKey = view === "group" || view === "report" ? [view, dq, filter, view === "group" ? gfield : "", sums.join(","), reload].join("|") : "";
+    useEffect(function () {
+      var mine = ++aseq.current;
+      setAgg(null);
+      setAggErr(null);
+      setOpened({});
+      gseq.current = {};
+      if (!aggKey) return;
+      ctx.api.aggregate(m, { q: dq || undefined, filter: filter || undefined, group: view === "group" ? gfield : undefined,
+        fns: ["count"].concat(sums.map(function (f) { return "sum:" + f; })) }).then(function (r) {
+        if (mine === aseq.current) setAgg(r);
+      }, function (e) {
+        if (mine === aseq.current) setAggErr(e);
+      });
+    }, [m, aggKey, ctx.me && ctx.me.org]);
+
+    var groupSort = sortParam(sort);
+    useEffect(function () { setOpened({}); gseq.current = {}; }, [groupSort]);
+
+    function loadGroup(key, offset) {
+      var k = JSON.stringify(key), mine = (gseq.current[k] || 0) + 1;
+      gseq.current[k] = mine;
+      setOpened(function (cur) { var n = Object.assign({}, cur); n[k] = Object.assign({ rows: [], total: 0 }, cur[k], { loading: true, error: null }); return n; });
+      ctx.api.list(m, { q: dq || undefined, filter: andFilter(filter, groupFilter(gfield, key, (ctx.eng.field(m, gfield) || {}).type)), sort: groupSort, limit: PAGE_SIZE, offset: offset }).then(function (r) {
+        if (gseq.current[k] !== mine) return;
+        (r.data || []).forEach(function (rec) { ctx.cache.put(m, rec); });
+        setOpened(function (cur) {
+          if (!cur[k]) return cur;
+          var n = Object.assign({}, cur);
+          n[k] = { rows: (offset ? cur[k].rows : []).concat(r.data || []), total: r.total != null ? r.total : (r.data || []).length, loading: false };
+          return n;
+        });
+      }, function (e) {
+        if (gseq.current[k] !== mine) return;
+        setOpened(function (cur) { if (!cur[k]) return cur; var n = Object.assign({}, cur); n[k] = Object.assign({}, cur[k], { loading: false, error: e }); return n; });
+      });
+    }
+    function toggleGroup(key) {
+      var k = JSON.stringify(key);
+      if (opened[k]) { delete gseq.current[k]; setOpened(function (cur) { var n = Object.assign({}, cur); delete n[k]; return n; }); return; }
+      loadGroup(key, 0);
+    }
 
     if (err && err.status === 403) return h(ForbiddenState, { what: label });
     if (err && err.status === 401) return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Menunggu masuk" })); // the shell shows the sign-in dialog; signing in reloads
@@ -336,34 +611,88 @@
 
     function create() { ctx.navigate("#/r/" + m + "/new"); }
     function onFilter(v) { setFval(v); setPage(1); }
+    function setSortTo(s) { setPrefs({ sort: sortParam(s) || null }); setPage(1); }
     var filtered = !!(dq || filter);
     var newBtn = canCreate ? h(R.Button, { key: "n", variant: "primary", icon: "add", onClick: create }, "Buat " + lower(label)) : null;
-    var toggle = views.kanban ? h(R.Segmented, { key: "v:" + mode, label: "Tampilan", value: mode, options: [{ value: "kanban", label: "Papan" }, { value: "list", label: "Daftar" }],
-      onChange: function (v) { setMode(v); setPage(1); } }) : null;
-    var header = h(R.PageHeader, { title: label, extra: [toggle, newBtn].filter(Boolean) });
-    var chips = u.on && mode === "list" ? h(ColumnChips, { ctx: ctx, model: m, columns: columns, u: u }) : null;
+    var header = h(R.PageHeader, { title: label, extra: newBtn ? [newBtn] : [] });
+    var chips = u.on && view === "list" ? h(ColumnChips, { ctx: ctx, model: m, columns: listColumns(mm), u: u }) : null;
 
+    /* ---- toolbar: search and quick filters, then Urutkan, Kolom, Kelompok and the view switcher */
+    var allCols = ["name"].concat(mm.is_submittable ? ["status"] : [], (mm.fields || []).filter(function (f) { return f.type !== "table"; }).map(function (f) { return f.name; }));
+    function sortItems() {
+      var items = [{ heading: "Urutkan menurut" }].concat(columns.map(function (c) {
+        return { label: colLabel(eng, m, c), checked: !!sort && sort.key === c, onSelect: function () { setSortTo({ key: c, dir: sort && sort.key === c ? sort.dir : "asc" }); } };
+      }));
+      return items.concat(["-",
+        { label: "Naik", icon: "arrowup", checked: !!sort && sort.dir === "asc", disabled: !sort, onSelect: function () { setSortTo({ key: sort.key, dir: "asc" }); } },
+        { label: "Turun", icon: "arrowdown", checked: !!sort && sort.dir === "desc", disabled: !sort, onSelect: function () { setSortTo({ key: sort.key, dir: "desc" }); } }]);
+    }
+    function columnItems() {
+      var items = [{ heading: "Tampilkan kolom" }].concat(allCols.map(function (c) {
+        var on = columns.indexOf(c) >= 0;
+        return { label: colLabel(eng, m, c), checked: on, disabled: on && columns.length < 2, onSelect: function () {
+          setPrefs({ columns: on ? columns.filter(function (x) { return x !== c; }) : columns.concat([c]) });
+        } };
+      }));
+      if (u.on) {
+        items.push("-", { label: "Jadikan bawaan untuk semua", icon: "team", disabled: u.busy, onSelect: function () {
+          u.quiet(u.edit("custom/" + m + ".rk", function (ex) { return RA.opsListColumns(m, columns, ex); }));
+        } });
+      }
+      return items;
+    }
+    function groupItems() {
+      return [{ heading: "Kelompokkan menurut" }].concat(gfields.map(function (f) {
+        return { label: colLabel(eng, m, f), checked: f === gfield, onSelect: function () { setPrefs({ group: f }); } };
+      }));
+    }
+    var tools = h("div", { className: "ap-list-tools" },
+      view === "group" && gfields.length ? h(ToolMenu, { key: "g", icon: "group", label: "Kelompok: " + colLabel(eng, m, gfield), items: groupItems }) : null,
+      board ? null : h(ToolMenu, { key: "s", icon: "sort", label: "Urutkan", title: sort ? "Diurutkan menurut " + colLabel(eng, m, sort.key) : undefined, items: sortItems }),
+      board ? null : h(ToolMenu, { key: "c", icon: "table", label: "Kolom", items: columnItems }),
+      h(R.ViewSwitcher, { value: view, label: "Tampilan", options: viewIds.map(function (v) { return { id: v, label: VIEW_LABEL[v] }; }),
+        onChange: function (v) { setPrefs({ view: v }); setPage(1); } }));
     var filterBar = h(R.FilterBar, { key: "f", search: true, searchPlaceholder: "Cari " + lower(label) + "…", query: query, onQuery: setQuery, filters: filters, value: fval, onChange: onFilter });
+    var toolbar = h("div", { className: "rk-tbar ap-list-bar" }, filterBar, tools);
 
-    // in Ubah an empty board still shows its columns, so stages can be added and ordered before the first record
-    if (!loading && !data.total && !filtered && !(u.on && mode === "kanban")) {
-      return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips,
+    var total = view === "group" ? (agg ? agg.count : 0) : data.total;
+    var busy = view === "group" ? !agg && !aggErr : loading;
+    // in Ubah an empty board still shows its columns, so stages can be added and ordered before the first record;
+    // a failed aggregate is not an empty list: the group view shows its error and "Coba lagi"
+    if (!busy && !total && !filtered && !(u.on && board) && !(view === "group" && aggErr)) {
+      return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, toolbar,
         h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", onClick: create }, "Buat yang pertama") : null })));
     }
 
-    var body;
-    if (mode === "kanban") {
-      body = h(React.Fragment, null, h("div", { className: "rk-tbar" }, filterBar),
-        loading ? h("div", { className: "pv-board" }, [0, 1, 2, 3].map(function (i) { return h(R.Skeleton, { key: i, variant: "card", height: 180 }); }))
-          : h(Kanban, { model: m, rows: data.rows, onMoved: function (rec) {
-            setData(function (cur) { return { rows: cur.rows.map(function (r) { return r.name === rec.name ? rec : r; }), total: cur.total }; });
-          } }));
-    } else {
-      body = h(ListTable, { ctx: ctx, model: m, columns: columns, rows: data.rows, loading: loading, sort: sort, filterBar: filterBar,
-        onSort: function (key) { setSort(nextSort(sort, key)); setPage(1); },
-        pager: data.total > PAGE_SIZE ? h(R.Pagination, { key: "pg:" + dq + "|" + filter + "|" + sortParam(sort), total: data.total, page: page, pageSize: PAGE_SIZE, jumper: false, onChange: setPage }) : null });
+    var pager = !board && view !== "group" && data.total > PAGE_SIZE
+      ? h(R.Pagination, { key: "pg:" + dq + "|" + filter + "|" + sortParam(sort), total: data.total, page: page, pageSize: PAGE_SIZE, jumper: false, onChange: setPage }) : null;
+
+    /* ---- selection: the bulk bar shows the count and clears it (bulk actions need their own design) */
+    var picked = data.rows.filter(function (r) { return selected[r.name]; });
+    function onSelect(names, on) {
+      setSelected(function (cur) { var n = Object.assign({}, cur); names.forEach(function (x) { if (on) n[x] = true; else delete n[x]; }); return n; });
     }
-    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, body));
+    var bulk = view === "list" ? h(R.BulkBar, { count: picked.length },
+      h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setSelected({}); } }, "Hapus pilihan")) : null;
+
+    var body;
+    if (board) {
+      body = loading ? h("div", { className: "pv-board" }, [0, 1, 2, 3].map(function (i) { return h(R.Skeleton, { key: i, variant: "card", height: 180 }); }))
+        : h(Kanban, { model: m, rows: data.rows, onMoved: function (rec) {
+          setData(function (cur) { return { rows: cur.rows.map(function (r) { return r.name === rec.name ? rec : r; }), total: cur.total }; });
+        } });
+    } else if (view === "group") {
+      body = h(GroupView, { ctx: ctx, model: m, field: gfield, agg: agg, error: aggErr, columns: columns, opened: opened,
+        onToggle: toggleGroup, onMore: function (key) { var st = opened[JSON.stringify(key)]; loadGroup(key, st ? st.rows.length : 0); },
+        onRetry: function () { setReload(reload + 1); } });
+    } else if (view === "report") {
+      body = h(ReportView, { ctx: ctx, model: m, columns: columns, rows: data.rows, loading: loading, agg: agg, footer: pager,
+        onColumns: function (next) { setPrefs({ columns: next }); } });
+    } else {
+      body = h(ListTable, { ctx: ctx, model: m, columns: columns, rows: data.rows, loading: loading, sort: sort, selected: selected, onSelect: onSelect,
+        onSort: function (key) { setSortTo(nextSort(sort, key)); }, footer: pager });
+    }
+    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, toolbar, bulk, body));
   }
 
   /* ---------------------------------------------------------------- Ubah: list columns as chips (order, hide) */

@@ -178,7 +178,8 @@ export declare function ReportTable(props: { columns: ReportColumn[]; rows: Reco
 /** 280px right panel; wrap the form and the panel in .rk-docpage so the panel moves below the form at <= 1100px. */
 export declare function DocPanel(props: { sections: { id?: string; title?: Node; content: Node }[]; label?: string }): React.ReactElement;
 /** ⌘J ask bar: 560px, fixed 24px above the bottom, centred (a full-width sheet on phones). Renders nothing when closed.
- *  Esc calls onClose; Enter calls onSend (Shift+Enter is a newline); blank or busy does not send. */
+ *  Esc calls onClose; Enter calls onSend (Shift+Enter is a newline); blank or busy does not send; both keys are ignored while an IME composes.
+ *  Render it as a sibling of ChatDrawer: an open drawer hides the ask bar (the drawer has its own composer). */
 export declare function AskBar(props: { open: boolean; context: { label: string } | null; onRemoveContext?: () => void; value: string; onChange: (v: string) => void;
   onSend: () => void; onOpenChat?: () => void; onClose: () => void; busy?: boolean }): React.ReactElement | null;
 export type ChangesetRisk = 'low' | 'medium' | 'high' | 'unknown';

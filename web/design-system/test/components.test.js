@@ -298,3 +298,26 @@ test("ChatDrawer disables send while busy", () => {
   nodes(withNew, (n) => n.type === "button" && texts(n).indexOf("Percakapan baru") >= 0)[0].props.onClick();
   assert.strictEqual(fresh, 1);
 });
+
+test("AskBar and ChatDrawer ignore Enter and Esc while an IME is composing", () => {
+  const composing = (k) => Object.assign(key(k), { nativeEvent: { isComposing: true } });
+  const ime229 = (k) => Object.assign(key(k), { keyCode: 229 });
+  const sent = [], closed = [];
+  const bar = render(R.AskBar(askBar({ onSend() { sent.push("bar"); }, onClose() { closed.push("bar"); } })));
+  for (const ev of [composing, ime229]) {
+    const e = ev("Enter");
+    textarea(bar).props.onKeyDown(e);
+    assert.strictEqual(e.prevented, false, "the IME keeps its Enter");
+    nodes(bar, (n) => hasClass(n, "rk-askbar"))[0].props.onKeyDown(ev("Escape"));
+  }
+  const R2 = load({ useState: (v) => [v === "" ? "Nomor PO" : typeof v === "function" ? v() : v, () => {}] });
+  const drawer = render(R2.ChatDrawer({ open: true, turns: TURNS, onSend: () => sent.push("drawer"), onClose: () => closed.push("drawer") }));
+  for (const ev of [composing, ime229]) {
+    textarea(drawer).props.onKeyDown(ev("Enter"));
+    nodes(drawer, (n) => hasClass(n, "rk-chat"))[0].props.onKeyDown(ev("Escape"));
+  }
+  assert.deepStrictEqual([sent, closed], [[], []]);
+  textarea(drawer).props.onKeyDown(key("Enter"));
+  nodes(drawer, (n) => hasClass(n, "rk-chat"))[0].props.onKeyDown(key("Escape"));
+  assert.deepStrictEqual([sent, closed], [["drawer"], ["drawer"]], "plain keys still work");
+});

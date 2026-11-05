@@ -873,6 +873,8 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 }
 
 /* ---------------------------------------------------------------- Raka: ⌘J ask bar (bottom centre) and the chat drawer (right, non-modal) */
+/* the drawer has its own composer: an ask bar rendered next to an open drawer steps aside */
+.rk-chat ~ .rk-askbar, .rk-askbar:has(~ .rk-chat) { display: none; }
 .rk-askbar { position: fixed; z-index: 55; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); box-sizing: border-box;
   display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-dialog); box-shadow: var(--shadow-pop); }
 .rk-askbar-ctx { display: flex; }

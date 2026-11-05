@@ -1299,19 +1299,21 @@
   }
 
   /* ---- Raka in the app: the ⌘J ask bar and the chat drawer. Raka proposes change sets; a person approves them in Ubah. */
+  /* Enter and Esc belong to the IME while it composes (Japanese, Chinese, Korean input; keyCode 229 on older Safari). */
+  function composing(e) { return !!((e.nativeEvent && e.nativeEvent.isComposing) || e.keyCode === 229); }
   function AskBar(p) {
     var ref = useRef(null);
     useEffect(function () { if (p.open && ref.current) ref.current.focus(); }, [p.open]);
     if (!p.open) return null;
     var canSend = !p.busy && !!(p.value || "").trim();
     return h("div", { className: "rk-askbar", role: "dialog", "aria-label": "Tanya Raka",
-      onKeyDown: function (e) { if (e.key === "Escape" && p.onClose) { e.preventDefault(); p.onClose(); } } },
+      onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Escape" && p.onClose) { e.preventDefault(); p.onClose(); } } },
       p.context ? h("div", { className: "rk-askbar-ctx" }, h("span", { className: "rk-askbar-chip" }, h(Icon, { name: "dashboard" }),
         h("span", { className: "l" }, "Halaman ini · " + p.context.label),
         h("button", { type: "button", "aria-label": "Hapus konteks " + p.context.label, title: "Hapus konteks", onClick: p.onRemoveContext }, h(Icon, { name: "close" })))) : null,
       h("textarea", { ref: ref, className: "rk-askbar-input", rows: 1, value: p.value || "", placeholder: "Tanya Raka…", "aria-label": "Tanya Raka",
         onChange: function (e) { if (p.onChange) p.onChange(e.target.value); },
-        onKeyDown: function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canSend && p.onSend) p.onSend(); } } }),
+        onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canSend && p.onSend) p.onSend(); } } }),
       h("div", { className: "rk-askbar-foot" },
         h("button", { type: "button", className: "rk-askbar-chat", onClick: p.onOpenChat }, "Buka chat", h(Kbd, null, "⌘J")),
         h("span", { className: "rk-sp" }),
@@ -1348,7 +1350,7 @@
     var canSend = !p.busy && !!text.trim();
     function send() { if (!canSend) return; if (p.onSend) p.onSend(text); setText(""); }
     return h("aside", { className: "rk-chat", "aria-label": "Percakapan dengan Raka",
-      onKeyDown: function (e) { if (e.key === "Escape" && p.onClose) p.onClose(); } },
+      onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Escape" && p.onClose) p.onClose(); } },
       h("div", { className: "rk-chat-head" }, h(Raka, { size: 24 }), h("b", null, "Raka"), h("span", { className: "rk-sp" }),
         h(Button, { variant: "quiet", icon: "add", onClick: p.onNew }, "Percakapan baru"),
         h(IconButton, { icon: "close", label: "Tutup", onClick: p.onClose })),
@@ -1359,7 +1361,7 @@
       h("div", { className: "rk-chat-comp" },
         h("textarea", { rows: 1, value: text, placeholder: "Tanya Raka…", "aria-label": "Pesan untuk Raka",
           onChange: function (e) { setText(e.target.value); },
-          onKeyDown: function (e) { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } } }),
+          onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } } }),
         h("button", { type: "button", className: "rk-send", disabled: !canSend, "aria-label": "Kirim", onClick: send }, h(Icon, { name: "send" }))));
   }
 

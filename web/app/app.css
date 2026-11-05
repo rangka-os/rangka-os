@@ -286,6 +286,41 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 }
 .ap-ubah-card { border-color: var(--line-strong); border-radius: 12px; }
 
+/* ---- Raka: the ⌘J ask bar and the chat drawer as the pen's Studio chat (I5s1gq): a white composer card with a soft
+   drop shadow, the context as an outlined chip, an Ink send key; your messages in a warm bubble, Raka's as plain text ---- */
+.rk-askbar { padding: 9px; gap: 6px; border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 6px 18px rgba(28, 25, 23, .07), 0 1px 2px rgba(28, 25, 23, .04); }
+.rk-askbar-input { font: 13.5px/20px var(--font-sans); padding: 4px; min-height: 36px; }
+.rk-askbar-chip { height: 26px; padding: 0 2px 0 6px; border-radius: var(--r-btn); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); font: 500 12px/18px var(--font-sans); }
+.rk-askbar-chip .rk-icon { color: var(--raka); }
+.rk-askbar-chat { height: 26px; font-size: 12px; color: var(--muted); border-radius: var(--r-btn); }
+.rk-askbar .rk-btn-primary { height: 26px; }
+.rk-chat { border-left: 1px solid var(--line-strong); box-shadow: 0 6px 24px rgba(28, 25, 23, .08); }
+.rk-chat-head { min-height: 44px; padding: 0 8px 0 14px; border-bottom-color: var(--line); }
+.rk-chat-head b { font: 600 13px/20px var(--font-sans); }
+.rk-chat-log { padding: 18px 16px 12px; gap: 18px; }
+.rk-chat-me { padding: 8px 12px; border-radius: 14px 14px 4px 14px; background: var(--neutral); font: 13.5px/21px var(--font-sans); }
+.rk-chat-raka { gap: 10px; }
+.rk-chat-raka > :first-child { width: 22px; height: 22px; flex: none; border-radius: 6px; }
+.rk-chat-text { font: 13.5px/21px var(--font-sans); color: var(--ink-2); }
+.rk-chat-act { font-size: 11.5px; color: var(--muted); }
+.rk-chat-cs { padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px; gap: 6px; }
+.rk-chat-cs b { font: 600 12.5px/18px var(--font-sans); }
+.rk-chat-cs small { font-size: 11.5px; }
+.rk-chat-comp { margin: 4px 12px 10px; padding: 9px; gap: 6px; border: 1px solid var(--line-strong); border-top: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface);
+  box-shadow: 0 6px 18px rgba(28, 25, 23, .07); }
+.rk-chat-comp textarea { border: 0; background: transparent; padding: 4px; font: 13.5px/20px var(--font-sans); min-height: 28px; }
+.rk-chat-comp textarea:focus { background: transparent; box-shadow: none; }
+.rk-chat-comp:focus-within { border-color: var(--focus); }
+.rk-chat-comp .rk-send { width: 26px; height: 26px; border-radius: var(--r-btn); background: var(--primary); color: var(--primary-ink); border: 0; display: inline-grid; place-items: center; flex: none; cursor: pointer; }
+.rk-chat-comp .rk-send:disabled { background: var(--neutral-hover); color: var(--faint); cursor: not-allowed; }
+.rk-chat-comp .rk-send .rk-icon { width: 14px; height: 14px; }
+:root[data-theme="dark"] .rk-askbar, :root[data-theme="dark"] .rk-chat-comp { box-shadow: none; }
+@media (max-width: 600px) {
+  .rk-askbar { border-radius: 12px 12px 0 0; }
+  .rk-chat-comp .rk-send { width: 40px; height: 40px; }
+  .rk-askbar .rk-btn-primary, .rk-askbar-chat { height: auto; }
+}
+
 /* ---- sign-in (AuthLayout): the pen's serif headline and white fields; the brand panel runs the full height ---- */
 .ap-signin { display: flex; flex-direction: column; }
 .ap-signin > .rk-auth { flex: 1 0 auto; }

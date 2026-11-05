@@ -3,6 +3,7 @@ package engine
 import (
 	"math"
 	"sort"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -130,6 +131,13 @@ func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *in
 	fields := map[string]any{"qty": bq, "value": moneyOut(bv), "avg_cost": moneyOut(avg)}
 	if has(s.h.op.e.Reg().Model("stock_balance"), "last_move") {
 		fields["last_move"] = mv["name"]
+	}
+	// last_sale_date: the latest posting date of a sale out of this balance, so an app can list slow-moving stock
+	// (qty > 0, not sold for N days) with a plain filter. A sale dated before it leaves it alone; a reversal keeps it.
+	if reason == "sale" && qty < 0 && has(s.h.op.e.Reg().Model("stock_balance"), "last_sale_date") {
+		if last := dateOnly(bal["last_sale_date"]); last == "" || s.date > last {
+			fields["last_sale_date"] = s.date
+		}
 	}
 	if _, err := s.h.SetSubmitted("stock_balance", str(bal["name"]), fields); err != nil {
 		return nil, err
@@ -532,4 +540,20 @@ func receivedOnPO(h *HookCtx, sign float64) error {
 	}
 	_, err = h.SetSubmitted("purchase_order", poName, fields)
 	return err
+}
+
+// dateOnly is a date field as yyyy-mm-dd ("" when empty), whether the store returned text or a time.
+func dateOnly(v any) string {
+	switch d := v.(type) {
+	case nil:
+		return ""
+	case time.Time:
+		return d.Format("2006-01-02")
+	case string:
+		if len(d) >= 10 {
+			return d[:10]
+		}
+		return d
+	}
+	return ""
 }

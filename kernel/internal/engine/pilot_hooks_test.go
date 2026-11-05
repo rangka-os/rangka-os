@@ -590,13 +590,28 @@ func TestPilotStockAverageTransferSale(t *testing.T) {
 		t.Fatal("flow ran for a move that is not negative")
 	}
 
+	// last_sale_date follows the latest sale date of the balance; receipts and transfers do not touch it
+	if got := dateOnly(b["last_sale_date"]); got != "2026-10-30" {
+		t.Fatalf("last_sale_date = %q, want 2026-10-30", got)
+	}
+	if got := dateOnly(p.balance(m.outA, m.beras)["last_sale_date"]); got != "" {
+		t.Fatalf("last_sale_date of a balance never sold from = %q", got)
+	}
+	p.doc("outlet_sales", map[string]any{"outlet": m.outC, "date": "2026-10-29", "lines": []any{map[string]any{"item": m.nasi, "qty": 1}}})
+	if got := dateOnly(p.balance(m.outC, m.beras)["last_sale_date"]); got != "2026-10-30" {
+		t.Fatalf("an earlier sale moved last_sale_date to %q", got)
+	}
+
 	dup := p.create("outlet_sales", map[string]any{"outlet": m.outC, "date": "2026-10-30", "lines": []any{map[string]any{"item": m.nasi, "qty": 1}}})
 	_, err = p.e.Submit(p.ctx, p.a, "outlet_sales", dup, true)
 	wantCode(t, err, 409, "duplicate_sales")
 	if err := p.cancel("outlet_sales", sale); err != nil {
 		t.Fatal(err)
 	}
-	p.wantBalance(m.outC, m.beras, 20, 260000, 13000)
+	p.wantBalance(m.outC, m.beras, 19.9, 258700, 13000)
+	if got := dateOnly(p.balance(m.outC, m.beras)["last_sale_date"]); got != "2026-10-30" {
+		t.Fatalf("a cancelled sale moved last_sale_date to %q (it is kept as history)", got)
+	}
 }
 
 // TestPilotStockCountWastePacking: a count posts the difference and records system_qty; waste goes out at

@@ -91,8 +91,10 @@ The CLI on its own: `npx @rangka-os/cli@next validate --apps apps --site site`.
 ### Run the container
 
 ```bash
-docker run --rm -p 8080:8080 -v "$PWD:/srv" -e DATABASE_URL=postgres://… ghcr.io/rangka-os/rangka serve
+docker run --rm -p 8080:8080 -v "$PWD:/srv" -e DATABASE_URL=postgres://… ghcr.io/rangka-os/rangka:0.5.0-alpha.5 serve
 ```
+
+Pre-releases are tagged by version only; `:latest` follows the first stable release.
 
 `/srv` is a project folder as written by `npm create @rangka-os`. A production compose file (Postgres, Caddy,
 backups, systemd) with a runbook lives in [`deploy/juragan/`](deploy/juragan/RUNBOOK.md).

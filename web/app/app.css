@@ -169,6 +169,91 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .pv-card .rk-amount { font-weight: 600; color: var(--ink); }
 .ap-main .pv-card-move { margin-top: 6px; height: 26px; font-size: 12px; color: var(--muted); border-color: var(--ap-card-line); border-radius: var(--r); background: var(--surface); }
 
+/* ---- cards and dashboards (the pen's Ringkasan: 10px cards, a ruled head, quiet labels, 20px numbers) ---- */
+.ap-main .rk-card { border-color: var(--line-strong); border-radius: var(--r-lg); }
+.ap-main .rk-card-head { min-height: 42px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.ap-main .rk-card-head h2 { font: 600 13px/20px var(--font-sans); }
+.ap-main .rk-card-body { padding: 12px 14px 14px; }
+.ap-main .rk-card-body.flush { padding: 0; }
+.ap-main .rk-numcard .rk-card-head, .ap-main .rk-stat .rk-card-head { border-bottom: 0; }
+.ap-main .rk-stat { border-color: var(--line-strong); border-radius: var(--r-lg); padding: 12px 14px; }
+.ap-main .rk-stat-label, .ap-main .rk-numcard-top { font-size: 11.5px; color: var(--muted); }
+.ap-main .rk-stat-num { font: 600 20px/28px var(--font-sans); letter-spacing: -.015em; margin: 4px 0 2px; }
+.ap-main .rk-numcard-cap { font-size: 11.5px; }
+.ap-main .rk-dash { gap: 12px; }
+
+/* ---- forms and the document page ---- */
+.ap-main .rk-field > label, .ap-main .rk-field > .rk-label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-main .rk-field > input, .ap-main .rk-field textarea, .ap-main .rk-field select, .ap-main .rk-input-affix input,
+.ap-main .rk-select-btn, .ap-main .rk-link-btn, .ap-main .rk-date-btn { background: var(--surface); border-color: var(--ap-field-line); border-radius: var(--r-btn); }
+.ap-main .rk-field > input:hover, .ap-main .rk-field textarea:hover, .ap-main .rk-field select:hover, .ap-main .rk-select-btn:hover, .ap-main .rk-link-btn:hover { background: var(--surface); border-color: var(--border); }
+.ap-main .rk-input-affix span { background: var(--soft); border-color: var(--ap-field-line); }
+.ap-main .pv-ro { background: var(--soft); border-radius: var(--r-btn); font-size: 13px; }
+.ap-docsec { border-bottom-color: var(--line); }
+.ap-docsec-t { font: 600 13.5px/20px var(--font-sans); }
+.rk-docpanel { border-left-color: var(--line); }
+.rk-docpanel-sec h3 { font: 600 12px/16px var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+/* lifecycle: the pen's step dots on a thin rail */
+.ap-main .rk-steps { gap: 4px; }
+.ap-main .rk-step-icon { height: 4px; background: var(--line-strong); }
+.ap-main .rk-step.finish .rk-step-icon { background: var(--ink-2); }
+.ap-main .rk-step.process .rk-step-icon { background: var(--brand); }
+.ap-main .rk-step-title { font-size: 12px; }
+/* child table and totals */
+.ap-main .rk-grid-wrap { border-color: var(--line-strong); border-radius: var(--r-lg); }
+.ap-main .rk-grid th { height: 34px; background: var(--soft); font: 600 11.5px/16px var(--font-sans); color: var(--muted); }
+.ap-main .rk-grid td { font-size: 12.5px; }
+.ap-main .rk-totals { font-size: 12.5px; }
+
+/* ---- alerts, tabs, menus, dialogs ---- */
+.ap-main .rk-alert { border-radius: var(--r-lg); }
+.ap-main .rk-tabs { gap: 18px; border-bottom-color: var(--line); }
+.ap-main .rk-tabs button { font: 500 12.5px/20px var(--font-sans); color: var(--muted); padding: 6px 0 8px; }
+.ap-main .rk-tabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+.ap-main .rk-tabs button[aria-selected="true"]::after { background: var(--ink); height: 2px; }
+.ap-main .rk-tabs .n { background: var(--ap-count); color: var(--ap-count-ink); font-weight: 600; font-size: 11px; }
+.rk-menu, .rk-pop, .rk-fpop, .ap-gl-pop { border-radius: 8px; }
+.rk-dialog { border-radius: var(--r-dialog); }
+
+/* ---- approvals inbox: rows as a card list ---- */
+.ap-main .ap-inbox { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+.ap-main .ap-inbox-row { padding: 12px 14px; border-bottom-color: var(--line); }
+.ap-main .ap-inbox-row:first-child { padding-top: 12px; }
+.ap-main .ap-inbox-doc a { font-family: var(--font-mono); font-size: 12.5px; }
+
+/* the approval's Setujui is the pen's green (the phone approval card); Tolak stays outlined */
+.rk-btn.ap-approve { background: var(--ap-approve); color: var(--ap-approve-ink); }
+.rk-btn.ap-approve:hover, .rk-btn.ap-approve:active { background: var(--ap-approve-hover); color: var(--ap-approve-ink); }
+.rk-btn.ap-approve:disabled { background: var(--disabled-bg); color: var(--faint); }
+.ap-approvals-panel .ap-banner-t { color: var(--warn); }
+
+/* ---- process list and import: the same white card ---- */
+.ap-main .ap-proc-list { border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; margin-top: 4px; }
+.ap-main .ap-proc-list > li:last-child { border-bottom: 0; }
+.ap-main .ap-proc-item { border-radius: 0; padding: 8px 14px; }
+.ap-main .ap-imp-tw { border-color: var(--line-strong); }
+
+/* ---- Ubah bars: the pen's change banner (warm yellow) for previews ---- */
+.ap-ubah-preview { background: #fff9ec; color: #7a3e00; border-bottom-color: #f3e1bc; }
+.ap-ubah-preview > .rk-icon { color: #a54800; }
+:root[data-theme="dark"] .ap-ubah-preview { background: #1f1b12; color: #f5cd47; border-bottom-color: rgba(245, 205, 71, .3); }
+:root[data-theme="dark"] .ap-ubah-preview > .rk-icon { color: #f5cd47; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ap-ubah-preview { background: #1f1b12; color: #f5cd47; border-bottom-color: rgba(245, 205, 71, .3); }
+  :root:not([data-theme="light"]) .ap-ubah-preview > .rk-icon { color: #f5cd47; }
+}
+.ap-ubah-card { border-color: var(--line-strong); border-radius: 12px; }
+
+/* ---- sign-in (AuthLayout): the pen's serif headline and white fields; the brand panel runs the full height ---- */
+.ap-signin { display: flex; flex-direction: column; }
+.ap-signin > .rk-auth { flex: 1 0 auto; }
+.rk-auth-pitch h2 { font: 500 34px/40px var(--font-serif); letter-spacing: -.01em; }
+.rk-auth-form h1 { font: 600 20px/28px var(--font-sans); }
+.rk-auth .rk-field > label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
+.rk-auth .rk-field > input { background: var(--surface); border-color: var(--ap-field-line); border-radius: var(--r-btn); }
+.rk-auth .rk-field > input:hover { background: var(--surface); border-color: var(--border); }
+@media (max-width: 860px) { .rk-auth-pitch h2 { font-size: 22px; line-height: 28px; } }
+
 @media (max-width: 600px) {
   .ap-main .rk-pagehead { padding: 0 16px; }
   .ap-main .rk-pagehead-row { min-height: 52px; padding: 10px 0 4px; }

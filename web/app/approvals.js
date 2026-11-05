@@ -143,7 +143,7 @@
     var id = "ap-reason-" + item.id;
     return h(React.Fragment, null,
       h("div", { className: "ap-decide" },
-        h(R.Button, { variant: "primary", icon: "check", disabled: !can || !!busy, loading: busy === "approve", title: why, onClick: approve }, "Setujui"),
+        h(R.Button, { variant: "primary", icon: "check", className: "ap-approve", disabled: !can || !!busy, loading: busy === "approve", title: why, onClick: approve }, "Setujui"),
         h(R.Button, { disabled: !can || !!busy, loading: busy === "reject", title: why,
           onClick: function () { if (can && !busyRef.current) { setReasonErr(null); setAsking(true); } } }, "Tolak")),
       asking ? h(R.Dialog, { title: "Tolak permintaan?", onClose: function () { if (!busyRef.current) setAsking(false); },

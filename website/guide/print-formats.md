@@ -9,7 +9,7 @@ account. A format is a small `.rk` file and an HTML template. The full rules are
 Put two files in the module (or app):
 
 ```text
-sales/
+invoicing/
   print/
     sales_invoice.rk
     sales_invoice.html

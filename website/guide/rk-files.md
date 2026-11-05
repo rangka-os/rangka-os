@@ -29,26 +29,30 @@ fields:
 Errors always point at a position:
 
 ```text
-crm/models/lead.rk:12:14  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
-crm/models/deal.rk:15:9   error  unknown_model    fields/1/to  "custommer" is not a model in this app or its dependencies; did you mean "customer"?
+pipeline/models/lead.rk:12:14  error  ambiguous_value  (syntax)  yes means different things in different YAML tools; write "yes" in quotes for text, or true or false
+pipeline/models/deal.rk:15:9   error  unknown_model    fields/1/to  "custommer" is not a model in this app or its dependencies; did you mean "customer"?
 ```
 
 ## Kinds
 
-Schema 0.4 has 14 kinds; each has a schema and a reference page.
+Schema 0.5 is current (0.4 is still published, for `app.rk` files in the old layout). It has 19 kinds; each has a
+schema and a reference page.
 
 | Kind | Where | Layer |
 | --- | --- | --- |
-| [app](/reference/schema/app), [model](/reference/schema/model), [dashboard](/reference/schema/dashboard), [flow](/reference/schema/flow), [role](/reference/schema/role) | `apps/<app>/` | 5 |
-| [template](/reference/schema/template) | `templates/<name>/` | 5 |
-| [overlay](/reference/schema/overlay), [config](/reference/schema/config), [features](/reference/schema/features) | site | 4 |
+| [module](/reference/schema/module) | `modules/<module>/module.rk` | 5 |
+| [model](/reference/schema/model), [flow](/reference/schema/flow), [role](/reference/schema/role) | `models/`, `flows/`, `roles/` in a module | 5 |
+| [print](/reference/schema/print), [import](/reference/schema/import), [process](/reference/schema/process) | `print/`, `imports/`, `processes/` in a module, an app or the site | 5 |
+| [app](/reference/schema/app), [dashboard](/reference/schema/dashboard) | `apps/<app>/app.rk`, `apps/<app>/dashboards/` | 5 |
+| [template](/reference/schema/template) | `templates/<name>/` (deprecated: an app replaces it, [contract 0001](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0001-modules-and-apps.md)) | 5 |
+| [overlay](/reference/schema/overlay), [config](/reference/schema/config), [features](/reference/schema/features), [letterhead](/reference/schema/letterhead) | site (`custom/<model>.rk`, `config.rk`, `features.rk`, `letterhead.rk`) | 4 |
+| [model](/reference/schema/model), [flow](/reference/schema/flow) | site `models/x_<name>.rk`, `flows/<name>.rk`: the company's own tables and automations ([contract 0016](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0016-site-company-module.md)) | 4 |
 | [connector](/reference/schema/connector) | rangka-connectors | 3 |
 | [system](/reference/schema/system) | site | 2 |
-| [theme](/reference/schema/theme), [layout](/reference/schema/layout) | site | 6 |
+| [theme](/reference/schema/theme), [layout](/reference/schema/layout) | site `themes/`, `layouts/` | 6 |
 | [changeset](/reference/schema/changeset) | sent to the API | — |
 
-Schema 0.5 adds kinds. Two of them come with print formats ([contract 0008](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0008-print-formats.md)):
-[print](/reference/schema/print) (`print/<name>.rk` in apps and the site) and [letterhead](/reference/schema/letterhead) (`letterhead.rk` / `letterheads/<org>.rk` in the site). See [Print formats](/guide/print-formats).
+See [Print formats](/guide/print-formats) and [Process canvas](/guide/process-canvas).
 
 Accepted extensions: `.rk` (preferred), `.rk.yaml`, `.rk.yml`; legacy `.json` still loads, and
 `tools/rk_convert.py` converts it, refusing any file that would not read back identically.

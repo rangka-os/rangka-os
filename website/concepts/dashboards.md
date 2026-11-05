@@ -1,7 +1,7 @@
 # Dashboards
 
-A dashboard is a `.rk` file in `apps/<app>/dashboards/`, listed in `app.rk` under `dashboards:` (the first one is the
-app's home). Widgets are computed from records when the page opens; nothing is stored.
+A dashboard is a `.rk` file in `apps/<app>/dashboards/`, listed in `app.rk` under `dashboards:` (the web app opens on
+the first one). A site can add its own in `dashboards/<name>.rk`. Widgets are computed from records when the page opens; nothing is stored.
 Reference: [dashboard.rk](/reference/schema/dashboard).
 
 ```yaml

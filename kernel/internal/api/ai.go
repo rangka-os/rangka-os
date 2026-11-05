@@ -42,6 +42,7 @@ const (
 	aiHealthTimeout = 2 * time.Second
 	aiMaxTurns      = 20
 	aiMaxHistory    = 8000 // characters over all kept turns
+	aiMaxMessage    = 4000 // characters in one message
 )
 
 // aiState is the per-process assistant state: who is chatting, recent chats per person, the last health probe.
@@ -211,6 +212,10 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 	}
 	if strings.TrimSpace(body.Message) == "" {
 		writeError(w, http.StatusBadRequest, "bad_request", "message is required")
+		return
+	}
+	if utf8.RuneCountInString(body.Message) > aiMaxMessage {
+		writeError(w, http.StatusBadRequest, "bad_request", "Pertanyaan terlalu panjang (maksimal 4.000 karakter).")
 		return
 	}
 	for _, t := range body.History {

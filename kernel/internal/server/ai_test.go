@@ -339,6 +339,28 @@ func TestAIChatNotConfigured(t *testing.T) {
 	}
 }
 
+// A message over 4,000 characters is refused before the sidecar sees it; exactly 4,000 goes through.
+func TestAIChatMessageTooLong(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	calls := 0
+	side := fakeSidecar(t, func(w http.ResponseWriter, r *http.Request, body map[string]any) {
+		calls++
+		writeEvent(w, "done", `{}`)
+	})
+	withAI(e, side.URL, nil)
+	r := e.must(400, "POST", "/api/v1/ai/chat", ask(strings.Repeat("é", 4001)))
+	if get(r.JSON, "error", "code") != "bad_request" || get(r.JSON, "error", "message") != "Pertanyaan terlalu panjang (maksimal 4.000 karakter)." {
+		t.Fatalf("long message: %s", r.Body)
+	}
+	if calls != 0 {
+		t.Fatalf("sidecar called %d times for a refused message", calls)
+	}
+	if evs := chat(e, ask(strings.Repeat("é", 4000))); names(evs) != "done" || calls != 1 {
+		t.Fatalf("4,000 characters: %+v, calls %d", evs, calls)
+	}
+}
+
 func TestFeaturesAI(t *testing.T) {
 	side := fakeSidecar(t, func(w http.ResponseWriter, r *http.Request, body map[string]any) { writeEvent(w, "done", `{}`) })
 	e := newEnv(t, false, nil)

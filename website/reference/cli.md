@@ -13,6 +13,7 @@ rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>]
                 [--connectors <dir>] [--deploy-target dev|docker|helm|desktop|cloud|partner] [--dev-open]
+                [--ai-url <url>] [--ai-callback-url <url>]
 rangka user add <email> --org <org> --role <role> [--outlets a,b] [--name <full name>] [--record <USR-…>]
                 [--reset-password] [--create-org] [--db <url>]
 rangka user remove <email> --org <org> [--db <url>]
@@ -149,6 +150,8 @@ made by `npm create @rangka-os` needs no flags:
 | `RANGKA_ADDR` | `--addr` |
 | `RANGKA_OWNER_EMAIL`, `RANGKA_OWNER_PASSWORD` | `--email`, `--password` (seed) |
 | `RANGKA_WEB`, `RANGKA_TEMPLATES` | `--web`, `--templates` |
+| `RANGKA_AI_URL`, `RANGKA_AI_CALLBACK_URL` | `--ai-url` (the rangka-ai sidecar; unset turns the assistant off), `--ai-callback-url` (default `http://127.0.0.1` + the listen port) |
+| `RANGKA_AI_SECRET` | none: sent to the sidecar as `Authorization: Bearer`; the same value as the sidecar's `RAKA_SERVE_TOKEN` |
 
 Makefile shortcuts in `kernel/`: `make build`, `make test`, `make validate`, `make compare-python`, `make run-demo`,
 `make rename-module MODULE=…`.

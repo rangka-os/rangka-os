@@ -4,11 +4,13 @@ import (
 	"context"
 	"flag"
 	"log"
+	"net"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"syscall"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/api"
 	"github.com/rangka-os/rangka-os/kernel/internal/bundle"
 	"github.com/rangka-os/rangka-os/kernel/internal/server"
 )
@@ -24,6 +26,8 @@ func cmdServe(args []string) int {
 	deploy := fs.String("deploy-target", envOr("RANGKA_DEPLOY_TARGET", "dev"), "dev, docker, helm, desktop, cloud or partner (shown in /system/status)")
 	filesDir := fs.String("files-dir", envOr("RANGKA_FILES_DIR", ""), "attachments directory (default: system.rk files.path, else ./data/files)")
 	devOpen := fs.Bool("dev-open", false, "serve /api and /mcp without sign-in, as the org owner (local demos only)")
+	aiURL := fs.String("ai-url", os.Getenv("RANGKA_AI_URL"), "rangka-ai sidecar URL, e.g. http://127.0.0.1:8787 (unset: the assistant is off)")
+	aiCallback := fs.String("ai-callback-url", os.Getenv("RANGKA_AI_CALLBACK_URL"), "kernel URL the sidecar reaches /mcp on (default http://127.0.0.1 + the listen port)")
 	fs.Parse(args)
 	set, err := loadSchemas(c.schemas)
 	if err != nil {
@@ -39,6 +43,9 @@ func cmdServe(args []string) int {
 		TemplatesDir:  server.FindDir(*templates, "templates", "../templates", filepath.Join(appsParent, "..", "rangka-os", "templates"), bundle.Dir("templates")),
 		ConnectorsDir: c.connectorsDir(), ModulesDir: c.modules, DeployTarget: *deploy, FilesDir: *filesDir,
 	}
+	if *aiURL != "" {
+		cfg.AI = &api.AIConfig{URL: *aiURL, CallbackURL: aiCallbackURL(*aiCallback, *addr), Secret: os.Getenv("RANGKA_AI_SECRET")}
+	}
 	ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 	defer stop()
 	s, err := server.New(ctx, cfg)
@@ -51,10 +58,28 @@ func cmdServe(args []string) int {
 	if *devOpen {
 		log.Printf("WARNING: --dev-open: every request acts as the owner of %s; never use this on a network", s.Cfg.Org)
 	}
+	if cfg.AI != nil {
+		log.Printf("AI assistant: sidecar %s, MCP callback %s/mcp", cfg.AI.URL, cfg.AI.CallbackURL)
+	}
 	if err := s.ListenAndServe(ctx); err != nil && err.Error() != "http: Server closed" {
 		return fail(err)
 	}
 	stop()
 	s.Wait()
 	return 0
+}
+
+// aiCallbackURL is the kernel URL the sidecar calls MCP on: the flag, else http://127.0.0.1 with the listen port.
+func aiCallbackURL(flagValue, addr string) string {
+	if flagValue != "" {
+		return flagValue
+	}
+	host, port, err := net.SplitHostPort(addr)
+	if err != nil || port == "" {
+		return "http://127.0.0.1:8080"
+	}
+	if host == "" || host == "0.0.0.0" || host == "::" {
+		host = "127.0.0.1"
+	}
+	return "http://" + net.JoinHostPort(host, port)
 }

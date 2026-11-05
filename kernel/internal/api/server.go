@@ -40,12 +40,15 @@ type Server struct {
 	DeployTarget string      // dev, docker, helm, desktop, cloud, partner
 	Files        files.Store // attachments blob store; nil = files capability disabled (501 files_disabled)
 	MaxUploadMB  int         // files.max_upload_mb; 0 = 20
+	AI           *AIConfig   // rangka-ai sidecar; nil = assistant off (contract 0020)
 	Log          func(format string, args ...any)
 
 	previewMu sync.Mutex // guards previews (preview.go)
 	previews  []*previewEntry
 
 	blobMu sync.Mutex // orders blob removal against uploads of the same bytes (one process)
+
+	ai aiState // assistant limits and health probe (ai.go)
 }
 
 type ctxKey struct{}
@@ -182,6 +185,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/files/meta", a(s.listFiles)) // v0 aliases
 	mux.HandleFunc("GET /api/v1/files/meta/{path...}", a(s.getFile))
 	mux.HandleFunc("POST /api/v1/tokens", a(s.createToken))
+	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
+	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
 	mux.HandleFunc("POST /auth/logout", s.logout)

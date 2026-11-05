@@ -123,6 +123,40 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form |
 | POST | `/tokens` | Create an API token |
 
+## AI chat
+
+The embedded assistant Raka (contract 0020). The kernel relays the chat to the rangka-ai sidecar set with
+`--ai-url`, giving it a 10-minute token that acts as the signed-in person over MCP. Raka reads and proposes change
+sets; it never approves, applies or writes records.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/ai/chat` | `{message, history: [{role: user\|assistant, text}], context: {route, title, model, record}}` → `text/event-stream` |
+
+- History keeps the last 20 turns and at most 8,000 characters (oldest dropped first). Another role → 400 `bad_request`.
+- `404 not_found` when no sidecar is configured, `403 ai_disabled` when `config.ai.enabled` is false, `403 ai_forbidden`
+  for an assistant token.
+- Per person: one chat at a time (`429 ai_busy`), 30 chats per 10 minutes (`429 ai_rate_limited`).
+- The stream passes the sidecar's events through: `text {delta}`, `tool {name, summary}`, `changeset {id, title,
+  risk, status}`, `escalate {reason}`, then `done {}` or `error {code, message}`. The kernel itself ends the stream
+  with one `error` event when the sidecar is down or refuses the request (`ai_unavailable`, or `bad_request` when it
+  rejects the body) and after 120 seconds (`ai_timeout`).
+- `GET /meta` has `features.ai: true` when the sidecar answered `GET /healthz` within the last 30 seconds and
+  `config.ai.enabled` is not false.
+- Each chat writes one audit entry of kind `ai.chat` with the tools used, change set ids, duration and outcome; the
+  message text is not stored.
+
+```text
+event: tool
+data: {"name":"rangka_query","summary":"Membaca 20 faktur"}
+
+event: text
+data: {"delta":"Ada 20 faktur bulan ini."}
+
+event: done
+data: {}
+```
+
 ## Auth
 
 `POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, and the OIDC endpoints in [Rangka ID](/concepts/rangka-id).

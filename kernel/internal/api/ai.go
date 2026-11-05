@@ -25,9 +25,11 @@ type AIConfig struct {
 	Client      *http.Client // nil = a client without its own timeout (Timeout bounds each chat)
 
 	// Limits; zero values take the production defaults (contract 0020 §7). Tests shorten them.
-	Timeout    time.Duration // one chat, sidecar included; default 120s
-	RateLimit  int           // chats per person per RateWindow; default 30
-	RateWindow time.Duration // default 10 minutes
+	Timeout       time.Duration // one chat, sidecar included; default 120s
+	RateLimit     int           // chats per person per RateWindow; default 30
+	RateWindow    time.Duration // default 10 minutes
+	HealthTTL     time.Duration // how long a healthy /healthz answer is trusted; default 30s
+	HealthFailTTL time.Duration // how long a failed probe is trusted; default 5s
 }
 
 const (
@@ -36,6 +38,7 @@ const (
 	aiRateWindow    = 10 * time.Minute
 	aiTokenTTL      = 10 * time.Minute
 	aiHealthTTL     = 30 * time.Second
+	aiHealthFailTTL = 5 * time.Second
 	aiHealthTimeout = 2 * time.Second
 	aiMaxTurns      = 20
 	aiMaxHistory    = 8000 // characters over all kept turns
@@ -55,7 +58,8 @@ type aiState struct {
 func (c *AIConfig) on() bool { return c != nil && c.URL != "" }
 
 // aiFeature reports meta.features.ai: a sidecar is configured, config.ai.enabled is not false and the sidecar
-// answered GET /healthz with 200 within the last 30 seconds.
+// answers GET /healthz with 200. A healthy answer is reused for 30 seconds, a failed probe for 5. The probe does
+// not inherit the request's cancellation, so a browser that leaves mid-probe cannot record the sidecar as down.
 func (s *Server) aiFeature(ctx context.Context, siteEnabled bool) bool {
 	if !s.AI.on() || !siteEnabled {
 		return false
@@ -63,10 +67,14 @@ func (s *Server) aiFeature(ctx context.Context, siteEnabled bool) bool {
 	st := &s.ai
 	st.healthMu.Lock()
 	defer st.healthMu.Unlock()
-	if !st.healthAt.IsZero() && time.Since(st.healthAt) < aiHealthTTL {
+	ttl := durOr(s.AI.HealthFailTTL, aiHealthFailTTL)
+	if st.healthOK {
+		ttl = durOr(s.AI.HealthTTL, aiHealthTTL)
+	}
+	if !st.healthAt.IsZero() && time.Since(st.healthAt) < ttl {
 		return st.healthOK
 	}
-	ctx, cancel := context.WithTimeout(ctx, aiHealthTimeout)
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), aiHealthTimeout)
 	defer cancel()
 	ok := false
 	if req, err := http.NewRequestWithContext(ctx, http.MethodGet, strings.TrimRight(s.AI.URL, "/")+"/healthz", nil); err == nil {
@@ -78,6 +86,13 @@ func (s *Server) aiFeature(ctx context.Context, siteEnabled bool) bool {
 	}
 	st.healthAt, st.healthOK = time.Now(), ok
 	return ok
+}
+
+func durOr(d, def time.Duration) time.Duration {
+	if d > 0 {
+		return d
+	}
+	return def
 }
 
 func (s *Server) aiClient() *http.Client {

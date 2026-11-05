@@ -3,7 +3,7 @@
 Raka, the [Rangka AI](/tools/rangka-ai) agent, answers questions and proposes changes from inside the web app
 (`/app/`) and the [Console](/tools/console): ⌘J (Ctrl+J), **Tanya Raka** in the sidebar, or the ⌘K menu. Answers
 stream into a chat drawer beside the page; a change Raka proposes shows up as a card that opens the preview. A person
-approves it in Ubah. Contract: [0020 AI assistant relay](/reference/contracts).
+approves it in Ubah. Contract: [0020 AI assistant relay](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0020-ai-assistant-relay.md) (proposed).
 
 The browser never holds an LLM key. It talks to the kernel; the kernel relays to a `rangka-ai serve` sidecar and hands
 it a short-lived token that acts as the signed-in person.

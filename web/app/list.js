@@ -613,7 +613,7 @@
     function onFilter(v) { setFval(v); setPage(1); }
     function setSortTo(s) { setPrefs({ sort: sortParam(s) || null }); setPage(1); }
     var filtered = !!(dq || filter);
-    var newBtn = canCreate ? h(R.Button, { key: "n", variant: "primary", icon: "add", onClick: create }, "Buat " + lower(label)) : null;
+    var newBtn = canCreate ? h(R.Button, { key: "n", variant: "primary", icon: "add", className: "ap-create", onClick: create }, "Buat " + lower(label)) : null;
     var header = h(R.PageHeader, { title: label, extra: newBtn ? [newBtn] : [] });
     var chips = u.on && view === "list" ? h(ColumnChips, { ctx: ctx, model: m, columns: listColumns(mm), u: u }) : null;
 
@@ -661,7 +661,7 @@
     // a failed aggregate is not an empty list: the group view shows its error and "Coba lagi"
     if (!busy && !total && !filtered && !(u.on && board) && !(view === "group" && aggErr)) {
       return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, toolbar,
-        h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", onClick: create }, "Buat yang pertama") : null })));
+        h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", className: "ap-create", onClick: create }, "Buat yang pertama") : null })));
     }
 
     var pager = !board && view !== "group" && data.total > PAGE_SIZE

@@ -61,8 +61,8 @@ Enforced by the kernel, not by prompts:
   `config.ai.auto_apply` says. Its change sets stop at `previewed`, carry `source: "ai"` and wait for a person.
 - A change set proposed for another organisation is refused (`403 org_mismatch`).
 - Limits per person: one chat at a time (`429 ai_busy`), 30 chats per 10 minutes (`429 ai_rate_limited`), 120 seconds
-  per chat, 4,000 characters per message (`400 bad_request`). History is kept in the browser tab (at most 20 turns);
-  the kernel stores none.
+  per chat, 4,000 characters per message (`400 bad_request`). History is kept in the browser tab (at most 20 turns), one
+  conversation per person, removed on sign-out; the kernel stores none.
 - Each chat writes one audit entry: person, tools used, change set ids, duration. The message text is not stored.
 - When the sidecar is down the person sees "Raka sedang tidak bisa dihubungi"; nothing else in the app changes.
 

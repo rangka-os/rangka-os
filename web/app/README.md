@@ -78,7 +78,7 @@ absent meta key turns it off and its buttons disappear.
 | Processes | `GET /api/v1/processes` answers 200 with at least one process; 404, 403 or any failure turns the "Proses bisnis" entry and `#/proses` off. The canvas is read only: no edit form, no layout save |
 | Buttons per action | `meta.models[m].can[action]` when present |
 | Ubah | `meta.changesets.propose`; "Setujui & terapkan" needs `approve` (and `approve_high` for high risk) |
-| Raka (⌘J, sidebar "Tanya Raka", ⌘K) | `meta.features.ai` is `true`: the kernel runs with `--ai-url`, the sidecar answered `GET /healthz` within 30 s and `config.ai.enabled` is not `false` (contract 0020). Answers stream from `POST /api/v1/ai/chat`; a change set card opens `?preview=<id>` or Ubah. Raka never approves or applies |
+| Raka (⌘J, sidebar "Tanya Raka", ⌘K) | `meta.features.ai` is `true`: the kernel runs with `--ai-url`, the sidecar answered `GET /healthz` within 30 s and `config.ai.enabled` is not `false` (contract 0020). Answers stream from `POST /api/v1/ai/chat`; a change set card opens `?preview=<id>` or Ubah. Raka never approves or applies. History stays in the tab under `rk.ai.<org>.<email>` and is removed on sign-out |
 
 ## Run
 

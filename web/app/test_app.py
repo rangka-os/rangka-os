@@ -3282,6 +3282,35 @@ def test_ai_error_message(page, ctx):
     shot(page, ctx, "ai-error")
 
 
+def test_ai_history_per_person(page, ctx):
+    """The conversation belongs to the person: signing out removes it, and the next person to sign in on the same tab
+    sees an empty drawer."""
+    mock_ai(page, ctx, [[("text", {"delta": "Halo, ini jawaban untuk pemilik."}), ("done", {})]])
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.keyboard.press("ControlOrMeta+j")
+    box = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka")
+    box.fill("pertanyaan rahasia pemilik")
+    box.press("Enter")
+    drawer = ai_drawer(page)
+    drawer.get_by_text("Halo, ini jawaban untuk pemilik.").wait_for(timeout=10000)
+    keys = page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.ai.'))")
+    assert keys == ["rk.ai.%s.%s" % (ORG, OWNER[0])], keys
+    drawer.get_by_role("button", name="Tutup").click()
+    drawer.wait_for(state="detached", timeout=5000)
+    sign_out(page)
+    left = page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.ai.') || k.startsWith('rk.console.ai'))")
+    assert left == [], left
+    sign_in_as(page, ctx, SALES)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    page.keyboard.press("ControlOrMeta+j")
+    page.get_by_role("dialog", name="Tanya Raka").get_by_role("button", name="Buka chat").click()
+    drawer.get_by_text("Tanya apa saja tentang data bisnismu", exact=False).wait_for(timeout=5000)
+    assert drawer.locator(".rk-chat-me, .rk-chat-raka").count() == 0, drawer.inner_text()
+    assert drawer.get_by_text("pertanyaan rahasia pemilik").count() == 0, "the owner's question is gone"
+
+
 def ai_turn(page, ask):
     """Ask Raka `ask` from the open drawer's composer (or ⌘J when the drawer is closed); wait until the answer is done.
     Returns the last Raka turn."""

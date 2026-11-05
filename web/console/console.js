@@ -1076,7 +1076,8 @@
     var role = me && me.roles && me.roles[0];
 
     /* Raka: only on a kernel that reports meta.features.ai (never in demo mode) */
-    var aiOn = !demo && !!(meta.features && meta.features.ai === true && aiApi && window.RangkaApp && window.RangkaApp.AssistantRoot);
+    var aiKey = window.RangkaApp && window.RangkaApp.consoleAiStorageKey ? window.RangkaApp.consoleAiStorageKey(me && me.email) : null; // one per person
+    var aiOn = !demo && !!(meta.features && meta.features.ai === true && aiApi && window.RangkaApp && window.RangkaApp.AssistantRoot && aiKey);
     function askRaka(q) { setNavOpen(false); if (aiRef.current) aiRef.current.ask(q); }
     /** "Halaman ini": the Console screen, and the model when a model page is open. */
     function aiPage() {
@@ -1089,7 +1090,13 @@
     function help() { toast("info", "Bantuan", "Console membaca /api/v1 sesuai CONTRACTS.md. Tekan ⌘K untuk lompat ke layar mana pun."); }
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmd(true); }
     function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
-    function logout() { api.logout().then(function () { toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri."); if (!demo) location.reload(); }); }
+    function logout() {
+      api.logout().then(function () {
+        if (window.RangkaApp && window.RangkaApp.clearAiStorage) window.RangkaApp.clearAiStorage();
+        toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri.");
+        if (!demo) location.reload();
+      });
+    }
     /** The switcher's menu: propose a change, theme, help and the account (Console has no org switch). */
     function switcherItems() {
       return [{ label: "Usulkan perubahan", icon: "add", onSelect: function () { setNavOpen(false); setPropose(true); } }, "-", { heading: "Tema" }].concat(
@@ -1131,7 +1138,7 @@
       switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
       cmd ? h(R.CommandMenu, { groups: cmdGroups, ask: false, placeholder: "Cari layar, model, dasbor, flow atau change set…", onClose: function () { setCmd(false); },
         onSelect: function (it, q) { if (it.ai) askRaka(q); } }) : null,
-      aiOn ? h(window.RangkaApp.AssistantRoot, { api: aiApi, storageKey: "rk.console.ai", getContext: aiPage, navigate: function (hash) { location.hash = hash; },
+      aiOn ? h(window.RangkaApp.AssistantRoot, { key: aiKey, api: aiApi, storageKey: aiKey, getContext: aiPage, navigate: function (hash) { location.hash = hash; },
         onPreview: function (id) { nav("/changesets/" + encodeURIComponent(id)); }, onOpenUbah: function (id) { nav("/changesets/" + encodeURIComponent(id)); },
         blocked: function () { return false; }, control: aiRef }) : null,
       propose ? h(ProposeDialog, Object.assign({}, ctx, { onClose: function () { setPropose(false); } })) : null,

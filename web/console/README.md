@@ -40,8 +40,8 @@ The sidebar footer shows **Mode demo** (purple) or **Terhubung** (green) and say
 **Raka.** On a kernel whose `meta.features.ai` is `true` (started with `--ai-url`, contract 0020) the Console mounts
 the app's assistant (`../app/ai.js`): **Tanya Raka** in the sidebar footer, ⌘J and the ⌘K "Tanya Raka" item open the
 ask bar; "Halaman ini" is the Console screen (plus the model on a model page). A change set card opens
-`#/changesets/<id>`, where a person approves it. History is kept in `sessionStorage` under `rk.console.ai`. Never in
-demo mode.
+`#/changesets/<id>`, where a person approves it. History is kept in `sessionStorage` under `rk.console.ai.<email>`, one per person, and
+removed on sign-out. Never in demo mode.
 
 ## Screens (UI in Bahasa Indonesia)
 

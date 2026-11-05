@@ -3,7 +3,9 @@
  * RA.AssistantRoot renders the ⌘J ask bar (R.AskBar) and the chat drawer (R.ChatDrawer) and talks to the kernel over
  * api.aiChat (POST /api/v1/ai/chat, a text/event-stream answer). It is self-contained; the host passes:
  *   api          {aiChat(body, onEvent, {signal})}: RangkaAppAPI or anything with the same method
- *   storageKey   sessionStorage key of the conversation (the app: "rk.ai.<org>", the Console: "rk.console.ai")
+ *   storageKey   sessionStorage key of the conversation, one per person: the app aiStorageKey(org, email)
+ *                ("rk.ai.<org>.<email>"), the Console consoleAiStorageKey(email) ("rk.console.ai.<email>"). Give the
+ *                element key={storageKey} so another person or company starts from their own conversation.
  *   getContext   () → {route, title, model?, record?} | null: the page the person is on (aiContext in the app)
  *   navigate     (hash) → void: used by the default "Lihat pratinjau" (#<route>?preview=<id>) and "Buka di Ubah" (#<route>?ubah=1)
  *   onPreview, onOpenUbah   (id) → void, optional: replace those defaults
@@ -13,7 +15,10 @@
  * focuses the drawer's composer. The ask bar is not rendered while the drawer is open. Mount it only when
  * meta.features.ai === true.
  *
- * Pure helpers (unit-tested in test/ai.test.js): parseSSE (from api.js), aiContext, aiErrorText, pushTurn, trimHistory, aiReduce.
+ * On sign-out the host calls clearAiStorage(), which drops every stored conversation (keys rk.ai.* and rk.console.ai*).
+ *
+ * Pure helpers (unit-tested in test/ai.test.js): parseSSE (from api.js), aiContext, aiErrorText, pushTurn, trimHistory, aiReduce,
+ * aiStorageKey, consoleAiStorageKey, clearAiStorage.
  */
 (function (global) {
   "use strict";
@@ -125,7 +130,24 @@
     }
   }
 
+  /** The app's sessionStorage key for one person's conversation in one company; null without both (do not mount then). */
+  function aiStorageKey(org, email) { return org && email ? "rk.ai." + org + "." + email : null; }
+  /** The Console's key for the signed-in person; null without an email. */
+  function consoleAiStorageKey(email) { return email ? "rk.console.ai." + email : null; }
+  /** Removes every stored conversation (app and Console) from `storage` (default sessionStorage); never throws. */
+  function clearAiStorage(storage) {
+    try {
+      storage = storage || global.sessionStorage;
+      var keys = [];
+      for (var i = 0; i < storage.length; i++) keys.push(storage.key(i));
+      keys.forEach(function (k) { if (k && (k.indexOf("rk.ai.") === 0 || k.indexOf("rk.console.ai") === 0)) storage.removeItem(k); });
+    } catch (e) { /* no storage (private mode, blocked): nothing was kept */ }
+  }
+
   RA.parseSSE = API.parseSSE;
+  RA.aiStorageKey = aiStorageKey;
+  RA.consoleAiStorageKey = consoleAiStorageKey;
+  RA.clearAiStorage = clearAiStorage;
   RA.aiContext = aiContext;
   RA.aiErrorText = aiErrorText;
   RA.pushTurn = pushTurn;

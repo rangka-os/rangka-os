@@ -128,3 +128,25 @@ test("chat busy disables send", () => {
   assert.match(s.turns[s.turns.length - 1].error, /^Raka sedang tidak bisa dihubungi/);
   assert.deepStrictEqual(RA.aiReduce(s, { type: "new" }), { turns: [], busy: false });
 });
+
+test("aiStorageKey is per company and person; consoleAiStorageKey per person", () => {
+  assert.strictEqual(RA.aiStorageKey("kopi-senja", "ceo@saga.co.id"), "rk.ai.kopi-senja.ceo@saga.co.id");
+  assert.notStrictEqual(RA.aiStorageKey("kopi-senja", "a@x.id"), RA.aiStorageKey("kopi-senja", "b@x.id"));
+  assert.strictEqual(RA.aiStorageKey("kopi-senja", ""), null, "no email: do not mount");
+  assert.strictEqual(RA.aiStorageKey(undefined, "a@x.id"), null, "no org: do not mount");
+  assert.strictEqual(RA.consoleAiStorageKey("a@x.id"), "rk.console.ai.a@x.id");
+  assert.strictEqual(RA.consoleAiStorageKey(null), null);
+});
+
+test("clearAiStorage removes every Raka conversation and nothing else; never throws", () => {
+  const data = { "rk.ai.kopi-senja.a@x.id": "[]", "rk.ai.other.b@x.id": "[]", "rk.console.ai.a@x.id": "[]", "rk.console.ai": "[]",
+    "rk.app.nav": "1", "rk.aix": "keep" };
+  const storage = {
+    get length() { return Object.keys(data).length; },
+    key: (i) => Object.keys(data)[i],
+    removeItem: (k) => { delete data[k]; }
+  };
+  RA.clearAiStorage(storage);
+  assert.deepStrictEqual(Object.keys(data).sort(), ["rk.aix", "rk.app.nav"]);
+  assert.doesNotThrow(() => RA.clearAiStorage({ get length() { throw new Error("blocked"); } }));
+});

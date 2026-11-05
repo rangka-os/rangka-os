@@ -668,7 +668,7 @@
       setExpired(false);
       api.me().then(function (m2) {
         // someone else signed in: nothing on screen is theirs (drafts, cache, menus), start the app over as them
-        if (me && m2.id !== me.id) { onExpired = null; global.location.reload(); return; }
+        if (me && m2.id !== me.id) { onExpired = null; if (RA.clearAiStorage) RA.clearAiStorage(); global.location.reload(); return; }
         var orgChanged = me && m2.org !== me.org;
         setMe(m2);
         if (orgChanged) { cacheRef.current.clear(); reloadMeta(m2); }
@@ -793,7 +793,8 @@
     var modeToggle = cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
 
     /* ---------------------------------------------------------------- Raka (ai.js, contract 0020) */
-    var aiOn = !!(meta.features && meta.features.ai === true && RA.AssistantRoot);
+    var aiKey = RA.aiStorageKey ? RA.aiStorageKey(me && me.org, me && me.email) : null; // one conversation per person
+    var aiOn = !!(meta.features && meta.features.ai === true && RA.AssistantRoot && aiKey);
     var aiRef = useRef(null);
     function askRaka(q) { setNavOpen(false); if (aiRef.current) aiRef.current.ask(q); }
     /** "Halaman ini": the route, plus the record's title from the cache on a document page. */
@@ -895,7 +896,7 @@
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs }))),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
         cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
-        aiOn ? h(RA.AssistantRoot, { api: api, storageKey: "rk.ai." + ((me && me.org) || ""), getContext: aiPage, navigate: RA.navigate,
+        aiOn ? h(RA.AssistantRoot, { key: aiKey, api: api, storageKey: aiKey, getContext: aiPage, navigate: RA.navigate,
           onPreview: aiPreview, onOpenUbah: aiOpenUbah, blocked: function () { return expiredRef.current; }, control: aiRef }) : null,
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
@@ -956,7 +957,10 @@
         err && err.status === 0 ? "Server tidak terjangkau." : (err && err.message) || String(err)));
     }
     if (phase !== "ready") return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Memuat" }), h("span", null, "Memuat…"));
-    return h(App, { boot: boot, me: me, setMe: setMe, onSignedOut: function () { setBoot(null); setMe(null); setPhase("signin"); } });
+    return h(App, { boot: boot, me: me, setMe: setMe, onSignedOut: function () {
+      if (RA.clearAiStorage) RA.clearAiStorage(); // Raka's conversations stay with the person who signed out
+      setBoot(null); setMe(null); setPhase("signin");
+    } });
   }
 
   ReactDOM.createRoot(global.document.getElementById("rk-app")).render(h(Root));

@@ -80,6 +80,11 @@ run-demo: build
 	  RANGKA_AI_SECRET=$$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n'); export RANGKA_AI_SECRET; \
 	  RAKA_SERVE_TOKEN=$$RANGKA_AI_SECRET node "$(RANGKA_AI_DIR)/dist/cli.js" serve --demo --port $(AI_PORT) & AI_PID=$$!; \
 	  AI_FLAGS="--ai-url http://127.0.0.1:$(AI_PORT)"; \
+	  i=0; until curl -fs -o /dev/null http://127.0.0.1:$(AI_PORT)/healthz; do \
+	    i=$$((i+1)); if [ $$i -ge 25 ]; then echo "peringatan: Raka belum menjawab di http://127.0.0.1:$(AI_PORT)/healthz setelah 5 detik"; break; fi; sleep 0.2; \
+	  done; \
+	elif [ ! -f "$(RANGKA_AI_DIR)/dist/cli.js" ]; then \
+	  echo "Raka tidak dijalankan: $(RANGKA_AI_DIR)/dist/cli.js belum ada (npm run build)"; \
 	fi; \
 	echo "open http://localhost$(ADDR)/app/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
 	$(BIN) serve --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" --addr $(ADDR) --dev-open $$AI_FLAGS

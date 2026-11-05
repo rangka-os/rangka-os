@@ -406,6 +406,15 @@ with sync_playwright() as pw:
             page.screenshot(path=os.path.join(args.shots, f"raka-{width}.png"))
         if errs:
             fail(f"raka {width}: console errors {errs[:3]}")
+        keys = page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.console.ai'))")
+        if keys != ["rk.console.ai.ceo@saga.co.id"]:
+            fail(f"raka {width}: history keys {keys}")
+        if width == 1440:  # Keluar removes the conversation
+            page.route(re.compile(r".*/auth/logout$"), lambda r: r.fulfill(status=200, content_type="application/json", body="{}"))
+            page.evaluate("() => sessionStorage.setItem('rk.ai.o1.ceo@saga.co.id', '[]')")
+            page.locator(".rk-side-switch").click()
+            page.get_by_role("menuitem", name="Keluar").click()
+            page.wait_for_function("() => !Object.keys(sessionStorage).some(k => k.startsWith('rk.console.ai') || k.startsWith('rk.ai.'))", timeout=5000)
         ctx.close()
         if width == 1440:  # ⌘K offers Tanya Raka and prefills the ask bar with the query
             ctx, page, errs = new_page(browser, 1440, "light")

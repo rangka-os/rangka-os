@@ -1091,8 +1091,8 @@
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmd(true); }
     function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
     function logout() {
+      if (window.RangkaApp && window.RangkaApp.clearAiStorage) window.RangkaApp.clearAiStorage(); // Raka's history leaves with the person
       api.logout().then(function () {
-        if (window.RangkaApp && window.RangkaApp.clearAiStorage) window.RangkaApp.clearAiStorage();
         toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri.");
         if (!demo) location.reload();
       });

@@ -2,7 +2,8 @@
  *
  * Boot: api.me() (401 → sign-in screen) → api.meta() → RangkaEngine.create(meta, cache.lookup) → api.features().
  * Then the shell layout.shell names (shellKind: the Frappe Sidebar for side-only, the default; TopNav + Sidebar for
- * top-nav), ⌘K (CommandPalette over commandGroups), data-density from the theme, and a hash
+ * top-nav), ⌘K (CommandPalette over commandGroups), Raka (ai.js RA.AssistantRoot: ⌘J, the ⌘K "Tanya Raka" item and the
+ * sidebar footer's "Tanya Raka", only when meta.features.ai === true), data-density from the theme, and a hash
  * router (#/d/<dashboard>, #/r/<model>, #/r/<model>/new, #/r/<model>/<name>, #/approvals, #/import/<name>, #/proses, #/proses/<name>).
  * Views are looked up on window.RangkaApp at render time (ListView, FormView, DashboardView, ApprovalInbox,
  * ImportWizard), so later files add them without touching the shell; a missing view shows "Halaman ini belum tersedia".
@@ -177,7 +178,8 @@
 
   /** ⌘K groups: Halaman (every sidebar entry once, nav = sideNav(…)), Buat baru (layout.nav.create models the user may
    *  create; none while readOnly, i.e. a preview), Data (found: [{model, name, title}] from the record search, already
-   *  matched by the server so filter: false), and Tanya Raka when meta.features.ai. Items: {id, label, sub, icon, hash}. */
+   *  matched by the server so filter: false), and Tanya Raka when meta.features.ai (filter: false; hash null: the shell
+   *  opens the ask bar with the query). Items: {id, label, sub, icon, hash}. */
   function commandGroups(meta, features, nav, found, readOnly) {
     meta = meta || {};
     nav = nav || { pinned: [], groups: [] };
@@ -205,7 +207,8 @@
           icon: (models[r.model] || {}).icon || "invoice", hash: recHash(r.model, r.name) };
       }) });
     }
-    if (meta.features && meta.features.ai === true) out.push({ label: "Tanya Raka", items: [{ id: "ask", label: "Tanya Raka", sub: "AI", icon: "spark", hash: null }] });
+    // unfiltered: whatever is typed stays visible here and becomes the question in the ask bar
+    if (meta.features && meta.features.ai === true) out.push({ label: "Tanya Raka", filter: false, items: [{ id: "ask", label: "Tanya Raka", sub: "AI", icon: "spark", hash: null }] });
     return out;
   }
 
@@ -509,7 +512,7 @@
     }
     var groups = commandGroups(p.meta, p.features, p.nav, found, p.readOnly).map(function (g) {
       return { label: g.label, filter: g.filter, items: g.items.map(function (it) {
-        return Object.assign({}, it, { onSelect: function () { if (it.hash) RA.navigate(it.hash); else if (p.onAsk) p.onAsk(); } });
+        return Object.assign({}, it, { onSelect: function (q) { if (it.hash) RA.navigate(it.hash); else if (p.onAsk) p.onAsk(q); } });
       }) };
     });
     return h(R.CommandMenu, { groups: groups, ask: false, onQuery: onQuery, placeholder: "Cari halaman atau data, atau buat baru…", onClose: p.onClose });
@@ -789,6 +792,36 @@
     function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
     var modeToggle = cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
 
+    /* ---------------------------------------------------------------- Raka (ai.js, contract 0020) */
+    var aiOn = !!(meta.features && meta.features.ai === true && RA.AssistantRoot);
+    var aiRef = useRef(null);
+    function askRaka(q) { setNavOpen(false); if (aiRef.current) aiRef.current.ask(q); }
+    /** "Halaman ini": the route, plus the record's title from the cache on a document page. */
+    function aiPage() {
+      var r = parseRoute(global.location.hash), rec = r.kind === "form" && r.name ? cacheRef.current.lookup(r.model, r.name) : null;
+      return RA.aiContext(global.location.hash, meta, rec && eng ? eng.title(r.model, rec) : null);
+    }
+    /** "Lihat pratinjau" opens the change set's preview (?preview=<id>, the same as the Ubah card's Pratinjau). */
+    function aiPreview(id) {
+      api.changeset(id).then(enterPreview, function (e) { toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError ? RA.ubahError(e) : e.message); });
+    }
+    /** "Buka di Ubah": Ubah on (?ubah=1) with the change set's card open. */
+    function aiOpenUbah(id) {
+      if (!cs8.propose) { toast("info", "Tidak bisa membuka Ubah", "Kamu tidak punya akses untuk mengubah aplikasi. Minta pemilik usaha meninjau perubahan ini."); return; }
+      (previewCs ? exitPreview() : Promise.resolve()).then(function () { toggleUbah(true); openCs(id); });
+    }
+    function askButton(iconOnly) {
+      if (!aiOn) return null;
+      return iconOnly ? h(R.IconButton, { key: "ask", icon: "spark", label: "Tanya Raka", className: "ap-ask", onClick: function () { askRaka(); } })
+        : h(R.Button, { key: "ask", variant: "quiet", icon: "spark", className: "ap-ask", onClick: function () { askRaka(); } }, "Tanya Raka");
+    }
+    /** The sidebar footer: Tanya Raka, then the Pakai / Ubah toggle (not on a phone, where it sits in the top bar). */
+    function sideFooter(iconOnly, toggle) {
+      var items = [askButton(iconOnly), phone ? null : toggle].filter(Boolean);
+      if (!items.length) return null;
+      return iconOnly ? h(React.Fragment, null, items) : h("div", { className: "rk-side-foot ap-side-foot" }, items);
+    }
+
     /** The switcher's menu: the apps (what TopNav's app switcher listed), companies, theme, help and the account. */
     function switcherItems() {
       var items = [];
@@ -814,12 +847,13 @@
     if (ubahOn) {
       side = h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
         switcher: kind === "side-only" ? switcher : null,
-        footer: kind === "side-only" && modeToggle && !phone ? h("div", { className: "rk-side-foot ap-side-foot" }, modeToggle) : null,
+        footer: sideFooter(false, kind === "side-only" && modeToggle ? h(React.Fragment, { key: "mode" }, modeToggle) : null),
         onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } });
     } else if (kind === "top-nav") {
       side = h(R.Sidebar, {
         app: { name: name, type: roleText, icon: "store", color: "var(--brand)" },
-        groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route), onNavigate: onNavigate
+        groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route), onNavigate: onNavigate,
+        footer: sideFooter(false, null)
       });
     } else {
       side = h(R.Sidebar, {
@@ -827,9 +861,9 @@
         search: { label: "Cari", onOpen: openCmd },
         pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route, home || "#/"), onNavigate: onNavigate,
         collapsed: narrow, onToggleCollapse: phone ? undefined : toggleCollapsed,
-        footer: !modeToggle || phone ? null : narrow
-          ? h(R.IconButton, { icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })
-          : h("div", { className: "rk-side-foot ap-side-foot" }, modeToggle)
+        footer: sideFooter(narrow, !modeToggle ? null : narrow
+          ? h(R.IconButton, { key: "mode", icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })
+          : h(React.Fragment, { key: "mode" }, modeToggle))
       });
     }
 
@@ -860,7 +894,9 @@
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs }))),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
-        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onClose: function () { setCmdOpen(false); } }) : null,
+        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
+        aiOn ? h(RA.AssistantRoot, { api: api, storageKey: "rk.ai." + ((me && me.org) || ""), getContext: aiPage, navigate: RA.navigate,
+          onPreview: aiPreview, onOpenUbah: aiOpenUbah, blocked: function () { return expiredRef.current; }, control: aiRef }) : null,
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,

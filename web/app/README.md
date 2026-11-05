@@ -58,6 +58,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `approvals.js` | Approval inbox and the "Menunggu persetujuan" banner |
 | `docs.js` | Print menu and attachments panel |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
+| `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |
 | `process.js` | "Proses bisnis": the process list and the read-only canvas (`../canvas`, `RangkaCanvas.Mounted` with `readOnly: true`) |
 | `test/*.test.js` | `node --test` units for the pure parts of each file |
 | `test_app.py` | Live Playwright suite against a real kernel |

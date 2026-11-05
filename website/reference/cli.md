@@ -1,25 +1,33 @@
 # CLI
 
-One binary, `rangka`. Install it with npm (`npm i -D @rangka-os/cli`, or `npx @rangka-os/cli`), download it from
-GitHub Releases, run the `ghcr.io/rangka-os/rangka` image, or build it from `rangka-os/kernel` (`make build`).
-Release binaries carry the Console, design system and theme/layout templates inside; a source build reads them
-from the workspace.
+One binary, `rangka`. Install it with npm (`npm i -D @rangka-os/cli@next`, or `npx @rangka-os/cli@next`; only
+pre-releases exist so far, under the `next` tag), download it from
+[GitHub Releases](https://github.com/rangka-os/rangka-os/releases), run the `ghcr.io/rangka-os/rangka:<version>`
+image, or build it from `rangka-os/kernel` (`make build`). Release binaries carry the web app, Console, design
+system, canvas and theme/layout/print templates inside; a source build reads them from the workspace.
 
 ```text
 rangka validate --apps <dir> [--site <dir>] [--modules <dir>] [--connectors <dir>] [--json] [app ...]
-rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n] [--files-dir <dir>]
+rangka migrate  --apps <dir> [--site <dir>] [--modules <dir>] [--connectors <dir>] --db <url> [--dry-run]
+                [--allow-destructive] [--rollback n] [--files-dir <dir>]
 rangka backup   --db <url> [--apps <dir>] [--modules <dir>] [--site <dir>] [--connectors <dir>] [--out <file>] [--org <id>] [--files-dir <dir>]
 rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
-rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>]
-                [--connectors <dir>] [--deploy-target dev|docker|helm|desktop|cloud|partner] [--dev-open]
+                [--email <owner>] [--password <p>] [--user-record USR-001]
+rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--org <id>] [--web <dir>] [--templates <dir>]
+                [--modules <dir>] [--connectors <dir>] [--files-dir <dir>]
+                [--deploy-target dev|docker|helm|desktop|cloud|partner] [--dev-open]
                 [--ai-url <url>] [--ai-callback-url <url>]
 rangka user add <email> --org <org> --role <role> [--outlets a,b] [--name <full name>] [--record <USR-…>]
                 [--reset-password] [--create-org] [--db <url>]
 rangka user remove <email> --org <org> [--db <url>]
 rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--apps <dir>] [--site <dir>] [--db <url>]
 rangka plan show|set <plan>|clear [--by <who>] [--note "..."] [--json] [--apps <dir>] [--site <dir>] [--db <url>]
+rangka version
 ```
+
+Every command that reads metadata also takes `--schemas <dir>` to validate against schema files on disk instead of
+the ones built into the binary. `rangka help` prints a short usage.
 
 | Command | Does |
 | --- | --- |
@@ -27,8 +35,8 @@ rangka plan show|set <plan>|clear [--by <who>] [--note "..."] [--json] [--apps <
 | `migrate` | Compiles models (with overlays) into Postgres DDL: a table per model, child tables, indexes on links, docstatus and unique fields. Idempotent and diff-based. `--dry-run` prints each statement with its risk and changes nothing. `--rollback n` undoes the last n migrations. Destructive steps need `--allow-destructive`. See [Migrations](#migrations). |
 | `backup` | Writes one verified `tar.gz`: every table, `site/`, `apps/`, `modules/`, `connectors/` and the uploads directory, with checksums. See [Backup and restore](#backup-and-restore). |
 | `restore` | Rebuilds an archive into an empty database and verifies it against the archive's checksums. |
-| `seed` | Creates the organisation (`--org`, `$RANGKA_ORG`, else the site folder name), loads `fixtures/*.rk`, and the owner account (`--email`/`--password`, `$RANGKA_OWNER_EMAIL`/`$RANGKA_OWNER_PASSWORD`; demo default `ceo@saga.co.id` / `rangka-demo`). |
-| `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/app/`, `/console/`; `/` redirects to `/app/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
+| `seed` | Creates the organisation (`--org`, `$RANGKA_ORG`, else the site folder name), loads `fixtures/*.rk` (`--fixtures`, `$RANGKA_FIXTURES`, else `fixtures` next to the apps directory), and the owner account (`--email`/`--password`, `$RANGKA_OWNER_EMAIL`/`$RANGKA_OWNER_PASSWORD`; demo default `ceo@saga.co.id` / `rangka-demo`) linked to the user record `--user-record` (default `USR-001`). |
+| `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; migrates first; serves `rangka-os/web` at `/` (`/app/`, `/console/`; `/` redirects to `/app/`). Refuses metadata with errors. `--dev-open` makes anonymous requests act as the org owner, for local demos only. `--ai-url` turns on the assistant relay to a rangka-ai sidecar. |
 | `user add` | Creates a Rangka ID account and sets its role in an organisation (one role per member), so people can sign in to `/app/`. The email is the first argument (or `--email`). The password comes from `$RANGKA_USER_PASSWORD` (or `--password`, which lands in shell history) and is needed only for a new account or with `--reset-password`; an existing account keeps its password otherwise. `--db` and `--org` default to `$DATABASE_URL` and `$RANGKA_ORG`. An unknown organisation is refused unless `--create-org` is given; `--record` links the member to a core user record; `--outlets a,b` sets the outlets the member works at (`--outlets ""` clears them). Missing flags exit 2. |
 | `user remove` | Ends a membership. Exits 1 with `<email> is not a member of <org>` when it is not one. |
 | `plan show` / `plan set` / `plan clear` | The tenant's plan ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)). `show` prints the plan, usage against its limits (`ok`, `near` from 80%, `full`, `over`) and what is read-only. `set <plan>` is an operator's upgrade or downgrade to a plan of `features.rk` (kept in `rk_plan_changes` with `--by` and `--note`); a downgrade deletes nothing, the newest outlets and people past a lower limit become read-only. `clear` goes back to `config.rk` `plan`. A running kernel picks the change up within 10 seconds. `user add` refuses a new person past the `users` limit. |
@@ -153,15 +161,19 @@ made by `npm create @rangka-os` needs no flags:
 | --- | --- |
 | `DATABASE_URL` | `--db` |
 | `RANGKA_APPS`, `RANGKA_SITE`, `RANGKA_MODULES`, `RANGKA_CONNECTORS`, `RANGKA_FIXTURES` | `--apps`, `--site`, `--modules`, `--connectors`, `--fixtures` (validate too) |
-| `RANGKA_ORG` | `--org` (seed, serve) |
+| `RANGKA_ORG` | `--org` (seed, serve, user) |
+| `RANGKA_DEPLOY_TARGET` | `--deploy-target` (shown in `/system/status`) |
 | `RANGKA_FILES_DIR` | `--files-dir` (serve, migrate, backup), `--files` (restore) |
 | `RANGKA_ENV` | `production` turns on the backup before migrations |
 | `RANGKA_BACKUP_DIR` | where those backups go (default `<site>/backups`) |
 | `RANGKA_ADDR` | `--addr` |
 | `RANGKA_OWNER_EMAIL`, `RANGKA_OWNER_PASSWORD` | `--email`, `--password` (seed) |
+| `RANGKA_USER_PASSWORD` | the password for `user add` (new accounts or `--reset-password`); `--password` also works but lands in shell history |
 | `RANGKA_WEB`, `RANGKA_TEMPLATES` | `--web`, `--templates` |
 | `RANGKA_AI_URL`, `RANGKA_AI_CALLBACK_URL` | `--ai-url` (the rangka-ai sidecar; unset turns the assistant off), `--ai-callback-url` (default `http://127.0.0.1` + the listen port) |
 | `RANGKA_AI_SECRET` | none: sent to the sidecar as `Authorization: Bearer`; the same value as the sidecar's `RAKA_SERVE_TOKEN` |
+| `RANGKA_CHROMIUM`, `RANGKA_PDF_CONCURRENCY` | none: the browser for PDF print (`off` disables PDF) and how many run at once (default 2) |
 
-Makefile shortcuts in `kernel/`: `make build`, `make test`, `make validate`, `make compare-python`, `make run-demo`,
-`make rename-module MODULE=…`.
+Makefile shortcuts in `kernel/`: `make build`, `make test` (throwaway Postgres), `make test-unit` (no database),
+`make vet`, `make validate`, `make compare-python`, `make run-demo` (`ADDR=:8090` for another port; `APPS=`, `SITE=`
+for other folders), `make sync-schemas`, `make rename-module MODULE=…`.

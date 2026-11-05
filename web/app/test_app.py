@@ -2863,7 +2863,7 @@ def enable_print_formats(site):
 
 def use_side_only(site):
     """The demo site's layout (crm_first) names `shell: top-nav`; the suite runs the default shell (side-only, contract
-    0017), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
+    0019), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
     d, changed = os.path.join(site, "layouts"), 0
     for fn in os.listdir(d) if os.path.isdir(d) else []:
         path = os.path.join(d, fn)

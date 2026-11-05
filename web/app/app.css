@@ -1,0 +1,138 @@
+/* The business app's look, from Dede's Pencil design rangka.pen (the "Sewa Pesta Makmur" app inside Juragan Studio,
+   frames I5s1gq/h37Lz, J1P9qx and DkSmr). Loaded after tokens.css and the design system, so it only restyles /app/:
+   the Console and the design system gallery keep tokens.json as is. Light values come from the pen's lt-* set and the
+   app preview; dark values from the pen's jg-* dark theme. Layout and behaviour stay in index.html and the views. */
+
+:root, :root[data-theme="light"] {
+  --font-sans: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, "SF Mono", monospace;
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-size: 13px; --font-size-sm: 12px;
+  --app: #fafaf9; --surface: #ffffff; --soft: #f7f5f3;
+  --line: #eeeae7; --line-strong: #e4dfda;
+  --hover: rgba(28, 25, 23, .045); --neutral: #f4f2ef; --neutral-hover: #e9e5e1;
+  --selected: #fbefea; --selected-ink: #8a2f1c; --row-selected: #fdf6f3;
+  --ok: #216e4e; --ok-tint: #eaf6ef; --warn: #a54800; --warn-tint: #fff4dd; --warn-line: #f1dda8;
+  --info: #0369a1; --info-tint: #e8f2fb; --bad: #b42318; --bad-tint: #fef2f2;
+  --r: 6px; --r-btn: 7px; --r-md: 7px; --r-lg: 10px; --r-dialog: 12px;
+  --sidebar: 224px; --header: 56px;
+  /* app-only roles */
+  --ap-field-line: #d9d2cc;        /* inputs, search, filter buttons */
+  --ap-nav-icon: #78716c;
+  --ap-col: #f2f1ef;               /* board columns */
+  --ap-card-line: #e7e5e4;
+  --ap-card-shadow: 0 1px 1px rgba(12, 10, 9, .05);
+  --ap-pill: #f5f5f4; --ap-pill-ink: #57534e;
+  --ap-create: #b4432a; --ap-create-hover: #9c3a24; --ap-create-ink: #ffffff;
+  --ap-count: #fdebd3; --ap-count-ink: #a54800;
+  --ap-approve: #1f7a52; --ap-approve-hover: #19663f; --ap-approve-ink: #ffffff;
+  --ap-seg: #f4f2ef; --ap-seg-on: #ffffff; --ap-seg-shadow: 0 1px 2px rgba(28, 25, 23, .10);
+}
+:root[data-theme="dark"] {
+  --app: #13110f; --surface: #1c1917; --soft: #24201d;
+  --line: #2e2825; --line-strong: #3a322e;
+  --ink: #ede8e4; --ink-2: #cfc7c1; --muted: #a79d96; --faint: #7a706a;
+  --hover: rgba(255, 255, 255, .05); --neutral: #24201d; --neutral-hover: #2e2825;
+  --selected: #30201b; --selected-ink: #f08a6b; --row-selected: #241a16;
+  --ok: #7ee2b8; --ok-tint: rgba(75, 206, 151, .12); --warn: #f5cd47; --warn-tint: rgba(245, 205, 71, .12); --warn-line: rgba(245, 205, 71, .4);
+  --info: #7cc4fa; --info-tint: rgba(56, 152, 236, .14); --bad: #fca5a5; --bad-tint: rgba(240, 82, 82, .14);
+  --ap-field-line: #3a322e; --ap-nav-icon: #a79d96; --ap-col: #191614; --ap-card-line: #2e2825; --ap-card-shadow: none;
+  --ap-pill: rgba(255, 255, 255, .07); --ap-pill-ink: #cfc7c1;
+  --ap-create: #e0623f; --ap-create-hover: #f08a6b; --ap-create-ink: #1a1210;
+  --ap-count: rgba(245, 205, 71, .14); --ap-count-ink: #f5cd47;
+  --ap-approve: #4bce97; --ap-approve-hover: #7ee2b8; --ap-approve-ink: #06231f;
+  --ap-seg: #13110f; --ap-seg-on: #2e2825; --ap-seg-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --app: #13110f; --surface: #1c1917; --soft: #24201d;
+    --line: #2e2825; --line-strong: #3a322e;
+    --ink: #ede8e4; --ink-2: #cfc7c1; --muted: #a79d96; --faint: #7a706a;
+    --hover: rgba(255, 255, 255, .05); --neutral: #24201d; --neutral-hover: #2e2825;
+    --selected: #30201b; --selected-ink: #f08a6b; --row-selected: #241a16;
+    --ok: #7ee2b8; --ok-tint: rgba(75, 206, 151, .12); --warn: #f5cd47; --warn-tint: rgba(245, 205, 71, .12); --warn-line: rgba(245, 205, 71, .4);
+    --info: #7cc4fa; --info-tint: rgba(56, 152, 236, .14); --bad: #fca5a5; --bad-tint: rgba(240, 82, 82, .14);
+    --ap-field-line: #3a322e; --ap-nav-icon: #a79d96; --ap-col: #191614; --ap-card-line: #2e2825; --ap-card-shadow: none;
+    --ap-pill: rgba(255, 255, 255, .07); --ap-pill-ink: #cfc7c1;
+    --ap-create: #e0623f; --ap-create-hover: #f08a6b; --ap-create-ink: #1a1210;
+    --ap-count: rgba(245, 205, 71, .14); --ap-count-ink: #f5cd47;
+  --ap-approve: #4bce97; --ap-approve-hover: #7ee2b8; --ap-approve-ink: #06231f;
+    --ap-seg: #13110f; --ap-seg-on: #2e2825; --ap-seg-shadow: none;
+  }
+}
+
+body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
+
+/* ---- shell: a white sidebar on the warm page, Kapur selection with deep Bata text ---- */
+.ap-shell { background: var(--app); }
+.ap-shell > .rk-side { background: var(--surface); border-right: 1px solid var(--line); }
+.ap-shell .rk-side-switch { margin: 10px 8px 6px; padding: 6px 8px; border-radius: 8px; }
+.ap-shell .rk-side-head b { font: 600 13.5px/18px var(--font-sans); }
+.ap-shell .rk-side-head small { font-size: 11.5px; line-height: 16px; }
+.ap-shell .rk-side-mark, .ap-shell .rk-side-head .tile { width: 24px; height: 24px; border-radius: 6px; background: var(--brand); }
+/* the Sendi r in white on the Bata tile: a stem and an arm cut at 45 degrees */
+.ap-shell .rk-side-mark::before { content: ""; position: absolute; left: 7px; top: 7px; width: 4px; height: 11px; background: #ffffff; }
+.ap-shell .rk-side-mark::after { left: 7px; right: auto; top: 7px; width: 11px; height: 4px; border-radius: 0; background: #ffffff; clip-path: polygon(0 0, 100% 0, 75% 100%, 0 100%); }
+.ap-shell .rk-side-search { margin: 0 8px 8px; height: 30px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ap-field-line); border-radius: var(--r-btn); color: var(--muted); }
+.ap-shell .rk-side-search:hover { background: var(--soft); }
+.ap-shell .rk-side nav { padding: 2px 8px 12px; }
+.ap-shell .rk-navlink { height: 30px; gap: 9px; padding: 0 8px; border-radius: var(--r); color: var(--ink-2); font: 400 13px/20px var(--font-sans); }
+.ap-shell .rk-navlink .rk-icon { width: 15px; height: 15px; color: var(--ap-nav-icon); }
+.ap-shell .rk-navlink:hover { background: var(--hover); color: var(--ink); }
+.ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); color: var(--selected-ink); font-weight: 600; }
+.ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--brand); }
+.ap-shell .rk-navlink .rk-count { min-width: 18px; height: 18px; padding: 0 6px; box-sizing: border-box; border-radius: var(--r-pill); background: var(--ap-count); color: var(--ap-count-ink);
+  font: 600 11px/18px var(--font-sans); text-align: center; }
+.ap-shell .rk-navlink[aria-current="page"] .rk-count { color: var(--ap-count-ink); }
+.ap-shell .rk-navgroup > p { margin: 14px 0 4px; padding: 0 10px; height: 16px; font: 600 11px/16px var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: #8c827b; }
+.ap-shell .rk-side-foot { border-top: 1px solid var(--line); padding: 8px 10px; }
+.ap-shell .rk-side-collapse .rk-iconbtn { color: var(--ap-nav-icon); }
+:root[data-theme="dark"] .ap-shell .rk-navgroup > p { color: var(--muted); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ap-shell .rk-navgroup > p { color: var(--muted); } }
+/* the phone bar and the top-nav shell */
+.ap-side .ap-mhead { background: var(--surface); }
+.ap-shell .rk-topnav { background: var(--surface); border-bottom-color: var(--line); }
+
+/* Pakai / Ubah: the pen's segmented control (grey track, the current one raised in white) */
+.ap-ubah-mode { padding: 2px; border-radius: 8px; background: var(--ap-seg); gap: 1px; }
+.ap-ubah-mode button { border-radius: var(--r); font: 500 12.5px/26px var(--font-sans); min-height: 26px; color: var(--muted); }
+.ap-ubah-mode button[aria-pressed="true"] { background: var(--ap-seg-on); box-shadow: var(--ap-seg-shadow); }
+
+/* ---- page header: 18px bold title, actions on the right, no rule under it ---- */
+.ap-main .rk-pagehead { background: transparent; padding: 0 20px; border-bottom: 0; }
+.ap-main .rk-pagehead-row { min-height: 60px; padding: 14px 0 6px; gap: 6px 10px; }
+.ap-main .rk-pagehead h1 { font: 700 18px/26px var(--font-sans); letter-spacing: -.01em; }
+.ap-main .rk-pagehead .rk-crumbs { font: 400 13px/20px var(--font-sans); color: var(--muted); }
+.ap-main .rk-pagehead .rk-crumbs + h1, .ap-main .rk-pagehead .rk-crumbs h1 { font-size: 16px; }
+.ap-main .rk-pagehead-sub { margin: -2px 0 8px; }
+.ap-main .rk-pagehead.has-tabs .rk-tabs { margin: 0; }
+.ap-main .rk-shell-content { padding: 8px 20px 32px; gap: 12px; }
+
+/* ---- buttons: outlined white by default, Ink for the one primary action, Bata for "Buat …" ---- */
+.rk-btn { border-radius: var(--r-btn); font: 500 12.5px/20px var(--font-sans); padding: 0 11px; }
+.rk-btn:not([class*="rk-btn-"]) { background: var(--surface); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.rk-btn:not([class*="rk-btn-"]):hover { background: var(--soft); color: var(--ink); }
+.rk-btn-sm { font-size: 12px; padding: 0 8px; }
+.rk-btn-lg { font-size: 13.5px; }
+.rk-btn.ap-create { background: var(--ap-create); color: var(--ap-create-ink); font-weight: 600; }
+.rk-btn.ap-create:hover, .rk-btn.ap-create:active { background: var(--ap-create-hover); color: var(--ap-create-ink); }
+.rk-btn.ap-create:disabled { background: var(--disabled-bg); color: var(--faint); }
+.rk-iconbtn { border-radius: var(--r-btn); }
+
+/* ---- status pills: rounded, no dot, the pen's tints ---- */
+.rk-pill, .rk-chip { height: 20px; padding: 0 8px; gap: 4px; font: 500 11.5px/20px var(--font-sans); }
+.rk-pill::before, .rk-chip::before { display: none; }
+.rk-pill.draft, .rk-chip-draft { background: var(--ap-pill); color: var(--ap-pill-ink); }
+.rk-pill.cancelled, .rk-chip-cancelled { background: var(--ap-pill); color: var(--muted); text-decoration: line-through; text-decoration-color: currentColor; }
+
+@media (max-width: 600px) {
+  .ap-main .rk-pagehead { padding: 0 16px; }
+  .ap-main .rk-pagehead-row { min-height: 52px; padding: 10px 0 4px; }
+  .ap-main .rk-pagehead h1 { font-size: 17px; }
+  .ap-main .rk-shell-content { padding: 8px 16px 24px; }
+  .ap-main .rk-search { flex-basis: 100%; }
+  /* phone: index.html makes every control at least 40px tall; the fixed heights above must not cap it */
+  .ap-main .rk-search, .ap-main .rk-viewswitch, .ap-main .rk-seg { height: auto; min-height: 40px; }
+  .ap-shell .rk-navlink { height: auto; min-height: 40px; }
+  .ap-ubah-mode button { min-height: 40px; line-height: 40px; }
+}

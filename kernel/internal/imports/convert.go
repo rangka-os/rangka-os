@@ -15,11 +15,13 @@ var (
 	reEN    = regexp.MustCompile(`^[1-9]\d{0,2}(,\d{3})+(\.\d+)?$`)
 	rePlain = regexp.MustCompile(`^\d+([.,]\d+)?$`)
 
-	reDMY    = regexp.MustCompile(`^(\d{1,2})/(\d{1,2})/(\d{4})$`)
+	// Day first with one separator used twice: 31/12/2023, 31-12-2023 (Moka exports), 31.12.2023. A two-digit
+	// year is what Excel leaves after a re-save (31-12-23).
+	reDMY    = regexp.MustCompile(`^(\d{1,2})([/.-])(\d{1,2})[/.-](\d{2}|\d{4})$`)
 	reISO    = regexp.MustCompile(`^(\d{4})-(\d{1,2})-(\d{1,2})$`)
 	reSerial = regexp.MustCompile(`^(\d{1,7})(?:\.(\d+))?$`)
 	reExp    = regexp.MustCompile(`^(\d+)(?:\.(\d+))?[eE]([+-]?\d+)$`)
-	reTime   = regexp.MustCompile(`^(\d{1,2}):(\d{2})(?::(\d{2}))?$`)
+	reTime   = regexp.MustCompile(`^(\d{1,2})([:.])(\d{2})(?:[:.](\d{2}))?$`)
 )
 
 const maxExcelSerial = 2958465
@@ -64,13 +66,13 @@ func Convert(f *meta.Field, column, cell string) (any, string) {
 	case "date":
 		d, _, ok := parseDate(cell, false)
 		if !ok {
-			return bad(`Kolom "%s" harus tanggal (dd/mm/yyyy), isinya "%s"`)
+			return bad(`Kolom "%s" harus tanggal (dd-mm-yyyy atau dd/mm/yyyy), isinya "%s"`)
 		}
 		return d, ""
 	case "datetime":
 		d, tm, ok := parseDate(cell, true)
 		if !ok {
-			return bad(`Kolom "%s" harus tanggal (dd/mm/yyyy), isinya "%s"`)
+			return bad(`Kolom "%s" harus tanggal (dd-mm-yyyy atau dd/mm/yyyy), isinya "%s"`)
 		}
 		return d + "T" + tm, ""
 	case "check":
@@ -148,17 +150,24 @@ func excelDate(serial int) string {
 	return time.Date(1899, 12, 30, 0, 0, 0, 0, time.UTC).AddDate(0, 0, serial).Format("2006-01-02")
 }
 
-// parseClock validates HH:MM[:SS] and returns HH:MM:SS.
+// parseClock validates HH:MM[:SS] or HH.MM[.SS] (Indonesian Excel) and returns HH:MM:SS.
 func parseClock(s string) (string, bool) {
 	m := reTime.FindStringSubmatch(s)
 	if m == nil {
 		return "", false
 	}
+	seps := 1
+	if m[4] != "" {
+		seps = 2
+	}
+	if strings.Count(s, m[2]) != seps {
+		return "", false // 08:14.05: one separator per cell
+	}
 	h, _ := strconv.Atoi(m[1])
-	mi, _ := strconv.Atoi(m[2])
+	mi, _ := strconv.Atoi(m[3])
 	sec := 0
-	if m[3] != "" {
-		sec, _ = strconv.Atoi(m[3])
+	if m[4] != "" {
+		sec, _ = strconv.Atoi(m[4])
 	}
 	if h > 23 || mi > 59 || sec > 59 {
 		return "", false
@@ -186,9 +195,20 @@ func parseDate(s string, withTime bool) (date, clock string, ok bool) {
 	}
 	var y, mo, d int
 	if m := reDMY.FindStringSubmatch(datePart); m != nil {
+		if strings.Count(datePart, m[2]) != 2 {
+			return "", "", false // 31-12/2023: one separator per cell
+		}
 		d, _ = strconv.Atoi(m[1])
-		mo, _ = strconv.Atoi(m[2])
-		y, _ = strconv.Atoi(m[3])
+		mo, _ = strconv.Atoi(m[3])
+		y, _ = strconv.Atoi(m[4])
+		if len(m[4]) == 2 {
+			// Excel's two-digit-year window: 00-29 is 20xx, 30-99 is 19xx.
+			if y < 30 {
+				y += 2000
+			} else {
+				y += 1900
+			}
+		}
 	} else if m := reISO.FindStringSubmatch(datePart); m != nil {
 		y, _ = strconv.Atoi(m[1])
 		mo, _ = strconv.Atoi(m[2])

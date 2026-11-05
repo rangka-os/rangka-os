@@ -541,6 +541,17 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if m.IsSubmittable && toInt(cur["docstatus"]) == 1 {
 			return conflict("immutable", "Dokumen yang sudah diajukan tidak bisa dihapus; batalkan dulu")
 		}
+		// A cancelled document with an amended copy is the copy's history (amended_from points at it), and apps key
+		// uniqueness on that chain; deleting it, even as owner, would orphan the copy and free its keys.
+		if m.IsSubmittable && toInt(cur["docstatus"]) == 2 {
+			copies, err := store.Find(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, map[string]any{"amended_from": name}, store.FindOpts{})
+			if err != nil {
+				return err
+			}
+			if len(copies) > 0 {
+				return conflict("has_amendments", "Dokumen ini sudah diubah menjadi "+str(copies[0]["name"])+"; dokumen batal yang punya salinan tidak bisa dihapus")
+			}
+		}
 		if err := store.Delete(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name); err != nil {
 			return err
 		}

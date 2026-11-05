@@ -6,6 +6,9 @@ import (
 	"encoding/hex"
 	"errors"
 	"net/url"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"sync"
 	"testing"
@@ -590,13 +593,28 @@ func TestPilotStockAverageTransferSale(t *testing.T) {
 		t.Fatal("flow ran for a move that is not negative")
 	}
 
+	// last_sale_date follows the latest sale date of the balance; receipts and transfers do not touch it
+	if got := dateOnly(b["last_sale_date"]); got != "2026-10-30" {
+		t.Fatalf("last_sale_date = %q, want 2026-10-30", got)
+	}
+	if got := dateOnly(p.balance(m.outA, m.beras)["last_sale_date"]); got != "" {
+		t.Fatalf("last_sale_date of a balance never sold from = %q", got)
+	}
+	p.doc("outlet_sales", map[string]any{"outlet": m.outC, "date": "2026-10-29", "lines": []any{map[string]any{"item": m.nasi, "qty": 1}}})
+	if got := dateOnly(p.balance(m.outC, m.beras)["last_sale_date"]); got != "2026-10-30" {
+		t.Fatalf("an earlier sale moved last_sale_date to %q", got)
+	}
+
 	dup := p.create("outlet_sales", map[string]any{"outlet": m.outC, "date": "2026-10-30", "lines": []any{map[string]any{"item": m.nasi, "qty": 1}}})
 	_, err = p.e.Submit(p.ctx, p.a, "outlet_sales", dup, true)
 	wantCode(t, err, 409, "duplicate_sales")
 	if err := p.cancel("outlet_sales", sale); err != nil {
 		t.Fatal(err)
 	}
-	p.wantBalance(m.outC, m.beras, 20, 260000, 13000)
+	p.wantBalance(m.outC, m.beras, 19.9, 258700, 13000)
+	if got := dateOnly(p.balance(m.outC, m.beras)["last_sale_date"]); got != "2026-10-29" {
+		t.Fatalf("after cancelling the 30 Oct sale last_sale_date = %q, want 2026-10-29 (the sale left)", got)
+	}
 }
 
 // TestPilotStockCountWastePacking: a count posts the difference and records system_qty; waste goes out at
@@ -1035,5 +1053,65 @@ func TestPilotReviewMinors(t *testing.T) {
 	}
 	if err := p.runHook(wrong, "quotation", q, nil); err == nil {
 		t.Fatal("SetSubmitted accepted rows of the wrong type")
+	}
+}
+
+// TestPilotLastSaleBackfill: a site that upgrades gets last_sale_date from its existing sale moves (cancelled
+// sales do not count), a later cancel derives it again, and an earlier-dated sale never moves it back.
+func TestPilotLastSaleBackfill(t *testing.T) {
+	old := filepath.Join(t.TempDir(), "apps")
+	if err := exec.Command("cp", "-r", pilotApps, old).Run(); err != nil {
+		t.Fatal(err)
+	}
+	sb := filepath.Join(old, "stock", "models", "stock_balance.rk")
+	b, _ := os.ReadFile(sb)
+	os.WriteFile(sb, []byte(strings.Replace(string(b), "  - {name: last_sale_date, type: date, read_only: true}\n", "", 1)), 0o644)
+	p := setupPilotApps(t, old)
+	m := p.masters()
+	p.receipt(m, m.outB, 100, 12000)
+	p.receipt(m, m.outA, 10, 12000)
+	p.create("recipe", map[string]any{"product": m.nasi, "yield_qty": 1, "lines": []any{map[string]any{"material": m.beras, "qty": 0.1}}})
+	sale := func(date string) string {
+		return p.doc("outlet_sales", map[string]any{"outlet": m.outB, "date": date, "lines": []any{map[string]any{"item": m.nasi, "qty": 10}}})
+	}
+	sale("2026-10-20")
+	s25 := sale("2026-10-25")
+	s28 := sale("2026-10-28")
+	if err := p.cancel("outlet_sales", s28); err != nil {
+		t.Fatal(err)
+	}
+
+	// upgrade: the app now declares the field; migrate adds the column and backfills it
+	reg, rep := meta.Validate(pilotApps, pilotSite, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatal(rep.All())
+	}
+	res, err := store.Migrate(p.ctx, p.e.DB, reg, false, "test")
+	if err != nil || !strings.Contains(strings.Join(res.Statements, ";"), `add column "last_sale_date"`) {
+		t.Fatalf("migrate: %v %v", res, err)
+	}
+	p.e.reg.Store(reg)
+	if got := dateOnly(p.balance(m.outB, m.beras)["last_sale_date"]); got != "2026-10-25" {
+		t.Fatalf("backfilled last_sale_date = %q, want 2026-10-25 (the cancelled 28 Oct sale does not count)", got)
+	}
+	if got := dateOnly(p.balance(m.outA, m.beras)["last_sale_date"]); got != "" {
+		t.Fatalf("backfill gave a balance never sold from %q", got)
+	}
+	if err := p.cancel("outlet_sales", s25); err != nil {
+		t.Fatal(err)
+	}
+	if got := dateOnly(p.balance(m.outB, m.beras)["last_sale_date"]); got != "2026-10-20" {
+		t.Fatalf("after cancelling the 25 Oct sale last_sale_date = %q, want 2026-10-20", got)
+	}
+	sale("2026-10-22")
+	if got := dateOnly(p.balance(m.outB, m.beras)["last_sale_date"]); got != "2026-10-22" {
+		t.Fatalf("after a 22 Oct sale last_sale_date = %q, want 2026-10-22", got)
+	}
+	// cancelling the newest sale goes back to the newest one left
+	if err := p.cancel("outlet_sales", sale("2026-10-26")); err != nil {
+		t.Fatal(err)
+	}
+	if got := dateOnly(p.balance(m.outB, m.beras)["last_sale_date"]); got != "2026-10-22" {
+		t.Fatalf("after cancelling the newest sale last_sale_date = %q, want 2026-10-22", got)
 	}
 }

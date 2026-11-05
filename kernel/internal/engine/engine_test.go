@@ -193,6 +193,10 @@ func TestInvoiceLifecycle(t *testing.T) {
 	if err != nil || res.Record["name"] != "INV-2026-00047-1" {
 		t.Fatalf("submit amendment: %v %v", res, err)
 	}
+	// the cancelled original has an amended copy: no one, not even the owner, may delete it
+	if err := e.Delete(ctx, a, "sales_invoice", "INV-2026-00047"); !errors.As(err, &se) || se.Status != 409 || se.Code != "has_amendments" {
+		t.Fatalf("delete a cancelled document with an amendment: %v", err)
+	}
 	// a new invoice continues the series
 	res, _ = e.Create(ctx, a, "sales_invoice", map[string]any{"customer": "CUST-0031", "outlet": "OUT-02", "items": []any{map[string]any{"item": "BRG-0101", "qty": 1}}})
 	if res, err = e.Submit(ctx, a, "sales_invoice", res.Record["name"].(string), false); err != nil || res.Record["name"] != "INV-2026-00048" {

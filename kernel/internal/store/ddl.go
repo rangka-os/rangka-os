@@ -589,6 +589,13 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 		if _, err := tx.Exec(ctx, s.SQL); err != nil {
 			return nil, fmt.Errorf("%s: %w", firstLine(s.SQL), err)
 		}
+		for _, b := range backfills {
+			if b.after(s.SQL) && b.ready(desired) {
+				if _, err := tx.Exec(ctx, b.sql); err != nil {
+					return nil, fmt.Errorf("backfill %s.%s: %w", b.table, b.column, err)
+				}
+			}
+		}
 	}
 	if len(res.Steps) > 0 {
 		if _, err := tx.Query(ctx, "insert into rk_migrations (source, statements, steps, risk) values ($1, $2, $3, $4)",
@@ -609,6 +616,56 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 	}
 	return res, tx.Commit(ctx)
 }
+
+// backfill fills a kernel-written column from existing records in the migration's transaction, right after the
+// step that adds the column, so a site that upgrades gets the values its old records imply (a field the stock
+// hooks write would otherwise stay empty until each record is next written).
+type backfill struct {
+	table, column string
+	needs         map[string][]string // other tables and columns the statement reads
+	sql           string
+}
+
+func (b backfill) after(stepSQL string) bool {
+	return strings.HasPrefix(stepSQL, fmt.Sprintf("alter table %s add column %s ", pg.QuoteIdent(b.table), pg.QuoteIdent(b.column)))
+}
+
+func (b backfill) ready(desired []Table) bool {
+	for t, cols := range b.needs {
+		var tab *Table
+		for i := range desired {
+			if desired[i].Name == t {
+				tab = &desired[i]
+			}
+		}
+		if tab == nil {
+			return false
+		}
+		for _, c := range cols {
+			found := false
+			for _, col := range tab.Columns {
+				found = found || col.Name == c
+			}
+			if !found {
+				return false
+			}
+		}
+	}
+	return true
+}
+
+var backfills = []backfill{{
+	// stock_balance.last_sale_date: the latest sale move of the balance whose document has no reversal move for the
+	// same outlet and item (as stock.post_moves derives it, kernel/internal/engine/stock.go lastSaleDate).
+	table: "r_stock_balance", column: "last_sale_date",
+	needs: map[string][]string{"r_stock_move": {"outlet", "item", "reason", "voucher_type", "voucher", "posting_date"}},
+	sql: `update r_stock_balance b set last_sale_date = x.d
+from (select m.org_id, m.outlet, m.item, max(m.posting_date) as d from r_stock_move m
+      where m.reason = 'sale' and not exists (select 1 from r_stock_move r where r.org_id = m.org_id and r.reason = 'reversal'
+            and r.voucher_type = m.voucher_type and r.voucher = m.voucher and r.outlet = m.outlet and r.item = m.item)
+      group by m.org_id, m.outlet, m.item) x
+where b.org_id = x.org_id and b.outlet = x.outlet and b.item = x.item`,
+}}
 
 // kernelTables creates the kernel tables. On a dry run it does so in a transaction that done rolls back, so a
 // dry run changes nothing even on an empty database; q reads through that transaction.

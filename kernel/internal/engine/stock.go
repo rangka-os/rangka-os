@@ -3,6 +3,7 @@ package engine
 import (
 	"math"
 	"sort"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -130,6 +131,21 @@ func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *in
 	fields := map[string]any{"qty": bq, "value": moneyOut(bv), "avg_cost": moneyOut(avg)}
 	if has(s.h.op.e.Reg().Model("stock_balance"), "last_move") {
 		fields["last_move"] = mv["name"]
+	}
+	// last_sale_date: the latest posting date of a sale out of this balance that is not cancelled, so an app can
+	// list slow-moving stock (qty > 0, not sold for N days) with a plain filter. A sale dated before it leaves it
+	// alone; while it is empty (first sale, or a balance from before the field) it is derived from the moves.
+	if reason == "sale" && qty < 0 && has(s.h.op.e.Reg().Model("stock_balance"), "last_sale_date") {
+		last := dateOnly(bal["last_sale_date"])
+		if last == "" {
+			if last, err = s.lastSaleDate(outlet, item); err != nil {
+				return nil, err
+			}
+		}
+		if s.date > last {
+			last = s.date
+		}
+		fields["last_sale_date"] = last
 	}
 	if _, err := s.h.SetSubmitted("stock_balance", str(bal["name"]), fields); err != nil {
 		return nil, err
@@ -445,9 +461,13 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 		return nil, err
 	}
 	n := 0
+	var sold [][2]string
 	for _, mv := range moves {
 		if str(mv["reason"]) == "reversal" {
 			continue
+		}
+		if str(mv["reason"]) == "sale" {
+			sold = append(sold, [2]string{str(mv["outlet"]), str(mv["item"])})
 		}
 		v := moneyIn(mv["value"])
 		if v < 0 {
@@ -457,6 +477,9 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 			return nil, err
 		}
 		n++
+	}
+	if err := s.refreshLastSale(sold); err != nil {
+		return nil, err
 	}
 	if h.Model.Name == "goods_receipt" {
 		if err := receivedOnPO(h, -1); err != nil {
@@ -532,4 +555,74 @@ func receivedOnPO(h *HookCtx, sign float64) error {
 	}
 	_, err = h.SetSubmitted("purchase_order", poName, fields)
 	return err
+}
+
+// lastSaleDate is the latest posting date of a sale move out of (outlet, item) whose document is not cancelled:
+// the sale moves of a voucher that has a reversal move for the same outlet and item do not count. "" when none.
+func (s *stockPost) lastSaleDate(outlet, item string) (string, error) {
+	sales, err := s.h.Find("stock_move", map[string]any{"outlet": outlet, "item": item, "reason": "sale"})
+	if err != nil || len(sales) == 0 {
+		return "", err
+	}
+	revs, err := s.h.Find("stock_move", map[string]any{"outlet": outlet, "item": item, "reason": "reversal"})
+	if err != nil {
+		return "", err
+	}
+	reversed := map[string]bool{}
+	for _, r := range revs {
+		reversed[str(r["voucher_type"])+"|"+str(r["voucher"])] = true
+	}
+	last := ""
+	for _, m := range sales {
+		if d := dateOnly(m["posting_date"]); !reversed[str(m["voucher_type"])+"|"+str(m["voucher"])] && d > last {
+			last = d
+		}
+	}
+	return last, nil
+}
+
+// refreshLastSale derives last_sale_date again for balances whose sale moves were just reversed.
+func (s *stockPost) refreshLastSale(keys [][2]string) error {
+	if !has(s.h.op.e.Reg().Model("stock_balance"), "last_sale_date") {
+		return nil
+	}
+	seen := map[[2]string]bool{}
+	for _, k := range keys {
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		bal, err := s.balance(k[0], k[1])
+		if err != nil {
+			return err
+		}
+		last, err := s.lastSaleDate(k[0], k[1])
+		if err != nil {
+			return err
+		}
+		var v any
+		if last != "" {
+			v = last
+		}
+		if _, err := s.h.SetSubmitted("stock_balance", str(bal["name"]), map[string]any{"last_sale_date": v}); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// dateOnly is a date field as yyyy-mm-dd ("" when empty), whether the store returned text or a time.
+func dateOnly(v any) string {
+	switch d := v.(type) {
+	case nil:
+		return ""
+	case time.Time:
+		return d.Format("2006-01-02")
+	case string:
+		if len(d) >= 10 {
+			return d[:10]
+		}
+		return d
+	}
+	return ""
 }

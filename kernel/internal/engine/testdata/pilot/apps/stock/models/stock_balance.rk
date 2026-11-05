@@ -9,3 +9,4 @@ fields:
   - {name: avg_cost, type: currency, read_only: true}
   - {name: negative, type: check, compute: qty < 0}
   - {name: last_move, type: data, read_only: true}
+  - {name: last_sale_date, type: date, read_only: true}

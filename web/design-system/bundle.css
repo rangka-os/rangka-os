@@ -872,6 +872,51 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   .rk-docpanel { width: auto; flex: none; border-left: 0; border-top: 1px solid var(--line); padding: 0; }
 }
 
+/* ---------------------------------------------------------------- Raka: ⌘J ask bar (bottom centre) and the chat drawer (right, non-modal) */
+.rk-askbar { position: fixed; z-index: 55; left: 50%; bottom: 24px; transform: translateX(-50%); width: min(560px, calc(100% - 32px)); box-sizing: border-box;
+  display: flex; flex-direction: column; gap: 10px; padding: 12px; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-dialog); box-shadow: var(--shadow-pop); }
+.rk-askbar-ctx { display: flex; }
+.rk-askbar-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; max-width: 100%; padding: 0 2px 0 8px; box-sizing: border-box; border-radius: var(--r); background: var(--neutral); color: var(--ink-2); font-size: var(--font-size-sm); font-weight: 500; }
+.rk-askbar-chip .l { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-askbar-chip .rk-icon { width: 14px; height: 14px; color: var(--muted); }
+.rk-askbar-chip button { display: inline-grid; place-items: center; width: 20px; height: 20px; padding: 0; border: 0; border-radius: var(--r-sm); background: transparent; color: var(--muted); cursor: pointer; }
+.rk-askbar-chip button:hover { background: var(--neutral-hover); color: var(--ink); }
+.rk-askbar-input { border: 0; outline: none; background: transparent; resize: none; padding: 2px; font: 14px/20px var(--font-sans); color: var(--ink); min-height: 24px; max-height: 160px; field-sizing: content; }
+.rk-askbar-input::placeholder { color: var(--faint); }
+.rk-askbar-foot { display: flex; align-items: center; gap: 8px; }
+.rk-askbar-chat { display: inline-flex; align-items: center; gap: 6px; height: var(--control); padding: 0 6px; border: 0; border-radius: var(--r-btn); background: transparent; color: var(--muted); font: var(--font-size-sm)/1 var(--font-sans); cursor: pointer; }
+.rk-askbar-chat:hover { background: var(--hover); color: var(--ink); }
+.rk-askbar .rk-btn-primary .rk-kbd { background: transparent; color: inherit; opacity: .7; padding: 0 0 0 2px; }
+.rk-askbar button:focus-visible, .rk-chat button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-chat { position: fixed; z-index: 45; top: 0; right: 0; bottom: 0; width: min(420px, 100%); box-sizing: border-box; display: flex; flex-direction: column;
+  background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow-pop); }
+.rk-chat-head { display: flex; align-items: center; gap: 8px; min-height: var(--header); padding: 0 8px 0 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
+.rk-chat-head b { font: 600 14px/20px var(--font-sans); color: var(--ink); }
+.rk-chat-head > .rk-iconbtn { color: var(--muted); }
+.rk-chat-log { flex: 1; min-height: 0; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 12px; }
+.rk-chat-empty { margin: auto 0; color: var(--muted); text-align: center; padding: 0 16px; }
+.rk-chat-me { align-self: flex-end; max-width: 85%; padding: 8px 12px; border-radius: var(--r-dialog); background: var(--neutral); color: var(--ink); white-space: pre-wrap; overflow-wrap: anywhere; }
+.rk-chat-raka { display: flex; gap: 8px; align-items: flex-start; }
+.rk-chat-raka .body { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.rk-chat-text { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); }
+.rk-chat-act { font-size: var(--font-size-sm); color: var(--muted); }
+.rk-chat-cs { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px solid var(--line); border-radius: var(--r-lg); }
+.rk-chat-cs b { font-weight: 600; color: var(--ink); }
+.rk-chat-cs .acts { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-left: -4px; }
+.rk-chat-cs small { font-size: var(--font-size-sm); color: var(--muted); }
+.rk-chat-comp { display: flex; align-items: flex-end; gap: 8px; padding: 10px 12px; border-top: 1px solid var(--line); flex-shrink: 0; }
+.rk-chat-comp textarea { flex: 1; min-width: 0; min-height: var(--field); max-height: 160px; box-sizing: border-box; padding: 4px 10px; border: 1px solid var(--border); border-radius: var(--r); background: var(--soft);
+  resize: none; font: var(--font-size)/var(--line-height) var(--font-sans); color: var(--ink); field-sizing: content; }
+.rk-chat-comp textarea::placeholder { color: var(--faint); }
+.rk-chat-comp textarea:focus { outline: none; background: var(--surface); border-color: var(--focus); box-shadow: 0 0 0 2px var(--selected); }
+@media (max-width: 600px) {
+  .rk-askbar { left: 0; right: 0; bottom: 0; width: auto; transform: none; border-radius: var(--r-dialog) var(--r-dialog) 0 0; border-width: 1px 0 0; }
+  .rk-askbar-chip { height: auto; }
+  .rk-askbar-input { min-height: 40px; padding: 10px 2px; }
+  .rk-askbar-chip button { width: 40px; height: 40px; }
+  .rk-chat { width: auto; left: 0; border-left: 0; box-shadow: none; }
+}
+
 /* ---------------------------------------------------------------- phones: tap targets that override the component rules above */
 @media (max-width: 600px) {
   .rk-tag button { width: var(--control-sm); height: var(--control-sm); }

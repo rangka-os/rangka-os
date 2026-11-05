@@ -346,6 +346,19 @@
           { title: "Lampiran", content: "struk-27-okt.jpg" },
           { title: "Persetujuan", content: h(R.StatusChip, { status: "paid" }) }] }));
     },
+    AskBar: function () {
+      var v = useState("Berapa faktur yang jatuh tempo bulan ini?"), c = useState({ label: "Faktur penjualan" });
+      return h(Frame, null, h(R.AskBar, { open: true, context: c[0], onRemoveContext: function () { c[1](null); }, value: v[0], onChange: v[1],
+        onSend: function () { v[1](""); }, onOpenChat: function () {}, onClose: function () {} }));
+    },
+    ChatDrawer: function () {
+      return h(Frame, { tall: true }, h(R.ChatDrawer, { open: true, onSend: function () {}, onNew: function () {}, onClose: function () {}, turns: [
+        { role: "user", text: "Berapa faktur yang jatuh tempo bulan ini?" },
+        { role: "assistant", activity: ["Membaca 142 faktur…"], text: "Ada 3 faktur jatuh tempo bulan ini, total Rp 5.180.000. Yang paling besar PT Lestari, Rp 3.900.000 (jatuh tempo 20 Nov)." },
+        { role: "user", text: "Tambah field Nomor PO di faktur, wajib untuk pelanggan grosir" },
+        { role: "assistant", activity: ["Menyusun change set…"], text: "Aku sudah menyusun usulannya. Cek pratinjaunya dulu.",
+          changesets: [{ id: "cs-0815", title: "Nomor PO wajib untuk pelanggan grosir", risk: "low", status: "previewed" }] }] }));
+    },
     Sparkline: function () { return h("div", { className: "gx-row" }, h(R.Sparkline, { data: [38, 41, 39, 45, 48, 51] }), h(R.Sparkline, { data: [12, 9, 11, 7, 5, 3], color: "var(--bad-solid)", width: 120 })); }
   };
 

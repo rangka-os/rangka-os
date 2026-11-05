@@ -177,4 +177,15 @@ export interface ReportColumn { field: string; label: string; align?: 'left' | '
 export declare function ReportTable(props: { columns: ReportColumn[]; rows: Record<string, any>[]; totals?: { label: Node; values?: Record<string, Node> }; onColumnsChange?: (columns: ReportColumn[]) => void; emptyText?: string }): React.ReactElement;
 /** 280px right panel; wrap the form and the panel in .rk-docpage so the panel moves below the form at <= 1100px. */
 export declare function DocPanel(props: { sections: { id?: string; title?: Node; content: Node }[]; label?: string }): React.ReactElement;
+/** ⌘J ask bar: 560px, fixed 24px above the bottom, centred (a full-width sheet on phones). Renders nothing when closed.
+ *  Esc calls onClose; Enter calls onSend (Shift+Enter is a newline); blank or busy does not send. */
+export declare function AskBar(props: { open: boolean; context: { label: string } | null; onRemoveContext?: () => void; value: string; onChange: (v: string) => void;
+  onSend: () => void; onOpenChat?: () => void; onClose: () => void; busy?: boolean }): React.ReactElement | null;
+export type ChangesetRisk = 'low' | 'medium' | 'high' | 'unknown';
+export interface ChatChangeset { id: string; title: string; risk: ChangesetRisk; status: string }
+export interface ChatTurn { role: 'user' | 'assistant'; text: string; activity?: string[]; changesets?: ChatChangeset[]; escalate?: string; error?: string }
+/** 420px chat with Raka on the right, non-modal (no scrim), full screen at 600px and below. The log is aria-live="polite" and scrolls to the newest turn.
+ *  The default change set card shows title, risk pill, "Lihat pratinjau" (onPreview) and "Buka di Ubah" (onOpenUbah); renderChangeset replaces it. */
+export declare function ChatDrawer(props: { open: boolean; turns: ChatTurn[]; busy?: boolean; onSend: (text: string) => void; onNew?: () => void; onClose: () => void;
+  renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void }): React.ReactElement | null;
 declare global { interface Window { Rangka: Record<string, any> } }

@@ -29,7 +29,9 @@ Raka, the AI agent in `rangka-ai`, should answer and propose change sets from in
    - `done` `{}`: ends the stream.
 4. **Guardrails in the kernel, not only in prompts.**
    - A request authenticated by a token with `ai: true` is refused with `403 ai_forbidden` for every REST call that is not `GET` or `HEAD` under `/api/v1/` (`POST /api/v1/ai/chat` included): approve, reject, apply and revert of change sets, record create, update, delete, lifecycle and actions. It proposes change sets over MCP only, and the MCP approve/apply tools refuse it the same way.
-   - This holds whatever `config.ai.auto_apply` says.
+   - Raka's token never applies, whatever `config.ai.auto_apply` says.
+   - Exception decided by the owner (5 Nov 2026): when the company sets `config.ai.auto_apply: low_risk`, the kernel itself applies a low-risk change set from Raka right after its preview succeeds. It applies it as `system` on the company's own setting, and the history notes `applied automatically (config.ai.auto_apply: low_risk)`. Medium and high risk still wait for a person. The default (`never`) applies nothing automatically.
+   - Approvers see `source: "ai"` as "Dari Raka" in Ubah and the Console.
    - Change sets created this way get `created_by` = the person and `source: "ai"` (schema `changeset.json`).
    - A change set proposed for another organisation than the caller's is refused with `403 org_mismatch`, for every caller, not only the assistant.
 5. **Audit.** One audit entry per chat request: person, org, tool names used, change set ids, duration. Message text is not stored.

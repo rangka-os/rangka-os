@@ -3080,6 +3080,28 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
     ctx.live.add("ubah")
 
 
+def test_ubah_marks_raka_proposals(page, ctx):
+    """Approvers see that a change set came from Raka: a "Dari Raka" pill in the pending list and on the card,
+    with who asked for it."""
+    cs = {"id": "cs_raka01", "title": "Nomor PO wajib untuk pelanggan grosir", "status": "previewed", "risk": "medium",
+          "source": "ai", "author": {"kind": "ai", "id": ctx.owner[0]}, "ops": [], "layers": [5], "history": [],
+          "preview": {"migrations": [], "affected": {}, "files": [], "notes": [], "reversible": True}}
+    page.route(re.compile(r".*/api/v1/changesets\?status=previewed$"), lambda r: r.fulfill(json={"data": [cs]}))
+    page.route(re.compile(r".*/api/v1/changesets\?status=approved$"), lambda r: r.fulfill(json={"data": []}))
+    page.route(re.compile(r".*/api/v1/changesets/cs_raka01$"), lambda r: r.fulfill(json=cs))
+    open_route(page, ctx, ctx.home()[0])
+    ubah_on(page)
+    page.get_by_role("button", name="Perubahan menunggu").click()
+    item = page.locator(".ap-ubah-pending li", has_text=cs["title"])
+    item.wait_for(timeout=10000)
+    assert item.locator(".rk-pill", has_text="Dari Raka").count() == 1, "the pending list marks Raka's proposal"
+    item.locator("button").click()
+    card = page.locator(".ap-ubah-card-cs", has_text=cs["title"])
+    card.wait_for(timeout=10000)
+    assert card.locator(".rk-pill", has_text="Dari Raka").count() == 1, "the card marks Raka's proposal"
+    page.get_by_text(f"Diusulkan Raka atas permintaan {ctx.owner[0]}").wait_for(timeout=5000)
+
+
 def test_ubah_hidden_for_rep(page, ctx):
     page.goto(ctx.base + "/app/?mode=ubah")
     sign_in(page, *SALES)

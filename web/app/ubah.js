@@ -633,7 +633,8 @@
         : !list.length ? h("p", { className: "ap-muted" }, "Tidak ada perubahan yang menunggu.")
           : h("ul", { className: "ap-ubah-pending" }, list.map(function (c) {
             return h("li", { key: c.id }, h("button", { type: "button", onClick: function () { p.onOpen(c.id); } },
-              h("span", null, c.title || c.id), h(R.Lozenge, { tone: c.status === "approved" ? "info" : TONE[c.risk] }, c.status === "approved" ? "Disetujui" : RA.riskLabel(c.risk))));
+              h("span", null, c.title || c.id), c.source === "ai" ? h(R.Lozenge, { tone: "new" }, "Dari Raka") : null,
+              h(R.Lozenge, { tone: c.status === "approved" ? "info" : TONE[c.risk] }, c.status === "approved" ? "Disetujui" : RA.riskLabel(c.risk))));
           }));
       return frame("Perubahan menunggu", rows, h(R.Button, { onClick: p.onClose }, "Tutup"));
     }
@@ -646,7 +647,9 @@
     function group(kind) { return lines.filter(function (l) { return l.kind === kind; }); }
     var mig = group("migration"), files = group("file"), aff = group("affected"), notes = group("note");
     var body = h(React.Fragment, null,
-      h("p", { className: "ap-ubah-card-cs" }, h("b", null, cs.title || cs.id), " ", h(R.Lozenge, { tone: invalid ? "bad" : TONE[cs.risk] }, invalid ? "Belum valid" : RA.riskLabel(cs.risk))),
+      h("p", { className: "ap-ubah-card-cs" }, h("b", null, cs.title || cs.id), " ", h(R.Lozenge, { tone: invalid ? "bad" : TONE[cs.risk] }, invalid ? "Belum valid" : RA.riskLabel(cs.risk)),
+        cs.source === "ai" ? h(React.Fragment, null, " ", h(R.Lozenge, { tone: "new" }, "Dari Raka")) : null),
+      cs.source === "ai" ? h("p", { className: "ap-muted" }, "Diusulkan Raka atas permintaan " + ((cs.author && cs.author.id) || "seseorang") + ". Periksa isinya sebelum menyetujui.") : null,
       invalid ? h("ul", { className: "ap-errlist" }, (errs.length ? errs : [{ message: "Change set ini tidak lolos validasi." }]).map(function (x, i) {
         return h("li", { key: i }, x.message, x.file ? h("span", { className: "ap-muted" }, " (" + x.file + ")") : null);
       })) : null,

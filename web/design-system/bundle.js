@@ -1354,6 +1354,11 @@
   var RISK = { low: ["ok", "Risiko rendah"], medium: ["warn", "Risiko sedang"], high: ["bad", "Risiko tinggi"] };
   function ChangesetCard(p) {
     var cs = p.cs, r = RISK[cs.risk] || ["default", "Risiko belum diketahui"];
+    // applied: the kernel applied it on config.ai.auto_apply: low_risk, so there is nothing left to preview or approve
+    if (cs.status === "applied") {
+      return h("div", { className: "rk-chat-cs" }, h("b", null, cs.title), h("div", null, h(Lozenge, { tone: r[0] }, r[1]), " ", h(Lozenge, { tone: "ok" }, "Diterapkan")),
+        h("small", null, "Sudah diterapkan otomatis karena risikonya rendah. Orang yang berwenang bisa mengurungkannya."));
+    }
     return h("div", { className: "rk-chat-cs" }, h("b", null, cs.title), h("div", null, h(Lozenge, { tone: r[0] }, r[1])),
       h("div", { className: "acts" },
         h(Button, { variant: "link", onClick: function () { if (p.onPreview) p.onPreview(cs.id); } }, "Lihat pratinjau"),

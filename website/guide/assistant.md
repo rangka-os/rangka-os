@@ -57,8 +57,11 @@ Enforced by the kernel, not by prompts:
 - Raka acts as the signed-in person: their roles, their row scope, their organisation. It never sees more than they do.
 - Its token (10 minutes, claim `ai`) may only read over REST. Every other REST call answers `403 ai_forbidden`; over
   MCP it may read and propose, validate and preview change sets, nothing else.
-- It never approves, rejects, applies or reverts a change set, and never creates, edits or submits a record, whatever
-  `config.ai.auto_apply` says. Its change sets stop at `previewed`, carry `source: "ai"` and wait for a person.
+- It never approves, rejects, applies or reverts a change set, and never creates, edits or submits a record. Its change
+  sets carry `source: "ai"`, show as "Dari Raka" to approvers, and stop at `previewed` to wait for a person.
+- One exception, chosen per company: with `config.ai.auto_apply: low_risk`, the kernel applies a **low-risk** change set
+  from Raka right after its preview, on the company's setting (the history says so). It can be undone like any applied
+  change set. Medium and high risk always wait for a person; the default `never` applies nothing automatically.
 - A change set proposed for another organisation is refused (`403 org_mismatch`).
 - Limits per person: one chat at a time (`429 ai_busy`), 30 chats per 10 minutes (`429 ai_rate_limited`), 120 seconds
   per chat, 4,000 characters per message (`400 bad_request`). History is kept in the browser tab (at most 20 turns), one

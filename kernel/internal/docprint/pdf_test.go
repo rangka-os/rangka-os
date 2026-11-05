@@ -63,6 +63,27 @@ func TestPDFNoOutputFile(t *testing.T) {
 	}
 }
 
+// A cold Chromium on a busy CI runner spent ~20 s starting before it printed: the timeout must leave room for
+// that, and the flags must skip first-run, extension, sync and network work that slows a cold start.
+func TestPDFStartupFlagsAndTimeout(t *testing.T) {
+	if pdfTimeout < 60*time.Second {
+		t.Fatalf("pdfTimeout = %v, want at least 60s", pdfTimeout)
+	}
+	args := filepath.Join(t.TempDir(), "args")
+	fakeChromium(t, `printf '%s\n' "$@" > `+args+`; exit 1`)
+	PDF(context.Background(), []byte("<p>x</p>"))
+	b, err := os.ReadFile(args)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, f := range []string{"--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-sync",
+		"--disable-background-networking", "--disable-component-update", "--disable-dev-shm-usage"} {
+		if !strings.Contains(string(b), f+"\n") {
+			t.Errorf("chromium not started with %s; got:\n%s", f, b)
+		}
+	}
+}
+
 func TestTail(t *testing.T) {
 	if got := tail("abc", 10); got != "abc" {
 		t.Fatal(got)

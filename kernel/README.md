@@ -9,6 +9,7 @@ API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The b
 ```
 make test       # all tests against a throwaway Postgres (started and removed by scripts/pgtemp.sh)
 make run-demo   # temp Postgres → migrate → seed → serve :8080 with --dev-open; Ctrl-C cleans up
+                # (+ the Raka sidecar, scripted, when ../rangka-ai or $RANGKA_AI_DIR is built)
 make validate   # rangka validate on testdata/catalogue-v0 (rangka-apps as of v0) + rangka-connectors
 make compare-python   # Go vs rangka_validate.py on the v0 catalogue, the broken copies and the modules/apps fixtures (must be identical)
 ```

@@ -47,9 +47,13 @@ type Service struct {
 // Principal is an authenticated caller.
 type Principal struct {
 	User  *User
-	Via   string // session, token, oidc, dev
-	Scope string // OAuth scopes for oidc tokens
+	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken)
+	Scope string // OAuth scopes for oidc and ai tokens
 }
+
+// AIForbiddenMessage is the message of the ai_forbidden error: an assistant asked for something only a
+// person may do (approve, apply, revert, write records).
+const AIForbiddenMessage = "Raka tidak boleh melakukan ini; minta orang yang berwenang."
 
 // Human reports a person signed in with a browser session (or the dev-open demo user).
 func (p *Principal) Human() bool { return p.Via == "session" || p.Via == "dev" }
@@ -183,6 +187,9 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			return nil, ErrUnauthenticated
 		}
 		scope, _ := claims["scope"].(string)
+		if ai, _ := claims["ai"].(bool); ai {
+			return &Principal{User: u, Via: "ai", Scope: scope}, nil
+		}
 		return &Principal{User: u, Via: "oidc", Scope: scope}, nil
 	}
 	if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {

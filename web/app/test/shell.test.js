@@ -230,4 +230,5 @@ test("commandGroups: every nav item once under Halaman, Buat baru per layout.nav
   assert.deepStrictEqual(plain(A.commandGroups(META, {}, A.sideNav(META, {}))).map((x) => x.label), ["Halaman"]);
   const ai = plain(A.commandGroups({ ...META, features: { ai: true } }, {}, A.sideNav(META, {})));
   assert.deepStrictEqual(ai.map((x) => x.label), ["Halaman", "Tanya Raka"]);
+  assert.strictEqual(ai[1].filter, false, "Tanya Raka stays whatever is typed (the query becomes the question)");
 });

@@ -77,6 +77,7 @@ type ChangeSet struct {
 	Title      string      `json:"title"`
 	Reason     string      `json:"reason,omitempty"`
 	Author     Author      `json:"author"`
+	Source     string      `json:"source,omitempty"` // "ai" when the embedded assistant proposed it (contract 0020)
 	Org        string      `json:"org,omitempty"`
 	Ops        []Op        `json:"ops"`
 	Layers     []int       `json:"layers"`
@@ -97,6 +98,8 @@ type Actor struct {
 	Roles []string
 	Human bool   // a person with a browser session (approval needs one)
 	Kind  string // user, ai, console, cli (author kind for proposals)
+	// Assistant is the embedded assistant acting for the person (auth Via ai): it proposes, never applies
+	Assistant bool
 }
 
 // Error carries an HTTP status.
@@ -418,9 +421,9 @@ func (s *Service) save(ctx context.Context, q pg.Querier, cs *ChangeSet, insert 
 		pre = pg.JSON{V: cs.Preview}
 	}
 	if insert {
-		_, err := q.Query(ctx, `insert into rk_changesets (id, org_id, title, reason, author, ops, layers, risk, status, validation, preview, history, previous)
-			values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13)`, cs.ID, cs.Org, cs.Title, cs.Reason, pg.JSON{V: cs.Author}, pg.JSON{V: cs.Ops},
-			pg.JSON{V: cs.Layers}, cs.Risk, cs.Status, val, pre, pg.JSON{V: cs.History}, prev)
+		_, err := q.Query(ctx, `insert into rk_changesets (id, org_id, title, reason, author, ops, layers, risk, status, validation, preview, history, previous, source)
+			values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, cs.ID, cs.Org, cs.Title, cs.Reason, pg.JSON{V: cs.Author}, pg.JSON{V: cs.Ops},
+			pg.JSON{V: cs.Layers}, cs.Risk, cs.Status, val, pre, pg.JSON{V: cs.History}, prev, cs.Source)
 		return err
 	}
 	_, err := q.Query(ctx, `update rk_changesets set status = $2, validation = $3, preview = $4, history = $5, previous = coalesce($6, previous), updated_at = now()
@@ -429,7 +432,7 @@ func (s *Service) save(ctx context.Context, q pg.Querier, cs *ChangeSet, insert 
 }
 
 func fromRow(m map[string]any) *ChangeSet {
-	cs := &ChangeSet{ID: str(m["id"]), Org: str(m["org_id"]), Title: str(m["title"]), Reason: str(m["reason"]), Risk: str(m["risk"]), Status: str(m["status"])}
+	cs := &ChangeSet{ID: str(m["id"]), Org: str(m["org_id"]), Title: str(m["title"]), Reason: str(m["reason"]), Risk: str(m["risk"]), Status: str(m["status"]), Source: str(m["source"])}
 	remarshal(m["author"], &cs.Author)
 	remarshal(m["ops"], &cs.Ops)
 	remarshal(m["layers"], &cs.Layers)

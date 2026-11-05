@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -1328,10 +1328,80 @@
     }));
   }
 
+  /* ---- Raka in the app: the ⌘J ask bar and the chat drawer. Raka proposes change sets; a person approves them in Ubah. */
+  /* Enter and Esc belong to the IME while it composes (Japanese, Chinese, Korean input; keyCode 229 on older Safari). */
+  function composing(e) { return !!((e.nativeEvent && e.nativeEvent.isComposing) || e.keyCode === 229); }
+  /* The shortcut as the person types it: ⌘J on a Mac, Ctrl J elsewhere (the same platform test as the app's handler). */
+  var ASK_KEY = /Mac|iPhone|iPad|iPod/.test((window.navigator && window.navigator.platform) || "") ? "⌘J" : "Ctrl J";
+  function AskBar(p) {
+    var ref = useRef(null);
+    useEffect(function () { if (p.open && ref.current) ref.current.focus(); }, [p.open]);
+    if (!p.open) return null;
+    var canSend = !p.busy && !!(p.value || "").trim();
+    return h("div", { className: "rk-askbar", role: "dialog", "aria-label": "Tanya Raka",
+      onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Escape" && p.onClose) { e.preventDefault(); p.onClose(); } } },
+      p.context ? h("div", { className: "rk-askbar-ctx" }, h("span", { className: "rk-askbar-chip" }, h(Icon, { name: "dashboard" }),
+        h("span", { className: "l" }, "Halaman ini · " + p.context.label),
+        h("button", { type: "button", "aria-label": "Hapus konteks " + p.context.label, title: "Hapus konteks", onClick: p.onRemoveContext }, h(Icon, { name: "close" })))) : null,
+      h("textarea", { ref: ref, className: "rk-askbar-input", rows: 1, value: p.value || "", placeholder: "Tanya Raka…", "aria-label": "Tanya Raka",
+        onChange: function (e) { if (p.onChange) p.onChange(e.target.value); },
+        onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canSend && p.onSend) p.onSend(); } } }),
+      h("div", { className: "rk-askbar-foot" },
+        h("button", { type: "button", className: "rk-askbar-chat", onClick: p.onOpenChat }, "Buka chat", h(Kbd, null, ASK_KEY)),
+        h("span", { className: "rk-sp" }),
+        h(Button, { variant: "primary", disabled: !canSend, loading: p.busy, onClick: function () { if (canSend && p.onSend) p.onSend(); } }, "Kirim", h(Kbd, null, "↵"))));
+  }
+  var RISK = { low: ["ok", "Risiko rendah"], medium: ["warn", "Risiko sedang"], high: ["bad", "Risiko tinggi"] };
+  function ChangesetCard(p) {
+    var cs = p.cs, r = RISK[cs.risk] || ["default", "Risiko belum diketahui"];
+    return h("div", { className: "rk-chat-cs" }, h("b", null, cs.title), h("div", null, h(Lozenge, { tone: r[0] }, r[1])),
+      h("div", { className: "acts" },
+        h(Button, { variant: "link", onClick: function () { if (p.onPreview) p.onPreview(cs.id); } }, "Lihat pratinjau"),
+        h(Button, { variant: "link", onClick: function () { if (p.onOpenUbah) p.onOpenUbah(cs.id); } }, "Buka di Ubah")),
+      h("small", null, "Raka tidak menerapkan sendiri. Kamu yang menyetujui di Ubah."));
+  }
+  function ChatTurnView(q) {
+    var t = q.turn, p = q.p;
+    if (t.role === "user") return h("div", { className: "rk-chat-me" }, t.text);
+    return h("div", { className: "rk-chat-raka" }, h(Raka, { size: 24 }),
+      h("div", { className: "body" },
+        (t.activity || []).map(function (a, i) { return h("div", { key: "a" + i, className: "rk-chat-act" }, a); }),
+        t.text ? h("div", { className: "rk-chat-text" }, t.text) : null,
+        (t.changesets || []).map(function (cs) {
+          return h(React.Fragment, { key: cs.id }, p.renderChangeset ? p.renderChangeset(cs) : h(ChangesetCard, { cs: cs, onPreview: p.onPreview, onOpenUbah: p.onOpenUbah }));
+        }),
+        t.escalate ? h(Alert, { tone: "info" }, t.escalate) : null,
+        t.error ? h(Alert, { tone: "bad" }, t.error) : null));
+  }
+  function ChatDrawer(p) {
+    var st = useState(""), text = st[0], setText = st[1], log = useRef(null);
+    var turns = p.turns || [], last = turns[turns.length - 1];
+    useEffect(function () { if (log.current) log.current.scrollTop = log.current.scrollHeight; },
+      [p.open, turns.length, last ? (last.text || "").length + (last.activity || []).length + (last.changesets || []).length : 0, p.busy]);
+    if (!p.open) return null;
+    var canSend = !p.busy && !!text.trim();
+    function send() { if (!canSend) return; if (p.onSend) p.onSend(text); setText(""); }
+    return h("aside", { className: "rk-chat", "aria-label": "Percakapan dengan Raka",
+      onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Escape" && p.onClose) p.onClose(); } },
+      h("div", { className: "rk-chat-head" }, h(Raka, { size: 24 }), h("b", null, "Raka"), h("span", { className: "rk-sp" }),
+        h(Button, { variant: "quiet", icon: "add", onClick: p.onNew }, "Percakapan baru"),
+        h(IconButton, { icon: "close", label: "Tutup", onClick: p.onClose })),
+      h("div", { className: "rk-chat-log", ref: log, role: "log", "aria-live": "polite" },
+        turns.length ? turns.map(function (t, i) { return h(ChatTurnView, { key: i, turn: t, p: p }); })
+          : h("div", { className: "rk-chat-empty" }, "Tanya apa saja tentang data bisnismu. Raka bisa menyusun usulan perubahan; kamu yang menyetujuinya."),
+        p.busy && (!last || last.role === "user") ? h("div", { className: "rk-chat-act" }, "Raka sedang berpikir…") : null),
+      h("div", { className: "rk-chat-comp" },
+        h("textarea", { rows: 1, value: text, placeholder: "Tanya Raka…", "aria-label": "Pesan untuk Raka",
+          onChange: function (e) { setText(e.target.value); },
+          onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); send(); } } }),
+        h("button", { type: "button", className: "rk-send", disabled: !canSend, "aria-label": "Kirim", onClick: send }, h(Icon, { name: "send" }))));
+  }
+
   var api = { Button: Button, Icon: Icon, StatusChip: StatusChip, Amount: Amount, Field: Field, Segmented: Segmented, StatCard: StatCard,
     DataTable: DataTable, DocumentHeader: DocumentHeader, PosKeypad: PosKeypad, Raka: Raka, formatRupiah: formatRupiah, Card: Card, Descriptions: Descriptions, Steps: Steps, Breadcrumb: Breadcrumb, PageHeader: PageHeader, AppShell: AppShell, LinkField: LinkField, ChildTable: ChildTable, DatePicker: DatePicker, DateRangePicker: DateRangePicker, formatTanggal: formatTanggal, Table: Table, Pagination: Pagination, Dialog: Dialog, Drawer: Drawer, DrawerSection: DrawerSection, CommandMenu: CommandMenu, Menu: Menu, ContextMenu: ContextMenu, Alert: Alert, Banner: Banner, Toast: Toast, Toaster: Toaster, Sidebar: Sidebar, Topbar: Topbar, Checkbox: Checkbox, RadioGroup: RadioGroup, Switch: Switch, Textarea: Textarea, NativeSelect: NativeSelect, Select: Select, MultiSelect: MultiSelect, Form: Form, FormSection: FormSection, ChatComposer: ChatComposer, Avatar: Avatar, AvatarGroup: AvatarGroup, ImagePreview: ImagePreview, ImageViewer: ImageViewer, Tabs: Tabs, EmptyState: EmptyState, Kbd: Kbd, IconButton: IconButton, ICONS: Object.keys(ICONS) };
   api.Lozenge = Lozenge; api.Badge = Badge; api.TopNav = TopNav; api.AppSwitcher = AppSwitcher; api.AccountMenu = AccountMenu; api.Spinner = Spinner; api.Skeleton = Skeleton; api.FilterBar = FilterBar; api.FilterBuilder = FilterBuilder; api.SettingsLayout = SettingsLayout; api.SettingsSection = SettingsSection; api.SettingsRow = SettingsRow; api.NumberCard = NumberCard; api.Chart = Chart; api.ChartCard = ChartCard; api.ListCard = ListCard; api.DashGrid = DashGrid; api.Sparkline = Sparkline; api.filterCel = filterCel; api.compactNumber = compact;
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   api.Logo = Logo; api.AuthLayout = AuthLayout;
+  api.AskBar = AskBar; api.ChatDrawer = ChatDrawer;
   window.Rangka = Object.assign(window.Rangka || {}, api);
 })();

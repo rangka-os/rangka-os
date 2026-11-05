@@ -7,8 +7,8 @@ const vm = require("vm");
 // bundle.js runs against a stub React: createElement records {type, props, children}; render() below expands
 // function components by calling them, so a test sees the whole tree as plain objects. Hooks are inert.
 const SRC = fs.readFileSync(path.join(__dirname, "..", "bundle.js"), "utf8");
-function load() {
-  const React = {
+function load(over, win) {
+  const React = Object.assign({
     createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
     useState: (v) => [typeof v === "function" ? v() : v, () => {}],
     useRef: (v) => ({ current: v === undefined ? null : v }),
@@ -17,8 +17,8 @@ function load() {
     useCallback: (f) => f,
     Fragment: "Fragment",
     Children: { map: (c, f) => [].concat(c || []).map(f), toArray: (c) => [].concat(c || []) },
-  };
-  const w = { React };
+  }, over);
+  const w = Object.assign({ React }, win);
   vm.runInNewContext(SRC, { window: w, document: {} }, { filename: "bundle.js" });
   return w.Rangka;
 }
@@ -192,4 +192,145 @@ test("CommandMenu: a filter:false group keeps its items whatever the query; othe
   assert.ok(t.includes("CV Sinar"), "server match kept though its title lacks the query");
   assert.ok(t.includes("Maju terus") && !t.includes("Pelanggan"), "the local group still filters");
   assert.ok(!t.some((x) => /Tanya Raka/.test(x)), "ask: false drops Tanya Raka");
+});
+
+const CTX = { label: "Faktur penjualan" };
+const askBar = (over) => Object.assign({ open: true, context: CTX, value: "Berapa faktur jatuh tempo?", onRemoveContext() {}, onChange() {}, onSend() {}, onOpenChat() {}, onClose() {} }, over);
+const textarea = (tree) => nodes(tree, (n) => n.type === "textarea")[0];
+const key = (k, shift) => ({ key: k, shiftKey: !!shift, prevented: false, preventDefault() { this.prevented = true; } });
+
+test("AskBar renders chip and removes it", () => {
+  let removed = 0;
+  const tree = render(R.AskBar(askBar({ onRemoveContext() { removed++; } })));
+  const chip = nodes(tree, (n) => hasClass(n, "rk-askbar-chip"));
+  assert.strictEqual(chip.length, 1);
+  assert.ok(texts(chip[0]).join("").indexOf("Halaman ini · Faktur penjualan") >= 0);
+  const x = nodes(chip[0], (n) => n.type === "button");
+  assert.strictEqual(x.length, 1);
+  assert.strictEqual(x[0].props["aria-label"], "Hapus konteks Faktur penjualan");
+  x[0].props.onClick();
+  assert.strictEqual(removed, 1);
+  assert.strictEqual(nodes(render(R.AskBar(askBar({ context: null }))), (n) => hasClass(n, "rk-askbar-chip")).length, 0, "no chip without context");
+  assert.strictEqual(R.AskBar(askBar({ open: false })), null, "closed renders nothing");
+  const t = texts(tree);
+  assert.ok(t.indexOf("Buka chat") >= 0 && t.indexOf("Kirim") >= 0, "footer: Buka chat and Kirim");
+});
+
+test("AskBar shows ⌘J on a Mac and Ctrl J elsewhere", () => {
+  const shortcut = (platform) => {
+    const Rp = load({}, { navigator: { platform } });
+    const chatBtn = nodes(render(Rp.AskBar(askBar({}))), (n) => hasClass(n, "rk-askbar-chat"))[0];
+    return texts(chatBtn).filter((x) => x !== "Buka chat").join("");
+  };
+  assert.strictEqual(shortcut("MacIntel"), "⌘J");
+  assert.strictEqual(shortcut("iPhone"), "⌘J");
+  assert.strictEqual(shortcut("Win32"), "Ctrl J");
+  assert.strictEqual(shortcut("Linux x86_64"), "Ctrl J");
+  assert.strictEqual(shortcut(""), "Ctrl J");
+});
+
+test("AskBar Enter calls onSend, Shift+Enter does not", () => {
+  const sent = [], closed = [], changed = [];
+  const tree = render(R.AskBar(askBar({ onSend() { sent.push(1); }, onClose() { closed.push(1); }, onChange(v) { changed.push(v); } })));
+  const ta = textarea(tree);
+  const shift = key("Enter", true);
+  ta.props.onKeyDown(shift);
+  assert.strictEqual(sent.length, 0, "Shift+Enter is a newline");
+  assert.strictEqual(shift.prevented, false);
+  const enter = key("Enter");
+  ta.props.onKeyDown(enter);
+  assert.strictEqual(sent.length, 1);
+  assert.ok(enter.prevented, "Enter does not add a newline");
+  ta.props.onChange({ target: { value: "halo" } });
+  assert.deepStrictEqual(changed, ["halo"]);
+  nodes(tree, (n) => hasClass(n, "rk-askbar"))[0].props.onKeyDown(key("Escape"));
+  assert.strictEqual(closed.length, 1, "Esc closes");
+
+  const empty = render(R.AskBar(askBar({ value: "  ", onSend() { sent.push(2); } })));
+  textarea(empty).props.onKeyDown(key("Enter"));
+  assert.strictEqual(sent.length, 1, "blank input does not send");
+  const busy = render(R.AskBar(askBar({ busy: true, onSend() { sent.push(3); } })));
+  textarea(busy).props.onKeyDown(key("Enter"));
+  assert.strictEqual(sent.length, 1, "busy does not send");
+  const kirim = nodes(busy, (n) => n.type === "button" && texts(n).indexOf("Kirim") >= 0)[0];
+  assert.ok(kirim.props.disabled, "Kirim disabled while busy");
+});
+
+const TURNS = [
+  { role: "user", text: "Tambah field Nomor PO di faktur" },
+  { role: "assistant", text: "Sudah aku susun usulannya.", activity: ["Membaca 142 faktur…", "Menyusun change set…"],
+    changesets: [{ id: "cs-7", title: "Nomor PO wajib untuk pelanggan grosir", risk: "low", status: "previewed" }] },
+];
+
+test("ChatDrawer renders turns with activity and a changeset card", () => {
+  const previewed = [], opened = [];
+  const tree = render(R.ChatDrawer({ open: true, turns: TURNS, onSend() {}, onNew() {}, onClose() {}, onPreview: (id) => previewed.push(id), onOpenUbah: (id) => opened.push(id) }));
+  const t = texts(tree);
+  ["Tambah field Nomor PO di faktur", "Sudah aku susun usulannya.", "Membaca 142 faktur…", "Menyusun change set…", "Nomor PO wajib untuk pelanggan grosir", "Risiko rendah"]
+    .forEach((x) => assert.ok(t.indexOf(x) >= 0, x));
+  const log = nodes(tree, (n) => n.props.role === "log");
+  assert.strictEqual(log.length, 1);
+  assert.strictEqual(log[0].props["aria-live"], "polite");
+  assert.strictEqual(nodes(tree, (n) => hasClass(n, "rk-scrim")).length, 0, "non-modal: no scrim");
+  const pill = nodes(tree, (n) => hasClass(n, "rk-pill") && texts(n).indexOf("Risiko rendah") >= 0)[0];
+  assert.ok(hasClass(pill, "ok"));
+  const btn = (label) => nodes(tree, (n) => n.type === "button" && texts(n).indexOf(label) >= 0)[0];
+  btn("Lihat pratinjau").props.onClick();
+  btn("Buka di Ubah").props.onClick();
+  assert.deepStrictEqual([previewed, opened], [["cs-7"], ["cs-7"]]);
+
+  const risks = render(R.ChatDrawer({ open: true, turns: [{ role: "assistant", text: "", changesets: ["medium", "high", "unknown"].map((r, i) => ({ id: "c" + i, title: "T" + i, risk: r, status: "proposed" })) }] }));
+  const pills = nodes(risks, (n) => hasClass(n, "rk-pill")).map((n) => [texts(n).join(""), ["ok", "warn", "bad", "draft"].find((c) => hasClass(n, c))]);
+  assert.deepStrictEqual(pills, [["Risiko sedang", "warn"], ["Risiko tinggi", "bad"], ["Risiko belum diketahui", "draft"]]);
+
+  const custom = render(R.ChatDrawer({ open: true, turns: TURNS, renderChangeset: (cs) => ({ type: "i", props: { className: "mine" }, children: [cs.id] }) }));
+  assert.ok(texts(custom).indexOf("cs-7") >= 0 && texts(custom).indexOf("Lihat pratinjau") < 0, "renderChangeset replaces the card");
+
+  const other = render(R.ChatDrawer({ open: true, turns: [{ role: "assistant", text: "", escalate: "Hanya pemilik yang bisa mengubah peran.", error: "Raka tidak bisa dihubungi." }] }));
+  assert.ok(nodes(other, (n) => hasClass(n, "rk-alert-info") && texts(n).indexOf("Hanya pemilik yang bisa mengubah peran.") >= 0).length === 1, "escalation is an info Alert");
+  assert.ok(nodes(other, (n) => hasClass(n, "rk-alert-bad") && texts(n).indexOf("Raka tidak bisa dihubungi.") >= 0).length === 1, "error is a bad Alert");
+  assert.strictEqual(R.ChatDrawer({ open: false, turns: [] }), null);
+});
+
+test("ChatDrawer disables send while busy", () => {
+  // seed the composer's text state so the send button is only disabled by busy
+  const R2 = load({ useState: (v) => [v === "" ? "Tambah field Nomor PO" : typeof v === "function" ? v() : v, () => {}] });
+  const sent = [];
+  const props = { open: true, turns: TURNS, onSend: (x) => sent.push(x), onNew() {}, onClose() {} };
+  const sendBtn = (tree) => nodes(tree, (n) => n.type === "button" && n.props["aria-label"] === "Kirim")[0];
+  const busy = render(R2.ChatDrawer(Object.assign({}, props, { busy: true })));
+  assert.strictEqual(sendBtn(busy).props.disabled, true);
+  textarea(busy).props.onKeyDown(key("Enter"));
+  assert.deepStrictEqual(sent, [], "Enter does not send while busy");
+  const idle = render(R2.ChatDrawer(props));
+  assert.strictEqual(sendBtn(idle).props.disabled, false);
+  textarea(idle).props.onKeyDown(key("Enter"));
+  assert.deepStrictEqual(sent, ["Tambah field Nomor PO"]);
+  let fresh = 0;
+  const withNew = render(R2.ChatDrawer(Object.assign({}, props, { onNew() { fresh++; } })));
+  nodes(withNew, (n) => n.type === "button" && texts(n).indexOf("Percakapan baru") >= 0)[0].props.onClick();
+  assert.strictEqual(fresh, 1);
+});
+
+test("AskBar and ChatDrawer ignore Enter and Esc while an IME is composing", () => {
+  const composing = (k) => Object.assign(key(k), { nativeEvent: { isComposing: true } });
+  const ime229 = (k) => Object.assign(key(k), { keyCode: 229 });
+  const sent = [], closed = [];
+  const bar = render(R.AskBar(askBar({ onSend() { sent.push("bar"); }, onClose() { closed.push("bar"); } })));
+  for (const ev of [composing, ime229]) {
+    const e = ev("Enter");
+    textarea(bar).props.onKeyDown(e);
+    assert.strictEqual(e.prevented, false, "the IME keeps its Enter");
+    nodes(bar, (n) => hasClass(n, "rk-askbar"))[0].props.onKeyDown(ev("Escape"));
+  }
+  const R2 = load({ useState: (v) => [v === "" ? "Nomor PO" : typeof v === "function" ? v() : v, () => {}] });
+  const drawer = render(R2.ChatDrawer({ open: true, turns: TURNS, onSend: () => sent.push("drawer"), onClose: () => closed.push("drawer") }));
+  for (const ev of [composing, ime229]) {
+    textarea(drawer).props.onKeyDown(ev("Enter"));
+    nodes(drawer, (n) => hasClass(n, "rk-chat"))[0].props.onKeyDown(ev("Escape"));
+  }
+  assert.deepStrictEqual([sent, closed], [[], []]);
+  textarea(drawer).props.onKeyDown(key("Enter"));
+  nodes(drawer, (n) => hasClass(n, "rk-chat"))[0].props.onKeyDown(key("Escape"));
+  assert.deepStrictEqual([sent, closed], [["drawer"], ["drawer"]], "plain keys still work");
 });

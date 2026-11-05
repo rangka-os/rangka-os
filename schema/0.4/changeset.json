@@ -138,6 +138,12 @@
       ],
       "description": "Computed: high when it touches system.rk, roles/permissions, money or stock fields, drops data, or changes submitted-document models"
     },
+    "source": {
+      "enum": [
+        "ai"
+      ],
+      "description": "Set by the kernel when the AI assistant (an assistant token, contract 0020) proposed the change set; absent otherwise"
+    },
     "status": {
       "enum": [
         "draft",

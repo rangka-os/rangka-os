@@ -5,6 +5,8 @@
   var React = window.React, h = React.createElement, useState = React.useState, useEffect = React.useEffect, useRef = React.useRef, useMemo = React.useMemo;
   var R = window.Rangka, API = window.RangkaConsoleAPI;
   var api = API({ baseUrl: (window.RANGKA_CONSOLE_CONFIG || {}).baseUrl || "" });
+  /* Raka (contract 0020) is the end-user app's assistant (../app/ai.js) mounted here; it only needs aiChat, so it gets the app's API client. */
+  var aiApi = window.RangkaAppAPI ? window.RangkaAppAPI({ baseUrl: api.baseUrl }) : null;
 
   /* ================================================================ formatting */
   function L(x) { return x == null ? "" : typeof x === "string" ? x : (x.id || x.en || ""); }
@@ -1018,6 +1020,7 @@
     var phone = usePhone();
     var mq = useState(window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)").matches : false), sysDark = mq[0], setSysDark = mq[1];
     var demo = api.mode === "demo";
+    var aiRef = useRef(null);
 
     function toast(tone, title, body) { var id = Date.now() + Math.random(); setToasts(function (t) { return t.concat([{ id: id, tone: tone, title: title, body: body }]).slice(-3); }); setTimeout(function () { setToasts(function (t) { return t.filter(function (x) { return x.id !== id; }); }); }, 5000); }
     function nav(path) { location.hash = "#" + path; setNavOpen(false); }
@@ -1078,10 +1081,28 @@
       { label: "Change set", items: csList.map(function (c) { return { label: c.title, icon: "amend", sub: c.id + " · " + (CS_STATUS[c.status] || [0, c.status])[1], onSelect: function () { nav("/changesets/" + c.id); } }; }) }];
     var role = me && me.roles && me.roles[0];
 
+    /* Raka: only on a kernel that reports meta.features.ai (never in demo mode) */
+    var aiKey = window.RangkaApp && window.RangkaApp.consoleAiStorageKey ? window.RangkaApp.consoleAiStorageKey(me && me.email) : null; // one per person
+    var aiOn = !demo && !!(meta.features && meta.features.ai === true && aiApi && window.RangkaApp && window.RangkaApp.AssistantRoot && aiKey);
+    function askRaka(q) { setNavOpen(false); if (aiRef.current) aiRef.current.ask(q); }
+    /** "Halaman ini": the Console screen, and the model when a model page is open. */
+    function aiPage() {
+      var r = parseRoute(), ctx = { route: "#/" + [r.screen].concat(r.parts).map(encodeURIComponent).join("/"), title: screenOf(r.screen).label };
+      if (r.screen === "apps" && r.parts[0] === "model" && r.parts[1]) { ctx.model = r.parts[1]; ctx.title += " · " + r.parts[1]; }
+      return ctx;
+    }
+    if (aiOn) cmdGroups.push({ label: "Tanya Raka", filter: false, items: [{ label: "Tanya Raka", icon: "spark", sub: "AI", ai: true }] });
+
     function help() { toast("info", "Bantuan", "Console membaca /api/v1 sesuai CONTRACTS.md. Tekan ⌘K untuk lompat ke layar mana pun."); }
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmd(true); }
     function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
-    function logout() { api.logout().then(function () { toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri."); if (!demo) location.reload(); }); }
+    function logout() {
+      if (window.RangkaApp && window.RangkaApp.clearAiStorage) window.RangkaApp.clearAiStorage(); // Raka's history leaves with the person
+      api.logout().then(function () {
+        toast("info", "Keluar", demo ? "Mode demo tidak punya sesi." : "Sesi diakhiri.");
+        if (!demo) location.reload();
+      });
+    }
     /** The switcher's menu: propose a change, theme, help and the account (Console has no org switch). */
     function switcherItems() {
       return [{ label: "Usulkan perubahan", icon: "add", onSelect: function () { setNavOpen(false); setPropose(true); } }, "-", { heading: "Tema" }].concat(
@@ -1094,9 +1115,11 @@
     var narrow = collapsed && !phone;
     var mode = h("span", { className: "cn-mode", title: demo ? "Data demo dari demo-data.js: " + api.modeReason : "Terhubung ke kernel " + api.modeReason },
       h(R.Lozenge, { tone: demo ? "new" : "ok", bold: demo }, demo ? "Mode demo" : "Terhubung"));
+    var askBtn = !aiOn ? null : narrow ? h(R.IconButton, { icon: "spark", label: "Tanya Raka", className: "cn-ask-icon", onClick: function () { askRaka(); } })
+      : h(R.Button, { variant: "quiet", icon: "spark", className: "cn-ask", onClick: function () { askRaka(); } }, "Tanya Raka");
     var footer = narrow
-      ? (me ? h("span", { title: (me.name || "") + (demo ? " · Mode demo" : ""), role: "img", "aria-label": me.name || "Akun" }, h(R.Avatar, { name: me.name || "?", size: 28, presence: "online" })) : null)
-      : h("div", { className: "cn-side-foot" },
+      ? h(React.Fragment, null, askBtn, me ? h("span", { title: (me.name || "") + (demo ? " · Mode demo" : ""), role: "img", "aria-label": me.name || "Akun" }, h(R.Avatar, { name: me.name || "?", size: 28, presence: "online" })) : null)
+      : h("div", { className: "cn-side-foot" }, askBtn,
           demo ? h("div", { className: "cn-demo-note" }, mode, h("span", null, "Data dari file .rk asli; status disimulasikan. " + (api.modeReason === "?demo=1" ? "Dibuka dengan ?demo=1." : "Kernel tidak terjangkau: " + api.modeReason + ".")),
             h("label", null, "Masuk sebagai"), h(R.Segmented, { label: "Peran demo", value: role || "owner", options: [{ value: "owner", label: "Pemilik" }, { value: "sales_manager", label: "Manajer sales" }],
               onChange: function (v) { api.setDemoRole(v); toast("info", "Peran demo: " + (ROLE_LABEL[v] || v), v === "owner" ? "Bisa menyetujui semua risiko." : "Tidak bisa menyetujui risiko tinggi."); } }))
@@ -1119,8 +1142,11 @@
           h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd })),
         h("main", { className: "cn-main", key: screen + "/" + route.parts.join("/") }, body)),
       switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
-      cmd ? h(R.CommandMenu, { groups: cmdGroups, placeholder: "Cari layar, model, dasbor, flow atau change set…", onClose: function () { setCmd(false); },
-        onSelect: function (it, q) { if (it.ai) toast("info", "Raka", "Di Console v0, pertanyaan ke Raka belum tersedia. Gunakan Omilo untuk “" + q + "”."); } }) : null,
+      cmd ? h(R.CommandMenu, { groups: cmdGroups, ask: false, placeholder: "Cari layar, model, dasbor, flow atau change set…", onClose: function () { setCmd(false); },
+        onSelect: function (it, q) { if (it.ai) askRaka(q); } }) : null,
+      aiOn ? h(window.RangkaApp.AssistantRoot, { key: aiKey, api: aiApi, storageKey: aiKey, getContext: aiPage, navigate: function (hash) { location.hash = hash; },
+        onPreview: function (id) { nav("/changesets/" + encodeURIComponent(id)); }, onOpenUbah: function (id) { nav("/changesets/" + encodeURIComponent(id)); },
+        blocked: function () { return false; }, control: aiRef }) : null,
       propose ? h(ProposeDialog, Object.assign({}, ctx, { onClose: function () { setPropose(false); } })) : null,
       h(R.Toaster, { float: true }, toasts.map(function (t) { return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, onClose: function () { setToasts(function (x) { return x.filter(function (y) { return y.id !== t.id; }); }); } }, t.body); })));
   }

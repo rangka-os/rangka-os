@@ -182,4 +182,16 @@ export declare function Logo(props: { size?: number; reversed?: boolean; word?: 
 /** Sign-in and other account pages: a Bata brand panel (logo, Sendi joint, headline) beside the form; a strip above it on phones.
  * `brand.text: null` hides the line under the headline. */
 export declare function AuthLayout(props: { brand?: { title?: Node; text?: Node | null }; chip?: Node; title?: Node; subtitle?: Node; footer?: Node; children?: Node }): React.ReactElement;
+/** ⌘J ask bar: 560px, fixed 24px above the bottom, centred (a full-width sheet on phones). Renders nothing when closed.
+ *  Esc calls onClose; Enter calls onSend (Shift+Enter is a newline); blank or busy does not send; both keys are ignored while an IME composes.
+ *  Render it as a sibling of ChatDrawer: an open drawer hides the ask bar (the drawer has its own composer). */
+export declare function AskBar(props: { open: boolean; context: { label: string } | null; onRemoveContext?: () => void; value: string; onChange: (v: string) => void;
+  onSend: () => void; onOpenChat?: () => void; onClose: () => void; busy?: boolean }): React.ReactElement | null;
+export type ChangesetRisk = 'low' | 'medium' | 'high' | 'unknown';
+export interface ChatChangeset { id: string; title: string; risk: ChangesetRisk; status: string }
+export interface ChatTurn { role: 'user' | 'assistant'; text: string; activity?: string[]; changesets?: ChatChangeset[]; escalate?: string; error?: string }
+/** 420px chat with Raka on the right, non-modal (no scrim), full screen at 600px and below. The log is aria-live="polite" and scrolls to the newest turn.
+ *  The default change set card shows title, risk pill, "Lihat pratinjau" (onPreview) and "Buka di Ubah" (onOpenUbah); renderChangeset replaces it. */
+export declare function ChatDrawer(props: { open: boolean; turns: ChatTurn[]; busy?: boolean; onSend: (text: string) => void; onNew?: () => void; onClose: () => void;
+  renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void }): React.ReactElement | null;
 declare global { interface Window { Rangka: Record<string, any> } }

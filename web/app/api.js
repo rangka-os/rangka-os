@@ -6,7 +6,7 @@
  * Every method returns a Promise. Failures reject with ApiError {status, code, message, body, fieldErrors, warnings,
  * needsForce}. 422 bodies are {errors:[{field?,rule?,code,message}], warnings, needs_force?}; other bodies are
  * {error:{code,message}}; network errors have status 0 and code "network". All requests send credentials.
- * Helpers on the namespace: parseRupiah, rupiah, tanggal, isMissingRoute, isFilesOff, printFormats, formatSize, ApiError.
+ * Helpers on the namespace: parseRupiah, rupiah, tanggal, isMissingRoute, isFilesOff, printFormats, formatSize, parseSSE, ApiError.
  */
 (function (global) {
   "use strict";
@@ -103,6 +103,30 @@
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ""));
     if (!m) return iso == null ? "" : String(iso);
     return parseInt(m[3], 10) + " " + MONTHS[parseInt(m[2], 10) - 1] + " " + m[1];
+  }
+
+  /** Server-sent events: feed each chunk of the stream as it arrives, with the same `state` object every time; returns
+   *  the events completed by this chunk as [{type, data}] (data parsed as JSON). A frame split across chunks waits in
+   *  state.buf; comments (": …") and frames whose data is not JSON are dropped. */
+  function parseSSE(chunk, state) {
+    state = state || {};
+    var buf = (state.buf || "") + String(chunk == null ? "" : chunk), tail = "";
+    if (buf.slice(-1) === "\r") { tail = "\r"; buf = buf.slice(0, -1); } // its "\n" may come in the next chunk
+    var frames = buf.replace(/\r\n?/g, "\n").split("\n\n");
+    state.buf = frames.pop() + tail;
+    var out = [];
+    frames.forEach(function (f) {
+      var type = "message", data = [];
+      f.split("\n").forEach(function (line) {
+        if (!line || line.charAt(0) === ":") return;
+        var i = line.indexOf(":"), k = i < 0 ? line : line.slice(0, i), v = i < 0 ? "" : line.slice(i + 1).replace(/^ /, "");
+        if (k === "event") type = v;
+        else if (k === "data") data.push(v);
+      });
+      if (!data.length) return;
+      try { out.push({ type: type, data: JSON.parse(data.join("\n")) }); } catch (e) { /* not ours */ }
+    });
+    return out;
   }
 
   function qs(pairs) {
@@ -358,6 +382,34 @@
     /* ----- process canvas (contract 0014, stream S10): the list; the canvas itself talks to the kernel through RangkaCanvas */
     api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };
 
+    /* ----- Raka (contract 0020) */
+    /** POST /api/v1/ai/chat {message, history, context} and read the text/event-stream answer: onEvent({type, data}) for
+     *  every event in order (text, tool, changeset, escalate, error, done); resolves when the stream ends. A refusal before
+     *  streaming (404 not_found, 403 ai_disabled | ai_forbidden, 429 ai_busy | ai_rate_limited, 400 bad_request) rejects
+     *  with its ApiError. o.signal (an AbortSignal) stops the request; it then rejects with the AbortError. */
+    api.aiChat = function (body, onEvent, o) {
+      var init = { method: "POST", credentials: "include", headers: { Accept: "text/event-stream", "Content-Type": "application/json" }, body: JSON.stringify(body || {}) };
+      if (o && o.signal) init.signal = o.signal;
+      return doFetch(base + "/api/v1/ai/chat", init).then(null, function (err) {
+        if (err && err.name === "AbortError") throw err;
+        throw ApiError(0, "network", "Tidak bisa terhubung ke server", { cause: String(err && err.message || err) });
+      }).then(function (res) {
+        if (res.status < 200 || res.status >= 300) return failure(res).then(function (e) { throw e; });
+        var st = {};
+        function emit(text) { parseSSE(text, st).forEach(function (ev) { onEvent(ev); }); }
+        if (!res.body || !res.body.getReader || !global.TextDecoder) return res.text().then(function (t) { emit(t + "\n\n"); });
+        var reader = res.body.getReader(), dec = new global.TextDecoder();
+        function pump() {
+          return reader.read().then(function (r) {
+            if (r.done) { emit(dec.decode() + "\n\n"); return; } // a last frame without its blank line still counts
+            emit(dec.decode(r.value, { stream: true }));
+            return pump();
+          });
+        }
+        return pump();
+      });
+    };
+
     /* ----- feature detection */
     api.features = function (meta, me) {
       meta = meta || {};
@@ -394,5 +446,6 @@
   create.parseRupiah = parseRupiah;
   create.rupiah = rupiah;
   create.tanggal = tanggal;
+  create.parseSSE = parseSSE;
   global.RangkaAppAPI = create;
 })(window);

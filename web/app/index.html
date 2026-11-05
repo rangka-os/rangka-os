@@ -16,7 +16,10 @@
   .ap-shell > .rk-side { height: auto; min-height: 0; overflow-y: auto; }
   .ap-shell > .rk-side nav { flex: 0 0 auto; overflow: visible; }
   .ap-side > .rk-side nav { flex: 1 0 auto; } /* footer and collapse sit at the bottom */
-  .ap-side-foot { padding: 8px; }
+  .ap-side-foot { padding: 8px; flex-wrap: wrap; }
+  .ap-side-foot .ap-ask { flex: 1 0 100%; justify-content: flex-start; }
+  .ap-shell .rk-side-foot.collapsed { flex-direction: column; gap: 4px; }
+  .ap-ask .rk-icon { color: var(--raka); } /* Raka's teal: only on the Tanya Raka entries */
   .ap-shell .rk-shell-main { min-height: 0; }
   .ap-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
   .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { box-sizing: border-box; width: 100%; }
@@ -321,4 +324,5 @@
 <script src="import.js"></script>
 <script src="../canvas/canvas.js"></script>
 <script src="process.js"></script>
+<script src="ai.js"></script>
 <script src="shell.js"></script>

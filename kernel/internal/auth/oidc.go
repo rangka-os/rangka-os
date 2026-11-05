@@ -37,6 +37,15 @@ func (s *Service) SignJWT(ctx context.Context, claims map[string]any) (string, e
 	return input + "." + base64.RawURLEncoding.EncodeToString(sig), nil
 }
 
+// MintAssistantToken issues the delegated token the embedded assistant calls MCP with (contract 0020): an
+// access JWT acting as u with scope rangka.mcp and claim ai: true. Nothing is stored; it expires after ttl,
+// and Resolve reloads the membership on every call, so removing the person ends it too.
+func (s *Service) MintAssistantToken(ctx context.Context, u *User, ttl time.Duration) (string, error) {
+	now := s.now()
+	return s.SignJWT(ctx, map[string]any{"iss": s.Issuer, "sub": fmt.Sprint(u.ID), "uid": u.ID, "aud": "rangka-ai", "iat": now.Unix(),
+		"exp": now.Add(ttl).Unix(), "scope": "rangka.mcp", "org": u.Org, "email": u.Email, "typ": "access", "ai": true})
+}
+
 // VerifyJWT checks signature, issuer and expiry of a token this provider issued.
 func (s *Service) VerifyJWT(tok string) (map[string]any, error) {
 	parts := strings.Split(tok, ".")

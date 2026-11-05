@@ -52,7 +52,8 @@ export default defineConfig({
           { text: '.rk files', link: '/guide/rk-files' },
           { text: 'Your first app', link: '/guide/first-app' },
           { text: 'Print formats', link: '/guide/print-formats' },
-          { text: 'Process canvas', link: '/guide/process-canvas' }
+          { text: 'Process canvas', link: '/guide/process-canvas' },
+          { text: 'Raka in the app', link: '/guide/assistant' }
         ] }
       ],
       '/concepts/': [
@@ -87,7 +88,8 @@ export default defineConfig({
       '/tools/': [
         { text: 'Tools', items: [
           { text: 'Rangka Console', link: '/tools/console' },
-          { text: 'Rangka AI', link: '/tools/rangka-ai' }
+          { text: 'Rangka AI', link: '/tools/rangka-ai' },
+          { text: 'Raka in the app', link: '/guide/assistant' }
         ] }
       ],
       '/ecosystem/': [

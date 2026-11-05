@@ -8,7 +8,7 @@ Plain JS on React 18 UMD and the Rangka design system (`../design-system/bundle.
 
 | File | What it is |
 | --- | --- |
-| `index.html` | Loads React (cdnjs), the DS bundle, `tokens.css`, the canvas (`../canvas/canvas.js` and `.css`), `demo-data.js`, `api.js`, `console.js`; local `cn-*` styles on DS tokens |
+| `index.html` | Loads React (cdnjs), the DS bundle, `tokens.css`, the canvas (`../canvas/canvas.js` and `.css`), `demo-data.js`, the app's `../app/api.js` and `../app/ai.js` (Raka), `api.js`, `console.js`; local `cn-*` styles on DS tokens |
 | `console.js` | Screens, shell (the Frappe-style Sidebar: switcher with theme and account, ⌘K search, Ringkasan/Change set/Audit log pinned, screens grouped by layer, collapse kept in `localStorage`, drawer on phones), ⌘K command menu |
 | `api.js` | `RangkaConsoleAPI({baseUrl})`: the data adapter for `docs/contracts.md` `/api/v1`, with an in-memory demo backend |
 | `build_demo.py` | Builds `demo-data.js` and `tokens.css` from the real `.rk` files and `tokens.json` |
@@ -36,6 +36,12 @@ URL before `console.js` loads:
 The adapter probes `GET /api/v1/system/status` (2.5 s). 200 + JSON → kernel mode; 401/403 → kernel mode with a sign-in
 form (`POST /auth/login`); network error, timeout, 404 or a non-JSON answer → demo mode. `?demo=1` forces demo.
 The sidebar footer shows **Mode demo** (purple) or **Terhubung** (green) and says why.
+
+**Raka.** On a kernel whose `meta.features.ai` is `true` (started with `--ai-url`, contract 0020) the Console mounts
+the app's assistant (`../app/ai.js`): **Tanya Raka** in the sidebar footer, ⌘J and the ⌘K "Tanya Raka" item open the
+ask bar; "Halaman ini" is the Console screen (plus the model on a model page). A change set card opens
+`#/changesets/<id>`, where a person approves it. History is kept in `sessionStorage` under `rk.console.ai.<email>`, one per person, and
+removed on sign-out. Never in demo mode.
 
 ## Screens (UI in Bahasa Indonesia)
 

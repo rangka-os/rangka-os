@@ -42,6 +42,7 @@ type Config struct {
 	Version                         string
 	DeployTarget                    string           // dev, docker, helm, desktop, cloud, partner
 	FilesDir                        string           // attachments root (--files-dir); "" = system.rk files.path, else data/files
+	AI                              *api.AIConfig    // rangka-ai sidecar (--ai-url); nil = assistant off
 	Now                             func() time.Time // fixed clocks in tests
 	Logf                            func(format string, args ...any)
 }
@@ -174,7 +175,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	s.API = &api.Server{Version: cfg.Version, Started: time.Now(), Engine: e, DB: db, Auth: s.Auth, Hub: s.Hub, Queue: s.Queue,
 		Sched: s.Sched, Changes: s.Changes, Imports: &imports.Service{DB: db, Engine: e}, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget,
-		MaxUploadMB: intCfg(reg, "files.max_upload_mb", 20)}
+		MaxUploadMB: intCfg(reg, "files.max_upload_mb", 20), AI: cfg.AI}
 	if fstore != nil {
 		s.API.Files = fstore // keep a nil *Local out of the interface
 	}

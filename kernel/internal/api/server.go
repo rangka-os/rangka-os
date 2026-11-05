@@ -40,12 +40,15 @@ type Server struct {
 	DeployTarget string      // dev, docker, helm, desktop, cloud, partner
 	Files        files.Store // attachments blob store; nil = files capability disabled (501 files_disabled)
 	MaxUploadMB  int         // files.max_upload_mb; 0 = 20
+	AI           *AIConfig   // rangka-ai sidecar; nil = assistant off (contract 0020)
 	Log          func(format string, args ...any)
 
 	previewMu sync.Mutex // guards previews (preview.go)
 	previews  []*previewEntry
 
 	blobMu sync.Mutex // orders blob removal against uploads of the same bytes (one process)
+
+	ai aiState // assistant limits and health probe (ai.go)
 }
 
 type ctxKey struct{}
@@ -71,10 +74,10 @@ func ChangeActor(p *auth.Principal) changeset.Actor {
 	switch p.Via {
 	case "token":
 		kind = "cli"
-	case "oidc":
+	case "oidc", "ai":
 		kind = "ai"
 	}
-	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind}
+	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind, Assistant: p.Via == "ai"}
 }
 
 func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
@@ -99,6 +102,11 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 		if p == nil {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="rangka"`)
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
+			return
+		}
+		// the embedded assistant only reads over REST; it proposes change sets over MCP (contract 0020 §4)
+		if p.Via == "ai" && r.Method != http.MethodGet && r.Method != http.MethodHead && strings.HasPrefix(r.URL.Path, "/api/v1/") {
+			writeError(w, http.StatusForbidden, "ai_forbidden", auth.AIForbiddenMessage)
 			return
 		}
 		c := &caller{p: p, actor: Actor(p)}
@@ -177,6 +185,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/files/meta", a(s.listFiles)) // v0 aliases
 	mux.HandleFunc("GET /api/v1/files/meta/{path...}", a(s.getFile))
 	mux.HandleFunc("POST /api/v1/tokens", a(s.createToken))
+	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
+	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
 	mux.HandleFunc("POST /auth/logout", s.logout)

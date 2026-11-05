@@ -18,6 +18,9 @@ approval scenarios run live; likewise imports/*.rk (S7) and print/*.rk + letterh
 and a lead card sales roles may not print). Call mock_feature(page, feature) in a scenario. The run ends with
 "live: … · mocked: …"; --require-all turns any mocked feature into a failure.
 
+RANGKA_AI_DIR=<a built rangka-ai checkout> also starts its scripted sidecar (`serve --demo`) and the kernel with --ai-url,
+so test_ai_live asks the real Raka; without it that scenario returns at once and the other Raka scenarios use mocks.
+
 Every HTTP answer >= 400 and every failed request to the kernel fails the scenario too, except 401 on /auth/*, the missing-route 404 ("no such endpoint") of
 the feature probes (approvals, attachments) and what a scenario allows with ctx.allow_http(status, url_regex).
 
@@ -699,6 +702,7 @@ class Ctx:
     def __init__(self, base, meta, args):
         self.base, self.meta, self.args = base, meta, args
         self.features, self.live, self.mocked, self.mock_state = {}, set(), set(), {}
+        self.ai_live = False  # RANGKA_AI_DIR: the kernel runs with the real rangka-ai sidecar
         self.owner, self.password, self.users = OWNER, PASSWORD, USERS
         self.allowed_http = []  # per scenario: (status, url regex) a scenario expects; see allow_http
 
@@ -905,6 +909,7 @@ def test_sidebar_collapse(page, ctx):
 
 def test_command_menu(page, ctx):
     """⌘K (Ctrl+K off a Mac) opens the command menu; typing searches records; Enter opens the first one."""
+    hide_ai(page, ctx)
     page.goto(ctx.base + "/app/")
     sign_in(page)
     expect_signed_in(page, ctx)
@@ -3142,6 +3147,285 @@ def test_ubah_embedded_posts_changeset(page, ctx):
     ctx.live.add("ubah")
 
 
+# ---------------------------------------------------------------------------------------------- Raka, the assistant (contract 0020)
+AI_SIDE_BTN = ".rk-side .ap-ask"
+
+
+def sse(frames):
+    return "".join(f"event: {t}\ndata: {json.dumps(d)}\n\n" for t, d in frames)
+
+
+def mock_ai(page, ctx, answers):
+    """meta.features.ai true (live and preview meta) and POST /api/v1/ai/chat answering from `answers` in order: a list of
+    SSE frames [(event, data)], or (status, error code) for a refusal before streaming. Returns the bodies sent."""
+    def meta(route):
+        body = route.fetch().json()
+        body["features"] = dict(body.get("features") or {}, ai=True)
+        _json(route, 200, body)
+    sent = []
+
+    def chat(route):
+        sent.append(json.loads(route.request.post_data or "{}"))
+        a = answers.pop(0)
+        if isinstance(a, tuple):
+            _json(route, a[0], {"error": {"code": a[1], "message": a[1]}})
+        else:
+            route.fulfill(status=200, content_type="text/event-stream", body=sse(a))
+    page.route(re.compile(r".*/api/v1/(preview/[^/]+/)?meta$"), meta)
+    page.route(re.compile(r".*/api/v1/ai/chat$"), chat)
+    return sent
+
+
+def ai_drawer(page):
+    return page.get_by_role("complementary", name="Percakapan dengan Raka")
+
+
+def hide_ai(page, ctx):
+    """With the real sidecar (RANGKA_AI_DIR) the kernel serves features.ai: drop it from meta for a scenario that checks
+    the app without the assistant."""
+    if not ctx.ai_live:
+        return
+
+    def meta(route):
+        body = route.fetch().json()
+        body["features"] = dict(body.get("features") or {}, ai=False)
+        _json(route, 200, body)
+    page.route(re.compile(r".*/api/v1/(preview/[^/]+/)?meta$"), meta)
+
+
+def test_ai_hidden_without_feature(page, ctx):
+    """No meta.features.ai (the kernel runs without a sidecar): ⌘J does nothing, no Tanya Raka in the sidebar or ⌘K."""
+    hide_ai(page, ctx)
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    page.keyboard.press("ControlOrMeta+j")
+    page.wait_for_timeout(200)
+    assert page.locator(".rk-askbar").count() == 0 and page.locator(".rk-chat").count() == 0, "no ask bar or drawer"
+    open_nav(page)
+    assert page.locator(AI_SIDE_BTN).count() == 0, "no Tanya Raka in the sidebar"
+    page.keyboard.press("Escape")
+    page.keyboard.press("ControlOrMeta+k")
+    dlg = page.get_by_role("dialog", name="Menu perintah")
+    dlg.wait_for(timeout=5000)
+    assert dlg.get_by_text("Tanya Raka").count() == 0, "no Tanya Raka in ⌘K"
+
+
+def test_ai_ask_and_drawer(page, ctx):
+    """⌘J opens the ask bar with "Halaman ini"; the sidebar and ⌘K open it too (⌘K with the query); sending opens the
+    drawer with the activity line, the streamed text and the change set card; "Lihat pratinjau" opens ?preview=<id>;
+    a reload keeps the conversation and "Percakapan baru" clears it."""
+    ctx.allow_http(404, r"/api/v1/files/custom/")  # no company overlay for lead yet
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    # a real previewed change set for the card (Raka proposes the same kind through MCP)
+    cs = page.evaluate("""async () => {
+      const RA = window.RangkaApp, ex = await RA.api.file("custom/lead.rk");
+      const ch = RA.opsAddField("lead", {label: "Nomor PO Raka", type: "data", modelLabel: "Lead"}, ex);
+      return (await RA.api.runChange(ch, {canApprove: false})).cs;
+    }""")
+    assert cs["status"] == "previewed", cs
+    try:
+        sent = mock_ai(page, ctx, [[
+            ("tool", {"name": "rangka_list", "summary": "Membaca 20 faktur…"}),
+            ("text", {"delta": "Ada 3 faktur jatuh tempo. "}),
+            ("text", {"delta": "Aku juga menyusun usulan field Nomor PO."}),
+            ("changeset", {"id": cs["id"], "title": cs["title"], "risk": cs.get("risk") or "unknown", "status": "previewed"}),
+            ("done", {}),
+        ]])
+        page.reload()
+        page.locator(".ap-shell").wait_for(timeout=15000)
+        page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+        home, _ = ctx.home()
+        dash_title = L((ctx.meta["dashboards"].get(home.split("/d/")[1]) or {}).get("label")) if home.startswith("#/d/") else None
+        # ⌘J: the ask bar with the page as context; Escape closes it
+        page.keyboard.press("ControlOrMeta+j")
+        bar = page.get_by_role("dialog", name="Tanya Raka")
+        bar.wait_for(timeout=5000)
+        chip = bar.locator(".rk-askbar-chip").inner_text()
+        assert chip.startswith("Halaman ini"), chip
+        if dash_title:
+            assert dash_title in chip, chip
+        shot(page, ctx, "ai-askbar")
+        check_fits(page, ctx, "ask bar")
+        page.keyboard.press("Escape")
+        bar.wait_for(state="detached", timeout=5000)
+        # the sidebar footer's Tanya Raka
+        open_nav(page)
+        page.locator(AI_SIDE_BTN).click()
+        bar.wait_for(timeout=5000)
+        page.keyboard.press("Escape")
+        bar.wait_for(state="detached", timeout=5000)
+        # ⌘K: what was typed becomes the question
+        page.keyboard.press("ControlOrMeta+k")
+        dlg = page.get_by_role("dialog", name="Menu perintah")
+        dlg.wait_for(timeout=5000)
+        page.mouse.move(1, 1)
+        page.keyboard.type("berapa faktur jatuh tempo?")
+        dlg.get_by_role("group", name="Tanya Raka").locator(".rk-cmd-item").click()
+        bar.wait_for(timeout=5000)
+        box = bar.get_by_role("textbox", name="Tanya Raka")
+        assert box.input_value() == "berapa faktur jatuh tempo?", box.input_value()
+        box.press("Enter")
+        drawer = ai_drawer(page)
+        drawer.get_by_text("Aku juga menyusun usulan field Nomor PO.", exact=False).wait_for(timeout=10000)
+        assert drawer.get_by_text("Membaca 20 faktur…").count() == 1, "the activity line"
+        assert drawer.locator(".rk-chat-me").inner_text() == "berapa faktur jatuh tempo?"
+        assert drawer.get_by_text(cs["title"]).count() == 1, "the change set card"
+        assert page.locator(".rk-askbar").count() == 0, "no ask bar while the drawer is open"
+        assert sent[0]["message"] == "berapa faktur jatuh tempo?" and sent[0]["history"] == [], sent[0]
+        assert sent[0]["context"]["route"] == home and sent[0]["context"]["title"], sent[0]
+        shot(page, ctx, "ai-drawer")
+        check_fits(page, ctx, "chat drawer")
+        # the conversation survives a reload (sessionStorage); "Buka chat" brings the drawer back
+        page.reload()
+        page.locator(".ap-shell").wait_for(timeout=15000)
+        page.keyboard.press("ControlOrMeta+j")
+        bar.get_by_role("button", name="Buka chat").click()
+        drawer.get_by_text(cs["title"]).wait_for(timeout=5000)
+        # "Lihat pratinjau" opens the existing preview mode
+        drawer.get_by_role("button", name="Lihat pratinjau").click()
+        page.wait_for_function("(id) => location.hash.endsWith('?preview=' + id)", arg=cs["id"], timeout=10000)
+        page.get_by_role("status").filter(has_text="Pratinjau: ").wait_for(timeout=15000)
+        assert ai_drawer(page).count() == 1, "the drawer stays open beside the preview"
+        drawer.get_by_role("button", name="Percakapan baru").click()
+        drawer.get_by_text("Tanya apa saja tentang data bisnismu", exact=False).wait_for(timeout=5000)
+        assert page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.ai.')).length") == 0, "cleared"
+    finally:
+        Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{cs['id']}/reject")
+
+
+def test_ai_error_message(page, ctx):
+    """An error event and a refusal before streaming show in the turn in Bahasa Indonesia."""
+    ctx.allow_http(429, r"/api/v1/ai/chat$")
+    mock_ai(page, ctx, [[("error", {"code": "ai_unavailable", "message": "sidecar down"}), ("done", {})], (429, "ai_rate_limited")])
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.keyboard.press("ControlOrMeta+j")
+    box = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka")
+    box.fill("halo")
+    box.press("Enter")
+    drawer = ai_drawer(page)
+    drawer.get_by_text("Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.").wait_for(timeout=10000)
+    composer = drawer.get_by_role("textbox", name="Pesan untuk Raka")
+    composer.fill("lagi")
+    composer.press("Enter")
+    drawer.get_by_text("Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.").wait_for(timeout=10000)
+    assert drawer.get_by_role("button", name="Kirim").is_disabled(), "an empty composer cannot send"
+    shot(page, ctx, "ai-error")
+
+
+def test_ai_history_per_person(page, ctx):
+    """The conversation belongs to the person: signing out removes it, and the next person to sign in on the same tab
+    sees an empty drawer."""
+    mock_ai(page, ctx, [[("text", {"delta": "Halo, ini jawaban untuk pemilik."}), ("done", {})]])
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.keyboard.press("ControlOrMeta+j")
+    box = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka")
+    box.fill("pertanyaan rahasia pemilik")
+    box.press("Enter")
+    drawer = ai_drawer(page)
+    drawer.get_by_text("Halo, ini jawaban untuk pemilik.").wait_for(timeout=10000)
+    keys = page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.ai.'))")
+    assert keys == ["rk.ai.%s.%s" % (ORG, OWNER[0])], keys
+    drawer.get_by_role("button", name="Tutup").click()
+    drawer.wait_for(state="detached", timeout=5000)
+    sign_out(page)
+    left = page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.ai.') || k.startsWith('rk.console.ai'))")
+    assert left == [], left
+    sign_in_as(page, ctx, SALES)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    page.keyboard.press("ControlOrMeta+j")
+    page.get_by_role("dialog", name="Tanya Raka").get_by_role("button", name="Buka chat").click()
+    drawer.get_by_text("Tanya apa saja tentang data bisnismu", exact=False).wait_for(timeout=5000)
+    assert drawer.locator(".rk-chat-me, .rk-chat-raka").count() == 0, drawer.inner_text()
+    assert drawer.get_by_text("pertanyaan rahasia pemilik").count() == 0, "the owner's question is gone"
+
+
+def ai_turn(page, ask):
+    """Ask Raka `ask` from the open drawer's composer (or ⌘J when the drawer is closed); wait until the answer is done.
+    Returns the last Raka turn."""
+    drawer = ai_drawer(page)
+    if drawer.count():
+        box = drawer.get_by_role("textbox", name="Pesan untuk Raka")
+    else:
+        page.keyboard.press("ControlOrMeta+j")
+        box = page.get_by_role("dialog", name="Tanya Raka").get_by_role("textbox", name="Tanya Raka")
+    before = drawer.locator(".rk-chat-raka").count()
+    box.fill(ask)
+    box.press("Enter")
+    drawer.locator(".rk-chat-raka").nth(before).wait_for(timeout=30000)
+    drawer.locator("button[aria-busy=true]").wait_for(state="detached", timeout=60000)
+    return drawer.locator(".rk-chat-raka").last
+
+
+def test_ai_live(page, ctx):
+    """The real Raka (rangka-ai serve --demo behind the kernel relay, contract 0020): "berapa faktur jatuh tempo bulan
+    ini?" streams an answer about invoices in rupiah from the kernel's data; "tambah field Nomor PO di faktur" ends in a
+    previewed change set card whose "Lihat pratinjau" opens the preview. Runs only with RANGKA_AI_DIR."""
+    if not ctx.ai_live:
+        print("     skipped: set RANGKA_AI_DIR to a built rangka-ai to talk to the real sidecar")
+        return
+    ctx.allow_http(404, r"/api/v1/files/custom/")  # the preview reads overlays the site may not have yet
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    answer = ai_turn(page, "berapa faktur jatuh tempo bulan ini?")
+    text = answer.locator(".rk-chat-text").inner_text()
+    assert "faktur" in text.lower() and "Rp" in text, f"an answer about invoices in rupiah, got {text!r}"
+    assert answer.locator(".rk-chat-act").count() >= 1, "the activity line of the tool Raka used"
+    print("     answer: " + text.replace("\n", " ")[:160])
+    try:
+        turn = ai_turn(page, "tambah field Nomor PO di faktur")
+        card = turn.locator(".rk-chat-cs")
+        card.first.wait_for(timeout=5000)
+        print("     change set: " + card.first.locator("b").inner_text())
+        shot(page, ctx, "ai-live")
+        check_fits(page, ctx, "chat drawer (live)")
+        card.first.get_by_role("button", name="Lihat pratinjau").click()
+        page.wait_for_function("() => /[?&]preview=[^&]+$/.test(location.hash)", timeout=10000)
+        cid = page.evaluate("() => location.hash.split('preview=')[1]")
+        page.get_by_role("status").filter(has_text="Pratinjau: ").wait_for(timeout=15000)
+        _, cs = Http(ctx.base).login(*ctx.owner).call("GET", f"/api/v1/changesets/{cid}")
+        assert cs.get("status") == "previewed" and cs.get("source") == "ai", f"a previewed change set from Raka: {cs}"
+        ctx.live.add("ai")
+    finally:
+        # whatever Raka proposed stays out of the later scenarios
+        owner = Http(ctx.base).login(*ctx.owner)
+        for c in owner.call("GET", "/api/v1/changesets?status=previewed")[1].get("data") or []:
+            if c.get("source") == "ai":
+                owner.call("POST", f"/api/v1/changesets/{c['id']}/reject")
+
+
+def start_sidecar(cli, tmp):
+    """rangka-ai's `serve --demo` (the scripted provider, no LLM key) on a free port with a random shared secret, as
+    `make run-demo` starts it. Returns (url, secret, process, log file) once /healthz answers."""
+    s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+    secret = uuid.uuid4().hex + uuid.uuid4().hex
+    log = open(os.path.join(tmp, "ai.log"), "w")
+    proc = subprocess.Popen(["node", cli, "serve", "--demo", "--port", str(port)], stdout=log, stderr=subprocess.STDOUT,
+                            env=dict(os.environ, RAKA_SERVE_TOKEN=secret))
+    url = f"http://127.0.0.1:{port}"
+    for _ in range(100):
+        if proc.poll() is not None:
+            log.close()
+            with open(log.name) as f:
+                raise RuntimeError(f"rangka-ai serve exited with {proc.returncode}:\n{f.read()[-1500:]}")
+        try:
+            urllib.request.urlopen(url + "/healthz", timeout=1)
+            return url, secret, proc, log
+        except Exception:
+            time.sleep(0.2)
+    proc.kill()
+    raise RuntimeError("rangka-ai serve did not answer /healthz within 20s")
+
+
 def main():
     global CTX
     ap = argparse.ArgumentParser()
@@ -3178,6 +3462,7 @@ def main():
     env = dict(os.environ, PGTEMP_STATE=os.path.join(tmp, ".pgtemp"))
     pgtemp = os.path.join(KERNEL, "scripts", "pgtemp.sh")
     server, log, pg_started, failures, skipped = None, None, False, [], None
+    sidecar, ai_log = None, None
 
     def fail(m):
         failures.append(m)
@@ -3221,10 +3506,16 @@ def main():
             if r.returncode:
                 raise RuntimeError(f"rangka {' '.join(cmd[:2])} failed: {r.stderr[-800:]}")
         s = socket.socket(); s.bind(("127.0.0.1", 0)); port = s.getsockname()[1]; s.close()
+        # RANGKA_AI_DIR (a built rangka-ai): its scripted sidecar runs for the whole suite and the kernel gets --ai-url
+        ai_flags, serve_env = [], dict(os.environ)
+        ai_cli = os.path.join(os.environ.get("RANGKA_AI_DIR", ""), "dist", "cli.js")
+        if os.environ.get("RANGKA_AI_DIR") and os.path.isfile(ai_cli) and shutil.which("node"):
+            ai_url, serve_env["RANGKA_AI_SECRET"], sidecar, ai_log = start_sidecar(ai_cli, tmp)
+            ai_flags = ["--ai-url", ai_url]
         log = open(os.path.join(tmp, "serve.log"), "w")
         server = subprocess.Popen([bin_path, "serve"] + common + ["--addr", f"127.0.0.1:{port}", "--web", os.path.join(ROOT, "web"),
                                    "--templates", os.path.join(ROOT, "templates"), "--org", ORG,
-                                   "--files-dir", os.path.join(tmp, "files")], stdout=log, stderr=subprocess.STDOUT)
+                                   "--files-dir", os.path.join(tmp, "files")] + ai_flags, stdout=log, stderr=subprocess.STDOUT, env=serve_env)
         base = f"http://127.0.0.1:{port}"
         for _ in range(150):
             if server.poll() is not None:
@@ -3239,6 +3530,7 @@ def main():
 
         _, meta = Http(base).login(*OWNER).call("GET", "/api/v1/meta")
         CTX = ctx = Ctx(base, meta, args)
+        ctx.ai_live = sidecar is not None
         ctx.features = detect_features(base)
         height = 860 if args.width < 600 else 900
         if args.shots:
@@ -3304,6 +3596,14 @@ def main():
                 server.kill()
         if log:
             log.close()
+        if sidecar:
+            sidecar.terminate()
+            try:
+                sidecar.wait(10)
+            except subprocess.TimeoutExpired:
+                sidecar.kill()
+        if ai_log:
+            ai_log.close()
         if pg_started:
             subprocess.run([pgtemp, "stop"], env=env, capture_output=True)
         if args.keep:

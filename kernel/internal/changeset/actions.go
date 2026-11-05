@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
@@ -56,10 +57,20 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 	doc := map[string]any{}
 	for k, v := range body {
 		switch k {
-		case "id", "status", "layers", "risk", "validation", "preview", "history":
+		case "id", "status", "layers", "risk", "validation", "preview", "history", "source":
 			continue
 		}
 		doc[k] = v
+	}
+	// a change set belongs to the proposer's organisation; rk_changesets has no row-level security
+	if v := doc["org"]; v != nil {
+		if org, ok := v.(string); !ok || (org != "" && org != a.Org) {
+			return nil, &Error{403, "org_mismatch", "Change set hanya bisa diusulkan untuk organisasi kamu sendiri.", nil}
+		}
+		delete(doc, "org")
+	}
+	if a.Assistant {
+		delete(doc, "author") // the assistant proposes as the person it acts for; it cannot name another author
 	}
 	if _, ok := doc["author"]; !ok {
 		kind := a.Kind
@@ -78,9 +89,10 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 	}
 	cs := &ChangeSet{}
 	remarshal(doc, cs)
-	if cs.Org == "" {
-		cs.Org = a.Org
+	if a.Assistant {
+		cs.Source = "ai"
 	}
+	cs.Org = a.Org
 	for i, op := range cs.Ops {
 		if (op.Op == "create" || op.Op == "replace") && op.Content == "" {
 			return nil, &Error{422, "invalid_changeset", fmt.Sprintf("ops/%d: %s needs content (the full .rk text)", i, op.Op), nil}
@@ -384,6 +396,9 @@ func (s *Service) Reject(ctx context.Context, a Actor, id, note string) (*Change
 // Apply writes the files, migrates and reloads metadata. It needs approval, or config.ai.auto_apply:
 // low_risk for a low-risk validated change set.
 func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, error) {
+	if a.Assistant { // never, not even through config.ai.auto_apply
+		return nil, &Error{403, "ai_forbidden", auth.AIForbiddenMessage, nil}
+	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	cs, err := s.Get(ctx, a.Org, id)

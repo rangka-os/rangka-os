@@ -1301,6 +1301,8 @@
   /* ---- Raka in the app: the ⌘J ask bar and the chat drawer. Raka proposes change sets; a person approves them in Ubah. */
   /* Enter and Esc belong to the IME while it composes (Japanese, Chinese, Korean input; keyCode 229 on older Safari). */
   function composing(e) { return !!((e.nativeEvent && e.nativeEvent.isComposing) || e.keyCode === 229); }
+  /* The shortcut as the person types it: ⌘J on a Mac, Ctrl J elsewhere (the same platform test as the app's handler). */
+  var ASK_KEY = /Mac|iPhone|iPad|iPod/.test((window.navigator && window.navigator.platform) || "") ? "⌘J" : "Ctrl J";
   function AskBar(p) {
     var ref = useRef(null);
     useEffect(function () { if (p.open && ref.current) ref.current.focus(); }, [p.open]);
@@ -1315,7 +1317,7 @@
         onChange: function (e) { if (p.onChange) p.onChange(e.target.value); },
         onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); if (canSend && p.onSend) p.onSend(); } } }),
       h("div", { className: "rk-askbar-foot" },
-        h("button", { type: "button", className: "rk-askbar-chat", onClick: p.onOpenChat }, "Buka chat", h(Kbd, null, "⌘J")),
+        h("button", { type: "button", className: "rk-askbar-chat", onClick: p.onOpenChat }, "Buka chat", h(Kbd, null, ASK_KEY)),
         h("span", { className: "rk-sp" }),
         h(Button, { variant: "primary", disabled: !canSend, loading: p.busy, onClick: function () { if (canSend && p.onSend) p.onSend(); } }, "Kirim", h(Kbd, null, "↵"))));
   }

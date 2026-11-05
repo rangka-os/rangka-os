@@ -7,7 +7,7 @@ const vm = require("vm");
 // bundle.js runs against a stub React: createElement records {type, props, children}; render() below expands
 // function components by calling them, so a test sees the whole tree as plain objects. Hooks are inert.
 const SRC = fs.readFileSync(path.join(__dirname, "..", "bundle.js"), "utf8");
-function load(over) {
+function load(over, win) {
   const React = Object.assign({
     createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
     useState: (v) => [typeof v === "function" ? v() : v, () => {}],
@@ -18,7 +18,7 @@ function load(over) {
     Fragment: "Fragment",
     Children: { map: (c, f) => [].concat(c || []).map(f), toArray: (c) => [].concat(c || []) },
   }, over);
-  const w = { React };
+  const w = Object.assign({ React }, win);
   vm.runInNewContext(SRC, { window: w, document: {} }, { filename: "bundle.js" });
   return w.Rangka;
 }
@@ -213,7 +213,20 @@ test("AskBar renders chip and removes it", () => {
   assert.strictEqual(nodes(render(R.AskBar(askBar({ context: null }))), (n) => hasClass(n, "rk-askbar-chip")).length, 0, "no chip without context");
   assert.strictEqual(R.AskBar(askBar({ open: false })), null, "closed renders nothing");
   const t = texts(tree);
-  assert.ok(t.indexOf("Buka chat") >= 0 && t.indexOf("Kirim") >= 0 && t.indexOf("⌘J") >= 0, "footer: Buka chat ⌘J and Kirim");
+  assert.ok(t.indexOf("Buka chat") >= 0 && t.indexOf("Kirim") >= 0, "footer: Buka chat and Kirim");
+});
+
+test("AskBar shows ⌘J on a Mac and Ctrl J elsewhere", () => {
+  const shortcut = (platform) => {
+    const Rp = load({}, { navigator: { platform } });
+    const chatBtn = nodes(render(Rp.AskBar(askBar({}))), (n) => hasClass(n, "rk-askbar-chat"))[0];
+    return texts(chatBtn).filter((x) => x !== "Buka chat").join("");
+  };
+  assert.strictEqual(shortcut("MacIntel"), "⌘J");
+  assert.strictEqual(shortcut("iPhone"), "⌘J");
+  assert.strictEqual(shortcut("Win32"), "Ctrl J");
+  assert.strictEqual(shortcut("Linux x86_64"), "Ctrl J");
+  assert.strictEqual(shortcut(""), "Ctrl J");
 });
 
 test("AskBar Enter calls onSend, Shift+Enter does not", () => {

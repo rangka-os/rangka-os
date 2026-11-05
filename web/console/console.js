@@ -966,7 +966,13 @@
   }
 
   /* ================================================================ app shell */
-  function readTheme() { try { return localStorage.getItem("rk-console-theme") || "system"; } catch (e) { return "system"; } }
+  // Light unless the person picked a mode. The old key also held the "system" default written on every load, so it
+  // is dropped rather than read.
+  var THEME_KEY = "rk.console.theme";
+  function readTheme() {
+    try { localStorage.removeItem("rk-console-theme"); var t = localStorage.getItem(THEME_KEY); return t === "dark" || t === "system" ? t : "light"; } catch (e) { return "light"; }
+  }
+  function pickTheme(setTheme, t) { setTheme(t); try { localStorage.setItem(THEME_KEY, t); } catch (e) {} }
   var COLLAPSE_KEY = "rk.console.sidebar.collapsed", PHONE = "(max-width: 600px)";
   function readCollapsed() { try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch (e) { return false; } }
   function writeCollapsed(on) { try { localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (e) {} }
@@ -1033,7 +1039,6 @@
     useEffect(function () { function k(e) { if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") { e.preventDefault(); setSwitchAt(null); setNavOpen(false); setCmd(true); } } document.addEventListener("keydown", k); return function () { document.removeEventListener("keydown", k); }; }, []);
     useEffect(function () {
       if (theme === "system") document.documentElement.removeAttribute("data-theme"); else document.documentElement.setAttribute("data-theme", theme);
-      try { localStorage.setItem("rk-console-theme", theme); } catch (e) {}
     }, [theme]);
     useEffect(function () { if (!window.matchMedia) return; var m = window.matchMedia("(prefers-color-scheme: dark)"), f = function () { setSysDark(m.matches); }; if (m.addEventListener) m.addEventListener("change", f); return function () { if (m.removeEventListener) m.removeEventListener("change", f); }; }, []);
 
@@ -1080,7 +1085,7 @@
     function switcherItems() {
       return [{ label: "Usulkan perubahan", icon: "add", onSelect: function () { setNavOpen(false); setPropose(true); } }, "-", { heading: "Tema" }].concat(
         [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
-          return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { setTheme(t[0]); } };
+          return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { pickTheme(setTheme, t[0]); } };
         }), ["-", { label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
         { label: "Profil", icon: "user", onSelect: function () { toast("info", "Belum ada di Console v0", "Profil dan keamanan akun ada di Rangka ID."); } },
         { label: "Keluar", icon: "logout", onSelect: logout }]);

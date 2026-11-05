@@ -71,6 +71,8 @@ OVERFLOW_JS = """() => {
 
 def new_page(browser, width, scheme):
     ctx = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=scheme, device_scale_factor=1)
+    # the Console is light unless the person picked a mode: pick the scheme under test
+    ctx.add_init_script("try { localStorage.setItem('rk.console.theme', %r) } catch (e) {}" % scheme)
     page = ctx.new_page()
     route_react(page)
     errs = []

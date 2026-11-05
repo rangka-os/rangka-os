@@ -2936,6 +2936,21 @@ def test_process_canvas(page, ctx):
     check_fits(page, ctx, "process canvas")
 
 
+def test_content_full_width(page, ctx):
+    """On a wide screen the page header and content reach the right edge, like Frappe: no max-width gap on the right."""
+    if ctx.args.width < 800:
+        return
+    page.set_viewport_size({"width": 1920, "height": 900})
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-main > .rk-pagehead").first.wait_for(timeout=10000)
+    for route in (ctx.home()[0], "#/r/sales_invoice"):
+        page.evaluate("(h) => { location.hash = h; }", route)
+        page.wait_for_timeout(600)
+        gap = page.evaluate("""() => ['.ap-main > .rk-pagehead', '.ap-main > .rk-shell-content'].map(s => {
+            const el = document.querySelector(s); return el ? Math.round(innerWidth - el.getBoundingClientRect().right) : null; })""")
+        assert all(g is not None and g <= 1 for g in gap), f"{route}: header/content stop {gap}px before the right edge"
+
+
 def test_no_horizontal_scroll(page, ctx):
     ensure_records(ctx, "sales_invoice", 3)
     approvals_mocked(page, ctx)

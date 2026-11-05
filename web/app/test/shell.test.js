@@ -181,6 +181,16 @@ test("densityOf: the theme's density, standard when missing or unknown", () => {
   assert.strictEqual(A.densityOf(null), "standard");
 });
 
+test("themeOf: the person's pick, else the company theme's light or dark, else light", () => {
+  assert.strictEqual(A.themeOf("dark", { theme: { mode: "light" } }), "dark");
+  assert.strictEqual(A.themeOf("system", { theme: { mode: "light" } }), "system");
+  assert.strictEqual(A.themeOf(null, { theme: { mode: "dark" } }), "dark");
+  assert.strictEqual(A.themeOf(null, { theme: { mode: "system" } }), "light");
+  assert.strictEqual(A.themeOf(null, { theme: {} }), "light");
+  assert.strictEqual(A.themeOf("purple", { theme: { mode: "neon" } }), "light");
+  assert.strictEqual(A.themeOf(null, null), "light");
+});
+
 test("sideNav: Beranda and the feature entries pinned, the app groups below", () => {
   const n = plain(A.sideNav(META, { approvals: true, processes: true, imports: true }, { approvals: 3 }));
   assert.deepStrictEqual(n.pinned.map((i) => [i.id, i.label, i.count]), [["home", "Beranda", undefined], ["approvals", "Persetujuan", 3], ["proses", "Proses bisnis", undefined], ["import/pelanggan_csv", "Impor data", undefined]]);

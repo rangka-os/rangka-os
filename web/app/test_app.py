@@ -834,6 +834,27 @@ def test_user_menu_lists_orgs(page, ctx):
         assert menu.get_by_role("menuitem", name=name).count() == 1, f"user menu lists {name}"
 
 
+def test_theme_default_light(page, ctx):
+    """Light by default even when the computer is in dark mode and an old auto-saved "system" is in storage; a mode the
+    person picks in the switcher sticks across a reload."""
+    page.emulate_media(color_scheme="dark")
+    page.goto(ctx.base + "/app/")
+    page.evaluate("() => localStorage.setItem('rk-app-theme', 'system')")
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    mode = lambda: page.evaluate("document.documentElement.getAttribute('data-theme')")
+    app_bg = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--app').trim()")
+    assert mode() == "light" and app_bg() == "#ffffff", f"light by default, got data-theme={mode()} --app={app_bg()}"
+    assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
+    account_menu(page).get_by_role("menuitem", name="Gelap").click()
+    assert mode() == "dark", "picking Gelap applies dark"
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    assert mode() == "dark", "the pick survives a reload"
+    page.evaluate("() => localStorage.removeItem('rk.app.theme')")
+    page.emulate_media(color_scheme="light")
+
+
 def test_sidebar_collapse(page, ctx):
     """Side-only shell: the sidebar collapses to icons and stays collapsed after a reload (localStorage); on a phone it
     is a drawer behind the 48px bar's menu button and has no collapse control."""
@@ -869,7 +890,7 @@ def test_sidebar_collapse(page, ctx):
     page.locator(".ap-shell > .rk-side.collapsed").wait_for(timeout=15000)
     page.wait_for_load_state("networkidle")
     shot(page, ctx, "shell-list-collapsed")
-    page.emulate_media(color_scheme="dark")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     page.wait_for_timeout(200)
     shot(page, ctx, "shell-list-collapsed-dark")
     side.get_by_role("button", name="Bentangkan navigasi").click()
@@ -1170,10 +1191,10 @@ def test_list_group_by(page, ctx):
     chips = [c.lower() for c in lunas.locator(".rk-table tbody .rk-chip").all_inner_texts()]
     assert chips and set(chips) == {"lunas"}, f"every row in the group is Lunas, got {sorted(set(chips))}"
     shot(page, ctx, "list-group-by")
-    page.emulate_media(color_scheme="dark")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     page.wait_for_timeout(300)  # let the colour transitions finish
     shot(page, ctx, "list-group-by-dark")
-    page.emulate_media(color_scheme="light")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
     # closing the group hides its rows; the group field picker lists the groupable fields
     lunas.locator(".rk-group-head").click()
     assert lunas.locator(".rk-table").count() == 0, "the group closed"
@@ -1221,10 +1242,10 @@ def test_report_totals(page, ctx):
     rows = page.locator(".rk-report tbody tr")
     assert rows.count() == min(agg["count"], 20), f"the report shows the current page, got {rows.count()} rows"
     shot(page, ctx, "list-report")
-    page.emulate_media(color_scheme="dark")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     page.wait_for_timeout(300)  # let the colour transitions finish
     shot(page, ctx, "list-report-dark")
-    page.emulate_media(color_scheme="light")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
     # Kolom adds any model field; the header's hide button takes it away again
     due = field_label(ctx, "sales_invoice", "due_date")
     page.get_by_role("button", name="Kolom", exact=True).click()
@@ -2847,7 +2868,7 @@ def enable_print_formats(site):
 
 def use_side_only(site):
     """The demo site's layout (crm_first) names `shell: top-nav`; the suite runs the default shell (side-only, contract
-    0017), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
+    0019), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
     d, changed = os.path.join(site, "layouts"), 0
     for fn in os.listdir(d) if os.path.isdir(d) else []:
         path = os.path.join(d, fn)
@@ -2918,6 +2939,21 @@ def test_process_canvas(page, ctx):
     writes = [u for m, u in seen if m in ("PUT", "POST") and "/api/v1/processes" in u]
     assert not writes, f"read-only canvas wrote: {writes}"
     check_fits(page, ctx, "process canvas")
+
+
+def test_content_full_width(page, ctx):
+    """On a wide screen the page header and content reach the right edge, like Frappe: no max-width gap on the right."""
+    if ctx.args.width < 800:
+        return
+    page.set_viewport_size({"width": 1920, "height": 900})
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-main > .rk-pagehead").first.wait_for(timeout=10000)
+    for route in (ctx.home()[0], "#/r/sales_invoice"):
+        page.evaluate("(h) => { location.hash = h; }", route)
+        page.wait_for_timeout(600)
+        gap = page.evaluate("""() => ['.ap-main > .rk-pagehead', '.ap-main > .rk-shell-content'].map(s => {
+            const el = document.querySelector(s); return el ? Math.round(innerWidth - el.getBoundingClientRect().right) : null; })""")
+        assert all(g is not None and g <= 1 for g in gap), f"{route}: header/content stop {gap}px before the right edge"
 
 
 def test_no_horizontal_scroll(page, ctx):

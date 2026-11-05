@@ -71,6 +71,8 @@ OVERFLOW_JS = """() => {
 
 def new_page(browser, width, scheme):
     ctx = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=scheme, device_scale_factor=1)
+    # the Console is light unless the person picked a mode: pick the scheme under test
+    ctx.add_init_script("try { localStorage.setItem('rk.console.theme', %r) } catch (e) {}" % scheme)
     page = ctx.new_page()
     route_react(page)
     errs = []
@@ -110,6 +112,16 @@ with sync_playwright() as pw:
                     page.screenshot(path=os.path.join(args.shots, f"{width}-{scheme}-{r.replace('/', '_')}.png"), full_page=True)
             ctx.close()
     print("screens checked:", len(ROUTES) * 4)
+
+    # 1a. wide screen: page header and content reach the right edge (no max-width gap)
+    ctx, page, errs = new_page(browser, 1920, "light")
+    page.goto(BASE + "?demo=1#/ringkasan")
+    page.wait_for_selector(".rk-pagehead h1", timeout=15000)
+    gap = page.evaluate("""() => ['.cn-main > .rk-pagehead', '.cn-main > .rk-shell-content'].map(s => {
+        const el = document.querySelector(s); return el ? Math.round(innerWidth - el.getBoundingClientRect().right) : null; })""")
+    if not all(g is not None and g <= 1 for g in gap):
+        fail(f"1920 #ringkasan: header/content stop {gap}px before the right edge")
+    ctx.close()
 
     # 1b. process canvas screen in demo mode: list, then four stage groups for lead_to_cash at both widths
     for width in (1440, 390):

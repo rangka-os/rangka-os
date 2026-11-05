@@ -177,6 +177,11 @@ export interface ReportColumn { field: string; label: string; align?: 'left' | '
 export declare function ReportTable(props: { columns: ReportColumn[]; rows: Record<string, any>[]; totals?: { label: Node; values?: Record<string, Node> }; onColumnsChange?: (columns: ReportColumn[]) => void; emptyText?: string }): React.ReactElement;
 /** 280px right panel; wrap the form and the panel in .rk-docpage so the panel moves below the form at <= 1100px. */
 export declare function DocPanel(props: { sections: { id?: string; title?: Node; content: Node }[]; label?: string }): React.ReactElement;
+/** The Sendi symbol (Bata, or white when reversed) with the "rangka" wordmark; `word: false` shows the symbol alone. */
+export declare function Logo(props: { size?: number; reversed?: boolean; word?: boolean; className?: string }): React.ReactElement;
+/** Sign-in and other account pages: a Bata brand panel (logo, Sendi joint, headline) beside the form; a strip above it on phones.
+ * `brand.text: null` hides the line under the headline. */
+export declare function AuthLayout(props: { brand?: { title?: Node; text?: Node | null }; chip?: Node; title?: Node; subtitle?: Node; footer?: Node; children?: Node }): React.ReactElement;
 /** ⌘J ask bar: 560px, fixed 24px above the bottom, centred (a full-width sheet on phones). Renders nothing when closed.
  *  Esc calls onClose; Enter calls onSend (Shift+Enter is a newline); blank or busy does not send; both keys are ignored while an IME composes.
  *  Render it as a sibling of ChatDrawer: an open drawer hides the ask bar (the drawer has its own composer). */

@@ -22,19 +22,14 @@
   .ap-ask .rk-icon { color: var(--raka); } /* Raka's teal: only on the Tanya Raka entries */
   .ap-shell .rk-shell-main { min-height: 0; }
   .ap-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-  .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { max-width: var(--page-max); box-sizing: border-box; width: 100%; }
+  .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { box-sizing: border-box; width: 100%; }
   .ap-menu-btn, .ap-nav-scrim, .ap-mhead { display: none; }
   .ap-mhead-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .ap-switch-menu .rk-menu { width: var(--menu-w); }
   .ap-splash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); padding: 24px; box-sizing: border-box; }
   .ap-splash > .rk-alert { max-width: 480px; }
   .ap-muted { margin: 0; color: var(--muted); }
-  .ap-signin { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: var(--soft); }
-  .ap-signin-card { width: min(400px, 100%); display: flex; flex-direction: column; gap: 16px; padding: 32px; box-sizing: border-box; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); }
-  .ap-signin-card h1 { margin: 0; font: 600 24px/28px var(--font-sans); }
-  .ap-signin-brand { display: flex; align-items: center; gap: 8px; font: 600 16px/20px var(--font-sans); }
-  .ap-signin-mark { width: 28px; height: 28px; border-radius: 6px; display: grid; place-items: center; background: var(--brand); color: #ffffff; }
-  .ap-signin-mark .rk-icon { width: 16px; height: 16px; }
+  .ap-signin { min-height: 100%; }
   .ap-signin-form { display: flex; flex-direction: column; gap: 16px; }
   .ap-signin-dialog { width: min(var(--dialog-w), calc(100vw - 32px)); }
   .ap-signin-dialog .rk-dialog-main { display: flex; flex-direction: column; gap: 16px; }
@@ -62,7 +57,6 @@
   @media (max-width: 640px) {
     .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Bantuan"], .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Notifikasi"] { display: none; }
     .ap-shell .rk-topnav > .rk-iconbtn[aria-label="Pindah aplikasi"] { display: none; }
-    .ap-signin-card { padding: 24px 16px; }
   }
   /* form view (fields.js, form.js) */
   .ap-printmenu { position: relative; display: inline-flex; }

@@ -11,7 +11,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 
 ### Shell
 
-`layout.shell` from `GET /api/v1/meta` picks the frame (contract 0017):
+`layout.shell` from `GET /api/v1/meta` picks the frame (contract 0019):
 
 - **`side-only`** (the default; also `side`, `pos` and `portal` until those exist): the Frappe sidebar. On top the
   business switcher (Sendi tile, company, your role); it opens a menu with the apps, the org switch (when you belong to

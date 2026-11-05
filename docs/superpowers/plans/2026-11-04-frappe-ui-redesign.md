@@ -11,7 +11,7 @@ backed by one new read-only kernel aggregate endpoint.
 - The design system (`web/design-system/bundle.{css,js}`, plain React UMD, no build step) is restyled in place, and a
   few new components are added.
 - `web/app` and `web/console` move onto those components.
-- Two contract proposals, 0017 (default shell) and 0018 (list aggregates), gate the only schema and kernel changes.
+- Two contract proposals, 0019 (default shell) and 0018 (list aggregates), gate the only schema and kernel changes.
 
 **Tech Stack:**
 - Go 1.24 kernel (`net/http` mux).
@@ -83,17 +83,17 @@ backed by one new read-only kernel aggregate endpoint.
 
 ---
 
-### Task 1: Contract proposals 0017 and 0018
+### Task 1: Contract proposals 0019 and 0018
 
 **Files:**
-- Create: `docs/contracts/0017-frappe-shell-default.md`
+- Create: `docs/contracts/0019-frappe-shell-default.md`
 - Create: `docs/contracts/0018-list-aggregates.md`
 - Modify: `docs/contracts.md` (index line for each, if the file lists contracts)
 
 **Interfaces:**
 - Produces: the accepted wording that Tasks 2 and 3 implement.
 
-- [ ] **Step 1: Write 0017.** Follow `0000-how-contracts-change.md`. Status: proposed. It decides:
+- [ ] **Step 1: Write 0019.** Follow `0000-how-contracts-change.md`. Status: proposed. It decides:
   - `schema/0.4/layout.json` `shell` default changes from `top-nav` to `side-only`;
   - the description changes from "top-nav (Atlassian style)" to "side-only (Frappe-style sidebar, default)";
   - `top-nav` stays valid;
@@ -118,12 +118,12 @@ backed by one new read-only kernel aggregate endpoint.
     - `404` for an unknown model;
     - `403` without a read grant.
   - No preview variant. In preview mode the app hides totals.
-- [ ] **Step 3: Commit and open one PR** titled "Contracts 0017 and 0018 (proposed)". Stop here until Dede accepts both. Tasks
+- [ ] **Step 3: Commit and open one PR** titled "Contracts 0019 and 0018 (proposed)". Stop here until Dede accepts both. Tasks
   2 and 3 merge only after acceptance. Tasks 4–7 may start in parallel.
 
 ```bash
-git add docs/contracts/0017-frappe-shell-default.md docs/contracts/0018-list-aggregates.md docs/contracts.md
-git commit -m "contracts: 0017 default shell, 0018 list aggregates (proposed)"
+git add docs/contracts/0019-frappe-shell-default.md docs/contracts/0018-list-aggregates.md docs/contracts.md
+git commit -m "contracts: 0019 default shell, 0018 list aggregates (proposed)"
 ```
 
 ---
@@ -182,7 +182,7 @@ git commit -m "contracts: 0017 default shell, 0018 list aggregates (proposed)"
 
 ---
 
-### Task 3: Default shell (contract 0017)
+### Task 3: Default shell (contract 0019)
 
 **Files:**
 - Modify: `schema/0.4/layout.json` (`shell.default`, top-level `description`, `extends.default` → `rangka/side-only`)
@@ -197,7 +197,7 @@ git commit -m "contracts: 0017 default shell, 0018 list aggregates (proposed)"
 - [ ] **Step 3: Validate.** `make -C kernel test-unit && make -C kernel compare-python`, then
   `python3 tools/rangka_validate.py ../rangka-apps/apps --site ../rangka-apps/sites/kopi-senja --connectors ../rangka-connectors`.
   Expected: PASS, identical reports, 0 errors.
-- [ ] **Step 4: Commit** `schema+kernel: side-only is the default shell (contract 0017)`.
+- [ ] **Step 4: Commit** `schema+kernel: side-only is the default shell (contract 0019)`.
 
 ---
 

@@ -18,8 +18,9 @@ import (
 // ErrNoChromium is returned by PDF when no Chromium or Chrome binary is available.
 var ErrNoChromium = errors.New("chromium not found")
 
-// pdfTimeout bounds one conversion; a variable so tests can shorten it.
-var pdfTimeout = 30 * time.Second
+// pdfTimeout bounds one conversion; a variable so tests can shorten it. A cold Chromium on a busy machine can
+// spend 20 s starting before it prints, so 30 s was too tight.
+var pdfTimeout = 60 * time.Second
 
 // pdfSlots bounds the Chromium processes running at once (each is 100–200 MB for up to pdfTimeout):
 // RANGKA_PDF_CONCURRENCY, default 2, read once at start.
@@ -82,7 +83,11 @@ func PDF(ctx context.Context, html []byte) ([]byte, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, pdfTimeout)
 	defer cancel()
+	// The fresh profile in dir makes every run a first run: skip the first-run, extension, sync, component-update and
+	// background-network work Chromium does at start, and use /tmp instead of a small /dev/shm (containers).
 	cmd := exec.CommandContext(ctx, bin, "--headless", "--disable-gpu", "--no-sandbox", "--no-pdf-header-footer",
+		"--no-first-run", "--no-default-browser-check", "--disable-extensions", "--disable-sync",
+		"--disable-background-networking", "--disable-component-update", "--disable-dev-shm-usage",
 		"--user-data-dir="+filepath.Join(dir, "profile"), "--print-to-pdf="+out, (&url.URL{Scheme: "file", Path: in}).String())
 	var stderr bytes.Buffer
 	cmd.Stderr = &stderr

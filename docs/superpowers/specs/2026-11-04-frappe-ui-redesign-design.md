@@ -93,7 +93,7 @@ Numbers below are the target; the builder may adjust by a pixel or two after see
 - **Default shell is a schema matter.** `schema/0.4/layout.json` has `shell: top-nav | side-only | pos | portal`
   with default `top-nav` and describes top-nav as "Atlassian style". Making the Frappe sidebar the default
   changes the schema default and description, so it starts as a contract proposal
-  (`docs/contracts/0017-…`, see `0000-how-contracts-change.md`). `top-nav` keeps rendering, restyled.
+  (`docs/contracts/0019-…`, see `0000-how-contracts-change.md`). `top-nav` keeps rendering, restyled.
 - **No build step, no new framework.** `web/app` is plain React 18.3.1 (UMD, vendored) + `window.Rangka` design
   system, hash routes, no CDN. Stay with that. Remix Icon stays the only icon set.
 - **Content rules unchanged:** Bahasa Indonesia first, sentence case, "kamu", `Rp 1.250.000`, `27 Okt 2026`,
@@ -124,7 +124,7 @@ Numbers below are the target; the builder may adjust by a pixel or two after see
 3. `web/app`: shell, list, form, dashboard, approvals, import, process, Ubah UI moved onto the new pieces.
 4. `web/console`: same shell and components; `build_demo.py` regenerates `tokens.css`.
 5. `kernel/internal/theme/tokens.json` via `make sync-schemas`.
-6. Contract 0017 for the default shell; `templates/layouts/*.rk` and `templates/themes/standard.rk` comments updated.
+6. Contract 0019 for the default shell; `templates/layouts/*.rk` and `templates/themes/standard.rk` comments updated.
 7. Docs: the design-system README, `website` pages that describe the UI, and recaptured screenshots.
 8. After the code: the claude.ai Design System artifact (Dede updates or asks for it); the old `web/prototype` is not
    updated.
@@ -145,7 +145,7 @@ Numbers below are the target; the builder may adjust by a pixel or two after see
 - The kernel gets one read-only endpoint for this: count, sum, average, min and max over the rows a list query matches.
   It takes the list's search, filter and row scope, and can group by one field.
 - Permissions and row scope work as they do for `GET /api/v1/r/{model}`.
-- It starts as its own contract proposal, `docs/contracts/0018-…`, next to 0017.
+- It starts as its own contract proposal, `docs/contracts/0018-…`, next to 0019.
 - Its exact shape is left to the builder. It may reuse the dashboard aggregate code.
 - **Anti-goals:**
   - Copying Frappe's concepts where Rangka differs (no direct "Customize Form" that bypasses change sets).
@@ -160,7 +160,7 @@ Numbers below are the target; the builder may adjust by a pixel or two after see
   goes through Ubah as a change set on `views.*`, the way list columns already do.
 - **Report view** uses `views.list` as its starting columns and lets the person add any model field. It gets no metadata
   of its own. The calendar view (`views.default: calendar`) is not part of this project; it belongs to project 2.
-- **Contract 0017** covers three things:
+- **Contract 0019** covers three things:
   - make the Frappe sidebar the default shell;
   - make `web/app` honour `layout.shell`, which it ignores today because it always renders `top`;
   - fix the kernel's fallback layout, which returns `shell: "side"`, a value that is not in the schema enum.

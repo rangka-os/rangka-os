@@ -1,6 +1,8 @@
-# 0017 Default shell: side-only
+# 0019 Default shell: side-only
 
 Status: accepted (5 Nov 2026) · Owner of the change: rangka-os (schema, kernel, web app) · Affects: nothing in rangka-apps
+
+Renumbered from 0017 on 5 Nov 2026: 0017 is connector secrets.
 
 ## Context
 

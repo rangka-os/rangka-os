@@ -86,10 +86,10 @@ try:
         page.on("pageerror", lambda e: errs.append("pageerror: " + str(e)))
         page.on("console", lambda m: errs.append(m.text) if m.type == "error" and not m.text.startswith("Failed to load resource") else None)
         page.goto(base + "/console/")
-        page.wait_for_selector(".cn-login-card, .rk-pagehead h1", timeout=15000)
-        if page.locator(".cn-login-card").count():
-            page.locator(".cn-login-card input[type=password]").fill("rangka-demo")
-            page.locator(".cn-login-card button[type=submit]").click()
+        page.wait_for_selector(".cn-login-form, .rk-pagehead h1", timeout=15000)
+        if page.locator(".cn-login-form").count():
+            page.locator(".cn-login-form input[type=password]").fill("rangka-demo")
+            page.locator(".cn-login-form button[type=submit]").click()
         page.wait_for_selector(".rk-pagehead h1", timeout=15000)
         if "terhubung" not in page.locator(".cn-mode").inner_text().lower():
             fail("mode lozenge is not Terhubung")

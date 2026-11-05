@@ -17,7 +17,7 @@
   .cn-shell > .rk-side nav { flex: 1 0 auto; overflow: visible; } /* footer and collapse sit at the bottom */
   .cn-shell .rk-shell-main { min-height: 0; }
   .cn-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
-  .cn-main > .rk-shell-content, .cn-main > .rk-pagehead { max-width: var(--page-max); box-sizing: border-box; width: 100%; }
+  .cn-main > .rk-shell-content, .cn-main > .rk-pagehead { box-sizing: border-box; width: 100%; }
   .cn-splash, .cn-fatal { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); padding: 24px; box-sizing: border-box; }
   .cn-menu-btn, .cn-nav-scrim, .cn-mhead { display: none; }
   .cn-mhead-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
@@ -236,10 +236,8 @@
   .cn-demo-note.ok { background: var(--ok-tint); }
   .cn-demo-note label { font-weight: 600; color: var(--ink-2); }
   .cn-demo-note span { overflow-wrap: anywhere; }
-  .cn-login { min-height: 100%; display: flex; align-items: center; justify-content: center; padding: 16px; box-sizing: border-box; background: var(--soft); }
-  .cn-login-card { width: min(400px, 100%); display: flex; flex-direction: column; gap: 16px; padding: 32px; box-sizing: border-box; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); }
-  .cn-login-card h1 { margin: 0; font: 600 24px/28px var(--font-sans); }
-  .cn-login-card p { margin: 0; }
+  .cn-login { min-height: 100%; }
+  .cn-login-form { display: flex; flex-direction: column; gap: 16px; }
 
   @media (max-width: 1100px) {
     .cn-detail { grid-template-columns: minmax(0, 1fr); }

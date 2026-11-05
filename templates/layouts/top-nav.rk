@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/layout.json
-# Top bar shell (Frappe UI style). Stays valid; side-only is the default shell (contract 0017).
+# Top bar shell (Frappe UI style). Stays valid; side-only is the default shell (contract 0019).
 name: top_nav
 label: {id: top-nav}
 shell: top-nav

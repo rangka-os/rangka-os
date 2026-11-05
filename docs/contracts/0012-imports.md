@@ -65,7 +65,9 @@ lines:
 - Limits: 20 MB per file, 50 000 data rows. Empty rows are skipped.
 - **Cell conversion follows the target field's type.** Numbers accept `1250000`, `1.250.000`, `1,250,000`,
   `Rp 1.250.000`, `12,5` and `12.5`; `currency` fields must be whole rupiah. Dates accept `dd/mm/yyyy`,
-  `d/m/yyyy`, `yyyy-mm-dd` and Excel serials (day first: Indonesian exports). Check fields accept
+  `d/m/yyyy`, `dd-mm-yyyy` (Moka exports), `dd.mm.yyyy`, the same with a two-digit year (`31-12-23`, Excel's window:
+  `00`-`29` is 20xx, `30`-`99` is 19xx), `yyyy-mm-dd` and Excel serials (day first: Indonesian exports). Times accept
+  `HH:MM[:SS]` and `HH.MM[.SS]`. Check fields accept
   `1/0/ya/tidak/true/false`. Money is never parsed as float: integers and decimal strings only.
 
 ### 3. REST (`/api/v1`, same error shape as today)

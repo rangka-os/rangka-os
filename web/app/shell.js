@@ -373,10 +373,8 @@
   }
 
   function SignInScreen(p) {
-    return h("div", { className: "ap-signin" }, h("div", { className: "ap-signin-card" },
-      h("div", { className: "ap-signin-brand" }, h("span", { className: "ap-signin-mark", "aria-hidden": "true" }, h(R.Icon, { name: "store" })), h("b", null, "Rangka")),
-      h("h1", null, "Masuk"),
-      h("p", { className: "ap-muted" }, "Pakai email dan kata sandi akunmu."),
+    return h("div", { className: "ap-signin" }, h(R.AuthLayout, { title: "Masuk ke akunmu", subtitle: "Pakai email dan kata sandi akunmu.",
+      footer: [h("span", { key: "id" }, "Rangka ID")] },
       h(SignInForm, { idPrefix: "ap-signin", onDone: p.onDone })));
   }
 

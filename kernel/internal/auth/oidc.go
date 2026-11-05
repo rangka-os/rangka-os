@@ -116,20 +116,41 @@ func oauthError(w http.ResponseWriter, status int, code, desc string) {
 	writeJSON(w, status, map[string]any{"error": code, "error_description": desc})
 }
 
+// loginPage is Rangka ID's sign-in page, in the design system's AuthLayout look (web/design-system AuthLayout):
+// a Bata brand panel with the Sendi joint beside the form, a strip above it on phones, light and dark.
 var loginPage = template.Must(template.New("login").Parse(`<!doctype html><html lang="id"><head><meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1"><title>Masuk · Rangka ID</title>
-<style>body{font:14px/20px system-ui,sans-serif;background:#f7f5f3;color:#1c1917;display:grid;place-items:center;min-height:100vh;margin:0}
-form{background:#fff;border:1px solid #dedad6;border-radius:8px;padding:24px;width:min(320px,90vw);display:grid;gap:12px}
-.mark{width:28px;height:28px}h1{font-size:18px;margin:0}label{display:grid;gap:4px;font-size:12px;color:#44403c}
-input{font:inherit;padding:8px;border:1px solid #8c827b;border-radius:3px}input:focus{outline:2px solid #e0623f;outline-offset:0;border-color:#e0623f}
-button{font:inherit;padding:8px;border:0;border-radius:3px;background:#1c1917;color:#fff;cursor:pointer}button:hover{background:#3a3330}
-button:focus-visible{outline:2px solid #e0623f;outline-offset:2px}.err{color:#ae2e24}</style></head>
-<body><form method="post" action="/oauth/authorize"><svg class="mark" viewBox="0 0 256 256" role="img" aria-label="Rangka"><path fill="#b4432a" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg><h1>Masuk ke {{.Client}}</h1>
-{{if .Error}}<p class="err">{{.Error}}</p>{{end}}
-<label>Email<input name="email" type="email" autocomplete="username" required></label>
+<meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Masuk · Rangka ID</title>
+<style>
+:root{--app:#fff;--ink:#1c1917;--ink2:#44403c;--muted:#6b625c;--field:#f7f5f3;--border:#8c827b;--line:#eeeae7;--primary:#1c1917;--on-primary:#fff;--primary-hover:#3a3330;--focus:#e0623f;--chip:#f6ede6;--chip-ink:#a33b23;--bad:#ae2e24;--bad-tint:#fdecea}
+@media (prefers-color-scheme:dark){:root{--app:#1a1715;--ink:#ede8e4;--ink2:#cfc7c1;--muted:#a79d96;--field:#13110f;--border:#7a706a;--line:#2a2522;--primary:#ede8e4;--on-primary:#1a1715;--primary-hover:#fff;--focus:#f08a6b;--chip:#3a2219;--chip-ink:#f08a6b;--bad:#fd9891;--bad-tint:#5d1f1a}}
+*{box-sizing:border-box}html,body{height:100%}body{margin:0;font:13px/20px ui-sans-serif,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;background:var(--app);color:var(--ink);display:flex}
+.brand{flex:0 0 44%;max-width:640px;position:relative;overflow:hidden;display:flex;flex-direction:column;justify-content:space-between;gap:32px;padding:32px 40px;background:#b4432a;color:#fff}
+.logo{display:inline-flex;align-items:center;gap:8px;font-weight:600;font-size:15px;letter-spacing:-.01em}.logo svg{width:22px;height:22px}
+.joint{position:absolute;right:-12%;bottom:-10%;width:70%;max-width:420px;opacity:.14;pointer-events:none}
+.pitch{position:relative;max-width:360px}.pitch h2{margin:0;font-weight:600;font-size:32px;line-height:38px;letter-spacing:-.02em}.pitch p{margin:12px 0 0;font-size:14px;line-height:22px;color:#f6ede6}
+main{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:40px 24px}
+form{width:min(360px,100%);display:flex;flex-direction:column;gap:16px}
+.chip{align-self:flex-start;display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:var(--chip);color:var(--chip-ink);font-size:12px;font-weight:500}
+h1{margin:0;font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.01em}.sub{margin:-8px 0 0;color:var(--muted)}
+label{display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:16px;color:var(--ink2)}
+input{font:inherit;height:28px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--field);color:var(--ink)}
+input:focus{outline:0;border-color:var(--focus);box-shadow:0 0 0 2px var(--chip);background:var(--app)}
+button{font:inherit;font-weight:500;height:32px;border:0;border-radius:6px;background:var(--primary);color:var(--on-primary);cursor:pointer}button:hover{background:var(--primary-hover)}
+button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.err{margin:0;padding:8px 12px;border-radius:6px;background:var(--bad-tint);color:var(--bad)}
+.foot{width:min(360px,100%);color:var(--muted);font-size:12px}
+@media (max-width:860px){body{flex-direction:column}.brand{flex:none;max-width:none;padding:20px 16px;gap:12px}.pitch h2{font-size:20px;line-height:26px}.pitch p{display:none}.joint{width:160px;right:-24px;bottom:-40px}main{justify-content:flex-start;padding:24px 16px}}
+@media (max-width:600px){input,button{height:40px}}
+</style></head>
+<body><div class="brand"><span class="logo"><svg viewBox="0 0 256 256" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg>rangka</span>
+<svg class="joint" viewBox="0 0 256 256" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg>
+<div class="pitch"><h2>Jadi juragan, bukan admin.</h2><p>Raka menyusun alur bisnismu dan ikut menjalankannya. Uang tetap kamu yang setujui.</p></div></div>
+<main><form method="post" action="/oauth/authorize"><span class="chip">{{.Client}}</span><h1>Masuk ke akunmu</h1><p class="sub">Pakai akun Rangka ID untuk masuk ke {{.Client}}.</p>
+{{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
+<label>Email<input name="email" type="email" autocomplete="username" required autofocus></label>
 <label>Kata sandi<input name="password" type="password" autocomplete="current-password" required></label>
 {{range $k, $v := .Params}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
-<button>Masuk</button></form></body></html>`))
+<button>Masuk</button></form><div class="foot">Rangka ID</div></main></body></html>`))
 
 // Authorize handles GET/POST /oauth/authorize (code flow with PKCE S256). Without a session it shows a
 // sign-in form; the POST of that form signs in and continues.

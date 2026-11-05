@@ -882,3 +882,31 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   /* the switch keeps its 28x16 look inside a transparent border that makes a 40px target */
   .rk-switch, .rk-switch[aria-checked="true"] { box-sizing: content-box; border: 12px solid transparent; background-clip: padding-box; }
 }
+
+/* ---- Logo and AuthLayout (sign-in). The brand panel keeps the logo kit's Bata #B4432A in both themes:
+ * white text on it is 5.2:1, while the dark theme's lighter --brand would fail for body text. */
+.rk-logo { display: inline-flex; align-items: center; gap: 8px; color: var(--ink); }
+.rk-logo .rk-logo-mark { color: #b4432a; flex: none; }
+.rk-logo-word { font: 600 15px/20px var(--font-sans); letter-spacing: -.01em; }
+.rk-logo.reversed, .rk-logo.reversed .rk-logo-mark { color: #ffffff; }
+.rk-auth { min-height: 100%; display: flex; background: var(--app); color: var(--ink); }
+.rk-auth-brand { flex: 0 0 44%; max-width: 640px; position: relative; overflow: hidden; display: flex; flex-direction: column; justify-content: space-between; gap: 32px; padding: 32px 40px; box-sizing: border-box; background: #b4432a; color: #ffffff; }
+.rk-auth-joint { position: absolute; right: -12%; bottom: -10%; width: 70%; max-width: 420px; opacity: .14; color: #ffffff; pointer-events: none; }
+.rk-auth-pitch { position: relative; max-width: 360px; }
+.rk-auth-pitch h2 { margin: 0; font: 600 32px/38px var(--font-sans); letter-spacing: -.02em; }
+.rk-auth-pitch p { margin: 12px 0 0; font: 400 14px/22px var(--font-sans); color: #f6ede6; }
+.rk-auth-side { flex: 1; min-width: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 24px; padding: 40px 24px; box-sizing: border-box; }
+.rk-auth-form { width: min(360px, 100%); display: flex; flex-direction: column; gap: 16px; }
+.rk-auth-form h1 { margin: 0; font: 600 20px/28px var(--font-sans); letter-spacing: -.01em; }
+.rk-auth-sub { margin: -8px 0 0; color: var(--muted); }
+.rk-auth-chip { align-self: flex-start; display: inline-flex; align-items: center; height: 24px; padding: 0 10px; border-radius: var(--r-pill); background: var(--selected); color: var(--selected-ink); font: 500 12px/16px var(--font-sans); }
+.rk-auth-foot { width: min(360px, 100%); display: flex; flex-wrap: wrap; gap: 16px; color: var(--muted); font-size: var(--font-size-sm); }
+.rk-auth-foot a { color: var(--link); }
+@media (max-width: 860px) {
+  .rk-auth { flex-direction: column; }
+  .rk-auth-brand { flex: none; max-width: none; padding: 20px 16px; gap: 12px; }
+  .rk-auth-pitch h2 { font-size: 20px; line-height: 26px; }
+  .rk-auth-pitch p { display: none; }
+  .rk-auth-joint { width: 160px; right: -24px; bottom: -40px; }
+  .rk-auth-side { justify-content: flex-start; padding: 24px 16px; }
+}

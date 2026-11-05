@@ -830,6 +830,27 @@ def test_user_menu_lists_orgs(page, ctx):
         assert menu.get_by_role("menuitem", name=name).count() == 1, f"user menu lists {name}"
 
 
+def test_theme_default_light(page, ctx):
+    """Light by default even when the computer is in dark mode and an old auto-saved "system" is in storage; a mode the
+    person picks in the switcher sticks across a reload."""
+    page.emulate_media(color_scheme="dark")
+    page.goto(ctx.base + "/app/")
+    page.evaluate("() => localStorage.setItem('rk-app-theme', 'system')")
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    mode = lambda: page.evaluate("document.documentElement.getAttribute('data-theme')")
+    app_bg = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--app').trim()")
+    assert mode() == "light" and app_bg() == "#ffffff", f"light by default, got data-theme={mode()} --app={app_bg()}"
+    assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
+    account_menu(page).get_by_role("menuitem", name="Gelap").click()
+    assert mode() == "dark", "picking Gelap applies dark"
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    assert mode() == "dark", "the pick survives a reload"
+    page.evaluate("() => localStorage.removeItem('rk.app.theme')")
+    page.emulate_media(color_scheme="light")
+
+
 def test_sidebar_collapse(page, ctx):
     """Side-only shell: the sidebar collapses to icons and stays collapsed after a reload (localStorage); on a phone it
     is a drawer behind the 48px bar's menu button and has no collapse control."""
@@ -865,7 +886,7 @@ def test_sidebar_collapse(page, ctx):
     page.locator(".ap-shell > .rk-side.collapsed").wait_for(timeout=15000)
     page.wait_for_load_state("networkidle")
     shot(page, ctx, "shell-list-collapsed")
-    page.emulate_media(color_scheme="dark")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     page.wait_for_timeout(200)
     shot(page, ctx, "shell-list-collapsed-dark")
     side.get_by_role("button", name="Bentangkan navigasi").click()
@@ -1165,10 +1186,10 @@ def test_list_group_by(page, ctx):
     chips = [c.lower() for c in lunas.locator(".rk-table tbody .rk-chip").all_inner_texts()]
     assert chips and set(chips) == {"lunas"}, f"every row in the group is Lunas, got {sorted(set(chips))}"
     shot(page, ctx, "list-group-by")
-    page.emulate_media(color_scheme="dark")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     page.wait_for_timeout(300)  # let the colour transitions finish
     shot(page, ctx, "list-group-by-dark")
-    page.emulate_media(color_scheme="light")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
     # closing the group hides its rows; the group field picker lists the groupable fields
     lunas.locator(".rk-group-head").click()
     assert lunas.locator(".rk-table").count() == 0, "the group closed"
@@ -1216,10 +1237,10 @@ def test_report_totals(page, ctx):
     rows = page.locator(".rk-report tbody tr")
     assert rows.count() == min(agg["count"], 20), f"the report shows the current page, got {rows.count()} rows"
     shot(page, ctx, "list-report")
-    page.emulate_media(color_scheme="dark")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     page.wait_for_timeout(300)  # let the colour transitions finish
     shot(page, ctx, "list-report-dark")
-    page.emulate_media(color_scheme="light")
+    page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
     # Kolom adds any model field; the header's hide button takes it away again
     due = field_label(ctx, "sales_invoice", "due_date")
     page.get_by_role("button", name="Kolom", exact=True).click()

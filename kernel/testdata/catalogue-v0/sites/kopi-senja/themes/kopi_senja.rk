@@ -2,7 +2,7 @@
 name: kopi_senja
 label: {id: Kopi Senja}
 extends: rangka/standard
-mode: system
+mode: light
 color:
   brand: '#9a5b2e'
   chart-1: '#0c66e4'

@@ -172,6 +172,15 @@
     return DENSITIES[d] ? d : "standard";
   }
 
+  var THEMES = { light: 1, dark: 1, system: 1 };
+  /** The colour mode: the person's own pick (light, dark or system), else the company theme's mode when it names one
+   * (light or dark; its "system" is no preference), else light. */
+  function themeOf(pick, meta) {
+    if (THEMES[pick]) return pick;
+    var m = meta && meta.theme && meta.theme.mode;
+    return m === "light" || m === "dark" ? m : "light";
+  }
+
   function lowerFirst(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
   function recHash(model, name) { return "#/r/" + encodeURIComponent(model) + "/" + encodeURIComponent(name); }
 
@@ -236,6 +245,7 @@
   RA.sideNav = sideNav;
   RA.shellKind = shellKind;
   RA.densityOf = densityOf;
+  RA.themeOf = themeOf;
   RA.commandGroups = commandGroups;
   RA.navFromLayout = navFromLayout;
   RA.hashQuery = hashQuery;
@@ -303,7 +313,13 @@
   RA.Ctx = React.createContext(null);
   RA.api = api;
 
-  function readTheme() { try { return global.localStorage.getItem("rk-app-theme") || "system"; } catch (e) { return "system"; } }
+  // Only a mode the person picked is stored. The old key also held the "system" default written on every load, so it
+  // is dropped rather than read: people who never picked now get the company theme's mode, else light.
+  var THEME_KEY = "rk.app.theme";
+  function readThemePick() {
+    try { global.localStorage.removeItem("rk-app-theme"); return global.localStorage.getItem(THEME_KEY); } catch (e) { return null; }
+  }
+  function writeThemePick(t) { try { global.localStorage.setItem(THEME_KEY, t); } catch (e) {} }
   var COLLAPSE_KEY = "rk.sidebar.collapsed";
   function readCollapsed() { try { return global.localStorage.getItem(COLLAPSE_KEY) === "1"; } catch (e) { return false; } }
   function writeCollapsed(on) { try { global.localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (e) {} }
@@ -540,11 +556,12 @@
   function App(p) {
     var boot = p.boot, me = p.me, setMe = p.setMe;
     var rs = useState(parseRoute(global.location.hash)), route = rs[0], setRoute = rs[1];
-    var ts = useState(readTheme()), theme = ts[0], setTheme = ts[1];
+    var ts = useState(readThemePick), themePick = ts[0], setThemePick = ts[1];
     var tt = useState([]), toasts = tt[0], setToasts = tt[1];
     var xs = useState(false), expired = xs[0], setExpired = xs[1];
     var ns = useState(false), navOpen = ns[0], setNavOpen = ns[1];
     var ms = useState(boot.meta), meta = ms[0], setMeta = ms[1];
+    var theme = themeOf(themePick, meta);
     var es = useState(boot.eng), eng = es[0], setEng = es[1];
     var fs = useState(boot.features), features = fs[0], setFeatures = fs[1];
     var cr = useState(0), setCacheRev = cr[1];
@@ -605,7 +622,6 @@
     useEffect(function () {
       var root = global.document.documentElement;
       if (theme === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", theme);
-      try { global.localStorage.setItem("rk-app-theme", theme); } catch (e) {}
     }, [theme]);
 
     useEffect(function () { global.document.documentElement.dataset.density = densityOf(meta); }, [meta]);
@@ -779,7 +795,7 @@
     function goApp(a) { var h2 = homeHash({ apps: installed.filter(function (x) { return x.name === a.id; }) }); if (h2) RA.navigate(h2); }
     function help() { toast("info", "Bantuan", "Hubungi pemilik usaha atau admin kalau kamu butuh akses ke halaman lain."); }
     function account(k) {
-      if (k.indexOf("theme:") === 0) setTheme(k.slice(6));
+      if (k.indexOf("theme:") === 0) { setThemePick(k.slice(6)); writeThemePick(k.slice(6)); }
       else if (k === "logout" || k === "switch") logout();
       else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
       else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");

@@ -47,6 +47,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | --- | --- |
 | `index.html` | Loads React, the design system, `tokens.css`, then the files below; app CSS (`ap-*`, incl. the ≤ 600px rules) |
 | `tokens.css` | Design tokens (Ink, Bata, Kapur), light and dark |
+| `app.css` | The app's look from Dede's Pencil design `rangka.pen`: app-only token values (light from the pen's app preview, dark from its `jg-*` dark theme), the white sidebar with Kapur selection, outlined buttons, the Bata "Buat …" button, status pills, table cards, board columns, dashboard cards, the green approve button and sign-in. Loaded after the inline CSS, so the Console and `tokens.json` stay as they are |
 | `engine.js` | CEL subset, defaults, computed fields, rules and status; `RangkaEngine.create(meta, lookup)`. Reference semantics for the kernel |
 | `api.js` | `RangkaAppAPI`: every kernel call, `ApiError`, feature detection, `parseRupiah` / `rupiah` |
 | `shell.js` | Router, sign-in, the shell from `layout.shell` (sidebar or top nav), ⌘K, density, org switcher, 401 handling, Ubah state and the menu editor; mounts last |

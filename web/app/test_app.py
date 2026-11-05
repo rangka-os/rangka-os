@@ -844,7 +844,7 @@ def test_theme_default_light(page, ctx):
     page.locator(".ap-shell").wait_for(timeout=15000)
     mode = lambda: page.evaluate("document.documentElement.getAttribute('data-theme')")
     app_bg = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--app').trim()")
-    assert mode() == "light" and app_bg() == "#ffffff", f"light by default, got data-theme={mode()} --app={app_bg()}"
+    assert mode() == "light" and app_bg() == "#fafaf9", f"light by default, got data-theme={mode()} --app={app_bg()}"
     assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
     account_menu(page).get_by_role("menuitem", name="Gelap").click()
     assert mode() == "dark", "picking Gelap applies dark"

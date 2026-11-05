@@ -613,8 +613,7 @@
     function onFilter(v) { setFval(v); setPage(1); }
     function setSortTo(s) { setPrefs({ sort: sortParam(s) || null }); setPage(1); }
     var filtered = !!(dq || filter);
-    var newBtn = canCreate ? h(R.Button, { key: "n", variant: "primary", icon: "add", onClick: create }, "Buat " + lower(label)) : null;
-    var header = h(R.PageHeader, { title: label, extra: newBtn ? [newBtn] : [] });
+    var newBtn = canCreate ? h(R.Button, { key: "n", variant: "primary", icon: "add", className: "ap-create", onClick: create }, "Buat " + lower(label)) : null;
     var chips = u.on && view === "list" ? h(ColumnChips, { ctx: ctx, model: m, columns: listColumns(mm), u: u }) : null;
 
     /* ---- toolbar: search and quick filters, then Urutkan, Kolom, Kelompok and the view switcher */
@@ -646,22 +645,27 @@
         return { label: colLabel(eng, m, f), checked: f === gfield, onSelect: function () { setPrefs({ group: f }); } };
       }));
     }
+    // rangka.pen: search and "Buat …" in the header; under it the views as tabs, the filters and tools on the right
+    var search = h("label", { key: "q", className: "rk-search ap-head-search" }, h(R.Icon, { name: "search" }),
+      h("input", { placeholder: "Cari " + lower(label) + "…", value: query, onChange: function (e) { setQuery(e.target.value); }, "aria-label": "Cari" }));
     var tools = h("div", { className: "ap-list-tools" },
       view === "group" && gfields.length ? h(ToolMenu, { key: "g", icon: "group", label: "Kelompok: " + colLabel(eng, m, gfield), items: groupItems }) : null,
       board ? null : h(ToolMenu, { key: "s", icon: "sort", label: "Urutkan", title: sort ? "Diurutkan menurut " + colLabel(eng, m, sort.key) : undefined, items: sortItems }),
-      board ? null : h(ToolMenu, { key: "c", icon: "table", label: "Kolom", items: columnItems }),
-      h(R.ViewSwitcher, { value: view, label: "Tampilan", options: viewIds.map(function (v) { return { id: v, label: VIEW_LABEL[v] }; }),
-        onChange: function (v) { setPrefs({ view: v }); setPage(1); } }));
-    var filterBar = h(R.FilterBar, { key: "f", search: true, searchPlaceholder: "Cari " + lower(label) + "…", query: query, onQuery: setQuery, filters: filters, value: fval, onChange: onFilter });
-    var toolbar = h("div", { className: "rk-tbar ap-list-bar" }, filterBar, tools);
+      board ? null : h(ToolMenu, { key: "c", icon: "table", label: "Kolom", items: columnItems }));
+    var viewTabs = h(R.ViewSwitcher, { value: view, label: "Tampilan", options: viewIds.map(function (v) { return { id: v, label: VIEW_LABEL[v] }; }),
+      onChange: function (v) { setPrefs({ view: v }); setPage(1); } });
+    var filterBar = h(R.FilterBar, { key: "f", search: false, filters: filters, value: fval, onChange: onFilter });
+    var toolbar = h("div", { className: "rk-tbar ap-list-bar ap-views" }, viewTabs, filterBar, tools);
 
     var total = view === "group" ? (agg ? agg.count : 0) : data.total;
     var busy = view === "group" ? !agg && !aggErr : loading;
+    var header = h(R.PageHeader, { title: label, tags: !busy && total ? h("span", { className: "ap-headcount" }, total.toLocaleString("id-ID") + " data") : null,
+      extra: newBtn ? [search, newBtn] : [search] });
     // in Ubah an empty board still shows its columns, so stages can be added and ordered before the first record;
     // a failed aggregate is not an empty list: the group view shows its error and "Coba lagi"
     if (!busy && !total && !filtered && !(u.on && board) && !(view === "group" && aggErr)) {
       return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, toolbar,
-        h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", onClick: create }, "Buat yang pertama") : null })));
+        h(R.EmptyState, { title: "Belum ada " + lower(label), actions: canCreate ? h(R.Button, { variant: "primary", icon: "add", className: "ap-create", onClick: create }, "Buat yang pertama") : null })));
     }
 
     var pager = !board && view !== "group" && data.total > PAGE_SIZE

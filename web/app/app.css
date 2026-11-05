@@ -1,0 +1,351 @@
+/* The business app's look, from Dede's Pencil design rangka.pen (the "Sewa Pesta Makmur" app inside Juragan Studio,
+   frames I5s1gq/h37Lz, J1P9qx and DkSmr). Loaded after tokens.css and the design system, so it only restyles /app/:
+   the Console and the design system gallery keep tokens.json as is. Light values come from the pen's lt-* set and the
+   app preview; dark values from the pen's jg-* dark theme. Layout and behaviour stay in index.html and the views. */
+
+:root, :root[data-theme="light"] {
+  --font-sans: "Inter", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, "SF Mono", monospace;
+  --font-serif: "Newsreader", Georgia, serif;
+  --font-size: 13px; --font-size-sm: 12px;
+  --app: #fafaf9; --surface: #ffffff; --soft: #f7f5f3;
+  --line: #eeeae7; --line-strong: #e4dfda;
+  --hover: rgba(28, 25, 23, .045); --neutral: #f4f2ef; --neutral-hover: #e9e5e1;
+  --selected: #fbefea; --selected-ink: #8a2f1c; --row-selected: #fdf6f3;
+  --ok: #216e4e; --ok-tint: #eaf6ef; --warn: #a54800; --warn-tint: #fff4dd; --warn-line: #f1dda8;
+  --info: #0369a1; --info-tint: #e8f2fb; --bad: #b42318; --bad-tint: #fef2f2;
+  --r: 6px; --r-btn: 7px; --r-md: 7px; --r-lg: 10px; --r-dialog: 12px;
+  --sidebar: 224px; --header: 56px;
+  /* charts: the pen's stone bars first, then Bata, green, amber, dark stone and Bata tint so several series stay apart */
+  --chart-1: #d6cdc6; --chart-2: #e0623f; --chart-3: #7cc79b; --chart-4: #e2b203; --chart-5: #a8998f; --chart-6: #f1c8bf;
+  /* app-only roles */
+  --ap-field-line: #d9d2cc;        /* inputs, search, filter buttons */
+  --ap-nav-icon: #78716c;
+  --ap-col: #f2f1ef;               /* board columns */
+  --ap-card-line: #e7e5e4;
+  --ap-card-shadow: 0 1px 1px rgba(12, 10, 9, .05);
+  --ap-pill: #f5f5f4; --ap-pill-ink: #57534e;
+  --ap-create: #b4432a; --ap-create-hover: #9c3a24; --ap-create-ink: #ffffff;
+  --ap-count: #fdebd3; --ap-count-ink: #a54800;
+  --ap-docno: #736860;
+  --ap-approve: #1f7a52; --ap-approve-hover: #19663f; --ap-approve-ink: #ffffff;
+  --ap-seg: #f4f2ef; --ap-seg-on: #ffffff; --ap-seg-shadow: 0 1px 2px rgba(28, 25, 23, .10);
+}
+:root[data-theme="dark"] {
+  --app: #13110f; --surface: #1c1917; --soft: #24201d;
+  --chart-1: #6e655f; --chart-2: #e0623f; --chart-3: #4bce97; --chart-4: #f5cd47; --chart-5: #a79d96; --chart-6: #8a3f2c;
+  --line: #2e2825; --line-strong: #3a322e;
+  --ink: #ede8e4; --ink-2: #cfc7c1; --muted: #a79d96; --faint: #7a706a;
+  --hover: rgba(255, 255, 255, .05); --neutral: #24201d; --neutral-hover: #2e2825;
+  --selected: #30201b; --selected-ink: #f08a6b; --row-selected: #241a16;
+  --ok: #7ee2b8; --ok-tint: rgba(75, 206, 151, .12); --warn: #f5cd47; --warn-tint: rgba(245, 205, 71, .12); --warn-line: rgba(245, 205, 71, .4);
+  --info: #7cc4fa; --info-tint: rgba(56, 152, 236, .14); --bad: #fca5a5; --bad-tint: rgba(240, 82, 82, .14);
+  --ap-field-line: #3a322e; --ap-nav-icon: #a79d96; --ap-col: #191614; --ap-card-line: #2e2825; --ap-card-shadow: none;
+  --ap-pill: rgba(255, 255, 255, .07); --ap-pill-ink: #cfc7c1;
+  --ap-create: #e0623f; --ap-create-hover: #f08a6b; --ap-create-ink: #1a1210;
+  --ap-count: rgba(245, 205, 71, .14); --ap-count-ink: #f5cd47;
+  --ap-docno: #958a83;
+  --ap-approve: #4bce97; --ap-approve-hover: #7ee2b8; --ap-approve-ink: #06231f;
+  --ap-seg: #13110f; --ap-seg-on: #2e2825; --ap-seg-shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --app: #13110f; --surface: #1c1917; --soft: #24201d;
+    --chart-1: #6e655f; --chart-2: #e0623f; --chart-3: #4bce97; --chart-4: #f5cd47; --chart-5: #a79d96; --chart-6: #8a3f2c;
+  --chart-1: #6e655f; --chart-2: #e0623f; --chart-3: #4bce97; --chart-4: #f5cd47; --chart-5: #a79d96; --chart-6: #8a3f2c;
+    --line: #2e2825; --line-strong: #3a322e;
+    --ink: #ede8e4; --ink-2: #cfc7c1; --muted: #a79d96; --faint: #7a706a;
+    --hover: rgba(255, 255, 255, .05); --neutral: #24201d; --neutral-hover: #2e2825;
+    --selected: #30201b; --selected-ink: #f08a6b; --row-selected: #241a16;
+    --ok: #7ee2b8; --ok-tint: rgba(75, 206, 151, .12); --warn: #f5cd47; --warn-tint: rgba(245, 205, 71, .12); --warn-line: rgba(245, 205, 71, .4);
+    --info: #7cc4fa; --info-tint: rgba(56, 152, 236, .14); --bad: #fca5a5; --bad-tint: rgba(240, 82, 82, .14);
+    --ap-field-line: #3a322e; --ap-nav-icon: #a79d96; --ap-col: #191614; --ap-card-line: #2e2825; --ap-card-shadow: none;
+    --ap-pill: rgba(255, 255, 255, .07); --ap-pill-ink: #cfc7c1;
+    --ap-create: #e0623f; --ap-create-hover: #f08a6b; --ap-create-ink: #1a1210;
+    --ap-count: rgba(245, 205, 71, .14); --ap-count-ink: #f5cd47;
+  --ap-docno: #958a83;
+  --ap-approve: #4bce97; --ap-approve-hover: #7ee2b8; --ap-approve-ink: #06231f;
+    --ap-seg: #13110f; --ap-seg-on: #2e2825; --ap-seg-shadow: none;
+  }
+}
+
+body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
+
+/* ---- shell: a white sidebar on the warm page, Kapur selection with deep Bata text ---- */
+.ap-shell { background: var(--app); }
+.ap-shell > .rk-side { background: var(--surface); border-right: 1px solid var(--line); }
+.ap-shell .rk-side-switch { margin: 10px 8px 6px; padding: 6px 8px; border-radius: 8px; }
+.ap-shell .rk-side-head b { font: 600 13.5px/18px var(--font-sans); }
+.ap-shell .rk-side-head small { font-size: 11.5px; line-height: 16px; }
+.ap-shell .rk-side-mark, .ap-shell .rk-side-head .tile { width: 24px; height: 24px; border-radius: 6px; background: var(--brand); }
+/* the Sendi r in white on the Bata tile: a stem and an arm cut at 45 degrees */
+.ap-shell .rk-side-mark::before { content: ""; position: absolute; left: 7px; top: 7px; width: 4px; height: 11px; background: #ffffff; }
+.ap-shell .rk-side-mark::after { left: 7px; right: auto; top: 7px; width: 11px; height: 4px; border-radius: 0; background: #ffffff; clip-path: polygon(0 0, 100% 0, 75% 100%, 0 100%); }
+.ap-shell .rk-side-search { margin: 0 8px 8px; height: 30px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ap-field-line); border-radius: var(--r-btn); color: var(--muted); }
+.ap-shell .rk-side-search:hover { background: var(--soft); }
+.ap-shell .rk-side nav { padding: 2px 8px 12px; }
+.ap-shell .rk-navlink { height: 30px; gap: 9px; padding: 0 8px; border-radius: var(--r); color: var(--ink-2); font: 400 13px/20px var(--font-sans); }
+.ap-shell .rk-navlink .rk-icon { width: 15px; height: 15px; color: var(--ap-nav-icon); }
+.ap-shell .rk-navlink:hover { background: var(--hover); color: var(--ink); }
+.ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); color: var(--selected-ink); font-weight: 600; }
+.ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--brand); }
+.ap-shell .rk-navlink .rk-count { min-width: 18px; height: 18px; padding: 0 6px; box-sizing: border-box; border-radius: var(--r-pill); background: var(--ap-count); color: var(--ap-count-ink);
+  font: 600 11px/18px var(--font-sans); text-align: center; }
+.ap-shell .rk-navlink[aria-current="page"] .rk-count { color: var(--ap-count-ink); }
+.ap-shell .rk-navgroup > p { margin: 14px 0 4px; padding: 0 10px; height: 16px; font: 600 11px/16px var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: #8c827b; }
+.ap-shell .rk-side-foot { border-top: 1px solid var(--line); padding: 8px 10px; }
+.ap-shell .rk-side-collapse .rk-iconbtn { color: var(--ap-nav-icon); }
+:root[data-theme="dark"] .ap-shell .rk-navgroup > p { color: var(--muted); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ap-shell .rk-navgroup > p { color: var(--muted); } }
+/* the phone bar and the top-nav shell */
+.ap-side .ap-mhead { background: var(--surface); }
+.ap-shell .rk-topnav { background: var(--surface); border-bottom-color: var(--line); }
+
+/* Pakai / Ubah: the pen's segmented control (grey track, the current one raised in white) */
+.ap-ubah-mode { padding: 2px; border-radius: 8px; background: var(--ap-seg); gap: 1px; }
+.ap-ubah-mode button { border-radius: var(--r); font: 500 12.5px/26px var(--font-sans); min-height: 26px; color: var(--muted); }
+.ap-ubah-mode button[aria-pressed="true"] { background: var(--ap-seg-on); box-shadow: var(--ap-seg-shadow); }
+
+/* ---- page header: 18px bold title, actions on the right, no rule under it ---- */
+.ap-main .rk-pagehead { background: transparent; padding: 0 20px; border-bottom: 0; }
+.ap-main .rk-pagehead-row { min-height: 60px; padding: 14px 0 6px; gap: 6px 10px; }
+.ap-main .rk-pagehead h1 { font: 700 18px/26px var(--font-sans); letter-spacing: -.01em; }
+.ap-main .rk-pagehead .rk-crumbs { font: 400 13px/20px var(--font-sans); color: var(--muted); }
+.ap-main .rk-pagehead .rk-crumbs + h1, .ap-main .rk-pagehead .rk-crumbs h1 { font-size: 16px; }
+.ap-main .rk-pagehead-sub { margin: -2px 0 8px; }
+.ap-main .rk-pagehead.has-tabs .rk-tabs { margin: 0; }
+.ap-main .rk-shell-content { padding: 8px 20px 32px; gap: 12px; }
+
+/* ---- buttons: outlined white by default, Ink for the one primary action, Bata for "Buat …" ---- */
+.rk-btn { border-radius: var(--r-btn); font: 500 12.5px/20px var(--font-sans); padding: 0 11px; }
+.rk-btn:not([class*="rk-btn-"]) { background: var(--surface); color: var(--ink-2); box-shadow: inset 0 0 0 1px var(--line-strong); }
+.rk-btn:not([class*="rk-btn-"]):hover { background: var(--soft); color: var(--ink); }
+.rk-btn-sm { font-size: 12px; padding: 0 8px; }
+.rk-btn-lg { font-size: 13.5px; }
+.rk-btn.ap-create { background: var(--ap-create); color: var(--ap-create-ink); font-weight: 600; }
+.rk-btn.ap-create:hover, .rk-btn.ap-create:active { background: var(--ap-create-hover); color: var(--ap-create-ink); }
+.rk-btn.ap-create:disabled { background: var(--disabled-bg); color: var(--faint); }
+.rk-iconbtn { border-radius: var(--r-btn); }
+
+/* ---- list toolbar: white search, outlined filters, the view switch as the pen's segmented control ---- */
+.ap-main .rk-search { height: 30px; background: var(--surface); border-color: var(--ap-field-line); border-radius: var(--r-btn); flex-basis: 240px; }
+.ap-main .rk-search:hover { background: var(--surface); border-color: var(--line-strong); }
+.ap-main .rk-search input { font-size: 12.5px; }
+.ap-main .rk-fbtn { height: 30px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ap-field-line); color: var(--ink-2); font: 500 12.5px/20px var(--font-sans); border-radius: var(--r-btn); }
+.ap-main .rk-fbtn:hover, .ap-main .rk-fbtn[aria-expanded="true"] { background: var(--soft); }
+.ap-main .rk-fbtn.on { background: var(--selected); color: var(--selected-ink); box-shadow: inset 0 0 0 1px var(--selected-ink); }
+.ap-main .rk-seg { background: var(--ap-seg); border-radius: 8px; padding: 2px; gap: 1px; height: 30px; }
+.ap-main .rk-seg button { border-radius: var(--r); color: var(--muted); font: 500 12.5px/1 var(--font-sans); padding: 0 10px; }
+.ap-main .rk-seg button[aria-pressed="true"] { background: var(--ap-seg-on); color: var(--ink); font-weight: 600; box-shadow: var(--ap-seg-shadow); }
+/* the pen's list header: search and "Buat …" on the right of the title, a count pill after it */
+.ap-main .ap-head-search { flex: 0 1 220px; }
+.ap-main .rk-pagehead-extra { flex-wrap: nowrap; gap: 8px; }
+.ap-headcount { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--r-pill); background: var(--ap-pill); color: var(--ap-pill-ink); font: 400 11.5px/20px var(--font-sans); white-space: nowrap; }
+/* under it one ruled row: the views as underline tabs on the left, filters and tools as small outlined buttons on the right */
+.ap-main .ap-views { display: flex; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; padding: 0; margin: -4px 0 4px; border-bottom: 1px solid var(--line); }
+.ap-main .ap-views > .rk-filterbar { flex: 1 1 auto; justify-content: flex-end; padding-bottom: 6px; }
+.ap-main .ap-views > .rk-filterbar > .rk-sp { display: none; }
+.ap-main .ap-views > .ap-list-tools { margin-left: 0; padding-bottom: 6px; }
+.ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: 26px; font: 400 12px/18px var(--font-sans); color: var(--ap-pill-ink); padding: 0 8px; border-radius: var(--r); }
+.ap-main .ap-views .rk-fbtn .rk-icon, .ap-main .ap-views .ap-toolmenu .rk-btn .rk-icon { width: 12px; height: 12px; }
+.ap-main .rk-viewswitch { order: -1; height: auto; padding: 0; gap: 16px; background: none; border-radius: 0; overflow-x: auto; flex: 0 1 auto; }
+.ap-main .rk-viewswitch-btn { height: 34px; padding: 0; min-width: 0; border-radius: 0; background: none; color: var(--muted); font: 400 12.5px/20px var(--font-sans); box-shadow: inset 0 -2px 0 transparent; }
+.ap-main .rk-viewswitch-btn:hover { color: var(--ink); }
+.ap-main .rk-viewswitch-btn .rk-icon { display: none; }
+.ap-main .rk-viewswitch-btn .l { display: inline; }
+.ap-main .rk-viewswitch-btn[aria-pressed="true"] { background: none; color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ink); }
+.ap-main .rk-viewswitch-btn[aria-pressed="true"] .rk-icon { color: var(--ink); }
+.ap-main .rk-viewswitch-btn:focus-visible { outline-offset: -2px; }
+
+/* ---- status pills: rounded, no dot, the pen's tints ---- */
+.rk-pill, .rk-chip { height: 20px; padding: 0 8px; gap: 4px; font: 500 11.5px/20px var(--font-sans); }
+.rk-pill::before, .rk-chip::before { display: none; }
+.rk-pill.draft, .rk-chip-draft { background: var(--ap-pill); color: var(--ap-pill-ink); }
+.rk-pill.cancelled, .rk-chip-cancelled { background: var(--ap-pill); color: var(--muted); text-decoration: line-through; text-decoration-color: currentColor; }
+
+/* ---- record tables: a white card, a warm header row, 38px rows ---- */
+.ap-main .rk-table-card .rk-tw, .ap-main .rk-report, .ap-main .ap-groupview { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+.ap-main .rk-table-card .rk-tw { overflow-x: auto; }
+.ap-main .rk-table th { height: 34px; background: var(--soft); border-bottom: 1px solid var(--line); font: 600 11.5px/16px var(--font-sans); color: var(--muted); }
+.ap-main .rk-table td { height: 38px; color: var(--ink-2); font-size: 12.5px; }
+.ap-main .rk-table th:first-child, .ap-main .rk-table td:first-child { padding-left: 14px; }
+.ap-main .rk-table th:last-child, .ap-main .rk-table td:last-child { padding-right: 14px; }
+.ap-main .rk-table tbody tr:last-child td { border-bottom: 0; }
+.ap-main .rk-table td a, .ap-main .rk-table td .rk-link { font-weight: 500; }
+.ap-main .rk-table .rk-doc-no, .ap-main .rk-table td a.rk-doc-no { font: 400 12.5px/20px var(--font-mono); color: var(--ap-docno); }
+.ap-main .rk-table td a.rk-doc-no:hover { color: var(--ink); }
+.ap-main .rk-table tfoot td { background: var(--soft); }
+.ap-main .rk-pager { font-size: 12.5px; color: var(--muted); }
+/* dashboard list cards keep their flush table inside the card */
+.ap-main .rk-card .rk-table th { background: transparent; }
+
+/* ---- board: grey columns, white cards with a hairline and a 1px shadow ---- */
+.ap-main .pv-board { gap: 10px; grid-auto-columns: minmax(240px, 1fr); }
+.ap-main .pv-col-k { background: var(--ap-col); border-radius: 8px; min-height: 120px; }
+.ap-main .pv-col-k header { padding: 10px 12px 0; gap: 6px; }
+.ap-main .pv-col-k header::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: var(--ap-nav-icon); flex: none; }
+.ap-main .pv-col-k.closed header::before { background: var(--ok); }
+.ap-main .pv-col-k header b { font: 600 12.5px/20px var(--font-sans); color: var(--ink); }
+.ap-main .pv-col-k header .n { background: none; padding: 0; font: 400 12px/16px var(--font-sans); color: var(--muted); }
+.ap-main .pv-prob { font-size: 11.5px; }
+.ap-main .pv-sum { padding: 2px 12px 0 25px; font: 600 12.5px/18px var(--font-sans); color: var(--ink-2); }
+.ap-main .pv-cards { gap: 8px; padding: 8px; }
+.ap-main .pv-card { padding: 10px; gap: 4px; border-radius: 7px; border: 1px solid var(--ap-card-line); box-shadow: var(--ap-card-shadow); font-size: 12px; line-height: 18px; color: var(--ink-2); }
+.ap-main .pv-card:hover { background: var(--surface); border-color: var(--line-strong); }
+.ap-main .pv-card b { font: 600 13px/18px var(--font-sans); color: var(--ink); }
+.ap-main .pv-card .rk-amount { font-weight: 600; color: var(--ink); }
+.ap-main .pv-card-move { margin-top: 6px; height: 26px; font-size: 12px; color: var(--muted); border-color: var(--ap-card-line); border-radius: var(--r); background: var(--surface); }
+
+/* ---- cards and dashboards (the pen's Ringkasan: 10px cards, a ruled head, quiet labels, 20px numbers) ---- */
+.ap-main .rk-card { border-color: var(--line-strong); border-radius: var(--r-lg); }
+.ap-main .rk-card-head { min-height: 42px; padding: 0 14px; border-bottom: 1px solid var(--line); }
+.ap-main .rk-card-head h2 { font: 600 13px/20px var(--font-sans); }
+.ap-main .rk-card-body { padding: 12px 14px 14px; }
+.ap-main .rk-card-body.flush { padding: 0; }
+.ap-main .rk-numcard .rk-card-head, .ap-main .rk-stat .rk-card-head { border-bottom: 0; }
+.ap-main .rk-stat { border-color: var(--line-strong); border-radius: var(--r-lg); padding: 12px 14px; }
+.ap-main .rk-stat-label, .ap-main .rk-numcard-top { font-size: 11.5px; color: var(--muted); }
+.ap-main .rk-stat-num { font: 600 20px/28px var(--font-sans); letter-spacing: -.015em; margin: 4px 0 2px; }
+.ap-main .rk-numcard-cap { font-size: 11.5px; }
+.ap-main .rk-dash { gap: 12px; }
+
+/* number tiles in one strip with dividers (dashboard.js groups consecutive number widgets into .ap-tiles) */
+.ap-main .ap-tiles { display: grid; grid-template-columns: var(--ap-tiles); gap: 1px; background: var(--line); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+.ap-main .ap-tiles > * { background: var(--surface); }
+.ap-main .ap-tiles > .rk-stat { border: 0; border-radius: 0; padding: 12px 14px; min-width: 0; }
+.ap-main .ap-tiles > .rk-stat.click:hover { background: var(--soft); }
+.ap-main .ap-tiles > .rk-skeleton { border-radius: 0; }
+@media (max-width: 1100px) { .ap-main .ap-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-main .ap-tiles > :last-child:nth-child(odd) { grid-column: span 2; } }
+/* charts: no grid lines, quiet axes, square-topped stone bars */
+.ap-main .rk-chart .grid { stroke: transparent; }
+.ap-main .rk-chart .ax, .ap-main .rk-donut .ax { fill: var(--muted); font-size: 11px; }
+.ap-main .rk-funnel .bar { background: var(--soft); border-radius: 2px; height: 18px; }
+.ap-main .rk-funnel .bar i { border-radius: 2px; }
+.ap-main .rk-legend i { border-radius: 2px; }
+
+/* ---- forms and the document page ---- */
+.ap-main .rk-field > label, .ap-main .rk-field > .rk-label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-main .rk-field > input, .ap-main .rk-field textarea, .ap-main .rk-field select, .ap-main .rk-input-affix input,
+.ap-main .rk-select-btn, .ap-main .rk-link-btn, .ap-main .rk-date-btn { background: var(--surface); border-color: var(--ap-field-line); border-radius: var(--r-btn); }
+.ap-main .rk-field > input:hover, .ap-main .rk-field textarea:hover, .ap-main .rk-field select:hover, .ap-main .rk-select-btn:hover, .ap-main .rk-link-btn:hover { background: var(--surface); border-color: var(--border); }
+.ap-main .rk-input-affix span { background: var(--soft); border-color: var(--ap-field-line); }
+.ap-main .pv-ro { background: var(--soft); border-radius: var(--r-btn); font-size: 13px; }
+.ap-docsec { border-bottom-color: var(--line); }
+.ap-docsec-t { font: 600 13.5px/20px var(--font-sans); }
+.rk-docpanel { border-left-color: var(--line); }
+.rk-docpanel-sec h3 { font: 600 12px/16px var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); margin-bottom: 8px; }
+/* lifecycle: the pen's step dots on a thin rail */
+.ap-main .rk-steps { gap: 4px; }
+.ap-main .rk-step-icon { height: 4px; background: var(--line-strong); }
+.ap-main .rk-step.finish .rk-step-icon { background: var(--ink-2); }
+.ap-main .rk-step.process .rk-step-icon { background: var(--brand); }
+.ap-main .rk-step-title { font-size: 12px; }
+/* child table and totals */
+.ap-main .rk-grid-wrap { border-color: var(--line-strong); border-radius: var(--r-lg); }
+.ap-main .rk-grid th { height: 34px; background: var(--soft); font: 600 11.5px/16px var(--font-sans); color: var(--muted); }
+.ap-main .rk-grid td { font-size: 12.5px; }
+.ap-main .rk-totals { font-size: 12.5px; }
+
+/* ---- alerts, tabs, menus, dialogs ---- */
+.ap-main .rk-alert { border-radius: var(--r-lg); }
+.ap-main .rk-tabs { gap: 18px; border-bottom-color: var(--line); }
+.ap-main .rk-tabs button { font: 500 12.5px/20px var(--font-sans); color: var(--muted); padding: 6px 0 8px; }
+.ap-main .rk-tabs button[aria-selected="true"] { color: var(--ink); font-weight: 600; }
+.ap-main .rk-tabs button[aria-selected="true"]::after { background: var(--ink); height: 2px; }
+.ap-main .rk-tabs .n { background: var(--ap-count); color: var(--ap-count-ink); font-weight: 600; font-size: 11px; }
+.rk-menu, .rk-pop, .rk-fpop, .ap-gl-pop { border-radius: 8px; }
+.rk-dialog { border-radius: var(--r-dialog); }
+
+/* ---- approvals inbox: rows as a card list ---- */
+.ap-main .ap-inbox { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+.ap-main .ap-inbox-row { padding: 12px 14px; border-bottom-color: var(--line); }
+.ap-main .ap-inbox-row:first-child { padding-top: 12px; }
+.ap-main .ap-inbox-doc a { font: 400 12.5px/20px var(--font-mono); color: var(--ap-docno); }
+.ap-main .ap-inbox-doc a:hover { color: var(--ink); }
+
+/* the approval's Setujui is the pen's green (the phone approval card); Tolak stays outlined */
+.rk-btn.ap-approve { background: var(--ap-approve); color: var(--ap-approve-ink); }
+.rk-btn.ap-approve:hover, .rk-btn.ap-approve:active { background: var(--ap-approve-hover); color: var(--ap-approve-ink); }
+.rk-btn.ap-approve:disabled { background: var(--disabled-bg); color: var(--faint); }
+.ap-approvals-panel .ap-banner-t { color: var(--warn); }
+
+/* ---- process list and import: the same white card ---- */
+.ap-main .ap-proc-list { border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); overflow: hidden; margin-top: 4px; }
+.ap-main .ap-proc-list > li:last-child { border-bottom: 0; }
+.ap-main .ap-proc-item { border-radius: 0; padding: 8px 14px; }
+.ap-main .ap-imp-tw { border-color: var(--line-strong); }
+
+/* ---- Ubah bars: the pen's change banner (warm yellow) for previews ---- */
+.ap-ubah-preview { background: #fff9ec; color: #7a3e00; border-bottom-color: #f3e1bc; }
+.ap-ubah-preview > .rk-icon { color: #a54800; }
+:root[data-theme="dark"] .ap-ubah-preview { background: #1f1b12; color: #f5cd47; border-bottom-color: rgba(245, 205, 71, .3); }
+:root[data-theme="dark"] .ap-ubah-preview > .rk-icon { color: #f5cd47; }
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .ap-ubah-preview { background: #1f1b12; color: #f5cd47; border-bottom-color: rgba(245, 205, 71, .3); }
+  :root:not([data-theme="light"]) .ap-ubah-preview > .rk-icon { color: #f5cd47; }
+}
+.ap-ubah-card { border-color: var(--line-strong); border-radius: 12px; }
+
+/* ---- Raka: the ⌘J ask bar and the chat drawer as the pen's Studio chat (I5s1gq): a white composer card with a soft
+   drop shadow, the context as an outlined chip, an Ink send key; your messages in a warm bubble, Raka's as plain text ---- */
+.rk-askbar { padding: 9px; gap: 6px; border: 1px solid var(--line-strong); border-radius: 12px; box-shadow: 0 6px 18px rgba(28, 25, 23, .07), 0 1px 2px rgba(28, 25, 23, .04); }
+.rk-askbar-input { font: 13.5px/20px var(--font-sans); padding: 4px; min-height: 36px; }
+.rk-askbar-chip { height: 26px; padding: 0 2px 0 6px; border-radius: var(--r-btn); background: var(--surface); box-shadow: inset 0 0 0 1px var(--line); color: var(--ink-2); font: 500 12px/18px var(--font-sans); }
+.rk-askbar-chip .rk-icon { color: var(--raka); }
+.rk-askbar-chat { height: 26px; font-size: 12px; color: var(--muted); border-radius: var(--r-btn); }
+.rk-askbar .rk-btn-primary { height: 26px; }
+.rk-chat { border-left: 1px solid var(--line-strong); box-shadow: 0 6px 24px rgba(28, 25, 23, .08); }
+.rk-chat-head { min-height: 44px; padding: 0 8px 0 14px; border-bottom-color: var(--line); }
+.rk-chat-head b { font: 600 13px/20px var(--font-sans); }
+.rk-chat-log { padding: 18px 16px 12px; gap: 18px; }
+.rk-chat-me { padding: 8px 12px; border-radius: 14px 14px 4px 14px; background: var(--neutral); font: 13.5px/21px var(--font-sans); }
+.rk-chat-raka { gap: 10px; }
+.rk-chat-raka > :first-child { width: 22px; height: 22px; flex: none; border-radius: 6px; }
+.rk-chat-text { font: 13.5px/21px var(--font-sans); color: var(--ink-2); }
+.rk-chat-act { font-size: 11.5px; color: var(--muted); }
+.rk-chat-cs { padding: 10px 12px; border: 1px solid var(--line-strong); border-radius: 10px; gap: 6px; }
+.rk-chat-cs b { font: 600 12.5px/18px var(--font-sans); }
+.rk-chat-cs small { font-size: 11.5px; }
+.rk-chat-comp { margin: 4px 12px 10px; padding: 9px; gap: 6px; border: 1px solid var(--line-strong); border-top: 1px solid var(--line-strong); border-radius: 12px; background: var(--surface);
+  box-shadow: 0 6px 18px rgba(28, 25, 23, .07); }
+.rk-chat-comp textarea { border: 0; background: transparent; padding: 4px; font: 13.5px/20px var(--font-sans); min-height: 28px; }
+.rk-chat-comp textarea:focus { background: transparent; box-shadow: none; }
+.rk-chat-comp:focus-within { border-color: var(--focus); }
+.rk-chat-comp .rk-send { width: 26px; height: 26px; border-radius: var(--r-btn); background: var(--primary); color: var(--primary-ink); border: 0; display: inline-grid; place-items: center; flex: none; cursor: pointer; }
+.rk-chat-comp .rk-send:disabled { background: var(--neutral-hover); color: var(--faint); cursor: not-allowed; }
+.rk-chat-comp .rk-send .rk-icon { width: 14px; height: 14px; }
+:root[data-theme="dark"] .rk-askbar, :root[data-theme="dark"] .rk-chat-comp { box-shadow: none; }
+@media (max-width: 600px) {
+  .rk-askbar { border-radius: 12px 12px 0 0; }
+  .rk-chat-comp .rk-send { width: 40px; height: 40px; }
+  .rk-chat-comp textarea { min-height: 40px; padding: 10px 4px; }
+  .rk-askbar .rk-btn-primary, .rk-askbar-chat { height: auto; }
+}
+
+/* ---- sign-in (AuthLayout): the pen's serif headline and white fields; the brand panel runs the full height ---- */
+.ap-signin { display: flex; flex-direction: column; }
+.ap-signin > .rk-auth { flex: 1 0 auto; }
+.rk-auth-pitch h2 { font: 500 34px/40px var(--font-serif); letter-spacing: -.01em; }
+.rk-auth-form h1 { font: 600 20px/28px var(--font-sans); }
+.rk-auth .rk-field > label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
+.rk-auth .rk-field > input { background: var(--surface); border-color: var(--ap-field-line); border-radius: var(--r-btn); }
+.rk-auth .rk-field > input:hover { background: var(--surface); border-color: var(--border); }
+@media (max-width: 860px) { .rk-auth-pitch h2 { font-size: 22px; line-height: 28px; } }
+
+@media (max-width: 600px) {
+  .ap-main .rk-pagehead { padding: 0 16px; }
+  .ap-main .rk-pagehead-row { min-height: 52px; padding: 10px 0 4px; }
+  .ap-main .rk-pagehead h1 { font-size: 17px; }
+  .ap-main .rk-shell-content { padding: 8px 16px 24px; }
+  .ap-main .rk-search { flex-basis: 100%; }
+  /* phone: index.html makes every control at least 40px tall; the fixed heights above must not cap it */
+  .ap-main .rk-search, .ap-main .rk-seg { height: auto; min-height: 40px; }
+  .ap-main .rk-viewswitch { min-height: 0; flex: 1 1 100%; }
+  .ap-main .rk-viewswitch-btn { min-height: 40px; height: 40px; }
+  .ap-main .ap-views > .rk-filterbar { justify-content: flex-start; }
+  .ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: auto; }
+  .ap-main .rk-pagehead-extra { flex-wrap: wrap; }
+  .ap-main .ap-head-search { flex: 1 1 100%; }
+  .ap-shell .rk-navlink { height: auto; min-height: 40px; }
+  .ap-ubah-mode button { min-height: 40px; line-height: 40px; }
+}

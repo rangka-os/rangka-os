@@ -47,8 +47,8 @@ rangka serve --ai-url http://127.0.0.1:8787 …
 | sidecar | `--demo` | Scripted provider, no key. Without `--demo` and without a provider the sidecar refuses to start |
 | company | `config.ai.enabled: false` | Turns Raka off for that company (`403 ai_disabled`) |
 
-The app and the Console show Raka only when `meta.features.ai` is `true`: a sidecar is configured, it answered
-`GET /healthz` within the last 30 seconds, and `config.ai.enabled` is not `false`.
+The app and the Console show Raka only when `meta.features.ai` is `true`: a sidecar is configured, it answers
+`GET /healthz` (a healthy answer is reused for 30 seconds, a failed one for 5), and `config.ai.enabled` is not `false`.
 
 ## Guardrails
 
@@ -61,6 +61,9 @@ Enforced by the kernel, not by prompts:
   `config.ai.auto_apply` says. Its change sets stop at `previewed`, carry `source: "ai"` and wait for a person.
 - A change set proposed for another organisation is refused (`403 org_mismatch`).
 - Limits per person: one chat at a time (`429 ai_busy`), 30 chats per 10 minutes (`429 ai_rate_limited`), 120 seconds
-  per chat, 12 tool calls per chat. History is kept in the browser tab (at most 20 turns); the kernel stores none.
+  per chat, 4,000 characters per message (`400 bad_request`). History is kept in the browser tab (at most 20 turns);
+  the kernel stores none.
 - Each chat writes one audit entry: person, tools used, change set ids, duration. The message text is not stored.
 - When the sidecar is down the person sees "Raka sedang tidak bisa dihubungi"; nothing else in the app changes.
+
+Raka itself (the sidecar, not the kernel) also stops after 12 tool calls per chat.

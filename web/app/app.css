@@ -16,6 +16,8 @@
   --info: #0369a1; --info-tint: #e8f2fb; --bad: #b42318; --bad-tint: #fef2f2;
   --r: 6px; --r-btn: 7px; --r-md: 7px; --r-lg: 10px; --r-dialog: 12px;
   --sidebar: 224px; --header: 56px;
+  /* charts: the pen's stone bars first, then Bata, green, amber, dark stone and Bata tint so several series stay apart */
+  --chart-1: #d6cdc6; --chart-2: #e0623f; --chart-3: #7cc79b; --chart-4: #e2b203; --chart-5: #a8998f; --chart-6: #f1c8bf;
   /* app-only roles */
   --ap-field-line: #d9d2cc;        /* inputs, search, filter buttons */
   --ap-nav-icon: #78716c;
@@ -25,11 +27,13 @@
   --ap-pill: #f5f5f4; --ap-pill-ink: #57534e;
   --ap-create: #b4432a; --ap-create-hover: #9c3a24; --ap-create-ink: #ffffff;
   --ap-count: #fdebd3; --ap-count-ink: #a54800;
+  --ap-docno: #736860;
   --ap-approve: #1f7a52; --ap-approve-hover: #19663f; --ap-approve-ink: #ffffff;
   --ap-seg: #f4f2ef; --ap-seg-on: #ffffff; --ap-seg-shadow: 0 1px 2px rgba(28, 25, 23, .10);
 }
 :root[data-theme="dark"] {
   --app: #13110f; --surface: #1c1917; --soft: #24201d;
+  --chart-1: #6e655f; --chart-2: #e0623f; --chart-3: #4bce97; --chart-4: #f5cd47; --chart-5: #a79d96; --chart-6: #8a3f2c;
   --line: #2e2825; --line-strong: #3a322e;
   --ink: #ede8e4; --ink-2: #cfc7c1; --muted: #a79d96; --faint: #7a706a;
   --hover: rgba(255, 255, 255, .05); --neutral: #24201d; --neutral-hover: #2e2825;
@@ -40,12 +44,15 @@
   --ap-pill: rgba(255, 255, 255, .07); --ap-pill-ink: #cfc7c1;
   --ap-create: #e0623f; --ap-create-hover: #f08a6b; --ap-create-ink: #1a1210;
   --ap-count: rgba(245, 205, 71, .14); --ap-count-ink: #f5cd47;
+  --ap-docno: #958a83;
   --ap-approve: #4bce97; --ap-approve-hover: #7ee2b8; --ap-approve-ink: #06231f;
   --ap-seg: #13110f; --ap-seg-on: #2e2825; --ap-seg-shadow: none;
 }
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     --app: #13110f; --surface: #1c1917; --soft: #24201d;
+    --chart-1: #6e655f; --chart-2: #e0623f; --chart-3: #4bce97; --chart-4: #f5cd47; --chart-5: #a79d96; --chart-6: #8a3f2c;
+  --chart-1: #6e655f; --chart-2: #e0623f; --chart-3: #4bce97; --chart-4: #f5cd47; --chart-5: #a79d96; --chart-6: #8a3f2c;
     --line: #2e2825; --line-strong: #3a322e;
     --ink: #ede8e4; --ink-2: #cfc7c1; --muted: #a79d96; --faint: #7a706a;
     --hover: rgba(255, 255, 255, .05); --neutral: #24201d; --neutral-hover: #2e2825;
@@ -56,6 +63,7 @@
     --ap-pill: rgba(255, 255, 255, .07); --ap-pill-ink: #cfc7c1;
     --ap-create: #e0623f; --ap-create-hover: #f08a6b; --ap-create-ink: #1a1210;
     --ap-count: rgba(245, 205, 71, .14); --ap-count-ink: #f5cd47;
+  --ap-docno: #958a83;
   --ap-approve: #4bce97; --ap-approve-hover: #7ee2b8; --ap-approve-ink: #06231f;
     --ap-seg: #13110f; --ap-seg-on: #2e2825; --ap-seg-shadow: none;
   }
@@ -126,10 +134,28 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .rk-fbtn { height: 30px; background: var(--surface); box-shadow: inset 0 0 0 1px var(--ap-field-line); color: var(--ink-2); font: 500 12.5px/20px var(--font-sans); border-radius: var(--r-btn); }
 .ap-main .rk-fbtn:hover, .ap-main .rk-fbtn[aria-expanded="true"] { background: var(--soft); }
 .ap-main .rk-fbtn.on { background: var(--selected); color: var(--selected-ink); box-shadow: inset 0 0 0 1px var(--selected-ink); }
-.ap-main .rk-viewswitch, .ap-main .rk-seg { background: var(--ap-seg); border-radius: 8px; padding: 2px; gap: 1px; height: 30px; }
-.ap-main .rk-viewswitch-btn, .ap-main .rk-seg button { border-radius: var(--r); color: var(--muted); font: 500 12.5px/1 var(--font-sans); padding: 0 10px; }
-.ap-main .rk-viewswitch-btn[aria-pressed="true"], .ap-main .rk-seg button[aria-pressed="true"] { background: var(--ap-seg-on); color: var(--ink); font-weight: 600; box-shadow: var(--ap-seg-shadow); }
-.ap-main .rk-viewswitch-btn .rk-icon { width: 14px; height: 14px; }
+.ap-main .rk-seg { background: var(--ap-seg); border-radius: 8px; padding: 2px; gap: 1px; height: 30px; }
+.ap-main .rk-seg button { border-radius: var(--r); color: var(--muted); font: 500 12.5px/1 var(--font-sans); padding: 0 10px; }
+.ap-main .rk-seg button[aria-pressed="true"] { background: var(--ap-seg-on); color: var(--ink); font-weight: 600; box-shadow: var(--ap-seg-shadow); }
+/* the pen's list header: search and "Buat …" on the right of the title, a count pill after it */
+.ap-main .ap-head-search { flex: 0 1 220px; }
+.ap-main .rk-pagehead-extra { flex-wrap: nowrap; gap: 8px; }
+.ap-headcount { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--r-pill); background: var(--ap-pill); color: var(--ap-pill-ink); font: 400 11.5px/20px var(--font-sans); white-space: nowrap; }
+/* under it one ruled row: the views as underline tabs on the left, filters and tools as small outlined buttons on the right */
+.ap-main .ap-views { display: flex; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; padding: 0; margin: -4px 0 4px; border-bottom: 1px solid var(--line); }
+.ap-main .ap-views > .rk-filterbar { flex: 1 1 auto; justify-content: flex-end; padding-bottom: 6px; }
+.ap-main .ap-views > .rk-filterbar > .rk-sp { display: none; }
+.ap-main .ap-views > .ap-list-tools { margin-left: 0; padding-bottom: 6px; }
+.ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: 26px; font: 400 12px/18px var(--font-sans); color: var(--ap-pill-ink); padding: 0 8px; border-radius: var(--r); }
+.ap-main .ap-views .rk-fbtn .rk-icon, .ap-main .ap-views .ap-toolmenu .rk-btn .rk-icon { width: 12px; height: 12px; }
+.ap-main .rk-viewswitch { order: -1; height: auto; padding: 0; gap: 16px; background: none; border-radius: 0; overflow-x: auto; flex: 0 1 auto; }
+.ap-main .rk-viewswitch-btn { height: 34px; padding: 0; min-width: 0; border-radius: 0; background: none; color: var(--muted); font: 400 12.5px/20px var(--font-sans); box-shadow: inset 0 -2px 0 transparent; }
+.ap-main .rk-viewswitch-btn:hover { color: var(--ink); }
+.ap-main .rk-viewswitch-btn .rk-icon { display: none; }
+.ap-main .rk-viewswitch-btn .l { display: inline; }
+.ap-main .rk-viewswitch-btn[aria-pressed="true"] { background: none; color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ink); }
+.ap-main .rk-viewswitch-btn[aria-pressed="true"] .rk-icon { color: var(--ink); }
+.ap-main .rk-viewswitch-btn:focus-visible { outline-offset: -2px; }
 
 /* ---- status pills: rounded, no dot, the pen's tints ---- */
 .rk-pill, .rk-chip { height: 20px; padding: 0 8px; gap: 4px; font: 500 11.5px/20px var(--font-sans); }
@@ -146,7 +172,8 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .rk-table th:last-child, .ap-main .rk-table td:last-child { padding-right: 14px; }
 .ap-main .rk-table tbody tr:last-child td { border-bottom: 0; }
 .ap-main .rk-table td a, .ap-main .rk-table td .rk-link { font-weight: 500; }
-.ap-main .rk-table .rk-doc-no, .ap-main .rk-table td a.rk-doc-no { font: 500 12px/20px var(--font-mono); letter-spacing: -.01em; }
+.ap-main .rk-table .rk-doc-no, .ap-main .rk-table td a.rk-doc-no { font: 400 12.5px/20px var(--font-mono); color: var(--ap-docno); }
+.ap-main .rk-table td a.rk-doc-no:hover { color: var(--ink); }
 .ap-main .rk-table tfoot td { background: var(--soft); }
 .ap-main .rk-pager { font-size: 12.5px; color: var(--muted); }
 /* dashboard list cards keep their flush table inside the card */
@@ -181,6 +208,20 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .rk-stat-num { font: 600 20px/28px var(--font-sans); letter-spacing: -.015em; margin: 4px 0 2px; }
 .ap-main .rk-numcard-cap { font-size: 11.5px; }
 .ap-main .rk-dash { gap: 12px; }
+
+/* number tiles in one strip with dividers (dashboard.js groups consecutive number widgets into .ap-tiles) */
+.ap-main .ap-tiles { display: grid; grid-template-columns: var(--ap-tiles); gap: 1px; background: var(--line); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+.ap-main .ap-tiles > * { background: var(--surface); }
+.ap-main .ap-tiles > .rk-stat { border: 0; border-radius: 0; padding: 12px 14px; min-width: 0; }
+.ap-main .ap-tiles > .rk-stat.click:hover { background: var(--soft); }
+.ap-main .ap-tiles > .rk-skeleton { border-radius: 0; }
+@media (max-width: 1100px) { .ap-main .ap-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-main .ap-tiles > :last-child:nth-child(odd) { grid-column: span 2; } }
+/* charts: no grid lines, quiet axes, square-topped stone bars */
+.ap-main .rk-chart .grid { stroke: transparent; }
+.ap-main .rk-chart .ax, .ap-main .rk-donut .ax { fill: var(--muted); font-size: 11px; }
+.ap-main .rk-funnel .bar { background: var(--soft); border-radius: 2px; height: 18px; }
+.ap-main .rk-funnel .bar i { border-radius: 2px; }
+.ap-main .rk-legend i { border-radius: 2px; }
 
 /* ---- forms and the document page ---- */
 .ap-main .rk-field > label, .ap-main .rk-field > .rk-label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
@@ -219,7 +260,8 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .ap-inbox { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
 .ap-main .ap-inbox-row { padding: 12px 14px; border-bottom-color: var(--line); }
 .ap-main .ap-inbox-row:first-child { padding-top: 12px; }
-.ap-main .ap-inbox-doc a { font-family: var(--font-mono); font-size: 12.5px; }
+.ap-main .ap-inbox-doc a { font: 400 12.5px/20px var(--font-mono); color: var(--ap-docno); }
+.ap-main .ap-inbox-doc a:hover { color: var(--ink); }
 
 /* the approval's Setujui is the pen's green (the phone approval card); Tolak stays outlined */
 .rk-btn.ap-approve { background: var(--ap-approve); color: var(--ap-approve-ink); }
@@ -261,7 +303,13 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
   .ap-main .rk-shell-content { padding: 8px 16px 24px; }
   .ap-main .rk-search { flex-basis: 100%; }
   /* phone: index.html makes every control at least 40px tall; the fixed heights above must not cap it */
-  .ap-main .rk-search, .ap-main .rk-viewswitch, .ap-main .rk-seg { height: auto; min-height: 40px; }
+  .ap-main .rk-search, .ap-main .rk-seg { height: auto; min-height: 40px; }
+  .ap-main .rk-viewswitch { min-height: 0; flex: 1 1 100%; }
+  .ap-main .rk-viewswitch-btn { min-height: 40px; height: 40px; }
+  .ap-main .ap-views > .rk-filterbar { justify-content: flex-start; }
+  .ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: auto; }
+  .ap-main .rk-pagehead-extra { flex-wrap: wrap; }
+  .ap-main .ap-head-search { flex: 1 1 100%; }
   .ap-shell .rk-navlink { height: auto; min-height: 40px; }
   .ap-ubah-mode button { min-height: 40px; line-height: 40px; }
 }

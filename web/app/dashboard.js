@@ -150,7 +150,29 @@
         onDrop: function (to) { var from = drag; setDrag(null); setOver(null); if (from !== null) onMove(from, to); },
         onMove: onMove, onSpan: onSpan }, card);
     }).filter(Boolean);
+    if (!u.on) cards = tileStrips(cards);
     return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" }, h(R.DashGrid, null, cards)));
+  }
+
+  /** rangka.pen shows a row of number tiles as one card with dividers: consecutive number cards (in Pakai) become one
+   * strip whose width is the sum of their spans (at most 12); each tile keeps its own span as its share of the strip. */
+  function TileStrip(p) { return h("div", { className: "ap-tiles", style: { "--ap-tiles": p.cols } }, p.children); }
+  function tileStrips(cards) {
+    var out = [], run = [];
+    function flush() {
+      if (run.length > 1) {
+        var span = Math.min(12, run.reduce(function (s, c) { return s + (c.props.span || 3); }, 0));
+        out.push(h(TileStrip, { key: "tiles:" + run[0].key, span: span, cols: run.map(function (c) { return "minmax(0, " + (c.props.span || 3) + "fr)"; }).join(" ") }, run));
+      } else out = out.concat(run);
+      run = [];
+    }
+    cards.forEach(function (c) {
+      var isNum = c && c.type === R.NumberCard;
+      if (isNum && run.length && run.reduce(function (s, x) { return s + (x.props.span || 3); }, 0) + (c.props.span || 3) > 12) flush();
+      if (isNum) run.push(c); else { flush(); out.push(c); }
+    });
+    flush();
+    return out;
   }
 
   RA.DashboardView = DashboardView;

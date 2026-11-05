@@ -55,11 +55,11 @@ browser ── POST /api/v1/ai/chat (session cookie, SSE back) ──▶ kernel 
   - `meta.features.ai` is true when the sidecar URL is set, `GET /healthz` on it answered within the last 30 seconds, and `config.ai.enabled` is not false.
   - Every chat writes one audit entry (person, tools used, change set id if any).
 - **rangka-ai:**
-  - New `rangka-ai serve [--port 7420]` with `POST /v1/chat` (SSE) and `GET /healthz`.
+  - `rangka-ai serve [--port 8787] [--demo]` (the existing server, next to `POST /v1/turn`) gains `POST /v1/chat` (SSE); `GET /healthz` was there.
   - Per request it builds an `McpBackend` from the given URL and token and runs the existing `Agent` with an event callback.
   - Events: `text` (delta), `tool` (name + Indonesian summary), `changeset` ({id, title, risk, status}), `escalate` ({reason}), `done`, `error`.
-  - Provider and model come from environment: `ANTHROPIC_API_KEY`, `RANGKA_AI_MODEL` (default `claude-sonnet-5-5`).
-  - With no key it runs the existing scripted demo provider, so the demo and tests work offline.
+  - Provider and model come from environment: `RAKA_PROVIDER`, `RAKA_MODEL`, `RAKA_API_KEY` (`ANTHROPIC_API_KEY` alone implies Anthropic, default `claude-sonnet-5-5`).
+  - `--demo` runs the existing scripted demo provider, so the demo and tests work offline. Without `--demo` and without a provider it refuses to start.
 - **Deployment:**
   - The kernel reads the sidecar URL from `--ai-url` or `RANGKA_AI_URL`. It is deployment config, so it is not in `config.rk`.
   - `make run-demo` starts `rangka-ai serve` too when the sibling repo is built.
@@ -96,7 +96,7 @@ browser ── POST /api/v1/ai/chat (session cookie, SSE back) ──▶ kernel 
 - The sidecar URL is an env var or flag, not `config.ai.url`, because `config.ai` is per company and the sidecar is per installation.
 - History is sent by the client, capped at the last 20 turns. The kernel stores nothing except the audit entry.
 - The "+ Tambah" button from the screenshot (attach other records) is left for v2. v1 has only the "Halaman ini" chip.
-- Default model `claude-sonnet-5-5`, overridable with `RANGKA_AI_MODEL`.
+- Default model `claude-sonnet-5-5`, overridable with `RAKA_MODEL` (rangka-ai's existing provider settings).
 - `rangka-ai` is picked up again with this work. Contract 0000 lists it as paused, and 0020 says it resumes.
 
 ### Settled after the builder check (Claude's calls)
@@ -117,8 +117,8 @@ browser ── POST /api/v1/ai/chat (session cookie, SSE back) ──▶ kernel 
   - CI runs the offline scripted path end to end: rangka-ai vitest, a kernel relay test with an `httptest` sidecar, and Playwright with the real sidecar in demo mode.
   - One live run against Anthropic happens before merge when `ANTHROPIC_API_KEY` is available, and its result goes in the PR.
 - **Kernel → sidecar auth.**
-  - A shared secret: `RANGKA_AI_SECRET`, sent as `Authorization: Bearer`, which the sidecar checks.
-  - The sidecar listens on `127.0.0.1` by default.
+  - A shared secret: the kernel's `RANGKA_AI_SECRET`, sent as `Authorization: Bearer`, which the sidecar checks against its `RAKA_SERVE_TOKEN` (the same value).
+  - The sidecar listens on `127.0.0.1:8787` by default.
   - The kernel passes the MCP URL it can be reached on (`--ai-callback-url`, default `http://127.0.0.1:<port>`).
 - **Limits.**
   - One chat at a time per person (a second gets `429 ai_busy`).

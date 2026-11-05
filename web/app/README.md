@@ -78,6 +78,7 @@ absent meta key turns it off and its buttons disappear.
 | Processes | `GET /api/v1/processes` answers 200 with at least one process; 404, 403 or any failure turns the "Proses bisnis" entry and `#/proses` off. The canvas is read only: no edit form, no layout save |
 | Buttons per action | `meta.models[m].can[action]` when present |
 | Ubah | `meta.changesets.propose`; "Setujui & terapkan" needs `approve` (and `approve_high` for high risk) |
+| Raka (⌘J, sidebar "Tanya Raka", ⌘K) | `meta.features.ai` is `true`: the kernel runs with `--ai-url`, the sidecar answered `GET /healthz` within 30 s and `config.ai.enabled` is not `false` (contract 0020). Answers stream from `POST /api/v1/ai/chat`; a change set card opens `?preview=<id>` or Ubah. Raka never approves or applies |
 
 ## Run
 
@@ -85,6 +86,9 @@ absent meta key turns it off and its buttons disappear.
 make -C kernel run-demo        # temp Postgres + Kopi Senja on :8080
 open http://localhost:8080/app/
 ```
+
+When `rangka-ai` is built next to `rangka-os` (`npm run build` there; or point `RANGKA_AI_DIR` at a checkout),
+`run-demo` also starts its scripted sidecar (`serve --demo`, no LLM key) and Raka answers on ⌘J.
 
 Sign in with `ceo@saga.co.id` / `rangka-demo`. Add more people with
 `RANGKA_USER_PASSWORD=… rangka user add <email> --org kopi-senja --role sales_rep` (`--db` defaults to `$DATABASE_URL`).
@@ -108,3 +112,8 @@ definition into the temp site copy (approval overlay, import definitions, `print
 company) before migrate. The run ends with `live: … · mocked: …`. `--require-all` fails when anything ran
 on a mock: the integrator's gate once the approvals, print, attachments, imports and multi-org streams are merged. Without
 Go, Playwright or the PostgreSQL binaries the suite prints SKIP and exits 0, but with `--require-all` it exits 1.
+
+`RANGKA_AI_DIR=<built rangka-ai> python3 web/app/test_app.py -k test_ai_live` runs the assistant end to end: the
+harness starts the real sidecar (`serve --demo`) with a random secret and the kernel with `--ai-url`; the scenario asks
+"berapa faktur jatuh tempo bulan ini?" and "tambah field Nomor PO di faktur" and opens the previewed change set. Without
+`RANGKA_AI_DIR` it returns at once; the other Raka scenarios mock `POST /api/v1/ai/chat`.

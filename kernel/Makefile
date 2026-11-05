@@ -12,6 +12,9 @@ SITE    ?= $(CAT)/sites/kopi-senja
 CONN    ?= $(WS)/rangka-connectors
 ADDR    ?= :8080
 BIN     := bin/rangka
+# rangka-ai checkout whose dist/cli.js run-demo starts as the Raka sidecar (skipped when not built)
+RANGKA_AI_DIR ?= $(WS)/rangka-ai
+AI_PORT ?= 8787
 MODULE  ?=
 
 .PHONY: build test test-unit vet validate compare-python run-demo sync-schemas proto-expected rename-module clean
@@ -62,15 +65,24 @@ compare-python: build
 	done; rm -rf $$D; exit $$rc
 
 # Temp Postgres → migrate → seed (org kopi-senja, ceo@saga.co.id / rangka-demo) → serve on :8080 with
-# --dev-open. Ctrl-C stops the server and removes the database.
+# --dev-open. When rangka-ai is built ($(RANGKA_AI_DIR)/dist/cli.js; set RANGKA_AI_DIR when the workspace has no
+# rangka-ai/), its scripted sidecar (serve --demo, no LLM key) runs on 127.0.0.1:$(AI_PORT) with a random shared
+# secret and the kernel gets --ai-url, so Raka answers in /app/ and /console/ (contract 0020).
+# Ctrl-C stops the server and the sidecar and removes the database.
 run-demo: build
 	@URL=$$(PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh start) || exit 1; \
-	trap 'PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh stop' EXIT INT TERM; \
+	AI_PID=; trap 'test -n "$$AI_PID" && kill $$AI_PID 2>/dev/null; PGTEMP_STATE=.pgtemp-demo scripts/pgtemp.sh stop' EXIT INT TERM; \
 	echo "temporary postgres: $$URL"; \
 	$(BIN) migrate --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" | tail -1 && \
-	$(BIN) seed --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" && \
+	$(BIN) seed --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" || exit 1; \
+	AI_FLAGS=; \
+	if [ -f "$(RANGKA_AI_DIR)/dist/cli.js" ] && command -v node >/dev/null; then \
+	  RANGKA_AI_SECRET=$$(od -An -N24 -tx1 /dev/urandom | tr -d ' \n'); export RANGKA_AI_SECRET; \
+	  RAKA_SERVE_TOKEN=$$RANGKA_AI_SECRET node "$(RANGKA_AI_DIR)/dist/cli.js" serve --demo --port $(AI_PORT) & AI_PID=$$!; \
+	  AI_FLAGS="--ai-url http://127.0.0.1:$(AI_PORT)"; \
+	fi; \
 	echo "open http://localhost$(ADDR)/app/  ·  API http://localhost$(ADDR)/api/v1/meta  ·  MCP POST http://localhost$(ADDR)/mcp" && \
-	$(BIN) serve --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" --addr $(ADDR) --dev-open
+	$(BIN) serve --apps $(APPS) --site $(SITE) --connectors $(CONN) --db "$$URL" --addr $(ADDR) --dev-open $$AI_FLAGS
 
 # Copy rangka-os/schema/0.5 (and 0.4 app.json, for legacy app.rk files) into the binary's embedded copy
 # (a test fails when they differ).

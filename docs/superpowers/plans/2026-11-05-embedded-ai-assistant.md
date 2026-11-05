@@ -31,7 +31,7 @@
 - **Delegated token:** a JWT from `auth.Service.SignJWT` with claims `uid, org, scope: "rangka.mcp", ai: true, exp: now+10m`, and no DB row.
 - **Sidecar.**
   - Flag `--ai-url` / env `RANGKA_AI_URL`; `--ai-callback-url` (default `http://127.0.0.1` + the listen port); env `RANGKA_AI_SECRET`, sent as `Authorization: Bearer`.
-  - The sidecar listens on `127.0.0.1:7420` by default and refuses requests without the secret, unless it runs with no secret in `--dev` mode.
+  - The sidecar is rangka-ai's existing `serve`: `127.0.0.1:8787` by default, secret in `RAKA_SERVE_TOKEN` (the same value as the kernel's `RANGKA_AI_SECRET`); it refuses to start without it. There is no no-secret mode.
 - **Limits** (kernel constants):
   - 1 concurrent chat per person (`429 ai_busy`);
   - 30 requests per 10 minutes per person (`429 ai_rate_limited`);
@@ -39,7 +39,7 @@
   - the agent stops after 12 tool calls.
 - **Events** (SSE `event:` + JSON `data:`): `text {delta}`, `tool {name, summary}`, `changeset {id, title, risk, status}`, `escalate {reason}`, `error {code, message}`, `done {}`.
 - **History:** at most 20 turns, sent by the client, kept in `sessionStorage` under the key `rk.ai.<org>` (app) and `rk.console.ai` (Console).
-- **Model:** default `claude-sonnet-5-5` via `RANGKA_AI_MODEL`, key `ANTHROPIC_API_KEY`. With no key the sidecar uses the scripted provider.
+- **Model:** default `claude-sonnet-5-5` via `RAKA_MODEL`, key `ANTHROPIC_API_KEY` (or `RAKA_PROVIDER`/`RAKA_API_KEY`). The scripted provider runs only with `serve --demo` (or `RAKA_PROVIDER=scripted`); with no provider the sidecar refuses to start.
 - **UI.**
   - Bahasa Indonesia, "kamu"; no emoji; Remix icons only.
   - Raka teal (`raka*` tokens) only on Raka's chat turns, the Raka mark and the "Tanya Raka" entries.
@@ -163,7 +163,7 @@
 **Files:**
 - Create: `src/server/serve.ts` (`startServer(opts: ServeOptions): Promise<{port: number, close(): Promise<void>}>`)
 - Create: `src/server/sse.ts` (`writeEvent(res, e)`)
-- Modify: `src/cli.ts` (command `serve` with `--port` default 7420, `--host` default 127.0.0.1, `--dev`), `src/agent/demo-scripts.ts` (add `dueInvoicesScript()`; extend `demoProvider` so "jatuh tempo" picks it)
+- Modify: `src/cli.ts` (command `serve` with `--port` default 8787, `--host` default 127.0.0.1, `--demo`), `src/agent/demo-scripts.ts` (add `dueInvoicesScript()`; extend `demoProvider` so "jatuh tempo" picks it)
 - Test: `test/serve.test.ts`
 - Docs: `README.md` (serve section)
 
@@ -265,7 +265,7 @@
 ### Task 8: Demo wiring, live end-to-end, docs
 
 **Files:**
-- Modify: `kernel/Makefile` (`run-demo`: when `$(WS)/rangka-ai/dist/cli.js` exists, start `node … serve --port 7420` with a random `RANGKA_AI_SECRET`, pass `--ai-url http://127.0.0.1:7420`, and stop it on exit)
+- Modify: `kernel/Makefile` (`run-demo`: when `$(WS)/rangka-ai/dist/cli.js` exists, start `node … serve --demo --port 8787` with a random secret in `RAKA_SERVE_TOKEN` and `RANGKA_AI_SECRET`, pass `--ai-url http://127.0.0.1:8787`, and stop it on exit)
 - Modify: `web/app/test_app.py` (`test_ai_live`: runs only when `RANGKA_AI_DIR` points at a built rangka-ai, starts the real sidecar in scripted mode, asks the two goal prompts, and expects an answer with "faktur" plus a previewed change set card)
 - Docs: `web/app/README.md` (feature table row for AI), the Console README, `website` AI page (how to enable, env vars, guardrails), `docs/contracts/0020` (no status change)
 

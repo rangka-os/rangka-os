@@ -3,12 +3,15 @@
 The Rangka OS server: one Go binary that validates `.rk` metadata, migrates Postgres from it, runs the
 document lifecycle, serves the REST API, realtime events, the queue and scheduler, Rangka ID (sessions,
 API tokens, an OpenID Connect provider), change sets and the MCP endpoint. The binding contract is
-[`../docs/contracts.md`](../docs/contracts.md); the reference semantics are the browser prototype
+[`../docs/contracts.md`](../docs/contracts.md) plus the numbered contracts in [`../docs/contracts/`](../docs/contracts/);
+the reference semantics are the browser prototype
 (`../web/app/engine.js`) and `../tools/rangka_validate.py`.
 
 ```
 make test       # all tests against a throwaway Postgres (started and removed by scripts/pgtemp.sh)
+make test-unit  # tests that need no database (DB tests skip)
 make run-demo   # temp Postgres → migrate → seed → serve :8080 with --dev-open; Ctrl-C cleans up
+                # (another port: make run-demo ADDR=:8090; other folders: APPS=… SITE=…)
                 # (+ the Raka sidecar, scripted, when ../rangka-ai or $RANGKA_AI_DIR is built)
 make validate   # rangka validate on testdata/catalogue-v0 (rangka-apps as of v0) + rangka-connectors
 make compare-python   # Go vs rangka_validate.py on the v0 catalogue, the broken copies and the modules/apps fixtures (must be identical)
@@ -32,7 +35,7 @@ one package:
 | chi | `net/http` `ServeMux` patterns (Go 1.22+) | `internal/api/server.go` `Handler()` |
 | cel-go | `internal/cel`: CEL grammar + macros, heterogeneous numeric equality, CONTRACTS functions | `cel.Compile`, `Program.Eval(*cel.Env)` |
 | River | `internal/jobs`: Postgres queue (`FOR UPDATE SKIP LOCKED`), retries with backoff, River's job states, cron scheduler with unique keys | `engine.Enqueuer`, `jobs.Handler` |
-| jsonschema | `internal/schema`: draft 2020-12 subset used by `schema/0.4`, Python-jsonschema messages | `schema.Set.Validate` |
+| jsonschema | `internal/schema`: draft 2020-12 subset used by `schema/0.5`, Python-jsonschema messages | `schema.Set.Validate` |
 | yaml.v3 | `internal/rk`: strict YAML parser with positions + writer | `rk.Load`, `rk.Dump` |
 
 Done: `internal/pg` is a thin wrapper over pgx v5 (`pg.Querier`: `Query`, `Exec`; pool, tx, LISTEN/NOTIFY, `CopyTo`
@@ -62,14 +65,14 @@ internal/auth (Rangka ID: sessions, rk_ tokens, OIDC)   internal/mcp (JSON-RPC t
                      ▲
                internal/api (REST /api/v1, /auth, /oauth, /mcp, static web) ◄── internal/server (wiring, reload)
                      ▲
-               cmd/rangka (validate | migrate | backup | restore | seed | serve)
+               cmd/rangka (validate | migrate | seed | serve | backup | restore | user | numbering | version)
 ```
 
 | Package | What it does |
 | --- | --- |
 | `internal/rk` | Strict YAML reader with the same refusals and positions as `rkfile.py` (tested against it on every workspace file), and a writer for change-set patches. |
-| `internal/schema` | The `schema/0.4` JSON Schemas embedded in the binary (`make sync-schemas`; a test fails when they drift) and a validator with Python-compatible messages. |
-| `internal/meta` | Loads apps, a site (with company overlays in `custom/`) and connectors into a `Registry`; `Validate` ports every check of `rangka_validate.py` byte for byte, then merges overlays onto the app models. `config.apps` is the installed set. |
+| `internal/schema` | The `schema/0.5` JSON Schemas (plus 0.4 `app.json` for legacy `app.rk` files) embedded in the binary (`make sync-schemas`; a test fails when they drift) and a validator with Python-compatible messages. |
+| `internal/meta` | Loads modules, apps, a site (with company overlays in `custom/`) and connectors into a `Registry`; `Validate` ports every check of `rangka_validate.py` byte for byte, then merges overlays onto the app models. `config.apps` is the installed set. |
 | `internal/theme` | Base design tokens (embedded copy of `web/design-system/tokens.json`), the dark derivation of CONTRACTS v0.1 decision 12 and WCAG contrast; same arithmetic as the Python validator. |
 | `internal/cel` | The CEL dialect: `today()`, `now()`, `duration()`, date ± duration, `round()`, `sum()`, `.map()`, `option()`, `app_installed()`, `truncate()`, `size()`, `.contains()`, `in`, ternary, link traversal (`customer.payment_days` loads the record). |
 | `internal/pg` | The Postgres client. |
@@ -82,22 +85,36 @@ internal/auth (Rangka ID: sessions, rk_ tokens, OIDC)   internal/mcp (JSON-RPC t
 | `internal/changeset` | Change sets, JSON Patch, risk/layer assessment. |
 | `internal/mcp` | MCP over Streamable HTTP (JSON responses), tools fixed by CONTRACTS. |
 | `internal/api` | HTTP handlers. |
-| `internal/backup` | `rangka backup` and `rangka restore`: native `COPY` of every table plus site, apps and files, with checksums. |
+| `internal/backup` | `rangka backup` and `rangka restore`: native `COPY` of every table plus site, apps, modules, connectors and files, with checksums. |
+| `internal/files` | Blob store for attachments: content-addressed files on local disk, per org. |
+| `internal/imports` | CSV/XLSX imports: read, map, preview, commit (contract 0012). |
+| `internal/docprint` | Print formats to HTML, and to PDF through headless Chromium (contract 0008). |
+| `internal/canvas` | The process canvas graph (contract 0014). |
+| `internal/money` | Exact 4-decimal arithmetic for amounts; never float (contract 0013). |
+| `internal/bundle` | `web/` and `templates/` inside release binaries, extracted to the user cache. |
+| `internal/testdb` | A fresh database per test on `RANGKA_TEST_DATABASE_URL`. |
 | `internal/server` | Wires the above, live metadata reload, the production backup before migrations (`PreMigrateBackup`); integration tests. |
 
 ## Commands
 
 ```
-rangka validate --apps <dir> [--site <dir>] [--connectors <dir>] [--json] [app ...]
-rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n]
+rangka validate --apps <dir> [--site <dir>] [--modules <dir>] [--connectors <dir>] [--json] [app ...]
+rangka migrate  --apps <dir> [--site <dir>] --db <url> [--dry-run] [--allow-destructive] [--rollback n] [--files-dir <dir>]
 rangka backup   --db <url> [--apps <dir>] [--site <dir>] [--out <file>] [--org <id>] [--files <dir>]
 rangka restore  <file> --db <url> [--into <dir>] [--files <dir>]
 rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org kopi-senja]
-rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>] [--deploy-target dev] [--files-dir <dir>] [--dev-open]
+rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>]
+                [--deploy-target dev] [--files-dir <dir>] [--dev-open] [--ai-url <url>] [--ai-callback-url <url>]
 rangka user add    <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]
                    [--reset-password] [--create-org] [--db <url>]
 rangka user remove <email> --org <id> [--db <url>]
+rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--db <url>]
+rangka version
 ```
+
+Every command reads `.env` in the working directory first (variables already set win). The commands that read
+metadata take `--modules` and `--connectors` too; see the [CLI reference](../website/reference/cli.md) for every flag
+and environment variable.
 
 `validate` prints `file:line:col  level  code  path  message` exactly like `rangka_validate.py` and exits 1 on
 errors. `migrate` and `serve` refuse metadata with errors. `seed` creates the org (the site directory name),
@@ -142,7 +159,12 @@ table, site, apps, uploads) and `restore` rebuilds it into an empty database and
   prototype's numbers for the seed data (`testdata/prototype-dashboards.json`, `make proto-expected`).
   Dashboards with `cache:` are cached per org and period and dropped on any write.
 * Flows: `find`, `find_all`, `create`/`update` (with `set:`), `notify` (log driver), `call` (recorded; no
-  connector runtime yet), `if`/`then`/`else`, `wait` (queues the rest), each with `if:`/`as:`.
+  connector runtime yet), `if`/`then`/`else`, `wait` (queues the rest), `approve` (the rest waits for a decision),
+  each with `if:`/`as:`.
+* Document approvals (contract 0007): a `submit`, `cancel` or action that matches a model's approval policy answers
+  202 and creates a request in `rk_approvals`; when the last one is approved the verb runs as the requester. REST
+  `/api/v1/approvals`, MCP `rangka_approvals_list` and `rangka_approve` (people only), SSE `event: approval`.
+* Number series (contract 0009): `rangka numbering set` continues a client's own numbering at go-live.
 * Automations (`when: stage changes to 'won'`, `do: crm.mark_won`) run their hook in the write's transaction. Scheduled flows are enqueued once per due minute (unique key), event flows run with
   `POST /api/v1/flows/{name}/run {event: …}`.
 
@@ -197,8 +219,7 @@ DELETE /api/v1/attachments/{id}               → 204
   (`<root>/<orgdir>/<sha[0:2]>/<sha>`, where `<orgdir>` is the org id, or `_` + 16 hex of its sha256 when the id is not a plain slug); metadata is in `rk_attachments`. Back up the root together with the database.
 * Limit `files.max_upload_mb` (default 20): larger uploads get 413 `too_large`. `files: {enabled: false}` answers
   501 `files_disabled`; `driver: s3` is refused at start-up until a driver exists.
-* Reading needs the record to be visible to the caller (org scope today; role permissions once contract 0005 §4
-  lands), upload and delete need `write`. Upload works in any docstatus; delete
+* Reading needs `read` on the record (org, row scope and model permissions), upload and delete need `write`. Upload works in any docstatus; delete
   is refused (409 `submitted`) once a submittable record is submitted. Attachments follow the record when submit
   renames it and go with it when it is deleted. Uploads and deletes are audited.
   Downloads send `nosniff` and `Content-Security-Policy: sandbox`, except PDF (Chromium's viewer refuses sandboxed
@@ -219,7 +240,7 @@ GET /api/v1/r/{model}/{name}/print?format=<print>&as=html|pdf
 * `RANGKA_CHROMIUM` is the path of the browser. Without it the kernel looks for `chromium`, `chromium-browser`,
   `google-chrome`, `google-chrome-stable` or `headless_shell` on `PATH`, then the macOS Chrome app.
   `RANGKA_CHROMIUM=off`, or a path that does not exist, means no browser: `as=pdf` answers 501 `pdf_unavailable`
-  with a `hint` pointing at the HTML version. A conversion is cut off after 30 s; a failed one answers 500
+  with a `hint` pointing at the HTML version. A conversion is cut off after 60 s; a failed one answers 500
   `pdf_failed` (the detail goes to the log). At most `RANGKA_PDF_CONCURRENCY` (default 2) browsers run at once;
   further requests wait for a slot.
 * The route sits behind the record guard (S1): the record is read as the caller, so another org's record or one
@@ -232,6 +253,14 @@ GET /api/v1/r/{model}/{name}/print?format=<print>&as=html|pdf
 * `/api/v1/meta` lists each model's formats as `prints`. `rangka validate` checks formats and letterheads
   (`template_missing`, `template_outside`, `template_error`, `logo_missing`; warning `letterhead_missing` for
   an org listed in `orgs:` without `letterheads/<id>.rk`).
+
+## Assistant relay
+
+Contract [0020](../docs/contracts/0020-ai-assistant-relay.md). With `--ai-url` (`RANGKA_AI_URL`), `POST /api/v1/ai/chat`
+relays a chat to the rangka-ai sidecar with a short-lived token that acts as the signed-in person over `/mcp`
+(read tools and change sets up to preview only). `RANGKA_AI_SECRET` is the bearer the kernel sends to the sidecar.
+`make run-demo` starts the scripted sidecar when `../rangka-ai` (or `$RANGKA_AI_DIR`) is built. Details:
+[REST API](../website/reference/rest-api.md#ai-chat).
 
 ## Tests
 

@@ -1,6 +1,6 @@
 # What is Rangka OS
 
-Rangka OS is a source-available engine for business software — CRM, sales, POS, inventory, accounting — in which every
+Rangka OS is a source-available engine (Elastic License 2.0) for business software — CRM, sales, POS, inventory, accounting — in which every
 app is described in files instead of written in code. You describe a model ("a deal has a customer, a stage and a
 value"), its rules, dashboards and screens in `.rk` files; the Rangka kernel turns them into a database, an API,
 realtime events and a working user interface.
@@ -20,13 +20,20 @@ QRIS as first-class integrations, and plans priced per company or outlet rather 
 
 ## What is in the box
 
-- **The kernel** (`rangka`): validates `.rk` files, migrates Postgres, runs the document lifecycle, serves REST, SSE
-  realtime, a queue and scheduler, Rangka ID (login, API tokens, OpenID Connect), change sets and an MCP endpoint.
-- **System capabilities**: cache, queue, scheduler, realtime, files, search, notifications, single sign-on — switched
-  on in `system.rk`, used by apps in one line.
+- **The kernel** (`rangka`): validates `.rk` files, migrates Postgres, runs the document lifecycle with approvals and
+  number series, serves REST, SSE realtime, a queue and scheduler, Rangka ID (login, API tokens, OpenID Connect),
+  permissions and row scope per outlet, attachments, print formats (HTML and PDF), imports, change sets with a live
+  preview, backup and restore, and an MCP endpoint.
+- **The web app** at `/app/`: dashboards, lists, forms, approvals, imports, print and the process canvas, drawn from
+  the `.rk` files.
+- **System capabilities**: db, cache, queue, scheduler, realtime, files, search, notifications, auth, declared in
+  `system.rk` and used by apps in one line. Today the drivers are Postgres, a memory cache and local files;
+  notifications go to the log. Valkey, S3, email and push delivery, and sign-in through another identity provider
+  are not built yet.
 - **Rangka Console**: the control pane that shows every layer, capability, app, change set and connector.
 - **A design system**: React components with Frappe UI structure in Rangka colours (Ink, Bata, warm stone), light and dark, used by every screen.
-- **Rangka AI**: an agent that proposes change sets, never code. See [Rangka AI](/tools/rangka-ai).
+- **Rangka AI** (Raka): an agent that proposes change sets, never code, and never approves or applies them. It runs as
+  a sidecar the kernel relays chat to. See [Rangka AI](/tools/rangka-ai).
 
 ## Who it is for
 

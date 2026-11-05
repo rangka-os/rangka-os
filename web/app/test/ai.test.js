@@ -89,6 +89,11 @@ test("aiErrorText maps the kernel codes to Bahasa Indonesia", () => {
   assert.strictEqual(RA.aiErrorText("ai_unavailable"), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
   assert.strictEqual(RA.aiErrorText("ai_forbidden"), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
   assert.strictEqual(RA.aiErrorText(undefined), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
+  const slow = "Raka butuh waktu terlalu lama. Coba pertanyaan yang lebih singkat.";
+  assert.strictEqual(RA.aiErrorText("ai_timeout"), slow);
+  assert.strictEqual(RA.aiErrorText("timeout"), slow, "the sidecar's own timeout");
+  assert.strictEqual(RA.aiErrorText("agent_failed"), "Raka gagal menyelesaikan permintaan ini. Coba tulis ulang.");
+  assert.strictEqual(RA.aiErrorText("unauthorized"), "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.");
 });
 
 test("trimHistory keeps the last 20", () => {

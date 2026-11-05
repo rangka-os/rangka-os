@@ -23,15 +23,23 @@
 
   /* ================================================================ pure helpers */
 
+  var UNAVAILABLE = "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.";
+  var TOO_LONG = "Raka butuh waktu terlalu lama. Coba pertanyaan yang lebih singkat.";
   var MSG = {
-    ai_unavailable: "Raka sedang tidak bisa dihubungi. Coba lagi sebentar lagi.",
+    // the kernel's codes
+    ai_unavailable: UNAVAILABLE,
+    ai_timeout: TOO_LONG,
     ai_busy: "Tunggu jawaban sebelumnya selesai.",
     ai_rate_limited: "Terlalu banyak pertanyaan. Coba lagi beberapa menit lagi.",
     ai_disabled: "Raka dimatikan untuk perusahaan ini.",
-    bad_request: "Pertanyaannya tidak bisa diproses. Coba tulis ulang."
+    bad_request: "Pertanyaannya tidak bisa diproses. Coba tulis ulang.",
+    // the sidecar's own codes, passed through by the kernel
+    timeout: TOO_LONG,
+    agent_failed: "Raka gagal menyelesaikan permintaan ini. Coba tulis ulang.",
+    unauthorized: UNAVAILABLE
   };
-  /** The Bahasa Indonesia message for a kernel error code (an error event or a refusal before streaming); any other code
-   *  reads as "Raka is unavailable". */
+  /** The Bahasa Indonesia message for an error code from the kernel or the sidecar (an error event or a refusal before
+   *  streaming); any other code reads as "Raka is unavailable". */
   function aiErrorText(code) { return MSG[code] || MSG.ai_unavailable; }
 
   function L(v) {

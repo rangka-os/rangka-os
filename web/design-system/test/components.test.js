@@ -283,6 +283,12 @@ test("ChatDrawer renders turns with activity and a changeset card", () => {
   const pills = nodes(risks, (n) => hasClass(n, "rk-pill")).map((n) => [texts(n).join(""), ["ok", "warn", "bad", "draft"].find((c) => hasClass(n, c))]);
   assert.deepStrictEqual(pills, [["Risiko sedang", "warn"], ["Risiko tinggi", "bad"], ["Risiko belum diketahui", "draft"]]);
 
+  // applied by the kernel on config.ai.auto_apply: low_risk: no preview or Ubah buttons, a note instead
+  const done = render(R.ChatDrawer({ open: true, turns: [{ role: "assistant", text: "", changesets: [{ id: "c9", title: "Warna grafik", risk: "low", status: "applied" }] }] }));
+  const dt = texts(done);
+  assert.ok(dt.indexOf("Diterapkan") >= 0 && dt.some((x) => /diterapkan otomatis/.test(x)), "applied card says so");
+  assert.ok(dt.indexOf("Lihat pratinjau") < 0 && dt.indexOf("Buka di Ubah") < 0, "nothing left to preview or approve");
+
   const custom = render(R.ChatDrawer({ open: true, turns: TURNS, renderChangeset: (cs) => ({ type: "i", props: { className: "mine" }, children: [cs.id] }) }));
   assert.ok(texts(custom).indexOf("cs-7") >= 0 && texts(custom).indexOf("Lihat pratinjau") < 0, "renderChangeset replaces the card");
 

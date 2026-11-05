@@ -51,7 +51,7 @@ browser ── POST /api/v1/ai/chat (session cookie, SSE back) ──▶ kernel 
   - `POST /api/v1/ai/chat` accepts `{message, history, context}` from a signed-in person.
   - It mints a short-lived delegated token (10 minutes, scope `rangka.mcp`, marked `ai`) for that person.
   - It calls the sidecar with the message, history, context, and the MCP URL and token, then streams the sidecar's events back unchanged.
-  - The `ai` mark is enforced in the kernel: requests carrying an `ai` token are refused for change-set approve and apply, and for every record write. This holds even when `config.ai.auto_apply` is `low_risk`: the chat path always stops at `previewed`.
+  - The `ai` mark is enforced in the kernel: requests carrying an `ai` token are refused for change-set approve and apply, and for every record write. Update 5 Nov 2026 (owner's decision): with `config.ai.auto_apply: low_risk` the kernel itself applies Raka's low-risk change sets after preview, as `system`; the token still cannot apply. See contract 0020 §4.
   - `meta.features.ai` is true when the sidecar URL is set, `GET /healthz` on it answered within the last 30 seconds, and `config.ai.enabled` is not false.
   - Every chat writes one audit entry (person, tools used, change set id if any).
 - **rangka-ai:**
@@ -108,7 +108,7 @@ browser ── POST /api/v1/ai/chat (session cookie, SSE back) ──▶ kernel 
   - It is a signed JWT from the kernel's existing signer (`SignJWT`): 10 minutes, scope `rangka.mcp`, claim `ai: true`. There is no database row; it expires on its own.
   - The kernel maps it to a principal with `Via = "ai"`, so the existing `Human()` gating already refuses approve, apply, revert and record writes.
   - New code only adds the `ai_forbidden` error code and a test for each refused route: change-set approve, reject, apply and revert, plus record create, update, delete, lifecycle and actions, over REST and MCP.
-- **`source: "ai"`.** The kernel sets it at propose time from the token, so the sidecar cannot fake it or leave it out. The agent's existing `pipeline.ts` runs validate and preview and emits the `changeset` event. For `ai` tokens the kernel ignores `config.ai.auto_apply`.
+- **`source: "ai"`.** The kernel sets it at propose time from the token, so the sidecar cannot fake it or leave it out. The agent's existing `pipeline.ts` runs validate and preview and emits the `changeset` event. Since 5 Nov 2026 a low-risk one is applied by the kernel when `config.ai.auto_apply: low_risk` (contract 0020 §4).
 - **Offline demo.**
   - The scripted provider makes real MCP tool calls (`rangka_query`, `draft_changeset`) against the demo data.
   - The answer to "faktur jatuh tempo" is therefore computed from real rows.

@@ -306,7 +306,25 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 		}
 	}
 	cs.Preview = p
-	return cs, s.transition(ctx, cs, a, "previewed", fmt.Sprintf("%d statement(s)", len(stmts)), false)
+	if err := s.transition(ctx, cs, a, "previewed", fmt.Sprintf("%d statement(s)", len(stmts)), false); err != nil {
+		return cs, err
+	}
+	// A low-risk proposal from Raka is applied once previewed when the company opted in with
+	// config.ai.auto_apply: low_risk. The kernel applies it as the system on the company's own setting:
+	// Raka's token still cannot apply (Apply refuses an assistant actor).
+	if a.Assistant && cs.Source == "ai" && cs.Risk == "low" && s.autoApplyLowRisk() {
+		return s.Apply(ctx, Actor{ID: "system", Org: a.Org, Kind: "system"}, cs.ID)
+	}
+	return cs, nil
+}
+
+// autoApplyLowRisk reports config.ai.auto_apply: low_risk.
+func (s *Service) autoApplyLowRisk() bool {
+	if s.Reg == nil {
+		return false
+	}
+	v, _ := s.Reg().SiteConfig("ai.auto_apply").(string)
+	return v == "low_risk"
 }
 
 // Approvers returns the roles that may approve (config.ai.approvers, always including owner).
@@ -405,12 +423,7 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	if err != nil {
 		return nil, err
 	}
-	autoApply := false
-	if s.Reg != nil {
-		if v, _ := s.Reg().SiteConfig("ai.auto_apply").(string); v == "low_risk" && cs.Risk == "low" && in(cs.Status, "validated", "previewed") {
-			autoApply = true
-		}
-	}
+	autoApply := s.autoApplyLowRisk() && cs.Risk == "low" && in(cs.Status, "validated", "previewed")
 	if cs.Status != "approved" && !autoApply {
 		return nil, &Error{409, "not_approved", "apply needs an approved change set (it is " + cs.Status + ")", nil}
 	}

@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -109,25 +110,50 @@ func TestAssistantProposalIsMarked(t *testing.T) {
 		t.Fatalf("propose: source %v author %v risk %v", cs["source"], cs["author"], cs["risk"])
 	}
 	id := cs["id"].(string)
-	call(ai, "rangka_changeset_validate", map[string]any{"id": id})
-	if p := call(ai, "rangka_changeset_preview", map[string]any{"id": id}); p["status"] != "previewed" {
-		t.Fatalf("preview: %v", p["status"])
-	}
+	// Raka's token can never apply, over REST or at the service
 	if r := ai.do("POST", "/api/v1/changesets/"+id+"/apply", nil); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
 		t.Fatalf("apply over REST: %d %s", r.Status, r.Body)
 	}
-	// the service refuses too, whatever route reaches it
 	_, err := e.s.Changes.Apply(context.Background(), changeset.Actor{ID: "ceo@saga.co.id", Org: "kopi-senja", Roles: []string{"owner"}, Kind: "ai", Assistant: true}, id)
 	if ce, ok := err.(*changeset.Error); !ok || ce.Code != "ai_forbidden" {
 		t.Fatalf("service apply: %v", err)
 	}
+	// but with config.ai.auto_apply: low_risk the kernel itself applies a low-risk proposal once it is previewed
+	call(ai, "rangka_changeset_validate", map[string]any{"id": id})
+	if p := call(ai, "rangka_changeset_preview", map[string]any{"id": id}); p["status"] != "applied" {
+		t.Fatalf("preview with auto_apply low_risk: %v", p["status"])
+	}
 	got := e.must(200, "GET", "/api/v1/changesets/"+id, nil).JSON
-	if got["status"] != "previewed" || got["source"] != "ai" {
+	if got["status"] != "applied" || got["source"] != "ai" {
 		t.Fatalf("stored: status %v source %v", got["status"], got["source"])
+	}
+	hist, _ := got["history"].([]any)
+	last, _ := hist[len(hist)-1].(map[string]any)
+	if last["status"] != "applied" || !strings.Contains(fmt.Sprint(last["note"]), "auto_apply") || last["by"] != "system" {
+		t.Fatalf("applied by the kernel on config, not by Raka: %v", last)
+	}
+	// medium risk still waits for a person
+	mid := call(ai, "rangka_changeset_propose", addRegion())
+	call(ai, "rangka_changeset_validate", map[string]any{"id": mid["id"]})
+	if p := call(ai, "rangka_changeset_preview", map[string]any{"id": mid["id"]}); p["status"] != "previewed" {
+		t.Fatalf("medium risk: %v", p["status"])
 	}
 	// a person's proposal carries no source
 	if own := e.must(201, "POST", "/api/v1/changesets", addRegion()).JSON; own["source"] != nil {
 		t.Fatalf("person's change set has source %v", own["source"])
+	}
+}
+
+// Without config.ai.auto_apply: low_risk nothing Raka proposes is applied automatically.
+func TestAssistantNoAutoApplyByDefault(t *testing.T) {
+	e := newEnv(t, false, nil)
+	ai := assistantEnv(t, e, 10*time.Minute)
+	cs := call(ai, "rangka_changeset_propose", map[string]any{"title": "Warna grafik",
+		"ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/color/chart-1", "value": "#0055cc"}}}}})
+	call(ai, "rangka_changeset_validate", map[string]any{"id": cs["id"]})
+	if p := call(ai, "rangka_changeset_preview", map[string]any{"id": cs["id"]}); p["status"] != "previewed" {
+		t.Fatalf("auto_apply never: %v", p["status"])
 	}
 }
 

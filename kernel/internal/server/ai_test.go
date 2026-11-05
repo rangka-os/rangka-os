@@ -337,6 +337,17 @@ func TestAIChatNotConfigured(t *testing.T) {
 	if v := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai"); v == true {
 		t.Fatalf("features.ai without a sidecar: %v", v)
 	}
+	// a healthy sidecar without a callback URL could not reach /mcp: the assistant stays off
+	side := fakeSidecar(t, func(w http.ResponseWriter, r *http.Request, body map[string]any) {
+		t.Error("sidecar called without a callback URL")
+	})
+	withAI(e, side.URL, func(c *api.AIConfig) { c.CallbackURL = "" })
+	if r := e.must(404, "POST", "/api/v1/ai/chat", ask("Halo")); get(r.JSON, "error", "code") != "not_found" {
+		t.Fatalf("no callback url: %s", r.Body)
+	}
+	if v := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai"); v != false {
+		t.Fatalf("features.ai without a callback url: %v", v)
+	}
 }
 
 // A message over 4,000 characters is refused before the sidecar sees it; exactly 4,000 goes through.

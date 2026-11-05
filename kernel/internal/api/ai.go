@@ -16,11 +16,11 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// AIConfig points the kernel at the rangka-ai sidecar (contract 0020). A nil config or an empty URL turns the
-// assistant off: POST /api/v1/ai/chat answers 404 and meta.features.ai is false.
+// AIConfig points the kernel at the rangka-ai sidecar (contract 0020). A nil config, an empty URL or an empty
+// CallbackURL turns the assistant off: POST /api/v1/ai/chat answers 404 and meta.features.ai is false.
 type AIConfig struct {
 	URL         string       // sidecar base URL (--ai-url, $RANGKA_AI_URL); the kernel posts to <URL>/v1/chat
-	CallbackURL string       // kernel base URL the sidecar reaches MCP on (--ai-callback-url); "" = this request's host
+	CallbackURL string       // kernel base URL the sidecar reaches MCP on (--ai-callback-url, else loopback + the listen port)
 	Secret      string       // sent as Authorization: Bearer ($RANGKA_AI_SECRET)
 	Client      *http.Client // nil = a client without its own timeout (Timeout bounds each chat)
 
@@ -56,7 +56,7 @@ type aiState struct {
 	healthOK bool
 }
 
-func (c *AIConfig) on() bool { return c != nil && c.URL != "" }
+func (c *AIConfig) on() bool { return c != nil && c.URL != "" && c.CallbackURL != "" }
 
 // aiFeature reports meta.features.ai: a sidecar is configured, config.ai.enabled is not false and the sidecar
 // answers GET /healthz with 200. A healthy answer is reused for 30 seconds, a failed probe for 5. The probe does
@@ -198,7 +198,7 @@ func trimHistory(h []aiTurn) []aiTurn {
 // change sets the stream named; the message text is not stored.
 func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 	if !s.AI.on() {
-		writeError(w, http.StatusNotFound, "not_found", "the AI assistant is not configured (--ai-url)")
+		writeError(w, http.StatusNotFound, "not_found", "the AI assistant is not configured (--ai-url, --ai-callback-url)")
 		return
 	}
 	if s.Engine.Reg().SiteConfig("ai.enabled") == false {
@@ -238,11 +238,7 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	out := aiSidecarBody{Message: body.Message, History: trimHistory(body.History), Context: body.Context, Org: u.Org}
-	callback := s.AI.CallbackURL
-	if callback == "" {
-		callback = "http://" + r.Host
-	}
-	out.MCP.URL, out.MCP.Token = strings.TrimRight(callback, "/")+"/mcp", token
+	out.MCP.URL, out.MCP.Token = strings.TrimRight(s.AI.CallbackURL, "/")+"/mcp", token
 	out.User.ID, out.User.Name, out.User.Roles = u.Email, u.FullName, u.Roles
 	if out.User.Name == "" {
 		out.User.Name = u.Email

@@ -72,3 +72,14 @@ func TestAIFeatureIgnoresRequestCancel(t *testing.T) {
 		t.Fatalf("after a cancelled request: probes %d, want 1 healthy cached probe", hits.Load())
 	}
 }
+
+// Without a callback URL the sidecar cannot reach /mcp: the assistant stays off and nothing is probed.
+func TestAIFeatureNeedsCallbackURL(t *testing.T) {
+	up := &atomic.Bool{}
+	up.Store(true)
+	side, hits := healthSidecar(t, up)
+	s := &Server{AI: &AIConfig{URL: side.URL}}
+	if s.aiFeature(context.Background(), true) || hits.Load() != 0 {
+		t.Fatalf("no callback URL: feature on or probed (%d)", hits.Load())
+	}
+}

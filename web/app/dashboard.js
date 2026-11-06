@@ -50,15 +50,38 @@
     }
     if (w.type === "list") {
       var m = w.model;
-      return h(R.ListCard, { key: w.name, span: span, loading: loading, title: title, subtitle: (r.total || 0) + " data",
+      return h(DashList, { key: w.name, ctx: ctx, w: w, r: r, open: open, span: span, loading: loading, title: title });
+    }
+    return null;
+  }
+
+  /* A dashboard list: the table on a laptop; under 490px (K-A8) a card per row with the same slots as the phone list
+     (who on top, the amount right, the number and the rest muted below), so no column is cut off. */
+  function DashList(p) {
+    var ctx = p.ctx, w = p.w, r = p.r, m = w.model, span = p.span, loading = p.loading, title = p.title, open = p.open;
+    var narrow = RA.useNarrow ? RA.useNarrow() : false;
+    if (narrow && !loading && RA.cardSlots && (r.rows || []).length) {
+      var s = RA.cardSlots(ctx.meta, m, w.columns);
+      var cell = function (c, rec) { return c ? RA.cellFor(m, c, rec, ctx) : null; };
+      return h(R.Card, { title: title, flush: true, extra: h("span", { className: "rk-card-sub" }, (r.total || 0) + " data") },
+        h("ul", { className: "ap-lc-list ap-dash-lc", "aria-label": title }, (r.rows || []).map(function (rec) {
+          var meta = s.meta.map(function (c) { return cell(c, rec); }).filter(function (x) { return x !== "" && x != null; });
+          return h("li", { key: rec.name, className: "ap-lc-item" },
+            h("a", { className: "ap-lc-link", href: "#/r/" + m + "/" + encodeURIComponent(rec.name) },
+              h("span", { className: "ap-lc-top" }, h("span", { className: "ap-lc-title" }, cell(s.title, rec)),
+                s.amount ? h("span", { className: "ap-lc-amt" }, h("span", { className: "rk-sr" }, colLabel(ctx, m, s.amount) + " "), cell(s.amount, rec)) : null),
+              meta.length || s.status ? h("span", { className: "ap-lc-sub" },
+                h("span", { className: "ap-lc-meta" }, meta.map(function (x, i) { return h("span", { key: i }, x); })),
+                s.status ? cell(s.status, rec) : null) : null));
+        })));
+    }
+    return h(R.ListCard, { key: w.name, span: span, loading: loading, title: title, subtitle: (r.total || 0) + " data",
         columns: (w.columns || []).map(function (c) {
           var fd = ctx.eng.field(m, c);
           return { key: c, label: colLabel(ctx, m, c), numeric: !!(fd && ctx.eng.numeric(fd)), render: function (_, row) { return RA.cellFor(m, c, row.__rec, ctx); } };
         }),
         rows: (r.rows || []).map(function (rec) { return { id: rec.name, __rec: rec }; }),
         onOpen: function (row) { open("#/r/" + m + "/" + encodeURIComponent(row.__rec.name)); } });
-    }
-    return null;
   }
 
   /* ---------------------------------------------------------------- Ubah: one widget with its move and width buttons */

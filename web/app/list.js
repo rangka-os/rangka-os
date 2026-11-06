@@ -177,8 +177,14 @@
       if (c === out.amount) return;
       if (c === out.status) return;
       var fd = fieldOf(mm, c);
-      if (fd && fd.type === "select" && fd.chip && !out.status) { out.status = c; return; }
+      if (fd && fd.type === "select" && fd.chip) { if (!out.status) out.status = c; return; } // a second chip (a kind) is noise on a phone card
       rest.push(c);
+    });
+    // the muted line takes the next plain columns when a chip left a gap among the first four
+    cols.slice(4).forEach(function (c) {
+      var fd = fieldOf(mm, c);
+      if (c === out.amount || c === out.status || !fd || NUMBER_TYPES[fd.type] || (fd.type === "select" && fd.chip)) return;
+      if (rest.length < 3) rest.push(c);
     });
     var t = rest.filter(function (c) { var fd = fieldOf(mm, c); return c !== "name" && !!fd && !NUMBER_TYPES[fd.type]; })[0];
     out.title = t || (rest.indexOf("name") >= 0 || !rest.length ? "name" : rest[0]);

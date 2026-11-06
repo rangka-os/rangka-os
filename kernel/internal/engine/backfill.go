@@ -3,11 +3,13 @@ package engine
 import (
 	"context"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/money"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -45,6 +47,7 @@ func backfillFields(ctx context.Context, q pg.Querier, reg *meta.Registry, m *me
 	type write struct {
 		org, name string
 		rec       store.Record
+		skip      map[string]bool // computes left empty (frozen documents)
 	}
 	var writes []write
 	seen := map[string]map[string][]string{} // unique field → org|value → record names
@@ -78,15 +81,38 @@ func backfillFields(ctx context.Context, q pg.Querier, reg *meta.Registry, m *me
 					}
 					ts.backfillDefaults(fields, nulls[org+"|"+str(t["name"])])
 				}
-				s.compute()
+				// only the new fields are computed: every stored value stays as written (a submitted document's
+				// stock_qty or amount is what was posted, even if a linked record changed since). A submitted or
+				// cancelled document also skips computes that read another record (a link member, or the parent's),
+				// whose value today may not be what it was when the document was submitted; they stay empty.
+				frozen := dm.IsSubmittable && toInt(rec["docstatus"]) != 0
+				if m.IsChild {
+					for _, f := range dm.Fields {
+						if f.Type == "table" && f.Of == m.Name {
+							for _, r := range rows(rec[f.Name]) {
+								cs := e.newScope(ctx, q, a, m, r, s.links)
+								cs.parent = s
+								cs.computeOnly(fields, frozen)
+							}
+						}
+					}
+				} else {
+					s.computeOnly(fields, frozen)
+				}
 				for _, t := range targets {
-					writes = append(writes, write{org, str(t["name"]), t})
+					skip := map[string]bool{}
+					for _, f := range fields {
+						if f.Compute != "" && dm.IsSubmittable && toInt(rec["docstatus"]) != 0 && readsRecord(m, f.Compute) {
+							skip[f.Name] = true
+						}
+					}
+					writes = append(writes, write{org, str(t["name"]), t, skip})
 					for _, f := range fields {
 						if !f.Unique {
 							continue
 						}
 						v := t[f.Name]
-						if v == nil || v == "" {
+						if v == nil || v == "" || skip[f.Name] {
 							continue
 						}
 						if seen[f.Name] == nil {
@@ -116,7 +142,7 @@ func backfillFields(ctx context.Context, q pg.Querier, reg *meta.Registry, m *me
 	for _, w := range writes {
 		var set []*meta.Field
 		for _, f := range fields {
-			if f.Compute != "" || f.MoneyOf() != "" || nulls[w.org+"|"+w.name][f.Name] {
+			if (f.Compute != "" && !w.skip[f.Name]) || f.MoneyOf() != "" || nulls[w.org+"|"+w.name][f.Name] {
 				set = append(set, f)
 			}
 		}
@@ -168,4 +194,51 @@ func (s *scope) backfillDefaults(fields []*meta.Field, null map[string]bool) {
 			s.rec[f.Name] = c
 		}
 	}
+}
+
+// linkMemberRe matches a member read (x.y) in an expression.
+var linkMemberRe = regexp.MustCompile(`\b([a-z_][a-z0-9_]*)\s*\.`)
+
+// readsRecord reports an expression that reads another record: a link field's member or the parent row/document,
+// or the derived status (it depends on today).
+func readsRecord(m *meta.Model, expr string) bool {
+	for _, x := range linkMemberRe.FindAllStringSubmatch(expr, -1) {
+		if x[1] == "parent" {
+			return true
+		}
+		if f := m.Field(x[1]); f != nil && (f.Type == "link" || f.Type == "dynamic_link") {
+			return true
+		}
+	}
+	return m.Field("status") == nil && regexp.MustCompile(`\bstatus\b`).MatchString(expr)
+}
+
+// computeOnly evaluates the listed compute fields of the record, in dependency order, as compute() does, leaving
+// every other stored value as it is; frozen skips those that read another record (readsRecord).
+func (s *scope) computeOnly(fields []*meta.Field, frozen bool) {
+	want := map[string]bool{}
+	for _, f := range fields {
+		if f.Compute != "" && !(frozen && readsRecord(s.m, f.Compute)) {
+			want[f.Name] = true
+		}
+	}
+	for _, f := range computeOrder(s.m) {
+		if !want[f.Name] {
+			continue
+		}
+		v, err := s.eval(f.Compute)
+		if err != nil || v == nil {
+			s.rec[f.Name] = store.Zero(f)
+			continue
+		}
+		c, err := store.Coerce(f, v)
+		if err != nil {
+			c = store.Zero(f)
+		}
+		if d, ok := c.(money.Decimal); ok && money.IsIDR(s.currencyOf(f)) {
+			c = d.Round(0)
+		}
+		s.rec[f.Name] = c
+	}
+	s.settleOwn()
 }

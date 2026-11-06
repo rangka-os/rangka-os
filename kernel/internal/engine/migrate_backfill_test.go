@@ -130,3 +130,52 @@ func TestMigrateBackfillUniqueClash(t *testing.T) {
 		t.Fatalf("the refused migration left the column: %v %v", res, err)
 	}
 }
+
+// TestMigrateBackfillFrozenDocuments: on a submitted document only the new fields are computed, from the values
+// stored when it was submitted, and a new compute that reads another record (a link member) is left empty there:
+// the linked record may have changed since (audit: a packing factor changed after submit doubled the unit cost).
+// A draft gets it, as its next save would.
+func TestMigrateBackfillFrozenDocuments(t *testing.T) {
+	old, upd := upgradeApps(t, map[string][2]string{
+		"procurement/models/goods_receipt_item.rk": {"  - {name: unit_cost, type: currency, compute: 'stock_qty > 0 ? round(amount / stock_qty) : 0'}\n",
+			"  - {name: unit_cost, type: currency, compute: 'stock_qty > 0 ? round(amount / stock_qty) : 0'}\n" +
+				"  - {name: stock_qty_new, type: float, compute: \"packing == '' ? qty : qty * packing.factor\"}\n" +
+				"  - {name: unit_new, type: currency, compute: 'stock_qty > 0 ? round(amount / stock_qty) : 0'}\n" +
+				"  - {name: day_new, type: date, compute: 'today ()'}\n"},
+	})
+	p := setupPilotApps(t, old)
+	m := p.masters()
+	pack := p.create("uom_conversion", map[string]any{"item": m.beras, "uom": m.karung, "factor": 50})
+	in := map[string]any{"vendor": m.vend, "outlet": m.outA, "items": []any{map[string]any{"item": m.beras, "qty": 2, "packing": pack, "rate": 600000}}}
+	gr := p.doc("goods_receipt", in)
+	draft := p.create("goods_receipt", in)
+	if _, err := p.e.Update(p.ctx, p.a, "uom_conversion", pack, map[string]any{"factor": 25}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := p.upgrade(upd); err != nil {
+		t.Fatalf("migrate: %v", err)
+	}
+	l := rows(p.get("goods_receipt", gr)["items"])[0]
+	if l["stock_qty"] != 100.0 || rp(l["unit_new"]) != 12000 || l["stock_qty_new"] != 0.0 {
+		t.Fatalf("submitted line: stock_qty %v unit_new %v stock_qty_new %v, want 100 12000 0 (empty)", l["stock_qty"], l["unit_new"], l["stock_qty_new"])
+	}
+	res, err := p.e.DB.Query(p.ctx, "select count(*) from r_goods_receipt_item where stock_qty_new is not null and parent = $1", gr)
+	if err != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("a link-reading compute was written on a submitted document: %v %v", res, err)
+	}
+	if d := rows(p.get("goods_receipt", draft)["items"])[0]; d["stock_qty_new"] != 50.0 {
+		t.Fatalf("draft line stock_qty_new = %v, want 50 (factor today)", d["stock_qty_new"])
+	}
+	if res, err := p.e.DB.Query(p.ctx, "select count(*) from r_goods_receipt_item where day_new is not null"); err != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("today () with a space was backfilled: %v %v", res, err)
+	}
+}
+
+func TestBackfillVolatile(t *testing.T) {
+	for expr, want := range map[string]bool{"today()": true, "today ()": true, "now( )": true, "tax.ppn_rate": true, "org .name": true,
+		"user.name": true, "active ? product : ''": false, "qty * 2": false, "todays_total": false, "taxable": false} {
+		if got := store.Volatile(expr); got != want {
+			t.Errorf("Volatile(%q) = %v, want %v", expr, got, want)
+		}
+	}
+}

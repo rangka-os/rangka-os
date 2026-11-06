@@ -10,6 +10,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"regexp"
 	"slices"
 	"sort"
 	"strings"
@@ -676,16 +677,13 @@ where b.org_id = x.org_id and b.outlet = x.outlet and b.item = x.item`,
 // would break a unique field. The engine sets it; without it new columns stay empty as before.
 var FieldBackfill func(ctx context.Context, q pg.Querier, reg *meta.Registry, m *meta.Model, fields []*meta.Field) error
 
-// Volatile reports an expression whose value depends on when or by whom it is evaluated (today(), now(),
-// user): backfilling it at upgrade time would give every old record the upgrade's value.
-func Volatile(expr string) bool {
-	for _, w := range []string{"today(", "now(", "user."} {
-		if strings.Contains(expr, w) {
-			return true
-		}
-	}
-	return false
-}
+// volatileRe matches what makes an expression's value depend on when, by whom or under which company settings it
+// is evaluated: today(), now() (with or without spaces) and the user, org and tax globals.
+var volatileRe = regexp.MustCompile(`\b(today|now)\s*\(|\b(user|org|tax)\s*\.`)
+
+// Volatile reports an expression whose value depends on when or by whom it is evaluated: backfilling it at upgrade
+// time would give every old record the upgrade's value.
+func Volatile(expr string) bool { return volatileRe.MatchString(expr) }
 
 // backfillFields gives the fields whose column a step added (alter table … add column) to FieldBackfill: a
 // compute that does not read the clock, or a default (non-compute) that does not. Tables new in this migration
@@ -728,8 +726,18 @@ func backfillFields(ctx context.Context, q pg.Querier, reg *meta.Registry, desir
 				fields = append(fields, f)
 			case f.Compute == "" && f.Default != "" && !Volatile(f.Default):
 				fields = append(fields, f)
-			case f.MoneyOf() != "" && added[name][f.MoneyOf()]:
-				fields = append(fields, f) // the IDR twin of a new money field
+			}
+		}
+		// the IDR twin of a money field that is filled (only then: a twin with an empty amount breaks 0013)
+		for _, f := range m.Fields {
+			if f.MoneyOf() == "" || !added[name][f.Name] {
+				continue
+			}
+			for _, x := range fields {
+				if x.Name == f.MoneyOf() {
+					fields = append(fields, f)
+					break
+				}
 			}
 		}
 		if len(fields) > 0 {

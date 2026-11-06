@@ -181,3 +181,27 @@ create table if not exists rk_approvals (
 );
 create index if not exists rk_approvals_org_state_idx on rk_approvals (org_id, state, requested_at desc);
 create index if not exists rk_approvals_record_idx on rk_approvals (org_id, model, name);
+
+-- plan limits (contract 0027): the tenant's plan as an operator set it, and AI credits used per month
+alter table rk_members add column if not exists added_at timestamptz not null default now();
+create table if not exists rk_site_plan (
+  id         int primary key default 1 check (id = 1),
+  plan       text not null,                -- a plan name of features.rk
+  source     text not null,                -- operator (rangka plan set) or config (config.rk plan, synced at serve)
+  limits     jsonb not null default '{}',  -- the plan's limits when last synced (rangka user add reads them)
+  changed_at timestamptz not null default now(),
+  changed_by text not null default '',
+  note       text not null default ''
+);
+create table if not exists rk_plan_changes (
+  id         bigserial primary key,
+  from_plan  text not null,
+  to_plan    text not null,
+  changed_at timestamptz not null default now(),
+  changed_by text not null default '',
+  note       text not null default ''
+);
+create table if not exists rk_ai_usage (
+  period text primary key,                 -- YYYY-MM in the site timezone
+  used   bigint not null default 0
+);

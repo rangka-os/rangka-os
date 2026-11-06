@@ -11,6 +11,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 )
 
 // userOut is where `rangka user` reports what it did (tests swap it).
@@ -218,6 +219,10 @@ func runUser(args []string) error {
 	if exists && !ua.ResetPassword {
 		// the password of an existing account is never changed here; a throwaway value satisfies EnsureUser
 		password = auth.RandomToken("unused", 16)
+	}
+	// contract 0027: a new person past the plan's people limit is refused (an existing member is not a new person)
+	if err := plan.CheckNewPerson(ctx, pool, ua.Email); err != nil {
+		return err
 	}
 	id, err := auth.EnsureUser(ctx, pool, ua.Email, ua.Name, password, ua.Org, ua.Role, ua.Record)
 	if err != nil {

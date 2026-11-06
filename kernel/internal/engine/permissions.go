@@ -260,6 +260,9 @@ func (e *Engine) Authorize(ctx context.Context, a Actor, model, action string, r
 
 // authorize checks inside an operation (link lookups in if: run in its transaction).
 func (o *op) authorize(m *meta.Model, action string, rec store.Record) error {
+	if err := o.planReadOnly(m, action, rec); err != nil {
+		return err
+	}
 	return o.e.authorize(o.ctx, o.tx, o.links, o.actor, m.Name, action, rec)
 }
 

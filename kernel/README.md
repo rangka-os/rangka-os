@@ -160,6 +160,7 @@ with a browser session and an approver role (`config.rk ai.approvers`, always `o
   `rk_org` cookie and answers like `/auth/me`. Not a member: 403 `permission_denied`. API and OIDC tokens
   have a fixed org: 400 `org_fixed`. Sessions only.
 * `GET /api/v1/orgs` lists only the caller's orgs.
+* `GET /api/v1/plan`: the tenant's plan, usage against its limits and notices for a banner. Past a limit, a new outlet or an AI chat is refused with 403 `plan_limit`; after a downgrade the extra outlets and people are read-only (403 `plan_read_only`). Contract 0027.
 * `rangka user add` creates the user or updates the membership (role, `--record`; `--outlets` replaces the
   member's outlets, `--outlets ""` clears them). The email is the first argument or `--email`. The password
   comes from the `RANGKA_USER_PASSWORD` environment variable (or `--password`, which lands in shell history)

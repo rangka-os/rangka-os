@@ -407,9 +407,10 @@ func LimitError(reg *meta.Registry, c *Current, key string) *Error {
 
 // ---------- enforcement
 
-// CheckNewOutlet refuses one more outlet past the plan's limit. tx is the creating transaction (org's setting);
-// an advisory lock serialises outlet creation, so two at once cannot both take the last place.
-func CheckNewOutlet(ctx context.Context, tx pg.Querier, db *pg.Pool, reg *meta.Registry, org string) error {
+// CheckNewOutlet refuses one more outlet past the plan's limit. tx is the creating transaction (org's setting). An
+// advisory lock serialises outlet creation, so two at once cannot both take the last place. Every count runs in tx
+// (the row-level setting switched per org with set_config(..., true) and restored), never on a second connection.
+func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org string) error {
 	c, err := Resolve(ctx, tx, reg)
 	if err != nil {
 		return err
@@ -421,24 +422,38 @@ func CheckNewOutlet(ctx context.Context, tx pg.Querier, db *pg.Pool, reg *meta.R
 	if _, err := tx.Query(ctx, "select pg_advisory_xact_lock(hashtext('rk_plan:outlets'))"); err != nil {
 		return err
 	}
-	res, err := tx.Query(ctx, "select count(*) from "+pg.QuoteIdent(store.TableName("outlet"))+" where org_id = $1", org)
+	res, err := tx.Query(ctx, "select id from rk_orgs order by id")
 	if err != nil {
 		return err
 	}
-	used := res.Rows[0][0].(int64)
-	os, err := orgs(ctx, db)
-	if err != nil {
-		return err
-	}
-	for _, o := range os {
-		if o == org {
-			continue
+	table := pg.QuoteIdent(store.TableName("outlet"))
+	var used int64
+	count := func(o string) error {
+		if _, err := tx.Query(ctx, "select set_config('rangka.org', $1, true)", o); err != nil {
+			return err
 		}
-		n, err := store.Count(pg.WithOrg(ctx, o), db, o, "outlet")
+		r, err := tx.Query(ctx, "select count(*) from "+table+" where org_id = $1", o)
 		if err != nil {
 			return err
 		}
-		used += n
+		used += r.Rows[0][0].(int64)
+		return nil
+	}
+	seen := false
+	for _, row := range res.Rows {
+		o := row[0].(string)
+		seen = seen || o == org
+		if err := count(o); err != nil {
+			return err
+		}
+	}
+	if !seen { // an org without an rk_orgs row (dev-open demo)
+		if err := count(org); err != nil {
+			return err
+		}
+	}
+	if _, err := tx.Query(ctx, "select set_config('rangka.org', $1, true)", org); err != nil {
+		return err
 	}
 	if used >= lim {
 		return LimitError(reg, c, Outlets)
@@ -553,38 +568,62 @@ func Take(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) (
 	return s, err
 }
 
-// Guard caches a Snapshot for a few seconds: the read-only check runs on every write.
+// Guard caches a Snapshot for the read-only check, which runs on every write inside its transaction. Peek never
+// touches the database: a stale snapshot is served while one background refresh (on its own pool connection, with
+// no transaction held) measures again, so writers holding a connection never wait for a second one (audit F1).
 type Guard struct {
-	TTL  time.Duration // default 10s
-	mu   sync.Mutex
-	snap *Snapshot
-	reg  *meta.Registry
+	TTL        time.Duration // default 10s
+	mu         sync.Mutex
+	snap       *Snapshot
+	reg        *meta.Registry
+	stale      bool
+	refreshing bool
 }
 
-// Invalidate drops the cached snapshot (after an outlet is created or the plan changed in this process).
+// Invalidate marks the snapshot stale: the next Peek starts a refresh (after an outlet is created).
 func (g *Guard) Invalidate() {
 	g.mu.Lock()
-	g.snap = nil
+	g.stale = true
 	g.mu.Unlock()
 }
 
-// Get returns a snapshot at most TTL old (a new one after the registry changed).
-func (g *Guard) Get(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) (*Snapshot, error) {
+// Refresh measures now and keeps the snapshot. Call it outside a transaction (start-up, tests, plan changes).
+func (g *Guard) Refresh(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) error {
+	s, err := Take(ctx, db, reg, now)
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	if err != nil {
+		return err
+	}
+	g.snap, g.reg, g.stale = s, reg, false
+	return nil
+}
+
+// Peek returns the cached snapshot (nil before the first measurement) and, when it is missing, stale, older than
+// TTL or of another registry, starts one background refresh.
+func (g *Guard) Peek(db *pg.Pool, reg *meta.Registry, now time.Time, logf func(string, ...any)) *Snapshot {
 	ttl := g.TTL
 	if ttl <= 0 {
 		ttl = 10 * time.Second
 	}
 	g.mu.Lock()
 	defer g.mu.Unlock()
-	if g.snap != nil && g.reg == reg && now.Sub(g.snap.At) < ttl && !now.Before(g.snap.At) {
-		return g.snap, nil
+	old := g.snap == nil || g.stale || g.reg != reg || now.Sub(g.snap.At) >= ttl || now.Before(g.snap.At)
+	if old && !g.refreshing && db != nil {
+		g.refreshing = true
+		go func() {
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+			defer cancel()
+			err := g.Refresh(ctx, db, reg, now)
+			g.mu.Lock()
+			g.refreshing = false
+			g.mu.Unlock()
+			if err != nil && logf != nil {
+				logf("plan: %v", err)
+			}
+		}()
 	}
-	s, err := Take(ctx, db, reg, now)
-	if err != nil {
-		return nil, err
-	}
-	g.snap, g.reg = s, reg
-	return s, nil
+	return g.snap
 }
 
 // ReadOnlyPerson is the refusal of a write by a person past the people limit.

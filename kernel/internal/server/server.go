@@ -147,6 +147,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	e.Log = cfg.Logf
 	e.Cache = cache.New(strCfg(reg, "cache.driver", "memory"), intCfg(reg, "cache.max_mb", 64), strCfg(reg, "cache.url", ""))
 	s.Engine = e
+	if err := e.Plan.Refresh(ctx, db, reg, e.Now()); err != nil { // the read-only check reads this snapshot (contract 0027)
+		cfg.Logf("plan: %v", err)
+	}
 	s.Queue = jobs.New(db, intCfg(reg, "queue.workers", 2), intCfg(reg, "queue.retries", 3))
 	s.Queue.Log = cfg.Logf
 	e.Queue = s.Queue

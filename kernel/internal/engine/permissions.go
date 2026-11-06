@@ -255,6 +255,9 @@ func (e *Engine) Authorize(ctx context.Context, a Actor, model, action string, r
 	if m := e.Reg().Model(model); m != nil && m.AppendOnly && (action == "create" || action == "write" || action == "delete" || action == "import") {
 		return appendOnly(m)
 	}
+	if err := e.planReadOnly(a, e.Reg().Model(model), action, rec); err != nil { // attachments, print (contract 0027 §4)
+		return err
+	}
 	return e.authorize(ctx, e.DB, nil, a, model, action, rec)
 }
 

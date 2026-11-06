@@ -1,13 +1,18 @@
 package server
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
@@ -40,7 +45,15 @@ func setPlan(e *env, name string) {
 	if _, err := plan.Set(context.Background(), e.s.DB, e.s.Engine.Reg(), name, "test", "uji"); err != nil {
 		e.t.Fatal(err)
 	}
-	e.s.Engine.Plan.Invalidate()
+	refreshPlan(e)
+}
+
+// refreshPlan measures the plan now (the read-only check reads a snapshot refreshed in the background).
+func refreshPlan(e *env) {
+	e.t.Helper()
+	if err := e.s.Engine.Plan.Refresh(context.Background(), e.s.DB, e.s.Engine.Reg(), e.s.Engine.Now()); err != nil {
+		e.t.Fatal(err)
+	}
 }
 
 func TestPlanOutletLimit(t *testing.T) {
@@ -146,7 +159,7 @@ func TestPlanPeople(t *testing.T) {
 	if _, err := auth.EnsureUser(ctx, e.s.DB, "c@kopisenja.id", "C", "rahasia-123", "kopi-senja", "sales_manager", ""); err != nil {
 		t.Fatal(err)
 	}
-	e.s.Engine.Plan.Invalidate()
+	refreshPlan(e)
 	rep := e.must(200, "GET", "/api/v1/plan", nil).JSON
 	if ro, _ := get(rep, "read_only", "users").([]any); len(ro) != 1 || ro[0] != "c@kopisenja.id" || get(rep, "usage", "users", "state") != "over" {
 		t.Fatalf("people report %v", rep)
@@ -197,3 +210,75 @@ func TestPlanAICredits(t *testing.T) {
 }
 
 func asPlanError(err error, pe **plan.Error) bool { return errors.As(err, pe) }
+
+// audit F1: the plan checks never take a second connection inside a write's transaction, so many writes at once
+// (more than the pool) still finish
+func TestPlanParallelWrites(t *testing.T) {
+	e := planEnv(t)
+	setPlan(e, "tumbuh")
+	e.s.Engine.Plan.Invalidate() // a refresh is due while the writes run
+	errs := make(chan string, 28)
+	var wg sync.WaitGroup
+	for i := 0; i < 16; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			b, _ := json.Marshal(map[string]any{"outlet_name": fmt.Sprintf("Kemang %d", i)})
+			req, _ := http.NewRequest("PATCH", e.ts.URL+"/api/v1/r/outlet/OUT-01", bytes.NewReader(b))
+			req.Header.Set("Content-Type", "application/json")
+			res, err := (&http.Client{Jar: e.jar, Timeout: 10 * time.Second}).Do(req)
+			if err != nil {
+				errs <- err.Error()
+				return
+			}
+			res.Body.Close()
+			if res.StatusCode != 200 {
+				errs <- fmt.Sprintf("patch %d", res.StatusCode)
+			}
+		}(i)
+	}
+	created := make(chan int, 12)
+	for i := 0; i < 12; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			b, _ := json.Marshal(map[string]any{"outlet_name": fmt.Sprintf("Baru %d", i)})
+			req, _ := http.NewRequest("POST", e.ts.URL+"/api/v1/r/outlet", bytes.NewReader(b))
+			req.Header.Set("Content-Type", "application/json")
+			res, err := (&http.Client{Jar: e.jar, Timeout: 10 * time.Second}).Do(req)
+			if err != nil {
+				errs <- err.Error()
+				return
+			}
+			res.Body.Close()
+			created <- res.StatusCode
+		}(i)
+	}
+	wg.Wait()
+	close(errs)
+	close(created)
+	for msg := range errs {
+		t.Error(msg)
+	}
+	ok := 0
+	for st := range created {
+		if st == 201 {
+			ok++
+		} else if st != 403 {
+			t.Errorf("create = %d", st)
+		}
+	}
+	if ok != 1 { // 2 outlets, limit 3
+		t.Fatalf("%d outlets created at once, want 1", ok)
+	}
+}
+
+// audit F2: attachments follow the read-only mode of the record's outlet
+func TestPlanAttachmentReadOnly(t *testing.T) {
+	e := planEnv(t)
+	setPlan(e, "mulai")
+	r := e.upload("/api/v1/r/sales_invoice/INV-2026-00044/attachments", "bukti.pdf", []byte("%PDF-1.4 x\n"))
+	if r.Status != 403 || errCode(r) != "plan_read_only" {
+		t.Fatalf("attachment on a read-only outlet's invoice: %d %s", r.Status, r.Body)
+	}
+}

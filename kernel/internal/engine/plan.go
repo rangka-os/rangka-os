@@ -18,12 +18,12 @@ func planError(err error) error {
 	return err
 }
 
-// planNewRecord refuses a new outlet past the plan's outlet limit (contract 0027 §2).
+// planNewRecord refuses a new outlet past the plan's outlet limit (contract 0027 §2), counting in o's transaction.
 func (o *op) planNewRecord(m *meta.Model) error {
-	if m.Name != "outlet" || o.e.DB == nil {
+	if m.Name != "outlet" {
 		return nil
 	}
-	if err := plan.CheckNewOutlet(o.ctx, o.tx, o.e.DB, o.e.Reg(), o.actor.Org); err != nil {
+	if err := plan.CheckNewOutlet(o.ctx, o.tx, o.e.Reg(), o.actor.Org); err != nil {
 		return planError(err)
 	}
 	o.e.Plan.Invalidate()
@@ -32,36 +32,51 @@ func (o *op) planNewRecord(m *meta.Model) error {
 
 // planReadOnly refuses a change by a person past the people limit, or on an outlet (or a record of an outlet) past
 // the outlet limit, after a downgrade (contract 0027 §4). Reads are never refused; kernel actors are not checked.
-// When the plan cannot be measured the write goes ahead (the limit checks at creation still hold).
-func (o *op) planReadOnly(m *meta.Model, action string, rec store.Record) error {
-	if action == "read" || o.actor.System || o.e.DB == nil {
+// It reads the cached snapshot only (plan.Guard.Peek), so it never takes a database connection: before the first
+// measurement, or when measuring fails, the write goes ahead (the limit checks at creation still hold).
+func (e *Engine) planReadOnly(a Actor, m *meta.Model, action string, rec store.Record) error {
+	if action == "read" || a.System || e.DB == nil {
 		return nil
 	}
-	snap, err := o.e.Plan.Get(o.ctx, o.e.DB, o.e.Reg(), o.e.Now())
-	if err != nil {
-		o.e.Log("plan: %v", err)
+	snap := e.Plan.Peek(e.DB, e.Reg(), e.Now(), e.Log)
+	if snap == nil || (len(snap.ExcessOutlets) == 0 && len(snap.ExcessPeople) == 0) {
 		return nil
 	}
-	if len(snap.ExcessOutlets) == 0 && len(snap.ExcessPeople) == 0 {
-		return nil
-	}
-	if pe := snap.ReadOnlyPerson(o.actor.ID); pe != nil {
+	if pe := snap.ReadOnlyPerson(a.ID); pe != nil {
 		return planError(pe)
 	}
-	if rec == nil || len(snap.ExcessOutlets) == 0 {
+	if m == nil || rec == nil || len(snap.ExcessOutlets) == 0 {
 		return nil
 	}
 	if m.Name == "outlet" && action != "create" {
-		if pe := snap.ReadOnlyOutlet(o.actor.Org, str(rec["name"])); pe != nil {
+		if pe := snap.ReadOnlyOutlet(a.Org, str(rec["name"])); pe != nil {
 			return planError(pe)
 		}
 	}
 	for _, f := range m.Fields {
 		if f.Type == "link" && f.To == "outlet" {
-			if pe := snap.ReadOnlyOutlet(o.actor.Org, str(rec[f.Name])); pe != nil {
+			if pe := snap.ReadOnlyOutlet(a.Org, str(rec[f.Name])); pe != nil {
 				return planError(pe)
 			}
 		}
 	}
 	return nil
+}
+
+func (o *op) planReadOnly(m *meta.Model, action string, rec store.Record) error {
+	return o.e.planReadOnly(o.actor, m, action, rec)
+}
+
+// planDecide refuses an approval decision by a read-only person, or on a record of a read-only outlet.
+func (o *op) planDecide(ap *store.Approval) error {
+	var m *meta.Model
+	var rec store.Record
+	if ap.Model != "" && ap.Name != "" {
+		if m = o.e.Reg().Model(ap.Model); m != nil {
+			if r, err := o.load(m, ap.Name); err == nil {
+				rec = r
+			}
+		}
+	}
+	return o.planReadOnly(m, "write", rec)
 }

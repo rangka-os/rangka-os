@@ -71,5 +71,9 @@ func TestExportCSV(t *testing.T) {
 	if !strings.Contains(string(r.Body), "Tidak diekspor") || strings.Contains(string(r.Body), "Nilai,119995") {
 		t.Fatalf("viewer dashboard csv:\n%s", r.Body)
 	}
+	// gladi G6: no technical model name, and no pointer to a list the viewer cannot download either
+	if v := string(r.Body); !strings.Contains(v, "tidak punya izin mengunduh data") || strings.Contains(v, "izin ekspor voucher") || strings.Contains(v, "Unduh dari daftar") {
+		t.Fatalf("viewer dashboard text:\n%s", v)
+	}
 	e.must(401, "GET", "/api/v1/export/r/voucher", nil)
 }

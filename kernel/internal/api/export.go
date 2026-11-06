@@ -189,6 +189,13 @@ func (s *Server) exportRecords(w http.ResponseWriter, r *http.Request, c *caller
 	if len(cols) == 0 {
 		cols = exportColumns(m, rows)
 	}
+	shown := cols[:0:0] // contract 0027: no column for a field hidden from the caller
+	for _, f := range cols {
+		if !s.Engine.FieldHidden(c.actor, m, m.Field(f.Name)) {
+			shown = append(shown, f)
+		}
+	}
+	cols = shown
 	if more {
 		w.Header().Set("X-Export-Truncated", strconv.Itoa(len(rows)))
 	}

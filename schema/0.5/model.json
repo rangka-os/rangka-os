@@ -821,7 +821,7 @@
           "enum": [
             "recipe"
           ],
-          "description": "out only: consume through the item's active recipe"
+          "description": "out: consume through the item's active recipe; in: bring its materials back (cost average or source)"
         },
         "cost": {
           "description": "in only: average (default), {unit: f}, {amount: f}, {source: link}, {consumed: true, split: qty|f}",

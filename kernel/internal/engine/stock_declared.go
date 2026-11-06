@@ -86,7 +86,7 @@ type declaredLine struct {
 	outlet string
 	item   string
 	qty    float64
-	uses   []materialUse // explode: recipe
+	uses   []materialUse // explode: recipe (out: consumed, in: brought back)
 }
 
 // postDeclaredMoves is stock.post_moves for a model with a stock: block: every rule's rows are evaluated and
@@ -253,6 +253,18 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 			continue
 		}
 		var err error
+		if ru.explode { // contract 0022: the materials of the returned item come back, each at its own cost
+			for _, u := range dl.uses {
+				q := roundQty(dl.qty * u.per)
+				if q <= qtyEps {
+					continue
+				}
+				if err = inAtCost(h, s, ru, dl.outlet, u.material, q); err != nil {
+					return nil, err
+				}
+			}
+			continue
+		}
 		switch ru.cost {
 		case "unit":
 			_, err = s.move(dl.outlet, dl.item, dl.qty, moneyIn(dl.row[ru.costField]), nil, ru.reason)
@@ -266,22 +278,8 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 		case "consumed":
 			v := shares[j]
 			_, err = s.move(dl.outlet, dl.item, dl.qty, divRound(v, dl.qty), &v, ru.reason)
-		case "source":
-			var unit int64
-			var ok bool
-			if unit, ok, err = sourceUnitCost(h, ru.costField, dl.item); err == nil {
-				if !ok {
-					unit, err = s.averageIn(dl.outlet, dl.item)
-				}
-				if err == nil {
-					_, err = s.move(dl.outlet, dl.item, dl.qty, unit, nil, ru.reason)
-				}
-			}
-		default: // average
-			var unit int64
-			if unit, err = s.averageIn(dl.outlet, dl.item); err == nil {
-				_, err = s.move(dl.outlet, dl.item, dl.qty, unit, nil, ru.reason)
-			}
+		default: // source, average
+			err = inAtCost(h, s, ru, dl.outlet, dl.item, dl.qty)
 		}
 		if err != nil {
 			return nil, err
@@ -320,6 +318,26 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 		msg += "; HPP " + rupiah(total)
 	}
 	return map[string]any{"message": msg}, nil
+}
+
+// inAtCost posts q of item into outlet at the source document's unit cost for item (cost source; the outlet
+// average when the source took none) or at the outlet average.
+func inAtCost(h *HookCtx, s *stockPost, ru stockRule, outlet, item string, q float64) error {
+	var unit int64
+	ok := false
+	var err error
+	if ru.cost == "source" {
+		if unit, ok, err = sourceUnitCost(h, ru.costField, item); err != nil {
+			return err
+		}
+	}
+	if !ok {
+		if unit, err = s.averageIn(outlet, item); err != nil {
+			return err
+		}
+	}
+	_, err = s.move(outlet, item, q, unit, nil, ru.reason)
+	return err
 }
 
 func splitWeight(dl declaredLine, ru stockRule) float64 {
@@ -415,6 +433,9 @@ func sourceUnitCost(h *HookCtx, field, item string) (int64, bool, error) {
 				if has(lm, "stock_qty") {
 					rq = qtyOf(row["stock_qty"])
 				}
+			}
+			if rq <= qtyEps { // a refund line (qty < 0) took nothing out and has no cogs
+				continue
 			}
 			v += moneyIn(row[ru.cogs])
 			q += rq

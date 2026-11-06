@@ -163,7 +163,7 @@ func (o *op) runAction(model, name, action string, args map[string]any, opts Act
 			return nil, err
 		}
 		if len(pending) > 0 {
-			return &ActionResult{Held: true, Approvals: all, Record: e.Output(m, rec)}, nil
+			return &ActionResult{Held: true, Approvals: all, Record: e.Redact(a, m, e.Output(m, copyRecord(rec)))}, nil
 		}
 	}
 	if act.Queue != nil && !opts.FromQueue {

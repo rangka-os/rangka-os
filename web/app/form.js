@@ -444,10 +444,12 @@
       });
     }
 
-    var layout = (mm.views && mm.views.form && mm.views.form.layout) || [{ section: null, fields: mm.fields.filter(function (f) { return !f.compute; }).map(function (f) { return f.name; }) }];
+    var layout = (mm.views && mm.views.form && mm.views.form.layout) || [{ section: null, fields: mm.fields.filter(function (f) { return !f.compute && !(f.hidden && !(f.required && f["default"] == null)); }).map(function (f) { return f.name; }) }];
     var placed = {};
     layout.forEach(function (s) { (s.columns ? [].concat.apply([], s.columns) : s.fields || []).forEach(function (n) { placed[n] = 1; }); });
-    var extra = mm.fields.filter(function (f) { return !placed[f.name] && !f.compute && !f.read_only && f.type !== "percent"; }).map(function (f) { return f.name; });
+    // hidden: true fields are kept out of the form, so they do not land in "Lainnya" either (mobile P7, M8), except a
+    // required one with no default: nobody could fill it otherwise and the save would be refused
+    var extra = mm.fields.filter(function (f) { return !placed[f.name] && !f.compute && !f.read_only && !(f.hidden && !(f.required && f["default"] == null)) && f.type !== "percent"; }).map(function (f) { return f.name; });
     if (extra.length) layout = layout.concat([{ section: { id: "Lainnya" }, fields: extra }]);
 
     var tabs = formTabs(layout);

@@ -248,7 +248,7 @@ func (s *Server) exportDashboard(w http.ResponseWriter, r *http.Request, c *call
 		}
 		cw.Write(nil)
 		if wd != nil && wd.Model != "" && !s.Engine.CanExportAll(c.actor, wd.Model) {
-			cw.Write([]string{title, "Tidak diekspor: izin ekspor " + wd.Model + " kamu tidak mencakup semua data; unduh dari daftarnya"})
+			cw.Write([]string{title, s.Engine.ExportRefusal(c.actor, wd.Model)})
 			continue
 		}
 		cw.Write([]string{title})

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -231,9 +232,10 @@ func TestPlanParallelWrites(t *testing.T) {
 				errs <- err.Error()
 				return
 			}
+			body, _ := io.ReadAll(res.Body)
 			res.Body.Close()
 			if res.StatusCode != 200 {
-				errs <- fmt.Sprintf("patch %d", res.StatusCode)
+				errs <- fmt.Sprintf("patch %d: %s", res.StatusCode, body)
 			}
 		}(i)
 	}
@@ -250,7 +252,11 @@ func TestPlanParallelWrites(t *testing.T) {
 				errs <- err.Error()
 				return
 			}
+			body, _ := io.ReadAll(res.Body)
 			res.Body.Close()
+			if res.StatusCode != 201 && res.StatusCode != 403 {
+				errs <- fmt.Sprintf("create %d: %s", res.StatusCode, body)
+			}
 			created <- res.StatusCode
 		}(i)
 	}

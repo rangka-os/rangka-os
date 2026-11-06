@@ -409,7 +409,7 @@ func LimitError(reg *meta.Registry, c *Current, key string) *Error {
 
 // CheckNewOutlet refuses one more outlet past the plan's limit. tx is the creating transaction (org's setting). An
 // advisory lock serialises outlet creation, so two at once cannot both take the last place. Every count runs in tx
-// (the row-level setting switched per org with set_config(..., true) and restored), never on a second connection.
+// (the row-level setting switched per org with set_config(..., true), then set back to what tx had), never on a second connection.
 func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org string) error {
 	c, err := Resolve(ctx, tx, reg)
 	if err != nil {
@@ -422,6 +422,11 @@ func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org 
 	if _, err := tx.Query(ctx, "select pg_advisory_xact_lock(hashtext('rk_plan:outlets'))"); err != nil {
 		return err
 	}
+	prev, err := tx.Query(ctx, "select coalesce(current_setting('rangka.org', true), '')")
+	if err != nil {
+		return err
+	}
+	before := prev.Rows[0][0].(string)
 	res, err := tx.Query(ctx, "select id from rk_orgs order by id")
 	if err != nil {
 		return err
@@ -452,7 +457,7 @@ func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org 
 			return err
 		}
 	}
-	if _, err := tx.Query(ctx, "select set_config('rangka.org', $1, true)", org); err != nil {
+	if _, err := tx.Query(ctx, "select set_config('rangka.org', $1, true)", before); err != nil { // the setting tx had
 		return err
 	}
 	if used >= lim {
@@ -578,24 +583,30 @@ type Guard struct {
 	reg        *meta.Registry
 	stale      bool
 	refreshing bool
+	gen        uint64 // bumped by Invalidate; a refresh that started before it does not count as fresh
 }
 
 // Invalidate marks the snapshot stale: the next Peek starts a refresh (after an outlet is created).
 func (g *Guard) Invalidate() {
 	g.mu.Lock()
 	g.stale = true
+	g.gen++
 	g.mu.Unlock()
 }
 
 // Refresh measures now and keeps the snapshot. Call it outside a transaction (start-up, tests, plan changes).
 func (g *Guard) Refresh(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) error {
+	g.mu.Lock()
+	gen := g.gen
+	g.mu.Unlock()
 	s, err := Take(ctx, db, reg, now)
 	g.mu.Lock()
 	defer g.mu.Unlock()
 	if err != nil {
 		return err
 	}
-	g.snap, g.reg, g.stale = s, reg, false
+	g.snap, g.reg = s, reg
+	g.stale = g.gen != gen // invalidated while measuring: measure again on the next Peek
 	return nil
 }
 

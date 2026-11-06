@@ -51,7 +51,7 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    users: [email]}, period}`. `state` is `ok`, `near` (from 80% of the limit), `full` (at the limit) or `over` (past
    it, after a downgrade); `limit` is null when not limited. `notices` are ready for an owner banner.
    `read_only.outlets` lists only outlets of the caller's organisations; `read_only.users` lists every read-only
-   person to an owner, and to anyone else only themselves.
+   person to an owner of an organisation they belong to, and to anyone else only themselves.
 6. **Who changes the plan.** Only an operator, with `rangka plan set <plan> [--by] [--note]` or `rangka plan clear`
    (back to `config.rk`); each change is kept in `rk_plan_changes`. There is no REST endpoint: payment is manual
    (concierge, QRIS), so Juragan Cloud changes the plan after it marks the invoice paid. The serving kernel copies

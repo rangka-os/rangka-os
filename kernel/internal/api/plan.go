@@ -5,13 +5,14 @@ import (
 	"sort"
 	"strings"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 )
 
 // getPlan is GET /api/v1/plan (contract 0028 §5): the tenant's plan, every plan of features.rk, usage against the
 // limits (ok, near from 80%, full, over), notices for a banner and what is read-only after a downgrade. Any
 // signed-in member may read it: a member in read-only mode needs to see why. read_only lists only the outlets of
-// the caller's organisations, and other people's emails only to an owner (audit F4).
+// the caller's organisations, and other people's emails only to an owner of an organisation they belong to (audit F4, N2).
 func (s *Server) getPlan(w http.ResponseWriter, r *http.Request, c *caller) {
 	reg := s.Engine.Reg()
 	now := s.Engine.Now()
@@ -38,9 +39,29 @@ func (s *Server) getPlan(w http.ResponseWriter, r *http.Request, c *caller) {
 			outlets = append(outlets, o)
 		}
 	}
+	// an owner sees the read-only people of the organisations they own (audit N2); anyone else only themselves
+	shared := map[string]bool{}
+	if owner {
+		var owned []string
+		for _, m := range ms {
+			for _, role := range m.Roles {
+				if role == "owner" {
+					owned = append(owned, m.ID)
+				}
+			}
+		}
+		res, err := s.DB.Query(r.Context(), "select distinct u.email from rk_members m join rk_users u on u.id = m.user_id where m.org_id = any($1)", pg.Array(owned))
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		for _, row := range res.Rows {
+			shared[strings.ToLower(row[0].(string))] = true
+		}
+	}
 	me := strings.ToLower(c.p.User.Email)
 	for p := range snap.ExcessPeople {
-		if owner || p == me {
+		if shared[p] || p == me {
 			users = append(users, p)
 		}
 	}

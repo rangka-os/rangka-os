@@ -253,7 +253,22 @@ type Tx struct {
 	done bool
 	// AfterCommit callbacks run once the transaction committed.
 	after []func()
+	// conflict is set when a statement or the commit failed with a serialization failure or a deadlock: the
+	// transaction lost a race and the whole unit of work may be run again (see Conflicted).
+	conflict bool
 }
+
+// note records a serialization failure (40001) or deadlock (40P01) and returns err unchanged.
+func (t *Tx) note(err error) error {
+	if IsCode(err, "40001") || IsCode(err, "40P01") {
+		t.conflict = true
+	}
+	return err
+}
+
+// Conflicted reports whether the transaction failed because a concurrent transaction won (SQLSTATE 40001 or
+// 40P01), even when the caller wrapped or replaced that error: running the unit of work again is safe.
+func (t *Tx) Conflicted() bool { return t.conflict }
 
 var errTxDone = errors.New("pg: transaction is finished")
 
@@ -270,14 +285,16 @@ func (t *Tx) Query(ctx context.Context, sql string, args ...any) (*Result, error
 	if t.done {
 		return nil, errTxDone
 	}
-	return query(ctx, t.tx, sql, args)
+	res, err := query(ctx, t.tx, sql, args)
+	return res, t.note(err)
 }
 
 func (t *Tx) Exec(ctx context.Context, sql string, args ...any) (*Result, error) {
 	if t.done {
 		return nil, errTxDone
 	}
-	return exec(ctx, t.tx, sql, args)
+	res, err := exec(ctx, t.tx, sql, args)
+	return res, t.note(err)
 }
 
 // CopyFrom runs COPY … FROM STDIN with r as input and returns the row count.
@@ -287,7 +304,7 @@ func (t *Tx) CopyFrom(ctx context.Context, r io.Reader, sql string) (int64, erro
 	}
 	tag, err := t.tx.Conn().PgConn().CopyFrom(ctx, r, sql)
 	if err != nil {
-		return 0, wrapErr(err)
+		return 0, t.note(wrapErr(err))
 	}
 	return tag.RowsAffected(), nil
 }
@@ -300,7 +317,7 @@ func (t *Tx) CopyTo(ctx context.Context, w io.Writer, sql string) (int64, error)
 	}
 	tag, err := t.tx.Conn().PgConn().CopyTo(ctx, w, sql)
 	if err != nil {
-		return 0, wrapErr(err)
+		return 0, t.note(wrapErr(err))
 	}
 	return tag.RowsAffected(), nil
 }
@@ -315,7 +332,7 @@ func (t *Tx) Commit(ctx context.Context) error {
 	}
 	t.done = true
 	if err := t.tx.Commit(ctx); err != nil {
-		return wrapErr(err)
+		return t.note(wrapErr(err))
 	}
 	for _, fn := range t.after {
 		fn()

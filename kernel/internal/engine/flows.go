@@ -36,7 +36,8 @@ type FlowResult struct {
 
 // RunFlow runs a flow from its first step for a caller (REST). event is the trigger payload (flows with on:).
 // Flow steps are not row-scoped, so a member with a row scope may not start a flow directly (contract 0010
-// §5); flows started by automations, the scheduler or jobs go through RunFlowFrom and stay unguarded.
+// §5); the scheduler goes through RunFlowFrom and queued jobs through RunFlowResume, both unguarded. A run started
+// here is manual (contract 0026): it may not create append_only ledger rows, also after a wait or an approval.
 func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event map[string]any) (*FlowResult, error) {
 	if e.RowScope(a) != nil {
 		return nil, Denied("flow", "run")
@@ -44,7 +45,7 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
 }
 
-// RunFlowFrom runs a flow's steps in one transaction from top-level step start with variables vars (a
+// RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (a
 // resumed wait). Steps: find, find_all, create, update, notify (log driver), call (connector action; the
 // kernel records the call, it has no connector runtime yet), if/then/else, wait (the remaining steps are
 // queued for later) and approve (the remaining steps wait for a decision). Every step may have if: and as:.
@@ -72,12 +73,25 @@ func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, even
 	out := newFlowResult(flowName)
 	err := e.run(ctx, a, func(o *op) error {
 		o.manualRun = manual
-		return e.flowIn(o, f, event, start, vars, out)
+		// a fresh result and copy of the variables per attempt: a retried run (contract 0025) must not report the
+		// steps of the rolled-back attempt
+		out = newFlowResult(flowName)
+		v := make(map[string]any, len(vars))
+		for k, x := range vars {
+			v[k] = x
+		}
+		return e.flowIn(o, f, event, start, v, out)
 	})
 	if c := flowConnector(e, f); err != nil && c != "" {
 		store.Audit(context.WithoutCancel(ctx), e.DB, a.Org, a.ID, "connector.error", "connector/"+c, "flow "+flowName+": "+err.Error(), nil)
 	}
 	return out, err
+}
+
+// lockFlowRead takes the transaction-scoped advisory lock of model m in the actor's org (contract 0025); taking it
+// again in the same transaction is a no-op wait-free re-entry.
+func (o *op) lockFlowRead(m string) error {
+	return store.LockKey(o.ctx, o.tx, "flowread:"+o.actor.Org+"/"+m)
 }
 
 func newFlowResult(flow string) *FlowResult {
@@ -219,6 +233,12 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if !readable.maybe() {
 				return e.Deny(e.permModel(m.Name).Name, "read")
 			}
+			// contract 0025: a flow that reads a model holds that model's lock (per org) until its unit of work ends, so
+			// two flows that check the same model and then write ("is this retainer month billed yet?") run one after
+			// the other, and the second reads the first one's commit; other orgs and other models are not held up
+			if err := o.lockFlowRead(m.Name); err != nil {
+				return err
+			}
 			recs, err := store.All(o.ctx, o.tx, e.Reg(), a.Org, m, false)
 			if err != nil {
 				return err
@@ -322,7 +342,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "notify."+ch, "flow/"+r.f.Name, n.Text, n); err != nil {
 				return err
 			}
-			e.Log("notify[%s] %s %v: %s", ch, to, n.Recipients, n.Text)
+			o.tx.AfterCommit(func() { e.Log("notify[%s] %s %v: %s", ch, to, n.Recipients, n.Text) }) // once, not per retried attempt
 			r.out.Steps = append(r.out.Steps, fmt.Sprintf("%s: notify %s via %s", i, to, ch))
 		case st["call"] != nil:
 			call := str(st["call"])

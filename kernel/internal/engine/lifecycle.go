@@ -596,6 +596,11 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	if toInt(rec["docstatus"]) != 0 {
 		return nil, conflict("not_draft", "Hanya draf yang bisa diajukan")
 	}
+	if af := str(rec["amended_from"]); af != "" { // before any approval request is held
+		if err := o.oneLiveAmendment(m, af, name); err != nil {
+			return nil, err
+		}
+	}
 	stored := cloneRecord(rec) // snapshot and approval when: read the stored record (0007 §2, §3)
 	o.prepare(m, rec, false)
 	errs, warns, err := o.check(m, rec, "submit")
@@ -653,6 +658,34 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		return nil, err
 	}
 	return &Result{Record: e.Output(m, rec), Warnings: warns}, nil
+}
+
+// oneLiveAmendment keeps the amendments of a document a single chain, so one business document has one live
+// version. Amend (self == "") is refused once the document has any copy (amended_from = it), whatever the copy's
+// state: a draft or submitted copy is the live one, and a cancelled copy is where the chain goes on (amend that
+// copy instead). Submitting a draft copy (self) is refused when another copy of the same document was ever
+// submitted (docstatus 1 or 2), which only chains branched before this rule can have. The original is locked
+// first, so two amends or submits at the same time see each other.
+func (o *op) oneLiveAmendment(m *meta.Model, original, self string) error {
+	if _, err := store.GetForUpdate(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, original); err != nil && !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	copies, err := store.Find(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, map[string]any{"amended_from": original}, store.FindOpts{})
+	if err != nil {
+		return err
+	}
+	for _, c := range copies {
+		cn, ds := str(c["name"]), toInt(c["docstatus"])
+		switch {
+		case cn == self:
+			continue
+		case self == "" && ds == 2:
+			return conflict("already_amended", "Dokumen "+original+" sudah diubah menjadi "+cn+" yang juga dibatalkan; ubah (amend) "+cn+", bukan dokumen ini")
+		case self == "" || ds != 0:
+			return conflict("already_amended", "Dokumen "+original+" sudah diubah menjadi "+cn+"; lanjutkan atau batalkan salinan itu dulu")
+		}
+	}
+	return nil
 }
 
 func (o *op) amendName(m *meta.Model, base string) (string, error) {
@@ -762,6 +795,9 @@ func (o *op) amend(model, name string) (*Result, error) {
 	}
 	if toInt(old["docstatus"]) != 2 {
 		return nil, conflict("not_cancelled", "Hanya dokumen yang dibatalkan yang bisa di-amend")
+	}
+	if err := o.oneLiveAmendment(m, name, ""); err != nil {
+		return nil, err
 	}
 	rec := store.Record{}
 	for k, v := range old {

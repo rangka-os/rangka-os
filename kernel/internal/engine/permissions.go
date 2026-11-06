@@ -276,8 +276,15 @@ func (e *Engine) Unconditional(a Actor, model, action string) bool {
 // Allowed gives the model-level answer for every action (conditional grants count as allowed), for /meta.
 func (e *Engine) Allowed(a Actor, model string) map[string]bool {
 	out := make(map[string]bool, len(Actions))
+	ledger := false
+	if m := e.Reg().Model(model); m != nil {
+		ledger = m.AppendOnly
+	}
 	for _, act := range Actions {
 		out[act] = e.authorize(context.Background(), e.DB, nil, a, model, act, nil) == nil
+		if ledger && (act == "create" || act == "write" || act == "delete" || act == "import") {
+			out[act] = false // contract 0026: nobody writes a ledger by hand, so the screens offer no button
+		}
 	}
 	return out
 }

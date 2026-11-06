@@ -437,6 +437,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                         rep.add("error", p, f"{key}/{i}", "unknown_hook", f'"{hk}" is not declared in app.rk hooks or core')
             if m.get("on_submit") and not m.get("is_submittable"):
                 rep.add("error", p, "on_submit", "not_submittable", "on_submit hooks need is_submittable: true")
+            if m.get("append_only") is True and m.get("is_submittable") is True:
+                rep.add("error", p, "append_only", "append_only_submittable", "an append_only ledger is not a document: drop is_submittable (contract 0026)")
             if isinstance(m.get("stock"), dict):
                 check_stock(rep, p, mname, m, fields, visible)
             for i, pr in enumerate(m.get("permissions", [])):

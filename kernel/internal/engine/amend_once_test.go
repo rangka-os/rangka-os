@@ -30,12 +30,24 @@ func TestAmendOnce(t *testing.T) {
 	if got := p.outstanding("customer", m.cust); got != 1000000 {
 		t.Fatalf("customer outstanding = %d, want 1000000 (one live copy)", got)
 	}
-	// the copy cancelled: the original may be amended again, and so may the copy
+	// the copy cancelled: the chain goes on from the copy, never again from the original (audit F1: amending
+	// the original again would branch the chain and both branches could be submitted)
 	if err := p.cancel("sales_invoice", copyName); err != nil {
 		t.Fatal(err)
 	}
-	if _, err := p.e.Amend(p.ctx, p.a, "sales_invoice", copyName); err != nil {
+	_, err = p.e.Amend(p.ctx, p.a, "sales_invoice", inv)
+	wantCode(t, err, 409, "already_amended")
+	second, err := p.e.Amend(p.ctx, p.a, "sales_invoice", copyName)
+	if err != nil {
 		t.Fatalf("amend the cancelled copy: %v", err)
+	}
+	tip := p.submit("sales_invoice", str(second.Record["name"]))
+	_, err = p.e.Amend(p.ctx, p.a, "sales_invoice", inv)
+	wantCode(t, err, 409, "already_amended")
+	_, err = p.e.Amend(p.ctx, p.a, "sales_invoice", copyName)
+	wantCode(t, err, 409, "already_amended")
+	if got := p.outstanding("customer", m.cust); got != 1000000 {
+		t.Fatalf("customer outstanding with the chain %s -> %s -> %s = %d, want 1000000", inv, copyName, tip, got)
 	}
 
 	// payment: the same rule
@@ -88,6 +100,19 @@ func TestAmendOnceSubmitGuard(t *testing.T) {
 	}
 	p.submit("sales_invoice", str(a.Record["name"]))
 	_, err = p.e.Submit(p.ctx, p.a, "sales_invoice", str(b.Record["name"]), true)
+	wantCode(t, err, 409, "already_amended")
+	// a copy kept under a name that is not DRAFT-… (imports) is guarded too (audit F2)
+	var c *Result
+	err = p.e.run(p.ctx, p.a, func(o *op) error {
+		in["name"] = "INV-IMPORT-1"
+		var err error
+		c, err = o.create("sales_invoice", in, CreateOpts{KeepName: true})
+		return err
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = p.e.Submit(p.ctx, p.a, "sales_invoice", str(c.Record["name"]), true)
 	wantCode(t, err, 409, "already_amended")
 	if got := p.outstanding("customer", m.cust); got != 1000000 {
 		t.Fatalf("customer outstanding = %d", got)

@@ -10,5 +10,5 @@ Rangka Cloud is the managed way to run Rangka OS, for businesses that want it wo
 - **Same source-available core**: Rangka Cloud runs the same rangka-os, rangka-apps, rangka-connectors and rangka-ai —
   anything built for it also runs self-hosted.
 
-Rangka Cloud itself (onboarding, provisioning, billing, fleet operations) is a separate, closed-source service.
+Rangka Cloud itself (onboarding, provisioning, billing, fleet operations) is a separate, private service.
 It is not available yet.

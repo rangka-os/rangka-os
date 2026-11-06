@@ -1,10 +1,15 @@
+import { readdirSync } from 'node:fs'
 import { defineConfig } from 'vitepress'
 
 // GitHub Pages serves this repo at /rangka-os/. A custom domain (e.g. rangka.dev) sets DOCS_BASE=/ in the workflow.
 const base = process.env.DOCS_BASE || '/rangka-os/'
 const repo = 'https://github.com/rangka-os/rangka-os'
 
-const kinds = ['app', 'model', 'dashboard', 'flow', 'overlay', 'role', 'connector', 'template', 'system', 'theme', 'layout', 'features', 'config', 'changeset']
+// One reference page per schema in schema/0.5 (scripts/gen-reference.mjs writes them), in reading order.
+const order = ['module', 'model', 'flow', 'role', 'import', 'print', 'app', 'dashboard', 'process', 'system', 'features', 'config', 'overlay', 'theme', 'layout', 'letterhead', 'connector', 'changeset', 'template']
+const kinds = readdirSync(new URL('../../schema/0.5/', import.meta.url))
+  .filter(f => f.endsWith('.json')).map(f => f.slice(0, -5))
+  .sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99))
 
 export default defineConfig({
   base,

@@ -31,10 +31,11 @@ idempotency: event.message_id
 | --- | --- |
 | `find`, `find_all` | Load one / many records with a CEL `where` |
 | `create`, `update` | Write a record with `set:` values (CEL) |
-| `notify` | Send through a `system.rk` notify channel (logged only in v0) |
-| `call` | Call a connector action (recorded in the audit log in v0) |
+| `notify` | Send through a `system.rk` notify channel (logged only in v0, and written to the audit log) |
+| `call` | Call a connector action (recorded in the audit log in v0; the connector runtime is not built yet) |
 | `if` / `then` / `else` | Branch; every step may also carry an `if:` guard |
-| `wait` | Wait for a duration or an event |
+| `wait` | Wait for a duration (`wait: 2h`) or until a condition holds (`wait: {until: …}`, checked every minute); the rest of the flow runs later from the queue. Top level only |
+| `approve` | Stop until a person with one of the `approvers` roles approves; reject ends the flow ([contract 0007](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0007-document-approvals.md)). Top level only |
 
 `on:` takes a connector trigger (`whatsapp_business.message_received`) or a model event (`deal.updated`);
 `schedule:` takes a cron. A scheduled flow runs once per due time even with several kernel nodes.

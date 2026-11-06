@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strconv"
@@ -158,21 +159,34 @@ func (e *Engine) linkTitle(ctx context.Context, a Actor, rs *RowScope, to, name 
 // is inside row scope rs and it passes the read grant (its if: included). Otherwise ok is false and nothing of the
 // record may be shown; callers show the stored code instead (audit 2026-11-06: titles leaked across outlets).
 func (e *Engine) readableLink(ctx context.Context, a Actor, rs *RowScope, to, name string, links map[string]map[string]any) (store.Record, bool) {
+	rec, ok, _ := e.readableLinkErr(ctx, a, rs, to, name, links)
+	return rec, ok
+}
+
+// readableLinkErr is readableLink that also returns a database error (anything but not found): a client filter
+// must fail on it instead of reading the record as missing (a predicate like grand_total == 0 would match).
+func (e *Engine) readableLinkErr(ctx context.Context, a Actor, rs *RowScope, to, name string, links map[string]map[string]any) (store.Record, bool, error) {
 	tm := e.Reg().Models[to]
 	if tm == nil || name == "" {
-		return nil, false
+		return nil, false, nil
 	}
 	rec, err := store.Get(ctx, e.DB, e.Reg(), a.Org, tm, name)
-	if err != nil || !rs.Visible(tm, rec) {
-		return nil, false
+	if err != nil {
+		if errors.Is(err, store.ErrNotFound) {
+			return nil, false, nil
+		}
+		return nil, false, err
+	}
+	if !rs.Visible(tm, rec) {
+		return nil, false, nil
 	}
 	e.refreshClock(ctx, a, tm, rec, true, links)
 	rec = e.Output(tm, rec)
 	pm := e.permModel(tm.Name)
 	if pm == nil || !e.recordAllowed(ctx, e.DB, a, tm, e.decide(a, pm, "read"), rec, links) {
-		return nil, false
+		return nil, false, nil
 	}
-	return rec, true
+	return rec, true, nil
 }
 
 func matchText(m *meta.Model, r store.Record, q string) bool {

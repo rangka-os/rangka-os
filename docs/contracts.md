@@ -45,7 +45,9 @@ Every model → table `r_<model>` with typed columns (+ `org_id`, `name` PK per 
 `amended_from`, `owner`, `created_at`, `modified_at`, `x` JSONB for company-layer `x_` fields). Table fields (`type: table`)
 → child table `r_<child_model>` with `parent`, `parent_field`, `idx`. Submittable: create as draft with name `DRAFT-xxxx`;
 naming pattern applied at submit (`INV-{YYYY}-{#####}` per org); submitted (1) is immutable (409); cancel → 2; amend →
-new draft with `amended_from`. Rules run on `save` and `submit`; `level: warn` returns warnings, error blocks.
+new draft with `amended_from`. Rules run on `save` and `submit`; `level: warn` returns warnings, error blocks. A rule whose
+check cannot be evaluated counts as failed (`code: rule_error`, the message says it could not be checked): an error
+rule blocks, a warn rule warns.
 Computed fields recomputed on every save. Status for invoices: draft, submitted, partly, paid, overdue, cancelled (see
 `rangka-os/web/app/engine.js` `status()`).
 

@@ -156,11 +156,14 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 			continue
 		}
 		v, e := s.eval(r.Check)
-		if e != nil {
-			continue // a rule that cannot be evaluated does not block (prototype)
-		}
-		if !cel.Truthy(v) {
+		// a rule that cannot be evaluated counts as failed (fail closed): a guard on money or stock must not pass
+		// because its expression broke on this record (audit cel-emvco F5). The issue says it could not be checked.
+		if e != nil || !cel.Truthy(v) {
 			is := Issue{Rule: r.Name, Code: "rule", Message: r.Message.Text()}
+			if e != nil {
+				is.Code = "rule_error"
+				is.Message = strings.TrimSpace(r.Message.Text() + " (aturan " + r.Name + " tidak bisa diperiksa: " + e.Error() + ")")
+			}
 			if r.Level == "warn" {
 				warns = append(warns, is)
 			} else {

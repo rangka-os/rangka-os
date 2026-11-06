@@ -160,8 +160,13 @@ func (s *scope) link(model, name string) *cel.Link {
 		}
 		var rec store.Record
 		if s.client {
-			// nil when missing or not readable: both read as a missing record, so a filter cannot tell them apart
-			rec, _ = s.e.readableLink(s.ctx, s.actor, s.rs, model, name, s.links)
+			// nil when missing or not readable: both read as a missing record, so a filter cannot tell them apart; a
+			// database error fails the expression (the row is left out), as for a metadata expression
+			var err error
+			rec, _, err = s.e.readableLinkErr(s.ctx, s.actor, s.rs, model, name, s.links)
+			if err != nil {
+				return nil, err
+			}
 		} else {
 			var err error
 			rec, err = store.Get(s.ctx, s.q, s.e.Reg(), s.org, tm, name)

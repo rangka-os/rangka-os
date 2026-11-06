@@ -434,6 +434,9 @@ func sourceUnitCost(h *HookCtx, field, item string) (int64, bool, error) {
 					rq = qtyOf(row["stock_qty"])
 				}
 			}
+			if rq <= qtyEps { // a refund line (qty < 0) took nothing out and has no cogs
+				continue
+			}
 			v += moneyIn(row[ru.cogs])
 			q += rq
 		}

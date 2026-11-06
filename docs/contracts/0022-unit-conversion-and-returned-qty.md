@@ -41,8 +41,11 @@ returns. The kernel never looks up `uom_conversion` itself.
 
 No kernel change. A source document that can be returned gets a tracker: a plain (not submittable) record with one
 row per item, created by a flow when the source is submitted, and updated by flows on the return's `submitted` and
-`cancelled` events. The return's save rules cap its quantity against the tracker; a guard flow refuses cancelling a
-source that still has live returns. `order_fulfilment` is the first one; retail and F&B get one for cashier refunds.
+`cancelled` events. The return's save rules cap its quantity against the tracker for the person typing it, but rules
+run before flows and take no lock (0025 §5), so two returns submitted at once can both pass them. The authoritative
+check is in the submit flow: it updates the tracker (which locks it, so concurrent submits are counted one after the
+other) and then refuses, through a guard record, a total above what can come back; that rolls the whole submit back
+with its stock moves. A guard flow likewise refuses cancelling a source that still has live returns. `order_fulfilment` is the first one; retail and F&B get one for cashier refunds.
 
 Why not a kernel `returned_qty` written onto the source with `SetSubmitted`:
 
@@ -97,7 +100,8 @@ items share one. Cancel reverses the moves like every declared document.
 - Schema: `explode` description in `schema/0.5/model.json` (no shape change).
 - Validators: `meta/validate_stock.go` and `check_stock` in `tools/rangka_validate.py`: `explode` is allowed on `in`;
   `stock_explode_cost` for `unit`, `amount` or `consumed` with it. Same order and messages.
+- `sourceUnitCost`: the cogs-per-unit fallback skips the source's refund lines (qty < 0), which took nothing out.
 - Tests: `TestDeclaredReturnExplode` (materials at the sale's cost and at the average, an item without a recipe, a
-  service, cancel), `kernel/testdata/stock-apps/apps/declared/models/recipe_return.rk`, golden
+  service, cancel), `TestDeclaredReturnRefundLines` (the fallback over the sold lines only), `kernel/testdata/stock-apps/apps/declared/models/recipe_return.rk`, golden
   `kernel/testdata/broken-stock.expected.txt`.
 - Docs: `website/concepts/rules.md`.

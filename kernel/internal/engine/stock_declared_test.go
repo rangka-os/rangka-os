@@ -366,3 +366,26 @@ func TestDeclaredReturnExplode(t *testing.T) {
 		t.Fatalf("beras after cancelling the return = %v, want 14", b["qty"])
 	}
 }
+
+// TestDeclaredReturnRefundLines (audit K-p L1): the cogs-per-unit fallback of a cost source skips the source's refund
+// lines (qty < 0), which took nothing out: 24.000 over the 10 sold, not over 10 - 4.
+func TestDeclaredReturnRefundLines(t *testing.T) {
+	p := setupDeclared(t)
+	m := p.masters()
+	p.receipt(m, m.outB, 10, 12000)
+	rc := p.create("recipe", map[string]any{"product": m.nasi, "lines": []any{map[string]any{"material": m.beras, "qty": 0.2}}})
+	sale := p.doc("sales_declared", map[string]any{"outlet": m.outB, "date": "2026-10-11", "lines": []any{
+		map[string]any{"item": m.nasi, "qty": 10}, map[string]any{"item": m.nasi, "qty": -4}}})
+	if c := rp(p.get("sales_declared", sale)["cogs_total"]); c != 24000 {
+		t.Fatalf("sale cogs = %d, want 24000", c)
+	}
+	if _, err := p.e.Update(p.ctx, p.a, "recipe", rc, map[string]any{"active": false}); err != nil {
+		t.Fatal(err)
+	}
+	ret := p.doc("recipe_return", map[string]any{"sale": sale, "outlet": m.outB, "return_date": "2026-10-12", "items": []any{
+		map[string]any{"item": m.nasi, "qty": 1}}})
+	mv := p.moves(ret)
+	if len(mv) != 1 || str(mv[0]["item"]) != m.nasi || rp(mv[0]["unit_cost"]) != 2400 {
+		t.Fatalf("return without a recipe = %v, want 1 nasi at 2400 (24.000 / 10)", mv)
+	}
+}

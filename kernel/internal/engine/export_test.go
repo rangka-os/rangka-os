@@ -46,6 +46,13 @@ func TestExportGrantAndTitles(t *testing.T) {
 	if e.CanExportAll(clerk, "sales_invoice") || !e.CanExportAll(owner, "sales_invoice") {
 		t.Fatal("a conditional export grant is not an export of every record (dashboards)")
 	}
+	// gladi G6: the dashboard line names the data in the owner's words and points at the list only when it helps
+	if got := e.ExportRefusal(clerk, "sales_invoice"); got != "Tidak diekspor: kamu hanya boleh mengunduh sebagian data faktur penjualan. Unduh dari daftar faktur penjualan untuk bagian yang boleh kamu unduh." {
+		t.Fatalf("conditional grant line = %q", got)
+	}
+	if got := e.ExportRefusal(staff, "sales_invoice"); got != "Tidak diekspor: kamu tidak punya izin mengunduh data faktur penjualan. Minta pemilik usaha memberi izin unduh kalau perlu." {
+		t.Fatalf("no grant line = %q", got)
+	}
 
 	// titles: OUT-01 is outside a staff member's scope once their outlets are only OUT-02
 	only2 := staff

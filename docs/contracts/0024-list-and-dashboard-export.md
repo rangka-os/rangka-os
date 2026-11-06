@@ -18,7 +18,8 @@ rangka-apps (49 grants), yet no endpoint checks it.
 2. **Permission.** Both need the model's `export` grant on top of `read`; a conditional grant (`if:`) is evaluated
    per row, before the 50 000 cut. A dashboard widget counts rows under `read`, so it is exported only when the
    caller may export every record of its model (an export grant without `if:`); otherwise the block is one line
-   saying so, and the rows can be downloaded from the list. Child models are refused (`400`); their rows come with the parent's print.
+   saying so in the owner's words, naming the data by its model label: with a conditional export grant it points
+   at the list's download (the rows the caller may export), with none it says the caller may not download that data. Child models are refused (`400`); their rows come with the parent's print.
 3. **File.** `text/csv; charset=utf-8`, `Content-Disposition: attachment; filename="<model or dashboard>-<today>.csv"`,
    `Cache-Control: no-store`, UTF-8 byte-order mark first (Excel reads UTF-8 only with it). `sep=semicolon` writes `;`
    for an Excel whose list separator is `;` (Windows with Indonesian regional settings); the default is `,`.

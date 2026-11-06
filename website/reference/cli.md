@@ -47,6 +47,14 @@ Every step records its reverse.
   same way, so a column or table that comes back gets fresh indexes (a returning `unique: true` field is unique
   again). Rolling it back renames both back. It is dropped for good only after 30 days and only with
   `--allow-destructive`.
+- **New columns are filled for existing records**, in the same transaction, after every step: a field with a
+  `compute` gets its computed value for every record and child row (submitted documents included), and a field with
+  a `default` (and no compute) gets the default where the column is empty. Only the new fields are computed, from
+  the stored values. Expressions that read the clock, the person or company settings (`today()`, `now()`, `user.`,
+  `org.`, `tax.`) are left empty, and so are, on submitted and cancelled documents, computes that read another
+  record (a link's field, `parent.`, `status`): that record may have changed since the document was submitted. If the filled values break a `unique: true` field, the
+  migration fails, lists the records that clash, and applies nothing; fix them with the old metadata, then migrate
+  again. `--dry-run` does not compute the values.
 - `--rollback n` undoes the last n migrations (n of at least 1). A rollback whose reverse drops a column or table is
   destructive too and needs `--allow-destructive`. It supports `--dry-run`.
 - `serve` migrates at start-up and refuses to start on a destructive retype, with a message that points to

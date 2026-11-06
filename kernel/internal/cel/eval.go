@@ -1195,7 +1195,20 @@ func method(name string, t any, args []any) (any, error) {
 				return nil, errf("invalid regex: %v", err)
 			}
 			return re.MatchString(s), nil
+		case "emvcoTag":
+			return emvcoTag(s, a)
 		}
+	}
+	if isStr && len(args) == 2 && name == "replace" {
+		old, ok1 := Unwrap(args[0]).(string)
+		nw, ok2 := Unwrap(args[1]).(string)
+		if !ok1 || !ok2 {
+			return nil, errf("replace() needs two texts")
+		}
+		if old == "" {
+			return nil, errf("replace() needs a non-empty text to replace")
+		}
+		return strings.ReplaceAll(s, old, nw), nil
 	}
 	if isStr && len(args) == 0 {
 		switch name {
@@ -1205,6 +1218,8 @@ func method(name string, t any, args []any) (any, error) {
 			return strings.ToUpper(s), nil
 		case "trim":
 			return strings.TrimSpace(s), nil
+		case "emvcoValid":
+			return emvcoValid(s), nil
 		}
 	}
 	if l, ok := t.([]any); ok && name == "contains" && len(args) == 1 {

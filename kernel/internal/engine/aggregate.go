@@ -72,6 +72,16 @@ func (e *Engine) Aggregate(ctx context.Context, a Actor, model string, opts List
 	if err := checkAggregate(m, group, fns); err != nil {
 		return AggResult{}, err
 	}
+	// contract 0027: no group or total over a field hidden from the caller
+	hidden := e.hiddenFields(a, m)
+	if hidden[group] {
+		return AggResult{}, &StatusError{403, "field_hidden", "Kolom " + group + " tidak bisa kamu lihat"}
+	}
+	for _, fn := range fns {
+		if hidden[fn.Field] {
+			return AggResult{}, &StatusError{403, "field_hidden", "Kolom " + fn.Field + " tidak bisa kamu lihat"}
+		}
+	}
 	rows, err := e.matching(ctx, a, m, opts)
 	if err != nil {
 		return AggResult{}, err

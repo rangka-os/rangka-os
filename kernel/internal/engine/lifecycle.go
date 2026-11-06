@@ -315,10 +315,10 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
+		res, err = o.create(model, e.dropHidden(a, e.Reg().Model(model), input), CreateOpts{authorize: true, Guard: true, client: true})
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Result, error) {
@@ -416,7 +416,7 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	if err := e.Guard(ctx, a, m.Name, rec, "read"); err != nil {
 		return nil, err
 	}
-	return rec, nil
+	return e.Redact(a, m, rec), nil
 }
 
 // lockLoad loads a record with its row locked until the transaction ends (select … for update). Submit,
@@ -451,10 +451,10 @@ func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch 
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.update(model, name, patch, true, true)
+		res, err = o.update(model, name, e.dropHidden(a, e.Reg().Model(model), patch), true, true)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 // update merges patch into a record. authorize checks write on the stored and the patched record (public
@@ -586,7 +586,7 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 		res, err = o.submit(model, name, force)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) submit(model, name string, force bool) (*Result, error) {
@@ -728,7 +728,7 @@ func (e *Engine) Cancel(ctx context.Context, a Actor, model, name string) (*Resu
 		res, err = o.cancel(model, name)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) cancel(model, name string) (*Result, error) {
@@ -792,7 +792,7 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 		res, err = o.amend(model, name)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) amend(model, name string) (*Result, error) {

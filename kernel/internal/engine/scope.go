@@ -104,6 +104,9 @@ func (s *scope) env() *cel.Env {
 
 func (s *scope) lookup(name string) (any, bool) {
 	if f := s.m.Field(name); f != nil {
+		if s.client && f.Type != "table" && s.e.FieldHidden(s.actor, s.m, f) {
+			return store.Zero(f), true // contract 0027: a filter cannot test a field hidden from its caller
+		}
 		v := s.rec[name]
 		switch f.Type {
 		case "link":

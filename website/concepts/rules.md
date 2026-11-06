@@ -65,7 +65,12 @@ Each move names a table (`lines`), one outlet (`in:` or `out:`, a header link or
 `stock_move.reason`, and optionally `if:` (CEL with `doc` and `line`), `item:`, `qty:`, `explode: recipe` (out),
 `cogs:` (out) and `cost:` (in: `average`, `{unit: f}`, `{amount: f}`, `{source: link}` for the cost the linked
 document took out, `{consumed: true, split: f}` for the value this document took out). Out moves post before in
-moves. `negative: refuse` fails the submit instead of letting an outlet go below zero. Cancel reverses every move.
+moves; all `consumed` rules (outputs and by-products) share one pool, split by qty or the share field. `{unit: f}`
+is a price per stock unit (use `{amount: f}` for a line total). `{source: link}` must name a submitted document:
+a return from a cancelled one is refused; from a sale exploded through a recipe, the item comes back at the
+sale's cogs per unit. A line whose outlet or item is empty is refused. `negative: refuse` fails the submit instead
+of letting an outlet go below zero; it is checked on each out move, before the in moves. An `if:` that is not true
+or false fails the submit (422 `stock_if`). Cancel reverses every move.
 The six built-in stock documents (`goods_receipt`, `stock_transfer`, `stock_transfer_receipt`, `stock_count`,
 `stock_adjustment`, `outlet_sales`) keep their own rules and cannot declare one.
 

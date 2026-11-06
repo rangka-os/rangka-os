@@ -2,7 +2,9 @@ package engine
 
 import (
 	"fmt"
+	"math"
 	"strings"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 )
@@ -94,6 +96,9 @@ type declaredLine struct {
 func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 	rec := h.Record
 	date := dateOnly(rec[sp.date])
+	if f := h.Model.Field(sp.date); f != nil && f.Type == "datetime" {
+		date = localDate(h.op.e, rec[sp.date])
+	}
 	if date == "" {
 		date = h.op.e.Today()
 	}
@@ -120,9 +125,13 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 				sc.extra = map[string]any{"doc": map[string]any(rec), "line": row}
 				v, err := sc.eval(ru.cond)
 				if err != nil {
-					return nil, fmt.Errorf("stock.moves[%d].if: %w", i, err)
+					return nil, &StatusError{422, "stock_if", fmt.Sprintf("stock.moves[%d].if of %s: %v", i, h.Model.Name, err)}
 				}
-				if v != true {
+				b, ok := v.(bool)
+				if !ok {
+					return nil, &StatusError{422, "stock_if", fmt.Sprintf("stock.moves[%d].if of %s must be true or false, got %v", i, h.Model.Name, v)}
+				}
+				if !b {
 					continue
 				}
 			}
@@ -130,8 +139,11 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 			if ru.lineOutlet {
 				dl.outlet = str(row[ru.outlet])
 			}
-			if dl.outlet == "" || dl.item == "" {
-				continue
+			if dl.item == "" {
+				return nil, refuse("stock_item_missing", fmt.Sprintf("Baris %v %s belum diisi barangnya", row["idx"], ru.lines))
+			}
+			if dl.outlet == "" {
+				return nil, refuse("stock_outlet_missing", fmt.Sprintf("Outlet %s untuk baris %v %s belum diisi", ru.outlet, row["idx"], ru.lines))
 			}
 			if ru.explode {
 				uses, ok := recipes[dl.item]
@@ -198,39 +210,42 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 		}
 		consumed += v
 		if ru.cogs != "" {
-			cogs[ru.lines+"|"+str(dl.row["name"])] += v
-			hasCogs[ru.lines+"|"+str(dl.row["name"])] = true
+			k := ru.lines + "|" + ru.cogs + "|" + str(dl.row["name"])
+			cogs[k] += v
+			hasCogs[k] = true
 			total += v
 		}
 	}
-	// consumed: the out value split over each consumed rule's lines by qty or a share field, the last line
-	// taking the remainder so the values add up to the rupiah.
+	// consumed: the out value split once over the lines of every consumed rule (outputs and by-products share one
+	// pool), by qty or a share field, the last of those lines taking the remainder so the values add up to the
+	// rupiah. A document that took value out for a consumed rule with no line to put it on is refused.
 	shares := map[int]int64{}
-	for i, ru := range sp.rules {
-		if !ru.in || ru.cost != "consumed" {
-			continue
+	var pool []int
+	var weight float64
+	hasConsumed := false
+	for j, dl := range lines {
+		if ru := sp.rules[dl.rule]; ru.in && ru.cost == "consumed" {
+			pool = append(pool, j)
+			weight += splitWeight(dl, ru)
 		}
-		var idx []int
-		var weight float64
-		for j, dl := range lines {
-			if dl.rule == i {
-				idx = append(idx, j)
-				weight += splitWeight(dl, ru)
+	}
+	for _, ru := range sp.rules {
+		hasConsumed = hasConsumed || (ru.in && ru.cost == "consumed")
+	}
+	if hasConsumed && len(pool) == 0 && consumed != 0 {
+		return nil, refuse("consumed_nowhere", "Bahan senilai "+rupiah(consumed)+" keluar, tetapi tidak ada baris hasil untuk menampung nilainya")
+	}
+	rest := consumed
+	for k, j := range pool {
+		v := rest
+		if k < len(pool)-1 {
+			v = 0
+			if weight > 0 {
+				v = mulRound(splitWeight(lines[j], sp.rules[lines[j].rule])/weight, consumed)
 			}
 		}
-		rest := consumed
-		for k, j := range idx {
-			v := rest
-			if k < len(idx)-1 {
-				if weight > 0 {
-					v = mulRound(splitWeight(lines[j], ru)/weight, consumed)
-				} else {
-					v = 0
-				}
-			}
-			shares[j] = v
-			rest -= v
-		}
+		shares[j] = v
+		rest -= v
 	}
 	for j, dl := range lines {
 		ru := sp.rules[dl.rule]
@@ -283,9 +298,12 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 			fields[ru.lines] = tbl
 		}
 		for _, row := range rows(rec[ru.lines]) {
-			k := ru.lines + "|" + str(row["name"])
+			k := ru.lines + "|" + ru.cogs + "|" + str(row["name"])
 			if hasCogs[k] {
-				tbl[str(row["name"])] = map[string]any{ru.cogs: moneyOut(cogs[k])}
+				if tbl[str(row["name"])] == nil {
+					tbl[str(row["name"])] = map[string]any{}
+				}
+				tbl[str(row["name"])][ru.cogs] = moneyOut(cogs[k])
 			}
 		}
 	}
@@ -328,13 +346,26 @@ func (s *stockPost) averageIn(outlet, item string) (int64, error) {
 	return moneyIn(it["standard_cost"]), nil
 }
 
-// sourceUnitCost is round(Σ|value| / Σ|qty|) of the moves the document linked by field posted for item
-// (reversals excluded); ok is false when it posted none.
+// sourceUnitCost is the unit cost at which the document linked by field took item out: round(Σ|value| / Σ|qty|) of
+// its moves for item (reversals excluded), else, when it consumed item through a recipe, the cogs per unit of its
+// lines of item. ok is false when it took none. A linked document that is not submitted (a draft, or cancelled:
+// its stock went back) is refused, so a return cannot bring in stock that never left.
 func sourceUnitCost(h *HookCtx, field, item string) (int64, bool, error) {
 	f := h.Model.Field(field)
 	name := str(h.Record[field])
 	if f == nil || name == "" {
 		return 0, false, nil
+	}
+	sm := h.op.e.Reg().Model(f.To)
+	if sm == nil {
+		return 0, false, nil
+	}
+	src, err := h.op.load(sm, name)
+	if err != nil {
+		return 0, false, err
+	}
+	if sm.IsSubmittable && toInt(src["docstatus"]) != 1 {
+		return 0, false, refuse("source_not_submitted", "Dokumen sumber "+name+" belum diajukan atau sudah dibatalkan; retur tidak bisa memakai biayanya")
 	}
 	moves, err := h.Find("stock_move", map[string]any{"voucher_type": f.To, "voucher": name, "item": item})
 	if err != nil {
@@ -346,20 +377,65 @@ func sourceUnitCost(h *HookCtx, field, item string) (int64, bool, error) {
 		if str(mv["reason"]) == "reversal" {
 			continue
 		}
-		x, y := moneyIn(mv["value"]), qtyOf(mv["qty"])
-		if x < 0 {
-			x = -x
-		}
-		if y < 0 {
-			y = -y
-		}
-		v += x
-		q += y
+		v += abs64(moneyIn(mv["value"]))
+		q += math.Abs(qtyOf(mv["qty"]))
 	}
-	if q <= qtyEps {
-		return 0, false, nil
+	if q > qtyEps {
+		return divRound(v, q), true, nil
 	}
-	return divRound(v, q), true, nil
+	// exploded through a recipe: the source's moves are of the materials; its line cogs are per item sold
+	type cogsRule struct{ lines, item, qty, cogs string }
+	var rules []cogsRule
+	if sp := stockSpecOf(sm); sp != nil && !LegacyStockModels[sm.Name] {
+		for _, ru := range sp.rules {
+			if !ru.in && ru.cogs != "" {
+				rules = append(rules, cogsRule{ru.lines, ru.item, ru.qty, ru.cogs})
+			}
+		}
+	} else if sm.Name == "outlet_sales" {
+		rules = []cogsRule{{"lines", "item", "", "cogs"}}
+	}
+	for _, ru := range rules {
+		lm := h.op.e.Reg().Models[sm.Field(ru.lines).Of]
+		for _, row := range rows(src[ru.lines]) {
+			if str(row[ru.item]) != item {
+				continue
+			}
+			rq := qtyOf(row[ru.qty])
+			if ru.qty == "" {
+				rq = qtyOf(row["qty"])
+				if has(lm, "stock_qty") {
+					rq = qtyOf(row["stock_qty"])
+				}
+			}
+			v += moneyIn(row[ru.cogs])
+			q += rq
+		}
+	}
+	if q > qtyEps {
+		return divRound(v, q), true, nil
+	}
+	return 0, false, nil
+}
+
+func abs64(x int64) int64 {
+	if x < 0 {
+		return -x
+	}
+	return x
+}
+
+// localDate is a datetime value's date in the organisation time zone (the store keeps datetimes in UTC).
+func localDate(e *Engine, v any) string {
+	switch d := v.(type) {
+	case time.Time:
+		return d.In(e.Location()).Format("2006-01-02")
+	case string:
+		if t, err := time.Parse(time.RFC3339, d); err == nil {
+			return t.In(e.Location()).Format("2006-01-02")
+		}
+	}
+	return dateOnly(v)
 }
 
 func formatQty(q float64) string {

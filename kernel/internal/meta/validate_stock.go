@@ -41,6 +41,11 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 	linkTo := func(target string) func(map[string]any) bool {
 		return func(f map[string]any) bool { return str(f, "type") == "link" && str(f, "to") == target }
 	}
+	postsStock := func(f map[string]any) bool {
+		to := str(f, "to")
+		x, ok := visible[to]
+		return str(f, "type") == "link" && ok && (legacyStock[to] || asMap(x.m.Raw["stock"]) != nil)
+	}
 	number := func(f map[string]any) bool {
 		switch str(f, "type") {
 		case "int", "float", "currency", "percent":
@@ -127,6 +132,22 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 				fieldKind(w+"/cogs", cfields, c, " of "+of, readOnlyCurrency, "must be a read_only currency field")
 			}
 		}
+		if cond, ok := r["if"].(string); ok { // doc is the header, line the row (contract 0021)
+			ctx := map[string]map[string]any{}
+			for k, f := range fields {
+				ctx[k] = f
+			}
+			ctx["doc"] = map[string]any{"name": "doc", "type": "link", "to": m.Name}
+			if of != "" {
+				ctx["line"] = map[string]any{"name": "line", "type": "link", "to": of}
+			}
+			v.expr(p, w+"/if", cond, ctx, visible)
+		}
+		if r["explode"] == "recipe" {
+			if _, ok := visible["recipe"]; !ok {
+				v.rep.add("warn", p, w+"/explode", "no_recipe", "explode: recipe without a recipe model: each item consumes itself")
+			}
+		}
 		if hasIn {
 			for _, k := range []string{"explode", "cogs"} {
 				if _, ok := r[k]; ok {
@@ -144,7 +165,7 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 				}
 			}
 			if s, ok := c["source"].(string); ok {
-				fieldKind(w+"/cost/source", fields, s, "", func(f map[string]any) bool { return str(f, "type") == "link" }, "is not a link field")
+				fieldKind(w+"/cost/source", fields, s, "", postsStock, "is not a link to a document that moves stock")
 			}
 			if c["consumed"] == true {
 				if !hasOut {
@@ -161,5 +182,15 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 	}
 	if ct, ok := st["cogs_total"].(string); ok {
 		fieldKind("stock/cogs_total", fields, ct, "", readOnlyCurrency, "must be a read_only currency field")
+		withCogs := false
+		for _, r := range movesList {
+			if rm := asMap(r); rm != nil {
+				_, c := rm["cogs"]
+				withCogs = withCogs || c
+			}
+		}
+		if !withCogs {
+			v.rep.add("warn", p, "stock/cogs_total", "cogs_total_unused", "cogs_total stays 0: no out move has cogs")
+		}
 	}
 }

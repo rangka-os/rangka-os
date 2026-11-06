@@ -235,3 +235,76 @@ func TestDeclaredNegativeRefuse(t *testing.T) {
 		t.Fatalf("delivery without refuse left %v, want -1", b["qty"])
 	}
 }
+
+// TestDeclaredAuditFixes covers the K-o audit (reports/audit/2026-11-06-kernel-k-o.md):
+// H1 two consumed rules share one pool; H2 a return from a sale exploded through a recipe comes back at the
+// sale's cogs per unit; M3 a line without outlet is refused; M4 a return from a cancelled source is refused;
+// M5 a datetime posts on the local date; M6 a non-bool if is an error; L9 two cogs fields on one table.
+func TestDeclaredAuditFixes(t *testing.T) {
+	p := setupDeclared(t)
+	m := p.masters()
+	p.receipt(m, m.outA, 10, 10000) // 100.000
+
+	// H1: outputs and by-products split the materials' value once
+	pr := p.doc("prod_two", map[string]any{"outlet": m.outA, "production_date": "2026-10-10",
+		"materials":  []any{map[string]any{"item": m.beras, "qty": 10}},
+		"outputs":    []any{map[string]any{"item": m.nasi, "qty": 30, "outlet": m.outA}},
+		"byproducts": []any{map[string]any{"item": m.minyak, "qty": 10, "outlet": m.outA}}})
+	var in, out int64
+	for _, x := range p.moves(pr) {
+		if v := rp(x["value"]); v > 0 {
+			in += v
+		} else {
+			out -= v
+		}
+	}
+	if out != 100000 || in != 100000 {
+		t.Fatalf("two consumed rules: out %d, in %d; want 100000 both", out, in)
+	}
+	if b := p.balance(m.outA, m.nasi); rp(b["value"]) != 75000 {
+		t.Fatalf("output share = %v, want 75000 (30 of 40 by qty)", b["value"])
+	}
+
+	// H2: a return of 2 portions from a recipe sale comes back at the sale's cogs per portion
+	p.receipt(m, m.outB, 10, 12000)
+	p.create("recipe", map[string]any{"product": m.jasa, "lines": []any{map[string]any{"material": m.beras, "qty": 0.2}}})
+	sale := p.doc("sales_declared", map[string]any{"outlet": m.outB, "date": "2026-10-11", "lines": []any{map[string]any{"item": m.jasa, "qty": 10}}})
+	if c := rp(p.get("sales_declared", sale)["cogs_total"]); c != 24000 {
+		t.Fatalf("sale cogs = %d", c)
+	}
+	ret := p.doc("pos_return", map[string]any{"sale": sale, "outlet": m.outB, "return_date": "2026-10-12", "items": []any{map[string]any{"item": m.jasa, "qty": 2}}})
+	if x := p.moves(ret)[0]; rp(x["unit_cost"]) != 2400 || rp(x["value"]) != 4800 {
+		t.Fatalf("return from an exploded sale at %v / %v, want 2400 / 4800", x["unit_cost"], x["value"])
+	}
+
+	// M4: a return from a cancelled delivery note is refused (its stock went back already)
+	dn := p.doc("delivery_note", map[string]any{"outlet": m.outB, "delivery_date": "2026-10-12", "items": []any{map[string]any{"item": m.beras, "qty": 1}}})
+	if err := p.cancel("delivery_note", dn); err != nil {
+		t.Fatal(err)
+	}
+	rj := p.create("sales_return", map[string]any{"delivery_note": dn, "outlet": m.outB, "quarantine_outlet": m.outC, "return_date": "2026-10-13",
+		"items": []any{map[string]any{"item": m.beras, "qty": 1}}})
+	_, err := p.e.Submit(p.ctx, p.a, "sales_return", rj, true)
+	wantCode(t, err, 409, "source_not_submitted")
+
+	// M3: a line without its outlet is refused, nothing moves
+	il := p.create("issue_line", map[string]any{"issue_date": "2026-10-13", "items": []any{
+		map[string]any{"item": m.beras, "qty": 3, "outlet": m.outB}, map[string]any{"item": m.beras, "qty": 4}}})
+	before := qtyOf(p.balance(m.outB, m.beras)["qty"])
+	_, err = p.e.Submit(p.ctx, p.a, "issue_line", il, true)
+	wantCode(t, err, 409, "stock_outlet_missing")
+	if after := qtyOf(p.balance(m.outB, m.beras)["qty"]); after != before {
+		t.Fatalf("refused issue moved stock: %v -> %v", before, after)
+	}
+
+	// M5: 12 Oct 06:30 WIB posts on 12 Oct, not on the UTC date
+	dt := p.doc("dt_issue", map[string]any{"outlet": m.outB, "issued_at": "2026-10-12T06:30:00+07:00", "items": []any{map[string]any{"item": m.beras, "qty": 1}}})
+	if d := dateOnly(p.moves(dt)[0]["posting_date"]); d != "2026-10-12" {
+		t.Fatalf("datetime posting_date = %s, want 2026-10-12", d)
+	}
+
+	// M6: an if that is not true or false is an error, not a skip
+	nb := p.create("nonbool_issue", map[string]any{"outlet": m.outB, "issue_date": "2026-10-13", "items": []any{map[string]any{"item": m.beras, "qty": 1}}})
+	_, err = p.e.Submit(p.ctx, p.a, "nonbool_issue", nb, true)
+	wantCode(t, err, 422, "stock_if")
+}

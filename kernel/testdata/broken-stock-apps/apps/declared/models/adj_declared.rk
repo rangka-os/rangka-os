@@ -9,7 +9,7 @@ stock:
   date: reason
   moves:
     - {lines: items, out: outlet, reason: waste, if: "doc.reason == 'waste'"}
-    - {lines: items, out: outlet, reason: adjustment, if: "doc.reason != 'waste'"}
+    - {lines: items, out: outlet, reason: adjustment, if: "doc.reasn != 'waste' && line.qtyy > 0"}
 fields:
   - {name: outlet, type: link, to: outlet, required: true}
   - {name: adjustment_date, type: date, default: today(), required: true}

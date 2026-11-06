@@ -58,6 +58,10 @@ def check_stock(rep, p, mname, m, fields, visible):
     def link_to(target):
         return lambda f: f.get("type") == "link" and f.get("to") == target
 
+    def posts_stock(f):
+        to = f.get("to")
+        return f.get("type") == "link" and to in visible and (to in LEGACY_STOCK or isinstance(visible[to][2].get("stock"), dict))
+
     def number(f):
         return f.get("type") in ("int", "float", "currency", "percent")
 
@@ -106,6 +110,14 @@ def check_stock(rep, p, mname, m, fields, visible):
                 field_kind(f"{w}/qty", cfields, r["qty"], f" of {of}", number, "is not a number field")
             if isinstance(r.get("cogs"), str):
                 field_kind(f"{w}/cogs", cfields, r["cogs"], f" of {of}", read_only_currency, "must be a read_only currency field")
+        if isinstance(r.get("if"), str):  # doc is the header, line the row (contract 0021)
+            ctx = dict(fields)
+            ctx["doc"] = {"name": "doc", "type": "link", "to": mname}
+            if of:
+                ctx["line"] = {"name": "line", "type": "link", "to": of}
+            check_expr(rep, p, f"{w}/if", r["if"], m, ctx, visible)
+        if r.get("explode") == "recipe" and "recipe" not in visible:
+            rep.add("warn", p, f"{w}/explode", "no_recipe", "explode: recipe without a recipe model: each item consumes itself")
         if "in" in r:
             for k in ("explode", "cogs"):
                 if k in r:
@@ -118,7 +130,7 @@ def check_stock(rep, p, mname, m, fields, visible):
                 if isinstance(c.get(k), str) and cfields is not None:
                     field_kind(f"{w}/cost/{k}", cfields, c[k], f" of {of}", number, "is not a number field")
             if isinstance(c.get("source"), str):
-                field_kind(f"{w}/cost/source", fields, c["source"], "", lambda f: f.get("type") == "link", "is not a link field")
+                field_kind(f"{w}/cost/source", fields, c["source"], "", posts_stock, "is not a link to a document that moves stock")
             if c.get("consumed") is True:
                 if not has_out:
                     rep.add("error", p, f"{w}/cost", "stock_consumed", "cost consumed needs an out move in this document")
@@ -131,6 +143,8 @@ def check_stock(rep, p, mname, m, fields, visible):
     ct = st.get("cogs_total")
     if isinstance(ct, str):
         field_kind("stock/cogs_total", fields, ct, "", read_only_currency, "must be a read_only currency field")
+        if not any("cogs" in r for r in moves):
+            rep.add("warn", p, "stock/cogs_total", "cogs_total_unused", "cogs_total stays 0: no out move has cogs")
 
 
 

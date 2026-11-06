@@ -9,7 +9,7 @@ stock:
   date: received_on
   moves:
     - {lines: outlet, in: received_on, reason: receipt, explode: recipe, cost: {amount: rate}}
-    - {lines: items, in: received_on, item: qty, qty: item, reason: receipt}
+    - {lines: items, in: received_on, item: qty, qty: item, reason: receipt, cost: {source: outlet}}
 fields:
   - {name: outlet, type: link, to: outlet, required: true}
   - {name: received_on, type: date, default: today(), required: true}

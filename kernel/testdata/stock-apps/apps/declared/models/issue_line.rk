@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: issue_line
+is_submittable: true
+naming: ISL-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: issue_date
+  moves:
+    - {lines: items, out: line.outlet, reason: adjustment}
+fields:
+  - {name: issue_date, type: date, required: true}
+  - {name: items, type: table, of: issue_line_item, min_rows: 1}

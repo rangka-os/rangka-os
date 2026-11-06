@@ -285,6 +285,15 @@ The difference with `outlet_sales` is only the duplicate check, which a cashier 
 8. A declared `sale` move sets `stock_balance.last_sale_date` like the Go rules, because it goes through the same
    `stockPost.move`.
 
+9. After the audit (reports `2026-11-06-kernel-k-o`): all `consumed` rules of a document share one pool (a
+   by-product table does not take the whole value again); a `{source}` that is not submitted is refused
+   (`source_not_submitted`), and a source that consumed the item through a recipe gives its cogs per unit; a line
+   with an empty outlet or item is refused (`stock_outlet_missing`, `stock_item_missing`); a value taken out with
+   no consumed line to hold it is refused (`consumed_nowhere`); a `datetime` date posts on the organisation's
+   local date; `if` is checked by the validator (`doc` and `line` members) and a non-bool result is 422
+   `stock_if`; `{source}` must link to a document that moves stock; warnings `no_recipe` and
+   `cogs_total_unused`.
+
 ## Implementation
 
 - Schema: `stock` and `$defs/stock_rule` in `schema/0.5/model.json`.
@@ -292,7 +301,7 @@ The difference with `outlet_sales` is only the duplicate check, which a cashier 
   uses it for any model with a `stock:` block that is not one of the six built-in documents.
 - Validators: `meta/validate_stock.go` and `check_stock` in `tools/rangka_validate.py`, same order and messages.
   Codes: `stock_hook`, `stock_legacy`, `stock_direction`, `stock_consumed`, `bad_stock_field`, `not_table`,
-  `unknown_field`, `unknown_option`. Not checked in V1: the CEL of `if` (it runs with `doc` and `line`).
+  `unknown_field`, `unknown_option`. `if` is checked like other expressions, with `doc` (the header) and `line` (the row) as links.
 - Tests: `engine/stock_declared_test.go` (equivalence; delivery note with cogs; sales return at source cost and
   into quarantine; production at the value of the materials, split by share; `negative: refuse`; cancel),
   `kernel/testdata/stock-apps` and `broken-stock-apps` in `make compare-python` and a golden file.

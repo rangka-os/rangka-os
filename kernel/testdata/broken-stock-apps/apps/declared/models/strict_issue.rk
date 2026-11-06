@@ -6,9 +6,11 @@ naming: SI-{#####}
 on_cancel: [stock.reverse_moves]
 stock:
   negative: refuse
+  cogs_total: total
   moves:
     - {lines: items, out: outlet, reason: adjustment}
 fields:
   - {name: outlet, type: link, to: outlet, required: true}
   - {name: issue_date, type: date, required: true}
+  - {name: total, type: currency, read_only: true}
   - {name: items, type: table, of: adj_declared_item, min_rows: 1}

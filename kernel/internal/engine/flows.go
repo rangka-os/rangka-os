@@ -45,8 +45,8 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
 }
 
-// RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (a
-// resumed wait). Steps: find, find_all, create, update, notify (log driver), call (connector action; the
+// RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (the
+// scheduler and record events; a queued job resumes through RunFlowResume). Steps: find, find_all, create, update, notify (log driver), call (connector action; the
 // kernel records the call, it has no connector runtime yet), if/then/else, wait (the remaining steps are
 // queued for later) and approve (the remaining steps wait for a decision). Every step may have if: and as:.
 //

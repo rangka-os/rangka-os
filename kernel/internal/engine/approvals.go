@@ -803,17 +803,25 @@ func (e *Engine) ApprovalSummary(ctx context.Context, a Actor, ap *store.Approva
 	}
 	for _, fn := range summaryAmountFields {
 		f := m.Field(fn)
-		if f == nil || !f.IsNumeric() {
+		if f == nil || (f.Type != "currency" && f.Type != "money") {
+			continue // only money: an int "amount" may be a count of units
+		}
+		v, ok := rec[fn]
+		if !ok || v == nil {
 			continue
 		}
-		if v, ok := rec[fn]; ok && v != nil {
-			out["amount"] = v
-			out["amount_label"] = f.Label.Text()
-			break
+		// the currency of the amount itself: a money field names its currency field; a currency field is rupiah
+		// (a foreign-currency document keeps its grand_total in IDR, audit 2026-11-07)
+		cur := "IDR"
+		if f.Type == "money" {
+			if cf := f.CurrencyField(); cf != "" {
+				if c, ok := rec[cf].(string); ok && c != "" {
+					cur = c
+				}
+			}
 		}
-	}
-	if c, ok := rec["currency"].(string); ok && c != "" {
-		out["currency"] = c
+		out["amount"], out["amount_label"], out["currency"] = v, f.Label.Text(), cur
+		break
 	}
 	return out
 }

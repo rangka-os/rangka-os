@@ -774,3 +774,43 @@ func (e *Engine) Reject(ctx context.Context, a Actor, id, reason string) (*Decis
 	}
 	return d, nil
 }
+
+// summaryAmountFields are the fields, in order, whose value is a request's amount in its summary.
+var summaryAmountFields = []string{"grand_total", "total", "net_total", "total_amount", "amount"}
+
+// ApprovalSummary is what an approver needs to decide from the card (mobile P7, P8): the record's title (which
+// follows its title link, so an invoice shows its customer and an order its supplier), its amount and currency.
+// It reads the record as a (read grant, row scope, hidden fields), so it shows nothing a could not open; nil for
+// flow requests and records a cannot read.
+func (e *Engine) ApprovalSummary(ctx context.Context, a Actor, ap *store.Approval) map[string]any {
+	if ap == nil || ap.Model == "" || ap.Name == "" || strings.HasPrefix(ap.Verb, "flow:") {
+		return nil
+	}
+	m := e.Reg().Model(ap.Model)
+	if m == nil {
+		return nil
+	}
+	rec, err := e.Get(ctx, a, ap.Model, ap.Name)
+	if err != nil {
+		return nil
+	}
+	out := map[string]any{}
+	if t := e.Title(ctx, a, m.Name, rec, 0); t != "" && t != ap.Name {
+		out["title"] = t
+	}
+	for _, fn := range summaryAmountFields {
+		f := m.Field(fn)
+		if f == nil || !f.IsNumeric() {
+			continue
+		}
+		if v, ok := rec[fn]; ok && v != nil {
+			out["amount"] = v
+			out["amount_label"] = f.Label.Text()
+			break
+		}
+	}
+	if c, ok := rec["currency"].(string); ok && c != "" {
+		out["currency"] = c
+	}
+	return out
+}

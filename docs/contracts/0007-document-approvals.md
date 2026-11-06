@@ -158,7 +158,7 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
   and arguments (`{force}` for submit, the action's args), and earlier approvals let the verb run only inside the
   approve that completes them. Once the verb has run, its approvals are marked `used_at` (§6) and never count
   again. Running an action again on an unchanged record asks again.
-- A `when` that cannot be evaluated **requires approval** (fail closed), unlike rules, which let a broken check pass.
+- A `when` that cannot be evaluated **requires approval** (fail closed), like a rule that cannot be evaluated, which counts as failed.
 - The snapshot includes every declared field, including a real `status` field (only the derived status is left out).
 - **Flow approvals never self-approve**; they always wait. Flow requests remember whether the starter was a person.
 - Reject voids the other pending requests of the same verb only; requests for other verbs on the record stay.

@@ -113,6 +113,7 @@ func (e *Engine) Aggregate(ctx context.Context, a Actor, model string, opts List
 	f := m.Field(group)
 	titles := map[string]string{}
 	links := map[string]map[string]any{}
+	rs := e.RowScope(a)
 	var rest []store.Record
 	for i, b := range buckets {
 		if i >= maxAggGroups {
@@ -123,7 +124,7 @@ func (e *Engine) Aggregate(ctx context.Context, a Actor, model string, opts List
 		if b.key != nil {
 			label = fmt.Sprint(b.key)
 			if f != nil && f.Type == "link" {
-				if t := e.linkTitle(ctx, a, f.To, str(b.key), titles, links); t != "" {
+				if t := e.linkTitle(ctx, a, rs, f.To, str(b.key), titles, links); t != "" {
 					label = t
 				}
 			}

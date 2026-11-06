@@ -116,7 +116,7 @@ func (e *Engine) matching(ctx context.Context, a Actor, m *meta.Model, opts List
 				continue
 			}
 		}
-		if q != "" && !matchText(m, r, q) && !e.matchLinkTitle(ctx, a, m, r, q, titles, links) {
+		if q != "" && !matchText(m, r, q) && !e.matchLinkTitle(ctx, a, rs, m, r, q, titles, links) {
 			continue
 		}
 		out = append(out, r)
@@ -126,33 +126,53 @@ func (e *Engine) matching(ctx context.Context, a Actor, m *meta.Model, opts List
 
 // matchLinkTitle reports whether q occurs in the display title of any record a link field points at, so lists are
 // searchable by what users see (a customer's name) and not only by the stored key. titles caches model/name → title.
-// A target the actor may not read (model-level or record-level) never matches, so q cannot reveal its title.
-func (e *Engine) matchLinkTitle(ctx context.Context, a Actor, m *meta.Model, r store.Record, q string, titles map[string]string, links map[string]map[string]any) bool {
+// A target the actor could not read (grant, if: or row scope, on every hop of a linked title) never matches, so q
+// cannot reveal its title.
+func (e *Engine) matchLinkTitle(ctx context.Context, a Actor, rs *RowScope, m *meta.Model, r store.Record, q string, titles map[string]string, links map[string]map[string]any) bool {
 	for _, f := range m.Fields {
 		if f.Type != "link" || str(r[f.Name]) == "" {
 			continue
 		}
-		if t := strings.ToLower(e.linkTitle(ctx, a, f.To, str(r[f.Name]), titles, links)); t != "" && strings.Contains(t, q) {
+		if t := strings.ToLower(e.linkTitle(ctx, a, rs, f.To, str(r[f.Name]), titles, links)); t != "" && strings.Contains(t, q) {
 			return true
 		}
 	}
 	return false
 }
 
-// linkTitle returns the display title of record name of model to, or "" when it is missing or the actor may not read
-// it (model-level or record-level). titles caches model/name → title.
-func (e *Engine) linkTitle(ctx context.Context, a Actor, to, name string, titles map[string]string, links map[string]map[string]any) string {
+// linkTitle returns the display title of record name of model to, or "" when it is missing or the actor could not
+// read it with GET /r/{to}/{name} (read grant with its if:, row scope rs). titles caches model/name → title.
+func (e *Engine) linkTitle(ctx context.Context, a Actor, rs *RowScope, to, name string, titles map[string]string, links map[string]map[string]any) string {
 	key := to + "/" + name
 	t, ok := titles[key]
 	if !ok {
-		if tm := e.Reg().Models[to]; tm != nil {
-			if l, err := store.Get(ctx, e.DB, e.Reg(), a.Org, tm, name); err == nil && e.recordAllowed(ctx, e.DB, a, tm, e.decide(a, e.permModel(tm.Name), "read"), l, links) {
-				t = e.Title(ctx, a, to, l, 0)
-			}
+		if l, ok := e.readableLink(ctx, a, rs, to, name, links); ok {
+			t = e.title(ctx, a, rs, to, l, 0, links)
 		}
 		titles[key] = t
 	}
 	return t
+}
+
+// readableLink loads record name of model to when the actor could read it with GET /r/{to}/{name}: it exists, it
+// is inside row scope rs and it passes the read grant (its if: included). Otherwise ok is false and nothing of the
+// record may be shown; callers show the stored code instead (audit 2026-11-06: titles leaked across outlets).
+func (e *Engine) readableLink(ctx context.Context, a Actor, rs *RowScope, to, name string, links map[string]map[string]any) (store.Record, bool) {
+	tm := e.Reg().Models[to]
+	if tm == nil || name == "" {
+		return nil, false
+	}
+	rec, err := store.Get(ctx, e.DB, e.Reg(), a.Org, tm, name)
+	if err != nil || !rs.Visible(tm, rec) {
+		return nil, false
+	}
+	e.refreshClock(ctx, a, tm, rec, true, links)
+	rec = e.Output(tm, rec)
+	pm := e.permModel(tm.Name)
+	if pm == nil || !e.recordAllowed(ctx, e.DB, a, tm, e.decide(a, pm, "read"), rec, links) {
+		return nil, false
+	}
+	return rec, true
 }
 
 func matchText(m *meta.Model, r store.Record, q string) bool {
@@ -221,8 +241,14 @@ func textOf(v any) string {
 	return fmt.Sprint(v)
 }
 
-// Title returns the display title of a record (title_field, following links), like the prototype title().
+// Title returns the display title of a record (title_field, following links), like the prototype title(). A title
+// field that is a link is followed (up to 3 hops) only into a record the actor could read (readableLink); otherwise
+// the stored code is the title, so a record outside the actor's row scope never lends its title.
 func (e *Engine) Title(ctx context.Context, a Actor, model string, rec store.Record, depth int) string {
+	return e.title(ctx, a, e.RowScope(a), model, rec, depth, nil)
+}
+
+func (e *Engine) title(ctx context.Context, a Actor, rs *RowScope, model string, rec store.Record, depth int, links map[string]map[string]any) string {
 	m := e.Reg().Models[model]
 	if m == nil || rec == nil {
 		return ""
@@ -232,15 +258,15 @@ func (e *Engine) Title(ctx context.Context, a Actor, model string, rec store.Rec
 		return str(rec["name"])
 	}
 	if f := m.Field(tf); f != nil && f.Type == "link" && depth < 3 {
-		tm := e.Reg().Models[f.To]
-		if tm == nil || str(rec[tf]) == "" {
+		code := str(rec[tf])
+		if code == "" {
 			return ""
 		}
-		l, err := store.Get(ctx, e.DB, e.Reg(), a.Org, tm, str(rec[tf]))
-		if err != nil {
-			return ""
+		l, ok := e.readableLink(ctx, a, rs, f.To, code, links)
+		if !ok {
+			return code
 		}
-		return e.Title(ctx, a, f.To, l, depth+1)
+		return e.title(ctx, a, rs, f.To, l, depth+1, links)
 	}
 	return str(rec[tf])
 }

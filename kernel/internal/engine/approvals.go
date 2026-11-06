@@ -659,6 +659,9 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 	if err != nil {
 		return nil, err
 	}
+	if d != nil && d.Record != nil { // contract 0027: the approver gets the record as they may see it
+		e.Redact(a, e.Reg().Model(d.Approval.Model), d.Record)
+	}
 	return d, nil
 }
 

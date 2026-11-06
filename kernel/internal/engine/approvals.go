@@ -724,7 +724,12 @@ func (o *op) resumeFlow(ap *store.Approval, d *Decision) error {
 		vars[as] = map[string]any{"state": "approved", "by": ap.DecidedBy, "at": *ap.DecidedAt}
 	}
 	out := newFlowResult(name)
-	if err := o.e.flowIn(o, f, meta.AsMap(ap.Args["event"]), int(toInt(ap.Args["resume"])), vars, out); err != nil {
+	// a flow a caller started by hand stays manual after its approval (contract 0026)
+	prev := o.manualRun
+	o.manualRun = ap.Args["manual"] == true
+	err := o.e.flowIn(o, f, meta.AsMap(ap.Args["event"]), int(toInt(ap.Args["resume"])), vars, out)
+	o.manualRun = prev
+	if err != nil {
 		return err
 	}
 	d.Flow = out

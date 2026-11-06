@@ -314,7 +314,7 @@ func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)
 	}
-	return s.Engine.RunFlowFrom(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]))
+	return s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true)
 }
 
 // Handler is the HTTP handler.

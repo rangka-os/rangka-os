@@ -4,6 +4,8 @@ import (
 	"context"
 	"errors"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 )
 
 // deal_log is an append_only ledger written by a flow on deal.updated (contract 0026).
@@ -140,4 +142,71 @@ func TestAppendOnlyFlowWrites(t *testing.T) {
 func isCode(err error, code string) bool {
 	var se *StatusError
 	return errors.As(err, &se) && se.Code == code
+}
+
+// A manual run stays manual across an approve step: the approved remainder may not create ledger rows either.
+func TestAppendOnlyManualRunAfterApproval(t *testing.T) {
+	e, owner := approvalSetupFiles(t, map[string]string{
+		"crm/models/deal_log.rk": appendOnlyFiles["crm/models/deal_log.rk"],
+		"crm/flows/deal_log_approved.rk": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: deal_log_approved
+label: {id: Catat setelah disetujui}
+steps:
+  - approve: {label: {id: Setujui catatan}, approvers: [owner]}
+  - create: deal_log
+    set: {value: "event.amount"}
+`}, "")
+	ctx := context.Background()
+	res, err := e.RunFlow(ctx, owner, "deal_log_approved", map[string]any{"amount": 987654321})
+	if err != nil || res.WaitingApproval == "" {
+		t.Fatalf("manual run must wait for approval: %+v %v", res, err)
+	}
+	if _, err := e.Approve(ctx, owner, res.WaitingApproval); !isCode(err, "append_only") {
+		t.Fatalf("approved remainder of a manual run = %v, want append_only", err)
+	}
+	if rows, _, _ := e.List(ctx, owner, "deal_log", ListOpts{Limit: 10}); len(rows) != 0 {
+		t.Fatalf("ledger rows after approval: %d", len(rows))
+	}
+}
+
+// A manual run stays manual across wait: the queued job carries it and the resumed run may not create ledger rows.
+func TestAppendOnlyManualRunAfterWait(t *testing.T) {
+	e, owner := approvalSetupFiles(t, map[string]string{
+		"crm/models/deal_log.rk": appendOnlyFiles["crm/models/deal_log.rk"],
+		"crm/flows/deal_log_later.rk": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: deal_log_later
+label: {id: Catat nanti}
+steps:
+  - wait: 1m
+  - create: deal_log
+    set: {value: "event.amount"}
+`}, "")
+	q := &recordingQueue{}
+	e.Queue = q
+	ctx := context.Background()
+	res, err := e.RunFlow(ctx, owner, "deal_log_later", map[string]any{"amount": 987654321})
+	if err != nil || res.WaitingJob == 0 {
+		t.Fatalf("manual run must wait: %+v %v", res, err)
+	}
+	args := roundTrip(q.jobs[len(q.jobs)-1]["args"]).(map[string]any) // the queue stores JSON
+	if args["manual"] != true {
+		t.Fatalf("job args lost the manual mark: %v", args)
+	}
+	a := JobActor(owner.Org, args["actor"])
+	_, err = e.RunFlowResume(ctx, a, "deal_log_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true)
+	if !isCode(err, "append_only") {
+		t.Fatalf("resumed manual run = %v, want append_only", err)
+	}
+	// the same flow started by the kernel (a schedule) writes its row after the wait
+	res, err = e.RunFlowFrom(ctx, owner, "deal_log_later", map[string]any{"amount": 5}, 0, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	args = roundTrip(q.jobs[len(q.jobs)-1]["args"]).(map[string]any)
+	if _, err := e.RunFlowResume(ctx, owner, "deal_log_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true); err != nil {
+		t.Fatalf("kernel-started run after wait: %v", err)
+	}
+	if rows, _, _ := e.List(ctx, owner, "deal_log", ListOpts{Limit: 10}); len(rows) != 1 {
+		t.Fatalf("ledger rows = %d, want 1 (the kernel-started one)", len(rows))
+	}
 }

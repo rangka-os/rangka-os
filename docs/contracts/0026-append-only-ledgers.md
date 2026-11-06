@@ -15,11 +15,13 @@ kernel limitation (DECISIONS 6 Nov).
 ## Decision
 
 1. **Model key.** A model may set `append_only: true` (schema 0.5, default `false`).
-2. **Create.** Rows are created only by flows that real events start (record events, schedules, connector events,
-   resumed waits), hooks and seed. A create through the API or an import is refused with 409 `append_only`, for every
-   role, the owner included. So is a create by a flow a caller starts by hand (`POST /api/v1/flows/{name}/run`),
-   since its event is whatever the caller wrote. A flow still needs the role's `create` grant, as for any model (it
-   runs as the person whose action started it).
+2. **Create.** Rows are created only by flows the kernel starts (record events, schedules, a resumed `wait` or an
+   approved `approve` step of such a flow), hooks and seed. A create through the API or an import is refused with
+   409 `append_only`, for every role, the owner included. So is a create by a flow a caller starts by hand
+   (`POST /api/v1/flows/{name}/run`), with or without `on:`, since its event is whatever the caller wrote; the mark
+   stays with that run across `wait` and `approve`. A flow still needs the role's `create` grant, as for any model
+   (it runs as the person whose action started it). Connector events reach flows today only through that endpoint,
+   so a connector flow cannot post to a ledger until connectors have an authenticated inbound route.
 3. **No edit, no delete.** Update and delete of a row are refused with 409 `append_only` on every path: the API, flows
    (`update` step), hooks (`Update`, `SetSubmitted`), submit, cancel and amend. A flow that tries rolls back the whole
    write that started it. Attachments of a row cannot be added or removed either (the write check refuses).
@@ -50,6 +52,11 @@ atau dihapus manual. Untuk koreksi, batalkan dokumen sumbernya."
 - A wrong row caused by a wrong document is fixed by cancelling and amending the document, which leaves both the
   original and the reversal in the ledger.
 - Existing apps keep working until they opt in: rangka-apps sets `append_only: true` on `project_ledger` and
-  `stock_adjustment_value` in its own change after this kernel ships; their 11 ledger flows only create rows.
+  `stock_adjustment_value` in its own change after this kernel ships; their 11 ledger flows only create rows. A
+  backfill flow without `on:` (`adjustment_value_backfill`) keeps posting from its schedule; running it by hand,
+  as a test script does today, is refused after the opt-in, and the script must wait for the schedule instead.
+- Deleting a source document (allowed for drafts and for cancelled documents without an amended copy) leaves its
+  ledger rows pointing at a name that no longer exists; a submitted document cannot be deleted, so a posted amount
+  always has its reversal before its source can go.
 - An import whose target is append-only passes metadata validation but is refused with `append_only` when someone
   runs it (the import permission check); a validation check for it is a follow-up.

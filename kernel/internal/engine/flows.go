@@ -56,6 +56,12 @@ func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, even
 	return e.runFlowFrom(ctx, a, flowName, event, start, vars, false)
 }
 
+// RunFlowResume is RunFlowFrom for a queued flow job resuming after wait:; manual is the job's "manual" arg, so a
+// run a caller started by hand stays manual after the wait (contract 0026).
+func (e *Engine) RunFlowResume(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool) (*FlowResult, error) {
+	return e.runFlowFrom(ctx, a, flowName, event, start, vars, manual)
+}
+
 // runFlowFrom is RunFlowFrom; manual marks a run a caller started with an event they wrote (REST), which may not
 // create append_only ledger rows (contract 0026): those come only from real events, hooks and seed.
 func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool) (*FlowResult, error) {
@@ -361,7 +367,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if _, isUntil := st["wait"].(map[string]any); isUntil {
 				next = idx // check the condition again
 			}
-			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs()},
+			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs(), "manual": o.manualRun},
 				EnqueueOpts{RunAt: e.Now().Add(d)})
 			if err != nil {
 				return err
@@ -429,7 +435,7 @@ func (r *flowRun) requestApproval(spec map[string]any, i string, resume int, as 
 	roles := append([]string{}, a.Roles...)
 	ap := store.Approval{Org: a.Org, Verb: "flow:" + r.f.Name, Policy: policy, Label: label, Approvers: approvers,
 		State: "pending", Snapshot: hashJSON(map[string]any{"event": event, "vars": vars}),
-		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as},
+		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as, "manual": o.manualRun},
 		RequestedBy: a.ID, Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System}}
 	if err := store.InsertApproval(o.ctx, o.tx, &ap); err != nil {
 		return "", err

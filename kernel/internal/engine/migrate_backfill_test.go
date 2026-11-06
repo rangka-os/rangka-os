@@ -1,6 +1,7 @@
 package engine
 
 import (
+	"fmt"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -141,7 +142,14 @@ func TestMigrateBackfillFrozenDocuments(t *testing.T) {
 			"  - {name: unit_cost, type: currency, compute: 'stock_qty > 0 ? round(amount / stock_qty) : 0'}\n" +
 				"  - {name: stock_qty_new, type: float, compute: \"packing == '' ? qty : qty * packing.factor\"}\n" +
 				"  - {name: unit_new, type: currency, compute: 'stock_qty > 0 ? round(amount / stock_qty) : 0'}\n" +
-				"  - {name: day_new, type: date, compute: 'today ()'}\n"},
+				"  - {name: day_new, type: date, compute: 'today ()'}\n" +
+				"  - {name: amount_v2, type: currency, compute: 'round(qty * rate)'}\n" +
+				"  - {name: factor_v2, type: float, compute: \"packing == '' ? 1.0 : packing.factor\"}\n" +
+				"  - {name: stock_qty_v3, type: float, compute: 'qty * factor_v2'}\n"},
+		"procurement/models/goods_receipt.rk": {"  - {name: items, type: table, of: goods_receipt_item, min_rows: 1}\n",
+			"  - {name: items, type: table, of: goods_receipt_item, min_rows: 1}\n" +
+				"  - {name: total_v2, type: currency, compute: 'items.map(i, i.amount_v2).sum()'}\n" +
+				"  - {name: qty_v3, type: float, compute: 'items.map(i, i.stock_qty_v3).sum()'}\n"},
 	})
 	p := setupPilotApps(t, old)
 	m := p.masters()
@@ -165,6 +173,18 @@ func TestMigrateBackfillFrozenDocuments(t *testing.T) {
 	}
 	if d := rows(p.get("goods_receipt", draft)["items"])[0]; d["stock_qty_new"] != 50.0 {
 		t.Fatalf("draft line stock_qty_new = %v, want 50 (factor today)", d["stock_qty_new"])
+	}
+	// a document compute over a new child compute sees the child values (audit R2-1), on both documents
+	for _, n := range []string{gr, draft} {
+		if g := p.get("goods_receipt", n); rp(g["total_v2"]) != 1200000 {
+			t.Fatalf("%s total_v2 = %v, want 1200000", n, g["total_v2"])
+		}
+	}
+	// a compute over a new field left empty is left empty too, also in the document (audit R2-2)
+	res, err = p.e.DB.Query(p.ctx, `select (select count(*) from r_goods_receipt_item where parent = $1 and (factor_v2 is not null or stock_qty_v3 is not null)),
+		(select count(*) from r_goods_receipt where name = $1 and qty_v3 is not null), (select qty_v3 from r_goods_receipt where name = $2)`, gr, draft)
+	if err != nil || res.Rows[0][0].(int64) != 0 || res.Rows[0][1].(int64) != 0 || fmt.Sprint(res.Rows[0][2]) != "50" {
+		t.Fatalf("transitive empty: %v %v", res.Rows, err)
 	}
 	if res, err := p.e.DB.Query(p.ctx, "select count(*) from r_goods_receipt_item where day_new is not null"); err != nil || res.Rows[0][0].(int64) != 0 {
 		t.Fatalf("today () with a space was backfilled: %v %v", res, err)

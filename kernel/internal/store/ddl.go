@@ -675,7 +675,7 @@ where b.org_id = x.org_id and b.outlet = x.outlet and b.item = x.item`,
 // added (contract: a field's compute, or its literal default for rows that are NULL). It runs in the migration's
 // transaction after every step, so all columns exist, and returns an error (nothing is applied) when the values
 // would break a unique field. The engine sets it; without it new columns stay empty as before.
-var FieldBackfill func(ctx context.Context, q pg.Querier, reg *meta.Registry, m *meta.Model, fields []*meta.Field) error
+var FieldBackfill func(ctx context.Context, q pg.Querier, reg *meta.Registry, fields map[string][]*meta.Field) error
 
 // volatileRe matches what makes an expression's value depend on when, by whom or under which company settings it
 // is evaluated: today(), now() (with or without spaces) and the user, org and tax globals.
@@ -711,6 +711,7 @@ func backfillFields(ctx context.Context, q pg.Querier, reg *meta.Registry, desir
 			}
 		}
 	}
+	byModel := map[string][]*meta.Field{}
 	for _, name := range order {
 		m := reg.Models[name]
 		if m == nil {
@@ -741,10 +742,14 @@ func backfillFields(ctx context.Context, q pg.Querier, reg *meta.Registry, desir
 			}
 		}
 		if len(fields) > 0 {
-			if err := FieldBackfill(ctx, q, reg, m, fields); err != nil {
-				return fmt.Errorf("backfill %s: %w", name, err)
-			}
+			byModel[name] = fields
 		}
+	}
+	if len(byModel) == 0 {
+		return nil
+	}
+	if err := FieldBackfill(ctx, q, reg, byModel); err != nil {
+		return fmt.Errorf("backfill: %w", err)
 	}
 	return nil
 }

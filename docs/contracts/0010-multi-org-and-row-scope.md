@@ -134,8 +134,11 @@ scope: {field: outlet, from: user.outlets}
   - MCP tools go through the same engine calls.
   - a link's title (list `q`, aggregate group labels, dashboard chart labels) comes only from a record the
     member could read with `GET /api/v1/r/{model}/{name}`, checked on every hop of a title that is a link;
-    otherwise the stored code stands in and `q` does not match the hidden title. Client `filter` expressions
-    that walk a link are not covered yet (they read the linked record's fields; see audit 2026-11-06).
+    otherwise the stored code stands in and `q` does not match the hidden title;
+  - a `filter` the caller supplies (list, aggregate, MCP `rangka_query`, export) that walks a link reads a
+    record the member could not read with `GET /api/v1/r/{model}/{name}` as a missing one (only `name`, the
+    stored code, is set), on every hop. Expressions in metadata (permission `if:`, compute, hooks, flows,
+    dashboard widget filters) are not limited.
 - Automations, hooks and flow steps run inside an allowed operation are not scoped (an outlet's goods
   receipt may write a stock move that head office sees). Because flow steps are not scoped, a member with a
   row scope may not start a flow directly: `POST /api/v1/flows/{name}/run` → 403 `permission_denied`

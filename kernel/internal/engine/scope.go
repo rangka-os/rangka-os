@@ -25,6 +25,12 @@ type scope struct {
 	extra  map[string]any
 	links  map[string]map[string]any // shared cache of loaded link records (model/name → scope map)
 	parent *scope                    // the document of a child row (nil for a document)
+	// client marks an expression the caller wrote (a list ?filter=): a link it walks loads only a record the
+	// actor could read with GET /r/{model}/{name} (readableLink, row scope rs); any other record reads as a
+	// missing one. Metadata expressions (permissions, compute, hooks, flows) keep client false and see every
+	// record. Client loads are cached under their own keys so the two never share an entry.
+	client bool
+	rs     *RowScope
 }
 
 func (e *Engine) newScope(ctx context.Context, q pg.Querier, a Actor, m *meta.Model, rec store.Record, links map[string]map[string]any) *scope {
@@ -36,6 +42,13 @@ func (e *Engine) newScope(ctx context.Context, q pg.Querier, a Actor, m *meta.Mo
 
 func (o *op) scope(m *meta.Model, rec store.Record) *scope {
 	return o.e.newScope(o.ctx, o.tx, o.actor, m, rec, o.links)
+}
+
+// newClientScope is newScope for an expression the caller supplied (see scope.client); rs is the actor's row scope.
+func (e *Engine) newClientScope(ctx context.Context, a Actor, m *meta.Model, rec store.Record, rs *RowScope, links map[string]map[string]any) *scope {
+	s := e.newScope(ctx, e.DB, a, m, rec, links)
+	s.client, s.rs = true, rs
+	return s
 }
 
 // UserVar is the CEL user global.
@@ -134,6 +147,9 @@ func (s *scope) lookup(name string) (any, bool) {
 func (s *scope) link(model, name string) *cel.Link {
 	return &cel.Link{Model: model, Name: name, Load: func() (map[string]any, error) {
 		key := model + "/" + name
+		if s.client {
+			key = "client:" + key
+		}
 		if r, ok := s.links[key]; ok {
 			return r, nil
 		}
@@ -142,14 +158,22 @@ func (s *scope) link(model, name string) *cel.Link {
 		if tm == nil {
 			return out, nil
 		}
-		rec, err := store.Get(s.ctx, s.q, s.e.Reg(), s.org, tm, name)
-		if err != nil && err != store.ErrNotFound {
-			return nil, err
+		var rec store.Record
+		if s.client {
+			// nil when missing or not readable: both read as a missing record, so a filter cannot tell them apart
+			rec, _ = s.e.readableLink(s.ctx, s.actor, s.rs, model, name, s.links)
+		} else {
+			var err error
+			rec, err = store.Get(s.ctx, s.q, s.e.Reg(), s.org, tm, name)
+			if err != nil && err != store.ErrNotFound {
+				return nil, err
+			}
 		}
 		if rec == nil {
 			rec = store.Record{"name": name}
 		}
 		inner := s.e.newScope(s.ctx, s.q, s.actor, tm, rec, s.links)
+		inner.client, inner.rs = s.client, s.rs
 		for _, f := range tm.Fields {
 			v, _ := inner.lookup(f.Name)
 			out[f.Name] = v

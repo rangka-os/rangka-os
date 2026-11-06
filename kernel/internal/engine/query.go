@@ -105,7 +105,7 @@ func (e *Engine) matching(ctx context.Context, a Actor, m *meta.Model, opts List
 			continue
 		}
 		if opts.Filter != "" {
-			v, err := e.newScope(ctx, e.DB, a, m, r, links).eval(opts.Filter)
+			v, err := e.newClientScope(ctx, a, m, r, rs, links).eval(opts.Filter)
 			if err != nil {
 				if _, ok := err.(*cel.SyntaxError); ok {
 					return nil, badRequest(err.Error())

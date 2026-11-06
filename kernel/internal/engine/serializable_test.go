@@ -2,67 +2,39 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
-// Contract 0025: two units of work that each check "is there one already?" and then write one must not both
-// pass (write skew). The barrier makes both read before either writes, on the first attempt only.
-func TestRunSerializesWriteSkew(t *testing.T) {
+// Contract 0025: a unit of work that lost a race runs again from scratch; what it reports comes from the attempt
+// that committed (audit 2026-11-06 F1: an import reported the first attempt's row errors after committing).
+func TestRunRetryStartsFresh(t *testing.T) {
 	e, a := setup(t)
 	ctx := context.Background()
-	if _, err := e.DB.Exec(ctx, `create table rk_test_skew (k text not null, who text not null)`); err != nil {
-		t.Fatal(err)
-	}
-	var ready sync.WaitGroup
-	ready.Add(2)
-	gate := make(chan struct{})
-	var mu sync.Mutex
-	attempts := map[string]int{}
-	work := func(who string) error {
-		return e.run(ctx, a, func(o *op) error {
-			mu.Lock()
-			attempts[who]++
-			first := attempts[who] == 1
-			mu.Unlock()
-			res, err := o.tx.Query(ctx, `select count(*) from rk_test_skew where k = 'only'`)
-			if err != nil {
-				return err
-			}
-			n := toInt(res.Rows[0][0])
-			if first {
-				ready.Done()
-				<-gate
-			}
-			if n > 0 {
-				return nil // someone already holds it
-			}
-			_, err = o.tx.Exec(ctx, `insert into rk_test_skew (k, who) values ('only', $1)`, who)
+	calls := 0
+	before := func(ctx context.Context, tx pg.Querier) error {
+		calls++
+		if calls == 1 { // lose the first attempt, after the inputs would have been checked
+			_, err := tx.Exec(ctx, `do $$ begin raise exception 'lost' using errcode = '40001'; end $$`)
 			return err
-		})
-	}
-	errs := make(chan error, 2)
-	for _, who := range []string{"a", "b"} {
-		go func(who string) { errs <- work(who) }(who)
-	}
-	ready.Wait()
-	close(gate)
-	for i := 0; i < 2; i++ {
-		if err := <-errs; err != nil {
-			t.Fatal(err)
 		}
+		return nil
 	}
-	res, err := e.DB.Query(ctx, `select count(*) from rk_test_skew`)
+	res, err := e.CreateMany(ctx, a, "customer", []map[string]any{{"customer_name": "Retry Satu"}, {"customer_name": "Retry Dua"}}, ManyOpts{Before: before})
 	if err != nil {
 		t.Fatal(err)
 	}
-	if n := toInt(res.Rows[0][0]); n != 1 {
-		t.Fatalf("both units of work wrote (%d rows): write skew not prevented", n)
+	if calls != 2 || len(res) != 2 || res[0].Err != nil || res[1].Err != nil || res[0].Name == "" {
+		t.Fatalf("retried import result: calls=%d %+v", calls, res)
 	}
-	if attempts["a"]+attempts["b"] < 3 {
-		t.Fatalf("the loser must run again from current data: attempts %v", attempts)
+	rows, _, err := e.List(ctx, a, "customer", ListOpts{Q: "Retry", Limit: 10})
+	if err != nil || len(rows) != 2 {
+		t.Fatalf("committed once: %d rows %v", len(rows), err)
 	}
 }
 
@@ -124,5 +96,31 @@ steps:
 		if winners != 1 {
 			t.Fatalf("round %d (%s): %d deals marked pemenang, want exactly 1", round, cust, winners)
 		}
+	}
+}
+
+// A unit of work that keeps losing gives up after writeAttempts with 409 write_conflict, and a lost race that the
+// unit itself wrapped (a flow step error) is still recognised.
+func TestRunGivesUpWithWriteConflict(t *testing.T) {
+	e, a := setup(t)
+	ctx := context.Background()
+	n := 0
+	err := e.run(ctx, a, func(o *op) error {
+		n++
+		_, err := o.tx.Exec(ctx, `do $$ begin raise exception 'lost' using errcode = '40001'; end $$`)
+		return fmt.Errorf("step 2 update deal: %w", err)
+	})
+	var se *StatusError
+	if !errors.As(err, &se) || se.Status != 409 || se.Code != "write_conflict" {
+		t.Fatalf("err = %v, want 409 write_conflict", err)
+	}
+	if n != writeAttempts {
+		t.Fatalf("attempts = %d, want %d", n, writeAttempts)
+	}
+	// an ordinary error is not retried
+	n = 0
+	err = e.run(ctx, a, func(o *op) error { n++; return badRequest("no") })
+	if err == nil || n != 1 {
+		t.Fatalf("plain error retried: n=%d err=%v", n, err)
 	}
 }

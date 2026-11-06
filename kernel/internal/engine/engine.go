@@ -165,11 +165,10 @@ type op struct {
 // writeAttempts bounds how often run starts a unit of work again after it lost a race (contract 0025).
 const writeAttempts = 8
 
-// run executes fn as one unit of work in a SERIALIZABLE transaction (contract 0025): a rule or flow that reads
-// other records (a sum, "is there already one") and then writes commits only if no concurrent unit of work
-// changed what it read. The loser fails with SQLSTATE 40001 (or 40P01, a deadlock); everything fn does is in
-// the transaction (writes, events, audit, queued jobs, recorded connector calls), so run rolls back and runs fn
-// again, up to writeAttempts times, from the current data. fn must not keep state between calls.
+// run executes fn as one unit of work in one transaction (READ COMMITTED; flows that read a model hold its lock, see
+// lockFlowRead). When the transaction fails because a concurrent one won (a deadlock, SQLSTATE 40P01, or a
+// serialization failure, 40001), run rolls back and runs fn again from current data, up to writeAttempts times
+// (contract 0025). fn must build its results inside the attempt.
 func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {
 	var err error
 	for attempt := 1; ; attempt++ {
@@ -197,7 +196,7 @@ var errConflict = errors.New("engine: concurrent write conflict")
 
 // runOnce is one attempt of run; retry reports a lost race (the transaction is rolled back).
 func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (retry bool, err error) {
-	tx, err := e.DB.BeginSerializable(ctx)
+	tx, err := e.DB.Begin(ctx)
 	if err != nil {
 		return false, err
 	}

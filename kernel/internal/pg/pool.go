@@ -281,16 +281,6 @@ func (p *Pool) Begin(ctx context.Context) (*Tx, error) {
 	return &Tx{tx: tx}, nil
 }
 
-// BeginSerializable starts a transaction at isolation level SERIALIZABLE: it commits only if running it alone
-// would have given the same result, else a statement or the commit fails with SQLSTATE 40001 (Conflicted).
-func (p *Pool) BeginSerializable(ctx context.Context) (*Tx, error) {
-	tx, err := p.p.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.Serializable})
-	if err != nil {
-		return nil, wrapErr(err)
-	}
-	return &Tx{tx: tx}, nil
-}
-
 func (t *Tx) Query(ctx context.Context, sql string, args ...any) (*Result, error) {
 	if t.done {
 		return nil, errTxDone
@@ -327,7 +317,7 @@ func (t *Tx) CopyTo(ctx context.Context, w io.Writer, sql string) (int64, error)
 	}
 	tag, err := t.tx.Conn().PgConn().CopyTo(ctx, w, sql)
 	if err != nil {
-		return 0, wrapErr(err)
+		return 0, t.note(wrapErr(err))
 	}
 	return tag.RowsAffected(), nil
 }

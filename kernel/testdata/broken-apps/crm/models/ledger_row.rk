@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# append_only on a child table: its rows are saved through the parent (contract 0026)
+name: ledger_row
+label: {id: Baris buku}
+is_child: true
+append_only: true
+fields:
+  - {name: amount, type: currency, label: {id: Jumlah}}

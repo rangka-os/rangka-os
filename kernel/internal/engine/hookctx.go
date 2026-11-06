@@ -151,6 +151,9 @@ func (h *HookCtx) setSubmitted(model, name string, fields map[string]any, allow 
 	if m == nil {
 		return nil, notFound("model " + model)
 	}
+	if m.AppendOnly { // contract 0026: a hook writes new ledger rows, never changes one
+		return nil, appendOnly(m)
+	}
 	var rec store.Record
 	if h.Model != nil && h.Model.Name == model && str(h.Record["name"]) == name {
 		rec = h.Record

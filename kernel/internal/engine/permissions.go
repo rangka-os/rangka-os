@@ -249,7 +249,12 @@ func (e *Engine) authorize(ctx context.Context, q pg.Querier, links map[string]m
 // grants' if: conditions are evaluated on it (the stored record, or the new record after defaults for create);
 // without one (rec == nil) it is a model-level check where a conditional grant counts as allowed. A child
 // model uses its parent's permissions; pass the parent record.
+// For an append_only ledger (contract 0026) create, write, delete and import are refused for everyone, so the
+// endpoints that check here (attachments, imports, record guards) leave its rows alone too.
 func (e *Engine) Authorize(ctx context.Context, a Actor, model, action string, rec store.Record) error {
+	if m := e.Reg().Model(model); m != nil && m.AppendOnly && (action == "create" || action == "write" || action == "delete" || action == "import") {
+		return appendOnly(m)
+	}
 	return e.authorize(ctx, e.DB, nil, a, model, action, rec)
 }
 

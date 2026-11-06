@@ -37,6 +37,7 @@ crm/models/deal.rk:9:3  error  compute_cycle  fields/probability/compute  probab
 crm/models/lead.rk:80:17  error  unknown_field  fields/10/depends_on  `converted_customer.citi`: customer has no field "citi"; did you mean "city"?
 crm/models/lead.rk:94:11  error  unknown_hook  actions/0/hook  "crm.convert_leads" is not declared in app.rk hooks or core
 crm/models/ledger_doc.rk:6:14  error  append_only_submittable  append_only  an append_only ledger is not a document: drop is_submittable (contract 0026)
+crm/models/ledger_row.rk:6:14  error  append_only_child  append_only  child rows are saved through their parent: mark the ledger model itself append_only (contract 0026)
 crm/app.rk:7:28  error  unknown_dashboard  dashboards/1  "crm_funnel" has no file dashboards/crm_funnel.rk
 crm/dashboards/crm_overview.rk:12:12  error  bad_field_type  widgets/0/field  "value" is currencyy; sum needs a number field (currency, int, float, percent)
 crm/dashboards/crm_overview.rk:16:11  error  duplicate_widget  widgets/1/name  widget "pipeline" appears twice
@@ -160,4 +161,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:21:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:22:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-140 error(s), 21 warning(s)
+141 error(s), 21 warning(s)

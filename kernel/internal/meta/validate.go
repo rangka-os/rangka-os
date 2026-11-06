@@ -427,6 +427,9 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 	if boolean(m.Raw, "append_only") && boolean(m.Raw, "is_submittable") {
 		v.rep.add("error", p, "append_only", "append_only_submittable", "an append_only ledger is not a document: drop is_submittable (contract 0026)")
 	}
+	if boolean(m.Raw, "append_only") && boolean(m.Raw, "is_child") {
+		v.rep.add("error", p, "append_only", "append_only_child", "child rows are saved through their parent: mark the ledger model itself append_only (contract 0026)")
+	}
 	if asMap(m.Raw["stock"]) != nil {
 		v.stock(p, m, fields, visible)
 	}

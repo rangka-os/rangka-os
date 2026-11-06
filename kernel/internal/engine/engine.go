@@ -159,6 +159,8 @@ type op struct {
 	approving bool
 	// inFlow is set while a flow runs: its own writes do not start record-event flows again.
 	inFlow bool
+	// manualRun is set for a flow a caller started through REST with an event of their own (contract 0026).
+	manualRun bool
 }
 
 func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {

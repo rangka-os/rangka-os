@@ -329,7 +329,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if m.IsChild {
 		return nil, badRequest(model + " rows are saved through their parent document")
 	}
-	if m.AppendOnly && opts.client {
+	if m.AppendOnly && (opts.client || o.manualRun) {
 		return nil, appendOnly(m)
 	}
 	rec, issues := o.e.normalize(m, input, nil, opts.client)
@@ -595,6 +595,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if m.AppendOnly { // validation refuses append_only with is_submittable; kept for a registry built otherwise
+		return nil, appendOnly(m)
+	}
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
 	}
@@ -734,6 +737,9 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if m.AppendOnly { // validation refuses append_only with is_submittable; kept for a registry built otherwise
+		return nil, appendOnly(m)
+	}
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
 	}
@@ -794,6 +800,9 @@ func (o *op) amend(model, name string) (*Result, error) {
 	m, err := e.model(model)
 	if err != nil {
 		return nil, err
+	}
+	if m.AppendOnly { // validation refuses append_only with is_submittable; kept for a registry built otherwise
+		return nil, appendOnly(m)
 	}
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")

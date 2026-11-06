@@ -41,7 +41,7 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 	if e.RowScope(a) != nil {
 		return nil, Denied("flow", "run")
 	}
-	return e.RunFlowFrom(ctx, a, flowName, event, 0, nil)
+	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
 }
 
 // RunFlowFrom runs a flow's steps in one transaction from top-level step start with variables vars (a
@@ -53,12 +53,21 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 // (read, create, write), so a person running a flow can do no more than they could by hand. Flows the
 // kernel starts (schedules, events) run as a System actor; a wait: resumes as the actor that started the run.
 func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any) (*FlowResult, error) {
+	return e.runFlowFrom(ctx, a, flowName, event, start, vars, false)
+}
+
+// runFlowFrom is RunFlowFrom; manual marks a run a caller started with an event they wrote (REST), which may not
+// create append_only ledger rows (contract 0026): those come only from real events, hooks and seed.
+func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool) (*FlowResult, error) {
 	f := e.Reg().Flows[flowName]
 	if f == nil || !e.Reg().IsInstalled(f.App) {
 		return nil, notFound("flow " + flowName)
 	}
 	out := newFlowResult(flowName)
-	err := e.run(ctx, a, func(o *op) error { return e.flowIn(o, f, event, start, vars, out) })
+	err := e.run(ctx, a, func(o *op) error {
+		o.manualRun = manual
+		return e.flowIn(o, f, event, start, vars, out)
+	})
 	if c := flowConnector(e, f); err != nil && c != "" {
 		store.Audit(context.WithoutCancel(ctx), e.DB, a.Org, a.ID, "connector.error", "connector/"+c, "flow "+flowName+": "+err.Error(), nil)
 	}

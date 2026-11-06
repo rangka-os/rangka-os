@@ -68,6 +68,13 @@ func TestAppendOnlyLedger(t *testing.T) {
 	if err := e.Delete(ctx, owner, "deal_log", name); !isCode(err, "append_only") {
 		t.Fatalf("owner delete = %v, want append_only", err)
 	}
+	// a Go hook changing a stored row (SetSubmitted) is refused too
+	if err := e.run(ctx, owner, func(o *op) error {
+		_, err := (&HookCtx{op: o}).SetSubmitted("deal_log", name, map[string]any{"value": 0})
+		return err
+	}); !isCode(err, "append_only") {
+		t.Fatalf("hook SetSubmitted = %v, want append_only", err)
+	}
 	got, err := e.Get(ctx, owner, "deal_log", name)
 	if err != nil || str(got["value"]) == "0" {
 		t.Fatalf("row changed: %v %v", got, err)
@@ -111,6 +118,22 @@ func TestAppendOnlyFlowWrites(t *testing.T) {
 	rows, _, err := e.List(ctx, owner, "deal_log", ListOpts{Limit: 10})
 	if err != nil || len(rows) != 1 {
 		t.Fatalf("flow must write one ledger row: %d %v", len(rows), err)
+	}
+	// the same flow started by hand (REST) with an event the caller wrote may not add a row (audit 2026-11-06 #1)
+	if _, err := e.RunFlow(ctx, owner, "deal_log_on_update", map[string]any{"name": str(res.Record["name"]), "model": "deal"}); !isCode(err, "append_only") {
+		t.Fatalf("manual run of a ledger flow = %v, want append_only", err)
+	}
+	if rows, _, _ := e.List(ctx, owner, "deal_log", ListOpts{Limit: 10}); len(rows) != 1 {
+		t.Fatalf("manual run added rows: %d", len(rows))
+	}
+	// endpoints that ask Authorize (attachments, record guards, imports) refuse writes to a ledger
+	for _, act := range []string{"create", "write", "delete", "import"} {
+		if err := e.Authorize(ctx, owner, "deal_log", act, rows[0]); !isCode(err, "append_only") {
+			t.Fatalf("Authorize %s = %v, want append_only", act, err)
+		}
+	}
+	if err := e.Authorize(ctx, owner, "deal_log", "read", rows[0]); err != nil {
+		t.Fatalf("read stays allowed: %v", err)
 	}
 }
 

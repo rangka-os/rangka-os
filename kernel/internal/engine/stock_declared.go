@@ -367,14 +367,19 @@ func sourceUnitCost(h *HookCtx, field, item string) (int64, bool, error) {
 	if sm.IsSubmittable && toInt(src["docstatus"]) != 1 {
 		return 0, false, refuse("source_not_submitted", "Dokumen sumber "+name+" belum diajukan atau sudah dibatalkan; retur tidak bisa memakai biayanya")
 	}
-	moves, err := h.Find("stock_move", map[string]any{"voucher_type": f.To, "voucher": name, "item": item})
+	moves, err := h.Find("stock_move", map[string]any{"voucher_type": f.To, "voucher": name})
 	if err != nil {
 		return 0, false, err
 	}
 	var v int64
 	var q float64
+	moved := false
 	for _, mv := range moves {
 		if str(mv["reason"]) == "reversal" {
+			continue
+		}
+		moved = true
+		if str(mv["item"]) != item {
 			continue
 		}
 		v += abs64(moneyIn(mv["value"]))
@@ -382,6 +387,9 @@ func sourceUnitCost(h *HookCtx, field, item string) (int64, bool, error) {
 	}
 	if q > qtyEps {
 		return divRound(v, q), true, nil
+	}
+	if !moved {
+		return 0, false, nil // the source moved no stock (an invoice made from a delivery note): the average
 	}
 	// exploded through a recipe: the source's moves are of the materials; its line cogs are per item sold
 	type cogsRule struct{ lines, item, qty, cogs string }

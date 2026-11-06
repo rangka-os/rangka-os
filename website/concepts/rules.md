@@ -68,7 +68,8 @@ document took out, `{consumed: true, split: f}` for the value this document took
 moves; all `consumed` rules (outputs and by-products) share one pool, split by qty or the share field. `{unit: f}`
 is a price per stock unit (use `{amount: f}` for a line total). `{source: link}` must name a submitted document:
 a return from a cancelled one is refused; from a sale exploded through a recipe, the item comes back at the
-sale's cogs per unit. A line whose outlet or item is empty is refused. `negative: refuse` fails the submit instead
+sale's cogs per unit (as stock of the menu item, which later sales do not consume: send such returns to a waste
+outlet); from a source that moved no stock (an invoice made from a delivery note), at the outlet average. A line whose outlet or item is empty is refused. `negative: refuse` fails the submit instead
 of letting an outlet go below zero; it is checked on each out move, before the in moves. An `if:` that is not true
 or false fails the submit (422 `stock_if`). Cancel reverses every move.
 The six built-in stock documents (`goods_receipt`, `stock_transfer`, `stock_transfer_receipt`, `stock_count`,

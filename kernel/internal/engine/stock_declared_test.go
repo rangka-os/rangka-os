@@ -308,3 +308,23 @@ func TestDeclaredAuditFixes(t *testing.T) {
 	_, err = p.e.Submit(p.ctx, p.a, "nonbool_issue", nb, true)
 	wantCode(t, err, 422, "stock_if")
 }
+
+// TestDeclaredReturnFromInvoiceViaDeliveryNote: an invoice made from a delivery note moves no stock (its if guards
+// the chain); a return against it comes back at the outlet average, not at the invoice's empty cogs (audit R1).
+func TestDeclaredReturnFromInvoiceViaDeliveryNote(t *testing.T) {
+	p := setupDeclared(t)
+	m := p.masters()
+	p.receipt(m, m.outA, 100, 12000)
+	dn := p.doc("delivery_note", map[string]any{"outlet": m.outA, "delivery_date": "2026-10-10", "items": []any{map[string]any{"item": m.beras, "qty": 10}}})
+	inv := p.doc("invoice_decl", map[string]any{"delivery_note": dn, "outlet": m.outA, "invoice_date": "2026-10-10", "items": []any{map[string]any{"item": m.beras, "qty": 10}}})
+	if n := len(p.moves(inv)); n != 0 {
+		t.Fatalf("invoice via delivery note moved stock: %d moves", n)
+	}
+	rt := p.doc("inv_return", map[string]any{"invoice": inv, "outlet": m.outA, "return_date": "2026-10-11", "items": []any{map[string]any{"item": m.beras, "qty": 2}}})
+	if x := p.moves(rt)[0]; rp(x["unit_cost"]) != 12000 {
+		t.Fatalf("return at %v, want the average 12000", x["unit_cost"])
+	}
+	if b := p.balance(m.outA, m.beras); rp(b["avg_cost"]) != 12000 {
+		t.Fatalf("avg after return = %v", b["avg_cost"])
+	}
+}

@@ -20,7 +20,7 @@ var planOut io.Writer
 const planUsage = `usage: rangka plan show [--json] [--apps <dir>] [--site <dir>] [--db <url>]
        rangka plan set <plan> [--by <who>] [--note "..."] [--apps <dir>] [--site <dir>] [--db <url>]
        rangka plan clear [--by <who>] [--apps <dir>] [--site <dir>] [--db <url>]
-The tenant's plan (contract 0027): set is the operator's upgrade or downgrade (a plan of features.rk), clear
+The tenant's plan (contract 0028): set is the operator's upgrade or downgrade (a plan of features.rk), clear
 goes back to config.rk plan. Nothing is deleted on a downgrade: what is past a lower limit becomes read-only.
 A running kernel picks the change up within 10 seconds.`
 

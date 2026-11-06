@@ -60,7 +60,7 @@ type Engine struct {
 	// instead of failing the dashboard (live preview of a change set, contract 0015 §4).
 	TolerateMissingTables bool
 
-	// Plan caches the tenant's plan snapshot for the read-only check (contract 0027).
+	// Plan caches the tenant's plan snapshot for the read-only check (contract 0028).
 	Plan plan.Guard
 
 	permCache   sync.Map // *meta.Model → *modelPerms

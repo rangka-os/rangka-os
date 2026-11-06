@@ -9,7 +9,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// planError turns a plan refusal (contract 0027) into a 403 with its code (plan_limit, plan_read_only).
+// planError turns a plan refusal (contract 0028) into a 403 with its code (plan_limit, plan_read_only).
 func planError(err error) error {
 	var pe *plan.Error
 	if errors.As(err, &pe) {
@@ -18,7 +18,7 @@ func planError(err error) error {
 	return err
 }
 
-// planNewRecord refuses a new outlet past the plan's outlet limit (contract 0027 §2), counting in o's transaction.
+// planNewRecord refuses a new outlet past the plan's outlet limit (contract 0028 §2), counting in o's transaction.
 func (o *op) planNewRecord(m *meta.Model) error {
 	if m.Name != "outlet" {
 		return nil
@@ -31,7 +31,7 @@ func (o *op) planNewRecord(m *meta.Model) error {
 }
 
 // planReadOnly refuses a change by a person past the people limit, or on an outlet (or a record of an outlet) past
-// the outlet limit, after a downgrade (contract 0027 §4). Reads are never refused; kernel actors are not checked.
+// the outlet limit, after a downgrade (contract 0028 §4). Reads are never refused; kernel actors are not checked.
 // It reads the cached snapshot only (plan.Guard.Peek), so it never takes a database connection: before the first
 // measurement, or when measuring fails, the write goes ahead (the limit checks at creation still hold).
 func (e *Engine) planReadOnly(a Actor, m *meta.Model, action string, rec store.Record) error {

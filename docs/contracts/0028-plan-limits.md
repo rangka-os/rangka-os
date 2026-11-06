@@ -1,4 +1,4 @@
-# 0027 Plan limits
+# 0028 Plan limits
 
 Status: accepted (6 Nov 2026) · Owner of the change: rangka-os (kernel) · Affects: Juragan Cloud (provisioning,
 billing), rangka-apps sites with `features.rk` plans, the web app (a plan banner later)

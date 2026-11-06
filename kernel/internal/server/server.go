@@ -133,7 +133,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		db.Close()
 		return nil, err
 	}
-	if err := plan.Sync(ctx, db, reg); err != nil { // contract 0027: rangka user add reads the limits from here
+	if err := plan.Sync(ctx, db, reg); err != nil { // contract 0028: rangka user add reads the limits from here
 		db.Close()
 		return nil, fmt.Errorf("plan: %w", err)
 	}
@@ -147,7 +147,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	e.Log = cfg.Logf
 	e.Cache = cache.New(strCfg(reg, "cache.driver", "memory"), intCfg(reg, "cache.max_mb", 64), strCfg(reg, "cache.url", ""))
 	s.Engine = e
-	if err := e.Plan.Refresh(ctx, db, reg, e.Now()); err != nil { // the read-only check reads this snapshot (contract 0027)
+	if err := e.Plan.Refresh(ctx, db, reg, e.Now()); err != nil { // the read-only check reads this snapshot (contract 0028)
 		cfg.Logf("plan: %v", err)
 	}
 	s.Queue = jobs.New(db, intCfg(reg, "queue.workers", 2), intCfg(reg, "queue.retries", 3))

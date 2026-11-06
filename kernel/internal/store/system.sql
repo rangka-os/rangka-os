@@ -182,7 +182,7 @@ create table if not exists rk_approvals (
 create index if not exists rk_approvals_org_state_idx on rk_approvals (org_id, state, requested_at desc);
 create index if not exists rk_approvals_record_idx on rk_approvals (org_id, model, name);
 
--- plan limits (contract 0027): the tenant's plan as an operator set it, and AI credits used per month
+-- plan limits (contract 0028): the tenant's plan as an operator set it, and AI credits used per month
 alter table rk_members add column if not exists added_at timestamptz not null default now();
 create table if not exists rk_site_plan (
   id         int primary key default 1 check (id = 1),

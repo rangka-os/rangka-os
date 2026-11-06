@@ -26,7 +26,7 @@ Usage:
   rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--apps <dir>] [--site <dir>] [--db <url>]
     (once at go-live: continue the client's own numbering; never lowers a counter or reissues a name)
   rangka plan show|set <plan>|clear [--note "..."] [--apps <dir>] [--site <dir>] [--db <url>]
-    (the tenant's plan, contract 0027: an operator's upgrade or downgrade; a downgrade deletes nothing)
+    (the tenant's plan, contract 0028: an operator's upgrade or downgrade; a downgrade deletes nothing)
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:

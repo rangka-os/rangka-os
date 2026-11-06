@@ -1,4 +1,4 @@
-// Package plan enforces the limits of the tenant's plan (contract 0027): outlets, people and AI credits per
+// Package plan enforces the limits of the tenant's plan (contract 0028): outlets, people and AI credits per
 // month. A plan comes from features.rk; the tenant's plan is the one an operator set (rangka plan set, stored in
 // rk_site_plan) or else config.rk plan. A site without a plan, or a plan without a limit, is not limited.
 package plan
@@ -215,7 +215,7 @@ func Sync(ctx context.Context, q pg.Querier, reg *meta.Registry) error {
 }
 
 // Set makes name the tenant's plan (an operator's decision: upgrade or downgrade). Nothing is deleted: records
-// past a lower limit become read-only (contract 0027 §4).
+// past a lower limit become read-only (contract 0028 §4).
 func Set(ctx context.Context, q pg.Querier, reg *meta.Registry, name, by, note string) (from string, err error) {
 	d := Find(reg, name)
 	if d == nil {

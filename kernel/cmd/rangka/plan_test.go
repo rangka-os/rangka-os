@@ -23,7 +23,7 @@ func TestParsePlanArgs(t *testing.T) {
 	}
 }
 
-// user add refuses a new person past the people limit rk_site_plan holds (contract 0027 §2)
+// user add refuses a new person past the people limit rk_site_plan holds (contract 0028 §2)
 func TestUserAddPlanLimit(t *testing.T) {
 	url := testdb.New(t)
 	ctx := context.Background()

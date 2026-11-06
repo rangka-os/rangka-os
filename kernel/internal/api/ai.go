@@ -233,7 +233,7 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	defer release()
-	// one AI credit per chat (contract 0027 §3): refused once the month's credits are used up, given back when the
+	// one AI credit per chat (contract 0028 §3): refused once the month's credits are used up, given back when the
 	// chat never reached the assistant
 	reg := s.Engine.Reg()
 	period := plan.Period(reg, s.Engine.Now())

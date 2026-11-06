@@ -220,7 +220,7 @@ func runUser(args []string) error {
 		// the password of an existing account is never changed here; a throwaway value satisfies EnsureUser
 		password = auth.RandomToken("unused", 16)
 	}
-	// contract 0027: a new person past the plan's people limit is refused (an existing member is not a new person)
+	// contract 0028: a new person past the plan's people limit is refused (an existing member is not a new person)
 	if err := plan.CheckNewPerson(ctx, pool, ua.Email); err != nil {
 		return err
 	}

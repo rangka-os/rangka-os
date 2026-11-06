@@ -329,7 +329,7 @@
 
     return h("div", { className: cx("rk-field", p.error && "rk-field-error") }, h("label", null, L(f.label)),
       h("div", { className: "rk-grid-wrap" },
-        h("div", { className: "rk-grid-scroll" }, h("table", { className: "rk-grid" },
+        h("div", { className: "rk-grid-scroll", tabIndex: 0, role: "region", "aria-label": L(f.label) }, h("table", { className: "rk-grid" },
           h("thead", null, h("tr", null, h("th", { className: "idx" }, "No"),
             cols.map(function (c) { return h("th", { key: c.name, className: numeric(c) ? "n" : undefined }, L(c.label)); }),
             ro ? null : h("th", { className: "act" }, h("span", { className: "rk-sr" }, "Aksi")))),

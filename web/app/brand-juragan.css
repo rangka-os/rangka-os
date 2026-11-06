@@ -9,6 +9,7 @@
  *   Raka   : neutral (no teal)
  */
 :root[data-brand="juragan"]:not([data-theme="dark"]) {
+  color-scheme: light;
   --font-size: 14px; --font-size-sm: 13px; --line-height: 20px;
   --app: #faf9f7; --surface: #ffffff; --soft: #f2f0ec;
   --line: #ebe7e1; --line-strong: #ddd8d0; --border: #a8a196;
@@ -37,6 +38,7 @@
 
 /* Dark: Rangka OS site palette (Dede), Bata #E0623F on the mark only */
 :root[data-brand="juragan"][data-theme="dark"] {
+  color-scheme: dark;
   --app: #161412; --surface: #1c1b19; --soft: #211e1b; --line: #33302e; --line-strong: #403c3a;
   --ink: #f3efec; --ink-2: #cfc7c1; --muted: #a79d96;
   --selected: #2f2d2a; --selected-ink: #f3efec; --row-selected: #262321;
@@ -45,6 +47,18 @@
   --bad: #f47c7c; --bad-tint: #3b2020; --ok: #75d78d; --ok-tint: #1a3520; --warn: #f2c36a; --warn-tint: #3a2b0d;
   --chart-1: #7fa8e6; --chart-2: #4cc2b8; --chart-3: #c9a0f0; --chart-4: #ebb353; --chart-5: #a79d96;
   --brand: #e0623f; --brand-soft: #3a2219; --raka: #cfc7c1; --raka-deep: #f3efec; --raka-soft: #2f2d2a; --spark: #a79d96;
+  /* the rest of the set, so no Rangka dark value (Bata create button, yellow counts, green approve) shows through */
+  --faint: #7a706a; --border: #7a706a; --hover: rgba(243, 239, 236, .05); --neutral: #262321; --neutral-hover: #2f2d2a; --primary-hover: #ffffff;
+  --info: #8fb4ec; --info-tint: #1d2a3d; --info-line: #2c4466;
+  --ok-line: #2a5a35; --ok-solid: #4fbf6b; --warn-line: #6a5120; --warn-solid: #f2c36a; --on-warn: #161412; --bad-line: #6b2b2b; --bad-solid: #f47c7c; --on-bad: #161412;
+  --chart-6: #6b655d;
+  --ap-field-line: #403c3a; --ap-nav-icon: #a79d96; --ap-col: #191715; --ap-card-line: #33302e; --ap-card-shadow: none;
+  --ap-pill: #262321; --ap-pill-ink: #cfc7c1;
+  --ap-create: #f3efec; --ap-create-hover: #ffffff; --ap-create-ink: #161412;
+  --ap-count: #f3efec; --ap-count-ink: #161412; --ap-docno: #a79d96;
+  --ap-approve: #f3efec; --ap-approve-hover: #ffffff; --ap-approve-ink: #161412;
+  --ap-seg: #161412; --ap-seg-on: #2f2d2a; --ap-seg-shadow: none;
+  --k-jual: #7fa8e6; --k-jual-s: #1d2a3d; --k-uang: #4cc2b8; --k-uang-s: #14302d; --k-kerja: #c9a0f0; --k-kerja-s: #2b2238; --k-stok: #ebb353; --k-stok-s: #33280f;
 }
 
 [data-brand="juragan"] body { font: 14px/20px "Inter", var(--font-sans); background: var(--app); }
@@ -196,4 +210,22 @@
   [data-brand="juragan"] .ap-attn-amt { grid-column: 2; grid-row: 1; margin: 0; justify-self: end; }
   [data-brand="juragan"] .ap-attn-row > .rk-btn { grid-column: 2; grid-row: 1 / span 2; min-height: 40px; }
   [data-brand="juragan"] .ap-attn-amt + .rk-btn { grid-row: 2; }
+}
+
+/* read-only fields of a locked document: label and value pairs, two columns from 900px */
+.ap-ro-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 32px; margin: 0; }
+.ap-ro-list > div { display: grid; grid-template-columns: 136px minmax(0, 1fr); gap: 12px; padding: 6px 0; min-width: 0; }
+.ap-ro-list dt { color: var(--muted); font-size: 13px; line-height: 20px; }
+.ap-ro-list dd { margin: 0; color: var(--ink); line-height: 20px; overflow-wrap: anywhere; }
+.ap-ro-list a { color: var(--link); text-decoration: none; }
+.ap-ro-list a:hover { text-decoration: underline; }
+@media (min-width: 900px) { .ap-ro-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-ro-list > .wide { grid-column: 1 / -1; } }
+@media (max-width: 489px) { .ap-ro-list > div { grid-template-columns: 112px minmax(0, 1fr); } }
+.rk-grid-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* a record head with real buttons (draft: Simpan draf, Ajukan): the title keeps its row, the buttons share the next */
+@media (max-width: 860px) {
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn):has(> .rk-pagehead-extra > .rk-btn) { flex-wrap: wrap; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn):has(> .rk-pagehead-extra > .rk-btn) > h1 { flex: 1 1 0; white-space: normal; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-pagehead-extra:has(> .rk-btn) { width: 100%; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-extra:has(> .rk-btn) > .rk-btn { flex: 1 1 0; min-height: 44px; }
 }

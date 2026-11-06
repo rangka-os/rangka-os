@@ -564,9 +564,11 @@
         if (!fs.length) return null;
         var flat = fs.filter(function (f) { return f.type !== "table"; }), grids = fs.filter(function (f) { return f.type === "table"; });
         body = h(React.Fragment, null,
-          flat.length ? h(R.Descriptions, { column: global.innerWidth >= 900 ? 2 : 1, items: flat.map(function (f) {
-            return [L(f.label), f.type === "select" && f.chip && rec[f.name] ? RA.cellFor(m, f.name, rec, ctx) : RA.fieldText(ctx, f, rec[f.name]), f.type === "text" ? 2 : 1];
-          }) }) : null,
+          // a valid description list (dl > div > dt + dd): two columns from 900px, long text across both
+          flat.length ? h("dl", { className: "ap-ro-list" }, flat.map(function (f) {
+            return h("div", { key: f.name, className: f.type === "text" ? "wide" : undefined }, h("dt", null, L(f.label)),
+              h("dd", null, f.type === "select" && f.chip && rec[f.name] ? RA.cellFor(m, f.name, rec, ctx) : RA.fieldText(ctx, f, rec[f.name])));
+          })) : null,
           grids.map(function (f) { return h("div", { key: f.name, className: flat.length ? "ap-ro-grid" : undefined }, fieldEl(f.name)); }));
       } else {
         body = h("div", { className: "ap-docgrid" }, s.columns

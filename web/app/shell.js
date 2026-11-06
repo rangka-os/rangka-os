@@ -628,7 +628,18 @@
 
     useEffect(function () {
       var root = global.document.documentElement;
-      if (theme === "system") root.removeAttribute("data-theme"); else root.setAttribute("data-theme", theme);
+      // The Juragan look has one light and one dark set: "system" is resolved to one of them (and follows the OS), so
+      // the Rangka media-query tokens never mix with the Juragan ones under an OS dark mode.
+      var mq = root.getAttribute("data-brand") === "juragan" && global.matchMedia ? global.matchMedia("(prefers-color-scheme: dark)") : null;
+      function apply() {
+        if (theme !== "system") root.setAttribute("data-theme", theme);
+        else if (mq) root.setAttribute("data-theme", mq.matches ? "dark" : "light");
+        else root.removeAttribute("data-theme");
+      }
+      apply();
+      if (!mq || theme !== "system") return undefined;
+      if (mq.addEventListener) mq.addEventListener("change", apply); else mq.addListener(apply);
+      return function () { if (mq.removeEventListener) mq.removeEventListener("change", apply); else mq.removeListener(apply); };
     }, [theme]);
 
     useEffect(function () { global.document.documentElement.dataset.density = densityOf(meta); }, [meta]);

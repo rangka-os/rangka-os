@@ -597,6 +597,9 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 			}
 		}
 	}
+	if err := backfillFields(ctx, tx, reg, desired, res.Steps); err != nil {
+		return nil, err
+	}
 	if len(res.Steps) > 0 {
 		if _, err := tx.Query(ctx, "insert into rk_migrations (source, statements, steps, risk) values ($1, $2, $3, $4)",
 			o.Source, pg.Array(res.Statements), pg.JSON{V: res.Steps}, HighestRisk(res.Steps)); err != nil {
@@ -666,6 +669,93 @@ from (select m.org_id, m.outlet, m.item, max(m.posting_date) as d from r_stock_m
       group by m.org_id, m.outlet, m.item) x
 where b.org_id = x.org_id and b.outlet = x.outlet and b.item = x.item`,
 }}
+
+// FieldBackfill fills, for the records already in a model's table, the given fields whose columns this migration
+// added (contract: a field's compute, or its literal default for rows that are NULL). It runs in the migration's
+// transaction after every step, so all columns exist, and returns an error (nothing is applied) when the values
+// would break a unique field. The engine sets it; without it new columns stay empty as before.
+var FieldBackfill func(ctx context.Context, q pg.Querier, reg *meta.Registry, m *meta.Model, fields []*meta.Field) error
+
+// Volatile reports an expression whose value depends on when or by whom it is evaluated (today(), now(),
+// user): backfilling it at upgrade time would give every old record the upgrade's value.
+func Volatile(expr string) bool {
+	for _, w := range []string{"today(", "now(", "user."} {
+		if strings.Contains(expr, w) {
+			return true
+		}
+	}
+	return false
+}
+
+// backfillFields gives the fields whose column a step added (alter table … add column) to FieldBackfill: a
+// compute that does not read the clock, or a default (non-compute) that does not. Tables new in this migration
+// have no old rows and are skipped.
+func backfillFields(ctx context.Context, q pg.Querier, reg *meta.Registry, desired []Table, steps []Step) error {
+	if FieldBackfill == nil {
+		return nil
+	}
+	added := map[string]map[string]bool{}
+	var order []string
+	for _, s := range steps {
+		for _, t := range desired {
+			prefix := fmt.Sprintf("alter table %s add column ", pg.QuoteIdent(t.Name))
+			if !strings.HasPrefix(s.SQL, prefix) {
+				continue
+			}
+			for _, c := range t.Columns {
+				if strings.HasPrefix(s.SQL, prefix+pg.QuoteIdent(c.Name)+" ") {
+					if added[t.Model] == nil {
+						added[t.Model] = map[string]bool{}
+						order = append(order, t.Model)
+					}
+					added[t.Model][c.Name] = true
+				}
+			}
+		}
+	}
+	for _, name := range order {
+		m := reg.Models[name]
+		if m == nil {
+			continue
+		}
+		var fields []*meta.Field
+		for _, f := range m.Fields {
+			if !added[name][f.Name] || !IsColumn(f) {
+				continue
+			}
+			switch {
+			case f.Compute != "" && !Volatile(f.Compute):
+				fields = append(fields, f)
+			case f.Compute == "" && f.Default != "" && !Volatile(f.Default):
+				fields = append(fields, f)
+			case f.MoneyOf() != "" && added[name][f.MoneyOf()]:
+				fields = append(fields, f) // the IDR twin of a new money field
+			}
+		}
+		if len(fields) > 0 {
+			if err := FieldBackfill(ctx, q, reg, m, fields); err != nil {
+				return fmt.Errorf("backfill %s: %w", name, err)
+			}
+		}
+	}
+	return nil
+}
+
+// WriteColumns writes the given fields of one stored record (or child row) as they are in r, without touching
+// modified_at or the document's state (backfill on migrate).
+func WriteColumns(ctx context.Context, q pg.Querier, org string, m *meta.Model, name string, fields []*meta.Field, r Record) error {
+	var sets []string
+	args := []any{org, name}
+	for _, f := range fields {
+		args = append(args, sqlValue(f, r[f.Name]))
+		sets = append(sets, fmt.Sprintf("%s = $%d", pg.QuoteIdent(f.Name), len(args)))
+	}
+	if len(sets) == 0 {
+		return nil
+	}
+	_, err := q.Query(ctx, fmt.Sprintf("update %s set %s where org_id = $1 and name = $2", pg.QuoteIdent(TableName(m.Name)), strings.Join(sets, ", ")), args...)
+	return err
+}
 
 // kernelTables creates the kernel tables. On a dry run it does so in a transaction that done rolls back, so a
 // dry run changes nothing even on an empty database; q reads through that transaction.

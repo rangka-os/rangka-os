@@ -269,7 +269,12 @@
     }
     function add() { p.onChange(f.name, rows.concat([eng.applyDefaults(f.of, {})])); }
     function del(i) { p.onChange(f.name, rows.filter(function (_, j) { return j !== i; })); }
-    var totals = ctx.meta.models[p.model].fields.filter(function (x) { return x.compute && x.type === "currency"; });
+    // Totals under the lines: computed currency fields of the parent, minus hidden ones and zero lines (riset desain K-A4:
+    // eleven tax lines at Rp 0 buried the total). The bold line is the document's total (grand_total, net_total), not the last one.
+    var allTotals = ctx.meta.models[p.model].fields.filter(function (x) { return x.compute && x.type === "currency" && !x.hidden; });
+    var grandName = ["grand_total", "net_total"].filter(function (n) { return allTotals.some(function (x) { return x.name === n; }); })[0]
+      || (allTotals.length ? allTotals[allTotals.length - 1].name : null);
+    var totals = allTotals.filter(function (x) { return x.name === grandName || Number(p.rec[x.name] || 0) !== 0; });
 
     function cell(r, i, c) {
       var v = r[c.name], lbl = L(c.label) + " baris " + (i + 1), num = numeric(c);
@@ -298,7 +303,7 @@
           ro ? h("span", { className: "rk-grid-lock" }, h(R.Icon, { name: "lock" }), p.lockText || "Baris tidak bisa diubah.")
             : h(R.Button, { size: "sm", icon: "add", onClick: add }, "Tambah baris"),
           h("div", { className: "rk-totals" }, totals.map(function (t, i) {
-            var g = i === totals.length - 1;
+            var g = t.name === grandName;
             return [h("span", { key: t.name + "l", className: g ? "grand" : undefined }, L(t.label)), h("b", { key: t.name + "v", className: g ? "grand" : undefined }, API.rupiah(p.rec[t.name] || 0))];
           })))),
       p.error ? h("span", { className: "rk-field-hint", role: "alert" }, p.error) : p.hint ? h("span", { className: "rk-field-hint" }, p.hint) : null);

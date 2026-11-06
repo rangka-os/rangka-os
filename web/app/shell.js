@@ -147,7 +147,13 @@
   function navGroups(meta, features, counts) {
     meta = meta || {};
     var groups = navFromLayout(meta) || appGroups(meta), f = featureNav(meta, features || {}, counts || {});
-    if (f.more.length) groups.push({ label: "Lainnya", items: f.more });
+    // riset desain K-A1: Persetujuan is what the owner decides, so it sits in the first group, not under Lainnya
+    var approvals = f.more.filter(function (x) { return x.id === "approvals"; }), rest = f.more.filter(function (x) { return x.id !== "approvals"; });
+    if (approvals.length) {
+      if (groups.length) groups[0] = { label: groups[0].label, items: groups[0].items.concat(approvals) };
+      else groups.push({ label: null, items: approvals });
+    }
+    if (rest.length) groups.push({ label: "Lainnya", items: rest });
     if (f.imports) groups.push(f.imports);
     return groups;
   }
@@ -900,6 +906,15 @@
       h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }),
       phone ? modeToggle : null);
 
+    // phone (desain arah E, P7): a bottom tab bar for the three things an owner does most; Menu opens the drawer
+    var onHome = route.kind === "dash" && home && ("#/d/" + route.dash) === home;
+    var tabBar = phone && kind !== "top-nav" && global.document.documentElement.getAttribute("data-brand") === "juragan" ? h("nav", { className: "ap-tabbar", "aria-label": "Navigasi bawah" },
+      h("a", { href: home || "#/", "aria-current": onHome ? "page" : undefined }, h(R.Icon, { name: "home" }), h("span", null, "Beranda")),
+      h("a", { href: "#/approvals", "aria-current": route.kind === "approvals" ? "page" : undefined }, h(R.Icon, { name: "check" }), h("span", null, "Setujui"),
+        approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null),
+      h("button", { type: "button", onClick: openCmd }, h(R.Icon, { name: "search" }), h("span", null, "Cari")),
+      h("button", { type: "button", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }, h(R.Icon, { name: "menu" }), h("span", null, "Menu"))) : null;
+
     var shell = h("div", { className: cx("rk-shell ap-shell", kind === "top-nav" ? "top ap-top" : "ap-side", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on") },
         top, side,
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
@@ -907,7 +922,7 @@
           phoneBar,
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
-          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs }))),
+          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs })), tabBar),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
         cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
         aiOn ? h(RA.AssistantRoot, { key: aiKey, api: api, storageKey: aiKey, getContext: aiPage, navigate: RA.navigate,

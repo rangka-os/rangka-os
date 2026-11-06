@@ -97,6 +97,16 @@
     var ovs = useState(null), over = ovs[0], setOver = ovs[1];
     var seq = useRef(0);
     var u = RA.useUbah ? RA.useUbah() : { on: false };
+    var isHome = !!(RA.homeHash && RA.homeHash(ctx.meta) === "#/d/" + name);
+    var aps = useState([]), approvals = aps[0], setApprovals = aps[1];
+    useEffect(function () {
+      if (!isHome || !ctx.features || !ctx.features.approvals) { setApprovals([]); return; }
+      var dead = false;
+      ctx.api.approvals({ state: "pending", limit: 20 }).then(function (r) {
+        if (!dead) setApprovals(((r && r.data) || []).filter(function (x) { return x && x.can_decide; }));
+      }, function () {});
+      return function () { dead = true; };
+    }, [name, reload, ctx.me && ctx.me.org]);
 
     useEffect(function () {
       var mine = ++seq.current;
@@ -117,7 +127,7 @@
     if (err && err.status === 403) return h(RA.ForbiddenState, { what: label });
     if (err && err.status === 401) return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Menunggu masuk" }));
 
-    var header = h(R.PageHeader, { title: label,
+    var header = h(R.PageHeader, { title: isHome ? greeting(ctx.me) : label,
       actions: [h(R.Segmented, { key: "p", label: "Periode", value: String(days), options: periodOptions(def), onChange: function (v) { setDays(Number(v)); } }),
         h(R.Button, { key: "r", icon: "refresh", onClick: function () { setReload(reload + 1); } }, "Muat ulang")] });
 
@@ -142,6 +152,7 @@
     var cards = defs.map(function (w, i) {
       var r = results[i];
       if (r && r.hidden) return null;
+      if (!u.on && isAttention(w)) return null; // shown in "Perlu diurus" above the grid
       var card = widgetCard(ctx, w, r, days, loading || !data, ctx.navigate);
       if (!card || !u.on) return card;
       return h(UbahWidget, { key: w.name, span: w.span || 3, name: w.name, title: L(w.label) || w.name, index: i, count: defs.length, busy: u.busy,
@@ -151,7 +162,59 @@
         onMove: onMove, onSpan: onSpan }, card);
     }).filter(Boolean);
     if (!u.on) cards = tileStrips(cards);
-    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" }, h(R.DashGrid, null, cards)));
+    var attention = !u.on && isHome ? h(AttentionPanel, { ctx: ctx, defs: defs, results: results, loading: loading || !data, approvals: approvals }) : null;
+    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" },
+      attention, cards.length ? h(R.DashGrid, null, cards) : null));
+  }
+
+  /* ---------------------------------------------------------------- Perlu diurus (riset desain P2, K-A2)
+   * Display only: the home dashboard opens with what waits on the owner. Rows come from data the app already has:
+   * pending approvals the user may decide (GET /api/v1/approvals) and the dashboard's list widgets whose name starts
+   * with "perlu_" (their label becomes the row badge, their first column the title, their last numeric column the amount). */
+  function isAttention(w) { return w && w.type === "list" && /^perlu_/.test(w.name || ""); }
+
+  function greeting(me) {
+    var hr = new Date().getHours(), part = hr < 11 ? "pagi" : hr < 15 ? "siang" : hr < 19 ? "sore" : "malam";
+    var nm = String((me && (me.name || "")) || "").trim(), first = /@/.test(nm) ? "" : nm.split(/\s+/)[0];
+    return "Selamat " + part + (first ? ", " + first : "");
+  }
+
+  function AttentionPanel(p) {
+    var ctx = p.ctx, rows = [];
+    (p.approvals || []).forEach(function (a) {
+      var mm = (ctx.meta.models || {})[a.model] || {};
+      rows.push({ key: "ap:" + (a.id || a.name), tone: "warn", badge: "Menunggu persetujuan",
+        title: L(a.label) || (L(mm.label) || a.model || "Dokumen") + " " + (a.record || a.doc || ""),
+        sub: (L(mm.label) || "") + (a.record || a.doc ? " · " + (a.record || a.doc) : ""),
+        action: "Periksa", hash: "#/approvals" });
+    });
+    p.defs.forEach(function (w, i) {
+      if (!isAttention(w)) return;
+      var r = p.results[i] || {}, m = w.model, cols = w.columns || [];
+      var num = cols.filter(function (c) { var fd = ctx.eng.field(m, c); return fd && ctx.eng.numeric(fd); });
+      var amt = num[num.length - 1], first = cols.filter(function (c) { return c !== amt; })[0] || "name";
+      (r.rows || []).forEach(function (rec) {
+        rows.push({ key: w.name + ":" + rec.name, tone: "bad", badge: L(w.label) || "Perlu diurus",
+          title: RA.cellFor(m, first, rec, ctx),
+          sub: cols.filter(function (c) { return c !== first && c !== amt; }).map(function (c) {
+            var v = RA.cellFor(m, c, rec, ctx); return typeof v === "string" || typeof v === "number" ? String(v) : null; }).filter(Boolean).join(" · ") || rec.name,
+          amount: amt ? RA.cellFor(m, amt, rec, ctx) : null, action: "Buka", hash: "#/r/" + m + "/" + encodeURIComponent(rec.name) });
+      });
+    });
+    var n = rows.length;
+    return h("section", { className: "ap-attn", "aria-labelledby": "ap-attn-h" },
+      h("div", { className: "ap-attn-head" },
+        h("h2", { id: "ap-attn-h" }, "Perlu diurus"),
+        h("span", { className: "ap-attn-count" }, p.loading ? "" : n ? n + " hal" : "Semua beres")),
+      p.loading && !n ? h("div", { className: "ap-attn-empty" }, h(R.Spinner, { size: "sm", label: "Memuat" }))
+        : !n ? h("div", { className: "ap-attn-empty" }, "Tidak ada yang menunggu keputusanmu hari ini.")
+        : rows.map(function (x) {
+          return h("div", { key: x.key, className: "ap-attn-row" },
+            h("span", { className: "ap-attn-badge " + x.tone }, x.badge),
+            h("div", { className: "ap-attn-main" }, h("b", null, x.title), x.sub ? h("small", null, x.sub) : null),
+            x.amount != null ? h("span", { className: "ap-attn-amt" }, x.amount) : null,
+            h(R.Button, { size: "sm", onClick: function () { ctx.navigate(x.hash); } }, x.action));
+        }));
   }
 
   /** rangka.pen shows a row of number tiles as one card with dividers: consecutive number cards (in Pakai) become one

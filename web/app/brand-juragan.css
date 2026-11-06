@@ -1,0 +1,116 @@
+/*
+ * Juragan look on the Rangka app (desain arah E, riset/desain/06 putaran 6, 07 palet Bata). Scoped to
+ * <html data-brand="juragan"> so the Rangka default stays untouched. Loaded after app.css.
+ * Rules of colour roles:
+ *   brand  : Bata only on the logo mark and the business tile
+ *   UI     : warm neutral (stone), active nav = neutral tint, primary button = ink, focus = neutral
+ *   kind   : module colours (sales blue, money teal, work purple, stock gold) for charts and kind tiles
+ *   status : ok/warn/bad/info only for real states, always with words
+ *   Raka   : neutral (no teal)
+ */
+:root[data-brand="juragan"]:not([data-theme="dark"]) {
+  --font-size: 14px; --font-size-sm: 13px; --line-height: 20px;
+  --app: #faf9f7; --surface: #ffffff; --soft: #f2f0ec;
+  --line: #ebe7e1; --line-strong: #ddd8d0; --border: #a8a196;
+  --ink: #1f1e1c; --ink-2: #4a4640; --muted: #6b655d; --faint: #9b938e;
+  --hover: rgba(31, 30, 28, .04); --neutral: #f2f0ec; --neutral-hover: #e9e5df;
+  --selected: #edeae5; --selected-ink: #1f1e1c; --row-selected: #f7f5f2;
+  --primary: #1f1e1c; --primary-hover: #000000; --primary-ink: #ffffff;
+  --link: #1f1e1c; --focus: #57534e; --focus-ring: 0 0 0 2px #57534e; --focus-soft: inset 0 0 0 1px #57534e;
+  --ok: #21763c; --ok-tint: #e3f6e6; --ok-line: #bfe6c8; --ok-solid: #21763c;
+  --warn: #7d5a00; --warn-tint: #ffeed0; --warn-line: #f4d79a; --warn-solid: #edb345; --on-warn: #1f1e1c;
+  --bad: #97123a; --bad-tint: #ffeaec; --bad-line: #f5c3cc; --bad-solid: #97123a; --on-bad: #ffffff;
+  --info: #215db3; --info-tint: #e7f1ff; --info-line: #c5dcfb;
+  --chart-1: #1f5fb8; --chart-2: #04756e; --chart-3: #8250b0; --chart-4: #8a6212; --chart-5: #6b655d; --chart-6: #a8a196;
+  --brand: #b4432a; --brand-deep: #1f1e1c; --brand-soft: #f6ede6;
+  --raka: #4a4640; --raka-deep: #1f1e1c; --raka-soft: #ebe7e1; --spark: #6b655d;
+  --r: 8px; --r-btn: 8px; --r-md: 8px; --r-lg: 12px; --r-dialog: 16px;
+  --control: 32px; --field: 32px; --control-lg: 36px; --row: 40px;
+  --ap-field-line: #ddd8d0; --ap-nav-icon: #6b655d; --ap-col: #f2f0ec; --ap-card-line: #ebe7e1;
+  --ap-pill: #f2f0ec; --ap-pill-ink: #4a4640;
+  --ap-create: #1f1e1c; --ap-create-hover: #000000; --ap-create-ink: #ffffff;
+  --ap-count: #1f1e1c; --ap-count-ink: #ffffff; --ap-docno: #6b655d;
+  --ap-approve: #1f1e1c; --ap-approve-hover: #000000; --ap-approve-ink: #ffffff;
+  --k-jual: #1f5fb8; --k-jual-s: #e8eff9; --k-uang: #04756e; --k-uang-s: #e2f3f1;
+  --k-kerja: #8250b0; --k-kerja-s: #f1eaf8; --k-stok: #8a6212; --k-stok-s: #f7eedb;
+}
+
+/* Dark: Rangka OS site palette (Dede), Bata #E0623F on the mark only */
+:root[data-brand="juragan"][data-theme="dark"] {
+  --app: #161412; --surface: #1c1b19; --soft: #211e1b; --line: #33302e; --line-strong: #403c3a;
+  --ink: #f3efec; --ink-2: #cfc7c1; --muted: #a79d96;
+  --selected: #2f2d2a; --selected-ink: #f3efec; --row-selected: #262321;
+  --primary: #f3efec; --primary-ink: #161412; --link: #f3efec; --focus: #cfc7c1;
+  --focus-ring: 0 0 0 2px #cfc7c1; --focus-soft: inset 0 0 0 1px #cfc7c1;
+  --bad: #f47c7c; --bad-tint: #3b2020; --ok: #75d78d; --ok-tint: #1a3520; --warn: #f2c36a; --warn-tint: #3a2b0d;
+  --chart-1: #7fa8e6; --chart-2: #4cc2b8; --chart-3: #c9a0f0; --chart-4: #ebb353; --chart-5: #a79d96;
+  --brand: #e0623f; --brand-soft: #3a2219; --raka: #cfc7c1; --raka-deep: #f3efec; --raka-soft: #2f2d2a; --spark: #a79d96;
+}
+
+[data-brand="juragan"] body { font: 14px/20px "Inter", var(--font-sans); background: var(--app); }
+
+/* logo mark and business tile = Bata (the one brand moment in the app) */
+/* g1 sets --brand to ink on .ap-shell; this beats it (0,3,0, later) */
+:root[data-brand="juragan"]:not([data-theme="dark"]) .ap-shell { --brand: #b4432a; }
+:root[data-brand="juragan"][data-theme="dark"] .ap-shell { --brand: #e0623f; }
+[data-brand="juragan"] .ap-shell .rk-side-mark,
+[data-brand="juragan"] .ap-shell .rk-side-head .tile { background: var(--brand) !important; color: #fff; }
+
+/* sidebar: warm neutral, active item = neutral tint, ink text and icon */
+[data-brand="juragan"] .ap-shell > .rk-side { background: var(--app); border-right: 1px solid var(--line); }
+[data-brand="juragan"] .ap-shell .rk-navlink { border-radius: 8px; color: var(--ink-2); }
+[data-brand="juragan"] .ap-shell .rk-navlink:hover { background: var(--hover); color: var(--ink); }
+[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); color: var(--ink); font-weight: 600; }
+[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--ink); }
+[data-brand="juragan"] .ap-shell .rk-navgroup > p { text-transform: none; letter-spacing: 0; font: 500 12px/16px var(--font-sans); color: var(--muted); }
+
+/* page head: a real title, not a 15px label */
+[data-brand="juragan"] .rk-pagehead { background: var(--app); border-bottom: 0; padding-top: 8px; }
+[data-brand="juragan"] .rk-pagehead h1 { font: 600 22px/28px "Inter", var(--font-sans); letter-spacing: -0.01em; }
+
+/* cards and stats: white on warm background, hairline, 12px radius */
+[data-brand="juragan"] .rk-card, [data-brand="juragan"] .rk-stat, [data-brand="juragan"] .ap-main .ap-tiles { border-color: var(--line); border-radius: 12px; }
+[data-brand="juragan"] .rk-stat { padding: 14px 16px; }
+
+/* buttons: 32px, 8px radius; primary ink */
+[data-brand="juragan"] .rk-btn { border-radius: 8px; font-weight: 600; }
+[data-brand="juragan"] .rk-btn-link { text-decoration: underline; text-underline-offset: 2px; }
+
+/* status badges: small radius, always with words (not round pills) */
+[data-brand="juragan"] .rk-pill, [data-brand="juragan"] .ap-attn-badge { border-radius: 6px; }
+
+/* table: comfortable rows, tabular numbers */
+[data-brand="juragan"] .rk-table td, [data-brand="juragan"] .rk-table th { font-variant-numeric: tabular-nums; }
+[data-brand="juragan"] .rk-table thead th { color: var(--muted); font-weight: 500; }
+
+/* Perlu diurus (home): the first thing the owner sees, kind tiles carry the module colour */
+[data-brand="juragan"] .ap-attn { border-radius: 12px; border-color: var(--line); }
+[data-brand="juragan"] .ap-attn-head h2 { font: 600 16px/22px "Inter", var(--font-sans); }
+
+/* Raka: neutral avatar and chat, no teal */
+[data-brand="juragan"] .rk-chat-raka, [data-brand="juragan"] .rk-askbar { --raka: var(--ink-2); }
+
+/* phone: 44px targets for primary actions */
+@media (max-width: 860px) {
+  [data-brand="juragan"] .rk-btn-primary, [data-brand="juragan"] .rk-btn-lg { min-height: 40px; }
+  [data-brand="juragan"] .rk-pagehead h1 { font-size: 20px; line-height: 26px; }
+}
+
+/* phone tab bar (shell.js, only with data-brand="juragan") */
+.ap-tabbar { display: none; }
+@media (max-width: 860px) {
+  [data-brand="juragan"] .ap-tabbar {
+    display: grid; grid-template-columns: repeat(4, 1fr); position: sticky; bottom: 0; z-index: 20;
+    background: var(--surface); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  [data-brand="juragan"] .ap-tabbar a, [data-brand="juragan"] .ap-tabbar button {
+    position: relative; display: grid; justify-items: center; gap: 2px; min-height: 48px; padding: 6px 0; border: 0; border-radius: 10px;
+    background: none; color: var(--muted); font: 500 11px/14px "Inter", var(--font-sans); text-decoration: none; cursor: pointer;
+  }
+  [data-brand="juragan"] .ap-tabbar [aria-current="page"] { color: var(--ink); background: var(--selected); font-weight: 600; }
+  [data-brand="juragan"] .ap-tabbar .rk-icon { width: 20px; height: 20px; }
+  [data-brand="juragan"] .ap-tabbar-n {
+    position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+    border-radius: 8px; background: var(--ink); color: var(--surface); font: 700 10px/16px var(--font-sans); font-style: normal;
+  }
+}

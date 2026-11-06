@@ -69,9 +69,11 @@ func errPartlyImported() error {
 	return &engine.StatusError{Status: 409, Code: "already_imported", Msg: "Sebagian baris sudah diimpor, unggah ulang file"}
 }
 
-// conflict reports a unique violation or a deadlock: another commit of the same file or rows got there first.
+// conflict reports a unique violation: another commit of the same file or rows got there first. A deadlock
+// (40P01) is not one: the engine runs the whole import again (contract 0025) and answers write_conflict if it
+// keeps losing, never "already imported".
 func conflict(err error) bool {
-	return pg.IsCode(err, "23505") || pg.IsCode(err, "40P01")
+	return pg.IsCode(err, "23505")
 }
 
 // imp resolves an import the caller may run: the model permission "import" on its target model (contract 0005

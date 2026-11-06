@@ -162,7 +162,9 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 			is := Issue{Rule: r.Name, Code: "rule", Message: r.Message.Text()}
 			if e != nil {
 				is.Code = "rule_error"
-				is.Message = strings.TrimSpace(r.Message.Text() + " (aturan " + r.Name + " tidak bisa diperiksa: " + e.Error() + ")")
+				// the CEL error is logged, not sent: its text can carry values of records the caller may not read
+				o.e.Log("rule %s.%s could not be evaluated on %v: %v", m.Name, r.Name, rec["name"], e)
+				is.Message = strings.TrimSpace(r.Message.Text() + " (aturan " + r.Name + " tidak bisa diperiksa)")
 			}
 			if r.Level == "warn" {
 				warns = append(warns, is)

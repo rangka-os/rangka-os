@@ -33,7 +33,9 @@ row. The kernel should answer them in one query that matches the list exactly.
    - The 50 largest groups by count are returned, ties broken by key.
    - The remaining groups are summed into `other` (present only when groups overflowed).
    - Empty values share one group with `key: null, label: "(kosong)"`.
-   - For a link field, `label` is the linked record's title.
+   - For a link field, `label` is the linked record's title when the caller could read that record with
+     `GET /api/v1/r/{model}/{name}` (read grant with its `if:`, row scope; every hop of a title that is itself a
+     link is checked the same way). Otherwise, and for a link to a missing record, `label` is the stored code.
 4. **Errors.**
    - `400` when `group` is not a field of the model, or is a `table` field.
    - `400` when `sum|avg|min|max` names a non-number field. Currency, int, float and percent are numbers; `money`

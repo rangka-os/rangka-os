@@ -132,6 +132,10 @@ scope: {field: outlet, from: user.outlets}
     keeps the stale row until it reloads;
   - a queued action is guarded when it is enqueued, not again in the worker;
   - MCP tools go through the same engine calls.
+  - a link's title (list `q`, aggregate group labels, dashboard chart labels) comes only from a record the
+    member could read with `GET /api/v1/r/{model}/{name}`, checked on every hop of a title that is a link;
+    otherwise the stored code stands in and `q` does not match the hidden title. Client `filter` expressions
+    that walk a link are not covered yet (they read the linked record's fields; see audit 2026-11-06).
 - Automations, hooks and flow steps run inside an allowed operation are not scoped (an outlet's goods
   receipt may write a stock move that head office sees). Because flow steps are not scoped, a member with a
   row scope may not start a flow directly: `POST /api/v1/flows/{name}/run` → 403 `permission_denied`

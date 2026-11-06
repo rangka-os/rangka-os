@@ -344,3 +344,28 @@ func TestPreviewOtherOrg404(t *testing.T) {
 		}
 	}
 }
+
+// A proposer with a row scope may not preview: the preview evaluates the change set's new expressions outside the
+// caller's row scope (audit cel-link-scope finding 1).
+func TestPreviewRefusedToScopedProposer(t *testing.T) {
+	owner, staff := scopedEnv(t, []string{"OUT-01"}, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, _ := os.ReadFile(p)
+		txt := strings.Replace(string(b), "schema/0.4/config.json", "schema/0.5/config.json", 1)
+		txt = strings.Replace(txt, "approvers: [owner, sales_manager]}", "approvers: [owner, sales_manager], proposers: [outlet_staff]}", 1)
+		if err := os.WriteFile(p, []byte(txt), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	id := proposeCS(owner, "Dashboard", map[string]any{"op": "create", "path": "dashboards/crm_overview.rk", "content": siteDashboard})
+	if cs := get(staff.must(200, "GET", "/api/v1/meta", nil).JSON, "changesets").(map[string]any); cs["propose"] != true {
+		t.Fatalf("staff must be a proposer for this test: %v", cs)
+	}
+	for _, p := range []string{"/api/v1/preview/" + id + "/meta", "/api/v1/preview/" + id + "/r/sales_invoice", "/api/v1/preview/" + id + "/dashboards/crm_overview"} {
+		r := staff.must(403, "GET", p, nil)
+		if get(r.JSON, "error", "code") != "preview_scoped" {
+			t.Fatalf("%s: %s", p, r.Body)
+		}
+	}
+	owner.must(200, "GET", "/api/v1/preview/"+id+"/meta", nil)
+}

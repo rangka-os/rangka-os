@@ -1,6 +1,9 @@
 package cel
 
-import "testing"
+import (
+	"fmt"
+	"testing"
+)
 
 // Synthetic QRIS payloads (no real merchant): a static one (point of initiation 11), the same merchant as dynamic
 // (12), both with a correct CRC.
@@ -26,6 +29,11 @@ func TestEmvcoMethods(t *testing.T) {
 		"first":   "01021100020163041234",
 		"space":   " " + qrisStatic,
 		"note":    "TRF INV-2026-00012 / Budi",
+		// a second 01/53/54 after the first (audit F1) and an empty object (F2), each with a correct CRC
+		"dup01":  withCRC("000201010211010212"),
+		"dup54":  withCRC("00020101021153033605303840"),
+		"amt":    withCRC("0002010102115400540550000"),
+		"empty0": withCRC("00020101021154005802ID"),
 	}
 	cases := []struct {
 		expr string
@@ -42,6 +50,12 @@ func TestEmvcoMethods(t *testing.T) {
 		{"first.emvcoValid()", false},
 		{"space.emvcoValid()", false},
 		{"empty.emvcoValid()", false},
+		{"dup01.emvcoValid()", false},
+		{"dup54.emvcoValid()", false},
+		{"amt.emvcoValid()", false},
+		{"empty0.emvcoValid()", false},
+		{"dup01.emvcoTag('01')", ""},
+		{"amt.emvcoTag('54')", ""},
 		{"space.trim().emvcoValid()", true},
 		{"p.emvcoTag('01')", "11"},
 		{"d.emvcoTag('01')", "12"},
@@ -65,9 +79,15 @@ func TestEmvcoMethods(t *testing.T) {
 			t.Errorf("%s = %#v, want %#v", c.expr, got, c.want)
 		}
 	}
-	for _, bad := range []string{"p.emvcoTag('5')", "p.emvcoTag('AB')", "p.emvcoTag(59)", "p.emvcoValid('x')", "note.replace('-')", "note.replace('-', 1)"} {
+	for _, bad := range []string{"p.emvcoTag('5')", "p.emvcoTag('AB')", "p.emvcoTag(59)", "p.emvcoValid('x')", "note.replace('-')", "note.replace('-', 1)", "note.replace('', '-')"} {
 		if _, err := Eval(bad, env(vars)); err == nil {
 			t.Errorf("%s: want an error", bad)
 		}
 	}
+}
+
+// withCRC appends tag 63 with the CRC of p + "6304".
+func withCRC(p string) string {
+	p += "6304"
+	return p + fmt.Sprintf("%04X", crc16CCITT(p))
 }

@@ -1205,6 +1205,9 @@ func method(name string, t any, args []any) (any, error) {
 		if !ok1 || !ok2 {
 			return nil, errf("replace() needs two texts")
 		}
+		if old == "" {
+			return nil, errf("replace() needs a non-empty text to replace")
+		}
 		return strings.ReplaceAll(s, old, nw), nil
 	}
 	if isStr && len(args) == 0 {

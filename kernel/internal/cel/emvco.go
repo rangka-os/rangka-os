@@ -18,21 +18,25 @@ import (
 
 type emvObject struct{ tag, value string }
 
-// emvParse splits s into its top-level objects; ok is false when s is not a whole number of well-formed objects.
+// emvParse splits s into its top-level objects; ok is false when s is not a whole number of well-formed objects,
+// when an object is empty (EMVCo lengths are 01-99) or when a tag appears twice (a second "01" or "54" would
+// otherwise hide behind the first one that emvcoTag reads).
 func emvParse(s string) (objs []emvObject, ok bool) {
 	for i := 0; i < len(s); i++ {
 		if s[i] < 0x20 || s[i] > 0x7e {
 			return nil, false
 		}
 	}
+	seen := map[string]bool{}
 	for i := 0; i < len(s); {
 		if i+4 > len(s) || !digits(s[i:i+4]) {
 			return nil, false
 		}
 		n := int(s[i+2]-'0')*10 + int(s[i+3]-'0')
-		if i+4+n > len(s) {
+		if n == 0 || i+4+n > len(s) || seen[s[i:i+2]] {
 			return nil, false
 		}
+		seen[s[i:i+2]] = true
 		objs = append(objs, emvObject{s[i : i+2], s[i+4 : i+4+n]})
 		i += 4 + n
 	}

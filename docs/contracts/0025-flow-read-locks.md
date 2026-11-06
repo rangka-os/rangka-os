@@ -5,8 +5,8 @@ metadata change; flows keep their meaning and become safe under concurrent use)
 
 ## Context
 
-Apps keep invariants that span documents in flows: one invoice per retainer month of a project, a credit limit
-summed over open orders, a project's billed total under its contract value. Each flow reads other records (`find`,
+Apps keep invariants that span documents in flows: one invoice per retainer month of a project, a project's billed
+total under its contract value, a customer's open orders total. Each flow reads other records (`find`,
 `find_all`) and then writes. Under PostgreSQL's READ COMMITTED two submits running at the same time both read the
 state before either wrote, and both pass (write skew). Audits of rangka-apps #16 and #18 accepted this as a pilot
 limitation (card t_24ba8ba9). A row lock on the submitted document does not help: the two documents are different
@@ -34,7 +34,13 @@ point-of-sale submits failed with 409s 3 to 14 times in 24 and different orgs fo
    and the notify log line is written after commit, so a retry reports only the attempt that committed.
 4. **Giving up.** A unit that still loses after 8 attempts answers 409 `write_conflict`: "Data ini sedang diubah
    orang lain bersamaan. Coba simpan lagi." Nothing of it is written; the client may send the same request again.
-5. **Existing locks stay.** Row locks (`select … for update` in submit, cancel, update and actions) and advisory
+5. **Not covered.** Rules and approval policies are evaluated before the document's flows run, without this lock:
+   a check there that reads other documents (a credit limit in `sales_invoice.credit_limit` or
+   `customer_order.over_credit_limit`) can still pass twice for two concurrent submits, as before. Such a check must
+   move into a flow (or a hook that locks what it reads) to be serialized. Link values read inside a flow's `where`
+   (`customer.outstanding`) come from the unit of work's link cache and may have been loaded before the lock was
+   taken.
+6. **Existing locks stay.** Row locks (`select … for update` in submit, cancel, update and actions) and advisory
    locks (approvals, stock balances, draft conversions, number series) are unchanged.
 
 ## Consequences
@@ -42,6 +48,9 @@ point-of-sale submits failed with 409s 3 to 14 times in 24 and different orgs fo
 - Apps need no lock primitive: a flow that checks and then writes is correct against another flow doing the same.
 - Flows that read the same model serialize per org. Submits already queue on their number series, so at UMKM volume
   the cost is a short wait, not an error.
-- A deadlock between two flows that read models in opposite order is resolved by PostgreSQL (40P01) and retried.
+- A deadlock between two flows that read models in opposite order, or between a hook that locks a row (the customer
+  row a ledger hook updates) and a flow read lock taken after it, is resolved by PostgreSQL (40P01) and retried;
+  each one costs the server's `deadlock_timeout` (1 s by default) before the retry, so app authors should read models
+  in the same order in flows that may run at the same time.
 - Code inside a unit of work must not send anything outside the database before commit (HTTP, files, logs that
   matter); use `Tx.AfterCommit`, or a retry would repeat it.

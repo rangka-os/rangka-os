@@ -582,6 +582,7 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 	var d *Decision
 	var stale *store.Approval
 	err := e.run(ctx, a, func(o *op) error {
+		d, stale = nil, nil // per attempt (contract 0025)
 		ap, err := o.decide(id, "approve")
 		if err != nil {
 			return err

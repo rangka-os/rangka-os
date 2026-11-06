@@ -93,6 +93,7 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 		models = append(models, m)
 	}
 	err := e.run(ctx, a, func(o *op) error {
+		st.Created, st.Skipped = map[string]int{}, map[string]int{} // per attempt (contract 0025)
 		for _, mn := range seedOrder(e.Reg(), models) {
 			m := e.Reg().Model(mn)
 			if m == nil {

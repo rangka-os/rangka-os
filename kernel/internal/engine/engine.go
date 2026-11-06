@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -161,18 +162,57 @@ type op struct {
 	inFlow bool
 }
 
+// writeAttempts bounds how often run starts a unit of work again after it lost a race (contract 0025).
+const writeAttempts = 8
+
+// run executes fn as one unit of work in one transaction (READ COMMITTED; flows that read a model hold its lock, see
+// lockFlowRead). When the transaction fails because a concurrent one won (a deadlock, SQLSTATE 40P01, or a
+// serialization failure, 40001), run rolls back and runs fn again from current data, up to writeAttempts times
+// (contract 0025). fn must build its results inside the attempt.
 func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {
+	var err error
+	for attempt := 1; ; attempt++ {
+		var retry bool
+		retry, err = e.runOnce(ctx, a, fn)
+		if !retry || attempt >= writeAttempts || ctx.Err() != nil {
+			break
+		}
+		// back off a little, longer each time, with jitter so the two losers do not collide again
+		d := time.Duration(attempt*attempt)*5*time.Millisecond + time.Duration(rand.Int63n(int64(10*time.Millisecond)))
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-time.After(d):
+		}
+	}
+	if err != nil && errors.Is(err, errConflict) {
+		return conflict("write_conflict", "Data ini sedang diubah orang lain bersamaan. Coba simpan lagi.")
+	}
+	return err
+}
+
+// errConflict marks a unit of work that still lost its race after writeAttempts.
+var errConflict = errors.New("engine: concurrent write conflict")
+
+// runOnce is one attempt of run; retry reports a lost race (the transaction is rolled back).
+func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (retry bool, err error) {
 	tx, err := e.DB.Begin(ctx)
 	if err != nil {
-		return err
+		return false, err
 	}
 	o := &op{ctx: ctx, tx: tx, e: e, actor: a, touched: map[string]bool{}, links: map[string]map[string]any{}}
 	defer tx.Rollback(ctx)
 	if err := fn(o); err != nil {
-		return err
+		if tx.Conflicted() {
+			return true, fmt.Errorf("%w: %v", errConflict, err)
+		}
+		return false, err
 	}
 	if err := tx.Commit(ctx); err != nil {
-		return err
+		if tx.Conflicted() {
+			return true, fmt.Errorf("%w: %v", errConflict, err)
+		}
+		return false, err
 	}
 	for m := range o.touched {
 		if e.Cache != nil {
@@ -182,7 +222,7 @@ func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {
 			e.OnWrite(a.Org, m)
 		}
 	}
-	return nil
+	return false, nil
 }
 
 func (o *op) event(m *meta.Model, rec store.Record, opName string) error {

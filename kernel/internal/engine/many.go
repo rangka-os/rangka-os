@@ -29,6 +29,7 @@ var errRollback = errors.New("rollback")
 func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs []map[string]any, opts ManyOpts) ([]ManyResult, error) {
 	out := make([]ManyResult, len(inputs))
 	err := e.run(ctx, a, func(o *op) error {
+		out = make([]ManyResult, len(inputs)) // per attempt (contract 0025)
 		if opts.Before != nil {
 			if err := opts.Before(ctx, o.tx); err != nil {
 				return err

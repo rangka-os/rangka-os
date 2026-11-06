@@ -146,3 +146,54 @@ func (e *Engine) DashboardAllowed(a Actor, d *meta.Dashboard) bool {
 	}
 	return false
 }
+
+// keepHidden is dropHidden for an update: the patch keeps the stored value of every field of m hidden from a, also
+// in the rows of table fields (matched by row name; a new row gets none), so a person who cannot see a field
+// neither sets nor clears it when they save the form (audit 2026-11-07: a child row's hidden cost became 0).
+func (e *Engine) keepHidden(a Actor, m *meta.Model, patch map[string]any, cur store.Record) map[string]any {
+	if patch == nil || m == nil || unrestricted(a) {
+		return patch
+	}
+	out := make(map[string]any, len(patch))
+	for k, v := range patch {
+		out[k] = v
+	}
+	for _, f := range m.Fields {
+		if f.Type == "table" {
+			cm := e.Reg().Model(f.Of)
+			l, ok := out[f.Name].([]any)
+			if !ok || cm == nil || e.hiddenFields(a, cm) == nil {
+				continue
+			}
+			stored := map[string]map[string]any{}
+			for _, x := range rows(cur[f.Name]) {
+				stored[str(x["name"])] = x
+			}
+			kept := make([]any, len(l))
+			for i, x := range l {
+				row, ok := x.(map[string]any)
+				if !ok {
+					kept[i] = x
+					continue
+				}
+				nr := e.dropHidden(a, cm, row)
+				if old := stored[str(row["name"])]; old != nil && str(row["name"]) != "" {
+					for _, cf := range cm.Fields {
+						if e.FieldHidden(a, cm, cf) {
+							if v, ok := old[cf.Name]; ok {
+								nr[cf.Name] = v
+							}
+						}
+					}
+				}
+				kept[i] = nr
+			}
+			out[f.Name] = kept
+			continue
+		}
+		if e.FieldHidden(a, m, f) {
+			delete(out, f.Name) // the merge keeps the stored value
+		}
+	}
+	return out
+}

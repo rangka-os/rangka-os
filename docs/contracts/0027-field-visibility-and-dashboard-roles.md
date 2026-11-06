@@ -21,11 +21,13 @@ read access away from whole models (rangka-apps `docs/permissions.md`).
    create, update, submit, cancel and amend, MCP reads, prints, export rows (and its column), dashboard list
    widgets, and `GET /api/v1/meta` (the field is not described). Rows of table fields are redacted with their own
    model's `hidden_for`.
-3. **No oracle.** In a filter the caller writes, a hidden field reads as its zero value (also through links); `q`
+3. **No oracle.** In a filter the caller writes, a hidden field reads as its zero value (also through links, table
+   rows and `option()`); `q`
    does not search it; a sort by it is ignored; an aggregate grouping or totalling it is refused with 403
    `field_hidden`; a link whose title field is hidden shows the stored code.
-4. **Writes.** A hidden field in a create or update from the actor is dropped, so they cannot set what they cannot
-   see. Flows, hooks and computes still read and write it (metadata is trusted).
+4. **Writes.** A hidden field in a create, import or update from the actor is dropped, so they cannot set what they
+   cannot see; on an update the stored value stays, also in table rows matched by row name. The result of an
+   approval or a held action is redacted like any other write result. Flows, hooks and computes still read and write it (metadata is trusted).
 5. **Dashboards.** A dashboard with `roles` opens only for an actor holding one of them (and the owner): others get
    403 and `meta.dashboards` leaves it out. A widget whose `field`, `group_by`, `sort` or a `columns` entry is
    hidden from the actor is returned as `{"hidden": true}`.
@@ -38,3 +40,7 @@ read access away from whole models (rangka-apps `docs/permissions.md`).
 - Expressions in metadata (computes, widget filters, flows) see every field: a widget filter that tests a hidden
   field still counts with it.
 - `system/audit` keeps full values; it is owner-only.
+- Known gaps (audit 2026-11-07, low): the record guard of prints and attachments evaluates `if:` on the redacted
+  record; an approval's snapshot hash covers hidden fields; an import preview shows the file's values to whoever
+  uploaded it. Apps that copy a hidden value into a field without `hidden_for` (rangka-apps assignment and timesheet
+  `cost_rate`) show it there; such fields need their own `hidden_for`.

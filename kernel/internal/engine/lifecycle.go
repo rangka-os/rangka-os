@@ -315,7 +315,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.create(model, e.dropHidden(a, e.Reg().Model(model), input), CreateOpts{authorize: true, Guard: true, client: true})
+		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
 		return err
 	})
 	return e.redactResult(a, model, res), err
@@ -331,6 +331,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	}
 	if m.AppendOnly && (opts.client || o.manualRun) {
 		return nil, appendOnly(m)
+	}
+	if opts.client { // contract 0027: a client (form, import) does not set a field hidden from it
+		input = o.e.dropHidden(o.actor, m, input)
 	}
 	rec, issues := o.e.normalize(m, input, nil, opts.client)
 	if len(issues) > 0 {
@@ -451,7 +454,7 @@ func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch 
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
-		res, err = o.update(model, name, e.dropHidden(a, e.Reg().Model(model), patch), true, true)
+		res, err = o.update(model, name, patch, true, true)
 		return err
 	})
 	return e.redactResult(a, model, res), err
@@ -472,6 +475,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	cur, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
+	}
+	if guard { // contract 0027: a client save keeps the stored values of fields hidden from it, rows included
+		patch = o.e.keepHidden(o.actor, m, patch, cur)
 	}
 	if authorize {
 		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(cur))); err != nil {

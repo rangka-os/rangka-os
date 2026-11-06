@@ -89,7 +89,7 @@ func (s *scope) env() *cel.Env {
 		Now:   s.e.Now,
 		Option: func(field, attr string) (any, error) {
 			f := s.m.Field(field)
-			if f == nil {
+			if f == nil || s.client && s.e.FieldHidden(s.actor, s.m, f) {
 				return nil, nil
 			}
 			o := f.Option(str(s.rec[field]))
@@ -117,6 +117,9 @@ func (s *scope) lookup(name string) (any, bool) {
 			return s.link(f.To, n), true
 		case "table":
 			if l, ok := v.([]any); ok {
+				if s.client { // contract 0027: rows a filter walks read hidden child fields as zero
+					return s.clientRows(f, l), true
+				}
 				return l, true
 			}
 			return []any{}, true
@@ -191,6 +194,32 @@ func (s *scope) link(model, name string) *cel.Link {
 		s.links[key] = out
 		return out, nil
 	}}
+}
+
+// clientRows is a client filter's view of table field f's rows: fields hidden from the actor read as zero.
+func (s *scope) clientRows(f *meta.Field, l []any) []any {
+	cm := s.e.Reg().Model(f.Of)
+	hidden := s.e.hiddenFields(s.actor, cm)
+	if hidden == nil {
+		return l
+	}
+	out := make([]any, len(l))
+	for i, x := range l {
+		row, ok := x.(map[string]any)
+		if !ok {
+			out[i] = x
+			continue
+		}
+		cp := make(map[string]any, len(row))
+		for k, v := range row {
+			cp[k] = v
+		}
+		for n := range hidden {
+			cp[n] = store.Zero(cm.Field(n))
+		}
+		out[i] = cp
+	}
+	return out
 }
 
 // eval evaluates src in this scope.

@@ -142,3 +142,82 @@ func TestHiddenForAndDashboardRoles(t *testing.T) {
 		t.Fatal("the IDR twin follows its money field")
 	}
 }
+
+// Audit 2026-11-07: hidden fields of table rows survive a save by someone who cannot see them, an import does
+// not set them, and a filter cannot test them through rows or option().
+func TestHiddenForRowsImportsAndFilters(t *testing.T) {
+	files := map[string]string{
+		"crm/models/crew_job.rk": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: crew_job
+label: {id: Pekerjaan kru}
+naming: CJ-{####}
+fields:
+  - {name: title, type: data, label: {id: Judul}}
+  - name: grade
+    type: select
+    label: {id: Kelas}
+    hidden_for: [sales_rep]
+    options:
+      - {value: a, label: {id: A}, probability: 90}
+      - {value: b, label: {id: B}, probability: 10}
+  - {name: lines, type: table, of: crew_job_line, label: {id: Baris}}
+permissions:
+  - {role: sales_rep, read: true, create: true, write: true, import: true}
+`,
+		"crm/models/crew_job_line.rk": `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: crew_job_line
+label: {id: Baris pekerjaan}
+is_child: true
+fields:
+  - {name: what, type: data, label: {id: Uraian}}
+  - {name: cost, type: currency, label: {id: Biaya}, hidden_for: [sales_rep]}
+`,
+	}
+	e, owner := approvalSetupFiles(t, files, "")
+	ctx := context.Background()
+	rep := Actor{Org: owner.Org, ID: "rep@example.test", UserName: "USR-801", Roles: []string{"sales_rep"}, Human: true}
+	res, err := e.Create(ctx, owner, "crew_job", map[string]any{"title": "Pasang", "grade": "a", "lines": []any{map[string]any{"what": "kabel", "cost": 777}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := str(res.Record["name"])
+
+	// the rep opens the job and saves it back with a changed description: the stored cost stays
+	got, err := e.Get(ctx, rep, "crew_job", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ls := got["lines"].([]any)
+	if _, ok := ls[0].(map[string]any)["cost"]; ok {
+		t.Fatalf("rep sees the row cost: %v", ls[0])
+	}
+	ls[0].(map[string]any)["what"] = "kabel 2"
+	if _, err := e.Update(ctx, rep, "crew_job", name, map[string]any{"lines": ls}); err != nil {
+		t.Fatal(err)
+	}
+	full, _ := e.Get(ctx, owner, "crew_job", name)
+	row := full["lines"].([]any)[0].(map[string]any)
+	if str(row["what"]) != "kabel 2" || toInt(row["cost"]) != 777 {
+		t.Fatalf("after the rep's save: %v", row)
+	}
+
+	// filters through rows and option() read hidden values as zero/none
+	for _, f := range []string{"lines.exists(l, l.cost == 777)", "option('grade', 'probability') == 90"} {
+		if n, _, _ := e.List(ctx, rep, "crew_job", ListOpts{Filter: f, Limit: 10}); len(n) != 0 {
+			t.Fatalf("rep filter %q matched %d rows", f, len(n))
+		}
+		if n, _, _ := e.List(ctx, owner, "crew_job", ListOpts{Filter: f, Limit: 10}); len(n) != 1 {
+			t.Fatalf("owner filter %q matched %d rows", f, len(n))
+		}
+	}
+
+	// an import by the rep does not set hidden fields
+	mr, err := e.CreateMany(ctx, rep, "crew_job", []map[string]any{{"title": "Impor", "grade": "b", "lines": []any{map[string]any{"what": "x", "cost": 5}}}}, ManyOpts{})
+	if err != nil || mr[0].Err != nil {
+		t.Fatalf("import: %v %v", err, mr)
+	}
+	imp, _ := e.Get(ctx, owner, "crew_job", mr[0].Name)
+	if str(imp["grade"]) == "b" || toInt(imp["lines"].([]any)[0].(map[string]any)["cost"]) == 5 {
+		t.Fatalf("import set hidden fields: %v", imp)
+	}
+}

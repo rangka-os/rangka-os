@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: item
+naming: BRG-{####}
+fields:
+  - {name: item_name, type: data, required: true}
+  - {name: kind, type: select, required: true, default: "'good'", options: [{value: service, label: {id: service}}, {value: good, label: {id: good}}, {value: material, label: {id: material}}, {value: product, label: {id: product}}]}
+  - {name: stock_uom, type: link, to: uom, required: true}
+  - {name: sales_uom, type: link, to: uom}
+  - {name: rate, type: currency}
+  - {name: standard_cost, type: currency}

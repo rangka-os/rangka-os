@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# retur jual: good items back at the cost they left at, damaged ones into quarantine
+name: sales_return
+is_submittable: true
+naming: RJ-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: return_date
+  moves:
+    - {lines: barang, in: outlet, reason: return_in, cost: {source: return_date}}
+    - {lines: items, in: line.gudang, reason: return_in, cost: fifo}
+fields:
+  - {name: delivery_note, type: link, to: delivery_note}
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: quarantine_outlet, type: link, to: outlet, required: true}
+  - {name: return_date, type: date, required: true}
+  - {name: items, type: table, of: sales_return_item, min_rows: 1}

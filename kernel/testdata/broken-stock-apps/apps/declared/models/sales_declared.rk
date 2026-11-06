@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# outlet_sales written as a declaration (equivalence test; the duplicate check stays Go-only)
+name: sales_declared
+is_submittable: true
+naming: SLD-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  moves:
+    - {lines: lines, out: outlet, explode: recipe, reason: sale, cogs: cogs, cost: average}
+  cogs_total: outlet
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: date, type: date, required: true}
+  - {name: lines, type: table, of: sales_declared_line, min_rows: 1}
+  - {name: cogs_total, type: currency, read_only: true}

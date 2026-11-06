@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: prod_two
+is_submittable: true
+naming: PR2-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: production_date
+  moves:
+    - {lines: materials, out: outlet, reason: production_out}
+    - {lines: outputs, in: line.outlet, reason: production_in, cost: {consumed: true}}
+    - {lines: byproducts, in: line.outlet, reason: production_in, cost: {consumed: true}}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: production_date, type: date, required: true}
+  - {name: materials, type: table, of: production_material, min_rows: 1}
+  - {name: outputs, type: table, of: production_output, min_rows: 1}
+  - {name: byproducts, type: table, of: production_output}

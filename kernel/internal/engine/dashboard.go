@@ -284,7 +284,9 @@ type titleInfo struct {
 	exists bool
 }
 
-// title returns the display title of a linked record and whether it exists.
+// title returns the label of a linked record: its title when the actor could read it (readableLink, row scope
+// dc.scope), else the stored code, so a chart never shows the title of a record outside the actor's scope. ok is
+// false only for an empty value.
 func (dc *dashCtx) title(model, name string) (string, bool) {
 	if name == "" {
 		return "", false
@@ -293,10 +295,10 @@ func (dc *dashCtx) title(model, name string) (string, bool) {
 	if t, ok := dc.titles[k]; ok {
 		return t.title, t.exists
 	}
-	var t titleInfo
-	if tm := dc.e.Reg().Models[model]; tm != nil {
-		if rec, err := store.Get(dc.ctx, dc.e.DB, dc.e.Reg(), dc.a.Org, tm, name); err == nil {
-			t = titleInfo{dc.e.Title(dc.ctx, dc.a, model, rec, 0), true}
+	t := titleInfo{name, true}
+	if rec, ok := dc.e.readableLink(dc.ctx, dc.a, dc.scope, model, name, dc.links); ok {
+		if v := dc.e.title(dc.ctx, dc.a, dc.scope, model, rec, 0, dc.links); v != "" {
+			t.title = v
 		}
 	}
 	dc.titles[k] = t

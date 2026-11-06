@@ -281,7 +281,7 @@ The difference with `outlet_sales` is only the duplicate check, which a cashier 
    `TestDeclaredMovesEquivalent`: the same script in two orgs gives identical moves, balances, cogs and
    reversals. The one-step `stock_transfer` is not expressible move for move (its in value is the value the same
    line took out), so it stays Go only, like `stock_count` and the two-step pair.
-7. Conversions and returned quantities: a separate contract (K-p).
+7. Conversions and returned quantities: a separate contract (K-p), `0022-unit-conversion-and-returned-qty.md`.
 8. A declared `sale` move sets `stock_balance.last_sale_date` like the Go rules, because it goes through the same
    `stockPost.move`.
 

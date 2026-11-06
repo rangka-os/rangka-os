@@ -328,3 +328,41 @@ func TestDeclaredReturnFromInvoiceViaDeliveryNote(t *testing.T) {
 		t.Fatalf("avg after return = %v", b["avg_cost"])
 	}
 }
+
+// TestDeclaredReturnExplode (contract 0022): an in move with explode: recipe brings back the materials of each
+// returned item, each at the cost the source sale took that material out (cost source) or at the outlet average;
+// an item without a recipe comes back as itself, a service moves nothing; cancel reverses it.
+func TestDeclaredReturnExplode(t *testing.T) {
+	p := setupDeclared(t)
+	m := p.masters()
+	p.receipt(m, m.outB, 10, 12000) // beras 10 kg at 12.000
+	p.create("recipe", map[string]any{"product": m.nasi, "lines": []any{map[string]any{"material": m.beras, "qty": 0.2}}})
+	sale := p.doc("sales_declared", map[string]any{"outlet": m.outB, "date": "2026-10-11", "lines": []any{
+		map[string]any{"item": m.nasi, "qty": 10}, map[string]any{"item": m.beras, "qty": 1}}})
+	if c := rp(p.get("sales_declared", sale)["cogs_total"]); c != 36000 { // 2 kg in the recipe + 1 kg sold as is
+		t.Fatalf("sale cogs = %d, want 36000", c)
+	}
+	p.receipt(m, m.outB, 7, 20000) // the average moves away from the sale's cost: 7 kg at 12.000 + 7 kg at 20.000
+	ret := p.doc("recipe_return", map[string]any{"sale": sale, "outlet": m.outB, "return_date": "2026-10-12", "items": []any{
+		map[string]any{"item": m.nasi, "qty": 3}, map[string]any{"item": m.beras, "qty": 1},
+		map[string]any{"item": m.jasa, "qty": 1}, map[string]any{"item": m.nasi, "qty": 1, "condition": "damaged"}}})
+	mv := p.moves(ret)
+	if len(mv) != 3 {
+		t.Fatalf("return moves = %d, want 3 (0,6 kg and 1 kg at the sale cost, 0,2 kg at the average after those two: 243.200 / 15,6 kg; the service none): %v", len(mv), mv)
+	}
+	want := [][3]any{{0.6, int64(12000), int64(7200)}, {1.0, int64(12000), int64(12000)}, {0.2, int64(15590), int64(3118)}}
+	for i, x := range mv {
+		if str(x["item"]) != m.beras || str(x["reason"]) != "return_in" || qtyOf(x["qty"]) != want[i][0] || rp(x["unit_cost"]) != want[i][1] || rp(x["value"]) != want[i][2] {
+			t.Fatalf("move %d = %v %v %v %v %v, want beras %v", i, x["item"], x["qty"], x["unit_cost"], x["value"], x["reason"], want[i])
+		}
+	}
+	if b := p.balance(m.outB, m.beras); qtyOf(b["qty"]) != 15.8 || rp(b["value"]) != 7*12000+7*20000+7200+12000+3118 {
+		t.Fatalf("beras after the return = %v / %v", b["qty"], b["value"])
+	}
+	if err := p.cancel("recipe_return", ret); err != nil {
+		t.Fatal(err)
+	}
+	if b := p.balance(m.outB, m.beras); qtyOf(b["qty"]) != 14 {
+		t.Fatalf("beras after cancelling the return = %v, want 14", b["qty"])
+	}
+}

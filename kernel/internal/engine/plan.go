@@ -35,7 +35,7 @@ func (o *op) planNewRecord(m *meta.Model) error {
 // It reads the cached snapshot only (plan.Guard.Peek), so it never takes a database connection: before the first
 // measurement, or when measuring fails, the write goes ahead (the limit checks at creation still hold).
 func (e *Engine) planReadOnly(a Actor, m *meta.Model, action string, rec store.Record) error {
-	if action == "read" || a.System || e.DB == nil {
+	if action == "read" || action == "print" || action == "export" || a.System || e.DB == nil { // reading never stops
 		return nil
 	}
 	snap := e.Plan.Peek(e.DB, e.Reg(), e.Now(), e.Log)

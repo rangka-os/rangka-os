@@ -281,4 +281,10 @@ func TestPlanAttachmentReadOnly(t *testing.T) {
 	if r.Status != 403 || errCode(r) != "plan_read_only" {
 		t.Fatalf("attachment on a read-only outlet's invoice: %d %s", r.Status, r.Body)
 	}
+	// reading never stops: print, attachment list and export of the read-only outlet's records still answer
+	if r := e.do("GET", "/api/v1/r/sales_invoice/INV-2026-00044/print?as=html", nil); r.Status == 403 { // the catalogue has no print format: 404 past the check
+		t.Fatalf("print of a read-only outlet's invoice: %s", r.Body)
+	}
+	e.must(200, "GET", "/api/v1/r/sales_invoice/INV-2026-00044/attachments", nil)
+	e.must(200, "GET", "/api/v1/export/r/sales_invoice", nil)
 }

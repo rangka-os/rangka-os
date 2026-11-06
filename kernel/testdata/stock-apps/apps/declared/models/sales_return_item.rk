@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: sales_return_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, required: true}
+  - {name: condition, type: select, default: "'good'", options: [{value: good, label: {id: good}}, {value: damaged, label: {id: damaged}}]}

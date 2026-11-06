@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: delivery_note_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, required: true}
+  - {name: cogs, type: currency, read_only: true}

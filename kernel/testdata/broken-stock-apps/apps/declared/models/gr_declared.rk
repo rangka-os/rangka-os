@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# goods_receipt written as a declaration (equivalence test)
+name: gr_declared
+is_submittable: true
+naming: GRD-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: received_on
+  moves:
+    - {lines: outlet, in: received_on, reason: receipt, explode: recipe, cost: {amount: rate}}
+    - {lines: items, in: received_on, item: qty, qty: item, reason: receipt}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: received_on, type: date, default: today(), required: true}
+  - {name: items, type: table, of: gr_declared_item, min_rows: 1}

@@ -47,3 +47,27 @@ automations:
 
  Apps declare the
 hooks they provide in `app.rk`; the validator refuses unknown ones.
+
+## Declared stock moves
+
+A document that moves stock declares how, and keeps `on_submit: [stock.post_moves]` and
+`on_cancel: [stock.reverse_moves]` (contract 0021). A delivery note:
+
+```yaml
+stock:
+  date: delivery_date
+  moves:
+    - {lines: items, out: outlet, reason: delivery, cogs: cogs}   # out at the outlet average, line cogs
+  cogs_total: cogs_total
+```
+
+Each move names a table (`lines`), one outlet (`in:` or `out:`, a header link or `line.<field>`), a `reason` from
+`stock_move.reason`, and optionally `if:` (CEL with `doc` and `line`), `item:`, `qty:`, `explode: recipe` (out),
+`cogs:` (out) and `cost:` (in: `average`, `{unit: f}`, `{amount: f}`, `{source: link}` for the cost the linked
+document took out, `{consumed: true, split: f}` for the value this document took out). Out moves post before in
+moves. `negative: refuse` fails the submit instead of letting an outlet go below zero. Cancel reverses every move.
+The six built-in stock documents (`goods_receipt`, `stock_transfer`, `stock_transfer_receipt`, `stock_count`,
+`stock_adjustment`, `outlet_sales`) keep their own rules and cannot declare one.
+
+**One document per chain moves stock.** If a delivery note and its invoice both declared `out`, stock would leave
+twice; guard the second with `if`, for example on the invoice `if: "doc.delivery_note == ''"`.

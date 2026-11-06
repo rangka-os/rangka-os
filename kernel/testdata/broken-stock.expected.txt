@@ -1,0 +1,27 @@
+catalogue/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/catalogue/module.rk and an app (contract 0001)
+declared/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/declared/module.rk and an app (contract 0001)
+declared/models/sales_return.rk:12:64  error  schema  stock/moves/1/cost  'fifo' is not valid under any of the given schemas
+outlets/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/outlets/module.rk and an app (contract 0001)
+stock/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/stock/module.rk and an app (contract 0001)
+declared/models/adj_declared.rk:9:9  error  bad_stock_field  stock/date  "reason" is not a date field
+declared/models/delivery_note.rk:11:7  error  stock_direction  stock/moves/0  a move needs exactly one of in or out
+declared/models/delivery_note.rk:11:68  error  bad_stock_field  stock/moves/0/cogs  "item" must be a read_only currency field
+declared/models/delivery_note.rk:11:68  error  stock_direction  stock/moves/0/cogs  cogs is only for out moves
+declared/models/delivery_note.rk:11:55  error  unknown_option  stock/moves/0/reason  "kirim" is not an option of stock_move.reason
+declared/models/gr_declared.rk:11:15  error  not_table  stock/moves/0/lines  "outlet" is not a table field
+declared/models/gr_declared.rk:11:27  error  bad_stock_field  stock/moves/0/in  "received_on" is not a link to outlet
+declared/models/gr_declared.rk:11:66  error  stock_direction  stock/moves/0/explode  explode is only for out moves
+declared/models/gr_declared.rk:12:26  error  bad_stock_field  stock/moves/1/in  "received_on" is not a link to outlet
+declared/models/gr_declared.rk:12:45  error  bad_stock_field  stock/moves/1/item  "qty" is not a link to item
+declared/models/gr_declared.rk:12:55  error  bad_stock_field  stock/moves/1/qty  "item" is not a number field
+declared/models/production_result.rk:11:70  error  stock_consumed  stock/moves/0/cost  cost consumed needs an out move in this document
+declared/models/production_result.rk:11:94  error  bad_stock_field  stock/moves/0/cost/split  "item" is not a number field
+declared/models/sales_declared.rk:10:84  error  stock_direction  stock/moves/0/cost  cost is only for in moves
+declared/models/sales_declared.rk:11:15  error  bad_stock_field  stock/cogs_total  "outlet" must be a read_only currency field
+declared/models/sales_return.rk:11:15  error  unknown_field  stock/moves/0/lines  "barang" is not a field
+declared/models/sales_return.rk:11:69  error  bad_stock_field  stock/moves/0/cost/source  "return_date" is not a link field
+declared/models/sales_return.rk:12:26  error  unknown_field  stock/moves/1/in  "gudang" is not a field of sales_return_item
+declared/models/strict_issue.rk:8:3  error  stock_hook  stock  stock: needs is_submittable: true and stock.post_moves in on_submit
+stock/models/stock_adjustment.rk:8:3  error  stock_legacy  stock  stock_adjustment has a built-in stock rule and cannot declare stock:
+
+21 error(s), 4 warning(s)

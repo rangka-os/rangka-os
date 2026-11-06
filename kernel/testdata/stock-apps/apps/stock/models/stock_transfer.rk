@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+name: stock_transfer
+is_submittable: true
+naming: TRF-{YYYY}-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+fields:
+  - {name: from_outlet, type: link, to: outlet, required: true}
+  - {name: to_outlet, type: link, to: outlet, required: true}
+  - {name: transfer_date, type: date, default: today(), required: true}
+  - {name: items, type: table, of: stock_transfer_item, min_rows: 1}
+  - {name: state, type: select, read_only: true, options: [{value: in_transit, label: {id: Dalam perjalanan}}, {value: partly_received, label: {id: Diterima sebagian}}, {value: received, label: {id: Diterima}}]}

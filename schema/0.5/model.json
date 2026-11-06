@@ -89,6 +89,38 @@
         "pattern": "^[a-z_]+\\.[a-z_]+$"
       }
     },
+    "stock": {
+      "type": "object",
+      "required": [
+        "moves"
+      ],
+      "additionalProperties": false,
+      "description": "How stock.post_moves moves stock for this model (contract 0021). The six built-in stock documents keep their own rule and may not declare one.",
+      "properties": {
+        "date": {
+          "$ref": "#/$defs/name",
+          "description": "Header date field used as posting_date (default: the first required date field)"
+        },
+        "moves": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "$ref": "#/$defs/stock_rule"
+          }
+        },
+        "cogs_total": {
+          "$ref": "#/$defs/name",
+          "description": "Read-only currency header field that gets the value taken out by all cogs lines"
+        },
+        "negative": {
+          "enum": [
+            "allow",
+            "refuse"
+          ],
+          "description": "refuse: submit fails when an out move would leave the outlet below zero (default allow)"
+        }
+      }
+    },
     "actions": {
       "type": "array",
       "items": {
@@ -739,6 +771,117 @@
         },
         "label": {
           "$ref": "#/$defs/label"
+        }
+      }
+    },
+    "stock_rule": {
+      "type": "object",
+      "required": [
+        "lines",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "lines": {
+          "$ref": "#/$defs/name",
+          "description": "Table field whose rows move"
+        },
+        "in": {
+          "type": "string",
+          "pattern": "^(line\\.)?[a-z][a-z0-9_]{0,62}$",
+          "description": "Outlet the rows come into: a header link field, or line.<field>"
+        },
+        "out": {
+          "type": "string",
+          "pattern": "^(line\\.)?[a-z][a-z0-9_]{0,62}$",
+          "description": "Outlet the rows leave: a header link field, or line.<field>"
+        },
+        "item": {
+          "$ref": "#/$defs/name",
+          "description": "Line link to item (default item)"
+        },
+        "qty": {
+          "$ref": "#/$defs/name",
+          "description": "Line quantity in stock uom (default stock_qty when the line has it, else qty)"
+        },
+        "if": {
+          "$ref": "#/$defs/cel",
+          "description": "Per line, with doc and line; false skips the line"
+        },
+        "reason": {
+          "$ref": "#/$defs/name",
+          "description": "An option of stock_move.reason"
+        },
+        "explode": {
+          "enum": [
+            "recipe"
+          ],
+          "description": "out only: consume through the item's active recipe"
+        },
+        "cost": {
+          "description": "in only: average (default), {unit: f}, {amount: f}, {source: link}, {consumed: true, split: qty|f}",
+          "oneOf": [
+            {
+              "enum": [
+                "average"
+              ]
+            },
+            {
+              "type": "object",
+              "required": [
+                "unit"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "unit": {
+                  "$ref": "#/$defs/name"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "amount"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "amount": {
+                  "$ref": "#/$defs/name"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "source"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "source": {
+                  "$ref": "#/$defs/name"
+                }
+              }
+            },
+            {
+              "type": "object",
+              "required": [
+                "consumed"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "consumed": {
+                  "const": true
+                },
+                "split": {
+                  "$ref": "#/$defs/name"
+                }
+              }
+            }
+          ]
+        },
+        "cogs": {
+          "$ref": "#/$defs/name",
+          "description": "out only: read-only currency line field that gets the value the line took out"
         }
       }
     }

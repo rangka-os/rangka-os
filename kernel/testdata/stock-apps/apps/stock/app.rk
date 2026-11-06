@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+name: stock
+version: 1.0.0
+title: {id: stock}
+requires: {rangka: '>=0.4', catalogue: ^1.0, outlets: ^1.0}
+hooks: [stock.reverse_moves]

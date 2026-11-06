@@ -174,6 +174,9 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 	if h.op.e.Reg().Model("stock_move") == nil || h.op.e.Reg().Model("stock_balance") == nil {
 		return map[string]any{"message": "stock is not installed"}, nil
 	}
+	if sp := stockSpecOf(h.Model); sp != nil && !LegacyStockModels[h.Model.Name] {
+		return postDeclaredMoves(h, sp)
+	}
 	rec := h.Record
 	// lineKeys are the (outlet, item) pairs of the document's lines that move stock, for the given outlet
 	// fields (lines with no quantity get no balance row).

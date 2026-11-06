@@ -79,11 +79,22 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 		}
 		raw["prints"] = printsMeta(reg, m.Name)
 		raw["can"] = e.Allowed(a, m.Name) // model level: a conditional grant (if:) counts as true
+		// contract 0027: a field hidden from the caller is not described to them either
+		if fl, ok := raw["fields"].([]any); ok {
+			kept := make([]any, 0, len(fl))
+			for _, x := range fl {
+				if f := m.Field(meta.Str(meta.AsMap(x), "name")); f != nil && e.FieldHidden(a, m, f) {
+					continue
+				}
+				kept = append(kept, x)
+			}
+			raw["fields"] = kept
+		}
 		models[m.Name] = raw
 	}
 	dashboards := map[string]any{}
 	for name, d := range reg.Dashboards {
-		if reg.Dashboard(name) != nil {
+		if reg.Dashboard(name) != nil && e.DashboardAllowed(a, d) { // contract 0027: roles: hides it
 			raw := map[string]any{}
 			for k, v := range d.Raw {
 				raw[k] = v

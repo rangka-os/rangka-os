@@ -49,7 +49,13 @@ func (s *Server) listApprovals(w http.ResponseWriter, r *http.Request, c *caller
 		fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"data": approvalItems(c.actor, rows), "total": total})
+	items := approvalItems(c.actor, rows)
+	for i := range rows {
+		if sum := s.Engine.ApprovalSummary(r.Context(), c.actor, &rows[i]); sum != nil {
+			items[i]["summary"] = sum
+		}
+	}
+	writeJSON(w, 200, map[string]any{"data": items, "total": total})
 }
 
 func (s *Server) getApproval(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -58,7 +64,11 @@ func (s *Server) getApproval(w http.ResponseWriter, r *http.Request, c *caller) 
 		fail(w, err)
 		return
 	}
-	writeJSON(w, 200, approvalItem(c.actor, ap))
+	item := approvalItem(c.actor, ap)
+	if sum := s.Engine.ApprovalSummary(r.Context(), c.actor, ap); sum != nil {
+		item["summary"] = sum
+	}
+	writeJSON(w, 200, item)
 }
 
 func (s *Server) decideApproval(approve bool) func(w http.ResponseWriter, r *http.Request, c *caller) {

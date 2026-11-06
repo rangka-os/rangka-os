@@ -193,3 +193,32 @@ func TestFlowApprovalScopedOtherOutlet(t *testing.T) {
 		t.Fatalf("approve own outlet's flow request: %v", d)
 	}
 }
+
+// Mobile P7: a request carries a summary to decide from the card: the record's title (its customer) and amount.
+func TestApprovalSummary(t *testing.T) {
+	owner, _ := scopedEnv(t, []string{"OUT-01"}, outletApprovalPolicy)
+	if _, err := auth.EnsureUser(context.Background(), owner.s.DB, "rep@kopisenja.id", "Sales", "rahasia-123", "kopi-senja", "sales_rep", "USR-003"); err != nil {
+		t.Fatal(err)
+	}
+	id := heldSubmit(t, owner.userEnv("rep@kopisenja.id", "rahasia-123"), "OUT-01")
+	var item map[string]any
+	for _, x := range rowsOf(owner.must(200, "GET", "/api/v1/approvals?state=pending", nil)) {
+		if get(x, "id") == id {
+			item = x.(map[string]any)
+		}
+	}
+	if item == nil {
+		t.Fatal("request not listed")
+	}
+	sum, _ := item["summary"].(map[string]any)
+	if sum == nil || sum["title"] == nil || sum["amount"] == nil {
+		t.Fatalf("summary = %v", item["summary"])
+	}
+	if title, _ := sum["title"].(string); title == "" || title == "CUST-0012" {
+		t.Fatalf("title must be the customer's name: %v", sum)
+	}
+	one := owner.must(200, "GET", "/api/v1/approvals/"+id, nil).JSON
+	if get(one, "summary", "amount") != sum["amount"] {
+		t.Fatalf("get summary = %v, list %v", one["summary"], sum)
+	}
+}

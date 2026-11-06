@@ -662,6 +662,9 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 	if err != nil {
 		return nil, err
 	}
+	if d != nil && d.Record != nil { // contract 0027: the approver gets the record as they may see it
+		e.Redact(a, e.Reg().Model(d.Approval.Model), d.Record)
+	}
 	return d, nil
 }
 
@@ -776,4 +779,52 @@ func (e *Engine) Reject(ctx context.Context, a Actor, id, reason string) (*Decis
 		return nil, err
 	}
 	return d, nil
+}
+
+// summaryAmountFields are the fields, in order, whose value is a request's amount in its summary.
+var summaryAmountFields = []string{"grand_total", "total", "net_total", "total_amount", "amount"}
+
+// ApprovalSummary is what an approver needs to decide from the card (mobile P7, P8): the record's title (which
+// follows its title link, so an invoice shows its customer and an order its supplier), its amount and currency.
+// It reads the record as a (read grant, row scope, hidden fields), so it shows nothing a could not open; nil for
+// flow requests and records a cannot read.
+func (e *Engine) ApprovalSummary(ctx context.Context, a Actor, ap *store.Approval) map[string]any {
+	if ap == nil || ap.Model == "" || ap.Name == "" || strings.HasPrefix(ap.Verb, "flow:") {
+		return nil
+	}
+	m := e.Reg().Model(ap.Model)
+	if m == nil {
+		return nil
+	}
+	rec, err := e.Get(ctx, a, ap.Model, ap.Name)
+	if err != nil {
+		return nil
+	}
+	out := map[string]any{}
+	if t := e.Title(ctx, a, m.Name, rec, 0); t != "" && t != ap.Name {
+		out["title"] = t
+	}
+	for _, fn := range summaryAmountFields {
+		f := m.Field(fn)
+		if f == nil || (f.Type != "currency" && f.Type != "money") {
+			continue // only money: an int "amount" may be a count of units
+		}
+		v, ok := rec[fn]
+		if !ok || v == nil {
+			continue
+		}
+		// the currency of the amount itself: a money field names its currency field; a currency field is rupiah
+		// (a foreign-currency document keeps its grand_total in IDR, audit 2026-11-07)
+		cur := "IDR"
+		if f.Type == "money" {
+			if cf := f.CurrencyField(); cf != "" {
+				if c, ok := rec[cf].(string); ok && c != "" {
+					cur = c
+				}
+			}
+		}
+		out["amount"], out["amount_label"], out["currency"] = v, f.Label.Text(), cur
+		break
+	}
+	return out
 }

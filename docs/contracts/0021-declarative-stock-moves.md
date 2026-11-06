@@ -59,7 +59,7 @@ Keys of one `moves` entry:
 | `qty` | Line field with the quantity in stock uom. Default: `stock_qty` when the line model has it, else `qty` (today's `lineQty`). |
 | `if` | Optional CEL, evaluated per line with `doc` and `line`. False skips the line. |
 | `reason` | Required. Written to `stock_move.reason`. |
-| `explode` | `out` only. `recipe` consumes each line through the item's active recipe (today's `consumption`), as `outlet_sales` does. |
+| `explode` | `recipe` consumes each line through the item's active recipe (today's `consumption`), as `outlet_sales` does. Out only here; on an `in` move it brings the materials back (contract 0022 §4). |
 | `cost` | `in` only. How the incoming value is set (§2). Default `average`. |
 | `cogs` | `out` only. Line field that gets the value taken out by that line. |
 
@@ -90,7 +90,8 @@ Outgoing moves are always valued at the outlet's moving average (`item.standard_
 - `stock:` only on a submittable model whose `on_submit` has `stock.post_moves`.
 - `lines` is a `table` field; `in`/`out` name a link to `outlet` on the header or on the line model; `item` is a link
   to `item`; `qty` is a number.
-- Exactly one of `in`/`out`. `explode` and `cogs` only with `out`; `cost` only with `in`.
+- Exactly one of `in`/`out`. `cogs` only with `out`; `cost` only with `in`. `explode` was `out` only here; 0022 §4 allows it
+  on `in` with cost `average` or `{source}`.
 - `reason` is an option of `stock_move.reason` in the installed stock module.
 - `cogs` / `cogs_total` are `read_only` currency fields.
 - `{source: f}`: `f` is a link to a model that itself posts stock. `{consumed: …}`: the document has at least one
@@ -281,7 +282,7 @@ The difference with `outlet_sales` is only the duplicate check, which a cashier 
    `TestDeclaredMovesEquivalent`: the same script in two orgs gives identical moves, balances, cogs and
    reversals. The one-step `stock_transfer` is not expressible move for move (its in value is the value the same
    line took out), so it stays Go only, like `stock_count` and the two-step pair.
-7. Conversions and returned quantities: a separate contract (K-p).
+7. Conversions and returned quantities: a separate contract (K-p), `0022-unit-conversion-and-returned-qty.md`.
 8. A declared `sale` move sets `stock_balance.last_sale_date` like the Go rules, because it goes through the same
    `stockPost.move`.
 

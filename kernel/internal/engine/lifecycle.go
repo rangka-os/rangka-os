@@ -156,11 +156,16 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 			continue
 		}
 		v, e := s.eval(r.Check)
-		if e != nil {
-			continue // a rule that cannot be evaluated does not block (prototype)
-		}
-		if !cel.Truthy(v) {
+		// a rule that cannot be evaluated counts as failed (fail closed): a guard on money or stock must not pass
+		// because its expression broke on this record (audit cel-emvco F5). The issue says it could not be checked.
+		if e != nil || !cel.Truthy(v) {
 			is := Issue{Rule: r.Name, Code: "rule", Message: r.Message.Text()}
+			if e != nil {
+				is.Code = "rule_error"
+				// the CEL error is logged, not sent: its text can carry values of records the caller may not read
+				o.e.Log("rule %s.%s could not be evaluated on %v: %v", m.Name, r.Name, rec["name"], e)
+				is.Message = strings.TrimSpace(r.Message.Text() + " (aturan " + r.Name + " tidak bisa diperiksa)")
+			}
 			if r.Level == "warn" {
 				warns = append(warns, is)
 			} else {
@@ -318,7 +323,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Result, error) {
@@ -331,6 +336,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	}
 	if m.AppendOnly && (opts.client || o.manualRun) {
 		return nil, appendOnly(m)
+	}
+	if opts.client { // contract 0027: a client (form, import) does not set a field hidden from it
+		input = o.e.dropHidden(o.actor, m, input)
 	}
 	rec, issues := o.e.normalize(m, input, nil, opts.client)
 	if len(issues) > 0 {
@@ -419,7 +427,7 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	if err := e.Guard(ctx, a, m.Name, rec, "read"); err != nil {
 		return nil, err
 	}
-	return rec, nil
+	return e.Redact(a, m, rec), nil
 }
 
 // lockLoad loads a record with its row locked until the transaction ends (select … for update). Submit,
@@ -457,7 +465,7 @@ func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch 
 		res, err = o.update(model, name, patch, true, true)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 // update merges patch into a record. authorize checks write on the stored and the patched record (public
@@ -475,6 +483,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	cur, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
+	}
+	if guard { // contract 0027: a client save keeps the stored values of fields hidden from it, rows included
+		patch = o.e.keepHidden(o.actor, m, patch, cur)
 	}
 	if authorize {
 		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(cur))); err != nil {
@@ -589,7 +600,7 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 		res, err = o.submit(model, name, force)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) submit(model, name string, force bool) (*Result, error) {
@@ -731,7 +742,7 @@ func (e *Engine) Cancel(ctx context.Context, a Actor, model, name string) (*Resu
 		res, err = o.cancel(model, name)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) cancel(model, name string) (*Result, error) {
@@ -795,7 +806,7 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 		res, err = o.amend(model, name)
 		return err
 	})
-	return res, err
+	return e.redactResult(a, model, res), err
 }
 
 func (o *op) amend(model, name string) (*Result, error) {

@@ -124,7 +124,11 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
   `GET /approvals/{id}`; `POST /approvals/{id}/approve` `{}`; `POST /approvals/{id}/reject` `{reason}`. Item:
   `{id, model, name, policy, label, verb, approvers, state, requested_by, requested_at, decided_by, decided_at,
   reason, can_decide}`; `can_decide` is true when the caller may decide it now. Approve/reject return 200 with the
-  item, plus `record` when the verb ran.
+  item, plus `record` when the verb ran. The REST list and `GET /approvals/{id}` add `summary: {title, amount,
+  amount_label, currency}` for a record request the caller may read (mobile P7): the record's title (following its
+  title link, so a customer or supplier name), its money total (`grand_total`, `total`, `net_total`, `total_amount`
+  or `amount`, currency or money fields only) and that amount's own currency (`IDR` for a currency field). It is read
+  as the caller (grant, row scope, hidden fields); flow requests have none. MCP's list does not carry it.
 - `POST /r/{model}/{name}/submit|cancel` and `/actions/{action}` answer 202 as in §2 when held.
 - Visibility (contract 0005): the list holds requests on models the caller may read (model level: a conditional
   read grant counts, as in `/meta`) and flow requests (model `''`) when the caller is `owner` or holds one of their
@@ -158,7 +162,7 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
   and arguments (`{force}` for submit, the action's args), and earlier approvals let the verb run only inside the
   approve that completes them. Once the verb has run, its approvals are marked `used_at` (§6) and never count
   again. Running an action again on an unchanged record asks again.
-- A `when` that cannot be evaluated **requires approval** (fail closed), unlike rules, which let a broken check pass.
+- A `when` that cannot be evaluated **requires approval** (fail closed), like a rule that cannot be evaluated, which counts as failed.
 - The snapshot includes every declared field, including a real `status` field (only the derived status is left out).
 - **Flow approvals never self-approve**; they always wait. Flow requests remember whether the starter was a person.
 - Reject voids the other pending requests of the same verb only; requests for other verbs on the record stay.

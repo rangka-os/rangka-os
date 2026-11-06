@@ -1,8 +1,8 @@
 /* Rangka end-user app: document approvals (contract 0007, stream S2).
  *
  * RangkaApp.ApprovalInbox({route}) — #/approvals: tabs Menunggu / Disetujui / Ditolak (GET /api/v1/approvals?state=);
- * each row shows the document (label + number link), the policy label, who asked and when, and for pending requests
- * Setujui / Tolak, enabled only when the item's can_decide is true.
+ * each row leads with the counterparty and the amount from the request's summary (P8: decide from the card), then the
+ * document (label + number link), the policy label, who asked and when, and for pending requests Setujui / Tolak, enabled only when the item's can_decide is true.
  *
  * RangkaApp.ApprovalBanner({model, name, rev, verbs, editable, panel, onDecided, onPending}) — on the form (panel: compact
  * entries for the side panel's Persetujuan section; nothing when none waits): loads the record's
@@ -16,7 +16,7 @@
  * 403 → "Kamu tidak punya akses …"; 409 approval_void → the server's message, and the list refreshes.
  *
  * Pure helpers (unit-tested in test/approvals.test.js): approverText, waitingTitle, policyLabel, decisionError,
- * countDecidable, waitingVerbs, pendingFor.
+ * countDecidable, waitingVerbs, pendingFor, summaryAmount.
  */
 (function (global) {
   "use strict";
@@ -62,6 +62,18 @@
     return { text: e.message || "Permintaan gagal", refresh: false };
   }
 
+  /** The summary's amount as owner text: "Rp 3.796.200" for IDR (or no currency), "USD 1.250,50" otherwise; "" when the
+   *  request carries no number (no summary, the approver cannot read the record, or the model has no total). */
+  function summaryAmount(s) {
+    if (!s || s.amount == null || s.amount === "") return "";
+    var n = Number(s.amount);
+    if (!isFinite(n)) return "";
+    var cur = String(s.currency || "IDR").toUpperCase();
+    if (cur === "IDR") return global.RangkaAppAPI ? global.RangkaAppAPI.rupiah(n) : "Rp " + Math.round(n);
+    var neg = n < 0, parts = Math.abs(n).toFixed(2).split(".");
+    return (neg ? "-" : "") + cur + " " + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + parts[1];
+  }
+
   function countDecidable(items) {
     return (items || []).filter(function (x) { return x && x.state === "pending" && x.can_decide; }).length;
   }
@@ -89,6 +101,7 @@
   RA.policyLabel = policyLabel;
   RA.decisionError = decisionError;
   RA.countDecidable = countDecidable;
+  RA.summaryAmount = summaryAmount;
 
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
@@ -283,15 +296,21 @@
         tab === "pending" ? "Dokumen yang perlu disetujui muncul di sini." : null);
     } else {
       body = h("ul", { className: "ap-inbox", "aria-label": "Daftar permintaan" }, data.map(function (it) {
-        var n = docName(it);
+        var n = docName(it), sum = it.summary || {}, party = sum.title || "", amount = summaryAmount(sum);
         var who = it.state === "approved" ? "Disetujui oleh " : it.state === "rejected" ? "Ditolak oleh " : null;
+        var tone = it.state === "approved" ? "ok" : it.state === "rejected" ? "bad" : "warn";
+        var doc = h("span", { className: "ap-inbox-doc" }, h("span", null, modelLabel(ctx, it.model)), " ",
+          n ? h("a", { href: "#/r/" + it.model + "/" + enc(n) }, n) : null);
         return h("li", { key: it.id, className: "ap-inbox-row" },
           h("div", { className: "ap-inbox-main" },
-            h("div", { className: "ap-inbox-doc" }, h("span", null, modelLabel(ctx, it.model)), " ",
-              n ? h("a", { href: "#/r/" + it.model + "/" + enc(n) }, n) : null,
-              h(R.Lozenge, { tone: it.state === "approved" ? "ok" : it.state === "rejected" ? "bad" : "warn" }, policyLabel(it))),
-            h("span", { className: "ap-muted" }, "Diajukan oleh " + (it.requested_by || "-") + (it.requested_at ? " · " + tanggal(it.requested_at) : "")),
-            it.state === "pending" ? h("span", { className: "ap-muted" }, waitingTitle(it, ctx.meta)) : null,
+            // who and how much first (P8): the counterparty and the rupiah decide the request; the document is the detail
+            h("div", { className: "ap-inbox-head" },
+              party ? h("b", { className: "ap-inbox-party" }, party) : doc,
+              amount ? h("span", { className: "ap-inbox-amt" }, sum.amount_label ? h("span", { className: "rk-sr" }, sum.amount_label + " ") : null, amount) : null),
+            h("div", { className: "ap-inbox-sub" }, party ? doc : h("span", null),
+              h(R.Lozenge, { tone: tone }, policyLabel(it))),
+            h("span", { className: "ap-muted" }, "Diajukan oleh " + (it.requested_by || "-") + (it.requested_at ? " · " + tanggal(it.requested_at) : "")
+              + (it.state === "pending" ? ". " + waitingTitle(it, ctx.meta) : "")),
             who ? h("span", { className: "ap-muted" }, who + (it.decided_by || "-") + (it.decided_at ? " · " + tanggal(it.decided_at) : "")) : null,
             it.reason ? h("span", { className: "ap-inbox-reason" }, "Alasan: " + it.reason) : null),
           it.state === "pending" ? h(Decide, { item: it, ctx: ctx, onDecided: decided(it), onFailed: failed }) : null);

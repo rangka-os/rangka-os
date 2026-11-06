@@ -52,3 +52,12 @@ test("pendingFor keeps the requests of the verb that applies now", () => {
   assert.strictEqual(ids(A.pendingFor(items, [])), "");
   assert.strictEqual(ids(A.pendingFor(undefined, ["submit"])), "");
 });
+
+test("summaryAmount: rupiah for IDR or no currency, the code otherwise, empty without a number", () => {
+  assert.strictEqual(A.summaryAmount({ amount: 3796200, amount_label: "Total" }), "Rp 3.796.200");
+  assert.strictEqual(A.summaryAmount({ amount: "1250000.00", currency: "IDR" }), "Rp 1.250.000");
+  assert.strictEqual(A.summaryAmount({ amount: 1250.5, currency: "USD" }), "USD 1.250,50");
+  assert.strictEqual(A.summaryAmount({ amount: "abc" }), "");
+  assert.strictEqual(A.summaryAmount({ title: "Toko" }), "");
+  assert.strictEqual(A.summaryAmount(undefined), "");
+});

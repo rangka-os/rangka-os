@@ -263,6 +263,62 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .ap-inbox-doc a { font: 400 12.5px/20px var(--font-mono); color: var(--ap-docno); }
 .ap-main .ap-inbox-doc a:hover { color: var(--ink); }
 
+/* who and how much lead the card (P8); the document number is the detail under it. Same roles as the phone list card:
+   the counterparty and the amount share one weight, the number keeps its mono, the rest is muted */
+.ap-inbox-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.ap-inbox-party, .ap-lc-title { min-width: 0; font: 600 13.5px/20px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+.ap-inbox-amt, .ap-lc-amt { flex: none; font: 600 13.5px/20px var(--font-sans); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ap-lc-amt .rk-amount { font: inherit; color: inherit; }
+.ap-inbox-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.ap-inbox-sub .ap-inbox-doc { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; line-height: 20px; min-width: 0; }
+.ap-inbox-sub .ap-inbox-doc a { white-space: nowrap; } /* the number is the identity: it wraps whole, never cut */
+.ap-main .ap-inbox-sub .ap-inbox-doc a { font-size: 12px; }
+.ap-inbox-sub .rk-lozenge { flex: none; }
+
+/* ---- phone list (K-A8, under 490px): a card per record inside the same white card as the table ---- */
+.ap-lc-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+.ap-lc-item + .ap-lc-item { border-top: 1px solid var(--line); }
+.ap-lc-link { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; min-height: 44px; box-sizing: border-box; color: inherit; text-decoration: none; }
+a.ap-lc-link:hover { background: var(--hover); }
+a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ap-lc-top, .ap-lc-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.ap-lc-sub { align-items: center; }
+.ap-lc-meta { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; font-size: 12px; line-height: 18px; color: var(--muted); }
+.ap-lc-meta > span + span::before { content: "·"; padding: 0 6px; color: var(--faint); }
+.ap-main .ap-lc-meta .rk-doc-no { font: 400 12px/18px var(--font-mono); color: var(--ap-docno); }
+.ap-lc-sub > .rk-chip, .ap-lc-sub > .rk-pill { flex: none; }
+.ap-lc .rk-cmd-empty { border: 1px solid var(--line-strong); border-top: 0; border-radius: 0 0 var(--r-lg) var(--r-lg); background: var(--surface); }
+.ap-lc-list:empty { display: none; }
+.ap-lc-list:empty + .rk-cmd-empty, .ap-lc-list:empty + .rk-sr + .rk-cmd-empty { border-top: 1px solid var(--line-strong); border-radius: var(--r-lg); }
+
+/* ---- phone grid (K-A8, under 490px): a card per child row, fields under their labels ---- */
+.ap-grid-label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-gc-list { list-style: none; margin: 0; padding: 0; }
+.ap-gc-row { padding: 10px 12px 12px; }
+.ap-gc-row + .ap-gc-row { border-top: 1px solid var(--line); }
+.ap-gc-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; font: 600 12px/16px var(--font-sans); color: var(--muted); }
+.ap-gc-head .rk-iconbtn { width: 40px; height: 40px; margin-right: -8px; color: var(--muted); }
+.ap-gc-head .rk-iconbtn:hover { color: var(--bad); background: var(--bad-tint); }
+.ap-gc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ap-gc-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ap-gc-f.wide { grid-column: 1 / -1; }
+.ap-gc-l { font-size: 11.5px; line-height: 16px; color: var(--muted); }
+.ap-gc-f .rk-cell { height: 40px; border: 1px solid var(--ap-field-line, var(--line-strong)); border-radius: var(--r-btn); background: var(--surface); padding: 0 10px; }
+.ap-gc-f .rk-cell:focus { border-color: var(--focus); box-shadow: none; }
+.ap-gc-f .ap-gl input { height: 40px; }
+.ap-gc-f.ro .rk-cell-ro, .ap-gc-f.ro .rk-cell-item { padding: 0; text-align: left; min-height: 20px; font-size: 13px; color: var(--ink-2); }
+.ap-gc-f.ro.n .rk-cell-ro { font-variant-numeric: tabular-nums; }
+.ap-gc-f .rk-cell-item { padding: 0; }
+.ap-gc-empty { margin: 0; }
+.ap-gc .rk-totals { min-width: 0; width: 100%; gap: 6px 16px; }
+.ap-gc .rk-grid-foot { padding: 10px 12px; }
+
+@media (max-width: 489px) {
+  /* thumb reach: Setujui and Tolak split the card's width */
+  .ap-main .ap-inbox .ap-decide { flex: 1 1 100%; }
+  .ap-main .ap-inbox .ap-decide .rk-btn { flex: 1 1 0; }
+}
+
 /* the approval's Setujui is the pen's green (the phone approval card); Tolak stays outlined */
 .rk-btn.ap-approve { background: var(--ap-approve); color: var(--ap-approve-ink); }
 .rk-btn.ap-approve:hover, .rk-btn.ap-approve:active { background: var(--ap-approve-hover); color: var(--ap-approve-ink); }

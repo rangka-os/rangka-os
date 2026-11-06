@@ -180,3 +180,34 @@ test("groupFields: status for submittable models, then select, link and check fi
   assert.deepStrictEqual(plain(A.groupFields(META, "sales_invoice")), ["status", "customer", "is_return", "channel"]);
   assert.deepStrictEqual(plain(A.groupFields(META, "lead")), []);
 });
+
+test("cardSlots: phone card shows the party as title, the first amount, the status and up to two more", () => {
+  const A = load();
+  const slots = (...a) => JSON.parse(JSON.stringify(A.cardSlots(...a))); // plain objects: the vm realm differs
+  const meta = { models: { sales_invoice: { is_submittable: true, fields: [
+    { name: "customer", type: "link", to: "customer" }, { name: "invoice_type", type: "select", options: [] },
+    { name: "outstanding", type: "currency" }, { name: "grand_total", type: "currency" }, { name: "due_date", type: "date" },
+    { name: "stage", type: "select", chip: true, options: [] }] },
+    outlet_sales: { fields: [{ name: "outlet", type: "link", to: "outlet" }, { name: "date", type: "date" },
+      { name: "net", type: "currency" }, { name: "stage", type: "select", chip: true, options: [] }] },
+    note: { fields: [{ name: "subject", type: "data" }] } } };
+  const s = slots(meta, "sales_invoice", ["name", "customer", "outstanding", "due_date", "status", "grand_total"]);
+  assert.deepStrictEqual(s, { title: "customer", amount: "outstanding", status: "status", meta: ["name", "due_date"] });
+  // status beyond the first four columns still shows; a second amount is not the card's amount
+  const t = slots(meta, "sales_invoice", ["name", "customer", "invoice_type", "grand_total", "outstanding", "status"]);
+  assert.deepStrictEqual(t, { title: "customer", amount: "grand_total", status: "status", meta: ["name", "invoice_type"] });
+  // no derived status: the first chip select stands in
+  assert.deepStrictEqual(slots(meta, "outlet_sales", ["outlet", "date", "net", "stage"]),
+    { title: "outlet", amount: "net", status: "stage", meta: ["date"] });
+  // only the number: it is the title
+  assert.deepStrictEqual(slots(meta, "note", ["name"]), { title: "name", amount: null, status: null, meta: [] });
+  assert.deepStrictEqual(slots(meta, "note", ["name", "subject"]), { title: "subject", amount: null, status: null, meta: ["name"] });
+});
+
+test("cardSlots: the amount comes from past the first four when none of them is money", () => {
+  const A = load();
+  const meta = { models: { sales_invoice: { is_submittable: true, fields: [{ name: "customer", type: "link", to: "customer" },
+    { name: "posting_date", type: "date" }, { name: "grand_total", type: "currency" }] } } };
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(A.cardSlots(meta, "sales_invoice", ["name", "customer", "posting_date", "status", "grand_total"]))),
+    { title: "customer", amount: "grand_total", status: "status", meta: ["name", "posting_date"] });
+});

@@ -38,13 +38,20 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
      changing (write, submit, cancel, amend, delete) a record whose link field to `outlet` names it, is refused.
    - people: the newest members past the limit; owners come first and the first person is never read-only. Every
      change by such a person is refused.
-   Reading and exporting are never refused. Kernel actors (seed, flows and hooks the kernel starts) are not checked.
-   A running kernel sees a plan change within 10 seconds (a cached snapshot); an upgrade lifts the read-only marks.
+   The same holds for adding or removing attachments of such a record, and for approving or rejecting a request: a
+   read-only person decides nothing, and nobody decides on a record of a read-only outlet. Reading and exporting are
+   never refused. Kernel actors (seed, flows and hooks the kernel starts) are not checked.
+   The check reads a snapshot cached in memory and never takes a database connection inside a write: a stale
+   snapshot (older than 10 seconds, or after an outlet was created) is served while one background refresh measures
+   again. So a running kernel sees a plan change within about 10 seconds; an upgrade lifts the read-only marks.
+   Before the first measurement, or while measuring fails, writes are not held back (the creation limits still hold).
 5. **Usage endpoint.** `GET /api/v1/plan` (any signed-in member) answers
    `{plan: {name, label, source, known}, plans: [{name, label, limits}], usage: {outlets|users|ai_credits_month:
    {used, limit, state, message}}, notices: [{resource, state, message}], read_only: {outlets: ["org/OUT-02"],
    users: [email]}, period}`. `state` is `ok`, `near` (from 80% of the limit), `full` (at the limit) or `over` (past
    it, after a downgrade); `limit` is null when not limited. `notices` are ready for an owner banner.
+   `read_only.outlets` lists only outlets of the caller's organisations; `read_only.users` lists every read-only
+   person to an owner, and to anyone else only themselves.
 6. **Who changes the plan.** Only an operator, with `rangka plan set <plan> [--by] [--note]` or `rangka plan clear`
    (back to `config.rk`); each change is kept in `rk_plan_changes`. There is no REST endpoint: payment is manual
    (concierge, QRIS), so Juragan Cloud changes the plan after it marks the invoice paid. The serving kernel copies
@@ -58,6 +65,11 @@ capabilities still follow `config.rk` (`plan`, `apps`): a plan change through `r
 installing other apps needs `config.rk` and `rangka migrate`.
 
 ## Consequences
+
+- Known limits: records tied to a read-only outlet only indirectly (a payment of an invoice of that outlet) are not
+  locked; outlets created at the same moment are ordered by name as text; a chat cut off before the assistant's
+  first answer gives its credit back even if the assistant had started; two `rangka user add` at once can pass the
+  people limit by one.
 
 - Rollback: `rangka plan clear`, or remove `limits:` from `features.rk` (nothing limited).
 - The tables are new (`rk_site_plan`, `rk_plan_changes`, `rk_ai_usage`) plus `rk_members.added_at` (existing members

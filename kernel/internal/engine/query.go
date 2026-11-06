@@ -39,7 +39,8 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	if err != nil {
 		return nil, 0, err
 	}
-	if opts.Sort != "" {
+	hidden := e.hiddenFields(a, m)
+	if opts.Sort != "" && !hidden[strings.TrimPrefix(opts.Sort, "-")] { // sorting by a hidden field would reveal its order
 		desc := strings.HasPrefix(opts.Sort, "-")
 		key := strings.TrimPrefix(opts.Sort, "-")
 		sort.SliceStable(out, func(i, j int) bool {
@@ -66,6 +67,11 @@ func (e *Engine) List(ctx context.Context, a Actor, model string, opts ListOpts)
 	}
 	if out == nil {
 		out = []store.Record{}
+	}
+	if hidden != nil || hasTable(m) {
+		for _, r := range out {
+			e.Redact(a, m, r)
+		}
 	}
 	return out, total, nil
 }
@@ -96,6 +102,7 @@ func (e *Engine) matching(ctx context.Context, a Actor, m *meta.Model, opts List
 	var out []store.Record
 	q := strings.ToLower(strings.TrimSpace(opts.Q))
 	rs := e.RowScope(a)
+	hidden := e.hiddenFields(a, m) // q never matches the text of a field hidden from the actor
 	for _, r := range all {
 		if !rs.Visible(m, r) {
 			continue
@@ -117,7 +124,7 @@ func (e *Engine) matching(ctx context.Context, a Actor, m *meta.Model, opts List
 				continue
 			}
 		}
-		if q != "" && !matchText(m, r, q) && !e.matchLinkTitle(ctx, a, rs, m, r, q, titles, links) {
+		if q != "" && !matchText(m, r, q, hidden) && !e.matchLinkTitle(ctx, a, rs, m, r, q, titles, links) {
 			continue
 		}
 		out = append(out, r)
@@ -189,11 +196,14 @@ func (e *Engine) readableLinkErr(ctx context.Context, a Actor, rs *RowScope, to,
 	return rec, true, nil
 }
 
-func matchText(m *meta.Model, r store.Record, q string) bool {
+func matchText(m *meta.Model, r store.Record, q string, hidden map[string]bool) bool {
 	if strings.Contains(strings.ToLower(str(r["name"])), q) {
 		return true
 	}
 	for _, f := range m.Fields {
+		if hidden[f.Name] {
+			continue
+		}
 		switch f.Type {
 		case "data", "text", "phone", "npwp", "select", "link":
 			if strings.Contains(strings.ToLower(str(r[f.Name])), q) {
@@ -268,7 +278,7 @@ func (e *Engine) title(ctx context.Context, a Actor, rs *RowScope, model string,
 		return ""
 	}
 	tf := m.TitleField
-	if tf == "" {
+	if tf == "" || e.FieldHidden(a, m, m.Field(tf)) { // a hidden title field: the code is the title (contract 0027)
 		return str(rec["name"])
 	}
 	if f := m.Field(tf); f != nil && f.Type == "link" && depth < 3 {

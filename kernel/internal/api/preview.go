@@ -175,6 +175,13 @@ func (s *Server) previewResolve(w http.ResponseWriter, r *http.Request, c *calle
 		writeError(w, 403, "permission_denied", "Pratinjau perubahan hanya untuk yang boleh mengusulkan perubahan")
 		return
 	}
+	// A preview evaluates the change set's new expressions (computed and clock fields, dashboard widget filters) as
+	// metadata, outside the caller's row scope: a proposer limited to some outlets could read other outlets through
+	// them, so only an unscoped proposer previews (audit cel-link-scope finding 1).
+	if s.Engine.RowScope(c.actor) != nil {
+		writeError(w, 403, "preview_scoped", "Pratinjau perubahan hanya untuk pengguna yang melihat semua cabang; minta pemilik usaha melihat pratinjaunya")
+		return
+	}
 	e, cs, err := s.previewEngine(r.Context(), c.actor.Org, id)
 	if err != nil {
 		csFail(w, err)

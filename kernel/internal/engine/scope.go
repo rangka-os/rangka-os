@@ -380,3 +380,21 @@ func num(v any) float64 {
 	}
 	return 0
 }
+
+// Holds reports whether the CEL check is true on rec of model, read as the actor with the client scope a list
+// filter uses (contract 0028 §4 require): links outside the actor's scope read as missing. A check that does not
+// compile or fails to evaluate is an error, never true.
+// vars are extra read-only variables (doc: the printed document); a field of the model with the same name wins.
+func (e *Engine) Holds(ctx context.Context, a Actor, model string, rec store.Record, check string, vars map[string]any) (bool, error) {
+	m, err := e.model(model)
+	if err != nil {
+		return false, err
+	}
+	s := e.newClientScope(ctx, a, m, rec, e.RowScope(a), map[string]map[string]any{})
+	s.extra = vars
+	v, err := s.eval(check)
+	if err != nil {
+		return false, err
+	}
+	return v == true, nil
+}

@@ -14,14 +14,24 @@ import (
 // Related is a list loaded for a print template: records of Model whose Match fields equal the document's.
 type Related struct {
 	Model        string
-	Match        map[string]string // related field → document field
+	Match        map[string]string    // related field → document field
+	Range        map[string][2]string // related field → [document field of the low bound, of the high bound], inclusive
 	Filter, Sort string
-	Limit        int // default 200, at most 1000
+	Limit        int  // default 200, at most 1000
+	Children     bool // rows come with their child tables (contract 0028)
+	Require      []Require
+}
+
+// Require is one check every row of a related list must pass before the format renders (contract 0028 §4).
+type Require struct {
+	Check   string // CEL on the related row
+	Message Label
 }
 
 // Print is one print format.
 type Print struct {
 	Name, App, Model, Paper string // App is "" for a site format; Paper defaults to A4
+	Output                  string // "html" (default, contract 0008) or "xml" (contract 0028)
 	Template                string // absolute path of the .html file
 	Root                    string // the app or site directory the template must stay inside
 	Label                   Label
@@ -41,6 +51,9 @@ func parsePrint(app, root, stem string, doc *rk.Doc) *Print {
 	if p.Paper == "" {
 		p.Paper = "A4"
 	}
+	if p.Output = str(raw, "output"); p.Output == "" {
+		p.Output = "html"
+	}
 	p.Root, _ = filepath.Abs(root)
 	if t := str(raw, "template"); t != "" {
 		if filepath.IsAbs(t) {
@@ -58,7 +71,23 @@ func parsePrint(app, root, stem string, doc *rk.Doc) *Print {
 
 func parseRelated(m map[string]any) Related {
 	r := Related{Model: str(m, "model"), Filter: celText(m["filter"]), Sort: str(m, "sort"),
-		Limit: integer(m, "limit"), Match: map[string]string{}}
+		Limit: integer(m, "limit"), Match: map[string]string{}, Children: boolean(m, "children")}
+	for k, v := range asMap(m["range"]) {
+		if b, ok := v.([]any); ok && len(b) == 2 {
+			lo, _ := b[0].(string)
+			hi, _ := b[1].(string)
+			if r.Range == nil {
+				r.Range = map[string][2]string{}
+			}
+			r.Range[k] = [2]string{lo, hi}
+		}
+	}
+	if list, ok := m["require"].([]any); ok {
+		for _, x := range list {
+			q := asMap(x)
+			r.Require = append(r.Require, Require{Check: celText(q["check"]), Message: label(q["message"])})
+		}
+	}
 	for k, v := range asMap(m["match"]) {
 		if s, ok := v.(string); ok {
 			r.Match[k] = s

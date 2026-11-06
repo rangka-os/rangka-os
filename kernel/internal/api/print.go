@@ -41,7 +41,7 @@ func printFormat(reg *meta.Registry, model, name string) *meta.Print {
 func printsMeta(reg *meta.Registry, model string) []any {
 	out := []any{}
 	for _, f := range reg.PrintsFor(model) {
-		out = append(out, map[string]any{"name": f.Name, "label": f.Label, "paper": f.Paper, "default": f.Default})
+		out = append(out, map[string]any{"name": f.Name, "label": f.Label, "paper": f.Paper, "default": f.Default, "output": f.Output})
 	}
 	return out
 }
@@ -53,13 +53,6 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 	model, name := r.PathValue("model"), r.PathValue("name")
 	q := r.URL.Query()
 	as := q.Get("as")
-	if as == "" {
-		as = "html"
-	}
-	if as != "html" && as != "pdf" {
-		writeError(w, http.StatusBadRequest, "bad_request", "as harus html atau pdf")
-		return
-	}
 	reg := s.Engine.Reg()
 	m := reg.Model(model)
 	f := printFormat(reg, model, q.Get("format"))
@@ -71,9 +64,23 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 		}
 		return
 	}
-	related, truncated, err := s.printRelated(ctx, c.actor, f, rec)
+	if f.Output == "xml" {
+		s.printXML(w, r, c, rec, f)
+		return
+	}
+	if as == "" {
+		as = "html"
+	}
+	if as != "html" && as != "pdf" {
+		writeError(w, http.StatusBadRequest, "bad_request", "as harus html atau pdf")
+		return
+	}
+	related, truncated, err := s.printRelated(ctx, c.actor, f, rec, false)
 	if err != nil {
 		fail(w, err)
+		return
+	}
+	if s.refuseInvalid(w, ctx, c, f, rec, related) {
 		return
 	}
 	children := map[string]*meta.Model{}
@@ -186,7 +193,9 @@ func (s *Server) printLinks(ctx context.Context, a engine.Actor, m *meta.Model, 
 // and whose match fields equal the document's, in its sort order, cut to its limit. The match pairs are part
 // of the List filter, so the limit applies to matching rows only. truncated marks the lists that had more
 // matching rows than the limit.
-func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record) (out map[string][]map[string]any, truncated map[string]bool, err error) {
+// With export true (an XML file, contract 0028) the rows are the ones the caller may export (Engine.Export), so a
+// tax file never carries rows its reader could not download as a list.
+func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record, export bool) (out map[string][]map[string]any, truncated map[string]bool, err error) {
 	out, truncated = map[string][]map[string]any{}, map[string]bool{}
 	for key, rel := range f.Related {
 		list := []map[string]any{}
@@ -198,13 +207,26 @@ func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print
 		if !ok {
 			continue // the document has no value to match on
 		}
-		rows, total, err := s.Engine.List(ctx, a, rel.Model, engine.ListOpts{Filter: filter, Sort: rel.Sort, Limit: rel.Limit})
+		opts := engine.ListOpts{Filter: filter, Sort: rel.Sort, Limit: rel.Limit, Children: rel.Children}
+		var rows []store.Record
+		var total int
+		if export {
+			_, rows, _, err = s.Engine.Export(ctx, a, rel.Model, opts)
+			if err == nil {
+				total = len(rows)
+				if len(rows) > rel.Limit {
+					rows = rows[:rel.Limit]
+				}
+			}
+		} else {
+			rows, total, err = s.Engine.List(ctx, a, rel.Model, opts)
+		}
 		if err != nil {
 			return nil, nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
 		}
 		truncated[key] = total > len(rows)
 		for _, row := range rows {
-			if matches(row, rec, rel.Match) { // defence in depth: the filter already holds these
+			if matches(row, rec, rel.Match) && inRange(row, rec, rel.Range) { // defence in depth: the filter already holds these
 				list = append(list, row)
 			}
 		}
@@ -241,6 +263,27 @@ func relatedFilter(rel meta.Related, doc store.Record) (filter string, ok bool, 
 		}
 		parts = append(parts, k+" == "+lit)
 	}
+	rkeys := make([]string, 0, len(rel.Range))
+	for k := range rel.Range {
+		rkeys = append(rkeys, k)
+	}
+	sort.Strings(rkeys)
+	for _, k := range rkeys {
+		if !celIdent.MatchString(k) {
+			return "", false, fmt.Errorf("range field %q is not a field name", k)
+		}
+		for i, op := range []string{" >= ", " <= "} {
+			v := doc[rel.Range[k][i]]
+			if v == nil || v == "" {
+				return "", false, nil
+			}
+			lit, ok := cel.Literal(v)
+			if !ok {
+				return "", false, nil
+			}
+			parts = append(parts, k+op+lit)
+		}
+	}
 	return strings.Join(parts, " && "), true, nil
 }
 
@@ -253,4 +296,138 @@ func matches(row, doc store.Record, match map[string]string) bool {
 		}
 	}
 	return true
+}
+
+// inRange reports whether row[k] lies within [doc[lo], doc[hi]] for every range pair, compared as text (dates are
+// stored YYYY-MM-DD, so text order is date order); a missing value is never in range.
+func inRange(row, doc store.Record, rng map[string][2]string) bool {
+	for k, b := range rng {
+		rv, lo, hi := row[k], doc[b[0]], doc[b[1]]
+		if rv == nil || lo == nil || hi == nil {
+			return false
+		}
+		v := fmt.Sprint(rv)
+		if v < fmt.Sprint(lo) || v > fmt.Sprint(hi) {
+			return false
+		}
+	}
+	return true
+}
+
+// maxProblems caps the problems a 422 export_invalid lists (contract 0028 §4).
+const maxProblems = 100
+
+// refuseInvalid checks every related row against its list's require checks (contract 0028 §4) and, when one
+// fails, writes 422 export_invalid with the problems in list order and returns true. A check that errors fails.
+func (s *Server) refuseInvalid(w http.ResponseWriter, ctx context.Context, c *caller, f *meta.Print, rec store.Record, related map[string][]map[string]any) bool {
+	vars := map[string]any{"doc": map[string]any(rec)}
+	var problems []any
+	keys := make([]string, 0, len(f.Related))
+	for k := range f.Related {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		rel := f.Related[key]
+		if len(rel.Require) == 0 {
+			continue
+		}
+		for _, row := range related[key] {
+			for _, q := range rel.Require {
+				ok, err := s.Engine.Holds(ctx, c.actor, rel.Model, row, q.Check, vars)
+				if err != nil {
+					s.logf("print %s: require on %s/%v: %v", f.Name, rel.Model, row["name"], err)
+				}
+				if !ok && len(problems) < maxProblems {
+					problems = append(problems, map[string]any{"list": key, "name": row["name"], "message": q.Message.Text()})
+				}
+			}
+		}
+	}
+	if len(problems) == 0 {
+		return false
+	}
+	writeJSON(w, http.StatusUnprocessableEntity, map[string]any{"error": map[string]any{"code": "export_invalid",
+		"message": "Data belum lengkap untuk file ini. Perbaiki dokumen di daftar lalu unduh lagi.", "problems": problems}})
+	return true
+}
+
+// printXML serves an output: xml format (contract 0028 §5): print and export grants, related rows the caller may
+// export (with children when asked), every require check passed, no list cut at its limit, a well-formed file.
+func (s *Server) printXML(w http.ResponseWriter, r *http.Request, c *caller, rec store.Record, f *meta.Print) {
+	ctx := r.Context()
+	model, name := r.PathValue("model"), r.PathValue("name")
+	if as := r.URL.Query().Get("as"); as != "" && as != "xml" {
+		writeError(w, http.StatusBadRequest, "bad_request", "format "+f.Name+" adalah file XML: as harus xml atau dikosongkan")
+		return
+	}
+	if err := s.Engine.Authorize(ctx, c.actor, model, "export", rec); err != nil {
+		fail(w, err)
+		return
+	}
+	reg := s.Engine.Reg()
+	m := reg.Model(model)
+	related, truncated, err := s.printRelated(ctx, c.actor, f, rec, true)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	for key, cut := range truncated {
+		if cut {
+			writeError(w, http.StatusUnprocessableEntity, "export_too_large",
+				fmt.Sprintf("Terlalu banyak dokumen untuk satu file (%s, maksimal %d). Pecah masanya atau hubungi admin.", key, f.Related[key].Limit))
+			return
+		}
+	}
+	if s.refuseInvalid(w, ctx, c, f, rec, related) {
+		return
+	}
+	h := w.Header()
+	h.Set("Content-Type", "application/xml; charset=utf-8")
+	h.Set("Cache-Control", "no-store")
+	fn := f.Name + "-" + strings.TrimSuffix(pdfFilename(name), ".pdf") + ".xml"
+	h.Set("Content-Disposition", `attachment; filename="`+asciiFilename(fn)+`"`)
+	if r.Method == http.MethodHead {
+		w.WriteHeader(http.StatusOK)
+		return
+	}
+	children := map[string]*meta.Model{}
+	relModels := map[string]*meta.Model{}
+	addChildren := func(mm *meta.Model) {
+		if mm == nil {
+			return
+		}
+		for _, fd := range mm.Fields {
+			if fd.Type == "table" {
+				children[fd.Of] = reg.Model(fd.Of)
+			}
+		}
+	}
+	addChildren(m)
+	for key, rel := range f.Related {
+		relModels[key] = reg.Model(rel.Model)
+		addChildren(relModels[key])
+	}
+	body, err := docprint.RenderXML(docprint.Input{
+		Format: f, Model: m, Doc: rec, Links: s.printLinks(ctx, c.actor, m, rec), Related: related, RelatedTruncated: truncated,
+		Org: printOrg(reg, c.actor.Org), Tax: reg.TaxSettings(c.actor.Org), Printed: s.Engine.Now().In(s.Engine.Location()),
+		Children: children,
+	}, relModels)
+	if err != nil {
+		s.logf("print: xml %s/%s: %v", model, name, err)
+		h.Del("Content-Disposition")
+		h.Del("Content-Type")
+		if errors.Is(err, docprint.ErrXMLInvalid) {
+			writeError(w, http.StatusInternalServerError, "xml_invalid", "File XML gagal dibuat: format "+f.Name+" menghasilkan XML yang tidak valid.")
+			return
+		}
+		fail(w, err)
+		return
+	}
+	if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "record.print", model+"/"+name, f.Name+" (xml)",
+		map[string]any{"format": f.Name, "as": "xml"}); err != nil {
+		s.logf("print: audit %s/%s: %v", model, name, err)
+	}
+	w.WriteHeader(http.StatusOK)
+	w.Write(body)
 }

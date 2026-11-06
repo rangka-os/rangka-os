@@ -5,26 +5,50 @@
   "type": "object",
   "required": ["name", "model", "template"],
   "additionalProperties": false,
+  "if": {"required": ["output"], "properties": {"output": {"const": "xml"}}},
+  "then": {"properties": {"template": {"pattern": "\\.xml$"}}},
+  "else": {"properties": {"template": {"pattern": "\\.html$"}}},
   "properties": {
     "$schema": {"type": "string"},
     "name": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
     "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
     "label": {"type": "object", "additionalProperties": {"type": "string"}},
     "paper": {"enum": ["A4", "A5", "80mm"]},
-    "template": {"type": "string", "pattern": "\\.html$"},
+    "template": {"type": "string", "pattern": "\\.(html|xml)$"},
+    "output": {"enum": ["html", "xml"], "default": "html", "description": "html: a printed page (contract 0008); xml: a downloaded XML file (contract 0028)"},
     "default": {"type": "boolean"},
     "related": {
       "type": "object",
       "additionalProperties": {
         "type": "object",
-        "required": ["model", "match"],
+        "required": ["model"],
+        "anyOf": [{"required": ["match"]}, {"required": ["range"]}],
         "additionalProperties": false,
         "properties": {
           "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
           "match": {"type": "object", "additionalProperties": {"type": "string"}},
           "filter": {"type": "string"},
           "sort": {"type": "string"},
-          "limit": {"type": "integer", "minimum": 1, "maximum": 1000}
+          "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
+          "range": {
+            "type": "object",
+            "description": "related field between two document fields, inclusive (contract 0028)",
+            "additionalProperties": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2}
+          },
+          "children": {"type": "boolean", "description": "rows come with their child tables (contract 0028)"},
+          "require": {
+            "type": "array",
+            "description": "every row must pass each check, else 422 export_invalid (contract 0028)",
+            "items": {
+              "type": "object",
+              "required": ["check", "message"],
+              "additionalProperties": false,
+              "properties": {
+                "check": {"type": "string"},
+                "message": {"type": "object", "additionalProperties": {"type": "string"}}
+              }
+            }
+          }
         }
       }
     }

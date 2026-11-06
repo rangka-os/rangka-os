@@ -303,6 +303,12 @@ type Result struct {
 	Approvals []store.Approval `json:"-"`
 }
 
+// appendOnly refuses a write to a ledger row (contract 0026): it is never edited or deleted, by anyone, and only
+// flows, hooks and seed create it; the correction is a reversing row written when the source document is cancelled.
+func appendOnly(m *meta.Model) error {
+	return conflict("append_only", "Baris "+strings.ToLower(m.Label.Text())+" dicatat otomatis dari dokumen sumbernya dan tidak bisa dibuat, diubah, atau dihapus manual. Untuk koreksi, batalkan dokumen sumbernya.")
+}
+
 // Create saves a new record: defaults, compute, save rules, name (DRAFT-xxxxx for submittable models).
 // The actor needs create, decided on the new record after defaults.
 func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[string]any) (*Result, error) {
@@ -322,6 +328,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	}
 	if m.IsChild {
 		return nil, badRequest(model + " rows are saved through their parent document")
+	}
+	if m.AppendOnly && (opts.client || o.manualRun) {
+		return nil, appendOnly(m)
 	}
 	rec, issues := o.e.normalize(m, input, nil, opts.client)
 	if len(issues) > 0 {
@@ -457,6 +466,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	if err != nil {
 		return nil, err
 	}
+	if m.AppendOnly {
+		return nil, appendOnly(m)
+	}
 	cur, err := o.lockLoad(m, name)
 	if err != nil {
 		return nil, err
@@ -528,6 +540,9 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if err != nil {
 			return err
 		}
+		if m.AppendOnly {
+			return appendOnly(m)
+		}
 		cur, err := o.lockLoad(m, name) // advisory lock, then row: the same order as Approve
 		if err != nil {
 			return err
@@ -579,6 +594,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	m, err := e.model(model)
 	if err != nil {
 		return nil, err
+	}
+	if m.AppendOnly { // validation refuses append_only with is_submittable; kept for a registry built otherwise
+		return nil, appendOnly(m)
 	}
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
@@ -719,6 +737,9 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	if err != nil {
 		return nil, err
 	}
+	if m.AppendOnly { // validation refuses append_only with is_submittable; kept for a registry built otherwise
+		return nil, appendOnly(m)
+	}
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")
 	}
@@ -779,6 +800,9 @@ func (o *op) amend(model, name string) (*Result, error) {
 	m, err := e.model(model)
 	if err != nil {
 		return nil, err
+	}
+	if m.AppendOnly { // validation refuses append_only with is_submittable; kept for a registry built otherwise
+		return nil, appendOnly(m)
 	}
 	if !m.IsSubmittable {
 		return nil, badRequest(model + " is not submittable")

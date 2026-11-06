@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# append_only with is_submittable: a ledger row is not a document (contract 0026)
+name: ledger_doc
+label: {id: Buku dokumen}
+naming: LD-{#####}
+append_only: true
+is_submittable: true
+fields:
+  - {name: amount, type: currency, label: {id: Jumlah}}

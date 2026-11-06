@@ -94,15 +94,18 @@ type Model struct {
 	Label                         Label
 	IsSubmittable, IsChild        bool
 	Realtime                      bool
-	Fields                        []*Field
-	Rules                         []Rule
-	Actions                       []Action
-	Approvals                     []Approval // app's own first, then the company overlay's
-	OnSubmit, OnCancel            []string
-	Raw                           map[string]any // merged with the company overlay, when there is one
-	Doc                           *rk.Doc        // the app's model file
-	Overlay                       string         // custom/<model>.rk merged into Raw ("" without)
-	byName                        map[string]*Field
+	// AppendOnly (contract 0026): rows are written only by flows, hooks and seed; nobody, the owner included,
+	// creates them through the API or updates or deletes them. A correction is a new (reversing) row.
+	AppendOnly         bool
+	Fields             []*Field
+	Rules              []Rule
+	Actions            []Action
+	Approvals          []Approval // app's own first, then the company overlay's
+	OnSubmit, OnCancel []string
+	Raw                map[string]any // merged with the company overlay, when there is one
+	Doc                *rk.Doc        // the app's model file
+	Overlay            string         // custom/<model>.rk merged into Raw ("" without)
+	byName             map[string]*Field
 
 	// From a map naming {series, pattern?, reset?} (contract 0009); Naming is then "".
 	NamingSeries, NamingPattern, NamingReset string
@@ -309,7 +312,7 @@ func parseModel(app string, doc *rk.Doc) *Model {
 	raw := withTwinsRaw(asMap(doc.Data)) // the IDR twins of money fields are fields too (contract 0013)
 	m := &Model{Name: str(raw, "name"), App: app, Naming: str(raw, "naming"), TitleField: str(raw, "title_field"),
 		Label: label(raw["label"]), IsSubmittable: boolean(raw, "is_submittable"), IsChild: boolean(raw, "is_child"),
-		Realtime: boolean(raw, "realtime"), Raw: raw, Doc: doc,
+		Realtime: boolean(raw, "realtime"), AppendOnly: boolean(raw, "append_only"), Raw: raw, Doc: doc,
 		OnSubmit: strList(raw["on_submit"]), OnCancel: strList(raw["on_cancel"])}
 	if nm := asMap(raw["naming"]); nm != nil {
 		m.NamingSeries, m.NamingPattern, m.NamingReset = str(nm, "series"), str(nm, "pattern"), str(nm, "reset")

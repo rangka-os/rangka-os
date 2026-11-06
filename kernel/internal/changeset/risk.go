@@ -248,6 +248,9 @@ func assessModel(a *Assessment, p string, old, nw map[string]any) {
 	if !reflect.DeepEqual(normalize(old["permissions"]), normalize(nw["permissions"])) {
 		a.raise("high", "changes permissions of "+p)
 	}
+	if ao, an := old["append_only"] == true, nw["append_only"] == true; ao != an {
+		a.raise("high", "changes append_only of "+p+" (a ledger's rows become editable or stop being so, contract 0026)")
+	}
 }
 
 func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw map[string]any, target map[string]any) {

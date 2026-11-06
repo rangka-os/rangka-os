@@ -36,15 +36,16 @@ type FlowResult struct {
 
 // RunFlow runs a flow from its first step for a caller (REST). event is the trigger payload (flows with on:).
 // Flow steps are not row-scoped, so a member with a row scope may not start a flow directly (contract 0010
-// §5); flows started by automations, the scheduler or jobs go through RunFlowFrom and stay unguarded.
+// §5); the scheduler goes through RunFlowFrom and queued jobs through RunFlowResume, both unguarded. A run started
+// here is manual (contract 0026): it may not create append_only ledger rows, also after a wait or an approval.
 func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event map[string]any) (*FlowResult, error) {
 	if e.RowScope(a) != nil {
 		return nil, Denied("flow", "run")
 	}
-	return e.RunFlowFrom(ctx, a, flowName, event, 0, nil)
+	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
 }
 
-// RunFlowFrom runs a flow's steps in one transaction from top-level step start with variables vars (a
+// RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (a
 // resumed wait). Steps: find, find_all, create, update, notify (log driver), call (connector action; the
 // kernel records the call, it has no connector runtime yet), if/then/else, wait (the remaining steps are
 // queued for later) and approve (the remaining steps wait for a decision). Every step may have if: and as:.
@@ -53,12 +54,25 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 // (read, create, write), so a person running a flow can do no more than they could by hand. Flows the
 // kernel starts (schedules, events) run as a System actor; a wait: resumes as the actor that started the run.
 func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any) (*FlowResult, error) {
+	return e.runFlowFrom(ctx, a, flowName, event, start, vars, false)
+}
+
+// RunFlowResume is RunFlowFrom for a queued flow job resuming after wait:; manual is the job's "manual" arg, so a
+// run a caller started by hand stays manual after the wait (contract 0026).
+func (e *Engine) RunFlowResume(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool) (*FlowResult, error) {
+	return e.runFlowFrom(ctx, a, flowName, event, start, vars, manual)
+}
+
+// runFlowFrom is RunFlowFrom; manual marks a run a caller started with an event they wrote (REST), which may not
+// create append_only ledger rows (contract 0026): those come only from real events, hooks and seed.
+func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool) (*FlowResult, error) {
 	f := e.Reg().Flows[flowName]
 	if f == nil || !e.Reg().IsInstalled(f.App) {
 		return nil, notFound("flow " + flowName)
 	}
 	out := newFlowResult(flowName)
 	err := e.run(ctx, a, func(o *op) error {
+		o.manualRun = manual
 		// a fresh result and copy of the variables per attempt: a retried run (contract 0025) must not report the
 		// steps of the rolled-back attempt
 		out = newFlowResult(flowName)
@@ -373,7 +387,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if _, isUntil := st["wait"].(map[string]any); isUntil {
 				next = idx // check the condition again
 			}
-			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs()},
+			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs(), "manual": o.manualRun},
 				EnqueueOpts{RunAt: e.Now().Add(d)})
 			if err != nil {
 				return err
@@ -441,7 +455,7 @@ func (r *flowRun) requestApproval(spec map[string]any, i string, resume int, as 
 	roles := append([]string{}, a.Roles...)
 	ap := store.Approval{Org: a.Org, Verb: "flow:" + r.f.Name, Policy: policy, Label: label, Approvers: approvers,
 		State: "pending", Snapshot: hashJSON(map[string]any{"event": event, "vars": vars}),
-		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as},
+		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as, "manual": o.manualRun},
 		RequestedBy: a.ID, Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System}}
 	if err := store.InsertApproval(o.ctx, o.tx, &ap); err != nil {
 		return "", err

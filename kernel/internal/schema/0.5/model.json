@@ -26,6 +26,11 @@
     "is_child": {
       "type": "boolean"
     },
+    "append_only": {
+      "type": "boolean",
+      "default": false,
+      "description": "A ledger: rows are written only by flows, hooks and seed; nobody, the owner included, creates them through the API, updates or deletes them. A correction is a reversing row (contract 0026)."
+    },
     "naming": {
       "oneOf": [
         {

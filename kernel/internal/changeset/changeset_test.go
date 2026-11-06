@@ -94,6 +94,13 @@ func TestAssess(t *testing.T) {
 			t.Errorf("%s: risk %s layers %v (%v), want %s %d", c.name, a.Risk, a.Layers, a.Reasons, c.risk, c.layer)
 		}
 	}
+	// contract 0026: switching a company model's append_only off (or on) is high risk, never auto-applied
+	led := map[string]any{"name": "ledger", "append_only": true, "fields": []any{map[string]any{"name": "note", "type": "data"}}}
+	files["models/ledger.rk"] = led
+	off := map[string]any{"name": "ledger", "fields": led["fields"]}
+	if a := Assess([]Op{{Op: "replace", Path: "models/ledger.rk"}}, before, with("models/ledger.rk", off), model); a.Risk != "high" {
+		t.Errorf("append_only off: risk %s (%v), want high", a.Risk, a.Reasons)
+	}
 }
 
 // A patched 0.4 app.rk keeps declaring 0.4 app.json; a 0.5 app (with modules) and other kinds declare 0.5.

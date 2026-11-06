@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: pos_return
+is_submittable: true
+naming: PRT-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: return_date
+  moves:
+    - {lines: items, in: outlet, reason: return_in, cost: {source: sale}}
+fields:
+  - {name: sale, type: link, to: sales_declared}
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: return_date, type: date, required: true}
+  - {name: items, type: table, of: sales_return_item, min_rows: 1}

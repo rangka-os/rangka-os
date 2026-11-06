@@ -42,9 +42,15 @@ func setupPilot(t *testing.T) *pilot {
 // setupPilotApps is setupPilot over another copy of the pilot apps.
 func setupPilotApps(t *testing.T, apps string) *pilot {
 	t.Helper()
+	return setupPilotAppsSite(t, apps, pilotSite)
+}
+
+// setupPilotAppsSite is setupPilotApps with another site.
+func setupPilotAppsSite(t *testing.T, apps, site string) *pilot {
+	t.Helper()
 	url := testdb.New(t)
 	ctx := context.Background()
-	reg, rep := meta.Validate(apps, pilotSite, nil, schema.Embedded())
+	reg, rep := meta.Validate(apps, site, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("pilot catalogue errors: %v", rep.All())
 	}

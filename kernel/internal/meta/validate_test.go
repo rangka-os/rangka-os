@@ -317,3 +317,17 @@ func TestLetterheadMissingWarning(t *testing.T) {
 		t.Errorf("overlay-site (pt_alpha has letterheads/pt_alpha.rk): %q", got)
 	}
 }
+
+// Declared stock moves (contract 0021): every stock: check, plus the 0.5 schema of the block.
+func TestBrokenStockMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-stock.expected.txt", Options{AppsDir: "testdata/broken-stock-apps/apps", SiteDir: "testdata/broken-stock-apps/site"})
+}
+
+func TestStockApps(t *testing.T) {
+	_, rep := ValidateOpts(Options{AppsDir: "../../testdata/stock-apps/apps", SiteDir: "../../testdata/stock-apps/site"}, nil, schema.Embedded())
+	if rep.Errors() != 0 {
+		var buf bytes.Buffer
+		rep.Print(&buf)
+		t.Fatalf("declared stock documents do not validate:\n%s", buf.String())
+	}
+}

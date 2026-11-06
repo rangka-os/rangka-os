@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: dt_issue
+is_submittable: true
+naming: DTI-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: issued_at
+  moves:
+    - {lines: items, out: outlet, reason: adjustment}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: issued_at, type: datetime, required: true}
+  - {name: items, type: table, of: adj_declared_item, min_rows: 1}

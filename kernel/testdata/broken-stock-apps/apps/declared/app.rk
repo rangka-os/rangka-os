@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+# Declared stock documents (contract 0021), installed next to the pilot apps by the declared-moves tests.
+name: declared
+version: 1.0.0
+title: {id: declared}
+requires: {rangka: '>=0.4', outlets: ^1.0, catalogue: ^1.0, stock: ^1.0}
+hooks: [stock.reverse_moves]

@@ -33,6 +33,119 @@ SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "c
 FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
+# documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)
+LEGACY_STOCK = {"goods_receipt", "stock_transfer", "stock_count", "stock_adjustment", "stock_transfer_receipt", "outlet_sales"}
+
+
+def check_stock(rep, p, mname, m, fields, visible):
+    """The stock: block of a model (contract 0021 §4)."""
+    st = m["stock"]
+    if not m.get("is_submittable") or "stock.post_moves" not in (m.get("on_submit") or []):
+        rep.add("error", p, "stock", "stock_hook", "stock: needs is_submittable: true and stock.post_moves in on_submit")
+    if mname in LEGACY_STOCK:
+        rep.add("error", p, "stock", "stock_legacy", f"{mname} has a built-in stock rule and cannot declare stock:")
+
+    def field_kind(where, src, name, label, ok, want):
+        f = src.get(name)
+        if f is None:
+            rep.add("error", p, where, "unknown_field", f'"{name}" is not a field{label}')
+        elif not ok(f):
+            rep.add("error", p, where, "bad_stock_field", f'"{name}" {want}')
+
+    def read_only_currency(f):
+        return f.get("type") in ("currency", "money") and bool(f.get("read_only"))
+
+    def link_to(target):
+        return lambda f: f.get("type") == "link" and f.get("to") == target
+
+    def posts_stock(f):
+        to = f.get("to")
+        return f.get("type") == "link" and to in visible and (to in LEGACY_STOCK or isinstance(visible[to][2].get("stock"), dict))
+
+    def number(f):
+        return f.get("type") in ("int", "float", "currency", "percent")
+
+    d = st.get("date")
+    if isinstance(d, str):
+        field_kind("stock/date", fields, d, "", lambda f: f.get("type") in ("date", "datetime"), "is not a date field")
+    sm = visible.get("stock_move")
+    reasons = None
+    if sm:
+        rf = {f.get("name"): f for f in sm[2].get("fields", []) if isinstance(f, dict)}.get("reason")
+        if rf is not None:
+            reasons = [o.get("value") for o in rf.get("options", []) if isinstance(o, dict)]
+    moves = [r for r in st.get("moves", []) if isinstance(r, dict)] if isinstance(st.get("moves"), list) else []
+    has_out = any("out" in r for r in moves)
+    for i, r in enumerate(st.get("moves", []) if isinstance(st.get("moves"), list) else []):
+        if not isinstance(r, dict):
+            continue
+        w = f"stock/moves/{i}"
+        lines = r.get("lines")
+        lf = fields.get(lines) if isinstance(lines, str) else None
+        cfields, of = None, ""
+        if isinstance(lines, str):
+            if lf is None:
+                rep.add("error", p, w + "/lines", "unknown_field", f'"{lines}" is not a field')
+            elif lf.get("type") != "table":
+                rep.add("error", p, w + "/lines", "not_table", f'"{lines}" is not a table field')
+            elif lf.get("of") in visible:
+                of = lf["of"]
+                cfields = {f["name"]: f for f in visible[of][2].get("fields", []) if isinstance(f, dict) and "name" in f}
+        if ("in" in r) == ("out" in r):
+            rep.add("error", p, w, "stock_direction", "a move needs exactly one of in or out")
+        for key in ("in", "out"):
+            o = r.get(key)
+            if not isinstance(o, str):
+                continue
+            if o.startswith("line."):
+                if cfields is not None:
+                    field_kind(f"{w}/{key}", cfields, o[5:], f" of {of}", link_to("outlet"), "is not a link to outlet")
+            else:
+                field_kind(f"{w}/{key}", fields, o, "", link_to("outlet"), "is not a link to outlet")
+        if cfields is not None:
+            it = r.get("item", "item")
+            if isinstance(it, str):
+                field_kind(f"{w}/item", cfields, it, f" of {of}", link_to("item"), "is not a link to item")
+            if isinstance(r.get("qty"), str):
+                field_kind(f"{w}/qty", cfields, r["qty"], f" of {of}", number, "is not a number field")
+            if isinstance(r.get("cogs"), str):
+                field_kind(f"{w}/cogs", cfields, r["cogs"], f" of {of}", read_only_currency, "must be a read_only currency field")
+        if isinstance(r.get("if"), str):  # doc is the header, line the row (contract 0021)
+            ctx = dict(fields)
+            ctx["doc"] = {"name": "doc", "type": "link", "to": mname}
+            if of:
+                ctx["line"] = {"name": "line", "type": "link", "to": of}
+            check_expr(rep, p, f"{w}/if", r["if"], m, ctx, visible)
+        if r.get("explode") == "recipe" and "recipe" not in visible:
+            rep.add("warn", p, f"{w}/explode", "no_recipe", "explode: recipe without a recipe model: each item consumes itself")
+        if "in" in r:
+            for k in ("explode", "cogs"):
+                if k in r:
+                    rep.add("error", p, f"{w}/{k}", "stock_direction", f"{k} is only for out moves")
+        if "out" in r and "cost" in r:
+            rep.add("error", p, f"{w}/cost", "stock_direction", "cost is only for in moves")
+        c = r.get("cost")
+        if isinstance(c, dict):
+            for k in ("unit", "amount"):
+                if isinstance(c.get(k), str) and cfields is not None:
+                    field_kind(f"{w}/cost/{k}", cfields, c[k], f" of {of}", number, "is not a number field")
+            if isinstance(c.get("source"), str):
+                field_kind(f"{w}/cost/source", fields, c["source"], "", posts_stock, "is not a link to a document that moves stock")
+            if c.get("consumed") is True:
+                if not has_out:
+                    rep.add("error", p, f"{w}/cost", "stock_consumed", "cost consumed needs an out move in this document")
+                sp = c.get("split")
+                if isinstance(sp, str) and sp != "qty" and cfields is not None:
+                    field_kind(f"{w}/cost/split", cfields, sp, f" of {of}", number, "is not a number field")
+        rs = r.get("reason")
+        if reasons is not None and isinstance(rs, str) and rs not in reasons:
+            rep.add("error", p, f"{w}/reason", "unknown_option", f'"{rs}" is not an option of stock_move.reason')
+    ct = st.get("cogs_total")
+    if isinstance(ct, str):
+        field_kind("stock/cogs_total", fields, ct, "", read_only_currency, "must be a read_only currency field")
+        if not any("cogs" in r for r in moves):
+            rep.add("warn", p, "stock/cogs_total", "cogs_total_unused", "cogs_total stays 0: no out move has cogs")
+
 
 
 def load_schemas():
@@ -324,6 +437,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                         rep.add("error", p, f"{key}/{i}", "unknown_hook", f'"{hk}" is not declared in app.rk hooks or core')
             if m.get("on_submit") and not m.get("is_submittable"):
                 rep.add("error", p, "on_submit", "not_submittable", "on_submit hooks need is_submittable: true")
+            if isinstance(m.get("stock"), dict):
+                check_stock(rep, p, mname, m, fields, visible)
             for i, pr in enumerate(m.get("permissions", [])):
                 if pr.get("role") not in roles:
                     rep.add("warn", p, f"permissions/{i}/role", "unknown_role", f'role "{pr.get("role")}" has no file in roles/ (it must exist at install)')

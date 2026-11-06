@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: nonbool_issue
+is_submittable: true
+naming: NBI-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  moves:
+    - {lines: items, out: outlet, reason: adjustment, if: "line.item"}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: issue_date, type: date, required: true}
+  - {name: items, type: table, of: adj_declared_item, min_rows: 1}

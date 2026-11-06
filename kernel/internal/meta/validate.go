@@ -424,6 +424,9 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 	if len(asList(m.Raw["on_submit"])) > 0 && !boolean(m.Raw, "is_submittable") {
 		v.rep.add("error", p, "on_submit", "not_submittable", "on_submit hooks need is_submittable: true")
 	}
+	if asMap(m.Raw["stock"]) != nil {
+		v.stock(p, m, fields, visible)
+	}
 	for i, pv := range asList(m.Raw["permissions"]) {
 		role := pyStr(asMap(pv)["role"])
 		if !roles[role] {

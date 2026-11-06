@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# surat jalan: stock leaves a warehouse or vehicle, at the average, with cogs per line
+name: delivery_note
+is_submittable: true
+naming: SJ-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: delivery_date
+  moves:
+    - {lines: items, in: outlet, out: outlet, reason: kirim, cogs: item}
+  cogs_total: cogs_total
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: delivery_date, type: date, required: true}
+  - {name: items, type: table, of: delivery_note_item, min_rows: 1}
+  - {name: cogs_total, type: currency, read_only: true}

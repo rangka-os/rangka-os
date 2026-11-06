@@ -136,6 +136,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", s.recordGuard("read", s.listAttachments))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/attachments", s.recordGuard("write", s.uploadAttachment))
 	mux.HandleFunc("GET /api/v1/dashboards/{name}", a(s.getDashboard))
+	mux.HandleFunc("GET /api/v1/export/r/{model}", a(s.exportRecords))
+	mux.HandleFunc("GET /api/v1/export/dashboards/{name}", a(s.exportDashboard))
 	mux.HandleFunc("POST /api/v1/flows/{name}/run", a(s.runFlow))
 	// imports
 	mux.HandleFunc("POST /api/v1/imports/{import}", a(s.previewImport))

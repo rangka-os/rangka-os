@@ -1,0 +1,45 @@
+# One tenant = one compose project juragan-t-<id> with one kernel. tenantctl runs it with
+#   --env-file <host .env> --env-file $HOST_DIR/tenants/<id>/tenant.env --env-file $HOST_DIR/secrets/<id>.env
+# tenant.env: TENANT_ID, TENANT_ORG, TENANT_HOST, RANGKA_TAG (the tenant's own pin); secrets/<id>.env: DB_PASSWORD.
+services:
+  kernel:
+    build:
+      context: ./kernel
+      target: ${KERNEL_TARGET:-pdf}
+      args:
+        RANGKA_TAG: ${RANGKA_TAG:?}
+    image: juragan-tenant-kernel:${RANGKA_TAG:?}-${KERNEL_TARGET:-pdf}
+    init: true
+    shm_size: 256m
+    mem_limit: ${KERNEL_MEM_LIMIT:-768m}
+    restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: 10m
+        max-file: "5"
+    command: ["serve"]
+    environment:
+      DATABASE_URL: postgres://${TENANT_ID:?}:${DB_PASSWORD:?}@postgres:5432/${TENANT_ID:?}?sslmode=disable
+      RANGKA_ORG: ${TENANT_ORG:?}
+      RANGKA_APPS: /srv/apps
+      RANGKA_SITE: /srv/site
+      RANGKA_MODULES: /srv/modules
+      RANGKA_CONNECTORS: /srv/connectors
+      RANGKA_DEPLOY_TARGET: docker
+      RANGKA_ENV: production
+      RANGKA_BACKUP_DIR: /srv/backups
+      RANGKA_ADDR: ":8080"
+      RANGKA_PDF_CONCURRENCY: ${RANGKA_PDF_CONCURRENCY:-1}
+      RANGKA_AI_URL: ${RANGKA_AI_URL:-}
+      RANGKA_AI_SECRET: ${RANGKA_AI_SECRET:-}
+    volumes:
+      - ${HOST_DIR:?}/tenants/${TENANT_ID:?}:/srv
+    networks:
+      tenants:
+        aliases: ["t-${TENANT_ID:?}"]
+
+networks:
+  tenants:
+    name: ${HOST_NETWORK:-juragan-tenants}
+    external: true

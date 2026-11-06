@@ -2,6 +2,20 @@
 # Shared helpers for backup.sh (and restore.sh, restore-drill.sh). Source it; it only defines functions.
 set -euo pipefail
 
+# valid_pilot_name <name>: a pilot or tenant name is also its database, role, folder and <NAME>_DB_PASSWORD variable,
+# so only lowercase letters, digits and underscores, starting with a letter, 2 to 31 characters.
+valid_pilot_name() {
+  [[ "$1" =~ ^[a-z][a-z0-9_]{1,30}$ ]]
+}
+
+# pilot_listed <name> <list...>: true when <name> is one of the list.
+pilot_listed() {
+  local want="$1" n
+  shift
+  for n in "$@"; do [ "$n" = "$want" ] && return 0; done
+  return 1
+}
+
 # True when the rangka binary has the S1 `rangka backup` command (contract 0005 §2).
 has_rangka_backup() {
   local help

@@ -620,6 +620,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	newName := name
 	if strings.HasPrefix(name, "DRAFT-") {
 		if af := str(rec["amended_from"]); af != "" {
+			if err := o.oneLiveAmendment(m, af, name); err != nil {
+				return nil, err
+			}
 			newName, err = o.amendName(m, af)
 		} else {
 			newName, err = o.nextName(m)
@@ -653,6 +656,28 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		return nil, err
 	}
 	return &Result{Record: e.Output(m, rec), Warnings: warns}, nil
+}
+
+// oneLiveAmendment refuses a second live amendment of a cancelled document: amend while a copy is a draft or
+// submitted, or submitting a draft copy (self) while another copy is submitted. Two live copies would each count
+// (a cancelled payment amended twice allocates twice). The original is locked first, so two amends or submits
+// at the same time see each other. A copy that is cancelled again no longer counts; the chain goes on from it.
+func (o *op) oneLiveAmendment(m *meta.Model, original, self string) error {
+	if _, err := store.GetForUpdate(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, original); err != nil && !errors.Is(err, store.ErrNotFound) {
+		return err
+	}
+	copies, err := store.Find(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, map[string]any{"amended_from": original}, store.FindOpts{})
+	if err != nil {
+		return err
+	}
+	for _, c := range copies {
+		ds := toInt(c["docstatus"])
+		if str(c["name"]) == self || ds == 2 || (self != "" && ds != 1) {
+			continue
+		}
+		return conflict("already_amended", "Dokumen "+original+" sudah diubah menjadi "+str(c["name"])+"; lanjutkan atau batalkan salinan itu dulu")
+	}
+	return nil
 }
 
 func (o *op) amendName(m *meta.Model, base string) (string, error) {
@@ -762,6 +787,9 @@ func (o *op) amend(model, name string) (*Result, error) {
 	}
 	if toInt(old["docstatus"]) != 2 {
 		return nil, conflict("not_cancelled", "Hanya dokumen yang dibatalkan yang bisa di-amend")
+	}
+	if err := o.oneLiveAmendment(m, name, ""); err != nil {
+		return nil, err
 	}
 	rec := store.Record{}
 	for k, v := range old {

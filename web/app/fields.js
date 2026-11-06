@@ -286,7 +286,8 @@
         return { cls: "ap-grid-link", el: h(GridLink, { ctx: ctx, field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }) };
       }
       if (ro || c.compute || c.read_only) {
-        return { cls: num ? "n" : undefined, ro: true, el: h("div", { className: num ? "rk-cell-ro" : "rk-cell-item" }, num ? formatNumber(v, c.type === "currency" ? 0 : 3) : v == null ? "" : String(v)) };
+        var txt = num ? formatNumber(v, c.type === "currency" ? 0 : 3) : c.type === "check" ? (v ? "Ya" : "Tidak") : v == null ? "" : String(v);
+        return { cls: num ? "n" : undefined, ro: true, el: h("div", { className: num ? "rk-cell-ro" : "rk-cell-item" }, txt) };
       }
       if (num) return { cls: "n", el: h(GridNum, { field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }) };
       return { el: h("input", { className: "rk-cell", value: v == null ? "" : String(v), "aria-label": lbl, onChange: function (e) { set(i, c.name, e.target.value); } }) };
@@ -311,7 +312,12 @@
             return h("li", { key: i, className: "ap-gc-row" },
               h("div", { className: "ap-gc-head" }, h("span", null, "Baris " + (i + 1)),
                 ro ? null : h(R.IconButton, { icon: "delete", label: "Hapus baris " + (i + 1), onClick: function () { del(i); } })),
-              h("div", { className: "ap-gc-fields" }, cols.map(function (c) {
+              // a locked row shows what it holds: empty, zero and unticked cells stay out of the card
+              h("div", { className: "ap-gc-fields" }, cols.filter(function (c) {
+                if (!ro) return true;
+                var v = r[c.name];
+                return !(v == null || v === "" || v === false || (numeric(c) && Number(v) === 0));
+              }).map(function (c) {
                 var b = body(r, i, c), wide = c.type === "link" || c.type === "text";
                 return h("div", { key: c.name, className: cx("ap-gc-f", wide && "wide", b.ro && "ro", b.cls === "n" && "n") },
                   h("span", { className: "ap-gc-l", "aria-hidden": "true" }, L(c.label)), b.el);

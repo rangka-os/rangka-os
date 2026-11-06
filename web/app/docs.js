@@ -207,7 +207,7 @@
           items: formats.map(function (f) { return { label: formatLabel(f) + (f.paper ? " · " + String(f.paper).toUpperCase() : ""), icon: "print", onSelect: function () { printHtml(f); } }; }) })) : null);
 
     return h(React.Fragment, null, printBtn,
-      h(R.Button, { key: "pdf", icon: "download", disabled: disabled, loading: busy === "pdf", onClick: pdf }, "Unduh PDF"),
+      h(R.Button, { key: "pdf", icon: "download", variant: p.primary ? "primary" : undefined, disabled: disabled, loading: busy === "pdf", onClick: pdf }, "Unduh PDF"),
       fallback ? h(R.Dialog, { key: "fallback", variant: "confirm", icon: "print",
         title: fallback.code === "pdf_failed" ? "PDF gagal dibuat di server" : "PDF belum tersedia di server ini",
         confirmLabel: "Cetak dari browser", cancelLabel: "Tutup",

@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"math"
+	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -53,6 +54,20 @@ func (e *Engine) Export(ctx context.Context, a Actor, model string, opts ListOpt
 // counts rows under the read grant, so its numbers are exported only to someone who may export all of them.
 func (e *Engine) CanExportAll(a Actor, model string) bool {
 	return e.Unconditional(a, model, "export")
+}
+
+// ExportRefusal is the line a dashboard export writes for a widget whose numbers a may not export, in the owner's
+// words: the data's own name (the model label, not its technical name), and a pointer to the list only when its
+// download gives a the part of the data they may export (a grant with if:). Gladi G6.
+func (e *Engine) ExportRefusal(a Actor, model string) string {
+	what := "ini"
+	if m := e.Reg().Model(model); m != nil && m.Label.Text() != "" {
+		what = strings.ToLower(m.Label.Text())
+	}
+	if e.Allowed(a, model)["export"] {
+		return "Tidak diekspor: kamu hanya boleh mengunduh sebagian data " + what + ". Unduh dari daftar " + what + " untuk bagian yang boleh kamu unduh."
+	}
+	return "Tidak diekspor: kamu tidak punya izin mengunduh data " + what + ". Minta pemilik usaha memberi izin unduh kalau perlu."
 }
 
 // Titles resolves link values to the linked record's display title for an export, the same title a list or a chart

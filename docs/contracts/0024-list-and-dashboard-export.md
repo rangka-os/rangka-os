@@ -26,8 +26,9 @@ rangka-apps (49 grants), yet no endpoint checks it.
    Without it: `name` ("Nomor"), the `in_list` fields in declaration order (every scalar field when none is marked),
    then the computed `status`.
 5. **Cells.** Numbers plain (`12500000`, so a spreadsheet can sum them), select values as their label, yes/no as
-   `Ya`/`Tidak`, dates ISO, a link as the linked record's own title field (its code when the record is outside the
-   caller's row scope, not readable, or titled by another link), the
+   `Ya`/`Tidak`, dates ISO, a link as the linked record's title, the same one the list shows
+   (contract 0018 §3): its code when the record is missing, outside the caller's row scope or not readable, and a
+   title field that is itself a link is followed only into a record the caller could read (else that hop's code), the
    computed status in the list's words (Draf, Diajukan, Dibayar sebagian, Jatuh tempo, Lunas, Dibatalkan). A text cell that starts with `=`, `+`, `-`, `@`, tab or CR and is not a number gets a
    leading `'`, so a spreadsheet shows it instead of running it (CSV injection).
 6. **Dashboard layout.** The dashboard label and period, then one block per widget separated by an empty line:

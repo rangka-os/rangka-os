@@ -57,4 +57,34 @@ func TestExportGrantAndTitles(t *testing.T) {
 	if got := e.Titles(ctx, owner).Of("outlet", "OUT-01"); got == "" {
 		t.Fatal("the owner sees the outlet's title")
 	}
+
+	// a title field that is a link (sales_invoice → customer) is followed like a list title, one hop at a time
+	var inv2 map[string]any
+	for _, r := range all {
+		if r["outlet"] == "OUT-02" && r["customer"] != nil && r["customer"] != "" {
+			inv2 = r
+			break
+		}
+	}
+	if inv2 == nil {
+		t.Fatal("need an OUT-02 invoice with a customer")
+	}
+	cust := inv2["customer"].(string)
+	crec, err := e.Get(ctx, owner, "customer", cust)
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := e.Title(ctx, owner, "customer", crec, 0)
+	if want == "" || want == cust {
+		t.Fatalf("customer %s needs a title of its own, got %q", cust, want)
+	}
+	if got := e.Titles(ctx, owner).Of("sales_invoice", inv2["name"].(string)); got != want {
+		t.Fatalf("owner invoice title = %q, want the customer's title %q", got, want)
+	}
+	cm := e.Reg().Models["customer"]
+	cm.Raw["permissions"] = []any{map[string]any{"role": "owner", "read": true}}
+	e.permCache.Delete(cm)
+	if got := e.Titles(ctx, only2).Of("sales_invoice", inv2["name"].(string)); got != cust {
+		t.Fatalf("staff invoice title through a customer they may not read = %q, want the code %s", got, cust)
+	}
 }

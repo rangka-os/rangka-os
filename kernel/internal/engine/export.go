@@ -55,9 +55,10 @@ func (e *Engine) CanExportAll(a Actor, model string) bool {
 	return e.Unconditional(a, model, "export")
 }
 
-// Titles resolves link values to the linked record's own title field for an export: "" when the record is missing,
-// outside the actor's row scope or not readable under the read grant (the caller then writes the code it already
-// has). A title field that is itself a link is not followed: the code is written. One Titles per export (it caches).
+// Titles resolves link values to the linked record's display title for an export, the same title a list or a chart
+// shows (linkTitle): "" when the record is missing, outside the actor's row scope or not readable under the read
+// grant (the caller then writes the code it already has). A title field that is itself a link is followed only into
+// a record the actor could read, else that hop's code is the title. One Titles per export (it caches).
 type Titles struct {
 	e      *Engine
 	ctx    context.Context
@@ -75,22 +76,7 @@ func (t *Titles) Of(to, name string) string {
 	if to == "" || name == "" {
 		return ""
 	}
-	key := to + "/" + name
-	if v, ok := t.titles[key]; ok {
-		return v
-	}
-	v := ""
-	reg := t.e.Reg()
-	if tm := reg.Models[to]; tm != nil && tm.TitleField != "" {
-		if f := tm.Field(tm.TitleField); f != nil && f.Type != "link" {
-			if rec, err := store.Get(t.ctx, t.e.DB, reg, t.a.Org, tm, name); err == nil && t.scope.Visible(tm, rec) &&
-				t.e.recordAllowed(t.ctx, t.e.DB, t.a, tm, t.e.decide(t.a, t.e.permModel(tm.Name), "read"), rec, t.links) {
-				v = str(rec[tm.TitleField])
-			}
-		}
-	}
-	t.titles[key] = v
-	return v
+	return t.e.linkTitle(t.ctx, t.a, t.scope, to, name, t.titles, t.links)
 }
 
 // StatusLabel is the Indonesian word for a computed document status (the web list's words).

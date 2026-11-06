@@ -151,3 +151,32 @@ func TestChartAndAggregateLabelsOutsideScope(t *testing.T) {
 		}
 	}
 }
+
+// TestClientFilterSkipsLinksOutsideScope: a list or aggregate ?filter= that walks a link reads a record outside
+// the actor's row scope as a missing one, on every hop, so it cannot be used to guess that record's fields
+// (audit 2026-11-06 row-scope-titles, finding 1). The owner's filters are unchanged.
+func TestClientFilterSkipsLinksOutsideScope(t *testing.T) {
+	owner, staff, _ := scopeTitlesEnv(t)
+	for _, c := range []struct {
+		filter       string
+		owner, staff int
+	}{
+		{`dest.outlet_name.contains("Bintaro")`, 1, 0},
+		{`inv.customer.customer_name.startsWith("Maju")`, 1, 0}, // invoice of OUT-02, then its customer
+		{`inv.grand_total > 0`, 2, 1},                           // only INV-2026-00043 is readable
+		{`memo.dest.outlet_name.contains("Bintaro")`, 1, 0},     // memo readable, its dest is not
+		{`memo.dest.name == "OUT-02"`, 1, 1},                    // the code is the memo's own data
+		{`outlet.outlet_name.contains("Kemang")`, 3, 3},         // own outlet still filterable
+	} {
+		p := "/api/v1/r/xfer?filter=" + url.QueryEscape(c.filter)
+		if n := count(owner, p); n != c.owner {
+			t.Errorf("owner filter %s: %d rows, want %d", c.filter, n, c.owner)
+		}
+		if n := count(staff, p); n != c.staff {
+			t.Errorf("staff filter %s: %d rows, want %d", c.filter, n, c.staff)
+		}
+		if n := staff.must(200, "GET", "/api/v1/aggregate/xfer?filter="+url.QueryEscape(c.filter), nil).JSON["count"]; n != float64(c.staff) {
+			t.Errorf("staff aggregate filter %s: %v, want %d", c.filter, n, c.staff)
+		}
+	}
+}

@@ -63,7 +63,9 @@ test("navGroups: dashboards, each app's menu groups, then approvals and imports 
   assert.strictEqual(off[1].items[1].icon, "invoice", "default icon");
   const on = A.navGroups(META, { approvals: true, imports: true });
   const last = on[on.length - 1];
-  assert.deepStrictEqual(plain(last).items.map((i) => [i.id, i.label]), [["approvals", "Persetujuan"], ["import/pelanggan_csv", "Impor data"]]);
+  // riset desain K-A1: Persetujuan joins the first group; Lainnya keeps the rest
+  assert.deepStrictEqual(plain(on[0]).items.map((i) => i.id).slice(-1), ["approvals"]);
+  assert.deepStrictEqual(plain(last).items.map((i) => [i.id, i.label]), [["import/pelanggan_csv", "Impor data"]]);
   // no import definitions: no entry and no dangling "#/import/" link, even when the flag is on
   const none = A.navGroups({ ...META, imports: {} }, { approvals: false, imports: true });
   assert.ok(!plain(none).some((g) => g.items.some((i) => /^import/.test(i.id))));
@@ -81,7 +83,8 @@ test("navGroups: Proses bisnis only when the kernel has processes", () => {
   const last = on[on.length - 1];
   assert.deepStrictEqual(last.items.map((i) => [i.id, i.label]), [["proses", "Proses bisnis"]]);
   const both = plain(A.navGroups(META, { approvals: true, processes: true }));
-  assert.deepStrictEqual(both[both.length - 1].items.map((i) => i.id), ["approvals", "proses"]);
+  assert.deepStrictEqual(both[both.length - 1].items.map((i) => i.id), ["proses"]);
+  assert.deepStrictEqual(both[0].items.map((i) => i.id).slice(-1), ["approvals"]);
 });
 
 test("navId maps a route to its sidebar entry", () => {
@@ -108,10 +111,10 @@ test("L picks Bahasa Indonesia from a label map", () => {
 });
 
 test("navGroups: Persetujuan carries the pending count as a badge", () => {
-  const items = (g) => plain(g[g.length - 1]).items;
-  assert.strictEqual(items(A.navGroups(META, { approvals: true }, { approvals: 2 }))[0].count, 2);
-  assert.strictEqual(items(A.navGroups(META, { approvals: true }, { approvals: 0 }))[0].count, undefined);
-  assert.strictEqual(items(A.navGroups(META, { approvals: true }))[0].count, undefined);
+  const appr = (g) => plain(g[0]).items.find((i) => i.id === "approvals");
+  assert.strictEqual(appr(A.navGroups(META, { approvals: true }, { approvals: 2 })).count, 2);
+  assert.strictEqual(appr(A.navGroups(META, { approvals: true }, { approvals: 0 })).count, undefined);
+  assert.strictEqual(appr(A.navGroups(META, { approvals: true })).count, undefined);
 });
 
 test("orgByLabel finds the org a user-menu item names", () => {
@@ -154,9 +157,10 @@ test("navFromLayout: sidebar groups from meta.layout.nav.side, else null", () =>
     ] },
     { label: "", items: [{ id: "r/customer", label: "Pelanggan", icon: "user" }] },
   ]);
-  // navGroups uses the layout's groups and keeps Lainnya after them
+  // navGroups uses the layout's groups; Persetujuan joins the first one (riset desain K-A1)
   const g = plain(A.navGroups(meta, { approvals: true }));
-  assert.deepStrictEqual(g.map((x) => x.label), ["Utama", "", "Lainnya"]);
+  assert.deepStrictEqual(g.map((x) => x.label), ["Utama", ""]);
+  assert.strictEqual(g[0].items[g[0].items.length - 1].id, "approvals");
 });
 
 test("shellKind: top-nav when the layout names it, else side-only (side, pos, portal and none)", () => {

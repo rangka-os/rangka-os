@@ -126,7 +126,11 @@
     var wrap = useRef(null);
     var busyRef = useRef(null);
     var name = p.name || (p.record && p.record.name) || (p.rec && p.rec.name);
-    var formats = API.printFormats(ctx.meta, p.model);
+    var all = API.printFormats(ctx.meta, p.model);
+    // XML file formats (contract 0028) are downloads, not pages: their own "Unduh" buttons, out of the Cetak menu
+    var files = all.filter(function (f) { return f.output === "xml"; });
+    var formats = all.filter(function (f) { return f.output !== "xml"; });
+    var ps = useState(null), problems = ps[0], setProblems = ps[1];
     var mm = (ctx.meta.models || {})[p.model] || {};
 
     useEffect(function () {
@@ -138,7 +142,7 @@
       return function () { document.removeEventListener("mousedown", away); document.removeEventListener("keydown", esc); };
     }, [open]);
 
-    if (!formats.length || !name || (mm.can && mm.can.print === false)) return null;
+    if (!all.length || !name || (mm.can && mm.can.print === false)) return null;
 
     function start(kind) {
       if (busyRef.current) return false;
@@ -198,7 +202,41 @@
       });
     }
 
+    function download(f) {
+      if (!start("file:" + f.name)) return;
+      ctx.api.printFile(p.model, name, f.name).then(function (r) {
+        stop();
+        var href = URL.createObjectURL(r.blob);
+        var a = document.createElement("a");
+        a.href = href;
+        a.download = r.filename;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        setTimeout(function () { URL.revokeObjectURL(href); }, 1000);
+      }, function (e) {
+        stop();
+        var list = e && e.body && e.body.error && e.body.error.problems;
+        if (e && e.code === "export_invalid" && list && list.length) setProblems({ format: f, message: e.message, list: list });
+        else fail(e);
+      });
+    }
+
     var disabled = !!busy;
+    var fileBtns = files.map(function (f, i) {
+      var lead = p.primary && !formats.length && i === 0;
+      return h(R.Button, { key: "file-" + f.name, icon: "download", variant: lead ? "primary" : undefined, disabled: disabled, loading: busy === "file:" + f.name, onClick: function () { download(f); } },
+        "Unduh " + formatLabel(f));
+    });
+    var problemsDialog = problems ? h(R.Dialog, { key: "problems", variant: "confirm", icon: "download",
+      title: "Belum bisa membuat " + formatLabel(problems.format),
+      confirmLabel: "Mengerti", cancelLabel: "Tutup",
+      onClose: function () { setProblems(null); }, onConfirm: function () { setProblems(null); } },
+      h("p", null, problems.message),
+      h("ul", { className: "ap-problems" }, problems.list.map(function (x, i) {
+        return h("li", { key: i }, h("b", null, x.name), " ", x.message);
+      }))) : null;
+    if (!formats.length) return h(React.Fragment, null, fileBtns, problemsDialog);
     var printBtn = formats.length === 1
       ? h(R.Button, { key: "print", icon: "print", disabled: disabled, loading: busy === "print", onClick: function () { printHtml(formats[0]); } }, "Cetak")
       : h("span", { key: "print", className: "ap-printmenu", ref: wrap },
@@ -207,7 +245,8 @@
           items: formats.map(function (f) { return { label: formatLabel(f) + (f.paper ? " · " + String(f.paper).toUpperCase() : ""), icon: "print", onSelect: function () { printHtml(f); } }; }) })) : null);
 
     return h(React.Fragment, null, printBtn,
-      h(R.Button, { key: "pdf", icon: "download", disabled: disabled, loading: busy === "pdf", onClick: pdf }, "Unduh PDF"),
+      h(R.Button, { key: "pdf", icon: "download", variant: p.primary ? "primary" : undefined, disabled: disabled, loading: busy === "pdf", onClick: pdf }, "Unduh PDF"),
+      fileBtns, problemsDialog,
       fallback ? h(R.Dialog, { key: "fallback", variant: "confirm", icon: "print",
         title: fallback.code === "pdf_failed" ? "PDF gagal dibuat di server" : "PDF belum tersedia di server ini",
         confirmLabel: "Cetak dari browser", cancelLabel: "Tutup",

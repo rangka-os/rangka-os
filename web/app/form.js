@@ -104,7 +104,7 @@
     var saved = !!record.name, out = [{ id: "info", title: "Info" }];
     if (saved && features.attachments !== false) out.push({ id: "attachments", title: "Lampiran" });
     if (saved && features.approvals) out.push({ id: "approvals", title: "Persetujuan" });
-    if (saved && (model.prints || []).length && !(model.can && model.can.print === false)) out.push({ id: "print", title: "Cetak" });
+    if (saved && (model.prints || []).length && !(model.can && model.can.print === false)) out.push({ id: "print", title: model.prints.every(function (f) { return f.output === "xml"; }) ? "Unduh" : "Cetak" });
     return out;
   }
 
@@ -126,6 +126,75 @@
     return tabs;
   }
 
+  var NUMERIC = { currency: 1, money: 1, float: 1, int: 1 };
+  // the summary prints its amounts with API.rupiah, so it takes only rupiah (currency) fields: a money field (an amount
+  // in its own currency, contract 0013) or a count (an int/float "total") never shows as Rp (audit 2026-11-07 F1, F2)
+  var SUM_TYPES = { currency: 1 };
+  var SUM_OPEN = ["outstanding", "outstanding_amount"];
+  var SUM_TOTAL = ["amount_due", "grand_total", "net_total", "total_amount", "total"];
+
+  /** Whole days from ISO date a to ISO date b (b - a), null when either is missing. */
+  function daysBetween(a, b) {
+    if (!a || !b) return null;
+    var x = Date.parse(String(a).slice(0, 10) + "T00:00:00Z"), y = Date.parse(String(b).slice(0, 10) + "T00:00:00Z");
+    return isFinite(x) && isFinite(y) ? Math.round((y - x) / 864e5) : null;
+  }
+
+  /** The summary on top of a saved money document (arah E: the amount that matters first, the state in words).
+   *  big: the open amount of a submitted document (outstanding) else its total; facts: total and paid next to an open
+   *  amount; progress: paid share of the total (0..1) or null; line: {kind, days, due, tone} for the state sentence
+   *  (overdue, due, paid, partly, cancelled, draft). null when the model has none of the amount fields. */
+  function docSummary(mm, rec, status, today) {
+    mm = mm || {};
+    rec = rec || {};
+    var fields = mm.fields || [];
+    function fd(n) { return fields.filter(function (f) { return f.name === n && !f.hidden && SUM_TYPES[f.type]; })[0] || null; }
+    function first(list) { for (var i = 0; i < list.length; i++) { var f = fd(list[i]); if (f && rec[f.name] != null) return f; } return null; }
+    var ds = Number(rec.docstatus || 0);
+    var open = ds === 1 ? first(SUM_OPEN) : null, total = first(SUM_TOTAL), big = open || total;
+    if (!big) return null;
+    var facts = [], paid = open ? fd("paid_amount") : null, progress = null;
+    if (open && total) facts.push({ name: total.name, label: labelText(total.label), value: rec[total.name] });
+    if (paid) facts.push({ name: paid.name, label: labelText(paid.label), value: rec[paid.name] || 0 });
+    if (open && total && Number(rec[total.name]) > 0) {
+      var share = 1 - Number(rec[open.name] || 0) / Number(rec[total.name]);
+      progress = Math.max(0, Math.min(1, share));
+    }
+    var due = rec.due_date || null, left = daysBetween(today, due), line;
+    if (status === "paid") line = { kind: "paid", tone: "ok" };
+    else if (status === "cancelled" || ds === 2) line = { kind: "cancelled", tone: "" };
+    else if (ds === 0) line = { kind: "draft", tone: "" };
+    else if (status === "overdue" || (left != null && left < 0 && Number(rec[big.name]) > 0)) line = { kind: "overdue", tone: "bad", days: left == null ? null : -left, due: due };
+    else if (status === "partly") line = { kind: "partly", tone: "warn", days: left, due: due };
+    else line = { kind: "due", tone: "", days: left, due: due };
+    return { big: { name: big.name, label: labelText(big.label), value: rec[big.name] }, facts: facts, progress: progress, line: line };
+  }
+
+  /** The sentence for docSummary's line; fmt formats an ISO date ("7 Des 2026"). */
+  function summaryLine(line, fmt) {
+    fmt = fmt || function (x) { return String(x || "").slice(0, 10); };
+    if (!line) return "";
+    if (line.kind === "paid") return "Lunas";
+    if (line.kind === "cancelled") return "Dibatalkan";
+    if (line.kind === "draft") return "Draf, belum diajukan";
+    if (line.kind === "overdue") return line.days ? "Lewat jatuh tempo " + line.days + " hari" : "Lewat jatuh tempo";
+    var when = line.due ? "jatuh tempo " + fmt(line.due) + (line.days === 0 ? " (hari ini)" : line.days > 0 ? " (" + line.days + " hari lagi)" : "") : "";
+    if (line.kind === "partly") return "Dibayar sebagian" + (when ? ", " + when : "");
+    return when ? when.charAt(0).toUpperCase() + when.slice(1) : "Belum dibayar";
+  }
+
+  /** A read-only value that says nothing: empty, an empty table, or a zero number (a "Tidak" check still says something). */
+  function blankValue(f, v) {
+    if (v == null || v === "") return true;
+    if (Array.isArray(v)) return !v.length;
+    if (f && NUMERIC[f.type]) return Number(v) === 0;
+    if (f && f.type === "percent") return Number(v) === 0;
+    return false;
+  }
+
+  RA.docSummary = docSummary;
+  RA.summaryLine = summaryLine;
+  RA.blankValue = blankValue;
   RA.writableBody = writableBody;
   RA.ruleField = ruleField;
   RA.mapServerErrors = mapServerErrors;
@@ -147,6 +216,8 @@
   function isDraftName(n) { return /^DRAFT-/.test(String(n || "")); }
 
   /** The server's record without response decorations. */
+  function todayISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
+
   function clean(rec) {
     var r = Object.assign({}, rec || {});
     delete r._warnings;
@@ -194,6 +265,7 @@
     var dls = useState(null), ubahDialog = dls[0], setUbahDialog = dls[1]; // "field" | "approval" | "automation"
     var tbs = useState(null), tab = tbs[0], setTab = tbs[1]; // the form layout's tab on show (null: the first)
     var fos = useState(false), filesOff = fos[0], setFilesOff = fos[1]; // Attachments found files off: drop "Lampiran"
+    var ses2 = useState(false), showEmpty = ses2[0], setShowEmpty = ses2[1]; // read only: empty and zero fields shown too
 
     function put(n) { recRef.current = n; setRecState(n); }
     function markDirty(v) { dirtyRef.current = v; setDirty(v); }
@@ -482,15 +554,25 @@
       return h("div", { key: n, className: f.type === "table" || f.type === "text" ? "ap-span" : undefined }, el);
     }
 
+    var hiddenBlank = 0;
     function section(i) {
       var s = layout[i], title = L(s.section) || "Rincian", body;
       if (ro) {
         var fs = namesOf(s).map(function (n) { return eng.field(m, n); }).filter(function (f) { return f && visible(f); });
+        // a read-only document says what it holds: empty and zero fields wait behind "Tampilkan kolom kosong"
+        if (!showEmpty && !isNew) {
+          var kept = fs.filter(function (f) { return !blankValue(f, rec[f.name]); });
+          hiddenBlank += fs.length - kept.length;
+          fs = kept;
+        }
+        if (!fs.length) return null;
         var flat = fs.filter(function (f) { return f.type !== "table"; }), grids = fs.filter(function (f) { return f.type === "table"; });
         body = h(React.Fragment, null,
-          flat.length ? h(R.Descriptions, { column: global.innerWidth >= 900 ? 2 : 1, items: flat.map(function (f) {
-            return [L(f.label), f.type === "select" && f.chip && rec[f.name] ? RA.cellFor(m, f.name, rec, ctx) : RA.fieldText(ctx, f, rec[f.name]), f.type === "text" ? 2 : 1];
-          }) }) : null,
+          // a valid description list (dl > div > dt + dd): two columns from 900px, long text across both
+          flat.length ? h("dl", { className: "ap-ro-list" }, flat.map(function (f) {
+            return h("div", { key: f.name, className: f.type === "text" ? "wide" : undefined }, h("dt", null, L(f.label)),
+              h("dd", null, f.type === "select" && f.chip && rec[f.name] ? RA.cellFor(m, f.name, rec, ctx) : RA.fieldText(ctx, f, rec[f.name])));
+          })) : null,
           grids.map(function (f) { return h("div", { key: f.name, className: flat.length ? "ap-ro-grid" : undefined }, fieldEl(f.name)); }));
       } else {
         body = h("div", { className: "ap-docgrid" }, s.columns
@@ -571,6 +653,33 @@
         : h("div", { className: "ap-docprint" }, h(RA.DocTools, { model: m, name: rec.name, record: rec }));
       return { id: s.id, title: s.title, content: content };
     });
+    var sectionEls = layout.map(function (s, i) { return onTab(i) ? section(i) : null; });
+
+    /* the summary on top of a saved document: the amount that matters first, the state in words, print at hand */
+    var sum = !isNew && sub ? docSummary(mm, rec, status, todayISO()) : null, sumEl = null;
+    if (sum) {
+      var day2 = API ? API.tanggal : function (x) { return String(x || "").slice(0, 10); };
+      var money = function (v) { return API ? API.rupiah(Number(v) || 0) : String(v); };
+      var tf = mm.title_field && eng.field(m, mm.title_field), party = tf && rec[tf.name] ? RA.fieldText(ctx, tf, rec[tf.name]) : null;
+      var lineText = summaryLine(sum.line, day2);
+      var showTools = RA.DocTools && prints.length && docstatus === 1 && !(can.print === false);
+      sumEl = h("section", { className: cx("ap-docsum", sum.line && sum.line.tone && "is-" + sum.line.tone), "aria-label": "Ringkasan " + lower(label) },
+        h("div", { className: "ap-docsum-top" },
+          h("div", { className: "ap-docsum-main" },
+            party ? h("span", { className: "ap-docsum-party" }, party) : null,
+            h("span", { className: "ap-docsum-l" }, sum.big.label),
+            h("b", { className: "ap-docsum-big" }, money(sum.big.value)),
+            lineText ? h("span", { className: cx("ap-docsum-line", sum.line.tone && "t-" + sum.line.tone) },
+              sum.line.tone === "bad" ? h(R.Icon, { name: "warning" }) : null, lineText) : null),
+          sum.facts.length ? h("dl", { className: "ap-docsum-kv" }, sum.facts.map(function (f) {
+            return h("div", { key: f.name }, h("dt", null, f.label), h("dd", null, money(f.value)));
+          })) : null),
+        sum.progress ? h("div", { className: "ap-docsum-bar", role: "img", "aria-label": Math.round(sum.progress * 100) + "% sudah dibayar" },
+          h("i", { style: { width: (sum.progress * 100).toFixed(1) + "%" } })) : null,
+        showTools ? h("div", { className: "ap-docsum-acts" }, h(RA.DocTools, { model: m, name: rec.name, record: rec, primary: true })) : null);
+      if (showTools) panel = panel.filter(function (x) { return x.id !== "print"; });
+    }
+
     var heldNote = own && !bannerOn ? h(R.Alert, { tone: "info", title: "Menunggu persetujuan" }, label + " ini menunggu persetujuan. Isinya tidak bisa diubah sampai disetujui atau ditolak.") : null;
 
     var tabBar = tabs.length ? h(R.Tabs, { tabs: tabs.map(function (t) {
@@ -601,10 +710,14 @@
         heldNote,
         h("div", { className: "rk-docpage" },
           h("div", { className: "ap-docmain" },
+            sumEl,
             lockNote,
             // While a request is in flight every editor is disabled: an edit typed now would be replaced by the answer.
             h("fieldset", { className: "ap-form-fields", disabled: !!busy, "aria-busy": busy ? "true" : undefined },
-              layout.map(function (s, i) { return onTab(i) ? section(i) : null; }))),
+              sectionEls),
+            hiddenBlank || (ro && showEmpty) ? h("div", { className: "ap-docempty" },
+              h(R.Button, { variant: "quiet", size: "sm", onClick: function () { setShowEmpty(!showEmpty); } },
+                showEmpty ? "Sembunyikan kolom kosong" : "Tampilkan " + hiddenBlank + " kolom kosong")) : null),
           h(R.DocPanel, { sections: panel }))),
       warn ? h(R.Dialog, { variant: "confirm", icon: "warning", title: "Tetap ajukan?", confirmLabel: "Tetap ajukan", cancelLabel: "Kembali",
         onClose: closeWarn, onConfirm: function () { submit(true); } },

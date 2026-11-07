@@ -844,7 +844,9 @@ def test_theme_default_light(page, ctx):
     page.locator(".ap-shell").wait_for(timeout=15000)
     mode = lambda: page.evaluate("document.documentElement.getAttribute('data-theme')")
     app_bg = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--app').trim()")
-    assert mode() == "light" and app_bg() == "#fafaf9", f"light by default, got data-theme={mode()} --app={app_bg()}"
+    # the light --app token of the look in use: Juragan (data-brand="juragan", brand-juragan.css) or Rangka (app.css)
+    light_bg = "#faf9f7" if page.evaluate("document.documentElement.getAttribute('data-brand')") == "juragan" else "#fafaf9"
+    assert mode() == "light" and app_bg() == light_bg, f"light by default, got data-theme={mode()} --app={app_bg()}"
     assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
     account_menu(page).get_by_role("menuitem", name="Gelap").click()
     assert mode() == "dark", "picking Gelap applies dark"
@@ -1007,7 +1009,9 @@ def table_rows(page):
 
 
 def wait_rows(page, timeout=10000):
-    page.wait_for_function("() => document.querySelectorAll('.rk-table tbody tr:not([aria-hidden])').length > 0 && !document.querySelector('.rk-table tbody tr[aria-hidden]')", timeout=timeout)
+    """Rows loaded: table rows, or under 490px (K-A8) the phone cards that take their place, with no skeleton left."""
+    page.wait_for_function("() => { const t = document.querySelectorAll('.rk-table tbody tr:not([aria-hidden])').length > 0 && !document.querySelector('.rk-table tbody tr[aria-hidden]');"
+                           " const c = document.querySelectorAll('.ap-lc-item:not([aria-hidden])').length > 0 && !document.querySelector('.ap-lc-item[aria-hidden]'); return t || c; }", timeout=timeout)
 
 
 def test_list_search_filter_page(page, ctx):
@@ -1183,12 +1187,15 @@ def test_list_group_by(page, ctx):
     n_req = len(reqs)
     lunas = page.locator(".rk-group", has=page.locator(".rk-group-head .l", has_text=re.compile("^Lunas$")))
     lunas.locator(".rk-group-head").click()
-    lunas.locator(".rk-table tbody tr:not([aria-hidden])").first.wait_for(timeout=10000)
+    # under 490px (K-A8) a group's rows are phone cards instead of a table
+    narrow = ctx.args.width < 490
+    row_sel, body_sel = (".ap-lc-item:not([aria-hidden])", ".ap-lc") if narrow else (".rk-table tbody tr:not([aria-hidden])", ".rk-table")
+    lunas.locator(row_sel).first.wait_for(timeout=10000)
     assert any("/r/sales_invoice" in u and "filter=status == 'paid'" in u and "limit=20" in u for m, u in reqs[n_req:]), \
         f"opening Lunas lists its rows with status == 'paid', saw {reqs[n_req:]}"
-    rows = lunas.locator(".rk-table tbody tr:not([aria-hidden])")
+    rows = lunas.locator(row_sel)
     assert rows.count() == min(paid, 20), f"{min(paid, 20)} Lunas rows, got {rows.count()}"
-    chips = [c.lower() for c in lunas.locator(".rk-table tbody .rk-chip").all_inner_texts()]
+    chips = [c.lower() for c in lunas.locator(body_sel + " .rk-chip").all_inner_texts()]
     assert chips and set(chips) == {"lunas"}, f"every row in the group is Lunas, got {sorted(set(chips))}"
     shot(page, ctx, "list-group-by")
     page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
@@ -1197,7 +1204,7 @@ def test_list_group_by(page, ctx):
     page.evaluate("document.documentElement.setAttribute('data-theme', 'light')")
     # closing the group hides its rows; the group field picker lists the groupable fields
     lunas.locator(".rk-group-head").click()
-    assert lunas.locator(".rk-table").count() == 0, "the group closed"
+    assert lunas.locator(body_sel).count() == 0, "the group closed"
     page.get_by_role("button", name=re.compile("^Kelompok: ")).click()
     assert page.locator(".ap-toolmenu-pop").get_by_role("menuitem", name=field_label(ctx, "sales_invoice", "customer")).count() == 1, "customer is a group field"
     page.keyboard.press("Escape")

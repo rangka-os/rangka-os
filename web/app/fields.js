@@ -7,7 +7,8 @@
  *   currency  "Rp 1.250.000" text, stored as the integer parseRupiah(text)
  *   int/float/percent  "1.250,5" text ("," is the decimal mark), stored as a number
  *   table     Grid: editable rows (link cells are GridLink comboboxes: a debounced GET /api/v1/r/<to>?q=…&limit=20,
- *             arrow keys + Enter to pick, Escape to close), totals from the parent's computed currency fields
+ *             arrow keys + Enter to pick, Escape to close), totals from the parent's computed currency fields; under
+ *             490px (K-A8) each row is a card with its fields stacked under their labels
  *   else      a text input (npwp keeps digits only)
  * `error` is the server's word (red, aria-invalid); `hint` is the browser's preview of a rule (never blocks a save).
  * Read-only fields render RangkaApp.fieldText as plain text (links open the record).
@@ -259,6 +260,7 @@
   function Grid(p) {
     var ctx = p.ctx, eng = ctx.eng, f = p.field, cm = ctx.meta.models[f.of], rows = p.rec[f.name] || [], ro = p.readOnly;
     var cols = cm.fields;
+    var narrow = RA.useNarrow ? RA.useNarrow() : false;
 
     function set(i, k, v) {
       var n = rows.map(function (r) { return Object.assign({}, r); });
@@ -269,24 +271,65 @@
     }
     function add() { p.onChange(f.name, rows.concat([eng.applyDefaults(f.of, {})])); }
     function del(i) { p.onChange(f.name, rows.filter(function (_, j) { return j !== i; })); }
-    var totals = ctx.meta.models[p.model].fields.filter(function (x) { return x.compute && x.type === "currency"; });
+    // Totals under the lines: computed currency fields of the parent, minus hidden ones and zero lines (riset desain K-A4:
+    // eleven tax lines at Rp 0 buried the total). The bold line is the document's total (grand_total, net_total), not the last one.
+    var allTotals = ctx.meta.models[p.model].fields.filter(function (x) { return x.compute && x.type === "currency" && !x.hidden; });
+    var grandName = ["grand_total", "net_total"].filter(function (n) { return allTotals.some(function (x) { return x.name === n; }); })[0]
+      || (allTotals.length ? allTotals[allTotals.length - 1].name : null);
+    var totals = allTotals.filter(function (x) { return x.name === grandName || Number(p.rec[x.name] || 0) !== 0; });
 
-    function cell(r, i, c) {
+    /** One cell's editor or text, and the class its table cell takes ("n" right-aligns numbers). */
+    function body(r, i, c) {
       var v = r[c.name], lbl = L(c.label) + " baris " + (i + 1), num = numeric(c);
       if (c.type === "link") {
-        if (ro || c.read_only) return h("td", { key: c.name }, h("div", { className: "rk-cell-item" }, h("b", null, v ? ctx.cache.title(c.to, v) : "—"), v ? h("small", null, v) : null));
-        return h("td", { key: c.name, className: "ap-grid-link" }, h(GridLink, { ctx: ctx, field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }));
+        if (ro || c.read_only) return { el: h("div", { className: "rk-cell-item" }, h("b", null, v ? ctx.cache.title(c.to, v) : "—"), v ? h("small", null, v) : null) };
+        return { cls: "ap-grid-link", el: h(GridLink, { ctx: ctx, field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }) };
       }
       if (ro || c.compute || c.read_only) {
-        return h("td", { key: c.name, className: num ? "n" : undefined }, h("div", { className: num ? "rk-cell-ro" : "rk-cell-item" }, num ? formatNumber(v, c.type === "currency" ? 0 : 3) : v == null ? "" : String(v)));
+        var txt = num ? formatNumber(v, c.type === "currency" ? 0 : 3) : c.type === "check" ? (v ? "Ya" : "Tidak") : v == null ? "" : String(v);
+        return { cls: num ? "n" : undefined, ro: true, el: h("div", { className: num ? "rk-cell-ro" : "rk-cell-item" }, txt) };
       }
-      if (num) return h("td", { key: c.name, className: "n" }, h(GridNum, { field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }));
-      return h("td", { key: c.name }, h("input", { className: "rk-cell", value: v == null ? "" : String(v), "aria-label": lbl, onChange: function (e) { set(i, c.name, e.target.value); } }));
+      if (num) return { cls: "n", el: h(GridNum, { field: c, value: v, label: lbl, onChange: function (x) { set(i, c.name, x); } }) };
+      return { el: h("input", { className: "rk-cell", value: v == null ? "" : String(v), "aria-label": lbl, onChange: function (e) { set(i, c.name, e.target.value); } }) };
+    }
+    function cell(r, i, c) { var b = body(r, i, c); return h("td", { key: c.name, className: b.cls }, b.el); }
+
+    var foot = h("div", { className: "rk-grid-foot" },
+      ro ? h("span", { className: "rk-grid-lock" }, h(R.Icon, { name: "lock" }), p.lockText || "Baris tidak bisa diubah.")
+        : h(R.Button, { size: "sm", icon: "add", onClick: add }, "Tambah baris"),
+      h("div", { className: "rk-totals" }, totals.map(function (t, i) {
+        var g = t.name === grandName;
+        return [h("span", { key: t.name + "l", className: g ? "grand" : undefined }, L(t.label)), h("b", { key: t.name + "v", className: g ? "grand" : undefined }, API.rupiah(p.rec[t.name] || 0))];
+      })));
+    var hint = p.error ? h("span", { className: "rk-field-hint", role: "alert" }, p.error) : p.hint ? h("span", { className: "rk-field-hint" }, p.hint) : null;
+
+    /* phone (under 490px, K-A8): one card per row, the fields stacked with their labels, so a row is filled without
+       scrolling sideways; the item spans the card, the numbers sit two by two */
+    if (narrow) {
+      return h("div", { className: cx("rk-field", p.error && "rk-field-error") }, h("span", { className: "ap-grid-label" }, L(f.label)),
+        h("div", { className: "rk-grid-wrap ap-gc" },
+          rows.length ? h("ol", { className: "ap-gc-list", "aria-label": L(f.label) }, rows.map(function (r, i) {
+            return h("li", { key: i, className: "ap-gc-row" },
+              h("div", { className: "ap-gc-head" }, h("span", null, "Baris " + (i + 1)),
+                ro ? null : h(R.IconButton, { icon: "delete", label: "Hapus baris " + (i + 1), onClick: function () { del(i); } })),
+              // a locked row shows what it holds: empty, zero and unticked cells stay out of the card
+              h("div", { className: "ap-gc-fields" }, cols.filter(function (c) {
+                if (!ro) return true;
+                var v = r[c.name];
+                return !(v == null || v === "" || v === false || (numeric(c) && Number(v) === 0));
+              }).map(function (c) {
+                var b = body(r, i, c), wide = c.type === "link" || c.type === "text";
+                return h("div", { key: c.name, className: cx("ap-gc-f", wide && "wide", b.ro && "ro", b.cls === "n" && "n") },
+                  h("span", { className: "ap-gc-l", "aria-hidden": "true" }, L(c.label)), b.el);
+              })));
+          })) : h("p", { className: "ap-grid-empty ap-gc-empty" }, "Belum ada baris"),
+          foot),
+        hint);
     }
 
     return h("div", { className: cx("rk-field", p.error && "rk-field-error") }, h("label", null, L(f.label)),
       h("div", { className: "rk-grid-wrap" },
-        h("div", { className: "rk-grid-scroll" }, h("table", { className: "rk-grid" },
+        h("div", { className: "rk-grid-scroll", tabIndex: 0, role: "region", "aria-label": L(f.label) }, h("table", { className: "rk-grid" },
           h("thead", null, h("tr", null, h("th", { className: "idx" }, "No"),
             cols.map(function (c) { return h("th", { key: c.name, className: numeric(c) ? "n" : undefined }, L(c.label)); }),
             ro ? null : h("th", { className: "act" }, h("span", { className: "rk-sr" }, "Aksi")))),
@@ -294,14 +337,8 @@
             return h("tr", { key: i }, h("td", { className: "idx" }, i + 1), cols.map(function (c) { return cell(r, i, c); }),
               ro ? null : h("td", { className: "act" }, h(R.IconButton, { icon: "delete", label: "Hapus baris " + (i + 1), onClick: function () { del(i); } })));
           }) : h("tr", null, h("td", { colSpan: cols.length + (ro ? 1 : 2), className: "ap-grid-empty" }, "Belum ada baris"))))),
-        h("div", { className: "rk-grid-foot" },
-          ro ? h("span", { className: "rk-grid-lock" }, h(R.Icon, { name: "lock" }), p.lockText || "Baris tidak bisa diubah.")
-            : h(R.Button, { size: "sm", icon: "add", onClick: add }, "Tambah baris"),
-          h("div", { className: "rk-totals" }, totals.map(function (t, i) {
-            var g = i === totals.length - 1;
-            return [h("span", { key: t.name + "l", className: g ? "grand" : undefined }, L(t.label)), h("b", { key: t.name + "v", className: g ? "grand" : undefined }, API.rupiah(p.rec[t.name] || 0))];
-          })))),
-      p.error ? h("span", { className: "rk-field-hint", role: "alert" }, p.error) : p.hint ? h("span", { className: "rk-field-hint" }, p.hint) : null);
+        foot),
+      hint);
   }
 
   /* ---------------------------------------------------------------- one field */

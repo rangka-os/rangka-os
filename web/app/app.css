@@ -92,7 +92,7 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-shell .rk-navlink .rk-count { min-width: 18px; height: 18px; padding: 0 6px; box-sizing: border-box; border-radius: var(--r-pill); background: var(--ap-count); color: var(--ap-count-ink);
   font: 600 11px/18px var(--font-sans); text-align: center; }
 .ap-shell .rk-navlink[aria-current="page"] .rk-count { color: var(--ap-count-ink); }
-.ap-shell .rk-navgroup > p { margin: 14px 0 4px; padding: 0 10px; height: 16px; font: 600 11px/16px var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: #8c827b; }
+.ap-shell .rk-navgroup > p { margin: 14px 0 4px; padding: 0 10px; height: 16px; font: 600 11px/16px var(--font-sans); letter-spacing: .05em; text-transform: uppercase; color: var(--muted); }
 .ap-shell .rk-side-foot { border-top: 1px solid var(--line); padding: 8px 10px; }
 .ap-shell .rk-side-collapse .rk-iconbtn { color: var(--ap-nav-icon); }
 :root[data-theme="dark"] .ap-shell .rk-navgroup > p { color: var(--muted); }
@@ -263,6 +263,62 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .ap-inbox-doc a { font: 400 12.5px/20px var(--font-mono); color: var(--ap-docno); }
 .ap-main .ap-inbox-doc a:hover { color: var(--ink); }
 
+/* who and how much lead the card (P8); the document number is the detail under it. Same roles as the phone list card:
+   the counterparty and the amount share one weight, the number keeps its mono, the rest is muted */
+.ap-inbox-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.ap-inbox-party, .ap-lc-title { min-width: 0; font: 600 13.5px/20px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+.ap-inbox-amt, .ap-lc-amt { flex: none; font: 600 13.5px/20px var(--font-sans); color: var(--ink); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.ap-lc-amt .rk-amount { font: inherit; color: inherit; }
+.ap-inbox-sub { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-width: 0; }
+.ap-inbox-sub .ap-inbox-doc { display: block; font-weight: 400; color: var(--muted); font-size: 12.5px; line-height: 20px; min-width: 0; }
+.ap-inbox-sub .ap-inbox-doc a { white-space: nowrap; } /* the number is the identity: it wraps whole, never cut */
+.ap-main .ap-inbox-sub .ap-inbox-doc a { font-size: 12px; }
+.ap-inbox-sub .rk-lozenge { flex: none; }
+
+/* ---- phone list (K-A8, under 490px): a card per record inside the same white card as the table ---- */
+.ap-lc-list { list-style: none; margin: 0; padding: 0; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+.ap-lc-item + .ap-lc-item { border-top: 1px solid var(--line); }
+.ap-lc-link { display: flex; flex-direction: column; gap: 2px; padding: 10px 14px; min-height: 44px; box-sizing: border-box; color: inherit; text-decoration: none; }
+a.ap-lc-link:hover { background: var(--hover); }
+a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ap-lc-top, .ap-lc-sub { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; min-width: 0; }
+.ap-lc-sub { align-items: center; }
+.ap-lc-meta { display: flex; flex-wrap: wrap; align-items: center; min-width: 0; font-size: 12px; line-height: 18px; color: var(--muted); }
+.ap-lc-meta > span + span::before { content: "·"; padding: 0 6px; color: var(--faint); }
+.ap-main .ap-lc-meta .rk-doc-no { font: 400 12px/18px var(--font-mono); color: var(--ap-docno); }
+.ap-lc-sub > .rk-chip, .ap-lc-sub > .rk-pill { flex: none; }
+.ap-lc .rk-cmd-empty { border: 1px solid var(--line-strong); border-top: 0; border-radius: 0 0 var(--r-lg) var(--r-lg); background: var(--surface); }
+.ap-lc-list:empty { display: none; }
+.ap-lc-list:empty + .rk-cmd-empty, .ap-lc-list:empty + .rk-sr + .rk-cmd-empty { border-top: 1px solid var(--line-strong); border-radius: var(--r-lg); }
+
+/* ---- phone grid (K-A8, under 490px): a card per child row, fields under their labels ---- */
+.ap-grid-label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-gc-list { list-style: none; margin: 0; padding: 0; }
+.ap-gc-row { padding: 10px 12px 12px; }
+.ap-gc-row + .ap-gc-row { border-top: 1px solid var(--line); }
+.ap-gc-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; font: 600 12px/16px var(--font-sans); color: var(--muted); }
+.ap-gc-head .rk-iconbtn { width: 40px; height: 40px; margin-right: -8px; color: var(--muted); }
+.ap-gc-head .rk-iconbtn:hover { color: var(--bad); background: var(--bad-tint); }
+.ap-gc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.ap-gc-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ap-gc-f.wide { grid-column: 1 / -1; }
+.ap-gc-l { font-size: 11.5px; line-height: 16px; color: var(--muted); }
+.ap-gc-f .rk-cell { height: 40px; border: 1px solid var(--ap-field-line, var(--line-strong)); border-radius: var(--r-btn); background: var(--surface); padding: 0 10px; }
+.ap-gc-f .rk-cell:focus { border-color: var(--focus); box-shadow: none; }
+.ap-gc-f .ap-gl input { height: 40px; }
+.ap-gc-f.ro .rk-cell-ro, .ap-gc-f.ro .rk-cell-item { padding: 0; text-align: left; min-height: 20px; font-size: 13px; color: var(--ink-2); }
+.ap-gc-f.ro.n .rk-cell-ro { font-variant-numeric: tabular-nums; }
+.ap-gc-f .rk-cell-item { padding: 0; }
+.ap-gc-empty { margin: 0; }
+.ap-gc .rk-totals { min-width: 0; width: 100%; gap: 6px 16px; }
+.ap-gc .rk-grid-foot { padding: 10px 12px; }
+
+@media (max-width: 489px) {
+  /* thumb reach: Setujui and Tolak split the card's width */
+  .ap-main .ap-inbox .ap-decide { flex: 1 1 100%; }
+  .ap-main .ap-inbox .ap-decide .rk-btn { flex: 1 1 0; }
+}
+
 /* the approval's Setujui is the pen's green (the phone approval card); Tolak stays outlined */
 .rk-btn.ap-approve { background: var(--ap-approve); color: var(--ap-approve-ink); }
 .rk-btn.ap-approve:hover, .rk-btn.ap-approve:active { background: var(--ap-approve-hover); color: var(--ap-approve-ink); }
@@ -348,4 +404,70 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
   .ap-main .ap-head-search { flex: 1 1 100%; }
   .ap-shell .rk-navlink { height: auto; min-height: 40px; }
   .ap-ubah-mode button { min-height: 40px; line-height: 40px; }
+}
+
+/* riset desain K-A4/A4: the sidebar keeps its footer (Tanya Raka) in view; only the nav list scrolls */
+@media (min-width: 861px) {
+  .ap-shell > .rk-side { position: sticky; top: 48px; height: calc(100vh - 48px); height: calc(100dvh - 48px); display: flex; flex-direction: column; }
+  .ap-shell:not(.ap-top) > .rk-side { top: 0; height: 100vh; height: 100dvh; }
+  .ap-shell > .rk-side > nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+}
+
+/* ==== Juragan look (riset desain gelombang 2, K-DS1 revisi): app conventions from Frappe UI (Inter 14px, neutral
+   surface/ink/outline, dark primary, status always with words). Bata accents and the warm stone palette are gone;
+   kunyit stays only in the Juragan mark. Light theme only; the dark theme keeps its values for now. ==== */
+:root:not([data-theme="dark"]) {
+  --font-size: 14px; --font-size-sm: 13px;
+  --app: #fafafa; --surface: #ffffff; --soft: #f5f5f5;
+  --line: #ececec; --line-strong: #e0e0e0;
+  --ink: #171717; --ink-2: #404040; --muted: #5c5c5c; --faint: #8a8a8a;
+  --hover: rgba(0, 0, 0, .04); --neutral: #f2f2f2; --neutral-hover: #e8e8e8;
+  --selected: #ececec; --selected-ink: #171717; --row-selected: #f5f5f5;
+  --primary: #171717; --primary-hover: #000000; --primary-ink: #ffffff;
+  --link: #175cd3; --focus: #2563eb;
+  --ok: #067647; --ok-tint: #ecfdf3; --warn: #93370d; --warn-tint: #fffaeb; --warn-line: #fedf89;
+  --info: #175cd3; --info-tint: #eff8ff; --bad: #b42318; --bad-tint: #fef3f2;
+  --r: 8px; --r-btn: 8px; --r-md: 8px; --r-lg: 12px;
+  --chart-1: #404040; --chart-2: #2e90fa; --chart-3: #f79009; --chart-4: #12b76a; --chart-5: #9e77ed; --chart-6: #a3a3a3;
+  --ap-field-line: #d9d9d9; --ap-nav-icon: #5c5c5c; --ap-col: #f2f2f2; --ap-card-line: #e7e7e7;
+  --ap-pill: #f2f2f2; --ap-pill-ink: #404040;
+  --ap-create: #171717; --ap-create-hover: #000000; --ap-create-ink: #ffffff;
+  --ap-count: #171717; --ap-count-ink: #ffffff;
+  --ap-docno: #5c5c5c;
+  --ap-approve: #171717; --ap-approve-hover: #000000; --ap-approve-ink: #ffffff;
+}
+:root:not([data-theme="dark"]) body { font: 14px/20px var(--font-sans); }
+:root:not([data-theme="dark"]) .ap-shell .rk-side-mark, :root:not([data-theme="dark"]) .ap-shell .rk-side-head .tile { background: #171717; }
+:root:not([data-theme="dark"]) .ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); color: var(--ink); font-weight: 600; }
+:root:not([data-theme="dark"]) .ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--ink); }
+:root:not([data-theme="dark"]) .ap-shell .rk-navgroup > p { text-transform: none; letter-spacing: 0; font: 500 12px/16px var(--font-sans); }
+/* document numbers: secondary text, not a monospace code (K-A3) */
+.ap-main .rk-table .rk-doc-no, .ap-main .rk-table td a.rk-doc-no, .ap-main .ap-inbox-doc a { font: 400 13px/20px var(--font-sans); color: var(--ap-docno); }
+.ap-main .rk-card, .ap-main .ap-tiles { border-radius: 12px; }
+
+/* Perlu diurus on the home dashboard (P2, K-A2) */
+.ap-attn { background: var(--surface); border: 1px solid var(--ap-card-line, var(--line)); border-radius: 12px; margin-bottom: 16px; }
+.ap-attn-head { display: flex; align-items: baseline; justify-content: space-between; gap: 12px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.ap-attn-head h2 { margin: 0; font: 600 15px/20px var(--font-sans); }
+.ap-attn-count { color: var(--muted); font-size: 13px; }
+.ap-attn-empty { padding: 18px 20px; color: var(--muted); }
+.ap-attn-row { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.ap-attn-row:last-child { border-bottom: 0; }
+.ap-attn-badge { flex: none; font: 600 12px/20px var(--font-sans); border-radius: 999px; padding: 0 10px; }
+.ap-attn-badge.bad { color: var(--bad); background: var(--bad-tint); }
+.ap-attn-badge.warn { color: var(--warn); background: var(--warn-tint); }
+.ap-attn-main { flex: 1 1 260px; min-width: 0; display: flex; flex-direction: column; }
+.ap-attn-main b { font-weight: 600; }
+.ap-attn-main small { color: var(--muted); font-size: 13px; }
+.ap-attn-amt { font-weight: 600; font-variant-numeric: tabular-nums; }
+
+/* the business tile and active icons use the neutral ink, whatever the tenant theme sets on :root */
+:root:not([data-theme="dark"]) .ap-shell { --brand: #171717; }
+
+/* phone (P7, K-A8): dashboard lists keep the first column (who) and the last (how much); the rest is one tap away */
+@media (max-width: 600px) {
+  .ap-main .rk-list-table th:not(:first-child):not(:last-child),
+  .ap-main .rk-list-table td:not(:first-child):not(:last-child) { display: none; }
+  .ap-attn-row { padding: 14px 16px; }
+  .ap-attn-amt { margin-left: auto; }
 }

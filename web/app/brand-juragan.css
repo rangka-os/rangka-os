@@ -1,0 +1,231 @@
+/*
+ * Juragan look on the Rangka app (desain arah E, riset/desain/06 putaran 6, 07 palet Bata). Scoped to
+ * <html data-brand="juragan"> so the Rangka default stays untouched. Loaded after app.css.
+ * Rules of colour roles:
+ *   brand  : Bata only on the logo mark and the business tile
+ *   UI     : warm neutral (stone), active nav = neutral tint, primary button = ink, focus = neutral
+ *   kind   : module colours (sales blue, money teal, work purple, stock gold) for charts and kind tiles
+ *   status : ok/warn/bad/info only for real states, always with words
+ *   Raka   : neutral (no teal)
+ */
+:root[data-brand="juragan"]:not([data-theme="dark"]) {
+  color-scheme: light;
+  --font-size: 14px; --font-size-sm: 13px; --line-height: 20px;
+  --app: #faf9f7; --surface: #ffffff; --soft: #f2f0ec;
+  --line: #ebe7e1; --line-strong: #ddd8d0; --border: #a8a196;
+  --ink: #1f1e1c; --ink-2: #4a4640; --muted: #6b655d; --faint: #9b938e;
+  --hover: rgba(31, 30, 28, .04); --neutral: #f2f0ec; --neutral-hover: #e9e5df;
+  --selected: #edeae5; --selected-ink: #1f1e1c; --row-selected: #f7f5f2;
+  --primary: #1f1e1c; --primary-hover: #000000; --primary-ink: #ffffff;
+  --link: #1f1e1c; --focus: #57534e; --focus-ring: 0 0 0 2px #57534e; --focus-soft: inset 0 0 0 1px #57534e;
+  --ok: #21763c; --ok-tint: #e3f6e6; --ok-line: #bfe6c8; --ok-solid: #21763c;
+  --warn: #7d5a00; --warn-tint: #ffeed0; --warn-line: #f4d79a; --warn-solid: #edb345; --on-warn: #1f1e1c;
+  --bad: #97123a; --bad-tint: #ffeaec; --bad-line: #f5c3cc; --bad-solid: #97123a; --on-bad: #ffffff;
+  --info: #215db3; --info-tint: #e7f1ff; --info-line: #c5dcfb;
+  --chart-1: #1f5fb8; --chart-2: #04756e; --chart-3: #8250b0; --chart-4: #8a6212; --chart-5: #6b655d; --chart-6: #a8a196;
+  --brand: #b4432a; --brand-deep: #1f1e1c; --brand-soft: #f6ede6;
+  --raka: #4a4640; --raka-deep: #1f1e1c; --raka-soft: #ebe7e1; --spark: #6b655d;
+  --r: 8px; --r-btn: 8px; --r-md: 8px; --r-lg: 12px; --r-dialog: 16px;
+  --control: 32px; --field: 32px; --control-lg: 36px; --row: 40px;
+  --ap-field-line: #ddd8d0; --ap-nav-icon: #6b655d; --ap-col: #f2f0ec; --ap-card-line: #ebe7e1;
+  --ap-pill: #f2f0ec; --ap-pill-ink: #4a4640;
+  --ap-create: #1f1e1c; --ap-create-hover: #000000; --ap-create-ink: #ffffff;
+  --ap-count: #1f1e1c; --ap-count-ink: #ffffff; --ap-docno: #6b655d;
+  --ap-approve: #1f1e1c; --ap-approve-hover: #000000; --ap-approve-ink: #ffffff;
+  --k-jual: #1f5fb8; --k-jual-s: #e8eff9; --k-uang: #04756e; --k-uang-s: #e2f3f1;
+  --k-kerja: #8250b0; --k-kerja-s: #f1eaf8; --k-stok: #8a6212; --k-stok-s: #f7eedb;
+}
+
+/* Dark: Rangka OS site palette (Dede), Bata #E0623F on the mark only */
+:root[data-brand="juragan"][data-theme="dark"] {
+  color-scheme: dark;
+  --app: #161412; --surface: #1c1b19; --soft: #211e1b; --line: #33302e; --line-strong: #403c3a;
+  --ink: #f3efec; --ink-2: #cfc7c1; --muted: #a79d96;
+  --selected: #2f2d2a; --selected-ink: #f3efec; --row-selected: #262321;
+  --primary: #f3efec; --primary-ink: #161412; --link: #f3efec; --focus: #cfc7c1;
+  --focus-ring: 0 0 0 2px #cfc7c1; --focus-soft: inset 0 0 0 1px #cfc7c1;
+  --bad: #f47c7c; --bad-tint: #3b2020; --ok: #75d78d; --ok-tint: #1a3520; --warn: #f2c36a; --warn-tint: #3a2b0d;
+  --chart-1: #7fa8e6; --chart-2: #4cc2b8; --chart-3: #c9a0f0; --chart-4: #ebb353; --chart-5: #a79d96;
+  --brand: #e0623f; --brand-soft: #3a2219; --raka: #cfc7c1; --raka-deep: #f3efec; --raka-soft: #2f2d2a; --spark: #a79d96;
+  /* the rest of the set, so no Rangka dark value (Bata create button, yellow counts, green approve) shows through */
+  --faint: #7a706a; --border: #7a706a; --hover: rgba(243, 239, 236, .05); --neutral: #262321; --neutral-hover: #2f2d2a; --primary-hover: #ffffff;
+  --info: #8fb4ec; --info-tint: #1d2a3d; --info-line: #2c4466;
+  --ok-line: #2a5a35; --ok-solid: #4fbf6b; --warn-line: #6a5120; --warn-solid: #f2c36a; --on-warn: #161412; --bad-line: #6b2b2b; --bad-solid: #f47c7c; --on-bad: #161412;
+  --chart-6: #6b655d;
+  --ap-field-line: #403c3a; --ap-nav-icon: #a79d96; --ap-col: #191715; --ap-card-line: #33302e; --ap-card-shadow: none;
+  --ap-pill: #262321; --ap-pill-ink: #cfc7c1;
+  --ap-create: #f3efec; --ap-create-hover: #ffffff; --ap-create-ink: #161412;
+  --ap-count: #f3efec; --ap-count-ink: #161412; --ap-docno: #a79d96;
+  --ap-approve: #f3efec; --ap-approve-hover: #ffffff; --ap-approve-ink: #161412;
+  --ap-seg: #161412; --ap-seg-on: #2f2d2a; --ap-seg-shadow: none;
+  --k-jual: #7fa8e6; --k-jual-s: #1d2a3d; --k-uang: #4cc2b8; --k-uang-s: #14302d; --k-kerja: #c9a0f0; --k-kerja-s: #2b2238; --k-stok: #ebb353; --k-stok-s: #33280f;
+}
+
+[data-brand="juragan"] body { font: 14px/20px "Inter", var(--font-sans); background: var(--app); }
+
+/* logo mark and business tile = Bata (the one brand moment in the app) */
+/* g1 sets --brand to ink on .ap-shell; this beats it (0,3,0, later) */
+:root[data-brand="juragan"]:not([data-theme="dark"]) .ap-shell { --brand: #b4432a; }
+:root[data-brand="juragan"][data-theme="dark"] .ap-shell { --brand: #e0623f; }
+[data-brand="juragan"] .ap-shell .rk-side-mark,
+[data-brand="juragan"] .ap-shell .rk-side-head .tile { background: var(--brand) !important; color: #fff; }
+
+/* sidebar: warm neutral, active item = neutral tint, ink text and icon */
+[data-brand="juragan"] .ap-shell > .rk-side { background: var(--app); border-right: 1px solid var(--line); }
+[data-brand="juragan"] .ap-shell .rk-navlink { border-radius: 8px; color: var(--ink-2); }
+[data-brand="juragan"] .ap-shell .rk-navlink:hover { background: var(--hover); color: var(--ink); }
+[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); color: var(--ink); font-weight: 600; }
+[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--ink); }
+[data-brand="juragan"] .ap-shell .rk-navgroup > p { text-transform: none; letter-spacing: 0; font: 500 12px/16px var(--font-sans); color: var(--muted); }
+
+/* page head: a real title, not a 15px label */
+[data-brand="juragan"] .rk-pagehead { background: var(--app); border-bottom: 0; padding-top: 8px; }
+[data-brand="juragan"] .rk-pagehead h1 { font: 600 22px/28px "Inter", var(--font-sans); letter-spacing: -0.01em; }
+
+/* cards and stats: white on warm background, hairline, 12px radius */
+[data-brand="juragan"] .rk-card, [data-brand="juragan"] .rk-stat, [data-brand="juragan"] .ap-main .ap-tiles { border-color: var(--line); border-radius: 12px; }
+[data-brand="juragan"] .rk-stat { padding: 14px 16px; }
+
+/* buttons: 32px, 8px radius; primary ink */
+[data-brand="juragan"] .rk-btn { border-radius: 8px; font-weight: 600; }
+[data-brand="juragan"] .rk-btn-link { text-decoration: underline; text-underline-offset: 2px; }
+
+/* status badges: small radius, always with words (not round pills) */
+[data-brand="juragan"] .rk-pill, [data-brand="juragan"] .ap-attn-badge { border-radius: 6px; }
+
+/* table: comfortable rows, tabular numbers */
+[data-brand="juragan"] .rk-table td, [data-brand="juragan"] .rk-table th { font-variant-numeric: tabular-nums; }
+[data-brand="juragan"] .rk-table thead th { color: var(--muted); font-weight: 500; }
+
+/* Perlu diurus (home): the first thing the owner sees, kind tiles carry the module colour */
+[data-brand="juragan"] .ap-attn { border-radius: 12px; border-color: var(--line); }
+[data-brand="juragan"] .ap-attn-head h2 { font: 600 16px/22px "Inter", var(--font-sans); }
+
+/* Raka: neutral avatar and chat, no teal */
+[data-brand="juragan"] .rk-chat-raka, [data-brand="juragan"] .rk-askbar { --raka: var(--ink-2); }
+
+/* phone: 44px targets for primary actions */
+@media (max-width: 860px) {
+  [data-brand="juragan"] .rk-btn-primary, [data-brand="juragan"] .rk-btn-lg { min-height: 40px; }
+  [data-brand="juragan"] .rk-pagehead h1 { font-size: 20px; line-height: 26px; }
+}
+
+/* phone tab bar (shell.js, only with data-brand="juragan") */
+.ap-tabbar { display: none; }
+@media (max-width: 860px) {
+  [data-brand="juragan"] .ap-tabbar {
+    display: grid; grid-template-columns: repeat(4, 1fr); position: sticky; bottom: 0; z-index: 20;
+    background: var(--surface); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
+  }
+  [data-brand="juragan"] .ap-tabbar a, [data-brand="juragan"] .ap-tabbar button {
+    position: relative; display: grid; justify-items: center; gap: 2px; min-height: 48px; padding: 6px 0; border: 0; border-radius: 10px;
+    background: none; color: var(--muted); font: 500 11px/14px "Inter", var(--font-sans); text-decoration: none; cursor: pointer;
+  }
+  [data-brand="juragan"] .ap-tabbar [aria-current="page"] { color: var(--ink); background: var(--selected); font-weight: 600; }
+  [data-brand="juragan"] .ap-tabbar .rk-icon { width: 20px; height: 20px; }
+  [data-brand="juragan"] .ap-tabbar-n {
+    position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+    border-radius: 8px; background: var(--ink); color: var(--surface); font: 700 10px/16px var(--font-sans); font-style: normal;
+  }
+}
+
+/* ---- detail dokumen (v2): ringkasan di atas, status berteks, aksi cetak di tangan ---- */
+/* lifecycle rail: the current step is ink, not Bata (Bata is only the mark) */
+[data-brand="juragan"] .ap-main .rk-step.process .rk-step-icon { background: var(--ink); }
+[data-brand="juragan"] .ap-main .rk-step.process .rk-step-title { color: var(--ink); }
+.ap-docsum { display: grid; gap: 12px; margin: 0 0 16px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.ap-docsum-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
+.ap-docsum-main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
+.ap-docsum-party { font: 600 15px/22px "Inter", var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+.ap-docsum-party a { color: inherit; text-decoration: none; }
+.ap-docsum-party a:hover { text-decoration: underline; }
+.ap-docsum-l { margin-top: 6px; font: 500 12px/16px "Inter", var(--font-sans); color: var(--muted); }
+.ap-docsum-big { font: 600 30px/36px "Inter", var(--font-sans); letter-spacing: -0.02em; color: var(--ink); font-variant-numeric: tabular-nums; margin-bottom: 6px; }
+.ap-docsum-line { font-size: 13px; line-height: 20px; color: var(--ink-2); }
+.ap-docsum-kv { display: flex; gap: 8px 28px; margin: 0; flex-wrap: wrap; }
+.ap-docsum-kv > div { display: flex; flex-direction: column; gap: 2px; }
+.ap-docsum-kv dt { font-size: 12px; line-height: 16px; color: var(--muted); }
+.ap-docsum-kv dd { margin: 0; font: 600 14px/20px "Inter", var(--font-sans); color: var(--ink); font-variant-numeric: tabular-nums; }
+.ap-docsum-bar { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; }
+.ap-docsum-bar i { display: block; height: 100%; background: var(--ok-solid, var(--ok)); border-radius: 3px; }
+.ap-docsum-acts { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
+.ap-docempty { display: flex; justify-content: flex-start; padding: 4px 0 16px; }
+[data-brand="juragan"] .ap-docsec-t { font: 600 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .rk-doc-lock { background: var(--soft); border: 0; border-radius: 8px; color: var(--ink-2); }
+@media (max-width: 860px) {
+  .ap-docsum { padding: 14px; }
+  .ap-docsum-big { font-size: 28px; line-height: 34px; }
+  .ap-docsum-acts .rk-btn { min-height: 40px; }
+  .ap-docempty .rk-btn { min-height: 40px; }
+}
+[data-brand="juragan"] .ap-docsum-party a { color: var(--ink); text-decoration: none; }
+[data-brand="juragan"] .ap-docsum-party a:hover { text-decoration: underline; }
+.ap-docsum-acts .rk-btn-primary { order: -1; }
+
+/* phone page head of a record (it has a back button): back, title, status and the ⋯ on one row; the breadcrumb trail
+   is a laptop thing. List heads keep their own wrapping. */
+@media (max-width: 860px) {
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) { flex-wrap: nowrap; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-crumbs { display: none; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > h1 { flex: 0 1 auto; font-size: 17px; line-height: 24px; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-pill { flex: none; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-pagehead-extra { width: auto; flex-wrap: nowrap; flex: none; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row > .rk-iconbtn, [data-brand="juragan"] .ap-main .ap-morebtn { width: 40px; height: 40px; }
+}
+.ap-docsum-line { display: inline-flex; align-items: center; gap: 6px; }
+.ap-docsum-line .rk-icon { width: 14px; height: 14px; }
+.ap-docsum-line.t-bad { color: var(--bad); font-weight: 600; }
+.ap-docsum-line.t-warn { color: var(--warn); font-weight: 500; }
+.ap-docsum-line.t-ok { color: var(--ok); font-weight: 600; }
+
+/* ---- dasbor (v2) ---- */
+/* card titles sit on the card, no rule under them; tables keep their own head row */
+[data-brand="juragan"] .ap-main .rk-card-head { border-bottom: 0; min-height: 44px; padding: 0 16px; }
+[data-brand="juragan"] .ap-main .rk-card-head h2 { font: 600 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-main .rk-card-sub { color: var(--muted); }
+/* a change against last period is a count, not a status: neutral chip, the arrow and number say the direction */
+[data-brand="juragan"] .rk-numcard-foot .rk-pill { background: var(--soft); color: var(--ink-2); }
+[data-brand="juragan"] .rk-stat-num { font: 600 24px/30px "Inter", var(--font-sans); letter-spacing: -0.01em; font-variant-numeric: tabular-nums; }
+.rk-card .ap-dash-lc { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
+
+/* ---- persetujuan (v2): siapa dan berapa memutuskan, nominal besar, Setujui/Tolak sebesar ibu jari ---- */
+[data-brand="juragan"] .ap-main .ap-inbox { border-color: var(--line); border-radius: 12px; }
+[data-brand="juragan"] .ap-main .ap-inbox-row { padding: 14px 16px; }
+[data-brand="juragan"] .ap-inbox-party { font: 600 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-inbox-amt { font: 600 16px/22px "Inter", var(--font-sans); letter-spacing: -0.01em; }
+@media (max-width: 489px) {
+  [data-brand="juragan"] .ap-inbox-head { flex-direction: column; align-items: flex-start; gap: 2px; }
+  [data-brand="juragan"] .ap-inbox-amt { font-size: 24px; line-height: 30px; }
+  [data-brand="juragan"] .ap-main .ap-inbox .ap-decide { margin-top: 6px; }
+  [data-brand="juragan"] .ap-main .ap-inbox .ap-decide .rk-btn { min-height: 44px; font-size: 15px; }
+}
+
+/* Perlu diurus on a phone: what (title, detail, state) on the left, the one action on the right; no stacked button rows */
+[data-brand="juragan"] .ap-attn-head { border-bottom: 0; padding-bottom: 6px; }
+@media (max-width: 600px) { [data-brand="juragan"] .ap-attn-head { padding-left: 16px; padding-right: 16px; } }
+@media (max-width: 600px) {
+  [data-brand="juragan"] .ap-attn-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 12px 16px; }
+  [data-brand="juragan"] .ap-attn-main { grid-column: 1; grid-row: 1; flex: none; }
+  [data-brand="juragan"] .ap-attn-badge { grid-column: 1; grid-row: 2; justify-self: start; }
+  [data-brand="juragan"] .ap-attn-amt { grid-column: 2; grid-row: 1; margin: 0; justify-self: end; }
+  [data-brand="juragan"] .ap-attn-row > .rk-btn { grid-column: 2; grid-row: 1 / span 2; min-height: 40px; }
+  [data-brand="juragan"] .ap-attn-amt + .rk-btn { grid-row: 2; }
+}
+
+/* read-only fields of a locked document: label and value pairs, two columns from 900px */
+.ap-ro-list { display: grid; grid-template-columns: minmax(0, 1fr); gap: 0 32px; margin: 0; }
+.ap-ro-list > div { display: grid; grid-template-columns: 136px minmax(0, 1fr); gap: 12px; padding: 6px 0; min-width: 0; }
+.ap-ro-list dt { color: var(--muted); font-size: 13px; line-height: 20px; }
+.ap-ro-list dd { margin: 0; color: var(--ink); line-height: 20px; overflow-wrap: anywhere; }
+.ap-ro-list a { color: var(--link); text-decoration: none; }
+.ap-ro-list a:hover { text-decoration: underline; }
+@media (min-width: 900px) { .ap-ro-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-ro-list > .wide { grid-column: 1 / -1; } }
+@media (max-width: 489px) { .ap-ro-list > div { grid-template-columns: 112px minmax(0, 1fr); } }
+.rk-grid-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+/* a record head with real buttons (draft: Simpan draf, Ajukan): the title keeps its row, the buttons share the next */
+@media (max-width: 860px) {
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn):has(> .rk-pagehead-extra > .rk-btn) { flex-wrap: wrap; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn):has(> .rk-pagehead-extra > .rk-btn) > h1 { flex: 1 1 0; white-space: normal; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-pagehead-extra:has(> .rk-btn) { width: 100%; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-extra:has(> .rk-btn) > .rk-btn { flex: 1 1 0; min-height: 44px; }
+}

@@ -132,3 +132,46 @@ test("formTabs: a section's tab carries to the sections after it; untabbed secti
   assert.deepStrictEqual(plain(A.formTabs([{ section: "X", tab: "Satu", fields: [] }, { section: "Y", tab: "Satu", fields: [] }])),
     [{ value: "Satu", label: "Satu", sections: [0, 1] }], "same tab twice is one tab");
 });
+
+test("docSummary: open amount first on a submitted invoice, total and paid beside it, the state in words", () => {
+  const A = load();
+  const mm = { fields: [{ name: "grand_total", type: "currency", label: { id: "Total" } }, { name: "amount_due", type: "currency", label: { id: "Tagihan bersih" } },
+    { name: "paid_amount", type: "currency", label: { id: "Sudah dibayar" } }, { name: "outstanding", type: "currency", label: { id: "Sisa tagihan" } }, { name: "due_date", type: "date" }] };
+  const rec = { docstatus: 1, grand_total: 1000, amount_due: 1000, paid_amount: 400, outstanding: 600, due_date: "2026-11-10" };
+  const s = plain(A.docSummary(mm, rec, "partly", "2026-11-07"));
+  assert.deepStrictEqual(s.big, { name: "outstanding", label: "Sisa tagihan", value: 600 });
+  assert.deepStrictEqual(s.facts.map((f) => f.name), ["amount_due", "paid_amount"]);
+  assert.strictEqual(s.progress, 0.4);
+  assert.strictEqual(A.summaryLine(s.line), "Dibayar sebagian, jatuh tempo 2026-11-10 (3 hari lagi)");
+  const late = plain(A.docSummary(mm, Object.assign({}, rec, { paid_amount: 0, outstanding: 1000 }), "overdue", "2026-11-22"));
+  assert.strictEqual(A.summaryLine(late.line), "Lewat jatuh tempo 12 hari");
+  assert.strictEqual(late.line.tone, "bad");
+  assert.strictEqual(A.summaryLine(plain(A.docSummary(mm, Object.assign({}, rec, { outstanding: 0 }), "paid", "2026-11-22")).line), "Lunas");
+  // a draft shows its total, not an open amount
+  const d = plain(A.docSummary(mm, { docstatus: 0, grand_total: 500, amount_due: 500 }, "draft", "2026-11-07"));
+  assert.strictEqual(d.big.name, "amount_due");
+  assert.strictEqual(A.summaryLine(d.line), "Draf, belum diajukan");
+  assert.strictEqual(A.docSummary({ fields: [{ name: "subject", type: "data" }] }, { docstatus: 1 }, "submitted"), null);
+});
+
+test("docSummary: only rupiah (currency) fields, never a money amount in its own currency or a count (audit F1, F2)", () => {
+  const A = load();
+  // a USD bill (contract 0013 money field): the summary prints rupiah, so it shows nothing rather than "Rp 1.251"
+  const bill = { fields: [{ name: "currency", type: "data" }, { name: "grand_total", type: "money", currency_field: "currency" }] };
+  assert.strictEqual(A.docSummary(bill, { docstatus: 1, currency: "USD", grand_total: "1250.55" }, "submitted", "2026-11-07"), null);
+  // a count named total is not an amount
+  assert.strictEqual(A.docSummary({ fields: [{ name: "total", type: "int" }] }, { docstatus: 1, total: 12 }, "submitted", "2026-11-07"), null);
+  assert.strictEqual(A.docSummary({ fields: [{ name: "total", type: "float" }] }, { docstatus: 0, total: 2.5 }, "draft", "2026-11-07"), null);
+  // a money twin next to the rupiah total: the rupiah one is the summary's amount
+  const fx = { fields: [{ name: "total", type: "money", currency_field: "currency" }, { name: "grand_total", type: "currency", label: { id: "Total" } }] };
+  assert.strictEqual(plain(A.docSummary(fx, { docstatus: 0, total: "99.5", grand_total: 1500000 }, "draft", "2026-11-07")).big.name, "grand_total");
+});
+
+test("blankValue: empty, zero and empty tables say nothing; a false check still does", () => {
+  const A = load();
+  assert.strictEqual(A.blankValue({ type: "currency" }, 0), true);
+  assert.strictEqual(A.blankValue({ type: "data" }, ""), true);
+  assert.strictEqual(A.blankValue({ type: "table" }, []), true);
+  assert.strictEqual(A.blankValue({ type: "check" }, false), false);
+  assert.strictEqual(A.blankValue({ type: "currency" }, 5), false);
+});

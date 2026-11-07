@@ -237,7 +237,7 @@
           h("input", { ref: input, type: "file", id: "ap-imp-file", className: "ap-att-input", accept: accept(def), "aria-label": "File impor", tabIndex: -1,
             disabled: !!busy, onChange: function (e) { pick(e.target.files); } }),
           h(R.Button, { icon: "add", disabled: !!busy, onClick: function () { if (input.current) input.current.click(); } }, "Pilih file"),
-          h("span", { className: "ap-muted" }, file ? file.name : "Format " + accept(def).replace(/\./g, "").replace(",", " atau ").toUpperCase() + ", maksimal 20 MB.")),
+          h("span", { className: "ap-muted" }, file ? file.name : "Format " + accept(def).replace(/\./g, "").toUpperCase().split(",").join(" atau ") + ", maksimal 20 MB.")),
         h("div", { className: "ap-imp-acts" },
           h(R.Button, { variant: "primary", disabled: !file || !!busy || (perOutlet && !outlet), loading: busy === "upload", onClick: upload }, "Periksa file")));
     } else if (step === 1) {

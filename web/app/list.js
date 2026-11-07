@@ -15,12 +15,14 @@
  * RangkaApp.Kanban({model, rows, onMoved}) PATCHes {<group_by>: value} when a card is dropped on another column (or picked
  * in the card's "Pindah ke…" select, for touch and keyboard); the card
  * moves at once and goes back when the kernel refuses (a 422 also toasts the first error and opens the record).
+ * Under 490px (K-A8) Daftar and Kelompok rows are cards (RangkaApp.useNarrow): the counterparty and amount on top, the
+ * number, date and status below (cardSlots picks them from the person's columns), no horizontal scroll.
  * RangkaApp.cellFor(model, field, rec) renders one list cell; RangkaApp.ForbiddenState({what}) is the "no access" screen
  * every view shows on a 403 permission_denied.
  *
  * Pure helpers (unit-tested in test/list.test.js): celQuote, inClause, buildFilter, sortParam, nextSort, parseSort,
  * listColumns, kanbanColumns, availableViews, groupFields, sumFields, mergeCheckGroups, groupFilter, loadListPrefs,
- * saveListPrefs.
+ * saveListPrefs, cardSlots.
  */
 (function (global) {
   "use strict";
@@ -158,6 +160,41 @@
     } catch (e) { /* private window or full storage: the settings last for this visit only */ }
   }
 
+  /** What a phone card (under 490px, K-A8) shows from the person's columns: of the first four, the counterparty as the
+   *  title (the first text column; the number only when nothing else), the first money/number column (the first four
+   *  first, then the rest) as the amount,
+   *  the derived status (from any position) or else the first chip select as the status, and up to two of the rest as a
+   *  muted line. Returns {title, amount, status, meta}. */
+  function cardSlots(meta, model, columns) {
+    var mm = modelOf(meta, model), cols = (columns || listColumns(mm)).map(colName);
+    var first = cols.slice(0, 4), out = { title: null, amount: null, status: null, meta: [] };
+    if (mm.is_submittable && cols.indexOf("status") >= 0) out.status = "status";
+    var rest = [];
+    // the rupiah belongs on the card (K-A8: name, status, rupiah) even when the person put it past the first four
+    // a rupiah (currency) column first, so a quantity among the first four does not take the amount's place (audit F3)
+    var ordered = first.concat(cols.slice(4));
+    var money = ordered.filter(function (c) { var fd = fieldOf(mm, c); return !!fd && fd.type === "currency"; })[0] ||
+      ordered.filter(function (c) { var fd = fieldOf(mm, c); return !!fd && !!NUMBER_TYPES[fd.type]; })[0];
+    if (money) out.amount = money;
+    first.forEach(function (c) {
+      if (c === out.amount) return;
+      if (c === out.status) return;
+      var fd = fieldOf(mm, c);
+      if (fd && fd.type === "select" && fd.chip) { if (!out.status) out.status = c; return; } // a second chip (a kind) is noise on a phone card
+      rest.push(c);
+    });
+    // the muted line takes the next plain columns when a chip left a gap among the first four
+    cols.slice(4).forEach(function (c) {
+      var fd = fieldOf(mm, c);
+      if (c === out.amount || c === out.status || !fd || NUMBER_TYPES[fd.type] || (fd.type === "select" && fd.chip)) return;
+      if (rest.length < 3) rest.push(c);
+    });
+    var t = rest.filter(function (c) { var fd = fieldOf(mm, c); return c !== "name" && !!fd && !NUMBER_TYPES[fd.type]; })[0];
+    out.title = t || (rest.indexOf("name") >= 0 || !rest.length ? "name" : rest[0]);
+    out.meta = rest.filter(function (c) { return c !== out.title; }).slice(0, 2);
+    return out;
+  }
+
   var STATUSES = [["draft", "Draf", ""], ["submitted", "Diajukan", "info"], ["paid", "Lunas", "ok"], ["partly", "Dibayar sebagian", "warn"], ["overdue", "Jatuh tempo", "bad"], ["cancelled", "Dibatalkan", ""]];
 
   RA.celQuote = celQuote;
@@ -175,6 +212,7 @@
   RA.mergeCheckGroups = mergeCheckGroups;
   RA.loadListPrefs = loadListPrefs;
   RA.saveListPrefs = saveListPrefs;
+  RA.cardSlots = cardSlots;
 
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
@@ -375,7 +413,59 @@
     });
   }
 
+  /* ---------------------------------------------------------------- phone: rows as cards (K-A8, under 490px) */
+  var NARROW = "(max-width: 489px)";
+  /** True under 490px, kept up to date (the list and the form's grid switch to cards). */
+  function useNarrow() {
+    var mq = global.matchMedia ? global.matchMedia(NARROW) : null;
+    var ns = useState(!!(mq && mq.matches)), narrow = ns[0], setNarrow = ns[1];
+    useEffect(function () {
+      if (!mq) return undefined;
+      var on = function () { setNarrow(mq.matches); };
+      on();
+      if (mq.addEventListener) mq.addEventListener("change", on); else mq.addListener(on);
+      return function () { if (mq.removeEventListener) mq.removeEventListener("change", on); else mq.removeListener(on); };
+    }, []);
+    return narrow;
+  }
+
+  /** The list as a card per record: the counterparty and the amount on top, the rest (number, date) and the status
+   *  below. A card is a link to the record; no checkbox (bulk actions are laptop work, P7). */
+  function ListCards(p) {
+    var ctx = p.ctx, m = p.model, s = cardSlots(ctx.meta, m, p.columns);
+    var label = L((ctx.meta.models[m] || {}).label) || "Daftar";
+    function cell(c, r) { return c ? cellFor(m, c, r, ctx) : null; }
+    var items = p.loading
+      ? Array.apply(null, Array(p.skeleton || 4)).map(function (_, i) {
+        return h("li", { key: "sk" + i, className: "ap-lc-item", "aria-hidden": "true" }, h("div", { className: "ap-lc-link" },
+          h("span", { className: "ap-lc-top" }, h("span", { className: "rk-skel", style: { width: (120 + (i * 37) % 60) + "px" } }), h("span", { className: "rk-skel", style: { width: "72px" } })),
+          h("span", { className: "ap-lc-sub" }, h("span", { className: "rk-skel", style: { width: "96px" } }))));
+      })
+      : p.rows.map(function (r) {
+        var metaCells = s.meta.map(function (c) { return cell(c, r); }).filter(function (x) { return x !== "" && x != null; });
+        return h("li", { key: r.name, className: "ap-lc-item" },
+          h("a", { className: "ap-lc-link", href: "#/r/" + m + "/" + encodeURIComponent(r.name) },
+            h("span", { className: "ap-lc-top" },
+              h("span", { className: "ap-lc-title" }, cell(s.title, r)),
+              s.amount ? h("span", { className: "ap-lc-amt" }, h("span", { className: "rk-sr" }, colLabel(ctx.eng, m, s.amount) + " "), cell(s.amount, r)) : null),
+            metaCells.length || s.status ? h("span", { className: "ap-lc-sub" },
+              h("span", { className: "ap-lc-meta" }, metaCells.map(function (x, i) { return h("span", { key: i }, x); })),
+              s.status ? cell(s.status, r) : null) : null));
+      });
+    return h("div", { className: "rk-table-card ap-list ap-lc" },
+      h("ul", { className: "ap-lc-list", "aria-label": label, "aria-busy": p.loading ? "true" : undefined }, items),
+      p.loading ? h("span", { className: "rk-sr", role: "status" }, "Memuat data…")
+        : p.rows.length ? null : h("div", { className: "rk-cmd-empty" }, p.emptyText || "Tidak ada data yang cocok dengan filter"),
+      p.footer ? h("div", { className: "ap-pager" }, p.footer) : null);
+  }
+
   function ListTable(p) {
+    var narrow = useNarrow();
+    if (narrow) return h(ListCards, p);
+    return h(WideTable, p);
+  }
+
+  function WideTable(p) {
     var ctx = p.ctx, m = p.model;
     var cols = tableCols(ctx, m, p.columns, p.sort), sel = p.selected, pick = !!p.onSelect;
     var names = p.rows.map(function (r) { return r.name; });
@@ -718,5 +808,6 @@
   RA.ListView = ListView;
   RA.Kanban = Kanban;
   RA.cellFor = cellFor;
+  RA.useNarrow = useNarrow;
   RA.ForbiddenState = ForbiddenState;
 })(window);

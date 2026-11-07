@@ -104,7 +104,7 @@
     var saved = !!record.name, out = [{ id: "info", title: "Info" }];
     if (saved && features.attachments !== false) out.push({ id: "attachments", title: "Lampiran" });
     if (saved && features.approvals) out.push({ id: "approvals", title: "Persetujuan" });
-    if (saved && (model.prints || []).length && !(model.can && model.can.print === false)) out.push({ id: "print", title: "Cetak" });
+    if (saved && (model.prints || []).length && !(model.can && model.can.print === false)) out.push({ id: "print", title: model.prints.every(function (f) { return f.output === "xml"; }) ? "Unduh" : "Cetak" });
     return out;
   }
 

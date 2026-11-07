@@ -302,6 +302,18 @@
       });
     };
 
+    /** An XML file format (contract 0028): GET the file → {blob, filename}; rejects with ApiError (422 export_invalid
+     *  carries body.error.problems [{list, name, message}]). */
+    api.printFile = function (model, name, format) {
+      var path = wrec(model, name) + "/print" + qs([["format", format]]);
+      return raw("GET", path).then(function (res) {
+        if (res.status < 200 || res.status >= 300) return failure(res).then(function (e) { throw e; });
+        var cd = res.headers.get("Content-Disposition") || "";
+        var m = /filename="([^"]+)"/.exec(cd);
+        return res.blob().then(function (b) { return { blob: b, filename: m ? m[1] : format + ".xml" }; });
+      });
+    };
+
     /* ----- attachments */
     api.attachments = function (model, name) {
       return json("GET", wrec(model, name) + "/attachments").then(function (r) { return r; }, function (e) {

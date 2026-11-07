@@ -473,6 +473,9 @@ func (o *op) decide(id, action string) (*store.Approval, error) {
 	if !CanDecide(a, ap) { // approving is governed by the policy's approvers, not by model permissions
 		return nil, o.e.Deny(ap.Model, "approve")
 	}
+	if err := o.planDecide(ap); err != nil { // a person or outlet in read-only mode decides nothing (contract 0028 §4)
+		return nil, err
+	}
 	if !isFlowApproval(ap) { // but the approver must be able to read what they approve (S1)
 		if err := o.authorizeRead(ap.Model, ap.Name); err != nil {
 			return nil, err
@@ -659,6 +662,9 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 	if err != nil {
 		return nil, err
 	}
+	if d != nil && d.Record != nil { // contract 0027: the approver gets the record as they may see it
+		e.Redact(a, e.Reg().Model(d.Approval.Model), d.Record)
+	}
 	return d, nil
 }
 
@@ -800,17 +806,25 @@ func (e *Engine) ApprovalSummary(ctx context.Context, a Actor, ap *store.Approva
 	}
 	for _, fn := range summaryAmountFields {
 		f := m.Field(fn)
-		if f == nil || !f.IsNumeric() {
+		if f == nil || (f.Type != "currency" && f.Type != "money") {
+			continue // only money: an int "amount" may be a count of units
+		}
+		v, ok := rec[fn]
+		if !ok || v == nil {
 			continue
 		}
-		if v, ok := rec[fn]; ok && v != nil {
-			out["amount"] = v
-			out["amount_label"] = f.Label.Text()
-			break
+		// the currency of the amount itself: a money field names its currency field; a currency field is rupiah
+		// (a foreign-currency document keeps its grand_total in IDR, audit 2026-11-07)
+		cur := "IDR"
+		if f.Type == "money" {
+			if cf := f.CurrencyField(); cf != "" {
+				if c, ok := rec[cf].(string); ok && c != "" {
+					cur = c
+				}
+			}
 		}
-	}
-	if c, ok := rec["currency"].(string); ok && c != "" {
-		out["currency"] = c
+		out["amount"], out["amount_label"], out["currency"] = v, f.Label.Text(), cur
+		break
 	}
 	return out
 }

@@ -149,9 +149,14 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 			}
 		}
 		if hasIn {
-			for _, k := range []string{"explode", "cogs"} {
-				if _, ok := r[k]; ok {
-					v.rep.add("error", p, w+"/"+k, "stock_direction", k+" is only for out moves")
+			if _, ok := r["cogs"]; ok {
+				v.rep.add("error", p, w+"/cogs", "stock_direction", "cogs is only for out moves")
+			}
+			// an in move through the recipe brings back materials: each at the outlet average or at the source's cost
+			// (contract 0022); unit, amount and consumed values belong to the line, not to its materials
+			if _, ok := r["explode"]; ok {
+				if c := asMap(r["cost"]); c != nil && c["source"] == nil {
+					v.rep.add("error", p, w+"/cost", "stock_explode_cost", "an in move with explode: recipe takes cost average or {source: …}")
 				}
 			}
 		}

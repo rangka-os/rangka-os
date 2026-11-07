@@ -19,7 +19,7 @@ var (
 // baseFuncs returns the helpers that do not depend on the model. `label` and `option` are bound per
 // render. `overdue` and `aging` are bound to asOf, the print time.
 func baseFuncs(asOf time.Time) template.FuncMap {
-	return template.FuncMap{
+	fm := template.FuncMap{
 		"rupiah":    Rupiah,
 		"money":     Money,
 		"number":    Number,
@@ -31,6 +31,7 @@ func baseFuncs(asOf time.Time) template.FuncMap {
 		"aging":     func(rows any) map[string]string { return Aging(rows, asOf) },
 		"taxrate":   TaxRate,
 		"dppfactor": DPPFactor,
+		"qr":        QR,
 		"upper": func(v any) string {
 			if v == nil {
 				return ""
@@ -38,6 +39,10 @@ func baseFuncs(asOf time.Time) template.FuncMap {
 			return strings.ToUpper(fmt.Sprint(v))
 		},
 	}
+	for k, v := range numberFuncs() {
+		fm[k] = v
+	}
+	return fm
 }
 
 // toRat converts an accepted numeric input to an exact rational. ok is false for nil, "" and

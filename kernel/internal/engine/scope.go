@@ -89,7 +89,7 @@ func (s *scope) env() *cel.Env {
 		Now:   s.e.Now,
 		Option: func(field, attr string) (any, error) {
 			f := s.m.Field(field)
-			if f == nil {
+			if f == nil || s.client && s.e.FieldHidden(s.actor, s.m, f) {
 				return nil, nil
 			}
 			o := f.Option(str(s.rec[field]))
@@ -104,6 +104,9 @@ func (s *scope) env() *cel.Env {
 
 func (s *scope) lookup(name string) (any, bool) {
 	if f := s.m.Field(name); f != nil {
+		if s.client && f.Type != "table" && s.e.FieldHidden(s.actor, s.m, f) {
+			return store.Zero(f), true // contract 0027: a filter cannot test a field hidden from its caller
+		}
 		v := s.rec[name]
 		switch f.Type {
 		case "link":
@@ -114,6 +117,9 @@ func (s *scope) lookup(name string) (any, bool) {
 			return s.link(f.To, n), true
 		case "table":
 			if l, ok := v.([]any); ok {
+				if s.client { // contract 0027: rows a filter walks read hidden child fields as zero
+					return s.clientRows(f, l), true
+				}
 				return l, true
 			}
 			return []any{}, true
@@ -193,6 +199,32 @@ func (s *scope) link(model, name string) *cel.Link {
 		s.links[key] = out
 		return out, nil
 	}}
+}
+
+// clientRows is a client filter's view of table field f's rows: fields hidden from the actor read as zero.
+func (s *scope) clientRows(f *meta.Field, l []any) []any {
+	cm := s.e.Reg().Model(f.Of)
+	hidden := s.e.hiddenFields(s.actor, cm)
+	if hidden == nil {
+		return l
+	}
+	out := make([]any, len(l))
+	for i, x := range l {
+		row, ok := x.(map[string]any)
+		if !ok {
+			out[i] = x
+			continue
+		}
+		cp := make(map[string]any, len(row))
+		for k, v := range row {
+			cp[k] = v
+		}
+		for n := range hidden {
+			cp[n] = store.Zero(cm.Field(n))
+		}
+		out[i] = cp
+	}
+	return out
 }
 
 // eval evaluates src in this scope.
@@ -384,4 +416,22 @@ func num(v any) float64 {
 		return float64(x)
 	}
 	return 0
+}
+
+// Holds reports whether the CEL check is true on rec of model, read as the actor with the client scope a list
+// filter uses (contract 0029 §4 require): links outside the actor's scope read as missing. A check that does not
+// compile or fails to evaluate is an error, never true.
+// vars are extra read-only variables (doc: the printed document); a field of the model with the same name wins.
+func (e *Engine) Holds(ctx context.Context, a Actor, model string, rec store.Record, check string, vars map[string]any) (bool, error) {
+	m, err := e.model(model)
+	if err != nil {
+		return false, err
+	}
+	s := e.newClientScope(ctx, a, m, rec, e.RowScope(a), map[string]map[string]any{})
+	s.extra = vars
+	v, err := s.eval(check)
+	if err != nil {
+		return false, err
+	}
+	return v == true, nil
 }

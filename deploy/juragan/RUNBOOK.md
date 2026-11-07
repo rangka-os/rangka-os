@@ -8,6 +8,8 @@ Steps marked **Dede** create cloud resources, touch DNS, money or credentials. E
 scripts in this folder (or `local/e2e.sh`) run. Placeholders are in `<angle brackets>`. Never paste secrets into
 chat, tickets or git.
 
+Tenants after the pilots (many per VM, created from onboarding without hand work): `host/README.md` and `host/tenantctl`.
+
 Files in this folder: `compose.yaml`, `.env.example`, `Caddyfile`, `postgres/initdb/10-pilots.sh`,
 `kernel/Dockerfile`, `backup/{Dockerfile,lib.sh,backup.sh,restore.sh}`, `restore-drill.sh`, `systemd/`, `local/` (end-to-end test, `local/rls-check.sh`,
 `local/fixtures/rls/`, `local/fixtures/print/`: the sample apps have no print format, so the test adds one for `lead`).
@@ -72,7 +74,7 @@ Each step has the check that proves it.
    age-keygen -o juragan-backup.key
    ```
    It prints `Public key: age1...`. Put `juragan-backup.key` into the password manager and keep one offline
-   copy. The private key never goes on the VM. Check: `grep -c '^AGE-SECRET-KEY-' juragan-backup.key`
+   copy. The private key never goes on the pilot VM (the tenant host makes a documented exception for its nightly drill, `host/README.md` section 5). Check: `grep -c '^AGE-SECRET-KEY-' juragan-backup.key`
    prints `1`. The file also has a `# public key: age1...` line: that `age1...` value goes into
    `BACKUP_AGE_RECIPIENT` in `.env`.
 7. **Image pull:** the release image `ghcr.io/rangka-os/rangka:<tag>` is public, no login needed. Check on the
@@ -456,7 +458,7 @@ Mapped to the program's go-live gate (per pilot). All of it before Dede signs of
 - [ ] HTTPS works on both hosts (`curl` of `/.well-known/openid-configuration` returns 200 on `https://jasa.juragan.ai` and `https://fnb.juragan.ai`).
 - [ ] A backup of each pilot is in the bucket (`jasa/`, `fnb/` hold `.tar.age` objects from the last night, timer log clean).
 - [ ] Restore drill passed on another machine within the last 24 hours (`DRILL PASSED` lines for both pilots in `drill.log`); the drill's age key file deleted afterwards.
-- [ ] Secrets only in `/opt/juragan/rangka-os/deploy/juragan/.env`, mode 600 (`stat -c %a .env` prints `600`); not in git, not in a bundle; age private key not on the VM.
+- [ ] Secrets only in `/opt/juragan/rangka-os/deploy/juragan/.env`, mode 600 (`stat -c %a .env` prints `600`); not in git, not in a bundle; age private key not on the pilot VM (tenant host: see `host/README.md` section 5).
 - [ ] `juragan-backup.timer` enabled (`systemctl list-timers juragan-backup.timer` shows the next run).
 - [ ] healthchecks.io ping alert set for `BACKUP_PING_URL` and verified green.
 - [ ] Bucket: Object Lock (governance, 30 days), versioning, 35-day expiry rule, Block Public Access all confirmed.

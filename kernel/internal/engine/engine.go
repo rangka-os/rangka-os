@@ -16,6 +16,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -58,6 +59,9 @@ type Engine struct {
 	// TolerateMissingTables makes a dashboard widget over a table that does not exist yet carry an error
 	// instead of failing the dashboard (live preview of a change set, contract 0015 §4).
 	TolerateMissingTables bool
+
+	// Plan caches the tenant's plan snapshot for the read-only check (contract 0028).
+	Plan plan.Guard
 
 	permCache   sync.Map // *meta.Model → *modelPerms
 	parentCache sync.Map // child *meta.Model → parent *meta.Model

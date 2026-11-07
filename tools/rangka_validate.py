@@ -119,9 +119,11 @@ def check_stock(rep, p, mname, m, fields, visible):
         if r.get("explode") == "recipe" and "recipe" not in visible:
             rep.add("warn", p, f"{w}/explode", "no_recipe", "explode: recipe without a recipe model: each item consumes itself")
         if "in" in r:
-            for k in ("explode", "cogs"):
-                if k in r:
-                    rep.add("error", p, f"{w}/{k}", "stock_direction", f"{k} is only for out moves")
+            if "cogs" in r:
+                rep.add("error", p, f"{w}/cogs", "stock_direction", "cogs is only for out moves")
+            # an in move through the recipe brings back materials (contract 0022): cost average or {source: …}
+            if "explode" in r and isinstance(r.get("cost"), dict) and "source" not in r["cost"]:
+                rep.add("error", p, f"{w}/cost", "stock_explode_cost", "an in move with explode: recipe takes cost average or {source: …}")
         if "out" in r and "cost" in r:
             rep.add("error", p, f"{w}/cost", "stock_direction", "cost is only for in moves")
         c = r.get("cost")

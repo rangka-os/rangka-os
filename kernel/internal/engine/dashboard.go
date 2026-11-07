@@ -24,6 +24,9 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 	if d == nil {
 		return nil, false, notFound("dashboard " + name)
 	}
+	if !e.DashboardAllowed(a, d) { // contract 0027: roles: limits who opens it
+		return nil, false, Denied("dashboard", "read")
+	}
 	if period <= 0 {
 		period = d.DefaultPeriod
 	}
@@ -179,6 +182,17 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 	if err := dc.e.Authorize(dc.ctx, dc.a, m.Name, "read", nil); err != nil {
 		return map[string]any{"error": map[string]any{"code": "permission_denied", "message": err.Error(), "model": m.Name, "action": "read"}}, nil
 	}
+	// contract 0027: a widget that totals, groups or lists a field hidden from the actor is not shown to them
+	if hidden := dc.e.hiddenFields(dc.a, m); hidden != nil {
+		if hidden[w.Field] || hidden[w.GroupBy] || hidden[strings.TrimPrefix(w.Sort, "-")] {
+			return map[string]any{"hidden": true}, nil
+		}
+		for _, c := range w.Columns {
+			if hidden[c] {
+				return map[string]any{"hidden": true}, nil
+			}
+		}
+	}
 	today := dc.e.Today()
 	from := ""
 	if w.Period != "" {
@@ -244,7 +258,7 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 		}
 		outRows := make([]any, len(list))
 		for i, r := range list {
-			outRows[i] = r
+			outRows[i] = dc.e.Redact(dc.a, m, copyRecord(r)) // contract 0027
 		}
 		return map[string]any{"rows": outRows, "total": len(rows)}, nil
 	}

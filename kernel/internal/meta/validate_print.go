@@ -5,11 +5,15 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	ttemplate "text/template"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 )
 
 // PrintFuncNames are the helpers print templates may call (contract 0008 §3). The renderer (docprint)
 // provides them; validation parses templates with no-op stand-ins of the same names.
-var PrintFuncNames = []string{"rupiah", "money", "number", "date", "terbilang", "label", "option", "sub", "sum", "overdue", "aging", "upper", "taxrate", "dppfactor"}
+var PrintFuncNames = []string{"rupiah", "money", "number", "date", "terbilang", "label", "option", "sub", "sum", "overdue", "aging", "upper", "taxrate", "dppfactor",
+	"add", "mul", "div", "round", "dec", "digits", "isodate", "qr"}
 
 func printFuncStubs() template.FuncMap {
 	fm := template.FuncMap{}
@@ -79,6 +83,21 @@ func (v *validator) printFormat(p *Print, all map[string]vis) {
 				v.rep.extra("error", d.Path, at+"/match/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s`, dv, p.Model))
 			}
 		}
+		for _, k := range sortedKeys(asMap(asMap(related[rn])["range"])) {
+			if !relFields[k] {
+				v.rep.extra("error", d.Path, at+"/range/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s`, k, rel.Model))
+			}
+			for _, dv := range rel.Range[k] {
+				if known && !union(fieldNames(model.m), SystemFields)[dv] {
+					v.rep.extra("error", d.Path, at+"/range/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s`, dv, p.Model))
+				}
+			}
+		}
+		for i, q := range rel.Require {
+			if _, err := cel.Compile(q.Check); err != nil {
+				v.rep.extra("error", d.Path, fmt.Sprintf("%s/require/%d/check", at, i), "cel_syntax", truncMsg(err.Error()))
+			}
+		}
 	}
 	v.printTemplate(p)
 }
@@ -96,6 +115,12 @@ func (v *validator) printTemplate(p *Print) {
 	src, err := os.ReadFile(p.Template)
 	if err != nil {
 		v.rep.extra("error", d.Path, "template", "template_missing", fmt.Sprintf(`template file "%s" does not exist`, t))
+		return
+	}
+	if p.Output == "xml" {
+		if _, err := ttemplate.New(filepath.Base(p.Template)).Funcs(ttemplate.FuncMap(printFuncStubs())).Parse(string(src)); err != nil {
+			v.rep.extra("error", d.Path, "template", "template_error", truncMsg(err.Error()))
+		}
 		return
 	}
 	if _, err := template.New(filepath.Base(p.Template)).Funcs(printFuncStubs()).Parse(string(src)); err != nil {

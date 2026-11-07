@@ -314,3 +314,35 @@ paper: A3
 		t.Errorf("paper schema error reported %d times: %v", n, rep.All())
 	}
 }
+
+// Contract 0029: an XML format parses as text/template with the print helpers, require checks compile, and the
+// template's extension follows output.
+func TestValidateXMLPrints(t *testing.T) {
+	dir := t.TempDir()
+	copyDir(t, printRoot, dir)
+	copyDir(t, printSite, dir+"/site")
+	head := "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\n"
+	writeFile(t, dir+"/site/print/good_xml.rk", head+"name: good_xml\nmodel: customer\noutput: xml\ntemplate: good_xml.xml\nrelated:\n  invoices:\n    model: sales_invoice\n    match: {customer: name}\n    children: true\n    require:\n      - {check: \"docstatus == 1\", message: {id: Harus diajukan}}\n")
+	writeFile(t, dir+"/site/print/good_xml.xml", `<A t="{{isodate .Printed}}">{{range .Related.invoices}}<B>{{dec (round (mul .grand_total 2) 2) 2}}{{digits .name}}</B>{{end}}</A>`)
+	_, rep := Validate(dir+"/apps", dir+"/site", nil, schema.Embedded())
+	var buf bytes.Buffer
+	if n := rep.Print(&buf); n != 0 {
+		t.Fatalf("good XML format:\n%s", buf.String())
+	}
+	writeFile(t, dir+"/site/print/bad_xml.rk", head+"name: bad_xml\nmodel: customer\noutput: xml\ntemplate: bad_xml.html\nrelated:\n  invoices:\n    model: sales_invoice\n    match: {customer: name}\n    require:\n      - {check: \"size(x > 0\", message: {id: Rusak}}\n")
+	writeFile(t, dir+"/site/print/bad_xml.html", `<A>{{nosuch .}}</A>`)
+	writeFile(t, dir+"/site/print/html_xml.rk", head+"name: html_xml\nmodel: customer\ntemplate: html_xml.xml\n")
+	writeFile(t, dir+"/site/print/html_xml.xml", `<A/>`)
+	_, rep = Validate(dir+"/apps", dir+"/site", nil, schema.Embedded())
+	buf.Reset()
+	rep.Print(&buf)
+	out := buf.String()
+	for _, want := range []string{"bad_xml.rk", "cel_syntax", "template_error", "html_xml.rk"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("missing %q:\n%s", want, out)
+		}
+	}
+	if strings.Count(out, "schema") < 2 { // .html with output xml, .xml without it
+		t.Errorf("template extension not checked against output:\n%s", out)
+	}
+}

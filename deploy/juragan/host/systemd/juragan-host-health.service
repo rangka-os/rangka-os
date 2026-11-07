@@ -1,0 +1,9 @@
+[Unit]
+Description=Juragan tenant host health (kernels, routes, backup age, disk); pings HEALTH_PING_URL
+Requires=docker.service
+After=docker.service
+
+[Service]
+Type=oneshot
+ExecStart=/opt/juragan/rangka-os/deploy/juragan/host/tenantctl --env /opt/juragan/rangka-os/deploy/juragan/host/.env health
+TimeoutStartSec=5m

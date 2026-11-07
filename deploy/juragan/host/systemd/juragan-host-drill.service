@@ -1,0 +1,12 @@
+[Unit]
+Description=Nightly restore drill of every Juragan tenant's newest off-box archive
+Requires=docker.service
+After=docker.service network-online.target juragan-host-backup.service
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# The age private key, root-only (mode 600), only for this drill: see README section 5 for the trade-off. A failed
+# drill (or a failed backup the night before) shows in `tenantctl health` (drill and backup age) and pings /fail.
+ExecStart=/opt/juragan/rangka-os/deploy/juragan/host/tenantctl --env /opt/juragan/rangka-os/deploy/juragan/host/.env drill all --identity /root/juragan-drill.key
+TimeoutStartSec=3h

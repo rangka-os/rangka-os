@@ -11,3 +11,4 @@ deploy/juragan/.env
 deploy/juragan/local/work/
 deploy/juragan/drill.log
 deploy/juragan/backups/
+deploy/juragan/host/.env

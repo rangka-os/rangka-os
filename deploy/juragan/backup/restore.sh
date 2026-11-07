@@ -38,7 +38,11 @@ unpack() { tar -xf "$1" -C "$2"; }
 
 main() {
   local archive="${1:-}" p="${2:-}" var url method dump_file n srv
-  case "$p" in jasa|fnb) ;; *) echo "usage: restore.sh <archive> <jasa|fnb>" >&2; exit 2 ;; esac
+  local names=()
+  read -r -a names <<<"${BACKUP_PILOTS:-jasa fnb}" # the pilot deploy: jasa fnb; the tenant host sets its tenants
+  if ! valid_pilot_name "$p" || ! pilot_listed "$p" "${names[@]}"; then
+    echo "usage: restore.sh <archive> <${names[*]}> (one of BACKUP_PILOTS)" >&2; exit 2
+  fi
   [ -f "$archive" ] || die "archive $archive not found"
   var="$(tr '[:lower:]' '[:upper:]' <<<"$p")_DB_PASSWORD"
   [ -n "${!var:-}" ] || die "$var is not set"

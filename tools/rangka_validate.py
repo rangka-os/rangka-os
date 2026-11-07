@@ -345,6 +345,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                 rep.add("error", p, "name", "company_model_name", f'company model "{mname}" must start with x_ (x_{mname}), so a module upgrade never brings a model of the same name (contract 0016)')
             if isinstance(m.get("naming"), dict):
                 reset_needs_date(rep, p, "naming", m["naming"])
+            if isinstance(m.get("naming"), str):
+                naming_fields(rep, p, "naming", mname, m, m["naming"], allmodels_of(apps))
         for dname, (p, db) in a["dashboards"].items():
             for e in sorted(V["dashboard"].iter_errors(db), key=lambda e: list(map(str, e.absolute_path))):
                 rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message if len(e.message) < 160 else e.message[:157] + "…")
@@ -967,6 +969,48 @@ def template_exists(kind, name):
     return not os.path.isdir(TEMPLATES_DIR)
 
 
+NAMING_TOKEN = re.compile(r"\{([a-z][a-z0-9_]*)(?:\.([a-z][a-z0-9_]*))?\}")
+NAMING_TYPES = {"data", "link", "select", "int"}
+
+
+def allmodels_of(apps):
+    return {mn: m for a in apps.values() for mn, (_, m) in a.get("models", {}).items() if isinstance(m, dict)}
+
+
+def naming_fields(rep, path, where, mname, m, naming, models):
+    """Field tokens of a string naming pattern ({outlet.code}, contract 0009 §2a), in the model's naming or a
+    config.numbering override: followed by "-", a header field of a type that can be part of a name and hidden from
+    no role (contract 0027), or a link and such a field of its target."""
+    def field(model, name):
+        for f in (model.get("fields") or []) if isinstance(model, dict) else []:
+            if isinstance(f, dict) and f.get("name") == name:
+                return f
+        return None
+    for g in NAMING_TOKEN.finditer(naming):
+        a, b = g.group(1), g.group(2)
+        tok = g.group(0)[1:-1]
+        f = field(m, a)
+        if g.end() >= len(naming) or naming[g.end()] != "-":
+            rep.add("error", path, where, "naming_field", f'naming token {{{tok}}} must be followed by "-"')
+        elif f is None:
+            rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: model {mname} has no field "{a}"')
+        elif f.get("hidden_for"):
+            rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: field "{a}" is hidden_for some roles; a document name shows it')
+        elif b is None and f.get("type") not in NAMING_TYPES:
+            rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: field "{a}" is a {f.get("type")}; use a data, link, select or int field')
+        elif b is not None and f.get("type") != "link":
+            rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: field "{a}" is not a link')
+        elif b is not None:
+            t = models.get(f.get("to"))
+            if t is None:
+                continue
+            tf = field(t, b)
+            if tf is None or tf.get("type") not in NAMING_TYPES:
+                rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: model {f.get("to")} has no data, link, select or int field "{b}"')
+            elif tf.get("hidden_for"):
+                rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: field "{b}" of {f.get("to")} is hidden_for some roles; a document name shows it')
+
+
 def reset_needs_date(rep, path, where, series):
     """A series whose reset period is not in its pattern repeats numbers (a default reset is inferred, never fails)."""
     pattern, reset = series.get("pattern"), series.get("reset")
@@ -1043,6 +1087,8 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
                 rep.add("error", cp, f"numbering/{mn}", "unknown_model", f'"{mn}" is not a model{suggest(mn, allmodels)}')
             elif allmodels[mn][0] not in installed:
                 rep.add("warn", cp, f"numbering/{mn}", "not_installed", f'"{mn}" comes from app "{allmodels[mn][0]}", which this site does not install')
+            elif isinstance(numbering[mn], str) and numbering[mn]:
+                naming_fields(rep, cp, f"numbering/{mn}", mn, allmodels[mn][2], numbering[mn], {k: v[2] for k, v in allmodels.items()})
         for mn in sorted(allmodels):
             app, mp, mm = allmodels[mn]
             naming = mm.get("naming")

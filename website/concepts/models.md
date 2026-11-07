@@ -103,6 +103,12 @@ Every record has `name` (its id, from `naming`), `created_by`, `created_at`, `mo
 `naming: INV-{YYYY}-{#####}` numbers records per organisation; documents get their number at submit and carry
 `DRAFT-…` before that. A site's `config.rk` may override the pattern per model.
 
+A string `naming` may also carry a field token, `{field}` or `{link.field}`, for a number per outlet or per branch:
+`naming: STRK-{outlet.code}-{YY}{MM}-{####}` gives `STRK-DGO-2611-0001` and `STRK-BDG-2611-0001`. A token is always
+followed by `-`; its value must already be `A-Z`, `0-9` and `-` between them (nothing is changed to fit), and since
+the counter is kept per rendered prefix each value counts on its own. A document whose token is empty or of another
+shape cannot be numbered (409 `numbering`). Field tokens are not allowed in series patterns.
+
 ### Number series
 
 Firms often number documents their own way, such as `INV/PTA/26/0012`, and restart every year or month. A site

@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+# Field tokens in a string naming (contract 0009 §2a): a missing field, a dotted token on a non-link, a link target
+# without the field, a field type that cannot be part of a name, a field hidden from a role, and a token running into
+# the counter (no "-" after it).
+name: struk
+naming: STRK-{deal.nope}-{kode}-{note.x}-{lines}-{nothing}-{secret}-{kode}{####}
+fields:
+  - {name: deal, type: link, to: deal}
+  - {name: kode, type: data}
+  - {name: note, type: data}
+  - {name: lines, type: text}
+  - {name: secret, type: data, hidden_for: [sales_rep]}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -84,12 +85,16 @@ func wholeNumber(v any) int64 {
 
 // nextName takes the next document name for m inside the op's transaction: a series number, or the v0
 // prefix counter for legacy schemes.
-func (o *op) nextName(m *meta.Model) (string, error) {
+func (o *op) nextName(m *meta.Model, rec store.Record) (string, error) {
 	e := o.e
 	now := e.Now().In(e.Location())
 	s := e.scheme(m, o.actor.Org)
 	if s.Series == "" {
-		return store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, s.Pattern, now)
+		pattern, err := o.fieldTokens(m, rec, s.Pattern)
+		if err != nil {
+			return "", err
+		}
+		return store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, pattern, now)
 	}
 	if s.Pattern == "" {
 		return "", conflict("numbering", "Seri nomor \""+s.Series+"\" belum diatur di config.rk")
@@ -165,4 +170,56 @@ func (e *Engine) orgCode(org string) string {
 		return o.Code
 	}
 	return strings.ToUpper(org)
+}
+
+// fieldTokenRe matches a field token of a string naming pattern: {field} or {link.field} (contract 0009 §2a).
+var fieldTokenRe = regexp.MustCompile(`\{([a-z][a-z0-9_]*)(?:\.[a-z][a-z0-9_]*)?\}`)
+
+// tokenValue is the shape a token's value must already have: segments of A-Z and 0-9 joined by "-". Nothing is
+// changed to fit (no upper-casing, no replacing), so two different values never render the same prefix and share a
+// counter (audit naming-field-token F2).
+var tokenValue = regexp.MustCompile(`^[A-Z0-9]+(-[A-Z0-9]+)*$`)
+
+// fieldTokens replaces the field tokens of a legacy string pattern (STRK-{outlet.code}-{YY}{MM}-{####}) with the
+// record's values. The legacy counter is keyed by the rendered prefix, so each value counts on its own: receipts of
+// outlet DGO and outlet RIU number 0001, 0002… apart. Every token must be followed by "-" (validated; also refused
+// here for a config override): a value running into the counter could read as another value's number. Only fields
+// of the record are read (never a global such as user). An empty value, or one not of the shape above, refuses the
+// numbering (409 numbering).
+func (o *op) fieldTokens(m *meta.Model, rec store.Record, pattern string) (string, error) {
+	locs := fieldTokenRe.FindAllStringSubmatchIndex(pattern, -1)
+	if locs == nil {
+		return pattern, nil
+	}
+	sc := o.scope(m, rec)
+	var b strings.Builder
+	last := 0
+	for _, loc := range locs {
+		path, head := pattern[loc[0]+1:loc[1]-1], pattern[loc[2]:loc[3]]
+		if loc[1] >= len(pattern) || pattern[loc[1]] != '-' {
+			return "", conflict("numbering", "Pola nomor \""+pattern+"\": token {"+path+"} harus diikuti tanda -")
+		}
+		if m.Field(head) == nil {
+			return "", conflict("numbering", "Pola nomor \""+pattern+"\": "+head+" bukan field "+m.Name)
+		}
+		v, err := sc.eval(path)
+		if err != nil {
+			return "", fmt.Errorf("numbering: %s: %w", path, err)
+		}
+		val := ""
+		if v != nil {
+			val = fmt.Sprint(v)
+		}
+		if val == "" {
+			return "", conflict("numbering", "Nomor dokumen memakai \""+path+"\" yang masih kosong; isi dulu sebelum diajukan")
+		}
+		if !tokenValue.MatchString(val) {
+			return "", conflict("numbering", "Nomor dokumen memakai \""+path+"\" = \""+val+"\": hanya huruf besar A-Z, angka dan tanda - di antaranya")
+		}
+		b.WriteString(pattern[last:loc[0]])
+		b.WriteString(val)
+		last = loc[1]
+	}
+	b.WriteString(pattern[last:])
+	return b.String(), nil
 }

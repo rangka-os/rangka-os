@@ -6,6 +6,7 @@ tax: {ppn_rate: 12, dpp_ratio: "11:12", pkp: true}
 org: {legal_name: PT Rusak, pkp: true}
 numbering:
   sales_invoice: INV-{YYYY}-{#####}
+  deal: D-{customer}{####}
   faktur: {pattern: "FK/{####}", reset: yearly}
   bulanan: {pattern: "B/{YY}/{###}", reset: monthly}
   cnt: {pattern: "X-{#}-{#}"}

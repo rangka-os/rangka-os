@@ -217,11 +217,70 @@ func TestSetNextNumber(t *testing.T) {
 func TestSeriesUnresolvableIsConflict(t *testing.T) {
 	e, a := setupSite(t, numberingSite)
 	err := e.run(context.Background(), a, func(o *op) error {
-		_, err := o.nextName(&meta.Model{Name: "unnamed_model", NamingSeries: "tidak_ada"})
+		_, err := o.nextName(&meta.Model{Name: "unnamed_model", NamingSeries: "tidak_ada"}, store.Record{})
 		return err
 	})
 	var se *StatusError
 	if !errors.As(err, &se) || se.Status != 409 || se.Code != "numbering" || se.Msg != `Seri nomor "tidak_ada" belum diatur di config.rk` {
 		t.Fatalf("unresolvable series: %v", err)
 	}
+}
+
+// TestNamingFieldToken: a legacy string pattern with a field token ({outlet.outlet_name}) renders the record's value
+// and keeps one counter per value, since the legacy counter is keyed by the rendered prefix (contract 0009 §2a). A
+// value must already be A-Z, 0-9 and "-" (nothing is changed to fit), an empty one refuses the numbering, a token not
+// followed by "-" or naming no field of the model is refused, and a global (user) is never read.
+func TestNamingFieldToken(t *testing.T) {
+	e, a := setupSite(t, numberingSite)
+	m := &meta.Model{Name: "lead", Naming: "STRK-{outlet.outlet_name}-{YY}-{####}",
+		Fields: []*meta.Field{{Name: "outlet", Type: "link", To: "outlet"}, {Name: "code", Type: "data"}}}
+	ctx := context.Background()
+	ids := map[string]string{}
+	for _, n := range []string{"DAGO-2", "BDG", "Dago 2"} {
+		res, err := e.Create(ctx, a, "outlet", map[string]any{"outlet_name": n})
+		if err != nil {
+			t.Fatal(err)
+		}
+		ids[n] = res.Record["name"].(string)
+	}
+	yy := e.Now().In(e.Location()).Format("06")
+	next := func(rec store.Record) (string, error) {
+		var name string
+		err := e.run(ctx, a, func(o *op) error {
+			var err error
+			name, err = o.nextName(m, rec)
+			return err
+		})
+		return name, err
+	}
+	for _, c := range []struct{ outlet, want string }{
+		{ids["DAGO-2"], "STRK-DAGO-2-" + yy + "-0001"},
+		{ids["DAGO-2"], "STRK-DAGO-2-" + yy + "-0002"},
+		{ids["BDG"], "STRK-BDG-" + yy + "-0001"},
+		{ids["DAGO-2"], "STRK-DAGO-2-" + yy + "-0003"},
+	} {
+		got, err := next(store.Record{"outlet": c.outlet})
+		if err != nil || got != c.want {
+			t.Fatalf("outlet %s: got %q, %v; want %q", c.outlet, got, err, c.want)
+		}
+	}
+	refused := func(label string, rec store.Record, want string) {
+		t.Helper()
+		_, err := next(rec)
+		var se *StatusError
+		if !errors.As(err, &se) || se.Status != 409 || se.Code != "numbering" || !strings.Contains(se.Msg, want) {
+			t.Fatalf("%s: %v", label, err)
+		}
+	}
+	refused("empty link", store.Record{"outlet": ""}, "masih kosong")
+	refused("value not A-Z 0-9 -", store.Record{"outlet": ids["Dago 2"]}, "hanya huruf besar")
+	m.Naming = "X-{code}-{####}"
+	if got, err := next(store.Record{"code": "A-1"}); err != nil || got != "X-A-1-0001" {
+		t.Fatalf("plain field: %q %v", got, err)
+	}
+	refused("lower case", store.Record{"code": "a-1"}, "hanya huruf besar")
+	m.Naming = "X-{code}{####}"
+	refused("token into the counter", store.Record{"code": "A"}, "harus diikuti")
+	m.Naming = "X-{user.email}-{####}"
+	refused("a global", store.Record{}, "bukan field")
 }

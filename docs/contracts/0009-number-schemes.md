@@ -1,6 +1,6 @@
 # 0009: Number schemes
 
-Status: proposed (3 Nov 2026, amended 4 Nov 2026: series `start`, `rangka numbering set`) · Owner: rangka-os · Stream S4 of the first-pilots program
+Status: proposed (3 Nov 2026, amended 4 Nov 2026: series `start`, `rangka numbering set`; amended 8 Nov 2026: §2a field tokens in string naming) · Owner: rangka-os · Stream S4 of the first-pilots program
 
 ## Context
 Pilot firms number their documents their own way (`INV/PTA/26/0012`, `PO/OUT-02/2611/007`), reset every year or
@@ -39,6 +39,36 @@ numbering:
 
 Literal text may be any of `A–Z a–z 0–9 / - . _`. A counter that outgrows its width is printed in full
 (`{###}` → `1000`), never truncated.
+
+### 2a. Field tokens in a string `naming` (amendment 8 Nov 2026)
+A cashier receipt is numbered per outlet (`STRK-DAGO-2611-0001`, `STRK-BDO-2611-0001`), not per org. A model's
+**string** `naming` (the v0 form, and a `config.numbering` string override) may contain field tokens:
+
+| Token | Value |
+| --- | --- |
+| `{field}` | a header field of the record (data, link, select or int) |
+| `{link.field}` | a data, link, select or int field of the record a header link points to |
+
+- Every token is followed by `-` (schema and validators; the engine refuses it too, for a `config.numbering`
+  string override). A value that ran straight into the counter could read as another value's number
+  (`X-A1` + `0001` = `X-A` + `10001`); with the `-`, one value's names never match another value's prefix and a
+  digit run.
+- The value is read from the record being numbered (at submit, or at create for a model that is not submittable),
+  and only from its own fields (never a global such as `user`). It must already be segments of `A-Z 0-9` joined by
+  `-` (`DGO`, `BDG-1`): nothing is upper-cased or replaced, so two different values never render the same prefix
+  and share a counter. Any other value, or an empty one, refuses the numbering (409 `numbering`). Apps that use a
+  token make the field required and check its shape in a rule, so the person sees it when saving the field.
+- The v0 counter is keyed by the rendered prefix (`rk_naming`), so each value has its own gap-free counter with no new
+  table: two outlets submitting at once lock two different counter rows.
+- Changing the value later (an outlet renames its code) starts a new counter for the new prefix; names already given
+  stay. A value that changes back continues after the highest existing name, as v0 already does.
+- Series patterns (`{series, pattern}` and `config.numbering` objects) do not take field tokens: a series counter is
+  per org + series + period, and `rangka numbering set` has no value to set it for. The schema's `number_pattern`
+  refuses them.
+- Validators (Go and `rangka_validate.py`, same order and message) report `naming_field`, in a model's naming and in
+  a `config.numbering` string override, for a token not followed by `-`, one that names no header field, a field of
+  another type, a field with `hidden_for` (contract 0027: the name would show it to those roles), a dotted token on
+  a field that is not a link, or a link target without the field.
 
 ### 3. Models reference a series
 ```yaml

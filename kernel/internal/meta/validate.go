@@ -120,6 +120,9 @@ func (v *validator) shape() {
 			if naming := asMap(m.Raw["naming"]); naming != nil {
 				v.resetNeedsDate(m.Doc.Path, "naming", naming, false)
 			}
+			if naming, ok := m.Raw["naming"].(string); ok {
+				v.namingFields(v.rep.add, m.Doc.Path, "naming", m, naming)
+			}
 		}
 		for _, dn := range v.appDashboards(a) {
 			d := v.reg.BaseDashboards[dn]

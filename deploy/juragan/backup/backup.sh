@@ -250,7 +250,8 @@ main() {
   elif [ -n "$target" ] && pilot_listed "$target" "${ALL_PILOTS[@]}"; then
     pilots=("$target")
   else
-    echo "usage: backup.sh <${ALL_PILOTS[*]// /|}|all>" >&2; exit 2
+    local IFS='|'
+    echo "usage: backup.sh <${ALL_PILOTS[*]}|all>" >&2; exit 2
   fi
   require_env
   set -m

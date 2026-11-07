@@ -1,5 +1,5 @@
 [Unit]
-Description=Back up and drill every Juragan tenant at 02:00 Jakarta time
+Description=Back up every Juragan tenant at 02:00 Jakarta time
 
 [Timer]
 OnCalendar=*-*-* 02:00:00 Asia/Jakarta

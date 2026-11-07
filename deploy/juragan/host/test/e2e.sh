@@ -131,6 +131,13 @@ case "$cross" in *"permission denied for database"*) ok "role tokob cannot conne
 same "tenant roles are NOSUPERUSER NOBYPASSRLS" "$(docker exec "$PG" psql -U postgres -qAtX -c "select string_agg(rolname || ':' || rolsuper::int || rolbypassrls::int, ' ' order by rolname) from pg_roles where rolname in ('tokoa','tokob')")" "tokoa:00 tokob:00"
 same "secrets are mode 600" "$(stat -f '%Lp' "$TMP/host/secrets/tokoa.env" 2>/dev/null || stat -c '%a' "$TMP/host/secrets/tokoa.env")" 600
 grep -q DB_PASSWORD "$TMP/host/registry/tokoa.env" && bad "registry holds a secret" || ok "registry holds no secret"
+cross="$(docker exec -e PGPASSWORD="$PWB" "$PG" psql -h 127.0.0.1 -U tokob -d postgres -c 'select 1' 2>&1 || true)"
+case "$cross" in *"permission denied for database"*) ok "tenant role cannot connect to the postgres database" ;; *) bad "tenant role reached postgres: $cross" ;; esac
+same "tenant role has a connection limit" "$(docker exec "$PG" psql -U postgres -qAtX -c "select rolconnlimit from pg_roles where rolname = 'tokoa'")" 20
+# network isolation: a container on tokoa's network reaches tokoa's kernel, not tokob's, nor tokob's network name
+same "tokoa network reaches its own kernel" "$(docker run --rm --network juragan-t-tokoa alpine:3.20 wget -q -O /dev/null http://t-tokoa:8080/.well-known/openid-configuration >/dev/null 2>&1; echo $?)" 0
+same "tokoa network cannot reach tokob's kernel" "$(docker run --rm --network juragan-t-tokoa alpine:3.20 wget -q -T 3 -O /dev/null http://t-tokob:8080/.well-known/openid-configuration >/dev/null 2>&1; echo $?)" 1
+same "bad org refused before anything is made" "$(RANGKA_OWNER_PASSWORD=x t create tokoc --bundle "$BUNDLE" --owner-email x@e2e.localhost --org $'org_a\nRANGKA_AI_URL=http://x.invalid' >/dev/null 2>&1; echo $?; [ -e "$TMP/host/registry/tokoc.env" ] && echo registry)" 1
 
 say "memory (idle kernels)"
 docker stats --no-stream --format '  {{.Name}} {{.MemUsage}}' | grep -E "juragan-(t-tok|host-$SUFFIX)" || true
@@ -147,6 +154,10 @@ if t drill all --identity "$TMP/age.key" | tee "$TMP/drill.out"; then ok "drill 
 same "drill passed for both" "$(grep -c '^DRILL PASSED' "$TMP/drill.out")" 2
 same "a wrong key fails the drill" "$(docker run --rm --entrypoint age-keygen "juragan-host-backup:$TAG_NEW" >"$TMP/wrong.key" 2>/dev/null; t drill tokoa --identity "$TMP/wrong.key" >/dev/null 2>&1; echo $?)" 1
 same "no drill containers left" "$(docker ps -aq --filter name=juragan-drill- | wc -l | tr -d ' ')" 0
+same "no drill volumes left" "$(docker volume ls -q --filter "label=juragan.drill=juragan-host-$SUFFIX" | wc -l | tr -d ' ')" 0
+same "no drill networks left" "$(docker network ls -q --filter "label=juragan.drill=juragan-host-$SUFFIX" | wc -l | tr -d ' ')" 0
+same "no restored folders left" "$(ls "$TMP/host/drill" 2>/dev/null | wc -l | tr -d ' ')" 0
+same "failed drill is logged" "$(grep -c '^DRILL FAILED tokoa' "$TMP/host/drill.log")" 1
 
 say "health"
 if t health; then ok "health all OK"; else bad "health reported a problem"; fi
@@ -159,8 +170,10 @@ t suspend tokob
 same "suspended route answers 503" "$(http tokob.localhost GET /app/)" 503
 grep -q "dihentikan sementara" "$TMP/body" && ok "suspended page explains" || bad "suspended page text"
 if t health >/dev/null; then ok "health OK with a suspended tenant"; else bad "health with a suspended tenant"; fi
-t resume tokob
+# an exported RANGKA_TAG / TENANT_ID in the caller's shell must not move the tenant off its pin
+RANGKA_TAG="$TAG_OLD" TENANT_ID=tokoa HOST_NETWORK=bogus t resume tokob
 same "resumed route" "$(http tokob.localhost GET /.well-known/openid-configuration)" 200
+same "shell RANGKA_TAG does not override the tenant's pin" "$(docker exec juragan-t-tokob-kernel-1 /usr/local/bin/rangka version | head -1)" "rangka ${TAG_NEW#v}"
 same "owner B signs in after resume" "$(login tokob.localhost "$OWNER_B" "$PW_B")" 200
 
 say "upgrade tokoa $TAG_OLD -> $TAG_NEW"
@@ -184,6 +197,9 @@ same "files gone" "$([ -e "$TMP/host/tenants/tokob" ] && echo present || echo go
 same "secret gone" "$([ -e "$TMP/host/secrets/tokob.env" ] && echo present || echo gone)" gone
 same "route gone" "$([ -e "$TMP/host/caddy/tokob.caddy" ] && echo present || echo gone)" gone
 same "tombstone kept" "$(sed -n 's/^STATUS=//p' "$TMP/host/registry/tokob.env")" deleted
+same "tombstone has no host or org in clear" "$(grep -cE '^(TENANT_HOST|TENANT_ORG)=' "$TMP/host/registry/tokob.env" || true)" 0
+same "network gone" "$(docker network inspect juragan-t-tokob >/dev/null 2>&1 && echo present || echo gone)" gone
+same "deleted host cannot be reused" "$(RANGKA_OWNER_PASSWORD=x t create tokod --bundle "$BUNDLE" --owner-email x@e2e.localhost --host tokob.localhost >/dev/null 2>&1; echo $?)" 1
 same "deleted id cannot be reused" "$(RANGKA_OWNER_PASSWORD=x t create tokob --bundle "$BUNDLE" --owner-email x@e2e.localhost >/dev/null 2>&1; echo $?)" 1
 same "final archive kept until retention" "$(ls "$TMP/host/backups/tokob" | grep -c '\.tar\.age$')" 2
 same "tokoa still serves" "$(http tokoa.localhost GET /.well-known/openid-configuration)" 200

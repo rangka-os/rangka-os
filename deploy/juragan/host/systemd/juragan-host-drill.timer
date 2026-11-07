@@ -1,0 +1,10 @@
+[Unit]
+Description=Restore drill of every Juragan tenant at 03:30 Jakarta time (after the 02:00 backup)
+
+[Timer]
+OnCalendar=*-*-* 03:30:00 Asia/Jakarta
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

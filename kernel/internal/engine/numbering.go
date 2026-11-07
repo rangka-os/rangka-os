@@ -173,35 +173,53 @@ func (e *Engine) orgCode(org string) string {
 }
 
 // fieldTokenRe matches a field token of a string naming pattern: {field} or {link.field} (contract 0009 §2a).
-var fieldTokenRe = regexp.MustCompile(`\{([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)?)\}`)
+var fieldTokenRe = regexp.MustCompile(`\{([a-z][a-z0-9_]*)(?:\.[a-z][a-z0-9_]*)?\}`)
 
-// tokenUnsafe is what a field value may not bring into a document name: anything but A-Z, 0-9 and "-".
-var tokenUnsafe = regexp.MustCompile(`[^A-Z0-9-]+`)
+// tokenValue is the shape a token's value must already have: segments of A-Z and 0-9 joined by "-". Nothing is
+// changed to fit (no upper-casing, no replacing), so two different values never render the same prefix and share a
+// counter (audit naming-field-token F2).
+var tokenValue = regexp.MustCompile(`^[A-Z0-9]+(-[A-Z0-9]+)*$`)
 
-// fieldTokens replaces the field tokens of a legacy string pattern ({outlet.code}) with the record's values,
-// upper-cased, with every run of other characters turned into "-". The legacy counter is keyed by the rendered
-// prefix, so each value gets its own counter: receipts of outlet DAGO and outlet BDO number 0001, 0002… apart. A
-// token whose value is empty refuses the numbering (409), since an empty part would share another value's counter.
+// fieldTokens replaces the field tokens of a legacy string pattern (STRK-{outlet.code}-{YY}{MM}-{####}) with the
+// record's values. The legacy counter is keyed by the rendered prefix, so each value counts on its own: receipts of
+// outlet DGO and outlet RIU number 0001, 0002… apart. Every token must be followed by "-" (validated; also refused
+// here for a config override): a value running into the counter could read as another value's number. Only fields
+// of the record are read (never a global such as user). An empty value, or one not of the shape above, refuses the
+// numbering (409 numbering).
 func (o *op) fieldTokens(m *meta.Model, rec store.Record, pattern string) (string, error) {
-	if !fieldTokenRe.MatchString(pattern) {
+	locs := fieldTokenRe.FindAllStringSubmatchIndex(pattern, -1)
+	if locs == nil {
 		return pattern, nil
 	}
-	var bad error
 	sc := o.scope(m, rec)
-	out := fieldTokenRe.ReplaceAllStringFunc(pattern, func(tok string) string {
-		path := tok[1 : len(tok)-1]
-		v, err := sc.eval(path)
-		val := strings.Trim(tokenUnsafe.ReplaceAllString(strings.ToUpper(fmt.Sprint(v)), "-"), "-")
-		if err != nil || v == nil || val == "" {
-			if bad == nil {
-				bad = conflict("numbering", "Nomor dokumen memakai \""+path+"\" yang masih kosong; isi dulu sebelum diajukan")
-			}
-			return ""
+	var b strings.Builder
+	last := 0
+	for _, loc := range locs {
+		path, head := pattern[loc[0]+1:loc[1]-1], pattern[loc[2]:loc[3]]
+		if loc[1] >= len(pattern) || pattern[loc[1]] != '-' {
+			return "", conflict("numbering", "Pola nomor \""+pattern+"\": token {"+path+"} harus diikuti tanda -")
 		}
-		return val
-	})
-	if bad != nil {
-		return "", bad
+		if m.Field(head) == nil {
+			return "", conflict("numbering", "Pola nomor \""+pattern+"\": "+head+" bukan field "+m.Name)
+		}
+		v, err := sc.eval(path)
+		if err != nil {
+			return "", fmt.Errorf("numbering: %s: %w", path, err)
+		}
+		val := ""
+		if v != nil {
+			val = fmt.Sprint(v)
+		}
+		if val == "" {
+			return "", conflict("numbering", "Nomor dokumen memakai \""+path+"\" yang masih kosong; isi dulu sebelum diajukan")
+		}
+		if !tokenValue.MatchString(val) {
+			return "", conflict("numbering", "Nomor dokumen memakai \""+path+"\" = \""+val+"\": hanya huruf besar A-Z, angka dan tanda - di antaranya")
+		}
+		b.WriteString(pattern[last:loc[0]])
+		b.WriteString(val)
+		last = loc[1]
 	}
-	return out, nil
+	b.WriteString(pattern[last:])
+	return b.String(), nil
 }

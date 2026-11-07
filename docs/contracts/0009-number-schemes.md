@@ -49,20 +49,26 @@ A cashier receipt is numbered per outlet (`STRK-DAGO-2611-0001`, `STRK-BDO-2611-
 | `{field}` | a header field of the record (data, link, select or int) |
 | `{link.field}` | a data, link, select or int field of the record a header link points to |
 
+- Every token is followed by `-` (schema and validators; the engine refuses it too, for a `config.numbering`
+  string override). A value that ran straight into the counter could read as another value's number
+  (`X-A1` + `0001` = `X-A` + `10001`); with the `-`, one value's names never match another value's prefix and a
+  digit run.
 - The value is read from the record being numbered (at submit, or at create for a model that is not submittable),
-  upper-cased, and every run of characters other than `A-Z 0-9 -` becomes `-` (trimmed at both ends).
+  and only from its own fields (never a global such as `user`). It must already be segments of `A-Z 0-9` joined by
+  `-` (`DGO`, `BDG-1`): nothing is upper-cased or replaced, so two different values never render the same prefix
+  and share a counter. Any other value, or an empty one, refuses the numbering (409 `numbering`). Apps that use a
+  token make the field required and check its shape in a rule, so the person sees it when saving the field.
 - The v0 counter is keyed by the rendered prefix (`rk_naming`), so each value has its own gap-free counter with no new
   table: two outlets submitting at once lock two different counter rows.
-- An empty value refuses the numbering (409 `numbering`): an empty part would share a counter with another value and
-  produce names like `STRK--2611-0001`. Apps that use a token make the field required (or check it in a rule).
 - Changing the value later (an outlet renames its code) starts a new counter for the new prefix; names already given
   stay. A value that changes back continues after the highest existing name, as v0 already does.
 - Series patterns (`{series, pattern}` and `config.numbering` objects) do not take field tokens: a series counter is
   per org + series + period, and `rangka numbering set` has no value to set it for. The schema's `number_pattern`
   refuses them.
-- Validators (Go and `rangka_validate.py`, same order and message) report `naming_field` for a token that names no
-  header field, a field of another type, a dotted token on a field that is not a link, or a link target without
-  the field.
+- Validators (Go and `rangka_validate.py`, same order and message) report `naming_field`, in a model's naming and in
+  a `config.numbering` string override, for a token not followed by `-`, one that names no header field, a field of
+  another type, a field with `hidden_for` (contract 0027: the name would show it to those roles), a dotted token on
+  a field that is not a link, or a link target without the field.
 
 ### 3. Models reference a series
 ```yaml

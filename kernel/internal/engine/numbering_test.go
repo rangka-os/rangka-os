@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -227,39 +226,22 @@ func TestSeriesUnresolvableIsConflict(t *testing.T) {
 	}
 }
 
-// TestNamingFieldToken: a legacy string pattern with a field token ({outlet.outlet_name}) renders the record's value,
-// upper-cased and made safe, and keeps one counter per value, since the legacy counter is keyed by the rendered
-// prefix (contract 0009 §2a). An empty value refuses the numbering.
+// TestNamingFieldToken: a legacy string pattern with a field token ({outlet.outlet_name}) renders the record's value
+// and keeps one counter per value, since the legacy counter is keyed by the rendered prefix (contract 0009 §2a). A
+// value must already be A-Z, 0-9 and "-" (nothing is changed to fit), an empty one refuses the numbering, a token not
+// followed by "-" or naming no field of the model is refused, and a global (user) is never read.
 func TestNamingFieldToken(t *testing.T) {
 	e, a := setupSite(t, numberingSite)
 	m := &meta.Model{Name: "lead", Naming: "STRK-{outlet.outlet_name}-{YY}-{####}",
 		Fields: []*meta.Field{{Name: "outlet", Type: "link", To: "outlet"}, {Name: "code", Type: "data"}}}
 	ctx := context.Background()
-	if _, err := e.Create(ctx, a, "outlet", map[string]any{"outlet_name": "Dago 2"}); err != nil {
-		t.Fatal(err)
-	}
-	outs, err := e.DB.Query(ctx, `select name, outlet_name from r_outlet where org_id = 'kopi-senja' order by name`)
-	if err != nil {
-		t.Fatal(err)
-	}
-	byName := map[string]string{}
-	for _, r := range outs.Rows {
-		byName[r[1].(string)] = r[0].(string)
-	}
-	dago, other := byName["Dago 2"], ""
-	for n, id := range byName {
-		if n != "Dago 2" && n != "" {
-			other = id
+	ids := map[string]string{}
+	for _, n := range []string{"DAGO-2", "BDG", "Dago 2"} {
+		res, err := e.Create(ctx, a, "outlet", map[string]any{"outlet_name": n})
+		if err != nil {
+			t.Fatal(err)
 		}
-	}
-	if dago == "" || other == "" {
-		t.Fatalf("outlets: %v", byName)
-	}
-	otherName := ""
-	for n, id := range byName {
-		if id == other {
-			otherName = n
-		}
+		ids[n] = res.Record["name"].(string)
 	}
 	yy := e.Now().In(e.Location()).Format("06")
 	next := func(rec store.Record) (string, error) {
@@ -271,25 +253,34 @@ func TestNamingFieldToken(t *testing.T) {
 		})
 		return name, err
 	}
-	safe := strings.Trim(regexp.MustCompile(`[^A-Z0-9-]+`).ReplaceAllString(strings.ToUpper(otherName), "-"), "-")
 	for _, c := range []struct{ outlet, want string }{
-		{dago, "STRK-DAGO-2-" + yy + "-0001"},
-		{dago, "STRK-DAGO-2-" + yy + "-0002"},
-		{other, "STRK-" + safe + "-" + yy + "-0001"},
-		{dago, "STRK-DAGO-2-" + yy + "-0003"},
+		{ids["DAGO-2"], "STRK-DAGO-2-" + yy + "-0001"},
+		{ids["DAGO-2"], "STRK-DAGO-2-" + yy + "-0002"},
+		{ids["BDG"], "STRK-BDG-" + yy + "-0001"},
+		{ids["DAGO-2"], "STRK-DAGO-2-" + yy + "-0003"},
 	} {
 		got, err := next(store.Record{"outlet": c.outlet})
 		if err != nil || got != c.want {
 			t.Fatalf("outlet %s: got %q, %v; want %q", c.outlet, got, err, c.want)
 		}
 	}
-	_, err = next(store.Record{"outlet": ""})
-	var se *StatusError
-	if !errors.As(err, &se) || se.Status != 409 || se.Code != "numbering" || !strings.Contains(se.Msg, `"outlet.outlet_name"`) {
-		t.Fatalf("empty token: %v", err)
+	refused := func(label string, rec store.Record, want string) {
+		t.Helper()
+		_, err := next(rec)
+		var se *StatusError
+		if !errors.As(err, &se) || se.Status != 409 || se.Code != "numbering" || !strings.Contains(se.Msg, want) {
+			t.Fatalf("%s: %v", label, err)
+		}
 	}
+	refused("empty link", store.Record{"outlet": ""}, "masih kosong")
+	refused("value not A-Z 0-9 -", store.Record{"outlet": ids["Dago 2"]}, "hanya huruf besar")
 	m.Naming = "X-{code}-{####}"
-	if got, err := next(store.Record{"code": "a/b c"}); err != nil || got != "X-A-B-C-0001" {
+	if got, err := next(store.Record{"code": "A-1"}); err != nil || got != "X-A-1-0001" {
 		t.Fatalf("plain field: %q %v", got, err)
 	}
+	refused("lower case", store.Record{"code": "a-1"}, "hanya huruf besar")
+	m.Naming = "X-{code}{####}"
+	refused("token into the counter", store.Record{"code": "A"}, "harus diikuti")
+	m.Naming = "X-{user.email}-{####}"
+	refused("a global", store.Record{}, "bukan field")
 }

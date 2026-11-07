@@ -444,6 +444,8 @@ func (v *validator) site(all map[string]vis) {
 				v.rep.extra("error", cfg.Path, "numbering/"+mn, "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, mn, suggest(mn, keys(all))))
 			} else if !installed[x.app] {
 				v.rep.extra("warn", cfg.Path, "numbering/"+mn, "not_installed", fmt.Sprintf(`"%s" comes from app "%s", which this site does not install`, mn, x.app))
+			} else if str, _ := numbering[mn].(string); str != "" {
+				v.namingFields(v.rep.extra, cfg.Path, "numbering/"+mn, x.m, str)
 			}
 		}
 		for _, mn := range sortedKeysM(all) {
@@ -985,25 +987,39 @@ var namingTokenRe = regexp.MustCompile(`\{([a-z][a-z0-9_]*)(?:\.([a-z][a-z0-9_]*
 // namingTypes are the field types whose value can be part of a document name.
 var namingTypes = map[string]bool{"data": true, "link": true, "select": true, "int": true}
 
-// namingFields reports a field token of a string naming pattern that names no header field of the model, a field of
-// a type that cannot be part of a name, or (for {link.field}) a link whose target lacks that field.
-func (v *validator) namingFields(m *Model, naming string) {
-	for _, g := range namingTokenRe.FindAllStringSubmatch(naming, -1) {
-		f := m.Field(g[1])
+// namingFields reports a field token of a string naming pattern (the model's own naming, or a config.numbering
+// override) that is not followed by "-" (its value would run into the next token or the counter, and one value's names
+// could read as another's), names no header field of the model, a field of a type that cannot be part of a name, a
+// field hidden from some role (contract 0027: the name would show it), or (for {link.field}) a link whose target lacks
+// that field.
+func (v *validator) namingFields(add func(level, path, where, code, msg string), path, where string, m *Model, naming string) {
+	for _, loc := range namingTokenRe.FindAllStringSubmatchIndex(naming, -1) {
+		tok, a := naming[loc[0]+1:loc[1]-1], naming[loc[2]:loc[3]]
+		b := ""
+		if loc[4] >= 0 {
+			b = naming[loc[4]:loc[5]]
+		}
+		f := m.Field(a)
 		switch {
+		case loc[1] >= len(naming) || naming[loc[1]] != '-':
+			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s} must be followed by "-"`, tok))
 		case f == nil:
-			v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s}: model %s has no field "%s"`, strings.TrimPrefix(strings.TrimSuffix(g[0], "}"), "{"), m.Name, g[1]))
-		case g[2] == "" && !namingTypes[f.Type]:
-			v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s}: field "%s" is a %s; use a data, link, select or int field`, g[1], g[1], f.Type))
-		case g[2] != "" && f.Type != "link":
-			v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s.%s}: field "%s" is not a link`, g[1], g[2], g[1]))
-		case g[2] != "":
+			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: model %s has no field "%s"`, tok, m.Name, a))
+		case len(StrList(f.Raw["hidden_for"])) > 0:
+			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: field "%s" is hidden_for some roles; a document name shows it`, tok, a))
+		case b == "" && !namingTypes[f.Type]:
+			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: field "%s" is a %s; use a data, link, select or int field`, tok, a, f.Type))
+		case b != "" && f.Type != "link":
+			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: field "%s" is not a link`, tok, a))
+		case b != "":
 			t := v.reg.Models[f.To]
 			if t == nil {
 				continue // the unknown link target is reported by the link check
 			}
-			if tf := t.Field(g[2]); tf == nil || !namingTypes[tf.Type] {
-				v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s.%s}: model %s has no data, link, select or int field "%s"`, g[1], g[2], f.To, g[2]))
+			if tf := t.Field(b); tf == nil || !namingTypes[tf.Type] {
+				add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: model %s has no data, link, select or int field "%s"`, tok, f.To, b))
+			} else if len(StrList(tf.Raw["hidden_for"])) > 0 {
+				add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: field "%s" of %s is hidden_for some roles; a document name shows it`, tok, b, f.To))
 			}
 		}
 	}

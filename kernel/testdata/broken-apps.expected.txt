@@ -8,10 +8,13 @@ core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must mat
 crm/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/crm/module.rk and an app (contract 0001)
 crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', …
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
-crm/models/struk.rk:5:9  error  naming_field  naming  naming token {deal.nope}: model deal has no data, link, select or int field "nope"
-crm/models/struk.rk:5:9  error  naming_field  naming  naming token {note.x}: field "note" is not a link
-crm/models/struk.rk:5:9  error  naming_field  naming  naming token {lines}: field "lines" is a text; use a data, link, select or int field
-crm/models/struk.rk:5:9  error  naming_field  naming  naming token {nothing}: model struk has no field "nothing"
+crm/models/struk.rk:6:9  error  schema  naming  'STRK-{deal.nope}-{kode}-{note.x}-{lines}-{nothing}-{secret}-{kode}{####}' is not valid under any of the given schemas
+crm/models/struk.rk:6:9  error  naming_field  naming  naming token {deal.nope}: model deal has no data, link, select or int field "nope"
+crm/models/struk.rk:6:9  error  naming_field  naming  naming token {note.x}: field "note" is not a link
+crm/models/struk.rk:6:9  error  naming_field  naming  naming token {lines}: field "lines" is a text; use a data, link, select or int field
+crm/models/struk.rk:6:9  error  naming_field  naming  naming token {nothing}: model struk has no field "nothing"
+crm/models/struk.rk:6:9  error  naming_field  naming  naming token {secret}: field "secret" is hidden_for some roles; a document name shows it
+crm/models/struk.rk:6:9  error  naming_field  naming  naming token {kode} must be followed by "-"
 crm/models/tanda_terima.rk:4:9  error  reset_needs_date  naming  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
@@ -104,4 +107,4 @@ crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope 
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-91 error(s), 14 warning(s)
+94 error(s), 14 warning(s)

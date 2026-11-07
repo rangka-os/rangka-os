@@ -124,7 +124,7 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 					return err
 				}
 				if name == "" {
-					n, err := o.nextName(m)
+					n, err := o.nextName(m, rec)
 					if err != nil {
 						return err
 					}

@@ -5,6 +5,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/bundle"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -975,5 +976,35 @@ func (v *validator) resetNeedsDate(path, where string, series map[string]any, ex
 		v.rep.extra("error", path, where, "reset_needs_date", msg)
 	} else {
 		v.rep.add("error", path, where, "reset_needs_date", msg)
+	}
+}
+
+// namingTokenRe matches a field token of a string naming pattern: {field} or {link.field} (contract 0009 §2a).
+var namingTokenRe = regexp.MustCompile(`\{([a-z][a-z0-9_]*)(?:\.([a-z][a-z0-9_]*))?\}`)
+
+// namingTypes are the field types whose value can be part of a document name.
+var namingTypes = map[string]bool{"data": true, "link": true, "select": true, "int": true}
+
+// namingFields reports a field token of a string naming pattern that names no header field of the model, a field of
+// a type that cannot be part of a name, or (for {link.field}) a link whose target lacks that field.
+func (v *validator) namingFields(m *Model, naming string) {
+	for _, g := range namingTokenRe.FindAllStringSubmatch(naming, -1) {
+		f := m.Field(g[1])
+		switch {
+		case f == nil:
+			v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s}: model %s has no field "%s"`, strings.TrimPrefix(strings.TrimSuffix(g[0], "}"), "{"), m.Name, g[1]))
+		case g[2] == "" && !namingTypes[f.Type]:
+			v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s}: field "%s" is a %s; use a data, link, select or int field`, g[1], g[1], f.Type))
+		case g[2] != "" && f.Type != "link":
+			v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s.%s}: field "%s" is not a link`, g[1], g[2], g[1]))
+		case g[2] != "":
+			t := v.reg.Models[f.To]
+			if t == nil {
+				continue // the unknown link target is reported by the link check
+			}
+			if tf := t.Field(g[2]); tf == nil || !namingTypes[tf.Type] {
+				v.rep.add("error", m.Doc.Path, "naming", "naming_field", fmt.Sprintf(`naming token {%s.%s}: model %s has no data, link, select or int field "%s"`, g[1], g[2], f.To, g[2]))
+			}
+		}
 	}
 }

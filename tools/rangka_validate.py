@@ -345,6 +345,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                 rep.add("error", p, "name", "company_model_name", f'company model "{mname}" must start with x_ (x_{mname}), so a module upgrade never brings a model of the same name (contract 0016)')
             if isinstance(m.get("naming"), dict):
                 reset_needs_date(rep, p, "naming", m["naming"])
+            if isinstance(m.get("naming"), str):
+                naming_fields(rep, p, mname, m, m["naming"], allmodels_of(apps))
         for dname, (p, db) in a["dashboards"].items():
             for e in sorted(V["dashboard"].iter_errors(db), key=lambda e: list(map(str, e.absolute_path))):
                 rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message if len(e.message) < 160 else e.message[:157] + "…")
@@ -965,6 +967,40 @@ def template_exists(kind, name):
         if os.path.isfile(os.path.join(TEMPLATES_DIR, kind, n + ".rk")):
             return True
     return not os.path.isdir(TEMPLATES_DIR)
+
+
+NAMING_TOKEN = re.compile(r"\{([a-z][a-z0-9_]*)(?:\.([a-z][a-z0-9_]*))?\}")
+NAMING_TYPES = {"data", "link", "select", "int"}
+
+
+def allmodels_of(apps):
+    return {mn: m for a in apps.values() for mn, (_, m) in a.get("models", {}).items() if isinstance(m, dict)}
+
+
+def naming_fields(rep, path, mname, m, naming, models):
+    """Field tokens of a string naming pattern ({outlet.code}, contract 0009 §2a): a header field of a type that can be
+    part of a name, or a link and a field of its target."""
+    def field(model, name):
+        for f in (model.get("fields") or []) if isinstance(model, dict) else []:
+            if isinstance(f, dict) and f.get("name") == name:
+                return f
+        return None
+    for g in NAMING_TOKEN.finditer(naming):
+        a, b = g.group(1), g.group(2)
+        f = field(m, a)
+        if f is None:
+            rep.add("error", path, "naming", "naming_field", f'naming token {{{g.group(0)[1:-1]}}}: model {mname} has no field "{a}"')
+        elif b is None and f.get("type") not in NAMING_TYPES:
+            rep.add("error", path, "naming", "naming_field", f'naming token {{{a}}}: field "{a}" is a {f.get("type")}; use a data, link, select or int field')
+        elif b is not None and f.get("type") != "link":
+            rep.add("error", path, "naming", "naming_field", f'naming token {{{a}.{b}}}: field "{a}" is not a link')
+        elif b is not None:
+            t = models.get(f.get("to"))
+            if t is None:
+                continue
+            tf = field(t, b)
+            if tf is None or tf.get("type") not in NAMING_TYPES:
+                rep.add("error", path, "naming", "naming_field", f'naming token {{{a}.{b}}}: model {f.get("to")} has no data, link, select or int field "{b}"')
 
 
 def reset_needs_date(rep, path, where, series):

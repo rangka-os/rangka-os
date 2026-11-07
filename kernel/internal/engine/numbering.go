@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"regexp"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -84,12 +85,16 @@ func wholeNumber(v any) int64 {
 
 // nextName takes the next document name for m inside the op's transaction: a series number, or the v0
 // prefix counter for legacy schemes.
-func (o *op) nextName(m *meta.Model) (string, error) {
+func (o *op) nextName(m *meta.Model, rec store.Record) (string, error) {
 	e := o.e
 	now := e.Now().In(e.Location())
 	s := e.scheme(m, o.actor.Org)
 	if s.Series == "" {
-		return store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, s.Pattern, now)
+		pattern, err := o.fieldTokens(m, rec, s.Pattern)
+		if err != nil {
+			return "", err
+		}
+		return store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, pattern, now)
 	}
 	if s.Pattern == "" {
 		return "", conflict("numbering", "Seri nomor \""+s.Series+"\" belum diatur di config.rk")
@@ -165,4 +170,38 @@ func (e *Engine) orgCode(org string) string {
 		return o.Code
 	}
 	return strings.ToUpper(org)
+}
+
+// fieldTokenRe matches a field token of a string naming pattern: {field} or {link.field} (contract 0009 §2a).
+var fieldTokenRe = regexp.MustCompile(`\{([a-z][a-z0-9_]*(?:\.[a-z][a-z0-9_]*)?)\}`)
+
+// tokenUnsafe is what a field value may not bring into a document name: anything but A-Z, 0-9 and "-".
+var tokenUnsafe = regexp.MustCompile(`[^A-Z0-9-]+`)
+
+// fieldTokens replaces the field tokens of a legacy string pattern ({outlet.code}) with the record's values,
+// upper-cased, with every run of other characters turned into "-". The legacy counter is keyed by the rendered
+// prefix, so each value gets its own counter: receipts of outlet DAGO and outlet BDO number 0001, 0002… apart. A
+// token whose value is empty refuses the numbering (409), since an empty part would share another value's counter.
+func (o *op) fieldTokens(m *meta.Model, rec store.Record, pattern string) (string, error) {
+	if !fieldTokenRe.MatchString(pattern) {
+		return pattern, nil
+	}
+	var bad error
+	sc := o.scope(m, rec)
+	out := fieldTokenRe.ReplaceAllStringFunc(pattern, func(tok string) string {
+		path := tok[1 : len(tok)-1]
+		v, err := sc.eval(path)
+		val := strings.Trim(tokenUnsafe.ReplaceAllString(strings.ToUpper(fmt.Sprint(v)), "-"), "-")
+		if err != nil || v == nil || val == "" {
+			if bad == nil {
+				bad = conflict("numbering", "Nomor dokumen memakai \""+path+"\" yang masih kosong; isi dulu sebelum diajukan")
+			}
+			return ""
+		}
+		return val
+	})
+	if bad != nil {
+		return "", bad
+	}
+	return out, nil
 }

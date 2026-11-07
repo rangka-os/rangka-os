@@ -1,6 +1,6 @@
 # 0009: Number schemes
 
-Status: proposed (3 Nov 2026, amended 4 Nov 2026: series `start`, `rangka numbering set`) · Owner: rangka-os · Stream S4 of the first-pilots program
+Status: proposed (3 Nov 2026, amended 4 Nov 2026: series `start`, `rangka numbering set`; amended 8 Nov 2026: §2a field tokens in string naming) · Owner: rangka-os · Stream S4 of the first-pilots program
 
 ## Context
 Pilot firms number their documents their own way (`INV/PTA/26/0012`, `PO/OUT-02/2611/007`), reset every year or
@@ -39,6 +39,30 @@ numbering:
 
 Literal text may be any of `A–Z a–z 0–9 / - . _`. A counter that outgrows its width is printed in full
 (`{###}` → `1000`), never truncated.
+
+### 2a. Field tokens in a string `naming` (amendment 8 Nov 2026)
+A cashier receipt is numbered per outlet (`STRK-DAGO-2611-0001`, `STRK-BDO-2611-0001`), not per org. A model's
+**string** `naming` (the v0 form, and a `config.numbering` string override) may contain field tokens:
+
+| Token | Value |
+| --- | --- |
+| `{field}` | a header field of the record (data, link, select or int) |
+| `{link.field}` | a data, link, select or int field of the record a header link points to |
+
+- The value is read from the record being numbered (at submit, or at create for a model that is not submittable),
+  upper-cased, and every run of characters other than `A-Z 0-9 -` becomes `-` (trimmed at both ends).
+- The v0 counter is keyed by the rendered prefix (`rk_naming`), so each value has its own gap-free counter with no new
+  table: two outlets submitting at once lock two different counter rows.
+- An empty value refuses the numbering (409 `numbering`): an empty part would share a counter with another value and
+  produce names like `STRK--2611-0001`. Apps that use a token make the field required (or check it in a rule).
+- Changing the value later (an outlet renames its code) starts a new counter for the new prefix; names already given
+  stay. A value that changes back continues after the highest existing name, as v0 already does.
+- Series patterns (`{series, pattern}` and `config.numbering` objects) do not take field tokens: a series counter is
+  per org + series + period, and `rangka numbering set` has no value to set it for. The schema's `number_pattern`
+  refuses them.
+- Validators (Go and `rangka_validate.py`, same order and message) report `naming_field` for a token that names no
+  header field, a field of another type, a dotted token on a field that is not a link, or a link target without
+  the field.
 
 ### 3. Models reference a series
 ```yaml

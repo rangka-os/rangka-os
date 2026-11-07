@@ -372,7 +372,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	case m.IsSubmittable:
 		rec["name"] = "DRAFT-" + store.RandomName(5)
 	default:
-		n, err := o.nextName(m)
+		n, err := o.nextName(m, rec)
 		if err != nil {
 			return nil, err
 		}
@@ -659,7 +659,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if af := str(rec["amended_from"]); af != "" {
 			newName, err = o.amendName(m, af)
 		} else {
-			newName, err = o.nextName(m)
+			newName, err = o.nextName(m, rec)
 		}
 		if err != nil {
 			return nil, err

@@ -8,6 +8,10 @@ core/models/item.rk:2:7  error  name_mismatch  name  model name "items" must mat
 crm/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/crm/module.rk and an app (contract 0001)
 crm/models/deal.rk:54:11  error  schema  fields/4/type  'currencyy' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', …
 crm/models/deal.rk:142:11  error  schema  views/form/layout/2/columns  [['owner', 'source', 'sourse'], ['owner'], ['lost_reason']] is too long
+crm/models/struk.rk:5:9  error  naming_field  naming  naming token {deal.nope}: model deal has no data, link, select or int field "nope"
+crm/models/struk.rk:5:9  error  naming_field  naming  naming token {note.x}: field "note" is not a link
+crm/models/struk.rk:5:9  error  naming_field  naming  naming token {lines}: field "lines" is a text; use a data, link, select or int field
+crm/models/struk.rk:5:9  error  naming_field  naming  naming token {nothing}: model struk has no field "nothing"
 crm/models/tanda_terima.rk:4:9  error  reset_needs_date  naming  reset yearly needs {YY} or {YYYY} in the pattern, or numbers repeat
 crm/dashboards/crm_overview.rk:98:5  error  schema  widgets/10  'chart' is a required property
 crm/dashboards/extra_board.rk:2:7  error  name_mismatch  name  dashboard name "extra" must match the file name "extra_board"
@@ -161,4 +165,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:21:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:22:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-141 error(s), 21 warning(s)
+145 error(s), 21 warning(s)

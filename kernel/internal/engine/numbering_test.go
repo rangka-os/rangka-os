@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"regexp"
 	"sort"
 	"strings"
 	"sync"
@@ -217,11 +218,78 @@ func TestSetNextNumber(t *testing.T) {
 func TestSeriesUnresolvableIsConflict(t *testing.T) {
 	e, a := setupSite(t, numberingSite)
 	err := e.run(context.Background(), a, func(o *op) error {
-		_, err := o.nextName(&meta.Model{Name: "unnamed_model", NamingSeries: "tidak_ada"})
+		_, err := o.nextName(&meta.Model{Name: "unnamed_model", NamingSeries: "tidak_ada"}, store.Record{})
 		return err
 	})
 	var se *StatusError
 	if !errors.As(err, &se) || se.Status != 409 || se.Code != "numbering" || se.Msg != `Seri nomor "tidak_ada" belum diatur di config.rk` {
 		t.Fatalf("unresolvable series: %v", err)
+	}
+}
+
+// TestNamingFieldToken: a legacy string pattern with a field token ({outlet.outlet_name}) renders the record's value,
+// upper-cased and made safe, and keeps one counter per value, since the legacy counter is keyed by the rendered
+// prefix (contract 0009 §2a). An empty value refuses the numbering.
+func TestNamingFieldToken(t *testing.T) {
+	e, a := setupSite(t, numberingSite)
+	m := &meta.Model{Name: "lead", Naming: "STRK-{outlet.outlet_name}-{YY}-{####}",
+		Fields: []*meta.Field{{Name: "outlet", Type: "link", To: "outlet"}, {Name: "code", Type: "data"}}}
+	ctx := context.Background()
+	if _, err := e.Create(ctx, a, "outlet", map[string]any{"outlet_name": "Dago 2"}); err != nil {
+		t.Fatal(err)
+	}
+	outs, err := e.DB.Query(ctx, `select name, outlet_name from r_outlet where org_id = 'kopi-senja' order by name`)
+	if err != nil {
+		t.Fatal(err)
+	}
+	byName := map[string]string{}
+	for _, r := range outs.Rows {
+		byName[r[1].(string)] = r[0].(string)
+	}
+	dago, other := byName["Dago 2"], ""
+	for n, id := range byName {
+		if n != "Dago 2" && n != "" {
+			other = id
+		}
+	}
+	if dago == "" || other == "" {
+		t.Fatalf("outlets: %v", byName)
+	}
+	otherName := ""
+	for n, id := range byName {
+		if id == other {
+			otherName = n
+		}
+	}
+	yy := e.Now().In(e.Location()).Format("06")
+	next := func(rec store.Record) (string, error) {
+		var name string
+		err := e.run(ctx, a, func(o *op) error {
+			var err error
+			name, err = o.nextName(m, rec)
+			return err
+		})
+		return name, err
+	}
+	safe := strings.Trim(regexp.MustCompile(`[^A-Z0-9-]+`).ReplaceAllString(strings.ToUpper(otherName), "-"), "-")
+	for _, c := range []struct{ outlet, want string }{
+		{dago, "STRK-DAGO-2-" + yy + "-0001"},
+		{dago, "STRK-DAGO-2-" + yy + "-0002"},
+		{other, "STRK-" + safe + "-" + yy + "-0001"},
+		{dago, "STRK-DAGO-2-" + yy + "-0003"},
+	} {
+		got, err := next(store.Record{"outlet": c.outlet})
+		if err != nil || got != c.want {
+			t.Fatalf("outlet %s: got %q, %v; want %q", c.outlet, got, err, c.want)
+		}
+	}
+	_, err = next(store.Record{"outlet": ""})
+	var se *StatusError
+	if !errors.As(err, &se) || se.Status != 409 || se.Code != "numbering" || !strings.Contains(se.Msg, `"outlet.outlet_name"`) {
+		t.Fatalf("empty token: %v", err)
+	}
+	m.Naming = "X-{code}-{####}"
+	if got, err := next(store.Record{"code": "a/b c"}); err != nil || got != "X-A-B-C-0001" {
+		t.Fatalf("plain field: %q %v", got, err)
 	}
 }

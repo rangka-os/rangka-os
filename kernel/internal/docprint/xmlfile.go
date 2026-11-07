@@ -17,7 +17,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 )
 
-// XML file formats (contract 0028): a print format with output: xml renders its template with text/template,
+// XML file formats (contract 0029): a print format with output: xml renders its template with text/template,
 // every output action escaped as XML text, and the result must be well-formed XML with one root element.
 
 // ErrXMLInvalid is returned when a rendered file is not well-formed XML (or holds a directive such as DOCTYPE).
@@ -27,7 +27,7 @@ var ErrXMLInvalid = errors.New("print: rendered file is not well-formed XML")
 // (it is not in PrintFuncNames), so they cannot double-escape or bypass it.
 const xmlEscaperName = "_rk_xml_escape"
 
-// numberFuncs are the exact-arithmetic helpers of contract 0028 §2, available to HTML formats too.
+// numberFuncs are the exact-arithmetic helpers of contract 0029 §2, available to HTML formats too.
 func numberFuncs() map[string]any {
 	return map[string]any{
 		"add":     Add,
@@ -207,7 +207,7 @@ func escapeNode(n parse.Node) {
 	}
 }
 
-// RenderXML renders an output: xml format (contract 0028 §2-3): text/template with every output escaped, then a
+// RenderXML renders an output: xml format (contract 0029 §2-3): text/template with every output escaped, then a
 // well-formedness check. Related rows are filled like .Doc when their model is in in.Related models.
 func RenderXML(in Input, relatedModels map[string]*meta.Model) ([]byte, error) {
 	f, m := in.Format, in.Model

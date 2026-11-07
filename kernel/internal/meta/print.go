@@ -18,11 +18,11 @@ type Related struct {
 	Range        map[string][2]string // related field → [document field of the low bound, of the high bound], inclusive
 	Filter, Sort string
 	Limit        int  // default 200, at most 1000
-	Children     bool // rows come with their child tables (contract 0028)
+	Children     bool // rows come with their child tables (contract 0029)
 	Require      []Require
 }
 
-// Require is one check every row of a related list must pass before the format renders (contract 0028 §4).
+// Require is one check every row of a related list must pass before the format renders (contract 0029 §4).
 type Require struct {
 	Check   string // CEL on the related row
 	Message Label
@@ -31,7 +31,7 @@ type Require struct {
 // Print is one print format.
 type Print struct {
 	Name, App, Model, Paper string // App is "" for a site format; Paper defaults to A4
-	Output                  string // "html" (default, contract 0008) or "xml" (contract 0028)
+	Output                  string // "html" (default, contract 0008) or "xml" (contract 0029)
 	Template                string // absolute path of the .html file
 	Root                    string // the app or site directory the template must stay inside
 	Label                   Label

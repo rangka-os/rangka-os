@@ -15,7 +15,7 @@
     "label": {"type": "object", "additionalProperties": {"type": "string"}},
     "paper": {"enum": ["A4", "A5", "80mm"]},
     "template": {"type": "string", "pattern": "\\.(html|xml)$"},
-    "output": {"enum": ["html", "xml"], "default": "html", "description": "html: a printed page (contract 0008); xml: a downloaded XML file (contract 0028)"},
+    "output": {"enum": ["html", "xml"], "default": "html", "description": "html: a printed page (contract 0008); xml: a downloaded XML file (contract 0029)"},
     "default": {"type": "boolean"},
     "related": {
       "type": "object",
@@ -32,13 +32,13 @@
           "limit": {"type": "integer", "minimum": 1, "maximum": 1000},
           "range": {
             "type": "object",
-            "description": "related field between two document fields, inclusive (contract 0028)",
+            "description": "related field between two document fields, inclusive (contract 0029)",
             "additionalProperties": {"type": "array", "items": {"type": "string"}, "minItems": 2, "maxItems": 2}
           },
-          "children": {"type": "boolean", "description": "rows come with their child tables (contract 0028)"},
+          "children": {"type": "boolean", "description": "rows come with their child tables (contract 0029)"},
           "require": {
             "type": "array",
-            "description": "every row must pass each check, else 422 export_invalid (contract 0028)",
+            "description": "every row must pass each check, else 422 export_invalid (contract 0029)",
             "items": {
               "type": "object",
               "required": ["check", "message"],

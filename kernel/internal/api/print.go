@@ -193,7 +193,7 @@ func (s *Server) printLinks(ctx context.Context, a engine.Actor, m *meta.Model, 
 // and whose match fields equal the document's, in its sort order, cut to its limit. The match pairs are part
 // of the List filter, so the limit applies to matching rows only. truncated marks the lists that had more
 // matching rows than the limit.
-// With export true (an XML file, contract 0028) the rows are the ones the caller may export (Engine.Export), so a
+// With export true (an XML file, contract 0029) the rows are the ones the caller may export (Engine.Export), so a
 // tax file never carries rows its reader could not download as a list.
 func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record, export bool) (out map[string][]map[string]any, truncated map[string]bool, err error) {
 	out, truncated = map[string][]map[string]any{}, map[string]bool{}
@@ -314,10 +314,10 @@ func inRange(row, doc store.Record, rng map[string][2]string) bool {
 	return true
 }
 
-// maxProblems caps the problems a 422 export_invalid lists (contract 0028 §4).
+// maxProblems caps the problems a 422 export_invalid lists (contract 0029 §4).
 const maxProblems = 100
 
-// refuseInvalid checks every related row against its list's require checks (contract 0028 §4) and, when one
+// refuseInvalid checks every related row against its list's require checks (contract 0029 §4) and, when one
 // fails, writes 422 export_invalid with the problems in list order and returns true. A check that errors fails.
 func (s *Server) refuseInvalid(w http.ResponseWriter, ctx context.Context, c *caller, f *meta.Print, rec store.Record, related map[string][]map[string]any) bool {
 	vars := map[string]any{"doc": map[string]any(rec)}
@@ -352,7 +352,7 @@ func (s *Server) refuseInvalid(w http.ResponseWriter, ctx context.Context, c *ca
 	return true
 }
 
-// printXML serves an output: xml format (contract 0028 §5): print and export grants, related rows the caller may
+// printXML serves an output: xml format (contract 0029 §5): print and export grants, related rows the caller may
 // export (with children when asked), every require check passed, no list cut at its limit, a well-formed file.
 func (s *Server) printXML(w http.ResponseWriter, r *http.Request, c *caller, rec store.Record, f *meta.Print) {
 	ctx := r.Context()

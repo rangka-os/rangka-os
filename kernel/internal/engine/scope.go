@@ -419,7 +419,7 @@ func num(v any) float64 {
 }
 
 // Holds reports whether the CEL check is true on rec of model, read as the actor with the client scope a list
-// filter uses (contract 0028 §4 require): links outside the actor's scope read as missing. A check that does not
+// filter uses (contract 0029 §4 require): links outside the actor's scope read as missing. A check that does not
 // compile or fails to evaluate is an error, never true.
 // vars are extra read-only variables (doc: the printed document); a field of the model with the same name wins.
 func (e *Engine) Holds(ctx context.Context, a Actor, model string, rec store.Record, check string, vars map[string]any) (bool, error) {

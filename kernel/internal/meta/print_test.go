@@ -315,7 +315,7 @@ paper: A3
 	}
 }
 
-// Contract 0028: an XML format parses as text/template with the print helpers, require checks compile, and the
+// Contract 0029: an XML format parses as text/template with the print helpers, require checks compile, and the
 // template's extension follows output.
 func TestValidateXMLPrints(t *testing.T) {
 	dir := t.TempDir()

@@ -12,7 +12,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
-// Contract 0028: print formats with output: xml.
+// Contract 0029: print formats with output: xml.
 
 const ledgerXMLRK = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
 name: ledger_xml

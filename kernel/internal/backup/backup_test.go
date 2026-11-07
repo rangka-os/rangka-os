@@ -554,8 +554,9 @@ func TestOrgBackup(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(m.Excluded, []string{"rk_keys"}) {
-		t.Errorf("excluded = %v, want [rk_keys]", m.Excluded)
+	// the tenant's plan and AI credits (contract 0028) belong to the installation, not to one org
+	if want := []string{"rk_ai_usage", "rk_keys", "rk_plan_changes", "rk_site_plan"}; !reflect.DeepEqual(m.Excluded, want) {
+		t.Errorf("excluded = %v, want %v", m.Excluded, want)
 	}
 	for _, ts := range m.Tables {
 		if ts.Name == "rk_keys" {

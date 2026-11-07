@@ -24,6 +24,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -132,6 +133,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		db.Close()
 		return nil, err
 	}
+	if err := plan.Sync(ctx, db, reg); err != nil { // contract 0028: rangka user add reads the limits from here
+		db.Close()
+		return nil, fmt.Errorf("plan: %w", err)
+	}
 	if err := auth.EnsureOrg(ctx, db, cfg.Org, titleCase(cfg.Org)); err != nil {
 		db.Close()
 		return nil, err
@@ -142,6 +147,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	e.Log = cfg.Logf
 	e.Cache = cache.New(strCfg(reg, "cache.driver", "memory"), intCfg(reg, "cache.max_mb", 64), strCfg(reg, "cache.url", ""))
 	s.Engine = e
+	if err := e.Plan.Refresh(ctx, db, reg, e.Now()); err != nil { // the read-only check reads this snapshot (contract 0028)
+		cfg.Logf("plan: %v", err)
+	}
 	s.Queue = jobs.New(db, intCfg(reg, "queue.workers", 2), intCfg(reg, "queue.retries", 3))
 	s.Queue.Log = cfg.Logf
 	e.Queue = s.Queue
@@ -259,6 +267,9 @@ func (s *Server) Reload(ctx context.Context) error {
 		return err
 	}
 	if err := SyncOrgs(ctx, s.DB, reg); err != nil {
+		return err
+	}
+	if err := plan.Sync(ctx, s.DB, reg); err != nil {
 		return err
 	}
 	s.Engine.SetRegistry(reg)

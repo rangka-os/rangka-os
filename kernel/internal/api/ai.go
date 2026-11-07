@@ -13,6 +13,7 @@ import (
 	"time"
 	"unicode/utf8"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -232,8 +233,31 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	defer release()
+	// one AI credit per chat (contract 0028 §3): refused once the month's credits are used up, given back when the
+	// chat never reached the assistant
+	reg := s.Engine.Reg()
+	period := plan.Period(reg, s.Engine.Now())
+	if err := plan.TakeAICredit(r.Context(), s.DB, reg, period); err != nil {
+		var pe *plan.Error
+		if errors.As(err, &pe) {
+			writeError(w, http.StatusForbidden, pe.Code, pe.Msg)
+		} else {
+			fail(w, err)
+		}
+		return
+	}
+	charged := true
+	refund := func() {
+		if charged {
+			charged = false
+			if err := plan.ReturnAICredit(context.WithoutCancel(r.Context()), s.DB, period); err != nil && s.Log != nil {
+				s.Log("ai: return credit: %v", err)
+			}
+		}
+	}
 	token, err := s.Auth.MintAssistantToken(r.Context(), u, aiTokenTTL)
 	if err != nil {
+		refund()
 		fail(w, err)
 		return
 	}
@@ -270,6 +294,7 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 	payload, _ := json.Marshal(out)
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, strings.TrimRight(s.AI.URL, "/")+"/v1/chat", bytes.NewReader(payload))
 	if err != nil {
+		refund()
 		stop("ai_unavailable", unavailable)
 		return
 	}
@@ -280,12 +305,14 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 	}
 	res, err := s.aiClient().Do(req)
 	if err != nil {
+		refund()
 		stop("ai_unavailable", unavailable)
 		return
 	}
 	defer res.Body.Close()
 	// a refused secret (401/403) is an operator problem: logged, and the person sees ai_unavailable
 	if res.StatusCode != http.StatusOK {
+		refund()
 		if s.Log != nil {
 			s.Log("ai: sidecar answered %d to POST /v1/chat", res.StatusCode)
 		}

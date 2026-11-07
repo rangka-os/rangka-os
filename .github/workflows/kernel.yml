@@ -47,3 +47,11 @@ jobs:
 
       - name: Vet, test and compare with the Python validator
         run: make -C rangka-os/kernel vet test compare-python
+
+      # The apps' acceptance test on the F&B demo against this kernel (a few seconds): kernel changes that break a real
+      # site (contract 0028 plan limits did, rangka-os#74) fail here instead of on rangka-apps main afterwards.
+      - name: rangka-apps day_one (demo-fnb) against this kernel
+        env:
+          RANGKA_OS: ${{ github.workspace }}/rangka-os
+          CONNECTORS: ${{ github.workspace }}/rangka-connectors
+        run: python3 rangka-apps/tests/day_one.py --site demo-fnb

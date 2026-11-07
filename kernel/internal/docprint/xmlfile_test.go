@@ -47,7 +47,7 @@ func TestXMLTemplateEscapes(t *testing.T) {
 
 func TestWellFormed(t *testing.T) {
 	for src, ok := range map[string]bool{
-		`<?xml version="1.0" encoding="utf-8"?>` + "\n<A><B/></A>\n": true,
+		`<?xml version="1.0" encoding="utf-8"?>` + "\n<A><B/></A>\n":                       true,
 		`<A xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"><B xsi:nil="true"/></A>`: true,
 		"<A></A><B/>": false, "<A>": false, "": false, "x<A/>": false, "<A/>x": false, "<A>&nbsp;</A>": false,
 		`<!DOCTYPE A><A/>`: false, `<A><B></A></B>`: false,

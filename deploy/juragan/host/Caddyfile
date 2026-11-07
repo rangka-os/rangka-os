@@ -1,0 +1,43 @@
+# Tenant host. One generated file per tenant in /etc/caddy/tenants/<id>.caddy (tenantctl writes it and reloads
+# Caddy): an active tenant imports `tenant`, a suspended one `suspended`. With TLS on, Caddy gets a certificate for
+# each named host by itself once DNS points at this machine (no on-demand TLS, so no `ask` endpoint is needed).
+
+# Compress text types only; listing them explicitly keeps text/event-stream (SSE) uncompressed.
+(compress) {
+	encode {
+		zstd
+		gzip
+		match {
+			header Content-Type text/html*
+			header Content-Type text/css*
+			header Content-Type text/plain*
+			header Content-Type text/javascript*
+			header Content-Type application/json*
+			header Content-Type application/javascript*
+			header Content-Type application/xml*
+			header Content-Type image/svg+xml*
+		}
+	}
+}
+
+# import tenant <upstream>: the tenant's kernel (network alias t-<id> on the host network)
+(tenant) {
+	import compress
+	header Strict-Transport-Security "max-age=31536000"
+	reverse_proxy {args[0]}:8080 {
+		flush_interval -1
+	}
+	handle_errors 502 503 504 {
+		header Content-Type "text/html; charset=utf-8"
+		respond "<!doctype html><meta charset=utf-8><title>Sedang dimulai ulang</title><p>Aplikasi usaha ini sedang dimulai ulang. Coba lagi dalam satu menit." 503
+	}
+}
+
+# import suspended: the tenant is stopped (unpaid, or on its way to deletion); data is kept
+(suspended) {
+	header Content-Type "text/html; charset=utf-8"
+	header Retry-After 3600
+	respond "<!doctype html><meta charset=utf-8><title>Layanan dihentikan sementara</title><p>Layanan untuk usaha ini sedang dihentikan sementara. Data tetap aman. Hubungi Juragan untuk mengaktifkan kembali." 503
+}
+
+import /etc/caddy/tenants/*.caddy

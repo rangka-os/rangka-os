@@ -11,7 +11,9 @@ umask 077
 PILOTS_ROOT="${PILOTS_ROOT:-/pilots}"
 BACKUP_ROOT="${BACKUP_ROOT:-/backups}"
 KEEP_LOCAL="${BACKUP_KEEP_LOCAL:-7}"
-ALL_PILOTS=(jasa fnb)
+# BACKUP_PILOTS: the names `all` covers, space separated. Unset in the pilot deploy (jasa fnb); the tenant host
+# (../host/tenantctl) sets its tenants. Every name must pass valid_pilot_name (lib.sh).
+read -r -a ALL_PILOTS <<<"${BACKUP_PILOTS:-jasa fnb}"
 CHILD=""   # pid (= process group, see set -m in main) of the pilot subshell that is running
 CURRENT="" # pilot being backed up
 
@@ -242,11 +244,15 @@ prune_local() { # archives older than BACKUP_KEEP_LOCAL days; stale work dirs an
 
 main() {
   local target="${1:-}" pilots=() p failed=0 rc
-  case "$target" in
-    jasa|fnb) pilots=("$target") ;;
-    all) pilots=("${ALL_PILOTS[@]}") ;;
-    *) echo "usage: backup.sh <jasa|fnb|all>" >&2; exit 2 ;;
-  esac
+  for p in "${ALL_PILOTS[@]}"; do valid_pilot_name "$p" || die "BACKUP_PILOTS has an invalid name '$p'"; done
+  if [ "$target" = all ]; then
+    pilots=("${ALL_PILOTS[@]}")
+  elif [ -n "$target" ] && pilot_listed "$target" "${ALL_PILOTS[@]}"; then
+    pilots=("$target")
+  else
+    local IFS='|'
+    echo "usage: backup.sh <${ALL_PILOTS[*]}|all>" >&2; exit 2
+  fi
   require_env
   set -m
   trap on_term TERM INT

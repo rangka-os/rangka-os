@@ -1,0 +1,10 @@
+[Unit]
+Description=Back up every Juragan tenant at 02:00 Jakarta time
+
+[Timer]
+OnCalendar=*-*-* 02:00:00 Asia/Jakarta
+Persistent=true
+RandomizedDelaySec=10m
+
+[Install]
+WantedBy=timers.target

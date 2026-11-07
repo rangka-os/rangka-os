@@ -1,0 +1,10 @@
+[Unit]
+Description=Nightly encrypted backup of every Juragan tenant to off-box storage
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+ExecStart=/opt/juragan/rangka-os/deploy/juragan/host/tenantctl --env /opt/juragan/rangka-os/deploy/juragan/host/.env backup all
+TimeoutStartSec=3h

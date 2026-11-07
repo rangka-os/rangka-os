@@ -844,7 +844,9 @@ def test_theme_default_light(page, ctx):
     page.locator(".ap-shell").wait_for(timeout=15000)
     mode = lambda: page.evaluate("document.documentElement.getAttribute('data-theme')")
     app_bg = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--app').trim()")
-    assert mode() == "light" and app_bg() == "#fafaf9", f"light by default, got data-theme={mode()} --app={app_bg()}"
+    # the light --app token of the look in use: Juragan (data-brand="juragan", brand-juragan.css) or Rangka (app.css)
+    light_bg = "#faf9f7" if page.evaluate("document.documentElement.getAttribute('data-brand')") == "juragan" else "#fafaf9"
+    assert mode() == "light" and app_bg() == light_bg, f"light by default, got data-theme={mode()} --app={app_bg()}"
     assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
     account_menu(page).get_by_role("menuitem", name="Gelap").click()
     assert mode() == "dark", "picking Gelap applies dark"

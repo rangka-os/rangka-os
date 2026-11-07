@@ -255,11 +255,17 @@ func (e *Engine) Authorize(ctx context.Context, a Actor, model, action string, r
 	if m := e.Reg().Model(model); m != nil && m.AppendOnly && (action == "create" || action == "write" || action == "delete" || action == "import") {
 		return appendOnly(m)
 	}
+	if err := e.planReadOnly(a, e.Reg().Model(model), action, rec); err != nil { // attachments, print (contract 0028 §4)
+		return err
+	}
 	return e.authorize(ctx, e.DB, nil, a, model, action, rec)
 }
 
 // authorize checks inside an operation (link lookups in if: run in its transaction).
 func (o *op) authorize(m *meta.Model, action string, rec store.Record) error {
+	if err := o.planReadOnly(m, action, rec); err != nil {
+		return err
+	}
 	return o.e.authorize(o.ctx, o.tx, o.links, o.actor, m.Name, action, rec)
 }
 

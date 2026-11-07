@@ -473,6 +473,9 @@ func (o *op) decide(id, action string) (*store.Approval, error) {
 	if !CanDecide(a, ap) { // approving is governed by the policy's approvers, not by model permissions
 		return nil, o.e.Deny(ap.Model, "approve")
 	}
+	if err := o.planDecide(ap); err != nil { // a person or outlet in read-only mode decides nothing (contract 0028 §4)
+		return nil, err
+	}
 	if !isFlowApproval(ap) { // but the approver must be able to read what they approve (S1)
 		if err := o.authorizeRead(ap.Model, ap.Name); err != nil {
 			return nil, err

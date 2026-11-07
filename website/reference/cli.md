@@ -18,6 +18,7 @@ rangka user add <email> --org <org> --role <role> [--outlets a,b] [--name <full 
                 [--reset-password] [--create-org] [--db <url>]
 rangka user remove <email> --org <org> [--db <url>]
 rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--apps <dir>] [--site <dir>] [--db <url>]
+rangka plan show|set <plan>|clear [--by <who>] [--note "..."] [--json] [--apps <dir>] [--site <dir>] [--db <url>]
 ```
 
 | Command | Does |
@@ -30,6 +31,7 @@ rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--apps <dir>
 | `serve` | REST, SSE, queue workers, scheduler, Rangka ID, change sets and MCP on one port; serves `rangka-os/web` at `/` (`/app/`, `/console/`; `/` redirects to `/app/`). Refuses metadata with errors. `--dev-open` turns off auth for local demos. |
 | `user add` | Creates a Rangka ID account and sets its role in an organisation (one role per member), so people can sign in to `/app/`. The email is the first argument (or `--email`). The password comes from `$RANGKA_USER_PASSWORD` (or `--password`, which lands in shell history) and is needed only for a new account or with `--reset-password`; an existing account keeps its password otherwise. `--db` and `--org` default to `$DATABASE_URL` and `$RANGKA_ORG`. An unknown organisation is refused unless `--create-org` is given; `--record` links the member to a core user record; `--outlets a,b` sets the outlets the member works at (`--outlets ""` clears them). Missing flags exit 2. |
 | `user remove` | Ends a membership. Exits 1 with `<email> is not a member of <org>` when it is not one. |
+| `plan show` / `plan set` / `plan clear` | The tenant's plan ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)). `show` prints the plan, usage against its limits (`ok`, `near` from 80%, `full`, `over`) and what is read-only. `set <plan>` is an operator's upgrade or downgrade to a plan of `features.rk` (kept in `rk_plan_changes` with `--by` and `--note`); a downgrade deletes nothing, the newest outlets and people past a lower limit become read-only. `clear` goes back to `config.rk` `plan`. A running kernel picks the change up within 10 seconds. `user add` refuses a new person past the `users` limit. |
 | `numbering set` | Once at go-live, makes `<next>` the number a series issues next for an org, so Rangka continues the client's own numbering. It applies to the current period in the site timezone, or to `--period` (`2026` for a yearly series, `2026-11` for a monthly one). It exits 1 instead of lowering a counter, reissuing an existing number or going below the series `start`, and prints the next number. Missing arguments exit 2. See [Number series](/concepts/models#number-series). |
 
 ## Migrations

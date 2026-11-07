@@ -384,6 +384,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 			rec["amended_from"] = str(input["amended_from"])
 		}
 	}
+	if err := o.planNewRecord(m); err != nil {
+		return nil, err
+	}
 	if err := store.Insert(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, rec); err != nil {
 		return nil, dbIssue(m, err)
 	}

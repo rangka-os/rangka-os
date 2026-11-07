@@ -180,6 +180,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/system/jobs", a(s.listJobs))
 	mux.HandleFunc("GET /api/v1/system/jobs/{id}", a(s.getJob))
 	mux.HandleFunc("GET /api/v1/system/audit", a(s.listAudit))
+	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)
 	mux.HandleFunc("GET /api/v1/orgs", a(s.listOrgs))
 	mux.HandleFunc("GET /api/v1/orgs/{id}/members", a(s.listMembers))
 	mux.HandleFunc("GET /api/v1/files", a(s.listFiles))

@@ -31,6 +31,7 @@ func baseFuncs(asOf time.Time) template.FuncMap {
 		"aging":     func(rows any) map[string]string { return Aging(rows, asOf) },
 		"taxrate":   TaxRate,
 		"dppfactor": DPPFactor,
+		"qr":        QR,
 		"upper": func(v any) string {
 			if v == nil {
 				return ""

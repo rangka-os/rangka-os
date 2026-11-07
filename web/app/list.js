@@ -171,7 +171,10 @@
     if (mm.is_submittable && cols.indexOf("status") >= 0) out.status = "status";
     var rest = [];
     // the rupiah belongs on the card (K-A8: name, status, rupiah) even when the person put it past the first four
-    var money = first.concat(cols.slice(4)).filter(function (c) { var fd = fieldOf(mm, c); return !!fd && !!NUMBER_TYPES[fd.type]; })[0];
+    // a rupiah (currency) column first, so a quantity among the first four does not take the amount's place (audit F3)
+    var ordered = first.concat(cols.slice(4));
+    var money = ordered.filter(function (c) { var fd = fieldOf(mm, c); return !!fd && fd.type === "currency"; })[0] ||
+      ordered.filter(function (c) { var fd = fieldOf(mm, c); return !!fd && !!NUMBER_TYPES[fd.type]; })[0];
     if (money) out.amount = money;
     first.forEach(function (c) {
       if (c === out.amount) return;

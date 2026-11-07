@@ -127,6 +127,9 @@
   }
 
   var NUMERIC = { currency: 1, money: 1, float: 1, int: 1 };
+  // the summary prints its amounts with API.rupiah, so it takes only rupiah (currency) fields: a money field (an amount
+  // in its own currency, contract 0013) or a count (an int/float "total") never shows as Rp (audit 2026-11-07 F1, F2)
+  var SUM_TYPES = { currency: 1 };
   var SUM_OPEN = ["outstanding", "outstanding_amount"];
   var SUM_TOTAL = ["amount_due", "grand_total", "net_total", "total_amount", "total"];
 
@@ -145,7 +148,7 @@
     mm = mm || {};
     rec = rec || {};
     var fields = mm.fields || [];
-    function fd(n) { return fields.filter(function (f) { return f.name === n && !f.hidden && NUMERIC[f.type]; })[0] || null; }
+    function fd(n) { return fields.filter(function (f) { return f.name === n && !f.hidden && SUM_TYPES[f.type]; })[0] || null; }
     function first(list) { for (var i = 0; i < list.length; i++) { var f = fd(list[i]); if (f && rec[f.name] != null) return f; } return null; }
     var ds = Number(rec.docstatus || 0);
     var open = ds === 1 ? first(SUM_OPEN) : null, total = first(SUM_TOTAL), big = open || total;

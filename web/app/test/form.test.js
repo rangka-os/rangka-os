@@ -154,6 +154,19 @@ test("docSummary: open amount first on a submitted invoice, total and paid besid
   assert.strictEqual(A.docSummary({ fields: [{ name: "subject", type: "data" }] }, { docstatus: 1 }, "submitted"), null);
 });
 
+test("docSummary: only rupiah (currency) fields, never a money amount in its own currency or a count (audit F1, F2)", () => {
+  const A = load();
+  // a USD bill (contract 0013 money field): the summary prints rupiah, so it shows nothing rather than "Rp 1.251"
+  const bill = { fields: [{ name: "currency", type: "data" }, { name: "grand_total", type: "money", currency_field: "currency" }] };
+  assert.strictEqual(A.docSummary(bill, { docstatus: 1, currency: "USD", grand_total: "1250.55" }, "submitted", "2026-11-07"), null);
+  // a count named total is not an amount
+  assert.strictEqual(A.docSummary({ fields: [{ name: "total", type: "int" }] }, { docstatus: 1, total: 12 }, "submitted", "2026-11-07"), null);
+  assert.strictEqual(A.docSummary({ fields: [{ name: "total", type: "float" }] }, { docstatus: 0, total: 2.5 }, "draft", "2026-11-07"), null);
+  // a money twin next to the rupiah total: the rupiah one is the summary's amount
+  const fx = { fields: [{ name: "total", type: "money", currency_field: "currency" }, { name: "grand_total", type: "currency", label: { id: "Total" } }] };
+  assert.strictEqual(plain(A.docSummary(fx, { docstatus: 0, total: "99.5", grand_total: 1500000 }, "draft", "2026-11-07")).big.name, "grand_total");
+});
+
 test("blankValue: empty, zero and empty tables say nothing; a false check still does", () => {
   const A = load();
   assert.strictEqual(A.blankValue({ type: "currency" }, 0), true);

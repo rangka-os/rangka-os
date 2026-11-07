@@ -211,3 +211,15 @@ test("cardSlots: the amount comes from past the first four when none of them is 
   assert.deepStrictEqual(JSON.parse(JSON.stringify(A.cardSlots(meta, "sales_invoice", ["name", "customer", "posting_date", "status", "grand_total"]))),
     { title: "customer", amount: "grand_total", status: "status", meta: ["name", "posting_date"] });
 });
+
+test("cardSlots: a rupiah column is the amount even when a quantity comes first (audit F3)", () => {
+  const A = load();
+  const meta = { models: { stock_entry: { fields: [{ name: "item", type: "link", to: "item" }, { name: "qty", type: "int" },
+    { name: "posting_date", type: "date" }, { name: "value", type: "currency" }] } } };
+  const s = JSON.parse(JSON.stringify(A.cardSlots(meta, "stock_entry", ["item", "qty", "posting_date", "value"])));
+  assert.strictEqual(s.amount, "value");
+  assert.strictEqual(s.title, "item");
+  // with no rupiah column a number still is the amount
+  const n = JSON.parse(JSON.stringify(A.cardSlots(meta, "stock_entry", ["item", "qty", "posting_date"])));
+  assert.strictEqual(n.amount, "qty");
+});

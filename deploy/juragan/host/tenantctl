@@ -137,6 +137,7 @@ valid_plan() { [[ "$1" =~ ^[a-z][a-z0-9_]{0,30}$ ]]; }
 secret() { od -An -N24 -tx1 /dev/urandom | tr -d ' \n'; }
 export_secret() { export "$1=$(secret)"; } # export_secret <NAME>: a fresh random value, for `-e NAME` (never argv)
 upper() { echo "$1" | tr '[:lower:]' '[:upper:]'; }
+sha256_stdin() { if command -v sha256sum >/dev/null; then sha256sum | cut -c1-64; else shasum -a 256 | cut -c1-64; fi; }
 sha256() { if command -v sha256sum >/dev/null; then printf %s "$1" | sha256sum | cut -c1-64; else printf %s "$1" | shasum -a 256 | cut -c1-64; fi; }
 
 # ---------- images
@@ -149,7 +150,15 @@ ensure_kernel_image() { # <tag> <target>
 ensure_backup_image() {
   [ -n "$DEFAULT_TAG" ] || die "RANGKA_TAG is not set in $ENV_FILE"
   ensure_kernel_image "$DEFAULT_TAG" slim
-  docker image inspect "juragan-host-backup:$DEFAULT_TAG" >/dev/null 2>&1 || hc --profile tools build -q backup >/dev/null
+  # rebuilt whenever backup.sh, restore.sh, lib.sh or the Dockerfile change (label juragan.scripts = their hash), so a
+  # host never runs a stale copy of the scripts it ships with
+  local want have
+  want="$(cat "$HERE/../backup/lib.sh" "$HERE/../backup/backup.sh" "$HERE/../backup/restore.sh" "$HERE/backup/Dockerfile" | sha256_stdin)"
+  have="$(docker image inspect -f '{{index .Config.Labels "juragan.scripts"}}' "juragan-host-backup:$DEFAULT_TAG" 2>/dev/null || true)"
+  [ "$have" = "$want" ] && return 0
+  log "building juragan-host-backup:$DEFAULT_TAG (backup scripts changed or image missing)"
+  docker build -q -f "$HERE/backup/Dockerfile" --build-arg "KERNEL_IMAGE=$(kernel_image "$DEFAULT_TAG" slim)" \
+    --label "juragan.scripts=$want" -t "juragan-host-backup:$DEFAULT_TAG" "$HERE/.." >/dev/null
 }
 
 # ---------- shared services and tenant networks
@@ -170,6 +179,15 @@ attach_shared() {
     if ! docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" | tr ' ' '\n' | grep -qx "$net"; then
       docker network connect --alias "$svc" "$net" "$c"
     fi
+  done
+}
+attached_shared() { # true when Postgres and Caddy are both on the tenant's network
+  local net c svc
+  net="$(tenant_net "$1")"
+  for svc in postgres caddy; do
+    c="$(shared_container "$svc")"
+    [ -n "$c" ] || return 1
+    docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" | tr ' ' '\n' | grep -qx "$net" || return 1
   done
 }
 detach_shared() { # detach_shared <id>: undo attach_shared and remove the network
@@ -458,6 +476,9 @@ cmd_health() {
       *) echo "SKIP $id status=$(reg "$id" STATUS)"; continue ;;
     esac
     k="$(probe_kernel "$id" || true)"
+    # the kernel needs Postgres on its network: a Postgres recreated outside host-up loses the tenant networks, and the
+    # kernel then fails every login while its OIDC document still answers 200
+    attached_shared "$id" || k="$k/no-db-net"
     r="$(probe_route "$id")"
     b="$(newest_local_backup "$id")"
     if [ -n "$b" ]; then age=$(( (now_s - $(stamp_epoch "$b")) / 3600 )); else age=-1; fi

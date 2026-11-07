@@ -90,7 +90,9 @@ RANGKA_USER_PASSWORD=... ./tenantctl kernel <id> user add <email> --org <org> --
 ./tenantctl kernel <id> plan set tumbuh --by operator --note "upgrade"   # contract 0028 releases
 ```
 
-Health fails when a kernel or its route does not answer 200 with the tenant's OIDC document, when the newest local
+Health fails when a kernel or its route does not answer 200 with the tenant's OIDC document, when Postgres or Caddy
+is not on the tenant's network (`kernel=200/no-db-net`: the shared containers were recreated outside `host-up`; run
+`./tenantctl host-up`), when the newest local
 archive is older than `HEALTH_BACKUP_MAX_AGE_HOURS` (26), when the last `DRILL PASSED` for the tenant is older than
 `HEALTH_DRILL_MAX_AGE_HOURS` (50; a failed upload shows here too, since the drill reads the off-box copy), or when the
 disk is above `HEALTH_DISK_MAX_PCT` (85). Tenants younger than a window are not judged by it yet.

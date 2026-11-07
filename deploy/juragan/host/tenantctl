@@ -3,6 +3,7 @@
 #
 #   tenantctl [--env file] host-up                      start the shared Postgres and Caddy (idempotent)
 #   tenantctl [--env file] create <id> --bundle <dir> --owner-email <email> [--host <name>] [--tag <tag>] [--org <org>]
+#                                                       [--plan <plan>] (features.rk plan; contract 0028 kernels: rangka plan set)
 #                                                       owner password from RANGKA_OWNER_PASSWORD (environment only)
 #   tenantctl [--env file] list | status <id> | health [<id>]
 #   tenantctl [--env file] upgrade <id> --tag <tag> [--bundle <dir>]   backup first, then the new pinned release
@@ -202,7 +203,7 @@ remove_dir() {
 
 # ---------- commands
 cmd_create() {
-  local id="${1:-}" bundle="" email="" host="" tag="" org="" d orgs=() o step
+  local id="${1:-}" bundle="" email="" host="" tag="" org="" plan="" d orgs=() o step out
   shift || true
   while [ $# -gt 0 ]; do
     case "$1" in
@@ -211,6 +212,7 @@ cmd_create() {
       --host) host="${2:?}"; shift 2 ;;
       --tag) tag="${2:?}"; shift 2 ;;
       --org) org="${2:?}"; shift 2 ;;
+      --plan) plan="${2:?}"; shift 2 ;;
       *) usage ;;
     esac
   done
@@ -255,7 +257,9 @@ cmd_create() {
   chmod 600 "$HOST_DIR/secrets/$id.env"
 
   step="files"
-  trap 'reg_set "$id" STATUS failed; reg_set "$id" FAILED_STEP "$step"; log "$id: FAILED at $step; inspect, then tenantctl delete $id --confirm $id --force"' ERR
+  # set -E hands this trap to $(...) subshells too; only the main shell records the failure (a failed command inside an
+  # `if out="$(...)"` test is handled there)
+  trap 'if [ "$BASH_SUBSHELL" = 0 ]; then reg_set "$id" STATUS failed; reg_set "$id" FAILED_STEP "$step"; log "$id: FAILED at $step; inspect, then tenantctl delete $id --confirm $id --force"; fi' ERR
   mkdir -p "$HOST_DIR/tenants/$id"
   for d in apps modules site fixtures connectors; do
     [ -d "$bundle/$d" ] && cp -R "$bundle/$d" "$HOST_DIR/tenants/$id/$d"
@@ -275,7 +279,7 @@ SQL
   step="image"
   ensure_kernel_image "$tag" "$KERNEL_TARGET"
   step="validate"
-  tc "$id" run --rm -T --no-deps kernel validate >/dev/null
+  out="$(tc "$id" run --rm -T --no-deps kernel validate 2>&1)" || { echo "$out" | grep -v '^ *Container ' | tail -15 >&2; false; }
   step="migrate"
   tc "$id" run --rm -T --no-deps kernel migrate | tail -1 >&2
   step="seed"
@@ -286,6 +290,21 @@ SQL
       RANGKA_OWNER_EMAIL="$email" tc "$id" run --rm -T --no-deps -e RANGKA_OWNER_EMAIL -e RANGKA_OWNER_PASSWORD kernel seed --org "$o" | tail -1 >&2
     fi
   done
+  if [ -n "$plan" ]; then
+    # contract 0028: the operator's plan (rk_site_plan) wins over config.rk `plan:`; a kernel before 0028 has no
+    # `plan` command, and then config.rk's plan (written by the builder) is what the kernel reports
+    [[ "$plan" =~ ^[a-z][a-z0-9_]{0,30}$ ]] || die "invalid plan '$plan'"
+    step="plan"
+    if out="$(tc "$id" run --rm -T --no-deps kernel plan set "$plan" --by tenantctl --note provisioning 2>&1)"; then
+      reg_set "$id" PLAN "$plan"
+      log "$id: plan $plan set"
+    elif grep -q 'unknown command' <<<"$out"; then
+      reg_set "$id" PLAN "$plan (config.rk)"
+      log "$id: release $tag has no 'rangka plan' (contract 0028); plan comes from site/config.rk"
+    else
+      echo "$out" | tail -3 >&2; false
+    fi
+  fi
   step="serve"
   tc "$id" up -d kernel >/dev/null 2>&1
   wait_kernel "$id" || { tc "$id" logs --tail 30 kernel >&2 || true; false; }

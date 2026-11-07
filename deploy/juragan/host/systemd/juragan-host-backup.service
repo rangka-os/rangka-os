@@ -1,0 +1,13 @@
+[Unit]
+Description=Nightly encrypted backup of every Juragan tenant, then a restore drill
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+
+[Service]
+Type=oneshot
+# the drill needs the age private key only while it runs: keep it in a root-only file that the operator controls
+# (/root/juragan-drill.key, mode 600), or drop the second ExecStart and run drills from another machine
+ExecStart=/opt/juragan/rangka-os/deploy/juragan/host/tenantctl --env /opt/juragan/rangka-os/deploy/juragan/host/.env backup all
+ExecStart=/opt/juragan/rangka-os/deploy/juragan/host/tenantctl --env /opt/juragan/rangka-os/deploy/juragan/host/.env drill all --identity /root/juragan-drill.key
+TimeoutStartSec=3h

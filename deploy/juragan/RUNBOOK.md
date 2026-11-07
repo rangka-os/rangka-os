@@ -8,6 +8,8 @@ Steps marked **Dede** create cloud resources, touch DNS, money or credentials. E
 scripts in this folder (or `local/e2e.sh`) run. Placeholders are in `<angle brackets>`. Never paste secrets into
 chat, tickets or git.
 
+Tenants after the pilots (many per VM, created from onboarding without hand work): `host/README.md` and `host/tenantctl`.
+
 Files in this folder: `compose.yaml`, `.env.example`, `Caddyfile`, `postgres/initdb/10-pilots.sh`,
 `kernel/Dockerfile`, `backup/{Dockerfile,lib.sh,backup.sh,restore.sh}`, `restore-drill.sh`, `systemd/`, `local/` (end-to-end test, `local/rls-check.sh`,
 `local/fixtures/rls/`, `local/fixtures/print/`: the sample apps have no print format, so the test adds one for `lead`).

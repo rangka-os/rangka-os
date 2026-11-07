@@ -4,7 +4,7 @@
 # HOST_DIR, the slim kernel target (no Chromium) and an rclone `local` off-box folder; nothing else on the machine is
 # touched, and it all goes away at the end (KEEP=1 leaves it running).
 #   host/test/e2e.sh
-#   TAG_OLD=v0.5.0-alpha.7 TAG_NEW=v0.5.0-alpha.8 HTTP_PORT=18480 host/test/e2e.sh
+#   TAG_OLD=v0.5.0-alpha.8 TAG_NEW=v0.5.0-alpha.9 HTTP_PORT=18480 host/test/e2e.sh
 # Bundle: ../local/fixtures/rls (app `stok`, two orgs). Steps: two tenants -> each answers through Caddy and signs in
 # its own owner only -> roles cannot cross databases -> backup all (encrypted with a throwaway age key) -> restore drill
 # of both -> health -> suspend/resume keeps data -> upgrade TAG_OLD -> TAG_NEW keeps data -> delete leaves no database,
@@ -14,8 +14,8 @@ set -euo pipefail
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 HOST="$(dirname "$HERE")"
 BUNDLE="$(dirname "$HOST")/local/fixtures/rls"
-TAG_OLD="${TAG_OLD:-v0.5.0-alpha.7}"
-TAG_NEW="${TAG_NEW:-v0.5.0-alpha.8}"
+TAG_OLD="${TAG_OLD:-v0.5.0-alpha.8}"
+TAG_NEW="${TAG_NEW:-v0.5.0-alpha.9}"
 PORT="${HTTP_PORT:-18480}"
 SUFFIX="e2e$$"
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/tenant-host-e2e.XXXXXX")"
@@ -101,7 +101,9 @@ same "age key pair made" "$(grep -c '^AGE-SECRET-KEY-' "$TMP/age.key")" 1
 
 say "create two tenants (tokoa on $TAG_OLD, tokob on $TAG_NEW)"
 RANGKA_OWNER_PASSWORD="$PW_A" t create tokoa --bundle "$BUNDLE" --owner-email "$OWNER_A" --tag "$TAG_OLD" >/dev/null
-RANGKA_OWNER_PASSWORD="$PW_B" t create tokob --bundle "$BUNDLE" --owner-email "$OWNER_B" >/dev/null
+RANGKA_OWNER_PASSWORD="$PW_B" t create tokob --bundle "$BUNDLE" --owner-email "$OWNER_B" --plan mulai >/dev/null
+same "tokob: plan recorded (kernel plan set, or config.rk before contract 0028)" "$(sed -n 's/^PLAN=//p' "$TMP/host/registry/tokob.env" | cut -d' ' -f1)" mulai
+same "tokob: no failure recorded by a handled check" "$(grep -c '^FAILED_STEP=' "$TMP/host/registry/tokob.env" || true)" 0
 same "tokoa route" "$(http tokoa.localhost GET /.well-known/openid-configuration)" 200
 same "tokob route" "$(http tokob.localhost GET /.well-known/openid-configuration)" 200
 code="$(http nobody.localhost GET /.well-known/openid-configuration)"

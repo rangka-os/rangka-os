@@ -4,14 +4,15 @@ version: 1.0.0
 title: {id: Kantor}
 rangka: '>=0.5'
 modules: {kerja: ^1.0, kasir: ^1.0}
-roles: [staf, mandor, kasir]
+roles: [staf, mandor, kasir, dapur]
 menu:
   - group: {id: Kerja}
     items: [jam_kerja, catatan_harian]
   - group: {id: Kasir}
-    items: [penjualan, sesi_kasir, tutup_sesi, menu]
+    items: [penjualan, sesi_kasir, tutup_sesi, menu, tiket_dapur]
 work:
   - {screen: isi_jam, roles: [staf], home: true}
   - {screen: catat}
   - {screen: antrian, roles: [staf]}
   - {screen: jual, roles: [kasir], home: true}
+  - {screen: dapur, roles: [dapur], home: true}

@@ -306,6 +306,12 @@
           h(R.Button, { type: "submit", variant: "primary", loading: busy, disabled: busy }, "Tutup sesi")));
     }
 
+    // a group_by link shows its record's title (category name), not the stored code
+    var groupField = cat.group_by ? (((ctx.meta.models || {})[cat.model] || {}).fields || []).filter(function (f) { return f.name === cat.group_by; })[0] : null;
+    function groupLabel(g) {
+      var to = groupField && groupField.type === "link" ? (ctx.meta.models || {})[groupField.to] : null;
+      return to && !(to.can && to.can.read === false) && ctx.cache && ctx.cache.title ? ctx.cache.title(groupField.to, g) : g;
+    }
     var groups = [];
     (items || []).forEach(function (it) { if (it.group && groups.indexOf(it.group) < 0) groups.push(it.group); });
     var shown = catalogueMatch(items, q, group);
@@ -315,7 +321,7 @@
         "aria-label": "Cari barang", value: q, onChange: function (e) { setQ(e.target.value); }, onKeyDown: onSearchKey }),
       groups.length > 1 ? h("div", { className: "ap-counter-groups", role: "tablist" },
         [""].concat(groups).map(function (g) {
-          return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g || "Semua");
+          return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g ? groupLabel(g) : "Semua");
         })) : null,
       catErr ? h("div", { className: "ap-work-err" }, catErr) : !items ? h("p", { className: "ap-work-loading" }, "Memuat katalog…") :
         h("div", { className: "ap-counter-grid" }, shown.map(function (it) {

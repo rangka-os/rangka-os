@@ -38,7 +38,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   fields, "Simpan" or "Simpan & ajukan", then an empty form again with "Baru disimpan") and `counter` (`counter.js`:
   open the caller's session or ask for one, catalogue tiles with groups, search and barcode Enter, cart with qty and
   notes, Tahan, tender with Uang pas / round notes / QRIS full or part and the change, receipt print through the
-  browser dialog, blind session close). Other types show a notice until their renderer ships.
+  browser dialog, blind session close) and `queue` (`queue.js`: columns by status, cards with rows and age, the first matching step as the button, Urungkan for 3 s, refresh every few seconds). Other types show a notice until their renderer ships.
 - **Safe writes** (`outbox.js`): every press sends `Idempotency-Key`s, so a double tap or pressing again after a lost
   answer writes once. A screen with `offline: queue` keeps unsent presses in IndexedDB ("N antre" in the header, sent
   on reconnect, every 15 s or with "Kirim sekarang"); a write the server refuses later stays on screen until dismissed.
@@ -79,6 +79,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `docs.js` | Print menu and attachments panel |
 | `outbox.js` | Safe writes for work screens: idempotency keys, the IndexedDB outbox and the read cache (contract 0030 §6, §7) |
 | `counter.js` | The `counter` work screen (cashier): catalogue, cart, hold, tender, session, receipt (contract 0030 §2) |
+| `queue.js` | The `queue` work screen (kitchen, today's jobs): columns of cards, steps, undo, polling (contract 0030 §2) |
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
 | `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |

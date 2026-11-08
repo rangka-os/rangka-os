@@ -555,3 +555,22 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-counter-held button { display: flex; justify-content: space-between; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px;
   background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; }
 .ap-counter-done p { margin: 0; color: var(--muted); }
+
+/* ---- queue (queue.js): columns of cards that age ---- */
+.ap-queue { display: grid; gap: 12px; }
+.ap-queue-cols { display: grid; gap: 12px; overflow-x: auto; align-items: start; }
+@media (max-width: 700px) { .ap-queue-cols { grid-template-columns: minmax(0, 1fr) !important; } }
+.ap-queue-col { display: grid; gap: 8px; align-content: start; min-width: 0; }
+.ap-queue-col h2 { display: flex; justify-content: space-between; margin: 0; font: 600 13px/18px var(--font-sans); color: var(--muted); text-transform: none; }
+.ap-queue-col h2 span { font-variant-numeric: tabular-nums; }
+.ap-queue-card { display: grid; gap: 8px; padding: 12px; border: 1px solid var(--line); border-left-width: 4px; border-radius: 12px; background: var(--surface); }
+.ap-queue-card header { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; }
+.ap-queue-card header b { font: 600 16px/22px var(--font-sans); color: var(--ink); }
+.ap-queue-age { font: 600 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; color: var(--muted); }
+.ap-queue-warn { border-left-color: #b45309; }
+.ap-queue-warn .ap-queue-age { color: #b45309; }
+.ap-queue-late { border-left-color: var(--bad); }
+.ap-queue-late .ap-queue-age { color: var(--bad); }
+.ap-queue-card ul { margin: 0; padding: 0 0 0 16px; color: var(--ink-2); font-size: 14px; }
+.ap-queue-sub, .ap-queue-fields { margin: 0; color: var(--muted); font-size: 13px; }
+.ap-queue-card .rk-btn { min-height: 44px; justify-content: center; }

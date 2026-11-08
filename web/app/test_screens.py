@@ -22,6 +22,7 @@ OWNER = ("ceo@saga.co.id", PASSWORD)
 STAF = ("staf@contoh.test", PASSWORD)
 MANDOR = ("mandor@contoh.test", PASSWORD)
 KASIR = ("kasir@contoh.test", PASSWORD)
+DAPUR = ("dapur@contoh.test", PASSWORD)
 TABLET = {"width": 1024, "height": 768}
 PHONE = {"width": 390, "height": 844}
 DESK = {"width": 1280, "height": 800}
@@ -243,6 +244,46 @@ def test_lost_answer_on_queue_screen_is_replayed_once(browser, ctx):
     c.close()
 
 
+def test_kitchen_queue_moves_cards_and_undoes(browser, ctx):
+    o, _ = page_for(browser, ctx, OWNER, DESK)
+    menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
+    if not menu:  # run alone (-k): make one
+        o.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Nasi goreng", "category": "Makanan", "price": 25000}), headers={"Content-Type": "application/json"})
+        menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
+    o.close()
+    k, _ = page_for(browser, ctx, KASIR, PHONE)
+    for table in ("Meja 1", "Meja 2"):
+        r = k.request.post("/api/v1/r/tiket_dapur", data=json.dumps({"table_no": table, "items": [{"menu": menu[0]["name"], "qty": 2, "note": "pedas"}]}),
+                           headers={"Content-Type": "application/json"})
+        assert r.status == 201, r.text()
+    k.close()
+    c, p = page_for(browser, ctx, DAPUR, TABLET)
+    p.goto("/app/")
+    p.wait_for_url("**/#/w/dapur")
+    p.wait_for_selector(".ap-queue-card")
+    heads = p.locator(".ap-queue-col h2").all_inner_texts()
+    assert [h.split("\n")[0] for h in heads] == ["Baru", "Dimasak", "Siap"], heads
+    baru = p.locator(".ap-queue-col").nth(0)
+    assert baru.locator(".ap-queue-card").count() == 2
+    assert "×2" in baru.inner_text() and "pedas" in baru.inner_text(), baru.inner_text()
+    card = baru.locator(".ap-queue-card", has_text="Meja 1")
+    card.get_by_role("button", name="Masak").click()
+    p.locator(".ap-queue-col").nth(1).locator(".ap-queue-card", has_text="Meja 1").wait_for()
+    # undo within 3 seconds puts it back
+    p.get_by_role("button", name="Urungkan").click()
+    p.locator(".ap-queue-col").nth(0).locator(".ap-queue-card", has_text="Meja 1").wait_for()
+    shot(ctx, p, "dapur")
+    # through to served: the card leaves the screen (filter status != 'served')
+    for label, col in (("Masak", 1), ("Siap", 2)):
+        p.locator(".ap-queue-card", has_text="Meja 2").get_by_role("button", name=label).click()
+        p.locator(".ap-queue-col").nth(col).locator(".ap-queue-card", has_text="Meja 2").wait_for()
+    p.locator(".ap-queue-card", has_text="Meja 2").get_by_role("button", name="Diantar").click()
+    p.locator(".ap-queue-card", has_text="Meja 2").wait_for(state="detached")
+    rows = c.request.get("/api/v1/r/tiket_dapur?limit=5").json()["data"]
+    assert sorted(r["status"] for r in rows) == ["new", "served"], rows
+    c.close()
+
+
 def test_owner_keeps_dashboard_home_with_kerja_group(browser, ctx):
     c, p = page_for(browser, ctx, OWNER, DESK)
     p.goto("/app/")
@@ -305,7 +346,7 @@ def main():
         db = pg.stdout.strip().splitlines()[-1]
         common = ["--apps", apps, "--site", site, "--db", db]
         steps = [["migrate"] + common, ["seed"] + common + ["--email", OWNER[0], "--password", OWNER[1]]]
-        for email, role, name in (("staf@contoh.test", "staf", "Sari Staf"), ("mandor@contoh.test", "mandor", "Mandor"), ("kasir@contoh.test", "kasir", "Kasir")):
+        for email, role, name in (("staf@contoh.test", "staf", "Sari Staf"), ("mandor@contoh.test", "mandor", "Mandor"), ("kasir@contoh.test", "kasir", "Kasir"), ("dapur@contoh.test", "dapur", "Dapur")):
             steps.append(["user", "add", email, "--db", db, "--org", "site", "--role", role, "--name", name, "--password", PASSWORD])
         for cmd in steps:
             r = subprocess.run([bin_path] + cmd, capture_output=True, text=True, timeout=180)

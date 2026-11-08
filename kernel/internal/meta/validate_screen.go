@@ -91,6 +91,11 @@ func (v *validator) screen(s *Screen, all map[string]vis, roles map[string]bool)
 			v.screenCounter(p, b, visible)
 		}
 	}
+	if typ == "queue" {
+		if b := asMap(raw["queue"]); b != nil {
+			v.screenQueue(p, b, visible)
+		}
+	}
 }
 
 // screenModel resolves the model a slot names among the models the screen's unit sees, reporting unknown_model.
@@ -393,6 +398,93 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 						v.slotField(p, fmt.Sprintf("counter/session/close/fields/%d", i), cm, cf, x, nil)
 					}
 					v.slotSet(p, "counter/session/close/set", cm, cf, cl["set"])
+				}
+			}
+		}
+	}
+}
+
+func optionSet(f map[string]any) map[string]bool {
+	opts := map[string]bool{}
+	for _, o := range asList(f["options"]) {
+		opts[pyStr(asMap(o)["value"])] = true
+	}
+	return opts
+}
+
+// screenQueue checks the slots of a queue screen (contract 0030 §2).
+func (v *validator) screenQueue(p string, b map[string]any, visible map[string]vis) {
+	src := asMap(b["source"])
+	if src == nil {
+		return
+	}
+	m, fields := v.slotModel(p, "queue/source/model", src, visible)
+	if m == nil {
+		return
+	}
+	v.parens(p, "queue/source/filter", src["filter"])
+	card := asMap(b["card"])
+	v.slotField(p, "queue/card/title", m, fields, card["title"], nil)
+	v.slotField(p, "queue/card/subtitle", m, fields, card["subtitle"], nil)
+	for i, x := range asList(card["fields"]) {
+		v.slotField(p, fmt.Sprintf("queue/card/fields/%d", i), m, fields, x, nil)
+	}
+	lines := v.slotField(p, "queue/card/lines", m, fields, card["lines"], tableKind)
+	if lm, lf := childOf(lines, visible); lm != nil {
+		for i, x := range asList(card["line"]) {
+			v.slotField(p, fmt.Sprintf("queue/card/line/%d", i), lm, lf, x, nil)
+		}
+	}
+	if af, ok := card["age_from"].(string); ok && af != "created_at" && af != "modified_at" {
+		v.slotField(p, "queue/card/age_from", m, fields, af, []string{"date", "datetime"})
+	}
+	actions := map[string]bool{}
+	for _, a := range m.Actions {
+		actions[a.Name] = true
+	}
+	for i, x := range asList(b["steps"]) {
+		st := asMap(x)
+		at := fmt.Sprintf("queue/steps/%d", i)
+		v.parens(p, at+"/when", st["when"])
+		act, hasAct := st["action"].(string)
+		set := asMap(st["set"])
+		if !hasAct && set == nil {
+			v.rep.extra("error", p, at, "screen_slot_type", "a step needs an action or a set")
+		}
+		switch {
+		case !hasAct:
+		case act == "submit":
+			if !boolean(m.Raw, "is_submittable") {
+				v.rep.extra("error", p, at+"/action", "screen_not_submittable", fmt.Sprintf(`%s is not submittable; a step cannot submit it`, m.Name))
+			}
+		case !actions[act]:
+			v.rep.extra("error", p, at+"/action", "unknown_action", fmt.Sprintf(`"%s" is not an action of %s%s`, act, m.Name, suggest(act, keys(actions))))
+		}
+		ks := make([]string, 0, len(set))
+		for k := range set {
+			ks = append(ks, k)
+		}
+		sort.Strings(ks)
+		for _, k := range ks {
+			f, has := fields[k]
+			switch {
+			case !has:
+				v.rep.extra("error", p, at+"/set/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, k, m.Name, suggest(k, keys(fields))))
+			case f["compute"] != nil || f["read_only"] == true:
+				v.rep.extra("error", p, at+"/set/"+k, "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; set: cannot fill it`, k))
+			case str(f, "type") == "select":
+				if val := pyStr(set[k]); !optionSet(f)[val] {
+					v.rep.extra("error", p, at+"/set/"+k, "screen_slot_type", fmt.Sprintf(`"%s" is not an option of %s`, val, k))
+				}
+			}
+		}
+	}
+	if cols := asMap(b["columns"]); cols != nil {
+		if f := v.slotField(p, "queue/columns/by", m, fields, cols["by"], nil); f != nil && str(f, "type") == "select" {
+			opts := optionSet(f)
+			for i, x := range asList(cols["values"]) {
+				if val, ok := x.(string); ok && !opts[val] {
+					v.rep.extra("error", p, fmt.Sprintf("queue/columns/values/%d", i), "screen_slot_type", fmt.Sprintf(`"%s" is not an option of %s`, val, pyStr(cols["by"])))
 				}
 			}
 		}

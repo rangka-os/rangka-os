@@ -322,6 +322,8 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			v.slotField(p, "counter/document/line/price", lm, lf, line["price"], numericKinds)
 			v.slotField(p, "counter/document/line/note", lm, lf, line["note"], nil)
 		}
+		v.slotField(p, "counter/document/total", docModel, docFields, doc["total"], numericKinds)
+		v.slotField(p, "counter/document/change", docModel, docFields, doc["change"], numericKinds)
 		v.slotSet(p, "counter/document/set", docModel, docFields, doc["set"])
 		if c := asMap(b["customer"]); c != nil {
 			v.slotField(p, "counter/customer/field", docModel, docFields, c["field"], nil)

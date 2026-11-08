@@ -1694,7 +1694,13 @@ def slot_set(rep, p, where, mn, fields, x):
 
 
 def option_values(f):
-    return {str(o.get("value")) if not isinstance(o.get("value"), str) else o.get("value") for o in (f.get("options") or []) if isinstance(o, dict)}
+    opts = f.get("options") if isinstance(f.get("options"), list) else []
+    return {pystr_opt(o.get("value") if isinstance(o, dict) else None) for o in opts}
+
+
+def pystr_opt(v):
+    """An option value as the Go validator prints it (pyStr): a string as is, anything else as Python repr."""
+    return v if isinstance(v, str) else repr(v)
 
 
 def check_screen_counter(rep, p, b, visible, prints):
@@ -1725,6 +1731,8 @@ def check_screen_counter(rep, p, b, visible, prints):
             slot_field(rep, p, "counter/document/line/qty", ln, lf, line.get("qty"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/document/line/price", ln, lf, line.get("price"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/document/line/note", ln, lf, line.get("note"))
+        slot_field(rep, p, "counter/document/total", dn, df, doc.get("total"), NUMERIC_KINDS)
+        slot_field(rep, p, "counter/document/change", dn, df, doc.get("change"), NUMERIC_KINDS)
         slot_set(rep, p, "counter/document/set", dn, df, doc.get("set"))
         if isinstance(b.get("customer"), dict):
             slot_field(rep, p, "counter/customer/field", dn, df, b["customer"].get("field"))

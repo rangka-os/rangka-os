@@ -4,8 +4,9 @@
  *   catalogue {model, filter, title, search, group_by, price, barcode, image, limit}: the items to tap, loaded once
  *     (GET /r/<model>?filter=…&limit=…) and kept in the device cache for offline use; searched on the device; a barcode
  *     typed or scanned into the search box and ended with Enter adds that item.
- *   document {model, lines, line {item, qty, price, note}, set}: one sale. Prices, discounts, tax and totals are the
- *     model's computes; the screen shows the catalogue price only as an estimate until the server answers.
+ *   document {model, lines, line {item, qty, price, note}, total, change, set}: one sale. Prices, discounts, tax and
+ *     totals are the model's computes; the screen's sums are an estimate, and the receipt panel shows the server's
+ *     total and change fields. set: values are fetched again for every sale.
  *   payments {table, method, amount, methods}: tender. Cash quick amounts (uang pas and round notes), QRIS full or part;
  *     change = cash given - (total - QRIS).
  *   session {model, link, filter, state {field, open, closed}, open [fields], set, close {model, link, fields, set}}:
@@ -245,16 +246,26 @@
       var change = changeOf(total, cash, qris);
       if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
       setBusy(true); setErr("");
-      var body = saleBody(c, cart, c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null,
-        session && typeof session === "object" ? session.name : null, sets.document, customer);
-      var sig = JSON.stringify(body);
-      var job = jobRef.current && jobRef.current.sig === sig ? jobRef.current.job
-        : RA.outbox.newJob({ scope: scope, screen: s.name, model: c.document.model, body: body, submit: c.submit !== false });
-      jobRef.current = { sig: sig, job: job };
-      RA.outbox.send(ctx.api, job, s.offline === "queue").then(function (res) {
+      // set: values are taken again for every sale (contract 0030 §2): a sale after midnight gets today's date
+      // (audit WS3 M2); offline, the last copy of the screen is used
+      var fresh = p.reload ? p.reload().then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
+      fresh.then(function (nowSets) {
+        var body = saleBody(c, cart, c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null,
+          session && typeof session === "object" ? session.name : null, nowSets.document, customer);
+        var sig = JSON.stringify(body);
+        var job = jobRef.current && jobRef.current.sig === sig ? jobRef.current.job
+          : RA.outbox.newJob({ scope: scope, screen: s.name, model: c.document.model, body: body, submit: c.submit !== false });
+        jobRef.current = { sig: sig, job: job };
+        return RA.outbox.send(ctx.api, job, s.offline === "queue");
+      }).then(function (res) {
         jobRef.current = null;
         var rec = res.record || {};
-        setDone({ name: rec.name || null, total: total, change: change, queued: !!res.queued, approval: !!res.approval });
+        // the receipt panel shows the server's total and change (audit WS3 M1); the screen's sums are only an estimate
+        var dt = c.document.total, dc = c.document.change;
+        var srvTotal = dt && rec[dt] != null ? Number(rec[dt]) : null, srvChange = dc && rec[dc] != null ? Number(rec[dc]) : null;
+        setDone({ name: rec.name || null, total: srvTotal != null ? srvTotal : total, change: srvChange != null ? srvChange : change,
+          estimate: srvChange == null, queued: !!res.queued, approval: !!res.approval });
+        loadCatalogue(); // prices may have changed since the screen opened
         setCart([]); setCustomer(""); setPay(null);
         if (res.queued) ctx.toast("info", "Belum terkirim", "Transaksi tersimpan di perangkat dan dikirim saat koneksi kembali.");
         if (searchRef.current) searchRef.current.focus();
@@ -282,6 +293,7 @@
       }).then(function () {
         ctx.toast("ok", "Sesi ditutup", session.name);
         setClosing(null); setDone(null); setSession(null);
+        RA.outbox.cache.put("session:" + scope + ":" + s.name, null); // a closed session never comes back from the cache (audit WS3 L1)
         return loadSession();
       }, function (e) { setErr(errText(e)); }).then(function () { setBusy(false); });
     }
@@ -358,7 +370,7 @@
         h(R.Button, { variant: "primary", loading: busy, disabled: busy, onClick: function () { finish(pay.cash, pay.qris); } }, "Selesai"))) : null;
 
     var result = done && !cart.length && !pay ? h("div", { className: "ap-counter-done", role: "status" },
-      h("div", { className: "ap-counter-due" }, h("span", null, done.queued ? "Tersimpan di perangkat" : "Kembalian"), h("b", null, rp(done.change))),
+      h("div", { className: "ap-counter-due" }, h("span", null, done.queued ? "Tersimpan di perangkat" : done.estimate ? "Kembalian (perkiraan)" : "Kembalian"), h("b", null, rp(done.change))),
       h("p", null, done.queued ? "Akan dikirim saat koneksi kembali; struk bisa dicetak setelah terkirim." : (done.name || "") + " · " + rp(done.total) + (done.approval ? " · menunggu persetujuan" : "")),
       c.print && done.name ? h(R.Button, { icon: "print", onClick: function () { printRecord(ctx.api, c.document.model, done.name, c.print); } }, "Cetak struk") : null) : null;
 

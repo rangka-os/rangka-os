@@ -1702,6 +1702,8 @@ def check_screen_queue(rep, p, b, visible):
         sset = st.get("set") if isinstance(st.get("set"), dict) else None
         if act is None and sset is None:
             rep.add("error", p, at, "screen_slot_type", "a step needs an action or a set")
+        if act is not None and sset is not None:
+            rep.add("error", p, at, "screen_slot_type", "a step takes an action or a set, not both")
         if act is not None:
             if act == "submit":
                 if m.get("is_submittable") is not True:

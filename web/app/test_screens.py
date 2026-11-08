@@ -311,7 +311,7 @@ def test_kitchen_queue_moves_cards_and_undoes(browser, ctx):
                            headers={"Content-Type": "application/json"})
         assert r.status == 201, r.text()
     k.close()
-    c, p = page_for(browser, ctx, DAPUR, TABLET)
+    c, p = page_for(browser, ctx, DAPUR, TABLET, allow=("/api/v1/r/tiket_dapur/",))
     p.goto("/app/")
     p.wait_for_url("**/#/w/dapur")
     p.wait_for_selector(".ap-queue-card")
@@ -335,6 +335,34 @@ def test_kitchen_queue_moves_cards_and_undoes(browser, ctx):
     p.locator(".ap-queue-card", has_text="Meja 2").wait_for(state="detached")
     rows = c.request.get("/api/v1/r/tiket_dapur?limit=5").json()["data"]
     assert sorted(r["status"] for r in rows) == ["new", "served"], rows
+    # a stale card: another device moved Meja 1 to ready; this screen still shows it as Baru and its step is refused
+    m1 = [r for r in rows if r["table_no"] == "Meja 1"][0]["name"]
+    frozen = {}
+    def freeze(route):  # this tablet keeps seeing the old list (its refresh has not come yet)
+        if route.request.method == "GET" and "frozen" in frozen:
+            route.fulfill(status=200, content_type="application/json", body=frozen["frozen"])
+        else:
+            resp = route.fetch()
+            if route.request.method == "GET":
+                frozen.setdefault("last", resp.text())
+            route.fulfill(response=resp)
+    p.route("**/api/v1/r/tiket_dapur?*", freeze)
+    p.wait_for_timeout(6000)  # one refresh through the route
+    frozen["frozen"] = frozen["last"]
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{m1}", data=json.dumps({"status": "ready"}), headers={"Content-Type": "application/json"}).status == 200
+    p.locator(".ap-queue-card", has_text="Meja 1").get_by_role("button", name="Masak").click()
+    p.wait_for_selector("text=sudah diubah di perangkat lain")
+    assert c.request.get(f"/api/v1/r/tiket_dapur/{m1}").json()["status"] == "ready", "the stale step did not move it back"
+    p.unroute("**/api/v1/r/tiket_dapur?*")
+    p.wait_for_timeout(6000)  # the real list again
+    # undo after another device changed the card: refused
+    p.locator(".ap-queue-col").nth(2).locator(".ap-queue-card", has_text="Meja 1").get_by_role("button", name="Diantar").click()
+    p.get_by_role("button", name="Urungkan").wait_for()
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{m1}", data=json.dumps({"status": "new"}), headers={"Content-Type": "application/json"}).status == 200
+    p.get_by_role("button", name="Urungkan").click()
+    p.wait_for_selector("text=Tidak bisa diurungkan")
+    assert c.request.get(f"/api/v1/r/tiket_dapur/{m1}").json()["status"] == "new"
+    ctx["errors"] = [x for x in ctx["errors"] if "409" not in x]  # the two refused conditional writes
     c.close()
 
 

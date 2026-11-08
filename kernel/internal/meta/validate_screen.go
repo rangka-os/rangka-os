@@ -453,6 +453,9 @@ func (v *validator) screenQueue(p string, b map[string]any, visible map[string]v
 		if !hasAct && set == nil {
 			v.rep.extra("error", p, at, "screen_slot_type", "a step needs an action or a set")
 		}
+		if hasAct && set != nil {
+			v.rep.extra("error", p, at, "screen_slot_type", "a step takes an action or a set, not both")
+		}
 		switch {
 		case !hasAct:
 		case act == "submit":

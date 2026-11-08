@@ -8,3 +8,4 @@ queue:
   card: {title: text}
   steps:
     - {when: "true", action: submit, label: {id: Ajukan}}
+    - {when: "true", action: submit, set: {text: x}, label: {id: Dua-duanya}}

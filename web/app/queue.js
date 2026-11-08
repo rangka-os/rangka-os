@@ -9,8 +9,10 @@
  *     10, red from 20.
  *   columns {by, values}: one column per value (a kitchen's Baru / Dimasak / Siap); without columns, one list.
  *   steps [{when, label, set | action}]: the first step whose `when` (CEL over the card) holds is the card's button.
- *     set writes literal values (PATCH), action runs submit or a model action. Every write carries an Idempotency-Key.
- *     After a step the card moves at once; "Urungkan" for 3 seconds puts the old values back (set steps only).
+ *     set writes literal values with a conditional PATCH (_if: the values the card showed), so a stale card never
+ *     moves a ticket back; action runs submit or a model action with an Idempotency-Key kept per card until an answer.
+ *     After a step the card moves at once; "Urungkan" for 3 seconds puts the old values back, only if the card still
+ *     holds what the step wrote.
  * The screen never computes money or stock: a step is the same write a form would make.
  *
  * Pure helpers (unit-tested in test/queue.test.js): ageMinutes, ageTone, stepFor, columnsOf, linesText.
@@ -77,6 +79,7 @@
     var rs = useState(null), rows = rs[0], setRows = rs[1];
     var ss = useState(null), stale = ss[0], setStale = ss[1];
     var es = useState(""), err = es[0], setErr = es[1];
+    var ns = useState(""), note = ns[0], setNote = ns[1]; // what the last step or undo said (a load keeps it)
     var bs = useState({}), busy = bs[0], setBusy = bs[1];
     var us = useState(null), undo = us[0], setUndo = us[1]; // {name, before, label, t}
     var ts = useState(Date.now()), now = ts[0], setNow = ts[1];
@@ -113,28 +116,38 @@
       return v == null ? "" : String(v);
     }
 
+    var busyRef = useRef({}); // synchronous guard per card (two clicks in one task never run a step twice)
+    var keysRef = useRef({}); // Idempotency-Key per card and step, kept until an answer arrives (contract 0030 §6)
+    function only(obj, keys) { var o = {}; keys.forEach(function (k) { o[k] = obj[k]; }); return o; }
     function run(rec, st) {
-      if (busy[rec.name]) return;
-      var step = st.step, before = {};
-      setBusy(Object.assign({}, busy, (function () { var o = {}; o[rec.name] = true; return o; })()));
-      var w;
+      if (busyRef.current[rec.name]) return;
+      busyRef.current[rec.name] = true;
+      setNote("");
+      setBusy(Object.assign({}, busyRef.current));
+      var step = st.step, slot = rec.name + "#" + st.index, w;
+      var key = keysRef.current[slot] || (keysRef.current[slot] = RA.newKey());
+      var before = step.set ? only(rec, Object.keys(step.set)) : null;
       if (step.set) {
-        Object.keys(step.set).forEach(function (k) { before[k] = rec[k]; });
-        // the card moves at once; the server answer replaces it
+        // conditional: only if the card still holds what this screen showed (another device may have moved it)
+        w = ctx.api.update(src.model, rec.name, Object.assign({}, step.set, { _if: before }));
         setRows(function (rs0) { return (rs0 || []).map(function (r) { return r.name === rec.name ? Object.assign({}, r, step.set) : r; }); });
-        w = ctx.api.update(src.model, rec.name, step.set);
       } else if (step.action === "submit") {
-        w = ctx.api.submit(src.model, rec.name, { key: RA.newKey() });
+        w = ctx.api.submit(src.model, rec.name, { key: key });
       } else {
-        w = ctx.api.action(src.model, rec.name, step.action, {}, { key: RA.newKey() });
+        w = ctx.api.action(src.model, rec.name, step.action, {}, { key: key });
       }
       w.then(function () {
-        if (step.set) setUndo({ name: rec.name, before: before, label: L(step.label), t: Date.now() });
+        delete keysRef.current[slot];
+        if (step.set) setUndo({ name: rec.name, before: before, after: Object.assign({}, step.set), label: L(step.label), t: Date.now() });
         return load();
       }, function (e) {
-        setErr((e && e.message) || "Langkah gagal");
+        if (!RA.outboxRetryable(e)) delete keysRef.current[slot]; // kept for a retry that may have reached the server
+        setNote(e && e.code === "precondition_failed" ? "Kartu ini sudah diubah di perangkat lain; daftar dimuat ulang." : (e && e.message) || "Langkah gagal");
         return load();
-      }).then(function () { setBusy(function (b) { var o = Object.assign({}, b); delete o[rec.name]; return o; }); });
+      }).then(function () {
+        delete busyRef.current[rec.name];
+        setBusy(Object.assign({}, busyRef.current));
+      });
     }
     useEffect(function () {
       if (!undo) return undefined;
@@ -144,7 +157,11 @@
     function doUndo() {
       var u = undo;
       setUndo(null);
-      ctx.api.update(src.model, u.name, u.before).then(load, function (e) { setErr(e.message || "Tidak bisa diurungkan"); });
+      // only when nobody changed the card since this screen's step
+      ctx.api.update(src.model, u.name, Object.assign({}, u.before, { _if: u.after })).then(load, function (e) {
+        setNote(e && e.code === "precondition_failed" ? "Tidak bisa diurungkan: kartu sudah diubah di perangkat lain." : (e && e.message) || "Tidak bisa diurungkan");
+        return load();
+      });
     }
 
     if (err && !rows) return h("div", { className: "ap-work-err", role: "alert" }, err);
@@ -170,6 +187,7 @@
     return h("div", { className: "ap-queue" },
       stale ? h("p", { className: "ap-work-note" }, "Belum ada koneksi. Data terakhir " + new Date(stale).toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" }) + ".") : null,
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
+      note ? h("div", { className: "ap-work-err", role: "alert" }, note, " ", h("button", { type: "button", className: "ap-work-link", onClick: function () { setNote(""); } }, "Tutup")) : null,
       undo ? h("div", { className: "ap-work-note ap-queue-undo", role: "status" }, rec0(undo) + " ",
         h("button", { type: "button", className: "ap-work-link", onClick: doUndo }, "Urungkan")) : null,
       h("div", { className: "ap-queue-cols", style: { gridTemplateColumns: "repeat(" + cols.length + ", minmax(240px, 1fr))" } }, cols.map(function (c) {

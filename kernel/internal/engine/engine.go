@@ -170,6 +170,8 @@ type op struct {
 	// cancelled (the verb's own document, written after its hooks). The target of an idempotency key is primary, else
 	// first.
 	first, primary string
+	// expect is UpdateIf's precondition, checked once by the update it guards
+	expect map[string]any
 }
 
 // writeAttempts bounds how often run starts a unit of work again after it lost a race (contract 0025).

@@ -867,7 +867,7 @@ def test_sidebar_collapse(page, ctx):
     sign_in(page)
     expect_signed_in(page, ctx)
     side = page.locator(".ap-shell > .rk-side")
-    if ctx.args.width < 600:
+    if ctx.args.width < 768:
         assert not side.is_visible(), "a phone shows no sidebar until the menu button opens it"
         assert page.locator(".ap-mhead").is_visible(), "the 48px bar"
         assert page.locator(".ap-mhead").bounding_box()["height"] == 48
@@ -1191,8 +1191,8 @@ def test_list_group_by(page, ctx):
     n_req = len(reqs)
     lunas = page.locator(".rk-group", has=page.locator(".rk-group-head .l", has_text=re.compile("^Lunas$")))
     lunas.locator(".rk-group-head").click()
-    # under 490px (K-A8) a group's rows are phone cards instead of a table
-    narrow = ctx.args.width < 490
+    # on phones (< 768px, K-A8) a group's rows are phone cards instead of a table
+    narrow = ctx.args.width < 768
     row_sel, body_sel = (".ap-lc-item:not([aria-hidden])", ".ap-lc") if narrow else (".rk-table tbody tr:not([aria-hidden])", ".rk-table")
     lunas.locator(row_sel).first.wait_for(timeout=10000)
     assert any("/r/sales_invoice" in u and "filter=status == 'paid'" in u and "limit=20" in u for m, u in reqs[n_req:]), \
@@ -2897,11 +2897,14 @@ SCROLL_JS = """() => ({sw: document.documentElement.scrollWidth, bw: document.bo
 SMALL_CONTROLS_JS = """() => {
   const out = [];
   for (const el of document.querySelectorAll('button, input, select, textarea, [role=button]')) {
-    if (el.tagName === 'INPUT' && ['checkbox', 'radio', 'file', 'hidden'].includes(el.type)) continue;
+    if (el.tagName === 'INPUT' && ['file', 'hidden'].includes(el.type)) continue;
     const cs = getComputedStyle(el), r = el.getBoundingClientRect();
     if (cs.visibility === 'hidden' || cs.display === 'none' || r.width === 0 || r.height === 0) continue;
     if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
-    if (r.height < 39.5) out.push((el.getAttribute('aria-label') || el.textContent || el.name || el.tagName).trim().slice(0, 30) + ' <' + el.tagName.toLowerCase() + '.' + el.className + '> ' + Math.round(r.height) + 'px');
+    // a checkbox or radio keeps its look; its table cell or label is the target
+    let t = r;
+    if (el.tagName === 'INPUT' && ['checkbox', 'radio'].includes(el.type)) { const c = el.closest('td, th, label'); if (c) t = c.getBoundingClientRect(); }
+    if (Math.min(t.height, t.width) < 43.5) out.push((el.getAttribute('aria-label') || el.textContent || el.name || el.tagName).trim().slice(0, 30) + ' <' + el.tagName.toLowerCase() + '.' + el.className + '> ' + Math.round(t.width) + 'x' + Math.round(t.height));
   }
   return out;
 }"""
@@ -2911,9 +2914,9 @@ def check_fits(page, ctx, label):
     w = ctx.args.width
     m = page.evaluate(SCROLL_JS)
     assert m["sw"] <= w, f"{label}: page scrolls sideways, scrollWidth {m['sw']} > {w}"
-    if w <= 600:
+    if w < 1280:  # phones and touch tablets (the suite runs below 1280 with a touch screen): 44px targets
         small = page.evaluate(SMALL_CONTROLS_JS)
-        assert not small, f"{label}: controls under 40px tall: {small}"
+        assert not small, f"{label}: controls under 44px: {small}"
 
 
 def test_process_canvas(page, ctx):
@@ -3567,7 +3570,7 @@ def main():
         CTX = ctx = Ctx(base, meta, args)
         ctx.ai_live = sidecar is not None
         ctx.features = detect_features(base)
-        height = 860 if args.width < 600 else 900
+        height = 860 if args.width < 768 else 900
         if args.shots:
             os.makedirs(args.shots, exist_ok=True)
 
@@ -3577,8 +3580,9 @@ def main():
                 ctx.allowed_http = []
                 # a phone width is a phone: meta viewport honoured (is_mobile) and touch input, so a page without
                 # <meta name=viewport> lays out at ~980px and the phone rules never apply, as on a real device
-                phone = args.width < 600
-                bctx = br.new_context(viewport={"width": args.width, "height": height}, is_mobile=phone, has_touch=phone)
+                phone = args.width < 768
+                # below 1280px the suite is a touch tablet or a phone (tokens.json breakpoint): coarse pointer, 44px targets
+                bctx = br.new_context(viewport={"width": args.width, "height": height}, is_mobile=phone, has_touch=args.width < 1280)
                 page = bctx.new_page()
                 errs, responses = [], []
                 # React is vendored (web/app/vendor): a request to a script CDN would be a regression

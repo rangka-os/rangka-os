@@ -24,6 +24,15 @@
   .ap-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
   .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { box-sizing: border-box; width: 100%; }
   .ap-menu-btn, .ap-nav-scrim, .ap-mhead { display: none; }
+  .ap-rail-scrim { display: none; }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    /* tablet portrait: the sidebar is the icon rail (shell.js); unfolded it floats over the page with a scrim */
+    .ap-rail-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
+    .ap-shell > .rk-side.rk-side-float { position: fixed; z-index: 40; top: 0; height: auto; }
+    .ap-shell.ap-top > .rk-side.rk-side-float { top: var(--topbar); }
+    /* Ubah edits the navigation itself, so it keeps the full sidebar */
+    .ap-shell.ap-ubah-on { grid-template-columns: var(--sidebar) minmax(0, 1fr); }
+  }
   .ap-mhead-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
   .ap-switch-menu .rk-menu { width: var(--menu-w); }
   .ap-splash { height: 100%; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px; color: var(--muted); padding: 24px; box-sizing: border-box; }
@@ -33,19 +42,14 @@
   .ap-signin-form { display: flex; flex-direction: column; gap: 16px; }
   .ap-signin-dialog { width: min(var(--dialog-w), calc(100vw - 32px)); }
   .ap-signin-dialog .rk-dialog-main { display: flex; flex-direction: column; gap: 16px; }
-  @media (min-width: 601px) and (max-width: 860px) {
-    /* side-only keeps its sidebar down to phone width (the design system hides it at 860px for the top-nav shell) */
-    .ap-shell.ap-side { grid-template-columns: var(--sidebar) minmax(0, 1fr); }
-    .ap-shell.ap-side > .rk-side { display: flex; }
-  }
-  @media (max-width: 860px) {
+  @media (max-width: 767px) {
     .ap-top { height: auto; min-height: 100%; }
     .ap-top .ap-main { overflow: visible; }
     .ap-top .ap-menu-btn { display: inline-flex; }
     .ap-top.ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: var(--topbar); left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
     .ap-top.ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: var(--topbar) 0 0 0; background: var(--scrim); z-index: 39; }
   }
-  @media (max-width: 600px) {
+  @media (max-width: 767px) {
     /* side-only on a phone: a 48px bar with the menu button, the sidebar as a drawer over the page */
     .ap-side { height: auto; min-height: 100%; }
     .ap-side .ap-main { overflow: visible; }
@@ -54,7 +58,7 @@
     .ap-side.ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
     .ap-side.ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
   }
-  @media (max-width: 640px) {
+  @media (max-width: 767px) {
     .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Bantuan"], .ap-shell .rk-topnav-end .rk-iconbtn[aria-label="Notifikasi"] { display: none; }
     .ap-shell .rk-topnav > .rk-iconbtn[aria-label="Pindah aplikasi"] { display: none; }
   }
@@ -90,7 +94,7 @@
   .ap-canvas-wrap { height: calc(100vh - var(--header) - 1px); min-height: 480px; }
   .ap-proc-list { list-style: none; margin: 12px 0 0; padding: 0; display: flex; flex-direction: column; max-width: 640px; border-top: 1px solid var(--line); }
   .ap-proc-list > li { border-bottom: 1px solid var(--line); }
-  .ap-proc-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: var(--r); color: var(--ink); text-decoration: none; min-height: 40px; box-sizing: border-box; }
+  .ap-proc-item { display: flex; align-items: center; gap: 12px; padding: 8px; border-radius: var(--r); color: var(--ink); text-decoration: none; min-height: var(--touch); box-sizing: border-box; }
   .ap-proc-item:hover { background: var(--hover); }
   .ap-proc-item:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
   .ap-proc-item b { flex: 1; font-weight: 500; }
@@ -98,7 +102,7 @@
   .ap-grid-link { min-width: 220px; }
   .ap-gl { display: flex; flex-direction: column; min-width: 0; }
   .ap-gl-pop { list-style: none; margin: 2px 0 0; padding: 4px; max-height: 220px; overflow-y: auto; background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-md); box-shadow: var(--shadow-pop); }
-  .ap-gl-opt { display: flex; flex-direction: column; gap: 0; padding: 8px; min-height: 40px; box-sizing: border-box; justify-content: center; border-radius: var(--r-sm); cursor: pointer; }
+  .ap-gl-opt { display: flex; flex-direction: column; gap: 0; padding: 8px; min-height: var(--touch); box-sizing: border-box; justify-content: center; border-radius: var(--r-sm); cursor: pointer; }
   .ap-gl-opt small { color: var(--muted); font-size: 12px; line-height: 16px; }
   .ap-gl-opt:hover { background: var(--hover); }
   .ap-gl-opt.on { background: var(--selected); color: var(--selected-ink); }
@@ -116,7 +120,7 @@
   .ap-docgrid { display: grid; grid-template-columns: minmax(0, 1fr); gap: 12px 24px; }
   .ap-docgrid > * { min-width: 0; }
   .ap-docgrid > .ap-span { grid-column: 1 / -1; }
-  @media (min-width: 900px) { .ap-docgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+  @media (min-width: 1024px) { .ap-docgrid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
   .rk-docpanel-sec:has(> .rk-docpanel-body:empty) { display: none; } /* a section whose content chose to show nothing */
   .rk-docpanel .rk-steps { margin-bottom: 12px; }
   .ap-docinfo { margin: 0; display: flex; flex-direction: column; gap: 6px; }
@@ -131,19 +135,19 @@
   .ap-banner-t .rk-icon { flex: none; }
   .ap-approvals-panel .ap-decide { margin-top: 4px; }
   .ap-morebtn { border: 1px solid var(--border); background: var(--surface); }
-  @media (max-width: 1100px) { .ap-docmain { padding-right: 0; } .rk-docpanel { margin-top: 8px; } }
+  @media (max-width: 1279px) { .ap-docmain { padding-right: 0; } .rk-docpanel { margin-top: 8px; } }
   .ap-main .rk-desc a, .ap-main .pv-ro a, .ap-docinfo a { color: var(--link); text-decoration: none; }
   .ap-main .rk-desc a:hover, .ap-main .pv-ro a:hover, .ap-docinfo a:hover { text-decoration: underline; }
   .ap-errlist { margin: 4px 0 0; padding-left: 18px; }
   .ap-main .rk-dialog-body .ap-errlist { margin-bottom: 8px; }
-  @media (max-width: 600px) {
+  @media (max-width: 767px) {
     .ap-main .rk-pagehead-extra { width: 100%; flex-wrap: wrap; }
     .ap-grid-link { min-width: 180px; }
-    /* phone: every button and field is at least 40px tall (links stay inline) */
-    body button, body [role=button], body select, body textarea, body input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: 40px; }
-    body .rk-iconbtn { min-width: 40px; }
-    body .rk-select-btn, body .rk-btn, body .rk-iconbtn { height: auto; min-height: 40px; }
-    body .rk-seg button, body .rk-pager button { min-height: 40px; }
+    /* phone: every button and field is at least 44px (--touch) (links stay inline) */
+    body button, body [role=button], body select, body textarea, body input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: var(--touch); }
+    body .rk-iconbtn { min-width: var(--touch); }
+    body .rk-select-btn, body .rk-btn, body .rk-iconbtn { height: auto; min-height: var(--touch); }
+    body .rk-seg button, body .rk-pager button { min-height: var(--touch); }
     /* a filter's list opens under the whole bar at full width: anchored to its button it ran past the screen edge */
     .ap-main .rk-filterbar { position: relative; }
     .ap-main .rk-fwrap { position: static; }
@@ -174,7 +178,7 @@
   .ap-ubah-mode button:hover { color: var(--ink); }
   .ap-ubah-mode button[aria-pressed="true"] { background: var(--surface); color: var(--selected-ink); box-shadow: var(--shadow-seg); }
   .ap-ubah-mode button:focus-visible { outline: 2px solid var(--focus); outline-offset: 0; }
-  .ap-ubah-bar, .ap-ubah-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 20px; min-height: 40px; box-sizing: border-box; font: 500 var(--font-size)/var(--line-height) var(--font-sans); border-bottom: 1px solid var(--line); flex-shrink: 0; }
+  .ap-ubah-bar, .ap-ubah-preview { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 8px; padding: 4px 20px; min-height: var(--touch); box-sizing: border-box; font: 500 var(--font-size)/var(--line-height) var(--font-sans); border-bottom: 1px solid var(--line); flex-shrink: 0; }
   .ap-ubah-bar { background: var(--selected); color: var(--selected-ink); }
   .ap-ubah-bar > .rk-icon, .ap-ubah-preview > .rk-icon { width: 16px; height: 16px; flex: none; }
   .ap-ubah-bar-t, .ap-ubah-preview-t { flex: 1 1 200px; min-width: 0; overflow-wrap: anywhere; }
@@ -232,11 +236,11 @@
   /* dialogs */
   .ap-ubah-form { display: flex; flex-direction: column; gap: 12px; }
   .ap-ubah-tcol { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 8px; }
-  @media (max-width: 600px) {
-    .ap-ubah-mode button { min-height: 40px; padding: 0 8px; }
+  @media (max-width: 767px) {
+    .ap-ubah-mode button { min-height: var(--touch); padding: 0 8px; }
     .ap-ubah-bar, .ap-ubah-preview { padding: 4px 16px; }
-    .ap-ubah-navitem .ap-ubah-tools .rk-iconbtn { width: 40px; height: 40px; }
-    .ap-ubah-group, .ap-ubah-rename { min-height: 40px; }
+    .ap-ubah-navitem .ap-ubah-tools .rk-iconbtn { width: var(--touch); height: var(--touch); }
+    .ap-ubah-group, .ap-ubah-rename { min-height: var(--touch); }
     .ap-ubah-card { left: 8px; right: 8px; bottom: 8px; width: auto; max-height: calc(100vh - var(--topbar) - 16px); }
     .ap-ubah-tcol { grid-template-columns: minmax(0, 1fr); }
   }
@@ -296,7 +300,7 @@
   .pv-code:focus { outline: none; border-color: var(--focus); box-shadow: var(--focus-soft); }
   .rk-grid .rk-cell { appearance: auto; }
   .rk-card-body > .rk-form-grid { padding: 0; }
-  @media (max-width: 860px) {
+  @media (max-width: 767px) {
     .pv-shell { height: auto; min-height: 100%; }
     .pv-shell > .rk-side { display: flex; width: 100%; border-right: 0; border-bottom: 1px solid var(--line-strong); }
     .pv-shell > .rk-side .rk-side-head, .pv-shell > .rk-side .pv-note, .pv-shell > .rk-side .rk-navgroup > p { display: none; }

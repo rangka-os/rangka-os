@@ -4,8 +4,8 @@
     python3 test_console.py --react-dir <dir with react.production.min.js and react-dom.production.min.js> [--shots <dir>]
 
 React comes from cdnjs in index.html; the sandbox may block it, so the test serves local UMD files for those URLs
-(get them with: npm pack react@18.3.1 react-dom@18.3.1 and untar). Checks every screen at 1440 and 390 px in light
-and dark: no console errors, a page title, no horizontal page scroll and no content clipped outside a scroller.
+(get them with: npm pack react@18.3.1 react-dom@18.3.1 and untar). Checks every screen at 1440, 768 (touch tablet) and 390 px (phone) in light
+and dark (44px tap targets below 1280): no console errors, a page title, no horizontal page scroll and no content clipped outside a scroller.
 Then walks a change set proposed -> validated -> previewed -> approved -> applied -> reverted, the owner-only rule,
 the command menu, the theme switch, proposing a change, the sidebar (pinned, collapse) and the phone drawer.
 """
@@ -76,8 +76,26 @@ OVERFLOW_JS = """() => {
 }"""
 
 
+SMALL_JS = """() => {
+  const out = [];
+  for (const el of document.querySelectorAll('button, a[href], input, select, textarea, [role=button]')) {
+    if (el.tagName === 'INPUT' && ['file', 'hidden'].includes(el.type)) continue;
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    if (cs.visibility === 'hidden' || cs.display === 'none' || !r.width || !r.height) continue;
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > innerWidth) continue;
+    let t = r;  // a checkbox or radio keeps its look; its table cell or label is the target
+    if (el.tagName === 'INPUT' && ['checkbox', 'radio'].includes(el.type)) { const c = el.closest('td, th, label'); if (c) t = c.getBoundingClientRect(); }
+    if (el.tagName === 'A' && el.closest('p, li, .rk-desc, .cn-demo-note')) continue;  // links in running text stay inline
+    if (Math.min(t.width, t.height) < 43.5) out.push((el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 24) + ' ' + Math.round(t.width) + 'x' + Math.round(t.height));
+  }
+  return [...new Set(out)];
+}"""
+
+
 def new_page(browser, width, scheme):
-    ctx = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=scheme, device_scale_factor=1)
+    # below 1280px a touch screen (tokens.json breakpoint): coarse pointer, 44px targets; below 768px a phone
+    ctx = browser.new_context(viewport={"width": width, "height": 900}, color_scheme=scheme, device_scale_factor=1,
+                              has_touch=width < 1280, is_mobile=width < 768)
     # the Console is light unless the person picked a mode: pick the scheme under test
     ctx.add_init_script("try { localStorage.setItem('rk.console.theme', %r) } catch (e) {}" % scheme)
     page = ctx.new_page()
@@ -93,8 +111,8 @@ def new_page(browser, width, scheme):
 with sync_playwright() as pw:
     browser = pw.chromium.launch()
 
-    # 1. every screen, two widths, two themes
-    for width in (1440, 390):
+    # 1. every screen, three widths, two themes
+    for width in (1440, 768, 390):
         for scheme in ("light", "dark"):
             ctx, page, errs = new_page(browser, width, scheme)
             page.goto(BASE + "?demo=1#/ringkasan")
@@ -115,6 +133,10 @@ with sync_playwright() as pw:
                     fail(f"{width}/{scheme} #{r}: content outside viewport {ov['out']}")
                 if errs:
                     fail(f"{width}/{scheme} #{r}: console errors {errs[:3]}")
+                if width < 1280 and scheme == "light":
+                    small = page.evaluate(SMALL_JS)
+                    if small:
+                        fail(f"{width} #{r}: tap targets under 44px {small[:6]}")
                 if args.shots and (scheme == "light" or r in ("ringkasan", "changesets/cs_ai7k2p9q", "appearance", "system")):
                     page.screenshot(path=os.path.join(args.shots, f"{width}-{scheme}-{r.replace('/', '_')}.png"), full_page=True)
             ctx.close()
@@ -329,6 +351,24 @@ with sync_playwright() as pw:
     page.locator(".rk-side-collapse button").click()
     if errs:
         fail(f"sidebar: console errors {errs[:3]}")
+    ctx.close()
+
+    # 8b. tablet portrait: the sidebar is the icon rail; unfolding floats it over the page, picking a screen folds it
+    ctx, page, errs = new_page(browser, 768, "light")
+    page.goto(BASE + "?demo=1#/ringkasan")
+    page.wait_for_selector(".rk-pagehead h1", timeout=15000)
+    side = page.locator(".rk-side")
+    if not side.is_visible() or "collapsed" not in (side.get_attribute("class") or "") or side.bounding_box()["width"] > 64:
+        fail(f"tablet: sidebar is not the icon rail ({side.get_attribute('class')}, {side.bounding_box()})")
+    page.get_by_role("button", name="Bentangkan navigasi").click()
+    if "rk-side-float" not in (side.get_attribute("class") or "") or side.bounding_box()["width"] < 200 or not page.locator(".cn-rail-scrim").is_visible():
+        fail("tablet: unfolding the rail does not float the full sidebar")
+    page.locator(".rk-side .rk-navlink", has_text="Audit log").click()
+    page.wait_for_function("location.hash === '#/audit'", timeout=3000)
+    if "collapsed" not in (side.get_attribute("class") or "") or page.locator(".cn-rail-scrim").count():
+        fail("tablet: picking a screen leaves the sidebar unfolded")
+    if errs:
+        fail(f"tablet rail: console errors {errs[:3]}")
     ctx.close()
 
     # 9. phone: the 48px bar opens the sidebar as a drawer; picking a screen closes it

@@ -215,6 +215,34 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     c.close()
 
 
+def test_lost_answer_on_queue_screen_is_replayed_once(browser, ctx):
+    # isi_jam queues: the server writes, the answer is lost, the job waits; its replay (with _occurred_at) answers the
+    # stored result instead of a conflict, and the record ends submitted, once (audit WS2 F1)
+    c, p = page_for(browser, ctx, STAF, PHONE, allow=("/api/v1/r/jam_kerja",))
+    lost = {"n": 0}
+    def drop_answer(route):
+        if route.request.method == "POST" and lost["n"] == 0:
+            lost["n"] = 1
+            route.fetch()
+            route.abort("connectionreset")
+        else:
+            route.continue_()
+    p.route("**/api/v1/r/jam_kerja", drop_answer)
+    p.goto("/app/#/w/isi_jam")
+    before = total(c, "jam_kerja")
+    p.locator("#f-jam_kerja-hours").fill("5")
+    p.get_by_role("button", name="Simpan & ajukan").click()
+    p.wait_for_selector(".ap-work-count")
+    p.evaluate("window.dispatchEvent(new Event('online'))")
+    p.wait_for_selector(".ap-work-count", state="detached", timeout=20000)
+    assert p.locator(".ap-work-queue .ap-work-err").count() == 0, p.locator(".ap-work-queue").inner_text()
+    assert total(c, "jam_kerja") == before + 1
+    rows = c.request.get("/api/v1/r/jam_kerja?limit=1&sort=-created_at").json()["data"]
+    assert rows[0]["hours"] == 5 and rows[0]["docstatus"] == 1, rows
+    ctx["errors"] = [x for x in ctx["errors"] if "ERR_CONNECTION_RESET" not in x and "Failed to fetch" not in x]
+    c.close()
+
+
 def test_owner_keeps_dashboard_home_with_kerja_group(browser, ctx):
     c, p = page_for(browser, ctx, OWNER, DESK)
     p.goto("/app/")

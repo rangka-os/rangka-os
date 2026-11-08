@@ -212,7 +212,8 @@ create table if not exists rk_idempotency (
   org_id       text not null,
   actor        text not null,
   key          text not null,
-  request_hash text not null,               -- sha256 hex of method, path and body
+  request_hash text not null,               -- sha256 hex of method, path and body (without _occurred_at)
+  claim        text not null default '',    -- random token of the request that holds the key
   state        text not null,               -- pending, committed, done
   target       text not null default '',    -- <model>/<name> written by the request
   status       integer not null default 0,
@@ -221,3 +222,4 @@ create table if not exists rk_idempotency (
   primary key (org_id, actor, key)
 );
 create index if not exists rk_idempotency_created on rk_idempotency (created_at);
+alter table rk_idempotency add column if not exists claim text not null default '';

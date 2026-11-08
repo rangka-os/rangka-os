@@ -166,8 +166,10 @@ type op struct {
 	inFlow bool
 	// manualRun is set for a flow a caller started through REST with an event of their own (contract 0026).
 	manualRun bool
-	// first is the first record the unit of work wrote (<model>/<name>), the target of an idempotency key.
-	first string
+	// first is the first record the unit of work wrote (<model>/<name>); primary the first document it submitted or
+	// cancelled (the verb's own document, written after its hooks). The target of an idempotency key is primary, else
+	// first.
+	first, primary string
 }
 
 // writeAttempts bounds how often run starts a unit of work again after it lost a race (contract 0025).
@@ -217,7 +219,14 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 		return false, err
 	}
 	if k, ok := idemFrom(ctx); ok { // contract 0030 §6: the key is committed with the write
-		if err := store.CommitIdempotency(ctx, tx, k.Org, k.Actor, k.Key, o.first); err != nil {
+		target := o.primary
+		if target == "" {
+			target = o.first
+		}
+		if err := store.CommitIdempotency(ctx, tx, k.Org, k.Actor, k.Key, k.Claim, target); err != nil {
+			if errors.Is(err, store.ErrIdemLost) {
+				return false, conflict("idempotency_in_progress", "A later request with this Idempotency-Key took it over; this one was not saved")
+			}
 			return false, err
 		}
 	}
@@ -242,6 +251,9 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 	o.touched[m.Name] = true
 	if o.first == "" {
 		o.first = m.Name + "/" + fmt.Sprint(rec["name"])
+	}
+	if o.primary == "" && (opName == "submitted" || opName == "cancelled") {
+		o.primary = m.Name + "/" + fmt.Sprint(rec["name"])
 	}
 	ev := store.Event{Type: "record", Org: o.actor.Org, Model: m.Name, Name: fmt.Sprint(rec["name"]), Op: opName}
 	if m.IsSubmittable {

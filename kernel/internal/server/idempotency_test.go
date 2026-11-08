@@ -2,10 +2,13 @@ package server
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"sync"
 	"testing"
 	"time"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // withKey is e sending Idempotency-Key: key.
@@ -139,4 +142,53 @@ func TestOccurredAt(t *testing.T) {
 		t.Fatalf("future: %s", r.Body)
 	}
 	staf.must(422, "POST", "/api/v1/r/jam_kerja", map[string]any{"date": "2026-11-08", "hours": 2, "_occurred_at": "kemarin"})
+}
+
+// Audit WS2 F1: a queued replay adds _occurred_at to the body the first try sent; it is the same request.
+func TestIdempotentReplayWithOccurredAt(t *testing.T) {
+	owner, staf, _ := screensEnv(t)
+	k := withKey(staf, "tap-q")
+	body := map[string]any{"date": "2026-11-08", "hours": 8}
+	first := k.must(201, "POST", "/api/v1/r/jam_kerja", body).JSON
+	queued := map[string]any{"date": "2026-11-08", "hours": 8, "_occurred_at": fixedNow().Add(-time.Minute).UTC().Format(time.RFC3339)}
+	again := k.must(201, "POST", "/api/v1/r/jam_kerja", queued)
+	if again.Header.Get("Idempotency-Replayed") != "true" || again.JSON["name"] != first["name"] {
+		t.Fatalf("queued replay: %s", again.Body)
+	}
+	sk := withKey(staf, "tap-qs")
+	sk.must(200, "POST", "/api/v1/r/jam_kerja/"+first["name"].(string)+"/submit", nil)
+	r := sk.must(200, "POST", "/api/v1/r/jam_kerja/"+first["name"].(string)+"/submit", map[string]any{"_occurred_at": fixedNow().UTC().Format(time.RFC3339)})
+	if r.Header.Get("Idempotency-Replayed") != "true" {
+		t.Fatalf("queued submit replay: %s", r.Body)
+	}
+	if n := countJam(t, owner); n != 1 {
+		t.Fatalf("records: %d", n)
+	}
+}
+
+// Audit WS2 F2: a request whose stale claim was taken over cannot commit with the key any more.
+func TestIdempotentClaimTakenOver(t *testing.T) {
+	owner, _, _ := screensEnv(t)
+	ctx := context.Background()
+	db := owner.s.DB
+	a, err := store.ClaimIdempotency(ctx, db, "site", "x@y", "k", "h")
+	if err != nil || a.Claim == "" {
+		t.Fatalf("claim a: %+v %v", a, err)
+	}
+	if _, err := db.Exec(ctx, `update rk_idempotency set created_at = now() - interval '10 minutes' where key = 'k'`); err != nil {
+		t.Fatal(err)
+	}
+	b, err := store.ClaimIdempotency(ctx, db, "site", "x@y", "k", "h")
+	if err != nil || b.Claim == "" || b.Claim == a.Claim {
+		t.Fatalf("claim b: %+v %v", b, err)
+	}
+	if err := store.CommitIdempotency(ctx, db, "site", "x@y", "k", a.Claim, "m/1"); !errors.Is(err, store.ErrIdemLost) {
+		t.Fatalf("old claim commits: %v", err)
+	}
+	if err := store.ReleaseIdempotency(ctx, db, "site", "x@y", "k", a.Claim); err != nil {
+		t.Fatal(err)
+	}
+	if err := store.CommitIdempotency(ctx, db, "site", "x@y", "k", b.Claim, "m/2"); err != nil {
+		t.Fatalf("new claim: %v", err)
+	}
 }

@@ -11,8 +11,8 @@ import (
 
 type idemCtxKey struct{}
 
-// IdemKey names a claimed key.
-type IdemKey struct{ Org, Actor, Key string }
+// IdemKey names a claimed key and the claim token of the request that holds it.
+type IdemKey struct{ Org, Actor, Key, Claim string }
 
 // WithIdempotency returns ctx carrying a claimed key for the write that runs with it.
 func WithIdempotency(ctx context.Context, k IdemKey) context.Context {

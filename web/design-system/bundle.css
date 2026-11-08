@@ -14,6 +14,9 @@
 @media (max-width: 767px), (max-width: 1279px) and (pointer: coarse) {
   :root, :root[data-density] { --control-sm: var(--touch); --control: var(--touch); --field: var(--touch); --control-lg: var(--touch); --row: 48px; --row-head: var(--touch); }
   button:not(.rk-switch), [role=button], [role=tab], select, textarea, input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: var(--touch); }
+  /* short labels ("Buka", "OK") and link-style buttons are 44px wide too, whatever the font renders */
+  button:not(.rk-switch), [role=button] { min-width: var(--touch); }
+  .rk-btn { justify-content: center; }
   .rk-search, .rk-select-btn, .rk-link-btn, .rk-btn { height: auto; min-height: var(--control); }
 }
 

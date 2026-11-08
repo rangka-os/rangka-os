@@ -1812,6 +1812,27 @@ def check_screen_counter(rep, p, b, visible, prints):
                     for i, x in enumerate(cl.get("fields") if isinstance(cl.get("fields"), list) else []):
                         slot_field(rep, p, f"counter/session/close/fields/{i}", cn2, cf2, x)
                     slot_set(rep, p, "counter/session/close/set", cn2, cf2, cl.get("set"))
+    # contract 0039: available as a balance model per the open session (e.g. stock_balance per outlet)
+    av = cat.get("available") if cat is not None and isinstance(cat.get("available"), dict) else None
+    if av is not None and cat_name:
+        where = "counter/catalogue/available"
+        an, am, af = slot_model(rep, p, where + "/model", av, visible)
+        if an:
+            it = slot_field(rep, p, where + "/item", an, af, av.get("item"), ["link"])
+            if it is not None and it.get("to") != cat_name:
+                rep.add("error", p, where + "/item", "screen_slot_type", f'"{av.get("item")}" links to {it.get("to")}; the catalogue is {cat_name}')
+            slot_field(rep, p, where + "/qty", an, af, av.get("qty"), NUMERIC_KINDS)
+            match = av.get("match") if isinstance(av.get("match"), dict) else {}
+            ses2 = b.get("session") if isinstance(b.get("session"), dict) else None
+            if match and ses2 is None:
+                rep.add("error", p, where + "/match", "screen_slot_type", "match compares with the open session; add the session slot")
+            sn2 = sf2 = None
+            if ses2 is not None and isinstance(ses2.get("model"), str) and ses2["model"] in visible:
+                sn2, sf2 = ses2["model"], fields_of(visible[ses2["model"]][2])
+            for k in sorted(match):
+                slot_field(rep, p, f"{where}/match/{k}", an, af, k)
+                if sn2:
+                    slot_field(rep, p, f"{where}/match/{k}", sn2, sf2, match[k])
 
 
 def screen_model(rep, p, where, b, visible):

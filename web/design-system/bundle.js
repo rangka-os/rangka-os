@@ -872,11 +872,12 @@
     }
     function link(it) {
       var id = it.id || it.label;
-      return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined, "aria-label": col ? it.label : undefined,
+      return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined,
         "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
         onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(id, it); } },
         col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: it.icon }),
-        col ? null : h("span", { className: "l" }, it.label),
+        // collapsed: the label stays as visually hidden text (the link's name), not aria-label, so it never doubles as a form label
+        h("span", { className: col ? "rk-sr" : "l" }, it.label),
         it.count ? (col ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : h("span", { className: "rk-count" }, it.count)) : null);
     }
     var search = p.search, searchLabel = (search && search.label) || "Cari";

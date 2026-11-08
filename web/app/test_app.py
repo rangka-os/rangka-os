@@ -747,6 +747,12 @@ def open_nav(page):
         btn.first.click()
 
 
+def close_nav(page):
+    """Closes the phone navigation drawer when it is open (its scrim covers the page)."""
+    if page.locator(".ap-nav-open").count():
+        page.mouse.click(page.viewport_size["width"] - 5, page.viewport_size["height"] // 2)  # the scrim, right of the drawer
+
+
 def expect_signed_in(page, ctx):
     hash_, _ = ctx.home()
     page.wait_for_function("(h) => location.hash === h", arg=hash_, timeout=15000)
@@ -1020,7 +1026,8 @@ def ensure_records(ctx, model, minimum):
 
 
 def table_rows(page):
-    return page.locator(".rk-table tbody tr:not([aria-hidden])")
+    """The list's rows: table rows, or on phones (< 768px) the cards that take their place."""
+    return page.locator(".rk-table tbody tr:not([aria-hidden]), .ap-lc-item:not([aria-hidden])")
 
 
 def wait_rows(page, timeout=10000):
@@ -1037,7 +1044,7 @@ def test_list_search_filter_page(page, ctx):
     first = table_rows(page).first.inner_text()
     assert re.search(r"Rp\s", first), "invoice rows show a rupiah total, got " + first
     page.get_by_role("heading", name=ctx.model_label("sales_invoice")).first.wait_for(timeout=5000)
-    chips = page.locator(".rk-table tbody .rk-chip").all_inner_texts()
+    chips = page.locator(".rk-table tbody .rk-chip, .ap-lc-item .rk-chip").all_inner_texts()
     chips = [c.lower() for c in chips]
     # a submitted, unpaid invoice is Diajukan until its due date and Jatuh tempo after it (engine.js derives overdue from
     # today), and the fixtures' due dates are fixed (the last is 5 Nov 2026): either chip is the seeded unpaid invoice
@@ -1078,7 +1085,7 @@ def test_list_search_filter_page(page, ctx):
     page.wait_for_timeout(500)
     wait_rows(page)
     assert any("filter=status in ['paid']" in u for m, u in reqs[n_req:]), f"Status → Lunas sends the paid filter, saw {reqs[n_req:]}"
-    chips = page.locator(".rk-table tbody .rk-chip").all_inner_texts()
+    chips = page.locator(".rk-table tbody .rk-chip, .ap-lc-item .rk-chip").all_inner_texts()
     assert chips and {c.lower() for c in chips} == {"lunas"}, f"every row is Lunas, got {sorted(set(chips))}"
     page.get_by_role("button", name="Hapus filter").click()
     wait_rows(page)
@@ -1093,11 +1100,12 @@ def test_list_search_filter_page(page, ctx):
     wait_rows(page)
     assert table_rows(page).count() >= 1, "page 2 has rows"
 
-    # sorting by a column header sends sort=
-    n_req = len(reqs)
-    page.locator(".rk-table thead").get_by_role("button", name="Total").click()
-    page.wait_for_timeout(400)
-    assert any("sort=grand_total" in u for m, u in reqs[n_req:]), f"header sort sends sort=, saw {reqs[n_req:]}"
+    # sorting by a column header sends sort= (phones show cards without headers; they sort through Urutkan)
+    if ctx.args.width >= 768:
+        n_req = len(reqs)
+        page.locator(".rk-table thead").get_by_role("button", name="Total").click()
+        page.wait_for_timeout(400)
+        assert any("sort=grand_total" in u for m, u in reqs[n_req:]), f"header sort sends sort=, saw {reqs[n_req:]}"
 
     # a row opens the record
     wait_rows(page)
@@ -3108,6 +3116,7 @@ def test_ubah_add_table_medium_with_dry_run(page, ctx):
     assert "Kunjungan toko" in banner.inner_text(), banner.inner_text()
     open_nav(page)
     page.get_by_role("complementary", name=re.compile("^Navigasi")).get_by_text("Kunjungan toko").wait_for(timeout=10000)
+    close_nav(page)
     page.get_by_role("button", name="Keluar pratinjau").click()
     page.get_by_role("button", name="Keluar pratinjau").wait_for(state="detached", timeout=10000)
     assert Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/changesets/" + pending[0]["id"])[1]["status"] == "previewed"

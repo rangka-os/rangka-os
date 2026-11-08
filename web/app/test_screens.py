@@ -172,22 +172,32 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     p.locator(".ap-counter-open input").first.fill("100000")
     p.get_by_role("button", name="Buka sesi").click()
     p.wait_for_selector(".ap-counter-item")
+    sales_before = total(c, "penjualan")
     # the price changes after the catalogue loaded: the receipt panel shows the server's total and change (audit M1)
     kopi = c.request.get("/api/v1/r/menu?filter=" + urllib.parse.quote("menu_name == 'Kopi susu'")).json()["data"][0]["name"]
     o2, _ = page_for(browser, ctx, OWNER, DESK)
     assert o2.request.patch(f"/api/v1/r/menu/{kopi}", data=json.dumps({"price": 17000}), headers={"Content-Type": "application/json"}).status == 200
     o2.close()
-    # a sale in 4 taps: item, item, Bayar, Uang pas
+    # a sale in 4 taps: item, item, Bayar, Uang pas. The cart's total is the model's (POST /compute, contract 0034):
+    # the catalogue still says 18.000 + 15.000, the breakdown and Bayar say 32.000
     p.locator(".ap-counter-item", has_text="Kopi susu").click()
     p.locator(".ap-counter-item", has_text="Roti bakar").click()
-    p.get_by_role("button", name="Bayar Rp 33.000").click()
+    assert "2 di pesanan" not in p.locator(".ap-counter-item", has_text="Kopi susu").get_attribute("aria-label")
+    assert "1 di pesanan" in p.locator(".ap-counter-item", has_text="Kopi susu").get_attribute("aria-label")
+    bayar = p.get_by_role("button", name="Bayar Rp 32.000")
+    bayar.wait_for()
+    assert "Rp 32.000" in p.locator(".ap-counter-sum").inner_text() and "perkiraan" not in p.locator(".ap-counter-sum").inner_text()
+    bayar.click()
+    assert "Rp 32.000" in p.locator(".ap-counter-pay").inner_text()
     p.get_by_role("button", name="Uang pas").click()
     p.wait_for_selector(".ap-counter-done")
     first = p.locator(".ap-counter-done p").inner_text().split(" · ")[0]
     rec = c.request.get(f"/api/v1/r/penjualan/{first}").json()
-    assert rec["docstatus"] == 1 and rec["grand_total"] == 32000 and rec["change_amount"] == 1000, rec
-    assert "Rp 1.000" in p.locator(".ap-counter-done .ap-counter-due").inner_text(), "the server's change, not the screen's"
+    assert rec["docstatus"] == 1 and rec["grand_total"] == 32000 and rec["change_amount"] == 0, rec
+    assert "Pembayaran berhasil" in p.locator(".ap-counter-done").inner_text()
     assert p.get_by_role("button", name="Cetak struk").count() == 1
+    assert total(c, "penjualan") == sales_before + 1, "computing the cart wrote nothing"
+    p.get_by_role("button", name="Pesanan baru").click()
     # hold a bill, scan a barcode into a new one, pay split QRIS + cash
     p.locator(".ap-counter-item", has_text="Es teh").click()
     p.locator(".ap-counter-cust").fill("Meja 3")

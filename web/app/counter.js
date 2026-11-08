@@ -4,9 +4,11 @@
  *   catalogue {model, filter, title, search, group_by, price, barcode, image, limit}: the items to tap, loaded once
  *     (GET /r/<model>?filter=…&limit=…) and kept in the device cache for offline use; searched on the device; a barcode
  *     typed or scanned into the search box and ended with Enter adds that item.
- *   document {model, lines, line {item, qty, price, note}, total, change, set}: one sale. Prices, discounts, tax and
- *     totals are the model's computes; the screen's sums are an estimate, and the receipt panel shows the server's
- *     total and change fields. set: values are fetched again for every sale.
+ *   document {model, lines, line {item, qty, price, note}, total, change, summary, set}: one sale. Prices, discounts,
+ *     tax and totals are the model's computes. With summary (contract 0034) the cart is sent to POST /compute/<model>
+ *     (debounced, and again before the tender opens) and the breakdown, the Bayar amount and the tender use the
+ *     model's numbers; without it, or offline, the screen's own sum shows, marked "perkiraan". The receipt panel
+ *     shows the server's total and change fields. set: values are fetched again for every sale.
  *   payments {table, method, amount, methods}: tender. Cash quick amounts (uang pas and round notes), QRIS full or part;
  *     change = cash given - (total - QRIS).
  *   session {model, link, filter, state {field, open, closed}, open [fields], set, close {model, link, fields, set}}:
@@ -114,6 +116,42 @@
     });
   }
 
+  /** The summary slot's fields as rows {name, label, value} from a computed record; fields the record lacks (hidden
+   *  from the caller, contract 0027) are skipped. fields: the document model's meta fields. */
+  function summaryRows(names, fields, rec) {
+    var byName = {};
+    (fields || []).forEach(function (f) { byName[f.name] = f; });
+    return (names || []).filter(function (n) { return rec && rec[n] !== undefined && rec[n] !== null; }).map(function (n) {
+      var f = byName[n] || {};
+      return { name: n, label: f.label || n, value: Number(rec[n]) || 0 };
+    });
+  }
+
+  /** A keypad press on a money value (digits only): "000", "0".."9", "⌫" (back), "C" (clear). At most 12 digits. */
+  function padPress(value, key) {
+    var v = String(value == null ? "" : value).replace(/\D/g, "");
+    if (key === "C") return "";
+    if (key === "⌫") return v.slice(0, -1);
+    return (v + key).replace(/^0+/, "").slice(0, 12);
+  }
+
+  /** Rupiah total of a count per note: {100000: 3, 2000: 1, coins: 1500} → 301500. */
+  function denomTotal(counts) {
+    return Object.keys(counts || {}).reduce(function (s, k) {
+      var n = Number(counts[k]) || 0;
+      return s + (k === "coins" ? n : n * Number(k));
+    }, 0);
+  }
+
+  /** Items in the cart: the sum of qty. */
+  function cartCount(cart) {
+    return (cart || []).reduce(function (s, l) { return s + (Number(l.qty) || 0); }, 0);
+  }
+
+  RA.summaryRows = summaryRows;
+  RA.padPress = padPress;
+  RA.denomTotal = denomTotal;
+  RA.cartCount = cartCount;
   RA.cartAdd = cartAdd;
   RA.cartSet = cartSet;
   RA.cartTotal = cartTotal;
@@ -161,10 +199,73 @@
     return list.length ? list.map(function (x) { return x.message; }).join(" · ") : (e && e.message) || "Gagal";
   }
 
+  /* ---------------------------------------------------------------- money keypad (controlled) */
+  var PAD_KEYS = ["1", "2", "3", "4", "5", "6", "7", "8", "9", "000", "0", "⌫"];
+  function MoneyPad(p) {
+    return h("div", { className: "ap-pad", role: "group", "aria-label": p.label || "Keypad" }, PAD_KEYS.map(function (k) {
+      return h("button", { key: k, type: "button", disabled: p.disabled, "aria-label": k === "⌫" ? "Hapus satu angka" : undefined,
+        onClick: function () { p.onChange(Number(padPress(p.value ? String(p.value) : "", k)) || 0); } }, k);
+    }));
+  }
+
+  /* ---------------------------------------------------------------- count per denomination (blind close) */
+  var DENOMS = [100000, 50000, 20000, 10000, 5000, 2000, 1000];
+  function DenomCount(p) {
+    var cs = useState({}), counts = cs[0], setCounts = cs[1];
+    function set(k, v) { var x = Object.assign({}, counts); x[k] = v; setCounts(x); p.onTotal(denomTotal(x)); }
+    return h("div", { className: "ap-denom" },
+      h("p", { className: "ap-denom-help" }, "Ketik jumlah lembar per pecahan. Total masuk ke hitung fisik."),
+      DENOMS.map(function (d) {
+        var n = Number(counts[d]) || 0;
+        return h("label", { key: d, className: "ap-denom-row" }, h("span", null, rp(d)),
+          h("input", { inputMode: "numeric", "aria-label": "Lembar " + rp(d), value: counts[d] || "", placeholder: "0",
+            onChange: function (e) { set(d, e.target.value.replace(/\D/g, "")); } }),
+          h("b", null, rp(n * d)));
+      }),
+      h("label", { className: "ap-denom-row" }, h("span", null, "Koin"),
+        h("input", { inputMode: "numeric", "aria-label": "Koin (rupiah)", value: counts.coins || "", placeholder: "0",
+          onChange: function (e) { set("coins", e.target.value.replace(/\D/g, "")); } }), h("b", null, rp(Number(counts.coins) || 0))),
+      h("div", { className: "ap-denom-sum" }, h("span", null, "Hasil hitung"), h("b", null, rp(denomTotal(counts)))));
+  }
+
+  function firstMoneyField(ctx, model, names) {
+    var mm = (ctx.meta.models || {})[model] || {};
+    return (names || []).filter(function (n) {
+      var f = (mm.fields || []).filter(function (x) { return x.name === n; })[0];
+      return f && (f.type === "currency" || f.type === "money");
+    })[0] || null;
+  }
+
+  function useOnline() {
+    var os = useState(global.navigator ? global.navigator.onLine !== false : true), on = os[0], setOn = os[1];
+    useEffect(function () {
+      function up() { setOn(true); } function down() { setOn(false); }
+      global.addEventListener("online", up); global.addEventListener("offline", down);
+      return function () { global.removeEventListener("online", up); global.removeEventListener("offline", down); };
+    }, []);
+    return on;
+  }
+
+  function todayText() {
+    var d = new Date(), z = function (n) { return (n < 10 ? "0" : "") + n; };
+    return global.RangkaAppAPI.tanggal(d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()));
+  }
+  function initials(t) {
+    return String(t || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join("").toUpperCase();
+  }
+  function tintOf(g) { var n = 0; String(g || "").split("").forEach(function (ch) { n = (n * 31 + ch.charCodeAt(0)) % 6; }); return "t" + n; }
+  function imageSrc(v) {
+    v = String(v || "");
+    if (!v) return "";
+    return /^(https?:)?\/|^data:image\//.test(v) ? v : "/api/v1/attachments/" + encodeURIComponent(v);
+  }
+
   /* ---------------------------------------------------------------- the counter */
   function CounterScreen(p) {
     var ctx = p.ctx, s = p.screen, c = s.counter || {}, sets = p.sets || {}, scope = RA.outboxScope(ctx.me);
-    var cat = c.catalogue || {}, ses = c.session || null;
+    var cat = c.catalogue || {}, ses = c.session || null, doc = c.document || {};
+    var docMeta = (ctx.meta.models || {})[doc.model] || {};
+    var online = useOnline();
     var ss = useState(ses ? "loading" : "none"), session = ss[0], setSession = ss[1]; // "loading" | null | record | "none"
     var is = useState(null), items = is[0], setItems = is[1];
     var ce = useState(null), catErr = ce[0], setCatErr = ce[1];
@@ -181,8 +282,11 @@
     var hos = useState(false), heldOpen = hos[0], setHeldOpen = hos[1];
     var os = useState(function () { return Object.assign({}, sets.session || {}); }), openRec = os[0], setOpenRec = os[1]; // prefilled from session.set
     var cls = useState(null), closing = cls[0], setClosing = cls[1]; // close form record, or null
+    var dns = useState(false), denomOpen = dns[0], setDenomOpen = dns[1];
     var noteAt = useState(null), noteLine = noteAt[0], setNoteLine = noteAt[1];
-    var jobRef = useRef(null), searchRef = useRef(null);
+    var shs = useState(false), sheet = shs[0], setSheet = shs[1]; // phone: the order sheet is open
+    var cas = useState(null), calc = cas[0], setCalc = cas[1]; // {key, rec, errors} | {key, failed}
+    var jobRef = useRef(null), searchRef = useRef(null), calcSeq = useRef(0);
 
     function loadSession() {
       if (!ses) return Promise.resolve();
@@ -198,7 +302,8 @@
       return ctx.api.list(cat.model, { filter: cat.filter, limit: cat.limit || 500 }).then(function (r) {
         var rows = ((r && r.data) || []).map(function (x) {
           return { item: x.name, title: String(x[cat.title] || x.title || x.name), price: x[cat.price], group: cat.group_by ? String(x[cat.group_by] || "") : "",
-            barcode: cat.barcode ? x[cat.barcode] : "", search: (cat.search || []).map(function (f) { return x[f] || ""; }).join(" ") };
+            barcode: cat.barcode ? x[cat.barcode] : "", search: (cat.search || []).map(function (f) { return x[f] || ""; }).join(" "),
+            image: cat.image ? x[cat.image] || "" : "", left: cat.available && x[cat.available] != null ? Number(x[cat.available]) : null };
         });
         setItems(rows);
         RA.outbox.cache.put(key, rows);
@@ -209,7 +314,32 @@
     useEffect(function () { loadSession(); loadCatalogue(); }, [s.name]);
     useEffect(function () { if (session && typeof session === "object") RA.outbox.cache.put("session:" + scope + ":" + s.name, session); }, [session]);
 
-    var total = cartTotal(cart);
+    var estimate = cartTotal(cart);
+    var shiftName = session && typeof session === "object" ? session.name : null;
+
+    /* ----- the model's numbers for this cart (contract 0034) */
+    function computeBody() { return saleBody(c, cart, null, shiftName, sets.document, customer); }
+    var calcKey = doc.summary && cart.length ? JSON.stringify(computeBody()) : "";
+    function runCompute(key, body) {
+      var seq = ++calcSeq.current;
+      return ctx.api.compute(doc.model, body).then(function (r) {
+        if (seq === calcSeq.current) setCalc({ key: key, rec: (r && r.record) || {}, errors: (r && r.errors) || [] });
+        return r && r.record;
+      }, function () {
+        if (seq === calcSeq.current) setCalc({ key: key, failed: true });
+        return null;
+      });
+    }
+    useEffect(function () {
+      if (!calcKey) { setCalc(null); return; }
+      var t = setTimeout(function () { runCompute(calcKey, JSON.parse(calcKey)); }, 250);
+      return function () { clearTimeout(t); };
+    }, [calcKey]);
+    var fresh = calc && !calc.failed && calc.key === calcKey ? calc : null;
+    var totalField = doc.summary && doc.summary.length ? doc.summary[doc.summary.length - 1] : doc.total;
+    var total = fresh && fresh.rec[totalField] != null ? Number(fresh.rec[totalField]) : estimate;
+    var isEstimate = !!doc.summary && !fresh;
+
     function add(it) { if (jobRef.current) return; setDone(null); setErr(""); setCart(function (x) { return cartAdd(x, it); }); }
     function setLine(i, patch) { if (jobRef.current) return; setCart(function (x) { return cartSet(x, i, patch); }); }
 
@@ -224,7 +354,7 @@
       if (!cart.length || jobRef.current) return;
       var next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, cart: cart, total: total }].concat(held).slice(0, 20);
       setHeld(next); writeHeld(hk, next);
-      setCart([]); setCustomer("");
+      setCart([]); setCustomer(""); setSheet(false);
       ctx.toast("info", "Bill ditahan", customer || rp(total));
     }
     function resume(h0) {
@@ -238,7 +368,16 @@
     function openPay() {
       if (!cart.length) return;
       if (c.customer && c.customer.required && !customer.trim()) { setErr("Isi nama pembeli atau nomor meja dulu."); return; }
-      setErr("");
+      setErr(""); setSheet(true);
+      if (doc.summary && !fresh) { // the tender starts from the model's total when it can be had
+        setBusy(true);
+        runCompute(calcKey, computeBody()).then(function (rec) {
+          setBusy(false);
+          var t = rec && rec[totalField] != null ? Number(rec[totalField]) : estimate;
+          setPay({ cash: t, qris: 0 });
+        });
+        return;
+      }
       setPay({ cash: total, qris: 0 });
     }
 
@@ -251,14 +390,13 @@
         jobRef.current = null; setStuck(false);
         var rec = res.record || {};
         // the receipt panel shows the server's total and change (audit WS3 M1); the screen's sums are only an estimate
-        var dt = c.document.total, dc = c.document.change;
+        var dt = doc.total, dc = doc.change;
         var srvTotal = dt && rec[dt] != null ? Number(rec[dt]) : null, srvChange = dc && rec[dc] != null ? Number(rec[dc]) : null;
         setDone({ name: rec.name || null, total: srvTotal != null ? srvTotal : est.total, change: srvChange != null ? srvChange : est.change,
           estimate: srvChange == null, queued: !!res.queued, approval: !!res.approval });
         loadCatalogue(); // prices may have changed since the screen opened
         setCart([]); setCustomer(""); setPay(null);
         if (res.queued) ctx.toast("info", "Belum terkirim", "Transaksi tersimpan di perangkat dan dikirim saat koneksi kembali.");
-        if (searchRef.current) searchRef.current.focus();
       }, function (e) {
         if (RA.outboxRetryable(e)) { setStuck(true); return; }
         // refused: the job is over (a draft it created stays reachable from the list); the cart may be changed again
@@ -276,19 +414,19 @@
       var change = changeOf(total, cash, qris);
       if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
       setBusy(true); setErr("");
-      var pay = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
-      var shiftName = session && typeof session === "object" ? session.name : null;
+      var payRows = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
       var est = { total: total, change: change };
       // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
       // on a failed reload, the last copy
-      var fresh = p.reload ? p.reload(true).then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
-      fresh.then(function (nowSets) {
-        var job = RA.outbox.newJob({ scope: scope, screen: s.name, model: c.document.model,
-          body: saleBody(c, cart, pay, shiftName, nowSets.document, customer), submit: c.submit !== false });
+      var reloaded = p.reload ? p.reload(true).then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
+      reloaded.then(function (nowSets) {
+        var job = RA.outbox.newJob({ scope: scope, screen: s.name, model: doc.model,
+          body: saleBody(c, cart, payRows, shiftName, nowSets.document, customer), submit: c.submit !== false });
         jobRef.current = { job: job, est: est };
         return send(job, est);
       });
     }
+    function newSale() { setDone(null); setSheet(false); if (searchRef.current) searchRef.current.focus(); }
 
     function openSession() {
       if (busy) return;
@@ -306,111 +444,162 @@
         return ctx.api.submit(cl.model, r.name, { key: RA.newKey() });
       }).then(function () {
         ctx.toast("ok", "Sesi ditutup", session.name);
-        setClosing(null); setDone(null); setSession(null);
+        setClosing(null); setDenomOpen(false); setDone(null); setSession(null);
         RA.outbox.cache.put("session:" + scope + ":" + s.name, null); // a closed session never comes back from the cache (audit WS3 L1)
         return loadSession();
       }, function (e) { setErr(errText(e)); }).then(function () { setBusy(false); });
     }
 
-    /* ----- no session yet: open one */
+    var offlineBar = !online ? h("div", { className: "ap-counter-offline", role: "status" },
+      h("b", null, "Offline"), " · kasir tetap jalan. Transaksi disimpan di perangkat ini dan dikirim saat internet kembali.") : null;
+
+    /* ----- no session yet: count the drawer, open one */
     if (ses && session === "loading") return h("p", { className: "ap-work-loading" }, "Memuat sesi…");
     if (ses && !session) {
+      var openMoney = firstMoneyField(ctx, ses.model, ses.open);
+      var openVal = openMoney ? Number(openRec[openMoney]) || 0 : 0;
+      function setOpen(n, v) { var x = Object.assign({}, openRec); x[n] = v; setOpenRec(x); }
       return h("form", { className: "ap-work-entry ap-counter-open", onSubmit: function (e) { e.preventDefault(); openSession(); } },
-        h("p", { className: "ap-work-note" }, "Belum ada sesi kasir yang buka. Hitung uang di laci, lalu buka sesi."),
-        h(MiniForm, { ctx: ctx, model: ses.model, fields: ses.open, rec: openRec, onChange: function (n, v) { var x = Object.assign({}, openRec); x[n] = v; setOpenRec(x); } }),
-        err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
-        h("div", { className: "ap-work-actions" }, h(R.Button, { type: "submit", variant: "primary", size: "lg", loading: busy, disabled: busy }, "Buka sesi")));
+        offlineBar,
+        h("div", { className: "ap-counter-sheet-h" }, h("h2", null, "Buka sesi kasir"),
+          h("p", null, (ctx.me && (ctx.me.name || ctx.me.email)) || "", " · ", todayText())),
+        h("div", { className: "ap-counter-open-grid" },
+          h("div", { className: "ap-counter-open-form" },
+            h("p", { className: "ap-work-note" }, "Hitung uang di laci untuk kembalian, lalu buka sesi."),
+            h(MiniForm, { ctx: ctx, model: ses.model, fields: ses.open, rec: openRec, onChange: setOpen }),
+            openMoney ? h("div", { className: "ap-counter-presets", role: "group", "aria-label": "Nominal cepat" },
+              [300000, 500000, 750000, 1000000].map(function (a) {
+                return h("button", { key: a, type: "button", "aria-pressed": openVal === a ? "true" : "false", onClick: function () { setOpen(openMoney, a); } }, rp(a));
+              })) : null,
+            err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
+            h("div", { className: "ap-work-actions" }, h(R.Button, { type: "submit", variant: "primary", size: "lg", loading: busy, disabled: busy }, "Buka sesi"))),
+          openMoney ? h("div", { className: "ap-counter-open-pad" },
+            h("div", { className: "ap-counter-display" }, h("small", null, "Uang di laci"), h("b", null, rp(openVal))),
+            h(MoneyPad, { label: "Ketik nominal", value: openVal, onChange: function (v) { setOpen(openMoney, v); } })) : null));
     }
     /* ----- closing: blind count */
     if (closing) {
+      var closeMoney = firstMoneyField(ctx, ses.close.model, ses.close.fields);
       return h("form", { className: "ap-work-entry ap-counter-close", onSubmit: function (e) { e.preventDefault(); closeSession(); } },
+        h("div", { className: "ap-counter-sheet-h" }, h("h2", null, "Tutup sesi · hitung uang di laci")),
         h("p", { className: "ap-work-note" }, "Hitung semua uang tunai di laci, termasuk modal. Jumlah seharusnya tidak ditampilkan."),
         h(MiniForm, { ctx: ctx, model: ses.close.model, fields: ses.close.fields, rec: closing, onChange: function (n, v) { var x = Object.assign({}, closing); x[n] = v; setClosing(x); } }),
+        closeMoney ? (denomOpen ? h(DenomCount, { onTotal: function (t) { var x = Object.assign({}, closing); x[closeMoney] = t; setClosing(x); } })
+          : h(R.Button, { variant: "quiet", onClick: function () { setDenomOpen(true); } }, "Hitung per pecahan")) : null,
         err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
         h("div", { className: "ap-counter-row" },
-          h(R.Button, { onClick: function () { setClosing(null); setErr(""); } }, "Batal"),
+          h(R.Button, { onClick: function () { setClosing(null); setDenomOpen(false); setErr(""); } }, "Batal"),
           h(R.Button, { type: "submit", variant: "primary", loading: busy, disabled: busy }, "Tutup sesi")));
     }
 
     var groups = [];
     (items || []).forEach(function (it) { if (it.group && groups.indexOf(it.group) < 0) groups.push(it.group); });
     var shown = catalogueMatch(items, q, group);
+    var inCart = {};
+    cart.forEach(function (l) { inCart[l.item] = (inCart[l.item] || 0) + l.qty; });
 
     var catalogue = h("section", { className: "ap-counter-cat", "aria-label": "Katalog" },
-      h("input", { ref: searchRef, className: "ap-counter-search", type: "search", placeholder: cat.barcode ? "Cari atau pindai barcode" : "Cari",
-        "aria-label": "Cari barang", value: q, onChange: function (e) { setQ(e.target.value); }, onKeyDown: onSearchKey }),
+      h("div", { className: "ap-counter-searchrow" },
+        h("input", { ref: searchRef, className: "ap-counter-search", type: "search", placeholder: cat.barcode ? "Cari menu atau scan barcode" : "Cari",
+          "aria-label": "Cari barang", value: q, onChange: function (e) { setQ(e.target.value); }, onKeyDown: onSearchKey }),
+        h("span", { className: "ap-counter-sync" + (online ? "" : " off") }, online ? "Online" : "Offline")),
       groups.length > 1 ? h("div", { className: "ap-counter-groups", role: "tablist" },
         [""].concat(groups).map(function (g) {
           return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g || "Semua");
         })) : null,
       catErr ? h("div", { className: "ap-work-err" }, catErr) : !items ? h("p", { className: "ap-work-loading" }, "Memuat katalog…") :
         h("div", { className: "ap-counter-grid" }, shown.map(function (it) {
-          return h("button", { key: it.item, type: "button", className: "ap-counter-item", onClick: function () { add(it); } },
+          var out = it.left != null && it.left <= 0, low = it.left != null && it.left > 0 && it.left <= 5, n = inCart[it.item] || 0;
+          return h("button", { key: it.item, type: "button", className: "ap-counter-item" + (out ? " out" : "") + (n ? " picked" : ""), onClick: function () { add(it); },
+            "aria-label": it.title + ", " + rp(it.price) + (out ? ", habis" : low ? ", sisa " + it.left : "") + (n ? ", " + n + " di pesanan" : "") },
+            h("span", { className: "ap-counter-pic " + tintOf(it.title), "aria-hidden": "true" },
+              it.image ? h("img", { src: imageSrc(it.image), alt: "", loading: "lazy" }) : h("i", null, initials(it.title)),
+              out ? h("em", { className: "ap-counter-left out" }, "Habis") : low ? h("em", { className: "ap-counter-left" }, "Sisa " + it.left) : null,
+              n ? h("strong", { className: "ap-counter-n" }, n) : null),
             h("span", { className: "ap-counter-item-t" }, it.title), h("span", { className: "ap-counter-item-p" }, rp(it.price)));
         }), !shown.length ? h("p", { className: "ap-work-loading" }, "Tidak ada yang cocok.") : null));
 
     var lines = h("ul", { className: "ap-counter-lines", "aria-label": "Keranjang" }, cart.map(function (l, i) {
       return h("li", { key: l.key },
         h("div", { className: "ap-counter-line" },
-          h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
-            l.note ? h("small", null, l.note) : null),
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
             h("b", null, l.qty),
             h("button", { type: "button", "aria-label": "Tambah " + l.title, onClick: function () { setLine(i, { qty: l.qty + 1 }); } }, "+")),
+          h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
+            l.note ? h("small", null, l.note) : doc.line && doc.line.note ? h("small", { className: "ap-counter-addnote" }, "+ catatan") : null),
           h("span", { className: "ap-counter-amt" }, rp(l.qty * l.price))),
-        noteLine === i && c.document.line.note ? h("input", { className: "ap-counter-note", "aria-label": "Catatan " + l.title, placeholder: "Catatan, misalnya kurang manis",
+        noteLine === i && doc.line.note ? h("input", { className: "ap-counter-note", "aria-label": "Catatan " + l.title, placeholder: "Catatan, misalnya kurang manis",
           value: l.note, autoFocus: true, onChange: function (e) { setLine(i, { note: e.target.value }); }, onKeyDown: function (e) { if (e.key === "Enter") setNoteLine(null); } }) : null);
     }));
+
+    var rows = fresh ? summaryRows(doc.summary, docMeta.fields, fresh.rec) : [];
+    var summary = cart.length ? h("dl", { className: "ap-counter-sum", "aria-label": "Rincian", "aria-busy": doc.summary && !fresh && !(calc && calc.failed) ? "true" : "false" },
+      rows.length ? rows.map(function (r, i) {
+        var last = i === rows.length - 1;
+        return h("div", { key: r.name, className: last ? "ap-counter-sum-total" : undefined }, h("dt", null, L(r.label)), h("dd", null, last ? rp(r.value) : rp(r.value).replace(/^Rp\s?/, "")));
+      }) : h("div", { className: "ap-counter-sum-total" }, h("dt", null, isEstimate ? "Total (perkiraan)" : "Total"), h("dd", null, rp(total))),
+      fresh && fresh.errors.length ? h("p", { className: "ap-counter-sum-err" }, fresh.errors.filter(function (x) { return x.field !== doc.lines; }).map(function (x) { return x.message; }).join(" · ")) : null) : null;
 
     var tender = stuck ? h("div", { className: "ap-counter-pay", role: "alertdialog", "aria-label": "Belum terkirim" },
       h("div", { className: "ap-work-err" }, "Transaksi ini belum pasti terkirim (koneksi atau server). Keranjang dan pembayaran dikunci; kirim ulang apa adanya, tidak akan tercatat dua kali."),
       h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: resend }, "Kirim ulang")) : pay ? h("div", { className: "ap-counter-pay", role: "dialog", "aria-label": "Bayar" },
-      h("div", { className: "ap-counter-due" }, h("span", null, "Total"), h("b", null, rp(total))),
+      h("div", { className: "ap-counter-paytop" },
+        h(R.Button, { variant: "quiet", icon: "left", disabled: busy, onClick: function () { setPay(null); } }, "Kembali"),
+        h("div", { className: "ap-counter-due big" }, h("span", null, "Yang harus dibayar"), h("b", null, rp(total)))),
       (c.payments && (c.payments.methods || ["cash"]).indexOf("cash") >= 0) || !c.payments ? h("div", { className: "ap-counter-cash" },
         quickCash(Math.max(0, total - (pay.qris || 0))).map(function (a, i) {
           return h(R.Button, { key: a, variant: i === 0 ? "primary" : undefined, disabled: busy, onClick: function () { finish(a, pay.qris); } }, i === 0 ? "Uang pas" : rp(a));
         })) : null,
       c.payments && (c.payments.methods || []).indexOf("qris") >= 0 ? h("div", { className: "ap-counter-row" },
-        h(R.Button, { disabled: busy, onClick: function () { finish(0, total); } }, "QRIS penuh"),
+        h(R.Button, { icon: "qris", disabled: busy, onClick: function () { finish(0, total); } }, "QRIS penuh"),
         h("label", { className: "ap-counter-part" }, "QRIS sebagian",
           h("input", { inputMode: "numeric", value: pay.qris ? String(pay.qris) : "", placeholder: "0",
             onChange: function (e) { setPay({ cash: pay.cash, qris: Math.min(total, RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0) }); } }))) : null,
       h("label", { className: "ap-counter-part" }, "Tunai diterima",
         h("input", { inputMode: "numeric", "aria-label": "Tunai diterima", value: pay.cash ? String(pay.cash) : "",
           onChange: function (e) { setPay({ cash: RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0, qris: pay.qris }); } })),
-      h("div", { className: "ap-counter-due" }, h("span", null, "Kembalian"),
+      h(MoneyPad, { label: "Ketik uang diterima", value: pay.cash, disabled: busy, onChange: function (v) { setPay({ cash: v, qris: pay.qris }); } }),
+      h("div", { className: "ap-counter-due change" }, h("span", null, "Kembalian"),
         h("b", null, changeOf(total, pay.cash, pay.qris) === null ? "kurang " + rp(total - (pay.qris || 0) - pay.cash) : rp(changeOf(total, pay.cash, pay.qris)))),
-      h("div", { className: "ap-counter-row" },
-        h(R.Button, { disabled: busy, onClick: function () { setPay(null); } }, "Kembali"),
-        h(R.Button, { variant: "primary", loading: busy, disabled: busy, onClick: function () { finish(pay.cash, pay.qris); } }, "Selesai"))) : null;
+      h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: function () { finish(pay.cash, pay.qris); } }, "Selesai")) : null;
 
     var result = done && !cart.length && !pay ? h("div", { className: "ap-counter-done", role: "status" },
-      h("div", { className: "ap-counter-due" }, h("span", null, done.queued ? "Tersimpan di perangkat" : done.estimate ? "Kembalian (perkiraan)" : "Kembalian"), h("b", null, rp(done.change))),
+      h("span", { className: "ap-counter-tick" + (done.queued ? " queued" : ""), "aria-hidden": "true" }, h(R.Icon, { name: done.queued ? "time" : "check" })),
+      h("h3", null, done.queued ? "Tersimpan di perangkat" : done.approval ? "Menunggu persetujuan" : "Pembayaran berhasil"),
+      h("div", { className: "ap-counter-due" }, h("span", null, done.queued ? "Kembalian (perkiraan)" : done.estimate ? "Kembalian (perkiraan)" : "Kembalian"), h("b", null, rp(done.change))),
       h("p", null, done.queued ? "Akan dikirim saat koneksi kembali; struk bisa dicetak setelah terkirim." : (done.name || "") + " · " + rp(done.total) + (done.approval ? " · menunggu persetujuan" : "")),
-      c.print && done.name ? h(R.Button, { icon: "print", onClick: function () { printRecord(ctx.api, c.document.model, done.name, c.print); } }, "Cetak struk") : null) : null;
-
-    var side = h("section", { className: "ap-counter-cart", "aria-label": "Transaksi" },
-      c.customer ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
-        value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } }) : null,
-      cart.length ? lines : result || h("p", { className: "ap-work-loading" }, "Ketuk barang untuk menambah."),
-      err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
-      tender || (cart.length ? h("div", { className: "ap-counter-foot" },
-        h("div", { className: "ap-counter-due" }, h("span", null, cart.length + " baris"), h("b", null, rp(total))),
-        h("div", { className: "ap-counter-row" },
-          c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
-          h(R.Button, { variant: "primary", size: "lg", onClick: openPay }, "Bayar " + rp(total)))) : null));
-
-    var tools = h("div", { className: "ap-counter-tools" },
-      c.hold && held.length ? h(R.Button, { variant: "quiet", onClick: function () { setHeldOpen(!heldOpen); } }, "Ditahan (" + held.length + ")") : null,
-      ses && ses.close ? h(R.Button, { variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null);
+      h("div", { className: "ap-counter-row" },
+        c.print && done.name ? h(R.Button, { icon: "print", onClick: function () { printRecord(ctx.api, doc.model, done.name, c.print); } }, "Cetak struk") : null,
+        h(R.Button, { variant: "primary", onClick: newSale }, "Pesanan baru"))) : null;
 
     var heldList = heldOpen ? h("ul", { className: "ap-counter-held", "aria-label": "Bill ditahan" }, held.map(function (x) {
       return h("li", { key: x.id }, h("button", { type: "button", onClick: function () { resume(x); } },
         h("span", null, x.customer || "Tanpa nama"), h("small", null, (x.cart || []).length + " baris · " + rp(x.total))));
     })) : null;
 
-    return h("div", { className: "ap-counter" }, tools, heldList, catalogue, side);
+    var side = h("section", { className: "ap-counter-cart", "aria-label": "Transaksi" },
+      h("div", { className: "ap-counter-cart-h" },
+        h("b", null, "Pesanan"),
+        h("span", { className: "ap-counter-tools" },
+          c.hold && held.length ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setHeldOpen(!heldOpen); } }, "Ditahan (" + held.length + ")") : null,
+          ses && ses.close ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null,
+          h("button", { type: "button", className: "ap-counter-sheet-x", "aria-label": "Tutup pesanan", onClick: function () { setSheet(false); } }, h(R.Icon, { name: "close" })))),
+      heldList,
+      c.customer ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
+        value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } }) : null,
+      h("div", { className: "ap-counter-body" }, cart.length ? lines : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
+      err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
+      tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
+        h("div", { className: "ap-counter-row" },
+          c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
+          h(R.Button, { variant: "primary", size: "lg", loading: busy && !pay, onClick: openPay }, "Bayar " + rp(total)))) : null));
+
+    var bar = cart.length && !sheet ? h("div", { className: "ap-counter-bar" },
+      h("span", null, cartCount(cart) + " item", customer ? " · " + customer : ""), h("b", null, rp(total)),
+      h(R.Button, { variant: "primary", onClick: function () { setSheet(true); } }, "Lihat pesanan")) : null;
+
+    return h("div", { className: "ap-counter" + (sheet || pay || stuck || (done && !cart.length) ? " sheet" : "") }, offlineBar, catalogue, side, bar);
   }
   RA.workRenderers = RA.workRenderers || {};
   RA.workRenderers.counter = CounterScreen;

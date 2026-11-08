@@ -66,3 +66,24 @@ test("findByBarcode and catalogueMatch", () => {
   assert.deepStrictEqual(plain(A.catalogueMatch(items, "", "Makanan")).map((x) => x.item), ["b"]);
   assert.deepStrictEqual(plain(A.catalogueMatch(items, "roti bak", "")).map((x) => x.item), ["b"]);
 });
+
+test("summaryRows: the summary fields in order, labels from meta, fields the record lacks skipped (contract 0034)", () => {
+  const fields = [{ name: "subtotal", label: { id: "Subtotal" } }, { name: "grand_total", label: { id: "Total" } }];
+  const rows = plain(A.summaryRows(["subtotal", "tax", "grand_total"], fields, { subtotal: 30000, grand_total: "33000" }));
+  assert.deepStrictEqual(rows, [{ name: "subtotal", label: { id: "Subtotal" }, value: 30000 }, { name: "grand_total", label: { id: "Total" }, value: 33000 }]);
+  assert.deepStrictEqual(plain(A.summaryRows(["x"], [], null)), []);
+});
+
+test("padPress: digits and 000 append, leading zeros drop, ⌫ and C, at most 12 digits", () => {
+  assert.strictEqual(A.padPress("", "0"), "");
+  assert.strictEqual(A.padPress("5", "000"), "5000");
+  assert.strictEqual(A.padPress("5000", "⌫"), "500");
+  assert.strictEqual(A.padPress("Rp 5.000", "0"), "50000");
+  assert.strictEqual(A.padPress("123", "C"), "");
+  assert.strictEqual(A.padPress("999999999999", "9"), "999999999999");
+});
+
+test("denomTotal and cartCount", () => {
+  assert.strictEqual(A.denomTotal({ 100000: "3", 2000: 1, coins: "1500", 5000: "" }), 303500);
+  assert.strictEqual(A.cartCount([{ qty: 2 }, { qty: 1 }]), 3);
+});

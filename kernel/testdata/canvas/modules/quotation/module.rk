@@ -7,3 +7,4 @@ optional: {tax_id: ^1.0, currency: ^1.0}
 # Semantics fixed in docs/kernel-hooks.md. orders.from_quotation is declared here because the make_order action lives
 # on quotation; the hook is implemented with the orders module.
 hooks: [quotation.revise, quotation.mark_outcome, orders.from_quotation]
+summary: {id: Modul uji quotation.}

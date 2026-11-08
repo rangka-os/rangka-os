@@ -151,6 +151,14 @@
       "uniqueItems": true,
       "description": "Installed apps, in menu order. Must be allowed by the plan."
     },
+    "connectors": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "uniqueItems": true,
+      "description": "Connectors switched on before any flow uses them (contract 0036). Site-wide: not allowed under orgs.<id>.config."
+    },
     "org": {
       "type": "object",
       "description": "The legal entity printed on documents",

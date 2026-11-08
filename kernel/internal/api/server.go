@@ -182,7 +182,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/system/jobs", a(s.listJobs))
 	mux.HandleFunc("GET /api/v1/system/jobs/{id}", a(s.getJob))
 	mux.HandleFunc("GET /api/v1/system/audit", a(s.listAudit))
-	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)
+	mux.HandleFunc("GET /api/v1/catalogue", a(s.getCatalogue)) // modules, apps and connectors to install (contract 0036)
+	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan))           // plan limits and usage (contract 0028)
 	mux.HandleFunc("GET /api/v1/orgs", a(s.listOrgs))
 	mux.HandleFunc("GET /api/v1/orgs/{id}/members", a(s.listMembers))
 	mux.HandleFunc("GET /api/v1/files", a(s.listFiles))
@@ -213,11 +214,13 @@ func (s *Server) Handler() http.Handler {
 			}
 			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p)}, nil
 		},
-		Engine:  func() *engine.Engine { return s.Engine },
-		Changes: s.Changes,
-		Meta:    func(ctx context.Context, a engine.Actor) (any, error) { return s.Meta(ctx, a) },
-		File:    func(ctx context.Context, p string) (any, error) { return s.File(p) },
-		Status:  func(ctx context.Context, org string) any { return s.Status(ctx, org) },
+		Engine:    func() *engine.Engine { return s.Engine },
+		Changes:   s.Changes,
+		Meta:      func(ctx context.Context, a engine.Actor) (any, error) { return s.Meta(ctx, a) },
+		File:      func(ctx context.Context, p string) (any, error) { return s.File(p) },
+		Status:    func(ctx context.Context, org string) any { return s.Status(ctx, org) },
+		Catalogue: func() any { return s.Engine.Reg().Catalogue() },
+		Skills:    s.skillLibrary,
 	}
 	for _, m := range []string{"POST", "GET", "DELETE"} {
 		mux.Handle(m+" /mcp", mcpHandler)

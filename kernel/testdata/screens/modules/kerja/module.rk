@@ -3,3 +3,4 @@ name: kerja
 version: 1.0.0
 title: {id: Kerja harian}
 requires: {rangka: '>=0.5'}
+summary: {id: Modul uji kerja.}

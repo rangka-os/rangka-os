@@ -49,6 +49,7 @@
     if (parts[0] === "approvals" && parts.length === 1) return { kind: "approvals" };
     if (parts[0] === "proses" && parts.length === 1) return { kind: "processes" };
     if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
+    if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
     if (parts[0] === "w" && parts.length === 2) return { kind: "work", screen: parts[1] };
     return { kind: "notfound" };
@@ -244,6 +245,7 @@
     var more = [], imports = null;
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
     if (features.processes) more.push({ id: "proses", label: "Proses bisnis", icon: "time" });
+    if (features.catalogue) more.push({ id: "pengaturan/katalog", label: "Modul dan sambungan", icon: "apps" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
     if (imps.length > 1) {
@@ -350,6 +352,7 @@
       case "approvals": return "approvals";
       case "processes": case "process": return "proses";
       case "import": return "import/" + route.import;
+      case "catalogue": return "pengaturan/katalog";
       case "work": return home && home === "#/w/" + route.screen ? "home" : "w/" + route.screen;
       default: return null;
     }
@@ -529,7 +532,7 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", work: "WorkScreenView" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", work: "WorkScreenView" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
@@ -541,7 +544,7 @@
     if (route.kind === "import") return !!(meta.imports || {})[route.import];
     if (route.kind === "work") return !!(meta.screens || {})[route.screen];
     if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
-    return route.kind === "approvals";
+    return route.kind === "approvals" || route.kind === "catalogue"; // the catalogue page itself answers "no access"
   }
 
   function Page(p) {

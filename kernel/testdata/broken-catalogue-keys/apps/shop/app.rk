@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+name: shop
+version: 1.0.0
+title: {id: Toko}
+rangka: '>=0.5'
+modules: {contacts: ^1.0}
+menu:
+  - group: {id: Toko}
+    items: [customer]

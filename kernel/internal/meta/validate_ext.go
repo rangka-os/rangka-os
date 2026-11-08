@@ -140,6 +140,9 @@ func (v *validator) more() {
 		if got, ok := asMap(d.Data)["name"].(string); !ok || got != cn {
 			v.rep.extra("error", d.Path, "name", "name_mismatch", fmt.Sprintf(`connector name "%s" must match the directory name "%s"`, pyStr(asMap(d.Data)["name"]), cn))
 		}
+		if c := asMap(d.Data); !strings.HasPrefix(cn, "x_") && c != nil && !truthy(c["summary"]) {
+			v.rep.extra("warn", d.Path, "(root)", "catalogue_summary_missing", fmt.Sprintf(`connector "%s" has no summary: add one sentence in plain words for the catalogue (contract 0036)`, cn))
+		}
 	}
 	if v.reg.Site != nil {
 		v.site(all)
@@ -453,6 +456,13 @@ func (v *validator) site(all map[string]vis) {
 			installed = closure(valid)
 			installed[SiteUnit] = installed[SiteUnit] || isSite(apps[SiteUnit])
 		}
+		if conns := v.reg.Connectors; len(conns) > 0 {
+			for i, x := range asList(c["connectors"]) {
+				if cn, ok := x.(string); ok && conns[cn] == nil {
+					v.rep.extra("error", cfg.Path, fmt.Sprintf("connectors/%d", i), "unknown_connector", fmt.Sprintf(`"%s" is not a connector%s`, cn, suggest(cn, keys(conns))))
+				}
+			}
+		}
 		if th, _ := c["theme"].(string); th != "" && s.Themes[th] == nil && !templateExists("themes", th, tdir) {
 			v.rep.extra("error", cfg.Path, "theme", "unknown_theme", fmt.Sprintf(`theme "%s" has no file themes/%s.rk%s`, th, th, suggest(th, keysDoc(s.Themes))))
 		}
@@ -500,6 +510,9 @@ func (v *validator) site(all map[string]vis) {
 		for _, id := range sortedKeys(asMap(c["orgs"])) {
 			if _, nested := asMap(asMap(asMap(c["orgs"])[id])["config"])["orgs"]; nested {
 				v.rep.extra("error", cfg.Path, "orgs/"+id+"/config/orgs", "nested_orgs", fmt.Sprintf(`org "%s" config cannot contain orgs`, id))
+			}
+			if _, set := asMap(asMap(asMap(c["orgs"])[id])["config"])["connectors"]; set {
+				v.rep.extra("error", cfg.Path, "orgs/"+id+"/config/connectors", "org_config_key", fmt.Sprintf(`org "%s" config cannot set connectors: one site has one installed set (contract 0036)`, id))
 			}
 		}
 		type dppAt struct {

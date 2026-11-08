@@ -39,6 +39,60 @@ Today the CSS uses 489, 600, 640, 760, 860, 900 and 1100px. Each moves to the ne
 | Tap targets | 44px both ways | 44px with a touch pointer | dense |
 | POS counter | catalogue + order bar + order sheet + bottom tabs | portrait: rail + catalogue + order bar + sheet; landscape: rail + catalogue + 384px order panel | same as landscape |
 
+## Coverage (after fixes, 8 Nov 2026)
+
+Re-audited at 375 / 768 / 1440 in light and dark, with phone (`is_mobile`, touch) and tablet (touch) emulation:
+no sideways page scroll, nothing cut off at the right edge outside a scroll box, no tap target under 44px on phones
+or touch tablets. `web/audit_responsive.py` (against `make run-demo`) checks every screen below plus the Papan, Kelompok and Laporan views.
+
+### Web app (`web/app`)
+
+| Screen | Phone 375 | Tablet 768 | Desktop 1440 |
+| --- | --- | --- | --- |
+| Shell, top-nav (Kopi Senja) | ok: drawer | ok: icon rail, unfolds over the page | ok |
+| Shell, side-only | ok: drawer, 48px bar | ok: icon rail | ok |
+| Dashboards (crm_overview, sales_overview) | ok | ok | ok |
+| Lists × 8 models (Daftar) | ok: card list | ok: table, sticky checkbox + first column | ok |
+| Papan, Kelompok, Laporan views | ok | ok: report scrolls inside its box | ok |
+| New form × 8 | ok: one column | ok | ok |
+| Document view × 8 | ok | ok: header actions wrap, menu opens on-screen | ok |
+| Approvals, Proses, Ubah | ok | ok (Ubah keeps the full sidebar) | ok |
+| Dialogs (confirm, form) | ok: bottom sheet, stacked actions | ok | ok |
+| Command menu, chat drawer | ok: full screen | ok | ok |
+| Sign-in | ok | ok | ok |
+
+### Work screens and POS (`counter.js`), checked by `test_screens.py` `test_counter_fits_phone_and_tablet`
+
+| Screen | Phone 375 | Tablet portrait 834 | Tablet landscape 1194 | Desktop 1280 |
+| --- | --- | --- | --- | --- |
+| Work shell navigation | ok: bottom tabs with icons | ok: rail with icons, two-line labels | ok: rail | ok: rail |
+| Counter: open session, catalogue, order, pay | ok: order bar + sheet | ok: order bar + sheet beside the rail | ok: 380px order panel | ok |
+
+### Console (`web/console`, 29 screens in `test_console.py`)
+
+| Screen | Phone 375 | Tablet 768 | Desktop 1440 |
+| --- | --- | --- | --- |
+| Shell | ok: drawer | ok: icon rail, unfolds over the page | ok |
+| All screens | ok | ok | ok |
+| Model detail tables | ok | ok: scroll inside their box, sticky first columns | ok |
+| Change set detail | ok: lifecycle steps wrap in rows of three | ok | ok |
+
+### Tests
+
+- `web/design-system/test_gallery.py`: 44px controls at 400px.
+- `web/app/test_screens.py`: new `test_counter_fits_phone_and_tablet` (375, 834, 1194, 1280).
+- `web/app/test_app.py`: below 1280px the suite runs with a touch screen and checks 44px targets; `--width 768`
+  now passes (rail in `test_sidebar_collapse`, Ubah toggle from the rail, exact "Masuk" button).
+- `web/console/test_console.py`: every screen at 1440, 768 (touch) and 390 in light and dark, 44px targets below
+  1280, and a tablet rail scenario.
+
+### Left open
+
+- `test_app.py --width 400`: `test_list_search_filter_page` and `test_ubah_add_table_medium_with_dry_run` fail the
+  same way on main (`c87f46f`): the first reads table rows where phones show cards, the second clicks under the open
+  navigation drawer. Test fixes, not layout bugs.
+- Responsive behaviour is not yet declarable in `layout.rk` (step 4 of the order below): needs a contract.
+
 ## Coverage (before fixes)
 
 `ok` = right layout and tap targets · `touch` = layout fine, controls under 44px · `gap` = layout differs from the

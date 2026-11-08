@@ -243,7 +243,7 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 				v.rep.extra("error", p, w+"/call", "unknown_action", fmt.Sprintf(`connector %s has no action "%s"`, cn, act))
 			}
 		}
-		for _, k := range []string{"where", "if"} {
+		for _, k := range []string{"where", "if", "for_each"} {
 			v.parens(p, w+"/"+k, st[k])
 		}
 		if ap, ok := st["approve"].(map[string]any); ok {
@@ -254,7 +254,7 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 				v.parens(p, w+"/set/"+fk, set[fk])
 			}
 		}
-		for _, k := range []string{"then", "else"} {
+		for _, k := range []string{"then", "else", "do"} {
 			v.steps(p, w+"/"+k, st[k], all)
 		}
 	}

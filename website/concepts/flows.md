@@ -34,6 +34,7 @@ idempotency: event.message_id
 | `notify` | Send through a `system.rk` notify channel (logged only in v0) |
 | `call` | Call a connector action (recorded in the audit log in v0) |
 | `if` / `then` / `else` | Branch; every step may also carry an `if:` guard |
+| `for_each` / `as` / `do` | Run the steps under `do` once per item of a list (a `find_all` variable), at most 2000 items, no `wait` or `approve` inside ([contract 0031](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0031-recurring-documents.md)) |
 | `wait` | Wait for a duration or an event |
 
 `on:` takes a connector trigger (`whatsapp_business.message_received`) or a model event (`deal.updated`);

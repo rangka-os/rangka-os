@@ -493,3 +493,55 @@ func TestListSearchHidesUnreadableLinkTitles(t *testing.T) {
 		t.Fatalf("rep with customer read: found %d invoices (%v), want some", n, err)
 	}
 }
+
+// TestFlowForEach: for_each runs its steps once per item (update the item variable, a nested if), restores nothing
+// it did not have, and is bounded.
+func TestFlowForEach(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	res, err := e.RunFlow(ctx, permManager, "bump_vouchers", nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(res.Updated) != 2 || len(res.Created) != 1 {
+		t.Fatalf("updated %v created %v, want 2 updated and 1 created", res.Updated, res.Created)
+	}
+	for name, want := range map[string]int64{"V1": 100001, "V2": 20001} {
+		v, err := e.Get(ctx, permOwner, "voucher", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v["amount"] != want {
+			t.Fatalf("%s amount = %v, want %d", name, v["amount"], want)
+		}
+	}
+	made, err := e.Get(ctx, permOwner, "voucher", res.Created[0][len("voucher/"):])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if made["title"] != "Bulan depan V1 2026-02-28" || made["amount"] != int64(30) {
+		t.Fatalf("made = %v / %v", made["title"], made["amount"])
+	}
+	if !strings.Contains(strings.Join(res.Steps, ";"), "2: for_each → 2") || !strings.Contains(strings.Join(res.Steps, ";"), "2.1.2: create voucher") {
+		t.Fatalf("steps = %v", res.Steps)
+	}
+}
+
+// TestFlowForEachBounded: a list longer than the bound fails the whole run, nothing written.
+func TestFlowForEachBounded(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	old := maxForEach
+	maxForEach = 1
+	defer func() { maxForEach = old }()
+	if _, err := e.RunFlow(ctx, permManager, "bump_vouchers", nil); err == nil || !strings.Contains(err.Error(), "at most 1 per run") {
+		t.Fatalf("err = %v, want the bound", err)
+	}
+	v, err := e.Get(ctx, permOwner, "voucher", "V1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v["amount"] != int64(100000) {
+		t.Fatalf("V1 amount = %v after a refused run", v["amount"])
+	}
+}

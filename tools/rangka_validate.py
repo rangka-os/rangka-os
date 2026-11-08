@@ -30,7 +30,7 @@ SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
 BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 LEGACY = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
-FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
+FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
 # documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)
@@ -937,14 +937,14 @@ def check_steps(rep, p, at, steps, allmodels, conns):
                 rep.add("error", p, f"{w}/call", "unknown_connector", f'"{cn}" is not a connector{suggest(cn, conns)}')
             elif act not in [x.get("name") for x in conns[cn][1].get("actions", [])]:
                 rep.add("error", p, f"{w}/call", "unknown_action", f'connector {cn} has no action "{act}"')
-        for k in ("where", "if"):
+        for k in ("where", "if", "for_each"):
             parens(rep, p, f"{w}/{k}", st.get(k))
         if isinstance(st.get("approve"), dict):
             parens(rep, p, f"{w}/approve/when", st["approve"].get("when"))
         if isinstance(st.get("set"), dict):
             for fk in sorted(st["set"]):
                 parens(rep, p, f"{w}/set/{fk}", st["set"][fk])
-        for k in ("then", "else"):
+        for k in ("then", "else", "do"):
             check_steps(rep, p, f"{w}/{k}", st.get(k), allmodels, conns)
 
 

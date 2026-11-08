@@ -934,6 +934,43 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			}
 		}
 		return nil, errf("duration() needs a number of days or text like '7d'")
+	case "add_months":
+		// add_months(date, n): the date n calendar months later (n may be negative); a day past the end of the
+		// target month becomes its last day (2026-01-31 + 1 = 2026-02-28), as Xendit's recurring anchor does. To
+		// keep a billing anchor, always add to the anchor (add_months(start, k)), never to the previous result.
+		if err := need(2); err != nil {
+			return nil, err
+		}
+		if Unwrap(args[0]) == nil || Unwrap(args[0]) == "" {
+			return "", nil
+		}
+		d, err := celDate(args[0])
+		if err != nil {
+			return nil, err
+		}
+		n, ok := toInt(Unwrap(args[1]))
+		if !ok {
+			return nil, errf("add_months() needs a whole number of months, got %s", typeName(args[1]))
+		}
+		return AddMonths(d, int(n)).Format("2006-01-02"), nil
+	case "days_between":
+		// days_between(a, b): whole calendar days from date a to date b (negative when b is earlier); 0 when either
+		// is empty.
+		if err := need(2); err != nil {
+			return nil, err
+		}
+		if Unwrap(args[0]) == nil || Unwrap(args[0]) == "" || Unwrap(args[1]) == nil || Unwrap(args[1]) == "" {
+			return int64(0), nil
+		}
+		a, err := celDate(args[0])
+		if err != nil {
+			return nil, err
+		}
+		b, err := celDate(args[1])
+		if err != nil {
+			return nil, err
+		}
+		return int64(b.Sub(a).Hours() / 24), nil
 	case "round":
 		if len(args) < 1 || len(args) > 2 {
 			return nil, errf("round() takes 1 or 2 arguments, got %d", len(args))
@@ -1249,4 +1286,31 @@ func Truthy(v any) bool {
 		return f != 0
 	}
 	return true
+}
+
+// celDate reads a date (YYYY-MM-DD, or the date part of an RFC 3339 time) as midnight UTC.
+func celDate(v any) (time.Time, error) {
+	s, ok := Unwrap(v).(string)
+	if !ok {
+		return time.Time{}, errf("needs a date like '2026-11-08', got %s", typeName(v))
+	}
+	if len(s) > 10 {
+		s = s[:10]
+	}
+	d, err := time.Parse("2006-01-02", s)
+	if err != nil {
+		return time.Time{}, errf("needs a date like '2026-11-08', got '%s'", s)
+	}
+	return d, nil
+}
+
+// AddMonths is d plus n calendar months, the day clamped to the last day of the target month.
+func AddMonths(d time.Time, n int) time.Time {
+	y, m, day := d.Date()
+	first := time.Date(y, m, 1, 0, 0, 0, 0, time.UTC).AddDate(0, n, 0)
+	last := first.AddDate(0, 1, -1).Day()
+	if day > last {
+		day = last
+	}
+	return time.Date(first.Year(), first.Month(), day, 0, 0, 0, 0, time.UTC)
 }

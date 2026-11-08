@@ -88,10 +88,10 @@ or touch tablets. `web/audit_responsive.py` (against `make run-demo`) checks eve
 
 ### Left open
 
-- `test_app.py --width 400`: `test_list_search_filter_page` and `test_ubah_add_table_medium_with_dry_run` fail the
+- `test_app.py --width 400`: `test_list_search_filter_page` and `test_ubah_add_table_medium_with_dry_run` failed the
   same way on main (`c87f46f`): the first reads table rows where phones show cards, the second clicks under the open
-  navigation drawer. Test fixes, not layout bugs.
-- Responsive behaviour is not yet declarable in `layout.rk` (step 4 of the order below): needs a contract.
+  navigation drawer. Fixed in the tests (8 Nov 2026): table_rows reads phone cards, close_nav before the banner.
+- Responsive behaviour is not yet declarable in `layout.rk`: proposed in contract 0038. Menu sub-levels: contract 0037.
 
 ## Coverage (before fixes)
 

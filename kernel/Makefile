@@ -96,7 +96,8 @@ run-demo: build
 # Copy rangka-os/schema/0.5 (and 0.4 app.json, for legacy app.rk files) into the binary's embedded copy
 # (a test fails when they differ).
 sync-schemas:
-	cp ../schema/0.5/*.json internal/schema/0.5/ && cp ../schema/0.4/app.json internal/schema/0.4/ && cp ../web/design-system/tokens.json internal/theme/tokens.json
+	cp ../schema/0.5/*.json internal/schema/0.5/ && cp ../schema/0.4/app.json internal/schema/0.4/ && cp ../web/design-system/tokens.json internal/theme/tokens.json && \
+	rm -rf internal/skills/platform && mkdir -p internal/skills/platform && cp -R ../skills/. internal/skills/platform/
 
 # Recompute the prototype's dashboard numbers used by the dashboard tests (needs node).
 proto-expected:

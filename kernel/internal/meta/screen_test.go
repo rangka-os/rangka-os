@@ -26,7 +26,7 @@ func TestLoadScreensAndWork(t *testing.T) {
 		}
 		got = append(got, x+"/"+w.App)
 	}
-	if want := "isi_jam*@staf/kantor catat/kantor antrian@staf/kantor jual*@kasir/kantor"; join(got) != want {
+	if want := "isi_jam*@staf/kantor catat/kantor antrian@staf/kantor jual*@kasir/kantor dapur*@dapur/kantor jual_online@kasir/kantor"; join(got) != want {
 		t.Fatalf("work = %q, want %q", join(got), want)
 	}
 }

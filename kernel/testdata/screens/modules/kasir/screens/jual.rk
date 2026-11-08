@@ -22,7 +22,7 @@ counter:
     line: {item: menu, qty: qty, price: rate, note: note}
     total: grand_total
     change: change_amount
-    set: {date: "today()"}
+    set: {date: "today()", sold_at: "now()"}
   payments: {table: payments, method: method, amount: amount, methods: [cash, qris]}
   session:
     model: sesi_kasir

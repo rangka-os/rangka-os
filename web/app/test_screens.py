@@ -223,7 +223,7 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
 
 def test_counter_lost_answer_then_press_again_is_one_sale(browser, ctx):
     # jual_online has no offline queue: the submit answer is lost after the server wrote, set: sold_at = now() changes,
-    # and the cashier presses Selesai again: the same job and keys go again, one cart is one sale (audit WS3 R2-1)
+    # and the cashier presses Kirim ulang: the same job and keys go again, one cart is one sale (audit WS3 R2-1, R3-1)
     o, _ = page_for(browser, ctx, OWNER, DESK)
     if not o.request.get("/api/v1/r/menu?limit=1").json()["data"]:
         o.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Es teh", "category": "Minuman", "price": 8000}), headers={"Content-Type": "application/json"})
@@ -250,8 +250,13 @@ def test_counter_lost_answer_then_press_again_is_one_sale(browser, ctx):
     p.get_by_role("button", name="Uang pas").click()
     p.wait_for_selector(".ap-counter-cart .ap-work-err")
     assert "tidak akan tercatat dua kali" in p.locator(".ap-counter-cart .ap-work-err").inner_text()
+    # locked: no tender to change, a tapped item does not change the cart (audit WS3 R3-1)
+    assert p.get_by_role("button", name="Selesai").count() == 0 and p.get_by_role("button", name="Uang pas").count() == 0
+    lines = p.locator(".ap-counter-lines").inner_text()
+    p.locator(".ap-counter-item").nth(1).click() if p.locator(".ap-counter-item").count() > 1 else p.locator(".ap-counter-item").first.click()
+    assert p.locator(".ap-counter-lines").inner_text() == lines
     time.sleep(1.2)  # now() moves on
-    p.get_by_role("button", name="Selesai").click()
+    p.get_by_role("button", name="Kirim ulang").click()
     p.wait_for_selector(".ap-counter-done")
     sales = c.request.get("/api/v1/r/penjualan?limit=5&sort=-created_at").json()["data"]
     assert total(c, "penjualan") == before + 1 and sales[0]["docstatus"] == 1, sales

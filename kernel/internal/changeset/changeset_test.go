@@ -69,6 +69,7 @@ func TestAssess(t *testing.T) {
 	}{
 		{"edit an app model", []Op{{Op: "patch", Path: "apps/crm/models/deal.rk"}}, with("apps/crm/models/deal.rk", deal), "high", 5},
 		{"new dashboard", []Op{{Op: "create", Path: "apps/crm/dashboards/x.rk"}}, with("apps/crm/dashboards/x.rk", map[string]any{"name": "x"}), "low", 5},
+		{"new work screen", []Op{{Op: "create", Path: "modules/crm/screens/isi.rk"}}, with("modules/crm/screens/isi.rk", map[string]any{"name": "isi"}), "low", 5},
 		{"edit a dashboard file", []Op{{Op: "patch", Path: "apps/crm/dashboards/old.rk"}}, before, "high", 5},
 		{"new model", []Op{{Op: "create", Path: "apps/crm/models/visit.rk"}}, with("apps/crm/models/visit.rk", map[string]any{"name": "visit"}), "medium", 5},
 		{"new model with money", []Op{{Op: "create", Path: "apps/crm/models/visit.rk"}}, with("apps/crm/models/visit.rk", map[string]any{"name": "visit", "fields": []any{map[string]any{"name": "fee", "type": "currency"}}}), "high", 5},

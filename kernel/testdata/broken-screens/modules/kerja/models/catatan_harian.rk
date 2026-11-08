@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: catatan_harian
+label: {id: Catatan harian}
+naming: CAT-{#####}
+fields:
+  - {name: text, type: text, label: {id: Catatan}, required: true}
+permissions:
+  - {role: staf, read: true, create: true}

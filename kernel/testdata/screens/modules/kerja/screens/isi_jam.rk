@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: isi_jam
+type: entry
+label: {id: Isi jam kerja}
+icon: time
+roles: [staf, mandor]
+device: phone
+offline: queue
+if: "user.roles.size() > 0"
+entry:
+  model: jam_kerja
+  fields: [date, hours, note]
+  set: {staff: "user.name"}
+  submit: true

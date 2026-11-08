@@ -7,7 +7,7 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET | `/meta` | Apps, models (with `app`, merged overlays and `can`), dashboards, flows, roles, connectors, theme tokens (light + dark), layout, `site` (config, features, redacted system), `installed`, `user`, `today` |
+| GET | `/meta` | Apps, models (with `app`, merged overlays and `can`), dashboards, flows, roles, `screens` and `work` (the work screens the caller may open, in order, `home` marking theirs; contract 0030), connectors, theme tokens (light + dark), layout, `site` (config, features, redacted system), `installed`, `user`, `today` |
 | GET | `/r/{model}` | `?filter=<CEL>&sort=-field&limit=50&offset=0&q=text` → `{data, total}` |
 | GET | `/aggregate/{model}` | `?filter=<CEL>&q=text&group=<field>&fn=count,sum:<field>` → `{count, values, groups, other?}` over the same rows as the list, no paging ([below](#list-aggregates)) |
 | POST | `/r/{model}` | Create → 201. Defaults and computed fields applied, save rules run |
@@ -16,6 +16,7 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | POST | `/r/{model}/{name}/actions/{action}` | Runs the hook; 202 `{job_id}` when the action has `queue:` |
 | GET | `/r/{model}/{name}/print` | `?format=<print>&as=html\|pdf`: the record as a document ([Print formats](/guide/print-formats)); 501 `pdf_unavailable` without Chromium |
 | GET | `/dashboards/{name}?period=30` | Every widget computed; `X-Cache: hit\|miss` when cached |
+| GET | `/screens/{name}` | A work screen the caller may open: `{name, screen, set}`, `set` = the screen's `set:` evaluated for the caller now; 404 otherwise ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md)) |
 | POST | `/flows/{name}/run` | Run a flow now with `{event: {…}}` |
 
 ## List aggregates

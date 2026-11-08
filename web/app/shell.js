@@ -50,12 +50,15 @@
     if (parts[0] === "proses" && parts.length === 1) return { kind: "processes" };
     if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
+    if (parts[0] === "w" && parts.length === 2) return { kind: "work", screen: parts[1] };
     return { kind: "notfound" };
   }
 
-  /** Home: the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list. */
+  /** Home: the first work screen marked home for the user (contract 0030 §3: meta.work is already theirs, in order),
+   *  else the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list. */
   function homeHash(meta) {
-    var apps = (meta && meta.apps) || [], i, j;
+    var apps = (meta && meta.apps) || [], work = (meta && meta.work) || [], screens = (meta && meta.screens) || {}, i, j;
+    for (i = 0; i < work.length; i++) if (work[i].home && screens[work[i].screen]) return "#/w/" + work[i].screen;
     for (i = 0; i < apps.length; i++) if ((apps[i].dashboards || []).length) return "#/d/" + apps[i].dashboards[0];
     for (i = 0; i < apps.length; i++) {
       var menu = apps[i].menu || [];
@@ -125,6 +128,36 @@
     return groups;
   }
 
+  /** The user's work screens (meta.work order) as sidebar entries: the "Kerja" group (contract 0030 §3). */
+  function workItems(meta) {
+    var screens = (meta && meta.screens) || {};
+    return ((meta && meta.work) || []).filter(function (w) { return screens[w.screen]; }).map(function (w) {
+      var s = screens[w.screen];
+      return { id: "w/" + w.screen, label: L(s.label) || w.screen, icon: s.icon || "edit" };
+    });
+  }
+  function withWork(meta, groups) {
+    var items = workItems(meta);
+    return items.length ? [{ label: "Kerja", items: items }].concat(groups) : groups;
+  }
+
+  /** The work shell (contract 0030 §3): no sidebar, the home screen full screen and a bottom bar. For a user whose
+   *  every role is a staff role (role desk: false) and who has a home screen; never for the owner. */
+  function workShell(meta) {
+    var roles = (meta && meta.user && meta.user.roles) || [], defs = (meta && meta.roles) || {};
+    if (!roles.length || roles.indexOf("owner") >= 0) return false;
+    if (!roles.every(function (r) { return defs[r] && defs[r].desk === false; })) return false;
+    var home = homeHash(meta);
+    return !!home && home.indexOf("#/w/") === 0;
+  }
+
+  /** The work shell's bottom bar: up to 5 screens, then Lainnya (lists the user may read, approvals) when there is any. */
+  function workBar(meta, features, counts) {
+    var items = workItems(meta).slice(0, 5), more = [];
+    navGroups(Object.assign({}, meta, { work: [] }), features, counts).forEach(function (g) { more = more.concat(g.items); });
+    return { items: items, more: more };
+  }
+
   /** The entries the kernel's features add: Persetujuan (counts.approvals as a badge), Proses bisnis, and Impor data
    *  (one entry for a single import, else a group of the imports by label). */
   function featureNav(meta, features, counts) {
@@ -146,7 +179,7 @@
    *  feature entries; counts.approvals (requests the user may decide) shows as a badge on Persetujuan. */
   function navGroups(meta, features, counts) {
     meta = meta || {};
-    var groups = navFromLayout(meta) || appGroups(meta), f = featureNav(meta, features || {}, counts || {});
+    var groups = withWork(meta, navFromLayout(meta) || appGroups(meta)), f = featureNav(meta, features || {}, counts || {});
     // riset desain K-A1: Persetujuan is what the owner decides, so it sits in the first group, not under Lainnya
     var approvals = f.more.filter(function (x) { return x.id === "approvals"; }), rest = f.more.filter(function (x) { return x.id !== "approvals"; });
     if (approvals.length) {
@@ -161,7 +194,7 @@
   /** The side-only sidebar: Beranda and the feature entries pinned on top, the layout's or the apps' groups below. */
   function sideNav(meta, features, counts) {
     meta = meta || {};
-    var groups = navFromLayout(meta) || appGroups(meta), f = featureNav(meta, features || {}, counts || {});
+    var groups = withWork(meta, navFromLayout(meta) || appGroups(meta)), f = featureNav(meta, features || {}, counts || {});
     if (f.imports) groups.push(f.imports);
     return { pinned: [{ id: "home", label: "Beranda", icon: "home" }].concat(f.more), groups: groups };
   }
@@ -237,6 +270,7 @@
       case "approvals": return "approvals";
       case "processes": case "process": return "proses";
       case "import": return "import/" + route.import;
+      case "work": return home && home === "#/w/" + route.screen ? "home" : "w/" + route.screen;
       default: return null;
     }
   }
@@ -250,6 +284,9 @@
   RA.orgByLabel = orgByLabel;
   RA.parseRoute = parseRoute;
   RA.homeHash = homeHash;
+  RA.workItems = workItems;
+  RA.workShell = workShell;
+  RA.workBar = workBar;
   RA.navGroups = navGroups;
   RA.sideNav = sideNav;
   RA.shellKind = shellKind;
@@ -397,7 +434,7 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", work: "WorkScreenView" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
@@ -407,6 +444,7 @@
     if (route.kind === "list" || route.kind === "form") return !!(meta.models || {})[route.model];
     if (route.kind === "dash") return !!(meta.dashboards || {})[route.dash];
     if (route.kind === "import") return !!(meta.imports || {})[route.import];
+    if (route.kind === "work") return !!(meta.screens || {})[route.screen];
     if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
     return route.kind === "approvals";
   }
@@ -926,6 +964,38 @@
       h("button", { type: "button", onClick: openCmd }, h(R.Icon, { name: "search" }), h("span", null, "Cari")),
       h("button", { type: "button", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }, h(R.Icon, { name: "menu" }), h("span", null, "Menu"))) : null;
 
+    var toaster = h(R.Toaster, { float: true }, toasts.map(function (t) {
+      return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, action: t.action, onAction: t.onAction ? function () { dropToast(t.id); t.onAction(); } : undefined,
+        onClose: function () { dropToast(t.id); } }, t.body);
+    }));
+
+    // contract 0030 §3: staff whose roles are all desk: false work in the work shell, no sidebar
+    if (workShell(meta) && !ubahOn && !previewCs) {
+      var wb = workBar(meta, features, { approvals: approvalCount }), here = navId(route);
+      var moreHere = wb.more.some(function (it) { return it.id === here; });
+      var work = h("div", { className: "rk-shell ap-shell ap-workshell" },
+        h("header", { className: "ap-whead" },
+          h("b", { className: "ap-whead-t" }, companyName),
+          h(R.IconButton, { icon: "user", label: "Akun", onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: Math.max(8, r.right - 260), bottom: r.bottom }); } })),
+        h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: false })),
+        navOpen ? h("div", { className: "ap-wmore", role: "dialog", "aria-label": "Lainnya" },
+          h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }),
+          h("ul", null, wb.more.map(function (it) {
+            return h("li", { key: it.id }, h("a", { href: "#/" + it.id, "aria-current": it.id === here ? "page" : undefined, onClick: function () { setNavOpen(false); } },
+              h(R.Icon, { name: it.icon || "invoice" }), h("span", null, it.label), it.count ? h("i", { className: "ap-tabbar-n" }, it.count) : null));
+          }))) : null,
+        h("nav", { className: "ap-workbar", "aria-label": "Layar kerja", style: { gridTemplateColumns: "repeat(" + (wb.items.length + (wb.more.length ? 1 : 0)) + ", 1fr)" } },
+          wb.items.map(function (it) {
+            return h("a", { key: it.id, href: "#/" + it.id, "aria-current": it.id === here ? "page" : undefined }, h(R.Icon, { name: it.icon }), h("span", null, it.label));
+          }),
+          wb.more.length ? h("button", { type: "button", "aria-expanded": navOpen, "aria-current": moreHere ? "page" : undefined, onClick: function () { setNavOpen(!navOpen); } },
+            h(R.Icon, { name: "menu" }), h("span", null, "Lainnya"), approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null) : null),
+        switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems().slice(installed.length ? installed.length + 2 : 0), onClose: function () { setSwitchAt(null); } }) : null,
+        expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
+        toaster);
+      return h(RA.Ctx.Provider, { value: ctx }, work);
+    }
+
     var shell = h("div", { className: cx("rk-shell ap-shell", kind === "top-nav" ? "top ap-top" : "ap-side", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on") },
         top, side,
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
@@ -941,10 +1011,7 @@
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
-        h(R.Toaster, { float: true }, toasts.map(function (t) {
-          return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, action: t.action, onAction: t.onAction ? function () { dropToast(t.id); t.onAction(); } : undefined,
-            onClose: function () { dropToast(t.id); } }, t.body);
-        })));
+        toaster);
     var inner = RA.UbahCtx ? h(RA.UbahCtx.Provider, { value: uctx }, shell) : shell;
     return h(RA.Ctx.Provider, { value: ctx }, inner);
   }

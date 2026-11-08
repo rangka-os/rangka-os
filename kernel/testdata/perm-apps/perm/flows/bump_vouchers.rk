@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: bump_vouchers
+label: {id: Naikkan voucher}
+# for_each: one update per voucher found, a nested if per item, and a voucher created per item with a date from add_months.
+steps:
+  - {find_all: voucher, where: docstatus == 0, sort: name, as: found}
+  - for_each: found
+    as: v
+    do:
+      - update: v
+        set:
+          amount: v.amount + 1
+      - if: v.amount > 50000
+        create: voucher
+        set:
+          title: "'Bulan depan ' + v.name + ' ' + add_months('2026-01-31', 1)"
+          owner: v.owner
+          amount: days_between('2026-11-01', '2026-12-01')

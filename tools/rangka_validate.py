@@ -30,7 +30,7 @@ SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
 BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 LEGACY = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
-FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
+FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
 # documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)
@@ -939,15 +939,31 @@ def check_steps(rep, p, at, steps, allmodels, conns):
                 rep.add("error", p, f"{w}/call", "unknown_connector", f'"{cn}" is not a connector{suggest(cn, conns)}')
             elif act not in [x.get("name") for x in conns[cn][1].get("actions", [])]:
                 rep.add("error", p, f"{w}/call", "unknown_action", f'connector {cn} has no action "{act}"')
-        for k in ("where", "if"):
+        for k in ("where", "if", "for_each"):
             parens(rep, p, f"{w}/{k}", st.get(k))
         if isinstance(st.get("approve"), dict):
             parens(rep, p, f"{w}/approve/when", st["approve"].get("when"))
         if isinstance(st.get("set"), dict):
             for fk in sorted(st["set"]):
                 parens(rep, p, f"{w}/set/{fk}", st["set"][fk])
-        for k in ("then", "else"):
+        for k in ("then", "else", "do"):
             check_steps(rep, p, f"{w}/{k}", st.get(k), allmodels, conns)
+        if isinstance(st.get("do"), list):
+            no_pause(rep, p, f"{w}/do", st["do"])
+
+
+def no_pause(rep, p, at, steps):
+    """wait and approve anywhere under a for_each's do: (contract 0031): the loop runs in one transaction."""
+    for i, st in enumerate(steps):
+        if not isinstance(st, dict):
+            continue
+        w = f"{at}/{i}"
+        for k in ("wait", "approve"):
+            if k in st:
+                rep.add("error", p, w, "for_each_pause", f"{k} is not allowed inside for_each (the loop runs in one transaction)")
+        for k in ("then", "else", "do"):
+            if isinstance(st.get(k), list):
+                no_pause(rep, p, f"{w}/{k}", st[k])
 
 
 def plan_info(features, plan):
@@ -1756,7 +1772,13 @@ def slot_set(rep, p, where, mn, fields, x):
 
 
 def option_values(f):
-    return {str(o.get("value")) if not isinstance(o.get("value"), str) else o.get("value") for o in (f.get("options") or []) if isinstance(o, dict)}
+    opts = f.get("options") if isinstance(f.get("options"), list) else []
+    return {pystr_opt(o.get("value") if isinstance(o, dict) else None) for o in opts}
+
+
+def pystr_opt(v):
+    """An option value as the Go validator prints it (pyStr): a string as is, anything else as Python repr."""
+    return v if isinstance(v, str) else repr(v)
 
 
 def check_screen_counter(rep, p, b, visible, prints):
@@ -1787,6 +1809,8 @@ def check_screen_counter(rep, p, b, visible, prints):
             slot_field(rep, p, "counter/document/line/qty", ln, lf, line.get("qty"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/document/line/price", ln, lf, line.get("price"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/document/line/note", ln, lf, line.get("note"))
+        slot_field(rep, p, "counter/document/total", dn, df, doc.get("total"), NUMERIC_KINDS)
+        slot_field(rep, p, "counter/document/change", dn, df, doc.get("change"), NUMERIC_KINDS)
         slot_set(rep, p, "counter/document/set", dn, df, doc.get("set"))
         if isinstance(b.get("customer"), dict):
             slot_field(rep, p, "counter/customer/field", dn, df, b["customer"].get("field"))

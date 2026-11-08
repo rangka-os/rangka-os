@@ -240,6 +240,14 @@
             },
             "set": {
               "$ref": "#/$defs/set"
+            },
+            "total": {
+              "$ref": "model.json#/$defs/name",
+              "description": "The document's total field (a number); the receipt panel shows the server's value"
+            },
+            "change": {
+              "$ref": "model.json#/$defs/name",
+              "description": "The document's change field (a number); the receipt panel shows the server's value"
             }
           }
         },

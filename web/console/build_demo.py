@@ -282,6 +282,7 @@ def installed_connectors():
                     used.add(s["call"].split(".")[0])
                 walk(s.get("then"))
                 walk(s.get("else"))
+                walk(s.get("do"))
     for f in flows.values():
         head = str(f.get("on", "")).split(".")[0]
         if f.get("on") and head not in models:

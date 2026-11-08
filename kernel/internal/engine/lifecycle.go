@@ -616,6 +616,11 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if err := o.voidApprovals(m.Name, name, ""); err != nil {
 			return err
 		}
+		// flows on <model>.deleted run in the delete's transaction (contract 0031): one that refuses (a guard record
+		// whose rule fails) rolls the delete back; the event is the record as it was
+		if _, err := o.recordFlows(m, cur, cur, "deleted"); err != nil {
+			return err
+		}
 		return o.event(m, cur, "deleted")
 	})
 }

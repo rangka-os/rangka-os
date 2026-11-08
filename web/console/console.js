@@ -976,11 +976,11 @@
     try { localStorage.removeItem("rk-console-theme"); var t = localStorage.getItem(THEME_KEY); return t === "dark" || t === "system" ? t : "light"; } catch (e) { return "light"; }
   }
   function pickTheme(setTheme, t) { setTheme(t); try { localStorage.setItem(THEME_KEY, t); } catch (e) {} }
-  var COLLAPSE_KEY = "rk.console.sidebar.collapsed", PHONE = "(max-width: 600px)";
+  var COLLAPSE_KEY = "rk.console.sidebar.collapsed", PHONE = "(max-width: 767px)"; // tokens.json breakpoint
   function readCollapsed() { try { return localStorage.getItem(COLLAPSE_KEY) === "1"; } catch (e) { return false; } }
   function writeCollapsed(on) { try { localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (e) {} }
   function isPhone() { return !!(window.matchMedia && window.matchMedia(PHONE).matches); }
-  /** Below 600px the sidebar is a drawer behind the 48px bar: no collapse there. */
+  /** Below 768px the sidebar is a drawer behind the 48px bar: no collapse there. */
   function usePhone() {
     var ps = useState(isPhone()), phone = ps[0], setPhone = ps[1];
     useEffect(function () {
@@ -1018,6 +1018,9 @@
     var tt = useState([]), toasts = tt[0], setToasts = tt[1], lv = useState([]), live = lv[0], setLive = lv[1], po = useState(false), propose = po[0], setPropose = po[1];
     var cls = useState(readCollapsed()), collapsed = cls[0], setCollapsed = cls[1], sms = useState(null), switchAt = sms[0], setSwitchAt = sms[1]; // the switcher's rect while its menu is open
     var phone = usePhone();
+    // tablet portrait (768-1023): the sidebar is the icon rail; unfolding it floats the full sidebar over the page
+    var rail = (R.useBreakpoint ? R.useBreakpoint() : "desktop") === "tablet-portrait";
+    var ros = useState(false), railOpen = ros[0], setRailOpen = ros[1];
     var mq = useState(window.matchMedia ? window.matchMedia("(prefers-color-scheme: dark)").matches : false), sysDark = mq[0], setSysDark = mq[1];
     var demo = api.mode === "demo";
     var aiRef = useRef(null);
@@ -1095,7 +1098,7 @@
 
     function help() { toast("info", "Bantuan", "Console membaca /api/v1 sesuai CONTRACTS.md. Tekan ⌘K untuk lompat ke layar mana pun."); }
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmd(true); }
-    function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
+    function toggleCollapsed() { if (rail) { setRailOpen(!railOpen); return; } var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
     function logout() {
       if (window.RangkaApp && window.RangkaApp.clearAiStorage) window.RangkaApp.clearAiStorage(); // Raka's history leaves with the person
       api.logout().then(function () {
@@ -1112,7 +1115,7 @@
         { label: "Profil", icon: "user", onSelect: function () { toast("info", "Belum ada di Console v0", "Profil dan keamanan akun ada di Rangka ID."); } },
         { label: "Keluar", icon: "logout", onSelect: logout }]);
     }
-    var narrow = collapsed && !phone;
+    var narrow = !phone && (rail ? !railOpen : collapsed), floating = rail && railOpen;
     var mode = h("span", { className: "cn-mode", title: demo ? "Data demo dari demo-data.js: " + api.modeReason : "Terhubung ke kernel " + api.modeReason },
       h(R.Lozenge, { tone: demo ? "new" : "ok", bold: demo }, demo ? "Mode demo" : "Terhubung"));
     var askBtn = !aiOn ? null : narrow ? h(R.IconButton, { icon: "spark", label: "Tanya Raka", className: "cn-ask-icon", onClick: function () { askRaka(); } })
@@ -1132,9 +1135,10 @@
           mark: h("span", { className: "tile", style: { background: "var(--brand)" } }, h(R.Icon, { name: "settings" })),
           onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } },
         search: { label: "Cari", onOpen: openCmd },
-        pinned: pinned, groups: groups, current: screen, onNavigate: function (id) { nav("/" + id); },
-        collapsed: narrow, onToggleCollapse: phone ? undefined : toggleCollapsed, footer: footer }),
+        pinned: pinned, groups: groups, current: screen, onNavigate: function (id) { setRailOpen(false); nav("/" + id); },
+        collapsed: narrow, float: floating, onToggleCollapse: phone ? undefined : toggleCollapsed, footer: footer }),
       navOpen ? h("div", { className: "cn-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
+      floating ? h("div", { className: "cn-rail-scrim", onClick: function () { setRailOpen(false); } }) : null,
       h("div", { className: "rk-shell-main" },
         h("header", { className: "cn-mhead" }, // phone only: the sidebar opens as a drawer
           h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "cn-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),

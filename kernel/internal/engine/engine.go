@@ -166,6 +166,8 @@ type op struct {
 	inFlow bool
 	// manualRun is set for a flow a caller started through REST with an event of their own (contract 0026).
 	manualRun bool
+	// first is the first record the unit of work wrote (<model>/<name>), the target of an idempotency key.
+	first string
 }
 
 // writeAttempts bounds how often run starts a unit of work again after it lost a race (contract 0025).
@@ -214,6 +216,11 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 		}
 		return false, err
 	}
+	if k, ok := idemFrom(ctx); ok { // contract 0030 §6: the key is committed with the write
+		if err := store.CommitIdempotency(ctx, tx, k.Org, k.Actor, k.Key, o.first); err != nil {
+			return false, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		if tx.Conflicted() {
 			return true, fmt.Errorf("%w: %v", errConflict, err)
@@ -233,6 +240,9 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 
 func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 	o.touched[m.Name] = true
+	if o.first == "" {
+		o.first = m.Name + "/" + fmt.Sprint(rec["name"])
+	}
 	ev := store.Event{Type: "record", Org: o.actor.Org, Model: m.Name, Name: fmt.Sprint(rec["name"]), Op: opName}
 	if m.IsSubmittable {
 		d := toInt(rec["docstatus"])
@@ -243,7 +253,11 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 		return err
 	}
 	summary := fmt.Sprintf("%s %s %s", m.Name, rec["name"], opName)
-	return store.Audit(o.ctx, o.tx, o.actor.Org, o.actor.ID, "record."+opName, m.Name+"/"+fmt.Sprint(rec["name"]), summary, nil)
+	var data any
+	if t, ok := occurredFrom(o.ctx); ok { // contract 0030 §7: when the user pressed the button (a queued write)
+		data = map[string]any{"occurred_at": t.UTC().Format(time.RFC3339)}
+	}
+	return store.Audit(o.ctx, o.tx, o.actor.Org, o.actor.ID, "record."+opName, m.Name+"/"+fmt.Sprint(rec["name"]), summary, data)
 }
 
 func (e *Engine) model(name string) (*meta.Model, error) {

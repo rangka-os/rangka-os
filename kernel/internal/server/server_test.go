@@ -38,7 +38,8 @@ type env struct {
 	apps  string
 	site  string
 	jar   http.CookieJar
-	token string // when set, requests send Authorization: Bearer token instead of the cookie
+	token string      // when set, requests send Authorization: Bearer token instead of the cookie
+	hdr   http.Header // extra request headers (Idempotency-Key)
 }
 
 // newEnv copies the workspace apps, site and fixtures into a temp dir (change sets write files), seeds a
@@ -130,6 +131,9 @@ func (e *env) do(method, path string, body any) *resp {
 	}
 	req, _ := http.NewRequest(method, e.ts.URL+path, rd)
 	req.Header.Set("Content-Type", "application/json")
+	for k, v := range e.hdr {
+		req.Header[k] = v
+	}
 	if e.token != "" {
 		req.Header.Set("Authorization", "Bearer "+e.token)
 	}

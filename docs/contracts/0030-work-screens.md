@@ -130,25 +130,41 @@ without a new table. This contract only adds, for offline devices later, `{DEVIC
 chars for a browser that is not paired) and a per-day `{DD}`. Gapless per series as today.
 
 ### 6. Idempotent writes
-Every write a screen makes carries `Idempotency-Key: <client uuid>` (generated when the user presses the button,
-kept until the answer arrives). New in the record API: `POST /api/v1/r/<model>` and `.../submit` honour the header;
-the kernel stores `(site, actor, key) → result` for 7 days and answers a replay with the stored result (`200`, header
-`Idempotency-Replayed: true`); the same key with a different body is `409 idempotency_conflict`. This is what makes a
-double tap, a dropped connection or a phase-1 queue safe, and it is the same rule edge events already follow (0006 §3).
+Every write a screen makes carries `Idempotency-Key: <client id>` (made when the user presses the button, kept until
+an answer arrives). The record API honours it on `POST /api/v1/r/<model>`, `.../submit`, `.../cancel`, `.../amend` and
+`.../actions/<name>`; a key is 1 to 128 printable ASCII characters (else 400 `idempotency_key`) and belongs to one org
+and one actor (another user's same key is another key). The kernel keeps `rk_idempotency (org, actor, key)` for 7 days:
+- The first request claims the key (`pending`) and runs. The engine marks the key `committed`, with the first record it
+  wrote, **inside the writing transaction**; a 2xx answer is then stored (`done`). A request that fails (4xx, 5xx)
+  releases a still pending key, so a corrected retry runs.
+- A replay with the same method, path and body answers the stored answer with header `Idempotency-Replayed: true`
+  (and `Location` again for a 201). If the server stopped between commit and storing the answer, the replay answers
+  the record it wrote (200). A different method, path or body is `409 idempotency_conflict`. The same request still
+  running is `409 idempotency_in_progress` with `Retry-After: 2`; a pending claim older than 2 minutes never committed
+  and is taken over.
+This is what makes a double tap, a dropped connection or a phase-1 queue safe, and it is the same rule edge events
+already follow (0006 §3).
 
 ### 7. Offline, phase 1: browser queue (`offline: queue`)
-- The web app keeps a small IndexedDB outbox per user and device. A write that fails with a network error or `5xx`
-  is stored with its idempotency key and replayed in order when online; `4xx` (rule refused, permission) is shown to
-  the user and never replayed silently.
-- Reference data a screen reads (`catalogue`, `stops`, `source` of the user's scope) is cached after each successful
-  load and shown read-only with "data terakhir <time>" when offline.
-- Allowed only for `counter`, `roll`, `route`, `clock`, `entry`. The kernel accepts a late write like any other; its
-  `occurred_at` is the time the user pressed the button (new optional body field `_occurred_at`, stored in the audit,
-  used by a model through `doc._occurred_at` when it wants it).
+- The web app keeps an IndexedDB outbox (`rangka-outbox`) per device, with jobs scoped to org and user (another person
+  signed in on the device never sends them). A press is a job with its own keys (create, then submit when the screen
+  submits). A write that fails with no connection, a `5xx` or `idempotency_in_progress` waits and is replayed in order
+  on reconnect, every 15 seconds while the screen is open, and from "Kirim sekarang"; any other `4xx` (rule refused,
+  permission) is shown to the user until dismissed and never replayed silently. On a screen without `offline: queue`
+  the same press keeps its keys, so pressing again after a lost answer never writes twice.
+- The screen (and later its reference data: `catalogue`, `stops`, `source` of the user's scope) is cached after each
+  successful load and shown with "data terakhir <time>" when offline.
+- Allowed only for `counter`, `roll`, `route`, `clock`, `entry` (`screen_offline`). The kernel accepts a late write like
+  any other. A replayed write carries `_occurred_at` (RFC 3339, the moment the user pressed the button) in its body: the
+  kernel takes it out of the body, keeps it as `occurred_at` in the audit entries of the records written, and refuses a
+  time more than 5 minutes ahead or 30 days back (`422 occurred_at`; the web app then sends once without it). Business
+  dates come from the screen's `set:` values, which the kernel evaluated when the screen was opened, so a sale queued
+  before midnight keeps its day.
 - Conflict rules are those of 0006 §5: sales win, stock may go negative with an exception, reference data from the
   kernel wins.
-- Limits stated to the user on screen: offline works while the tab stays open or the app is installed as a PWA;
-  clearing the browser loses the queue (count shown in the header so staff can wait for "0 antre").
+- Limits stated to the user on screen: the queue works while the tab stays open (it survives a reload; an installable
+  PWA with a service worker is a later step); clearing the browser loses the queue, so the count ("N antre") stays in the
+  header until it is 0.
 
 ### 8. Offline, phase 2: rangka-edge (`offline: edge`)
 For the counter with printer and drawer, and later patrol and salesman routes with long dead zones:
@@ -268,8 +284,8 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 ## Implementation (rangka-os, one PR each, in this order)
 | Stage | Content | State |
 |---|---|---|
-| WS1 | `screen.json`, `app.work`, change-set path `modules/<m>/screens/`, validators, registry, `/meta` `screens` + `work`, `GET /api/v1/screens/{name}`, home per role, `#/w/<screen>`, "Kerja" group, work shell, renderer `entry` | this PR |
-| WS2 | `Idempotency-Key` on create, submit and actions; `_occurred_at`; IndexedDB outbox; cached reference data | next |
+| WS1 | `screen.json`, `app.work`, change-set path `modules/<m>/screens/`, validators, registry, `/meta` `screens` + `work`, `GET /api/v1/screens/{name}`, home per role, `#/w/<screen>`, "Kerja" group, work shell, renderer `entry` | merged |
+| WS2 | `Idempotency-Key` on create, submit, cancel, amend and actions (`rk_idempotency`); `_occurred_at`; IndexedDB outbox; cached screen | this PR |
 | WS3 | renderer `counter`, print from the screen, `on: cancel` rules evaluated | |
 | WS4, WS6, WS9a, WS7, WS5, WS8, WS9b | `queue`; `geo` + photo/signature; `clock`; `roll`; camera scan; `handover`; `route` | |
 

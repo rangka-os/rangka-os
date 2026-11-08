@@ -150,6 +150,7 @@
 
     function raw(method, path, body, extra) {
       var init = { method: method, credentials: "include", headers: { Accept: "application/json" } };
+      Object.keys(extra || {}).forEach(function (k) { init.headers[k] = extra[k]; });
       if (body instanceof FormData) init.body = body;
       else if (body !== undefined) { init.body = JSON.stringify(body); init.headers["Content-Type"] = "application/json"; }
       return doFetch(base + path, init).then(function (res) {
@@ -171,15 +172,15 @@
     }
 
     /** → Promise<{status, body}>; rejects with ApiError on any non-2xx. */
-    function call(method, path, body) {
-      return raw(method, path, body).then(function (res) {
+    function call(method, path, body, headers) {
+      return raw(method, path, body, headers).then(function (res) {
         if (res.status < 200 || res.status >= 300) return failure(res).then(function (e) { throw e; });
         // read the (empty) body anyway: an unread 204 shows up as an aborted request
         if (res.status === 204) return res.text().then(function () { return { status: 204, body: null }; }, function () { return { status: 204, body: null }; });
         return res.text().then(function (t) {
           var b = null;
           try { b = t ? JSON.parse(t) : null; } catch (e) { b = null; }
-          return { status: res.status, body: b };
+          return { status: res.status, body: b, replayed: !!(res.headers && res.headers.get && res.headers.get("Idempotency-Replayed") === "true") };
         });
       });
     }
@@ -229,12 +230,20 @@
       return json("GET", rec(model) + qs([["q", o.q], ["filter", o.filter], ["sort", o.sort], ["limit", o.limit], ["offset", o.offset]]));
     };
     api.get = function (model, name) { return json("GET", rec(model, name)); };
-    api.create = function (model, r) { return json("POST", wrec(model), r); };
+    /** Write options (contract 0030 §6, §7): {key} sends Idempotency-Key (a retry with the same key never writes twice);
+     *  {occurredAt} adds _occurred_at (ISO time the user pressed the button) for a write that waited in a queue. */
+    function wopts(o, body) {
+      o = o || {};
+      var b = body;
+      if (o.occurredAt) { b = {}; Object.keys(body || {}).forEach(function (k) { b[k] = body[k]; }); b._occurred_at = o.occurredAt; }
+      return { body: b, headers: o.key ? { "Idempotency-Key": o.key } : undefined };
+    }
+    api.create = function (model, r, o) { var w = wopts(o, r); return call("POST", wrec(model), w.body, w.headers).then(function (x) { return x.body; }); };
     api.update = function (model, name, patch) { return json("PATCH", wrec(model, name), patch); };
     api.remove = function (model, name) { return json("DELETE", wrec(model, name)); };
     api.submit = function (model, name, o) {
-      var body = o && o.force ? { force: true } : {};
-      return call("POST", wrec(model, name) + "/submit", body).then(function (r) {
+      var w = wopts(o, o && o.force ? { force: true } : {});
+      return call("POST", wrec(model, name) + "/submit", w.body, w.headers).then(function (r) {
         if (r.status === 202) return { record: r.body && r.body.record, approval: (r.body && r.body.approval) || null };
         return { record: r.body, approval: null };
       });
@@ -249,8 +258,9 @@
     api.amend = function (model, name) { return json("POST", wrec(model, name) + "/amend", {}); };
     /** → the action's result; {queued, jobId} for a queued job (202 {job_id, status:"queued"}); {record, approval} when
      *  an approval policy holds the action (202 {approval, approvals, record}). */
-    api.action = function (model, name, action, args) {
-      return call("POST", wrec(model, name) + "/actions/" + enc(action), args || {}).then(function (r) {
+    api.action = function (model, name, action, args, o) {
+      var w = wopts(o, args || {});
+      return call("POST", wrec(model, name) + "/actions/" + enc(action), w.body, w.headers).then(function (r) {
         if (r.status === 202 && r.body && r.body.approval) return { record: r.body.record || null, approval: r.body.approval };
         if (r.status === 202) return { queued: true, jobId: r.body && r.body.job_id };
         return r.body;

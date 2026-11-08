@@ -205,3 +205,19 @@ create table if not exists rk_ai_usage (
   period text primary key,                 -- YYYY-MM in the site timezone
   used   bigint not null default 0
 );
+
+-- idempotent writes (contract 0030 §6): one row per (org, actor, Idempotency-Key). pending while the request runs,
+-- committed in the engine transaction that wrote (target = the first record it wrote), done with the stored answer.
+create table if not exists rk_idempotency (
+  org_id       text not null,
+  actor        text not null,
+  key          text not null,
+  request_hash text not null,               -- sha256 hex of method, path and body
+  state        text not null,               -- pending, committed, done
+  target       text not null default '',    -- <model>/<name> written by the request
+  status       integer not null default 0,
+  response     jsonb,
+  created_at   timestamptz not null default now(),
+  primary key (org_id, actor, key)
+);
+create index if not exists rk_idempotency_created on rk_idempotency (created_at);

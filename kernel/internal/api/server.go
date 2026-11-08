@@ -123,14 +123,14 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/meta", a(s.getMeta))
 	mux.HandleFunc("GET /api/v1/r/{model}", a(s.listRecords))
 	mux.HandleFunc("GET /api/v1/aggregate/{model}", a(s.aggregateRecords))
-	mux.HandleFunc("POST /api/v1/r/{model}", a(s.createRecord))
+	mux.HandleFunc("POST /api/v1/r/{model}", a(s.idempotent(s.createRecord)))
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}", a(s.getRecord))
 	mux.HandleFunc("PATCH /api/v1/r/{model}/{name}", a(s.patchRecord))
 	mux.HandleFunc("DELETE /api/v1/r/{model}/{name}", a(s.deleteRecord))
-	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.lifecycle))
+	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.idempotent(s.lifecycle)))
 	mux.HandleFunc("GET /api/v1/attachments/{id}", a(s.getAttachment))
 	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))
-	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.runAction))
+	mux.HandleFunc("POST /api/v1/r/{model}/{name}/actions/{action}", a(s.idempotent(s.runAction)))
 	// guarded record routes: the guard checks the permission, then the stream's handler runs
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}/print", s.recordGuard("print", s.printRecord))
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}/attachments", s.recordGuard("read", s.listAttachments))
@@ -274,7 +274,8 @@ func cors(h http.Handler) http.Handler {
 		if o := r.Header.Get("Origin"); o != "" && (strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/oauth/")) {
 			w.Header().Set("Access-Control-Allow-Origin", o)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Mcp-Session-Id, Mcp-Protocol-Version")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Mcp-Session-Id, Mcp-Protocol-Version")
+			w.Header().Set("Access-Control-Expose-Headers", "Idempotency-Replayed, Location, Retry-After")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Vary", "Origin")
 			if r.Method == http.MethodOptions {

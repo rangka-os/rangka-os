@@ -37,6 +37,10 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   the kernel for the user) and renders `RangkaApp.workRenderers[type]`. Built: `entry` (a short form: the listed
   fields, "Simpan" or "Simpan & ajukan", then an empty form again with "Baru disimpan"). Other types show a notice
   until their renderer ships.
+- **Safe writes** (`outbox.js`): every press sends `Idempotency-Key`s, so a double tap or pressing again after a lost
+  answer writes once. A screen with `offline: queue` keeps unsent presses in IndexedDB ("N antre" in the header, sent
+  on reconnect, every 15 s or with "Kirim sekarang"); a write the server refuses later stays on screen until dismissed.
+  The screen is cached and shown with "data terakhir <jam>" offline.
 
 ### Ubah (change and preview)
 
@@ -71,6 +75,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `dashboard.js` | Dashboard view from `GET /dashboards/{name}` |
 | `approvals.js` | Approval inbox and the "Menunggu persetujuan" banner |
 | `docs.js` | Print menu and attachments panel |
+| `outbox.js` | Safe writes for work screens: idempotency keys, the IndexedDB outbox and the read cache (contract 0030 §6, §7) |
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
 | `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |

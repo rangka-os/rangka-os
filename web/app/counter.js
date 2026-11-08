@@ -178,7 +178,7 @@
     var hk = heldKey(scope, s.name);
     var hs = useState(function () { return readHeld(hk); }), held = hs[0], setHeld = hs[1];
     var hos = useState(false), heldOpen = hos[0], setHeldOpen = hos[1];
-    var os = useState({}), openRec = os[0], setOpenRec = os[1];
+    var os = useState(function () { return Object.assign({}, sets.session || {}); }), openRec = os[0], setOpenRec = os[1]; // prefilled from session.set
     var cls = useState(null), closing = cls[0], setClosing = cls[1]; // close form record, or null
     var noteAt = useState(null), noteLine = noteAt[0], setNoteLine = noteAt[1];
     var jobRef = useRef(null), searchRef = useRef(null);
@@ -269,7 +269,7 @@
       if (busy) return;
       setBusy(true); setErr("");
       var body = Object.assign({}, sets.session || {}, openRec);
-      ctx.api.create(ses.model, body, { key: RA.newKey() }).then(function (r) { setSession(r); setOpenRec({}); }, function (e) { setErr(errText(e)); })
+      ctx.api.create(ses.model, body, { key: RA.newKey() }).then(function (r) { setSession(r); setOpenRec(Object.assign({}, sets.session || {})); }, function (e) { setErr(errText(e)); })
         .then(function () { setBusy(false); });
     }
     function closeSession() {
@@ -381,7 +381,7 @@
 
     var tools = h("div", { className: "ap-counter-tools" },
       c.hold && held.length ? h(R.Button, { variant: "quiet", onClick: function () { setHeldOpen(!heldOpen); } }, "Ditahan (" + held.length + ")") : null,
-      ses && ses.close ? h(R.Button, { variant: "quiet", onClick: function () { setClosing({}); setErr(""); } }, "Tutup sesi") : null);
+      ses && ses.close ? h(R.Button, { variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null);
 
     var heldList = heldOpen ? h("ul", { className: "ap-counter-held", "aria-label": "Bill ditahan" }, held.map(function (x) {
       return h("li", { key: x.id }, h("button", { type: "button", onClick: function () { resume(x); } },

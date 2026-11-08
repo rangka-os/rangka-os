@@ -239,6 +239,9 @@
       return { body: b, headers: o.key ? { "Idempotency-Key": o.key } : undefined };
     }
     api.create = function (model, r, o) { var w = wopts(o, r); return call("POST", wrec(model), w.body, w.headers).then(function (x) { return x.body; }); };
+    /** POST /api/v1/compute/{model} (contract 0034): the record as the model would save it, nothing written →
+     *  {record, errors, warnings}. */
+    api.compute = function (model, r) { return json("POST", "/api/v1/compute/" + enc(model), r); };
     api.update = function (model, name, patch) { return json("PATCH", wrec(model, name), patch); };
     api.remove = function (model, name) { return json("DELETE", wrec(model, name)); };
     api.submit = function (model, name, o) {

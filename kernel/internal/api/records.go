@@ -61,6 +61,20 @@ func (s *Server) createRecord(w http.ResponseWriter, r *http.Request, c *caller)
 	writeJSON(w, http.StatusCreated, recordOut(res))
 }
 
+// computeRecord answers the record as the model would save it, without saving (contract 0034).
+func (s *Server) computeRecord(w http.ResponseWriter, r *http.Request, c *caller) {
+	body, ok := readObject(w, r)
+	if !ok {
+		return
+	}
+	res, err := s.Engine.Compute(r.Context(), c.actor, r.PathValue("model"), body)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, res)
+}
+
 func (s *Server) getRecord(w http.ResponseWriter, r *http.Request, c *caller) {
 	rec, err := s.Engine.Get(r.Context(), c.actor, r.PathValue("model"), r.PathValue("name"))
 	if err != nil {

@@ -4,11 +4,12 @@ type: counter
 label: {id: Kasir A}
 roles: [staf]
 counter:
-  catalogue: {model: catatan_harian, price: text, search: [ghost], filter: "(text"}
+  catalogue: {model: catatan_harian, price: text, search: [ghost], filter: "(text", available: text}
   document:
     model: catatan_harian
     lines: text
     line: {item: text, qty: text}
+    summary: [ghost, text]
   payments: {table: pays, method: m, amount: a}
   session:
     model: jam_kerja

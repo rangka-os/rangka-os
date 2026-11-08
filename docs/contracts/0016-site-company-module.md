@@ -1,6 +1,6 @@
 # 0016 Site company module
 
-Status: proposed (follow-up of S11, 4 Nov 2026) · Owner of the change: rangka-os (kernel, schema, validator, web app) ·
+Status: accepted (8 Nov 2026, Dede; proposed 4 Nov 2026 as a follow-up of S11) · Owner of the change: rangka-os (kernel, schema, validator, web app) ·
 Affects: nothing in rangka-apps
 
 ## Context

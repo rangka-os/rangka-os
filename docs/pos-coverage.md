@@ -1,6 +1,6 @@
 # POS coverage matrix
 
-Status: draft for review (8 Nov 2026). Reference design: `rangka.pen`, frame `sL99a` "Rangka POS · Tablet & HP"
+Status: reviewed with the owner (8 Nov 2026); slice A chosen and built (contract 0034). Reference design: `rangka.pen`, frame `sL99a` "Rangka POS · Tablet & HP"
 (32 screens, sample data Kopi Teras, outlet Kemang). Measured against rangka-os `main` at a5d5f89 (contract 0030,
 WS1–WS3 merged) and rangka-apps `main` at cd7c624 (`modules/pos`, app `kasir`).
 
@@ -99,13 +99,17 @@ WS1–WS3 merged) and rangka-apps `main` at cd7c624 (`modules/pos`, app `kasir`)
 
 | Slice | Content | Contract | Repos |
 |---|---|---|---|
-| **A. Counter to design** (proposed first) | (1) Kernel: `POST /api/v1/r/{model}/_compute` runs defaults, computes and save rules on an unsaved record and writes nothing. (2) Screen slot `document.summary: [fields]`: the cart shows those fields from the dry compute, debounced, so the breakdown is the model's own numbers. (3) Renderer per the design: tablet rail, item cards with image and in-cart count, order panel with breakdown, tender with `PosKeypad` and quick cash, success panel, open-shift keypad, portrait and phone layouts, offline banner. (4) Denomination counter for the blind close. | New 0034 (compute endpoint + `summary` slot), both validators | rangka-os only |
+| **A. Counter to design** (built, contract 0034) | (1) Kernel: `POST /api/v1/r/{model}/_compute` runs defaults, computes and save rules on an unsaved record and writes nothing. (2) Screen slot `document.summary: [fields]`: the cart shows those fields from the dry compute, debounced, so the breakdown is the model's own numbers. (3) Renderer per the design: tablet rail, item cards with image and in-cart count, order panel with breakdown, tender with `PosKeypad` and quick cash, success panel, open-shift keypad, portrait and phone layouts, offline banner. (4) Denomination counter for the blind close. | New 0034 (compute endpoint + `summary` slot), both validators | rangka-os only |
 | B. Modifiers | `item_modifier_group` / `item_modifier` models, a modifier child table on the sale line, slot `line.options`, variant sheet | 0034 or its own | rangka-apps (models) + rangka-os (slot, sheet) |
 | C. Orders and tables | Open bills as server draft sales, `orders` view on the counter, `floor` screen type | New contract (adds a type) | both |
 | D. Restaurant money | PB1/PBJT, service charge, rounding, more payment methods, split bill | Module work; split bill needs a decision | rangka-apps mostly |
 | E. Kitchen | WS4 `queue` renderer + ticket flow | 0030 (already planned) | rangka-os + rangka-apps |
 | F. Devices | ESC/POS print, drawer, PIN unlock through Edge | 0003, 0006 | rangka-edge + kernel |
 | G. Integrations | Dynamic QRIS, GoFood/GrabFood/ShopeeFood, WhatsApp receipts | 0002 | rangka-connectors + kernel |
+
+Slice A notes: rangka-apps `modules/pos/screens/kasir.rk` still has to name the new slots (`summary`, `available`)
+to get the breakdown and stock badges; the denomination count fills the close's money field; the rail is the work
+shell's bar on screens 900px and wider.
 
 Slice A stays inside rangka-os, changes no money rule (the model still computes everything) and makes every later
 slice look right, because B–E render inside the same counter.

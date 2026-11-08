@@ -34,7 +34,7 @@ func TestLoadScreensAndWork(t *testing.T) {
 // A screen of a unit that is not installed is neither returned nor offered.
 func TestScreenNotInstalled(t *testing.T) {
 	reg := Load("../../testdata/screens/apps", "../../testdata/screens/site", nil)
-	reg.Installed["kerja"] = false
+	reg.Installed["kerja"], reg.Installed["kasir"] = false, false
 	if reg.Screen("isi_jam") != nil || len(reg.Work()) != 0 {
 		t.Fatal("screen of an uninstalled module is offered")
 	}

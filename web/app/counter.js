@@ -559,10 +559,12 @@
       h("label", { className: "ap-counter-part" }, "Tunai diterima",
         h("input", { inputMode: "numeric", "aria-label": "Tunai diterima", value: pay.cash ? String(pay.cash) : "",
           onChange: function (e) { setPay({ cash: RA.parseNumber ? RA.parseNumber(e.target.value) : Number(e.target.value) || 0, qris: pay.qris }); } })),
-      h(MoneyPad, { label: "Ketik uang diterima", value: pay.cash, disabled: busy, onChange: function (v) { setPay({ cash: v, qris: pay.qris }); } }),
-      h("div", { className: "ap-counter-due change" }, h("span", null, "Kembalian"),
-        h("b", null, changeOf(total, pay.cash, pay.qris) === null ? "kurang " + rp(total - (pay.qris || 0) - pay.cash) : rp(changeOf(total, pay.cash, pay.qris)))),
-      h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: function () { finish(pay.cash, pay.qris); } }, "Selesai")) : null;
+      // the first press replaces the prefilled amount (uang pas), later presses type on
+      h(MoneyPad, { label: "Ketik uang diterima", value: pay.typed ? pay.cash : 0, disabled: busy, onChange: function (v) { setPay({ cash: v, qris: pay.qris, typed: true }); } }),
+      h("div", { className: "ap-counter-paydone" },
+        h("div", { className: "ap-counter-due change" }, h("span", null, "Kembalian"),
+          h("b", null, changeOf(total, pay.cash, pay.qris) === null ? "kurang " + rp(total - (pay.qris || 0) - pay.cash) : rp(changeOf(total, pay.cash, pay.qris)))),
+        h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: function () { finish(pay.cash, pay.qris); } }, "Selesai"))) : null;
 
     var result = done && !cart.length && !pay ? h("div", { className: "ap-counter-done", role: "status" },
       h("span", { className: "ap-counter-tick" + (done.queued ? " queued" : ""), "aria-hidden": "true" }, h(R.Icon, { name: done.queued ? "time" : "check" })),
@@ -586,9 +588,9 @@
           ses && ses.close ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null,
           h("button", { type: "button", className: "ap-counter-sheet-x", "aria-label": "Tutup pesanan", onClick: function () { setSheet(false); } }, h(R.Icon, { name: "close" })))),
       heldList,
-      c.customer ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
+      c.customer && !(pay && !stuck) ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
         value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } }) : null,
-      h("div", { className: "ap-counter-body" }, cart.length ? lines : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
+      pay && !stuck ? null : h("div", { className: "ap-counter-body" }, cart.length ? lines : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
       tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
         h("div", { className: "ap-counter-row" },

@@ -589,7 +589,10 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-counter-paytop { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
 .ap-counter-row { display: flex; gap: 8px; flex-wrap: wrap; }
 .ap-counter-row > .rk-btn { flex: 1; min-height: 44px; justify-content: center; }
-.ap-counter-foot .rk-btn-primary, .ap-counter-pay > .rk-btn { min-height: 52px; font-size: 16px; }
+.ap-counter-foot .rk-btn-primary, .ap-counter-pay > .rk-btn, .ap-counter-paydone .rk-btn { min-height: 52px; font-size: 16px; }
+.ap-counter-pay .ap-pad button { min-height: 44px; }
+.ap-counter-paydone .rk-btn, .ap-counter-pay > .rk-btn { width: 100%; justify-content: center; }
+.ap-counter-paydone { position: sticky; bottom: -14px; display: grid; gap: 8px; margin: 0 -14px -14px; padding: 10px 14px 14px; background: var(--surface); border-top: 1px solid var(--line); }
 .ap-counter-cash { display: grid; grid-template-columns: repeat(auto-fill, minmax(104px, 1fr)); gap: 8px; }
 .ap-counter-cash .rk-btn { min-height: 48px; justify-content: center; }
 .ap-counter-part { display: grid; gap: 4px; flex: 1; color: var(--muted); font-size: 13px; }

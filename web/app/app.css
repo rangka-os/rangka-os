@@ -78,6 +78,8 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-shell .rk-side-head b { font: 600 13.5px/18px var(--font-sans); }
 .ap-shell .rk-side-head small { font-size: 11.5px; line-height: 16px; }
 .ap-shell .rk-side-mark, .ap-shell .rk-side-head .tile { width: 24px; height: 24px; border-radius: 6px; background: var(--brand); }
+/* top-nav: the sidebar tile is the open app (Ink), not the business's Bata logo, which sits in the top bar */
+.ap-top > .rk-side .rk-side-head .tile { background: var(--primary); color: var(--primary-ink); }
 /* the Sendi r in white on the Bata tile: a stem and an arm cut at 45 degrees */
 .ap-shell .rk-side-mark::before { content: ""; position: absolute; left: 7px; top: 7px; width: 4px; height: 11px; background: #ffffff; }
 .ap-shell .rk-side-mark::after { left: 7px; right: auto; top: 7px; width: 11px; height: 4px; border-radius: 0; background: #ffffff; clip-path: polygon(0 0, 100% 0, 75% 100%, 0 100%); }

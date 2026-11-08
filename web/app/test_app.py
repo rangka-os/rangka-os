@@ -1314,6 +1314,55 @@ def test_forbidden_list(page, ctx):
     assert page.get_by_text("Kamu tidak punya akses ke Peluang").count() == 0, "the sidebar still navigates away from the forbidden state"
 
 
+def test_catalogue_page(page, ctx):
+    """Contract 0036 §6, read only: the owner finds "Modul dan sambungan" under Lainnya, sees apps and connectors with
+    a status word, filters and searches; sales@contoh.test (sales_rep, may not propose) has no entry and no access."""
+    cat = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/catalogue")[1]
+    app = next(a for a in cat["apps"] if a["installed"])
+    wa = next(c for c in cat["connectors"] if c["name"] == "whatsapp_business")
+    idle = next(c for c in cat["connectors"] if not c["installed"])
+    open_route(page, ctx, ctx.home()[0])
+    open_nav(page)
+    page.locator(".rk-side").get_by_role("link", name="Modul dan sambungan", exact=True).click()
+    page.wait_for_function("() => location.hash === '#/pengaturan/katalog'", timeout=5000)
+    page.get_by_role("heading", name="Modul dan sambungan").first.wait_for(timeout=10000)
+    card = page.locator(f'.ap-cat-card[data-name="{app["name"]}"]')
+    card.wait_for(timeout=10000)
+    assert L(app["title"]) in card.inner_text() and "Terpasang" in card.inner_text(), card.inner_text()
+    card.click()
+    drawer = page.locator(".rk-drawer")
+    drawer.wait_for(timeout=5000)
+    assert "Menambah" in drawer.inner_text(), drawer.inner_text()
+    drawer.get_by_role("button", name="Tutup").click()
+    page.get_by_role("tab", name=re.compile("^Sambungan")).click()
+    wcard = page.locator('.ap-cat-card[data-name="whatsapp_business"]')
+    wcard.wait_for(timeout=5000)
+    assert L(wa["label"]) in wcard.inner_text() and "Perlu kunci" in wcard.inner_text(), wcard.inner_text()
+    assert "whatsapp_business" not in wcard.inner_text(), "technical names stay off the cards"
+    if ctx.args.shots:
+        page.screenshot(path=os.path.join(ctx.args.shots, f"catalogue-sambungan-{ctx.args.width}.png"), full_page=True)
+    page.locator(".ap-cat-tools").get_by_role("button", name="Belum dipasang", exact=True).click()
+    page.locator(f'.ap-cat-card[data-name="{idle["name"]}"]').wait_for(timeout=5000)
+    assert page.locator('.ap-cat-card[data-name="whatsapp_business"]').count() == 0, "Belum dipasang hides an installed connector"
+    page.locator(".ap-cat-tools").get_by_role("button", name="Semua", exact=True).click()
+    page.get_by_role("searchbox", name="Cari sambungan").fill(L(idle["label"]))
+    page.locator(f'.ap-cat-card[data-name="{idle["name"]}"]').wait_for(timeout=5000)
+    assert page.locator('.ap-cat-card[data-name="whatsapp_business"]').count() == 0 or L(idle["label"]) in L(wa["label"]), "search narrows the cards"
+    assert page.get_by_role("button", name=re.compile("^(Pasang|Sambungkan|Lepas|Putuskan)$")).count() == 0, "no acting buttons in this phase"
+
+    # sales_rep: no entry, and the address answers no access
+    page.context.clear_cookies()
+    ctx.allow_http(403, r"/api/v1/catalogue$")
+    open_route(page, ctx, ctx.home()[0], who=SALES)
+    open_nav(page)
+    page.locator(".rk-side").wait_for(timeout=5000)
+    assert page.locator(".rk-side").get_by_role("link", name="Modul dan sambungan").count() == 0, "sales_rep sees the catalogue entry"
+    if page.locator(".ap-nav-open").count():
+        page.keyboard.press("Escape")
+    page.evaluate("() => { location.hash = '#/pengaturan/katalog'; }")
+    page.get_by_text("Kamu tidak punya akses ke Modul dan sambungan").first.wait_for(timeout=10000)
+
+
 # ---------------------------------------------------------------------------------------------- forms and the document lifecycle (Task 6)
 def rupiah(n):
     s = f"{abs(int(n)):,}".replace(",", ".")
@@ -2748,7 +2797,9 @@ def test_import_file_too_large(page, ctx):
 
 # ---------------------------------------------------------------------------------------------- runner
 CTX = None
-PROBE_404 = re.compile(r"/api/v1/(approvals|processes|r/[^/]+/[^/]+/attachments)(\?|$)")
+PROBE_404 = re.compile(r"/api/v1/(approvals|processes|catalogue|r/[^/]+/[^/]+/attachments)(\?|$)")
+# api.features probes the catalogue (contract 0036): members who may not propose changes get 403, which hides the entry
+PROBE_403 = re.compile(r"^/api/v1/catalogue$")
 
 
 def http_problems(responses, ctx):
@@ -2759,6 +2810,8 @@ def http_problems(responses, ctx):
         if r.status == 401 and path.startswith("/auth/"):
             continue
         if any(st == r.status and rx.search(path) for st, rx in ctx.allowed_http):
+            continue
+        if r.status == 403 and PROBE_403.search(path):
             continue
         if r.status == 404 and PROBE_404.search(path):
             try:

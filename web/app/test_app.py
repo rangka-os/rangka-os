@@ -737,7 +737,7 @@ def sign_in(page, email=OWNER[0], password=OWNER[1], within=None):
     scope = page.locator(within) if within else page
     scope.get_by_label("Email").fill(email)
     scope.get_by_label("Kata sandi").fill(password)
-    scope.get_by_role("button", name="Masuk").click()
+    scope.get_by_role("button", name="Masuk", exact=True).click()
 
 
 def open_nav(page):
@@ -770,7 +770,7 @@ def me_status(page):
 # ---------------------------------------------------------------------------------------------- scenarios
 def test_sign_in(page, ctx):
     page.goto(ctx.base + "/app/")
-    page.get_by_role("button", name="Masuk").wait_for(timeout=15000)
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=15000)
     assert page.get_by_label("Email").is_visible() and page.get_by_label("Kata sandi").is_visible(), "sign-in form labels"
     sign_in(page, ctx.owner[0], "salah-sekali")
     page.get_by_text("Email atau kata sandi salah").wait_for(timeout=10000)
@@ -788,7 +788,7 @@ def test_sign_in(page, ctx):
 def test_root_redirect(page, ctx):
     page.goto(ctx.base + "/")
     assert page.url.startswith(ctx.base + "/app/"), "GET / lands on /app/, got " + page.url
-    page.get_by_role("button", name="Masuk").wait_for(timeout=15000)
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=15000)
 
 
 def test_logout(page, ctx):
@@ -796,7 +796,7 @@ def test_logout(page, ctx):
     sign_in(page)
     expect_signed_in(page, ctx)
     account_menu(page).get_by_role("menuitem", name="Keluar").click()
-    page.get_by_role("button", name="Masuk").wait_for(timeout=10000)
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
     assert page.get_by_label("Kata sandi").is_visible(), "sign-in form after Keluar"
     assert me_status(page) == 401, "GET /auth/me after logout should be 401"
 
@@ -860,7 +860,8 @@ def test_theme_default_light(page, ctx):
 
 def test_sidebar_collapse(page, ctx):
     """Side-only shell: the sidebar collapses to icons and stays collapsed after a reload (localStorage); on a phone it
-    is a drawer behind the 48px bar's menu button and has no collapse control."""
+    is a drawer behind the 48px bar's menu button and has no collapse control; on a tablet in portrait it is the icon
+    rail, unfolded over the page."""
     home, app = ctx.home()
     model = "sales_invoice" if "sales_invoice" in ctx.meta["models"] else ctx.menu_models(app)[0]
     page.goto(ctx.base + "/app/")
@@ -877,6 +878,18 @@ def test_sidebar_collapse(page, ctx):
         side.get_by_role("link", name=ctx.model_label(model), exact=True).click()
         page.wait_for_function("(h) => location.hash === h", arg="#/r/" + model, timeout=5000)
         assert not side.is_visible(), "picking an entry closes the drawer"
+        return
+    if ctx.args.width < 1024:
+        # tablet portrait: the icon rail; unfolding floats the full sidebar over the page, picking an entry folds it
+        page.wait_for_function("() => document.querySelector('.ap-shell > .rk-side').classList.contains('collapsed')", timeout=5000)
+        assert side.bounding_box()["width"] <= 64, f"the rail is narrow: {side.bounding_box()}"
+        side.get_by_role("button", name="Bentangkan navigasi").click()
+        page.locator(".ap-shell > .rk-side.rk-side-float:not(.collapsed)").wait_for(timeout=5000)
+        assert page.locator(".ap-rail-scrim").is_visible(), "a scrim behind the floating sidebar"
+        side.get_by_role("link", name=ctx.model_label(model), exact=True).click()
+        page.wait_for_function("(h) => location.hash === h", arg="#/r/" + model, timeout=5000)
+        page.locator(".ap-shell > .rk-side.collapsed").wait_for(timeout=5000)
+        assert not page.locator(".ap-rail-scrim").count(), "picking an entry folds the rail again"
         return
     assert side.get_by_role("link", name="Beranda").is_visible() and side.get_by_role("button", name="Cari").is_visible()
     page.locator("[data-loading=false]").first.wait_for(timeout=15000)
@@ -1848,7 +1861,7 @@ def approvals_mocked(page, ctx):
 
 def sign_out(page):
     account_menu(page).get_by_role("menuitem", name="Keluar").click()
-    page.get_by_role("button", name="Masuk").wait_for(timeout=10000)
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
 
 
 def sign_in_as(page, ctx, who, hash_=None):
@@ -1962,6 +1975,9 @@ def test_invoice_needs_manager_approval(page, ctx):
     sign_out(page)
     sign_in_as(page, ctx, MANAGER)
     open_nav(page)
+    unfold = page.get_by_role("button", name="Bentangkan navigasi")  # the tablet rail shows a dot, the full sidebar the count
+    if unfold.count() and unfold.first.is_visible():
+        unfold.first.click()
     link = page.locator(".rk-side .rk-navlink", has_text="Persetujuan")
     page.wait_for_function("() => { const a = [...document.querySelectorAll('.rk-side .rk-navlink')].find(x => x.textContent.startsWith('Persetujuan'));"
                            " return a && a.querySelector('.rk-count'); }", timeout=10000)
@@ -3018,7 +3034,11 @@ def widget_order(ctx, dash):
 
 
 def ubah_on(page):
-    page.get_by_role("group", name="Mode").get_by_role("button", name="Ubah", exact=True).click()
+    rail = page.get_by_role("button", name="Masuk mode Ubah")  # the icon rail (tablet portrait, or folded) has an icon toggle
+    if rail.count() and rail.first.is_visible():
+        rail.first.click()
+    else:
+        page.get_by_role("group", name="Mode").get_by_role("button", name="Ubah", exact=True).click()
     page.get_by_role("region", name="Mode ubah").wait_for(timeout=5000)
 
 

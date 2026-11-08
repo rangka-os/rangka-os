@@ -248,6 +248,9 @@
   .ap-ubah-group, .ap-ubah-rename { min-height: var(--touch); }
   .rk-askbar-chip button { width: var(--touch); height: var(--touch); }
   .rk-chat-comp .rk-send { width: var(--touch); height: var(--touch); }
+  .rk-chat-comp textarea { min-height: var(--touch); padding-top: 12px; padding-bottom: 12px; }
   .ap-main .pv-card-move { height: var(--touch); }
   .ap-counter-qty button { width: var(--touch); height: var(--touch); }
+  /* link values in a read-only document (customer, outlet) are taps too */
+  .ap-main .ap-ro-list dd a, .ap-main .ap-docsum-party a { display: inline-flex; align-items: center; min-height: var(--touch); }
 }

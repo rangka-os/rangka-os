@@ -139,7 +139,7 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .rk-seg button[aria-pressed="true"] { background: var(--ap-seg-on); color: var(--ink); font-weight: 600; box-shadow: var(--ap-seg-shadow); }
 /* the pen's list header: search and "Buat …" on the right of the title, a count pill after it */
 .ap-main .ap-head-search { flex: 0 1 220px; }
-.ap-main .rk-pagehead-extra { flex-wrap: nowrap; gap: 8px; }
+.ap-main .rk-pagehead-extra { flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .ap-headcount { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--r-pill); background: var(--ap-pill); color: var(--ap-pill-ink); font: 400 11.5px/20px var(--font-sans); white-space: nowrap; }
 /* under it one ruled row: the views as underline tabs on the left, filters and tools as small outlined buttons on the right */
 .ap-main .ap-views { display: flex; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; padding: 0; margin: -4px 0 4px; border-bottom: 1px solid var(--line); }
@@ -165,6 +165,8 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 
 /* ---- record tables: a white card, a warm header row, 38px rows ---- */
 .ap-main .rk-table-card .rk-tw, .ap-main .rk-report, .ap-main .ap-groupview { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+/* tables wider than the page scroll inside their box (first column sticky below 1280px, bundle.css) */
+.ap-main .rk-table-card .rk-tw, .ap-main .rk-report { overflow: auto; }
 .ap-main .rk-table-card .rk-tw { overflow-x: auto; }
 .ap-main .rk-table th { height: 34px; background: var(--soft); border-bottom: 1px solid var(--line); font: 600 11.5px/16px var(--font-sans); color: var(--muted); }
 .ap-main .rk-table td { height: 38px; color: var(--ink-2); font-size: 12.5px; }
@@ -308,7 +310,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-gc-f .ap-gl input { height: 40px; }
 .ap-gc-f.ro .rk-cell-ro, .ap-gc-f.ro .rk-cell-item { padding: 0; text-align: left; min-height: 20px; font-size: 13px; color: var(--ink-2); }
 .ap-gc-f.ro.n .rk-cell-ro { font-variant-numeric: tabular-nums; }
-.ap-gc-f .rk-cell-item { padding: 0; }
+.ap-gc-f .rk-cell-item { padding: 0; min-width: 0; }
 .ap-gc-empty { margin: 0; }
 .ap-gc .rk-totals { min-width: 0; width: 100%; gap: 6px 16px; }
 .ap-gc .rk-grid-foot { padding: 10px 12px; }

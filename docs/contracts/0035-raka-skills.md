@@ -1,203 +1,192 @@
-# 0035 Raka skills: what Raka can do, declared by the platform
+# 0035 Rangka skills: one Agent Skills library for Raka and any other harness
 
-Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel) and rangka-ai (tools,
-guardrails, knowledge) · Affects: rangka-apps (optional app skills), rangka-cloud (interview and studio read the
-same list), rangka-connectors and rangka-edge (nothing to change, read as they are) · Builds on: 0001, 0003, 0017,
-0020, 0028, 0030, 0032, 0033
+Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (skills, CLI, kernel tools, docs site) · Affects:
+rangka-ai (loads skills instead of a big knowledge pack), rangka-apps and rangka-connectors (ship skills for their
+apps and connectors), rangka-edge (one skill), rangka-cloud (private interview skills, not published) · Builds on:
+0000, 0020, 0030, 0032, 0033
 
 ## Context
 
 - **The Mogu case (8 Nov 2026).** Dede onboarded "Mogu", an F&B business: kimbab and es krim gabin, sold at an outlet
   and through GoFood, GrabFood and ShopeeFood, all manual today. Raka recommended Rangka F&B Cabang. Dede then asked
-  for a POS. Raka said it had made one. Nothing visible had changed.
-- **The POS already exists.** rangka-apps ships `kasir`:
-  - modules `users`, `contacts`, `catalogue`, `outlets`, `stock` and `pos`;
-  - the cashier work screen (0030).
-  
-  Five of its six modules are already in `fnb_cabang`. Adding `kasir` to Mogu's site would add one module, `pos`. It
-  would share Mogu's items, outlets, stock and people with F&B Cabang: one business, one set of data, two apps.
-- **Raka could not know that.**
-  - Its catalogue is `rangka-ai/knowledge/apps.json`, built from a pinned rangka-apps commit. It lists 6 apps
-    (`crm`, `fnb_cabang`, `grosir_distribusi`, `jasa_proyek`, `produksi_pabrik`, `ritel_cabang`). The catalogue has
-    17, `kasir` among them.
-  - Contract 0000 §6 already says this pack should not be committed. It goes stale with every rangka-apps merge.
-- **Raka could not do it either.**
-  - Its tools are `rangka_meta`, `rangka_get_file`, `rangka_query`, `rangka_get_record`, `rangka_dashboard`,
-    `draft_changeset` (hand-written JSON Patch on `.rk` files) and `escalate`.
-  - "Add the POS app" means hand-writing a `config.rk` patch, knowing which modules exist, and knowing what that
-    pulls in. No tool says what the platform can do here.
-- **Nothing stops a false "done".** Raka's reply text is free text. A turn can say "sudah aku buatkan" with no change
-  set behind it, and the owner has no way to tell.
-- **Capabilities live in five places, each with its own format:**
-  - **rangka-os:** the kinds in `schema/0.5`, the kernel features (0030 work screens, 0031 recurring documents, 0032
-    module sets, 0033 company pieces and connector drafts), plan limits (0028).
-  - **rangka-apps:** 17 apps and 28 modules.
-  - **rangka-connectors:** 5 connectors (`biteship`, `loyverse`, `moka`, `whatsapp_business`, `xendit`), and none
-    for GoFood, GrabFood or ShopeeFood.
-  - **rangka-edge:** outlet devices (0003). First cut only: no device connectors and no POS yet.
-  - **rangka-cloud:** the interview, which composes from the catalogue.
-
-  Raka has to find all of this from prompts. When a piece is missing it guesses, and when one exists it misses it.
+  for a POS. Raka said it had made one. Nothing had changed.
+- **The POS exists.** rangka-apps ships `kasir`: module `pos` plus the cashier work screen (0030). Five of its six
+  modules (`users`, `contacts`, `catalogue`, `outlets`, `stock`) are already in `fnb_cabang`. Adding it would add
+  only `pos`, and the items, outlets, stock and people would stay one set of data across both apps.
+- **Raka did not know how.**
+  - Everything Raka knows about Rangka is one generated prompt, `rangka-ai/knowledge/rangka.md`, plus `apps.json`. Both
+    are built from pinned sibling commits.
+  - `apps.json` lists 6 of 17 apps; `kasir` is not one of them.
+  - Nothing tells Raka how to add an app (a `config.apps` or `config.modules` change, 0032) or how to explain what it
+    shares.
+  - Nothing tells it that only a change set makes anything happen, so "sudah aku buatkan" went out with nothing behind it.
+- **Raka is not the only agent.**
+  - Developers and partners build on Rangka with Claude Code, Codex, Cursor and other harnesses. They hit the same
+    gaps: `.rk` strict YAML rules, change-set lifecycle, which module owns what, connector format.
+  - Each harness today gets that knowledge from `CLAUDE.md` files and luck.
+- **The format exists.** Agent Skills (a folder with `SKILL.md`, YAML frontmatter `name` and `description`, optional
+  `references/`, `scripts/`, `assets/`) loads progressively: only names and descriptions sit in the prompt, and a
+  skill's body is read when the task needs it. Claude Code, the Claude API and apps, and a growing number of other
+  harnesses read it as is. Others take the folder as plain instructions.
 
 ## Decision
 
-### 1. A skill is a declared capability
+### 1. One skills library, in the open Agent Skills format
 
-A **skill** is one thing Raka can do for an owner, declared as data next to the code that does it. Raka chooses a
-skill and fills its inputs. **Code** turns that into a change set, an answer or a handoff. The LLM never writes the
-`.rk` ops for a skill.
+- A **Rangka skill** is a standard Agent Skills folder:
 
-New kind `skill` (`schema/0.5/skill.json`). A skill file has these keys:
+  ```
+  skills/rangka-compose/
+    SKILL.md            # frontmatter + instructions
+    references/         # longer material read on demand (module list rules, examples)
+    evals/              # prompts with the expected outcome (§6); ignored by harnesses
+  ```
 
-```yaml
-# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/skill.json
-name: add_app
-title: {id: Tambah aplikasi, en: Add an app}
-when:                                  # how owners ask; examples for Raka, never matched literally
-  id: ["mau pakai kasir", "tambahin POS", "bisa sekalian buat sewa alat?"]
-inputs:
-  app: {type: catalogue_app, required: true}
-requires: {kernel: ">=0.5", feature: module_sets}   # 0032
-produces: changeset                    # changeset | answer | handoff
-generator: config.add_app              # kernel code that builds the ops; one name, one function
-proof:                                 # what must be true after apply, and what the owner opens to see it
-  - installed: "{{app}}"
-  - open: "/app/#/w/{{app.work_home}}" # falls back to the app's home
-escalate_when: ["plan_limit"]          # 0028: the plan does not include the app
-```
+- **Frontmatter:**
+  - `name`: kebab-case, equal to the folder name, prefixed `rangka-`.
+  - `description`: what the skill does and when to use it, ≤ 1024 characters, written so a model picks it from the
+    description alone.
+  - Rangka-specific keys sit only under `metadata:`, so every harness still parses the file:
+    - `rangka.version`: the release that ships it;
+    - `rangka.requires`: kernel version or feature, for example `module_sets` (0032);
+    - `rangka.writes`: which layers its actions may change, for example `[config, site/custom]`.
+- **Written for any harness.** Each action is given two ways:
+  - the MCP tool (`rangka_meta`, `rangka_changeset_propose`, …), for an agent connected to a kernel, which is how
+    Raka runs;
+  - the CLI or file equivalent (`rangka validate`, editing `site/config.rk`, `rangka apply`), for an agent in a
+    checkout.
 
-- **`produces`:**
-  - `changeset`: the generator returns ops. They go through the usual pipeline (validate, preview, owner approves).
-  - `answer`: read-only. Code reads the data and Raka words the answer.
-  - `handoff`: something only a person may do, on a screen of its own: setting connector secrets (0017), testing a
-    connector (0033 §3), pairing an Edge device (0003). Raka links to the screen and never does it itself.
-- **Risk is never declared.** The kernel's `Assess` rates the generated change set as for any other. A skill cannot
-  lower it.
-- **Validator codes** (Go and Python identical):
-  - `skill_generator_unknown`: the kernel has no generator by that name;
-  - `skill_input_type`: an input type the kernel does not know;
-  - `skill_proof_route`: a proof route outside `/app/` or `/console/`.
+  A skill never assumes one harness's tool names.
+- **Scripts are optional helpers.** A skill must work without running them: Raka runs no code, and some harnesses
+  cannot either. Skills never contain secrets, keys or customer data.
 
-### 2. Who ships skills
+### 2. Who writes which skills (ownership as in 0000)
 
-| Source | What | Where |
-| --- | --- | --- |
-| rangka-os kernel | **Platform skills**, one per kernel capability, with their generators in Go | `kernel/skills/*.rk`, embedded in the binary |
-| rangka-apps | **App skills**: an app's own way to be set up, made of platform skills with fixed arguments. No new code. | `apps/<app>/skills/*.rk`, `modules/<m>/skills/*.rk` (optional) |
-| rangka-connectors | Nothing new. Each connector becomes an option of the platform skill `connect_service`, read from its `connector.rk` (`title`, `summary`, `actions`, `money`) | — |
-| rangka-edge | Nothing new. Pairing a device is the platform skill `pair_device` (a handoff) | — |
-| rangka-cloud | Nothing new. The interview and studio read the same list (§3) | — |
+| Repo | Skills (v1) |
+| --- | --- |
+| rangka-os (`skills/`) | `rangka-concepts` (layers, apps vs modules, data shared across apps, what Raka may never do) · `rangka-rk-files` (strict YAML rules, schema header, validator codes) · `rangka-changesets` (propose → validate → preview, risk, never approve or apply, how to tell the owner) · `rangka-compose` (add or remove an app or module, read the catalogue, explain `shares`/`adds`) · `rangka-overlays` (`x_` fields, options, views) · `rangka-flows` · `rangka-dashboards` · `rangka-work-screens` (0030) · `rangka-theme-and-layout` · `rangka-imports` |
+| rangka-apps (`apps/<app>/skill/`, `skills/`) | one per app, for example `rangka-app-kasir`: who it is for, what it shares and adds, its onboarding questions, roles and screens, and how to set it up on an existing site. Plus `rangka-app-authoring` for writing modules and apps. |
+| rangka-connectors (`skills/`) | `rangka-connectors` (what exists, install, secrets form, test) · `rangka-connector-authoring` (the format, 0017 secrets rules, 0033 company drafts) |
+| rangka-edge (`skills/`) | `rangka-edge-devices` (what works offline today, pairing, device connectors) |
+| rangka-cloud (private) | `juragan-interview` and other Cloud-only skills. They are loaded by Raka in the Cloud and never published. |
 
-**Platform skills, v1.** Each one exists because the kernel already has the capability:
+Each skill lives next to the code it describes and changes in the same PR as that code. A PR that changes a
+capability without its skill fails review, the same rule as docs.
 
-| Skill | Produces | Kernel capability |
-| --- | --- | --- |
-| `explain_system` | answer | `/meta`, installed modules and the apps that brought them (0032 `installed_by`) |
-| `find_capability` | answer | the catalogue listing of §3: what exists, what is installed, what is missing |
-| `add_app`, `add_module` | changeset | `config.apps`, `config.modules` (0001, 0032) |
-| `remove_module` | changeset | 0032 §3; high risk when rows exist |
-| `add_field`, `change_field_options` | changeset | overlays in `site/custom/<model>.rk` (`x_` fields) |
-| `add_company_model`, `add_flow` | changeset | 0016 and 0033 §1, money and stock rules unchanged |
-| `add_list_column`, `add_dashboard_widget` | changeset | views and dashboards |
-| `assign_work_screen` | changeset | 0030: a screen for a role, home or not |
-| `set_numbering`, `set_theme`, `set_layout` | changeset | numbering, `theme.rk`, `layout.rk` |
-| `connect_service` | changeset, then handoff | install a catalogue connector, then the secrets form (0017) |
-| `draft_connector` | changeset, then handoff | 0033 §2–§4: company connector, test, second confirmation |
-| `pair_device` | handoff | 0003: the Edge pairing screen |
-| `import_records` | handoff | the import screen; Raka maps columns, a person runs it |
-| `report_gap` | answer | files a gap (the Cloud's gap issues) when nothing fits |
+### 3. Installable anywhere, documented on rangka-os
 
-Example app skill: `kasir` ships `pasang_kasir`, which is
-`add_app {app: kasir}`, then `assign_work_screen {screen: kasir, role: cashier, home: true}`, then asking the owner
-for the outlet and cashier names that its onboarding questions (`outlet.sales_source`, `seed.users`) already declare.
+- **Release asset.** Each rangka-os release attaches `rangka-skills-<version>.zip`, holding the skills of all four
+  public repos at their pinned commits. It is built by CI, never committed (0000 §6).
+- **CLI**: `rangka skills install [--to <dir>]`, from `@rangka-os/cli`.
+  - Defaults by harness: `.claude/skills/` (project) or `~/.claude/skills/`, `.agents/skills/` for harnesses that read
+    that folder, or any `--to`.
+  - `rangka skills list` and `rangka skills check` (the lint of §6).
+- **Claude Code plugin.** rangka-os carries a plugin marketplace manifest, so
+  `/plugin marketplace add rangka-os/rangka-os` installs the library and updates it per release.
+- **From a running kernel.** MCP tools serve the skills that match that kernel's version and installed apps:
+  - `rangka_skills` returns names and descriptions;
+  - `rangka_skill {name}` returns the `SKILL.md` body;
+  - `rangka_skill_file {name, path}` returns one reference file.
 
-### 3. Raka reads skills from the running kernel, not from a pack
+  Any MCP harness connected to a kernel can load them without installing anything.
+- **Docs.** The docs site gets a **Skills** section, generated from the `SKILL.md` files by a script like
+  `gen-reference.mjs` (the docs workflow already checks out rangka-apps and rangka-connectors). It has:
+  - one page per skill, showing its description, metadata, body and references;
+  - an install page per harness (Claude Code, Claude API and apps, Codex, Cursor, others);
+  - a page on writing a Rangka skill (this contract's rules).
 
-- **MCP tools** (and REST for the Console and the Cloud):
-  - **`rangka_skills`** (`GET /api/v1/skills`): the skills this site can use, the kernel filters them (`requires`,
-    plan limits). It also gives the **catalogue listing** used by `find_capability` and `add_app`, one line per app,
-    module and connector:
-    - `installed`, `available` or `not_in_plan`;
+### 4. Raka is one consumer
+
+- **Prompt.** Raka's system prompt lists the available skills by name and description (the kernel's `rangka_skills`,
+  or the zip in the Cloud before any kernel runs). A tool `load_skill {name}` reads one when needed.
+  `rangka-concepts` and `rangka-changesets` are always loaded. This works the same with every provider (Anthropic,
+  OpenAI-compatible, DeepSeek), because rangka-ai does the loading itself.
+- **Knowledge pack.** `knowledge/rangka.md` shrinks to what the skills do not cover. `knowledge/apps.json` goes: what
+  exists comes from the live catalogue (§5).
+- **Interview.** The Cloud's interview loads `rangka-compose` and the app skills, so composition and "mau sekalian
+  POS" use the same text a developer's Claude Code uses.
+
+### 5. Two kernel pieces the skills need
+
+Skills are instructions. They cannot know what exists on a site, and they cannot stop a false claim, so:
+
+- **Live catalogue.**
+  - `rangka catalogue --json` and the MCP tool `rangka_catalogue` list each app, module and connector with:
+    - its state, `installed`, `available` or `not_in_plan` (0028);
     - its title and summary;
-    - for apps: `shares` (modules already installed that it reuses) and `adds` (modules it would add), computed by the
-      same resolver as 0032 §2.
-  - **`rangka_skill_plan {skill, inputs}`** (`POST /api/v1/skills/{name}/plan`): runs the generator, proposes the
-    change set (status `proposed`, `source: "ai"`) and returns its id, the ops summary, `shares`/`adds`, and the proof
-    to check after apply. For a handoff it returns the screen's route and creates nothing. An `ai: true` token may
-    call it. It never validates past proposed by itself and never approves (0020 §4).
-- **The interview, before any kernel runs** (Cloud, phase 1): `rangka catalogue --json` prints the same catalogue
-  listing from the catalogue directory. The Cloud passes it to rangka-ai, so the interview and the running site never
-  disagree about what exists.
-- **rangka-ai:**
-  - drops `knowledge/apps.json` as a source of what exists;
-  - the knowledge pack keeps concepts and how-tos only, built in CI (0000 §6);
-  - `draft_changeset` stays for what no skill covers, behind the same guardrails.
+    - for apps, `shares` (modules already installed that it reuses) and `adds` (modules it would add), computed by
+      0032's resolver.
+  - `rangka-compose` tells every agent to read this first and never to name an app from memory.
+- **Proof before claim.**
+  - Skills that write tell the agent never to say something is done. They say what was proposed and what the owner
+    does next.
+  - The studio and web app show completion from the change set's status, with a link to what changed.
+  - rangka-ai enforces this too. A Raka turn that claims completion with no change set in that turn is repaired once,
+    then replaced by a fixed line ("Aku belum mengubah apa pun. Ini usulanku: …"). The phrase list and tests live in
+    rangka-ai.
 
-### 4. Proof before claim
+### 6. Quality
 
-- Raka's text never states that something is made, added, connected or done. The **Cloud and the web app render
-  completion from the change set**, as a card with its status and the skill's proof link ("Diterapkan · Buka Kasir").
-  Raka's text says what it proposed and what the owner does next.
-- **rangka-ai guardrail:**
-  - a turn whose reply claims completion ("sudah aku buatkan", "sudah jadi", "done") but has no change set or handoff
-    from this turn is repaired once;
-  - if the claim is still there, it is replaced by a fixed line: "Aku belum mengubah apa pun. Ini usulanku: …".
-  - The phrase list lives in rangka-ai with tests, in Bahasa Indonesia and English.
-- **After apply**, the kernel checks the skill's `proof`:
-  - each `installed` is in `/meta`;
-  - each `open` route answers 200 for a member with the role.
+- **Lint.** `rangka skills check` runs in each repo's CI and checks that:
+  - the frontmatter is valid and `name` equals the folder;
+  - the description length is within the limit;
+  - every reference link resolves;
+  - every validator code, MCP tool and CLI command the skill names really exists in that kernel version;
+  - no secret-looking string appears.
+- **Evals.** Each skill's `evals/*.yaml` gives a prompt, a starting site and the expected outcome. The expected
+  outcome is one of:
+  - a change set touching these paths with this risk;
+  - an answer that names these apps;
+  - an escalation.
 
-  A failed proof marks the change set `applied_unverified`, and the card says so. It is never shown as done.
+  rangka-ai CI runs them with the scripted provider on every PR, and with a real provider nightly. First eval: "mau
+  sekalian POS" on an F&B Cabang site proposes adding `kasir` and says it shares `catalogue`, `outlets`, `stock`
+  and `users` and adds `pos`.
+- **Missing pieces are said.**
+  - `rangka-compose` and `rangka-connectors` tell the agent to say plainly when nothing fits, offer what does exist
+    and file a gap.
+  - For Mogu that means:
+    - no GoFood, GrabFood or ShopeeFood connector exists, so it offers daily sales or a CSV import;
+    - no offline POS on Edge yet, so the cashier works online for now.
 
-### 5. Missing capabilities are said, not invented
+### 7. Guardrails do not change
 
-- `find_capability` returns `missing` when nothing in the listing matches. Raka then says so and offers what does
-  exist. It never drafts a fake piece to fill the gap. For Mogu that means:
-  - **GoFood, GrabFood, ShopeeFood:** no connector exists. Raka offers what does exist: record those orders through
-    `outlet_sales` daily sales, or import the platforms' CSV exports with `import_records`. It files a `report_gap`.
-  - **POS:** `kasir` exists. Raka uses `add_app`, which shares `catalogue`, `outlets`, `stock` and `users` with F&B
-    Cabang and adds `pos`.
-  - **Offline at the outlet:** Edge has no POS yet (rangka-edge README). Raka says the cashier works online for now.
-
-### 6. Guardrails do not change
-
-- AI never approves or applies (0020 §4).
-- Escalations of 0033 stay, and high risk stays owner-only.
-- Money and stock never depend on an LLM: generators are Go code, and a skill only chooses a generator and its
-  inputs.
+- A skill grants nothing. What an agent may do is still decided by the kernel and by rangka-ai's guardrails:
+  - AI never approves or applies (0020);
+  - 0033's escalations stay;
+  - high risk is owner-only;
+  - money and stock never depend on an LLM.
+- A skill that tells an agent to approve, apply or read secrets fails `rangka skills check`.
 
 ## Contract changes
 
-- **Schema 0.5:** new kind `skill` (`skill.json`); app and module folders may hold `skills/`.
-- **Validators:** codes `skill_generator_unknown`, `skill_input_type`, `skill_proof_route`. App skills may only
-  reference platform skills.
-- **Kernel:** embedded platform skills and their generators; `GET /api/v1/skills`,
-  `POST /api/v1/skills/{name}/plan`; MCP `rangka_skills`, `rangka_skill_plan`; proof check after apply and status
-  `applied_unverified`; CLI `rangka catalogue --json`.
+- **rangka-os:**
+  - `skills/`;
+  - CLI `rangka skills install|list|check` and `rangka catalogue --json`;
+  - MCP `rangka_skills`, `rangka_skill`, `rangka_skill_file`, `rangka_catalogue`;
+  - the release zip and the plugin marketplace manifest;
+  - the docs site's Skills section.
+- **rangka-apps, rangka-connectors, rangka-edge:** `skills/` folders, and `rangka skills check` in CI.
 - **rangka-ai:**
-  - tools `rangka_skills`, `rangka_skill_plan`;
+  - `load_skill`, skills in the system prompt, evals;
   - the completion-claim guardrail;
-  - the catalogue no longer comes from the committed `knowledge/apps.json`;
-  - `/v1/turn` and `/v1/chat` emit `skill` events (`{name, changeset_id | route}`).
-- **rangka-apps:** optional `skills/` per app (`kasir` first).
-- **rangka-cloud:** the interview passes `rangka catalogue --json` to rangka-ai, and the studio renders the change-set
-  card and proof link instead of Raka's claim.
+  - `apps.json` removed and `rangka.md` reduced.
+- **rangka-cloud:** private skills, the interview loads the published ones, and completion is shown from change sets.
 
 ## Order
 
 1. **The Mogu fix:**
-   - catalogue listing and `rangka catalogue --json`;
-   - `rangka_skills` with `explain_system`, `find_capability`, `add_app` and `add_module`;
-   - the completion-claim guardrail.
-
-   Evaluation case: "mau sekalian POS" on an F&B Cabang site gives a proposed change set that adds `kasir` with
-   `shares: [catalogue, outlets, stock, users]`, `adds: [pos]`.
-2. Overlay and view skills, `assign_work_screen`, proof check after apply.
-3. `connect_service`, `draft_connector` (with 0033), `import_records`.
-4. `pair_device` when rangka-edge has device connectors.
+   - `rangka-concepts`, `rangka-changesets`, `rangka-compose`, `rangka-app-kasir`;
+   - `rangka catalogue --json` and `rangka_catalogue`;
+   - Raka's `load_skill` and the claim guardrail;
+   - the POS eval.
+2. Install paths (`rangka skills install`, zip, plugin manifest) and the docs Skills section.
+3. The rest of the rangka-os skills, connector skills and app skills for every app.
+4. `rangka-edge-devices` when Edge has device connectors.
 
 ## Open
 
-- Company-defined skills (an owner saving "how we open a new outlet" as a skill): later.
-- Whether `when:` examples should feed the learning loop's retrieval (rangka-cloud interview design, "Learning").
-- One generator per platform skill, or generators that compose: decided while building step 1.
+- Whether rangka-apps keeps one skill per app or one per module plus app summaries.
+- Whether the kernel should also expose skills as MCP prompts, beside the tools.
+- Translations: skills are written in English (code and docs rule), and examples carry the Bahasa Indonesia owners
+  type. Is that enough for Raka's replies?

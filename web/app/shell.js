@@ -134,7 +134,7 @@
     return ((meta && meta.work) || []).filter(function (w) { return screens[w.screen]; }).map(function (w) {
       var s = screens[w.screen];
       // an icon the design system does not draw would leave a blank rail or tab tile: fall back by screen type
-      var icon = s.icon && (!R.ICONS || R.ICONS.indexOf(s.icon) >= 0) ? s.icon : s.type === "counter" ? "store" : "edit";
+      var icon = s.icon && (!R || !R.ICONS || R.ICONS.indexOf(s.icon) >= 0) ? s.icon : s.type === "counter" ? "store" : "edit";
       return { id: "w/" + w.screen, label: L(s.label) || w.screen, icon: icon };
     });
   }

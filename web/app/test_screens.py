@@ -221,6 +221,44 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     c.close()
 
 
+def test_counter_lost_answer_then_press_again_is_one_sale(browser, ctx):
+    # jual_online has no offline queue: the submit answer is lost after the server wrote, set: sold_at = now() changes,
+    # and the cashier presses Selesai again: the same job and keys go again, one cart is one sale (audit WS3 R2-1)
+    o, _ = page_for(browser, ctx, OWNER, DESK)
+    if not o.request.get("/api/v1/r/menu?limit=1").json()["data"]:
+        o.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Es teh", "category": "Minuman", "price": 8000}), headers={"Content-Type": "application/json"})
+    o.close()
+    c, p = page_for(browser, ctx, KASIR, TABLET, allow=("/api/v1/r/penjualan",))
+    p.goto("/app/#/w/jual_online")
+    p.wait_for_selector(".ap-counter-open, .ap-counter-item")
+    if p.locator(".ap-counter-open").count():
+        p.locator(".ap-counter-open input").first.fill("50000")
+        p.get_by_role("button", name="Buka sesi").click()
+        p.wait_for_selector(".ap-counter-item")
+    before = total(c, "penjualan")
+    drops = {"n": 0}
+    def drop_submit(route):
+        if route.request.method == "POST" and drops["n"] == 0:
+            drops["n"] = 1
+            route.fetch()
+            route.abort("connectionreset")
+        else:
+            route.continue_()
+    p.route("**/api/v1/r/penjualan/*/submit", drop_submit)
+    p.locator(".ap-counter-item").first.click()
+    p.locator(".ap-counter-foot").get_by_role("button").last.click()  # Bayar
+    p.get_by_role("button", name="Uang pas").click()
+    p.wait_for_selector(".ap-counter-cart .ap-work-err")
+    assert "tidak akan tercatat dua kali" in p.locator(".ap-counter-cart .ap-work-err").inner_text()
+    time.sleep(1.2)  # now() moves on
+    p.get_by_role("button", name="Selesai").click()
+    p.wait_for_selector(".ap-counter-done")
+    sales = c.request.get("/api/v1/r/penjualan?limit=5&sort=-created_at").json()["data"]
+    assert total(c, "penjualan") == before + 1 and sales[0]["docstatus"] == 1, sales
+    ctx["errors"] = [x for x in ctx["errors"] if "ERR_CONNECTION_RESET" not in x and "Failed to fetch" not in x]
+    c.close()
+
+
 def test_lost_answer_on_queue_screen_is_replayed_once(browser, ctx):
     # isi_jam queues: the server writes, the answer is lost, the job waits; its replay (with _occurred_at) answers the
     # stored result instead of a conflict, and the record ends submitted, once (audit WS2 F1)

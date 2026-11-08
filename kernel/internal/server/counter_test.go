@@ -19,7 +19,7 @@ func TestCounterScreen(t *testing.T) {
 	kopi := owner.must(201, "POST", "/api/v1/r/menu", map[string]any{"menu_name": "Kopi susu", "category": "Minuman", "price": 18000}).JSON["name"].(string)
 
 	m := kasir.must(200, "GET", "/api/v1/meta", nil).JSON
-	if got := workOf(t, m); got != "jual* " {
+	if got := workOf(t, m); got != "jual* jual_online " {
 		t.Fatalf("kasir work: %q", got)
 	}
 	sc := kasir.must(200, "GET", "/api/v1/screens/jual", nil).JSON

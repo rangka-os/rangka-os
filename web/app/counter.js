@@ -246,15 +246,19 @@
       var change = changeOf(total, cash, qris);
       if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
       setBusy(true); setErr("");
-      // set: values are taken again for every sale (contract 0030 §2): a sale after midnight gets today's date
-      // (audit WS3 M2); offline, the last copy of the screen is used
-      var fresh = p.reload ? p.reload().then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
+      var pay = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
+      var shiftName = session && typeof session === "object" ? session.name : null;
+      // the press's fingerprint leaves set: out: a press again after a lost answer reuses the same job and keys even
+      // when set: (now(), the date after midnight) changed meanwhile, so one cart is one sale (audit WS3 R2-1)
+      var sig = JSON.stringify(saleBody(c, cart, pay, shiftName, null, customer));
+      var pending = jobRef.current && jobRef.current.sig === sig ? jobRef.current.job : null;
+      // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
+      // on a failed reload, the last copy
+      var fresh = pending ? Promise.resolve(null)
+        : p.reload ? p.reload(true).then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
       fresh.then(function (nowSets) {
-        var body = saleBody(c, cart, c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null,
-          session && typeof session === "object" ? session.name : null, nowSets.document, customer);
-        var sig = JSON.stringify(body);
-        var job = jobRef.current && jobRef.current.sig === sig ? jobRef.current.job
-          : RA.outbox.newJob({ scope: scope, screen: s.name, model: c.document.model, body: body, submit: c.submit !== false });
+        var job = pending || RA.outbox.newJob({ scope: scope, screen: s.name, model: c.document.model,
+          body: saleBody(c, cart, pay, shiftName, nowSets.document, customer), submit: c.submit !== false });
         jobRef.current = { sig: sig, job: job };
         return RA.outbox.send(ctx.api, job, s.offline === "queue");
       }).then(function (res) {

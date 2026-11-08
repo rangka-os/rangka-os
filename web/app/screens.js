@@ -5,7 +5,8 @@
  * renderer yet shows a notice; later files add renderers to workRenderers without touching this one.
  *
  * Renderers get {ctx, screen, set, sets, reload}: set is the block's own set: (entry), sets the nested ones by slot
- * path (counter: document, session, session.close); reload() fetches the screen again (fresh values, e.g. now()).
+ * path (counter: document, session, session.close); reload(quiet) fetches the screen again (fresh values, e.g. now());
+ * with quiet a refusal resolves null instead of showing the error page.
  * Every write goes through the record API (api.create, api.submit), so permissions, row scope, rules and approvals
  * apply as on a form.
  *
@@ -219,13 +220,14 @@
     var st = useState(null), stale = st[0], setStale = st[1]; // the time of the cached screen shown while offline
     var q = useOutbox(ctx);
     var cacheKey = "screen:" + RA.outboxScope(ctx.me) + ":" + name;
-    function load() {
+    // quiet (a renderer reloading mid-task): a refusal does not replace the screen with an error page
+    function load(quiet) {
       return ctx.api.screen(name).then(function (d) {
         setData(d); setStale(null);
         RA.outbox.cache.put(cacheKey, d);
         return d;
       }, function (e) {
-        if (!RA.outboxRetryable(e)) { setErr(e); return null; }
+        if (!RA.outboxRetryable(e)) { if (!quiet) setErr(e); return null; }
         return RA.outbox.cache.get(cacheKey).then(function (c) { // offline: the last good copy, said so on screen
           if (!c) { setErr(e); return null; }
           setData(c.value); setStale(c.at);

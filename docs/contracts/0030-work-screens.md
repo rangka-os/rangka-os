@@ -55,7 +55,7 @@ Adding a type is a contract change.
 
 | type | Job | Slots (required **bold**) | Writes |
 |---|---|---|---|
-| `counter` | Sell or take payment at a counter: catalogue, cart, tender, receipt | **`catalogue`** {**model**, filter, title, search, group_by, **price** (a number field), barcode, image, limit (default 500)}, **`document`** {**model** (submittable unless `submit: false`), **lines** (a table), **line**: {**item** (a link to the catalogue model), **qty**, price, note}, set: {field: CEL}}, `payments` {table, method, amount, ref, methods (options of method)}, `session` {model, link (a link of the document to it), filter (the caller's session, e.g. `cashier == user.email`), state: {field, open, closed}, open: [fields], set, close: {model (submittable), link, fields, set}, blind (bool, default true: the cashier counts cash without seeing the expected amount; the model enforces it with `hidden_for`)}, `hold` (bool), `customer` {field, required}, `print` (a print format of the document), `submit` (default true) | creates one `document` per sale with its lines and payment rows, then submits it |
+| `counter` | Sell or take payment at a counter: catalogue, cart, tender, receipt | **`catalogue`** {**model**, filter, title, search, group_by, **price** (a number field), barcode, image, limit (default 500)}, **`document`** {**model** (submittable unless `submit: false`), **lines** (a table), **line**: {**item** (a link to the catalogue model), **qty**, price, note}, total and change (number fields the receipt panel reads from the server's answer; the screen's own sums are only an estimate), set: {field: CEL, fetched again for every sale}}, `payments` {table, method, amount, ref, methods (options of method)}, `session` {model, link (a link of the document to it), filter (the caller's session, e.g. `cashier == user.email`), state: {field, open, closed}, open: [fields], set, close: {model (submittable), link, fields, set}, blind (bool, default true: the cashier counts cash without seeing the expected amount; the model enforces it with `hidden_for`)}, `hold` (bool), `customer` {field, required}, `print` (a print format of the document), `submit` (default true) | creates one `document` per sale with its lines and payment rows, then submits it |
 | `queue` | Work through cards that change state: kitchen tickets, today's work orders, pick lists, today's rental jobs | **`source`** {model, filter, sort}, **`card`** {title, subtitle, lines, fields, age_from}, **`steps`** [{when: CEL, action: submit / action name / {set: {...}}, label}], `columns` {by: field, values}, `refresh` (seconds, default 10) | runs the step's action on one record |
 | `roll` | One parent record, many rows marked fast or added by scan: class attendance, team attendance, stock count, receiving | **`document`** {model, find or create: CEL, set}, **`rows`** {table, label, mark: {field, values, default} or qty: field} (default: every row starts at e.g. `present` and staff change only the exceptions, as Teachworks and Jackrabbit do), `add_by` (scan / search / none), `scan` {field, match}, `submit` | updates the parent's table, then submits |
 | `route` | Today's list of places to visit, check in, act there | **`stops`** {model, filter, sort, title, address, location}, `visit` {model, link, set, capture: [location, photo]}, **`actions`** [{label, screen or create: model, set}] | creates a visit record (optional) and opens another screen or form with the stop prefilled |
@@ -289,6 +289,13 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
    the seven types (built in the order of the plan, `counter` first), widgets for scan, photo, location, signature and
    80mm print, IndexedDB outbox.
 5. Later (phase 2, with rangka-edge): 0006 `screen.write`, `config.screens`, local Edge bridge, PIN unlock.
+
+### Known gaps of the counter (audit WS3, low)
+- Payment methods other than `cash` and `qris` are not offered by the renderer yet.
+- A held approval of a cancel re-runs the cancel (and its `on: cancel` rules) as the requester at approval time;
+  warn-level cancel rules are not shown to the caller.
+- With two open sessions the screen takes the newest; the catalogue loads at most `limit` rows (default 500).
+- Offline across midnight, the last cached `set:` values keep yesterday's date until the screen reloads online.
 
 ## Implementation (rangka-os, one PR each, in this order)
 | Stage | Content | State |

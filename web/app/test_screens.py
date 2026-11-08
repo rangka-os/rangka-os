@@ -12,7 +12,7 @@ A scenario fails on an exception, on a console error, or on an HTTP answer >= 40
 
 Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure exits 1.
 """
-import argparse, json, os, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.request
+import argparse, json, os, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -172,6 +172,11 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     p.locator(".ap-counter-open input").first.fill("100000")
     p.get_by_role("button", name="Buka sesi").click()
     p.wait_for_selector(".ap-counter-item")
+    # the price changes after the catalogue loaded: the receipt panel shows the server's total and change (audit M1)
+    kopi = c.request.get("/api/v1/r/menu?filter=" + urllib.parse.quote("menu_name == 'Kopi susu'")).json()["data"][0]["name"]
+    o2, _ = page_for(browser, ctx, OWNER, DESK)
+    assert o2.request.patch(f"/api/v1/r/menu/{kopi}", data=json.dumps({"price": 17000}), headers={"Content-Type": "application/json"}).status == 200
+    o2.close()
     # a sale in 4 taps: item, item, Bayar, Uang pas
     p.locator(".ap-counter-item", has_text="Kopi susu").click()
     p.locator(".ap-counter-item", has_text="Roti bakar").click()
@@ -180,7 +185,8 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     p.wait_for_selector(".ap-counter-done")
     first = p.locator(".ap-counter-done p").inner_text().split(" · ")[0]
     rec = c.request.get(f"/api/v1/r/penjualan/{first}").json()
-    assert rec["docstatus"] == 1 and rec["grand_total"] == 33000 and rec["change_amount"] == 0, rec
+    assert rec["docstatus"] == 1 and rec["grand_total"] == 32000 and rec["change_amount"] == 1000, rec
+    assert "Rp 1.000" in p.locator(".ap-counter-done .ap-counter-due").inner_text(), "the server's change, not the screen's"
     assert p.get_by_role("button", name="Cetak struk").count() == 1
     # hold a bill, scan a barcode into a new one, pay split QRIS + cash
     p.locator(".ap-counter-item", has_text="Es teh").click()
@@ -188,15 +194,15 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     p.get_by_role("button", name="Tahan").click()
     p.locator(".ap-counter-search").fill("899001")
     p.locator(".ap-counter-search").press("Enter")
-    p.get_by_role("button", name="Bayar Rp 18.000").click()
+    p.get_by_role("button", name="Bayar Rp 17.000").click()  # the catalogue reloaded after the sale
     p.locator(".ap-counter-part input").first.fill("10000")
     p.get_by_label("Tunai diterima").fill("20000")
-    assert "Rp 12.000" in p.locator(".ap-counter-pay").inner_text()
+    assert "Rp 13.000" in p.locator(".ap-counter-pay").inner_text()
     p.get_by_role("button", name="Selesai").click()
     p.wait_for_selector(".ap-counter-done")
     second = p.locator(".ap-counter-done p").inner_text().split(" · ")[0]
     rec = c.request.get(f"/api/v1/r/penjualan/{second}").json()
-    assert rec["change_amount"] == 12000 and sorted(x["method"] for x in rec["payments"]) == ["cash", "qris"], rec
+    assert rec["change_amount"] == 13000 and sorted(x["method"] for x in rec["payments"]) == ["cash", "qris"], rec
     # the held bill comes back with its table
     p.get_by_role("button", name="Ditahan (1)").click()
     p.locator(".ap-counter-held button").first.click()
@@ -207,7 +213,7 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     p.get_by_role("button", name="Tutup sesi").click()
     form = p.locator(".ap-counter-close")
     assert "seharusnya Rp" not in form.inner_text()
-    form.locator("input").first.fill("151000")
+    form.locator("input").first.fill("150000")
     form.get_by_role("button", name="Tutup sesi").click()
     p.wait_for_selector(".ap-counter-open")
     sessions = c.request.get("/api/v1/r/sesi_kasir?limit=5").json()["data"]

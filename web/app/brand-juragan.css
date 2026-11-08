@@ -69,6 +69,8 @@
 :root[data-brand="juragan"][data-theme="dark"] .ap-shell { --brand: #e0623f; }
 [data-brand="juragan"] .ap-shell .rk-side-mark,
 [data-brand="juragan"] .ap-shell .rk-side-head .tile { background: var(--brand) !important; color: #fff; }
+/* top-nav: the sidebar tile is the open app, in Ink; the business keeps the Bata tile in the top bar */
+[data-brand="juragan"] .ap-top > .rk-side .rk-side-head .tile { background: var(--primary) !important; color: var(--primary-ink); }
 
 /* sidebar: warm neutral, active item = neutral tint, ink text and icon */
 [data-brand="juragan"] .ap-shell > .rk-side { background: var(--app); border-right: 1px solid var(--line); }

@@ -573,6 +573,14 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-side nav { flex: 1; overflow-y: auto; padding: 4px 8px 12px; display: flex; flex-direction: column; gap: 1px; }
 .rk-navgroup { display: flex; flex-direction: column; gap: 1px; }
 .rk-navgroup > p { margin: 10px 0 2px; padding: 0 8px; height: 20px; display: flex; align-items: center; font: 500 var(--font-size-sm)/16px var(--font-sans); color: var(--muted); }
+/* a foldable group's label is a button with the label's look; folded it shows the count and a right chevron */
+.rk-navgroup-t { display: flex; align-items: center; gap: 4px; width: calc(100% + 16px); height: 100%; margin: 0 -8px; padding: 0 8px; border: 0; border-radius: var(--r); background: transparent; font: inherit; letter-spacing: inherit; text-transform: inherit; color: inherit; cursor: pointer; text-align: left; }
+.rk-navgroup-t .l { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-navgroup-t .rk-icon { width: 12px; height: 12px; opacity: 0; transition: opacity .1s; }
+.rk-navgroup-t:hover, .rk-navgroup-t:focus-visible { color: var(--ink-2); }
+.rk-navgroup-t:hover .rk-icon, .rk-navgroup-t:focus-visible .rk-icon, .rk-navgroup.folded .rk-navgroup-t .rk-icon { opacity: 1; }
+.rk-navgroup-t:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.rk-navgroup-n { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
 .rk-navlink { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; height: var(--control); padding: 0 8px; border: 0; border-radius: var(--r);
   background: transparent; color: var(--ink-2); font: 400 var(--font-size)/var(--line-height) var(--font-sans); text-align: left; cursor: pointer; text-decoration: none; box-sizing: border-box; transition: background .1s; white-space: nowrap; }
 .rk-navlink .rk-icon { color: var(--muted); }
@@ -965,6 +973,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 @media (max-width: 767px), (max-width: 1279px) and (pointer: coarse) {
   .rk-iconbtn, .rk-topnav .rk-av-btn, .rk-topnav-product, .rk-viewswitch-btn { min-width: var(--touch); }
   .rk-side.collapsed nav { padding-left: 4px; padding-right: 4px; }
+  .rk-side .rk-navgroup > p:has(> .rk-navgroup-t) { height: auto; margin-top: 4px; margin-bottom: 0; }
   .rk-side.collapsed .rk-side-switch, .rk-side.collapsed .rk-side-search { margin-left: 4px; margin-right: 4px; width: calc(100% - 8px); }
   .rk-crumbs a { display: inline-flex; align-items: center; justify-content: center; min-height: var(--touch); min-width: var(--touch); }
   .rk-th-sort { min-width: var(--touch); }

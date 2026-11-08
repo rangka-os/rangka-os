@@ -275,6 +275,17 @@
     }
   }
 
+  /** The installed app a route belongs to (its dashboard or menu model), else the first app with a page; null with none. */
+  function appOf(meta, route) {
+    var apps = ((meta && meta.apps) || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
+    var owns = function (a) {
+      if (route && route.kind === "dash") return (a.dashboards || []).indexOf(route.dash) >= 0;
+      if (route && (route.kind === "list" || route.kind === "form")) return (a.menu || []).some(function (g) { return (g.items || []).indexOf(route.model) >= 0; });
+      return false;
+    };
+    return apps.filter(owns)[0] || apps[0] || null;
+  }
+
   /** The org a user-menu entry names (the menu shows names; an org without a name shows its id). */
   function orgByLabel(orgs, label) {
     return (orgs || []).filter(function (o) { return o && (o.name || o.id) === label; })[0] || null;
@@ -297,6 +308,7 @@
   RA.hashQuery = hashQuery;
   RA.withHashQuery = withHashQuery;
   RA.navId = navId;
+  RA.appOf = appOf;
 
   /* ================================================================ browser only from here */
   var React = global.React, ReactDOM = global.ReactDOM, R = global.Rangka;
@@ -920,8 +932,10 @@
         footer: sideFooter(false, kind === "side-only" && modeToggle ? h(React.Fragment, { key: "mode" }, modeToggle) : null),
         onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } });
     } else if (kind === "top-nav") {
+      // the top bar already names the business; the sidebar names the app the page belongs to
+      var app = appOf(meta, route);
       side = h(R.Sidebar, {
-        app: { name: name, type: roleText, icon: "store", color: "var(--brand)" },
+        app: { name: app ? L(app.title) || app.name : name, type: roleText, icon: app ? "apps" : "store", color: "var(--brand)" },
         groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route), onNavigate: onNavigate,
         footer: sideFooter(false, null)
       });

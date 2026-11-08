@@ -287,3 +287,11 @@ test("workBar: up to 5 screens, Lainnya with the desk entries", () => {
   assert.ok(!b.more.some((i) => i.id.indexOf("w/") === 0), "Lainnya holds no screens");
   assert.ok(b.more.some((i) => i.id === "approvals" && i.count === 2) && b.more.some((i) => i.id === "r/deal"));
 });
+
+test("appOf: the app a page belongs to names the top-nav sidebar, else the first app", () => {
+  assert.strictEqual(A.appOf(META, { kind: "dash", dash: "sales_overview" }).name, "sales");
+  assert.strictEqual(A.appOf(META, { kind: "form", model: "lead", name: "X" }).name, "crm");
+  assert.strictEqual(A.appOf(META, { kind: "list", model: "customer" }).name, "core");
+  assert.strictEqual(A.appOf(META, { kind: "approvals" }).name, "core");
+  assert.strictEqual(A.appOf({ apps: [] }, { kind: "home" }), null);
+});

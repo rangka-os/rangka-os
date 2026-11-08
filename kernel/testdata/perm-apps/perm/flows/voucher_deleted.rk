@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: voucher_deleted
+label: {id: Voucher dihapus}
+# A flow on <model>.deleted runs in the delete's transaction: it writes a note, and a failing step (a child row created
+# on its own is refused) rolls the delete back.
+on: voucher.deleted
+steps:
+  - create: note
+    set:
+      body: "'Dihapus ' + event.name + ' ' + event.title"
+  - if: event.title == 'Terkunci'
+    create: voucher_line
+    set: {}

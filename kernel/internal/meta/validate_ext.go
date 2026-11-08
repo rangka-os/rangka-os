@@ -243,7 +243,7 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 				v.rep.extra("error", p, w+"/call", "unknown_action", fmt.Sprintf(`connector %s has no action "%s"`, cn, act))
 			}
 		}
-		for _, k := range []string{"where", "if"} {
+		for _, k := range []string{"where", "if", "for_each"} {
 			v.parens(p, w+"/"+k, st[k])
 		}
 		if ap, ok := st["approve"].(map[string]any); ok {
@@ -254,8 +254,33 @@ func (v *validator) steps(p, at string, steps any, all map[string]vis) {
 				v.parens(p, w+"/set/"+fk, set[fk])
 			}
 		}
-		for _, k := range []string{"then", "else"} {
+		for _, k := range []string{"then", "else", "do"} {
 			v.steps(p, w+"/"+k, st[k], all)
+		}
+		if do, ok := st["do"].([]any); ok {
+			v.noPause(p, w+"/do", do)
+		}
+	}
+}
+
+// noPause reports wait and approve steps anywhere under a for_each's do: (contract 0031): the loop runs in one
+// transaction, so the kernel refuses them when the flow runs.
+func (v *validator) noPause(p, at string, steps []any) {
+	for i, sv := range steps {
+		st, ok := sv.(map[string]any)
+		if !ok {
+			continue
+		}
+		w := fmt.Sprintf("%s/%d", at, i)
+		for _, k := range []string{"wait", "approve"} {
+			if _, has := st[k]; has {
+				v.rep.extra("error", p, w, "for_each_pause", fmt.Sprintf("%s is not allowed inside for_each (the loop runs in one transaction)", k))
+			}
+		}
+		for _, k := range []string{"then", "else", "do"} {
+			if sub, ok := st[k].([]any); ok {
+				v.noPause(p, w+"/"+k, sub)
+			}
 		}
 	}
 }

@@ -17,6 +17,7 @@ if: app_installed('sales')
 | `customer.payment_days` | Member access through a link loads the linked record (overlay fields too) |
 | `today()`, `now()` | ISO date / datetime in the organisation's timezone |
 | `duration('7d')`, `duration(n)` (n days), date ± duration | Date arithmetic; result is an ISO date |
+| `add_months(date, n)`, `days_between(a, b)` | Calendar months (day clamped to the month's end: `2026-01-31` + 1 = `2026-02-28`) and whole days from a to b |
 | `round(x)`, `size(x)`, `sum(list)`, `list.map(x, expr)` | Numbers and lists |
 | `option('field', 'attr')` | An attribute of the selected option of a select field (e.g. `probability`) |
 | `app_installed('sales')` | Whether an app is installed |

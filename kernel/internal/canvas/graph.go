@@ -520,6 +520,9 @@ func stepDetail(st map[string]any) string {
 	if _, ok := st["then"]; ok {
 		return "if"
 	}
+	if x, ok := st["for_each"]; ok {
+		return "for_each " + text(x)
+	}
 	keys := make([]string, 0, len(st))
 	for k := range st {
 		keys = append(keys, k)
@@ -569,7 +572,7 @@ func touches(steps []any, model string, vars map[string]string) bool {
 		if u := meta.Str(st, "update"); u != "" && vars[u] == model {
 			return true
 		}
-		if touches(meta.AsList(st["then"]), model, vars) || touches(meta.AsList(st["else"]), model, vars) {
+		if touches(meta.AsList(st["then"]), model, vars) || touches(meta.AsList(st["else"]), model, vars) || touches(meta.AsList(st["do"]), model, vars) {
 			return true
 		}
 	}

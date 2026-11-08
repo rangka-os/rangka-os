@@ -35,8 +35,10 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   approvals they may open, as a sheet). Ubah and previews always use the desk shell.
 - **Renderers** (`screens.js`): `#/w/<screen>` loads `GET /api/v1/screens/<name>` (the screen plus `set:` evaluated by
   the kernel for the user) and renders `RangkaApp.workRenderers[type]`. Built: `entry` (a short form: the listed
-  fields, "Simpan" or "Simpan & ajukan", then an empty form again with "Baru disimpan"). Other types show a notice
-  until their renderer ships.
+  fields, "Simpan" or "Simpan & ajukan", then an empty form again with "Baru disimpan") and `counter` (`counter.js`:
+  open the caller's session or ask for one, catalogue tiles with groups, search and barcode Enter, cart with qty and
+  notes, Tahan, tender with Uang pas / round notes / QRIS full or part and the change, receipt print through the
+  browser dialog, blind session close). Other types show a notice until their renderer ships.
 - **Safe writes** (`outbox.js`): every press sends `Idempotency-Key`s, so a double tap or pressing again after a lost
   answer writes once. A screen with `offline: queue` keeps unsent presses in IndexedDB ("N antre" in the header, sent
   on reconnect, every 15 s or with "Kirim sekarang"); a write the server refuses later stays on screen until dismissed.
@@ -76,6 +78,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `approvals.js` | Approval inbox and the "Menunggu persetujuan" banner |
 | `docs.js` | Print menu and attachments panel |
 | `outbox.js` | Safe writes for work screens: idempotency keys, the IndexedDB outbox and the read cache (contract 0030 §6, §7) |
+| `counter.js` | The `counter` work screen (cashier): catalogue, cart, hold, tender, session, receipt (contract 0030 §2) |
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
 | `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |

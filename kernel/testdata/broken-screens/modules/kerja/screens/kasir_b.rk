@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: kasir_b
+type: counter
+label: {id: Kasir B}
+roles: [staf]
+counter:
+  catalogue: {model: catatan_harian, price: ghost}
+  document:
+    model: jam_kerja
+    lines: breaks
+    line: {item: minutes, qty: ghost, note: minutes}
+    set: {total: "1", staff: "user.name"}
+  payments: {table: breaks, method: minutes, amount: minutes, methods: [cash]}
+  customer: {field: buyer}
+  session:
+    model: catatan_harian
+    link: staff
+    state: {field: text, open: open}

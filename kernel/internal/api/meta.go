@@ -170,7 +170,7 @@ func screenMeta(sc *meta.Screen) map[string]any {
 }
 
 // getScreen is GET /api/v1/screens/{name} (contract 0030): the screen and its set: values evaluated for the
-// caller now. A screen the caller may not open is 404, like one that does not exist.
+// caller now (set: the block's own, sets: nested slots such as document and session of a counter). A screen the caller may not open is 404, like one that does not exist.
 func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
 	name := r.PathValue("name")
 	sc := s.Engine.ScreenAllowed(c.actor, name)
@@ -178,12 +178,17 @@ func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
 		fail(w, &engine.StatusError{Status: 404, Code: "not_found", Msg: "no work screen " + name})
 		return
 	}
-	set, err := s.Engine.ScreenSet(c.actor, sc)
+	sets, err := s.Engine.ScreenSets(c.actor, sc)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, 200, map[string]any{"name": sc.Name, "screen": screenMeta(sc), "set": set})
+	set, _ := sets[""].(map[string]any)
+	if set == nil {
+		set = map[string]any{}
+	}
+	delete(sets, "")
+	writeJSON(w, 200, map[string]any{"name": sc.Name, "screen": screenMeta(sc), "set": set, "sets": sets})
 }
 
 // InstalledConnectors are the connectors a flow triggers or calls, or system.rk notify uses.

@@ -4,7 +4,8 @@
  * the signed-in user, now) and renders the screen's type from RangkaApp.workRenderers[type]. A type without a
  * renderer yet shows a notice; later files add renderers to workRenderers without touching this one.
  *
- * Renderers get {ctx, screen, set, reload}: reload() fetches the screen again (fresh set: values, e.g. now()).
+ * Renderers get {ctx, screen, set, sets, reload}: set is the block's own set: (entry), sets the nested ones by slot
+ * path (counter: document, session, session.close); reload() fetches the screen again (fresh values, e.g. now()).
  * Every write goes through the record API (api.create, api.submit), so permissions, row scope, rules and approvals
  * apply as on a form.
  *
@@ -243,7 +244,7 @@
       stale ? h("p", { className: "ap-work-note" }, "Belum ada koneksi. Layar dari data terakhir " + hhmm(stale) + ".") : null,
       h(QueueBar, { q: q }),
       missing.length ? h("p", { className: "ap-work-note" }, "Perangkat ini belum mendukung " + missing.join(", ") + ". Layar tetap bisa dipakai tanpa fitur itu.") : null,
-      Renderer ? h(Renderer, { ctx: ctx, screen: s, set: data.set || {}, reload: load })
+      Renderer ? h(Renderer, { ctx: ctx, screen: s, set: data.set || {}, sets: data.sets || {}, reload: load })
         : h(R.EmptyState, { title: "Jenis layar ini belum tersedia" }, "Layar " + (L(s.label) || s.name) + " memakai jenis \u201c" + s.type + "\u201d yang belum ada di versi aplikasi ini. Pakai menu Lainnya untuk membuka formulirnya."));
   }
   RA.WorkScreenView = WorkScreenView;

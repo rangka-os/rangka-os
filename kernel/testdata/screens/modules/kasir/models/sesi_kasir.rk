@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: sesi_kasir
+label: {id: Sesi kasir}
+naming: SESI-{####}
+fields:
+  - {name: cashier, type: data, label: {id: Kasir}, default: user.email, read_only: true, in_list: true}
+  - {name: opening_cash, type: currency, label: {id: Modal kas}, required: true}
+  - name: state
+    type: select
+    label: {id: Status}
+    default: "'open'"
+    read_only: true
+    options:
+      - {value: open, label: {id: Buka}}
+      - {value: closed, label: {id: Tutup}}
+  - {name: expected_cash, type: currency, label: {id: Tunai seharusnya}, read_only: true, hidden_for: [kasir]}
+permissions:
+  - {role: kasir, read: true, create: true, write: true}

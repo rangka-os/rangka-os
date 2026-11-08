@@ -514,3 +514,44 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-work-queue .ap-work-note { margin: 0; }
 .ap-work-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
 .ap-workshell .rk-toasts.float { bottom: calc(76px + env(safe-area-inset-bottom)); }
+
+/* ---- counter (counter.js): catalogue left, cart right on a tablet; stacked on a phone ---- */
+.ap-counter { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 900px) { .ap-counter { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; }
+  .ap-counter-tools, .ap-counter-held { grid-column: 1 / -1; }
+  .ap-counter-cart { position: sticky; top: 64px; } }
+.ap-counter-tools { display: flex; justify-content: flex-end; gap: 8px; }
+.ap-counter-tools:empty { display: none; }
+.ap-counter-search, .ap-counter-cust, .ap-counter-note, .ap-counter-part input { width: 100%; box-sizing: border-box; min-height: 44px; padding: 0 12px;
+  border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font: 400 15px/20px var(--font-sans); }
+.ap-counter-groups { display: flex; gap: 6px; overflow-x: auto; margin: 10px 0; padding-bottom: 2px; }
+.ap-counter-groups button { flex: none; min-height: 36px; padding: 0 14px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+  color: var(--ink-2); font: 500 13px/18px var(--font-sans); cursor: pointer; }
+.ap-counter-groups [aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
+.ap-counter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 8px; margin-top: 10px; }
+.ap-counter-item { display: grid; align-content: space-between; gap: 6px; min-height: 76px; padding: 10px 12px; text-align: left; border: 1px solid var(--line);
+  border-radius: 12px; background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; }
+.ap-counter-item:active { background: var(--selected); }
+.ap-counter-item-t { font: 600 14px/18px var(--font-sans); }
+.ap-counter-item-p { color: var(--muted); font: 500 13px/16px var(--font-sans); font-variant-numeric: tabular-nums; }
+.ap-counter-cart { display: grid; gap: 12px; padding: 14px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
+.ap-counter-lines { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ap-counter-line { display: grid; grid-template-columns: minmax(0, 1fr) auto auto; align-items: center; gap: 8px; }
+.ap-counter-line-t { display: grid; padding: 4px 0; border: 0; background: none; color: var(--ink); text-align: left; font: 500 14px/18px var(--font-sans); cursor: pointer; }
+.ap-counter-line-t small { color: var(--muted); font-size: 12px; }
+.ap-counter-qty { display: flex; align-items: center; gap: 6px; }
+.ap-counter-qty button { width: 36px; height: 36px; border: 1px solid var(--line-strong); border-radius: 10px; background: var(--surface); color: var(--ink); font-size: 18px; cursor: pointer; }
+.ap-counter-qty b { min-width: 22px; text-align: center; font-variant-numeric: tabular-nums; }
+.ap-counter-amt { min-width: 84px; text-align: right; font-variant-numeric: tabular-nums; }
+.ap-counter-foot, .ap-counter-pay, .ap-counter-done { display: grid; gap: 10px; }
+.ap-counter-due { display: flex; justify-content: space-between; align-items: baseline; }
+.ap-counter-due b { font: 700 22px/28px var(--font-sans); font-variant-numeric: tabular-nums; }
+.ap-counter-row { display: flex; gap: 8px; flex-wrap: wrap; }
+.ap-counter-row > .rk-btn { flex: 1; min-height: 44px; justify-content: center; }
+.ap-counter-cash { display: grid; grid-template-columns: repeat(auto-fill, minmax(110px, 1fr)); gap: 8px; }
+.ap-counter-cash .rk-btn { min-height: 48px; justify-content: center; }
+.ap-counter-part { display: grid; gap: 4px; flex: 1; color: var(--muted); font-size: 13px; }
+.ap-counter-held { display: grid; gap: 6px; margin: 0; padding: 0; list-style: none; }
+.ap-counter-held button { display: flex; justify-content: space-between; width: 100%; min-height: 44px; padding: 0 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); color: var(--ink); cursor: pointer; font: inherit; }
+.ap-counter-done p { margin: 0; color: var(--muted); }

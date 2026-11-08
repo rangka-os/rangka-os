@@ -88,19 +88,78 @@ func (e *Engine) ScreenAllowed(a Actor, name string) *meta.Screen {
 // user, today() and now()). The values prefill the record the screen creates; they are not trusted more than a
 // form's input.
 func (e *Engine) ScreenSet(a Actor, s *meta.Screen) (map[string]any, error) {
-	set := meta.AsMap(s.Block()["set"])
+	sets, err := e.ScreenSets(a, s)
+	if err != nil {
+		return nil, err
+	}
+	if v, ok := sets[""]; ok {
+		return v.(map[string]any), nil
+	}
+	return map[string]any{}, nil
+}
+
+// ScreenSets evaluates every set: of the type block, keyed by the slot path that holds it: "" for the block's own
+// (entry), "document", "session", "session.close" (counter).
+func (e *Engine) ScreenSets(a Actor, s *meta.Screen) (map[string]any, error) {
+	out := map[string]any{}
+	env := e.screenEnv(a)
+	var walk func(path string, m map[string]any, depth int) error
+	walk = func(path string, m map[string]any, depth int) error {
+		if set, ok := m["set"].(map[string]any); ok {
+			vals, err := e.evalSet(s, path, set, env)
+			if err != nil {
+				return err
+			}
+			out[path] = vals
+		}
+		if depth >= 2 {
+			return nil
+		}
+		keys := make([]string, 0, len(m))
+		for k := range m {
+			keys = append(keys, k)
+		}
+		sort.Strings(keys)
+		for _, k := range keys {
+			if k == "set" {
+				continue
+			}
+			if sub, ok := m[k].(map[string]any); ok {
+				p := k
+				if path != "" {
+					p = path + "." + k
+				}
+				if err := walk(p, sub, depth+1); err != nil {
+					return err
+				}
+			}
+		}
+		return nil
+	}
+	if err := walk("", s.Block(), 0); err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (e *Engine) evalSet(s *meta.Screen, path string, set map[string]any, env *cel.Env) (map[string]any, error) {
 	out := map[string]any{}
 	keys := make([]string, 0, len(set))
 	for k := range set {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
-	env := e.screenEnv(a)
 	for _, k := range keys {
 		src, _ := set[k].(string)
 		v, err := cel.Eval(src, env)
 		if err != nil {
-			return nil, &StatusError{Status: 422, Code: "screen_set", Msg: "screen " + s.Name + " set." + k + ": " + err.Error()}
+			where := k
+			if path != "" {
+				where = path + ".set." + k
+			} else {
+				where = "set." + k
+			}
+			return nil, &StatusError{Status: 422, Code: "screen_set", Msg: "screen " + s.Name + " " + where + ": " + err.Error()}
 		}
 		v = cel.Unwrap(v)
 		if t, ok := v.(time.Time); ok {

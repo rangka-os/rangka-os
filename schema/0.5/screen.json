@@ -4,36 +4,101 @@
   "title": "Rangka work screen",
   "description": "A work screen a module ships in screens/<name>.rk (contract 0030): one staff job on a phone or tablet, rendered by the web app from one of seven types. It writes only through the record API, so permissions, row scope, rules, flows and approvals apply as for a form.",
   "type": "object",
-  "required": ["name", "type", "label", "roles"],
+  "required": [
+    "name",
+    "type",
+    "label",
+    "roles"
+  ],
   "additionalProperties": false,
   "properties": {
-    "$schema": {"type": "string"},
-    "name": {"$ref": "model.json#/$defs/name"},
-    "type": {"enum": ["counter", "queue", "roll", "route", "handover", "clock", "entry"]},
-    "label": {"$ref": "model.json#/$defs/label"},
-    "description": {"$ref": "model.json#/$defs/label"},
-    "icon": {"type": "string"},
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "$ref": "model.json#/$defs/name"
+    },
+    "type": {
+      "enum": [
+        "counter",
+        "queue",
+        "roll",
+        "route",
+        "handover",
+        "clock",
+        "entry"
+      ]
+    },
+    "label": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "description": {
+      "$ref": "model.json#/$defs/label"
+    },
+    "icon": {
+      "type": "string"
+    },
     "roles": {
       "type": "array",
       "minItems": 1,
-      "items": {"$ref": "model.json#/$defs/name"},
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
       "description": "Roles that may open the screen (the owner always may)"
     },
-    "device": {"enum": ["phone", "tablet", "any"], "description": "Layout hint, never a lock"},
+    "device": {
+      "enum": [
+        "phone",
+        "tablet",
+        "any"
+      ],
+      "description": "Layout hint, never a lock"
+    },
     "needs": {
       "type": "array",
-      "items": {"enum": ["scan", "photo", "location", "signature", "print"]},
+      "items": {
+        "enum": [
+          "scan",
+          "photo",
+          "location",
+          "signature",
+          "print"
+        ]
+      },
       "description": "Device capabilities; the screen still opens without them, with a notice"
     },
-    "offline": {"enum": ["none", "queue", "edge"]},
-    "if": {"type": "string", "description": "CEL over user (and org, tax); false hides the screen"},
-    "entry": {"$ref": "#/$defs/entry"},
-    "counter": {"$ref": "#/$defs/block"},
-    "queue": {"$ref": "#/$defs/block"},
-    "roll": {"$ref": "#/$defs/block"},
-    "route": {"$ref": "#/$defs/block"},
-    "handover": {"$ref": "#/$defs/block"},
-    "clock": {"$ref": "#/$defs/block"}
+    "offline": {
+      "enum": [
+        "none",
+        "queue",
+        "edge"
+      ]
+    },
+    "if": {
+      "type": "string",
+      "description": "CEL over user (and org, tax); false hides the screen"
+    },
+    "entry": {
+      "$ref": "#/$defs/entry"
+    },
+    "counter": {
+      "$ref": "#/$defs/counter"
+    },
+    "queue": {
+      "$ref": "#/$defs/block"
+    },
+    "roll": {
+      "$ref": "#/$defs/block"
+    },
+    "route": {
+      "$ref": "#/$defs/block"
+    },
+    "handover": {
+      "$ref": "#/$defs/block"
+    },
+    "clock": {
+      "$ref": "#/$defs/block"
+    }
   },
   "$defs": {
     "block": {
@@ -43,25 +108,274 @@
     "set": {
       "type": "object",
       "description": "field: CEL over user, org, tax, today() and now(), evaluated by the kernel when the screen opens",
-      "propertyNames": {"$ref": "model.json#/$defs/name"},
-      "additionalProperties": {"type": "string"}
+      "propertyNames": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "additionalProperties": {
+        "type": "string"
+      }
     },
     "entry": {
       "type": "object",
       "description": "A short phone form: fill, save, next (contract 0030 §2)",
-      "required": ["model", "fields"],
+      "required": [
+        "model",
+        "fields"
+      ],
       "additionalProperties": false,
       "properties": {
-        "model": {"$ref": "model.json#/$defs/name"},
+        "model": {
+          "$ref": "model.json#/$defs/name"
+        },
         "fields": {
           "type": "array",
           "minItems": 1,
           "maxItems": 8,
-          "items": {"$ref": "model.json#/$defs/name"}
+          "items": {
+            "$ref": "model.json#/$defs/name"
+          }
         },
-        "set": {"$ref": "#/$defs/set"},
-        "submit": {"type": "boolean", "description": "Submit the record after saving it (the model must be submittable)"},
-        "again": {"type": "boolean", "description": "After saving, open an empty form again (default true)"}
+        "set": {
+          "$ref": "#/$defs/set"
+        },
+        "submit": {
+          "type": "boolean",
+          "description": "Submit the record after saving it (the model must be submittable)"
+        },
+        "again": {
+          "type": "boolean",
+          "description": "After saving, open an empty form again (default true)"
+        }
+      }
+    },
+    "counter": {
+      "type": "object",
+      "description": "Sell or take payment at a counter: catalogue, cart, tender, receipt (contract 0030 §2)",
+      "required": [
+        "catalogue",
+        "document"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "catalogue": {
+          "type": "object",
+          "required": [
+            "model",
+            "price"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "filter": {
+              "type": "string",
+              "description": "List filter (field names, CEL) over the catalogue model, with user"
+            },
+            "title": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "search": {
+              "type": "array",
+              "items": {
+                "$ref": "model.json#/$defs/name"
+              }
+            },
+            "group_by": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "price": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "barcode": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "image": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 2000,
+              "description": "Rows loaded (default 500)"
+            }
+          }
+        },
+        "document": {
+          "type": "object",
+          "required": [
+            "model",
+            "lines",
+            "line"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "lines": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "line": {
+              "type": "object",
+              "required": [
+                "item",
+                "qty"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "item": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "qty": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "price": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "note": {
+                  "$ref": "model.json#/$defs/name"
+                }
+              }
+            },
+            "set": {
+              "$ref": "#/$defs/set"
+            }
+          }
+        },
+        "payments": {
+          "type": "object",
+          "required": [
+            "table",
+            "method",
+            "amount"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "table": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "method": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "amount": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "ref": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "methods": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "session": {
+          "type": "object",
+          "required": [
+            "model",
+            "link",
+            "state"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "link": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "filter": {
+              "type": "string",
+              "description": "List filter for the caller's open session, e.g. cashier == user.email"
+            },
+            "state": {
+              "type": "object",
+              "required": [
+                "field",
+                "open"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "field": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "open": {
+                  "type": "string"
+                },
+                "closed": {
+                  "type": "string"
+                }
+              }
+            },
+            "open": {
+              "type": "array",
+              "items": {
+                "$ref": "model.json#/$defs/name"
+              }
+            },
+            "set": {
+              "$ref": "#/$defs/set"
+            },
+            "close": {
+              "type": "object",
+              "required": [
+                "model",
+                "link",
+                "fields"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "model": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "link": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "fields": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "model.json#/$defs/name"
+                  }
+                },
+                "set": {
+                  "$ref": "#/$defs/set"
+                }
+              }
+            },
+            "blind": {
+              "type": "boolean",
+              "description": "The cashier counts cash without seeing the expected amount (default true)"
+            }
+          }
+        },
+        "hold": {
+          "type": "boolean"
+        },
+        "customer": {
+          "type": "object",
+          "required": [
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "required": {
+              "type": "boolean"
+            }
+          }
+        },
+        "print": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "submit": {
+          "type": "boolean"
+        }
       }
     }
   }

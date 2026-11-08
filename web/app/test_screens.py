@@ -4,9 +4,10 @@ PostgreSQL 16).
 
     python3 web/app/test_screens.py [--keep] [--shots DIR] [-k NAME]
 
-Builds the kernel, serves kernel/testdata/screens (module kerja: screens isi_jam and catat of type entry, kasir of
-type counter hidden by its if:; app kantor binds them with work:) on a throwaway Postgres, adds staf@contoh.test (role
-staf, desk: false) and mandor@contoh.test (role mandor), and runs the scenarios test_<name>(browser, ctx) in file order.
+Builds the kernel, serves kernel/testdata/screens (module kerja: screens isi_jam and catat of type entry, antrian
+hidden by its if:; module kasir: screen jual of type counter; app kantor binds them with work:) on a throwaway
+Postgres, adds staf@contoh.test (role staf, desk: false), mandor@contoh.test (role mandor) and kasir@contoh.test (role
+kasir, desk: false), and runs the scenarios test_<name>(browser, ctx) in file order.
 A scenario fails on an exception, on a console error, or on an HTTP answer >= 400 it did not expect.
 
 Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure exits 1.
@@ -20,6 +21,8 @@ PASSWORD = "rangka-demo"  # the demo seed password, test users only
 OWNER = ("ceo@saga.co.id", PASSWORD)
 STAF = ("staf@contoh.test", PASSWORD)
 MANDOR = ("mandor@contoh.test", PASSWORD)
+KASIR = ("kasir@contoh.test", PASSWORD)
+TABLET = {"width": 1024, "height": 768}
 PHONE = {"width": 390, "height": 844}
 DESK = {"width": 1280, "height": 800}
 
@@ -155,6 +158,63 @@ def test_lost_answer_then_press_again_writes_once(browser, ctx):
     c.close()
 
 
+def test_counter_open_sell_split_hold_close(browser, ctx):
+    owner, _ = page_for(browser, ctx, OWNER, DESK)
+    for name, cat, price, code in (("Kopi susu", "Minuman", 18000, "899001"), ("Es teh", "Minuman", 8000, ""), ("Roti bakar", "Makanan", 15000, "")):
+        r = owner.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": name, "category": cat, "price": price, "barcode": code}), headers={"Content-Type": "application/json"})
+        assert r.status == 201, r.text()
+    owner.close()
+    c, p = page_for(browser, ctx, KASIR, TABLET)
+    p.goto("/app/")
+    p.wait_for_url("**/#/w/jual")
+    # no open session: count the drawer and open one
+    p.wait_for_selector(".ap-counter-open")
+    p.locator(".ap-counter-open input").first.fill("100000")
+    p.get_by_role("button", name="Buka sesi").click()
+    p.wait_for_selector(".ap-counter-item")
+    # a sale in 4 taps: item, item, Bayar, Uang pas
+    p.locator(".ap-counter-item", has_text="Kopi susu").click()
+    p.locator(".ap-counter-item", has_text="Roti bakar").click()
+    p.get_by_role("button", name="Bayar Rp 33.000").click()
+    p.get_by_role("button", name="Uang pas").click()
+    p.wait_for_selector(".ap-counter-done")
+    first = p.locator(".ap-counter-done p").inner_text().split(" · ")[0]
+    rec = c.request.get(f"/api/v1/r/penjualan/{first}").json()
+    assert rec["docstatus"] == 1 and rec["grand_total"] == 33000 and rec["change_amount"] == 0, rec
+    assert p.get_by_role("button", name="Cetak struk").count() == 1
+    # hold a bill, scan a barcode into a new one, pay split QRIS + cash
+    p.locator(".ap-counter-item", has_text="Es teh").click()
+    p.locator(".ap-counter-cust").fill("Meja 3")
+    p.get_by_role("button", name="Tahan").click()
+    p.locator(".ap-counter-search").fill("899001")
+    p.locator(".ap-counter-search").press("Enter")
+    p.get_by_role("button", name="Bayar Rp 18.000").click()
+    p.locator(".ap-counter-part input").first.fill("10000")
+    p.get_by_label("Tunai diterima").fill("20000")
+    assert "Rp 12.000" in p.locator(".ap-counter-pay").inner_text()
+    p.get_by_role("button", name="Selesai").click()
+    p.wait_for_selector(".ap-counter-done")
+    second = p.locator(".ap-counter-done p").inner_text().split(" · ")[0]
+    rec = c.request.get(f"/api/v1/r/penjualan/{second}").json()
+    assert rec["change_amount"] == 12000 and sorted(x["method"] for x in rec["payments"]) == ["cash", "qris"], rec
+    # the held bill comes back with its table
+    p.get_by_role("button", name="Ditahan (1)").click()
+    p.locator(".ap-counter-held button").first.click()
+    assert p.locator(".ap-counter-cust").input_value() == "Meja 3"
+    assert "Es teh" in p.locator(".ap-counter-lines").inner_text()
+    shot(ctx, p, "kasir-keranjang")
+    # close blind: the expected cash never shows
+    p.get_by_role("button", name="Tutup sesi").click()
+    form = p.locator(".ap-counter-close")
+    assert "seharusnya Rp" not in form.inner_text()
+    form.locator("input").first.fill("151000")
+    form.get_by_role("button", name="Tutup sesi").click()
+    p.wait_for_selector(".ap-counter-open")
+    sessions = c.request.get("/api/v1/r/sesi_kasir?limit=5").json()["data"]
+    assert [s["state"] for s in sessions] == ["closed"], sessions
+    c.close()
+
+
 def test_owner_keeps_dashboard_home_with_kerja_group(browser, ctx):
     c, p = page_for(browser, ctx, OWNER, DESK)
     p.goto("/app/")
@@ -217,7 +277,7 @@ def main():
         db = pg.stdout.strip().splitlines()[-1]
         common = ["--apps", apps, "--site", site, "--db", db]
         steps = [["migrate"] + common, ["seed"] + common + ["--email", OWNER[0], "--password", OWNER[1]]]
-        for email, role, name in (("staf@contoh.test", "staf", "Sari Staf"), ("mandor@contoh.test", "mandor", "Mandor")):
+        for email, role, name in (("staf@contoh.test", "staf", "Sari Staf"), ("mandor@contoh.test", "mandor", "Mandor"), ("kasir@contoh.test", "kasir", "Kasir")):
             steps.append(["user", "add", email, "--db", db, "--org", "site", "--role", role, "--name", name, "--password", PASSWORD])
         for cmd in steps:
             r = subprocess.run([bin_path] + cmd, capture_output=True, text=True, timeout=180)

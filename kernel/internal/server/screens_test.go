@@ -49,19 +49,19 @@ func TestWorkScreensMeta(t *testing.T) {
 	owner, staf, mandor := screensEnv(t)
 	// the owner opens every bound screen whose if: holds and keeps the dashboard home (no *)
 	om := owner.must(200, "GET", "/api/v1/meta", nil).JSON
-	if got := workOf(t, om); got != "isi_jam catat " {
+	if got := workOf(t, om); got != "isi_jam catat jual " {
 		t.Fatalf("owner work: %q", got)
 	}
 	if get(om, "screens", "isi_jam", "module") != "kerja" || get(om, "screens", "isi_jam", "entry", "model") != "jam_kerja" || get(om, "screens", "isi_jam", "$schema") != nil {
 		t.Fatalf("owner screens: %v", om["screens"])
 	}
-	// staf: isi_jam is their home; kasir's if: (outlets) fails, so it is neither listed nor described
+	// staf: isi_jam is their home; antrian.s if: (outlets) fails, so it is neither listed nor described
 	sm := staf.must(200, "GET", "/api/v1/meta", nil).JSON
 	if got := workOf(t, sm); got != "isi_jam* catat " {
 		t.Fatalf("staf work: %q", got)
 	}
-	if get(sm, "screens", "kasir") != nil {
-		t.Fatal("staf meta describes kasir")
+	if get(sm, "screens", "antrian") != nil {
+		t.Fatal("staf meta describes antrian")
 	}
 	// mandor: isi_jam allows mandor, but the app narrows it to staf
 	mm := mandor.must(200, "GET", "/api/v1/meta", nil).JSON
@@ -79,9 +79,9 @@ func TestGetScreen(t *testing.T) {
 		t.Fatalf("staf screen: %v", r)
 	}
 	mandor.must(404, "GET", "/api/v1/screens/isi_jam", nil)
-	staf.must(404, "GET", "/api/v1/screens/kasir", nil)
+	staf.must(404, "GET", "/api/v1/screens/antrian", nil)
 	staf.must(404, "GET", "/api/v1/screens/tidak_ada", nil)
-	owner.must(404, "GET", "/api/v1/screens/kasir", nil)
+	owner.must(404, "GET", "/api/v1/screens/antrian", nil)
 	owner.must(200, "GET", "/api/v1/screens/catat", nil)
 	// the screen writes through the record API: the staf creates and submits what the form would
 	rec := staf.must(201, "POST", "/api/v1/r/jam_kerja", map[string]any{"date": "2026-11-08", "hours": 8, "staff": get(r, "set", "staff")}).JSON

@@ -55,7 +55,7 @@ Adding a type is a contract change.
 
 | type | Job | Slots (required **bold**) | Writes |
 |---|---|---|---|
-| `counter` | Sell or take payment at a counter: catalogue, cart, tender, receipt | **`catalogue`** {model, filter, search, group_by, price, barcode, image}, **`document`** {model, lines, line: {item, qty, price, note}, set: {field: CEL}}, `payments` {table, method, amount, methods}, `session` {model, link, state, open: [fields], close: {model, link, fields}, blind (bool, default true: the cashier counts cash without seeing the expected amount)}, `hold` (bool), `customer` {field, required}, `print`, `submit` (default true) | creates one `document` per sale with its lines and payment rows, then submits it |
+| `counter` | Sell or take payment at a counter: catalogue, cart, tender, receipt | **`catalogue`** {**model**, filter, title, search, group_by, **price** (a number field), barcode, image, limit (default 500)}, **`document`** {**model** (submittable unless `submit: false`), **lines** (a table), **line**: {**item** (a link to the catalogue model), **qty**, price, note}, set: {field: CEL}}, `payments` {table, method, amount, ref, methods (options of method)}, `session` {model, link (a link of the document to it), filter (the caller's session, e.g. `cashier == user.email`), state: {field, open, closed}, open: [fields], set, close: {model (submittable), link, fields, set}, blind (bool, default true: the cashier counts cash without seeing the expected amount; the model enforces it with `hidden_for`)}, `hold` (bool), `customer` {field, required}, `print` (a print format of the document), `submit` (default true) | creates one `document` per sale with its lines and payment rows, then submits it |
 | `queue` | Work through cards that change state: kitchen tickets, today's work orders, pick lists, today's rental jobs | **`source`** {model, filter, sort}, **`card`** {title, subtitle, lines, fields, age_from}, **`steps`** [{when: CEL, action: submit / action name / {set: {...}}, label}], `columns` {by: field, values}, `refresh` (seconds, default 10) | runs the step's action on one record |
 | `roll` | One parent record, many rows marked fast or added by scan: class attendance, team attendance, stock count, receiving | **`document`** {model, find or create: CEL, set}, **`rows`** {table, label, mark: {field, values, default} or qty: field} (default: every row starts at e.g. `present` and staff change only the exceptions, as Teachworks and Jackrabbit do), `add_by` (scan / search / none), `scan` {field, match}, `submit` | updates the parent's table, then submits |
 | `route` | Today's list of places to visit, check in, act there | **`stops`** {model, filter, sort, title, address, location}, `visit` {model, link, set, capture: [location, photo]}, **`actions`** [{label, screen or create: model, set}] | creates a visit record (optional) and opens another screen or form with the stop prefilled |
@@ -64,11 +64,14 @@ Adding a type is a contract change.
 | `entry` | A short phone form, save and next: hours, expense with receipt, waste, batch output, overtime | **`model`**, **`fields`** [names, at most 8, plain fields: no table, no compute], `set` {field: CEL}, `submit` (bool), `again` (bool, default true); `capture` comes with §4's widgets (WS6) | creates one record (and submits when asked) |
 
 Rules shared by every type:
+- **Filters are list filters.** A slot `filter` is the `filter` of `GET /api/v1/r/<model>` (field names, CEL, with
+  `user`), not a `row.` expression; the actor's row scope applies on top.
 - **Slots name fields, never compute.** `set`, `filter` and `if` are CEL with `user`, `org`, `tax`, `today()`,
   `now()`, `device` (§4) and `stop` (route) or `doc` (roll/handover parent); the same CEL subset as dashboards. Prices,
   tax and totals are computed by the model's computes and rules, never by the screen.
-- **`set` is evaluated by the kernel.** `GET /api/v1/screens/<name>` answers `{name, screen, set}` with the type
-  block's `set` evaluated for the caller at that moment (a `now()` is RFC 3339 in the org timezone); the web app asks
+- **`set` is evaluated by the kernel.** `GET /api/v1/screens/<name>` answers `{name, screen, set, sets}`: `set` is the
+  type block's own `set` (entry), `sets` the nested ones by slot path (`document`, `session`, `session.close`), all
+  evaluated for the caller at that moment (a `now()` is RFC 3339 in the org timezone); the web app asks
   again for every new record. A screen the caller may not open is 404. The values prefill the record; they are not
   trusted more than what a form sends.
 - **Blocks whose renderer is not built yet** are free-form objects in `screen.json`; the PR that adds the renderer
@@ -199,7 +202,7 @@ offline: queue
 counter:
   catalogue:
     model: item
-    filter: "row.kind != 'material'"
+    filter: "kind != 'material'"
     search: [item_name, sku, barcode]
     group_by: category
     price: rate
@@ -213,6 +216,7 @@ counter:
   session:
     model: pos_shift
     link: shift
+    filter: "cashier == user.email"
     state: {field: state, open: open, closed: closed}
     open: [opening_cash]
     close: {model: pos_shift_close, link: shift, fields: [counted_cash]}
@@ -235,7 +239,7 @@ type: queue
 roles: [kitchen]
 device: tablet
 queue:
-  source: {model: kitchen_ticket, filter: "row.status != 'served' && row.date == today()", sort: created}
+  source: {model: kitchen_ticket, filter: "status != 'served' && date == today()", sort: created}
   card: {title: table_no, subtitle: sale, lines: items, age_from: created}
   columns: {by: status, values: [new, cooking, ready]}
   steps:
@@ -256,9 +260,8 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
   to while it is open (a shift, a route day, a site visit) must not be submittable; its closing is a separate
   submittable document (`session.close.model`). Same rule for `clock` (an `attendance_log` is linked by nothing) and
   `route` visits.
-- **`on: cancel` rules are accepted by the schema but never evaluated.** Screens that void (counter) rely on a flow
-  for same-day checks until the engine runs them. Proposed kernel fix: evaluate `on: cancel` rules in the cancel path
-  (small PR, audited).
+- **`on: cancel` rules now run (WS3).** The cancel path evaluates the model's `on: cancel` rules (fail closed) before
+  an approval is asked for, so a refused void never waits in the inbox; a counter's same-day void is a model rule.
 
 ## What stays out
 - No screen-specific code paths in the kernel for money, stock or tax; those stay in models (auditable).
@@ -285,8 +288,8 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 | Stage | Content | State |
 |---|---|---|
 | WS1 | `screen.json`, `app.work`, change-set path `modules/<m>/screens/`, validators, registry, `/meta` `screens` + `work`, `GET /api/v1/screens/{name}`, home per role, `#/w/<screen>`, "Kerja" group, work shell, renderer `entry` | merged |
-| WS2 | `Idempotency-Key` on create, submit, cancel, amend and actions (`rk_idempotency`); `_occurred_at`; IndexedDB outbox; cached screen | this PR |
-| WS3 | renderer `counter`, print from the screen, `on: cancel` rules evaluated | |
+| WS2 | `Idempotency-Key` on create, submit, cancel, amend and actions (`rk_idempotency`); `_occurred_at`; IndexedDB outbox; cached screen | merged |
+| WS3 | `counter` slots and checks, `sets` in `GET /screens`, renderer `counter` (catalogue cached, cart, hold, split tender, session open and blind close, receipt print), `on: cancel` rules evaluated | this PR |
 | WS4, WS6, WS9a, WS7, WS5, WS8, WS9b | `queue`; `geo` + photo/signature; `clock`; `roll`; camera scan; `handover`; `route` | |
 
 ## Open

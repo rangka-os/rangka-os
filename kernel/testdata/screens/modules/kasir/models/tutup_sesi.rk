@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: tutup_sesi
+label: {id: Tutup sesi}
+is_submittable: true
+naming: TUTUP-{####}
+fields:
+  - {name: shift, type: link, to: sesi_kasir, label: {id: Sesi}, required: true}
+  - {name: counted_cash, type: currency, label: {id: Hitung fisik}, required: true}
+  - {name: cash_difference, type: currency, label: {id: Selisih}, compute: counted_cash - shift.expected_cash, hidden_for: [kasir]}
+permissions:
+  - {role: kasir, read: true, create: true, write: true, submit: true}

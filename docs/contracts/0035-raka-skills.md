@@ -1,6 +1,6 @@
 # 0035 Rangka skills: one Agent Skills library for Raka and any other harness
 
-Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (skills, CLI, kernel tools, docs site) · Affects:
+Status: accepted (8 Nov 2026) · Owner of the change: rangka-os (skills, CLI, kernel tools, docs site) · Affects:
 rangka-ai (loads skills instead of a big knowledge pack), rangka-apps and rangka-connectors (ship skills for their
 apps and connectors), rangka-edge (one skill), rangka-cloud (private interview skills, not published) · Builds on:
 0000, 0020, 0030, 0032, 0033

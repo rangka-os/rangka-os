@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: chat
+label: {id: Chat Pelanggan}
+summary: {id: Kirim pesan ke pelanggan dari Rangka.}
+category: messaging
+icon: chat-3-line
+version: 1.0.0
+vendor: Contoh
+docs: https://example.test/docs
+auth:
+  type: token
+  fields:
+    - {name: token, label: {id: Token}, secret: true, required: true}
+actions:
+  - name: send
+    request: {method: POST, url: https://api.example.test/send}

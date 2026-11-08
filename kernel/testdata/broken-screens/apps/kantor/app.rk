@@ -12,3 +12,4 @@ work:
   - {screen: catat, roles: [staf, mandor], home: true}
   - {screen: harian, home: true}
   - {screen: isi_jamm}
+summary: {id: App uji kantor.}

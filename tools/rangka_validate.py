@@ -332,6 +332,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
             rep.add("warn", p, "(root)", "deprecated_layout", f"0.4 app.rk: split into modules/{name}/module.rk and an app (contract 0001)")
         for e in schema_for(V, "module" if a["kind"] == "module" else "app", a["manifest"]).iter_errors(a["manifest"]) if p else ():
             rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message)
+        if a["kind"] in ("module", "app") and isinstance(a["manifest"], dict) and not a["manifest"].get("summary"):
+            rep.add("warn", p, "(root)", "catalogue_summary_missing", f'{a["kind"]} "{name}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
         if a["kind"] == "app" and rkfile.listdir(os.path.join(a["dir"], "models")):
             rep.add("error", p, "models", "app_defines_model", f'app "{name}" has models/; an app defines no models, move them into a module (contract 0001)')
         for mname, (p, m) in a["models"].items():
@@ -817,9 +819,11 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         schema_errors(rep, V, "connector", p, c)
         if c.get("name") != cn:
             rep.add("error", p, "name", "name_mismatch", f'connector name "{c.get("name")}" must match the directory name "{cn}"')
+        if not cn.startswith("x_") and isinstance(c, dict) and not c.get("summary"):
+            rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
 
     if site:
-        check_site(rep, V, root, apps, allmodels, sdocs)
+        check_site(rep, V, root, apps, allmodels, sdocs, conns)
         for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
             check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
@@ -1044,7 +1048,7 @@ def reset_needs_date(rep, path, where, series):
     rep.add("error", path, where, "reset_needs_date", f"reset {reset} needs {what} in the pattern, or numbers repeat")
 
 
-def check_site(rep, V, root, apps, allmodels, sdocs):
+def check_site(rep, V, root, apps, allmodels, sdocs, conns=None):
     for key in sorted(sdocs):
         p, d = sdocs[key]
         kind = kind_of(p) or (key[:-3] if "/" not in key else key.split("/")[0][:-1])
@@ -1090,6 +1094,10 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
                         rep.add("error", cp, f"apps/{i}", "missing_dependency", f'"{a}" requires "{dep}"; add it to apps')
         elif allowed is not None:
             installed = closure(apps, [a for a in allowed if a in app_names]) + company
+        if conns and isinstance(cfg.get("connectors"), list):
+            for i, cn in enumerate(cfg["connectors"]):
+                if isinstance(cn, str) and cn not in conns:
+                    rep.add("error", cp, f"connectors/{i}", "unknown_connector", f'"{cn}" is not a connector{suggest(cn, conns)}')
         th = cfg.get("theme")
         if th and th not in themes and not template_exists("themes", th):
             rep.add("error", cp, "theme", "unknown_theme", f'theme "{th}" has no file themes/{th}.rk{suggest(th, themes)}')
@@ -1124,6 +1132,8 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None
             if isinstance(oc, dict) and "orgs" in oc:
                 rep.add("error", cp, f"orgs/{oid}/config/orgs", "nested_orgs", f'org "{oid}" config cannot contain orgs')
+            if isinstance(oc, dict) and "connectors" in oc:
+                rep.add("error", cp, f"orgs/{oid}/config/connectors", "org_config_key", f'org "{oid}" config cannot set connectors: one site has one installed set (contract 0036)')
         dpp_where = [("tax/dpp_ratio", cfg.get("tax"))]
         for oid in sorted(orgs):
             oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None

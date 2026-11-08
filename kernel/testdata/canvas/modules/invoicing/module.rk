@@ -7,3 +7,4 @@ optional: {outlets: ^1.0, tax_id: ^1.0, currency: ^1.0, orders: ^1.0, projects: 
 # ledger.post_receivable is a core hook; this one is semantics fixed in docs/kernel-hooks.md.
 # invoicing.from_order is declared by the orders module, where the make_invoice action lives.
 hooks: [invoicing.reverse_receivable]
+summary: {id: Modul uji invoicing.}

@@ -48,8 +48,9 @@ for tpl in $TEMPLATES; do
   echo "== $tpl: npm run validate"
   if ! out=$(cd "$dir" && npm run --silent validate 2>&1); then status=1; fi
   echo "$out"
-  # The validator prints "N error(s), M warning(s)"; anything but zero of both fails the check.
-  if ! grep -q '^0 error(s), 0 warning(s)$' <<<"$out"; then
+  # The validator prints "N error(s), M warning(s)"; any error or warning fails the check, except
+  # catalogue_summary_missing (contract 0036): rangka-apps and rangka-connectors add summaries after the schema ships.
+  if ! grep -q '^0 error(s), ' <<<"$out" || grep -E '  warn  ' <<<"$out" | grep -vq 'catalogue_summary_missing'; then
     echo "check-staged: $tpl is not clean" >&2
     status=1
   fi

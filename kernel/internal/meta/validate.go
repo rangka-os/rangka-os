@@ -104,6 +104,9 @@ func (v *validator) shape() {
 				v.rep.add("error", a.Doc.Path, e.PathString(), "schema", e.Message)
 			}
 		}
+		if (a.Kind == KindModule || a.Kind == KindApp) && a.Raw != nil && !truthy(a.Raw["summary"]) {
+			v.rep.add("warn", a.File, "(root)", "catalogue_summary_missing", fmt.Sprintf(`%s "%s" has no summary: add one sentence in plain words for the catalogue (contract 0036)`, a.Kind, a.Name))
+		}
 		if a.Kind == KindApp && len(rk.ListDir(filepath.Join(a.Dir, "models"))) > 0 {
 			v.rep.add("error", a.File, "models", "app_defines_model", fmt.Sprintf(`app "%s" has models/; an app defines no models, move them into a module (contract 0001)`, a.Name))
 		}

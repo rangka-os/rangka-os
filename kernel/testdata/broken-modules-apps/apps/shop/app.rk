@@ -6,3 +6,4 @@ modules: {contacts: ^2.0, pipeline: ^1.0, nope: ^1.0}
 menu:
   - group: {id: Toko}
     items: [deal, customer, invoice]
+summary: {id: App uji shop.}

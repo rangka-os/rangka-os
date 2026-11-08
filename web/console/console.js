@@ -968,8 +968,8 @@
   function LayoutPreview(p) {
     var l = p.layout || {}, meta = p.meta, tk = p.theme && p.theme.tokens ? p.theme.tokens[p.dark ? "dark" : "light"] : {}, nav = l.nav || {};
     var style = {}; ["primary", "surface", "app", "soft", "ink", "ink-2", "muted", "line-strong", "selected", "selected-ink", "brand", "chart-1"].forEach(function (k) { if (tk[k]) style["--pv-" + k] = tk[k]; });
-    var side = nav.side && nav.side.length ? nav.side.map(function (g) { return { group: L(g.group), items: g.items.map(function (i) { return L(i.label) || i.to; }) }; })
-      : (meta.apps || []).reduce(function (a, ap) { return a.concat((ap.menu || []).map(function (g) { return { group: L(g.group), items: g.items.map(function (m) { return L(((meta.models || {})[m] || {}).label) || m; }) }; })); }, []);
+    var side = nav.side && nav.side.length ? nav.side.map(function (g) { return { group: L(g.group), items: g.items.map(function (i) { return Array.isArray(i.items) ? L(i.label) + " ›" : L(i.label) || i.to; }) }; })
+      : (meta.apps || []).reduce(function (a, ap) { return a.concat((ap.menu || []).map(function (g) { return { group: L(g.group), items: g.items.map(function (m) { return typeof m === "string" ? L(((meta.models || {})[m] || {}).label) || m : L(m.label) + " ›"; }) }; })); }, []);
     var home = l.home || "", pages = l.pages || [];
     return h("div", { className: "cn-lp", style: style, role: "img", "aria-label": "Pratinjau layout " + (l.name || "") },
       h("div", { className: "cn-lp-top" }, h("span", { className: "tile" }), (nav.top || []).map(function (t, i) { return h("span", { key: i, className: cx("it", i === 0 && "on") }, L(t.label) || t.to, t.if ? h("i", { title: t.if }, "*") : null); }),

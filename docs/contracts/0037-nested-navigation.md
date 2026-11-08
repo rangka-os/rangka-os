@@ -1,6 +1,6 @@
 # 0037 Nested navigation: sub-levels in menus and nav.side
 
-Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema 0.5, both validators, web app, design system)
+Status: accepted and implemented (8 Nov 2026) · Owner of the change: rangka-os (schema 0.5, both validators, web app, design system)
 · Affects: rangka-apps (apps and modules may group their menus) · Builds on 0001, 0019, 0032
 
 ## Context
@@ -14,7 +14,7 @@ Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema 0.5, bot
 ## Decision
 
 ### 1. Schema (0.5, additive)
-- `menu[].items[]` in `app.json` and `module.json`: an entry is a model name, as now, or a sub-menu
+- `menu[].items[]` in `app.json` (modules have no menu): an entry is a model name, as now, or a sub-menu
   `{label, icon?, items: [model]}`. Sub-menus do not nest further (two levels under a group).
 - `menu[]` gains `collapsed: true | false` (optional): the group's starting state before the person folds or opens
   it. Without it the renderer decides (today: folded when the navigation has more than 15 links).
@@ -23,16 +23,16 @@ Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema 0.5, bot
 - A sub-menu needs at least one item and at most 12.
 
 ### 2. Validators (Go and Python, identical reports)
-- `menu_depth`: a sub-menu inside a sub-menu.
-- `menu_empty`: a sub-menu with no item that resolves (all models missing or not installed is a warning, as for
-  groups today).
-- Existing `unknown_model` and link checks apply to sub-menu items.
+- The schema refuses a sub-menu inside a sub-menu and an empty one (`schema`).
+- `unknown_model`, `unknown_dashboard` and `optional_model` apply to sub-menu items, and now also to every
+  `nav.side` link (they were not checked before).
+- A sub-menu whose models are all missing is left out by the renderer, like an empty group.
 
 ### 3. Rendering
 - Design system `Sidebar`: an item may carry `items` (children). The parent is a row with a chevron; it is open when
   it holds the current page or the person opened it (same storage as group folds). Children are indented 24px,
   44px tall on touch.
-- Icon rail (collapsed sidebar, tablet portrait): the parent shows its icon; a tap opens a flyout with the children.
+- Icon rail (collapsed sidebar, tablet portrait): the parent shows its icon; a tap opens its first child.
 - Command menu (⌘K) lists children as pages with the parent as their subtitle.
 - Phone drawer: same tree as the sidebar.
 
@@ -47,3 +47,10 @@ Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema 0.5, bot
 ## Open
 - Whether `collapsed` belongs to the app (author) or the site layout (company) only; this draft allows both, the
   layout wins.
+
+## Implementation (8 Nov 2026)
+- Schema 0.5 `app.json`, `layout.json`; Go and Python validators; fixtures `kernel/testdata/nav-apps` and
+  `broken-nav-apps` (`broken-nav.expected.txt`, in `make compare-python`).
+- Design system `Sidebar` (`NavItem.items`, group `collapsed`), web app `shell.js` (`menuModels`, `flatNav`,
+  `appGroups`, `navFromLayout`, ⌘K, work-shell Lainnya), Ubah menu editor (a sub-menu moves and hides as one entry),
+  Console layout preview, canvas menu inference.

@@ -637,6 +637,27 @@ func (v *validator) layout(p string, l map[string]any, all map[string]vis, dashb
 		for i, it := range asList(nav[sec]) {
 			switch x := it.(type) {
 			case map[string]any:
+				if sec == "side" {
+					// nav.side: groups of links and sub-menus of links (contract 0037)
+					for j, y := range asList(x["items"]) {
+						ym, ok := y.(map[string]any)
+						if !ok {
+							continue
+						}
+						if sub, isList := ym["items"].([]any); isList {
+							for k, z := range sub {
+								if zm, ok := z.(map[string]any); ok {
+									cond, _ := zm["if"].(string)
+									target(fmt.Sprintf("nav/side/%d/items/%d/items/%d/to", i, j, k), zm["to"], cond)
+								}
+							}
+						} else {
+							cond, _ := ym["if"].(string)
+							target(fmt.Sprintf("nav/side/%d/items/%d/to", i, j), ym["to"], cond)
+						}
+					}
+					continue
+				}
 				cond, _ := x["if"].(string)
 				target(fmt.Sprintf("nav/%s/%d/to", sec, i), x["to"], cond)
 			case string:
@@ -644,6 +665,19 @@ func (v *validator) layout(p string, l map[string]any, all map[string]vis, dashb
 					v.rep.extra("error", p, fmt.Sprintf("nav/%s/%d", sec, i), "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, x, suggest(x, keys(all))))
 				}
 			}
+		}
+	}
+	// responsive (contract 0038): phone tabs come with phone: tabs and the reverse
+	resp := asMap(l["responsive"])
+	if resp["phone"] == "tabs" && !truthy(resp["tabs"]) {
+		v.rep.extra("error", p, "responsive", "responsive_tabs", "phone: tabs needs 2 to 5 tabs")
+	} else if truthy(resp["tabs"]) && resp["phone"] != "tabs" {
+		v.rep.extra("error", p, "responsive/tabs", "responsive_tabs", "tabs are drawn only with phone: tabs")
+	}
+	for i, it := range asList(resp["tabs"]) {
+		if im, ok := it.(map[string]any); ok {
+			cond, _ := im["if"].(string)
+			target(fmt.Sprintf("responsive/tabs/%d/to", i), im["to"], cond)
 		}
 	}
 	var blocks func(where string, bl any)

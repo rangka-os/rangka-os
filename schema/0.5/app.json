@@ -114,8 +114,41 @@
           "items": {
             "type": "array",
             "items": {
-              "$ref": "model.json#/$defs/name"
+              "anyOf": [
+                {
+                  "$ref": "model.json#/$defs/name"
+                },
+                {
+                  "type": "object",
+                  "required": [
+                    "label",
+                    "items"
+                  ],
+                  "additionalProperties": false,
+                  "description": "A sub-menu (contract 0037): one more level, no deeper",
+                  "properties": {
+                    "label": {
+                      "$ref": "model.json#/$defs/label"
+                    },
+                    "icon": {
+                      "type": "string"
+                    },
+                    "items": {
+                      "type": "array",
+                      "minItems": 1,
+                      "maxItems": 12,
+                      "items": {
+                        "$ref": "model.json#/$defs/name"
+                      }
+                    }
+                  }
+                }
+              ]
             }
+          },
+          "collapsed": {
+            "type": "boolean",
+            "description": "Starting state of the group before the person folds or opens it (contract 0037); the site layout's nav.side wins"
           }
         },
         "additionalProperties": false

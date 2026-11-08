@@ -399,8 +399,11 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
         hooks = CORE_HOOKS | set(a["manifest"].get("hooks", []))
         for gi, g in enumerate(a["manifest"].get("menu", [])):
             for i, it in enumerate(g.get("items", [])):
-                if it not in visible:
-                    rep.add("error", a["app_path"], f"menu/{gi}/items/{i}", "unknown_model", f'"{it}" is not a model in this app or its dependencies{suggest(it, visible)}')
+                # a sub-menu {label, items} lists its models one level down (contract 0037)
+                subs = [(f"menu/{gi}/items/{i}/items/{j}", x) for j, x in enumerate(it.get("items", []))] if isinstance(it, dict) else [(f"menu/{gi}/items/{i}", it)]
+                for where, m in subs:
+                    if isinstance(m, str) and m not in visible:
+                        rep.add("error", a["app_path"], where, "unknown_model", f'"{m}" is not a model in this app or its dependencies{suggest(m, visible)}')
         for mname, (p, m) in a["models"].items():
             fields = {f["name"]: f for f in m.get("fields", []) if "name" in f}
             known = set(fields) | SYSTEM_FIELDS
@@ -1204,10 +1207,30 @@ def check_layout(rep, p, l, allmodels, dashboards, installed):
     nav = l.get("nav") or {}
     for sec in sorted(nav):
         for i, it in enumerate(nav[sec] if isinstance(nav[sec], list) else []):
-            if isinstance(it, dict):
+            if isinstance(it, dict) and sec == "side":
+                # nav.side: groups of links and sub-menus of links (contract 0037)
+                for j, x in enumerate(it.get("items") or []):
+                    if not isinstance(x, dict):
+                        continue
+                    if isinstance(x.get("items"), list):
+                        for k, y in enumerate(x["items"]):
+                            if isinstance(y, dict):
+                                target(f"nav/side/{i}/items/{j}/items/{k}/to", y.get("to"), y.get("if"))
+                    else:
+                        target(f"nav/side/{i}/items/{j}/to", x.get("to"), x.get("if"))
+            elif isinstance(it, dict):
                 target(f"nav/{sec}/{i}/to", it.get("to"), it.get("if"))
             elif isinstance(it, str) and sec == "create" and it not in allmodels:
                 rep.add("error", p, f"nav/{sec}/{i}", "unknown_model", f'"{it}" is not a model{suggest(it, allmodels)}')
+    # responsive (contract 0038): phone tabs come with phone: tabs and the reverse
+    resp = l.get("responsive") if isinstance(l.get("responsive"), dict) else {}
+    if resp.get("phone") == "tabs" and not resp.get("tabs"):
+        rep.add("error", p, "responsive", "responsive_tabs", "phone: tabs needs 2 to 5 tabs")
+    elif resp.get("tabs") and resp.get("phone") != "tabs":
+        rep.add("error", p, "responsive/tabs", "responsive_tabs", "tabs are drawn only with phone: tabs")
+    for i, it in enumerate(resp.get("tabs") or []):
+        if isinstance(it, dict):
+            target(f"responsive/tabs/{i}/to", it.get("to"), it.get("if"))
 
     def blocks(where, bl):
         for i, b in enumerate(bl if isinstance(bl, list) else []):

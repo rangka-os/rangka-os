@@ -1,0 +1,6 @@
+customer:
+  - {name: CUST-0001, customer_name: Kedai Kopi Andi, city: Bandung}
+  - {name: CUST-0002, customer_name: Toko Roti Sari, city: Jakarta}
+deal:
+  - {name: DEAL-00001, deal_name: Mesin espresso, customer: CUST-0001, stage: prospect, value: 25000000}
+  - {name: DEAL-00002, deal_name: Langganan biji kopi, customer: CUST-0002, stage: won, value: 12000000}

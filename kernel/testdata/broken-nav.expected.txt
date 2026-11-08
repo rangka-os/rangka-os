@@ -1,0 +1,7 @@
+crm/app.rk:16:27  error  unknown_model  menu/0/items/1/items/1  "vendor" is not a model in this app or its dependencies
+../site/layouts/kantor.rk:10:11  error  schema  nav/side/0/items/1  {'label': {'id': 'Data induk'}, 'items': [{'to': 'model:pemasok'}, {'label': {'id': 'Terlalu dalam'}, 'items': [{'to': 'model:customer'}]}]} is not valid und…
+../site/layouts/kantor.rk:16:11  error  schema  responsive/tablet  'laci' is not one of ['rail', 'sidebar', 'drawer']
+../site/layouts/kantor.rk:12:20  error  unknown_model  nav/side/0/items/1/items/0/to  "pemasok" is not a model
+../site/layouts/kantor.rk:16:3  error  responsive_tabs  responsive  phone: tabs needs 2 to 5 tabs
+
+5 error(s), 0 warning(s)

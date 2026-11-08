@@ -881,7 +881,28 @@
         col ? null : h("span", { className: "g" }, h("b", null, sw.title), sw.subtitle ? h("small", null, sw.subtitle) : null),
         !col && sw.onClick ? h(Icon, { name: "updown" }) : null);
     }
+    function isCur(it) { var id = it.id || it.label; return id === p.current || it.label === p.current; }
+    function holds(it) { return isCur(it) || (it.items || []).some(holds); }
+    /* A parent entry (contract 0037): a row that opens its children (open when it holds the current page, else as the
+       person left it, folds storage "sub:<label>"). On the icon rail it opens its first child. */
+    function parent(it) {
+      var key = "sub:" + it.label, kids = it.items, here = kids.some(holds);
+      var open = here || (key in folds ? !folds[key] : false);
+      if (col) {
+        return h("a", { key: key, href: "#", className: "rk-navlink", title: it.label, "aria-current": here ? "page" : undefined,
+          onClick: function (e) { e.preventDefault(); var f = kids[0]; if (f && p.onNavigate) p.onNavigate(f.id || f.label, f); } },
+          ICONS[it.icon] ? h(Icon, { name: it.icon }) : h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)),
+          h("span", { className: "rk-sr" }, it.label));
+      }
+      return h(React.Fragment, { key: key },
+        h("button", { type: "button", className: cx("rk-navlink rk-navparent", here && "holds"), "aria-expanded": open ? "true" : "false",
+          onClick: function () { if (here) return; var next = Object.assign({}, folds); next[key] = open; setFolds(next); try { localStorage.setItem(fk, JSON.stringify(next)); } catch (e) {} } },
+          h(Icon, { name: ICONS[it.icon] ? it.icon : "list" }), h("span", { className: "l" }, it.label),
+          h(Icon, { name: open ? "down" : "right" })),
+        open ? h("div", { className: "rk-navsub", role: "group", "aria-label": it.label }, kids.map(link)) : null);
+    }
     function link(it) {
+      if (it.items && it.items.length) return parent(it);
       var id = it.id || it.label;
       return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined,
         "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
@@ -896,13 +917,15 @@
     // current page open; a click on a group label folds or opens it and is remembered (foldKey in localStorage).
     var fk = p.foldKey || "rk.nav.folded", groups = p.groups || [];
     var fs = useState(function () { try { return JSON.parse(localStorage.getItem(fk) || "{}") || {}; } catch (e) { return {}; } }), folds = fs[0], setFolds = fs[1];
-    var links = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
+    function count(items) { return items.reduce(function (n, it) { return n + (it.items ? count(it.items) : 1); }, 0); }
+    var links = groups.reduce(function (n, g) { return n + count(g.items); }, 0);
     var foldable = p.foldGroups !== false && !col;
-    function hasCurrent(g) { return g.items.some(function (it) { return (it.id || it.label) === p.current || it.label === p.current; }); }
+    function hasCurrent(g) { return g.items.some(holds); }
     function isOpen(g) {
       if (!foldable || !g.label || hasCurrent(g)) return true;
       var k = String(g.label);
-      return k in folds ? !folds[k] : links <= (p.foldAfter || 15);
+      // the person's choice, else the group's own collapsed (contract 0037), else open unless the navigation is long
+      return k in folds ? !folds[k] : typeof g.collapsed === "boolean" ? !g.collapsed : links <= (p.foldAfter || 15);
     }
     function toggleGroup(g) {
       var next = Object.assign({}, folds); next[String(g.label)] = isOpen(g);

@@ -72,6 +72,13 @@ func menuItems(a *meta.App) []menuItem {
 		for i, iv := range meta.AsList(meta.AsMap(gv)["items"]) {
 			if s, ok := iv.(string); ok {
 				out = append(out, menuItem{s, fmt.Sprintf("/menu/%d/items/%d", g, i)})
+				continue
+			}
+			// a sub-menu (contract 0037): its models one level down
+			for j, jv := range meta.AsList(meta.AsMap(iv)["items"]) {
+				if s, ok := jv.(string); ok {
+					out = append(out, menuItem{s, fmt.Sprintf("/menu/%d/items/%d/items/%d", g, i, j)})
+				}
 			}
 		}
 	}

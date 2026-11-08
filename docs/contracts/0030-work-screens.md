@@ -142,6 +142,12 @@ and one actor (another user's same key is another key). The kernel keeps `rk_ide
   the record it wrote (200) once the claim is 2 minutes old (before that it is still running). A different method, path or body is `409 idempotency_conflict`. The same request still
   running is `409 idempotency_in_progress` with `Retry-After: 2`; a pending claim older than 2 minutes never committed
   and is taken over.
+- Each claim carries a random token; the commit inside the write succeeds only for the request that still holds the
+  claim, so a request whose stale claim was taken over rolls back (`409 idempotency_in_progress`) and one key never
+  writes twice. The hash covers method, path and the body without `_occurred_at` (a queued replay adds it).
+- The replay target of submit and cancel is the document the verb acted on (not a record its hooks wrote first).
+- A stored answer is replayed to the same actor without checking permissions again (for 7 days); sessions and API
+  tokens of one user share the key space.
 This is what makes a double tap, a dropped connection or a phase-1 queue safe, and it is the same rule edge events
 already follow (0006 §3).
 

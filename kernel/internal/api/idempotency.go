@@ -26,7 +26,7 @@ import (
 //   - same request, committed but no stored answer after 2 minutes (the server stopped in between): the record it
 //     wrote, 200, replayed (before that: still running)
 //   - same request still running: 409 idempotency_in_progress (Retry-After: 2)
-//   - a different method, path or body: 409 idempotency_conflict
+//   - a different method, path or body (compared without _occurred_at): 409 idempotency_conflict
 // A request that fails (4xx, 5xx) before writing releases its key, so a retry runs again.
 //
 // The body may also carry `_occurred_at` (RFC 3339): when the user pressed the button for a write that waited in a
@@ -115,6 +115,20 @@ func (s *Server) occurredAt(w http.ResponseWriter, body []byte) ([]byte, time.Ti
 	return out, t, true
 }
 
+// canonicalBody is what the request hash covers: the body without _occurred_at, compacted so that whitespace does
+// not matter (the raw bytes when the body is not JSON).
+func canonicalBody(body, raw []byte) []byte {
+	if len(bytes.TrimSpace(body)) == 0 { // no body is an empty object, as the handlers read it
+		return []byte("{}")
+	}
+	var v any
+	if json.Unmarshal(body, &v) != nil {
+		return raw
+	}
+	out, _ := json.Marshal(v)
+	return out
+}
+
 // idempotent wraps a write handler with Idempotency-Key and _occurred_at handling.
 func (s *Server) idempotent(h func(http.ResponseWriter, *http.Request, *caller)) func(http.ResponseWriter, *http.Request, *caller) {
 	return func(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -144,7 +158,8 @@ func (s *Server) idempotent(h func(http.ResponseWriter, *http.Request, *caller))
 			return
 		}
 		s.pruneIdempotency()
-		sum := sha256.Sum256([]byte(r.Method + " " + r.URL.Path + "\n" + string(raw)))
+		// the body without _occurred_at: a queued replay adds the time the first try did not send (audit WS2 F1)
+		sum := sha256.Sum256([]byte(r.Method + " " + r.URL.Path + "\n" + string(canonicalBody(body, raw))))
 		hash := hex.EncodeToString(sum[:])
 		org, actor := c.actor.Org, c.actor.ID
 		it, err := store.ClaimIdempotency(ctx, s.DB, org, actor, key, hash)
@@ -157,14 +172,14 @@ func (s *Server) idempotent(h func(http.ResponseWriter, *http.Request, *caller))
 			return
 		}
 		cw := &captureWriter{h: http.Header{}}
-		k := engine.IdemKey{Org: org, Actor: actor, Key: key}
+		k := engine.IdemKey{Org: org, Actor: actor, Key: key, Claim: it.Claim}
 		h(cw, r.WithContext(engine.WithIdempotency(ctx, k)), c)
 		bg := context.WithoutCancel(ctx)
 		if cw.status >= 200 && cw.status < 300 {
-			if err := store.FinishIdempotency(bg, s.DB, org, actor, key, cw.status, json.RawMessage(bytes.TrimSpace(cw.buf.Bytes()))); err != nil && s.Log != nil {
+			if err := store.FinishIdempotency(bg, s.DB, org, actor, key, it.Claim, cw.status, json.RawMessage(bytes.TrimSpace(cw.buf.Bytes()))); err != nil && s.Log != nil {
 				s.Log("idempotency: store answer for %s: %v", key, err)
 			}
-		} else if err := store.ReleaseIdempotency(bg, s.DB, org, actor, key); err != nil && s.Log != nil {
+		} else if err := store.ReleaseIdempotency(bg, s.DB, org, actor, key, it.Claim); err != nil && s.Log != nil {
 			s.Log("idempotency: release %s: %v", key, err)
 		}
 		cw.flush(w)

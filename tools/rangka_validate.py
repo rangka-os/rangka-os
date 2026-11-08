@@ -713,7 +713,7 @@ def kind_of(path):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
-    app_imports, site_imports, prints, letterheads, processes = [], [], [], {}, []
+    app_imports, site_imports, prints, letterheads, processes, screens = [], [], [], {}, [], []
     for name, a in apps.items():
         for st, p in rkfile.listdir(os.path.join(a["dir"], "flows")):
             f = rep.load(p)
@@ -731,6 +731,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                 roles.append((name, st, p, r))
         load_prints(rep, prints, name, a["dir"])
         load_processes(rep, processes, name, a["dir"])
+        load_screens(rep, screens, name, a["dir"])
     if site:
         for stem in ("system", "features", "config"):
             p = rkfile.find(site, stem)
@@ -824,6 +825,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         check_overlays(rep, V, apps, allmodels, overlays)
     check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
     check_processes(rep, V, allmodels, only, processes)
+    check_screens(rep, V, apps, allmodels, only, screens)
 
 
 def check_scope(rep, p, r, allmodels):
@@ -1588,6 +1590,127 @@ def check_processes(rep, V, allmodels, only, processes):
                     check_expr(sub, p, f"{at}/when", sm["when"], m, fields, allmodels)
                 if sub.items:
                     rep.add("error", p, f"{at}/when", "process_when", sub.items[0][4])
+
+
+SCREEN_TYPES = ["counter", "queue", "roll", "route", "handover", "clock", "entry"]
+OFFLINE_TYPES = {"counter", "roll", "route", "clock", "entry"}
+
+
+def load_screens(rep, screens, app, root):
+    """Work screens (contract 0030 §1) in <root>/screens of a module or a 0.4 unit."""
+    for st, p in rkfile.listdir(os.path.join(root, "screens")):
+        d = rep.load(p)
+        if d is not None:
+            screens.append((app, st, p, d))
+
+
+def check_screens(rep, V, apps, allmodels, only, screens):
+    """Screen files and the work: lists of apps (contract 0030 §1, §3). The first unit that ships a name keeps it."""
+    roles = {"owner"}.union(*[a["roles"] for a in apps.values()])
+    first = {}
+    for app, stem, p, d in screens:
+        dup = stem in first
+        if not dup:
+            first[stem] = (app, d)
+        if only and app not in only:
+            continue
+        if dup:
+            rep.add("error", p, "name", "duplicate_screen", f'screen "{stem}" is already shipped by {first[stem][0]}; screen names are unique per site')
+            continue
+        check_screen(rep, V, apps, allmodels, roles, app, stem, p, d)
+    for name, a in apps.items():
+        if a["kind"] != "app" or (only and name not in only) or not a["app_path"]:
+            continue
+        check_work(rep, apps, name, a, first)
+
+
+def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d):
+    schema_errors(rep, V, "screen", p, d)
+    raw = d if isinstance(d, dict) else {}
+    if not isinstance(raw.get("name"), str) or raw["name"] != stem:
+        rep.add("error", p, "name", "name_mismatch", f'screen name "{raw.get("name")}" must match the file name "{stem}"')
+    typ = raw.get("type") if isinstance(raw.get("type"), str) else ""
+    known = typ in SCREEN_TYPES
+    if known and typ not in raw:
+        rep.add("error", p, "type", "screen_type_mismatch", f"a {typ} screen needs its {typ}: block")
+    for t in SCREEN_TYPES:
+        if t in raw and t != typ:
+            rep.add("error", p, t, "screen_type_mismatch", f'"{t}" is the block of the {t} type; this screen is type {raw.get("type")}')
+    for i, r in enumerate(raw.get("roles") if isinstance(raw.get("roles"), list) else []):
+        if isinstance(r, str) and r not in roles:
+            rep.add("error", p, f"roles/{i}", "unknown_role", f'role "{r}" is not a role of any module or app{suggest(r, roles)}')
+    if raw.get("offline") in ("queue", "edge") and known and typ not in OFFLINE_TYPES:
+        rep.add("error", p, "offline", "screen_offline", f"a {typ} screen cannot work offline (only counter, roll, route, clock and entry)")
+    parens(rep, p, "if", raw.get("if"))
+    units = set(closure(apps, [app]))
+    visible = {m: v for m, v in allmodels.items() if v[0] in units}
+    if typ == "entry" and isinstance(raw.get("entry"), dict):
+        check_screen_entry(rep, p, raw["entry"], visible)
+
+
+def screen_model(rep, p, where, b, visible):
+    mn = b.get("model")
+    if not isinstance(mn, str):
+        return None
+    if mn not in visible:
+        rep.add("error", p, where, "unknown_model", f'"{mn}" is not a model of this module or its requires{suggest(mn, visible)}')
+        return None
+    return mn, visible[mn][2]
+
+
+def check_screen_entry(rep, p, b, visible):
+    got = screen_model(rep, p, "entry/model", b, visible)
+    if not got:
+        return
+    mn, m = got
+    fields = {f["name"]: f for f in m.get("fields", []) if isinstance(f, dict) and "name" in f}
+    for i, fn in enumerate(b.get("fields") if isinstance(b.get("fields"), list) else []):
+        if not isinstance(fn, str):
+            continue
+        at = f"entry/fields/{i}"
+        if fn not in fields:
+            rep.add("error", p, at, "unknown_field", f'"{fn}" is not a field of {mn}{suggest(fn, fields)}')
+        elif fields[fn].get("type") == "table":
+            rep.add("error", p, at, "screen_slot_type", f'"{fn}" is a table; an entry screen takes plain fields')
+        elif fields[fn].get("compute") is not None:
+            rep.add("error", p, at, "screen_slot_type", f'"{fn}" is computed; nobody types it')
+    st = b.get("set") if isinstance(b.get("set"), dict) else {}
+    for k in sorted(st):
+        if k not in fields:
+            rep.add("error", p, f"entry/set/{k}", "unknown_field", f'"{k}" is not a field of {mn}{suggest(k, fields)}')
+            continue
+        parens(rep, p, f"entry/set/{k}", st[k])
+    if b.get("submit") is True and m.get("is_submittable") is not True:
+        rep.add("error", p, "entry/submit", "screen_not_submittable", f"{mn} is not submittable; drop submit: true")
+
+
+def check_work(rep, apps, name, a, first):
+    man = a["manifest"] if isinstance(a["manifest"], dict) else {}
+    listed = man.get("modules") if isinstance(man.get("modules"), dict) else {}
+    units = set(closure(apps, [k for k in listed if k in apps and apps[k]["kind"] in ("module", "legacy")]))
+    mine = sorted(n for n, (u, _) in first.items() if u in units)
+    homes = {}
+    for i, w in enumerate(man.get("work") if isinstance(man.get("work"), list) else []):
+        w = w if isinstance(w, dict) else {}
+        sn = w.get("screen")
+        if not isinstance(sn, str):
+            continue
+        at = f"work/{i}"
+        if sn not in first or first[sn][0] not in units:
+            rep.add("error", a["app_path"], f"{at}/screen", "unknown_screen", f'"{sn}" is not a screen of this app\'s modules{suggest(sn, mine)}')
+            continue
+        sd = first[sn][1] if isinstance(first[sn][1], dict) else {}
+        allowed = [r for r in (sd.get("roles") if isinstance(sd.get("roles"), list) else []) if isinstance(r, str)]
+        wr = w.get("roles") if isinstance(w.get("roles"), list) else []
+        for j, r in enumerate(wr):
+            if isinstance(r, str) and r not in allowed:
+                rep.add("error", a["app_path"], f"{at}/roles/{j}", "screen_role_not_allowed", f'screen {sn} allows only {", ".join(allowed)}; work: can narrow its roles, not add "{r}"')
+        if w.get("home") is True:
+            for r in [x for x in wr if isinstance(x, str)] or allowed:
+                if r in homes:
+                    rep.add("warn", a["app_path"], f"{at}/home", "duplicate_home", f"role {r} already lands on work/{homes[r]}; only the first home: true counts")
+                else:
+                    homes[r] = i
 
 
 def inside(root, path):

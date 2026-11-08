@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: kasir
+type: counter
+label: {id: Kasir}
+roles: [staf]
+if: "user.outlets.size() > 0"
+counter: {}

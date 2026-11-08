@@ -43,7 +43,7 @@ validate: build
 # The Go validator and rangka_validate.py must print the same reports: the real apps + site + connectors, the overlay and numbering sites,
 # the broken apps copy, the broken apps + broken site (overlays, theme contrast) + broken connectors, and the
 # contract 0001 layout (modules/ + apps/), valid and broken, print formats + letterheads, valid and broken, and
-# processes (contract 0014: the canvas snapshot and a broken set), and declared stock moves (contract 0021), valid and broken.
+# processes (contract 0014: the canvas snapshot and a broken set), declared stock moves (contract 0021), valid and broken, and work screens (contract 0030), valid and broken.
 # template_error (a template Go's html/template cannot parse) is kernel only: Python has no Go template parser,
 # so the broken print input has no such template.
 compare-python: build
@@ -60,7 +60,9 @@ compare-python: build
 	            "testdata/modules-apps/apps --site testdata/site-module" \
 	            "testdata/modules-apps/apps --site testdata/broken-site-module" \
 	            "testdata/stock-apps/apps --site testdata/stock-apps/site" \
-	            "testdata/broken-stock-apps/apps --site testdata/broken-stock-apps/site"; do \
+	            "testdata/broken-stock-apps/apps --site testdata/broken-stock-apps/site" \
+	            "testdata/screens/apps --site testdata/screens/site" \
+	            "testdata/broken-screens/apps --site testdata/broken-screens/site"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \
 	  if diff $$D/py.txt $$D/go.txt; then echo "identical ($$(tail -1 $$D/go.txt)): $$args"; else rc=1; fi; \

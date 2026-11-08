@@ -29,11 +29,13 @@ type Registry struct {
 	Overlays         map[string]*rk.Doc  // <site>/custom/<model>.rk by file stem
 	Prints           map[string]*Print   // print formats by name; a site format replaces an app's one
 	Processes        map[string]*Process // processes by name (contract 0014); a site process replaces a unit's one
+	Screens          map[string]*Screen  // work screens by name (contract 0030); the first unit that ships a name keeps it
 	Orgs             map[string]*OrgDoc  // config.rk orgs: by org id
 	ConnectorsDir    string
 	order            []string
 	printFiles       []*Print   // every loaded print file, apps first (validation)
 	processFiles     []*Process // every loaded process file, units first (validation)
+	screenFiles      []*Screen  // every loaded screen file, in unit order (validation)
 }
 
 // AppOrder returns installed app names in a stable order (dependencies first).
@@ -145,7 +147,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 	}
 	r := &Registry{AppsDir: appsDir, SiteDir: siteDir, ConnectorsDir: o.ConnectorsDir, ModulesDir: o.ModulesDir, App: map[string]*App{}, Models: map[string]*Model{},
 		Dashboards: map[string]*Dashboard{}, BaseDashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Imports: map[string]*Import{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
-		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}, Prints: map[string]*Print{}, Processes: map[string]*Process{}}
+		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}, Prints: map[string]*Print{}, Processes: map[string]*Process{}, Screens: map[string]*Screen{}}
 	ld := &loader{rep: rep}
 	// modules first, then apps (rangka_validate.py order); a name in both is reported on the app
 	type unit struct{ name, dir, stem, prefix string }
@@ -255,6 +257,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		}
 		r.loadPrints(ld, a.Name, a.Dir, a.Prefix+"/")
 		r.loadProcesses(ld, a.Name, a.Dir, a.Prefix+"/")
+		r.loadScreens(ld, a.Name, a.Dir, a.Prefix+"/")
 	}
 	if siteDir != "" {
 		r.Site = loadSite(siteDir, ld, r)

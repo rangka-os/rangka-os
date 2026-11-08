@@ -5,7 +5,7 @@ attachments and CSV imports. It is plain React (UMD) plus the design system, wit
 a Rangka kernel over `/api/v1`. The kernel serves this folder at `/app/` (`/` redirects there). Routes are hash routes,
 so deep links survive a reload and the kernel needs no SPA fallback:
 
-`#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>` · `#/proses` · `#/proses/<process>`
+`#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>` · `#/proses` · `#/proses/<process>` · `#/w/<screen>`
 
 The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 
@@ -24,6 +24,19 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 ⌘K or Ctrl+K opens the command menu in both: Halaman (every sidebar entry), Buat baru (`layout.nav.create`) and Data
 (the first 5 matches per model in the sidebar, from `GET /api/v1/r/<model>?q=`). `theme.density` sets
 `data-density` on `<html>` (`compact`, `standard`, `comfortable`).
+
+### Work screens (contract 0030)
+
+- **Home per role.** `meta.work` lists the screens the user may open, in the apps' `work:` order. The first one with
+  `home: true` is where they land (`homeHash`); the owner has none and keeps the dashboard home.
+- **Kerja group.** Everyone with screens gets a "Kerja" group at the top of the sidebar.
+- **Work shell.** A user whose every role is `desk: false` and who has a home screen gets no sidebar: a 48px bar
+  (company, account menu), the screen full width, and a bottom bar with up to 5 screens plus "Lainnya" (the lists and
+  approvals they may open, as a sheet). Ubah and previews always use the desk shell.
+- **Renderers** (`screens.js`): `#/w/<screen>` loads `GET /api/v1/screens/<name>` (the screen plus `set:` evaluated by
+  the kernel for the user) and renders `RangkaApp.workRenderers[type]`. Built: `entry` (a short form: the listed
+  fields, "Simpan" or "Simpan & ajukan", then an empty form again with "Baru disimpan"). Other types show a notice
+  until their renderer ships.
 
 ### Ubah (change and preview)
 
@@ -58,6 +71,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `dashboard.js` | Dashboard view from `GET /dashboards/{name}` |
 | `approvals.js` | Approval inbox and the "Menunggu persetujuan" banner |
 | `docs.js` | Print menu and attachments panel |
+| `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
 | `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |
 | `process.js` | "Proses bisnis": the process list and the read-only canvas (`../canvas`, `RangkaCanvas.Mounted` with `readOnly: true`) |

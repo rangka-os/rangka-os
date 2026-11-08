@@ -69,7 +69,7 @@ func unitPath(p string) bool {
 // roles and permissions, config.tax (and config.ai, which decides approvals), deletions, existing fields of
 // submittable models, and edits to existing app files (app files belong to app authors; organisations use
 // custom/<model>.rk). Medium: features.rk, flows, new fields/rules/overlays, config.apps and other settings,
-// connectors, new models. Low: themes, layouts, labels, dashboards.
+// connectors, new models. Low: themes, layouts, labels, dashboards, new work screens.
 func Assess(ops []Op, before, after func(path string) (map[string]any, bool), model func(name string) map[string]any) *Assessment {
 	a := &Assessment{Risk: "low"}
 	layers := map[int]bool{}
@@ -111,6 +111,8 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 			switch {
 			case strings.Contains(p, "/dashboards/"):
 				a.raise("low", "new dashboard "+p)
+			case strings.Contains(p, "/screens/"): // UI over the record API; offered only once an app binds it (contract 0030)
+				a.raise("low", "new work screen "+p)
 			case strings.Contains(p, "/models/") || strings.HasPrefix(p, "models/"):
 				for _, f := range meta.AsList(nw["fields"]) {
 					if sensitiveField(meta.AsMap(f)) {

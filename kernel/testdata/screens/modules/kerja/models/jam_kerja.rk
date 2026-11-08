@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: jam_kerja
+label: {id: Jam kerja}
+is_submittable: true
+naming: JAM-{#####}
+fields:
+  - {name: date, type: date, label: {id: Tanggal}, required: true, default: today()}
+  - {name: staff, type: data, label: {id: Staf}}
+  - {name: hours, type: float, label: {id: Jam}, required: true}
+  - {name: note, type: text, label: {id: Catatan}}
+  - {name: rate, type: currency, label: {id: Tarif}}
+  - {name: total, type: currency, label: {id: Total}, compute: hours * rate}
+  - {name: breaks, type: table, of: jam_istirahat, label: {id: Istirahat}}
+permissions:
+  - {role: staf, read: true, create: true, write: true, submit: true}
+  - {role: mandor, read: true, write: true, submit: true}

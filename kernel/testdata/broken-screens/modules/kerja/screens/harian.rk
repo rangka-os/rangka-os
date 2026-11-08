@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: harian
+type: entry
+label: {id: Harian}
+roles: [staf]
+entry:
+  model: catatan_harian
+  fields: [text]
+  submit: true

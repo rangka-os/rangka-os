@@ -974,7 +974,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 
 /* ---------------------------------------------------------------- touch: phones and touch tablets (44px targets) */
 @media (max-width: 767px), (max-width: 1279px) and (pointer: coarse) {
-  .rk-iconbtn, .rk-topnav .rk-av-btn, .rk-topnav-product, .rk-viewswitch-btn { min-width: var(--touch); }
+  .rk-iconbtn, .rk-topnav .rk-av-btn, .rk-topnav-product, .rk-viewswitch-btn, .rk-btn { min-width: var(--touch); }
   .rk-side.collapsed nav { padding-left: 4px; padding-right: 4px; }
   .rk-side .rk-navgroup > p:has(> .rk-navgroup-t) { height: auto; margin-top: 4px; margin-bottom: 0; }
   .rk-side.collapsed .rk-side-switch, .rk-side.collapsed .rk-side-search { margin-left: 4px; margin-right: 4px; width: calc(100% - 8px); }

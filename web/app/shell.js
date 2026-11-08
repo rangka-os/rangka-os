@@ -128,6 +128,12 @@
     return groups;
   }
 
+  /** True when the design system draws the icon (or cannot say: no design system loaded, as under node --test). */
+  function drawn(icon) {
+    var icons = global.Rangka && global.Rangka.ICONS;
+    return !icons || icons.indexOf(icon) >= 0;
+  }
+
   /** The installed app a route belongs to: the app whose dashboards hold the dashboard, or whose menu lists the model;
    *  null for pages of no app (approvals, processes, imports, work screens, home pages). */
   function appOfRoute(apps, route) {
@@ -144,7 +150,7 @@
   /** The app's icon: its own when the design system draws it, else one by the app's name, else the apps grid. */
   function appIcon(a) {
     var own = a && a.icon;
-    return own && (!R.ICONS || R.ICONS.indexOf(own) >= 0) ? own : APP_ICONS[a && a.name] || "apps";
+    return own && drawn(own) ? own : APP_ICONS[a && a.name] || "apps";
   }
 
   /** The user's work screens (meta.work order) as sidebar entries: the "Kerja" group (contract 0030 §3). */
@@ -153,7 +159,7 @@
     return ((meta && meta.work) || []).filter(function (w) { return screens[w.screen]; }).map(function (w) {
       var s = screens[w.screen];
       // an icon the design system does not draw would leave a blank rail or tab tile: fall back by screen type
-      var icon = s.icon && (!R.ICONS || R.ICONS.indexOf(s.icon) >= 0) ? s.icon : s.type === "counter" ? "store" : "edit";
+      var icon = s.icon && drawn(s.icon) ? s.icon : s.type === "counter" ? "store" : "edit";
       return { id: "w/" + w.screen, label: L(s.label) || w.screen, icon: icon };
     });
   }
@@ -296,6 +302,17 @@
     }
   }
 
+  /** The installed app a route belongs to (its dashboard or menu model), else the first app with a page; null with none. */
+  function appOf(meta, route) {
+    var apps = ((meta && meta.apps) || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
+    var owns = function (a) {
+      if (route && route.kind === "dash") return (a.dashboards || []).indexOf(route.dash) >= 0;
+      if (route && (route.kind === "list" || route.kind === "form")) return (a.menu || []).some(function (g) { return (g.items || []).indexOf(route.model) >= 0; });
+      return false;
+    };
+    return apps.filter(owns)[0] || apps[0] || null;
+  }
+
   /** The org a user-menu entry names (the menu shows names; an org without a name shows its id). */
   function orgByLabel(orgs, label) {
     return (orgs || []).filter(function (o) { return o && (o.name || o.id) === label; })[0] || null;
@@ -318,6 +335,7 @@
   RA.hashQuery = hashQuery;
   RA.withHashQuery = withHashQuery;
   RA.navId = navId;
+  RA.appOf = appOf;
 
   /* ================================================================ browser only from here */
   var React = global.React, ReactDOM = global.ReactDOM, R = global.Rangka;
@@ -950,6 +968,7 @@
         footer: sideFooter(false, kind === "side-only" && modeToggle ? h(React.Fragment, { key: "mode" }, modeToggle) : null),
         onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } });
     } else if (kind === "top-nav") {
+      // the top bar already names the business; the sidebar is the open app (openApp above)
       side = h(R.Sidebar, {
         app: openApp ? { name: L(openApp.title) || openApp.name, icon: appIcon(openApp), color: "var(--primary)" } : null,
         groups: navGroups(openApp ? Object.assign({}, meta, { apps: [openApp] }) : meta, features, { approvals: approvalCount }), current: navId(route), onNavigate: onNavigate,

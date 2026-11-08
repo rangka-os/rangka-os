@@ -46,7 +46,7 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 }
 
 // RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (the
-// scheduler and record events; a queued job resumes through RunFlowResume). Steps: find, find_all, create, update, notify (log driver), call (connector action; the
+// scheduler and record events; a queued job resumes through RunFlowResume). Steps: find, find_all, create, update, for_each (the steps under do: once per item of a list), notify (log driver), call (connector action; the
 // kernel records the call, it has no connector runtime yet), if/then/else, wait (the remaining steps are
 // queued for later) and approve (the remaining steps wait for a decision). Every step may have if: and as:.
 //
@@ -141,6 +141,9 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	}
 	return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.run", "flow/"+f.Name, fmt.Sprintf("%d step(s), %d created, %d notification(s)", len(out.Steps), len(out.Created), len(out.Notifications)), nil)
 }
+
+// maxForEach bounds one for_each step (one flow run is one transaction).
+var maxForEach = 2000 // a var so a test can lower it
 
 type flowRun struct {
 	o    *op
@@ -368,6 +371,41 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			}
 			r.out.Calls = append(r.out.Calls, call)
 			r.out.Steps = append(r.out.Steps, fmt.Sprintf("%s: call %s (recorded)", i, call))
+		case st["for_each"] != nil:
+			// for_each: <list expression>, as: <var>, do: [steps]. The steps run once per item with the item in the
+			// variable, in the flow's one transaction (a failing item rolls the whole run back); wait and approve are
+			// not allowed inside. A list longer than maxForEach fails the run instead of holding locks for minutes.
+			src, _ := st["for_each"].(string)
+			if as == "" {
+				return badRequest(fmt.Sprintf("flow %s step %s: for_each needs as:", r.f.Name, i))
+			}
+			v, err := cel.Eval(src, r.env())
+			if err != nil {
+				return fmt.Errorf("step %s for_each: %w", i, err)
+			}
+			items, ok := cel.Unwrap(v).([]any)
+			if !ok && cel.Unwrap(v) != nil {
+				return fmt.Errorf("step %s for_each: needs a list, got %T", i, cel.Unwrap(v))
+			}
+			if len(items) > maxForEach {
+				return badRequest(fmt.Sprintf("flow %s step %s: for_each over %d items (at most %d per run)", r.f.Name, i, len(items), maxForEach))
+			}
+			prev, had := r.vars[as]
+			r.out.Steps = append(r.out.Steps, fmt.Sprintf("%s: for_each → %d", i, len(items)))
+			for k, it := range items {
+				if r.stop {
+					break
+				}
+				r.vars[as] = it
+				if err := r.steps(meta.AsList(st["do"]), fmt.Sprintf("%s.%d.", i, k+1), 0); err != nil {
+					return err
+				}
+			}
+			if had {
+				r.vars[as] = prev
+			} else {
+				delete(r.vars, as)
+			}
 		case st["wait"] != nil:
 			if label != "" {
 				return badRequest(fmt.Sprintf("flow %s step %s: wait is only allowed at the top level of a flow", r.f.Name, i))

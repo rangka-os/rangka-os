@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -491,5 +492,92 @@ func TestListSearchHidesUnreadableLinkTitles(t *testing.T) {
 	set("customer", grant("rep", nil), grant("owner", nil))
 	if _, n, err = e.List(ctx, rep, "sales_invoice", ListOpts{Q: q, Limit: 1000}); err != nil || n == 0 {
 		t.Fatalf("rep with customer read: found %d invoices (%v), want some", n, err)
+	}
+}
+
+// TestFlowForEach: for_each runs its steps once per item (update the item variable, a nested if), restores nothing
+// it did not have, and is bounded.
+func TestFlowForEach(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	res, err := e.RunFlow(ctx, permManager, "bump_vouchers", nil)
+	if err != nil {
+		t.Fatalf("run: %v", err)
+	}
+	if len(res.Updated) != 2 || len(res.Created) != 1 {
+		t.Fatalf("updated %v created %v, want 2 updated and 1 created", res.Updated, res.Created)
+	}
+	for name, want := range map[string]int64{"V1": 100001, "V2": 20001} {
+		v, err := e.Get(ctx, permOwner, "voucher", name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if v["amount"] != want {
+			t.Fatalf("%s amount = %v, want %d", name, v["amount"], want)
+		}
+	}
+	made, err := e.Get(ctx, permOwner, "voucher", res.Created[0][len("voucher/"):])
+	if err != nil {
+		t.Fatal(err)
+	}
+	if made["title"] != "Bulan depan V1 2026-02-28" || made["amount"] != int64(30) {
+		t.Fatalf("made = %v / %v", made["title"], made["amount"])
+	}
+	if !strings.Contains(strings.Join(res.Steps, ";"), "2: for_each → 2") || !strings.Contains(strings.Join(res.Steps, ";"), "2.1.2: create voucher") {
+		t.Fatalf("steps = %v", res.Steps)
+	}
+}
+
+// TestFlowForEachBounded: a list longer than the bound fails the whole run, nothing written.
+func TestFlowForEachBounded(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	old := maxForEach
+	maxForEach = 1
+	defer func() { maxForEach = old }()
+	if _, err := e.RunFlow(ctx, permManager, "bump_vouchers", nil); err == nil || !strings.Contains(err.Error(), "at most 1 per run") {
+		t.Fatalf("err = %v, want the bound", err)
+	}
+	v, err := e.Get(ctx, permOwner, "voucher", "V1")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if v["amount"] != int64(100000) {
+		t.Fatalf("V1 amount = %v after a refused run", v["amount"])
+	}
+}
+
+// TestFlowOnDeleted: flows on <model>.deleted run in the delete's transaction (contract 0031): their writes commit
+// with it, and a failing step rolls the delete back.
+func TestFlowOnDeleted(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	if _, err := e.Update(ctx, permOwner, "voucher", "V2", map[string]any{"title": "Terkunci"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Delete(ctx, permOwner, "voucher", "V2"); err == nil {
+		t.Fatal("deleting V2 succeeded; its deleted flow fails, so the delete must roll back")
+	}
+	if _, err := e.Get(ctx, permOwner, "voucher", "V2"); err != nil {
+		t.Fatalf("V2 after a refused delete: %v", err)
+	}
+	if err := e.Delete(ctx, permOwner, "voucher", "V1"); err != nil {
+		t.Fatalf("delete V1: %v", err)
+	}
+	notes, _, err := e.List(ctx, permOwner, "note", ListOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, n := range notes {
+		if n["body"] == "Dihapus V1 Bensin" {
+			found++
+		}
+		if strings.HasPrefix(fmt.Sprint(n["body"]), "Dihapus V2") {
+			t.Fatalf("the refused delete left a note: %v", n)
+		}
+	}
+	if found != 1 {
+		t.Fatalf("notes = %v, want one 'Dihapus V1 Bensin'", notes)
 	}
 }

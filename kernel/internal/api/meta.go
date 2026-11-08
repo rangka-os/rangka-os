@@ -198,6 +198,7 @@ func InstalledConnectors(reg *meta.Registry) []string {
 			}
 			walk(meta.AsList(sm["then"]))
 			walk(meta.AsList(sm["else"]))
+			walk(meta.AsList(sm["do"]))
 		}
 	}
 	for _, f := range reg.Flows {

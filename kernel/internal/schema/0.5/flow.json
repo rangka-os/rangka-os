@@ -280,6 +280,38 @@
         },
         {
           "type": "object",
+          "title": "for_each",
+          "description": "Run the steps under do once per item of a list (in the flow's one transaction; at most 2000 items; no wait or approve inside)",
+          "required": [
+            "for_each",
+            "as",
+            "do"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "for_each": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "A list, usually a find_all variable"
+            },
+            "as": {
+              "$ref": "model.json#/$defs/name",
+              "description": "Variable that holds the current item"
+            },
+            "if": {
+              "$ref": "model.json#/$defs/cel",
+              "description": "Run the step only when this is true"
+            },
+            "do": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "$ref": "#/$defs/step"
+              }
+            }
+          }
+        },
+        {
+          "type": "object",
           "title": "wait",
           "description": "",
           "required": [

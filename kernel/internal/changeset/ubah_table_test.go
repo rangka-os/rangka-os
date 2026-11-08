@@ -29,6 +29,16 @@ func TestUbahAddTableIsValidMedium(t *testing.T) {
 		if cs.Ops[0].Path != "models/x_kunjungan_toko.rk" {
 			t.Fatalf("%s: table at %s, want the site company module", app, cs.Ops[0].Path)
 		}
+		// Propose checks the body against changeset.json before anything else: its op paths must allow the site
+		// company module's models/ (contract 0016), or the web app's "Tambah tabel" is refused with 422
+		var doc map[string]any
+		if err := json.Unmarshal(b, &doc); err != nil {
+			t.Fatal(err)
+		}
+		doc["id"], doc["status"], doc["author"] = newID(), "proposed", map[string]any{"kind": "user", "id": "owner@contoh.test"}
+		if errs := schema.Embedded().Validate("changeset", schema.FromData(normalize(doc))); len(errs) > 0 {
+			t.Fatalf("%s: changeset.json refuses the ops: %s %s", app, errs[0].PathString(), errs[0].Message)
+		}
 		s := &Service{AppsDir: filepath.Join(canvas, "apps"), SiteDir: filepath.Join(canvas, "site"), ModulesDir: filepath.Join(canvas, "modules"), Schemas: schema.Embedded()}
 		v, _, _, cleanup, err := s.check(&cs)
 		if err != nil {

@@ -123,7 +123,8 @@ node --test web/app/test/*.test.js
 python3 web/app/test_app.py [--width 1280|400] [--require-all] [--shots DIR] [--keep] [-k NAME]
 ```
 
-`test_app.py` builds the kernel, starts a throwaway Postgres, migrates, seeds, adds a `sales_manager` and a
+`test_app.py` builds the kernel, starts a throwaway Postgres, migrates and seeds the kernel's v0 catalogue
+(`kernel/testdata/catalogue-v0`, the one `make test` uses; only `rangka-connectors` is read from next to this repo), adds a `sales_manager` and a
 `sales_rep`, serves, and runs every scenario in a fresh Chromium context. A scenario fails on an exception, a console
 error or an unexpected HTTP error. `--width 400` runs the same scenarios as a phone (400px, mobile viewport and touch);
 `test_no_horizontal_scroll` is the scenario that checks the main screens do not scroll sideways and that controls are

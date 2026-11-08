@@ -24,8 +24,15 @@ class Quiet(http.server.SimpleHTTPRequestHandler):
         pass
 
 
+class Server(socketserver.ThreadingTCPServer):
+    # threaded: the browser opens parallel connections; socketserver's default listen backlog of 5 is too short for
+    # them, and on macOS the overflow is reset (net::ERR_CONNECTION_RESET on a random script, a flaky failure)
+    request_queue_size = 128
+    daemon_threads = True
+
+
 handler = functools.partial(Quiet, directory=WEB)
-httpd = socketserver.ThreadingTCPServer(("127.0.0.1", 0), handler)  # threaded: the browser opens parallel connections
+httpd = Server(("127.0.0.1", 0), handler)
 port = httpd.server_address[1]
 threading.Thread(target=httpd.serve_forever, daemon=True).start()
 BASE = f"http://127.0.0.1:{port}/console/index.html"

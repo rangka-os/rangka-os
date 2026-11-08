@@ -287,3 +287,14 @@ test("workBar: up to 5 screens, Lainnya with the desk entries", () => {
   assert.ok(!b.more.some((i) => i.id.indexOf("w/") === 0), "Lainnya holds no screens");
   assert.ok(b.more.some((i) => i.id === "approvals" && i.count === 2) && b.more.some((i) => i.id === "r/deal"));
 });
+
+test("pwaMenu: update first, then install or the iOS hint, nothing once installed", () => {
+  const m = A.pwaMenu;
+  assert.deepStrictEqual(plain(m(null)), []);
+  assert.deepStrictEqual(plain(m({ standalone: false, installable: true })), ["install"]);
+  assert.deepStrictEqual(plain(m({ standalone: false, installable: false, iosHint: true })), ["ios"]);
+  assert.deepStrictEqual(plain(m({ standalone: false, installable: false, iosHint: false })), []);
+  assert.deepStrictEqual(plain(m({ standalone: true, installable: true, iosHint: true })), []);
+  assert.deepStrictEqual(plain(m({ standalone: true, updateReady: true })), ["update"]);
+  assert.deepStrictEqual(plain(m({ standalone: false, installable: true, updateReady: true })), ["update", "install"]);
+});

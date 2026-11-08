@@ -5,7 +5,7 @@
 
 Serves web/ over http on a free port and opens design-system/gallery.html at 1280 and 400 px, in light and dark and
 in the three densities. Fails on a console error, a horizontal page scroll, a component from the @ds-bundle header
-without its gallery section, uppercase status pills, a control under 40px tall on phones (as in
+without its gallery section, uppercase status pills, a control under 44px tall on phones (as in
 web/app/test_app.py), or metrics that ignore data-density.
 """
 import argparse, functools, http.server, json, os, re, socketserver, sys, threading
@@ -61,7 +61,7 @@ SMALL_CONTROLS_JS = """() => {
     if (el.tagName === 'INPUT' && ['checkbox', 'radio', 'file', 'hidden'].includes(el.type)) continue;
     const cs = getComputedStyle(el), r = el.getBoundingClientRect();
     if (cs.visibility === 'hidden' || cs.display === 'none' || r.width === 0 || r.height === 0) continue;
-    if (r.height < 39.5) out.push((el.closest('[data-component]') || {}).id + ': ' + (el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 30) + ' <' + el.tagName.toLowerCase() + '.' + el.className + '> ' + Math.round(r.height) + 'px');
+    if (r.height < 43.5) out.push((el.closest('[data-component]') || {}).id + ': ' + (el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 30) + ' <' + el.tagName.toLowerCase() + '.' + el.className + '> ' + Math.round(r.height) + 'px');
   }
   return out;
 }"""
@@ -110,7 +110,7 @@ with sync_playwright() as pw:
             if width <= 600:
                 small = page.evaluate(SMALL_CONTROLS_JS)
                 if small:
-                    fail(f"{tag}: controls under 40px tall: {small}")
+                    fail(f"{tag}: controls under 44px tall: {small}")
             if args.shots:
                 os.makedirs(args.shots, exist_ok=True)
                 page.screenshot(path=os.path.join(args.shots, f"gallery-{width}-{theme}.png"), full_page=True)

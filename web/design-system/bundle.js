@@ -879,7 +879,7 @@
         it.count ? (col ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : h("span", { className: "rk-count" }, it.count)) : null);
     }
     var search = p.search, searchLabel = (search && search.label) || "Cari";
-    return h("aside", { className: cx("rk-side", col && "collapsed"), "aria-label": sw ? "Navigasi " + sw.title : "Navigasi" },
+    return h("aside", { className: cx("rk-side", col && "collapsed", p.float && "rk-side-float"), "aria-label": sw ? "Navigasi " + sw.title : "Navigasi" },
       sw ? head() : null,
       p.company && !col ? h("button", { type: "button", className: "rk-company", onClick: p.onCompany }, h(Icon, { name: "store" }), h("span", { className: "g" }, p.company, p.outlet ? h("small", null, p.outlet) : null), h(Icon, { name: "updown" })) : null,
       search ? h("button", { type: "button", className: "rk-side-search", onClick: search.onOpen, title: col ? searchLabel : undefined, "aria-label": col ? searchLabel : undefined },
@@ -1402,11 +1402,32 @@
         h("button", { type: "button", className: "rk-send", disabled: !canSend, "aria-label": "Kirim", onClick: send }, h(Icon, { name: "send" }))));
   }
 
+  /* ---- Breakpoints (tokens.json breakpoint): "phone" < 768, "tablet-portrait" 768-1023, "tablet" 1024-1279, "desktop" >= 1280.
+     touch() is true on phones and on touch tablets, where controls are 44px (--touch). */
+  var BREAKPOINTS = { tablet: 768, tabletLandscape: 1024, desktop: 1280 };
+  function breakpoint(w) {
+    if (w == null) w = window.innerWidth;
+    return w < BREAKPOINTS.tablet ? "phone" : w < BREAKPOINTS.tabletLandscape ? "tablet-portrait" : w < BREAKPOINTS.desktop ? "tablet" : "desktop";
+  }
+  function isTouch() {
+    return !!(window.matchMedia && window.matchMedia("(max-width: 767px), (max-width: 1279px) and (pointer: coarse)").matches);
+  }
+  function useBreakpoint() {
+    var st = useState(breakpoint()), bp = st[0], set = st[1];
+    useEffect(function () {
+      var on = function () { set(breakpoint()); };
+      window.addEventListener("resize", on);
+      return function () { window.removeEventListener("resize", on); };
+    }, []);
+    return bp;
+  }
+
   var api = { Button: Button, Icon: Icon, StatusChip: StatusChip, Amount: Amount, Field: Field, Segmented: Segmented, StatCard: StatCard,
     DataTable: DataTable, DocumentHeader: DocumentHeader, PosKeypad: PosKeypad, Raka: Raka, formatRupiah: formatRupiah, Card: Card, Descriptions: Descriptions, Steps: Steps, Breadcrumb: Breadcrumb, PageHeader: PageHeader, AppShell: AppShell, LinkField: LinkField, ChildTable: ChildTable, DatePicker: DatePicker, DateRangePicker: DateRangePicker, formatTanggal: formatTanggal, Table: Table, Pagination: Pagination, Dialog: Dialog, Drawer: Drawer, DrawerSection: DrawerSection, CommandMenu: CommandMenu, Menu: Menu, ContextMenu: ContextMenu, Alert: Alert, Banner: Banner, Toast: Toast, Toaster: Toaster, Sidebar: Sidebar, Topbar: Topbar, Checkbox: Checkbox, RadioGroup: RadioGroup, Switch: Switch, Textarea: Textarea, NativeSelect: NativeSelect, Select: Select, MultiSelect: MultiSelect, Form: Form, FormSection: FormSection, ChatComposer: ChatComposer, Avatar: Avatar, AvatarGroup: AvatarGroup, ImagePreview: ImagePreview, ImageViewer: ImageViewer, Tabs: Tabs, EmptyState: EmptyState, Kbd: Kbd, IconButton: IconButton, ICONS: Object.keys(ICONS) };
   api.Lozenge = Lozenge; api.Badge = Badge; api.TopNav = TopNav; api.AppSwitcher = AppSwitcher; api.AccountMenu = AccountMenu; api.Spinner = Spinner; api.Skeleton = Skeleton; api.FilterBar = FilterBar; api.FilterBuilder = FilterBuilder; api.SettingsLayout = SettingsLayout; api.SettingsSection = SettingsSection; api.SettingsRow = SettingsRow; api.NumberCard = NumberCard; api.Chart = Chart; api.ChartCard = ChartCard; api.ListCard = ListCard; api.DashGrid = DashGrid; api.Sparkline = Sparkline; api.filterCel = filterCel; api.compactNumber = compact;
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   api.Logo = Logo; api.AuthLayout = AuthLayout;
   api.AskBar = AskBar; api.ChatDrawer = ChatDrawer;
+  api.BREAKPOINTS = BREAKPOINTS; api.breakpoint = breakpoint; api.useBreakpoint = useBreakpoint; api.isTouch = isTouch;
   window.Rangka = Object.assign(window.Rangka || {}, api);
 })();

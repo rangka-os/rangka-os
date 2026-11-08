@@ -102,7 +102,7 @@ func TestIdempotentCommittedWithoutAnswer(t *testing.T) {
 	k := withKey(staf, "tap-crash")
 	body := map[string]any{"date": "2026-11-08", "hours": 5}
 	first := k.must(201, "POST", "/api/v1/r/jam_kerja", body).JSON
-	if _, err := owner.s.DB.Exec(ctx, `update rk_idempotency set state = 'committed', response = null where key = 'tap-crash'`); err != nil {
+	if _, err := owner.s.DB.Exec(ctx, `update rk_idempotency set state = 'committed', response = null, created_at = now() - interval '10 minutes' where key = 'tap-crash'`); err != nil {
 		t.Fatal(err)
 	}
 	r := k.must(200, "POST", "/api/v1/r/jam_kerja", body)

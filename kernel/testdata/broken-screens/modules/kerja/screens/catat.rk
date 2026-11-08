@@ -6,5 +6,5 @@ roles: [staf]
 entry:
   model: jam_kerja
   fields: [date, hourz, breaks, total]
-  set: {staf: "user.name", note: "concat("}
+  set: {staf: "user.name", note: "concat(", total: "1"}
   submit: true

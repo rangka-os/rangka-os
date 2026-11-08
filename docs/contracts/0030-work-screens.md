@@ -139,7 +139,7 @@ and one actor (another user's same key is another key). The kernel keeps `rk_ide
   releases a still pending key, so a corrected retry runs.
 - A replay with the same method, path and body answers the stored answer with header `Idempotency-Replayed: true`
   (and `Location` again for a 201). If the server stopped between commit and storing the answer, the replay answers
-  the record it wrote (200). A different method, path or body is `409 idempotency_conflict`. The same request still
+  the record it wrote (200) once the claim is 2 minutes old (before that it is still running). A different method, path or body is `409 idempotency_conflict`. The same request still
   running is `409 idempotency_in_progress` with `Retry-After: 2`; a pending claim older than 2 minutes never committed
   and is taken over.
 This is what makes a double tap, a dropped connection or a phase-1 queue safe, and it is the same rule edge events

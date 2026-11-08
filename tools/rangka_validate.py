@@ -1674,10 +1674,13 @@ def check_screen_entry(rep, p, b, visible):
             rep.add("error", p, at, "screen_slot_type", f'"{fn}" is a table; an entry screen takes plain fields')
         elif fields[fn].get("compute") is not None:
             rep.add("error", p, at, "screen_slot_type", f'"{fn}" is computed; nobody types it')
-    st = b.get("set") if isinstance(b.get("set"), dict) else {}
+    st = {str(k): v for k, v in b["set"].items()} if isinstance(b.get("set"), dict) else {}
     for k in sorted(st):
         if k not in fields:
             rep.add("error", p, f"entry/set/{k}", "unknown_field", f'"{k}" is not a field of {mn}{suggest(k, fields)}')
+            continue
+        if fields[k].get("compute") is not None or fields[k].get("read_only") is True:
+            rep.add("error", p, f"entry/set/{k}", "screen_slot_type", f'"{k}" is computed or read-only; set: cannot fill it')
             continue
         parens(rep, p, f"entry/set/{k}", st[k])
     if b.get("submit") is True and m.get("is_submittable") is not True:

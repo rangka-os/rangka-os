@@ -23,7 +23,8 @@ import (
 // ASCII). The first request with a key claims it (rk_idempotency, per org and actor, kept 7 days) and runs; the engine
 // marks the key committed in the writing transaction, and a 2xx answer is stored. A later request with the same key:
 //   - same method, path and body, answer stored: the stored answer, header Idempotency-Replayed: true
-//   - same request, committed but no stored answer (the server stopped in between): the record it wrote, 200, replayed
+//   - same request, committed but no stored answer after 2 minutes (the server stopped in between): the record it
+//     wrote, 200, replayed (before that: still running)
 //   - same request still running: 409 idempotency_in_progress (Retry-After: 2)
 //   - a different method, path or body: 409 idempotency_conflict
 // A request that fails (4xx, 5xx) before writing releases its key, so a retry runs again.
@@ -185,6 +186,11 @@ func (s *Server) idemReplay(w http.ResponseWriter, r *http.Request, c *caller, i
 		w.WriteHeader(it.Status)
 		w.Write(append(it.Response, '\n'))
 	case "committed":
+		if time.Since(it.Created) < store.IdempotencyStale { // written, the answer is on its way
+			w.Header().Set("Retry-After", idemRetrySecond)
+			writeError(w, http.StatusConflict, "idempotency_in_progress", "the first request with this key is still running")
+			return
+		}
 		model, name, ok := strings.Cut(it.Target, "/")
 		if !ok {
 			writeError(w, http.StatusConflict, "idempotency_unknown", "the first request with this key wrote no record; check before you send it again")

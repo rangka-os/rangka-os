@@ -13,7 +13,7 @@ var SystemFields = map[string]bool{"name": true, "status": true, "created_by": t
 	"company": true, "docstatus": true, "amended_from": true}
 
 // Functions of the CEL dialect (rangka_validate.py FUNCTIONS).
-var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now"}
+var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between"}
 
 // Globals readable in expressions (org and tax: contract 0010 §8).
 var Globals = map[string]bool{"user": true, "org": true, "tax": true, "true": true, "false": true, "null": true, "event": true}

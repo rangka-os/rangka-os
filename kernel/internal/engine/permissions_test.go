@@ -3,6 +3,7 @@ package engine
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -543,5 +544,40 @@ func TestFlowForEachBounded(t *testing.T) {
 	}
 	if v["amount"] != int64(100000) {
 		t.Fatalf("V1 amount = %v after a refused run", v["amount"])
+	}
+}
+
+// TestFlowOnDeleted: flows on <model>.deleted run in the delete's transaction (contract 0031): their writes commit
+// with it, and a failing step rolls the delete back.
+func TestFlowOnDeleted(t *testing.T) {
+	e := permSetup(t)
+	ctx := context.Background()
+	if _, err := e.Update(ctx, permOwner, "voucher", "V2", map[string]any{"title": "Terkunci"}); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.Delete(ctx, permOwner, "voucher", "V2"); err == nil {
+		t.Fatal("deleting V2 succeeded; its deleted flow fails, so the delete must roll back")
+	}
+	if _, err := e.Get(ctx, permOwner, "voucher", "V2"); err != nil {
+		t.Fatalf("V2 after a refused delete: %v", err)
+	}
+	if err := e.Delete(ctx, permOwner, "voucher", "V1"); err != nil {
+		t.Fatalf("delete V1: %v", err)
+	}
+	notes, _, err := e.List(ctx, permOwner, "note", ListOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	found := 0
+	for _, n := range notes {
+		if n["body"] == "Dihapus V1 Bensin" {
+			found++
+		}
+		if strings.HasPrefix(fmt.Sprint(n["body"]), "Dihapus V2") {
+			t.Fatalf("the refused delete left a note: %v", n)
+		}
+	}
+	if found != 1 {
+		t.Fatalf("notes = %v, want one 'Dihapus V1 Bensin'", notes)
 	}
 }

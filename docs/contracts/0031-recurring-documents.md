@@ -40,7 +40,11 @@ Two things were missing in the kernel (`lima-bisnis-plan.md` §2.5, B5 and B6):
    items fails the run, so one run never holds locks for minutes; apps that may pass that bound select with `limit`
    and let the next scheduled run continue. The variable named by `as` is restored (or removed) after the loop.
    Steps are reported as `<step>.<item>.<substep>` (`2.1.1: update subscription SUB-00001`).
-4. Both validators know the two functions and validate the steps under `do` like those under `then`.
+4. **Flows on `<model>.deleted` run.** The validators always accepted `on: <model>.deleted`, but the kernel never
+   started those flows. They now run in the delete's transaction, as the deleter, with the record as it was as the
+   event (and `before`); a flow that refuses (a guard record whose rule fails) rolls the delete back. An app uses this to
+   keep a record that others depend on (a deposited field collection, the draft payment it made).
+5. Both validators know the two functions and validate the steps under `do` like those under `then`.
 
 ## Not in this contract
 

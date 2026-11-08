@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: penjualan_baris
+label: {id: Baris}
+is_child: true
+fields:
+  - {name: menu, type: link, to: menu, label: {id: Menu}, required: true}
+  - {name: qty, type: float, label: {id: Qty}, default: '1', required: true}
+  - {name: rate, type: currency, label: {id: Harga}, compute: menu.price}
+  - {name: amount, type: currency, label: {id: Jumlah}, compute: round(qty * rate)}
+  - {name: note, type: data, label: {id: Catatan}}

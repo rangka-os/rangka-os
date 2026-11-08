@@ -178,6 +178,35 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 	return append(errs, s.checkMoney("", "", "", map[string]bool{})...), warns, err
 }
 
+// cancelRules evaluates the rules with on: cancel over the submitted record (fail closed, like check). Required
+// fields, rows and other rules are not checked again: the record was valid when it was submitted.
+func (o *op) cancelRules(m *meta.Model, rec store.Record) (errs, warns []Issue) {
+	var s *scope
+	for _, r := range m.Rules {
+		if r.On != "cancel" {
+			continue
+		}
+		if s == nil {
+			s = o.scope(m, rec)
+		}
+		v, e := s.eval(r.Check)
+		if e != nil || !cel.Truthy(v) {
+			is := Issue{Rule: r.Name, Code: "rule", Message: r.Message.Text()}
+			if e != nil {
+				is.Code = "rule_error"
+				o.e.Log("rule %s.%s could not be evaluated on %v: %v", m.Name, r.Name, rec["name"], e)
+				is.Message = strings.TrimSpace(r.Message.Text() + " (aturan " + r.Name + " tidak bisa diperiksa)")
+			}
+			if r.Level == "warn" {
+				warns = append(warns, is)
+			} else {
+				errs = append(errs, is)
+			}
+		}
+	}
+	return errs, warns
+}
+
 // minRows reports the table fields of rec with fewer rows than their min_rows. only limits the check to
 // some table fields (nil: all of them).
 func minRows(m *meta.Model, rec store.Record, only func(field string) bool) []Issue {
@@ -774,6 +803,11 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	}
 	if toInt(rec["docstatus"]) != 1 {
 		return nil, conflict("not_submitted", "Hanya dokumen yang sudah diajukan yang bisa dibatalkan")
+	}
+	// rules with on: cancel guard the cancel itself (same-day void, own shift); they run before an approval is
+	// asked for, so a refused cancel never waits in the inbox (contract 0030 §10)
+	if errs, warns := o.cancelRules(m, rec); len(errs) > 0 {
+		return nil, validation(errs, warns)
 	}
 	pending, all, err := o.hold(m, rec, Snapshot(m, rec), "cancel", map[string]any{})
 	if err != nil {

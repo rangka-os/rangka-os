@@ -1,0 +1,36 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: jual
+type: counter
+label: {id: Kasir}
+icon: wallet
+roles: [kasir]
+device: tablet
+needs: [print]
+offline: queue
+counter:
+  catalogue:
+    model: menu
+    filter: "active == true"
+    title: menu_name
+    search: [menu_name, barcode]
+    group_by: category
+    price: price
+    barcode: barcode
+  document:
+    model: penjualan
+    lines: items
+    line: {item: menu, qty: qty, price: rate, note: note}
+    total: grand_total
+    change: change_amount
+    set: {date: "today()", sold_at: "now()"}
+  payments: {table: payments, method: method, amount: amount, methods: [cash, qris]}
+  session:
+    model: sesi_kasir
+    link: shift
+    filter: "cashier == user.email"
+    state: {field: state, open: open, closed: closed}
+    open: [opening_cash]
+    close: {model: tutup_sesi, link: shift, fields: [counted_cash]}
+  customer: {field: buyer}
+  hold: true
+  print: struk

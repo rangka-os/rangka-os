@@ -1,0 +1,28 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: penjualan
+label: {id: Penjualan}
+is_submittable: true
+naming: JUAL-{#####}
+title_field: grand_total
+fields:
+  - {name: shift, type: link, to: sesi_kasir, label: {id: Sesi}, required: true}
+  - {name: date, type: date, label: {id: Tanggal}, default: today()}
+  - {name: sold_at, type: datetime, label: {id: Waktu jual}}
+  - {name: buyer, type: data, label: {id: Pembeli}}
+  - {name: items, type: table, of: penjualan_baris, label: {id: Barang}, min_rows: 1}
+  - {name: grand_total, type: currency, label: {id: Total}, compute: "items.map(l, l.amount).sum()", in_list: true}
+  - {name: payments, type: table, of: penjualan_bayar, label: {id: Bayar}}
+  - name: cash_received
+    type: currency
+    label: {id: Tunai diterima}
+    compute: "payments.size() == 0 ? grand_total : payments.map(p, p.method == 'cash' ? p.amount : 0).sum()"
+  - name: qris_amount
+    type: currency
+    label: {id: QRIS}
+    compute: "payments.map(p, p.method == 'qris' ? p.amount : 0).sum()"
+  - {name: change_amount, type: currency, label: {id: Kembalian}, compute: cash_received + qris_amount - grand_total}
+rules:
+  - {name: paid, on: submit, check: "cash_received + qris_amount >= grand_total", message: {id: Pembayaran kurang}}
+  - {name: same_day_void, on: cancel, check: "date == today()", message: {id: Hanya transaksi hari ini yang bisa dibatalkan kasir}}
+permissions:
+  - {role: kasir, read: true, create: true, write: true, submit: true, cancel: true, print: true}

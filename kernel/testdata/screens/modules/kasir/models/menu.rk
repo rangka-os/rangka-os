@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: menu
+label: {id: Menu}
+naming: MNU-{###}
+title_field: menu_name
+fields:
+  - {name: menu_name, type: data, label: {id: Nama menu}, required: true, in_list: true}
+  - {name: category, type: data, label: {id: Kategori}, in_list: true}
+  - {name: price, type: currency, label: {id: Harga}, required: true, in_list: true}
+  - {name: barcode, type: data, label: {id: Barcode}}
+  - {name: active, type: check, label: {id: Aktif}, default: 'true'}
+permissions:
+  - {role: kasir, read: true}

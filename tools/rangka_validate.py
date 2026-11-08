@@ -825,7 +825,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         check_overlays(rep, V, apps, allmodels, overlays)
     check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
     check_processes(rep, V, allmodels, only, processes)
-    check_screens(rep, V, apps, allmodels, only, screens)
+    check_screens(rep, V, apps, allmodels, only, screens, prints)
 
 
 def check_scope(rep, p, r, allmodels):
@@ -1620,7 +1620,7 @@ def load_screens(rep, screens, app, root):
             screens.append((app, st, p, d))
 
 
-def check_screens(rep, V, apps, allmodels, only, screens):
+def check_screens(rep, V, apps, allmodels, only, screens, prints=()):
     """Screen files and the work: lists of apps (contract 0030 §1, §3). The first unit that ships a name keeps it."""
     roles = {"owner"}.union(*[a["roles"] for a in apps.values()])
     first = {}
@@ -1633,14 +1633,14 @@ def check_screens(rep, V, apps, allmodels, only, screens):
         if dup:
             rep.add("error", p, "name", "duplicate_screen", f'screen "{stem}" is already shipped by {first[stem][0]}; screen names are unique per site')
             continue
-        check_screen(rep, V, apps, allmodels, roles, app, stem, p, d)
+        check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints)
     for name, a in apps.items():
         if a["kind"] != "app" or (only and name not in only) or not a["app_path"]:
             continue
         check_work(rep, apps, name, a, first)
 
 
-def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d):
+def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints=()):
     schema_errors(rep, V, "screen", p, d)
     raw = d if isinstance(d, dict) else {}
     if not isinstance(raw.get("name"), str) or raw["name"] != stem:
@@ -1662,6 +1662,143 @@ def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d):
     visible = {m: v for m, v in allmodels.items() if v[0] in units}
     if typ == "entry" and isinstance(raw.get("entry"), dict):
         check_screen_entry(rep, p, raw["entry"], visible)
+    if typ == "counter" and isinstance(raw.get("counter"), dict):
+        check_screen_counter(rep, p, raw["counter"], visible, prints)
+
+
+NUMERIC_KINDS = ["currency", "money", "float", "int", "percent"]
+
+
+def fields_of(m):
+    return {f["name"]: f for f in m.get("fields", []) if isinstance(f, dict) and "name" in f}
+
+
+def slot_field(rep, p, where, mn, fields, x, kinds=None):
+    """A slot naming a field of model mn (fields), of one of kinds when given; returns the field or None."""
+    if not isinstance(x, str):
+        return None
+    if x not in fields:
+        rep.add("error", p, where, "unknown_field", f'"{x}" is not a field of {mn}{suggest(x, fields)}')
+        return None
+    if kinds and fields[x].get("type") not in kinds:
+        rep.add("error", p, where, "screen_slot_type", f'"{x}" is a field of type {fields[x].get("type")}; this slot needs {" or ".join(kinds)}')
+        return None
+    return fields[x]
+
+
+def slot_model(rep, p, where, b, visible):
+    got = screen_model(rep, p, where, b, visible)
+    return (got[0], got[1], fields_of(got[1])) if got else (None, None, None)
+
+
+def child_of(f, visible):
+    if not f or not isinstance(f.get("of"), str) or f["of"] not in visible:
+        return None, None, None
+    m = visible[f["of"]][2]
+    return f["of"], m, fields_of(m)
+
+
+def slot_set(rep, p, where, mn, fields, x):
+    st = {str(k): v for k, v in x.items()} if isinstance(x, dict) else {}
+    for k in sorted(st):
+        if k not in fields:
+            rep.add("error", p, f"{where}/{k}", "unknown_field", f'"{k}" is not a field of {mn}{suggest(k, fields)}')
+        elif fields[k].get("compute") is not None or fields[k].get("read_only") is True:
+            rep.add("error", p, f"{where}/{k}", "screen_slot_type", f'"{k}" is computed or read-only; set: cannot fill it')
+        else:
+            parens(rep, p, f"{where}/{k}", st[k])
+
+
+def option_values(f):
+    opts = f.get("options") if isinstance(f.get("options"), list) else []
+    return {pystr_opt(o.get("value") if isinstance(o, dict) else None) for o in opts}
+
+
+def pystr_opt(v):
+    """An option value as the Go validator prints it (pyStr): a string as is, anything else as Python repr."""
+    return v if isinstance(v, str) else repr(v)
+
+
+def check_screen_counter(rep, p, b, visible, prints):
+    cat = b.get("catalogue") if isinstance(b.get("catalogue"), dict) else None
+    cat_name = None
+    if cat is not None:
+        cn, cm, cf = slot_model(rep, p, "counter/catalogue/model", cat, visible)
+        cat_name = cn
+        if cn:
+            slot_field(rep, p, "counter/catalogue/price", cn, cf, cat.get("price"), NUMERIC_KINDS)
+            for k in ("title", "group_by", "barcode", "image"):
+                slot_field(rep, p, f"counter/catalogue/{k}", cn, cf, cat.get(k))
+            for i, x in enumerate(cat.get("search") if isinstance(cat.get("search"), list) else []):
+                slot_field(rep, p, f"counter/catalogue/search/{i}", cn, cf, x)
+            parens(rep, p, "counter/catalogue/filter", cat.get("filter"))
+    doc = b.get("document") if isinstance(b.get("document"), dict) else None
+    dn, dm, df = slot_model(rep, p, "counter/document/model", doc, visible) if doc is not None else (None, None, None)
+    if dn:
+        if b.get("submit") is not False and dm.get("is_submittable") is not True:
+            rep.add("error", p, "counter/document/model", "screen_not_submittable", f"{dn} is not submittable; set submit: false or pick a submittable document")
+        lines = slot_field(rep, p, "counter/document/lines", dn, df, doc.get("lines"), ["table"])
+        ln, lm, lf = child_of(lines, visible)
+        if ln:
+            line = doc.get("line") if isinstance(doc.get("line"), dict) else {}
+            item = slot_field(rep, p, "counter/document/line/item", ln, lf, line.get("item"), ["link"])
+            if item is not None and cat_name and item.get("to") != cat_name:
+                rep.add("error", p, "counter/document/line/item", "screen_slot_type", f'"{line.get("item")}" links to {item.get("to")}; the catalogue is {cat_name}')
+            slot_field(rep, p, "counter/document/line/qty", ln, lf, line.get("qty"), NUMERIC_KINDS)
+            slot_field(rep, p, "counter/document/line/price", ln, lf, line.get("price"), NUMERIC_KINDS)
+            slot_field(rep, p, "counter/document/line/note", ln, lf, line.get("note"))
+        slot_field(rep, p, "counter/document/total", dn, df, doc.get("total"), NUMERIC_KINDS)
+        slot_field(rep, p, "counter/document/change", dn, df, doc.get("change"), NUMERIC_KINDS)
+        slot_set(rep, p, "counter/document/set", dn, df, doc.get("set"))
+        if isinstance(b.get("customer"), dict):
+            slot_field(rep, p, "counter/customer/field", dn, df, b["customer"].get("field"))
+        if isinstance(b.get("print"), str):
+            if not any(st == b["print"] and isinstance(d, dict) and d.get("model") == dn for (_a, _r, st, _p, d) in prints):
+                rep.add("error", p, "counter/print", "unknown_print", f'"{b["print"]}" is not a print format of {dn}')
+    pay = b.get("payments") if isinstance(b.get("payments"), dict) else None
+    if pay is not None and dn:
+        table = slot_field(rep, p, "counter/payments/table", dn, df, pay.get("table"), ["table"])
+        pn, pm, pf = child_of(table, visible)
+        if pn:
+            method = slot_field(rep, p, "counter/payments/method", pn, pf, pay.get("method"))
+            slot_field(rep, p, "counter/payments/amount", pn, pf, pay.get("amount"), NUMERIC_KINDS)
+            slot_field(rep, p, "counter/payments/ref", pn, pf, pay.get("ref"))
+            if method is not None and method.get("type") == "select":
+                opts = option_values(method)
+                for i, x in enumerate(pay.get("methods") if isinstance(pay.get("methods"), list) else []):
+                    if isinstance(x, str) and x not in opts:
+                        rep.add("error", p, f"counter/payments/methods/{i}", "screen_slot_type", f'"{x}" is not an option of {pay.get("method")}')
+    ses = b.get("session") if isinstance(b.get("session"), dict) else None
+    if ses is not None:
+        sn, sm, sf = slot_model(rep, p, "counter/session/model", ses, visible)
+        if sn:
+            if dn:
+                l = slot_field(rep, p, "counter/session/link", dn, df, ses.get("link"), ["link"])
+                if l is not None and l.get("to") != sn:
+                    rep.add("error", p, "counter/session/link", "screen_slot_type", f'"{ses.get("link")}" links to {l.get("to")}; the session is {sn}')
+            st = ses.get("state") if isinstance(ses.get("state"), dict) else {}
+            f = slot_field(rep, p, "counter/session/state/field", sn, sf, st.get("field"), ["select", "data"])
+            if f is not None and f.get("type") == "select":
+                opts = option_values(f)
+                for k in ("open", "closed"):
+                    if isinstance(st.get(k), str) and st[k] not in opts:
+                        rep.add("error", p, f"counter/session/state/{k}", "screen_slot_type", f'"{st[k]}" is not an option of {st.get("field")}')
+            for i, x in enumerate(ses.get("open") if isinstance(ses.get("open"), list) else []):
+                slot_field(rep, p, f"counter/session/open/{i}", sn, sf, x)
+            slot_set(rep, p, "counter/session/set", sn, sf, ses.get("set"))
+            parens(rep, p, "counter/session/filter", ses.get("filter"))
+            cl = ses.get("close") if isinstance(ses.get("close"), dict) else None
+            if cl is not None:
+                cn2, cm2, cf2 = slot_model(rep, p, "counter/session/close/model", cl, visible)
+                if cn2:
+                    if cm2.get("is_submittable") is not True:
+                        rep.add("error", p, "counter/session/close/model", "screen_not_submittable", f"{cn2} is not submittable; a session closes with a submitted document")
+                    l = slot_field(rep, p, "counter/session/close/link", cn2, cf2, cl.get("link"), ["link"])
+                    if l is not None and l.get("to") != sn:
+                        rep.add("error", p, "counter/session/close/link", "screen_slot_type", f'"{cl.get("link")}" links to {l.get("to")}; the session is {sn}')
+                    for i, x in enumerate(cl.get("fields") if isinstance(cl.get("fields"), list) else []):
+                        slot_field(rep, p, f"counter/session/close/fields/{i}", cn2, cf2, x)
+                    slot_set(rep, p, "counter/session/close/set", cn2, cf2, cl.get("set"))
 
 
 def screen_model(rep, p, where, b, visible):

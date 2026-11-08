@@ -908,3 +908,33 @@ func TestFlowApprovalVisibility(t *testing.T) {
 		t.Fatalf("rep get flow request: %v", err)
 	}
 }
+
+// Contract 0030 §10: rules with on: cancel are evaluated on cancel, before an approval is asked for.
+func TestCancelRules(t *testing.T) {
+	b, err := os.ReadFile(filepath.Join(testdb.Catalogue("apps"), "sales/models/sales_invoice.rk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	inv := strings.Replace(string(b), "\nrules:\n", "\nrules:\n  - name: void_by_owner\n    on: cancel\n    check: \"'owner' in user.roles || grand_total < 1000\"\n    message: {id: Hanya pemilik yang boleh membatalkan}\n", 1)
+	e, owner := approvalSetupFiles(t, map[string]string{"sales/models/sales_invoice.rk": inv}, "approvals:\n  - {name: batal, on: cancel, approvers: [owner]}\n")
+	ctx := context.Background()
+	sub, err := e.Submit(ctx, rep, "sales_invoice", newInvoice(t, e, rep), true)
+	if err != nil || sub.Held {
+		t.Fatalf("submit: %+v %v", sub, err)
+	}
+	name := sub.Record["name"].(string)
+	// the rep's cancel is refused by the rule: not held, nothing waits in the inbox
+	_, err = e.Cancel(ctx, rep, "sales_invoice", name)
+	var ve *ValidationError
+	if !errors.As(err, &ve) || len(ve.Errors) != 1 || ve.Errors[0].Rule != "void_by_owner" {
+		t.Fatalf("rep cancel: %v", err)
+	}
+	if aps, _, _ := store.ListApprovals(ctx, e.DB, store.ApprovalFilter{Org: "kopi-senja", State: "pending"}); len(aps) != 0 {
+		t.Fatalf("a refused cancel asked for approval: %+v", aps)
+	}
+	// the owner passes the rule (and, being an approver, the policy)
+	res, err := e.Cancel(ctx, owner, "sales_invoice", name)
+	if err != nil || res.Record["docstatus"] != int64(2) {
+		t.Fatalf("owner cancel: %+v %v", res, err)
+	}
+}

@@ -87,7 +87,8 @@ const where = {
   theme: '<site>/themes/<name>.rk', layout: '<site>/layouts/<name>.rk', features: '<site>/features.rk', config: '<site>/config.rk',
   changeset: 'sent to /api/v1/changesets (not a file on disk)', import: 'modules/<module>/imports/<name>.rk',
   print: 'modules/<module>/print/<name>.rk or <site>/print/<name>.rk', letterhead: '<site>/letterhead.rk or <site>/letterheads/<org>.rk',
-  process: 'apps/<app>/processes/<name>.rk, modules/<module>/processes/<name>.rk or <site>/processes/<name>.rk'
+  process: 'apps/<app>/processes/<name>.rk, modules/<module>/processes/<name>.rk or <site>/processes/<name>.rk',
+  screen: 'modules/<module>/screens/<name>.rk'
 }
 const workspace = join(root, '..')
 const index = []

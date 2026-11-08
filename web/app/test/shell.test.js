@@ -236,3 +236,54 @@ test("commandGroups: every nav item once under Halaman, Buat baru per layout.nav
   assert.deepStrictEqual(ai.map((x) => x.label), ["Halaman", "Tanya Raka"]);
   assert.strictEqual(ai[1].filter, false, "Tanya Raka stays whatever is typed (the query becomes the question)");
 });
+
+// contract 0030: work screens
+const WORK = {
+  ...META,
+  user: { roles: ["staf"] },
+  roles: { staf: { label: { id: "Staf" }, desk: false }, mandor: { label: { id: "Mandor" } } },
+  screens: { isi_jam: { label: { id: "Isi jam" }, icon: "time", type: "entry" }, catat: { label: { id: "Catat" }, type: "entry" } },
+  work: [{ screen: "catat", home: false }, { screen: "isi_jam", home: true }],
+};
+
+test("parseRoute: #/w/<screen> is a work screen", () => {
+  assert.deepStrictEqual(plain(A.parseRoute("#/w/isi_jam")), { kind: "work", screen: "isi_jam" });
+  assert.deepStrictEqual(plain(A.parseRoute("#/w/isi_jam?stop=C-1")), { kind: "work", screen: "isi_jam" });
+  assert.strictEqual(A.parseRoute("#/w").kind, "notfound");
+});
+
+test("homeHash: the first work screen marked home wins over dashboards; the owner (no home) keeps the dashboard", () => {
+  assert.strictEqual(A.homeHash(WORK), "#/w/isi_jam");
+  assert.strictEqual(A.homeHash({ ...WORK, work: [{ screen: "isi_jam", home: false }] }), "#/d/crm_overview");
+  assert.strictEqual(A.homeHash({ ...WORK, screens: {} }), "#/d/crm_overview", "a screen not described is never home");
+});
+
+test("navGroups and sideNav: Kerja lists the work screens first, in meta.work order", () => {
+  const g = plain(A.navGroups(WORK, {}));
+  assert.strictEqual(g[0].label, "Kerja");
+  assert.deepStrictEqual(g[0].items.map((i) => [i.id, i.label, i.icon]), [["w/catat", "Catat", "edit"], ["w/isi_jam", "Isi jam", "time"]]);
+  assert.strictEqual(plain(A.sideNav(WORK, {})).groups[0].label, "Kerja");
+  assert.ok(!plain(A.navGroups(META, {})).some((x) => x.label === "Kerja"), "no screens, no Kerja");
+});
+
+test("navId: a work screen is w/<screen>, the home screen is the pinned Beranda", () => {
+  assert.strictEqual(A.navId({ kind: "work", screen: "catat" }), "w/catat");
+  assert.strictEqual(A.navId({ kind: "work", screen: "isi_jam" }, "#/w/isi_jam"), "home");
+});
+
+test("workShell: only when every role is desk: false and a home screen exists; never the owner", () => {
+  assert.strictEqual(A.workShell(WORK), true);
+  assert.strictEqual(A.workShell({ ...WORK, user: { roles: ["staf", "mandor"] } }), false, "mandor uses the desk");
+  assert.strictEqual(A.workShell({ ...WORK, user: { roles: ["owner"] } }), false);
+  assert.strictEqual(A.workShell({ ...WORK, work: [{ screen: "isi_jam", home: false }] }), false, "no home screen");
+  assert.strictEqual(A.workShell({ ...WORK, user: { roles: [] } }), false);
+});
+
+test("workBar: up to 5 screens, Lainnya with the desk entries", () => {
+  const many = { ...WORK, screens: {}, work: [] };
+  for (let i = 0; i < 7; i++) { many.screens["s" + i] = { label: { id: "S" + i } }; many.work.push({ screen: "s" + i, home: i === 0 }); }
+  const b = plain(A.workBar(many, { approvals: true }, { approvals: 2 }));
+  assert.deepStrictEqual(b.items.map((i) => i.id), ["w/s0", "w/s1", "w/s2", "w/s3", "w/s4"]);
+  assert.ok(!b.more.some((i) => i.id.indexOf("w/") === 0), "Lainnya holds no screens");
+  assert.ok(b.more.some((i) => i.id === "approvals" && i.count === 2) && b.more.some((i) => i.id === "r/deal"));
+});

@@ -265,6 +265,8 @@
       var fns = o.fns && o.fns.length ? o.fns : ["count"];
       return json("GET", "/api/v1/aggregate/" + enc(model) + qs([["q", o.q], ["filter", o.filter], ["group", o.group], ["fn", fns.join(",")]]));
     };
+    /** GET /api/v1/screens/{name} (contract 0030) → {name, screen, set}: set: evaluated for the caller now. */
+    api.screen = function (name) { return json("GET", "/api/v1/screens/" + enc(name)); };
     api.dashboard = function (name, period) { return json("GET", root() + "/dashboards/" + enc(name) + qs([["period", period]])); };
 
     /* ----- approvals */

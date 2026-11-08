@@ -134,8 +134,18 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 			}
 		}
 	}
+	// contract 0030 §3: the work screens the caller may open, and in which order (the first home: true is their home)
+	work := e.Work(a)
+	screens := map[string]any{}
+	for _, w := range work {
+		screens[w.Screen] = screenMeta(reg.Screen(w.Screen))
+	}
+	if work == nil {
+		work = []engine.WorkItem{}
+	}
 	out := map[string]any{
 		"apps": apps, "modules": modules, "models": models, "dashboards": dashboards, "flows": flows, "imports": imports, "roles": roles,
+		"screens": screens, "work": work,
 		"connectors": connectorsMeta(reg), "site": siteMeta(reg),
 		"theme": s.theme(reg), "layout": s.layout(reg),
 		"installed": reg.AppOrder(), "org": a.Org,
@@ -146,6 +156,34 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 		"features":   map[string]any{"ai": s.aiFeature(ctx, reg.SiteConfig("ai.enabled") != false)},
 	}
 	return out, nil
+}
+
+// screenMeta is a screen as /meta and /screens describe it: the file plus the module that ships it.
+func screenMeta(sc *meta.Screen) map[string]any {
+	raw := map[string]any{}
+	for k, v := range sc.Raw {
+		raw[k] = v
+	}
+	delete(raw, "$schema")
+	raw["module"] = sc.App
+	return raw
+}
+
+// getScreen is GET /api/v1/screens/{name} (contract 0030): the screen and its set: values evaluated for the
+// caller now. A screen the caller may not open is 404, like one that does not exist.
+func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
+	name := r.PathValue("name")
+	sc := s.Engine.ScreenAllowed(c.actor, name)
+	if sc == nil {
+		fail(w, &engine.StatusError{Status: 404, Code: "not_found", Msg: "no work screen " + name})
+		return
+	}
+	set, err := s.Engine.ScreenSet(c.actor, sc)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, 200, map[string]any{"name": sc.Name, "screen": screenMeta(sc), "set": set})
 }
 
 // InstalledConnectors are the connectors a flow triggers or calls, or system.rk notify uses.

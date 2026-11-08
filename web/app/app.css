@@ -471,3 +471,41 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-attn-row { padding: 14px 16px; }
   .ap-attn-amt { margin-left: auto; }
 }
+
+/* ---- work screens (contract 0030, screens.js) and the work shell (shell.js workShell) ---- */
+.ap-workshell { display: flex; flex-direction: column; min-height: 100vh; min-height: 100dvh; background: var(--app); }
+.ap-workshell .ap-main { flex: 1; min-height: 0; overflow: auto; }
+.ap-whead { display: flex; align-items: center; gap: 8px; height: 48px; padding: 0 8px 0 16px; box-sizing: border-box; position: sticky; top: 0; z-index: 20;
+  background: var(--surface); border-bottom: 1px solid var(--line); }
+.ap-whead-t { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ap-workbar { display: grid; position: sticky; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line);
+  padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); }
+.ap-workbar a, .ap-workbar button { position: relative; display: grid; justify-items: center; gap: 2px; min-height: 48px; padding: 6px 2px; border: 0;
+  border-radius: 10px; background: none; color: var(--muted); font: 500 11px/14px var(--font-sans); text-decoration: none; cursor: pointer; }
+.ap-workbar span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-workbar [aria-current="page"] { color: var(--ink); background: var(--selected); font-weight: 600; }
+.ap-workbar .rk-icon { width: 20px; height: 20px; }
+.ap-workshell .ap-tabbar-n { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
+  border-radius: 8px; background: var(--ink); color: var(--surface); font: 700 10px/16px var(--font-sans); font-style: normal; }
+.ap-wmore .ap-nav-scrim { display: block; position: fixed; inset: 0; z-index: 30; background: rgba(0, 0, 0, .3); }
+.ap-wmore ul { position: fixed; left: 0; right: 0; bottom: 0; z-index: 31; margin: 0; padding: 8px 8px calc(72px + env(safe-area-inset-bottom)); list-style: none;
+  max-height: 70vh; overflow: auto; background: var(--surface); border-radius: 16px 16px 0 0; }
+.ap-wmore a { position: relative; display: flex; align-items: center; gap: 12px; min-height: 48px; padding: 0 12px; border-radius: 10px; color: var(--ink); text-decoration: none; }
+.ap-wmore a[aria-current="page"] { background: var(--selected); font-weight: 600; }
+.ap-wmore .ap-tabbar-n { position: static; margin-left: auto; }
+
+.ap-work { max-width: 560px; margin: 0 auto; padding: 16px; box-sizing: border-box; }
+.ap-work-tablet, .ap-work-counter { max-width: 1100px; }
+.ap-work-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin: 0 0 16px; }
+.ap-work-head h1 { margin: 0; font: 600 20px/26px var(--font-sans); color: var(--ink); }
+.ap-work-note { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; background: var(--info-tint); color: var(--info); font-size: 13px; }
+.ap-work-loading { color: var(--muted); }
+.ap-work-entry { display: grid; gap: 16px; }
+.ap-work-fields { display: grid; gap: 14px; }
+.ap-work-err { padding: 10px 12px; border-radius: 10px; background: var(--bad-tint); color: var(--bad); font-size: 14px; }
+.ap-work-actions .rk-btn { width: 100%; min-height: 48px; justify-content: center; }
+.ap-work-done h2 { margin: 8px 0 6px; font: 600 13px/18px var(--font-sans); color: var(--muted); }
+.ap-work-done ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
+.ap-work-done li { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.ap-work-done a { color: var(--ink); text-decoration: none; font-weight: 500; }
+.ap-work-tag { margin-left: auto; font-size: 12px; color: var(--muted); }

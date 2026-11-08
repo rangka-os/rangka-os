@@ -935,7 +935,7 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 		}
 		return nil, errf("duration() needs a number of days or text like '7d'")
 	case "add_months":
-		// add_months(date, n): the date n calendar months later (n may be negative); a day past the end of the
+		// add_months(date, n): the date (YYYY-MM-DD) n calendar months later, |n| <= 12000; a day past the end of the
 		// target month becomes its last day (2026-01-31 + 1 = 2026-02-28), as Xendit's recurring anchor does. To
 		// keep a billing anchor, always add to the anchor (add_months(start, k)), never to the previous result.
 		if err := need(2); err != nil {
@@ -949,8 +949,8 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			return nil, err
 		}
 		n, ok := toInt(Unwrap(args[1]))
-		if !ok {
-			return nil, errf("add_months() needs a whole number of months, got %s", typeName(args[1]))
+		if !ok || n > maxMonths || n < -maxMonths {
+			return nil, errf("add_months() needs a whole number of months between -%d and %d, got %v", maxMonths, maxMonths, Unwrap(args[1]))
 		}
 		return AddMonths(d, int(n)).Format("2006-01-02"), nil
 	case "days_between":
@@ -970,7 +970,7 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 		if err != nil {
 			return nil, err
 		}
-		return int64(b.Sub(a).Hours() / 24), nil
+		return b.Unix()/86400 - a.Unix()/86400, nil // both midnight UTC: whole days, no duration saturation
 	case "round":
 		if len(args) < 1 || len(args) > 2 {
 			return nil, errf("round() takes 1 or 2 arguments, got %d", len(args))
@@ -1288,21 +1288,22 @@ func Truthy(v any) bool {
 	return true
 }
 
-// celDate reads a date (YYYY-MM-DD, or the date part of an RFC 3339 time) as midnight UTC.
+// celDate reads a calendar date written exactly YYYY-MM-DD (date fields). A datetime is refused: its date depends on
+// the time zone (the store keeps datetimes in UTC), so add_months and days_between take dates only (contract 0031).
 func celDate(v any) (time.Time, error) {
 	s, ok := Unwrap(v).(string)
 	if !ok {
 		return time.Time{}, errf("needs a date like '2026-11-08', got %s", typeName(v))
 	}
-	if len(s) > 10 {
-		s = s[:10]
-	}
 	d, err := time.Parse("2006-01-02", s)
-	if err != nil {
-		return time.Time{}, errf("needs a date like '2026-11-08', got '%s'", s)
+	if err != nil || len(s) != 10 {
+		return time.Time{}, errf("needs a date like '2026-11-08' (a date field, not a datetime), got '%s'", s)
 	}
 	return d, nil
 }
+
+// maxMonths bounds add_months (a thousand years either way), so the arithmetic never overflows.
+const maxMonths = 12000
 
 // AddMonths is d plus n calendar months, the day clamped to the last day of the target month.
 func AddMonths(d time.Time, n int) time.Time {

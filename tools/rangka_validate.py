@@ -946,6 +946,22 @@ def check_steps(rep, p, at, steps, allmodels, conns):
                 parens(rep, p, f"{w}/set/{fk}", st["set"][fk])
         for k in ("then", "else", "do"):
             check_steps(rep, p, f"{w}/{k}", st.get(k), allmodels, conns)
+        if isinstance(st.get("do"), list):
+            no_pause(rep, p, f"{w}/do", st["do"])
+
+
+def no_pause(rep, p, at, steps):
+    """wait and approve anywhere under a for_each's do: (contract 0031): the loop runs in one transaction."""
+    for i, st in enumerate(steps):
+        if not isinstance(st, dict):
+            continue
+        w = f"{at}/{i}"
+        for k in ("wait", "approve"):
+            if k in st:
+                rep.add("error", p, w, "for_each_pause", f"{k} is not allowed inside for_each (the loop runs in one transaction)")
+        for k in ("then", "else", "do"):
+            if isinstance(st.get(k), list):
+                no_pause(rep, p, f"{w}/{k}", st[k])
 
 
 def plan_info(features, plan):

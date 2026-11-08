@@ -53,7 +53,8 @@ export declare function Banner(props: { icon?: IconName; children: Node }): Reac
 export interface ToastProps { title: string; tone?: 'ok' | 'info' | 'warn' | 'bad'; children?: Node; action?: string; onAction?: () => void; onClose?: () => void }
 export declare function Toast(props: ToastProps): React.ReactElement;
 export declare function Toaster(props: { float?: boolean; children: Node }): React.ReactElement;
-export interface NavItem { id?: string; label: string; icon?: IconName; count?: number | null; href?: string }
+/** items: a parent entry with children (contract 0037), one level deep; it opens when it holds the current page. */
+export interface NavItem { id?: string; label: string; icon?: IconName; count?: number | null; href?: string; items?: NavItem[] }
 /** Frappe side navigation. collapsed: icons only, labels as title tooltips, width --sidebar-collapsed; the footer stays, compact:
  *  a custom footer renders centred and clipped in .rk-side-foot.collapsed (give it icon-only content), the legacy user shows only the avatar.
  *  Legacy props: app (mapped to switcher, its tile becomes the mark), product (switcher title), company/outlet/onCompany, user/role. */
@@ -61,7 +62,11 @@ export interface SidebarProps {
   switcher?: { title: string; subtitle?: Node; mark?: Node; onClick?: () => void };
   search?: { label?: string; onOpen?: () => void };
   pinned?: NavItem[];
-  groups?: { label?: string; items: NavItem[] }[];
+  /** collapsed: the group's starting state before the person folds or opens it. */
+  groups?: { label?: string; collapsed?: boolean; items: NavItem[] }[];
+  /** Groups fold on a click of their label (remembered under foldKey, default rk.nav.folded); a navigation with more
+   *  than foldAfter (15) links starts with only the current page's group open. foldGroups: false turns it off. */
+  foldGroups?: boolean; foldAfter?: number; foldKey?: string;
   current?: string; onNavigate?: (id: string, item: NavItem) => void;
   collapsed?: boolean; onToggleCollapse?: () => void;
   /** Opened from the tablet-portrait rail: the full sidebar floats over the page (position fixed, shadow). */

@@ -380,8 +380,18 @@
     if (d.length) out.push({ group: lbl("Dasbor"), items: d });
     (meta.apps || []).forEach(function (a) {
       (a.menu || []).forEach(function (g) {
-        var items = (g.items || []).filter(function (m) { return models[m]; }).map(function (m) { return { to: "model:" + m }; });
-        if (items.length) out.push({ group: lbl(L(g.group) || L(a.title) || a.name), items: items });
+        var items = (g.items || []).map(function (it) {
+          if (typeof it === "string") return models[it] ? { to: "model:" + it } : null;
+          // a sub-menu (contract 0037) stays one in nav.side
+          var kids = ((it && it.items) || []).filter(function (m) { return models[m]; }).map(function (m) { return { to: "model:" + m }; });
+          if (!kids.length) return null;
+          var sub = { label: it.label || lbl(kids[0].to), items: kids };
+          if (it.icon) sub.icon = it.icon;
+          return sub;
+        }).filter(Boolean);
+        var grp = { group: lbl(L(g.group) || L(a.title) || a.name), items: items };
+        if (typeof g.collapsed === "boolean") grp.collapsed = g.collapsed;
+        if (items.length) out.push(grp);
       });
     });
     return out;
@@ -422,8 +432,11 @@
     var first = null;
     (ap.menu || []).forEach(function (g) {
       (g && g.items || []).forEach(function (it) {
-        var m = isObj(it) ? String(it.to || "").replace(/^model:/, "") : it;
-        if (!first && ((meta.models || {})[m])) first = m;
+        // a model name, a link {to}, or a sub-menu {label, items} (contract 0037)
+        (isObj(it) && Array.isArray(it.items) ? it.items : [it]).forEach(function (x) {
+          var m = isObj(x) ? String(x.to || "").replace(/^model:/, "") : x;
+          if (!first && ((meta.models || {})[m])) first = m;
+        });
       });
     });
     if (first) return RA.unitOf(meta, first).unit;

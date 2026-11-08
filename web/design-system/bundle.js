@@ -875,12 +875,28 @@
       return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined,
         "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
         onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(id, it); } },
-        col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: it.icon }),
+        col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: ICONS[it.icon] ? it.icon : "list" }),
         // collapsed: the label stays as visually hidden text (the link's name), not aria-label, so it never doubles as a form label
         h("span", { className: col ? "rk-sr" : "l" }, it.label),
         it.count ? (col ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : h("span", { className: "rk-count" }, it.count)) : null);
     }
     var search = p.search, searchLabel = (search && search.label) || "Cari";
+    // Foldable groups: a long navigation (more than foldAfter links, default 15) starts with only the group of the
+    // current page open; a click on a group label folds or opens it and is remembered (foldKey in localStorage).
+    var fk = p.foldKey || "rk.nav.folded", groups = p.groups || [];
+    var fs = useState(function () { try { return JSON.parse(localStorage.getItem(fk) || "{}") || {}; } catch (e) { return {}; } }), folds = fs[0], setFolds = fs[1];
+    var links = groups.reduce(function (n, g) { return n + g.items.length; }, 0);
+    var foldable = p.foldGroups !== false && !col;
+    function hasCurrent(g) { return g.items.some(function (it) { return (it.id || it.label) === p.current || it.label === p.current; }); }
+    function isOpen(g) {
+      if (!foldable || !g.label || hasCurrent(g)) return true;
+      var k = String(g.label);
+      return k in folds ? !folds[k] : links <= (p.foldAfter || 15);
+    }
+    function toggleGroup(g) {
+      var next = Object.assign({}, folds); next[String(g.label)] = isOpen(g);
+      setFolds(next); try { localStorage.setItem(fk, JSON.stringify(next)); } catch (e) {}
+    }
     return h("aside", { className: cx("rk-side", col && "collapsed", p.float && "rk-side-float"), "aria-label": sw ? "Navigasi " + sw.title : "Navigasi" },
       sw ? head() : null,
       p.company && !col ? h("button", { type: "button", className: "rk-company", onClick: p.onCompany }, h(Icon, { name: "store" }), h("span", { className: "g" }, p.company, p.outlet ? h("small", null, p.outlet) : null), h(Icon, { name: "updown" })) : null,
@@ -888,11 +904,14 @@
         h(Icon, { name: "search" }), col ? null : h("span", { className: "l" }, searchLabel), col ? null : h(Kbd, null, "⌘K")) : null,
       h("nav", null,
         p.pinned && p.pinned.length ? h("div", { key: "pinned", className: "rk-navgroup" }, p.pinned.map(link)) : null,
-        (p.groups || []).map(function (g, i) {
-          var lead = i > 0 || (p.pinned && p.pinned.length);
-          return h("div", { key: g.label || "main", className: "rk-navgroup" },
-            g.label ? (col ? (lead ? h("div", { className: "rk-navsep", role: "separator" }) : null) : h("p", null, g.label)) : null,
-            g.items.map(link));
+        groups.map(function (g, i) {
+          var lead = i > 0 || (p.pinned && p.pinned.length), open = isOpen(g);
+          return h("div", { key: g.label || "main", className: cx("rk-navgroup", !open && "folded") },
+            g.label ? (col ? (lead ? h("div", { className: "rk-navsep", role: "separator" }) : null)
+              : foldable && !hasCurrent(g) ? h("p", null, h("button", { type: "button", className: "rk-navgroup-t", "aria-expanded": open ? "true" : "false", onClick: function () { toggleGroup(g); } },
+                  h("span", { className: "l" }, g.label), h("span", { className: "rk-navgroup-n" }, open ? null : g.items.length), h(Icon, { name: open ? "down" : "right" })))
+              : h("p", null, g.label)) : null,
+            open ? g.items.map(link) : null);
         })),
       col ? (p.footer ? h("div", { className: "rk-side-foot collapsed" }, p.footer)
           : p.user ? h("div", { className: "rk-side-foot collapsed", title: p.user, "aria-label": p.user, role: "group" }, h(Avatar, { name: p.user, size: 28, presence: "online" })) : null)

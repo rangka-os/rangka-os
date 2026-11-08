@@ -15,6 +15,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/skills"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -38,6 +39,9 @@ type Handler struct {
 	Meta    func(ctx context.Context, a engine.Actor) (any, error)
 	File    func(ctx context.Context, path string) (any, error)
 	Status  func(ctx context.Context, org string) any
+	// Catalogue and Skills serve contract 0035: what exists for this site, and the skills agents load.
+	Catalogue func() any
+	Skills    func() *skills.Library
 }
 
 type request struct {
@@ -249,6 +253,16 @@ var assistantTools = map[string]bool{
 	"rangka_meta": true, "rangka_get_file": true, "rangka_query": true, "rangka_get_record": true, "rangka_dashboard": true,
 	"rangka_system_status": true, "rangka_changeset_propose": true, "rangka_changeset_validate": true,
 	"rangka_changeset_preview": true, "rangka_changeset_status": true, "rangka_approvals_list": true,
+	"rangka_catalogue": true, "rangka_skills": true, "rangka_skill": true, "rangka_skill_file": true,
+}
+
+// ToolNames returns the names of every tool this server lists (rangka skills check rejects others).
+func ToolNames() map[string]bool {
+	out := map[string]bool{}
+	for _, t := range tools() {
+		out[t.(map[string]any)["name"].(string)] = true
+	}
+	return out
 }
 
 func obj(props map[string]any, required ...string) map[string]any {
@@ -279,6 +293,10 @@ func tools() []any {
 		map[string]any{"name": "rangka_changeset_status", "title": "Change set status", "description": "The change set with its status and history.", "inputSchema": obj(map[string]any{"id": strp("change set id")}, "id"), "annotations": ro},
 		map[string]any{"name": "rangka_approvals_list", "title": "List approvals", "description": "Document approval requests of this organisation, newest first, each with can_decide for the caller. Filter by state (pending, approved, rejected, void), model and record name.",
 			"inputSchema": obj(map[string]any{"state": map[string]any{"enum": []string{"pending", "approved", "rejected", "void"}}, "model": strp("model name"), "name": strp("record name")}), "annotations": ro},
+		map[string]any{"name": "rangka_catalogue", "title": "Catalogue", "description": "Every app, module and connector this site can use, with state (installed, available, not_in_plan); per app the installed modules it shares and the modules it adds. Read it before naming an app (contract 0035).", "inputSchema": obj(map[string]any{}), "annotations": ro},
+		map[string]any{"name": "rangka_skills", "title": "List skills", "description": "Rangka skills (Agent Skills): name, description and source of each. Load one with rangka_skill before working in its area.", "inputSchema": obj(map[string]any{}), "annotations": ro},
+		map[string]any{"name": "rangka_skill", "title": "Load a skill", "description": "One skill's SKILL.md instructions and the list of its other files.", "inputSchema": obj(map[string]any{"name": strp("skill name, e.g. rangka-compose")}, "name"), "annotations": ro},
+		map[string]any{"name": "rangka_skill_file", "title": "Read a skill file", "description": "One file of a skill (a reference), by its path inside the skill.", "inputSchema": obj(map[string]any{"name": strp("skill name"), "path": strp("path inside the skill, e.g. references/apps.md")}, "name", "path"), "annotations": ro},
 		map[string]any{"name": "rangka_approve", "title": "Approve or reject", "description": "Decide an approval request. Needs a person (browser session): agent and API-token callers get human_required. A reject needs a reason.",
 			"inputSchema": obj(map[string]any{"id": strp("approval id (apr_…)"), "decision": map[string]any{"enum": []string{"approve", "reject"}}, "reason": strp("why (required for reject)")}, "id", "decision"),
 			"annotations": map[string]any{"readOnlyHint": false, "destructiveHint": false, "openWorldHint": false}},
@@ -335,6 +353,37 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 		return d, err
 	case "rangka_system_status":
 		return h.Status(ctx, c.Actor.Org), nil
+	case "rangka_catalogue":
+		if h.Catalogue == nil {
+			return nil, errors.New("no catalogue on this server")
+		}
+		return h.Catalogue(), nil
+	case "rangka_skills":
+		list := []any{}
+		for _, sk := range h.library().Skills {
+			list = append(list, map[string]any{"name": sk.Name, "description": sk.Description, "source": sk.Source})
+		}
+		return map[string]any{"skills": list}, nil
+	case "rangka_skill":
+		sk := h.library().Get(sarg(args, "name"))
+		if sk == nil {
+			return nil, fmt.Errorf("no skill %q (rangka_skills lists them)", sarg(args, "name"))
+		}
+		files := sk.Files
+		if files == nil {
+			files = []string{}
+		}
+		return map[string]any{"name": sk.Name, "description": sk.Description, "metadata": sk.Metadata, "source": sk.Source, "instructions": sk.Body, "files": files}, nil
+	case "rangka_skill_file":
+		sk := h.library().Get(sarg(args, "name"))
+		if sk == nil {
+			return nil, fmt.Errorf("no skill %q (rangka_skills lists them)", sarg(args, "name"))
+		}
+		text, err := sk.ReadFile(sarg(args, "path"))
+		if err != nil {
+			return nil, err
+		}
+		return map[string]any{"name": sk.Name, "path": sarg(args, "path"), "text": text}, nil
 	case "rangka_changeset_propose":
 		a := c.Change
 		a.Kind = "ai" // proposals through MCP come from an agent unless the arguments name another author
@@ -427,4 +476,14 @@ func splitFields(s string) []string {
 		out = append(out, cur)
 	}
 	return out
+}
+
+// library returns the served skills, the embedded platform ones when the server was given none.
+func (h *Handler) library() *skills.Library {
+	if h.Skills != nil {
+		if l := h.Skills(); l != nil {
+			return l
+		}
+	}
+	return skills.Load("", "")
 }

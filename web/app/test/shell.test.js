@@ -298,3 +298,11 @@ test("pwaMenu: update first, then install or the iOS hint, nothing once installe
   assert.deepStrictEqual(plain(m({ standalone: true, updateReady: true })), ["update"]);
   assert.deepStrictEqual(plain(m({ standalone: false, installable: true, updateReady: true })), ["update", "install"]);
 });
+
+test("appOf: the app a page belongs to names the top-nav sidebar, else the first app", () => {
+  assert.strictEqual(A.appOf(META, { kind: "dash", dash: "sales_overview" }).name, "sales");
+  assert.strictEqual(A.appOf(META, { kind: "form", model: "lead", name: "X" }).name, "crm");
+  assert.strictEqual(A.appOf(META, { kind: "list", model: "customer" }).name, "core");
+  assert.strictEqual(A.appOf(META, { kind: "approvals" }).name, "core");
+  assert.strictEqual(A.appOf({ apps: [] }, { kind: "home" }), null);
+});

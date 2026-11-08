@@ -12,6 +12,12 @@
  * the record (and submits it with submit: true); again (default true) opens an empty form at once with the saved
  * record in "Baru disimpan" (last 5). Server errors land on their fields, the rest above the button.
  *
+ * Safe writes (outbox.js, contract 0030 §6, §7): every press is a job with its own Idempotency-Keys. A press that got
+ * no answer keeps its keys, so pressing again never writes twice. With offline: queue the job waits in the device
+ * outbox instead ("N antre" in the header, sent on reconnect, every 15 s and from "Kirim sekarang"); a write the
+ * server refuses later is shown until dismissed. The screen itself is cached after each load and shown with
+ * "data terakhir <jam>" when the connection is down.
+ *
  * Pure helpers (unit-tested in test/screens.test.js): entryFields, entryStart, entryBody, screenNeeds.
  */
 (function (global) {
@@ -104,30 +110,45 @@
       if (!mapped.rest.length && !Object.keys(mapped.fields).length) mapped.rest.push((e && e.message) || "Tidak tersimpan. Coba lagi.");
       setErrs(mapped);
     }
+    var pendingRef = useRef(null); // the press that got no answer: pressing again resends the same keys
     function save(ev) {
       if (ev) ev.preventDefault();
-      if (busy) return; // one tap, one record (WS2 adds the idempotency key)
+      if (busy) return; // a second tap while the first runs does nothing; the idempotency key covers the rest
       setBusy(true);
       setErrs({ fields: {}, rest: [] });
-      var body = entryBody(models, en.model, rec, RA.writableBody);
-      ctx.api.create(en.model, body).then(function (r) {
-        if (!en.submit) return { record: r, approval: null };
-        return ctx.api.submit(en.model, r.name).then(null, function (e) { e.savedAs = r; throw e; });
-      }).then(function (res) {
+      var body = entryBody(models, en.model, rec, RA.writableBody), sig = JSON.stringify(body);
+      var job = pendingRef.current && pendingRef.current.sig === sig ? pendingRef.current.job
+        : RA.outbox.newJob({ scope: RA.outboxScope(ctx.me), screen: s.name, model: en.model, body: body, submit: en.submit });
+      pendingRef.current = { sig: sig, job: job };
+      function startAgain() {
+        return p.reload().then(function (next) {
+          setRec(fresh(next ? next.set : p.set));
+          setRound(function (x) { return x + 1; });
+        });
+      }
+      RA.outbox.send(ctx.api, job, s.offline === "queue").then(function (res) {
+        pendingRef.current = null;
+        if (res.queued) {
+          ctx.toast("info", "Belum terkirim", "Tersimpan di perangkat ini dan dikirim otomatis saat koneksi kembali.");
+          setDone(function (d) { return [{ name: job.id, title: "Menunggu dikirim", queued: true }].concat(d).slice(0, 5); });
+          return startAgain();
+        }
         var r = res.record || {};
         var title = (ctx.eng && r.name ? ctx.eng.title(en.model, r) : "") || r.name;
         if (res.approval) ctx.toast("info", "Menunggu persetujuan", title + " sudah disimpan dan menunggu persetujuan.");
         else ctx.toast("ok", en.submit ? "Tersimpan dan diajukan" : "Tersimpan", title);
         if (en.again === false) { RA.navigate("#/r/" + encodeURIComponent(en.model) + "/" + encodeURIComponent(r.name)); return; }
         setDone(function (d) { return [{ name: r.name, title: title, waiting: !!res.approval }].concat(d).slice(0, 5); });
-        return p.reload().then(function (next) {
-          setRec(fresh(next ? next.set : p.set));
-          setRound(function (x) { return x + 1; });
-        });
+        return startAgain();
       }, function (e) {
-        if (e && e.savedAs) { // created but not submitted: say so, keep the draft reachable
-          ctx.toast("bad", "Tersimpan sebagai draf, belum diajukan", (e.message || "") + " · " + e.savedAs.name);
-          setDone(function (d) { return [{ name: e.savedAs.name, title: e.savedAs.name, draft: true }].concat(d).slice(0, 5); });
+        if (RA.outboxRetryable(e)) { // kept: the same press goes again with the same keys
+          setErrs({ fields: {}, rest: ["Belum terkirim (koneksi atau server). Tekan " + (en.submit ? "Simpan & ajukan" : "Simpan") + " lagi; data tidak akan tercatat dua kali."] });
+          return;
+        }
+        pendingRef.current = null;
+        if (job.created) { // created but not submitted: say so, keep the draft reachable
+          ctx.toast("bad", "Tersimpan sebagai draf, belum diajukan", (e.message || "") + " · " + job.created);
+          setDone(function (d) { return [{ name: job.created, title: job.created, draft: true }].concat(d).slice(0, 5); });
           setRec(fresh(p.set));
           setRound(function (x) { return x + 1; });
           return;
@@ -147,31 +168,83 @@
         h("h2", null, "Baru disimpan"),
         h("ul", null, done.map(function (d) {
           return h("li", { key: d.name },
-            h("a", { href: "#/r/" + encodeURIComponent(en.model) + "/" + encodeURIComponent(d.name) }, d.title),
-            d.waiting ? h("span", { className: "ap-work-tag" }, "menunggu persetujuan") : d.draft ? h("span", { className: "ap-work-tag" }, "draf") : null);
+            d.queued ? h("span", null, d.title) : h("a", { href: "#/r/" + encodeURIComponent(en.model) + "/" + encodeURIComponent(d.name) }, d.title),
+            d.waiting ? h("span", { className: "ap-work-tag" }, "menunggu persetujuan") : d.draft ? h("span", { className: "ap-work-tag" }, "draf")
+              : d.queued ? h("span", { className: "ap-work-tag" }, "antre") : null);
         }))) : null);
   }
   RA.workRenderers.entry = EntryScreen;
+
+  /* ---------------------------------------------------------------- the queue: "N antre" and refused writes */
+  function hhmm(iso) { var d = new Date(iso); return isNaN(d) ? "" : ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+
+  function useOutbox(ctx) {
+    var scope = RA.outboxScope(ctx.me);
+    var js = useState([]), jobs = js[0], setJobs = js[1];
+    useEffect(function () {
+      var live = true;
+      function mine(all) { if (live) setJobs((all || []).filter(function (j) { return j.scope === scope; })); }
+      var off = RA.outbox.subscribe(mine);
+      function go() { RA.outbox.flush(ctx.api, scope).then(null, function () {}); }
+      RA.outbox.list(scope).then(mine);
+      go();
+      global.addEventListener("online", go);
+      var t = global.setInterval(go, 15000);
+      return function () { live = false; off(); global.removeEventListener("online", go); global.clearInterval(t); };
+    }, [scope]);
+    return { queued: jobs.filter(function (j) { return j.state === "queued"; }), failed: jobs.filter(function (j) { return j.state === "failed"; }),
+      flush: function () { return RA.outbox.flush(ctx.api, scope); }, dismiss: RA.outbox.dismiss };
+  }
+
+  function QueueBar(p) {
+    var q = p.q;
+    if (!q.queued.length && !q.failed.length) return null;
+    return h("div", { className: "ap-work-queue" },
+      q.queued.length ? h("p", { className: "ap-work-note", role: "status" },
+        h("b", null, q.queued.length + " antre"), " · belum terkirim, dikirim otomatis saat koneksi kembali. Jangan hapus data browser sampai 0 antre. ",
+        h("button", { type: "button", className: "ap-work-link", onClick: function () { q.flush(); } }, "Kirim sekarang")) : null,
+      q.failed.map(function (j) {
+        return h("div", { key: j.id, className: "ap-work-err", role: "alert" },
+          "Ditolak saat dikirim (" + hhmm(j.at) + "): " + (j.error || "") + " ",
+          h("button", { type: "button", className: "ap-work-link", onClick: function () { q.dismiss(j.id); } }, "Tutup"));
+      }));
+  }
 
   /* ---------------------------------------------------------------- the route */
   function WorkScreenView(p) {
     var ctx = useContext(RA.Ctx), name = p.route.screen;
     var ss = useState(null), data = ss[0], setData = ss[1];
     var es = useState(null), err = es[0], setErr = es[1];
+    var st = useState(null), stale = st[0], setStale = st[1]; // the time of the cached screen shown while offline
+    var q = useOutbox(ctx);
+    var cacheKey = "screen:" + RA.outboxScope(ctx.me) + ":" + name;
     function load() {
-      return ctx.api.screen(name).then(function (d) { setData(d); return d; }, function (e) { setErr(e); return null; });
+      return ctx.api.screen(name).then(function (d) {
+        setData(d); setStale(null);
+        RA.outbox.cache.put(cacheKey, d);
+        return d;
+      }, function (e) {
+        if (!RA.outboxRetryable(e)) { setErr(e); return null; }
+        return RA.outbox.cache.get(cacheKey).then(function (c) { // offline: the last good copy, said so on screen
+          if (!c) { setErr(e); return null; }
+          setData(c.value); setStale(c.at);
+          return c.value;
+        });
+      });
     }
     useEffect(function () { load(); }, [name]);
     if (err) return h("div", { className: "rk-shell-content ap-work" }, h(R.EmptyState, { title: err.status === 404 ? "Layar tidak ditemukan" : "Layar tidak bisa dibuka" },
-      err.status === 404 ? "Layar ini tidak ada atau bukan untuk peranmu." : err.message));
+      err.status === 404 ? "Layar ini tidak ada atau bukan untuk peranmu." : err.status === 0 ? "Belum ada koneksi dan layar ini belum pernah dibuka di perangkat ini." : err.message));
     if (!data) return h("div", { className: "rk-shell-content ap-work", "aria-busy": "true" }, h("p", { className: "ap-work-loading" }, "Memuat…"));
     var s = data.screen, Renderer = RA.workRenderers[s.type];
     var missing = screenNeeds(s.needs, global.navigator);
     return h("div", { className: "rk-shell-content ap-work ap-work-" + s.type + (s.device ? " ap-work-" + s.device : "") },
-      h(WorkHead, { screen: s }),
+      h(WorkHead, { screen: s, right: q.queued.length ? h("span", { className: "ap-work-count" }, q.queued.length + " antre") : null }),
+      stale ? h("p", { className: "ap-work-note" }, "Belum ada koneksi. Layar dari data terakhir " + hhmm(stale) + ".") : null,
+      h(QueueBar, { q: q }),
       missing.length ? h("p", { className: "ap-work-note" }, "Perangkat ini belum mendukung " + missing.join(", ") + ". Layar tetap bisa dipakai tanpa fitur itu.") : null,
       Renderer ? h(Renderer, { ctx: ctx, screen: s, set: data.set || {}, reload: load })
-        : h(R.EmptyState, { title: "Jenis layar ini belum tersedia" }, "Layar " + (L(s.label) || s.name) + " memakai jenis “" + s.type + "” yang belum ada di versi aplikasi ini. Pakai menu Lainnya untuk membuka formulirnya."));
+        : h(R.EmptyState, { title: "Jenis layar ini belum tersedia" }, "Layar " + (L(s.label) || s.name) + " memakai jenis \u201c" + s.type + "\u201d yang belum ada di versi aplikasi ini. Pakai menu Lainnya untuk membuka formulirnya."));
   }
   RA.WorkScreenView = WorkScreenView;
 })(window);

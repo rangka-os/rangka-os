@@ -529,3 +529,20 @@ test("aggregate resolves null in preview", async () => {
   await api.aggregate("sales_invoice", { fns: ["count"] });
   assert.strictEqual(f.calls[0].url, "/api/v1/aggregate/sales_invoice?fn=count");
 });
+
+test("create, submit and action send Idempotency-Key and _occurred_at when asked (contract 0030 §6, §7)", async () => {
+  const f = stub([json(201, { name: "DRAFT-1" }), json(200, { name: "JAM-1" }), json(200, { ok: true }), json(201, { name: "DRAFT-2" })]);
+  const api = RA({ fetch: f });
+  await api.create("jam", { hours: 8 }, { key: "k1", occurredAt: "2026-11-08T01:00:00Z" });
+  await api.submit("jam", "DRAFT-1", { key: "k2" });
+  await api.action("jam", "JAM-1", "approve", { note: "x" }, { key: "k3" });
+  await api.create("jam", { hours: 1 });
+  assert.strictEqual(f.calls[0].init.headers["Idempotency-Key"], "k1");
+  assert.deepStrictEqual(JSON.parse(f.calls[0].init.body), { hours: 8, _occurred_at: "2026-11-08T01:00:00Z" });
+  assert.strictEqual(f.calls[1].init.headers["Idempotency-Key"], "k2");
+  assert.deepStrictEqual(JSON.parse(f.calls[1].init.body), {});
+  assert.strictEqual(f.calls[2].init.headers["Idempotency-Key"], "k3");
+  assert.deepStrictEqual(JSON.parse(f.calls[2].init.body), { note: "x" });
+  assert.strictEqual(f.calls[3].init.headers["Idempotency-Key"], undefined, "no key unless asked");
+  assert.deepStrictEqual(JSON.parse(f.calls[3].init.body), { hours: 1 });
+});

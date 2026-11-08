@@ -509,3 +509,8 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-work-done li { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .ap-work-done a { color: var(--ink); text-decoration: none; font-weight: 500; }
 .ap-work-tag { margin-left: auto; font-size: 12px; color: var(--muted); }
+.ap-work-count { flex: none; padding: 2px 10px; border-radius: 999px; background: var(--info-tint); color: var(--info); font: 600 12px/20px var(--font-sans); }
+.ap-work-queue { display: grid; gap: 8px; margin: 0 0 12px; }
+.ap-work-queue .ap-work-note { margin: 0; }
+.ap-work-link { padding: 0; border: 0; background: none; color: inherit; font: inherit; font-weight: 600; text-decoration: underline; cursor: pointer; }
+.ap-workshell .rk-toasts.float { bottom: calc(76px + env(safe-area-inset-bottom)); }

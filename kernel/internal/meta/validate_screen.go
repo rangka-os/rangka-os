@@ -135,6 +135,10 @@ func (v *validator) screenEntry(p string, b map[string]any, visible map[string]v
 			v.rep.extra("error", p, "entry/set/"+k, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, k, m.Name, suggest(k, keys(fields))))
 			continue
 		}
+		if f := fields[k]; f["compute"] != nil || f["read_only"] == true {
+			v.rep.extra("error", p, "entry/set/"+k, "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; set: cannot fill it`, k))
+			continue
+		}
 		v.parens(p, "entry/set/"+k, set[k])
 	}
 	if b["submit"] == true && !boolean(m.Raw, "is_submittable") {

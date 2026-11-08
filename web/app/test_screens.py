@@ -101,6 +101,88 @@ def test_entry_without_again_opens_the_record(browser, ctx):
     c.close()
 
 
+def total(c, model):
+    return c.request.get(f"/api/v1/r/{model}?limit=1").json()["total"]
+
+
+def test_offline_press_waits_in_the_queue_and_is_sent_once(browser, ctx):
+    c, p = page_for(browser, ctx, STAF, PHONE)
+    p.goto("/app/#/w/isi_jam")  # offline: queue
+    p.wait_for_selector(".ap-work-entry")
+    before = total(c, "jam_kerja")
+    c.set_offline(True)
+    p.locator("#f-jam_kerja-hours").fill("6")
+    p.get_by_role("button", name="Simpan & ajukan").click()
+    p.wait_for_selector(".ap-work-count")
+    assert p.locator(".ap-work-count").inner_text() == "1 antre"
+    assert "Menunggu dikirim" in p.locator(".ap-work-done").inner_text()
+    assert p.locator("#f-jam_kerja-hours").input_value() == "", "the form starts again while offline"
+    shot(ctx, p, "staf-antre")
+    c.set_offline(False)
+    p.evaluate("window.dispatchEvent(new Event('online'))")
+    p.wait_for_selector(".ap-work-count", state="detached", timeout=20000)
+    assert total(c, "jam_kerja") == before + 1
+    rows = c.request.get("/api/v1/r/jam_kerja?limit=1&sort=-created_at").json()["data"]
+    assert rows[0]["hours"] == 6 and rows[0]["docstatus"] == 1, rows
+    ctx["errors"] = [x for x in ctx["errors"] if "ERR_INTERNET_DISCONNECTED" not in x]  # the offline requests themselves
+    c.close()
+
+
+def test_lost_answer_then_press_again_writes_once(browser, ctx):
+    # catat has no offline queue: the answer of the first press is lost after the server wrote; pressing again sends
+    # the same Idempotency-Key, so the record exists once
+    c, p = page_for(browser, ctx, STAF, PHONE, allow=("/api/v1/r/catatan_harian",))
+    lost = {"n": 0}
+    def drop_answer(route):
+        if route.request.method == "POST" and lost["n"] == 0:
+            lost["n"] = 1
+            route.fetch()  # the kernel writes
+            route.abort("connectionreset")  # the phone never hears back
+        else:
+            route.continue_()
+    p.route("**/api/v1/r/catatan_harian", drop_answer)
+    p.goto("/app/#/w/catat")
+    before = total(c, "catatan_harian")
+    p.locator("#f-catatan_harian-text").fill("Gas tinggal satu tabung")
+    p.get_by_role("button", name="Simpan").click()
+    p.wait_for_selector(".ap-work-err")
+    assert "tidak akan tercatat dua kali" in p.locator(".ap-work-err").inner_text()
+    assert total(c, "catatan_harian") == before + 1, "the first press did write"
+    p.get_by_role("button", name="Simpan").click()
+    p.wait_for_url("**/#/r/catatan_harian/CAT-*")
+    assert total(c, "catatan_harian") == before + 1, "pressing again wrote nothing new"
+    ctx["errors"] = [x for x in ctx["errors"] if "ERR_CONNECTION_RESET" not in x and "Failed to fetch" not in x]
+    c.close()
+
+
+def test_lost_answer_on_queue_screen_is_replayed_once(browser, ctx):
+    # isi_jam queues: the server writes, the answer is lost, the job waits; its replay (with _occurred_at) answers the
+    # stored result instead of a conflict, and the record ends submitted, once (audit WS2 F1)
+    c, p = page_for(browser, ctx, STAF, PHONE, allow=("/api/v1/r/jam_kerja",))
+    lost = {"n": 0}
+    def drop_answer(route):
+        if route.request.method == "POST" and lost["n"] == 0:
+            lost["n"] = 1
+            route.fetch()
+            route.abort("connectionreset")
+        else:
+            route.continue_()
+    p.route("**/api/v1/r/jam_kerja", drop_answer)
+    p.goto("/app/#/w/isi_jam")
+    before = total(c, "jam_kerja")
+    p.locator("#f-jam_kerja-hours").fill("5")
+    p.get_by_role("button", name="Simpan & ajukan").click()
+    p.wait_for_selector(".ap-work-count")
+    p.evaluate("window.dispatchEvent(new Event('online'))")
+    p.wait_for_selector(".ap-work-count", state="detached", timeout=20000)
+    assert p.locator(".ap-work-queue .ap-work-err").count() == 0, p.locator(".ap-work-queue").inner_text()
+    assert total(c, "jam_kerja") == before + 1
+    rows = c.request.get("/api/v1/r/jam_kerja?limit=1&sort=-created_at").json()["data"]
+    assert rows[0]["hours"] == 5 and rows[0]["docstatus"] == 1, rows
+    ctx["errors"] = [x for x in ctx["errors"] if "ERR_CONNECTION_RESET" not in x and "Failed to fetch" not in x]
+    c.close()
+
+
 def test_owner_keeps_dashboard_home_with_kerja_group(browser, ctx):
     c, p = page_for(browser, ctx, OWNER, DESK)
     p.goto("/app/")

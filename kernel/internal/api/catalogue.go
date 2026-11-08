@@ -14,6 +14,8 @@ import (
 
 // The catalogue (contract 0036 §3): every module, app and connector this kernel can install without a download,
 // with plain words for the owner. Read only in this phase: installing (§4) and connecting (§5) come later.
+// Agents read the catalogue through MCP rangka_catalogue (contract 0035, meta.Registry.Catalogue); this route serves
+// the screens of the web app and the Console.
 
 // ErrCatalogueForbidden is the answer for a caller who may not propose change sets.
 var ErrCatalogueForbidden = errors.New("Katalog hanya untuk yang boleh mengusulkan perubahan")
@@ -36,14 +38,6 @@ func (s *Server) getCatalogue(w http.ResponseWriter, r *http.Request, c *caller)
 		return
 	}
 	writeJSON(w, 200, s.Catalogue(r.Context()))
-}
-
-// CatalogueFor is the MCP tool rangka_catalogue_list: the same answer and the same read rule as the REST route.
-func (s *Server) CatalogueFor(ctx context.Context, a engine.Actor, assistant bool) (any, error) {
-	if !s.mayReadCatalogue(a, assistant) {
-		return nil, ErrCatalogueForbidden
-	}
-	return s.Catalogue(ctx), nil
 }
 
 // Catalogue builds {modules, apps, connectors}. It holds no secret values and no file contents.

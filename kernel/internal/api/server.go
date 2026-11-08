@@ -214,14 +214,13 @@ func (s *Server) Handler() http.Handler {
 			}
 			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p)}, nil
 		},
-		Engine:  func() *engine.Engine { return s.Engine },
-		Changes: s.Changes,
-		Meta:    func(ctx context.Context, a engine.Actor) (any, error) { return s.Meta(ctx, a) },
-		File:    func(ctx context.Context, p string) (any, error) { return s.File(p) },
-		Status:  func(ctx context.Context, org string) any { return s.Status(ctx, org) },
-		Catalogue: func(ctx context.Context, c *mcp.Caller) (any, error) {
-			return s.CatalogueFor(ctx, c.Actor, c.Change.Assistant)
-		},
+		Engine:    func() *engine.Engine { return s.Engine },
+		Changes:   s.Changes,
+		Meta:      func(ctx context.Context, a engine.Actor) (any, error) { return s.Meta(ctx, a) },
+		File:      func(ctx context.Context, p string) (any, error) { return s.File(p) },
+		Status:    func(ctx context.Context, org string) any { return s.Status(ctx, org) },
+		Catalogue: func() any { return s.Engine.Reg().Catalogue() },
+		Skills:    s.skillLibrary,
 	}
 	for _, m := range []string{"POST", "GET", "DELETE"} {
 		mux.Handle(m+" /mcp", mcpHandler)

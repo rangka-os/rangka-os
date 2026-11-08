@@ -27,6 +27,10 @@ Usage:
     (once at go-live: continue the client's own numbering; never lowers a counter or reissues a name)
   rangka plan show|set <plan>|clear [--note "..."] [--apps <dir>] [--site <dir>] [--db <url>]
     (the tenant's plan, contract 0028: an operator's upgrade or downgrade; a downgrade deletes nothing)
+  rangka catalogue [--json] [--apps <dir>] [--site <dir>]
+    (apps, modules and connectors with their state for the site; per app what it shares and adds, contract 0035)
+  rangka skills list|check [dir ...]
+    (Rangka skills for AI agents, contract 0035: list them, or lint skill folders)
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:
@@ -63,6 +67,10 @@ func main() {
 		code = cmdBackup(os.Args[2:])
 	case "restore":
 		code = cmdRestore(os.Args[2:])
+	case "catalogue":
+		code = cmdCatalogue(os.Args[2:])
+	case "skills":
+		code = cmdSkills(os.Args[2:])
 	case "version", "--version":
 		fmt.Println("rangka", Version)
 	case "help", "-h", "--help":

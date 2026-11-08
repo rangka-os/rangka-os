@@ -9,7 +9,7 @@ import (
 )
 
 // Contract 0036 §3: GET /api/v1/catalogue lists every module, app and connector on disk with plain words, for
-// people who may propose change sets; MCP rangka_catalogue_list gives the same answer.
+// people who may propose change sets. Agents use MCP rangka_catalogue (contract 0035) instead.
 
 func catalogueEntry(t *testing.T, list any, name string) map[string]any {
 	t.Helper()
@@ -93,7 +93,7 @@ func anyStrings(v any) []string {
 }
 
 // A sales_rep may not propose change sets, so the catalogue answers 403; so does a plain API token.
-// A delegated assistant token for the owner may read it, over REST and MCP.
+// A delegated assistant token for the owner may read it.
 func TestCatalogueReadRule(t *testing.T) {
 	e := newEnv(t, false, nil)
 	e.login()
@@ -105,12 +105,7 @@ func TestCatalogueReadRule(t *testing.T) {
 	if r := (&env{t: t, ts: e.ts, token: tok}).do("GET", "/api/v1/catalogue", nil); r.Status != 403 {
 		t.Fatalf("api token: %d %s", r.Status, r.Body)
 	}
-	ai := assistantEnv(t, e, 10*time.Minute)
-	ai.must(200, "GET", "/api/v1/catalogue", nil)
-	res := rpc(ai, 3, "tools/call", map[string]any{"name": "rangka_catalogue_list", "arguments": map[string]any{}})
-	if res["isError"] == true || !strings.Contains(get(res, "content", 0, "text").(string), "whatsapp_business") {
-		t.Fatalf("assistant MCP: %v", res)
-	}
+	assistantEnv(t, e, 10*time.Minute).must(200, "GET", "/api/v1/catalogue", nil)
 }
 
 // The answer holds no secret values, even when the secrets driver (env) has them.

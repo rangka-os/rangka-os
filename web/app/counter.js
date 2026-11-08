@@ -245,10 +245,22 @@
     // A sale whose answer got lost stays pending: the cart, tender and buyer are locked and every press sends that
     // same job (same keys, same body) until the server answers, so one cart is one sale (audit WS3 R2-1, R3-1).
     var sts = useState(false), stuck = sts[0], setStuck = sts[1];
+    var sendingRef = useRef(false); // synchronous guard: two presses in one task never start two sales (audit WS3 L-R4-1)
+    var pendingKey = "pending:" + scope + ":" + s.name;
+    // a pending sale survives a page reload: it comes back locked with its cart (audit WS3 L-R4-2)
+    useEffect(function () {
+      RA.outbox.cache.get(pendingKey).then(function (x) {
+        var v = x && x.value;
+        if (!v || !v.job || jobRef.current) return;
+        jobRef.current = { job: v.job, est: v.est };
+        setCart(v.cart || []); setCustomer(v.customer || ""); setStuck(true);
+      });
+    }, [pendingKey]);
     function send(job, est) {
       setBusy(true); setErr("");
       return RA.outbox.send(ctx.api, job, s.offline === "queue").then(function (res) {
-        jobRef.current = null; setStuck(false);
+        jobRef.current = null; setStuck(false); sendingRef.current = false;
+        RA.outbox.cache.put(pendingKey, null);
         var rec = res.record || {};
         // the receipt panel shows the server's total and change (audit WS3 M1); the screen's sums are only an estimate
         var dt = c.document.total, dc = c.document.change;
@@ -260,21 +272,29 @@
         if (res.queued) ctx.toast("info", "Belum terkirim", "Transaksi tersimpan di perangkat dan dikirim saat koneksi kembali.");
         if (searchRef.current) searchRef.current.focus();
       }, function (e) {
-        if (RA.outboxRetryable(e)) { setStuck(true); return; }
+        sendingRef.current = false;
+        if (RA.outboxRetryable(e)) {
+          setStuck(true);
+          RA.outbox.cache.put(pendingKey, { job: job, est: est, cart: cart, customer: customer });
+          return;
+        }
+        RA.outbox.cache.put(pendingKey, null);
         // refused: the job is over (a draft it created stays reachable from the list); the cart may be changed again
         jobRef.current = null; setStuck(false);
         setErr(errText(e));
       }).then(function () { setBusy(false); }, function () { setBusy(false); });
     }
     function resend() {
-      if (busy || !jobRef.current) return;
+      if (busy || sendingRef.current || !jobRef.current) return;
+      sendingRef.current = true;
       send(jobRef.current.job, jobRef.current.est);
     }
     function finish(cash, qris) {
-      if (busy) return;
+      if (busy || sendingRef.current) return;
       if (jobRef.current) { resend(); return; } // a pending sale goes again exactly as it was
       var change = changeOf(total, cash, qris);
       if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
+      sendingRef.current = true;
       setBusy(true); setErr("");
       var pay = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
       var shiftName = session && typeof session === "object" ? session.name : null;
@@ -409,7 +429,7 @@
 
     var tools = h("div", { className: "ap-counter-tools" },
       c.hold && held.length ? h(R.Button, { variant: "quiet", onClick: function () { setHeldOpen(!heldOpen); } }, "Ditahan (" + held.length + ")") : null,
-      ses && ses.close ? h(R.Button, { variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null);
+      ses && ses.close && !stuck ? h(R.Button, { variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null);
 
     var heldList = heldOpen ? h("ul", { className: "ap-counter-held", "aria-label": "Bill ditahan" }, held.map(function (x) {
       return h("li", { key: x.id }, h("button", { type: "button", onClick: function () { resume(x); } },

@@ -256,6 +256,11 @@ def test_counter_lost_answer_then_press_again_is_one_sale(browser, ctx):
     lines = p.locator(".ap-counter-lines").inner_text()
     p.locator(".ap-counter-item").nth(1).click() if p.locator(".ap-counter-item").count() > 1 else p.locator(".ap-counter-item").first.click()
     assert p.locator(".ap-counter-lines").inner_text() == lines
+    assert p.get_by_role("button", name="Tutup sesi").count() == 0, "no closing while a sale is pending"
+    # a reload keeps the pending sale locked with its cart
+    p.reload()
+    p.get_by_role("button", name="Kirim ulang").wait_for()
+    assert p.locator(".ap-counter-lines").inner_text() == lines
     time.sleep(1.2)  # now() moves on
     p.get_by_role("button", name="Kirim ulang").click()
     p.wait_for_selector(".ap-counter-done")

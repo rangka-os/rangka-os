@@ -1729,6 +1729,7 @@ def check_screen_counter(rep, p, b, visible, prints):
             slot_field(rep, p, "counter/catalogue/price", cn, cf, cat.get("price"), NUMERIC_KINDS)
             for k in ("title", "group_by", "barcode", "image"):
                 slot_field(rep, p, f"counter/catalogue/{k}", cn, cf, cat.get(k))
+            slot_field(rep, p, "counter/catalogue/available", cn, cf, cat.get("available"), NUMERIC_KINDS)
             for i, x in enumerate(cat.get("search") if isinstance(cat.get("search"), list) else []):
                 slot_field(rep, p, f"counter/catalogue/search/{i}", cn, cf, x)
             parens(rep, p, "counter/catalogue/filter", cat.get("filter"))
@@ -1749,6 +1750,8 @@ def check_screen_counter(rep, p, b, visible, prints):
             slot_field(rep, p, "counter/document/line/note", ln, lf, line.get("note"))
         slot_field(rep, p, "counter/document/total", dn, df, doc.get("total"), NUMERIC_KINDS)
         slot_field(rep, p, "counter/document/change", dn, df, doc.get("change"), NUMERIC_KINDS)
+        for i, x in enumerate(doc.get("summary") if isinstance(doc.get("summary"), list) else []):
+            slot_field(rep, p, f"counter/document/summary/{i}", dn, df, x, NUMERIC_KINDS)
         slot_set(rep, p, "counter/document/set", dn, df, doc.get("set"))
         if isinstance(b.get("customer"), dict):
             slot_field(rep, p, "counter/customer/field", dn, df, b["customer"].get("field"))

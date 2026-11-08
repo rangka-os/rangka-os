@@ -193,6 +193,10 @@
             "image": {
               "$ref": "model.json#/$defs/name"
             },
+            "available": {
+              "$ref": "model.json#/$defs/name",
+              "description": "A number field of the catalogue model: what is left to sell. The card shows 'Sisa N' at 5 or less and 'Habis' at 0 or less; it never blocks a sale (contract 0034)"
+            },
             "limit": {
               "type": "integer",
               "minimum": 1,
@@ -248,6 +252,14 @@
             "change": {
               "$ref": "model.json#/$defs/name",
               "description": "The document's change field (a number); the receipt panel shows the server's value"
+            },
+            "summary": {
+              "type": "array",
+              "maxItems": 8,
+              "items": {
+                "$ref": "model.json#/$defs/name"
+              },
+              "description": "Number fields of the document shown under the cart, in this order, as POST /api/v1/compute answers them; the last one is the total line (contract 0034)"
             }
           }
         },

@@ -296,6 +296,7 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			for _, k := range []string{"title", "group_by", "barcode", "image"} {
 				v.slotField(p, "counter/catalogue/"+k, m, fields, cat[k], nil)
 			}
+			v.slotField(p, "counter/catalogue/available", m, fields, cat["available"], numericKinds)
 			for i, x := range asList(cat["search"]) {
 				v.slotField(p, fmt.Sprintf("counter/catalogue/search/%d", i), m, fields, x, nil)
 			}
@@ -324,6 +325,9 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 		}
 		v.slotField(p, "counter/document/total", docModel, docFields, doc["total"], numericKinds)
 		v.slotField(p, "counter/document/change", docModel, docFields, doc["change"], numericKinds)
+		for i, x := range asList(doc["summary"]) {
+			v.slotField(p, fmt.Sprintf("counter/document/summary/%d", i), docModel, docFields, x, numericKinds)
+		}
 		v.slotSet(p, "counter/document/set", docModel, docFields, doc["set"])
 		if c := asMap(b["customer"]); c != nil {
 			v.slotField(p, "counter/customer/field", docModel, docFields, c["field"], nil)

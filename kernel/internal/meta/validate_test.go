@@ -331,3 +331,16 @@ func TestStockApps(t *testing.T) {
 		t.Fatalf("declared stock documents do not validate:\n%s", buf.String())
 	}
 }
+
+// Contract 0036: the catalogue keys (summary, category, icon) and config.connectors. The valid set has no
+// problems; the broken one has the warnings and errors rangka_validate.py prints.
+func TestCatalogueKeys(t *testing.T) {
+	_, rep := ValidateOpts(Options{AppsDir: "../../testdata/catalogue-keys/apps", SiteDir: "../../testdata/catalogue-keys/site", ConnectorsDir: "../../testdata/catalogue-keys/connectors"}, nil, schema.Embedded())
+	if n := len(rep.All()); n != 0 {
+		t.Fatalf("problems: %+v", rep.All())
+	}
+}
+
+func TestBrokenCatalogueKeysMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-catalogue-keys.expected.txt", Options{AppsDir: "testdata/broken-catalogue-keys/apps", SiteDir: "testdata/broken-catalogue-keys/site", ConnectorsDir: "testdata/broken-catalogue-keys/connectors"})
+}

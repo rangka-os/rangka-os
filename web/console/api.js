@@ -333,6 +333,7 @@
         return reply({ data: db.audit.filter(function (a) { return prefixMatch(a.kind, q.kind) && (!q.actor || a.actor === q.actor) && (!q.org || a.org === q.org); }).slice(0, q.limit || 50) });
       },
       changesets: function () { return reply({ data: db.changesets.map(publicCs) }); },
+      catalogue: function () { return reply(clone(db.catalogue || { modules: [], apps: [], connectors: [] })); },
       changeset: function (id) { var c = findCs(id); return c ? reply(publicCs(c)) : fail(404, "not_found", "Change set " + id + " tidak ada"); },
       propose: function (body) {
         var cs = clone(body) || {}, errs = [];
@@ -447,6 +448,8 @@
 
       /* system */
       status: pick(function () { return get("/api/v1/system/status"); }, function () { return demo.status(); }),
+      /** GET /api/v1/catalogue → {modules, apps, connectors}: everything installable, installed or not (contract 0036). */
+      catalogue: pick(function () { return get("/api/v1/catalogue"); }, function () { return demo.catalogue(); }),
       jobs: pick(function (state) { return get("/api/v1/system/jobs" + qs({ state: state, limit: 200 })).then(list); }, function (state) { return demo.jobs({ state: state }).then(list); }),
       /** q: {limit, kind (prefix), actor, org} */
       audit: pick(function (q) { return get("/api/v1/system/audit" + qs(q || { limit: 50 })).then(list); }, function (q) { return demo.audit(q || {}).then(list); }),

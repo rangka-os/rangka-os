@@ -213,6 +213,7 @@
     { id: "orgs", label: "Organisasi & member", icon: "building", group: "Lapis 4 · Organisasi" },
     { id: "apps", label: "App & model", icon: "apps", group: "Lapis 5 · Aplikasi" },
     { id: "processes", label: "Proses", icon: "time", group: "Lapis 5 · Aplikasi" },
+    { id: "catalogue", label: "Katalog", icon: "store", group: "Lapis 5 · Aplikasi" },
     { id: "appearance", label: "Tampilan", icon: "palette", group: "Lapis 6 · Presentasi" },
     { id: "changesets", label: "Change set", icon: "amend", group: "Tata kelola" },
     { id: "audit", label: "Audit log", icon: "shield", group: "Tata kelola" }
@@ -772,39 +773,100 @@
         h("div", { className: "rk-field" }, h("label", { htmlFor: "cn-editor" }, cur.create ? "Isi overlay baru" : "Isi baru"), h("textarea", { id: "cn-editor", className: "cn-editor", spellCheck: false, value: text, onChange: function (e) { setText(e.target.value); } }),
           h("span", { className: "rk-field-hint" }, cur.create ? "Field lapisan perusahaan diawali x_. File app tidak diubah." : "Seluruh isi file (op replace). Lapis 2, izin dan pajak butuh persetujuan pemilik."))));
   }
+  /* ================================================================ Catalogue (contract 0036, read only) */
+  var CAT_LABEL = { sales: "Penjualan", purchasing: "Pembelian", stock: "Stok", finance: "Keuangan", tax: "Pajak", people: "Orang", operations: "Operasional",
+    messaging: "Pesan", payments: "Pembayaran", marketplace: "Marketplace", other: "Lainnya" };
+  function catalogueStatus(u) {
+    if (u.installed) return h(R.Lozenge, { tone: "ok" }, "Terpasang");
+    if (u.in_plan === false) return h(R.Lozenge, { tone: "warn" }, "Tidak termasuk paket");
+    return h(R.Lozenge, null, "Belum dipasang");
+  }
+  function unitPath(u) { return u.kind === "module" ? "modules/" + u.name + "/module.rk" : "apps/" + u.name + "/app.rk"; }
+  function CatalogueScreen(ctx) {
+    var cat = useLoad(function () { return api.catalogue(); }, [ctx.csRev]);
+    var ds = useState(null), open = ds[0], setOpen = ds[1];
+    var d = cat.data || {}, units = (d.modules || []).concat(d.apps || []);
+    var rows = units.map(function (u) {
+      return { id: u.kind + ":" + u.name, u: u, title: L(u.title) || u.name, kind: u.kind, version: u.version, category: CAT_LABEL[u.category] || u.category,
+        state: u.installed ? 0 : u.in_plan === false ? 2 : 1, by: (u.installed_by || []).join(", "), requires: (u.requires || []).length, required_by: (u.required_by || []).length };
+    });
+    var cur = open && units.filter(function (u) { return u.kind + ":" + u.name === open; })[0];
+    var installed = units.filter(function (u) { return u.installed; }).length;
+    return h(React.Fragment, null,
+      h(R.PageHeader, { title: "Katalog", breadcrumb: ["Rangka Console", "Lapis 5", "Katalog"], onNavigate: function () {},
+        subtitle: cat.data ? units.length + " modul dan app di folder kernel · " + installed + " terpasang · hanya baca" : "Modul dan app yang bisa dipasang kernel ini" }),
+      h("div", { className: "rk-shell-content" },
+        cat.error ? (cat.error.status === 403 ? h(R.Alert, { tone: "warn", title: "Tidak ada akses" }, "Katalog hanya untuk yang boleh mengusulkan perubahan.") : h(ErrorBox, { error: cat.error, onRetry: cat.reload }))
+        : !cat.data ? h(Loading)
+        : rows.length ? h(R.Table, { card: false, searchPlaceholder: "Cari modul atau app…", rows: rows, onOpen: function (r) { setOpen(r.id); },
+          columns: [{ key: "title", label: "Nama", render: function (v, r) { return h("span", { className: "cn-cell-title" }, h("b", null, v), h("small", null, mono(r.u.name), r.u.summary ? " · " + L(r.u.summary) : "")); } },
+            { key: "kind", label: "Jenis", render: function (v) { return h(R.Lozenge, { tone: v === "module" ? "info" : "default" }, v === "module" ? "Modul" : "App"); } },
+            { key: "category", label: "Kategori" },
+            { key: "version", label: "Versi", render: function (v) { return mono(v || "—"); } },
+            { key: "state", label: "Status", render: function (v, r) { return catalogueStatus(r.u); } },
+            { key: "by", label: "Dipasang oleh", render: function (v) { return v ? mono(v) : h("span", { className: "cn-faint" }, "—"); } },
+            { key: "requires", label: "Butuh", numeric: true }, { key: "required_by", label: "Dibutuhkan", numeric: true }] })
+        : h(R.EmptyState, { title: "Katalog kosong" }, "Tidak ada modul atau app di folder kernel.")),
+      cur ? h(R.Drawer, { title: L(cur.title) || cur.name, subtitle: cur.name + " " + (cur.version || "") + " · " + (cur.kind === "module" ? "modul" : "app"), icon: "store", wide: true,
+          onClose: function () { setOpen(null); }, headerActions: catalogueStatus(cur) },
+        h(R.DrawerSection, { title: "Ringkasan" }, h(R.Descriptions, { column: 2, items: [["Ringkasan", L(cur.summary) || "Belum ada ringkasan"], ["Kategori", CAT_LABEL[cur.category] || cur.category],
+          ["Ikon", cur.icon ? mono(cur.icon) : "—"], ["Sumber", cur.source], ["Paket", (cur.plan || "—") + (cur.in_plan === false ? " · tidak termasuk" : "")],
+          ["Dipasang oleh", (cur.installed_by || []).length ? mono(cur.installed_by.join(", ")) : "—"]] })),
+        h(R.DrawerSection, { title: "Ketergantungan" }, h(R.Descriptions, { column: 1, items: [
+          ["Butuh", (cur.requires || []).length ? h("span", { className: "cn-chips" }, cur.requires.map(function (x) { return h("span", { key: x, className: "cn-chip" }, x); })) : "—"],
+          ["Dibutuhkan oleh", (cur.required_by || []).length ? h("span", { className: "cn-chips" }, cur.required_by.map(function (x) { return h("span", { key: x, className: "cn-chip" }, x); })) : "—"]] })),
+        h(R.DrawerSection, { title: "Model yang ditambah" }, miniTable(["Model", "Nama"], (cur.models || []).map(function (m) { return [L(m.label) || m.name, mono(m.name)]; }), "Tanpa model")),
+        h(R.DrawerSection, { title: "Sumber " + unitPath(cur) }, h(SourcePanel, { path: unitPath(cur), maxHeight: "360px" }))) : null);
+  }
+
   /* ================================================================ Connectors */
   function ConnectorsScreen(ctx) {
     var meta = ctx.meta, s = ctx.status, conns = meta.connectors || {};
     var ds = useState(null), open = ds[0], setOpen = ds[1];
     var full = useLoad(function () { return open ? api.file("connectors/" + open + ".rk") : Promise.resolve(null); }, [open]);
     var events = useLoad(function () { return open ? api.audit({ kind: "connector", limit: 100 }) : Promise.resolve([]); }, [open, ctx.csRev]);
+    // the catalogue (contract 0036) adds the connectors on disk that are not installed; a 403 leaves the installed ones
+    var cat = useLoad(function () { return api.catalogue().catch(function () { return null; }); }, [ctx.csRev]);
+    var catConns = ((cat.data || {}).connectors || []);
+    function catOf(n) { return catConns.filter(function (x) { return x.name === n; })[0] || null; }
     function healthOf(n) { var st = (s.connectors || []).filter(function (x) { return x.name === n; })[0]; return st || null; }
     var rows = Object.keys(conns).map(function (n) {
       var c = conns[n], st = healthOf(n) || {};
       return { id: n, name: c.name || n, vendor: c.vendor, version: c.version, lbl: L(c.label) || n, triggers: (c.triggers || []).length, actions: (c.actions || []).length, st: st,
-        health: !st.name ? -1 : st.ok === false ? 0 : st.errors_24h ? 1 : 2 };
-    });
-    function health(r) { return !r || r.health === -1 ? h(R.Lozenge, null, "Tak dilaporkan") : r.health === 0 ? h(R.Lozenge, { tone: "bad", bold: true }, "Gangguan") : r.health === 1 ? h(R.Lozenge, { tone: "warn" }, r.st.errors_24h + " galat 24 jam") : h(R.Lozenge, { tone: "ok" }, "Sehat"); }
-    var c = open && conns[open], cst = (open && healthOf(open)) || {}, def = (full.data && full.data.parsed) || {};
+        installed: true, health: !st.name ? -1 : st.ok === false ? 0 : st.errors_24h ? 1 : 2 };
+    }).concat(catConns.filter(function (x) { return !conns[x.name]; }).map(function (x) {
+      return { id: x.name, name: x.name, vendor: x.vendor, version: x.version, lbl: L(x.label) || x.name, triggers: null, actions: null, st: {}, installed: false, health: -2 };
+    }));
+    var available = rows.filter(function (r) { return !r.installed; }).length;
+    function health(r) { return r && r.health === -2 ? h(R.Lozenge, null, "Belum dipasang") : !r || r.health === -1 ? h(R.Lozenge, null, "Tak dilaporkan") : r.health === 0 ? h(R.Lozenge, { tone: "bad", bold: true }, "Gangguan") : r.health === 1 ? h(R.Lozenge, { tone: "warn" }, r.st.errors_24h + " galat 24 jam") : h(R.Lozenge, { tone: "ok" }, "Sehat"); }
+    var ce = open && catOf(open);
+    var c = open && (conns[open] || (ce ? { label: ce.label, version: ce.version, vendor: ce.vendor, triggers: [], actions: [] } : null)), cst = (open && healthOf(open)) || {}, def = (full.data && full.data.parsed) || {};
     var usedBy = open ? Object.keys(meta.flows || {}).filter(function (f) { var fl = meta.flows[f]; return String(fl.on || "").indexOf(open + ".") === 0 || JSON.stringify(fl.steps || []).indexOf('"' + open + ".") >= 0; }) : [];
     var notify = siteSystem(meta).notify || {}, notifyUse = open && Object.keys(notify).filter(function (k) { return (notify[k] || {}).connector === open; });
     var evs = (events.data || []).filter(function (a) { return a.target === "connector/" + open || a.actor === open; }).slice(0, 8);
     var secrets = c ? (c.secrets || ((def.auth || {}).fields || []).filter(function (f) { return f.secret; }).map(function (f) { return f.name; })) : [];
     var KIND = { "connector.event": ["info", "Peristiwa"], "connector.call": ["ok", "Panggilan"], "connector.error": ["bad", "Galat"] };
     return h(React.Fragment, null,
-      h(R.PageHeader, { title: "Konektor", breadcrumb: ["Rangka Console", "Lapis 3", "Konektor"], onNavigate: function () {}, subtitle: "Konektor terpasang: dipicu atau dipanggil flow, atau dipakai notify di system.rk" }),
+      h(R.PageHeader, { title: "Konektor", breadcrumb: ["Rangka Console", "Lapis 3", "Konektor"], onNavigate: function () {}, subtitle: "Terpasang: dipicu atau dipanggil flow, dipakai notify di system.rk, atau disebut config.rk connectors" + (available ? " · " + available + " lagi belum dipasang" : "") }),
       h("div", { className: "rk-shell-content" },
         rows.length ? h(R.Table, { card: false, searchPlaceholder: "Cari konektor…", rows: rows, onOpen: function (r) { setOpen(r.id); },
           columns: [{ key: "lbl", label: "Konektor", render: function (v, r) { return h("span", { className: "cn-cell-title" }, h("b", null, v), h("small", null, mono(r.id), r.vendor ? " · " + r.vendor : "")); } },
             { key: "version", label: "Versi", render: function (v) { return mono(v || "—"); } },
             { key: "health", label: "Kesehatan", render: function (v, r) { return health(r); } },
-            { key: "triggers", label: "Pemicu", numeric: true }, { key: "actions", label: "Aksi", numeric: true },
+            { key: "triggers", label: "Pemicu", numeric: true, render: function (v) { return v == null ? "—" : num(v); } }, { key: "actions", label: "Aksi", numeric: true, render: function (v) { return v == null ? "—" : num(v); } },
             { key: "ev", label: "Peristiwa 24 jam", numeric: true, render: function (v, r) { return num(r.st.events_24h); } },
             { key: "calls", label: "Panggilan 24 jam", numeric: true, render: function (v, r) { return num(r.st.calls_24h); } },
             { key: "last", label: "Peristiwa terakhir", render: function (v, r) { return h("span", { className: "cn-nowrap", title: dt(r.st.last_event_at) }, r.st.last_event_at ? rel(r.st.last_event_at) : "Belum ada"); } }] })
-          : h(R.EmptyState, { title: "Belum ada konektor terpasang" }, "Konektor terpasang saat flow memakainya (on: atau call:) atau system.rk notify menyebutnya.")),
+          : h(R.EmptyState, { title: "Belum ada konektor" }, "Konektor terpasang saat flow memakainya (on: atau call:), system.rk notify menyebutnya, atau config.rk connectors mendaftarnya.")),
       c ? h(R.Drawer, { title: L(c.label) || open, subtitle: open + " " + (c.version || "") + (c.vendor ? " · " + c.vendor : ""), icon: "plug", wide: true, onClose: function () { setOpen(null); },
           headerActions: health(rows.filter(function (r) { return r.id === open; })[0]) },
+        ce ? h(R.DrawerSection, { title: "Katalog" }, h(R.Descriptions, { column: 2, items: [
+          ["Status", { available: "Belum dipasang", needs_auth: "Perlu kunci", untested: "Belum diuji", ready: "Siap", error: "Gangguan" }[ce.state] || ce.state],
+          ["Ringkasan", L(ce.summary) || "Belum ada ringkasan"], ["Uang", ce.money ? "Menyentuh uang" : "Tidak"],
+          ["Host", (ce.hosts || []).length ? mono(ce.hosts.join(", ")) : "—"], ["Port", (ce.provides || []).length ? mono(ce.provides.join(", ")) : "—"],
+          ["Dipilih untuk port", (ce.ports_selected || []).length ? mono(ce.ports_selected.join(", ")) : "—"]] }),
+          miniTable(["Kunci", "Rahasia", "Terisi"], (ce.auth || []).map(function (f) { return [h("span", { className: "cn-cell-title" }, h("b", null, L(f.label) || f.name), h("small", null, mono(f.name))), f.secret ? "Ya" : "Tidak", f.set ? "Terisi" : "Belum"]; }), "Tanpa kunci"),
+          h("p", { className: "cn-note" }, "Hanya baca. Memasang dan mengisi kunci datang di tahap berikutnya.")) : null,
         h(R.DrawerSection, { title: "Kesehatan 24 jam" }, h(R.Descriptions, { column: 2, items: [["Status", cst.ok === false ? "Gangguan" : cst.name ? "Sehat" : "Tidak dilaporkan"], ["Peristiwa", num(cst.events_24h)], ["Panggilan", num(cst.calls_24h)],
           ["Galat", num(cst.errors_24h)], ["Peristiwa terakhir", cst.last_event_at ? dt(cst.last_event_at) : "Belum ada"], ["Batas", (def.limits || {}).rate || "—"]] })),
         h(R.DrawerSection, { title: "Dipakai oleh" }, usedBy.length || (notifyUse && notifyUse.length) ? h("div", { className: "cn-chips" }, usedBy.map(function (f) { return h("a", { key: f, className: "cn-chip cn-link", href: "#/apps/flow/" + f }, "Flow " + f); }),
@@ -1071,6 +1133,7 @@
     else if (screen === "orgs") body = h(OrgsScreen, ctx);
     else if (screen === "apps") body = h(AppsScreen, ctx);
     else if (screen === "processes") body = h(ProcessesScreen, ctx);
+    else if (screen === "catalogue") body = h(CatalogueScreen, ctx);
     else if (screen === "appearance") body = h(AppearanceScreen, ctx);
     else if (screen === "changesets") body = h(ChangesetList, ctx);
     else if (screen === "audit") body = h(AuditScreen, ctx);

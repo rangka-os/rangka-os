@@ -335,6 +335,24 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-main .ap-proc-item { border-radius: 0; padding: 8px 14px; }
 .ap-main .ap-imp-tw { border-color: var(--line-strong); }
 
+/* ---- Modul dan sambungan (contract 0036): category groups of white cards, status in a word ---- */
+.ap-cat-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 16px; }
+.ap-cat-search { flex: 1 1 220px; min-width: 0; max-width: 360px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface); color: var(--ink); font: 400 14px/20px var(--font-sans); }
+.ap-cat-search:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ap-cat-group { margin-bottom: 20px; }
+.ap-cat-group > h2 { margin: 0 0 8px; font: 600 12px/16px var(--font-sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ap-cat-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 8px; }
+.ap-cat-card { display: flex; gap: 12px; align-items: center; width: 100%; min-height: 64px; padding: 12px 14px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); color: var(--ink); font: inherit; }
+.ap-cat-card:hover { background: var(--soft); }
+.ap-cat-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ap-cat-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-md); background: var(--soft); color: var(--ink-2); }
+.ap-cat-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-cat-text b { font-weight: 600; }
+.ap-cat-text .ap-muted { overflow-wrap: anywhere; }
+.ap-cat-tech { margin: 0; font: 400 12px/16px var(--font-mono, monospace); color: var(--faint, var(--muted)); }
+
 /* ---- Ubah bars: the pen's change banner (warm yellow) for previews ---- */
 .ap-ubah-preview { background: #fff9ec; color: #7a3e00; border-bottom-color: #f3e1bc; }
 .ap-ubah-preview > .rk-icon { color: #a54800; }

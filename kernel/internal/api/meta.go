@@ -194,31 +194,17 @@ func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
 // InstalledConnectors are the connectors a flow triggers or calls, or system.rk notify uses.
 func InstalledConnectors(reg *meta.Registry) []string {
 	used := map[string]bool{}
-	var walk func(steps []any)
-	walk = func(steps []any) {
-		for _, st := range steps {
-			sm := meta.AsMap(st)
-			if c, ok := sm["call"].(string); ok {
-				used[strings.SplitN(c, ".", 2)[0]] = true
-			}
-			walk(meta.AsList(sm["then"]))
-			walk(meta.AsList(sm["else"]))
-			walk(meta.AsList(sm["do"]))
-		}
-	}
-	for _, f := range reg.Flows {
-		if !reg.IsInstalled(f.App) {
-			continue
-		}
-		if head, _, ok := strings.Cut(f.On, "."); ok && reg.Models[head] == nil {
-			used[head] = true
-		}
-		walk(meta.AsList(f.Raw["steps"]))
+	for c := range connectorUsers(reg) {
+		used[c] = true
 	}
 	for _, ch := range []string{"email", "push", "whatsapp"} {
 		if c := meta.Str(meta.AsMap(reg.SystemConfig("notify."+ch)), "connector"); c != "" {
 			used[c] = true
 		}
+	}
+	// config.connectors switches a connector on before any flow uses it (contract 0036 §5)
+	for _, c := range meta.StrList(reg.SiteConfig("connectors")) {
+		used[c] = true
 	}
 	var out []string
 	for c := range used {
@@ -227,6 +213,40 @@ func InstalledConnectors(reg *meta.Registry) []string {
 		}
 	}
 	sort.Strings(out)
+	return out
+}
+
+// connectorUsers maps each connector to the installed flows that trigger on it or call it, sorted by flow name.
+func connectorUsers(reg *meta.Registry) map[string][]string {
+	out := map[string][]string{}
+	for _, f := range reg.Flows {
+		if !reg.IsInstalled(f.App) {
+			continue
+		}
+		used := map[string]bool{}
+		var walk func(steps []any)
+		walk = func(steps []any) {
+			for _, st := range steps {
+				sm := meta.AsMap(st)
+				if c, ok := sm["call"].(string); ok {
+					used[strings.SplitN(c, ".", 2)[0]] = true
+				}
+				walk(meta.AsList(sm["then"]))
+				walk(meta.AsList(sm["else"]))
+				walk(meta.AsList(sm["do"]))
+			}
+		}
+		if head, _, ok := strings.Cut(f.On, "."); ok && reg.Models[head] == nil {
+			used[head] = true
+		}
+		walk(meta.AsList(f.Raw["steps"]))
+		for c := range used {
+			out[c] = append(out[c], f.Name)
+		}
+	}
+	for c := range out {
+		sort.Strings(out[c])
+	}
 	return out
 }
 

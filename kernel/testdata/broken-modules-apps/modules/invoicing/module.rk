@@ -5,3 +5,4 @@ title: {id: Faktur}
 menu:
   - group: {id: Faktur}
     items: [invoice]
+summary: {id: Modul uji invoicing.}

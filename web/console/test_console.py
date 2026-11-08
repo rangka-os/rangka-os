@@ -41,7 +41,7 @@ REACT = {"react.production.min.js": os.path.join(args.react_dir, "react.producti
          "react-dom.production.min.js": os.path.join(args.react_dir, "react-dom.production.min.js")}
 ROUTES = ["ringkasan", "system", "system/source", "connectors", "orgs", "orgs/cv-maju-jaya", "apps", "apps/model/deal", "apps/model/deal/views",
           "apps/model/deal/rules", "apps/model/lead/caps", "apps/model/sales_invoice/source", "apps/model/customer", "apps/model/customer/views", "apps/model/customer/source", "apps/dashboard/crm_overview", "apps/flow/whatsapp_to_lead",
-          "apps/app/crm", "processes", "processes/lead_to_cash", "processes/quote_to_cash", "appearance", "changesets", "changesets/cs_ai7k2p9q", "changesets/cs_sy9q4w2e", "changesets/cs_tm3x8a1b", "changesets/cs_ai2r7d4n", "changesets/cs_ai5ig3wq", "audit"]
+          "apps/app/crm", "processes", "catalogue", "processes/lead_to_cash", "processes/quote_to_cash", "appearance", "changesets", "changesets/cs_ai7k2p9q", "changesets/cs_sy9q4w2e", "changesets/cs_tm3x8a1b", "changesets/cs_ai2r7d4n", "changesets/cs_ai5ig3wq", "audit"]
 failures, notes = [], []
 
 
@@ -179,6 +179,33 @@ with sync_playwright() as pw:
         if errs:
             fail(f"{width} processes: console errors {errs[:3]}")
         ctx.close()
+
+    # 1c. catalogue (contract 0036, read only): Katalog lists the apps with a status word; Konektor also lists
+    #     connectors that are not installed, and a not-installed one opens with its auth fields (never a value)
+    ctx, page, errs = new_page(browser, 1440, "light")
+    page.goto(BASE + "?demo=1#/catalogue")
+    page.wait_for_selector(".rk-table tbody tr", timeout=15000)
+    txt = page.locator(".cn-main").inner_text()
+    if "Katalog" not in page.locator(".rk-pagehead h1").inner_text() or "crm" not in txt or "Terpasang" not in txt:
+        fail("catalogue: no crm row with Terpasang")
+    page.locator(".rk-table tbody tr", has_text="crm").first.click()
+    page.wait_for_selector(".rk-drawer", timeout=5000)
+    if "apps/crm/app.rk" not in page.locator(".rk-drawer").inner_text():
+        fail("catalogue drawer: no source path")
+    page.goto(BASE + "?demo=1#/connectors")
+    page.wait_for_selector(".rk-table tbody tr", timeout=15000)
+    page.wait_for_function("document.querySelector('.cn-main').innerText.includes('xendit')", timeout=5000)
+    txt = page.locator(".cn-main").inner_text()
+    if "Belum dipasang" not in txt or "whatsapp_business" not in txt:
+        fail("connectors: not-installed connectors are not listed")
+    page.locator(".rk-table tbody tr", has_text="xendit").first.click()
+    page.wait_for_selector(".rk-drawer", timeout=5000)
+    dt_ = page.locator(".rk-drawer").inner_text()
+    if "Katalog" not in dt_ or "api.xendit.co" not in dt_ or "Belum" not in dt_:
+        fail(f"connectors drawer (xendit): {dt_[:300]!r}")
+    if errs:
+        fail(f"catalogue: console errors {errs[:3]}")
+    ctx.close()
 
     # 2. no ?demo=1: the static server has no kernel, so the adapter falls back to demo
     ctx, page, errs = new_page(browser, 1440, "light")

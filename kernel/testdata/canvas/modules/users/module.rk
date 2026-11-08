@@ -3,3 +3,4 @@ name: users
 version: 1.0.0
 title: {id: Pengguna, en: Users}
 requires: {rangka: '>=0.5'}
+summary: {id: Modul uji users.}

@@ -1,0 +1,10 @@
+../modules/contacts/module.rk:5:11  error  schema  category  'crm' is not one of ['sales', 'purchasing', 'stock', 'finance', 'tax', 'people', 'operations', 'messaging', 'payments', 'marketplace', 'other']
+../modules/contacts/module.rk:6:7  error  schema  icon  'Contacts Book' does not match '^[a-z0-9]+(-[a-z0-9]+)*$'
+../modules/contacts/module.rk:1:1  warn   catalogue_summary_missing  (root)  module "contacts" has no summary: add one sentence in plain words for the catalogue (contract 0036)
+shop/app.rk:1:1  warn   catalogue_summary_missing  (root)  app "shop" has no summary: add one sentence in plain words for the catalogue (contract 0036)
+../connectors/chat/connector.rk:1:1  warn   catalogue_summary_missing  (root)  connector "chat" has no summary: add one sentence in plain words for the catalogue (contract 0036)
+../site/config.rk:6:20  error  unknown_connector  connectors/1  "chatt" is not a connector; did you mean "chat"?
+../site/config.rk:10:26  error  org_config_key  orgs/cabang/config/connectors  org "cabang" config cannot set connectors: one site has one installed set (contract 0036)
+../site/config.rk:9:5  warn   letterhead_missing  orgs/cabang  org "cabang" has no letterheads/cabang.rk; its documents print without address, bank or signatory
+
+4 error(s), 4 warning(s)

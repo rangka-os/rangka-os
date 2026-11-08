@@ -23,6 +23,16 @@
     "title": {
       "$ref": "model.json#/$defs/label"
     },
+    "summary": {
+      "$ref": "model.json#/$defs/label",
+      "description": "One sentence in plain words for the catalogue (contract 0036)"
+    },
+    "category": {
+      "$ref": "model.json#/$defs/catalogue_category"
+    },
+    "icon": {
+      "$ref": "model.json#/$defs/icon"
+    },
     "requires": {
       "type": "object",
       "additionalProperties": {

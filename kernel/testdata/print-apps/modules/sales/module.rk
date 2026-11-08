@@ -3,3 +3,4 @@ name: sales
 version: 1.0.0
 title: {id: Penjualan, en: Sales}
 requires: {rangka: '>=0.5', core: ^1.0}
+summary: {id: Modul uji sales.}

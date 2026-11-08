@@ -926,7 +926,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 @media (max-width: 767px) {
   .rk-tag button { width: var(--control-sm); height: var(--control-sm); }
   .rk-viewswitch { height: auto; }
-  .rk-viewswitch-btn { min-width: 40px; justify-content: center; }
+  .rk-viewswitch-btn { min-width: var(--touch); justify-content: center; }
   .rk-viewswitch-btn .l { display: none; }
   .rk-report-hide { display: none; }
   /* the switch keeps its 28x16 look inside a transparent border that makes a 40px target */
@@ -963,13 +963,19 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 
 /* ---------------------------------------------------------------- touch: phones and touch tablets (44px targets) */
 @media (max-width: 767px), (max-width: 1279px) and (pointer: coarse) {
-  .rk-iconbtn { min-width: var(--touch); }
+  .rk-iconbtn, .rk-topnav .rk-av-btn, .rk-topnav-product, .rk-viewswitch-btn { min-width: var(--touch); }
+  .rk-side.collapsed nav { padding-left: 4px; padding-right: 4px; }
+  .rk-side.collapsed .rk-side-switch, .rk-side.collapsed .rk-side-search { margin-left: 4px; margin-right: 4px; width: calc(100% - 8px); }
+  .rk-crumbs a { display: inline-flex; align-items: center; justify-content: center; min-height: var(--touch); min-width: var(--touch); }
+  .rk-th-sort { min-width: var(--touch); }
   .rk-navlink, .rk-side-search { height: var(--touch); }
   .rk-side.collapsed { width: max(var(--sidebar-collapsed), calc(var(--touch) + 12px)); }
   .rk-shell:has(> .rk-side.collapsed) { grid-template-columns: max(var(--sidebar-collapsed), calc(var(--touch) + 12px)) minmax(0, 1fr); }
   .rk-th-sort { min-height: var(--touch); }
   /* checkboxes keep their look; the cell around them is the target */
   .rk-cb { width: 20px; height: 20px; }
+  .rk-check, label:has(> .rk-radio) { min-height: var(--touch); align-items: center; }
+  .rk-check input { margin-top: 0; }
   .rk-cb-cell { position: relative; }
   .rk-cb-cell > .rk-cb::after { content: ""; position: absolute; inset: 0; }
   .rk-tabs button { min-height: var(--touch); }
@@ -996,6 +1002,9 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   .rk-dialog-acts, .rk-dialog-foot { flex-direction: column-reverse; align-items: stretch; }
   .rk-dialog-acts > *, .rk-dialog-foot > * { width: 100%; justify-content: center; }
   .rk-cmd { top: 0; left: 0; right: 0; bottom: 0; transform: none; width: auto; border-radius: 0; }
+  /* lifecycle steps wrap to rows of three instead of running off the edge */
+  .rk-steps { flex-wrap: wrap; row-gap: 10px; }
+  .rk-step { flex: 1 0 33%; }
 }
 @media (max-width: 1279px) {
   .rk-tw .rk-table tbody tr:hover td:first-child, .rk-tw .rk-table tbody tr:hover td.rk-cb-cell + td { background: linear-gradient(var(--hover), var(--hover)), var(--surface); }

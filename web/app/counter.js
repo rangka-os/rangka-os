@@ -210,8 +210,8 @@
     useEffect(function () { if (session && typeof session === "object") RA.outbox.cache.put("session:" + scope + ":" + s.name, session); }, [session]);
 
     var total = cartTotal(cart);
-    function add(it) { setDone(null); setErr(""); setCart(function (x) { return cartAdd(x, it); }); jobRef.current = null; }
-    function setLine(i, patch) { setCart(function (x) { return cartSet(x, i, patch); }); jobRef.current = null; }
+    function add(it) { if (jobRef.current) return; setDone(null); setErr(""); setCart(function (x) { return cartAdd(x, it); }); }
+    function setLine(i, patch) { if (jobRef.current) return; setCart(function (x) { return cartSet(x, i, patch); }); }
 
     function onSearchKey(e) {
       if (e.key !== "Enter") return;
@@ -221,17 +221,18 @@
     }
 
     function hold() {
-      if (!cart.length) return;
+      if (!cart.length || jobRef.current) return;
       var next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, cart: cart, total: total }].concat(held).slice(0, 20);
       setHeld(next); writeHeld(hk, next);
-      setCart([]); setCustomer(""); jobRef.current = null;
+      setCart([]); setCustomer("");
       ctx.toast("info", "Bill ditahan", customer || rp(total));
     }
     function resume(h0) {
+      if (jobRef.current) return;
       var next = held.filter(function (x) { return x.id !== h0.id; });
       if (cart.length) next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, cart: cart, total: total }].concat(next);
       setHeld(next); writeHeld(hk, next);
-      setCart(h0.cart); setCustomer(h0.customer || ""); setHeldOpen(false); jobRef.current = null;
+      setCart(h0.cart); setCustomer(h0.customer || ""); setHeldOpen(false);
     }
 
     function openPay() {
@@ -241,43 +242,52 @@
       setPay({ cash: total, qris: 0 });
     }
 
-    function finish(cash, qris) {
-      if (busy) return;
-      var change = changeOf(total, cash, qris);
-      if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
+    // A sale whose answer got lost stays pending: the cart, tender and buyer are locked and every press sends that
+    // same job (same keys, same body) until the server answers, so one cart is one sale (audit WS3 R2-1, R3-1).
+    var sts = useState(false), stuck = sts[0], setStuck = sts[1];
+    function send(job, est) {
       setBusy(true); setErr("");
-      var pay = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
-      var shiftName = session && typeof session === "object" ? session.name : null;
-      // the press's fingerprint leaves set: out: a press again after a lost answer reuses the same job and keys even
-      // when set: (now(), the date after midnight) changed meanwhile, so one cart is one sale (audit WS3 R2-1)
-      var sig = JSON.stringify(saleBody(c, cart, pay, shiftName, null, customer));
-      var pending = jobRef.current && jobRef.current.sig === sig ? jobRef.current.job : null;
-      // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
-      // on a failed reload, the last copy
-      var fresh = pending ? Promise.resolve(null)
-        : p.reload ? p.reload(true).then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
-      fresh.then(function (nowSets) {
-        var job = pending || RA.outbox.newJob({ scope: scope, screen: s.name, model: c.document.model,
-          body: saleBody(c, cart, pay, shiftName, nowSets.document, customer), submit: c.submit !== false });
-        jobRef.current = { sig: sig, job: job };
-        return RA.outbox.send(ctx.api, job, s.offline === "queue");
-      }).then(function (res) {
-        jobRef.current = null;
+      return RA.outbox.send(ctx.api, job, s.offline === "queue").then(function (res) {
+        jobRef.current = null; setStuck(false);
         var rec = res.record || {};
         // the receipt panel shows the server's total and change (audit WS3 M1); the screen's sums are only an estimate
         var dt = c.document.total, dc = c.document.change;
         var srvTotal = dt && rec[dt] != null ? Number(rec[dt]) : null, srvChange = dc && rec[dc] != null ? Number(rec[dc]) : null;
-        setDone({ name: rec.name || null, total: srvTotal != null ? srvTotal : total, change: srvChange != null ? srvChange : change,
+        setDone({ name: rec.name || null, total: srvTotal != null ? srvTotal : est.total, change: srvChange != null ? srvChange : est.change,
           estimate: srvChange == null, queued: !!res.queued, approval: !!res.approval });
         loadCatalogue(); // prices may have changed since the screen opened
         setCart([]); setCustomer(""); setPay(null);
         if (res.queued) ctx.toast("info", "Belum terkirim", "Transaksi tersimpan di perangkat dan dikirim saat koneksi kembali.");
         if (searchRef.current) searchRef.current.focus();
       }, function (e) {
-        if (RA.outboxRetryable(e)) { setErr("Belum terkirim (koneksi atau server). Tekan Selesai lagi; transaksi tidak akan tercatat dua kali."); return; }
-        jobRef.current = null;
+        if (RA.outboxRetryable(e)) { setStuck(true); return; }
+        // refused: the job is over (a draft it created stays reachable from the list); the cart may be changed again
+        jobRef.current = null; setStuck(false);
         setErr(errText(e));
       }).then(function () { setBusy(false); }, function () { setBusy(false); });
+    }
+    function resend() {
+      if (busy || !jobRef.current) return;
+      send(jobRef.current.job, jobRef.current.est);
+    }
+    function finish(cash, qris) {
+      if (busy) return;
+      if (jobRef.current) { resend(); return; } // a pending sale goes again exactly as it was
+      var change = changeOf(total, cash, qris);
+      if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
+      setBusy(true); setErr("");
+      var pay = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
+      var shiftName = session && typeof session === "object" ? session.name : null;
+      var est = { total: total, change: change };
+      // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
+      // on a failed reload, the last copy
+      var fresh = p.reload ? p.reload(true).then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
+      fresh.then(function (nowSets) {
+        var job = RA.outbox.newJob({ scope: scope, screen: s.name, model: c.document.model,
+          body: saleBody(c, cart, pay, shiftName, nowSets.document, customer), submit: c.submit !== false });
+        jobRef.current = { job: job, est: est };
+        return send(job, est);
+      });
     }
 
     function openSession() {
@@ -359,7 +369,9 @@
           value: l.note, autoFocus: true, onChange: function (e) { setLine(i, { note: e.target.value }); }, onKeyDown: function (e) { if (e.key === "Enter") setNoteLine(null); } }) : null);
     }));
 
-    var tender = pay ? h("div", { className: "ap-counter-pay", role: "dialog", "aria-label": "Bayar" },
+    var tender = stuck ? h("div", { className: "ap-counter-pay", role: "alertdialog", "aria-label": "Belum terkirim" },
+      h("div", { className: "ap-work-err" }, "Transaksi ini belum pasti terkirim (koneksi atau server). Keranjang dan pembayaran dikunci; kirim ulang apa adanya, tidak akan tercatat dua kali."),
+      h(R.Button, { variant: "primary", size: "lg", loading: busy, disabled: busy, onClick: resend }, "Kirim ulang")) : pay ? h("div", { className: "ap-counter-pay", role: "dialog", "aria-label": "Bayar" },
       h("div", { className: "ap-counter-due" }, h("span", null, "Total"), h("b", null, rp(total))),
       (c.payments && (c.payments.methods || ["cash"]).indexOf("cash") >= 0) || !c.payments ? h("div", { className: "ap-counter-cash" },
         quickCash(Math.max(0, total - (pay.qris || 0))).map(function (a, i) {
@@ -386,7 +398,7 @@
 
     var side = h("section", { className: "ap-counter-cart", "aria-label": "Transaksi" },
       c.customer ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
-        value: customer, onChange: function (e) { setCustomer(e.target.value); } }) : null,
+        value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } }) : null,
       cart.length ? lines : result || h("p", { className: "ap-work-loading" }, "Ketuk barang untuk menambah."),
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
       tender || (cart.length ? h("div", { className: "ap-counter-foot" },

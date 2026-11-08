@@ -294,6 +294,7 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 - Payment methods other than `cash` and `qris` are not offered by the renderer yet.
 - A held approval of a cancel re-runs the cancel (and its `on: cancel` rules) as the requester at approval time;
   warn-level cancel rules are not shown to the caller.
+- A sale whose answer was lost locks the cart, tender and buyer until "Kirim ulang" gets an answer (same keys).
 - With two open sessions the screen takes the newest; the catalogue loads at most `limit` rows (default 500).
 - Offline across midnight, the last cached `set:` values keep yesterday's date until the screen reloads online.
 

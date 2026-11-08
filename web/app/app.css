@@ -139,7 +139,7 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .rk-seg button[aria-pressed="true"] { background: var(--ap-seg-on); color: var(--ink); font-weight: 600; box-shadow: var(--ap-seg-shadow); }
 /* the pen's list header: search and "Buat …" on the right of the title, a count pill after it */
 .ap-main .ap-head-search { flex: 0 1 220px; }
-.ap-main .rk-pagehead-extra { flex-wrap: nowrap; gap: 8px; }
+.ap-main .rk-pagehead-extra { flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .ap-headcount { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--r-pill); background: var(--ap-pill); color: var(--ap-pill-ink); font: 400 11.5px/20px var(--font-sans); white-space: nowrap; }
 /* under it one ruled row: the views as underline tabs on the left, filters and tools as small outlined buttons on the right */
 .ap-main .ap-views { display: flex; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; padding: 0; margin: -4px 0 4px; border-bottom: 1px solid var(--line); }
@@ -165,6 +165,8 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 
 /* ---- record tables: a white card, a warm header row, 38px rows ---- */
 .ap-main .rk-table-card .rk-tw, .ap-main .rk-report, .ap-main .ap-groupview { background: var(--surface); border: 1px solid var(--line-strong); border-radius: var(--r-lg); overflow: hidden; }
+/* tables wider than the page scroll inside their box (first column sticky below 1280px, bundle.css) */
+.ap-main .rk-table-card .rk-tw, .ap-main .rk-report { overflow: auto; }
 .ap-main .rk-table-card .rk-tw { overflow-x: auto; }
 .ap-main .rk-table th { height: 34px; background: var(--soft); border-bottom: 1px solid var(--line); font: 600 11.5px/16px var(--font-sans); color: var(--muted); }
 .ap-main .rk-table td { height: 38px; color: var(--ink-2); font-size: 12.5px; }
@@ -215,7 +217,7 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .ap-tiles > .rk-stat { border: 0; border-radius: 0; padding: 12px 14px; min-width: 0; }
 .ap-main .ap-tiles > .rk-stat.click:hover { background: var(--soft); }
 .ap-main .ap-tiles > .rk-skeleton { border-radius: 0; }
-@media (max-width: 1100px) { .ap-main .ap-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-main .ap-tiles > :last-child:nth-child(odd) { grid-column: span 2; } }
+@media (max-width: 1279px) { .ap-main .ap-tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-main .ap-tiles > :last-child:nth-child(odd) { grid-column: span 2; } }
 /* charts: no grid lines, quiet axes, square-topped stone bars */
 .ap-main .rk-chart .grid { stroke: transparent; }
 .ap-main .rk-chart .ax, .ap-main .rk-donut .ax { fill: var(--muted); font-size: 11px; }
@@ -297,7 +299,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-gc-row { padding: 10px 12px 12px; }
 .ap-gc-row + .ap-gc-row { border-top: 1px solid var(--line); }
 .ap-gc-head { display: flex; align-items: center; justify-content: space-between; min-height: 32px; font: 600 12px/16px var(--font-sans); color: var(--muted); }
-.ap-gc-head .rk-iconbtn { width: 40px; height: 40px; margin-right: -8px; color: var(--muted); }
+.ap-gc-head .rk-iconbtn { width: var(--touch); height: var(--touch); margin-right: -8px; color: var(--muted); }
 .ap-gc-head .rk-iconbtn:hover { color: var(--bad); background: var(--bad-tint); }
 .ap-gc-fields { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .ap-gc-f { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
@@ -308,12 +310,12 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-gc-f .ap-gl input { height: 40px; }
 .ap-gc-f.ro .rk-cell-ro, .ap-gc-f.ro .rk-cell-item { padding: 0; text-align: left; min-height: 20px; font-size: 13px; color: var(--ink-2); }
 .ap-gc-f.ro.n .rk-cell-ro { font-variant-numeric: tabular-nums; }
-.ap-gc-f .rk-cell-item { padding: 0; }
+.ap-gc-f .rk-cell-item { padding: 0; min-width: 0; }
 .ap-gc-empty { margin: 0; }
 .ap-gc .rk-totals { min-width: 0; width: 100%; gap: 6px 16px; }
 .ap-gc .rk-grid-foot { padding: 10px 12px; }
 
-@media (max-width: 489px) {
+@media (max-width: 767px) {
   /* thumb reach: Setujui and Tolak split the card's width */
   .ap-main .ap-inbox .ap-decide { flex: 1 1 100%; }
   .ap-main .ap-inbox .ap-decide .rk-btn { flex: 1 1 0; }
@@ -371,10 +373,10 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .rk-chat-comp .rk-send:disabled { background: var(--neutral-hover); color: var(--faint); cursor: not-allowed; }
 .rk-chat-comp .rk-send .rk-icon { width: 14px; height: 14px; }
 :root[data-theme="dark"] .rk-askbar, :root[data-theme="dark"] .rk-chat-comp { box-shadow: none; }
-@media (max-width: 600px) {
+@media (max-width: 767px) {
   .rk-askbar { border-radius: 12px 12px 0 0; }
-  .rk-chat-comp .rk-send { width: 40px; height: 40px; }
-  .rk-chat-comp textarea { min-height: 40px; padding: 10px 4px; }
+  .rk-chat-comp .rk-send { width: var(--touch); height: var(--touch); }
+  .rk-chat-comp textarea { min-height: var(--touch); padding: 10px 4px; }
   .rk-askbar .rk-btn-primary, .rk-askbar-chat { height: auto; }
 }
 
@@ -386,28 +388,28 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .rk-auth .rk-field > label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
 .rk-auth .rk-field > input { background: var(--surface); border-color: var(--ap-field-line); border-radius: var(--r-btn); }
 .rk-auth .rk-field > input:hover { background: var(--surface); border-color: var(--border); }
-@media (max-width: 860px) { .rk-auth-pitch h2 { font-size: 22px; line-height: 28px; } }
+@media (max-width: 1023px) { .rk-auth-pitch h2 { font-size: 22px; line-height: 28px; } }
 
-@media (max-width: 600px) {
+@media (max-width: 767px) {
   .ap-main .rk-pagehead { padding: 0 16px; }
   .ap-main .rk-pagehead-row { min-height: 52px; padding: 10px 0 4px; }
   .ap-main .rk-pagehead h1 { font-size: 17px; }
   .ap-main .rk-shell-content { padding: 8px 16px 24px; }
   .ap-main .rk-search { flex-basis: 100%; }
-  /* phone: index.html makes every control at least 40px tall; the fixed heights above must not cap it */
-  .ap-main .rk-search, .ap-main .rk-seg { height: auto; min-height: 40px; }
+  /* phone: index.html makes every control at least 44px (--touch); the fixed heights above must not cap it */
+  .ap-main .rk-search, .ap-main .rk-seg { height: auto; min-height: var(--touch); }
   .ap-main .rk-viewswitch { min-height: 0; flex: 1 1 100%; }
-  .ap-main .rk-viewswitch-btn { min-height: 40px; height: 40px; }
+  .ap-main .rk-viewswitch-btn { min-height: var(--touch); }
   .ap-main .ap-views > .rk-filterbar { justify-content: flex-start; }
   .ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: auto; }
   .ap-main .rk-pagehead-extra { flex-wrap: wrap; }
   .ap-main .ap-head-search { flex: 1 1 100%; }
-  .ap-shell .rk-navlink { height: auto; min-height: 40px; }
-  .ap-ubah-mode button { min-height: 40px; line-height: 40px; }
+  .ap-shell .rk-navlink { height: auto; min-height: var(--touch); }
+  .ap-ubah-mode button { min-height: var(--touch); line-height: var(--touch); }
 }
 
 /* riset desain K-A4/A4: the sidebar keeps its footer (Tanya Raka) in view; only the nav list scrolls */
-@media (min-width: 861px) {
+@media (min-width: 768px) {
   .ap-shell > .rk-side { position: sticky; top: 48px; height: calc(100vh - 48px); height: calc(100dvh - 48px); display: flex; flex-direction: column; }
   .ap-shell:not(.ap-top) > .rk-side { top: 0; height: 100vh; height: 100dvh; }
   .ap-shell > .rk-side > nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -465,7 +467,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 :root:not([data-theme="dark"]) .ap-shell { --brand: #171717; }
 
 /* phone (P7, K-A8): dashboard lists keep the first column (who) and the last (how much); the rest is one tap away */
-@media (max-width: 600px) {
+@media (max-width: 767px) {
   .ap-main .rk-list-table th:not(:first-child):not(:last-child),
   .ap-main .rk-list-table td:not(:first-child):not(:last-child) { display: none; }
   .ap-attn-row { padding: 14px 16px; }
@@ -506,7 +508,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-work-actions .rk-btn { width: 100%; min-height: 48px; justify-content: center; }
 .ap-work-done h2 { margin: 8px 0 6px; font: 600 13px/18px var(--font-sans); color: var(--muted); }
 .ap-work-done ul { margin: 0; padding: 0; list-style: none; display: grid; gap: 4px; }
-.ap-work-done li { display: flex; align-items: center; gap: 8px; min-height: 40px; padding: 0 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
+.ap-work-done li { display: flex; align-items: center; gap: 8px; min-height: var(--touch); padding: 0 12px; border-radius: 10px; background: var(--surface); border: 1px solid var(--line); }
 .ap-work-done a { color: var(--ink); text-decoration: none; font-weight: 500; }
 .ap-work-tag { margin-left: auto; font-size: 12px; color: var(--muted); }
 .ap-work-count { flex: none; padding: 2px 10px; border-radius: 999px; background: var(--info-tint); color: var(--info); font: 600 12px/20px var(--font-sans); }
@@ -520,7 +522,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-work-counter { max-width: none; padding: 12px 16px 0; }
 .ap-counter { display: grid; gap: 16px; grid-template-columns: minmax(0, 1fr); padding-bottom: 76px; }
 .ap-counter-offline { grid-column: 1 / -1; padding: 10px 14px; border-radius: 10px; background: var(--warn-tint); color: var(--on-warn); border: 1px solid var(--warn-line); font-size: 14px; }
-@media (min-width: 900px) {
+@media (min-width: 1024px) {
   .ap-counter { grid-template-columns: minmax(0, 1fr) 380px; align-items: start; padding-bottom: 16px; }
   .ap-counter-cart { position: sticky; top: 12px; max-height: calc(100dvh - 140px); }
   .ap-counter-bar, .ap-counter-sheet-x { display: none !important; }
@@ -533,7 +535,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-counter-sync::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
 .ap-counter-sync.off { background: var(--warn-tint); color: var(--warn); }
 .ap-counter-groups { display: flex; gap: 6px; overflow-x: auto; margin: 12px 0 0; padding-bottom: 2px; }
-.ap-counter-groups button { flex: none; min-height: 36px; padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
+.ap-counter-groups button { flex: none; min-height: var(--touch); padding: 0 16px; border: 1px solid var(--line); border-radius: 999px; background: var(--surface);
   color: var(--ink-2); font: 500 14px/18px var(--font-sans); cursor: pointer; }
 .ap-counter-groups [aria-selected="true"] { background: var(--ink); border-color: var(--ink); color: var(--surface); }
 .ap-counter-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(148px, 1fr)); gap: 10px; margin-top: 12px; }
@@ -558,7 +560,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-counter-cart-h { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 32px; }
 .ap-counter-cart-h > b { font: 600 17px/22px var(--font-sans); }
 .ap-counter-tools { display: flex; align-items: center; gap: 4px; }
-.ap-counter-sheet-x { display: grid; place-items: center; width: 36px; height: 36px; border: 0; border-radius: 10px; background: var(--neutral); color: var(--ink); cursor: pointer; }
+.ap-counter-sheet-x { display: grid; place-items: center; width: var(--touch); height: var(--touch); border: 0; border-radius: 10px; background: var(--neutral); color: var(--ink); cursor: pointer; }
 .ap-counter-body { flex: 1 1 auto; min-height: 60px; }
 .ap-counter-empty { margin: 24px 0; color: var(--muted); text-align: center; }
 .ap-counter-lines { display: grid; gap: 2px; margin: 0; padding: 0; list-style: none; }
@@ -616,20 +618,20 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-counter-sheet-h h2 { margin: 0; font: 600 22px/28px var(--font-sans); }
 .ap-counter-sheet-h p { margin: 4px 0 0; color: var(--muted); }
 .ap-counter-open-grid { display: grid; gap: 24px; }
-@media (min-width: 900px) { .ap-counter-open-grid { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; } }
+@media (min-width: 1024px) { .ap-counter-open-grid { grid-template-columns: minmax(0, 1fr) 360px; align-items: start; } }
 .ap-counter-open-form { display: grid; gap: 14px; }
 .ap-counter-open-pad { display: grid; gap: 12px; padding: 16px; border: 1px solid var(--line); border-radius: 14px; background: var(--surface); }
 .ap-counter-display { display: grid; gap: 2px; }
 .ap-counter-display small { color: var(--muted); }
 .ap-counter-display b { font: 700 28px/34px var(--font-sans); font-variant-numeric: tabular-nums; }
 .ap-counter-presets { display: flex; flex-wrap: wrap; gap: 8px; }
-.ap-counter-presets button { min-height: 40px; padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: 500 14px/18px var(--font-sans); cursor: pointer; }
+.ap-counter-presets button { min-height: var(--touch); padding: 0 14px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink); font: 500 14px/18px var(--font-sans); cursor: pointer; }
 .ap-counter-presets [aria-pressed="true"] { background: var(--selected); border-color: var(--selected-ink); color: var(--selected-ink); }
 .ap-counter-close { max-width: 560px; }
 .ap-denom { display: grid; gap: 6px; padding: 12px; border: 1px solid var(--line); border-radius: 12px; background: var(--surface); }
 .ap-denom-help { margin: 0 0 4px; color: var(--muted); font-size: 13px; }
 .ap-denom-row { display: grid; grid-template-columns: 110px 90px 1fr; align-items: center; gap: 10px; font-size: 14px; }
-.ap-denom-row input { min-height: 40px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; text-align: right; }
+.ap-denom-row input { min-height: var(--touch); padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font: inherit; text-align: right; }
 .ap-denom-row b { text-align: right; font-variant-numeric: tabular-nums; }
 .ap-denom-sum { display: flex; justify-content: space-between; padding-top: 8px; border-top: 1px solid var(--line); font-weight: 700; }
 /* phone: the order is a sheet behind a bottom bar */
@@ -638,19 +640,24 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-counter-bar span { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 14px; }
 .ap-counter-bar b { font-variant-numeric: tabular-nums; }
 .ap-counter-bar .rk-btn { background: var(--surface); color: var(--ink); }
-@media (max-width: 899px) {
+@media (max-width: 1023px) {
   .ap-counter-cart { display: none; }
   .ap-counter.sheet .ap-counter-cart { display: flex; position: fixed; inset: 48px 0 0; z-index: 26; border-radius: 16px 16px 0 0; border: 0;
     padding-bottom: calc(16px + env(safe-area-inset-bottom)); box-shadow: var(--shadow-overlay); }
 }
-/* tablet: the work shell's bar becomes a left rail */
-@media (min-width: 900px) {
+/* tablet and desktop: the work shell's bar becomes a left rail (rangka.pen POS tablet, portrait and landscape) */
+@media (min-width: 768px) {
   .ap-workshell { display: grid; grid-template-columns: 88px minmax(0, 1fr); grid-template-rows: 48px minmax(0, 1fr); height: 100vh; height: 100dvh; }
   .ap-workshell > .ap-whead { grid-column: 2; grid-row: 1; }
   .ap-workshell > .ap-main { grid-column: 2; grid-row: 2; }
   .ap-workshell > .ap-workbar { grid-column: 1; grid-row: 1 / span 2; grid-template-columns: none !important; grid-auto-rows: min-content; align-content: start; gap: 4px;
     position: static; padding: 10px 8px; border-top: 0; border-right: 1px solid var(--line); }
   .ap-workshell > .ap-workbar a, .ap-workshell > .ap-workbar button { min-height: 60px; font-size: 12px; }
+  /* rail labels wrap to two lines instead of "Kasir tan…" */
+  .ap-workshell > .ap-workbar span { white-space: normal; text-align: center; line-height: 14px; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow-wrap: anywhere; }
+  /* the counter's order bar and sheet sit beside the rail, not over it */
+  .ap-workshell .ap-counter-bar { left: 96px; bottom: calc(16px + env(safe-area-inset-bottom)); }
+  .ap-workshell .ap-counter.sheet .ap-counter-cart { left: 88px; }
   .ap-workshell > .ap-wmore { position: absolute; }
   .ap-workshell .rk-toasts.float { bottom: 16px; }
 }

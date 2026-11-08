@@ -413,9 +413,9 @@
     });
   }
 
-  /* ---------------------------------------------------------------- phone: rows as cards (K-A8, under 490px) */
-  var NARROW = "(max-width: 489px)";
-  /** True under 490px, kept up to date (the list and the form's grid switch to cards). */
+  /* ---------------------------------------------------------------- phone: rows as cards (K-A8, under 768px) */
+  var NARROW = "(max-width: 767px)";
+  /** True under 768px (tokens.json breakpoint), kept up to date (the list and the form's grid switch to cards). */
   function useNarrow() {
     var mq = global.matchMedia ? global.matchMedia(NARROW) : null;
     var ns = useState(!!(mq && mq.matches)), narrow = ns[0], setNarrow = ns[1];

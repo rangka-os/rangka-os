@@ -239,19 +239,19 @@
   .cn-login { min-height: 100%; }
   .cn-login-form { display: flex; flex-direction: column; gap: 16px; }
 
-  @media (max-width: 1100px) {
+  @media (max-width: 1279px) {
     .cn-detail { grid-template-columns: minmax(0, 1fr); }
     .cn-layer { grid-template-columns: minmax(0, 1fr); }
   }
-  @media (min-width: 601px) and (max-width: 860px) {
-    /* the sidebar stays down to phone width (the design system hides it at 860px for the top-nav shell) */
-    .cn-shell { grid-template-columns: var(--sidebar) minmax(0, 1fr); }
-    .cn-shell > .rk-side { display: flex; }
+  .cn-rail-scrim { display: none; }
+  @media (min-width: 768px) and (max-width: 1023px) {
+    /* tablet portrait: the sidebar is the icon rail (console.js); unfolded it floats over the page */
+    .cn-rail-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
   }
-  @media (max-width: 860px) {
+  @media (max-width: 1023px) {
     .cn-grid2 { grid-template-columns: minmax(0, 1fr); }
   }
-  @media (max-width: 600px) {
+  @media (max-width: 767px) {
     /* phone: a 48px bar with the menu button, the sidebar as a drawer over the page */
     .cn-shell { height: auto; min-height: 100%; }
     .cn-main { overflow: visible; }
@@ -260,8 +260,10 @@
     .cn-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
     .cn-nav-open > .cn-nav-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
   }
-  @media (max-width: 640px) {
+  @media (max-width: 767px) {
     .cn-hide-sm { display: none; }
+    .cn-steps-wrap { overflow: visible; }
+    .cn-steps-wrap .rk-steps { min-width: 0; }
     .cn-swatch-groups { grid-template-columns: minmax(0, 1fr); }
     .cn-lp-side { flex-basis: 40%; }
     .cn-counts .cn-count { min-width: 0; flex: 1 1 88px; }

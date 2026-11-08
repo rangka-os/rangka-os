@@ -326,6 +326,62 @@ def test_role_without_screens_sees_no_kerja_and_404(browser, ctx):
     c.close()
 
 
+FIT_JS = """(minTouch) => {
+  const W = innerWidth, small = [];
+  for (const el of document.querySelectorAll('button, a[href], input, select, textarea, [role=button]')) {
+    if (el.tagName === 'INPUT' && el.type === 'hidden') continue;
+    const cs = getComputedStyle(el), r = el.getBoundingClientRect();
+    if (cs.visibility === 'hidden' || cs.display === 'none' || !r.width || !r.height) continue;
+    if (r.bottom < 0 || r.top > innerHeight || r.right < 0 || r.left > W) continue;
+    if (Math.min(r.height, r.width) < minTouch - 0.5) small.push((el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 24) + ' ' + Math.round(r.width) + 'x' + Math.round(r.height));
+  }
+  return {sw: document.documentElement.scrollWidth, W, small};
+}"""
+POS_SIZES = {"phone": {"width": 375, "height": 812}, "tablet-portrait": {"width": 834, "height": 1194},
+             "tablet": {"width": 1194, "height": 834}, "desk": DESK}
+
+
+def test_counter_fits_phone_and_tablet(browser, ctx):
+    """The counter at the rangka.pen POS sizes (phone 375, tablet portrait 834, tablet landscape 1194, desk): no
+    sideways page scroll, and on touch sizes every control is at least 44px in both directions."""
+    o, _ = page_for(browser, ctx, OWNER, DESK)
+    if not o.request.get("/api/v1/r/menu?limit=1").json()["data"]:
+        o.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Es teh", "category": "Minuman", "price": 8000}), headers={"Content-Type": "application/json"})
+    o.close()
+    problems = []
+    for size, vp in POS_SIZES.items():
+        touch = size != "desk"
+        c = browser.new_context(viewport=vp, base_url=ctx["base"], is_mobile=size == "phone", has_touch=touch)
+        assert c.request.post("/auth/login", data=json.dumps({"email": KASIR[0], "password": KASIR[1]}), headers={"Content-Type": "application/json"}).status == 200
+        p = c.new_page()
+        p.on("console", lambda m: m.type == "error" and "401" not in m.text and ctx["errors"].append(f"console: {m.text}"))
+        p.goto("/app/#/w/jual")
+        p.wait_for_selector(".ap-counter-open, .ap-counter-item")
+        if p.locator(".ap-counter-open").count():
+            shot(ctx, p, f"kasir-buka-{size}")
+            p.locator(".ap-counter-open input").first.fill("50000")
+            p.get_by_role("button", name="Buka sesi").click()
+            p.wait_for_selector(".ap-counter-item")
+        p.locator(".ap-counter-item").first.click()
+        p.wait_for_timeout(400)
+        states = [("katalog", None)]
+        if p.locator(".ap-counter-bar").is_visible():  # phone and tablet portrait: the order opens as a sheet
+            states.append(("pesanan", lambda: p.locator(".ap-counter-bar button").last.click()))
+        states.append(("bayar", lambda: p.locator(".ap-counter-foot").get_by_role("button").last.click()))
+        for name, go in states:
+            if go:
+                go()
+                p.wait_for_timeout(400)
+            m = p.evaluate(FIT_JS, 44 if touch else 0)
+            if m["sw"] > m["W"]:
+                problems.append(f"{size} {name}: page scrolls sideways ({m['sw']} > {m['W']})")
+            if m["small"]:
+                problems.append(f"{size} {name}: touch targets under 44px: {m['small'][:8]}")
+            shot(ctx, p, f"kasir-{name}-{size}")
+        c.close()
+    assert not problems, "\n".join(problems)
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep", action="store_true")

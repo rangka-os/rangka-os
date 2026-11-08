@@ -64,6 +64,8 @@ export interface SidebarProps {
   groups?: { label?: string; items: NavItem[] }[];
   current?: string; onNavigate?: (id: string, item: NavItem) => void;
   collapsed?: boolean; onToggleCollapse?: () => void;
+  /** Opened from the tablet-portrait rail: the full sidebar floats over the page (position fixed, shadow). */
+  float?: boolean;
   footer?: Node;
   app?: { name: string; type?: string; icon?: IconName; color?: string }; product?: string; company?: string; outlet?: string; onCompany?: () => void; user?: string; role?: string;
 }
@@ -163,6 +165,14 @@ export declare function ListCard(props: { title: string; subtitle?: string; extr
 export declare function DashGrid(props: { children?: Node }): React.ReactElement;
 export declare function Sparkline(props: { data: number[]; width?: number; height?: number; color?: string }): React.ReactElement;
 export declare function compactNumber(n: number, rupiah?: boolean): string;
+/** Breakpoints from tokens.json: phone < 768, tablet portrait 768-1023, tablet 1024-1279, desktop >= 1280. */
+export declare const BREAKPOINTS: { tablet: number; tabletLandscape: number; desktop: number };
+export type Breakpoint = "phone" | "tablet-portrait" | "tablet" | "desktop";
+export declare function breakpoint(width?: number): Breakpoint;
+/** React hook: the current breakpoint, updated on resize. */
+export declare function useBreakpoint(): Breakpoint;
+/** True on phones and touch tablets (controls are 44px there). */
+export declare function isTouch(): boolean;
 export type ListView = 'list' | 'kanban' | 'group' | 'report';
 export declare function ViewSwitcher(props: { value: ListView; options: { id: ListView; label: string; icon?: IconName }[]; onChange?: (id: ListView) => void; label?: string }): React.ReactElement;
 /** Renders nothing when count is 0; otherwise "<count> dipilih", the actions (children) and a clear button. */

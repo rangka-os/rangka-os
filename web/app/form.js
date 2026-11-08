@@ -744,7 +744,10 @@
     return h("span", { className: "ap-toolmenu", ref: wrap },
       h(R.IconButton, { icon: "more", label: "Tindakan lain", className: "ap-morebtn", disabled: p.disabled, "aria-haspopup": "menu",
         "aria-expanded": open ? "true" : "false", onClick: function () { setOpen(!open); } }),
-      open ? h("div", { className: "ap-toolmenu-pop" }, h(R.Menu, { items: p.items, onClose: function () { setOpen(false); } })) : null);
+      // the menu hangs from the button's right edge; when the button sits near the left (the header wraps on tablets
+      // and phones) it opens to the right instead of running off the screen
+      open ? h("div", { className: "ap-toolmenu-pop" + (wrap.current && wrap.current.getBoundingClientRect().right < 260 ? " left" : "") },
+        h(R.Menu, { items: p.items, onClose: function () { setOpen(false); } })) : null);
   }
 
   /** The label of the app (or module) a model belongs to, for the breadcrumb; "" when meta does not say. */

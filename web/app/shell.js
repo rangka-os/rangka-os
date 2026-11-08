@@ -133,7 +133,9 @@
     var screens = (meta && meta.screens) || {};
     return ((meta && meta.work) || []).filter(function (w) { return screens[w.screen]; }).map(function (w) {
       var s = screens[w.screen];
-      return { id: "w/" + w.screen, label: L(s.label) || w.screen, icon: s.icon || "edit" };
+      // an icon the design system does not draw would leave a blank rail or tab tile: fall back by screen type
+      var icon = s.icon && (!R.ICONS || R.ICONS.indexOf(s.icon) >= 0) ? s.icon : s.type === "counter" ? "store" : "edit";
+      return { id: "w/" + w.screen, label: L(s.label) || w.screen, icon: icon };
     });
   }
   function withWork(meta, groups) {
@@ -369,9 +371,9 @@
   var COLLAPSE_KEY = "rk.sidebar.collapsed";
   function readCollapsed() { try { return global.localStorage.getItem(COLLAPSE_KEY) === "1"; } catch (e) { return false; } }
   function writeCollapsed(on) { try { global.localStorage.setItem(COLLAPSE_KEY, on ? "1" : "0"); } catch (e) {} }
-  var PHONE = "(max-width: 600px)";
+  var PHONE = "(max-width: 767px)"; // tokens.json breakpoint: phone below 768px
   function isPhone() { return !!(global.matchMedia && global.matchMedia(PHONE).matches); }
-  /** True at phone width (≤ 600px), kept up to date. */
+  /** True at phone width (≤ 767px), kept up to date. */
   function usePhone() {
     var ps = useState(isPhone()), phone = ps[0], setPhone = ps[1];
     useEffect(function () {
@@ -621,6 +623,9 @@
     var cms = useState(false), cmdOpen = cms[0], setCmdOpen = cms[1];
     var sms = useState(null), switchAt = sms[0], setSwitchAt = sms[1]; // the switcher's rect while its menu is open
     var phone = usePhone();
+    // tablet portrait (768-1023): the sidebar is the icon rail; its unfold button floats the full sidebar over the page
+    var rail = (R.useBreakpoint ? R.useBreakpoint() : "desktop") === "tablet-portrait";
+    var ros = useState(false), railOpen = ros[0], setRailOpen = ros[1];
     var cacheRef = useRef(boot.cache);
     var featRef = useRef(features);
     featRef.current = features;
@@ -856,9 +861,9 @@
       else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
       else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
     }
-    function onNavigate(id) { RA.navigate(id === "home" ? home || "#/" : "#/" + id); setNavOpen(false); }
+    function onNavigate(id) { RA.navigate(id === "home" ? home || "#/" : "#/" + id); setNavOpen(false); setRailOpen(false); }
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmdOpen(true); }
-    function toggleCollapsed() { var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
+    function toggleCollapsed() { if (rail) { setRailOpen(!railOpen); return; } var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
     var modeToggle = cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
 
     /* ---------------------------------------------------------------- Raka (ai.js, contract 0020) */
@@ -912,7 +917,7 @@
     var sideNavItems = sideNav(meta, features, { approvals: approvalCount });
     var switcher = { title: companyName, subtitle: roleText || undefined,
       onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } };
-    var narrow = collapsed && !phone;
+    var narrow = !phone && (rail ? !railOpen : collapsed), floating = rail && railOpen;
     var side;
     if (ubahOn) {
       side = h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
@@ -923,14 +928,15 @@
       side = h(R.Sidebar, {
         app: { name: name, type: roleText, icon: "store", color: "var(--brand)" },
         groups: navGroups(meta, features, { approvals: approvalCount }), current: navId(route), onNavigate: onNavigate,
-        footer: sideFooter(false, null)
+        collapsed: rail && !railOpen, float: floating, onToggleCollapse: rail ? toggleCollapsed : undefined,
+        footer: sideFooter(rail && !railOpen, null)
       });
     } else {
       side = h(R.Sidebar, {
         switcher: switcher,
         search: { label: "Cari", onOpen: openCmd },
         pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route, home || "#/"), onNavigate: onNavigate,
-        collapsed: narrow, onToggleCollapse: phone ? undefined : toggleCollapsed,
+        collapsed: narrow, float: floating, onToggleCollapse: phone ? undefined : toggleCollapsed,
         footer: sideFooter(narrow, !modeToggle ? null : narrow
           ? h(R.IconButton, { key: "mode", icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })
           : h(React.Fragment, { key: "mode" }, modeToggle))
@@ -999,6 +1005,7 @@
     var shell = h("div", { className: cx("rk-shell ap-shell", kind === "top-nav" ? "top ap-top" : "ap-side", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on") },
         top, side,
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
+        floating && !ubahOn ? h("div", { className: "ap-rail-scrim", onClick: function () { setRailOpen(false); } }) : null,
         h("div", { className: "rk-shell-main" },
           phoneBar,
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,

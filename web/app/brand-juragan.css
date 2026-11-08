@@ -105,14 +105,14 @@
 [data-brand="juragan"] .rk-chat-raka, [data-brand="juragan"] .rk-askbar { --raka: var(--ink-2); }
 
 /* phone: 44px targets for primary actions */
-@media (max-width: 860px) {
-  [data-brand="juragan"] .rk-btn-primary, [data-brand="juragan"] .rk-btn-lg { min-height: 40px; }
+@media (max-width: 1023px) {
+  [data-brand="juragan"] .rk-btn-primary, [data-brand="juragan"] .rk-btn-lg { min-height: var(--touch); }
   [data-brand="juragan"] .rk-pagehead h1 { font-size: 20px; line-height: 26px; }
 }
 
 /* phone tab bar (shell.js, only with data-brand="juragan") */
 .ap-tabbar { display: none; }
-@media (max-width: 860px) {
+@media (max-width: 1023px) {
   [data-brand="juragan"] .ap-tabbar {
     display: grid; grid-template-columns: repeat(4, 1fr); position: sticky; bottom: 0; z-index: 20;
     background: var(--surface); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom));
@@ -152,11 +152,11 @@
 .ap-docempty { display: flex; justify-content: flex-start; padding: 4px 0 16px; }
 [data-brand="juragan"] .ap-docsec-t { font: 600 14px/20px "Inter", var(--font-sans); }
 [data-brand="juragan"] .rk-doc-lock { background: var(--soft); border: 0; border-radius: 8px; color: var(--ink-2); }
-@media (max-width: 860px) {
+@media (max-width: 1023px) {
   .ap-docsum { padding: 14px; }
   .ap-docsum-big { font-size: 28px; line-height: 34px; }
-  .ap-docsum-acts .rk-btn { min-height: 40px; }
-  .ap-docempty .rk-btn { min-height: 40px; }
+  .ap-docsum-acts .rk-btn { min-height: var(--touch); }
+  .ap-docempty .rk-btn { min-height: var(--touch); }
 }
 [data-brand="juragan"] .ap-docsum-party a { color: var(--ink); text-decoration: none; }
 [data-brand="juragan"] .ap-docsum-party a:hover { text-decoration: underline; }
@@ -164,13 +164,13 @@
 
 /* phone page head of a record (it has a back button): back, title, status and the ⋯ on one row; the breadcrumb trail
    is a laptop thing. List heads keep their own wrapping. */
-@media (max-width: 860px) {
+@media (max-width: 1023px) {
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) { flex-wrap: nowrap; }
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-crumbs { display: none; }
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > h1 { flex: 0 1 auto; font-size: 17px; line-height: 24px; }
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-pill { flex: none; }
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-pagehead-extra { width: auto; flex-wrap: nowrap; flex: none; }
-  [data-brand="juragan"] .ap-main .rk-pagehead-row > .rk-iconbtn, [data-brand="juragan"] .ap-main .ap-morebtn { width: 40px; height: 40px; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row > .rk-iconbtn, [data-brand="juragan"] .ap-main .ap-morebtn { width: var(--touch); height: var(--touch); }
 }
 .ap-docsum-line { display: inline-flex; align-items: center; gap: 6px; }
 .ap-docsum-line .rk-icon { width: 14px; height: 14px; }
@@ -193,7 +193,7 @@
 [data-brand="juragan"] .ap-main .ap-inbox-row { padding: 14px 16px; }
 [data-brand="juragan"] .ap-inbox-party { font: 600 14px/20px "Inter", var(--font-sans); }
 [data-brand="juragan"] .ap-inbox-amt { font: 600 16px/22px "Inter", var(--font-sans); letter-spacing: -0.01em; }
-@media (max-width: 489px) {
+@media (max-width: 767px) {
   [data-brand="juragan"] .ap-inbox-head { flex-direction: column; align-items: flex-start; gap: 2px; }
   [data-brand="juragan"] .ap-inbox-amt { font-size: 24px; line-height: 30px; }
   [data-brand="juragan"] .ap-main .ap-inbox .ap-decide { margin-top: 6px; }
@@ -202,13 +202,13 @@
 
 /* Perlu diurus on a phone: what (title, detail, state) on the left, the one action on the right; no stacked button rows */
 [data-brand="juragan"] .ap-attn-head { border-bottom: 0; padding-bottom: 6px; }
-@media (max-width: 600px) { [data-brand="juragan"] .ap-attn-head { padding-left: 16px; padding-right: 16px; } }
-@media (max-width: 600px) {
+@media (max-width: 767px) { [data-brand="juragan"] .ap-attn-head { padding-left: 16px; padding-right: 16px; } }
+@media (max-width: 767px) {
   [data-brand="juragan"] .ap-attn-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 12px; align-items: center; padding: 12px 16px; }
   [data-brand="juragan"] .ap-attn-main { grid-column: 1; grid-row: 1; flex: none; }
   [data-brand="juragan"] .ap-attn-badge { grid-column: 1; grid-row: 2; justify-self: start; }
   [data-brand="juragan"] .ap-attn-amt { grid-column: 2; grid-row: 1; margin: 0; justify-self: end; }
-  [data-brand="juragan"] .ap-attn-row > .rk-btn { grid-column: 2; grid-row: 1 / span 2; min-height: 40px; }
+  [data-brand="juragan"] .ap-attn-row > .rk-btn { grid-column: 2; grid-row: 1 / span 2; min-height: var(--touch); }
   [data-brand="juragan"] .ap-attn-amt + .rk-btn { grid-row: 2; }
 }
 
@@ -219,13 +219,38 @@
 .ap-ro-list dd { margin: 0; color: var(--ink); line-height: 20px; overflow-wrap: anywhere; }
 .ap-ro-list a { color: var(--link); text-decoration: none; }
 .ap-ro-list a:hover { text-decoration: underline; }
-@media (min-width: 900px) { .ap-ro-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-ro-list > .wide { grid-column: 1 / -1; } }
-@media (max-width: 489px) { .ap-ro-list > div { grid-template-columns: 112px minmax(0, 1fr); } }
+@media (min-width: 1024px) { .ap-ro-list { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ap-ro-list > .wide { grid-column: 1 / -1; } }
+@media (max-width: 767px) { .ap-ro-list > div { grid-template-columns: 112px minmax(0, 1fr); } }
 .rk-grid-scroll:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 /* a record head with real buttons (draft: Simpan draf, Ajukan): the title keeps its row, the buttons share the next */
-@media (max-width: 860px) {
+@media (max-width: 1023px) {
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn):has(> .rk-pagehead-extra > .rk-btn) { flex-wrap: wrap; }
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn):has(> .rk-pagehead-extra > .rk-btn) > h1 { flex: 1 1 0; white-space: normal; }
   [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-iconbtn) > .rk-pagehead-extra:has(> .rk-btn) { width: 100%; }
   [data-brand="juragan"] .ap-main .rk-pagehead-extra:has(> .rk-btn) > .rk-btn { flex: 1 1 0; min-height: 44px; }
+}
+
+/* ---- touch (phones and touch tablets, tokens.json breakpoint): every control is a 44px target, also under the
+ * Juragan metrics above. The phone-only layout rules stay in index.html and app.css at (max-width: 767px). */
+@media (max-width: 767px), (max-width: 1279px) and (pointer: coarse) {
+  :root, :root[data-brand="juragan"]:not([data-theme="dark"]), :root[data-brand="juragan"] { --control-sm: var(--touch); --control: var(--touch); --field: var(--touch); --control-lg: var(--touch); --row: 48px; }
+  body button, body [role=button], body select, body textarea, body input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: var(--touch); }
+  body .rk-iconbtn { min-width: var(--touch); }
+  body .rk-select-btn, body .rk-btn, body .rk-iconbtn { height: auto; min-height: var(--touch); }
+  .ap-main .rk-search, .ap-main .rk-seg, .ap-main .rk-fbtn, .ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: auto; min-height: var(--touch); }
+  .ap-main .rk-viewswitch-btn { min-height: var(--touch); height: var(--touch); min-width: var(--touch); }
+  body button:not(.rk-switch) { min-width: var(--touch); }
+  .ap-main tr:has(> .rk-cb-cell) > td { height: 48px; }
+  .ap-shell .rk-side.collapsed nav { padding-left: 4px; padding-right: 4px; }
+  .ap-shell .rk-navlink, .ap-shell .rk-side-search { height: auto; min-height: var(--touch); }
+  .ap-ubah-mode button { min-height: var(--touch); line-height: var(--touch); }
+  .ap-ubah-navitem .ap-ubah-tools .rk-iconbtn { width: var(--touch); height: var(--touch); }
+  .ap-ubah-group, .ap-ubah-rename { min-height: var(--touch); }
+  .rk-askbar-chip button { width: var(--touch); height: var(--touch); }
+  .rk-chat-comp .rk-send { width: var(--touch); height: var(--touch); }
+  .rk-chat-comp textarea { min-height: var(--touch); padding-top: 12px; padding-bottom: 12px; }
+  .ap-main .pv-card-move { height: var(--touch); }
+  .ap-counter-qty button { width: var(--touch); height: var(--touch); }
+  /* link values in a read-only document (customer, outlet) are taps too */
+  .ap-main .ap-ro-list dd a, .ap-main .ap-docsum-party a { display: inline-flex; align-items: center; min-height: var(--touch); }
 }

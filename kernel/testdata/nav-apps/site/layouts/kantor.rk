@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/layout.json
+# Nested nav.side and responsive behaviour (contracts 0037, 0038)
+name: kantor
+extends: rangka/side-only
+nav:
+  side:
+    - group: {id: Penjualan}
+      collapsed: true
+      items:
+        - {to: 'model:deal'}
+        - label: {id: Data induk}
+          icon: building
+          items:
+            - {to: 'model:customer'}
+            - {to: 'dashboard:crm_overview', label: {id: Ringkasan}}
+responsive:
+  tablet: sidebar
+  phone: tabs
+  tabs:
+    - {to: 'dashboard:crm_overview', label: {id: Beranda}, icon: home}
+    - {to: 'model:deal', icon: invoice}

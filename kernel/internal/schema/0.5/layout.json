@@ -62,8 +62,41 @@
               "items": {
                 "type": "array",
                 "items": {
-                  "$ref": "#/$defs/link"
+                  "anyOf": [
+                    {
+                      "$ref": "#/$defs/link"
+                    },
+                    {
+                      "type": "object",
+                      "required": [
+                        "label",
+                        "items"
+                      ],
+                      "additionalProperties": false,
+                      "description": "A sub-menu (contract 0037)",
+                      "properties": {
+                        "label": {
+                          "$ref": "model.json#/$defs/label"
+                        },
+                        "icon": {
+                          "type": "string"
+                        },
+                        "items": {
+                          "type": "array",
+                          "minItems": 1,
+                          "maxItems": 12,
+                          "items": {
+                            "$ref": "#/$defs/link"
+                          }
+                        }
+                      }
+                    }
+                  ]
                 }
+              },
+              "collapsed": {
+                "type": "boolean",
+                "description": "Starting state of the group (contract 0037)"
               }
             }
           }
@@ -79,6 +112,37 @@
         "app_switcher": {
           "type": "boolean",
           "default": true
+        }
+      }
+    },
+    "responsive": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Desk shells per width (contract 0038); breakpoints come from the design tokens",
+      "properties": {
+        "tablet": {
+          "enum": [
+            "rail",
+            "sidebar",
+            "drawer"
+          ],
+          "description": "768-1023px; default rail"
+        },
+        "phone": {
+          "enum": [
+            "drawer",
+            "tabs"
+          ],
+          "description": "below 768px; default drawer"
+        },
+        "tabs": {
+          "type": "array",
+          "minItems": 2,
+          "maxItems": 5,
+          "items": {
+            "$ref": "#/$defs/link"
+          },
+          "description": "phone: tabs only; a last Menu tab opens the drawer"
         }
       }
     },

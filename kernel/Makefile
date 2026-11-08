@@ -53,6 +53,8 @@ compare-python: build
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors" \
 	            "testdata/modules-apps/apps --site testdata/modules-apps/site" \
 	            "testdata/broken-modules-apps/apps --site testdata/broken-modules-apps/site" \
+	            "testdata/nav-apps/apps --site testdata/nav-apps/site" \
+	            "testdata/broken-nav-apps/apps --site testdata/broken-nav-apps/site" \
 	            "testdata/print-apps/apps --site testdata/print-site" \
 	            "testdata/broken-print-apps/apps --site testdata/broken-print-site" \
 	            "testdata/canvas/apps --site testdata/canvas/site" \

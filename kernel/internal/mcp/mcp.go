@@ -38,6 +38,8 @@ type Handler struct {
 	Meta    func(ctx context.Context, a engine.Actor) (any, error)
 	File    func(ctx context.Context, path string) (any, error)
 	Status  func(ctx context.Context, org string) any
+	// Catalogue is GET /api/v1/catalogue with its read rule (contract 0036 §3).
+	Catalogue func(ctx context.Context, c *Caller) (any, error)
 }
 
 type request struct {
@@ -249,6 +251,7 @@ var assistantTools = map[string]bool{
 	"rangka_meta": true, "rangka_get_file": true, "rangka_query": true, "rangka_get_record": true, "rangka_dashboard": true,
 	"rangka_system_status": true, "rangka_changeset_propose": true, "rangka_changeset_validate": true,
 	"rangka_changeset_preview": true, "rangka_changeset_status": true, "rangka_approvals_list": true,
+	"rangka_catalogue_list": true,
 }
 
 func obj(props map[string]any, required ...string) map[string]any {
@@ -270,6 +273,7 @@ func tools() []any {
 		map[string]any{"name": "rangka_get_record", "title": "Read a record", "description": "One record with its child rows.", "inputSchema": obj(map[string]any{"model": strp("model name"), "name": strp("record name")}, "model", "name"), "annotations": ro},
 		map[string]any{"name": "rangka_dashboard", "title": "Dashboard numbers", "description": "Computed widgets of a dashboard over the last period days.", "inputSchema": obj(map[string]any{"name": strp("dashboard name"), "period": map[string]any{"type": "integer", "minimum": 1}}, "name"), "annotations": ro},
 		map[string]any{"name": "rangka_system_status", "title": "System status", "description": "Kernel version, capabilities (db, cache, queue, scheduler, realtime …), apps and counts.", "inputSchema": obj(map[string]any{}), "annotations": ro},
+		map[string]any{"name": "rangka_catalogue_list", "title": "Catalogue", "description": "Modules, apps and connectors this installation can install, with plain-word summaries, whether each is installed, its plan and, for connectors, state (available, needs_auth, ready, error) and auth fields without values (GET /api/v1/catalogue). Only for people who may propose change sets.", "inputSchema": obj(map[string]any{}), "annotations": ro},
 		map[string]any{"name": "rangka_changeset_propose", "title": "Propose a change set", "description": "Propose metadata changes. ops: [{op: create|replace|patch|delete, path: modules/<module>/models/<m>.rk | apps/<app>/app.rk | system.rk | config.rk | themes/<t>.rk | …, content: full .rk text (create/replace), patch: RFC 6902 list (patch)}]. Returns the change set with layers and risk; a person must approve it.",
 			"inputSchema": obj(map[string]any{"title": strp("short title"), "reason": strp("why"), "ops": map[string]any{"type": "array", "minItems": 1, "items": map[string]any{"type": "object",
 				"properties": map[string]any{"op": map[string]any{"enum": []string{"create", "replace", "patch", "delete"}}, "path": strp("change-set path"), "content": strp(".rk text"), "patch": map[string]any{"type": "array", "items": map[string]any{"type": "object"}}},
@@ -333,6 +337,11 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 	case "rangka_dashboard":
 		d, _, err := e.Dashboard(ctx, c.Actor, sarg(args, "name"), iarg(args, "period"))
 		return d, err
+	case "rangka_catalogue_list":
+		if h.Catalogue == nil {
+			return nil, errUnknownTool
+		}
+		return h.Catalogue(ctx, c)
 	case "rangka_system_status":
 		return h.Status(ctx, c.Actor.Org), nil
 	case "rangka_changeset_propose":

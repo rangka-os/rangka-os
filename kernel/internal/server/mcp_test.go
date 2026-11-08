@@ -48,7 +48,7 @@ func TestMCP(t *testing.T) {
 	for _, tl := range tools {
 		names = append(names, get(tl, "name").(string))
 	}
-	want := "rangka_meta,rangka_get_file,rangka_query,rangka_get_record,rangka_dashboard,rangka_system_status,rangka_changeset_propose,rangka_changeset_validate,rangka_changeset_preview,rangka_changeset_status,rangka_approvals_list,rangka_approve"
+	want := "rangka_meta,rangka_get_file,rangka_query,rangka_get_record,rangka_dashboard,rangka_system_status,rangka_catalogue_list,rangka_changeset_propose,rangka_changeset_validate,rangka_changeset_preview,rangka_changeset_status,rangka_approvals_list,rangka_approve"
 	if strings.Join(names, ",") != want {
 		t.Fatalf("tools: %s", strings.Join(names, ","))
 	}

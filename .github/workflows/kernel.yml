@@ -1,5 +1,5 @@
 # Kernel tests on every push and pull request to main: unit and database tests (backup -> restore included),
-# then the Go validator against the Python reference on the real metadata.
+# then the Go validator against the Python reference on the real metadata; job web runs the web app and Console suites.
 # The tests read rangka-apps and rangka-connectors next to this repo, so all three are checked out side by side.
 name: kernel
 
@@ -55,3 +55,36 @@ jobs:
           RANGKA_OS: ${{ github.workspace }}/rangka-os
           CONNECTORS: ${{ github.workspace }}/rangka-connectors
         run: python3 rangka-apps/tests/day_one.py --site demo-fnb
+
+  web:
+    # The end-user web app against a real kernel (web/app/test_app.py: Playwright, Go, PostgreSQL 16, the kernel's v0
+    # catalogue and rangka-connectors) and the Console in demo mode (web/console/test_console.py, vendored React).
+    # --require-all: a missing tool or a feature on contract mocks fails instead of skipping.
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+        with: { path: rangka-os }
+      - uses: actions/checkout@v4
+        with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
+
+      - uses: actions/setup-go@v5
+        with: { go-version-file: rangka-os/kernel/go.mod }
+
+      - name: Install PostgreSQL 16
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y postgresql-16
+          echo "PGBIN=/usr/lib/postgresql/16/bin" >> "$GITHUB_ENV"
+
+      - uses: actions/setup-python@v5
+        with: { python-version: '3.12' }
+      - name: Install Playwright and Chromium
+        run: |
+          python -m pip install playwright
+          python -m playwright install --with-deps chromium
+
+      - name: Web app (web/app/test_app.py)
+        run: python rangka-os/web/app/test_app.py --require-all
+
+      - name: Console (web/console/test_console.py)
+        run: python rangka-os/web/console/test_console.py --react-dir rangka-os/web/app/vendor

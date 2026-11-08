@@ -3,9 +3,9 @@
 
     python3 web/app/test_app.py [--width 1280|400] [--require-all] [--shots DIR] [--keep] [-k NAME]
 
-Builds the kernel into a temp dir, copies rangka-apps/{apps,fixtures,sites/kopi-senja} and rangka-connectors into a
-temp workspace, starts a throwaway Postgres (kernel/scripts/pgtemp.sh), runs migrate, seed (owner ceo@saga.co.id /
-rangka-demo) and `rangka user add` for manajer@contoh.test (sales_manager) and sales@contoh.test (sales_rep), adds the
+Builds the kernel into a temp dir, copies the kernel's v0 catalogue (kernel/testdata/catalogue-v0: apps, fixtures,
+sites/kopi-senja) and rangka-connectors into a temp workspace, starts a throwaway Postgres (kernel/scripts/pgtemp.sh),
+runs migrate, seed (owner ceo@saga.co.id / rangka-demo) and `rangka user add` for manajer@contoh.test (sales_manager) and sales@contoh.test (sales_rep), adds the
 owner to a second org toko-kedua (`--create-org`, for the org switcher), then
 serves on a free port with --web <repo>/web. Scenarios are the functions test_<name>(page, ctx) below, run in file
 order, each in a fresh browser context; -k keeps those whose name contains NAME. A scenario fails on an exception or
@@ -31,8 +31,9 @@ import argparse, csv, email, hashlib, io, uuid, email.policy, http.cookiejar, js
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))  # rangka-os checkout (or a worktree of it)
-WS = os.path.dirname(ROOT)  # holds rangka-apps and rangka-connectors (symlinks next to worktrees)
+WS = os.path.dirname(ROOT)  # holds rangka-connectors (a symlink next to worktrees)
 KERNEL = os.path.join(ROOT, "kernel")
+CATALOGUE = os.path.join(KERNEL, "testdata", "catalogue-v0")  # rangka-apps as of v0: apps, fixtures, sites/kopi-senja
 
 OWNER = ("ceo@saga.co.id", "rangka-demo")
 USERS = [("manajer@contoh.test", "sales_manager", "Manajer Contoh"), ("sales@contoh.test", "sales_rep", "Sales Contoh")]
@@ -991,7 +992,8 @@ def writable_body(ctx, model, rec):
 def ensure_records(ctx, model, minimum):
     """Make sure `model` has at least `minimum` records by creating drafts through the API as the owner."""
     h = Http(ctx.base).login(*ctx.owner)
-    _, body = h.call("GET", f"/api/v1/r/{model}?limit=1")
+    # children=1: a list leaves out child rows, and a client create below a table's min_rows is a 422
+    _, body = h.call("GET", f"/api/v1/r/{model}?limit=1&children=1")
     have, seed = body["total"], (body["data"] or [None])[0]
     assert seed, f"no seeded {model} to copy from"
     for i in range(max(0, minimum - have)):
@@ -1024,7 +1026,9 @@ def test_list_search_filter_page(page, ctx):
     page.get_by_role("heading", name=ctx.model_label("sales_invoice")).first.wait_for(timeout=5000)
     chips = page.locator(".rk-table tbody .rk-chip").all_inner_texts()
     chips = [c.lower() for c in chips]
-    assert "lunas" in chips and "diajukan" in chips, f"seeded Lunas and Diajukan chips, got {sorted(set(chips))}"
+    # a submitted, unpaid invoice is Diajukan until its due date and Jatuh tempo after it (engine.js derives overdue from
+    # today), and the fixtures' due dates are fixed (the last is 5 Nov 2026): either chip is the seeded unpaid invoice
+    assert "lunas" in chips and ({"diajukan", "jatuh tempo"} & set(chips)), f"seeded Lunas and Diajukan/Jatuh tempo chips, got {sorted(set(chips))}"
     assert any(m == "GET" and "limit=20" in u and "/r/sales_invoice" in u for m, u in reqs), "the first page asks for limit=20"
 
     # search: a customer's name narrows the rows and goes out as q=
@@ -1041,7 +1045,7 @@ def test_list_search_filter_page(page, ctx):
     before = table_rows(page).count()
     assert before == 20 and counts[key] < before, "a full first page to narrow"
     n_req = len(reqs)
-    box = page.get_by_label("Cari", exact=True)
+    box = page.get_by_role("textbox", name="Cari", exact=True)  # the list search, not the shell's Cari button
     box.fill(part)
     page.wait_for_timeout(700)
     q_reqs = [u for m, u in reqs[n_req:] if "q=" in u and "/r/sales_invoice" in u]
@@ -3510,9 +3514,11 @@ def main():
         if b.returncode:
             raise RuntimeError("kernel does not build:\n" + b.stderr[-1500:])
         work = os.path.join(tmp, "ws")
-        for src in ("rangka-apps/apps", "rangka-apps/fixtures", "rangka-apps/sites/kopi-senja", "rangka-connectors"):
-            shutil.copytree(os.path.join(WS, src), os.path.join(work, src))
-        APPS, SITE, CONN = (os.path.join(work, "rangka-apps", "apps"), os.path.join(work, "rangka-apps", "sites", "kopi-senja"), os.path.join(work, "rangka-connectors"))
+        # The suite runs on the kernel's frozen v0 catalogue (apps core/crm/sales, site kopi-senja, its fixtures), the
+        # same one `make test` and `make run-demo` use, so the kernel does not follow rangka-apps' layout (contract 0001)
+        shutil.copytree(CATALOGUE, os.path.join(work, "catalogue"))
+        shutil.copytree(os.path.join(WS, "rangka-connectors"), os.path.join(work, "rangka-connectors"))
+        APPS, SITE, CONN = (os.path.join(work, "catalogue", "apps"), os.path.join(work, "catalogue", "sites", "kopi-senja"), os.path.join(work, "rangka-connectors"))
         enable_approval_policy(SITE)
         enable_import_def(SITE)
         enable_print_formats(SITE)
@@ -3526,7 +3532,7 @@ def main():
             raise RuntimeError("postgres did not start: " + pg.stderr[-800:])
         db = pg.stdout.strip().splitlines()[-1]
         common = ["--apps", APPS, "--site", SITE, "--db", db, "--connectors", CONN]
-        steps = [["migrate"] + common, ["seed"] + common + ["--fixtures", os.path.join(work, "rangka-apps", "fixtures"), "--email", OWNER[0], "--password", OWNER[1]]]
+        steps = [["migrate"] + common, ["seed"] + common + ["--fixtures", os.path.join(work, "catalogue", "fixtures"), "--email", OWNER[0], "--password", OWNER[1]]]
         steps += [["user", "add", "--db", db, "--org", ORG, "--email", e, "--password", PASSWORD, "--role", role, "--name", name, "--record", RECORDS[e]] for e, role, name in USERS]
         # a second org for the org switcher (S5): the owner is also owner of toko-kedua (existing account, no password)
         steps += [["user", "add", OWNER[0], "--db", db, "--org", SECOND_ORG, "--role", "owner", "--create-org"]]

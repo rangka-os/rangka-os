@@ -7,9 +7,12 @@ apps and connectors), rangka-edge (one skill), rangka-cloud (private interview s
 
 ## Context
 
-- **The Mogu case (8 Nov 2026).** Dede onboarded "Mogu", an F&B business: kimbab and es krim gabin, sold at an outlet
-  and through GoFood, GrabFood and ShopeeFood, all manual today. Raka recommended Rangka F&B Cabang. Dede then asked
-  for a POS. Raka said it had made one. Nothing had changed.
+- **An example that exposed it (8 Nov 2026).** In a test onboarding, an owner described a small F&B business: one
+  outlet plus GoFood, GrabFood and ShopeeFood orders, all recorded by hand. Raka recommended Rangka F&B Cabang. The
+  owner then asked for a POS. Raka said it had made one. Nothing had changed.
+
+  The business is only an example. The same gap shows for any owner, any business type and any capability Raka has
+  not been taught: a rental owner asking for deposits, a course asking for attendance, a shop asking about Tokopedia.
 - **The POS exists.** rangka-apps ships `kasir`: module `pos` plus the cashier work screen (0030). Five of its six
   modules (`users`, `contacts`, `catalogue`, `outlets`, `stock`) are already in `fnb_cabang`. Adding it would add
   only `pos`, and the items, outlets, stock and people would stay one set of data across both apps.
@@ -139,15 +142,15 @@ Skills are instructions. They cannot know what exists on a site, and they cannot
   - an answer that names these apps;
   - an escalation.
 
-  rangka-ai CI runs them with the scripted provider on every PR, and with a real provider nightly. First eval: "mau
-  sekalian POS" on an F&B Cabang site proposes adding `kasir` and says it shares `catalogue`, `outlets`, `stock`
+  rangka-ai CI runs them with the scripted provider on every PR, and with a real provider nightly. Evals use made-up
+  businesses, never a real customer's data. First eval: "mau sekalian POS" on an F&B Cabang site proposes adding `kasir` and says it shares `catalogue`, `outlets`, `stock`
   and `users` and adds `pos`.
 - **Missing pieces are said.**
   - `rangka-compose` and `rangka-connectors` tell the agent to say plainly when nothing fits, offer what does exist
     and file a gap.
-  - For Mogu that means:
-    - no GoFood, GrabFood or ShopeeFood connector exists, so it offers daily sales or a CSV import;
-    - no offline POS on Edge yet, so the cashier works online for now.
+  - In the example above:
+    - no GoFood, GrabFood or ShopeeFood connector exists, so the agent offers daily sales or a CSV import;
+    - there is no offline POS on Edge yet, so the cashier works online for now.
 
 ### 7. Guardrails do not change
 
@@ -175,7 +178,7 @@ Skills are instructions. They cannot know what exists on a site, and they cannot
 
 ## Order
 
-1. **The Mogu fix:**
+1. **Composition first** (the example's gap, and the most common request):
    - `rangka-concepts`, `rangka-changesets`, `rangka-compose`, `rangka-app-kasir`;
    - `rangka catalogue --json` and `rangka_catalogue`;
    - Raka's `load_skill` and the claim guardrail;

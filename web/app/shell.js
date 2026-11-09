@@ -958,7 +958,9 @@
     var current = orgs.filter(function (o) { return o.id === me.org; })[0];
     var companyName = me.orgName || (current ? current.name || current.id : name);
     var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta,
-      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs };
+      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs,
+      // a change set built elsewhere (the catalogue's Pasang / Lepas) opens in the same card as Ubah's
+      showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); } };
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 
     var kind = shellKind(meta);

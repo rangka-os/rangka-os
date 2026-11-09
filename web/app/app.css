@@ -351,6 +351,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-cat-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ap-cat-text b { font-weight: 600; }
 .ap-cat-text .ap-muted { overflow-wrap: anywhere; }
+.ap-cat-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .ap-cat-tech { margin: 0; font: 400 12px/16px var(--font-mono, monospace); color: var(--faint, var(--muted)); }
 
 /* ---- Ubah bars: the pen's change banner (warm yellow) for previews ---- */

@@ -192,6 +192,12 @@ with sync_playwright() as pw:
     page.wait_for_selector(".rk-drawer", timeout=5000)
     if "apps/crm/app.rk" not in page.locator(".rk-drawer").inner_text():
         fail("catalogue drawer: no source path")
+    # Lepas (contract 0036 §4): the demo backend writes the same config.rk patch and opens the previewed change set
+    page.locator(".rk-drawer").get_by_role("button", name="Lepas", exact=True).click()
+    page.wait_for_function("location.hash.indexOf('#/changesets/cs_') === 0", timeout=5000)
+    page.wait_for_function("document.querySelector('.rk-pagehead h1') && document.querySelector('.rk-pagehead h1').innerText.indexOf('Lepas') === 0", timeout=5000)
+    if "dipratinjau" not in page.locator(".rk-pagehead").inner_text().lower():
+        fail(f"catalogue Lepas: change set not previewed: {page.locator('.rk-pagehead').inner_text()!r}")
     page.goto(BASE + "?demo=1#/connectors")
     page.wait_for_selector(".rk-table tbody tr", timeout=15000)
     page.wait_for_function("document.querySelector('.cn-main').innerText.includes('xendit')", timeout=5000)

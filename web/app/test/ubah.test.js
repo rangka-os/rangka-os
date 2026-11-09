@@ -478,3 +478,17 @@ test("opsAddTable writes into the site company module (fixtures for the kernel c
     assert.strictEqual(fs.readFileSync(fx, "utf8"), body, "fixture " + fx + " is stale; run with UPDATE_FIXTURES=1");
   }
 });
+
+test("riskReasonText says the kernel's risk reasons in Bahasa Indonesia", () => {
+  assert.strictEqual(RA.riskReasonText("installs catatan (with what they require)"), "Memasang catatan beserta yang dibutuhkannya");
+  assert.strictEqual(RA.riskReasonText("removes stock (preview counts their rows; rows stay, tables are kept)"),
+    "Melepas stock (pratinjau menghitung datanya; data dan tabelnya tetap disimpan)");
+  assert.strictEqual(RA.riskReasonText("contacts leaves config.modules but stays installed (another unit requires it)"),
+    "contacts keluar dari config.modules tapi tetap terpasang karena dibutuhkan bagian lain");
+  assert.strictEqual(RA.riskReasonText("adds money/stock field x_total to custom/deal.rk"), "Menambah kolom uang atau stok x_total ke custom/deal.rk");
+  assert.strictEqual(RA.riskReasonText("adds field x_po to custom/deal.rk"), "Menambah kolom x_po ke custom/deal.rk");
+  assert.strictEqual(RA.riskReasonText("changes config.plan"), "Mengubah config.plan");
+  assert.strictEqual(RA.riskReasonText("new model x_sewa without permissions: every role has full access"),
+    "Model baru x_sewa tanpa izin: semua peran bisa membuka dan mengubahnya");
+  assert.strictEqual(RA.riskReasonText("something the kernel says later"), "something the kernel says later");
+});

@@ -1372,6 +1372,49 @@ def test_catalogue_page(page, ctx):
     page.get_by_text("Kamu tidak punya akses ke Modul dan sambungan").first.wait_for(timeout=10000)
 
 
+def test_catalogue_install_module(page, ctx):
+    """Contract 0036 §4: the owner installs module catatan from "Modul dan sambungan": Pasang opens the change-set card
+    with the risk word, Setujui & terapkan applies it, and its menu group appears without a reload. The change set is
+    reverted afterwards so later scenarios see the site as it was."""
+    open_route(page, ctx, "#/pengaturan/katalog")
+    card = page.locator(f'.ap-cat-card[data-name="{CATALOGUE_MODULE}"]')
+    card.wait_for(timeout=10000)
+    assert "Belum dipasang" in card.inner_text(), card.inner_text()
+    open_nav(page)
+    assert page.locator(".rk-side").get_by_role("link", name="Catatan", exact=True).count() == 0, "catatan has a menu entry before it is installed"
+    if page.locator(".ap-nav-open").count():
+        page.keyboard.press("Escape")
+    card.click()
+    drawer = page.locator(".rk-drawer")
+    drawer.get_by_role("button", name="Pasang", exact=True).click()
+    cs_card = page.locator(".ap-ubah-card")
+    cs_card.wait_for(timeout=15000)
+    txt = cs_card.inner_text()
+    assert "Pasang Buku catatan" in txt and "Risiko" in txt, txt
+    assert "Memasang catatan beserta yang dibutuhkannya" in txt and "installs" not in txt, "risk reason in Bahasa Indonesia: " + txt
+    if ctx.args.shots:
+        page.screenshot(path=os.path.join(ctx.args.shots, f"catalogue-pasang-{ctx.args.width}.png"))
+    loaded = page.evaluate("() => performance.getEntriesByType('navigation').length")
+    cs_card.get_by_role("button", name="Setujui & terapkan").click()
+    cs_card.wait_for(state="detached", timeout=20000)
+    open_nav(page)
+    page.locator(".rk-side").get_by_role("link", name="Catatan", exact=True).wait_for(timeout=15000)
+    assert page.evaluate("() => performance.getEntriesByType('navigation').length") == loaded, "the app reloaded the page"
+    if page.locator(".ap-nav-open").count():
+        page.keyboard.press("Escape")
+    page.wait_for_function("(n) => { const c = document.querySelector('.ap-cat-card[data-name=\"' + n + '\"]'); return c && c.innerText.includes('Terpasang'); }",
+                           arg=CATALOGUE_MODULE, timeout=10000)
+    # an app named by config.rk can be taken out again: its detail offers Lepas (not clicked)
+    page.locator('.ap-cat-card[data-name="crm"]').click()
+    page.locator(".rk-drawer").get_by_role("button", name="Lepas", exact=True).wait_for(timeout=5000)
+
+    h = Http(ctx.base).login(*ctx.owner)
+    done = [c for c in h.call("GET", "/api/v1/changesets?status=applied")[1]["data"] if c.get("source") == "catalogue" and c.get("title") == "Pasang Buku catatan"]
+    assert done, "no applied catalogue change set"
+    st, body = h.call("POST", f"/api/v1/changesets/{done[0]['id']}/revert")
+    assert st == 200, (st, body)
+
+
 # ---------------------------------------------------------------------------------------------- forms and the document lifecycle (Task 6)
 def rupiah(n):
     s = f"{abs(int(n)):,}".replace(",", ".")
@@ -2955,6 +2998,46 @@ def enable_print_formats(site):
     return True
 
 
+CATALOGUE_MODULE = "catatan"
+CATATAN_MODULE_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: catatan
+version: 1.0.0
+title: {id: Buku catatan, en: Notebook}
+summary: {id: Catat hal kecil yang perlu diingat tim., en: Notes the team needs to remember.}
+category: operations
+icon: sticky-note-line
+requires: {rangka: '>=0.5'}
+"""
+CATATAN_MODEL_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: catatan
+label: {id: Catatan}
+naming: CAT-{####}
+title_field: judul
+fields:
+  - {name: judul, type: data, label: {id: Judul}, required: true, in_list: true}
+"""
+
+
+def enable_catalogue_module(catalogue, site):
+    """Contract 0036 §4 needs something to install: a module catatan next to the v0 apps, allowed by plan tumbuh. The
+    site's config.rk and features.rk move to schema 0.5 (config.modules, plan modules); nothing installs it yet."""
+    d = os.path.join(catalogue, "modules", CATALOGUE_MODULE)
+    os.makedirs(os.path.join(d, "models"), exist_ok=True)
+    with open(os.path.join(d, "module.rk"), "w") as f:
+        f.write(CATATAN_MODULE_RK)
+    with open(os.path.join(d, "models", "catatan.rk"), "w") as f:
+        f.write(CATATAN_MODEL_RK)
+    for name, subs in (("config.rk", []), ("features.rk", [(r"(?m)^(    apps: \[core, crm, sales\])$", r"\1\n    modules: [catatan]")])):
+        path = os.path.join(site, name)
+        with open(path) as f:
+            text = f.read().replace("/schema/0.4/", "/schema/0.5/", 1)
+        for pat, rep in subs:
+            text, n = re.subn(pat, rep, text)
+            assert n == 1, f"enable_catalogue_module: {name} has no line for {pat}"
+        with open(path, "w") as f:
+            f.write(text)
+
+
 def use_side_only(site):
     """The demo site's layout (crm_first) names `shell: top-nav`; the suite runs the default shell (side-only, contract
     0019), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
@@ -3706,6 +3789,7 @@ def main():
         enable_import_def(SITE)
         enable_print_formats(SITE)
         use_side_only(SITE)
+        enable_catalogue_module(os.path.join(work, "catalogue"), SITE)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

@@ -429,6 +429,8 @@
     /* ----- process canvas (contract 0014, stream S10): the list; the canvas itself talks to the kernel through RangkaCanvas */
     /** GET /api/v1/catalogue (contract 0036): modules, apps and connectors; 403 for members who may not propose changes. */
     api.catalogue = function () { return json("GET", "/api/v1/catalogue"); };
+    /** POST /api/v1/catalogue/propose {add, remove} → the change set, validated and previewed (contract 0036 §4). */
+    api.catalogueChange = function (body) { return json("POST", "/api/v1/catalogue/propose", body); };
     api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };
 
     /* ----- Raka (contract 0020) */

@@ -94,7 +94,7 @@ type ChangeSet struct {
 	Title      string      `json:"title"`
 	Reason     string      `json:"reason,omitempty"`
 	Author     Author      `json:"author"`
-	Source     string      `json:"source,omitempty"` // "ai" when the embedded assistant proposed it (contract 0020)
+	Source     string      `json:"source,omitempty"` // "ai" from the embedded assistant (contract 0020), "catalogue" from the catalogue (0036)
 	Org        string      `json:"org,omitempty"`
 	Ops        []Op        `json:"ops"`
 	Layers     []int       `json:"layers"`

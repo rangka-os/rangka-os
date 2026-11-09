@@ -47,14 +47,17 @@ type EnqueueOpts struct {
 
 // Engine is the lifecycle runtime. The registry can be swapped while serving (change sets reload it).
 type Engine struct {
-	reg     atomic.Pointer[meta.Registry]
-	DB      *pg.Pool
-	Now     func() time.Time
-	Hooks   map[string]Hook
-	Cache   cache.Cache
-	Queue   Enqueuer
-	OnWrite func(org, model string)
-	Log     func(format string, args ...any)
+	reg   atomic.Pointer[meta.Registry]
+	DB    *pg.Pool
+	Now   func() time.Time
+	Hooks map[string]Hook
+	Cache cache.Cache
+	Queue Enqueuer
+	// CallTarget resolves a flow's call: (connector.action or a port) to the connector, the action and the job
+	// options (retry.max, idempotency); nil = calls are only recorded (no connector runtime).
+	CallTarget func(reg *meta.Registry, call string, input map[string]any) (connector, action string, opts EnqueueOpts, err error)
+	OnWrite    func(org, model string)
+	Log        func(format string, args ...any)
 
 	// TolerateMissingTables makes a dashboard widget over a table that does not exist yet carry an error
 	// instead of failing the dashboard (live preview of a change set, contract 0015 §4).

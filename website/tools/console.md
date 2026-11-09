@@ -10,7 +10,7 @@ reviewing changes. It ships in `rangka-os/web/console` and is served by the kern
 | App & model | Apps → models, dashboards, flows, roles; fields, views with a form preview, rules, permissions, which capabilities a model uses, the company-layer overlay, and the `.rk` source with line numbers |
 | Proses | The [process canvas](/guide/process-canvas) of each process; an edit in the side panel becomes a change set |
 | Change set | Lifecycle steps, a readable diff of every file, validation, preview SQL and affected records, risk and layers, history; validate, preview, approve, reject, apply and revert buttons per state. **Usulkan perubahan** proposes a change to any layer 2–6 file |
-| Konektor | Installed connectors: health, triggers, actions, which credentials are secret, where they are used |
+| Konektor | Installed connectors (and, from the catalogue, the ones not installed yet): health, triggers, actions, where they are used. **Kunci** sets or removes each auth field with the `db` secrets driver; it shows set or not, the last 4 characters of long values and who set them, never a value ([contract 0017](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0017-connector-secrets.md)) |
 | Organisasi & member | Plan with usage bars, config defaults, members with roles and two-factor status |
 | Tampilan | Theme tokens in light and dark (overrides marked, derived dark values noted), a preview of the layout shell |
 | Audit log | Every write and change-set transition, filterable by kind, actor and organisation |

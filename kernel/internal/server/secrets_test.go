@@ -1,9 +1,12 @@
 package server
 
 import (
+	"bytes"
+	"compress/gzip"
 	"context"
 	"encoding/base64"
 	"errors"
+	"io"
 	"net/url"
 	"os"
 	"path/filepath"
@@ -12,6 +15,7 @@ import (
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/backup"
 	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 )
 
@@ -338,5 +342,74 @@ func TestSecretsRewrap(t *testing.T) {
 	stale := &secrets.Service{DB: e.s.DB, Reg: e.s.Engine.Reg, KEK: old}
 	if _, _, err := stale.Value(ctx, "kopi-senja", "whatsapp_business", "access_token"); !errors.Is(err, secrets.ErrDecrypt) {
 		t.Fatalf("old key after rewrap: %v", err)
+	}
+}
+
+// A change set that installs a connector lists its unset required auth fields under preview.requires (§4), and
+// leaves out the fields already set. It can still be applied.
+func TestChangesetRequiresConnectorAuth(t *testing.T) {
+	e := secretsEnv(t, "db", testKEK(t), "", "")
+	e.login()
+	e.must(204, "PUT", "/api/v1/connectors/xendit/auth/"+firstSecretField(t, e, "xendit"), map[string]any{"value": "xnd_development_0017_secret_key"})
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Pasang Xendit", "ops": []any{
+		map[string]any{"op": "patch", "path": "config.rk", "patch": []any{map[string]any{"op": "add", "path": "/connectors", "value": []any{"xendit"}}}}}}).JSON
+	id := cs["id"].(string)
+	pv := e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
+	noLeak(t, "preview", pv.Body, "xnd_development_0017_secret_key")
+	reqs, _ := get(pv.JSON, "preview", "requires").([]any)
+	if len(reqs) == 0 {
+		t.Fatalf("no requires: %s", pv.Body)
+	}
+	set := firstSecretField(t, e, "xendit")
+	for _, x := range reqs {
+		r := x.(map[string]any)
+		if r["connector"] != "xendit" || r["field"] == set || r["field"] == nil {
+			t.Fatalf("requires: %v", reqs)
+		}
+	}
+	// whatsapp_business is installed already (a flow uses it): not listed
+	if strings.Contains(string(pv.Body), `"connector":"whatsapp_business"`) {
+		t.Fatalf("an installed connector is listed: %s", pv.Body)
+	}
+}
+
+func firstSecretField(t *testing.T, e *env, connector string) string {
+	t.Helper()
+	for _, x := range e.must(200, "GET", "/api/v1/connectors/"+connector+"/auth", nil).JSON["fields"].([]any) {
+		if f := x.(map[string]any); f["secret"] == true {
+			return f["field"].(string)
+		}
+	}
+	t.Fatalf("%s has no secret field", connector)
+	return ""
+}
+
+// rangka backup holds ciphertext and wrapped keys only, and its manifest names the KEK the restore needs (§2).
+func TestBackupHoldsNoSecret(t *testing.T) {
+	kekText := testKEK(t)
+	e := secretsEnv(t, "db", kekText, "", "")
+	e.login()
+	e.must(204, "PUT", "/api/v1/connectors/whatsapp_business/auth/access_token", map[string]any{"value": waToken})
+	var buf bytes.Buffer
+	m, err := backup.Write(context.Background(), e.s.DB, &buf, backup.Options{Org: "kopi-senja", SiteDir: e.site, AppsDir: e.apps,
+		FilesDir: e.s.Cfg.FilesDir, Version: "test"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	kek, _ := secrets.ParseKEK(kekText)
+	if len(m.KEKIDs) != 1 || m.KEKIDs[0] != kek.ID {
+		t.Fatalf("manifest kek_ids: %v (want %s)", m.KEKIDs, kek.ID)
+	}
+	zr, err := gzip.NewReader(&buf)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := io.ReadAll(zr)
+	if err != nil {
+		t.Fatal(err)
+	}
+	noLeak(t, "backup archive", raw, waToken, kekText)
+	if !bytes.Contains(raw, []byte("rk_secrets")) {
+		t.Fatal("the archive has no rk_secrets table")
 	}
 }

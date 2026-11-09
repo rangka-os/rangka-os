@@ -108,15 +108,26 @@ crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope 
 crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope field "wilayah" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
-../broken-connectors/leaky/connector.rk:20:12  error  secret_plain_http  actions/0/request/url  action "plain_http" sends a secret over plain http: use https (contract 0017 §5)
-../broken-connectors/leaky/connector.rk:25:12  error  secret_host_undeclared  actions/1/request/url  action "other_host" sends a secret to collect.example.net, which is not in hosts (api.example.com) (contract 0017 §5)
-../broken-connectors/leaky/connector.rk:35:12  error  secret_host_undeclared  actions/3/request/url  action "templated_bad" sends a secret to evil.example.net, which is not in hosts (api.example.com) (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:19:16  error  secret_literal  auth/fields/2/default  secret field "pin" cannot have a default: bind its value per org (contract 0017 §1)
+../broken-connectors/leaky/connector.rk:24:12  error  secret_plain_http  actions/0/request/url  action "plain_http" sends a secret over plain http: use https (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:29:12  error  secret_host_undeclared  actions/1/request/url  action "other_host" sends a secret to collect.example.net, which is not in hosts (api.example.com) (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:40:13  error  secret_misplaced  actions/3/request/body  action "templated_bad" puts secret api_key in the body: send it in a header (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:39:12  error  secret_host_undeclared  actions/3/request/url  action "templated_bad" sends a secret to evil.example.net, which is not in hosts (api.example.com) (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:48:12  error  secret_misplaced  actions/5/request/url  action "key_in_path" puts secret api_key in the URL: send it in a header (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:52:12  error  secret_misplaced  actions/6/request/url  action "key_in_query" puts secret api_key in the query string: send it in a header, or allow it with allow_secret_in: [query] (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:57:14  error  secret_misplaced  actions/7/request/query  action "key_in_query_map" puts secret pin in the query string: send it in a header, or allow it with allow_secret_in: [query] (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:59:22  warn   secret_in_query  actions/8/allow_secret_in  action "key_in_query_allowed" sends secret api_key in the query string (allow_secret_in); proxies and logs may keep it (contract 0017 §5)
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
 ../broken-connectors/whatsapp_business/connector.rk:2:7  error  name_mismatch  name  connector name "whatsapp" must match the directory name "whatsapp_business"
 ../broken-connectors/whatsapp_business/connector.rk:1:1  warn   catalogue_summary_missing  (root)  connector "whatsapp_business" has no summary: add one sentence in plain words for the catalogue (contract 0036)
 ../broken-site/config.rk:13:9  error  schema  numbering/awal  {'pattern': 'A/{YYYY}/{####}', 'start': 0} is not valid under any of the given schemas
 ../broken-site/config.rk:12:8  error  schema  numbering/cnt  {'pattern': 'X-{#}-{#}'} is not valid under any of the given schemas
 ../broken-site/system.rk:4:17  error  schema  cache/driver  'memcache' is not one of ['memory', 'valkey']
+../broken-site/system.rk:33:20  error  secret_literal  connector_auth/leaky/api_key  leaky.api_key is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
+../broken-site/system.rk:34:12  error  unknown_connector  connector_auth/whatsap  "whatsap" is not a connector
+../broken-site/system.rk:29:19  error  secret_literal  connector_auth/whatsapp_business/access_token  whatsapp_business.access_token is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
+../broken-site/system.rk:32:18  error  unknown_auth_field  connector_auth/whatsapp_business/acess_token  connector whatsapp_business has no auth field "acess_token"; did you mean "access_token"?
+../broken-site/system.rk:37:39  error  secret_literal  connector_auth/orgs/pt_beta/whatsapp_business/app_secret  whatsapp_business.app_secret is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
 ../broken-site/features.rk:6:23  error  unknown_app  plans/0/apps/2  "stock" is not an app in testdata/broken-apps
 ../broken-site/features.rk:5:14  error  unknown_plan  plans/0/extends  plan "basic" does not exist
 ../broken-site/config.rk:16:8  error  missing_dependency  apps/0  "crm" requires "core"; add it to apps
@@ -173,4 +184,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-152 error(s), 22 warning(s)
+162 error(s), 23 warning(s)

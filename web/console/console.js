@@ -862,7 +862,6 @@
     var usedBy = open ? Object.keys(meta.flows || {}).filter(function (f) { var fl = meta.flows[f]; return String(fl.on || "").indexOf(open + ".") === 0 || JSON.stringify(fl.steps || []).indexOf('"' + open + ".") >= 0; }) : [];
     var notify = siteSystem(meta).notify || {}, notifyUse = open && Object.keys(notify).filter(function (k) { return (notify[k] || {}).connector === open; });
     var evs = (events.data || []).filter(function (a) { return a.target === "connector/" + open || a.actor === open; }).slice(0, 8);
-    var secrets = c ? (c.secrets || ((def.auth || {}).fields || []).filter(function (f) { return f.secret; }).map(function (f) { return f.name; })) : [];
     var KIND = { "connector.event": ["info", "Peristiwa"], "connector.call": ["ok", "Panggilan"], "connector.error": ["bad", "Galat"] };
     return h(React.Fragment, null,
       h(R.PageHeader, { title: "Konektor", breadcrumb: ["Rangka Console", "Lapis 3", "Konektor"], onNavigate: function () {}, subtitle: "Terpasang: dipicu atau dipanggil flow, dipakai notify di system.rk, atau disebut config.rk connectors" + (available ? " · " + available + " lagi belum dipasang" : "") }),
@@ -884,17 +883,61 @@
           ["Host", (ce.hosts || []).length ? mono(ce.hosts.join(", ")) : "—"], ["Port", (ce.provides || []).length ? mono(ce.provides.join(", ")) : "—"],
           ["Dipilih untuk port", (ce.ports_selected || []).length ? mono(ce.ports_selected.join(", ")) : "—"]] }),
           miniTable(["Kunci", "Rahasia", "Terisi"], (ce.auth || []).map(function (f) { return [h("span", { className: "cn-cell-title" }, h("b", null, L(f.label) || f.name), h("small", null, mono(f.name))), f.secret ? "Ya" : "Tidak", f.set ? "Terisi" : "Belum"]; }), "Tanpa kunci"),
-          h("p", { className: "cn-note" }, "Hanya baca. Memasang dan mengisi kunci datang di tahap berikutnya.")) : null,
+          h("p", { className: "cn-note" }, "Isi kunci di bagian Kunci di bawah. Memasang konektor lewat change set.")) : null,
         h(R.DrawerSection, { title: "Kesehatan 24 jam" }, h(R.Descriptions, { column: 2, items: [["Status", cst.ok === false ? "Gangguan" : cst.name ? "Sehat" : "Tidak dilaporkan"], ["Peristiwa", num(cst.events_24h)], ["Panggilan", num(cst.calls_24h)],
           ["Galat", num(cst.errors_24h)], ["Peristiwa terakhir", cst.last_event_at ? dt(cst.last_event_at) : "Belum ada"], ["Batas", (def.limits || {}).rate || "—"]] })),
         h(R.DrawerSection, { title: "Dipakai oleh" }, usedBy.length || (notifyUse && notifyUse.length) ? h("div", { className: "cn-chips" }, usedBy.map(function (f) { return h("a", { key: f, className: "cn-chip cn-link", href: "#/apps/flow/" + f }, "Flow " + f); }),
           (notifyUse || []).map(function (k) { return h("a", { key: k, className: "cn-chip cn-link", href: "#/system/notify" }, "Notifikasi " + k + " (system.rk)"); })) : h("p", { className: "cn-muted" }, "Tidak dipakai.")),
-        h(R.DrawerSection, { title: "Kredensial rahasia" }, secrets.length ? h("div", { className: "cn-chips" }, secrets.map(function (x) { return h(R.Lozenge, { key: x, tone: "warn" }, x); })) : h("p", { className: "cn-muted" }, "Tidak ada"),
-          h("p", { className: "cn-note" }, "Nilainya tidak pernah dikirim ke Console.")),
+        h(KeysPanel, { key: open, name: open, ctx: ctx, onChanged: cat.reload }),
         h(R.DrawerSection, { title: "Pemicu" }, miniTable(["Nama", "Lewat", "Data"], (def.triggers || (c.triggers || []).map(function (n) { return { name: n }; })).map(function (t) { return [h("span", { className: "cn-cell-title" }, h("b", null, L(t.label) || t.name), h("small", null, mono(open + "." + t.name))), t.via || "—", h("span", { className: "cn-chips" }, Object.keys(t.emit || {}).map(function (k) { return h("span", { key: k, className: "cn-chip" }, k); }))]; }), "Tanpa pemicu")),
         h(R.DrawerSection, { title: "Aksi" }, miniTable(["Nama", "Permintaan", "Coba ulang"], (def.actions || (c.actions || []).map(function (n) { return { name: n }; })).map(function (a) { return [h("span", { className: "cn-cell-title" }, h("b", null, L(a.label) || a.name), h("small", null, mono(a.name))), a.request ? mono(((a.request || {}).method || "") + " " + String((a.request || {}).url || "").replace(/^https?:\/\//, "")) : "—", a.retry ? a.retry.max + "× " + (a.retry.backoff || "") : "—"]; }), "Tanpa aksi")),
         h(R.DrawerSection, { title: "Peristiwa terakhir" }, events.loading && !events.data ? h(Loading) : miniTable(["Waktu", "Jenis", "Ringkasan"], evs.map(function (e) { var k = KIND[e.kind] || ["default", e.kind]; return [h("span", { className: "cn-nowrap", title: dt(e.at) }, rel(e.at)), h(R.Lozenge, { tone: k[0] }, k[1]), e.summary]; }), "Belum ada peristiwa")),
         h(R.DrawerSection, { title: "Sumber" }, h(SourcePanel, { path: "connectors/" + open + ".rk", maxHeight: "360px" }))) : null);
+  }
+  /* Kunci: connector secrets, write-only (contract 0017 §3). The Console sends a value once and never gets it back;
+     it shows only whether a field is set, its last 4 characters for long values, and who set it. */
+  function KeysPanel(p) {
+    var ctx = p.ctx;
+    var auth = useLoad(function () { return api.connectorAuth(p.name); }, [p.name]);
+    var es = useState(null), editing = es[0], setEditing = es[1];
+    var vs = useState(""), value = vs[0], setValue = vs[1];
+    var bs = useState(false), busy = bs[0], setBusy = bs[1];
+    var d = auth.data || {}, fields = d.fields || [];
+    function done(msg, field) { setBusy(false); setEditing(null); setValue(""); auth.reload(); if (p.onChanged) p.onChanged(); ctx.toast("ok", msg, field); }
+    function failed(e) {
+      setBusy(false);
+      ctx.toast("bad", e.code === "secrets_read_only_driver" ? "Kunci diatur di system.rk" : e.code === "secrets_key_missing" ? "Kernel belum punya kunci enkripsi" : e.status === 403 ? "Tidak ada akses" : "Kunci tidak tersimpan", (e && e.message) || String(e));
+    }
+    function save(f) {
+      if (!value) return;
+      setBusy(true);
+      var v = value;
+      setValue(""); // the value leaves the page state as soon as it is sent
+      api.setConnectorAuth(p.name, f.field, v).then(function () { done("Kunci tersimpan", f.field); }, failed);
+    }
+    function clear(f) { setBusy(true); api.clearConnectorAuth(p.name, f.field).then(function () { done("Kunci dihapus", f.field); }, failed); }
+    var body;
+    if (auth.error && auth.error.status === 403) body = h(R.Alert, { tone: "warn", title: "Tidak ada akses" }, "Kunci penghubung hanya bisa dilihat dan diatur oleh pemilik usaha atau peran yang diberi izin connector_auth.");
+    else if (auth.error) body = h(ErrorBox, { error: auth.error, onRetry: auth.reload });
+    else if (auth.loading && !auth.data) body = h(Loading);
+    else body = h(React.Fragment, null,
+      d.writable ? null : h(R.Alert, { tone: "info", title: "Diatur di system.rk" }, "Situs ini memakai driver " + (d.driver || "env") + ": kunci diikat di system.rk connector_auth ke ${VARIABEL}, bukan dari sini."),
+      miniTable(["Kunci", "Status", "Diubah", ""], fields.map(function (f) {
+        var state = f.set ? h(R.Lozenge, { tone: "ok" }, f.secret && f.hint ? "Terisi ····" + f.hint : f.secret ? "Terisi" : "Terisi: " + f.value) : h(R.Lozenge, { tone: f.required ? "warn" : "default" }, f.required ? "Belum diisi" : "Belum diisi (opsional)");
+        var actions = !d.writable ? null : editing === f.field
+          ? h("form", { className: "cn-key-form", autoComplete: "off", onSubmit: function (e) { e.preventDefault(); save(f); } },
+              h(R.Field, { label: "Nilai baru " + (L(f.label) || f.field), type: f.secret ? "password" : "text", value: value, autoComplete: f.secret ? "new-password" : "off", autoFocus: true, onChange: function (e) { setValue(e.target.value); } }),
+              h("div", { className: "cn-chips" },
+                h(R.Button, { size: "sm", variant: "primary", type: "submit", disabled: busy || !value }, "Simpan"),
+                h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setEditing(null); setValue(""); } }, "Batal")))
+          : h("div", { className: "cn-chips" },
+              h(R.Button, { size: "sm", onClick: function () { setEditing(f.field); setValue(""); }, disabled: busy }, f.set ? "Ganti" : "Isi"),
+              f.set ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { clear(f); }, disabled: busy }, "Hapus") : null);
+        return [h("span", { className: "cn-cell-title" }, h("b", null, L(f.label) || f.field), h("small", null, mono(f.field), f.secret ? " · rahasia" : "")), state,
+          f.set_at ? h("span", { className: "cn-nowrap", title: dt(f.set_at) }, rel(f.set_at) + (f.set_by ? " · " + f.set_by : "")) : "—", actions];
+      }), "Konektor ini tidak butuh kunci"));
+    return h(R.DrawerSection, { title: "Kunci" }, body,
+      h("p", { className: "cn-note" }, "Nilai kunci dikirim sekali ke kernel dan tidak pernah dikirim balik ke Console, ke Raka, atau ke change set."));
   }
   /* ================================================================ Organisations */
   function effectivePlan(features, name) {

@@ -21,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -447,4 +448,30 @@ func toInt(v any) int64 {
 		return int64(n)
 	}
 	return 0
+}
+
+// Requires builds the change-set hook of contract 0017 §4: for each connector the change installs (installed after,
+// not before), the required auth fields still unset for the org. installed lists a registry's installed connectors.
+func (s *Service) Requires(installed func(*meta.Registry) []string) func(ctx context.Context, org string, before, after *meta.Registry) []changeset.Requirement {
+	return func(ctx context.Context, org string, before, after *meta.Registry) []changeset.Requirement {
+		was := map[string]bool{}
+		for _, n := range installed(before) {
+			was[n] = true
+		}
+		// the change's copy has no connector files: the definitions are the live ones
+		after.Connectors = before.Connectors
+		out := []changeset.Requirement{}
+		for _, n := range installed(after) {
+			if was[n] {
+				continue
+			}
+			set := s.SetMap(ctx, org, n)
+			for _, f := range Fields(before, n) {
+				if f.Required && !set[f.Name] {
+					out = append(out, changeset.Requirement{Connector: n, Field: f.Name, Label: f.Label, Secret: f.Secret})
+				}
+			}
+		}
+		return out
+	}
 }

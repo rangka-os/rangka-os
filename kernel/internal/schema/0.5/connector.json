@@ -187,6 +187,16 @@
           },
           "idempotency": {
             "type": "string"
+          },
+          "allow_secret_in": {
+            "type": "array",
+            "items": {
+              "enum": [
+                "query"
+              ]
+            },
+            "uniqueItems": true,
+            "description": "Lets this action send a secret in the query string for an API that takes its key there; the validator reports a warning so it stays visible in review (contract 0017 §5)"
           }
         }
       }

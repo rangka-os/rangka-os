@@ -192,6 +192,12 @@
     ["status", "jobs", "audit", "changesets", "orgs", "members"].forEach(function (k) { rebase(db[k], shift); });
     db.role = "owner";
 
+    var SECRETS_FORBIDDEN = "Kunci penghubung hanya bisa diatur oleh pemilik atau peran yang diberi izin connector_auth";
+    function demoConnector(name) { return ((db.catalogue || {}).connectors || []).filter(function (c) { return c.name === name; })[0] || null; }
+    function demoConnectorState(c) {
+      if (!c.installed || c.state === "error") return;
+      c.state = (c.auth || []).some(function (f) { return f.required && !f.set; }) ? "needs_auth" : "ready";
+    }
     function nowIso() { return new Date().toISOString().replace(/\.\d{3}Z$/, "Z"); }
     function reply(v) { return new Promise(function (res) { setTimeout(function () { res(clone(v)); }, latency + Math.random() * latency * 0.6); }); }
     function fail(status, code, message, extra) { var body = Object.assign({ error: { code: code, message: message } }, extra || {}); return new Promise(function (_, rej) { setTimeout(function () { rej(ApiError(status, code, message, body)); }, latency); }); }
@@ -334,6 +340,36 @@
       },
       changesets: function () { return reply({ data: db.changesets.map(publicCs) }); },
       catalogue: function () { return reply(clone(db.catalogue || { modules: [], apps: [], connectors: [] })); },
+      /** Connector secrets in demo mode (contract 0017 §3): the db driver, write-only. Only set/hint/version are kept,
+       *  never the value. */
+      connectorAuth: function (name) {
+        var c = demoConnector(name);
+        if (db.role !== "owner") return fail(403, "forbidden", SECRETS_FORBIDDEN);
+        if (!c) return fail(404, "not_found", "no connector " + name);
+        return reply({ connector: name, org: "kopi-senja", driver: "db", writable: true, fields: (c.auth || []).map(function (f) {
+          return { field: f.name, label: f.label, secret: f.secret, required: f.required, set: !!f.set, hint: f.hint || undefined, version: f.version || undefined, set_by: f.set_by || undefined, set_at: f.set_at || undefined };
+        }) });
+      },
+      setConnectorAuth: function (name, field, value) {
+        var c = demoConnector(name), f = c && (c.auth || []).filter(function (x) { return x.name === field; })[0];
+        if (db.role !== "owner") return fail(403, "forbidden", SECRETS_FORBIDDEN);
+        if (!c) return fail(404, "not_found", "no connector " + name);
+        if (!f) return fail(404, "unknown_field", "Penghubung ini tidak punya field itu.");
+        if (!value) return fail(400, "empty_value", "Nilai tidak boleh kosong; untuk menghapus pakai DELETE.");
+        f.set = true; f.version = (f.version || 0) + 1; f.hint = f.secret && value.length >= 16 ? value.slice(-4) : ""; f.set_by = me().user.email; f.set_at = nowIso();
+        demoConnectorState(c);
+        db.audit.unshift({ at: nowIso(), org: "kopi-senja", actor: me().user.email, kind: "secret.set", target: "connector/" + name, summary: "secret " + field + " set (version " + f.version + ")" });
+        return reply({});
+      },
+      clearConnectorAuth: function (name, field) {
+        var c = demoConnector(name), f = c && (c.auth || []).filter(function (x) { return x.name === field; })[0];
+        if (db.role !== "owner") return fail(403, "forbidden", SECRETS_FORBIDDEN);
+        if (!f) return fail(404, "unknown_field", "Penghubung ini tidak punya field itu.");
+        f.set = false; f.hint = f.version = f.set_by = f.set_at = undefined;
+        demoConnectorState(c);
+        db.audit.unshift({ at: nowIso(), org: "kopi-senja", actor: me().user.email, kind: "secret.delete", target: "connector/" + name, summary: "secret " + field + " deleted" });
+        return reply({});
+      },
       changeset: function (id) { var c = findCs(id); return c ? reply(publicCs(c)) : fail(404, "not_found", "Change set " + id + " tidak ada"); },
       propose: function (body) {
         var cs = clone(body) || {}, errs = [];
@@ -488,6 +524,15 @@
       catalogue: pick(function () { return get("/api/v1/catalogue"); }, function () { return demo.catalogue(); }),
       /** POST /api/v1/catalogue/propose {add, remove} → the change set, validated and previewed (contract 0036 §4). */
       catalogueChange: pick(function (body) { return post("/api/v1/catalogue/propose", body); }, function (body) { return demo.catalogueChange(body); }),
+      /** GET /api/v1/connectors/{c}/auth → {driver, writable, fields: [{field, label, secret, required, set, hint, version, set_by, set_at}]}.
+       *  Write-only API (contract 0017 §3): no answer ever carries a secret value. */
+      connectorAuth: pick(function (name) { return get("/api/v1/connectors/" + encodeURIComponent(name) + "/auth"); }, function (name) { return demo.connectorAuth(name); }),
+      /** PUT /api/v1/connectors/{c}/auth/{field} {value} → 204. The value goes to the kernel and is never read back. */
+      setConnectorAuth: pick(function (name, field, value) { return http("PUT", "/api/v1/connectors/" + encodeURIComponent(name) + "/auth/" + encodeURIComponent(field), { value: value }); },
+        function (name, field, value) { return demo.setConnectorAuth(name, field, value); }),
+      /** DELETE /api/v1/connectors/{c}/auth/{field} → 204. */
+      clearConnectorAuth: pick(function (name, field) { return http("DELETE", "/api/v1/connectors/" + encodeURIComponent(name) + "/auth/" + encodeURIComponent(field)); },
+        function (name, field) { return demo.clearConnectorAuth(name, field); }),
       jobs: pick(function (state) { return get("/api/v1/system/jobs" + qs({ state: state, limit: 200 })).then(list); }, function (state) { return demo.jobs({ state: state }).then(list); }),
       /** q: {limit, kind (prefix), actor, org} */
       audit: pick(function (q) { return get("/api/v1/system/audit" + qs(q || { limit: 50 })).then(list); }, function (q) { return demo.audit(q || {}).then(list); }),

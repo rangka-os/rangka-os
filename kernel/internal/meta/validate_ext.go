@@ -367,6 +367,7 @@ func (v *validator) site(all map[string]vis) {
 			}
 		}
 	}
+	v.connectorAuth()
 	apps := v.reg.App
 	var appNames []string // apps and 0.4 units: what plans and config.apps name
 	for _, a := range v.reg.Apps {

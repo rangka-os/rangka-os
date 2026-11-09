@@ -67,6 +67,9 @@ type Manifest struct {
 	// Absent lists the optional metadata directories (modules, connectors) that were configured but do not
 	// exist; the loader tolerates them, so the archive does too and restore rebuilds without them.
 	Absent []string `json:"absent,omitempty"`
+	// KEKIDs names the key-encryption keys that wrap the archived org data keys (contract 0017 §2): the archive holds
+	// ciphertext and wrapped keys only, so a restore on another machine needs RANGKA_MASTER_KEY with one of these ids.
+	KEKIDs []string `json:"kek_ids,omitempty"`
 }
 
 // TableSum is a table's row count and the SHA-256 of its canonical COPY text (see Sums).
@@ -358,6 +361,18 @@ func Write(ctx context.Context, db *pg.Pool, w io.Writer, o Options) (*Manifest,
 			}
 		}
 		tables, m.Excluded = scope(tables, o.Org)
+		for _, t := range tables {
+			if t.name != "rk_org_keys" {
+				continue
+			}
+			r, err := tx.Query(ctx, "select distinct kek_id from rk_org_keys where $1 = '' or org_id = $1 order by 1", o.Org)
+			if err != nil {
+				return err
+			}
+			for _, row := range r.Rows {
+				m.KEKIDs = append(m.KEKIDs, row[0].(string))
+			}
+		}
 		if blobs, err = attachmentBlobs(ctx, tx, o.Org); err != nil {
 			return err
 		}

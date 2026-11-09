@@ -198,6 +198,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		cfg.Logf("secrets: driver db without RANGKA_MASTER_KEY; connector secrets cannot be set (run rangka keygen)")
 	}
 	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now}
+	s.Changes.Requires = s.API.Secrets.Requires(api.InstalledConnectors)
 	return s, nil
 }
 

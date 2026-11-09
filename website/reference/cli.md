@@ -91,6 +91,9 @@ rangka restore rangka-all-20261103-020000.tar.gz --db <url-of-an-empty-database>
   directories the loader reads: `--modules` / `$RANGKA_MODULES`, default `modules` next to `--apps`; `--connectors` /
   `$RANGKA_CONNECTORS`) and the uploads directory. A modules or connectors directory that does not exist is
   skipped and listed in the manifest's `absent`; a missing `--apps` directory is an error.
+- Connector secrets of the `db` driver are in the archive as ciphertext and wrapped data keys only. The manifest's
+  `kek_ids` names the key-encryption key they need; `backup` and `restore` print it. Keep `RANGKA_MASTER_KEY` apart
+  from the archives: with another key the kernel starts but cannot decrypt them until the right key is back.
 - Backup is written in Go through the database connection (`COPY ... TO STDOUT`), so the single binary needs no
   Postgres client tools. All tables are read from one snapshot. The file is written as `<out>.partial` and renamed
   when complete. Every archive (also the pre-migrate ones) is created with mode `0600`: it holds password, token and

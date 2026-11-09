@@ -27,6 +27,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
+	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -187,6 +188,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if fstore != nil {
 		s.API.Files = fstore // keep a nil *Local out of the interface
 	}
+	// connector secrets (contract 0017): without a KEK the kernel starts and db-driver writes answer secrets_key_missing
+	kek, err := secrets.LoadKEK(nil)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	if kek == nil && strCfg(reg, "secrets.driver", "env") == "db" {
+		cfg.Logf("secrets: driver db without RANGKA_MASTER_KEY; connector secrets cannot be set (run rangka keygen)")
+	}
+	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now}
 	return s, nil
 }
 

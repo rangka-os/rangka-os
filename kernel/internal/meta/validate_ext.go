@@ -143,6 +143,9 @@ func (v *validator) more() {
 		if c := asMap(d.Data); !strings.HasPrefix(cn, "x_") && c != nil && !truthy(c["summary"]) {
 			v.rep.extra("warn", d.Path, "(root)", "catalogue_summary_missing", fmt.Sprintf(`connector "%s" has no summary: add one sentence in plain words for the catalogue (contract 0036)`, cn))
 		}
+		if c := asMap(d.Data); c != nil {
+			v.secretHosts(d, c)
+		}
 	}
 	if v.reg.Site != nil {
 		v.site(all)

@@ -139,7 +139,7 @@ func TestUpsertMemberCreatesPasswordless(t *testing.T) {
 func TestUpsertMemberUpdatesAndKeepsPassword(t *testing.T) {
 	lowCost(t)
 	ctx, db := identEnv(t)
-	id, err := EnsureUser(ctx, db, "a@x.id", "", "rahasia-123", "pt_alpha", "owner", "USR-001")
+	id, err := EnsureUser(ctx, db, "a@x.id", "", "rahasia-123", "pt_alpha", "sales_rep", "USR-001")
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -163,9 +163,49 @@ func TestUpsertMemberUpdatesAndKeepsPassword(t *testing.T) {
 	}
 }
 
+func TestUpsertMemberProtectsOwner(t *testing.T) {
+	ctx, db := identEnv(t)
+	if _, _, err := UpsertMember(ctx, db, "new@x.id", "N", "pt_alpha", "owner", nil); !errors.Is(err, ErrOwnerProtected) {
+		t.Fatalf("owner role for a new member: %v", err)
+	}
+	if res, _ := db.Query(ctx, "select 1 from rk_users where email = 'new@x.id'"); len(res.Rows) != 0 {
+		t.Fatal("refused owner must not create the user")
+	}
+	own, err := EnsureUser(ctx, db, "o@x.id", "", "rahasia-123", "pt_alpha", "owner", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := UpsertMember(ctx, db, "o@x.id", "X", "pt_alpha", "sales_rep", []string{"JKT"}); !errors.Is(err, ErrOwnerProtected) {
+		t.Fatalf("demoting an owner: %v", err)
+	}
+	if _, _, err := UpsertMember(ctx, db, "o@x.id", "X", "pt_alpha", "owner", nil); !errors.Is(err, ErrOwnerProtected) {
+		t.Fatalf("owner to owner: %v", err)
+	}
+	u, _ := LoadUser(ctx, db, own, "pt_alpha")
+	if !reflect.DeepEqual(u.Roles, []string{"owner"}) || len(u.Outlets) != 0 {
+		t.Fatalf("owner changed: %+v", u)
+	}
+	// an owner in another org does not block a member role here
+	if _, _, err := UpsertMember(ctx, db, "o@x.id", "X", "pt_beta", "sales_rep", nil); err != nil {
+		t.Fatalf("owner of another org: %v", err)
+	}
+	// inside a transaction the refusal leaves the tx usable
+	tx, err := db.Begin(ctx)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer tx.Rollback(ctx)
+	if _, _, err := UpsertMember(ctx, tx, "o@x.id", "X", "pt_alpha", "sales_rep", nil); !errors.Is(err, ErrOwnerProtected) {
+		t.Fatal(err)
+	}
+	if _, err := tx.Query(ctx, "select 1"); err != nil {
+		t.Fatalf("tx aborted: %v", err)
+	}
+}
+
 func TestUpsertMemberLeavesOtherOrgAlone(t *testing.T) {
 	ctx, db := identEnv(t)
-	id, _, err := UpsertMember(ctx, db, "a@x.id", "A", "pt_beta", "owner", []string{"SBY"})
+	id, _, err := UpsertMember(ctx, db, "a@x.id", "A", "pt_beta", "sales_manager", []string{"SBY"})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -176,7 +216,7 @@ func TestUpsertMemberLeavesOtherOrgAlone(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if !reflect.DeepEqual(u.Roles, []string{"owner"}) || !reflect.DeepEqual(u.Outlets, []string{"SBY"}) {
+	if !reflect.DeepEqual(u.Roles, []string{"sales_manager"}) || !reflect.DeepEqual(u.Outlets, []string{"SBY"}) {
 		t.Fatalf("other org changed: %+v", u)
 	}
 }

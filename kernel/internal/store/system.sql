@@ -262,3 +262,12 @@ create table if not exists rk_hook_events (
   primary key (org_id, connector, trigger, key)
 );
 create index if not exists rk_hook_events_at on rk_hook_events (at);
+-- poll triggers (contract 0002 §A.1): where the last poll stopped, per org, connector and trigger
+create table if not exists rk_poll_cursors (
+  org_id     text not null,
+  connector  text not null,
+  trigger    text not null,
+  cursor     text not null,
+  updated_at timestamptz not null default now(),
+  primary key (org_id, connector, trigger)
+);

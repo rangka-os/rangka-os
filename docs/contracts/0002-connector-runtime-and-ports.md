@@ -44,3 +44,12 @@ ports: {payment.qris: midtrans, messaging.whatsapp: whatsapp_business}
 4. Polling triggers.
 
 Gate: in the Kopi Senja demo site, a real WhatsApp message creates a lead within 5 seconds, and a duplicate webhook creates nothing.
+
+## Refinements (9 Nov 2026, as built)
+- **Poll triggers** (§A.1) name one of the connector's actions: `action:`, with `input:` (each value CEL over `cursor`
+  and `settings`) and `cursor:` (CEL over the answer, the next cursor). The answer goes through `for_each` and `emit`
+  like a webhook body, with the same dedupe. The cursor is stored per org (`rk_poll_cursors`). Only triggers that an
+  installed flow listens to are polled. A poll trigger without `action:` is a warning (`poll_action_missing`) and is
+  not polled; an unknown action is `unknown_action`. A connector without its keys is skipped, not dead-lettered.
+- **Replay** (§A.5) is `POST /api/v1/system/jobs/{id}/replay` for any dead-lettered job. It makes a new job, and the
+  dead-letter row stays. A connector call is rendered again with the org's current keys.

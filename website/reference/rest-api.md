@@ -174,6 +174,7 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | --- | --- | --- |
 | GET | `/system/status` | Version, uptime, deploy target, schema version, every capability's driver and health, connectors health, OIDC clients |
 | GET | `/system/jobs?state=` · `/system/jobs/{id}` | Queue jobs |
+| POST | `/system/jobs/{id}/replay` | Queue a dead-lettered (`discarded`) job again as a new job → `202 {id, replay_of}`. The dead-letter row stays. A connector call is rendered again with the org's current keys, so set the missing key first, then replay. A second replay of the same job returns the first replay. Owner or a `connector_auth` role only (`403`; Raka and helpers `403 ai_forbidden`); a job that is not dead-lettered → `409 job_not_dead`. Audited as `job.replay` |
 | GET | `/system/audit?kind=&actor=&org=&limit=` | Audit log |
 | GET | `/orgs` · `/orgs/{id}/members` | Organisations (with plan and usage) and members |
 | GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form (`/files/meta/…` is an older alias) |
@@ -227,6 +228,28 @@ when retries run out or the status is not retried. A request that carries a secr
 fails with `secret_host_refused` and nothing is sent. Without its keys a call fails with `connector_needs_auth`, at
 once. Before audit entries, job errors and stored responses are written, every active secret value of that org and
 connector (plain, base64, URL-encoded) is replaced with `[redacted:<field>]`; stored responses are cut to 4 KB.
+A failed call can be sent again with `POST /api/v1/system/jobs/{id}/replay` (above).
+
+A `via: poll` trigger names one of the connector's `action:`s. Every `every:` (`5m` by default, `1m` at least) the
+scheduler queues one `poll` job per trigger that an installed flow listens to. The slot is aligned to `every`, so
+several kernel instances never poll twice. The job sends the action with `input:`, whose values are CEL over `cursor`
+(the stored cursor, `null` on the first poll) and `settings`. Its answer (after `output:`) goes through `for_each` and
+`emit` like a webhook body, with the same dedupe. The next cursor comes from `cursor:` (CEL over the answer) and is
+stored per org in `rk_poll_cursors`. A connector without its keys is skipped (`{"skipped": "needs_auth"}`), not
+dead-lettered. A failed poll is not retried: the next slot is the retry.
+
+```yaml
+triggers:
+  - name: new_orders
+    via: poll
+    every: 5m
+    action: list_orders
+    input: {since: cursor, limit: "50"}
+    cursor: next_cursor
+    for_each: orders[]
+    emit: {order_id: item.id, phone: item.phone}
+```
+
 `auth.type: basic` sends the first secret field as the user name; `auth.type: oauth2` refreshes `access_token` at
 `auth.token_url` a minute before `expires_at`, and a failed refresh removes it so the connector needs auth again.
 

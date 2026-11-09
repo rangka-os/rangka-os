@@ -145,6 +145,7 @@ func (v *validator) more() {
 		}
 		if c := asMap(d.Data); c != nil {
 			v.secretHosts(d, c)
+			v.pollTriggers(d, c)
 		}
 	}
 	if v.reg.Site != nil {

@@ -791,6 +791,19 @@ def check_secret_hosts(rep, p, c):
 SECRET_REF = re.compile(r"^\$\{[A-Z][A-Z0-9_]*\}$")
 
 
+def check_poll_triggers(rep, p, c):
+    """Contract 0002 §A.1: a trigger with via: poll names one of the connector's actions."""
+    actions = [a.get("name") for a in c.get("actions") or [] if isinstance(a, dict)]
+    for i, t in enumerate(c.get("triggers") or []):
+        if not isinstance(t, dict) or t.get("via") != "poll":
+            continue
+        act = t.get("action")
+        if not isinstance(act, str) or not act:
+            rep.add("warn", p, f"triggers/{i}", "poll_action_missing", f'poll trigger "{t.get("name")}" names no action to send: the kernel does not poll it until it does (contract 0002 §A.1)')
+        elif act not in actions:
+            rep.add("error", p, f"triggers/{i}/action", "unknown_action", f'connector {c.get("name")} has no action "{act}"{suggest(act, [a for a in actions if isinstance(a, str)])}')
+
+
 def check_connector_auth(rep, sysdoc, conns):
     """Contract 0017 §2: system.rk connector_auth binds known connectors and fields; a secret field is a ${VAR}."""
     if not sysdoc or not conns or not isinstance(sysdoc[1], dict) or not isinstance(sysdoc[1].get("connector_auth"), dict):
@@ -928,6 +941,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
         if isinstance(c, dict):
             check_secret_hosts(rep, p, c)
+            check_poll_triggers(rep, p, c)
 
     if site:
         check_site(rep, V, root, apps, allmodels, sdocs, conns, overlays, flows)

@@ -33,6 +33,20 @@ type Scheduler struct {
 	// mode, contract 0040 §3) still enqueues runs that came due before it existed. Repeats are dropped by the
 	// unique key per flow and minute. 0 = start from now (rangka serve, where the loop never stops).
 	CatchUp time.Duration
+	polls   []*pollItem
+}
+
+// PollSpec is a periodic "poll" job (a connector trigger with via: poll, contract 0002 §A.1).
+type PollSpec struct {
+	Name  string // whatsapp_business.message_status
+	Every time.Duration
+	Args  map[string]any
+}
+
+type pollItem struct {
+	PollSpec
+	org  string
+	last time.Time // the last slot enqueued
 }
 
 // NewScheduler makes a scheduler in a time zone (system.rk scheduler.timezone).
@@ -83,6 +97,32 @@ func (s *Scheduler) SetFlows(reg *meta.Registry, org string) {
 	s.mu.Unlock()
 }
 
+// SetPolls registers the poll triggers of an org (called again after a metadata reload). Slots are aligned to
+// multiples of Every, so several kernel instances enqueue the same slot under one unique key.
+func (s *Scheduler) SetPolls(org string, specs []PollSpec) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	prev := map[string]time.Time{}
+	for _, p := range s.polls {
+		if p.org == org {
+			prev[p.Name] = p.last
+		}
+	}
+	items := []*pollItem{}
+	for _, p := range s.polls {
+		if p.org != org {
+			items = append(items, p)
+		}
+	}
+	for _, sp := range specs {
+		if sp.Every <= 0 {
+			continue
+		}
+		items = append(items, &pollItem{PollSpec: sp, org: org, last: prev[sp.Name]})
+	}
+	s.polls = items
+}
+
 func sortedFlowNames(reg *meta.Registry) []string {
 	var out []string
 	for n := range reg.Flows {
@@ -96,6 +136,7 @@ func sortedFlowNames(reg *meta.Registry) []string {
 // on several instances.
 func (s *Scheduler) Tick(ctx context.Context) {
 	now := s.Now().In(s.Loc)
+	s.tickPolls(ctx, now)
 	s.mu.Lock()
 	items := append([]*Schedule{}, s.items...)
 	s.mu.Unlock()
@@ -117,6 +158,35 @@ func (s *Scheduler) Tick(ctx context.Context) {
 			it.next = it.Cron.Next(due)
 			s.mu.Unlock()
 		}
+	}
+}
+
+// tickPolls enqueues each poll whose current slot has not been enqueued yet.
+func (s *Scheduler) tickPolls(ctx context.Context, now time.Time) {
+	s.mu.Lock()
+	polls := append([]*pollItem{}, s.polls...)
+	s.mu.Unlock()
+	for _, p := range polls {
+		slot := now.Truncate(p.Every)
+		s.mu.Lock()
+		due := slot.After(p.last)
+		s.mu.Unlock()
+		if !due {
+			continue
+		}
+		args := map[string]any{"scheduled_at": slot.UTC().Format(time.RFC3339)}
+		for k, v := range p.Args {
+			args[k] = v
+		}
+		// one attempt: the next slot is the retry, so a vendor outage leaves one dead-lettered poll per slot
+		if _, err := s.Q.Enqueue(ctx, nil, "poll", p.org, args, engine.EnqueueOpts{MaxAttempts: 1,
+			UniqueKey: "poll:" + p.org + ":" + p.Name + ":" + strconv.FormatInt(slot.Unix(), 10)}); err != nil {
+			s.Log("scheduler: poll %s: %v", p.Name, err)
+			continue
+		}
+		s.mu.Lock()
+		p.last = slot
+		s.mu.Unlock()
 	}
 }
 

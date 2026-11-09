@@ -224,7 +224,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if kek == nil && strCfg(reg, "secrets.driver", "env") == "db" {
 		cfg.Logf("secrets: driver db without RANGKA_MASTER_KEY; connector secrets cannot be set (run rangka keygen)")
 	}
-	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now}
+	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now, Vault: secrets.VaultFromEnv(nil), Log: cfg.Logf}
+	if strCfg(reg, "secrets.driver", "env") == "vault" && s.API.Secrets.Vault == nil {
+		cfg.Logf("secrets: driver vault without VAULT_ADDR; connector secrets read as unset")
+	}
 	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows
 	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf,
 		StartFlow: func(ctx context.Context, org, flow string, event map[string]any, key string) error {

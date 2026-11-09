@@ -183,6 +183,8 @@ made by `npm create @rangka-os` needs no flags:
 | `RANGKA_AI_URL`, `RANGKA_AI_CALLBACK_URL` | `--ai-url` (the rangka-ai sidecar; unset turns the assistant off), `--ai-callback-url` (default `http://127.0.0.1` + the listen port) |
 | `RANGKA_AI_SECRET` | none: sent to the sidecar as `Authorization: Bearer`; the same value as the sidecar's `RAKA_SERVE_TOKEN` |
 | `RANGKA_MASTER_KEY`, `RANGKA_MASTER_KEY_FILE` | none: the key-encryption key of the `db` secrets driver (base64 of 32 bytes, from `rangka keygen`), or a file that holds it. Unset: the kernel starts and refuses to store secrets |
+| `RANGKA_MASTER_KEY_VAULT` | none: the name of a Vault transit key that wraps the `db` driver's data keys instead (the key stays in Vault) |
+| `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_NAMESPACE` | none: the Vault server of the `vault` secrets driver and of `RANGKA_MASTER_KEY_VAULT` |
 | `RANGKA_CHROMIUM`, `RANGKA_PDF_CONCURRENCY` | none: the browser for PDF print (`off` disables PDF) and how many run at once (default 2) |
 
 Makefile shortcuts in `kernel/`: `make build`, `make test` (throwaway Postgres), `make test-unit` (no database),

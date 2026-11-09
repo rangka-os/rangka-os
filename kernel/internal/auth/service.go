@@ -48,7 +48,7 @@ type Service struct {
 type Principal struct {
 	User  *User
 	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken)
-	Scope string // OAuth scopes for oidc and ai tokens
+	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write)
 }
 
 // AIForbiddenMessage is the message of the ai_forbidden error: an assistant asked for something only a
@@ -128,19 +128,43 @@ func (s *Service) SessionCookie(tok string, maxAge int) *http.Cookie {
 }
 
 // CreateToken issues an API token (rk_…) for a user in an org.
-func (s *Service) CreateToken(ctx context.Context, u *User, name string, ttl time.Duration) (string, int64, error) {
+func (s *Service) CreateToken(ctx context.Context, u *User, name string, ttl time.Duration, scopes ...string) (string, int64, error) {
 	tok := RandomToken("rk_", 32)
 	var exp any
 	if ttl > 0 {
 		exp = s.now().Add(ttl)
 	}
-	res, err := s.DB.Query(ctx, "insert into rk_tokens (user_id, org_id, name, token_hash, expires_at) values ($1, $2, $3, $4, $5) returning id",
-		u.ID, u.Org, name, HashToken(tok), exp)
+	if scopes == nil {
+		scopes = []string{}
+	}
+	res, err := s.DB.Query(ctx, "insert into rk_tokens (user_id, org_id, name, token_hash, expires_at, scopes) values ($1, $2, $3, $4, $5, $6) returning id",
+		u.ID, u.Org, name, HashToken(tok), exp, scopes)
 	if err != nil {
 		return "", 0, err
 	}
-	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.token_created", "token/"+name, "API token created", nil)
+	var data any
+	if len(scopes) > 0 {
+		data = map[string]any{"scopes": scopes}
+	}
+	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.token_created", "token/"+name, "API token created", data)
 	return tok, res.Rows[0][0].(int64), nil
+}
+
+// ScopeSecretsWrite lets an API token set and remove connector secrets (contract 0017 §3), for Rangka Cloud
+// provisioning. Only a person who may manage secrets can mint it; Omilo helper and Rangka AI tokens never carry it.
+const ScopeSecretsWrite = "secrets:write"
+
+// TokenScopes are the scopes an API token may carry.
+var TokenScopes = map[string]bool{ScopeSecretsWrite: true}
+
+// HasScope reports whether the principal's scopes include scope.
+func (p *Principal) HasScope(scope string) bool {
+	for _, s := range strings.Fields(p.Scope) {
+		if s == scope {
+			return true
+		}
+	}
+	return false
 }
 
 // ErrUnauthenticated means no valid credentials were sent.
@@ -154,7 +178,7 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
 		if strings.HasPrefix(tok, "rk_") {
 			res, err := s.DB.Query(ctx, `update rk_tokens set last_used_at = now() where token_hash = $1 and (expires_at is null or expires_at > $2)
-				returning user_id, org_id`, HashToken(tok), s.now())
+				returning user_id, org_id, array_to_string(scopes, ' ')`, HashToken(tok), s.now())
 			if err != nil {
 				return nil, err
 			}
@@ -171,7 +195,7 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &Principal{User: u, Via: "token"}, nil
+			return &Principal{User: u, Via: "token", Scope: res.Rows[0][2].(string)}, nil
 		}
 		claims, err := s.VerifyJWT(tok)
 		if err != nil {

@@ -16,6 +16,9 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | POST | `/r/{model}/{name}/actions/{action}` | Runs the hook; 202 `{job_id}` when the action has `queue:`, 202 as above when it waits for approval |
 | GET | `/r/{model}/{name}/print` | `?format=<print>&as=html\|pdf`: the record as a document ([Print formats](/guide/print-formats)); 501 `pdf_unavailable` without Chromium |
 | GET | `/dashboards/{name}?period=30` | Every widget computed; `X-Cache: hit\|miss` when cached |
+| POST | `/compute/{model}` | The record as the model would save it (defaults, computes, child totals), without saving or numbering ([contract 0034](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0034-counter-compute-and-summary.md)) |
+| GET | `/export/r/{model}` | `?filter=&q=&sort=&columns=a,b&sep=semicolon`: the list as CSV (UTF-8 with BOM, plain numbers, select labels, Ya/Tidak). Needs the model's `export` permission on top of read ([contract 0024](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0024-list-and-dashboard-export.md)) |
+| GET | `/export/dashboards/{name}` | `?period=`: every widget the caller may export, one CSV block per widget |
 | (header) | `Idempotency-Key` on `POST /r/{model}`, `/submit`, `/cancel`, `/amend`, `/actions/{action}` | A retry with the same key answers the stored result (`Idempotency-Replayed: true`) and writes nothing; another body is 409 `idempotency_conflict`, the same request still running 409 `idempotency_in_progress`. Body `_occurred_at` (RFC 3339) goes to the audit ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md) §6, §7) |
 | GET | `/screens/{name}` | A work screen the caller may open: `{name, screen, set}`, `set` = the screen's `set:` evaluated for the caller now; 404 otherwise ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md)) |
 | POST | `/flows/{name}/run` | Run a flow now with `{event: {…}}` |
@@ -101,7 +104,7 @@ Model `permissions:` are enforced on every route below, for people, API tokens a
 
 Child models use their parent's permissions. A flow that a person starts runs as that person, so each step is
 checked with their roles. A dashboard widget over a model the caller cannot read returns the 403 body in place of
-its data. There is no export endpoint yet.
+its data. Exports need the `export` permission as well as read.
 
 A refusal is `403`:
 
@@ -175,6 +178,8 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/orgs` · `/orgs/{id}/members` | Organisations (with plan and usage) and members |
 | GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form (`/files/meta/…` is an older alias) |
 | POST | `/tokens` | Create an API token |
+| GET | `/plan` | The tenant's plan, every plan of `features.rk`, usage against the limits (`ok`, `near` from 80%, `full`, `over`), notices and what is read-only after a downgrade ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)) |
+| GET | `/catalogue` | Every module, app and connector this kernel can install, with its state for the site; for people who may propose change sets. Read only for now ([contract 0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md)) |
 
 ## AI chat
 

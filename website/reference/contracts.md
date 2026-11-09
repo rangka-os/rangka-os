@@ -27,6 +27,24 @@ in `docs/contracts/` ([how contracts change](https://github.com/rangka-os/rangka
 | [0018](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0018-list-aggregates.md) | List aggregates | accepted |
 | [0019](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0019-frappe-shell-default.md) | Default shell: side-only | accepted |
 | [0020](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0020-ai-assistant-relay.md) | AI assistant relay | proposed |
+| [0021](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0021-declarative-stock-moves.md) | Declarative stock moves | implemented |
+| [0022](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0022-unit-conversion-and-returned-qty.md) | Unit conversion and returned quantities | implemented |
+| [0024](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0024-list-and-dashboard-export.md) | List and dashboard export | proposed |
+| [0025](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0025-flow-read-locks.md) | Check-then-write in flows | accepted |
+| [0026](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0026-append-only-ledgers.md) | Append-only ledgers | accepted |
+| [0027](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0027-field-visibility-and-dashboard-roles.md) | Field visibility (hidden_for) and dashboard roles | accepted |
+| [0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md) | Plan limits | accepted |
+| [0029](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0029-xml-file-formats.md) | XML file formats | proposed |
+| [0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md) | Work screens (staff tools declared in `.rk`) | accepted |
+| [0031](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0031-recurring-documents.md) | Recurring documents: month arithmetic and for_each | accepted |
+| [0032](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0032-free-module-composition.md) | Free module composition | proposed |
+| [0033](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0033-ai-drafted-company-pieces-and-connectors.md) | AI-drafted company pieces and connectors | proposed |
+| [0034](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0034-counter-compute-and-summary.md) | Counter: dry compute, summary and availability | proposed |
+| [0035](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0035-raka-skills.md) | Rangka skills: one Agent Skills library for Raka and any other harness | accepted |
+| [0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md) | Catalogue in the platform: modules and connectors | proposed |
+| [0037](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0037-nested-navigation.md) | Nested navigation: sub-levels in menus and nav.side | accepted and implemented |
+| [0038](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0038-responsive-layout.md) | Responsive behaviour in layout.rk | accepted and implemented |
+| [0039](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0039-counter-stock-per-outlet.md) | Counter: stock per outlet on the catalogue | proposed |
 
 The base contract (v0) follows.
 

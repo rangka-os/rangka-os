@@ -37,7 +37,7 @@ const steps = [
 ]
 
 const tabs = [
-  { title: 'Production-grade core', icon: 'beams', text: 'Strict YAML with JSON Schemas, a validator with 81 checks, generated tables, REST, SSE and MCP. Nothing hand-wired per app.', label: 'Concept', link: '/guide/rk-files', linkText: '.rk files' },
+  { title: 'Production-grade core', icon: 'beams', text: 'Strict YAML with JSON Schemas, a validator with 107 checks, generated tables, REST, SSE and MCP. Nothing hand-wired per app.', label: 'Concept', link: '/guide/rk-files', linkText: '.rk files' },
   { title: 'AI for rapid changes', icon: 'spark', text: 'Rangka AI reads your models and proposes change sets in layers 4–6 only. Guardrails live in code, not in a prompt.', label: 'Tool', link: '/tools/rangka-ai', linkText: 'Rangka AI' },
   { title: 'Control without drag', icon: 'shield', text: 'Validated, previewed on a copy, approved by a person, applied live, reverted in one click. High-risk changes need the owner.', label: 'Concept', link: '/concepts/change-sets', linkText: 'Change sets' },
 ]

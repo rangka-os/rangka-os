@@ -19,8 +19,8 @@ Every kind of `.rk` file, generated from `schema/0.5`.
 | [overlay.rk](./overlay) | `<site>/custom/<model>.rk` | Company layer (layer 4): fields, rules and view tweaks an organisation adds to an app model, in &lt;site&gt;/custom/&lt;model&gt;.rk |
 | [print.rk](./print) | `modules/<module>/print/<name>.rk or <site>/print/<name>.rk` | Rangka print format |
 | [process.rk](./process) | `apps/<app>/processes/<name>.rk, modules/<module>/processes/<name>.rk or <site>/processes/<name>.rk` | Rangka process |
-| [screen.rk](./screen) | `modules/<module>/screens/<name>.rk` | A work screen a module ships in screens/&lt;name&gt;.rk (contract 0030): one staff job on a phone or tablet, rendered by the web app from one of seven types. It writes only through the record API, so permissions, row scope, rules, flows and approvals apply as for a form. |
 | [role.rk](./role) | `modules/<module>/roles/<role>.rk or apps/<app>/roles/<role>.rk` | A role an app defines (apps/&lt;app&gt;/roles/&lt;role&gt;.rk) |
+| [screen.rk](./screen) | `modules/<module>/screens/<name>.rk` | A work screen a module ships in screens/&lt;name&gt;.rk (contract 0030): one staff job on a phone or tablet, rendered by the web app from one of seven types |
 | [system.rk](./system) | `<site>/system.rk` | Layer 2: which backend capabilities are on and which driver serves each |
 | [template.rk](./template) | `templates/<name>/template.rk (0.4, deprecated: now apps/<app>/app.rk)` | A starting point for a new installation: the apps to install, connectors, roles, fixtures and onboarding questions. |
 | [theme.rk](./theme) | `<site>/themes/<name>.rk` | Layer 6: colours, type and density for an installation or one organisation |

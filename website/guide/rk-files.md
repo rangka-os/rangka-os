@@ -35,7 +35,7 @@ pipeline/models/deal.rk:15:9   error  unknown_model    fields/1/to  "custommer" 
 
 ## Kinds
 
-Schema 0.5 is current (0.4 is still published, for `app.rk` files in the old layout). It has 19 kinds; each has a
+Schema 0.5 is current (0.4 is still published, for `app.rk` files in the old layout). It has 20 kinds; each has a
 schema and a reference page.
 
 | Kind | Where | Layer |
@@ -43,6 +43,7 @@ schema and a reference page.
 | [module](/reference/schema/module) | `modules/<module>/module.rk` | 5 |
 | [model](/reference/schema/model), [flow](/reference/schema/flow), [role](/reference/schema/role) | `models/`, `flows/`, `roles/` in a module | 5 |
 | [print](/reference/schema/print), [import](/reference/schema/import), [process](/reference/schema/process) | `print/`, `imports/`, `processes/` in a module, an app or the site | 5 |
+| [screen](/reference/schema/screen) | `modules/<module>/screens/<name>.rk`: a work screen for staff, such as the POS counter ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md)) | 5 |
 | [app](/reference/schema/app), [dashboard](/reference/schema/dashboard) | `apps/<app>/app.rk`, `apps/<app>/dashboards/` | 5 |
 | [template](/reference/schema/template) | `templates/<name>/` (deprecated: an app replaces it, [contract 0001](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0001-modules-and-apps.md)) | 5 |
 | [overlay](/reference/schema/overlay), [config](/reference/schema/config), [features](/reference/schema/features), [letterhead](/reference/schema/letterhead) | site (`custom/<model>.rk`, `config.rk`, `features.rk`, `letterhead.rk`) | 4 |

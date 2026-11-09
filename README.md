@@ -55,20 +55,26 @@ revertible. Money and stock never depend on an LLM.
   business uses, with dashboards and processes ([contract 0001](docs/contracts/0001-modules-and-apps.md)). An
   organisation's own fields and rules are overlays in `custom/<model>.rk`, never edits to the app.
 - **Documents that behave.** Draft → submitted → cancelled, with amend; numbering at submit with per-organisation
-  series; approvals; rupiah as integers (no floats), PPN 12% on DPP 11/12.
+  series; approvals; rupiah as integers (no floats), PPN 12% on DPP 11/12; declared stock moves with recipes and
+  returns; recurring documents.
+- **Work screens for staff.** Screens declared in `.rk` for the people at the counter or in the field, starting with
+  the POS counter: cart, hold, split tender, sessions with a blind close, receipts, stock per outlet; an offline outbox
+  with idempotency keys ([contract 0030](docs/contracts/0030-work-screens.md)).
 - **Generated everything.** Tables and safe migrations (`--dry-run`, `--rollback`, destructive steps refused unless
   allowed), REST (`/api/v1`), SSE events, MCP tools, list aggregates, dashboards, PDF print formats, spreadsheet
-  imports, attachments.
+  imports, CSV export, attachments, plan limits. Every screen works from phone to desktop.
 - **Change sets.** Propose → validate → preview → approve → apply → revert. High-risk changes need the owner; an AI
   token can never approve or apply.
 - **Raka in the app.** The Rangka AI agent answers in the web app and Console through a sidecar
   ([contract 0020](docs/contracts/0020-ai-assistant-relay.md)) and changes things only by proposing change sets.
+  [`skills/`](skills) gives Raka and any other agent harness the same Rangka skills
+  ([contract 0035](docs/contracts/0035-raka-skills.md)).
 - **Rangka ID built in.** Password sign-in (bcrypt), sessions, API tokens, an OpenID Connect provider, roles with
   outlet scope and Postgres row-level security per organisation.
 - **One binary.** Queue, scheduler, realtime, cache and files run on Postgres and the local disk by default;
   `system.rk` decides the drivers. `rangka backup` / `rangka restore` archive the database, metadata and uploads.
 - **A strict validator, twice.** The Go kernel and the Python reference (`tools/rangka_validate.py`) print
-  byte-identical reports: 81 codes, each with `file:line:col`.
+  byte-identical reports: 107 codes, each with `file:line:col`.
 
 ## Quick start
 
@@ -182,6 +188,7 @@ Read more: [architecture and layers](https://rangka-os.github.io/rangka-os/guide
 | [`schema/0.5/`](schema/0.5) | JSON Schemas for every `.rk` kind (module, model, flow, app, dashboard, print, import, system, config, …). `schema/0.4/` stays published for older files |
 | [`tools/`](tools) | Python reference validator `rangka_validate.py`, strict `.rk` reader `rkfile.py`, converters and doc builders |
 | [`templates/`](templates) | Theme and layout templates |
+| [`skills/`](skills) | Rangka skills for AI agents, in the Agent Skills format |
 | [`web/app/`](web/app) | The web app served at `/app/` |
 | [`web/console/`](web/console/README.md) | Rangka Console, the control pane for operators |
 | [`web/design-system/`](web/design-system) | React components and `tokens.json` (Ink, Bata, warm stone; light and dark) |
@@ -204,9 +211,10 @@ Read more: [architecture and layers](https://rangka-os.github.io/rangka-os/guide
 ## Status
 
 Done and tested on Postgres 16: validators, migrations with dry run and rollback, document lifecycle, numbering,
-approvals, multi-organisation with row scope and RLS, permissions, attachments, imports, print formats, list
-aggregates, dashboards, change sets, Rangka ID + OIDC, MCP, backup and restore, the web app and Console, the Raka
-relay, releases on npm, GitHub and ghcr.io.
+approvals, multi-organisation with row scope and RLS, permissions, attachments, imports, CSV export, print formats,
+list aggregates, dashboards, declared stock moves, recurring documents, plan limits, change sets, Rangka ID + OIDC,
+MCP and skills, backup and restore, the responsive web app and Console, the POS counter work screen, the Raka relay,
+releases on npm, GitHub and ghcr.io.
 
 Still open: the CEL engine, YAML reader, JSON Schema validator, HTTP router and job queue are small in-tree packages
 to be swapped for the upstream libraries ([contract 0005 §1](docs/contracts/0005-pilot-readiness.md)); the connector

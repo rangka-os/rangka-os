@@ -6,7 +6,7 @@ const base = process.env.DOCS_BASE || '/rangka-os/'
 const repo = 'https://github.com/rangka-os/rangka-os'
 
 // One reference page per schema in schema/0.5 (scripts/gen-reference.mjs writes them), in reading order.
-const order = ['module', 'model', 'flow', 'role', 'import', 'print', 'app', 'dashboard', 'process', 'system', 'features', 'config', 'overlay', 'theme', 'layout', 'letterhead', 'connector', 'changeset', 'template']
+const order = ['module', 'model', 'flow', 'role', 'import', 'print', 'screen', 'app', 'dashboard', 'process', 'system', 'features', 'config', 'overlay', 'theme', 'layout', 'letterhead', 'connector', 'changeset', 'template']
 const kinds = readdirSync(new URL('../../schema/0.5/', import.meta.url))
   .filter(f => f.endsWith('.json')).map(f => f.slice(0, -5))
   .sort((a, b) => (order.indexOf(a) + 1 || 99) - (order.indexOf(b) + 1 || 99))

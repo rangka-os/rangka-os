@@ -360,8 +360,9 @@
           "pattern": "^[0-9]+(ms|s|m|h|d)$"
         },
         "password": {
-          "type": "boolean",
-          "default": true
+          "oneOf": [{"type": "boolean"}, {"const": "owners"}],
+          "default": true,
+          "description": "true: everyone signs in with a password. false: nobody does. \"owners\": only members with role owner (contract 0042 §6)."
         },
         "passkeys": {
           "type": "boolean",

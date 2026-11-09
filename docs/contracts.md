@@ -74,6 +74,7 @@ Computed fields recomputed on every save. Status for invoices: draft, submitted,
 | PUT | `/processes/{name}/layout` | `{groups,nodes}` → stored in `site/canvas/<name>.json`; owner only, 400 `bad_layout` |
 | GET | `/system/status` | for Console: `{version,uptime_s,site,capabilities:{db:{driver,ok,latency_ms},cache:{driver,ok,hits,misses,keys},queue:{driver,ok,counts:{available,running,retryable,completed,discarded}},scheduler:{driver,ok,schedules:[{name,source,cron,next_run,last_run,last_status}]},realtime:{driver,transports,connections},files:{driver,ok},search:{driver,ok},notify:{email:{driver},push:{…},whatsapp:{…}},auth:{issuer,clients:[id]}},apps:[{name,version,models,dashboards}],orgs:n,members:n}` |
 | GET | `/system/jobs?state=` | queue jobs |
+| POST | `/system/jobs/{id}/replay` | queue a dead-lettered job again (contract 0002 §A.5); owner or `connector_auth` role; `409 job_not_dead` |
 | GET | `/system/audit?limit=50` | `{data:[{at,actor,kind,target,summary}]}` |
 | GET | `/orgs`, `/orgs/{id}/members` | organisations and members |
 | GET | `/files/meta/{path}` | raw .rk text + parsed JSON (Console, AI) |

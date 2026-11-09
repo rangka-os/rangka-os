@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 )
 
@@ -200,6 +202,51 @@ func TestConnectorNeedsAuth(t *testing.T) {
 	st, errs := waitJob(t, e, id)
 	if st != "discarded" || !strings.Contains(errs, "connector_needs_auth") || strings.Count(errs, `"attempt"`) != 1 {
 		t.Fatalf("needs auth: %s %s", st, errs)
+	}
+}
+
+// A dead-lettered call is replayed after the owner sets the missing key: the replay is a new job rendered with the
+// current keys, the dead-letter row stays, a second replay returns the first, and a sales_rep cannot replay.
+func TestReplayDeadLetter(t *testing.T) {
+	e, v := runtimeEnv(t)
+	e.must(204, "DELETE", "/api/v1/connectors/whatsapp_business/auth/access_token", nil)
+	id := callJob(t, e, "whatsapp_business", "send_template", map[string]any{"to": "6281234", "template": "halo", "idempotency_key": "r1"})
+	if st, errs := waitJob(t, e, id); st != "discarded" || !strings.Contains(errs, "connector_needs_auth") {
+		t.Fatalf("dead letter: %s %s", st, errs)
+	}
+	path := fmt.Sprintf("/api/v1/system/jobs/%d/replay", id)
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "rep@kopisenja.id", "Sales", "rahasia-123", "kopi-senja", "sales_rep", "USR-003"); err != nil {
+		t.Fatal(err)
+	}
+	if r := loginAs(e, "rep@kopisenja.id", "rahasia-123").do("POST", path, nil); r.Status != 403 {
+		t.Fatalf("sales_rep replay: %d %s", r.Status, r.Body)
+	}
+	e.must(204, "PUT", "/api/v1/connectors/whatsapp_business/auth/access_token", map[string]any{"value": waToken})
+	r := e.must(202, "POST", path, nil)
+	nid := int64(r.JSON["id"].(float64))
+	if nid == id || r.JSON["replay_of"] != float64(id) {
+		t.Fatalf("replay answer: %s", r.Body)
+	}
+	if st, errs := waitJob(t, e, nid); st != "completed" {
+		t.Fatalf("replayed call: %s %s", st, errs)
+	}
+	if len(v.reqs) != 1 || v.reqs[0].Header.Get("Authorization") != "Bearer "+waToken {
+		t.Fatalf("replay request: %d", len(v.reqs))
+	}
+	if again := e.must(202, "POST", path, nil); int64(again.JSON["id"].(float64)) != nid {
+		t.Fatalf("second replay made another job: %s", again.Body)
+	}
+	if st, _ := waitJob(t, e, id); st != "discarded" {
+		t.Fatalf("dead-letter row changed: %s", st)
+	}
+	if r := e.do("POST", fmt.Sprintf("/api/v1/system/jobs/%d/replay", nid), nil); r.Status != 409 || get(r.JSON, "error", "code") != "job_not_dead" {
+		t.Fatalf("replay of a completed job: %d %s", r.Status, r.Body)
+	}
+	if r := e.do("POST", "/api/v1/system/jobs/999999/replay", nil); r.Status != 404 {
+		t.Fatalf("replay of a missing job: %d", r.Status)
+	}
+	if !strings.Contains(dump(t, e, "select kind from rk_audit"), "job.replay") {
+		t.Fatal("replay not audited")
 	}
 }
 
@@ -429,4 +476,140 @@ func TestFlowCallQueuesJob(t *testing.T) {
 		t.Fatalf("vendor requests: %d", len(v.reqs))
 	}
 	noLeak(t, "jobs", []byte(dump(t, e, "select args::text from rk_jobs where kind = 'call'")), waToken)
+}
+
+const pollerConnector = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: poller_test
+label: {id: Poller test}
+summary: {id: Penghubung uji yang mengambil pesanan baru secara berkala.}
+version: 1.0.0
+hosts: [api.example.com]
+auth:
+  type: token
+  fields:
+    - {name: api_key, label: {id: API key}, secret: true}
+triggers:
+  - name: new_orders
+    via: poll
+    every: 1m
+    action: list_orders
+    input: {since: cursor, limit: "50"}
+    cursor: next_cursor
+    for_each: "orders[]"
+    emit: {order_id: item.id, customer: item.customer, phone: item.phone}
+actions:
+  - name: list_orders
+    request:
+      method: GET
+      url: https://api.example.com/v1/orders
+      headers: {Authorization: 'Bearer {auth.api_key}'}
+      query: {since: '{input.since}', limit: '{input.limit}'}
+    input:
+      - {name: since, type: data}
+      - {name: limit, type: int}
+`
+
+const pollFlow = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: order_to_lead
+label: {id: Pesanan baru jadi lead}
+on: poller_test.new_orders
+steps:
+  - create: lead
+    set:
+      lead_name: event.customer
+      phone: event.phone
+      source: "'whatsapp'"
+      status: "'new'"
+idempotency: event.order_id
+`
+
+// A via: poll trigger (contract 0002 §A.1): the scheduler queues one poll per slot for the trigger an installed flow
+// listens to; the poll sends the action with the stored cursor, starts the flow per new item, drops items it saw
+// before, stores the next cursor, and skips quietly while the connector has no key.
+func TestPollTrigger(t *testing.T) {
+	t.Setenv("RANGKA_MASTER_KEY", testKEK(t))
+	t.Setenv("RANGKA_MASTER_KEY_FILE", "")
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "system.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, []byte(strings.Replace(string(b), "secrets: {driver: env}", "secrets: {driver: db}", 1)), 0o644)
+		dir := filepath.Join(filepath.Dir(apps), "rangka-connectors", "poller_test")
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, "connector.rk"), []byte(pollerConnector), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(apps, "crm", "flows", "order_to_lead.rk"), []byte(pollFlow), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	v := &vendor{status: 200, answer: `{"orders":[{"id":"o1","customer":"Budi","phone":"628111222"}],"next_cursor":"c1"}`}
+	e.s.Connectors.HTTP = &http.Client{Transport: v, Timeout: 5 * time.Second}
+	e.login()
+	ctx := context.Background()
+	pollJobs := func() []int64 {
+		res, err := e.s.DB.Query(ctx, "select id from rk_jobs where kind = 'poll' order by id")
+		if err != nil {
+			t.Fatal(err)
+		}
+		var out []int64
+		for _, r := range res.Rows {
+			out = append(out, r[0].(int64))
+		}
+		return out
+	}
+	// without its key the poll is skipped: completed, nothing sent, nothing dead-lettered
+	e.s.Sched.Tick(ctx)
+	ids := pollJobs()
+	if len(ids) != 1 {
+		t.Fatalf("poll jobs after the first tick: %v", ids)
+	}
+	if st, errs := waitJob(t, e, ids[0]); st != "completed" || len(v.reqs) != 0 {
+		t.Fatalf("poll without a key: %s %s, %d requests", st, errs, len(v.reqs))
+	}
+	if !strings.Contains(dump(t, e, "select result::text from rk_jobs where kind = 'poll'"), "needs_auth") {
+		t.Fatal("poll without a key not reported as skipped")
+	}
+	// the same slot is not queued twice
+	e.s.Sched.Tick(ctx)
+	if n := len(pollJobs()); n != 1 {
+		t.Fatalf("same slot queued again: %d jobs", n)
+	}
+	e.must(204, "PUT", "/api/v1/connectors/poller_test/auth/api_key", map[string]any{"value": "poller-api-key-0002-zzzz"})
+	res, err := e.s.Connectors.Poll(ctx, "kopi-senja", "poller_test", "new_orders")
+	if err != nil || res.Events != 1 || !res.Cursor {
+		t.Fatalf("first poll: %+v %v", res, err)
+	}
+	if len(v.reqs) != 1 || v.reqs[0].URL.Host != "api.example.com" || v.reqs[0].Header.Get("Authorization") != "Bearer poller-api-key-0002-zzzz" ||
+		v.reqs[0].URL.Query().Get("since") != "" || v.reqs[0].URL.Query().Get("limit") != "50" {
+		t.Fatalf("first request: %v", v.reqs[0].URL)
+	}
+	waitFor(t, func() bool { return leadsByPhone(t, e, "628111222") == 1 })
+	if c := dump(t, e, "select cursor from rk_poll_cursors"); strings.TrimSpace(c) != "c1" {
+		t.Fatalf("cursor: %q", c)
+	}
+	// the next poll sends the cursor; an item seen before starts nothing
+	res, err = e.s.Connectors.Poll(ctx, "kopi-senja", "poller_test", "new_orders")
+	if err != nil || res.Events != 0 || res.Dupes != 1 {
+		t.Fatalf("second poll: %+v %v", res, err)
+	}
+	if v.reqs[1].URL.Query().Get("since") != "c1" {
+		t.Fatalf("second request: %v", v.reqs[1].URL)
+	}
+	time.Sleep(200 * time.Millisecond)
+	if n := leadsByPhone(t, e, "628111222"); n != 1 {
+		t.Fatalf("leads after a duplicate: %d", n)
+	}
+	noLeak(t, "jobs and audit", []byte(dump(t, e, "select args::text, coalesce(errors::text, ''), coalesce(result::text, '') from rk_jobs")+
+		dump(t, e, "select coalesce(data::text, '') from rk_audit")), "poller-api-key-0002-zzzz")
+}
+
+func waitFor(t *testing.T, ok func() bool) {
+	t.Helper()
+	for i := 0; i < 200; i++ {
+		if ok() {
+			return
+		}
+		time.Sleep(25 * time.Millisecond)
+	}
+	t.Fatal("condition not met in time")
 }

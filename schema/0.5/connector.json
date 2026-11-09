@@ -93,7 +93,23 @@
           },
           "every": {
             "type": "string",
-            "pattern": "^[0-9]+(s|m|h)$"
+            "pattern": "^[0-9]+(s|m|h)$",
+            "description": "poll: how often, 5m by default and 1m at least (contract 0002 §A.1)"
+          },
+          "action": {
+            "$ref": "model.json#/$defs/name",
+            "description": "poll: the action of this connector sent on each poll; its answer is read like a webhook body"
+          },
+          "input": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "string"
+            },
+            "description": "poll: the action's input, each value CEL over cursor (the stored cursor, null on the first poll) and settings"
+          },
+          "cursor": {
+            "type": "string",
+            "description": "poll: CEL over the answer giving the next cursor (for example next_page_token); empty keeps the cursor"
           },
           "verify": {
             "type": "object"

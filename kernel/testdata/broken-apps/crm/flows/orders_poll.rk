@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: orders_poll
+label: {id: Pesanan dari trigger poll tanpa action}
+on: leaky.orders_no_action
+steps:
+  - {find: lead, where: phone == event.phone, as: lead}

@@ -236,6 +236,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}}
 	s.API.Connectors = s.Connectors
 	s.Queue.Handlers["call"] = s.runCallJob
+	s.Queue.Handlers["poll"] = s.runPollJob
+	s.Sched.SetPolls(cfg.Org, pollSpecs(reg))
 	e.CallTarget = callTarget
 	s.Changes.Requires = s.API.Secrets.Requires(api.InstalledConnectors)
 	return s, nil
@@ -325,6 +327,7 @@ func (s *Server) Reload(ctx context.Context) error {
 	}
 	s.Engine.SetRegistry(reg)
 	s.Sched.SetFlows(reg, s.Cfg.Org)
+	s.Sched.SetPolls(s.Cfg.Org, pollSpecs(reg))
 	s.Cfg.Logf("metadata reloaded: %d models, %d dashboards", len(reg.Models), len(reg.Dashboards))
 	return nil
 }
@@ -384,6 +387,22 @@ func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 func (s *Server) runCallJob(ctx context.Context, j *jobs.Job) (any, error) {
 	ctx = pg.WithOrg(ctx, j.Org)
 	return s.Connectors.Call(ctx, j.Org, meta.Str(j.Args, "connector"), meta.Str(j.Args, "action"), meta.AsMap(j.Args["input"]))
+}
+
+// runPollJob runs one poll of a connector trigger (contract 0002 §A.1).
+func (s *Server) runPollJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
+	return s.Connectors.Poll(ctx, j.Org, meta.Str(j.Args, "connector"), meta.Str(j.Args, "trigger"))
+}
+
+// pollSpecs lists the scheduler's poll jobs: the via: poll triggers installed flows listen to.
+func pollSpecs(reg *meta.Registry) []jobs.PollSpec {
+	var out []jobs.PollSpec
+	for _, p := range connectors.Polls(reg) {
+		out = append(out, jobs.PollSpec{Name: p.Connector + "." + p.Trigger, Every: p.Every,
+			Args: map[string]any{"connector": p.Connector, "trigger": p.Trigger}})
+	}
+	return out
 }
 
 // callTarget resolves a call: target and its job options: retry.max + 1 attempts, and the action's idempotency

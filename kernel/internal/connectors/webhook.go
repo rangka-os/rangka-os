@@ -36,13 +36,18 @@ type HookResult struct {
 
 // trigger returns a webhook trigger's definition.
 func (rt *Runtime) trigger(connector, name string) (map[string]any, map[string]any, bool) {
+	return rt.triggerVia(connector, name, "webhook")
+}
+
+// triggerVia returns a trigger's definition when it is received via (webhook or poll).
+func (rt *Runtime) triggerVia(connector, name, via string) (map[string]any, map[string]any, bool) {
 	c, ok := rt.connector(connector)
 	if !ok {
 		return nil, nil, false
 	}
 	for _, x := range meta.AsList(c["triggers"]) {
 		t := meta.AsMap(x)
-		if meta.Str(t, "name") == name && meta.Str(t, "via") == "webhook" {
+		if meta.Str(t, "name") == name && meta.Str(t, "via") == via {
 			return c, t, true
 		}
 	}
@@ -88,24 +93,33 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return HookResult{Status: 400, Body: "body is not JSON"}
 	}
+	ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, body)
+	if err != nil {
+		return HookResult{Status: 500, Body: err.Error()}
+	}
+	return HookResult{Status: 200, Body: "ok", Events: ev, Dupes: dupes}
+}
+
+// dispatch turns a webhook body or a poll answer into events (for_each, emit), scrubs them, drops duplicates and
+// starts each listening flow once per event. It returns how many events were new and how many were duplicates.
+func (rt *Runtime) dispatch(ctx context.Context, org, connector, trigger string, t map[string]any, body any) (int, int, error) {
 	scrub, _ := rt.Scrubber(ctx, org, connector)
-	items := forEach(body, meta.Str(t, "for_each"))
-	res := HookResult{Status: 200, Body: "ok"}
 	flows := rt.flowsOn(connector + "." + trigger)
-	for _, it := range items {
+	events, dupes := 0, 0
+	for _, it := range forEach(body, meta.Str(t, "for_each")) {
 		ev := emit(meta.AsMap(t["emit"]), body, it)
 		ev = scrub.Value(ev).(map[string]any)
 		key := eventKey(org, connector, trigger, ev)
 		fresh, err := rt.remember(ctx, org, connector, trigger, key)
 		if err != nil {
 			rt.logf("connectors: dedupe: %v", err)
-			return HookResult{Status: 500, Body: "could not record the event"}
+			return events, dupes, errors.New("could not record the event")
 		}
 		if !fresh {
-			res.Dupes++
+			dupes++
 			continue
 		}
-		res.Events++
+		events++
 		store.Audit(ctx, rt.DB, org, "connector:"+connector, "connector.event", "connector/"+connector, trigger, map[string]any{"trigger": trigger, "event": ev})
 		for _, f := range flows {
 			if rt.StartFlow == nil {
@@ -113,11 +127,11 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 			}
 			if err := rt.StartFlow(ctx, org, f, ev, "hook:"+key+":"+f); err != nil {
 				rt.logf("connectors: start flow %s: %v", f, err)
-				return HookResult{Status: 500, Body: "could not start the flow"}
+				return events, dupes, errors.New("could not start the flow")
 			}
 		}
 	}
-	return res
+	return events, dupes, nil
 }
 
 // flowsOn lists the installed flows with on: <connector>.<trigger>, sorted.

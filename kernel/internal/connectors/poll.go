@@ -1,0 +1,182 @@
+package connectors
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"sort"
+	"strings"
+	"time"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
+	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+)
+
+// Polling triggers (contract 0002 §A.1): a trigger with via: poll names one of the connector's actions. Every `every`
+// (5m by default, 1m at least) the scheduler queues a "poll" job per trigger that an installed flow listens to. The job
+// sends the action with the trigger's input (CEL over cursor and settings), turns the answer into events with
+// for_each and emit exactly like a webhook (same scrubbing and dedupe), starts the listening flows, then stores the
+// next cursor from the trigger's cursor: expression (CEL over the answer). The request is rendered at send time, so
+// the action's host and secret rules apply unchanged. A connector without its keys is skipped, not dead-lettered.
+
+// DefaultPollEvery and MinPollEvery bound a poll trigger's every.
+const (
+	DefaultPollEvery = 5 * time.Minute
+	MinPollEvery     = time.Minute
+)
+
+// PollEvery reads a trigger's every (5m, 30s, 2h): DefaultPollEvery when missing or unreadable, at least MinPollEvery.
+func PollEvery(t map[string]any) time.Duration {
+	d, err := time.ParseDuration(strings.TrimSpace(meta.Str(t, "every")))
+	if err != nil || d <= 0 {
+		return DefaultPollEvery
+	}
+	if d < MinPollEvery {
+		return MinPollEvery
+	}
+	return d
+}
+
+// PollResult is what a poll job stores.
+type PollResult struct {
+	Skipped string `json:"skipped,omitempty"` // needs_auth: the connector has no keys yet
+	Events  int    `json:"events"`
+	Dupes   int    `json:"dupes"`
+	Cursor  bool   `json:"cursor_moved"`
+}
+
+// Poll runs one poll of org's connector trigger.
+func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*PollResult, error) {
+	c, t, ok := rt.triggerVia(connector, trigger, "poll")
+	if !ok {
+		return nil, &jobs.Permanent{Err: fmt.Errorf("%w: no poll trigger %s.%s", ErrUnknown, connector, trigger)}
+	}
+	action := meta.Str(t, "action")
+	cursor, err := rt.cursor(ctx, org, connector, trigger)
+	if err != nil {
+		return nil, err
+	}
+	var cur any
+	if cursor != "" {
+		cur = cursor
+	}
+	input := map[string]any{}
+	env := varsEnv(map[string]any{"cursor": cur, "settings": settings(c)})
+	for k, x := range meta.AsMap(t["input"]) {
+		src, ok := x.(string)
+		if !ok {
+			continue
+		}
+		v, err := cel.Eval(src, env)
+		if err != nil {
+			return nil, &jobs.Permanent{Err: fmt.Errorf("poll %s.%s: input %s: %v", connector, trigger, k, err)}
+		}
+		if u := cel.Unwrap(v); u != nil {
+			input[k] = u
+		}
+	}
+	// a connector still waiting for its keys is skipped quietly: polling it every few minutes would only fill the
+	// dead-letter queue and the audit trail. OAuth2 connectors refresh first, as Call does.
+	if meta.Str(meta.AsMap(c["auth"]), "type") == "oauth2" {
+		if err := rt.refreshIfDue(ctx, org, connector); errors.Is(err, ErrNeedsAuth) {
+			return &PollResult{Skipped: "needs_auth"}, nil
+		}
+	}
+	if _, err := rt.Render(ctx, org, connector, action, input); errors.Is(err, ErrNeedsAuth) {
+		return &PollResult{Skipped: "needs_auth"}, nil
+	}
+	out, err := rt.Call(ctx, org, connector, action, input)
+	if err != nil {
+		return nil, err
+	}
+	res := &PollResult{}
+	if res.Events, res.Dupes, err = rt.dispatch(ctx, org, connector, trigger, t, out); err != nil {
+		return nil, err
+	}
+	if next := nextCursor(meta.Str(t, "cursor"), out); next != "" && next != cursor {
+		scrub, _ := rt.Scrubber(ctx, org, connector)
+		if _, err := rt.DB.Exec(ctx, `insert into rk_poll_cursors (org_id, connector, trigger, cursor) values ($1, $2, $3, $4)
+			on conflict (org_id, connector, trigger) do update set cursor = excluded.cursor, updated_at = now()`,
+			org, connector, trigger, scrub.String(next)); err != nil {
+			return nil, fmt.Errorf("poll cursor: %w", err)
+		}
+		res.Cursor = true
+	}
+	return res, nil
+}
+
+func (rt *Runtime) cursor(ctx context.Context, org, connector, trigger string) (string, error) {
+	res, err := rt.DB.Query(ctx, "select cursor from rk_poll_cursors where org_id = $1 and connector = $2 and trigger = $3", org, connector, trigger)
+	if err != nil {
+		return "", fmt.Errorf("poll cursor: %w", err)
+	}
+	if len(res.Rows) == 0 {
+		return "", nil
+	}
+	s, _ := res.Rows[0][0].(string)
+	return s, nil
+}
+
+// nextCursor evaluates the trigger's cursor expression over the answer (its fields, and body); "" keeps the cursor.
+func nextCursor(src string, out map[string]any) string {
+	if strings.TrimSpace(src) == "" {
+		return ""
+	}
+	vars := map[string]any{"body": out}
+	for k, v := range out {
+		vars[k] = v
+	}
+	v, err := cel.Eval(src, varsEnv(vars))
+	if err != nil {
+		return ""
+	}
+	x := cel.Unwrap(v)
+	if x == nil {
+		return ""
+	}
+	if f, ok := x.(float64); ok && f == float64(int64(f)) {
+		return fmt.Sprint(int64(f))
+	}
+	return fmt.Sprint(x)
+}
+
+// Poll is one scheduled poll: a trigger with via: poll that an installed flow listens to.
+type Poll struct {
+	Connector, Trigger string
+	Every              time.Duration
+}
+
+// Polls lists the poll triggers that installed flows listen to (on: <connector>.<trigger>) and that name an action,
+// sorted by flow.
+func Polls(reg *meta.Registry) []Poll {
+	seen := map[string]bool{}
+	var out []Poll
+	for _, name := range sortedKeys(reg.Flows) {
+		f := reg.Flows[name]
+		if !reg.IsInstalled(f.App) {
+			continue
+		}
+		conn, trig, ok := strings.Cut(f.On, ".")
+		if !ok || seen[f.On] || reg.Connectors[conn] == nil {
+			continue
+		}
+		for _, x := range meta.AsList(meta.AsMap(reg.Connectors[conn].Data)["triggers"]) {
+			t := meta.AsMap(x)
+			if meta.Str(t, "name") == trig && meta.Str(t, "via") == "poll" && meta.Str(t, "action") != "" {
+				seen[f.On] = true
+				out = append(out, Poll{Connector: conn, Trigger: trig, Every: PollEvery(t)})
+			}
+		}
+	}
+	return out
+}
+
+func sortedKeys[V any](m map[string]V) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}

@@ -118,6 +118,42 @@ func TestVaultTransitKEK(t *testing.T) {
 	}
 }
 
+// rangka secrets rewrap moves data keys from a key file to a Vault transit key and back, without touching the values.
+func TestRewrapToTransit(t *testing.T) {
+	fv := &fakeVault{tokenOK: "hvs.test-token"}
+	vs := httptest.NewServer(fv)
+	defer vs.Close()
+	e := secretsEnv(t, "db", testKEK(t), "", "")
+	e.login()
+	e.must(204, "PUT", "/api/v1/connectors/whatsapp_business/auth/access_token", map[string]any{"value": waToken})
+	ctx := context.Background()
+	fileKEK := e.s.API.Secrets.KEK
+	transit := secrets.TransitKEK(&secrets.Vault{Addr: vs.URL, Token: "hvs.test-token"}, "rangka")
+	if n, err := secrets.Rewrap(ctx, e.s.DB, fileKEK, transit); err != nil || n != 1 {
+		t.Fatalf("rewrap to transit: %d %v", n, err)
+	}
+	res, err := e.s.DB.Query(ctx, "select kek_id, wrapped from rk_org_keys where org_id = 'kopi-senja'")
+	if err != nil || res.Rows[0][0] != "vault-transit:rangka" || !strings.HasPrefix(string(res.Rows[0][1].([]byte)), "vault:v1:") {
+		t.Fatalf("org key after rewrap: %v %v", res, err)
+	}
+	read := func(k *secrets.KEK) (string, error) {
+		v, _, err := (&secrets.Service{DB: e.s.DB, Reg: e.s.Engine.Reg, KEK: k}).Value(ctx, "kopi-senja", "whatsapp_business", "access_token")
+		return v, err
+	}
+	if v, err := read(transit); err != nil || v != waToken {
+		t.Fatalf("value under transit: %q %v", v, err)
+	}
+	if _, err := read(fileKEK); err == nil {
+		t.Fatal("the old file key still opens the data key")
+	}
+	if n, err := secrets.Rewrap(ctx, e.s.DB, transit, fileKEK); err != nil || n != 1 {
+		t.Fatalf("rewrap back: %d %v", n, err)
+	}
+	if v, err := read(fileKEK); err != nil || v != waToken {
+		t.Fatalf("value back under the file key: %q %v", v, err)
+	}
+}
+
 // A token with secrets:write may set secrets (Rangka Cloud provisioning); only a person who may manage secrets mints
 // one; an unknown scope is refused; a plain token still may not write.
 func TestSecretsWriteScope(t *testing.T) {

@@ -225,3 +225,24 @@ func (v *validator) connectorAuth() {
 		}
 	}
 }
+
+// pollTriggers is contract 0002 §A.1 (check_poll_triggers in rangka_validate.py): a trigger with via: poll names one
+// of the connector's actions, which the kernel sends on every poll. A trigger without one is only described (a spec
+// connector): the kernel does not poll it, and a flow listening to it gets poll_action_missing (validate_ext.go).
+func (v *validator) pollTriggers(d *rk.Doc, c map[string]any) {
+	actions := namesOf(c["actions"])
+	for i, x := range asList(c["triggers"]) {
+		t := asMap(x)
+		if t == nil || t["via"] != "poll" {
+			continue
+		}
+
+		act, ok := t["action"].(string)
+
+		switch {
+		case !ok || act == "":
+		case !contains(actions, act):
+			v.rep.extra("error", d.Path, fmt.Sprintf("triggers/%d/action", i), "unknown_action", fmt.Sprintf(`connector %s has no action "%s"%s`, pyStr(c["name"]), act, suggest(act, actions)))
+		}
+	}
+}

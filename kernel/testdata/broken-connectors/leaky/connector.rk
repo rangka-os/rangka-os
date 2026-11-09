@@ -17,6 +17,10 @@ auth:
       label: {id: PIN}
       secret: true
       default: "'1234'"
+triggers:
+  - {name: orders_ok, via: poll, every: 5m, action: templated_ok, cursor: next_cursor, for_each: "orders[]"}
+  - {name: orders_no_action, via: poll, every: 5m}
+  - {name: orders_typo, via: poll, action: templated_okk}
 actions:
   - name: plain_http
     request:

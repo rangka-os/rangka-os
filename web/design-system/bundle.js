@@ -1089,6 +1089,11 @@
       mi("profile", "user", "Profil"),
       mi("settings", "settings", "Pengaturan akun"),
       mi("security", "shield", "Keamanan dan login"),
+      // extra sections from the app (mode, install …): [{heading?, items: [{key, icon, label, on?}]}]
+      (p.extra || []).filter(function (g) { return g && g.items && g.items.length; }).map(function (g, i) {
+        return h(React.Fragment, { key: "x" + i }, h("div", { className: "rk-msep" }), g.heading ? h("div", { className: "rk-mh" }, g.heading) : null,
+          g.items.map(function (it) { return mi(it.key, it.icon, it.label, null, !!it.on); }));
+      }),
       h("div", { className: "rk-msep" }),
       h("div", { className: "rk-mh" }, "Tema"),
       mi("theme:light", "sun", "Terang", null, th === "light"), mi("theme:dark", "moon", "Gelap", null, th === "dark"), mi("theme:system", "palette", "Ikuti sistem", null, th === "system"),
@@ -1121,7 +1126,7 @@
         h("button", { type: "button", className: "rk-av-btn", "aria-label": "Akun " + (p.user ? p.user.name : ""), "aria-expanded": open === "account", onClick: function () { tog("account"); } },
           h(Avatar, { name: p.user ? p.user.name : "?", size: 28 }))),
       open === "switcher" ? h(AppSwitcher, { float: true, apps: p.apps, current: p.currentApp, recent: p.recent, onManage: p.onManageApps, onMarket: p.onMarketplace, onSelect: function (a) { setOpen(null); if (p.onSwitch) p.onSwitch(a); } }) : null,
-      open === "account" ? h(AccountMenu, Object.assign({ float: true }, p.user || {}, { theme: p.theme, onSelect: function (k) { setOpen(null); if (p.onAccount) p.onAccount(k); } })) : null);
+      open === "account" ? h(AccountMenu, Object.assign({ float: true }, p.user || {}, { theme: p.theme, extra: p.accountExtra, onSelect: function (k) { setOpen(null); if (p.onAccount) p.onAccount(k); } })) : null);
   }
 
   /* ---- Loaders: spinner and skeletons */

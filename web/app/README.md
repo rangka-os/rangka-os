@@ -17,8 +17,8 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   business switcher (Sendi tile, company, your role); it opens a menu with the apps, the org switch (when you belong to
   more than one org), theme, help, profile and sign-out. Then search (⌘K), the pinned entries (Beranda, Persetujuan with
   its count, Proses bisnis, Impor data) and the layout's `nav.side` groups (else each app's menu). The footer holds the
-  Pakai / Ubah toggle and the collapse button; collapsed state is kept in `localStorage["rk.sidebar.collapsed"]`.
-  At 600px and below the sidebar is a drawer opened from a 48px bar (menu, company, search, Pakai / Ubah).
+  collapse button; collapsed state is kept in `localStorage["rk.sidebar.collapsed"]`.
+  At 600px and below the sidebar is a drawer opened from a 48px bar (menu, company, search).
 - **`top-nav`**: the TopNav (app switcher, search, account menu) with the sidebar below it.
 
 ⌘K or Ctrl+K opens the command menu in both: Halaman (every sidebar entry), Buat baru (`layout.nav.create`) and Data
@@ -78,7 +78,9 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 ### Ubah (change and preview)
 
 - **Who sees it.** Only people with `meta.changesets.propose` (a browser session and the owner, or a role in
-  `config.ai.approvers` / `config.ai.proposers`) get the Pakai / Ubah toggle. Everyone else gets no toggle, and `?ubah=1` does nothing.
+  `config.ai.approvers` / `config.ai.proposers`) get a "Mode" section (Pakai / Ubah tampilan dan data) in the account menu: the avatar menu
+  in the top-nav shell, the business switcher's menu in the side shell. The Ubah bar has "Selesai" to go back to Pakai.
+  Everyone else gets no Mode section, and `?ubah=1` does nothing. The mode is off while offline (it writes change sets).
 - **What it does.** In Ubah people rearrange dashboards, forms, list and kanban columns and the menu, and add fields,
   stages, approvals, automations and tables. Every edit is a change set (contract 0015). A low-risk edit by an approver is
   applied at once with an "Urungkan" toast (undo is the change set's `revert`). Medium and high risk edits stop at

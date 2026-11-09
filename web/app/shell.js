@@ -412,7 +412,26 @@
     return d.getDate() + " " + M[d.getMonth()] + " " + d.getFullYear() + " " + hm;
   }
 
+  /**
+   * The account menu's extra sections: "Mode" (Pakai / Ubah) when the person may propose changes (o.propose), then
+   * "Aplikasi" from pwaMenu() keys (o.pwa). Items are {key, icon, label, on}; empty sections are left out.
+   */
+  function accountSections(o) {
+    var out = [];
+    if (o.propose) out.push({ heading: "Mode", items: [
+      { key: "mode:pakai", icon: "eye", label: "Pakai", on: !o.ubah },
+      { key: "mode:ubah", icon: "edit", label: "Ubah tampilan dan data", on: !!o.ubah }] });
+    var app = (o.pwa || []).map(function (k) {
+      return k === "update" ? { key: "app:update", icon: "download", label: "Muat versi baru" }
+        : k === "install" ? { key: "app:install", icon: "phone", label: "Pasang aplikasi" }
+        : { key: "app:ios", icon: "phone", label: "Pasang di layar utama" };
+    });
+    if (app.length) out.push({ heading: "Aplikasi", items: app });
+    return out;
+  }
+
   RA.L = L;
+  RA.accountSections = accountSections;
   RA.pwaMenu = pwaMenu;
   RA.lastSeen = lastSeen;
   RA.orgByLabel = orgByLabel;
@@ -1046,7 +1065,15 @@
     function goApp(a) { var h2 = homeHash({ apps: installed.filter(function (x) { return x.name === a.id; }) }); if (h2) RA.navigate(h2); }
     function help() { toast("info", "Bantuan", "Hubungi pemilik usaha atau admin kalau kamu butuh akses ke halaman lain."); }
     function account(k) {
-      if (k.indexOf("theme:") === 0) { setThemePick(k.slice(6)); writeThemePick(k.slice(6)); }
+      if (k === "mode:pakai" || k === "mode:ubah") {
+        // on a phone the menu sits in the drawer: close it so the Ubah bar and the page are in view
+        setNavOpen(false); setSwitchAt(null);
+        if ((k === "mode:ubah") !== ubah) toggleUbah(k === "mode:ubah");
+      }
+      else if (k === "app:update") RA.pwa.applyUpdate();
+      else if (k === "app:install") RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
+      else if (k === "app:ios") toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
+      else if (k.indexOf("theme:") === 0) { setThemePick(k.slice(6)); writeThemePick(k.slice(6)); }
       else if (k === "logout" || k === "switch") logout();
       else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
       else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
@@ -1055,7 +1082,6 @@
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmdOpen(true); }
     function toggleCollapsed() { if (rail) { setRailOpen(!railOpen); return; } var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
     // offline: Ubah writes change sets, so it waits for the connection like every other write
-    var modeToggle = cs8.propose && !previewCs && !offline && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
 
     /* ---------------------------------------------------------------- Raka (ai.js, contract 0020) */
     var aiKey = RA.aiStorageKey ? RA.aiStorageKey(me && me.org, me && me.email) : null; // one conversation per person
@@ -1089,16 +1115,10 @@
     }
 
     /** Install / update entries for the switcher's menu (pwa.js state); empty when there is nothing to offer. */
-    function appItems(s) {
-      return pwaMenu(s).map(function (k) {
-        if (k === "update") return { label: "Muat versi baru", icon: "download", onSelect: function () { RA.pwa.applyUpdate(); } };
-        if (k === "install") return { label: "Pasang aplikasi", icon: "phone", onSelect: function () {
-          RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
-        } };
-        return { label: "Pasang di layar utama", icon: "phone", onSelect: function () {
-          toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
-        } };
-      });
+    /** Extra sections of the account menu (TopNav's avatar menu and the side shell's switcher menu): the Pakai / Ubah
+     *  mode for people who may propose changes, then install / update of the app (pwa.js). */
+    function accountExtra() {
+      return accountSections({ propose: !!cs8.propose && !previewCs && !offline, ubah: ubah, pwa: pwaMenu(pwa) });
     }
 
     /** The switcher's menu: the apps (what TopNav's app switcher listed), companies, theme, help and the account. */
@@ -1111,7 +1131,11 @@
         return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
       }), ["-", { heading: "Tema" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
         return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
-      }), ["-"], appItems(pwa), [{ label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
+      }), ["-"], [].concat.apply([], accountExtra().map(function (g) {
+        return [{ heading: g.heading }].concat(g.items.map(function (it) {
+          return { label: it.label, icon: it.icon, checked: it.on, onSelect: function () { account(it.key); } };
+        }), ["-"]);
+      })), [{ label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
         { label: "Profil", icon: "user", onSelect: function () { account("profile"); } },
         { label: "Ganti akun", icon: "switch", onSelect: function () { account("switch"); } },
         { label: "Keluar", icon: "logout", onSelect: function () { account("logout"); } }]);
@@ -1126,7 +1150,7 @@
     if (ubahOn) {
       side = h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
         switcher: kind === "side-only" ? switcher : null,
-        footer: sideFooter(false, kind === "side-only" && modeToggle ? h(React.Fragment, { key: "mode" }, modeToggle) : null),
+        footer: sideFooter(false, null),
         onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } });
     } else if (kind === "top-nav") {
       // the top bar already names the business; the sidebar is the open app (openApp above)
@@ -1142,9 +1166,7 @@
         search: { label: "Cari", onOpen: openCmd },
         pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route, home || "#/"), onNavigate: onNavigate,
         collapsed: narrow, float: floating, onToggleCollapse: drawerNav ? undefined : toggleCollapsed,
-        footer: sideFooter(narrow, !modeToggle ? null : narrow
-          ? h(R.IconButton, { key: "mode", icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })
-          : h(React.Fragment, { key: "mode" }, modeToggle))
+        footer: sideFooter(narrow, null)
       });
     }
 
@@ -1153,8 +1175,8 @@
       searchPlaceholder: "Cari", currentApp: openApp ? openApp.name : null,
       apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: appIcon(a), color: "var(--primary)" }; }),
       user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },
-      actions: h(React.Fragment, null, modeToggle,
-        h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } })),
+      actions: h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
+      accountExtra: accountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
       onNotifications: function () { toast("info", "Belum ada notifikasi"); }
@@ -1163,8 +1185,7 @@
     var phoneBar = kind === "top-nav" ? null : h("header", { className: "ap-mhead" },
       h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
       h("b", { className: "ap-mhead-t" }, companyName),
-      h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }),
-      phone ? modeToggle : null);
+      h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }));
 
     // phone (desain arah E, P7): a bottom tab bar for the three things an owner does most; Menu opens the drawer
     var onHome = route.kind === "dash" && home && ("#/d/" + route.dash) === home;
@@ -1227,7 +1248,7 @@
               ? "Menampilkan data terakhir dilihat " + lastSeen(staleAt, new Date()) + ". Menyimpan menunggu koneksi."
               : "Halaman yang sudah pernah dibuka masih bisa dibaca; menyimpan menunggu koneksi.")) : null,
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
-          ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
+          ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending, onDone: function () { toggleUbah(false); } }) : null,
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs || offline })), tabBar),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
         cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs || offline, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,

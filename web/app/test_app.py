@@ -3193,11 +3193,8 @@ def widget_order(ctx, dash):
 
 
 def ubah_on(page):
-    rail = page.get_by_role("button", name="Masuk mode Ubah")  # the icon rail (tablet portrait, or folded) has an icon toggle
-    if rail.count() and rail.first.is_visible():
-        rail.first.click()
-    else:
-        page.get_by_role("group", name="Mode").get_by_role("button", name="Ubah", exact=True).click()
+    """Pakai / Ubah lives in the account menu (the switcher's menu in the side shell)."""
+    account_menu(page).get_by_text("Ubah tampilan dan data", exact=True).click()
     page.get_by_role("region", name="Mode ubah").wait_for(timeout=5000)
 
 
@@ -3296,13 +3293,30 @@ def test_ubah_marks_raka_proposals(page, ctx):
     page.get_by_text(f"Diusulkan Raka atas permintaan {ctx.owner[0]}").wait_for(timeout=5000)
 
 
+def test_ubah_from_account_menu(page, ctx):
+    """The mode sits in the account menu, not in the bars; Selesai on the Ubah bar goes back to Pakai."""
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-shell").wait_for(timeout=10000)
+    assert page.locator(".ap-ubah-mode").count() == 0, "no Pakai/Ubah toggle in the top bar, phone bar or sidebar"
+    ubah_on(page)
+    bar = page.get_by_role("region", name="Mode ubah")
+    bar.get_by_role("button", name="Selesai").click()
+    bar.wait_for(state="detached", timeout=5000)
+    assert page.locator(".ap-ubah-mode").count() == 0
+    # and Ubah can be turned on again from the menu
+    ubah_on(page)
+    ctx.live.add("ubah")
+
+
 def test_ubah_hidden_for_rep(page, ctx):
     page.goto(ctx.base + "/app/?mode=ubah")
     sign_in(page, *SALES)
     page.locator(".ap-shell").wait_for(timeout=15000)
     page.evaluate("() => { location.hash = location.hash.split('?')[0] + '?ubah=1'; }")
     page.locator("[data-loading=false]").wait_for(timeout=15000)  # the dashboard rendered with ?ubah=1 in the hash
-    assert page.get_by_role("group", name="Mode").count() == 0, "a sales_rep gets no Pakai/Ubah toggle"
+    menu = account_menu(page)
+    assert menu.get_by_text("Ubah tampilan dan data", exact=True).count() == 0, "a sales_rep gets no Ubah in the account menu"
+    page.keyboard.press("Escape")
     assert page.get_by_role("region", name="Mode ubah").count() == 0, "and no Ubah bar"
     ctx.live.add("ubah")
 

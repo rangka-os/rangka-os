@@ -20,7 +20,7 @@ This contract is phase 1: read tools only. Writes are reserved (below), not offe
 
 ### 1. The gateway
 
-- **One MCP server per turn.** The host (Rangka Cloud) serves an MCP endpoint on loopback for each turn and passes it to Raka in `/v1/turn` (§2). Raka's existing MCP client talks to it unchanged.
+- **One MCP server per turn.** The host (Rangka Cloud) serves an MCP endpoint on loopback for each turn and passes it to Raka in `/v1/turn` as `kernel.url` with the per-turn bearer as `kernel.token` (§2). Raka's existing MCP client talks to it unchanged.
 - **Two tool families behind one endpoint:**
   - `cloud_*`: Cloud tools for the business (§3), answered by the host itself.
   - the kernel tools Raka already knows (`rangka_meta`, `rangka_get_file`, `rangka_query`, `rangka_get_record`, `rangka_dashboard`, `rangka_skills`, `rangka_skill`, `rangka_skill_file`, `rangka_changeset_propose/validate/preview/status`), which the host forwards to the business's kernel with a kernel token Raka never sees. Forwarding is a later phase; a host that does not forward offers only the `cloud_*` tools.
@@ -31,12 +31,11 @@ This contract is phase 1: read tools only. Writes are reserved (below), not offe
 
 ### 2. `/v1/turn` additions
 
-Request (existing fields unchanged: `messages`, `kernel`):
+Request (existing fields unchanged: `messages`, `kernel`). One field is added:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
 | `place` | `"studio" \| "console" \| "app"`, optional | Where the owner opened Raka. Raka's system prompt opens with it and says what to look at first: studio, the interview and the build; console, `cloud_business` and then the problem; app, the page in `context`. It changes what Raka looks at first, never which tools exist or what it may do. An unknown value is `400 bad_request`. |
-| `gateway` | `{ "url": "<MCP url>", "token": "<per-turn bearer>" }`, optional | The gateway of §1. When present, Raka uses it as its MCP backend and `kernel` may be omitted. When both are sent, `gateway` wins. At least one of `gateway` and `kernel` is required, as `kernel` is today. |
 
 Response: unchanged: `{ status, text, summary, changeset_ids, escalations, usage }`. `usage` is `{ "inputTokens": n, "outputTokens": n }` for the turn (already sent today); the host counts turns against the plan's Raka allowance from it. The response never carries the gateway or kernel token, and logs never carry either.
 
@@ -98,8 +97,8 @@ Out of scope for the wire format beyond `usage` (§2): the host counts every tur
 
 ## Compatibility
 
-- A host that sends no `place` and no `gateway` gets today's `/v1/turn` behaviour: Raka uses `kernel` and no `cloud_*` tools exist.
-- A host must not send `gateway` to a rangka-ai that has not shipped §2. An older rangka-ai ignores `gateway`, finds no `kernel` and answers `400`, which fails safe; the host may also read the version from `/healthz` or enable the gateway per environment.
+- A host that sends no `place`, and a `kernel` that is a real kernel's MCP URL, gets today's `/v1/turn` behaviour: no `cloud_*` tools exist.
+- No new transport field. A host passes its gateway in the existing `kernel` `{url, token}`: the gateway is the MCP server at `kernel.url`, and the token is the per-turn bearer. Raka tells the two apart only by the tool list: kernel tools are offered when `rangka_meta` is listed, `cloud_*` tools when they are listed. A rangka-ai that has not shipped `place` ignores it and works as before.
 - A kernel that offers no `cloud_*` tools is the normal case: those names exist only on the gateway, never on a kernel's own `/mcp`.
 - Contract 0020's `/v1/chat` and the kernel relay are unchanged.
 - No schema, validator or kernel change. No change to 0035: Cloud skills use its format and are reserved above.
@@ -107,7 +106,7 @@ Out of scope for the wire format beyond `usage` (§2): the host counts every tur
 ## Contract changes
 
 - **rangka-ai:**
-  - `/v1/turn` accepts `place` and `gateway` (§2);
+  - `/v1/turn` accepts `place` (§2); `kernel.url` may point at a host's gateway, and Raka offers the tool families the MCP server lists;
   - an MCP backend that takes the gateway and passes `cloud_*` tools through; the refusal of approve/apply/reject/revert names applies to both families;
   - a system prompt that opens with the place;
   - later phases: `DELETE /v1/memory/{business}`, memory behind `RAKA_DATABASE_URL`.

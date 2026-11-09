@@ -109,7 +109,7 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 	if err != nil {
 		return nil, &Error{422, "bad_ops", err.Error(), nil}
 	}
-	as := Assess(cs.Ops, parsed(live, nil), parsed(live, files), s.appModel)
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor})
 	cs.Layers, cs.Risk = as.Layers, as.Risk
 	if cs.Layers == nil {
 		cs.Layers = []int{}
@@ -122,6 +122,125 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 		return nil, err
 	}
 	return cs, nil
+}
+
+// installedFor returns the units a config.rk would install with the live units (contract 0032 §3).
+func (s *Service) installedFor(cfg map[string]any) map[string]bool {
+	if s.Reg == nil || s.Reg() == nil {
+		return nil
+	}
+	return s.Reg().InstalledFor(cfg)
+}
+
+// modulesDiff compares the live installed units with those of the change set's registry (contract 0032 §3): it
+// counts the rows of every removed model in all organisations, raises the change set to high when any is above
+// zero, and names the units config no longer lists that another unit keeps installed.
+func (s *Service) modulesDiff(ctx context.Context, cs *ChangeSet, live *store.Live, after *meta.Registry, p *Preview) error {
+	touches := false
+	for _, op := range cs.Ops {
+		touches = touches || op.Path == "config.rk"
+	}
+	if !touches || s.Reg == nil || s.Reg() == nil || after == nil {
+		return nil
+	}
+	before := s.Reg()
+	d := &ModulesDiff{Added: []string{}, Removed: []string{}, Rows: map[string]int64{}, Kept: []KeptUnit{}}
+	for _, n := range after.AppOrder() {
+		if !before.IsInstalled(n) {
+			d.Added = append(d.Added, n)
+		}
+	}
+	for _, n := range before.AppOrder() {
+		if !after.IsInstalled(n) {
+			d.Removed = append(d.Removed, n)
+		}
+	}
+	sort.Strings(d.Added)
+	sort.Strings(d.Removed)
+	var withRows []string
+	for _, n := range d.Removed {
+		u := before.App[n]
+		if u == nil {
+			continue
+		}
+		for _, mn := range u.Models {
+			if _, ok := live.Columns[store.TableName(mn)]; !ok {
+				d.Rows[mn] = 0
+				continue
+			}
+			c, err := store.CountAllOrgs(ctx, s.DB, mn)
+			if err != nil {
+				return err
+			}
+			d.Rows[mn] = c
+			p.Affected[mn] = c
+			if c > 0 {
+				withRows = append(withRows, fmt.Sprintf("%s (%d)", mn, c))
+			}
+		}
+	}
+	// units the old config named that the new one does not, still installed: another unit requires them
+	oldNamed := map[string]bool{}
+	for _, x := range meta.AsList(before.SiteConfig("apps")) {
+		if n, ok := x.(string); ok {
+			oldNamed[n] = true
+		}
+	}
+	for _, n := range before.ConfigModules() {
+		oldNamed[n] = true
+	}
+	newNamed := map[string]bool{}
+	for _, x := range meta.AsList(after.SiteConfig("apps")) {
+		if n, ok := x.(string); ok {
+			newNamed[n] = true
+		}
+	}
+	for _, n := range after.ConfigModules() {
+		newNamed[n] = true
+	}
+	for _, n := range sortedSet(oldNamed) {
+		if newNamed[n] || !after.IsInstalled(n) {
+			continue
+		}
+		var by []string
+		for _, u := range after.Apps {
+			if u.Name == n || !after.IsInstalled(u.Name) {
+				continue
+			}
+			_, m := u.Modules[n]
+			_, r := u.Requires[n]
+			if m || r {
+				by = append(by, u.Name)
+			}
+		}
+		sort.Strings(by)
+		if by == nil {
+			by = []string{}
+		}
+		d.Kept = append(d.Kept, KeptUnit{Name: n, RequiredBy: by})
+		p.Notes = append(p.Notes, fmt.Sprintf("%s tetap terpasang: dibutuhkan oleh %s", n, strings.Join(by, ", ")))
+	}
+	if len(d.Added) > 0 {
+		p.Notes = append(p.Notes, "dipasang: "+strings.Join(d.Added, ", "))
+	}
+	if len(d.Removed) > 0 {
+		p.Notes = append(p.Notes, "dilepas: "+strings.Join(d.Removed, ", ")+" (tabel dan datanya disimpan, kembali saat dipasang lagi)")
+	}
+	if len(withRows) > 0 && cs.Risk != "high" {
+		cs.Risk = "high"
+		p.Notes = append(p.Notes, "risiko naik ke tinggi: model yang dilepas masih berisi data, "+strings.Join(withRows, ", ")+"; hanya pemilik yang bisa menyetujui")
+	}
+	p.Modules = d
+	return nil
+}
+
+func sortedSet(m map[string]bool) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // appModel returns the app's own model file (without overlays) by name.
@@ -304,6 +423,9 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 			p.Reversible = false
 			p.Notes = append(p.Notes, fmt.Sprintf("deleting %s hides %d record(s); the table is kept", model, n))
 		}
+	}
+	if err := s.modulesDiff(ctx, cs, live, reg, p); err != nil {
+		return nil, err
 	}
 	cs.Preview = p
 	if err := s.transition(ctx, cs, a, "previewed", fmt.Sprintf("%d statement(s)", len(stmts)), false); err != nil {

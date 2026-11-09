@@ -70,16 +70,9 @@ func (r *Registry) Catalogue() Catalogue {
 			}
 		}
 	}
-	installedBy := map[string][]string{}
-	for _, a := range r.Apps {
-		if !a.IsApp() || !installed[a.Name] {
-			continue
-		}
-		for _, m := range r.Closure([]string{a.Name}) {
-			if m != a.Name {
-				installedBy[m] = append(installedBy[m], a.Name)
-			}
-		}
+	var planMods map[string]bool // contract 0032 §6: nil = every module
+	if r.Site != nil {
+		planMods = r.PlanModules()
 	}
 	for _, a := range r.Apps {
 		switch {
@@ -107,11 +100,15 @@ func (r *Registry) Catalogue() Catalogue {
 			sort.Strings(app.Adds)
 			c.Apps = append(c.Apps, app)
 		case a.Kind == KindModule:
-			m := CatalogueModule{Name: a.Name, Title: a.Title, State: StateAvailable, InstalledBy: installedBy[a.Name]}
+			m := CatalogueModule{Name: a.Name, Title: a.Title, State: StateAvailable}
 			if installed[a.Name] {
 				m.State = StateInstalled
+				if by := r.InstalledBy(a.Name); len(by) > 0 {
+					m.InstalledBy = by // "config" (config.modules, contract 0032) and/or the installed apps
+				}
+			} else if planMods != nil && !planMods[a.Name] {
+				m.State = StateNotInPlan
 			}
-			sort.Strings(m.InstalledBy)
 			c.Modules = append(c.Modules, m)
 		}
 	}

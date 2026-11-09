@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: stock_item
+label: {id: Barang stok}
+naming: STK-{#####}
+title_field: item_name
+fields:
+  - {name: item_name, type: data, label: {id: Nama barang}, required: true}
+permissions:
+  - {role: sales_rep, read: true, write: true, create: true}

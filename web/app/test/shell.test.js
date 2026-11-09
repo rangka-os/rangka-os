@@ -76,6 +76,24 @@ test("navGroups: dashboards, each app's menu groups, then approvals and imports 
   assert.deepStrictEqual(grp.items.map((i) => [i.id, i.label]), [["import/a", "Alfa"], ["import/b", "Zebra"]]);
 });
 
+test("a composed site (contract 0032): meta.menu groups after app menus, home from the first module dashboard or list", () => {
+  const composed = {
+    apps: [],
+    menu: [
+      { module: "payments", group: { id: "Pembayaran" }, items: ["payment"], dashboards: [] },
+      { module: "invoicing", group: { id: "Tagihan" }, items: ["invoice", "gone"], dashboards: ["billing"] },
+    ],
+    models: { payment: { label: { id: "Pembayaran" } }, invoice: { label: { id: "Tagihan" } } },
+    dashboards: { billing: { label: { id: "Ringkasan tagihan" } } },
+  };
+  const g = plain(A.navGroups(composed, {}));
+  assert.deepStrictEqual(g.map((x) => x.label).slice(0, 3), ["Dasbor", "Pembayaran", "Tagihan"]);
+  assert.deepStrictEqual(g[2].items.map((x) => x.id), ["r/invoice"]); // a model /meta does not list is left out
+  assert.strictEqual(A.homeHash(composed), "#/d/billing");
+  assert.strictEqual(A.homeHash({ ...composed, dashboards: {}, menu: [composed.menu[0]] }), "#/r/payment");
+  assert.strictEqual(A.homeHash(META), "#/d/crm_overview"); // app sites keep their home
+});
+
 test("navGroups: Proses bisnis only when the kernel has processes", () => {
   const off = plain(A.navGroups(META, { processes: false }));
   assert.ok(!off.some((g) => g.items.some((i) => i.id === "proses")));

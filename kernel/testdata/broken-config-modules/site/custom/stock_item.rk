@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
+model: stock_item
+fields:
+  - {name: x_rak, type: data, label: {id: Rak}}

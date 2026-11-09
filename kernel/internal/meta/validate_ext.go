@@ -390,6 +390,19 @@ func (v *validator) site(all map[string]vis) {
 				}
 			}
 		}
+		var modNames []string
+		for _, a := range v.reg.Apps {
+			if a.Kind == KindModule {
+				modNames = append(modNames, a.Name)
+			}
+		}
+		for i, x := range asList(s.Features["plans"]) {
+			for j, m := range asList(asMap(x)["modules"]) {
+				if ms := pyStr(m); !contains(modNames, ms) {
+					v.rep.extra("error", feat.Path, fmt.Sprintf("plans/%d/modules/%d", i, j), "unknown_module", fmt.Sprintf(`"%s" is not a module%s`, ms, suggest(ms, modNames)))
+				}
+			}
+		}
 		for i, x := range asList(s.Features["plans"]) {
 			if ext, ok := asMap(x)["extends"].(string); ok && ext != "" && !plans[ext] {
 				v.rep.extra("error", feat.Path, fmt.Sprintf("plans/%d/extends", i), "unknown_plan", fmt.Sprintf(`plan "%s" does not exist`, ext))
@@ -419,16 +432,18 @@ func (v *validator) site(all map[string]vis) {
 		if plan != "" && feat != nil && !plans[plan] {
 			v.rep.extra("error", cfg.Path, "plan", "unknown_plan", fmt.Sprintf(`plan "%s" is not in features.rk%s`, plan, suggest(plan, planNames)))
 		}
-		if list, ok := c["apps"].([]any); ok {
-			var listed, valid []string
+		list, listedApps := c["apps"].([]any)
+		cfgMods := configModules(c, cfg)
+		composed := cfgMods != nil
+		var chosen []string // config.apps that are apps, then config.modules that are modules
+		if listedApps {
+			var listed []string
 			for _, x := range list {
 				listed = append(listed, pyStr(x))
 				if isApp(pyStr(x)) {
-					valid = append(valid, pyStr(x))
+					chosen = append(chosen, pyStr(x))
 				}
 			}
-			installed = closure(valid)
-			installed[SiteUnit] = installed[SiteUnit] || isSite(apps[SiteUnit])
 			for i, a := range listed {
 				if !isApp(a) {
 					v.rep.extra("error", cfg.Path, fmt.Sprintf("apps/%d", i), "unknown_app", fmt.Sprintf(`"%s" is not an app in %s%s`, a, v.reg.AppsDir, suggest(a, appNames)))
@@ -446,6 +461,17 @@ func (v *validator) site(all map[string]vis) {
 					}
 				}
 			}
+		}
+		if composed {
+			planFor := ""
+			if hasAllowed {
+				planFor = plan
+			}
+			chosen = append(chosen, v.configModules(cfg.Path, asMap(c["modules"]), cfgMods, planFor)...)
+		}
+		if listedApps || composed { // either key replaces the plan's apps as the fallback (contract 0032)
+			installed = closure(chosen)
+			installed[SiteUnit] = installed[SiteUnit] || isSite(apps[SiteUnit])
 		} else if hasAllowed {
 			var valid []string
 			for _, a := range allowed {
@@ -455,6 +481,9 @@ func (v *validator) site(all map[string]vis) {
 			}
 			installed = closure(valid)
 			installed[SiteUnit] = installed[SiteUnit] || isSite(apps[SiteUnit])
+		}
+		if composed {
+			v.uninstalledModels(all, installed)
 		}
 		if conns := v.reg.Connectors; len(conns) > 0 {
 			for i, x := range asList(c["connectors"]) {
@@ -477,6 +506,8 @@ func (v *validator) site(all map[string]vis) {
 			}
 			if x, ok := all[mn]; !ok {
 				v.rep.extra("error", cfg.Path, "numbering/"+mn, "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, mn, suggest(mn, keys(all))))
+			} else if !installed[x.app] && composed {
+				v.rep.extra("error", cfg.Path, "numbering/"+mn, "uses_uninstalled_model", uninstalledMsg(mn, x.app))
 			} else if !installed[x.app] {
 				v.rep.extra("warn", cfg.Path, "numbering/"+mn, "not_installed", fmt.Sprintf(`"%s" comes from app "%s", which this site does not install`, mn, x.app))
 			} else if str, _ := numbering[mn].(string); str != "" {
@@ -513,6 +544,9 @@ func (v *validator) site(all map[string]vis) {
 			}
 			if _, set := asMap(asMap(asMap(c["orgs"])[id])["config"])["connectors"]; set {
 				v.rep.extra("error", cfg.Path, "orgs/"+id+"/config/connectors", "org_config_key", fmt.Sprintf(`org "%s" config cannot set connectors: one site has one installed set (contract 0036)`, id))
+			}
+			if _, set := asMap(asMap(asMap(c["orgs"])[id])["config"])["modules"]; set {
+				v.rep.extra("error", cfg.Path, "orgs/"+id+"/config/modules", "org_config_key", fmt.Sprintf(`org "%s" config cannot set modules: one kernel has one schema (contract 0032)`, id))
 			}
 		}
 		type dppAt struct {
@@ -562,8 +596,9 @@ func (v *validator) site(all map[string]vis) {
 	for n, d := range v.reg.Dashboards {
 		dashboards[n] = d
 	}
+	_, composed := s.Config["modules"].(map[string]any)
 	for _, ln := range sortedKeysM(s.Layouts) {
-		v.layout(s.Layouts[ln].Path, asMap(s.Layouts[ln].Data), all, dashboards, installed)
+		v.layout(s.Layouts[ln].Path, asMap(s.Layouts[ln].Data), all, dashboards, installed, composed && s.Docs["config.rk"] != nil)
 	}
 	v.siteDashboards(all)
 }
@@ -608,7 +643,7 @@ func ThemeColours(d *rk.Doc) (map[string]string, map[string]string, map[string]t
 
 func keysDoc[V any](m map[string]V) []string { return sortedKeysM(m) }
 
-func (v *validator) layout(p string, l map[string]any, all map[string]vis, dashboards map[string]*Dashboard, installed map[string]bool) {
+func (v *validator) layout(p string, l map[string]any, all map[string]vis, dashboards map[string]*Dashboard, installed map[string]bool, composed bool) {
 	target := func(where string, to any, cond string) {
 		ts, ok := to.(string)
 		if !ok || !strings.Contains(ts, ":") {
@@ -620,6 +655,8 @@ func (v *validator) layout(p string, l map[string]any, all map[string]vis, dashb
 			x, ok := all[name]
 			if !ok {
 				v.rep.extra("error", p, where, "unknown_model", fmt.Sprintf(`"%s" is not a model%s`, name, suggest(name, keys(all))))
+			} else if !installed[x.app] && !strings.Contains(cond, "app_installed('"+x.app+"')") && composed {
+				v.rep.extra("error", p, where, "uses_uninstalled_model", uninstalledMsg(name, x.app))
 			} else if !installed[x.app] && !strings.Contains(cond, "app_installed('"+x.app+"')") {
 				v.rep.extra("error", p, where, "optional_model", fmt.Sprintf(`"%s" comes from app "%s", which this site does not install; add  if: app_installed('%s')`, name, x.app, x.app))
 			}

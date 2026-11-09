@@ -460,7 +460,7 @@
     "secrets": {
       "type": "object",
       "additionalProperties": false,
-      "description": "Where ${VARS} resolve from.",
+      "description": "Where connector secrets and ${VARS} resolve from (contract 0017). env, file and vault are read only; db keeps per-org values set through the write-only API, encrypted with RANGKA_MASTER_KEY.",
       "properties": {
         "enabled": {
           "type": "boolean",
@@ -470,12 +470,33 @@
           "enum": [
             "env",
             "file",
-            "vault"
+            "vault",
+            "db"
           ]
         },
         "path": {
-          "type": "string"
+          "type": "string",
+          "description": "file: the directory with one file per ${VAR}; vault: the key path"
         }
+      }
+    },
+    "connector_auth": {
+      "type": "object",
+      "description": "Binds connector auth fields for the env, file and vault drivers (contract 0017 §2): connector → field → ${VAR}. A secret field must be a ${VAR} reference. orgs.<org> overrides the site's bindings for one organisation.",
+      "properties": {
+        "orgs": {
+          "type": "object",
+          "description": "Per-org bindings: org → connector → field → value",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": {
+              "$ref": "#/$defs/auth_binding"
+            }
+          }
+        }
+      },
+      "additionalProperties": {
+        "$ref": "#/$defs/auth_binding"
       }
     },
     "audit": {
@@ -515,6 +536,18 @@
           "type": "boolean",
           "default": true
         }
+      }
+    }
+  },
+  "$defs": {
+    "auth_binding": {
+      "type": "object",
+      "description": "Field name → value: a ${VAR} reference, or a literal for a field that is not secret",
+      "additionalProperties": {
+        "type": [
+          "string",
+          "number"
+        ]
       }
     }
   }

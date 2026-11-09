@@ -10,6 +10,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
 // The catalogue (contract 0036 §3): every module, app and connector this kernel can install without a download,
@@ -146,6 +147,7 @@ func categoryOr(c any) any {
 }
 
 func (s *Server) catalogueConnectors(ctx context.Context, reg *meta.Registry) []any {
+	org := pg.OrgFrom(ctx)
 	installed := map[string]bool{}
 	for _, n := range InstalledConnectors(reg) {
 		installed[n] = true
@@ -167,15 +169,20 @@ func (s *Server) catalogueConnectors(ctx context.Context, reg *meta.Registry) []
 		c := meta.AsMap(reg.Connectors[name].Data)
 		exp := meta.AsMap(c["experimental"])
 		summary, category, icon := catalogueKeys(c)
-		// auth fields: name, label, secret and set. No value is ever included; set stays false until the secrets
-		// API of contract 0017 exists.
+		// auth fields: name, label, secret and set, from the same answer as GET /connectors/{c}/auth (contract 0017
+		// §3). No value is ever included. A connector needs auth while a required field is unset.
 		auth, needsAuth := []any{}, false
+		set := map[string]bool{}
+		if s.Secrets != nil {
+			set = s.Secrets.SetMap(ctx, org, name)
+		}
 		for _, x := range meta.AsList(meta.AsMap(c["auth"])["fields"]) {
 			f := meta.AsMap(x)
+			fn := meta.Str(f, "name")
 			required := f["required"] != false // an auth field is needed unless it says required: false
-			auth = append(auth, map[string]any{"name": meta.Str(f, "name"), "label": f["label"], "secret": f["secret"] == true,
-				"required": required, "set": false})
-			needsAuth = needsAuth || required
+			auth = append(auth, map[string]any{"name": fn, "label": f["label"], "secret": f["secret"] == true,
+				"required": required, "set": set[fn]})
+			needsAuth = needsAuth || (required && !set[fn])
 		}
 		provides := []string{}
 		pv := meta.AsMap(c["provides"])

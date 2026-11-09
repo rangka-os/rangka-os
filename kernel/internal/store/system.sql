@@ -223,3 +223,29 @@ create table if not exists rk_idempotency (
 );
 create index if not exists rk_idempotency_created on rk_idempotency (created_at);
 alter table rk_idempotency add column if not exists claim text not null default '';
+
+-- connector secrets, db driver (contract 0017 §2): per-org data keys wrapped by the key-encryption key (KEK), which
+-- never sits in the database, and AES-256-GCM values bound to org|connector|field|version. No plaintext anywhere.
+create table if not exists rk_org_keys (
+  org_id     text not null,
+  dek_id     text not null,
+  wrapped    bytea not null,              -- the data key sealed with the KEK
+  nonce      bytea not null,
+  kek_id     text not null,               -- which KEK wraps it (rangka secrets rewrap changes it)
+  created_at timestamptz not null default now(),
+  primary key (org_id, dek_id)
+);
+create table if not exists rk_secrets (
+  org_id     text not null,
+  connector  text not null,
+  field      text not null,
+  version    integer not null,
+  ciphertext bytea not null,
+  nonce      bytea not null,
+  dek_id     text not null,
+  hint       text not null default '',    -- last 4 characters, only for values of 16 characters or more
+  set_by     text not null default '',
+  set_at     timestamptz not null default now(),
+  retire_at  timestamptz,                 -- set when a newer version replaces it (inbound grace period, §8)
+  primary key (org_id, connector, field, version)
+);

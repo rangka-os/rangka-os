@@ -96,11 +96,15 @@
 
   /** Home: the first work screen marked home for the user (contract 0030 §3: meta.work is already theirs, in order),
    *  else the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list; on a
-   *  composed site (contract 0032 §5, meta.menu) the first dashboard of a module group, else its first list. */
+   *  composed site (contract 0032 §5, meta.menu) the first dashboard of a module group, else its first list. The site
+   *  layout's home (model:<m> or dashboard:<d>) comes before the apps when it names something installed. */
   function homeHash(meta) {
     var apps = (meta && meta.apps) || [], work = (meta && meta.work) || [], screens = (meta && meta.screens) || {}, i, j;
     var mods = (meta && meta.menu) || [];
     for (i = 0; i < work.length; i++) if (work[i].home && screens[work[i].screen]) return "#/w/" + work[i].screen;
+    var lh = String((meta && meta.layout && meta.layout.home) || ""), k = lh.slice(0, lh.indexOf(":")), n = lh.slice(lh.indexOf(":") + 1);
+    if (k === "model" && ((meta && meta.models) || {})[n]) return "#/r/" + n; // the layout's home (contract 0032 §5), when installed
+    if (k === "dashboard" && ((meta && meta.dashboards) || {})[n]) return "#/d/" + n;
     for (i = 0; i < apps.length; i++) if ((apps[i].dashboards || []).length) return "#/d/" + apps[i].dashboards[0];
     for (i = 0; i < apps.length; i++) {
       var menu = apps[i].menu || [];

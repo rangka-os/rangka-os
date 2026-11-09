@@ -209,6 +209,19 @@ with sync_playwright() as pw:
     dt_ = page.locator(".rk-drawer").inner_text()
     if "Katalog" not in dt_ or "api.xendit.co" not in dt_ or "Belum" not in dt_:
         fail(f"connectors drawer (xendit): {dt_[:300]!r}")
+    # Kunci (contract 0017 §3): a key is sent once and never shown again; the drawer shows Terisi and the last 4
+    # characters, the page never holds the value after Simpan, and Hapus clears it
+    secret = "xnd_development_console_0017_k3y9"
+    keys = page.locator(".rk-drawer section.rk-dw-sec", has=page.locator("h3", has_text="Kunci")).first
+    row = keys.locator("tr", has_text="secret_key")
+    row.get_by_role("button", name="Isi", exact=True).click()
+    keys.locator("input[type=password]").fill(secret)
+    keys.get_by_role("button", name="Simpan", exact=True).click()
+    page.wait_for_function("[...document.querySelectorAll('.rk-drawer tr')].some(function (r) { return r.innerText.includes('secret_key') && r.innerText.includes('Terisi ····k3y9'); })", timeout=5000)
+    if secret in page.content():
+        fail("Kunci: the page still holds the secret value after Simpan")
+    keys.locator("tr", has_text="secret_key").get_by_role("button", name="Hapus", exact=True).click()
+    page.wait_for_function("[...document.querySelectorAll('.rk-drawer tr')].some(function (r) { return r.innerText.includes('secret_key') && r.innerText.includes('Belum diisi'); })", timeout=5000)
     if errs:
         fail(f"catalogue: console errors {errs[:3]}")
     ctx.close()

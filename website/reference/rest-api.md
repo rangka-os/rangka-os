@@ -200,6 +200,10 @@ data key wrapped by `RANGKA_MASTER_KEY` (`rangka keygen`); without that key writ
 `connector_auth: {<connector>: {<field>: "${VAR}"}}`, per org under `connector_auth.orgs.<org>`. An installed
 connector shows `state: ready` in `/catalogue` once every required field is set.
 
+A change set that installs a connector lists its unset required fields in `preview.requires`
+(`[{connector, field, label, secret}]`). It can still be applied; the connector stays `needs_auth` until a person sets
+them.
+
 ## AI chat
 
 The embedded assistant Raka (contract 0020). The kernel relays the chat to the rangka-ai sidecar set with

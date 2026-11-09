@@ -82,6 +82,9 @@ func cmdBackup(args []string) int {
 		rows += t.Rows
 	}
 	fmt.Printf("backup %s: %d table(s), %d row(s), %d file(s)\n", *out, len(m.Tables), rows, len(m.Files))
+	if len(m.KEKIDs) > 0 {
+		fmt.Printf("connector secrets are encrypted: keep RANGKA_MASTER_KEY (id %s) apart from this archive\n", strings.Join(m.KEKIDs, ", "))
+	}
 	return 0
 }
 
@@ -129,5 +132,8 @@ func cmdRestore(args []string) int {
 	}
 	fmt.Printf("restored %s (%s, %s, rangka %s): %d table(s), %d row(s), %d file(s) into %s; verified\n",
 		archive, org, m.CreatedAt.Format(time.RFC3339), m.Version, len(m.Tables), rows, len(m.Files), *into)
+	if len(m.KEKIDs) > 0 {
+		fmt.Printf("connector secrets need RANGKA_MASTER_KEY with id %s (rangka serve refuses to read them with another key)\n", strings.Join(m.KEKIDs, ", "))
+	}
 	return 0
 }

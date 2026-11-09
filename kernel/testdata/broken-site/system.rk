@@ -24,3 +24,14 @@ auth:
 secrets: {driver: env}
 audit: {enabled: true, retention_days: 365}
 observability: {log_level: info, metrics: true}
+connector_auth:
+  whatsapp_business:
+    access_token: EAAG-literal-token
+    app_secret: "${WA_APP_SECRET}"
+    phone_number_id: "1098765432"
+    acess_token: "${WA_TOKEN}"
+  leaky: {api_key: 12345}
+  whatsap: {access_token: "${X}"}
+  orgs:
+    pt_beta:
+      whatsapp_business: {app_secret: plain-secret}

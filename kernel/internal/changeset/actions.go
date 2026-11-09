@@ -434,6 +434,9 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 	if err := s.modulesDiff(ctx, cs, live, reg, p); err != nil {
 		return nil, err
 	}
+	if s.Requires != nil && s.Reg != nil {
+		p.Requires = s.Requires(ctx, cs.Org, s.Reg(), reg)
+	}
 	cs.Preview = p
 	if err := s.transition(ctx, cs, a, "previewed", fmt.Sprintf("%d statement(s)", len(stmts)), false); err != nil {
 		return cs, err

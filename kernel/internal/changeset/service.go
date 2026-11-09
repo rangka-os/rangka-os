@@ -64,6 +64,17 @@ type Preview struct {
 	Notes      []string         `json:"notes,omitempty"`
 	// Modules is the difference in installed units a config.rk change makes (contract 0032 §3); nil otherwise.
 	Modules *ModulesDiff `json:"modules,omitempty"`
+	// Requires lists the auth fields still unset for the connectors this change installs (contract 0017 §4). The
+	// change can be applied; each connector stays needs_auth until a person sets them. Never a value.
+	Requires []Requirement `json:"requires,omitempty"`
+}
+
+// Requirement is one auth field a newly installed connector still needs.
+type Requirement struct {
+	Connector string `json:"connector"`
+	Field     string `json:"field"`
+	Label     any    `json:"label,omitempty"`
+	Secret    bool   `json:"secret"`
 }
 
 // ModulesDiff lists the units a change installs (the whole closure) and removes, the rows each removed model holds
@@ -138,7 +149,10 @@ type Service struct {
 	Reg                             func() *meta.Registry
 	Reload                          func(ctx context.Context) error // re-read dirs, migrate, swap the registry
 	Now                             func() time.Time
-	mu                              sync.Mutex
+	// Requires lists the unset auth fields of the connectors a change installs (contract 0017 §4); nil = none.
+	// before is the live registry, after the change's copy (which has no connector files of its own).
+	Requires func(ctx context.Context, org string, before, after *meta.Registry) []Requirement
+	mu       sync.Mutex
 }
 
 func (s *Service) now() string {

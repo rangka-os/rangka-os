@@ -13,6 +13,10 @@ auth:
       secret: true
     - name: account_id
       label: {id: Account ID}
+    - name: pin
+      label: {id: PIN}
+      secret: true
+      default: "'1234'"
 actions:
   - name: plain_http
     request:
@@ -38,6 +42,25 @@ actions:
     request:
       method: GET
       url: http://status.example.org/ping?account={auth.account_id}
+  - name: key_in_path
+    request:
+      method: GET
+      url: https://api.example.com/v1/{auth.api_key}/balance
+  - name: key_in_query
+    request:
+      method: GET
+      url: https://api.example.com/v1/rates?key={auth.api_key}
+  - name: key_in_query_map
+    request:
+      method: GET
+      url: https://api.example.com/v1/rates
+      query: {key: '{auth.pin}'}
+  - name: key_in_query_allowed
+    allow_secret_in: [query]
+    request:
+      method: GET
+      url: https://api.example.com/v1/rates
+      query: {api_key: '{auth.api_key}'}
 settings:
   - {name: base_host, type: data, default: "'API.example.com'"}
   - {name: other_host, type: data, default: "'evil.example.net'"}

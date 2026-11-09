@@ -738,10 +738,14 @@ def url_host(url):
 
 
 def check_secret_hosts(rep, p, c):
-    """Contract 0017 §5: an action that carries a secret uses https and, when the connector declares hosts:, sends it
+    """Contract 0017 §1, §5: a secret field has no default; an action carries a secret only in headers (the query
+    string with allow_secret_in: [query], as a warning), uses https and, when the connector declares hosts:, sends it
     only to those hosts (after templating the URL with the settings' defaults)."""
     fields = (c.get("auth") or {}).get("fields") if isinstance(c.get("auth"), dict) else None
     secret = [f.get("name") for f in fields or [] if isinstance(f, dict) and f.get("secret") is True and isinstance(f.get("name"), str)]
+    for i, f in enumerate(fields or []):
+        if isinstance(f, dict) and f.get("secret") is True and "default" in f:
+            rep.add("error", p, f"auth/fields/{i}/default", "secret_literal", f'secret field "{f.get("name")}" cannot have a default: bind its value per org (contract 0017 §1)')
     if not secret:
         return
     hosts = c.get("hosts") if isinstance(c.get("hosts"), list) else None
@@ -757,6 +761,20 @@ def check_secret_hosts(rep, p, c):
         if not any("{auth." + n + "}" in t for t in _strings(req) for n in secret):
             continue
         url, name = req["url"], a.get("name")
+        allow = a.get("allow_secret_in") if isinstance(a.get("allow_secret_in"), list) else []
+
+        def used(x):
+            return [n for n in secret if any("{auth." + n + "}" in t for t in _strings(x))]
+        base, _, qs = url.partition("?")
+        if used(base):
+            rep.add("error", p, f"actions/{i}/request/url", "secret_misplaced", f'action "{name}" puts secret {", ".join(used(base))} in the URL: send it in a header (contract 0017 §5)')
+        inq = used([qs, req.get("query")])
+        if inq and "query" in allow:
+            rep.add("warn", p, f"actions/{i}/allow_secret_in", "secret_in_query", f'action "{name}" sends secret {", ".join(inq)} in the query string (allow_secret_in); proxies and logs may keep it (contract 0017 §5)')
+        elif inq:
+            rep.add("error", p, f"actions/{i}/request/query" if used(req.get("query")) else f"actions/{i}/request/url", "secret_misplaced", f'action "{name}" puts secret {", ".join(inq)} in the query string: send it in a header, or allow it with allow_secret_in: [query] (contract 0017 §5)')
+        if used(req.get("body")):
+            rep.add("error", p, f"actions/{i}/request/body", "secret_misplaced", f'action "{name}" puts secret {", ".join(used(req.get("body")))} in the body: send it in a header (contract 0017 §5)')
         if url.lower().startswith("http://"):
             rep.add("error", p, f"actions/{i}/request/url", "secret_plain_http", f'action "{name}" sends a secret over plain http: use https (contract 0017 §5)')
         if hosts is None:
@@ -768,6 +786,35 @@ def check_secret_hosts(rep, p, c):
             continue
         if host not in [h.lower() for h in hosts if isinstance(h, str)]:
             rep.add("error", p, f"actions/{i}/request/url", "secret_host_undeclared", f'action "{name}" sends a secret to {host}, which is not in hosts ({", ".join(str(h) for h in hosts)}) (contract 0017 §5)')
+
+
+SECRET_REF = re.compile(r"^\$\{[A-Z][A-Z0-9_]*\}$")
+
+
+def check_connector_auth(rep, sysdoc, conns):
+    """Contract 0017 §2: system.rk connector_auth binds known connectors and fields; a secret field is a ${VAR}."""
+    if not sysdoc or not conns or not isinstance(sysdoc[1], dict) or not isinstance(sysdoc[1].get("connector_auth"), dict):
+        return
+    p, ca = sysdoc[0], sysdoc[1]["connector_auth"]
+    blocks = [("connector_auth", {k: v for k, v in ca.items() if k != "orgs"})]
+    orgs = ca.get("orgs") if isinstance(ca.get("orgs"), dict) else {}
+    for org in sorted(orgs):
+        if isinstance(orgs[org], dict):
+            blocks.append((f"connector_auth/orgs/{org}", orgs[org]))
+    for where, block in blocks:
+        for cn in sorted(block):
+            if cn not in conns:
+                rep.add("error", p, f"{where}/{cn}", "unknown_connector", f'"{cn}" is not a connector{suggest(cn, conns)}')
+                continue
+            if not isinstance(block[cn], dict):
+                continue
+            c = conns[cn][1] if isinstance(conns[cn][1], dict) else {}
+            fields = {f.get("name"): f for f in ((c.get("auth") or {}).get("fields") or []) if isinstance(f, dict)}
+            for fn in sorted(block[cn]):
+                if fn not in fields:
+                    rep.add("error", p, f"{where}/{cn}/{fn}", "unknown_auth_field", f'connector {cn} has no auth field "{fn}"{suggest(fn, [k for k in fields if isinstance(k, str)])}')
+                elif fields[fn].get("secret") is True and not (isinstance(block[cn][fn], str) and SECRET_REF.match(block[cn][fn])):
+                    rep.add("error", p, f"{where}/{cn}/{fn}", "secret_literal", f'{cn}.{fn} is secret: bind it to a ${{VAR}} reference, not a literal (contract 0017 §2)')
 
 
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
@@ -1209,6 +1256,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
             stem = key.split("/", 1)[1][:-3]
             if d.get("name") != stem:
                 rep.add("error", p, "name", "name_mismatch", f'{kind} name "{d.get("name")}" must match the file name "{stem}"')
+    check_connector_auth(rep, sdocs.get("system.rk"), conns)
     themes = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("themes/")}
     layouts = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("layouts/")}
     config = sdocs.get("config.rk", (None, {}))

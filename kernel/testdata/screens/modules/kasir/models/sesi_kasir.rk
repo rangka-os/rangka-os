@@ -4,6 +4,7 @@ label: {id: Sesi kasir}
 naming: SESI-{####}
 fields:
   - {name: cashier, type: data, label: {id: Kasir}, default: user.email, read_only: true, in_list: true}
+  - {name: outlet, type: data, label: {id: Outlet}, default: "'Pusat'", in_list: true}
   - {name: opening_cash, type: currency, label: {id: Modal kas}, required: true}
   - name: state
     type: select

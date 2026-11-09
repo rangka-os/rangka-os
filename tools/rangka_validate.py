@@ -799,8 +799,8 @@ def check_poll_triggers(rep, p, c):
             continue
         act = t.get("action")
         if not isinstance(act, str) or not act:
-            rep.add("warn", p, f"triggers/{i}", "poll_action_missing", f'poll trigger "{t.get("name")}" names no action to send: the kernel does not poll it until it does (contract 0002 §A.1)')
-        elif act not in actions:
+            continue  # only described (a spec connector): a flow listening to it gets poll_action_missing
+        if act not in actions:
             rep.add("error", p, f"triggers/{i}/action", "unknown_action", f'connector {c.get("name")} has no action "{act}"{suggest(act, [a for a in actions if isinstance(a, str)])}')
 
 
@@ -913,6 +913,9 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                     rep.add("error", p, "on", "unknown_connector", f'"{head}" is not a connector{suggest(head, conns)}')
                 elif ev not in [t.get("name") for t in conns[head][1].get("triggers", [])]:
                     rep.add("error", p, "on", "unknown_trigger", f'connector {head} has no trigger "{ev}"')
+                elif any(isinstance(t, dict) and t.get("name") == ev and t.get("via") == "poll" and not (isinstance(t.get("action"), str) and t.get("action"))
+                         for t in conns[head][1].get("triggers", [])):
+                    rep.add("warn", p, "on", "poll_action_missing", f'poll trigger {on} names no action to send: the kernel does not poll it, so this flow never runs (contract 0002 §A.1)')
         parens(rep, p, "if", f.get("if"))
         check_steps(rep, p, "steps", f.get("steps", []), allmodels, conns)
 

@@ -111,6 +111,8 @@ func (v *validator) more() {
 					v.rep.extra("error", p, "on", "unknown_connector", fmt.Sprintf(`"%s" is not a connector%s`, head, suggest(head, keys(conns))))
 				} else if !contains(namesOf(asMap(c.Data)["triggers"]), ev) {
 					v.rep.extra("error", p, "on", "unknown_trigger", fmt.Sprintf(`connector %s has no trigger "%s"`, head, ev))
+				} else if pollWithoutAction(asMap(c.Data), ev) {
+					v.rep.extra("warn", p, "on", "poll_action_missing", fmt.Sprintf(`poll trigger %s names no action to send: the kernel does not poll it, so this flow never runs (contract 0002 §A.1)`, on))
 				}
 			}
 		}
@@ -1137,4 +1139,16 @@ func (v *validator) namingFields(add func(level, path, where, code, msg string),
 			}
 		}
 	}
+}
+
+// pollWithoutAction reports a via: poll trigger that names no action: the kernel cannot poll it.
+func pollWithoutAction(c map[string]any, trigger string) bool {
+	for _, x := range asList(c["triggers"]) {
+		t := asMap(x)
+		if t["name"] == trigger && t["via"] == "poll" {
+			a, _ := t["action"].(string)
+			return a == ""
+		}
+	}
+	return false
 }

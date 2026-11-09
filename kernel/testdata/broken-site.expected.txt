@@ -87,6 +87,7 @@ crm/flows/bad_flow.rk:13:16  error  unknown_action  steps/2/then/1/call  connect
 crm/flows/bad_flow.rk:17:49  error  cel_syntax  steps/4/where  unbalanced parentheses in `(x`
 crm/flows/no_trigger.rk:1:1  warn   never_runs  (root)  a flow needs on: (an event) or schedule: (cron)
 crm/flows/no_trigger.rk:4:12  error  unknown_connector  steps/0/call  "nowhere" is not a connector
+crm/flows/orders_poll.rk:4:5  warn   poll_action_missing  on  poll trigger leaky.orders_no_action names no action to send: the kernel does not poll it, so this flow never runs (contract 0002 §A.1)
 sales/imports/bad_import.rk:11:10  error  not_a_table  lines/field  "notes" is not a table field of sales_invoice
 sales/imports/bad_import.rk:7:9  error  unknown_field  map/nope  "nope" is not a field of sales_invoice
 sales/imports/bad_import.rk:8:13  error  cel_syntax  map/customer  unbalanced parentheses in `lower(name`
@@ -117,7 +118,6 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-connectors/leaky/connector.rk:56:12  error  secret_misplaced  actions/6/request/url  action "key_in_query" puts secret api_key in the query string: send it in a header, or allow it with allow_secret_in: [query] (contract 0017 §5)
 ../broken-connectors/leaky/connector.rk:61:14  error  secret_misplaced  actions/7/request/query  action "key_in_query_map" puts secret pin in the query string: send it in a header, or allow it with allow_secret_in: [query] (contract 0017 §5)
 ../broken-connectors/leaky/connector.rk:63:22  warn   secret_in_query  actions/8/allow_secret_in  action "key_in_query_allowed" sends secret api_key in the query string (allow_secret_in); proxies and logs may keep it (contract 0017 §5)
-../broken-connectors/leaky/connector.rk:22:5  warn   poll_action_missing  triggers/1  poll trigger "orders_no_action" names no action to send: the kernel does not poll it until it does (contract 0002 §A.1)
 ../broken-connectors/leaky/connector.rk:23:44  error  unknown_action  triggers/2/action  connector leaky has no action "templated_okk"; did you mean "templated_ok"?
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
 ../broken-connectors/whatsapp_business/connector.rk:2:7  error  name_mismatch  name  connector name "whatsapp" must match the directory name "whatsapp_business"

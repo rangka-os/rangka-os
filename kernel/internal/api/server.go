@@ -41,6 +41,7 @@ type Server struct {
 	Files        files.Store // attachments blob store; nil = files capability disabled (501 files_disabled)
 	MaxUploadMB  int         // files.max_upload_mb; 0 = 20
 	AI           *AIConfig   // rangka-ai sidecar; nil = assistant off (contract 0020)
+	Internal     *Internal   // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0039 §1)
 	Log          func(format string, args ...any)
 
 	previewMu sync.Mutex // guards previews (preview.go)
@@ -228,6 +229,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "not_found", "no such endpoint "+r.URL.Path)
 	})
+	if s.Internal != nil && s.Internal.Token != "" {
+		mux.HandleFunc("POST /_rangka/tick", s.internalOnly(s.tick))
+	}
 	// static web (app, console, design system)
 	if s.WebDir != "" {
 		mux.Handle("GET /", s.static())

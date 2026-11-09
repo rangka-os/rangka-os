@@ -37,6 +37,17 @@ type Service struct {
 	DevOpen    bool
 	DefaultOrg string
 	Now        func() time.Time
+	// Upstreams are the external OpenID Providers of system.rk auth.upstream, ${ENV} resolved at start (contract 0042).
+	Upstreams []Upstream
+	// Password reads system.rk auth.password (true, false or "owners"); nil means true.
+	Password func() any
+	// UpstreamHTTP supplies the transport for calls to upstream providers (tests); nil uses the default transport.
+	UpstreamHTTP *http.Client
+	// Log receives operator messages; it never gets a token, code, secret or claim value.
+	Log func(format string, args ...any)
+
+	upMu    sync.Mutex
+	upCache map[string]*issuerCache // discovery and JWKS per issuer (upstream.go)
 
 	keyOnce sync.Once
 	key     *rsa.PrivateKey
@@ -79,16 +90,26 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 	if err != nil {
 		return "", nil, err
 	}
-	tok := RandomToken("", 32)
 	ttl := s.SessionTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at) values ($1, $2, $3, $4)", HashToken(tok), u.ID, u.Org, s.now().Add(ttl)); err != nil {
+	tok, err := s.openSession(ctx, u, ttl)
+	if err != nil {
 		return "", nil, err
 	}
 	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.login", "user/"+u.Email, "signed in", nil)
 	return tok, u, nil
+}
+
+// openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
+// auth.session_ttl; upstream sessions UpstreamSessionTTL.
+func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration) (string, error) {
+	tok := RandomToken("", 32)
+	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at) values ($1, $2, $3, $4)", HashToken(tok), u.ID, u.Org, s.now().Add(ttl)); err != nil {
+		return "", err
+	}
+	return tok, nil
 }
 
 // SwitchOrg moves a live session to another organisation the user belongs to.

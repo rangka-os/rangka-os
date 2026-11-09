@@ -10,6 +10,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sync"
 	"time"
 
@@ -121,6 +122,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	ups, err := upstreams(reg.SystemConfig("auth.upstream"), os.LookupEnv)
+	if err != nil {
+		return nil, err
+	}
 	fstore, err := openFiles(cfg, reg)
 	if err != nil {
 		return nil, err
@@ -198,7 +203,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		ttl = 24 * time.Hour
 	}
 	s.Auth = &auth.Service{DB: db, Issuer: issuer, SessionTTL: ttl, DevOpen: cfg.DevOpen, DefaultOrg: cfg.Org, Now: cfg.Now,
-		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }}
+		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }, Upstreams: ups, Log: cfg.Logf,
+		Password: func() any { return s.Engine.Reg().SystemConfig("auth.password") }}
 	s.Changes = &changeset.Service{DB: db, AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir, ModulesDir: cfg.ModulesDir,
 		Schemas: cfg.Schemas, Reg: e.Reg, Reload: s.Reload, Now: cfg.Now}
 	site := ""
@@ -290,6 +296,37 @@ func clients(reg *meta.Registry) []auth.Client {
 			Public: cm["public"] == true, Scopes: meta.StrList(cm["scopes"])})
 	}
 	return out
+}
+
+var envRef = regexp.MustCompile(`^\$\{([A-Z][A-Z0-9_]*)\}$`)
+
+// upstreams reads system.rk auth.upstream (contract 0042 §1). ${ENV} values are resolved now; a missing variable
+// stops the start with an error that names the variable, never a value. The list is fixed until the next start.
+func upstreams(cfg any, lookup func(string) (string, bool)) ([]auth.Upstream, error) {
+	var out []auth.Upstream
+	for _, u := range meta.AsList(cfg) {
+		um := meta.AsMap(u)
+		up := auth.Upstream{ID: meta.Str(um, "id"), Label: meta.Str(um, "label"), Issuer: meta.Str(um, "issuer")}
+		if up.Label == "" {
+			up.Label = up.ID
+		}
+		for _, f := range []struct {
+			key string
+			dst *string
+		}{{"client_id", &up.ClientID}, {"client_secret", &up.ClientSecret}} {
+			v := meta.Str(um, f.key)
+			if m := envRef.FindStringSubmatch(v); m != nil {
+				val, ok := lookup(m[1])
+				if !ok || val == "" {
+					return nil, fmt.Errorf("auth.upstream %s: %s reads ${%s}, which is not set", up.ID, f.key, m[1])
+				}
+				v = val
+			}
+			*f.dst = v
+		}
+		out = append(out, up)
+	}
+	return out, nil
 }
 
 // Start runs the realtime listener, queue workers and scheduler until ctx ends.

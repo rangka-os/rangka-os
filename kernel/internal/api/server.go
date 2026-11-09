@@ -214,6 +214,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /auth/logout", s.logout)
 	mux.HandleFunc("POST /auth/org", a(s.switchOrg))
 	mux.HandleFunc("GET /auth/me", a(s.me))
+	// upstream sign-in (contract 0042): the kernel as relying party of an external OpenID Provider
+	mux.HandleFunc("GET /auth/providers", s.Auth.Providers)
+	mux.HandleFunc("GET /auth/upstream/{id}/start", s.Auth.UpstreamStart)
+	mux.HandleFunc("GET /auth/upstream/{id}/callback", s.Auth.UpstreamCallback)
 	mux.HandleFunc("GET /.well-known/openid-configuration", s.Auth.Discovery)
 	mux.HandleFunc("GET /oauth/authorize", s.Auth.Authorize)
 	mux.HandleFunc("POST /oauth/authorize", s.Auth.Authorize)
@@ -346,7 +350,11 @@ func (s *Server) logRequests(h http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		h.ServeHTTP(sw, r)
 		if s.Log != nil && (strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/oauth/")) {
-			s.Log("%s %s %d %s", r.Method, r.URL.RequestURI(), sw.status, time.Since(start).Round(time.Millisecond))
+			target := r.URL.RequestURI()
+			if strings.HasPrefix(r.URL.Path, "/auth/upstream/") {
+				target = r.URL.EscapedPath() // the callback's query carries the provider's code and our state
+			}
+			s.Log("%s %s %d %s", r.Method, target, sw.status, time.Since(start).Round(time.Millisecond))
 		}
 	})
 }

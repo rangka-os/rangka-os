@@ -1,7 +1,8 @@
 # Models and fields
 
 A **model** is the centre of everything: it becomes a table, an API resource, a list, a form and, if you ask, a
-kanban board. It lives in `apps/<app>/models/<name>.rk`. Full property list: [model.rk reference](/reference/schema/model).
+kanban board. It lives in a module, `modules/<module>/models/<name>.rk` (a company's own tables live in the site,
+`models/x_<name>.rk`). Full property list: [model.rk reference](/reference/schema/model).
 
 ```yaml
 name: customer
@@ -94,8 +95,9 @@ views:
 
 ## System fields
 
-Every record has `name` (its id, from `naming`), `created_by`, `created_at`, `modified_at`, `org`. Document models add
-`docstatus` and `amended_from`, and a derived `status` unless they define their own. Models may define their own
+Every record has `name` (its id, from `naming`), `created_by`, `created_at` and `modified_at`, and is stored per
+organisation (an `org_id` column the API does not return). Document models add `docstatus` and `amended_from`, and a
+derived `status` unless they define their own. Models may define their own
 `owner` or `status` fields.
 
 ## Naming
@@ -142,7 +144,7 @@ numbering once at go-live, run `rangka numbering set <org> <series> <next>` inst
 in the current period (or in `--period 2026`). It never lowers a counter and never reissues an existing number; the
 earlier numbers stay in the client's old system.
 
-A new number always continues after the highest existing matching name, so data opened with real numbers mid-period is skipped over, never reissued. Changing a pattern or org code mid-period keeps counting, because the counter is per org, series and period. Until `orgs:` is allowed in `config.rk`, `{ORG}` is the org id in upper case.
+A new number always continues after the highest existing matching name, so data opened with real numbers mid-period is skipped over, never reissued. Changing a pattern or org code mid-period keeps counting, because the counter is per org, series and period.
 
 A model's number is resolved in this order:
 

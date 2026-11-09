@@ -31,13 +31,13 @@ onMounted(() => {
 onBeforeUnmount(() => io?.disconnect())
 
 const steps = [
-  { n: '01', a: 'Start with', b: 'ready-made', c: 'business apps', text: 'CRM, sales, POS and inventory ship as .rk apps for Indonesian businesses: rupiah without decimals, PPN 12% on DPP 11/12, NPWP, QRIS and WhatsApp. Install one with a line in config.rk.', link: '/ecosystem/apps', cta: 'Browse the apps', shot: 'kanban' },
+  { n: '01', a: 'Start with', b: 'ready-made', c: 'business apps', text: 'CRM, sales, invoicing, payments and stock ship as .rk modules and apps for Indonesian businesses: rupiah without decimals, PPN 12% on DPP 11/12, NPWP, QRIS and WhatsApp. Install one with a line in config.rk.', link: '/ecosystem/apps', cta: 'Browse the apps', shot: 'kanban' },
   { n: '02', a: 'Change it', b: 'without', c: 'an engineer', text: 'Ask Rangka AI for a PO number on invoices. It writes an overlay in your company layer, explains why, and shows the exact diff and risk. A person approves; the kernel applies it live and can revert it.', link: '/concepts/change-sets', cta: 'How change sets work', shot: 'console-changeset' },
   { n: '03', a: 'Stay in control with', b: 'self-hosted', c: 'infrastructure', text: 'Your business is a folder of files in your git, served by one Go binary and one Postgres. Queue, scheduler, realtime, cache and single sign-on are switched on in system.rk.', link: '/guide/architecture', cta: 'Read the architecture', shot: '' },
 ]
 
 const tabs = [
-  { title: 'Production-grade core', icon: 'beams', text: 'Strict YAML with JSON Schemas, a validator with 47 checks, generated tables, REST, SSE and MCP. Nothing hand-wired per app.', label: 'Concept', link: '/guide/rk-files', linkText: '.rk files' },
+  { title: 'Production-grade core', icon: 'beams', text: 'Strict YAML with JSON Schemas, a validator with 107 checks, generated tables, REST, SSE and MCP. Nothing hand-wired per app.', label: 'Concept', link: '/guide/rk-files', linkText: '.rk files' },
   { title: 'AI for rapid changes', icon: 'spark', text: 'Rangka AI reads your models and proposes change sets in layers 4–6 only. Guardrails live in code, not in a prompt.', label: 'Tool', link: '/tools/rangka-ai', linkText: 'Rangka AI' },
   { title: 'Control without drag', icon: 'shield', text: 'Validated, previewed on a copy, approved by a person, applied live, reverted in one click. High-risk changes need the owner.', label: 'Concept', link: '/concepts/change-sets', linkText: 'Change sets' },
 ]
@@ -60,7 +60,7 @@ const sc = ref(0)
 
 const faqs = [
   ['Is Rangka OS open source?', 'No, it is source-available under the Elastic License 2.0 (ELv2). The code is public on GitHub and free to self-host, change and use for your own business. Offering Rangka to others as a hosted or managed service needs a separate agreement with Saga Tekno Studio. Only the hosted Rangka Cloud is closed.'],
-  ['Is it ready for production?', 'Not yet. This is a v0 preview that runs end to end on a demo company. Several kernel parts use in-tree stand-ins that will be replaced; see the roadmap.'],
+  ['Is it ready for production?', 'Not yet. Rangka OS is in alpha (v0.5.0-alpha): it runs end to end, backs up and restores, enforces permissions and row scope, and is being readied for the first pilot businesses. The CEL engine, YAML reader, JSON Schema validator, router and job queue are still small in-tree packages that will be swapped for the upstream libraries; see the roadmap.'],
   ['Do I need a developer to customize it?', 'No for apps: models, rules, screens and dashboards are .rk files, changed by owners or Rangka AI through change sets. Yes if you want to work on the Go kernel.'],
   ['How do you stop AI from breaking things?', 'AI can only propose. Every change set is validated, previewed on a copy with its SQL, and approved by a person; high-risk changes need the owner. Applied changes can be reverted.'],
   ['Can I host it myself?', 'Yes. One Go binary and one Postgres run everything, including the queue, scheduler, realtime and cache.'],

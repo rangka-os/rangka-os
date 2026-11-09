@@ -108,6 +108,7 @@ type fakeOP struct {
 	tokenFail  int // status the token endpoint answers with instead of tokens (0 = normal)
 	discBody   []byte
 	discRedir  string
+	jwksURI    string // jwks_uri in discovery ("" = srv.URL/jwks)
 	authHeader string
 	tokenForm  url.Values
 }
@@ -130,23 +131,29 @@ func newFakeOP(t *testing.T, clientID, secret string, key *opKey) *fakeOP {
 		if iss == "" {
 			iss = op.srv.URL
 		}
-		json.NewEncoder(w).Encode(map[string]any{"issuer": iss, "authorization_endpoint": op.srv.URL + "/authorize?tenant=t1",
-			"token_endpoint": op.srv.URL + "/token", "jwks_uri": op.srv.URL + "/jwks"})
-	})
-	mux.HandleFunc("GET /jwks", func(w http.ResponseWriter, r *http.Request) {
-		op.mu.Lock()
-		defer op.mu.Unlock()
-		op.jwksHits++
-		keys := []any{}
-		for _, k := range op.published {
-			keys = append(keys, k.jwk())
+		jwks := op.jwksURI
+		if jwks == "" {
+			jwks = op.srv.URL + "/jwks"
 		}
-		json.NewEncoder(w).Encode(map[string]any{"keys": keys})
+		json.NewEncoder(w).Encode(map[string]any{"issuer": iss, "authorization_endpoint": op.srv.URL + "/authorize?tenant=t1",
+			"token_endpoint": op.srv.URL + "/token", "jwks_uri": jwks})
 	})
+	mux.HandleFunc("GET /jwks", op.serveJWKS)
 	mux.HandleFunc("POST /token", op.token)
 	op.srv = httptest.NewServer(mux)
 	t.Cleanup(op.srv.Close)
 	return op
+}
+
+func (op *fakeOP) serveJWKS(w http.ResponseWriter, r *http.Request) {
+	op.mu.Lock()
+	defer op.mu.Unlock()
+	op.jwksHits++
+	keys := []any{}
+	for _, k := range op.published {
+		keys = append(keys, k.jwk())
+	}
+	json.NewEncoder(w).Encode(map[string]any{"keys": keys})
 }
 
 func (op *fakeOP) token(w http.ResponseWriter, r *http.Request) {
@@ -241,6 +248,7 @@ type upEnv struct {
 	now  time.Time
 	logs *strings.Builder
 	mu   sync.Mutex
+	bind string // the browser-binding cookie of the last start (this test's "browser")
 }
 
 const testSecret = "client-secret-DO-NOT-LOG"
@@ -269,7 +277,16 @@ func (e *upEnv) advance(d time.Duration) { e.mu.Lock(); e.now = e.now.Add(d); e.
 
 func (e *upEnv) get(path string, hdr ...string) *httptest.ResponseRecorder {
 	e.t.Helper()
+	return e.getWith("", path, hdr...)
+}
+
+// getWith sends the browser-binding cookie bind (none when "").
+func (e *upEnv) getWith(bind, path string, hdr ...string) *httptest.ResponseRecorder {
+	e.t.Helper()
 	req := httptest.NewRequest("GET", path, nil)
+	if bind != "" {
+		req.AddCookie(&http.Cookie{Name: bindCookieName, Value: bind})
+	}
 	for i := 0; i+1 < len(hdr); i += 2 {
 		req.Header.Set(hdr[i], hdr[i+1])
 	}
@@ -285,12 +302,23 @@ func (e *upEnv) start(id, to string) string {
 	if w.Code != 302 {
 		e.t.Fatalf("start: %d %s", w.Code, w.Body)
 	}
+	var ck *http.Cookie
+	for _, c := range w.Result().Cookies() {
+		if c.Name == bindCookieName {
+			ck = c
+		}
+	}
+	if ck == nil || ck.Value == "" || !ck.HttpOnly || !ck.Secure || ck.SameSite != http.SameSiteLaxMode || ck.Path != "/auth/upstream/"+id+"/" || ck.MaxAge != 600 {
+		e.t.Fatalf("browser-binding cookie: %+v", ck)
+	}
+	e.bind = ck.Value
 	return w.Header().Get("Location")
 }
 
+// callback finishes a flow in the browser that started it (it sends the binding cookie).
 func (e *upEnv) callback(id, code, state string) *httptest.ResponseRecorder {
 	e.t.Helper()
-	return e.get("/auth/upstream/" + id + "/callback?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(state))
+	return e.getWith(e.bind, "/auth/upstream/"+id+"/callback?code="+url.QueryEscape(code)+"&state="+url.QueryEscape(state))
 }
 
 // signIn runs start → provider → callback.
@@ -332,8 +360,10 @@ func wantRefused(t *testing.T, w *httptest.ResponseRecorder, status int, code, c
 	if !strings.Contains(w.Header().Get("Content-Type"), "text/html") || !strings.Contains(w.Body.String(), copy) {
 		t.Fatalf("want the sign-in page with %q, got %s %s", copy, w.Header().Get("Content-Type"), w.Body)
 	}
-	if len(w.Result().Cookies()) != 0 {
-		t.Fatalf("a refused sign-in set a cookie: %v", w.Result().Cookies())
+	for _, c := range w.Result().Cookies() {
+		if c.Name == CookieName || c.MaxAge >= 0 {
+			t.Fatalf("a refused sign-in set a cookie: %v", c)
+		}
 	}
 }
 
@@ -611,8 +641,8 @@ func TestUpstreamUnknownKidRefetchAndRotation(t *testing.T) {
 func TestUpstreamProviderErrorNotReflected(t *testing.T) {
 	e := newUpEnv(t, testSecret, newRSAKey(t, "rsa-1"))
 	_, state := e.op.authorize(t, e.start("kantor", "/app/"), e.now, "s", "", nil, nil)
-	w := e.get("/auth/upstream/kantor/callback?state=" + url.QueryEscape(state) +
-		"&error=access_denied&error_description=" + url.QueryEscape("<script>alert('EVIL-PROVIDER-TEXT')</script>"))
+	w := e.getWith(e.bind, "/auth/upstream/kantor/callback?state="+url.QueryEscape(state)+
+		"&error=access_denied&error_description="+url.QueryEscape("<script>alert('EVIL-PROVIDER-TEXT')</script>"))
 	wantRefused(t, w, 401, "upstream_invalid", "Masuk dengan Kantor belum berhasil. Coba lagi.")
 	if strings.Contains(w.Body.String(), "EVIL-PROVIDER-TEXT") || strings.Contains(w.Body.String(), "access_denied") {
 		t.Fatalf("provider text reflected: %s", w.Body)
@@ -717,5 +747,140 @@ func TestProviders(t *testing.T) {
 	e.s.Upstreams = nil
 	if w := e.get("/auth/providers"); strings.TrimSpace(w.Body.String()) != `{"password":true,"upstream":[]}` {
 		t.Fatalf("no upstream: %s", w.Body)
+	}
+}
+
+// Review Focus 2: a callback URL carried to another browser (login CSRF) is refused there, does not consume the
+// state of the browser that started the flow, and signs nobody in.
+func TestUpstreamStateBoundToBrowser(t *testing.T) {
+	e := newUpEnv(t, testSecret, newRSAKey(t, "rsa-1"))
+	e.member("dewi@kopi.id", "sub-dewi")
+	code, state := e.op.authorize(t, e.start("kantor", "/app/"), e.now, "sub-dewi", "", nil, nil)
+	path := "/auth/upstream/kantor/callback?code=" + url.QueryEscape(code) + "&state=" + url.QueryEscape(state)
+	other := RandomToken("", 32) // another browser's own binding cookie
+	for _, bind := range []string{"", other} {
+		w := e.getWith(bind, path)
+		wantRefused(t, w, 400, "invalid_state", "Sesi masuk sudah habis. Mulai lagi.")
+		cleared := false
+		for _, c := range w.Result().Cookies() {
+			cleared = cleared || (c.Name == bindCookieName && c.MaxAge < 0 && c.Path == "/auth/upstream/kantor/")
+		}
+		if !cleared {
+			t.Fatalf("binding cookie not cleared: %v", w.Result().Cookies())
+		}
+	}
+	if e.op.tokenHits != 0 || e.sessions() != 0 {
+		t.Fatalf("another browser reached the token endpoint (%d) or got a session (%d)", e.op.tokenHits, e.sessions())
+	}
+	// the browser that started the flow still completes it, once
+	if w := e.callback("kantor", code, state); w.Code != 302 || e.sessions() != 1 {
+		t.Fatalf("starting browser: %d %s", w.Code, w.Body)
+	}
+	wantRefused(t, e.callback("kantor", code, state), 400, "invalid_state", "Sesi masuk sudah habis.")
+	e.assertLogsClean(e.bind, other, state, code)
+}
+
+// A verified e-mail does not add a second subject to a person already linked at this issuer (an e-mail the
+// provider reassigned, or a second account claiming it).
+func TestUpstreamNoSecondSubjectByEmail(t *testing.T) {
+	e := newUpEnv(t, testSecret, newRSAKey(t, "rsa-1"))
+	uid := e.member("dewi@kopi.id", "sub-dewi")
+	wantRefused(t, e.signIn("sub-other", "dewi@kopi.id", true, nil), 403, "membership_pending", "Aksesmu sedang disiapkan.")
+	if _, err := UserByIdentity(e.ctx, e.db, e.op.srv.URL, "sub-other"); err == nil {
+		t.Fatal("second subject linked")
+	}
+	if e.sessions() != 0 {
+		t.Fatal("session opened")
+	}
+	// a link at another issuer does not block the first link at this one
+	if _, err := e.db.Exec(e.ctx, "delete from rk_identities"); err != nil {
+		t.Fatal(err)
+	}
+	if err := LinkIdentity(e.ctx, e.db, "https://elsewhere.example", "sub-x", uid); err != nil {
+		t.Fatal(err)
+	}
+	if w := e.signIn("sub-other", "dewi@kopi.id", true, nil); w.Code != 302 {
+		t.Fatalf("first link at this issuer: %d %s", w.Code, w.Body)
+	}
+}
+
+// Every writer of rk_users.email stores it trimmed and lower-cased, so the lower-cased claim finds the account.
+func TestUpstreamEmailCase(t *testing.T) {
+	e := newUpEnv(t, testSecret, newRSAKey(t, "rsa-1"))
+	if _, err := EnsureUser(e.ctx, e.db, " Owner@Kopi.ID ", "", "pw-123456", "pt_alpha", "owner", ""); err != nil {
+		t.Fatal(err)
+	}
+	if _, _, err := UpsertMember(e.ctx, e.db, " Kasir@Kopi.ID", "", "pt_alpha", "cashier", nil); err != nil {
+		t.Fatal(err)
+	}
+	res, err := e.db.Query(e.ctx, "select email from rk_users order by email")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := fmt.Sprint(res.Rows); got != "[[kasir@kopi.id] [owner@kopi.id]]" {
+		t.Fatalf("stored e-mails %s", got)
+	}
+	for sub, email := range map[string]string{"sub-owner": "OWNER@kopi.id ", "sub-kasir": "kasir@KOPI.id"} {
+		if w := e.signIn(sub, email, true, nil); w.Code != 302 {
+			t.Fatalf("%s: %d %s", email, w.Code, w.Body)
+		}
+	}
+}
+
+func TestUpstreamHTTPSOnly(t *testing.T) {
+	for raw, want := range map[string]bool{"https://id.example": true, "http://localhost:8080": true, "http://127.0.0.1:1": true,
+		"http://[::1]:9": true, "http://id.example": false, "http://localhost.evil.example": false, "ftp://id.example": false, "": false, "/rel": false} {
+		if got := SecureURL(raw); got != want {
+			t.Errorf("SecureURL(%q) = %v", raw, got)
+		}
+	}
+	e := newUpEnv(t, testSecret, newRSAKey(t, "rsa-1"))
+	e.op.jwksURI = "http://jwks.example/keys"
+	wantRefused(t, e.get("/auth/upstream/kantor/start"), 502, "upstream_unavailable", "Kantor sedang tidak bisa dihubungi.")
+	e.s.Upstreams[0].Issuer = "http://id.example"
+	wantRefused(t, e.get("/auth/upstream/kantor/start"), 502, "upstream_unavailable", "Kantor sedang tidak bisa dihubungi.")
+}
+
+// A JWKS on another host than the issuer (Google's layout) works, including a redirect within that host.
+func TestUpstreamJWKSOnAnotherHost(t *testing.T) {
+	e := newUpEnv(t, testSecret, newRSAKey(t, "rsa-1"))
+	e.member("dewi@kopi.id", "sub-dewi")
+	mux := http.NewServeMux()
+	mux.HandleFunc("GET /keys", func(w http.ResponseWriter, r *http.Request) { http.Redirect(w, r, "/keys/v2", http.StatusFound) })
+	mux.HandleFunc("GET /keys/v2", e.op.serveJWKS)
+	keys := httptest.NewServer(mux)
+	t.Cleanup(keys.Close)
+	e.op.jwksURI = strings.Replace(keys.URL, "127.0.0.1", "localhost", 1) + "/keys" // another host name than the issuer's
+	if w := e.signIn("sub-dewi", "", nil, nil); w.Code != 302 {
+		t.Fatalf("jwks on another host: %d %s", w.Code, w.Body)
+	}
+	if e.op.jwksHits != 1 {
+		t.Fatalf("jwks hits %d", e.op.jwksHits)
+	}
+}
+
+func TestCheckUpstreamRedirect(t *testing.T) {
+	req := func(u string) *http.Request { r, _ := http.NewRequest("GET", u, nil); return r }
+	for _, tc := range []struct {
+		from, to string
+		ok       bool
+	}{
+		{"https://keys.example/a", "https://keys.example/b", true},
+		{"http://localhost/a", "https://localhost/b", true},
+		{"https://keys.example/a", "http://keys.example/b", false},
+		{"https://keys.example/a", "https://evil.example/b", false},
+		{"https://keys.example/a", "https://keys.example:444/b", false},
+	} {
+		err := checkUpstreamRedirect(req(tc.to), []*http.Request{req(tc.from)})
+		if (err == nil) != tc.ok {
+			t.Errorf("%s -> %s: %v", tc.from, tc.to, err)
+		}
+	}
+	via := []*http.Request{}
+	for i := 0; i < 5; i++ {
+		via = append(via, req("https://keys.example/a"))
+	}
+	if checkUpstreamRedirect(req("https://keys.example/b"), via) == nil {
+		t.Error("sixth redirect followed")
 	}
 }

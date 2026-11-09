@@ -21,13 +21,13 @@ Both are the same thing: the kernel is the relying party of an external OpenID P
 
 | Key | Meaning |
 | --- | --- |
-| `id` | Name used in routes, `[a-z][a-z0-9_]*`. Unique. |
+| `id` | Name used in routes, `[a-z][a-z0-9_]*`. Unique. Required. |
 | `label` | Shown to people ("Masuk dengan <label>"). Default: the `id`. |
-| `issuer` | The provider's issuer URL. Compared to the `iss` claim as an exact string (no trailing-slash or case tolerance). |
+| `issuer` | The provider's issuer URL. Required. `https`, except `http` on `localhost`, `127.0.0.1` or `::1` (development). Compared to the `iss` claim as an exact string (no trailing-slash or case tolerance). |
 | `client_id` | A literal or `${ENV}`. |
 | `client_secret` | `${ENV}` only (the schema already refuses a literal secret). Absent means a public client: PKCE only, no secret. |
 
-`${ENV}` values are resolved when the kernel loads its configuration. A missing variable stops the start with an error that names the variable, never a value. Secrets, tokens and codes never appear in logs, errors, audit entries or responses.
+`auth.upstream` is read and checked when the kernel starts: a missing or malformed `id`, a duplicate `id`, a missing or non-https `issuer`, a missing `client_id` or a literal `client_secret` stops the start with an error that names the entry, never a secret. `${ENV}` values are resolved then too; a missing variable stops the start with an error that names the variable, never a value. A change to `auth.upstream` (or to the variables it reads) takes effect at the next start, not on a configuration reload. Secrets, tokens and codes never appear in logs, errors, audit entries or responses.
 
 `auth.password` accepts three values (§6): `true` (default), `false`, `"owners"`.
 
@@ -39,7 +39,8 @@ No other key is added. Which organisation a person enters is not configured here
 - Discovery and the JWKS are cached for 1 hour per issuer.
 - An id_token whose `kid` is not in the cached JWKS makes the kernel refetch the JWKS once, at most once per minute per issuer, then decide. A key rotation therefore heals itself; a flood of bad `kid`s cannot make the kernel hammer the provider.
 - Algorithms: RS256 and ES256. `none`, HS* and every other algorithm are refused, whatever the header says.
-- Outgoing requests to the provider have a 10 s timeout, follow no redirect off the issuer's host, and read at most 1 MiB.
+- The discovery document's `authorization_endpoint`, `token_endpoint` and `jwks_uri` must be `https` (the same loopback exception as `issuer`), or the upstream is unusable (`502 upstream_unavailable`): a plain-http JWKS would let the network substitute keys.
+- Outgoing requests to the provider have a 10 s timeout and read at most 1 MiB. A redirect is followed only to the same host as the request being followed, with the same scheme or http to https (never a downgrade), at most 5 times. The JWKS and token endpoint may live on another host than the issuer.
 
 ### 3. Routes
 
@@ -49,11 +50,11 @@ No other key is added. Which organisation a person enters is not configured here
 | `GET /auth/upstream/{id}/start?to=<path>` | public | Begins sign-in. Unknown `id` is `404 unknown_upstream`. |
 | `GET /auth/upstream/{id}/callback` | public | The redirect URI registered at the provider: `{kernel origin}/auth/upstream/{id}/callback`. |
 
-**Start.** `to` must be a same-site path (starts with `/`, not `//`, no scheme, no backslash); anything else is replaced by `/app/`. The kernel creates `state`, `nonce` and a PKCE verifier (random, at least 256 bits each), stores their hashes or values in a server-side row (`rk_upstream_states`: state hash, upstream id, nonce, verifier, `to`, expiry) valid for 10 minutes and usable once, and redirects (302) to the provider's authorization endpoint with `response_type=code`, `scope=openid email profile`, `code_challenge_method=S256`, `state`, `nonce`, `redirect_uri`. PKCE and `state` are on every flow, also for confidential clients. The browser holds nothing but the redirect.
+**Start.** `to` must be a same-site path (starts with `/`, not `//`, no scheme, no backslash); anything else is replaced by `/app/`. The kernel creates `state`, `nonce`, a PKCE verifier and a browser-binding value (random, at least 256 bits each), stores a server-side row (`rk_upstream_states`: state hash, upstream id, binding hash, nonce hash, verifier, `to`, expiry) valid for 10 minutes and usable once, and redirects (302) to the provider's authorization endpoint with `response_type=code`, `scope=openid email profile`, `code_challenge_method=S256`, `state`, `nonce`, `redirect_uri`. PKCE and `state` are on every flow, also for confidential clients. The binding value goes to the browser as the cookie `rk_upstream` (HttpOnly, SameSite=Lax, `Path=/auth/upstream/{id}/`, Max-Age 600, Secure when the kernel's issuer is https or the request came over TLS), so a callback is accepted only in the browser that started the flow. The browser holds the redirect and that cookie, nothing else.
 
 **Callback.** The kernel:
 
-1. looks up the row by `state` and deletes it in the same statement (one use). A missing, expired, already used or other-upstream `state` is `400 invalid_state`; no session, no token request is made. A replayed callback is therefore refused the second time;
+1. looks up the row by `state`, upstream id and the hash of the `rk_upstream` cookie, and deletes it in the same statement (one use), then clears the cookie. A missing, expired, already used or other-upstream `state`, or a missing or different cookie, is `400 invalid_state`; no session, no token request is made. A replayed callback is therefore refused the second time, and a callback URL carried to another browser (login CSRF) is refused there without consuming the state of the browser that started it;
 2. if the provider returned `error`, shows the generic copy `Masuk dengan <label> belum berhasil. Coba lagi.` The provider's `error_description` is never rendered;
 3. exchanges `code` at the token endpoint with the PKCE verifier and `client_secret_basic` (or no secret for a public client);
 4. verifies the id_token (§4);
@@ -82,7 +83,7 @@ An upstream identity is the pair `(issuer, sub)`, stored in `rk_identities(issue
 Resolution at the callback:
 
 1. **Known pair.** `(issuer, sub)` exists: that user. The e-mail claim is ignored.
-2. **Unknown pair, first sign-in.** The kernel links by e-mail only when `email_verified` is `true` AND a user with that e-mail already has a membership in the organisation. It then stores the link and continues.
+2. **Unknown pair, first sign-in.** The kernel links by e-mail only when `email_verified` is `true` AND a user with that e-mail already has a membership in the organisation AND that user has no identity yet at this issuer. It then stores the link and continues. A user already linked at the issuer under another `sub` is not linked again by e-mail: an address the provider reassigned, or a second account claiming it, must not become a second way in. Such a sign-in gets rule 3. E-mails are compared trimmed and lower-cased (every writer of `rk_users.email` stores them so).
 3. **Otherwise** it refuses: `403 membership_pending`, "Aksesmu sedang disiapkan. Coba lagi sebentar." Sign-in never creates a user, a membership or a role. A provider account with the victim's e-mail and `email_verified: false` gets no link.
 
 `(issuer, sub)` already linked to another user is never re-linked at sign-in.
@@ -122,6 +123,7 @@ Browser routes show these on the sign-in page; JSON clients (`/auth/providers` a
 | 403 | `membership_pending` | Aksesmu sedang disiapkan. Coba lagi sebentar. | §5 rule 3 |
 | 403 | `no_membership` | (existing copy) | known identity, no membership |
 | 403 | `password_disabled` | Masuk dengan <label>. | §6 |
+| 500 | `internal` | Terjadi kesalahan. Coba lagi. | the kernel's own failure (database) during start or callback |
 
 No message echoes provider text, a token, a code or a claim.
 
@@ -137,7 +139,8 @@ No message echoes provider text, a token, a code or a claim.
 
 - The provider is trusted for who a person is, never for what they may do. Role and outlets come only from the kernel's membership, set by an owner or by the member API.
 - `aud`/`azp` and `iss` checks stop a token issued by the right provider for another client, or by another provider, from signing anyone in.
-- One-use `state`, stored nonce and PKCE verifier stop replay and login CSRF: a callback is accepted once, only for the upstream it was started for, and a stolen `code` is useless without the verifier held by the kernel.
+- One-use `state`, stored nonce and PKCE verifier stop replay: a callback is accepted once, only for the upstream it was started for, and a stolen `code` is useless without the verifier held by the kernel. The `rk_upstream` binding cookie stops login CSRF: a callback URL from the attacker's own flow, opened in the victim's browser, lacks the attacker's cookie and is refused.
+- Provider URLs are https (loopback excepted), and redirects never leave the host or downgrade the scheme, so the network cannot substitute keys or read codes.
 - Linking by e-mail requires a verified e-mail and an existing membership, so a provider account with someone else's address cannot take their place, and the kernel never creates access from a sign-in.
 - `to` is restricted to same-site paths, so the callback is not an open redirect.
 - JWKS refetch is rate limited per issuer (§2); outgoing calls are bounded in time and size.

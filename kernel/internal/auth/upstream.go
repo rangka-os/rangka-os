@@ -51,7 +51,33 @@ const (
 	orgCookieName = "rk_org"
 	// upstreamDefaultTo is where a sign-in lands without a usable ?to=.
 	upstreamDefaultTo = "/app/"
+	// bindCookieName ties a sign-in to the browser that started it (login CSRF): set at start with
+	// Path=/auth/upstream/<id>/, its hash stored with the state, required and cleared at the callback.
+	bindCookieName = "rk_upstream"
 )
+
+// SecureURL reports whether a provider URL may be used: https, or http on a loopback host (development, tests).
+func SecureURL(raw string) bool {
+	u, err := url.Parse(raw)
+	if err != nil || u.Host == "" {
+		return false
+	}
+	switch u.Scheme {
+	case "https":
+		return true
+	case "http":
+		h := u.Hostname()
+		return h == "localhost" || h == "127.0.0.1" || h == "::1"
+	}
+	return false
+}
+
+// bindCookie builds the browser-binding cookie of an upstream flow (value "" with maxAge -1 clears it). Secure
+// follows the session cookie: set when the kernel's issuer is https, and also when this request came over TLS.
+func (s *Service) bindCookie(r *http.Request, up *Upstream, value string, maxAge int) *http.Cookie {
+	return &http.Cookie{Name: bindCookieName, Value: value, Path: "/auth/upstream/" + up.ID + "/", HttpOnly: true, SameSite: http.SameSiteLaxMode,
+		Secure: strings.HasPrefix(s.Issuer, "https://") || r.TLS != nil, MaxAge: maxAge}
+}
 
 // upstreamError is a refused upstream sign-in: the status, code and copy shown to the person (contract 0042 §8),
 // and a reason for the operator's log that never carries a token, code, secret or claim value.
@@ -155,15 +181,15 @@ func (s *Service) UpstreamStart(w http.ResponseWriter, r *http.Request) {
 		s.upstreamFail(w, r, up, uerr)
 		return
 	}
-	state, nonce, verifier := RandomToken("", 32), RandomToken("", 32), RandomToken("", 32)
+	state, nonce, verifier, browser := RandomToken("", 32), RandomToken("", 32), RandomToken("", 32), RandomToken("", 32)
 	now := s.now()
 	// expired rows are swept here so the table stays small; a row is otherwise removed by its callback
 	if _, err := s.DB.Query(ctx, "delete from rk_upstream_states where expires_at < $1", now); err != nil {
 		s.upstreamFail(w, r, up, &upstreamError{500, "internal", "Terjadi kesalahan. Coba lagi.", "sweep states: " + err.Error()})
 		return
 	}
-	if _, err := s.DB.Query(ctx, `insert into rk_upstream_states (state_hash, upstream, nonce_hash, verifier, to_path, expires_at)
-		values ($1, $2, $3, $4, $5, $6)`, HashToken(state), up.ID, HashToken(nonce), verifier, SafePath(r.URL.Query().Get("to")), now.Add(upstreamStateTTL)); err != nil {
+	if _, err := s.DB.Query(ctx, `insert into rk_upstream_states (state_hash, upstream, browser_hash, nonce_hash, verifier, to_path, expires_at)
+		values ($1, $2, $3, $4, $5, $6, $7)`, HashToken(state), up.ID, HashToken(browser), HashToken(nonce), verifier, SafePath(r.URL.Query().Get("to")), now.Add(upstreamStateTTL)); err != nil {
 		s.upstreamFail(w, r, up, &upstreamError{500, "internal", "Terjadi kesalahan. Coba lagi.", "store state: " + err.Error()})
 		return
 	}
@@ -183,6 +209,7 @@ func (s *Service) UpstreamStart(w http.ResponseWriter, r *http.Request) {
 	q.Set("code_challenge", base64.RawURLEncoding.EncodeToString(sum[:]))
 	q.Set("code_challenge_method", "S256")
 	au.RawQuery = q.Encode()
+	http.SetCookie(w, s.bindCookie(r, up, browser, int(upstreamStateTTL.Seconds())))
 	w.Header().Set("Cache-Control", "no-store")
 	http.Redirect(w, r, au.String(), http.StatusFound)
 }
@@ -195,6 +222,8 @@ func (s *Service) UpstreamCallback(w http.ResponseWriter, r *http.Request) {
 		s.upstreamFail(w, r, nil, errUnknownUpstream())
 		return
 	}
+	// the binding cookie is single use like the state: cleared whatever the outcome
+	http.SetCookie(w, s.bindCookie(r, up, "", -1))
 	u, to, uerr := s.upstreamCallback(r, up)
 	if uerr != nil {
 		s.upstreamFail(w, r, up, uerr)
@@ -219,14 +248,19 @@ func (s *Service) upstreamCallback(r *http.Request, up *Upstream) (*User, string
 	if state == "" {
 		return nil, "", errInvalidState("no state")
 	}
-	// one use: the row is deleted by the statement that reads it; another upstream's state is not consumed
-	res, err := s.DB.Query(ctx, `delete from rk_upstream_states where state_hash = $1 and upstream = $2
-		returning nonce_hash, verifier, to_path, expires_at`, HashToken(state), up.ID)
+	bind, err := r.Cookie(bindCookieName)
+	if err != nil || bind.Value == "" {
+		return nil, "", errInvalidState("no browser-binding cookie")
+	}
+	// one use: the row is deleted by the statement that reads it. It must match the upstream and the browser that
+	// started the flow, so another upstream's or another browser's attempt neither consumes it nor signs anyone in.
+	res, err := s.DB.Query(ctx, `delete from rk_upstream_states where state_hash = $1 and upstream = $2 and browser_hash = $3
+		returning nonce_hash, verifier, to_path, expires_at`, HashToken(state), up.ID, HashToken(bind.Value))
 	if err != nil {
 		return nil, "", &upstreamError{500, "internal", "Terjadi kesalahan. Coba lagi.", "consume state: " + err.Error()}
 	}
 	if len(res.Rows) == 0 {
-		return nil, "", errInvalidState("state unknown, used or for another upstream")
+		return nil, "", errInvalidState("state unknown, used, or for another upstream or browser")
 	}
 	row := res.Rows[0]
 	nonceHash, verifier, to := row[0].(string), row[1].(string), row[2].(string)
@@ -311,6 +345,15 @@ func (s *Service) resolveUpstreamUser(ctx context.Context, r *http.Request, up *
 		}
 		if err != nil {
 			return nil, &upstreamError{500, "internal", "Terjadi kesalahan. Coba lagi.", "load user: " + err.Error()}
+		}
+		// a person already linked at this issuer under another sub is not linked again by e-mail: an e-mail the
+		// provider reassigned, or a second account claiming it, must not become a second way in
+		res, err = s.DB.Query(ctx, "select 1 from rk_identities where issuer = $1 and user_id = $2 limit 1", up.Issuer, uid)
+		if err != nil {
+			return nil, &upstreamError{500, "internal", "Terjadi kesalahan. Coba lagi.", "find identity: " + err.Error()}
+		}
+		if len(res.Rows) > 0 {
+			return nil, errMembershipPending("account already linked to another subject at this issuer")
 		}
 		if err := LinkIdentity(ctx, s.DB, up.Issuer, sub, uid); err != nil {
 			// ErrConflict: the pair was linked to someone else meanwhile; it is never re-linked at sign-in
@@ -409,16 +452,23 @@ func (s *Service) upstreamClient(up *Upstream) *http.Client {
 	if s.UpstreamHTTP != nil {
 		rt = s.UpstreamHTTP.Transport
 	}
-	host := ""
-	if iu, err := url.Parse(up.Issuer); err == nil {
-		host = iu.Host
+	return &http.Client{Transport: rt, Timeout: upstreamTimeout, CheckRedirect: checkUpstreamRedirect}
+}
+
+// checkUpstreamRedirect follows a redirect only on the host of the request being followed, with the same scheme
+// or http to https (never a downgrade), and at most 5 times.
+func checkUpstreamRedirect(req *http.Request, via []*http.Request) error {
+	if len(via) >= 5 {
+		return errors.New("redirect refused: too many")
 	}
-	return &http.Client{Transport: rt, Timeout: upstreamTimeout, CheckRedirect: func(req *http.Request, via []*http.Request) error {
-		if req.URL.Host != host || len(via) >= 5 {
-			return errors.New("redirect refused")
-		}
-		return nil
-	}}
+	prev := via[len(via)-1].URL
+	if req.URL.Host != prev.Host {
+		return errors.New("redirect refused: another host")
+	}
+	if req.URL.Scheme != prev.Scheme && !(prev.Scheme == "http" && req.URL.Scheme == "https") {
+		return errors.New("redirect refused: scheme change")
+	}
+	return nil
 }
 
 // upstreamDo runs a request and reads at most 1 MiB of the answer.
@@ -456,6 +506,9 @@ func (s *Service) upstreamGet(ctx context.Context, up *Upstream, u string) ([]by
 
 // discovery returns the provider's configuration, cached for an hour. Its issuer must equal the configured one.
 func (s *Service) discovery(ctx context.Context, up *Upstream) (*upstreamDiscovery, *upstreamError) {
+	if !SecureURL(up.Issuer) {
+		return nil, errUpstreamUnavailable(up, "issuer is not https")
+	}
 	c := s.issuer(up.Issuer)
 	c.mu.Lock()
 	defer c.mu.Unlock()
@@ -475,6 +528,10 @@ func (s *Service) discovery(ctx context.Context, up *Upstream) (*upstreamDiscove
 	}
 	if d.AuthorizationEndpoint == "" || d.TokenEndpoint == "" || d.JWKSURI == "" {
 		return nil, errUpstreamUnavailable(up, "discovery lacks an endpoint")
+	}
+	// a plain-http JWKS or token endpoint would let the network substitute keys or read codes
+	if !SecureURL(d.JWKSURI) || !SecureURL(d.TokenEndpoint) || !SecureURL(d.AuthorizationEndpoint) {
+		return nil, errUpstreamUnavailable(up, "discovery names an endpoint that is not https")
 	}
 	c.disc, c.discAt = &d, s.now()
 	return c.disc, nil

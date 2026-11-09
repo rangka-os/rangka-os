@@ -43,6 +43,37 @@ func TestUpstreamsConfig(t *testing.T) {
 	}
 }
 
+// auth.upstream is checked at start: the error names the entry and never carries a secret.
+func TestUpstreamsConfigRefused(t *testing.T) {
+	lookup := func(k string) (string, bool) { return "env-value-SECRET", true }
+	ok := func() map[string]any {
+		return map[string]any{"id": "kantor", "issuer": "https://id.example", "client_id": "cid", "client_secret": "${KANTOR_SECRET}"}
+	}
+	for name, tc := range map[string]struct {
+		edit func(m map[string]any) []any
+		want string
+	}{
+		"no id":          {func(m map[string]any) []any { delete(m, "id"); return []any{m} }, "auth.upstream[0]: id"},
+		"bad id":         {func(m map[string]any) []any { m["id"] = "Kantor-1"; return []any{m} }, `id "Kantor-1" must match`},
+		"duplicate id":   {func(m map[string]any) []any { return []any{m, ok()} }, "auth.upstream kantor: id is used twice"},
+		"no issuer":      {func(m map[string]any) []any { delete(m, "issuer"); return []any{m} }, "auth.upstream kantor: issuer is required"},
+		"http issuer":    {func(m map[string]any) []any { m["issuer"] = "http://id.example"; return []any{m} }, "issuer must be an https URL"},
+		"no client_id":   {func(m map[string]any) []any { delete(m, "client_id"); return []any{m} }, "auth.upstream kantor: client_id is required"},
+		"literal secret": {func(m map[string]any) []any { m["client_secret"] = "literal-SECRET"; return []any{m} }, "client_secret must be a ${ENV} reference"},
+	} {
+		_, err := upstreams(tc.edit(ok()), lookup)
+		if err == nil || !strings.Contains(err.Error(), tc.want) || strings.Contains(err.Error(), "SECRET") {
+			t.Errorf("%s: %v", name, err)
+		}
+	}
+	// a loopback issuer may be http (development)
+	m := ok()
+	m["issuer"] = "http://localhost:9000"
+	if _, err := upstreams([]any{m}, lookup); err != nil {
+		t.Errorf("loopback issuer: %v", err)
+	}
+}
+
 // A kernel without auth.upstream answers as before: password sign-in only, no upstream (contract 0042 compatibility).
 func TestProvidersWithoutUpstream(t *testing.T) {
 	e := newEnv(t, false, nil)

@@ -43,6 +43,7 @@ create index if not exists rk_identities_user on rk_identities (user_id);
 create table if not exists rk_upstream_states (   -- upstream sign-in in flight (contract 0042 §3): 10 minutes, one use
   state_hash text primary key,              -- sha256 of state; the browser holds the value
   upstream   text not null,                 -- auth.upstream id the flow was started for
+  browser_hash text not null,               -- sha256 of the rk_upstream cookie set at start (binds the flow to that browser)
   nonce_hash text not null,                 -- sha256 of nonce; compared with the id_token's nonce
   verifier   text not null,                 -- PKCE code_verifier, sent to the token endpoint, so kept as is
   to_path    text not null,                 -- same-site path to land on

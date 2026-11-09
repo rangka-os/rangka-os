@@ -1372,6 +1372,27 @@ def test_catalogue_page(page, ctx):
     page.get_by_text("Kamu tidak punya akses ke Modul dan sambungan").first.wait_for(timeout=10000)
 
 
+def test_phone_layout_tabs(page, ctx):
+    """Kopi Senja's layout turns on phone tabs (responsive.phone: tabs, contract 0038): Beranda, Peluang, Faktur,
+    Setujui and a last Menu tab that opens the drawer; Escape closes it. Wider screens have no tab bar."""
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-shell").wait_for(timeout=10000)
+    bar = page.locator(".ap-tabbar-layout")
+    if ctx.args.width >= 768:
+        assert bar.count() == 0, "no bottom tabs from 768px"
+        return
+    bar.wait_for(timeout=5000)
+    labels = [t.strip() for t in bar.locator("a, button").all_inner_texts()]
+    assert [l.split("\n")[0] for l in labels] == ["Beranda", "Peluang", "Faktur", "Setujui", "Menu"], labels
+    assert bar.locator("[aria-current=page]").inner_text().startswith("Beranda"), "home is the current tab"
+    bar.get_by_role("link", name="Peluang").click()
+    page.wait_for_function("() => location.hash.startsWith('#/r/deal')", timeout=5000)
+    bar.get_by_role("button", name="Menu").click()
+    page.locator(".ap-nav-open").wait_for(timeout=5000)
+    page.keyboard.press("Escape")
+    page.locator(".ap-nav-open").wait_for(state="detached", timeout=5000)
+
+
 def test_catalogue_install_module(page, ctx):
     """Contract 0036 §4: the owner installs module catatan from "Modul dan sambungan": Pasang opens the change-set card
     with the risk word, Setujui & terapkan applies it, and its menu group appears without a reload. The change set is

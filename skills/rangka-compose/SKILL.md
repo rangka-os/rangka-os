@@ -33,7 +33,7 @@ Match by the app's title and summary and by the owner's words (see `rangka-conce
 | an `installed` app already covers it | Say where it is in their system (menu or screen). Change nothing. |
 | an `available` app covers it | Explain it (step 3), then propose adding it (step 4). |
 | a `not_in_plan` app covers it | Say it exists and their plan does not include it. Do not propose it. Tell them to change the plan with Juragan (an operator does it). |
-| nothing covers it | Say so in one sentence, offer the closest thing that exists, and stop. Never draft a fake app or module. |
+| nothing covers it | Say which part nothing covers, then design it as a company piece (site `models/x_*`, `flows/`, overlays; 0016, 0033) — in the studio as a `custom` piece on the map (`rangka-consult`). Money and stock records stay in core modules. Only two gaps are real: a system with no usable API, and edge hardware with no edge module. Never draft a fake app or module. |
 
 ## 3. Explain what it shares before proposing
 
@@ -72,10 +72,10 @@ never deleted, but the owner must hear that its screens disappear.
 
 Say what exists instead and what you cannot do yet. Examples of honest answers:
 
-- Orders from GoFood, GrabFood or ShopeeFood: no connector in the catalogue covers them. If `outlet_sales` (outlet
+- Orders from GoFood, GrabFood or ShopeeFood: no connector in the catalogue covers them. Say so; if `outlet_sales` (outlet
   sales) is installed, offer recording each day's sales in it, or one of its sales-file imports; check which imports
   exist with `rangka_meta` before naming one.
-- A device at the outlet (printer, cash drawer, offline cashier): say the cashier runs in the browser and needs the
-  internet for now.
+- A device at the outlet: rangka-edge runs offline at the outlet (0003); check `rangka_catalogue` for an edge module
+  before offering it.
 
 Never promise a date for a missing capability.

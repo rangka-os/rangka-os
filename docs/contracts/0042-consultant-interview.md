@@ -41,7 +41,8 @@ Cloud stores the map with the project. rangka-ai stays stateless: it receives th
 | `design.records`, `design.steps` | ≤ 20 each |
 | every string | ≤ 300 characters (UTF-16 units, as `MAX_FACT_CHARS` today) |
 
-- Over a limit the whole map is invalid, with reason `map_too_large`, `field_too_long`, `bad_id` or `duplicate_id`.
+- Over a limit the whole map is invalid, with reason `map_too_large`, `field_too_long`, `bad_id` or `duplicate_id`. A request `map` that is invalid this way is answered `400 bad_request` whose message names the code.
+- A `put` whose value breaks these shape rules (`catalogue`, `connector` or `cloud_service` piece without `ref`; `ref` on a `custom` or `existing` piece; `design` on a non-`custom` piece; bad id; a string over 300 characters) is dropped as `bad_shape` (section 2). `ref` is not checked against the catalogue.
 - The map lives in Cloud with the project; rangka-ai is stateless and receives it each turn.
 
 ### 2. Map ops
@@ -50,10 +51,10 @@ Cloud stores the map with the project. rangka-ai stays stateless: it receives th
 | --- | --- | --- |
 | put | `{"op": "put", "kind": "stage\|piece\|open\|setting", "value": {...}}` | Insert or replace by `value.id`; a new stage goes last. |
 | remove | `{"op": "remove", "kind": ..., "id": ...}` | Removes the item. Removing a piece removes it from every stage. |
-| order | `{"op": "order", "ids": [stage ids]}` | Listed stages first in that order; ids not listed keep their relative order after them. |
+| order | `{"op": "order", "ids": [stage ids]}` | Listed stages first in that order; stages not listed keep their relative order after them. Unknown ids are ignored; an empty list is a no-op. |
 | business | `{"op": "business", "value": {name?, kind?, summary?}}` | Merge. |
 
-rangka-ai applies ops in order and returns the resulting map. A failing op is dropped and reported as `{"index": n, "reason": "..."}` with reasons `bad_shape`, `unknown_id`, `unconfirmed_guess`, `limit`. Dangling `stage.pieces` references are removed silently after all ops (the stage is kept).
+rangka-ai applies ops in order and returns the resulting map. A failing op is dropped and reported as `{"index": n, "reason": "..."}` with reasons `bad_shape`, `unknown_id`, `unconfirmed_guess`, `limit` (only for an op that would push a collection over its limit). Dangling `stage.pieces` references are removed silently after all ops (the stage is kept).
 
 ### 3. Guesses from files
 
@@ -67,21 +68,40 @@ A reply may carry `guesses: [{"id": "g_dp", "file": "f_1", "claim": "Deposit sel
 
 `POST /v1/interview` with `"version": 2`.
 
-- Request adds: `map` (required in v2), `confirmed_guesses: [id]`, `files: [{id, name, media_type, status}]`, `kernel: {url, token}` (the gateway, section 5; optional: without it Raka works from the map and conversation only). Examples may carry `map` next to `facts`. The request drops `facts`.
+- Request adds: `map` (required in v2), `confirmed_guesses: [id]`, `files: [{id, name, media_type, status}]`, `kernel: {url, token}` (the gateway, section 5; optional: without it Raka works from the map and conversation only). Examples may carry `map` next to `facts`. The request drops `facts`; a v2 request that still sends `facts` has them ignored.
 - Response: `{reply, map, dropped_ops, guesses, suggest_build, usage, provider, model}`. No `done`, no `facts`.
+- `suggest_build` (boolean) is set by Raka when the map covers the flow from first contact to money in. Cloud then offers the "Susun rancangan" action. It never ends the interview, and the owner can build without it.
 - A request without `version` is v1 (unchanged) until Cloud has moved; v1 is removed in a later contract.
 
 **Facts to map for legacy projects.**
 
-| Fact | Becomes |
+Fact keys and labels (rangka-cloud `FactKeys`, in this order, verbatim):
+
+| Key | Label |
 | --- | --- |
-| `business_name` | `business.name` |
-| `industry` | `business.kind` |
-| `offer` | `business.summary` |
-| `ordering`, `payment`, `fulfilment`, `locations`, `team`, `pain_points`, `data_to_move` (each with a value) | a `setting`, id `t_<key>`, text `"<label>: <value>"` (label from rangka-cloud `FactKeys`) |
-| `current_tools` | one piece of kind `existing`, id `p_current` |
-| `replace_or_complement` | setting `t_replace`, text `"Juragan: ganti penuh"` or `"Juragan: pendamping"` |
-| each missing required fact | an `open` item `o_<key>` with the scripted question below |
+| `business_name` | Nama usaha |
+| `industry` | Jenis bisnis |
+| `offer` | Yang dijual |
+| `customers` | Pelanggan |
+| `ordering` | Cara pesan |
+| `payment` | Pembayaran |
+| `fulfilment` | Antar atau ambil |
+| `locations` | Lokasi dan cabang |
+| `team` | Tim |
+| `current_tools` | Sistem yang dipakai sekarang |
+| `replace_or_complement` | Ganti penuh atau pendamping |
+| `data_to_move` | Data yang perlu dipindah |
+| `pain_points` | Yang paling repot |
+
+Rules (Python and Go must produce byte-identical maps):
+
+- A fact is present only if its value is a string that is non-empty after JavaScript-style `trim()`; anything else (absent, null, non-string, blank) is absent. The trimmed value is used.
+- `business.name` from `business_name`, `business.kind` from `industry`, `business.summary` from `offer` (each only if present, else empty string).
+- Settings: for each of `ordering`, `payment`, `fulfilment`, `locations`, `team`, `pain_points`, `data_to_move` that is present, a `setting` with id `t_<key>` and text `"<label>: <value>"`, cut to 300 UTF-16 units (cut, never dropped). Order: `FactKeys` order of the setting keys, then `t_replace` last.
+- `current_tools` present: one piece, id `p_current`, kind `existing`, `label` = the value cut to 300 UTF-16 units, no `why`, no `ref`.
+- `replace_or_complement` present: setting `t_replace` with text `"Juragan: ganti penuh"` when `NormaliseReplaceOrComplement` gives `ganti`, `"Juragan: pendamping"` when it gives `pendamping`; any other value gives no setting.
+- Each required fact (`RequiredForDone` order: `business_name`, `offer`, `current_tools`, `replace_or_complement`) that is absent gives an `open` item `o_<key>` with the scripted question below.
+- `stages` is empty.
 
 Scripted questions (rangka-cloud `MissingFactQuestions`, verbatim):
 
@@ -131,9 +151,9 @@ Each unset value falls back to the matching `RAKA_*`. `VISION` has no fallback: 
 
 ### 8. Susun rancangan: initial plan
 
-Cloud builds as today from the map's `catalogue` and `cloud_service` pieces (their `ref` into `config.modules`, through `keepComposition` and the validator), then calls `POST /v1/plan {map, kernel, slug}` against the preview kernel (`slug` is the project slug, the process file name). rangka-ai proposes:
+Cloud builds as today from the map's `catalogue` and `cloud_service` pieces (their `ref` into `config.modules`, through `keepComposition` and the validator), then calls `POST /v1/plan {map, kernel, slug}` against the preview kernel (`slug` is the project slug, the process file name, matching `^[a-z][a-z0-9-]{0,62}$`; Cloud guarantees it and rangka-ai answers `400 bad_request` otherwise). rangka-ai proposes:
 
-- (a) `processes/<slug>.rk` (0014) with the stages that have a `model` the kernel's `rangka_meta` knows, in map order, `label: {id: <stage label>}`, skipping the rest;
+- (a) `processes/<slug>.rk` (0014) with the stages that have a `model` the kernel's `rangka_meta` knows, in map order, `label: {id: <stage label>}`; stages whose model is unknown are skipped and listed nowhere;
 - (b) when `settings` is non-empty, one agent run that turns the settings into overlay defaults and rules (`site/custom/<model>.rk`); settings it cannot express come back in `unexpressed: [setting ids]`.
 
 `custom` pieces are not built in this contract (they wait for 0033): `/v1/plan` returns them in `deferred: [piece ids]` and Cloud records them as gaps. Response: `{changesets: [{id, title, summary}], unexpressed, deferred}`.

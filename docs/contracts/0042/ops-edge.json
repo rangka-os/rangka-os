@@ -1,0 +1,158 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Kopi Senja",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_kasir",
+        "label": "Bayar di kasir",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_printer",
+        "kind": "edge",
+        "label": "Printer struk",
+        "ref": "edge_printer",
+        "why": "Struk dicetak di outlet"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_laci",
+        "kind": "edge",
+        "label": "Laci kas",
+        "why": "Laci kas terbuka saat bayar tunai"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_pg",
+        "kind": "cloud_service",
+        "label": "Payment gateway",
+        "ref": "payment_gateway"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_bad",
+        "kind": "edge",
+        "label": "Timbangan",
+        "ref": ""
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_bad2",
+        "kind": "edge",
+        "label": "Timbangan",
+        "design": {}
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_bad3",
+        "kind": "cloud_service",
+        "label": "Payment gateway"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_kasir",
+        "label": "Bayar di kasir",
+        "actor": "Kasir",
+        "pieces": [
+          "p_printer",
+          "p_laci",
+          "p_pg"
+        ]
+      }
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Kopi Senja",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_kasir",
+        "label": "Bayar di kasir",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_printer",
+          "p_laci",
+          "p_pg"
+        ],
+        "actor": "Kasir"
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_printer",
+        "kind": "edge",
+        "label": "Printer struk",
+        "ref": "edge_printer",
+        "why": "Struk dicetak di outlet"
+      },
+      {
+        "id": "p_laci",
+        "kind": "edge",
+        "label": "Laci kas",
+        "why": "Laci kas terbuka saat bayar tunai"
+      },
+      {
+        "id": "p_pg",
+        "kind": "cloud_service",
+        "label": "Payment gateway",
+        "ref": "payment_gateway"
+      }
+    ],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": [
+    {
+      "index": 3,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 4,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 5,
+      "reason": "bad_shape"
+    }
+  ]
+}

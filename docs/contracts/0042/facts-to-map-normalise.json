@@ -4,13 +4,15 @@
     "offer": " Kue basah ",
     "current_tools": "Buku",
     "ordering": "  Lewat WA  ",
-    "replace_or_complement": "  Ganti penuh "
+    "replace_or_complement": "  Ganti penuh ",
+    "industry": "\u0085Kafe",
+    "locations": "\ufeffBekasi\u3000"
   },
   "want_map": {
     "version": 1,
     "business": {
       "name": "Toko Maju",
-      "kind": "",
+      "kind": "\u0085Kafe",
       "summary": "Kue basah"
     },
     "stages": [],
@@ -26,6 +28,10 @@
       {
         "id": "t_ordering",
         "text": "Cara pesan: Lewat WA"
+      },
+      {
+        "id": "t_locations",
+        "text": "Lokasi dan cabang: Bekasi"
       },
       {
         "id": "t_replace",

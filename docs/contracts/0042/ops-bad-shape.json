@@ -1,0 +1,170 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_b"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_a",
+        "kind": "plugin",
+        "label": "Plugin"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_c",
+        "label": "Bayar",
+        "documents": "Nota"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "open",
+      "value": {
+        "id": "o_a",
+        "text": "Jam buka?",
+        "note": "x"
+      }
+    },
+    {
+      "op": "business",
+      "value": {
+        "name": "nnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn"
+      }
+    },
+    {
+      "op": "business",
+      "value": {
+        "owner": "Bu Sri"
+      }
+    },
+    {
+      "op": "business",
+      "value": {
+        "name": "Toko Baru"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_b",
+        "kind": "existing",
+        "label": "Excel",
+        "ref": "excel"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_c",
+        "kind": "catalogue",
+        "label": "Kasir",
+        "ref": "pos",
+        "design": {}
+      }
+    },
+    {
+      "op": "rename",
+      "kind": "stage",
+      "id": "s_a"
+    },
+    {
+      "op": "remove",
+      "kind": "thing",
+      "id": "s_a"
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Toko Baru",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": [
+    {
+      "index": 0,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 1,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 2,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 3,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 4,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 5,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 7,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 8,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 9,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 10,
+      "reason": "bad_shape"
+    }
+  ]
+}

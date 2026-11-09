@@ -33,7 +33,11 @@ Match by the app's title and summary and by the owner's words (see `rangka-conce
 | an `installed` app already covers it | Say where it is in their system (menu or screen). Change nothing. |
 | an `available` app covers it | Explain it (step 3), then propose adding it (step 4). |
 | a `not_in_plan` app covers it | Say it exists and their plan does not include it. Do not propose it. Tell them to change the plan with Juragan (an operator does it). |
-| nothing covers it | Say which part nothing covers, then design it as a company piece (site `models/x_*`, `flows/`, overlays; 0016, 0033) — in the studio as a `custom` piece on the map (`rangka-consult`). Money and stock records stay in core modules. Only two gaps are real: a system with no usable API, and edge hardware with no edge module. Never draft a fake app or module. |
+| nothing covers it, in the studio | Say which part nothing covers, then design it as a `custom` piece on the map (`rangka-consult`). Money and stock records stay in core modules. |
+| nothing covers it, in the console | Say which part nothing covers. Draft company pieces (site `models/x_*`, `flows/`, overlays; 0016, 0033) only once contract 0033 is accepted; until then name the gap plainly and change nothing. |
+
+Only two gaps are real in either place: a system with no usable API, and edge hardware with no edge module. Never
+draft a fake app or module.
 
 ## 3. Explain what it shares before proposing
 

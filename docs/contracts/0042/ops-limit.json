@@ -1,0 +1,306 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [
+      {
+        "id": "o_1",
+        "text": "Pertanyaan 1"
+      },
+      {
+        "id": "o_2",
+        "text": "Pertanyaan 2"
+      },
+      {
+        "id": "o_3",
+        "text": "Pertanyaan 3"
+      },
+      {
+        "id": "o_4",
+        "text": "Pertanyaan 4"
+      },
+      {
+        "id": "o_5",
+        "text": "Pertanyaan 5"
+      },
+      {
+        "id": "o_6",
+        "text": "Pertanyaan 6"
+      },
+      {
+        "id": "o_7",
+        "text": "Pertanyaan 7"
+      },
+      {
+        "id": "o_8",
+        "text": "Pertanyaan 8"
+      },
+      {
+        "id": "o_9",
+        "text": "Pertanyaan 9"
+      },
+      {
+        "id": "o_10",
+        "text": "Pertanyaan 10"
+      },
+      {
+        "id": "o_11",
+        "text": "Pertanyaan 11"
+      },
+      {
+        "id": "o_12",
+        "text": "Pertanyaan 12"
+      },
+      {
+        "id": "o_13",
+        "text": "Pertanyaan 13"
+      },
+      {
+        "id": "o_14",
+        "text": "Pertanyaan 14"
+      },
+      {
+        "id": "o_15",
+        "text": "Pertanyaan 15"
+      },
+      {
+        "id": "o_16",
+        "text": "Pertanyaan 16"
+      },
+      {
+        "id": "o_17",
+        "text": "Pertanyaan 17"
+      },
+      {
+        "id": "o_18",
+        "text": "Pertanyaan 18"
+      },
+      {
+        "id": "o_19",
+        "text": "Pertanyaan 19"
+      },
+      {
+        "id": "o_20",
+        "text": "Pertanyaan 20"
+      }
+    ],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "put",
+      "kind": "open",
+      "value": {
+        "id": "o_new",
+        "text": "Pertanyaan baru"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "open",
+      "value": {
+        "id": "o_5",
+        "text": "Pertanyaan 5 diubah"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_b",
+        "label": "Bayar",
+        "documents": [
+          "Dok 1",
+          "Dok 2",
+          "Dok 3",
+          "Dok 4",
+          "Dok 5",
+          "Dok 6",
+          "Dok 7",
+          "Dok 8",
+          "Dok 9",
+          "Dok 10",
+          "Dok 11"
+        ]
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_c",
+        "kind": "custom",
+        "label": "Cek alat",
+        "design": {
+          "records": [
+            "Catatan 1",
+            "Catatan 2",
+            "Catatan 3",
+            "Catatan 4",
+            "Catatan 5",
+            "Catatan 6",
+            "Catatan 7",
+            "Catatan 8",
+            "Catatan 9",
+            "Catatan 10",
+            "Catatan 11",
+            "Catatan 12",
+            "Catatan 13",
+            "Catatan 14",
+            "Catatan 15",
+            "Catatan 16",
+            "Catatan 17",
+            "Catatan 18",
+            "Catatan 19",
+            "Catatan 20",
+            "Catatan 21"
+          ],
+          "steps": []
+        }
+      }
+    },
+    {
+      "op": "remove",
+      "kind": "open",
+      "id": "o_1"
+    },
+    {
+      "op": "put",
+      "kind": "open",
+      "value": {
+        "id": "o_new",
+        "text": "Pertanyaan baru"
+      }
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [
+      {
+        "id": "o_2",
+        "text": "Pertanyaan 2"
+      },
+      {
+        "id": "o_3",
+        "text": "Pertanyaan 3"
+      },
+      {
+        "id": "o_4",
+        "text": "Pertanyaan 4"
+      },
+      {
+        "id": "o_5",
+        "text": "Pertanyaan 5 diubah"
+      },
+      {
+        "id": "o_6",
+        "text": "Pertanyaan 6"
+      },
+      {
+        "id": "o_7",
+        "text": "Pertanyaan 7"
+      },
+      {
+        "id": "o_8",
+        "text": "Pertanyaan 8"
+      },
+      {
+        "id": "o_9",
+        "text": "Pertanyaan 9"
+      },
+      {
+        "id": "o_10",
+        "text": "Pertanyaan 10"
+      },
+      {
+        "id": "o_11",
+        "text": "Pertanyaan 11"
+      },
+      {
+        "id": "o_12",
+        "text": "Pertanyaan 12"
+      },
+      {
+        "id": "o_13",
+        "text": "Pertanyaan 13"
+      },
+      {
+        "id": "o_14",
+        "text": "Pertanyaan 14"
+      },
+      {
+        "id": "o_15",
+        "text": "Pertanyaan 15"
+      },
+      {
+        "id": "o_16",
+        "text": "Pertanyaan 16"
+      },
+      {
+        "id": "o_17",
+        "text": "Pertanyaan 17"
+      },
+      {
+        "id": "o_18",
+        "text": "Pertanyaan 18"
+      },
+      {
+        "id": "o_19",
+        "text": "Pertanyaan 19"
+      },
+      {
+        "id": "o_20",
+        "text": "Pertanyaan 20"
+      },
+      {
+        "id": "o_new",
+        "text": "Pertanyaan baru"
+      }
+    ],
+    "settings": []
+  },
+  "want_dropped": [
+    {
+      "index": 0,
+      "reason": "limit"
+    },
+    {
+      "index": 2,
+      "reason": "limit"
+    },
+    {
+      "index": 3,
+      "reason": "limit"
+    }
+  ]
+}

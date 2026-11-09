@@ -33,6 +33,10 @@
     ],
     "settings": [
       {
+        "id": "t_customers",
+        "text": "Pelanggan: Mahasiswa"
+      },
+      {
         "id": "t_ordering",
         "text": "Cara pesan: Lewat WA"
       }

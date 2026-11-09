@@ -32,6 +32,10 @@
     "open": [],
     "settings": [
       {
+        "id": "t_customers",
+        "text": "Pelanggan: Keluarga dan panitia acara"
+      },
+      {
         "id": "t_ordering",
         "text": "Cara pesan: Lewat WhatsApp"
       },

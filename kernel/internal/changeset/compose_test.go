@@ -24,7 +24,7 @@ func TestAssessConfigModules(t *testing.T) {
 	}
 	for _, c := range []struct {
 		name, risk, reason string
-		after             map[string]any
+		after              map[string]any
 	}{
 		{"adds a module and its requires", "medium", "installs stock", with(map[string]any{"payments": "^1.0", "invoicing": "^1.2", "stock": "^1.0"})},
 		{"adds an app", "medium", "installs crm, pipeline", map[string]any{"plan": "sewa", "apps": []any{"crm"}, "modules": base["modules"]}},
@@ -43,7 +43,9 @@ func TestAssessConfigModules(t *testing.T) {
 	}
 	// payments leaves config.modules; invoicing (still named) keeps contacts, nothing else changes
 	a := AssessWith([]Op{{Op: "replace", Path: "config.rk"}},
-		func(string) (map[string]any, bool) { return with(map[string]any{"invoicing": "^1.2", "contacts": "^1.0"}), true },
+		func(string) (map[string]any, bool) {
+			return with(map[string]any{"invoicing": "^1.2", "contacts": "^1.0"}), true
+		},
 		func(string) (map[string]any, bool) { return with(map[string]any{"invoicing": "^1.2"}), true }, Env{Installed: reg.InstalledFor})
 	if a.Risk != "low" || !strings.Contains(strings.Join(a.Reasons, "; "), "contacts leaves config.modules but stays installed") {
 		t.Errorf("kept module: %s %v", a.Risk, a.Reasons)

@@ -4,8 +4,10 @@
 package skills
 
 import (
+	"archive/zip"
 	"embed"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path"
@@ -78,7 +80,13 @@ func Platform() []*Skill {
 
 // Load builds the library: the embedded platform skills, then <apps>/<app>/skills/<skill>/ and
 // <modules>/<module>/skills/<skill>/, units in name order. Either directory may be "".
-func Load(appsDir, modulesDir string) *Library {
+func Load(appsDir, modulesDir string) *Library { return LoadAll(appsDir, modulesDir) }
+
+// Folder is a skills folder outside the units, such as rangka-connectors/skills.
+type Folder struct{ Dir, Source string }
+
+// LoadAll is Load plus extra skills folders (missing ones are skipped), loaded last.
+func LoadAll(appsDir, modulesDir string, extra ...Folder) *Library {
 	l := &Library{byName: map[string]*Skill{}}
 	add := func(list []*Skill, probs []Problem) {
 		l.Problems = append(l.Problems, probs...)
@@ -106,7 +114,63 @@ func Load(appsDir, modulesDir string) *Library {
 			add(loadDir(os.DirFS(sd), kind+":"+u.Name()))
 		}
 	}
+	for _, f := range extra {
+		if st, err := os.Stat(f.Dir); err == nil && st.IsDir() {
+			add(loadDir(os.DirFS(f.Dir), f.Source))
+		}
+	}
 	return l
+}
+
+// AllFiles returns SKILL.md and every other file of the skill, as paths relative to its folder.
+func (s *Skill) AllFiles() []string { return append([]string{"SKILL.md"}, s.Files...) }
+
+// CopyTo writes the skill into dir/<name>/, replacing a folder of that name (it is ours: rangka-*).
+func (s *Skill) CopyTo(dir string) error {
+	if !nameRe.MatchString(s.Name) {
+		return fmt.Errorf("refusing to install %q: not a rangka- skill name", s.Name)
+	}
+	dst := filepath.Join(dir, s.Name)
+	if err := os.RemoveAll(dst); err != nil {
+		return err
+	}
+	for _, f := range s.AllFiles() {
+		b, err := fs.ReadFile(s.fsys, f)
+		if err != nil {
+			return err
+		}
+		p := filepath.Join(dst, filepath.FromSlash(f))
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			return err
+		}
+		if err := os.WriteFile(p, b, 0o644); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// Pack writes the skills as a zip with <name>/SKILL.md at the top, so `unzip -d .claude/skills` installs them.
+func Pack(w io.Writer, list []*Skill) error {
+	zw := zip.NewWriter(w)
+	for _, s := range list {
+		for _, f := range s.AllFiles() {
+			b, err := fs.ReadFile(s.fsys, f)
+			if err != nil {
+				return err
+			}
+			h := &zip.FileHeader{Name: s.Name + "/" + f, Method: zip.Deflate}
+			h.SetMode(0o644)
+			fw, err := zw.CreateHeader(h)
+			if err != nil {
+				return err
+			}
+			if _, err := fw.Write(b); err != nil {
+				return err
+			}
+		}
+	}
+	return zw.Close()
 }
 
 // LoadFolder loads the skills directly under dir (a repository's skills/), for rangka skills check.

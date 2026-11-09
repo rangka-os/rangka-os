@@ -34,4 +34,4 @@ the read tools, the change-set tools up to preview, `rangka_approvals_list`, the
 tool is refused with `ai_forbidden`.
 
 The skills are the folders under [`skills/`](https://github.com/rangka-os/rangka-os/tree/main/skills) plus each app's
-and module's `skills/`, in the Agent Skills format. Any harness can install them; see the README there.
+and module's `skills/`, in the Agent Skills format. Any harness can install them: see [Skills](/skills/).

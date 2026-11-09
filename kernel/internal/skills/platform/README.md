@@ -14,17 +14,15 @@ Apps and modules in rangka-apps ship their own skills in `<unit>/skills/` (for e
 
 ## Use them
 
-- **Connected to a kernel over MCP** (Raka does this): `rangka_skills` lists them, `rangka_skill {name}` loads one,
-  `rangka_skill_file {name, path}` reads a reference. The kernel serves these platform skills plus every app and
-  module skill in its catalogue.
-- **Claude Code, Codex, Cursor or another harness in a checkout:** copy the folders into the folder your harness
-  reads, for example `.claude/skills/` (Claude Code) or `.agents/skills/`:
+- **Any harness, with the CLI:** `npx @rangka-os/cli skills install` copies these plus every app, module and
+  connector skill into `.claude/skills/` (`--harness agents` for `.agents/skills/`, or `--to <dir>`).
+- **Claude Code plugin:** `/plugin marketplace add rangka-os/rangka-os`, then `/plugin install rangka-skills@rangka-os`
+  (platform skills; the manifests are in `.claude-plugin/`).
+- **Release zip:** each release attaches `rangka-skills-<version>.zip` (`unzip -d .claude/skills`).
+- **Connected to a kernel over MCP** (Raka does this): `rangka_skills`, `rangka_skill {name}`,
+  `rangka_skill_file {name, path}`.
 
-  ```bash
-  cp -R skills/rangka-* .claude/skills/
-  ```
-
-  `rangka skills install`, a release zip and a Claude Code plugin come next (contract 0035, step 2).
+Per-harness details: [docs, Skills → Install](https://rangka-os.github.io/rangka-os/skills/install).
 
 ## Write or change one
 

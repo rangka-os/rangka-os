@@ -6,3 +6,8 @@ reference/schema/*.md
 public/api/
 reference/validator-codes.md
 public/schema/
+skills/*.md
+!skills/index.md
+!skills/install.md
+!skills/writing.md
+skills/_skills.json

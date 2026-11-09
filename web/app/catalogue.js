@@ -86,7 +86,7 @@
         function (e) { setBusy(null); setErr((e && e.message) || "Perubahan tidak bisa diusulkan"); });
     }
     var actions = null;
-    if (!conn && p.ctx.showChangeSet) {
+    if (!conn && p.ctx.showChangeSet && !p.ctx.readOnly) { // no change while offline or previewing a change set
       if (!x.installed && x.in_plan !== false) {
         actions = h(R.Button, { variant: "primary", icon: "add", loading: busy === "add", disabled: !!busy, onClick: function () { act("add"); } }, "Pasang");
       } else if (removable) {

@@ -1390,6 +1390,7 @@ def test_catalogue_install_module(page, ctx):
     cs_card.wait_for(timeout=15000)
     txt = cs_card.inner_text()
     assert "Pasang Buku catatan" in txt and "Risiko" in txt, txt
+    assert "Memasang catatan beserta yang dibutuhkannya" in txt and "installs" not in txt, "risk reason in Bahasa Indonesia: " + txt
     if ctx.args.shots:
         page.screenshot(path=os.path.join(ctx.args.shots, f"catalogue-pasang-{ctx.args.width}.png"))
     loaded = page.evaluate("() => performance.getEntriesByType('navigation').length")

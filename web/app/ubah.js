@@ -353,6 +353,52 @@
       .filter(function (r) { if (!r || seen[r]) return false; seen[r] = 1; return true; }); // one reason per op: a create + patch repeats it
   };
 
+  /* The kernel words risk reasons in English (they also land in the audit log and the Console). The change-set card
+   * shows them to owners, so the known shapes (kernel/internal/changeset/risk.go) are said in Bahasa Indonesia; an
+   * unknown one is shown as is. Specific shapes come before the general ones. */
+  var REASON_ID = [
+    [/^installs (.+) \(with what they require\)$/, "Memasang $1 beserta yang dibutuhkannya"],
+    [/^removes (.+) \(preview counts their rows; rows stay, tables are kept\)$/, "Melepas $1 (pratinjau menghitung datanya; data dan tabelnya tetap disimpan)"],
+    [/^changes the range of module (\S+) \((.*)\)$/, "Mengubah rentang versi modul $1 ($2)"],
+    [/^(\S+) leaves config\.modules but stays installed \(another unit requires it\)$/, "$1 keluar dari config.modules tapi tetap terpasang karena dibutuhkan bagian lain"],
+    [/^config\.apps \/ config\.modules: the installed units stay the same$/, "Yang terpasang tetap sama"],
+    [/^config\.rk unchanged$/, "config.rk tidak berubah"],
+    [/^changes system capabilities \(system\.rk\)$/, "Mengubah kapabilitas sistem (system.rk)"],
+    [/^changes plans \(features\.rk\)$/, "Mengubah paket (features.rk)"],
+    [/^changes roles \((.+)\)$/, "Mengubah peran ($1)"],
+    [/^deletes (.+)$/, "Menghapus $1"],
+    [/^company automation (.+)$/, "Otomasi perusahaan $1"],
+    [/^edits (\w+) file (\S+) \(.*\)$/, "Mengubah berkas $1 $2 (berkas itu milik pembuat app; perusahaan mengubah model lewat custom/<model>.rk)"],
+    [/^new dashboard (.+)$/, "Dasbor baru $1"],
+    [/^new work screen (.+)$/, "Layar kerja baru $1"],
+    [/^new model (\S+) with money\/stock field (.+)$/, "Model baru $1 dengan kolom uang atau stok $2"],
+    [/^new model (\S+) without permissions: every role has full access$/, "Model baru $1 tanpa izin: semua peran bisa membuka dan mengubahnya"],
+    [/^new model (.+)$/, "Model baru $1"],
+    [/^new file (.+)$/, "Berkas baru $1"],
+    [/^new overlay (\S+) with (.+)$/, "Lapisan perusahaan baru $1 dengan $2"],
+    [/^site dashboard \((.+)\)$/, "Dasbor situs ($1)"],
+    [/^presentation \((.+)\)$/, "Tampilan ($1)"],
+    [/^removes field (\S+) from (\S+) \(its data stays\)$/, "Menghapus kolom $1 dari $2 (datanya tetap disimpan)"],
+    [/^adds money\/stock field (\S+) to (.+)$/, "Menambah kolom uang atau stok $1 ke $2"],
+    [/^adds field (\S+) to (.+)$/, "Menambah kolom $1 ke $2"],
+    [/^relabels field (\S+) of (.+)$/, "Mengganti label kolom $1 di $2"],
+    [/^changes money\/stock field (\S+) of (.+)$/, "Mengubah kolom uang atau stok $1 di $2"],
+    [/^changes field (\S+) of a submittable model \((.+)\)$/, "Mengubah kolom $1 di model yang bisa diajukan ($2)"],
+    [/^changes field (\S+) of (.+)$/, "Mengubah kolom $1 di $2"],
+    [/^changes rules of (.+)$/, "Mengubah aturan $1"],
+    [/^changes permissions of (.+)$/, "Mengubah izin $1"],
+    [/^changes append_only of (\S+) \(.*\)$/, "Mengubah append_only $1 (baris buku besar jadi bisa diubah, atau sebaliknya)"],
+    [/^changes approvals of (.+)$/, "Mengubah persetujuan $1"],
+    [/^changes select options of a submittable model \((.+)\)$/, "Mengubah pilihan di model yang bisa diajukan ($1)"],
+    [/^changes select options of (.+)$/, "Mengubah pilihan $1"],
+    [/^changes views of (.+)$/, "Mengubah tampilan $1"],
+    [/^changes (.+)$/, "Mengubah $1"]
+  ];
+  RA.riskReasonText = function (r) {
+    for (var i = 0; i < REASON_ID.length; i++) if (REASON_ID[i][0].test(r)) return r.replace(REASON_ID[i][0], REASON_ID[i][1]);
+    return r;
+  };
+
   /** The change set's dry run as display lines [{kind: migration|file|affected|note, text}]. meta (optional) names models. */
   RA.dryRunLines = function (cs, meta) {
     var p = cs && cs.preview, out = [];
@@ -666,7 +712,7 @@
       invalid ? h("ul", { className: "ap-errlist" }, (errs.length ? errs : [{ message: "Change set ini tidak lolos validasi." }]).map(function (x, i) {
         return h("li", { key: i }, x.message, x.file ? h("span", { className: "ap-muted" }, " (" + x.file + ")") : null);
       })) : null,
-      reasons.length ? h("ul", { className: "ap-ubah-reasons" }, reasons.map(function (r, i) { return h("li", { key: i }, r); })) : null,
+      reasons.length ? h("ul", { className: "ap-ubah-reasons" }, reasons.map(function (r, i) { return h("li", { key: i }, RA.riskReasonText(r)); })) : null,
       mig.length ? h("pre", { className: "ap-ubah-sql" }, h("code", null, mig.map(function (l) { return l.text; }).join("\n"))) : null,
       files.length || aff.length || notes.length ? h("ul", { className: "ap-ubah-dry" }, files.concat(aff, notes).map(function (l, i) { return h("li", { key: i, className: "k-" + l.kind }, l.text); })) : null,
       !canApprove && !invalid && cs.status === "previewed" ? h("p", { className: "ap-muted" }, cs.risk === "high" ? "Perubahan berisiko tinggi hanya bisa disetujui pemilik usaha." : "Menunggu persetujuan orang yang berwenang.") : null);

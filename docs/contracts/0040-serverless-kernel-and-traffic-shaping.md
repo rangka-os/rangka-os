@@ -1,4 +1,4 @@
-# 0039: Serverless kernel and traffic shaping
+# 0040: Serverless kernel and traffic shaping
 
 Status: proposed (8 Nov 2026, §1 amended 9 Nov) · Owner of the change: rangka-os (kernel) · Affects: Rangka Cloud (hosting on
 AWS Lambda, router throttling), the web app (realtime by polling), `features.rk` plans (schema), both validators

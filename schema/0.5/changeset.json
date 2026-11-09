@@ -78,7 +78,7 @@
           },
           "path": {
             "type": "string",
-            "pattern": "^(apps/[a-z0-9_]+/(app|models/[a-z0-9_]+|dashboards/[a-z0-9_]+|flows/[a-z0-9_]+|roles/[a-z0-9_]+)|modules/[a-z0-9_]+/(module|models/[a-z0-9_]+|dashboards/[a-z0-9_]+|screens/[a-z0-9_]+|flows/[a-z0-9_]+|roles/[a-z0-9_]+)|custom/[a-z0-9_]+|models/[a-z0-9_]+|flows/[a-z0-9_]+|system|themes/[a-z0-9_]+|layouts/[a-z0-9_]+|dashboards/[a-z0-9_]+|features|config|connectors/[a-z0-9_]+)\\.rk$"
+            "pattern": "^(apps/[a-z0-9_]+/(app|models/[a-z0-9_]+|dashboards/[a-z0-9_]+|flows/[a-z0-9_]+|roles/[a-z0-9_]+)|modules/[a-z0-9_]+/(module|models/[a-z0-9_]+|dashboards/[a-z0-9_]+|screens/[a-z0-9_]+|flows/[a-z0-9_]+|roles/[a-z0-9_]+)|custom/[a-z0-9_]+|models/[a-z0-9_]+|flows/[a-z0-9_]+|system|themes/[a-z0-9_]+|layouts/[a-z0-9_]+|processes/[a-z][a-z0-9_]*|dashboards/[a-z0-9_]+|features|config|connectors/[a-z0-9_]+)\\.rk$"
           },
           "content": {
             "type": "string",

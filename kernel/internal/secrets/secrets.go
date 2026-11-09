@@ -475,3 +475,7 @@ func (s *Service) Requires(installed func(*meta.Registry) []string) func(ctx con
 		return out
 	}
 }
+
+// Forget clears the cached values of one (org, connector), so the next read goes to the database (another worker
+// may have rotated them).
+func (s *Service) Forget(org, connector string) { s.forget(org, connector) }

@@ -46,8 +46,8 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 }
 
 // RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (the
-// scheduler and record events; a queued job resumes through RunFlowResume). Steps: find, find_all, create, update, for_each (the steps under do: once per item of a list), notify (log driver), call (connector action; the
-// kernel records the call, it has no connector runtime yet), if/then/else, wait (the remaining steps are
+// scheduler and record events; a queued job resumes through RunFlowResume). Steps: find, find_all, create, update, for_each (the steps under do: once per item of a list), notify (log driver), call (connector action, queued as a
+// call job when the runtime is wired, else only recorded), if/then/else, wait (the remaining steps are
 // queued for later) and approve (the remaining steps wait for a decision). Every step may have if: and as:.
 //
 // A flow runs as its actor: find, create and update steps are authorized like the public entry points
@@ -362,6 +362,30 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 				} else {
 					input[k] = with[k]
 				}
+			}
+			// the call runs as a queued job after commit (contract 0002 §A.3): the job holds the action, input, org and
+			// connector, never a rendered request (contract 0017 §6)
+			if e.Queue != nil && e.CallTarget != nil {
+				c, act, opts, err := e.CallTarget(e.Reg(), call, input)
+				if err != nil {
+					return fmt.Errorf("step %s call %s: %w", i, call, err)
+				}
+				if opts.UniqueKey != "" {
+					opts.UniqueKey = "call:" + a.Org + ":" + c + "." + act + ":" + opts.UniqueKey
+				}
+				id, err := e.Queue.Enqueue(o.ctx, o.tx, "call", a.Org, map[string]any{"connector": c, "action": act, "input": input, "flow": r.f.Name}, opts)
+				if err != nil {
+					return err
+				}
+				if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.queued", "connector/"+c, act+" from flow "+r.f.Name, map[string]any{"job": id}); err != nil {
+					return err
+				}
+				if as != "" {
+					r.vars[as] = map[string]any{"status": "queued", "connector": c, "action": act, "job": id}
+				}
+				r.out.Calls = append(r.out.Calls, call)
+				r.out.Steps = append(r.out.Steps, fmt.Sprintf("%s: call %s (queued, job %d)", i, call, id))
+				continue
 			}
 			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.call", "connector/"+conn, action+" from flow "+r.f.Name, input); err != nil {
 				return err

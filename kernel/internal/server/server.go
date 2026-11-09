@@ -17,7 +17,9 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/backup"
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
+	"github.com/rangka-os/rangka-os/kernel/internal/connectors"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/imports"
@@ -66,8 +68,10 @@ type Server struct {
 	Auth     *auth.Service
 	Changes  *changeset.Service
 	API      *api.Server
-	reload   sync.Mutex
-	wg       sync.WaitGroup
+	// Connectors runs connector actions and webhooks (contract 0002 §A).
+	Connectors *connectors.Runtime
+	reload     sync.Mutex
+	wg         sync.WaitGroup
 }
 
 // LoadRegistry validates the metadata directories and refuses to continue on errors.
@@ -221,6 +225,15 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		cfg.Logf("secrets: driver db without RANGKA_MASTER_KEY; connector secrets cannot be set (run rangka keygen)")
 	}
 	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now}
+	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows
+	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf,
+		StartFlow: func(ctx context.Context, org, flow string, event map[string]any, key string) error {
+			_, err := s.Queue.Enqueue(ctx, nil, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
+			return err
+		}}
+	s.API.Connectors = s.Connectors
+	s.Queue.Handlers["call"] = s.runCallJob
+	e.CallTarget = callTarget
 	s.Changes.Requires = s.API.Secrets.Requires(api.InstalledConnectors)
 	return s, nil
 }
@@ -361,6 +374,42 @@ func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 		start = int(r)
 	}
 	return s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true)
+}
+
+// runCallJob sends one connector action (a flow's call: step). Its errors are scrubbed; a call that cannot succeed
+// (keys missing, a refused host, a status the action does not retry) is discarded at once.
+func (s *Server) runCallJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
+	return s.Connectors.Call(ctx, j.Org, meta.Str(j.Args, "connector"), meta.Str(j.Args, "action"), meta.AsMap(j.Args["input"]))
+}
+
+// callTarget resolves a call: target and its job options: retry.max + 1 attempts, and the action's idempotency
+// expression (CEL over input) as the unique key, so a retried flow never sends twice.
+func callTarget(reg *meta.Registry, call string, input map[string]any) (string, string, engine.EnqueueOpts, error) {
+	conn, act, err := connectors.ResolvePort(reg, call)
+	if err != nil {
+		return "", "", engine.EnqueueOpts{}, err
+	}
+	r := connectors.Resolver{Reg: func() *meta.Registry { return reg }}
+	_, a, err := r.Action(conn, act)
+	if err != nil {
+		return "", "", engine.EnqueueOpts{}, err
+	}
+	opts := engine.EnqueueOpts{MaxAttempts: connectors.MaxAttempts(a)}
+	if src, ok := a["idempotency"].(string); ok && src != "" {
+		v, err := cel.Eval(src, &cel.Env{Vars: func(n string) (any, bool) {
+			if n == "input" {
+				return input, true
+			}
+			return nil, false
+		}})
+		if err == nil {
+			if k := fmt.Sprint(cel.Unwrap(v)); k != "" && k != "<nil>" {
+				opts.UniqueKey = k
+			}
+		}
+	}
+	return conn, act, opts, nil
 }
 
 // Handler is the HTTP handler.

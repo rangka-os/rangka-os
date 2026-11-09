@@ -2,9 +2,9 @@ package meta
 
 import "sort"
 
-// ConnectorsRun reports whether this kernel runs connectors (contract 0002). Until it does, connectors are listed
-// so agents can name them, and the catalogue says they do not run.
-const ConnectorsRun = false
+// ConnectorsRun reports whether this kernel runs connectors (contract 0002): calls run as queued jobs and webhooks
+// are served at /hooks/<org>/<connector>/<trigger>. A connector still needs its keys before it works.
+const ConnectorsRun = true
 
 // Catalogue is what exists for this site and what is installed (contract 0035 §5): every app, module and
 // connector the kernel can see, with its state. Agents read it before naming an app, never from memory.
@@ -43,7 +43,7 @@ type CatalogueModule struct {
 	InstalledBy []string `json:"installed_by,omitempty"`
 }
 
-// CatalogueConnect is one connector. Runs is false while the kernel has no connector runtime (ConnectorsRun).
+// CatalogueConnect is one connector. Runs is ConnectorsRun.
 type CatalogueConnect struct {
 	Name   string `json:"name"`
 	Label  Label  `json:"label,omitempty"`

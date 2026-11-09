@@ -98,7 +98,7 @@ func TestCatalogueSharesAndAdds(t *testing.T) {
 	if m := moduleOf(c, "kas"); m == nil || m.State != StateAvailable || len(m.InstalledBy) != 0 {
 		t.Errorf("kas: %+v", m)
 	}
-	if c.ConnectorsRun || len(c.Connectors) != 0 {
+	if !c.ConnectorsRun || len(c.Connectors) != 0 {
 		t.Errorf("connectors: run %v, %d listed", c.ConnectorsRun, len(c.Connectors))
 	}
 }

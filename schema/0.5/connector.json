@@ -56,6 +56,11 @@
             "none"
           ]
         },
+        "token_url": {
+          "type": "string",
+          "pattern": "^https://",
+          "description": "oauth2: where the kernel refreshes the access token with refresh_token, client_id and client_secret (contract 0017 §8)"
+        },
         "fields": {
           "type": "array",
           "items": {

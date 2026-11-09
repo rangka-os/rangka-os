@@ -198,7 +198,8 @@ Additive; nothing above changed.
   counts AI-authored change sets this month.
 - **Connectors:** installed = referenced by an installed flow (`on:` or `call:`) or by `system.rk notify.*.connector`.
   Health counts audit entries `connector.event` / `connector.call` / `connector.error` with target `connector/<name>`.
-  The kernel has no connector runtime yet: `call:` steps are recorded (audit), not sent.
+  `call:` steps queue a `call` job that renders the request at send time and sends it (contract 0002 §A, 0017 §5–§8);
+  webhooks arrive at `/hooks/<org>/<connector>/<trigger>`.
 - **Flows:** `update: <variable>` needs a record found or created earlier; `if:` + `then:`/`else:` branches; `wait:`
   only at the top level (a duration, or `{until: cel}` re-checked every minute) queues the rest as a `flow` job.
   `POST /flows/{name}/run {event}` runs a flow now (records `connector.event` for connector-triggered flows).

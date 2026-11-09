@@ -709,9 +709,21 @@ steps:
 	if job["state"] != "completed" || !strings.HasPrefix(get(job, "result", "created", 0).(string), "activity/ACT-") || job["queue"] != "default" || job["org"] != "kopi-senja" {
 		t.Fatalf("resumed job: %v", job)
 	}
-	st := e.must(200, "GET", "/api/v1/system/status", nil).JSON
-	if c := get(st, "connectors", 0); get(c, "events_24h") != 1.0 || get(c, "calls_24h") != 1.0 || get(c, "ok") != true || get(c, "last_event_at") == nil {
+	// the call: step queued a call job; without keys it fails at once with connector_needs_auth (contract 0017 §2),
+	// which the connector's health shows
+	var st map[string]any
+	for i := 0; i < 100; i++ {
+		st = e.must(200, "GET", "/api/v1/system/status", nil).JSON
+		if get(get(st, "connectors", 0), "errors_24h") == 1.0 {
+			break
+		}
+		time.Sleep(50 * time.Millisecond)
+	}
+	if c := get(st, "connectors", 0); get(c, "events_24h") != 1.0 || get(c, "errors_24h") != 1.0 || get(c, "ok") != false || get(c, "last_event_at") == nil {
 		t.Fatalf("connector health: %v", c)
+	}
+	if a := e.must(200, "GET", "/api/v1/system/audit?kind=connector.error", nil); !strings.Contains(string(a.Body), "connector_needs_auth") {
+		t.Fatalf("no connector_needs_auth entry: %s", a.Body)
 	}
 	// no lead: the else branch notifies
 	r = e.must(200, "POST", "/api/v1/flows/steps_demo/run", map[string]any{"event": map[string]any{"from": "+620000"}}).JSON

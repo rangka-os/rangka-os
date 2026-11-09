@@ -249,3 +249,15 @@ create table if not exists rk_secrets (
   retire_at  timestamptz,                 -- set when a newer version replaces it (inbound grace period, §8)
   primary key (org_id, connector, field, version)
 );
+
+-- inbound connector events already seen (contract 0002 §A.1, 0017 §7): a vendor retry or a replayed webhook with the
+-- same event creates nothing. Rows older than 30 days are pruned by rangka serve.
+create table if not exists rk_hook_events (
+  org_id    text not null,
+  connector text not null,
+  trigger   text not null,
+  key       text not null,
+  at        timestamptz not null default now(),
+  primary key (org_id, connector, trigger, key)
+);
+create index if not exists rk_hook_events_at on rk_hook_events (at);

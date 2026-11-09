@@ -12,6 +12,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
+	"github.com/rangka-os/rangka-os/kernel/internal/connectors"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/imports"
@@ -34,16 +35,17 @@ type Server struct {
 	Sched        *jobs.Scheduler
 	Changes      *changeset.Service
 	Imports      *imports.Service
-	WebDir       string           // rangka-os/web, served at /
-	TemplatesDir string           // rangka-os/templates (theme and layout templates)
-	Org          string           // default organisation
-	Site         string           // site name
-	DeployTarget string           // dev, docker, helm, desktop, cloud, partner
-	Files        files.Store      // attachments blob store; nil = files capability disabled (501 files_disabled)
-	MaxUploadMB  int              // files.max_upload_mb; 0 = 20
-	AI           *AIConfig        // rangka-ai sidecar; nil = assistant off (contract 0020)
-	Secrets      *secrets.Service // connector secrets (contract 0017); nil = every auth field reports unset
-	Internal     *Internal        // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0040 §1)
+	WebDir       string              // rangka-os/web, served at /
+	TemplatesDir string              // rangka-os/templates (theme and layout templates)
+	Org          string              // default organisation
+	Site         string              // site name
+	DeployTarget string              // dev, docker, helm, desktop, cloud, partner
+	Files        files.Store         // attachments blob store; nil = files capability disabled (501 files_disabled)
+	MaxUploadMB  int                 // files.max_upload_mb; 0 = 20
+	AI           *AIConfig           // rangka-ai sidecar; nil = assistant off (contract 0020)
+	Connectors   *connectors.Runtime // connector webhooks (/hooks/…); nil = 404
+	Secrets      *secrets.Service    // connector secrets (contract 0017); nil = every auth field reports unset
+	Internal     *Internal           // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0040 §1)
 	Log          func(format string, args ...any)
 
 	previewMu sync.Mutex // guards previews (preview.go)
@@ -201,6 +203,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/tokens", a(s.createToken))
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
+	// connector webhooks (contract 0002 §A.1, 0017 §7): not signed in; the org's secrets verify each request
+	mux.HandleFunc("POST /hooks/{org}/{connector}/{trigger}", s.hook)
+	mux.HandleFunc("GET /hooks/{org}/{connector}/{trigger}", s.hook)
+	mux.HandleFunc("POST /hooks/{connector}/{trigger}", s.hook)
+	mux.HandleFunc("GET /hooks/{connector}/{trigger}", s.hook)
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
 	mux.HandleFunc("POST /auth/logout", s.logout)

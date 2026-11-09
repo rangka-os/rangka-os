@@ -10,6 +10,7 @@ package jobs
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"strconv"
 	"sync"
@@ -29,6 +30,13 @@ type Job struct {
 	Attempt     int            `json:"attempt"`
 	MaxAttempts int            `json:"max_attempts"`
 }
+
+// Permanent is an error a retry cannot fix (a connector without its keys, a 4xx the action does not retry): the job
+// is discarded at once, which is the dead-letter state.
+type Permanent struct{ Err error }
+
+func (p *Permanent) Error() string { return p.Err.Error() }
+func (p *Permanent) Unwrap() error { return p.Err }
 
 // Handler runs a job; its result is stored.
 type Handler func(ctx context.Context, j *Job) (any, error)
@@ -174,7 +182,8 @@ func (q *Queue) RunOne(ctx context.Context) (bool, error) {
 	}
 	entry := map[string]any{"at": time.Now().UTC().Format(time.RFC3339), "attempt": j.Attempt, "error": err.Error()}
 	state := "retryable"
-	if j.Attempt >= j.MaxAttempts {
+	var perm *Permanent
+	if j.Attempt >= j.MaxAttempts || errors.As(err, &perm) {
 		state = "discarded"
 	}
 	_, uerr := q.DB.Query(ctx, `update rk_jobs set state = $2, errors = errors || $3::jsonb,

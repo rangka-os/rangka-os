@@ -204,6 +204,28 @@ A change set that installs a connector lists its unset required fields in `previ
 (`[{connector, field, label, secret}]`). It can still be applied; the connector stays `needs_auth` until a person sets
 them.
 
+## Connector webhooks and calls
+
+The connector runtime ([contract 0002](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0002-connector-runtime-and-ports.md)).
+These routes are not under `/api/v1` and need no sign-in: the org's connector secrets verify each request.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/hooks/{org}/{connector}/{trigger}` | A `via: webhook` trigger. `verify.signature` is an HMAC over the raw body (`sha256=` prefix allowed), `verify.header` + `verify.equals` a shared token; both are checked against every accepted version of the secret in constant time. Missing or wrong → `401`. Body limit 1 MB. Each item of `for_each` is mapped with `emit` and starts the installed flows with `on: <connector>.<trigger>`; the same event again starts nothing |
+| GET | `/hooks/{org}/{connector}/{trigger}` | The subscription check of `verify.challenge` (Meta's `hub.verify_token`): the right token echoes `hub.challenge`, a wrong one is `401` |
+| POST, GET | `/hooks/{connector}/{trigger}` | The same for the site's default org |
+
+A flow's `call: <connector>.<action>` (or a port such as `payment.qris.create`, mapped by `system.rk` `ports:`)
+queues a `call` job holding the action, input, org and connector, never the rendered request. The job renders the
+request in memory, sends it and maps `output:`; it retries per the action's `retry:` and is discarded (dead letter)
+when retries run out or the status is not retried. A request that carries a secret goes only over https to a host in
+`hosts:` (else the hosts the connector's own URLs name) and follows redirects only to the same host; anything else
+fails with `secret_host_refused` and nothing is sent. Without its keys a call fails with `connector_needs_auth`, at
+once. Before audit entries, job errors and stored responses are written, every active secret value of that org and
+connector (plain, base64, URL-encoded) is replaced with `[redacted:<field>]`; stored responses are cut to 4 KB.
+`auth.type: basic` sends the first secret field as the user name; `auth.type: oauth2` refreshes `access_token` at
+`auth.token_url` a minute before `expires_at`, and a failed refresh removes it so the connector needs auth again.
+
 ## AI chat
 
 The embedded assistant Raka (contract 0020). The kernel relays the chat to the rangka-ai sidecar set with

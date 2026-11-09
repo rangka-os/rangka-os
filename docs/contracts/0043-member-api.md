@@ -42,11 +42,11 @@ Request:
 Behaviour:
 
 1. Resolves `{upstream}` to its issuer; unknown is `404 unknown_upstream`.
-2. If `(issuer, subject)` is already linked, that user is the target; a different `email` in the body updates `rk_users.email` (`409 email_taken` when another account has that e-mail).
-3. Else, if a user with `email` exists, that user is the target and the link is created; else a new user is created with no password.
-4. The target's membership in the token's organisation is created or updated with `role` and `outlets`. Another organisation's membership of the same person is never touched.
-5. A target that is already an `owner` in this organisation is never changed: `409 owner_protected`.
-6. For a new person, plan limits apply (0028): past the `users` limit the answer is the existing `403 plan_limit` with its owner-facing message, and nothing is written. An existing member is not a new person.
+2. **Resolve the target, writing nothing yet.** If `(issuer, subject)` is already linked, that user is the target. Else, if a user with `email` exists, that user is the target; when that user is already linked under the same issuer to a different subject, `409 identity_conflict`. Else the target is a new person.
+3. **Refuse before writing.** A target that is already an `owner` in this organisation: `409 owner_protected`. A new person past the plan's `users` limit (0028): the existing `403 plan_limit` with its owner-facing message (an existing member is not a new person). A linked target whose `email` differs and belongs to another account: `409 email_taken`.
+4. **Write.** Create the user if new (no password); link `(issuer, subject)` if not linked; update `rk_users.email` when it changed; create or update the membership in the token's organisation with `role` and `outlets`. Another organisation's membership of the same person is never touched.
+5. The whole PUT (and DELETE) runs in one transaction; every error leaves nothing written.
+6. Sessions and tokens are revoked per step 7 in that same transaction.
 7. When an existing member's `role` or `outlets` actually change, their sessions and API tokens in this organisation are revoked (§4). An unchanged push revokes nothing.
 
 Response `200`: `{ "user_id": 12, "created": true }` (`created` is true only when the user account was created by this call).
@@ -68,6 +68,7 @@ Both routes answer errors as `{ "error": { "code", "message" } }`.
 | 422 | `unknown_role` | `role` is missing from the organisation's roles, or is `owner`. `owner` is never created, changed or removed through this API |
 | 422 | `unknown_outlet` | an outlet in `outlets` does not exist |
 | 422 | `bad_request` | body is not valid JSON or `email` is missing or invalid |
+| 409 | `identity_conflict` | the e-mail's user is already linked under this issuer to a different subject |
 | 409 | `email_taken` | e-mail change for a linked subject collides with another account |
 | 403 | `plan_limit` | a new person would pass the plan's `users` limit (0028) |
 

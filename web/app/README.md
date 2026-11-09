@@ -54,11 +54,19 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   cache-busting. Google Fonts are cached on first use.
 - **Never cached:** `/api/`, `/auth/`, `/oauth/`, `/mcp` and `/.well-known/`. Record data stays out of Cache Storage
   (shared phones, org switch); work screens keep their own per-user copy (`outbox.js`).
-- **Offline.**
-  - A lost connection shows "Kamu sedang offline" under the desk shell's top bar.
-  - Opened with no connection, the cached app says "Belum ada koneksi" and opens by itself when the phone is back
-    online.
-  - Opening the last-seen pages offline is the next step (plan: `docs/superpowers/plans/2026-11-08-pwa.md`, phase 2).
+- **Offline: last-seen pages** (`readcache.js`).
+  - Every answer the person already got for the session, meta, dashboards, lists, list sums, records (with their
+    attachment lists), approvals and processes is kept on the device (IndexedDB `rangka-read`). Nothing is
+    prefetched; change-set previews, the event stream, AI and work screens are not kept here.
+  - Without a connection, `api.js` answers those GETs from the device copy. The app opens on the page it was on,
+    read only (like a preview): no create, save, submit, kanban moves or Ubah. A record shows "Simpan saat online".
+  - The strip under the top bar says "Menampilkan data terakhir dilihat <hari ini 14.05>". A page never opened on
+    this device says so.
+  - When the server answers again, the strip goes and the view loads afresh.
+  - The copy belongs to one person in one org. A different person or org on `/auth/me` empties it first, and so do
+    sign-out, an org switch and any 401. At most 400 answers and 8 MB, least recently used out first.
+  - With no copy at all (another phone, cleared data), the app says "Belum ada koneksi" and opens by itself once
+    back online.
 - **Updates.** When `sw.js` changes (a new `PRECACHE` list or `VERSION`), the new worker waits. A "Versi baru tersedia"
   toast, or "Muat versi baru" in the account menu, switches over and reloads.
 - **When the worker is off.** `pwa.js` does not register the worker inside a frame (Rangka Cloud embeds the app), on
@@ -100,6 +108,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `dashboard.js` | Dashboard view from `GET /dashboards/{name}` |
 | `approvals.js` | Approval inbox and the "Menunggu persetujuan" banner |
 | `docs.js` | Print menu and attachments panel |
+| `readcache.js` | The device copy of the pages a person saw, for reading without a connection (per user and org, LRU) |
 | `pwa.js` | Installable app on the page side: registers `sw.js`, install prompt, update toast, online state, status-bar colour |
 | `sw.js` | Service worker: network-first app shell, Google Fonts cache, never API data |
 | `manifest.webmanifest`, `icons/` | Web app manifest and the Sendi icons (192, 512, maskable, Apple touch) |

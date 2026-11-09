@@ -48,6 +48,7 @@
     "vendor/react.production.min.js",
     "vendor/react-dom.production.min.js",
     "../design-system/bundle.js",
+    "readcache.js",
     "api.js",
     "engine.js",
     "list.js",

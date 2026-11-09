@@ -706,6 +706,7 @@ class Ctx:
         self.ai_live = False  # RANGKA_AI_DIR: the kernel runs with the real rangka-ai sidecar
         self.owner, self.password, self.users = OWNER, PASSWORD, USERS
         self.allowed_http = []  # per scenario: (status, url regex) a scenario expects; see allow_http
+        self.allowed_failed = []  # per scenario: url regexes whose failed requests are expected (offline on purpose)
 
     def allow_http(self, status, url_pattern):
         """Let the current scenario see an HTTP error it provokes on purpose (e.g. 403 from a forbidden list)."""
@@ -3047,6 +3048,41 @@ def test_content_full_width(page, ctx):
         assert all(g is not None and g <= 1 for g in gap), f"{route}: header/content stop {gap}px before the right edge"
 
 
+SW_SCENARIOS = {"test_pwa_installable_and_offline"}
+
+
+def test_pwa_installable_and_offline(page, ctx):
+    """Installable app (pwa.js, sw.js): the manifest and its headers, the worker in control, the shell cached without
+    record data, the offline strip, and a start without connection that opens by itself once the connection is back."""
+    ctx.allowed_failed.append(re.compile(r"/(api|auth)/"))
+    open_route(page, ctx, ctx.home()[0])
+    assert page.locator('link[rel="manifest"]').get_attribute("href") == "manifest.webmanifest"
+    man = page.request.get(ctx.base + "/app/manifest.webmanifest")
+    assert man.ok and man.headers["content-type"].startswith("application/manifest+json"), man.headers
+    assert man.json()["display"] == "standalone"
+    sw = page.request.get(ctx.base + "/app/sw.js")
+    assert sw.headers.get("cache-control") == "no-cache", sw.headers
+    page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=15000)
+    cached = page.evaluate("""async () => {
+        const c = await caches.open('rangka-shell-v1');
+        return (await c.keys()).map(r => new URL(r.url).pathname);
+    }""")
+    assert "/app/" in cached and "/app/shell.js" in cached and "/app/manifest.webmanifest" in cached, cached
+    assert not [p for p in cached if p.startswith(("/api", "/auth", "/oauth", "/mcp"))], "record data in Cache Storage: " + str(cached)
+    assert page.evaluate("() => document.querySelector('meta[name=theme-color]').content"), "theme-color is set"
+
+    # the connection drops while the app is open: the desk shell says so under its top bar
+    page.context.set_offline(True)
+    page.locator(".ap-offline").wait_for(timeout=5000)
+    # opened again without a connection: the cached shell starts and says it waits for the connection
+    page.reload()
+    page.get_by_text("Belum ada koneksi").wait_for(timeout=15000)
+    # the connection comes back: the app opens without pressing anything
+    page.context.set_offline(False)
+    expect_signed_in(page, ctx)
+    assert page.locator(".ap-offline").count() == 0
+
+
 def test_no_horizontal_scroll(page, ctx):
     ensure_records(ctx, "sales_invoice", 3)
     approvals_mocked(page, ctx)
@@ -3660,11 +3696,16 @@ def main():
             br = pw.chromium.launch()
             for name, fn in scenarios:
                 ctx.allowed_http = []
+                ctx.allowed_failed = []
                 # a phone width is a phone: meta viewport honoured (is_mobile) and touch input, so a page without
                 # <meta name=viewport> lays out at ~980px and the phone rules never apply, as on a real device
                 phone = args.width < 768
                 # below 1280px the suite is a touch tablet or a phone (tokens.json breakpoint): coarse pointer, 44px targets
-                bctx = br.new_context(viewport={"width": args.width, "height": height}, is_mobile=phone, has_touch=args.width < 1280)
+                # the app's service worker (sw.js) is blocked except in the scenarios about it: Playwright's page.route
+                # mocks do not see requests a worker handles
+                sw = "allow" if name in SW_SCENARIOS else "block"
+                bctx = br.new_context(viewport={"width": args.width, "height": height}, is_mobile=phone, has_touch=args.width < 1280,
+                                      service_workers=sw)
                 page = bctx.new_page()
                 errs, responses = [], []
                 # React is vendored (web/app/vendor): a request to a script CDN would be a regression
@@ -3677,7 +3718,8 @@ def main():
                 # Chrome aborts some error answers without a response event (a 404 stylesheet served as text/plain);
                 # a failed request to the kernel is a failure too. Font/CDN requests aborted on purpose are elsewhere.
                 failed = []
-                page.on("requestfailed", lambda r: failed.append(f"{r.url} ({r.failure})") if r.url.startswith(ctx.base + "/") else None)
+                page.on("requestfailed", lambda r: failed.append(f"{r.url} ({r.failure})")
+                        if r.url.startswith(ctx.base + "/") and not any(rx.search(r.url) for rx in ctx.allowed_failed) else None)
                 t0 = time.time()
                 try:
                     fn(page, ctx)

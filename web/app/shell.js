@@ -383,7 +383,24 @@
     return (orgs || []).filter(function (o) { return o && (o.name || o.id) === label; })[0] || null;
   }
 
+  /**
+   * What the account menu offers for the installable app, from pwa.js state(): "update" when a new version waits,
+   * then "install" (the browser can prompt) or "ios" (iPhone/iPad: how to add it from the Share sheet). An app that
+   * already runs from the home screen offers no install.
+   */
+  function pwaMenu(s) {
+    if (!s) return [];
+    var out = [];
+    if (s.updateReady) out.push("update");
+    if (!s.standalone) {
+      if (s.installable) out.push("install");
+      else if (s.iosHint) out.push("ios");
+    }
+    return out;
+  }
+
   RA.L = L;
+  RA.pwaMenu = pwaMenu;
   RA.orgByLabel = orgByLabel;
   RA.parseRoute = parseRoute;
   RA.homeHash = homeHash;
@@ -728,6 +745,7 @@
     var cls = useState(readCollapsed()), collapsed = cls[0], setCollapsed = cls[1];
     var cms = useState(false), cmdOpen = cms[0], setCmdOpen = cms[1];
     var sms = useState(null), switchAt = sms[0], setSwitchAt = sms[1]; // the switcher's rect while its menu is open
+    var pws = useState(RA.pwa ? RA.pwa.state() : null), pwa = pws[0], setPwa = pws[1]; // pwa.js: online, install, update
     var phone = usePhone();
     // tablet portrait (768-1023): the sidebar is the icon rail; its unfold button floats the full sidebar over the page
     // layout.responsive (contract 0038): tablet rail (default) | sidebar | drawer, phone drawer (default) | tabs
@@ -757,6 +775,17 @@
       // ?preview=<id> that could not be opened (403, 404, 409 preview_permissions …): say why, the live app is shown
       if (boot.previewErr) toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError ? RA.ubahError(boot.previewErr) : boot.previewErr.message);
       return function () { onExpired = null; toastImpl = null; boot.cacheListener.fn = null; };
+    }, []);
+
+    // installable app (pwa.js): register the worker once, say when a new version is ready, track online / install
+    useEffect(function () {
+      if (!RA.pwa) return;
+      RA.pwa.start({
+        onChange: setPwa,
+        onUpdate: function () {
+          toast("info", "Versi baru tersedia", "Muat ulang untuk memakainya.", { action: "Muat ulang", onAction: RA.pwa.applyUpdate });
+        }
+      });
     }, []);
 
     useEffect(function () {
@@ -789,6 +818,8 @@
         if (theme !== "system") root.setAttribute("data-theme", theme);
         else if (mq) root.setAttribute("data-theme", mq.matches ? "dark" : "light");
         else root.removeAttribute("data-theme");
+        // the installed app's status bar takes the top bar's colour (--surface), light or dark
+        if (RA.pwa && global.getComputedStyle) RA.pwa.themeColor(global.getComputedStyle(root).getPropertyValue("--surface").trim());
       }
       apply();
       if (!mq || theme !== "system") return undefined;
@@ -1014,6 +1045,19 @@
       return iconOnly ? h(React.Fragment, null, items) : h("div", { className: "rk-side-foot ap-side-foot" }, items);
     }
 
+    /** Install / update entries for the switcher's menu (pwa.js state); empty when there is nothing to offer. */
+    function appItems(s) {
+      return pwaMenu(s).map(function (k) {
+        if (k === "update") return { label: "Muat versi baru", icon: "download", onSelect: function () { RA.pwa.applyUpdate(); } };
+        if (k === "install") return { label: "Pasang aplikasi", icon: "phone", onSelect: function () {
+          RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
+        } };
+        return { label: "Pasang di layar utama", icon: "phone", onSelect: function () {
+          toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
+        } };
+      });
+    }
+
     /** The switcher's menu: the apps (what TopNav's app switcher listed), companies, theme, help and the account. */
     function switcherItems() {
       var items = [];
@@ -1024,7 +1068,7 @@
         return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
       }), ["-", { heading: "Tema" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
         return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
-      }), ["-", { label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
+      }), ["-"], appItems(pwa), [{ label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
         { label: "Profil", icon: "user", onSelect: function () { account("profile"); } },
         { label: "Ganti akun", icon: "switch", onSelect: function () { account("switch"); } },
         { label: "Keluar", icon: "logout", onSelect: function () { account("logout"); } }]);
@@ -1135,6 +1179,8 @@
         floating && !ubahOn ? h("div", { className: "ap-rail-scrim", onClick: function () { setRailOpen(false); } }) : null,
         h("div", { className: "rk-shell-main" },
           phoneBar,
+          pwa && !pwa.online ? h("div", { className: "ap-offline", role: "status" }, h(R.Icon, { name: "offline" }),
+            h("span", null, h("b", null, "Kamu sedang offline. "), "Halaman yang sudah terbuka masih bisa dibaca; menyimpan menunggu koneksi.")) : null,
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs })), tabBar),
@@ -1192,10 +1238,23 @@
     }
     useEffect(start, []);
 
+    // no connection at start (the installed app opened from the home screen without signal): try again by itself
+    // as soon as the phone is back online
+    var noNet = phase === "error" && err && err.status === 0;
+    useEffect(function () {
+      if (!noNet) return undefined;
+      global.addEventListener("online", start);
+      return function () { global.removeEventListener("online", start); };
+    }, [noNet]);
+
     if (phase === "signin") return h(SignInScreen, { onDone: start });
+    if (phase === "error" && noNet) {
+      return h("div", { className: "ap-splash" }, h(R.Alert, { tone: "warn", title: "Belum ada koneksi", actions: h(R.Button, { onClick: start }, "Coba lagi") },
+        "Rangka terbuka lagi begitu HP-mu tersambung ke internet atau server bisnismu."));
+    }
     if (phase === "error") {
       return h("div", { className: "ap-splash" }, h(R.Alert, { tone: "bad", title: "Aplikasi tidak bisa dimuat", actions: h(R.Button, { onClick: start }, "Coba lagi") },
-        err && err.status === 0 ? "Server tidak terjangkau." : (err && err.message) || String(err)));
+        (err && err.message) || String(err)));
     }
     if (phase !== "ready") return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Memuat" }), h("span", null, "Memuat…"));
     return h(App, { boot: boot, me: me, setMe: setMe, onSignedOut: function () {

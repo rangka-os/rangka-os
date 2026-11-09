@@ -254,8 +254,26 @@ func (s *Server) static() http.Handler {
 				return
 			}
 		}
+		staticHeaders(w.Header(), r.URL.Path)
 		fsrv.ServeHTTP(w, r)
 	})
+}
+
+// staticHeaders sets what the installable web app needs from the file server. The service worker and the pages it
+// serves must be revalidated on every load, or a kernel upgrade keeps running yesterday's worker (browsers cap the
+// worker's HTTP cache at 24 hours, but "no-cache" makes it immediate); the manifest needs its own media type, which
+// Go's mime table does not know.
+func staticHeaders(h http.Header, p string) {
+	switch {
+	case strings.HasSuffix(p, "/sw.js"):
+		h.Set("Cache-Control", "no-cache")
+		h.Set("Content-Type", "text/javascript; charset=utf-8")
+	case strings.HasSuffix(p, ".webmanifest"):
+		h.Set("Cache-Control", "no-cache")
+		h.Set("Content-Type", "application/manifest+json")
+	case strings.HasSuffix(p, "/") || strings.HasSuffix(p, ".html"):
+		h.Set("Cache-Control", "no-cache")
+	}
 }
 
 func indexPage(dir string) string {

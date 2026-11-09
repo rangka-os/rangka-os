@@ -351,6 +351,42 @@
         return reply(publicCs(cs));
       },
       transition: transition,
+      /** POST /api/v1/catalogue/propose in demo mode: the same config.rk patch and refusals as the kernel (contract 0036 §4). */
+      catalogueChange: function (body) {
+        body = body || {};
+        var self = this, cat = db.catalogue || {}, units = (cat.modules || []).concat(cat.apps || []);
+        var add = body.add || [], rm = body.remove || [];
+        if ((body.connect || []).length) return fail(422, "catalogue_connect_unavailable", "Menyambungkan konektor dari katalog belum tersedia");
+        if (!add.length && !rm.length) return fail(422, "catalogue_nothing_to_do", "Pilih modul atau app yang mau dipasang atau dilepas");
+        var cfg = (db.files["config.rk"] || {}).parsed || {}, apps = (cfg.apps || []).slice(), mods = cfg.modules || null, patch = [], appsChanged = false, addT = [], rmT = [];
+        function unit(n) { return units.filter(function (u) { return u.name === n; })[0]; }
+        function title(u) { return (u.title && (u.title.id || u.title.en)) || u.name; }
+        for (var i = 0; i < add.length; i++) {
+          var u = unit(add[i]);
+          if (!u) return fail(422, "catalogue_unknown", "\"" + add[i] + "\" tidak ada di katalog");
+          if (u.installed) return fail(422, "catalogue_nothing_to_do", title(u) + " sudah terpasang");
+          if (u.in_plan === false) return fail(422, u.kind === "module" ? "module_not_in_plan" : "app_not_in_plan", title(u) + " tidak termasuk paket " + (u.plan || ""));
+          if (u.kind === "app") { apps.push(u.name); appsChanged = true; }
+          else patch.push(mods ? { op: "add", path: "/modules/" + u.name, value: "^" + String(u.version || "1.0").split(".").slice(0, 2).join(".") }
+            : { op: "add", path: "/modules", value: (function () { var m = {}; m[u.name] = "^" + String(u.version || "1.0").split(".").slice(0, 2).join("."); return m; })() });
+          addT.push(title(u));
+        }
+        for (var j = 0; j < rm.length; j++) {
+          var r = unit(rm[j]);
+          if (!r) return fail(422, "catalogue_unknown", "\"" + rm[j] + "\" tidak ada di katalog");
+          if (!r.installed) return fail(422, "catalogue_nothing_to_do", title(r) + " belum terpasang");
+          if (r.kind === "app" && apps.indexOf(r.name) >= 0) { apps = apps.filter(function (a) { return a !== r.name; }); appsChanged = true; }
+          else if (r.kind === "module" && mods && mods[r.name]) patch.push({ op: "remove", path: "/modules/" + r.name });
+          else return fail(422, "catalogue_nothing_to_do", title(r) + " dipasang karena dibutuhkan " + ((r.required_by || []).join(", ") || "bagian lain") + "; lepas itu dulu");
+          rmT.push(title(r));
+        }
+        if (appsChanged) patch.unshift({ op: cfg.apps ? "replace" : "add", path: "/apps", value: apps });
+        var t = (addT.length ? ["Pasang " + addT.join(", ")] : []).concat(rmT.length ? [(addT.length ? "lepas " : "Lepas ") + rmT.join(", ")] : []).join("; ");
+        return self.propose({ title: t, reason: "Dari katalog Modul dan sambungan", ops: [{ op: "patch", path: "config.rk", patch: patch }] }).then(function (cs) {
+          findCs(cs.id).source = "catalogue";
+          return transition(cs.id, "validate");
+        }).then(function (v) { return v.status === "validated" ? transition(v.id, "preview") : v; });
+      },
       orgs: function () { return reply({ data: db.orgs }); },
       members: function (id) { return db.members[id] ? reply({ data: db.members[id] }) : fail(404, "not_found", "Organisasi tidak ada"); },
       file: function (path) { var f = db.files[path]; return f ? reply({ path: f.path, kind: f.kind, layer: f.layer, text: f.text, parsed: f.parsed, sha: f.sha, source: f.source }) : fail(404, "not_found", "no metadata file " + path); },
@@ -450,6 +486,8 @@
       status: pick(function () { return get("/api/v1/system/status"); }, function () { return demo.status(); }),
       /** GET /api/v1/catalogue → {modules, apps, connectors}: everything installable, installed or not (contract 0036). */
       catalogue: pick(function () { return get("/api/v1/catalogue"); }, function () { return demo.catalogue(); }),
+      /** POST /api/v1/catalogue/propose {add, remove} → the change set, validated and previewed (contract 0036 §4). */
+      catalogueChange: pick(function (body) { return post("/api/v1/catalogue/propose", body); }, function (body) { return demo.catalogueChange(body); }),
       jobs: pick(function (state) { return get("/api/v1/system/jobs" + qs({ state: state, limit: 200 })).then(list); }, function (state) { return demo.jobs({ state: state }).then(list); }),
       /** q: {limit, kind (prefix), actor, org} */
       audit: pick(function (q) { return get("/api/v1/system/audit" + qs(q || { limit: 50 })).then(list); }, function (q) { return demo.audit(q || {}).then(list); }),

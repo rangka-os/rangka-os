@@ -188,7 +188,7 @@ Read more: [architecture and layers](https://rangka-os.github.io/rangka-os/guide
 | [`schema/0.5/`](schema/0.5) | JSON Schemas for every `.rk` kind (module, model, flow, app, dashboard, print, import, system, config, …). `schema/0.4/` stays published for older files |
 | [`tools/`](tools) | Python reference validator `rangka_validate.py`, strict `.rk` reader `rkfile.py`, converters and doc builders |
 | [`templates/`](templates) | Theme and layout templates |
-| [`skills/`](skills) | Rangka skills for AI agents, in the Agent Skills format |
+| [`skills/`](skills/README.md) | Skills for AI agents (Agent Skills format, contract 0035). Claude Code: `/plugin marketplace add rangka-os/rangka-os`, then `/plugin install rangka-skills@rangka-os`; any harness: `rangka skills install`. [Docs](https://rangka-os.github.io/rangka-os/skills/) |
 | [`web/app/`](web/app) | The web app served at `/app/` |
 | [`web/console/`](web/console/README.md) | Rangka Console, the control pane for operators |
 | [`web/design-system/`](web/design-system) | React components and `tokens.json` (Ink, Bata, warm stone; light and dark) |

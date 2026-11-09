@@ -39,6 +39,10 @@ jobs:
       # Before goreleaser publishes anything: the starter must stage and its templates validate (npm.yml).
       - name: Check the npm starter
         run: make -C rangka-os/kernel build && rangka-os/npm/scripts/check-staged.sh
+      # Contract 0035: every skill (platform, apps, modules, connectors) as one zip on the GitHub Release, for harnesses
+      # without the CLI: unzip -d .claude/skills. pack refuses when a skill fails rangka skills check.
+      - name: Pack the skills
+        run: rangka-os/kernel/bin/rangka skills pack --apps rangka-apps/apps --modules rangka-apps/modules --connectors rangka-connectors --out "rangka-os/dist-skills/rangka-skills-${GITHUB_REF_NAME#v}.zip"
 
       - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3

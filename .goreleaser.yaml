@@ -62,6 +62,8 @@ docker_manifests:
 release:
   github: {owner: rangka-os, name: rangka-os}
   prerelease: auto
+  extra_files:
+    - glob: ./dist-skills/rangka-skills-*.zip   # packed by release.yml (contract 0035)
 
 changelog:
   use: github

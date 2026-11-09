@@ -82,7 +82,18 @@
     group: "M20.0833 15.1999L21.2854 15.9212C21.5221 16.0633 21.5989 16.3704 21.4569 16.6072C21.4146 16.6776 21.3557 16.7365 21.2854 16.7787L12.5144 22.0412C12.1977 22.2313 11.8021 22.2313 11.4854 22.0412L2.71451 16.7787C2.47772 16.6366 2.40093 16.3295 2.54301 16.0927C2.58523 16.0223 2.64413 15.9634 2.71451 15.9212L3.9166 15.1999L11.9999 20.0499L20.0833 15.1999ZM20.0833 10.4999L21.2854 11.2212C21.5221 11.3633 21.5989 11.6704 21.4569 11.9072C21.4146 11.9776 21.3557 12.0365 21.2854 12.0787L11.9999 17.6499L2.71451 12.0787C2.47772 11.9366 2.40093 11.6295 2.54301 11.3927C2.58523 11.3223 2.64413 11.2634 2.71451 11.2212L3.9166 10.4999L11.9999 15.3499L20.0833 10.4999ZM12.5144 1.30864L21.2854 6.5712C21.5221 6.71327 21.5989 7.0204 21.4569 7.25719C21.4146 7.32757 21.3557 7.38647 21.2854 7.42869L11.9999 12.9999L2.71451 7.42869C2.47772 7.28662 2.40093 6.97949 2.54301 6.7427C2.58523 6.67232 2.64413 6.61343 2.71451 6.5712L11.4854 1.30864C11.8021 1.11864 12.1977 1.11864 12.5144 1.30864ZM11.9999 3.33233L5.88723 6.99995L11.9999 10.6676L18.1126 6.99995L11.9999 3.33233Z",
     table: "M4 8H20V5H4V8ZM14 19V10H10V19H14ZM16 19H20V10H16V19ZM8 19V10H4V19H8ZM3 3H21C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3Z",
     fold: "M5 5H13V19H5V5ZM19 19H15V5H19V19ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4C21 3.44772 20.5523 3 20 3H4ZM7 12L11 8.5V15.5L7 12Z",
-    unfold: "M5 5H13V19H5V5ZM19 19H15V5H19V19ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4C21 3.44772 20.5523 3 20 3H4ZM11 12L7 8.5V15.5L11 12Z"
+    unfold: "M5 5H13V19H5V5ZM19 19H15V5H19V19ZM4 3C3.44772 3 3 3.44772 3 4V20C3 20.5523 3.44772 21 4 21H20C20.5523 21 21 20.5523 21 20V4C21 3.44772 20.5523 3 20 3H4ZM11 12L7 8.5V15.5L11 12Z",
+    bank: "M2 20H22V22H2V20ZM4 12H6V19H4V12ZM9 12H11V19H9V12ZM13 12H15V19H13V12ZM18 12H20V19H18V12ZM2 7L12 2L22 7V11H2V7ZM4 8.23607V9H20V8.23607L12 4.23607L4 8.23607ZM12 8C11.4477 8 11 7.55228 11 7C11 6.44772 11.4477 6 12 6C12.5523 6 13 6.44772 13 7C13 7.55228 12.5523 8 12 8Z",
+    book: "M21 18H6C5.44772 18 5 18.4477 5 19C5 19.5523 5.44772 20 6 20H21V22H6C4.34315 22 3 20.6569 3 19V4C3 2.89543 3.89543 2 5 2H21V18ZM5 16.05C5.16156 16.0172 5.32877 16 5.5 16H19V4H5V16.05ZM16 9H8V7H16V9Z",
+    cash: "M3.00488 3.00275H21.0049C21.5572 3.00275 22.0049 3.45046 22.0049 4.00275V20.0027C22.0049 20.555 21.5572 21.0027 21.0049 21.0027H3.00488C2.4526 21.0027 2.00488 20.555 2.00488 20.0027V4.00275C2.00488 3.45046 2.4526 3.00275 3.00488 3.00275ZM4.00488 5.00275V19.0027H20.0049V5.00275H4.00488ZM8.50488 14.0027H14.0049C14.281 14.0027 14.5049 13.7789 14.5049 13.5027C14.5049 13.2266 14.281 13.0027 14.0049 13.0027H10.0049C8.62417 13.0027 7.50488 11.8835 7.50488 10.5027C7.50488 9.12203 8.62417 8.00275 10.0049 8.00275H11.0049V6.00275H13.0049V8.00275H15.5049V10.0027H10.0049C9.72874 10.0027 9.50488 10.2266 9.50488 10.5027C9.50488 10.7789 9.72874 11.0027 10.0049 11.0027H14.0049C15.3856 11.0027 16.5049 12.122 16.5049 13.5027C16.5049 14.8835 15.3856 16.0027 14.0049 16.0027H13.0049V18.0027H11.0049V16.0027H8.50488V14.0027Z",
+    history: "M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12H4C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C9.25022 4 6.82447 5.38734 5.38451 7.50024L8 7.5V9.5H2V3.5H4L3.99989 5.99918C5.82434 3.57075 8.72873 2 12 2ZM13 7L12.9998 11.585L16.2426 14.8284L14.8284 16.2426L10.9998 12.413L11 7H13Z",
+    map: "M2 5L9 2L15 5L21.303 2.2987C21.5569 2.18992 21.8508 2.30749 21.9596 2.56131C21.9862 2.62355 22 2.69056 22 2.75827V19L15 22L9 19L2.69696 21.7013C2.44314 21.8101 2.14921 21.6925 2.04043 21.4387C2.01375 21.3765 2 21.3094 2 21.2417V5ZM16 19.3955L20 17.6812V5.03308L16 6.74736V19.3955ZM14 19.2639V6.73607L10 4.73607V17.2639L14 19.2639ZM8 17.2526V4.60451L4 6.31879V18.9669L8 17.2526Z",
+    plus: "M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z",
+    receipt: "M9 4L6 2L3 4V19C3 20.6569 4.34315 22 6 22H20C21.6569 22 23 20.6569 23 19V16H21V4L18 2L15 4L12 2L9 4ZM19 16H7V19C7 19.5523 6.55228 20 6 20C5.44772 20 5 19.5523 5 19V5.07037L6 4.4037L9 6.4037L12 4.4037L15 6.4037L18 4.4037L19 5.07037V16ZM20 20H8.82929C8.93985 19.6872 9 19.3506 9 19V18H21V19C21 19.5523 20.5523 20 20 20Z",
+    repeat: "M6 4H21C21.5523 4 22 4.44772 22 5V12H20V6H6V9L1 5L6 1V4ZM18 20H3C2.44772 20 2 19.5523 2 19V12H4V18H18V15L23 19L18 23V20Z",
+    tag: "M10.9042 2.10025L20.8037 3.51446L22.2179 13.414L13.0255 22.6063C12.635 22.9969 12.0019 22.9969 11.6113 22.6063L1.71184 12.7069C1.32131 12.3163 1.32131 11.6832 1.71184 11.2926L10.9042 2.10025ZM11.6113 4.22157L3.83316 11.9997L12.3184 20.485L20.0966 12.7069L19.036 5.28223L11.6113 4.22157ZM13.7327 10.5855C12.9516 9.80448 12.9516 8.53815 13.7327 7.7571C14.5137 6.97606 15.78 6.97606 16.5611 7.7571C17.3421 8.53815 17.3421 9.80448 16.5611 10.5855C15.78 11.3666 14.5137 11.3666 13.7327 10.5855Z",
+    truck: "M8.96456 18C8.72194 19.6961 7.26324 21 5.5 21C3.73676 21 2.27806 19.6961 2.03544 18H1V6C1 5.44772 1.44772 5 2 5H16C16.5523 5 17 5.44772 17 6V8H20L23 12.0557V18H20.9646C20.7219 19.6961 19.2632 21 17.5 21C15.7368 21 14.2781 19.6961 14.0354 18H8.96456ZM15 7H3V15.0505C3.63526 14.4022 4.52066 14 5.5 14C6.8962 14 8.10145 14.8175 8.66318 16H14.3368C14.5045 15.647 14.7296 15.3264 15 15.0505V7ZM17 13H21V12.715L18.9917 10H17V13ZM17.5 19C18.1531 19 18.7087 18.5826 18.9146 18C18.9699 17.8436 19 17.6753 19 17.5C19 16.6716 18.3284 16 17.5 16C16.6716 16 16 16.6716 16 17.5C16 17.6753 16.0301 17.8436 16.0854 18C16.2913 18.5826 16.8469 19 17.5 19ZM7 17.5C7 16.6716 6.32843 16 5.5 16C4.67157 16 4 16.6716 4 17.5C4 17.6753 4.03008 17.8436 4.08535 18C4.29127 18.5826 4.84689 19 5.5 19C6.15311 19 6.70873 18.5826 6.91465 18C6.96992 17.8436 7 17.6753 7 17.5Z",
+    undo: "M5.82843 6.99955L8.36396 9.53509L6.94975 10.9493L2 5.99955L6.94975 1.0498L8.36396 2.46402L5.82843 4.99955H13C17.4183 4.99955 21 8.58127 21 12.9996C21 17.4178 17.4183 20.9996 13 20.9996H4V18.9996H13C16.3137 18.9996 19 16.3133 19 12.9996C19 9.68584 16.3137 6.99955 13 6.99955H5.82843Z"
   };
 
   function Icon(p) {
@@ -870,17 +881,56 @@
         col ? null : h("span", { className: "g" }, h("b", null, sw.title), sw.subtitle ? h("small", null, sw.subtitle) : null),
         !col && sw.onClick ? h(Icon, { name: "updown" }) : null);
     }
+    function isCur(it) { var id = it.id || it.label; return id === p.current || it.label === p.current; }
+    function holds(it) { return isCur(it) || (it.items || []).some(holds); }
+    /* A parent entry (contract 0037): a row that opens its children (open when it holds the current page, else as the
+       person left it, folds storage "sub:<label>"). On the icon rail it opens its first child. */
+    function parent(it) {
+      var key = "sub:" + it.label, kids = it.items, here = kids.some(holds);
+      var open = here || (key in folds ? !folds[key] : false);
+      if (col) {
+        return h("a", { key: key, href: "#", className: "rk-navlink", title: it.label, "aria-current": here ? "page" : undefined,
+          onClick: function (e) { e.preventDefault(); var f = kids[0]; if (f && p.onNavigate) p.onNavigate(f.id || f.label, f); } },
+          ICONS[it.icon] ? h(Icon, { name: it.icon }) : h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)),
+          h("span", { className: "rk-sr" }, it.label));
+      }
+      return h(React.Fragment, { key: key },
+        h("button", { type: "button", className: cx("rk-navlink rk-navparent", here && "holds"), "aria-expanded": open ? "true" : "false",
+          onClick: function () { if (here) return; var next = Object.assign({}, folds); next[key] = open; setFolds(next); try { localStorage.setItem(fk, JSON.stringify(next)); } catch (e) {} } },
+          h(Icon, { name: ICONS[it.icon] ? it.icon : "list" }), h("span", { className: "l" }, it.label),
+          h(Icon, { name: open ? "down" : "right" })),
+        open ? h("div", { className: "rk-navsub", role: "group", "aria-label": it.label }, kids.map(link)) : null);
+    }
     function link(it) {
+      if (it.items && it.items.length) return parent(it);
       var id = it.id || it.label;
       return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined,
         "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
         onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(id, it); } },
-        col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: it.icon }),
+        col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: ICONS[it.icon] ? it.icon : "list" }),
         // collapsed: the label stays as visually hidden text (the link's name), not aria-label, so it never doubles as a form label
         h("span", { className: col ? "rk-sr" : "l" }, it.label),
         it.count ? (col ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : h("span", { className: "rk-count" }, it.count)) : null);
     }
     var search = p.search, searchLabel = (search && search.label) || "Cari";
+    // Foldable groups: a long navigation (more than foldAfter links, default 15) starts with only the group of the
+    // current page open; a click on a group label folds or opens it and is remembered (foldKey in localStorage).
+    var fk = p.foldKey || "rk.nav.folded", groups = p.groups || [];
+    var fs = useState(function () { try { return JSON.parse(localStorage.getItem(fk) || "{}") || {}; } catch (e) { return {}; } }), folds = fs[0], setFolds = fs[1];
+    function count(items) { return items.reduce(function (n, it) { return n + (it.items ? count(it.items) : 1); }, 0); }
+    var links = groups.reduce(function (n, g) { return n + count(g.items); }, 0);
+    var foldable = p.foldGroups !== false && !col;
+    function hasCurrent(g) { return g.items.some(holds); }
+    function isOpen(g) {
+      if (!foldable || !g.label || hasCurrent(g)) return true;
+      var k = String(g.label);
+      // the person's choice, else the group's own collapsed (contract 0037), else open unless the navigation is long
+      return k in folds ? !folds[k] : typeof g.collapsed === "boolean" ? !g.collapsed : links <= (p.foldAfter || 15);
+    }
+    function toggleGroup(g) {
+      var next = Object.assign({}, folds); next[String(g.label)] = isOpen(g);
+      setFolds(next); try { localStorage.setItem(fk, JSON.stringify(next)); } catch (e) {}
+    }
     return h("aside", { className: cx("rk-side", col && "collapsed", p.float && "rk-side-float"), "aria-label": sw ? "Navigasi " + sw.title : "Navigasi" },
       sw ? head() : null,
       p.company && !col ? h("button", { type: "button", className: "rk-company", onClick: p.onCompany }, h(Icon, { name: "store" }), h("span", { className: "g" }, p.company, p.outlet ? h("small", null, p.outlet) : null), h(Icon, { name: "updown" })) : null,
@@ -888,11 +938,14 @@
         h(Icon, { name: "search" }), col ? null : h("span", { className: "l" }, searchLabel), col ? null : h(Kbd, null, "⌘K")) : null,
       h("nav", null,
         p.pinned && p.pinned.length ? h("div", { key: "pinned", className: "rk-navgroup" }, p.pinned.map(link)) : null,
-        (p.groups || []).map(function (g, i) {
-          var lead = i > 0 || (p.pinned && p.pinned.length);
-          return h("div", { key: g.label || "main", className: "rk-navgroup" },
-            g.label ? (col ? (lead ? h("div", { className: "rk-navsep", role: "separator" }) : null) : h("p", null, g.label)) : null,
-            g.items.map(link));
+        groups.map(function (g, i) {
+          var lead = i > 0 || (p.pinned && p.pinned.length), open = isOpen(g);
+          return h("div", { key: g.label || "main", className: cx("rk-navgroup", !open && "folded") },
+            g.label ? (col ? (lead ? h("div", { className: "rk-navsep", role: "separator" }) : null)
+              : foldable && !hasCurrent(g) ? h("p", null, h("button", { type: "button", className: "rk-navgroup-t", "aria-expanded": open ? "true" : "false", onClick: function () { toggleGroup(g); } },
+                  h("span", { className: "l" }, g.label), h("span", { className: "rk-navgroup-n" }, open ? null : g.items.length), h(Icon, { name: open ? "down" : "right" })))
+              : h("p", null, g.label)) : null,
+            open ? g.items.map(link) : null);
         })),
       col ? (p.footer ? h("div", { className: "rk-side-foot collapsed" }, p.footer)
           : p.user ? h("div", { className: "rk-side-foot collapsed", title: p.user, "aria-label": p.user, role: "group" }, h(Avatar, { name: p.user, size: 28, presence: "online" })) : null)
@@ -1036,6 +1089,11 @@
       mi("profile", "user", "Profil"),
       mi("settings", "settings", "Pengaturan akun"),
       mi("security", "shield", "Keamanan dan login"),
+      // extra sections from the app (mode, install …): [{heading?, items: [{key, icon, label, on?}]}]
+      (p.extra || []).filter(function (g) { return g && g.items && g.items.length; }).map(function (g, i) {
+        return h(React.Fragment, { key: "x" + i }, h("div", { className: "rk-msep" }), g.heading ? h("div", { className: "rk-mh" }, g.heading) : null,
+          g.items.map(function (it) { return mi(it.key, it.icon, it.label, null, !!it.on); }));
+      }),
       h("div", { className: "rk-msep" }),
       h("div", { className: "rk-mh" }, "Tema"),
       mi("theme:light", "sun", "Terang", null, th === "light"), mi("theme:dark", "moon", "Gelap", null, th === "dark"), mi("theme:system", "palette", "Ikuti sistem", null, th === "system"),
@@ -1068,7 +1126,7 @@
         h("button", { type: "button", className: "rk-av-btn", "aria-label": "Akun " + (p.user ? p.user.name : ""), "aria-expanded": open === "account", onClick: function () { tog("account"); } },
           h(Avatar, { name: p.user ? p.user.name : "?", size: 28 }))),
       open === "switcher" ? h(AppSwitcher, { float: true, apps: p.apps, current: p.currentApp, recent: p.recent, onManage: p.onManageApps, onMarket: p.onMarketplace, onSelect: function (a) { setOpen(null); if (p.onSwitch) p.onSwitch(a); } }) : null,
-      open === "account" ? h(AccountMenu, Object.assign({ float: true }, p.user || {}, { theme: p.theme, onSelect: function (k) { setOpen(null); if (p.onAccount) p.onAccount(k); } })) : null);
+      open === "account" ? h(AccountMenu, Object.assign({ float: true }, p.user || {}, { theme: p.theme, extra: p.accountExtra, onSelect: function (k) { setOpen(null); if (p.onAccount) p.onAccount(k); } })) : null);
   }
 
   /* ---- Loaders: spinner and skeletons */

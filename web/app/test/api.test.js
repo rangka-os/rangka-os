@@ -546,3 +546,41 @@ test("create, submit and action send Idempotency-Key and _occurred_at when asked
   assert.strictEqual(f.calls[3].init.headers["Idempotency-Key"], undefined, "no key unless asked");
   assert.deepStrictEqual(JSON.parse(f.calls[3].init.body), { hours: 1 });
 });
+
+test("read-through cache: a kept GET is stored, served from the device copy without a connection, never for writes", async () => {
+  const store = {};
+  const rc = {
+    cacheable: (p) => p === "/api/v1/meta" || p.startsWith("/api/v1/r/"),
+    put: (p, b) => { store[p] = { body: b, at: "2026-11-08T07:05:00.000Z" }; return Promise.resolve(); },
+    get: (p) => Promise.resolve(store[p] || null),
+  };
+  let online = true;
+  const stale = [], fresh = [];
+  const f = stub((url) => online ? json(200, url.endsWith("/meta") ? { apps: ["crm"] } : { name: "L-1" }) : new TypeError("Failed to fetch"));
+  const api = RA({ fetch: f, readCache: rc, onStale: (at, p) => stale.push([at, p]), onFresh: (p) => fresh.push(p) });
+
+  await api.meta();
+  await api.get("lead", "L-1");
+  assert.deepStrictEqual(Object.keys(store).sort(), ["/api/v1/meta", "/api/v1/r/lead/L-1"]);
+  assert.deepStrictEqual(fresh, ["/api/v1/meta", "/api/v1/r/lead/L-1"]);
+
+  online = false;
+  const m = await api.meta();
+  assert.deepStrictEqual(m.apps, ["crm"], "meta from the device copy, defaults still applied");
+  assert.deepStrictEqual(stale[0], ["2026-11-08T07:05:00.000Z", "/api/v1/meta"]);
+  assert.strictEqual((await api.get("lead", "L-1")).name, "L-1");
+
+  const miss = await rejected(api.get("lead", "L-2"));
+  assert.strictEqual(miss.status, 0);
+  assert.match(miss.message, /belum pernah dibuka di perangkat ini/);
+
+  const w = await rejected(api.update("lead", "L-1", { title: "x" }));
+  assert.strictEqual(w.status, 0, "writes are never answered from the copy");
+  assert.match(w.message, /Tidak bisa terhubung/);
+
+  // a refusal from the server is not hidden behind the copy
+  online = true;
+  const f2 = stub(() => json(403, { error: { code: "forbidden", message: "Tidak boleh" } }));
+  const api2 = RA({ fetch: f2, readCache: rc });
+  assert.strictEqual((await rejected(api2.meta())).status, 403);
+});

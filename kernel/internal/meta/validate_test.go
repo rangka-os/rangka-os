@@ -96,6 +96,21 @@ func TestBrokenModulesAppsMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-modules-apps.expected.txt", Options{AppsDir: "testdata/broken-modules-apps/apps", SiteDir: "testdata/broken-modules-apps/site"})
 }
 
+// Sub-menus in app menus and nav.side, and responsive in layouts (contracts 0037, 0038): broken links, a sub-menu
+// nested too deep, an unknown tablet mode and phone tabs without tabs.
+func TestBrokenNavMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-nav.expected.txt", Options{AppsDir: "testdata/broken-nav-apps/apps", SiteDir: "testdata/broken-nav-apps/site"})
+}
+
+// The valid nested navigation fixture has no problems.
+func TestNavAppsValid(t *testing.T) {
+	_, rep := ValidateOpts(Options{AppsDir: "../../testdata/nav-apps/apps", SiteDir: "../../testdata/nav-apps/site"}, nil, schema.Embedded())
+	var buf bytes.Buffer
+	if rep.Print(&buf); len(rep.All()) != 0 {
+		t.Fatalf("expected no problems:\n%s", buf.String())
+	}
+}
+
 // Print formats and letterheads (contract 0008): every check except template_error, which is kernel only.
 func TestBrokenPrintMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-print.expected.txt", Options{AppsDir: "testdata/broken-print-apps/apps", SiteDir: "testdata/broken-print-site"})
@@ -330,4 +345,17 @@ func TestStockApps(t *testing.T) {
 		rep.Print(&buf)
 		t.Fatalf("declared stock documents do not validate:\n%s", buf.String())
 	}
+}
+
+// Contract 0036: the catalogue keys (summary, category, icon) and config.connectors. The valid set has no
+// problems; the broken one has the warnings and errors rangka_validate.py prints.
+func TestCatalogueKeys(t *testing.T) {
+	_, rep := ValidateOpts(Options{AppsDir: "../../testdata/catalogue-keys/apps", SiteDir: "../../testdata/catalogue-keys/site", ConnectorsDir: "../../testdata/catalogue-keys/connectors"}, nil, schema.Embedded())
+	if n := len(rep.All()); n != 0 {
+		t.Fatalf("problems: %+v", rep.All())
+	}
+}
+
+func TestBrokenCatalogueKeysMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-catalogue-keys.expected.txt", Options{AppsDir: "testdata/broken-catalogue-keys/apps", SiteDir: "testdata/broken-catalogue-keys/site", ConnectorsDir: "testdata/broken-catalogue-keys/connectors"})
 }

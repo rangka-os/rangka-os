@@ -276,6 +276,24 @@ test("sideFromMenus turns the shown menu into nav.side groups", () => {
   ]);
 });
 
+test("sideFromMenus: a composed site's module groups (meta.menu) are part of the shown menu", () => {
+  const meta = {
+    apps: [],
+    menu: [
+      { module: "pipeline", group: { id: "Pipeline penjualan" }, items: ["deal", "gone"], dashboards: ["sales"] },
+      { module: "users", group: { id: "Pengguna" }, items: ["user"], dashboards: [] },
+    ],
+    models: { deal: {}, user: {} },
+    dashboards: { sales: {} },
+  };
+  assert.deepStrictEqual(RA.sideFromMenus(meta), [
+    { group: { id: "Dasbor" }, items: [{ to: "dashboard:sales" }] },
+    { group: { id: "Pipeline penjualan" }, items: [{ to: "model:deal" }] },
+    { group: { id: "Pengguna" }, items: [{ to: "model:user" }] },
+  ]);
+  assert.deepStrictEqual(RA.menuSide(meta), RA.sideFromMenus(meta)); // the Ubah sidebar shows them
+});
+
 test("dashDef keeps only dashboard schema keys and names the dashboard", () => {
   const meta = { dashboards: { d: { label: { id: "D" }, app: "crm", periods: [7], widgets: [{ name: "a", type: "number", span: 3, model: "deal", extra: 1 }] } } };
   assert.deepStrictEqual(RA.dashDef(meta, "d"), { name: "d", label: { id: "D" }, periods: [7], widgets: [{ name: "a", type: "number", span: 3, model: "deal" }] });
@@ -477,4 +495,18 @@ test("opsAddTable writes into the site company module (fixtures for the kernel c
     if (process.env.UPDATE_FIXTURES) { fs.mkdirSync(path.dirname(fx), { recursive: true }); fs.writeFileSync(fx, body); }
     assert.strictEqual(fs.readFileSync(fx, "utf8"), body, "fixture " + fx + " is stale; run with UPDATE_FIXTURES=1");
   }
+});
+
+test("riskReasonText says the kernel's risk reasons in Bahasa Indonesia", () => {
+  assert.strictEqual(RA.riskReasonText("installs catatan (with what they require)"), "Memasang catatan beserta yang dibutuhkannya");
+  assert.strictEqual(RA.riskReasonText("removes stock (preview counts their rows; rows stay, tables are kept)"),
+    "Melepas stock (pratinjau menghitung datanya; data dan tabelnya tetap disimpan)");
+  assert.strictEqual(RA.riskReasonText("contacts leaves config.modules but stays installed (another unit requires it)"),
+    "contacts keluar dari config.modules tapi tetap terpasang karena dibutuhkan bagian lain");
+  assert.strictEqual(RA.riskReasonText("adds money/stock field x_total to custom/deal.rk"), "Menambah kolom uang atau stok x_total ke custom/deal.rk");
+  assert.strictEqual(RA.riskReasonText("adds field x_po to custom/deal.rk"), "Menambah kolom x_po ke custom/deal.rk");
+  assert.strictEqual(RA.riskReasonText("changes config.plan"), "Mengubah config.plan");
+  assert.strictEqual(RA.riskReasonText("new model x_sewa without permissions: every role has full access"),
+    "Model baru x_sewa tanpa izin: semua peran bisa membuka dan mengubahnya");
+  assert.strictEqual(RA.riskReasonText("something the kernel says later"), "something the kernel says later");
 });

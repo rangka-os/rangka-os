@@ -104,6 +104,9 @@ func (v *validator) shape() {
 				v.rep.add("error", a.Doc.Path, e.PathString(), "schema", e.Message)
 			}
 		}
+		if (a.Kind == KindModule || a.Kind == KindApp) && a.Raw != nil && !truthy(a.Raw["summary"]) {
+			v.rep.add("warn", a.File, "(root)", "catalogue_summary_missing", fmt.Sprintf(`%s "%s" has no summary: add one sentence in plain words for the catalogue (contract 0036)`, a.Kind, a.Name))
+		}
 		if a.Kind == KindApp && len(rk.ListDir(filepath.Join(a.Dir, "models"))) > 0 {
 			v.rep.add("error", a.File, "models", "app_defines_model", fmt.Sprintf(`app "%s" has models/; an app defines no models, move them into a module (contract 0001)`, a.Name))
 		}
@@ -230,10 +233,27 @@ func (v *validator) meaning() {
 		}
 		for gi, g := range asList(a.Raw["menu"]) {
 			for i, it := range asList(asMap(g)["items"]) {
-				s := pyStr(it)
-				if _, ok := visible[s]; !ok {
-					v.rep.add("error", appPath, fmt.Sprintf("menu/%d/items/%d", gi, i), "unknown_model",
-						fmt.Sprintf(`"%s" is not a model in this app or its dependencies%s`, s, suggest(s, keys(visible))))
+				// a sub-menu {label, items} lists its models one level down (contract 0037)
+				type entry struct {
+					where string
+					m     any
+				}
+				subs := []entry{{fmt.Sprintf("menu/%d/items/%d", gi, i), it}}
+				if sm, ok := it.(map[string]any); ok {
+					subs = subs[:0]
+					for j, x := range asList(sm["items"]) {
+						subs = append(subs, entry{fmt.Sprintf("menu/%d/items/%d/items/%d", gi, i, j), x})
+					}
+				}
+				for _, e := range subs {
+					s, isStr := e.m.(string)
+					if !isStr {
+						continue
+					}
+					if _, ok := visible[s]; !ok {
+						v.rep.add("error", appPath, e.where, "unknown_model",
+							fmt.Sprintf(`"%s" is not a model in this app or its dependencies%s`, s, suggest(s, keys(visible))))
+					}
 				}
 			}
 		}

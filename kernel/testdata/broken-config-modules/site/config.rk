@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+# Every contract 0032 error: keys that are no module, a range the module is outside of, a module outside the plan,
+# site files naming a model of an uninstalled module, and modules set per org.
+locale: id-ID
+currency: IDR
+timezone: Asia/Jakarta
+plan: sewa
+modules: {invoicing: ^2.0, payments: ^1.0, crm: ^1.0, site: ^1.0, contcts: ^1.0, pipeline: ^1.0}
+numbering:
+  stock_item: BRG-{#####}
+orgs:
+  cabang:
+    name: Cabang
+    config:
+      modules: {stock: ^1.0}

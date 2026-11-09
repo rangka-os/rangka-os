@@ -1,5 +1,5 @@
 import type * as React from 'react';
-export type IconName = 'home' | 'store' | 'cart' | 'stock' | 'invoice' | 'card' | 'qris' | 'add' | 'search' | 'print' | 'check' | 'close' | 'lock' | 'amend' | 'left' | 'right' | 'down' | 'sort' | 'more' | 'bell' | 'attach' | 'send' | 'at' | 'copy' | 'delete' | 'edit' | 'eye' | 'download' | 'zoom' | 'image' | 'info' | 'warning' | 'success' | 'error' | 'user' | 'logout' | 'filter' | 'spark' | 'menu' | 'settings' | 'team' | 'sidebar' | 'mic' | 'updown' | 'calendar' | 'open' | 'drag' | 'time' | 'link' | 'apps' | 'chart' | 'dashboard' | 'help' | 'sun' | 'moon' | 'external' | 'refresh' | 'arrowup' | 'arrowdown' | 'funnel' | 'star' | 'switch' | 'pie' | 'line' | 'building' | 'shield' | 'key' | 'plug' | 'globe' | 'palette' | 'list' | 'kanban' | 'group' | 'table' | 'fold' | 'unfold';
+export type IconName = 'home' | 'store' | 'cart' | 'stock' | 'invoice' | 'card' | 'qris' | 'add' | 'search' | 'print' | 'check' | 'close' | 'lock' | 'amend' | 'left' | 'right' | 'down' | 'sort' | 'more' | 'bell' | 'attach' | 'send' | 'at' | 'copy' | 'delete' | 'edit' | 'eye' | 'download' | 'zoom' | 'image' | 'info' | 'warning' | 'success' | 'error' | 'user' | 'logout' | 'filter' | 'spark' | 'menu' | 'settings' | 'team' | 'sidebar' | 'mic' | 'updown' | 'calendar' | 'open' | 'drag' | 'time' | 'link' | 'apps' | 'chart' | 'dashboard' | 'help' | 'sun' | 'moon' | 'external' | 'refresh' | 'arrowup' | 'arrowdown' | 'funnel' | 'star' | 'switch' | 'pie' | 'line' | 'building' | 'shield' | 'key' | 'plug' | 'globe' | 'palette' | 'list' | 'kanban' | 'group' | 'table' | 'fold' | 'unfold' | 'bank' | 'book' | 'cash' | 'history' | 'map' | 'plus' | 'receipt' | 'repeat' | 'tag' | 'truck' | 'undo' | 'wallet';
 export interface IconProps { name: IconName; size?: number; label?: string; className?: string }
 export declare function Icon(props: IconProps): React.ReactElement | null;
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> { variant?: 'default' | 'primary' | 'quiet' | 'link' | 'danger' | 'danger-solid'; size?: 'sm' | 'md' | 'lg'; icon?: IconName; loading?: boolean }
@@ -53,7 +53,8 @@ export declare function Banner(props: { icon?: IconName; children: Node }): Reac
 export interface ToastProps { title: string; tone?: 'ok' | 'info' | 'warn' | 'bad'; children?: Node; action?: string; onAction?: () => void; onClose?: () => void }
 export declare function Toast(props: ToastProps): React.ReactElement;
 export declare function Toaster(props: { float?: boolean; children: Node }): React.ReactElement;
-export interface NavItem { id?: string; label: string; icon?: IconName; count?: number | null; href?: string }
+/** items: a parent entry with children (contract 0037), one level deep; it opens when it holds the current page. */
+export interface NavItem { id?: string; label: string; icon?: IconName; count?: number | null; href?: string; items?: NavItem[] }
 /** Frappe side navigation. collapsed: icons only, labels as title tooltips, width --sidebar-collapsed; the footer stays, compact:
  *  a custom footer renders centred and clipped in .rk-side-foot.collapsed (give it icon-only content), the legacy user shows only the avatar.
  *  Legacy props: app (mapped to switcher, its tile becomes the mark), product (switcher title), company/outlet/onCompany, user/role. */
@@ -61,7 +62,11 @@ export interface SidebarProps {
   switcher?: { title: string; subtitle?: Node; mark?: Node; onClick?: () => void };
   search?: { label?: string; onOpen?: () => void };
   pinned?: NavItem[];
-  groups?: { label?: string; items: NavItem[] }[];
+  /** collapsed: the group's starting state before the person folds or opens it. */
+  groups?: { label?: string; collapsed?: boolean; items: NavItem[] }[];
+  /** Groups fold on a click of their label (remembered under foldKey, default rk.nav.folded); a navigation with more
+   *  than foldAfter (15) links starts with only the current page's group open. foldGroups: false turns it off. */
+  foldGroups?: boolean; foldAfter?: number; foldKey?: string;
   current?: string; onNavigate?: (id: string, item: NavItem) => void;
   collapsed?: boolean; onToggleCollapse?: () => void;
   /** Opened from the tablet-portrait rail: the full sidebar floats over the page (position fixed, shadow). */
@@ -138,10 +143,11 @@ export declare function Badge(props: { appearance?: 'primary' | 'important'; max
 export interface AppEntry { id: string; name: string; desc: string; icon: IconName; color: string; external?: boolean }
 export interface RecentEntry { name: string; sub?: string; icon?: IconName; [k: string]: any }
 export declare function AppSwitcher(props: { apps?: AppEntry[]; current?: string; recent?: RecentEntry[]; float?: boolean; onSelect?: (app: any) => void; onManage?: () => void; onMarket?: () => void }): React.ReactElement;
-export interface AccountMenuProps { name: string; email?: string; company?: string; companies?: string[]; theme?: 'light' | 'dark' | 'system'; float?: boolean; onSelect?: (key: string) => void }
+export interface AccountMenuSection { heading?: string; items: { key: string; icon: IconName; label: string; on?: boolean }[] }
+export interface AccountMenuProps { name: string; email?: string; company?: string; companies?: string[]; theme?: 'light' | 'dark' | 'system'; extra?: AccountMenuSection[]; float?: boolean; onSelect?: (key: string) => void }
 export declare function AccountMenu(props: AccountMenuProps): React.ReactElement;
 export interface TopNavProps { product?: { name: string; icon: IconName; color: string }; items?: { id?: string; label: string; menu?: boolean }[]; current?: string; createLabel?: string | false; searchPlaceholder?: string; unread?: boolean;
-  user?: { name: string; email?: string; company?: string; companies?: string[] }; theme?: 'light' | 'dark' | 'system'; apps?: AppEntry[]; currentApp?: string; recent?: RecentEntry[]; actions?: Node; defaultOpen?: 'switcher' | 'account';
+  user?: { name: string; email?: string; company?: string; companies?: string[] }; theme?: 'light' | 'dark' | 'system'; apps?: AppEntry[]; currentApp?: string; recent?: RecentEntry[]; actions?: Node; accountExtra?: AccountMenuSection[]; defaultOpen?: 'switcher' | 'account';
   onHome?: () => void; onNavigate?: (id: string) => void; onCreate?: () => void; onSearch?: () => void; onSwitch?: (app: any) => void; onAccount?: (key: string) => void; onNotifications?: () => void; onHelp?: () => void; onManageApps?: () => void; onMarketplace?: () => void }
 export declare function TopNav(props: TopNavProps): React.ReactElement;
 export declare function Spinner(props: { size?: 'sm' | 'md' | 'lg'; label?: string }): React.ReactElement;

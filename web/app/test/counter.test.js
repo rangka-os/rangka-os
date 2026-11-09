@@ -87,3 +87,18 @@ test("denomTotal and cartCount", () => {
   assert.strictEqual(A.denomTotal({ 100000: "3", 2000: 1, coins: "1500", 5000: "" }), 303500);
   assert.strictEqual(A.cartCount([{ qty: 2 }, { qty: 1 }]), 3);
 });
+
+test("balanceFilter: one equality per match pair, quoted; null without a session or with an empty value (contract 0039)", () => {
+  const av = { model: "stock_balance", item: "item", qty: "qty", match: { outlet: "outlet" } };
+  assert.strictEqual(A.balanceFilter(av, { outlet: "OUT-02" }), "outlet == 'OUT-02'");
+  assert.strictEqual(A.balanceFilter(av, { outlet: "Toko O'Neil" }), "outlet == 'Toko O\\'Neil'");
+  assert.strictEqual(A.balanceFilter(av, { outlet: "" }), null);
+  assert.strictEqual(A.balanceFilter(av, null), null);
+  assert.strictEqual(A.balanceFilter({ model: "m", item: "i", qty: "q" }, null), "");
+  assert.strictEqual(A.balanceFilter({ match: { b: "y", a: "x" } }, { x: 1, y: 2 }), "a == '1' && b == '2'");
+});
+
+test("sumBalances: qty summed per item, rows without an item skipped", () => {
+  const av = { item: "item", qty: "qty" };
+  assert.deepStrictEqual(plain(A.sumBalances([{ item: "A", qty: 2 }, { item: "A", qty: "1.5" }, { item: "B", qty: 0 }, { qty: 9 }], av)), { A: 3.5, B: 0 });
+});

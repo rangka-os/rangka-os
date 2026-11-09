@@ -78,6 +78,8 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-shell .rk-side-head b { font: 600 13.5px/18px var(--font-sans); }
 .ap-shell .rk-side-head small { font-size: 11.5px; line-height: 16px; }
 .ap-shell .rk-side-mark, .ap-shell .rk-side-head .tile { width: 24px; height: 24px; border-radius: 6px; background: var(--brand); }
+/* top-nav: the sidebar tile is the open app (Ink), not the business's Bata logo, which sits in the top bar */
+.ap-top > .rk-side .rk-side-head .tile { background: var(--primary); color: var(--primary-ink); }
 /* the Sendi r in white on the Bata tile: a stem and an arm cut at 45 degrees */
 .ap-shell .rk-side-mark::before { content: ""; position: absolute; left: 7px; top: 7px; width: 4px; height: 11px; background: #ffffff; }
 .ap-shell .rk-side-mark::after { left: 7px; right: auto; top: 7px; width: 11px; height: 4px; border-radius: 0; background: #ffffff; clip-path: polygon(0 0, 100% 0, 75% 100%, 0 100%); }
@@ -332,6 +334,25 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-main .ap-proc-list > li:last-child { border-bottom: 0; }
 .ap-main .ap-proc-item { border-radius: 0; padding: 8px 14px; }
 .ap-main .ap-imp-tw { border-color: var(--line-strong); }
+
+/* ---- Modul dan sambungan (contract 0036): category groups of white cards, status in a word ---- */
+.ap-cat-tools { display: flex; flex-wrap: wrap; gap: 8px 12px; align-items: center; margin: 4px 0 16px; }
+.ap-cat-search { flex: 1 1 220px; min-width: 0; max-width: 360px; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md);
+  background: var(--surface); color: var(--ink); font: 400 14px/20px var(--font-sans); }
+.ap-cat-search:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ap-cat-group { margin-bottom: 20px; }
+.ap-cat-group > h2 { margin: 0 0 8px; font: 600 12px/16px var(--font-sans); color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.ap-cat-list { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(min(100%, 300px), 1fr)); gap: 8px; }
+.ap-cat-card { display: flex; gap: 12px; align-items: center; width: 100%; min-height: 64px; padding: 12px 14px; text-align: left; cursor: pointer;
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); color: var(--ink); font: inherit; }
+.ap-cat-card:hover { background: var(--soft); }
+.ap-cat-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ap-cat-icon { flex: none; display: grid; place-items: center; width: 36px; height: 36px; border-radius: var(--r-md); background: var(--soft); color: var(--ink-2); }
+.ap-cat-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.ap-cat-text b { font-weight: 600; }
+.ap-cat-text .ap-muted { overflow-wrap: anywhere; }
+.ap-cat-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
+.ap-cat-tech { margin: 0; font: 400 12px/16px var(--font-mono, monospace); color: var(--faint, var(--muted)); }
 
 /* ---- Ubah bars: the pen's change banner (warm yellow) for previews ---- */
 .ap-ubah-preview { background: #fff9ec; color: #7a3e00; border-bottom-color: #f3e1bc; }
@@ -660,4 +681,14 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-workshell .ap-counter.sheet .ap-counter-cart { left: 88px; }
   .ap-workshell > .ap-wmore { position: absolute; }
   .ap-workshell .rk-toasts.float { bottom: 16px; }
+}
+
+/* installable app (pwa.js): connection lost, shown under the top bar of the desk shell */
+.ap-offline { display: flex; align-items: flex-start; gap: 8px; padding: 8px 16px; background: var(--warn-tint); color: var(--ink);
+  border-bottom: 1px solid var(--warn-line); font-size: 13px; line-height: 18px; }
+.ap-offline .rk-icon { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; color: var(--warn); }
+
+/* phone with the desk tab bar (layout tabs or the Juragan bar): toasts sit above it, not on it (the work shell has its own rule) */
+@media (max-width: 767px) {
+  .ap-shell:has(.ap-tabbar) .rk-toasts.float { bottom: calc(80px + env(safe-area-inset-bottom)); }
 }

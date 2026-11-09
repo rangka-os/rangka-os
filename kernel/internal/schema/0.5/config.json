@@ -151,6 +151,29 @@
       "uniqueItems": true,
       "description": "Installed apps, in menu order. Must be allowed by the plan."
     },
+    "modules": {
+      "type": "object",
+      "additionalProperties": {
+        "type": "string"
+      },
+      "description": "module → version range (^1.0, >=1.2): modules installed on their own, next to apps (contract 0032). The validators add each module's requires; the plan must allow them. Not allowed under orgs.<id>.config."
+    },
+    "connectors": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "uniqueItems": true,
+      "description": "Connectors switched on before any flow uses them (contract 0036). Site-wide: not allowed under orgs.<id>.config."
+    },
+    "connector_auth": {
+      "type": "array",
+      "items": {
+        "$ref": "model.json#/$defs/name"
+      },
+      "uniqueItems": true,
+      "description": "Roles (besides owner) that may set and remove connector secrets through the API (contract 0017 §3). Site-wide."
+    },
     "org": {
       "type": "object",
       "description": "The legal entity printed on documents",

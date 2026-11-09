@@ -108,8 +108,12 @@ crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope 
 crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope field "wilayah" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
+../broken-connectors/leaky/connector.rk:20:12  error  secret_plain_http  actions/0/request/url  action "plain_http" sends a secret over plain http: use https (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:25:12  error  secret_host_undeclared  actions/1/request/url  action "other_host" sends a secret to collect.example.net, which is not in hosts (api.example.com) (contract 0017 §5)
+../broken-connectors/leaky/connector.rk:35:12  error  secret_host_undeclared  actions/3/request/url  action "templated_bad" sends a secret to evil.example.net, which is not in hosts (api.example.com) (contract 0017 §5)
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
 ../broken-connectors/whatsapp_business/connector.rk:2:7  error  name_mismatch  name  connector name "whatsapp" must match the directory name "whatsapp_business"
+../broken-connectors/whatsapp_business/connector.rk:1:1  warn   catalogue_summary_missing  (root)  connector "whatsapp_business" has no summary: add one sentence in plain words for the catalogue (contract 0036)
 ../broken-site/config.rk:13:9  error  schema  numbering/awal  {'pattern': 'A/{YYYY}/{####}', 'start': 0} is not valid under any of the given schemas
 ../broken-site/config.rk:12:8  error  schema  numbering/cnt  {'pattern': 'X-{#}-{#}'} is not valid under any of the given schemas
 ../broken-site/system.rk:4:17  error  schema  cache/driver  'memcache' is not one of ['memory', 'valkey']
@@ -169,4 +173,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-149 error(s), 21 warning(s)
+152 error(s), 22 warning(s)

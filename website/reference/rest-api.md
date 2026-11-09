@@ -12,13 +12,52 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | GET | `/aggregate/{model}` | `?filter=<CEL>&q=text&group=<field>&fn=count,sum:<field>` → `{count, values, groups, other?}` over the same rows as the list, no paging ([below](#list-aggregates)) |
 | POST | `/r/{model}` | Create → 201. Defaults and computed fields applied, save rules run |
 | GET · PATCH · DELETE | `/r/{model}/{name}` | PATCH merges. Submitted documents return 409 |
-| POST | `/r/{model}/{name}/submit` · `cancel` · `amend` | Document lifecycle; `submit` takes `{"force": true}` to accept warnings |
-| POST | `/r/{model}/{name}/actions/{action}` | Runs the hook; 202 `{job_id}` when the action has `queue:` |
+| POST | `/r/{model}/{name}/submit` · `cancel` · `amend` | Document lifecycle; `submit` takes `{"force": true}` to accept warnings; `amend` → 201. 202 `{approval, approvals, record}` when the verb waits for [approval](#approvals) |
+| POST | `/r/{model}/{name}/actions/{action}` | Runs the hook; 202 `{job_id}` when the action has `queue:`, 202 as above when it waits for approval |
 | GET | `/r/{model}/{name}/print` | `?format=<print>&as=html\|pdf`: the record as a document ([Print formats](/guide/print-formats)); 501 `pdf_unavailable` without Chromium |
 | GET | `/dashboards/{name}?period=30` | Every widget computed; `X-Cache: hit\|miss` when cached |
+| POST | `/compute/{model}` | The record as the model would save it (defaults, computes, child totals), without saving or numbering ([contract 0034](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0034-counter-compute-and-summary.md)) |
+| GET | `/export/r/{model}` | `?filter=&q=&sort=&columns=a,b&sep=semicolon`: the list as CSV (UTF-8 with BOM, plain numbers, select labels, Ya/Tidak). Needs the model's `export` permission on top of read ([contract 0024](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0024-list-and-dashboard-export.md)) |
+| GET | `/export/dashboards/{name}` | `?period=`: every widget the caller may export, one CSV block per widget |
 | (header) | `Idempotency-Key` on `POST /r/{model}`, `/submit`, `/cancel`, `/amend`, `/actions/{action}` | A retry with the same key answers the stored result (`Idempotency-Replayed: true`) and writes nothing; another body is 409 `idempotency_conflict`, the same request still running 409 `idempotency_in_progress`. Body `_occurred_at` (RFC 3339) goes to the audit ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md) §6, §7) |
 | GET | `/screens/{name}` | A work screen the caller may open: `{name, screen, set}`, `set` = the screen's `set:` evaluated for the caller now; 404 otherwise ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md)) |
 | POST | `/flows/{name}/run` | Run a flow now with `{event: {…}}` |
+
+## Attachments
+
+Files on records (contract 0011). Not to be confused with `/files`, which serves the `.rk` files.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/r/{model}/{name}/attachments` | `{data: [{id, filename, content_type, size, sha256, created_by, created_at, url}]}`, newest first |
+| POST | `/r/{model}/{name}/attachments` | Multipart, part `file` → 201 with the item. 413 `too_large` over `files.max_upload_mb` (default 20) |
+| GET | `/attachments/{id}` | The bytes; inline for images and PDF, a download otherwise |
+| DELETE | `/attachments/{id}` | 204. 409 `submitted` once a submittable record is submitted |
+
+`files: {enabled: false}` in `system.rk` answers 501 `files_disabled`.
+
+## Approvals
+
+Document approvals (contract 0007). A `submit`, `cancel` or action that matches an approval policy does not run; it
+answers 202 and creates a request. When the last pending request is approved, the verb runs as the requester.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/approvals` | `?state=pending\|approved\|rejected\|void&model=&name=&limit=50&offset=0` → `{data, total}`; each item has `can_decide` |
+| GET | `/approvals/{id}` | One request |
+| POST | `/approvals/{id}/approve` · `reject` | `{}` or `{reason}`; reject needs a reason. 200 with `approval`, plus `record` (or `action`, `flow`) when the verb ran. People only |
+
+SSE sends `event: approval` with `{id, model, name, state}` on every change.
+
+## Imports
+
+Spreadsheet imports declared in `imports/<name>.rk` (contract 0012). `GET /meta` lists them under `imports`.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| POST | `/imports/{import}` | Multipart `file` (CSV or XLSX), form `outlet` when the import is per outlet. Checks every row in a dry run → `{id, import, rows, preview, errors, skipped, duplicate}`. 413 `too_large` over 20 MB |
+| POST | `/imports/{import}/{id}/commit` | Creates every record in one transaction. People only. 422 `import_errors` / `import_empty`, 409 `already_imported` |
+| GET | `/imports/{import}` · `/imports/{import}/{id}` | The 50 most recent entries as `{data, total}`; one entry |
 
 ## List aggregates
 
@@ -60,11 +99,12 @@ Model `permissions:` are enforced on every route below, for people, API tokens a
 | `submit`, `cancel`, `amend` | the same name |
 | `GET /r/{model}/{name}/print` | `print` |
 | `GET` attachments of a record | `read` |
-| `POST` attachments of a record | `write` |
+| `POST` attachments of a record, `DELETE /attachments/{id}` | `write` |
+| `/imports/{import}` (upload, commit, read) | `import` on its model; each created record also needs `create` |
 
 Child models use their parent's permissions. A flow that a person starts runs as that person, so each step is
 checked with their roles. A dashboard widget over a model the caller cannot read returns the 403 body in place of
-its data. `export` and `import` are checked by the code that serves them; there is no export endpoint yet.
+its data. Exports need the `export` permission as well as read.
 
 A refusal is `403`:
 
@@ -103,6 +143,20 @@ data: {"id":"cs_rzlzncahuf","status":"applied"}
 | GET | `/changesets/{id}` | Full change set with validation, preview (`migrations`, `affected`, `files[{path, before, after}]`) and history |
 | POST | `/changesets/{id}/validate` · `preview` · `approve` · `reject` · `apply` · `revert` | Approve only from `previewed`, by a signed-in approver; high risk owner only (403 `owner_required`) |
 
+### Live preview
+
+`/preview` shows the installation as it would look with a change set applied, read against the live database without
+migrating it (contract 0015). Only callers who may propose change sets can use it. Responses carry
+`X-Rangka-Preview: <id>`.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/preview?changeset=<id>` | `{changeset: {id, title, status, risk, layers}, meta}` |
+| GET | `/preview/{id}/meta` · `/preview/{id}/r/{model}` · `/preview/{id}/r/{model}/{name}` · `/preview/{id}/dashboards/{name}` | Like the live routes |
+
+Any other method answers 405 `preview_read_only`. A change set that changes permissions has no preview (409
+`preview_permissions`).
+
 ## Process canvas
 
 A process is a declared `processes/<name>.rk` file or one inferred from an app's menu (contract 0014). The graph shows only stages whose model the caller may read.
@@ -122,8 +176,29 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/system/jobs?state=` · `/system/jobs/{id}` | Queue jobs |
 | GET | `/system/audit?kind=&actor=&org=&limit=` | Audit log |
 | GET | `/orgs` · `/orgs/{id}/members` | Organisations (with plan and usage) and members |
-| GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form |
+| GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form (`/files/meta/…` is an older alias) |
 | POST | `/tokens` | Create an API token |
+| GET | `/plan` | The tenant's plan, every plan of `features.rk`, usage against the limits (`ok`, `near` from 80%, `full`, `over`), notices and what is read-only after a downgrade ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)) |
+| GET | `/catalogue` | Every module, app and connector this kernel can install, with its state for the site; for people who may propose change sets. Read only for now ([contract 0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md)) |
+
+### Connector secrets
+
+Write-only ([contract 0017](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0017-connector-secrets.md)): no
+answer, audit entry, change set, export or log ever holds a secret value, the owner's included. The routes are for the
+org's `owner` and roles named in `config.rk` `connector_auth: [role, …]`; a `sales_rep` gets `403 forbidden`, Raka and
+OIDC helpers `403 ai_forbidden`. API tokens may read; writing needs a browser session.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/connectors/{connector}/auth` | `{connector, org, driver, writable, fields}`; per field `field`, `label`, `secret`, `required`, `set`, and with the `db` driver `hint` (last 4 characters of a value of 16 or more), `version`, `set_by`, `set_at`. Fields that are not secret also return their `value` |
+| PUT | `/connectors/{connector}/auth/{field}` | `{"value": "…"}` → `204`, for the current org. Adds a version; the previous one still verifies inbound webhooks for 24 hours. Audited as `secret.set` |
+| DELETE | `/connectors/{connector}/auth/{field}` | `204`; removes every version. Audited as `secret.delete` |
+
+`system.rk` `secrets.driver` decides where values live. `db` keeps them in `rk_secrets`, AES-256-GCM per org with a
+data key wrapped by `RANGKA_MASTER_KEY` (`rangka keygen`); without that key writes answer `409 secrets_key_missing`.
+`env`, `file` and `vault` are read only (`409 secrets_read_only_driver`): bind fields in `system.rk`
+`connector_auth: {<connector>: {<field>: "${VAR}"}}`, per org under `connector_auth.orgs.<org>`. An installed
+connector shows `state: ready` in `/catalogue` once every required field is set.
 
 ## AI chat
 
@@ -161,7 +236,9 @@ data: {}
 
 ## Auth
 
-`POST /auth/login`, `POST /auth/logout`, `GET /auth/me`, and the OIDC endpoints in [Rangka ID](/concepts/rangka-id).
+`POST /auth/login`, `POST /auth/logout`, `GET /auth/me` (user with outlets, every org membership, the current org),
+`POST /auth/org {"org": "<id>"}` (switch a browser session to another org of the user; tokens have a fixed org: 400
+`org_fixed`), and the OIDC endpoints in [Rangka ID](/concepts/rangka-id).
 
 The CRM app's own endpoints, generated from its models with examples, are in the
 [CRM API reference](/api/crm/index.html).

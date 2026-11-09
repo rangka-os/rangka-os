@@ -3,6 +3,15 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Rangka</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icons/favicon.svg" type="image/svg+xml">
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+<meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
+<meta name="theme-color" content="#1c1b19" media="(prefers-color-scheme: dark)">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-title" content="Rangka">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Bricolage+Grotesque:opsz,wght@12..96,500..700&family=Inter:wght@400..700&family=JetBrains+Mono:wght@400;500&family=Newsreader:opsz,wght@6..72,400..600&display=swap">
 <link rel="stylesheet" href="tokens.css">
 <link rel="stylesheet" href="../design-system/bundle.css">
@@ -25,6 +34,28 @@
   .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { box-sizing: border-box; width: 100%; }
   .ap-menu-btn, .ap-nav-scrim, .ap-mhead { display: none; }
   .ap-rail-scrim { display: none; }
+  /* layout.responsive.tablet (contract 0038): sidebar keeps the full sidebar on a portrait tablet; drawer opens it
+     from the menu button as on phones */
+  @media (min-width: 768px) and (max-width: 1023px) {
+    .ap-shell.ap-tablet-sidebar:not(:has(> .rk-side.collapsed)) { grid-template-columns: var(--sidebar) minmax(0, 1fr); }
+    .ap-shell.ap-tablet-drawer { grid-template-columns: minmax(0, 1fr); height: auto; min-height: 100%; }
+    .ap-shell.ap-tablet-drawer > .rk-side { display: none; }
+    .ap-shell.ap-tablet-drawer .ap-main { overflow: visible; }
+    .ap-shell.ap-tablet-drawer .ap-menu-btn { display: inline-flex; }
+    .ap-side.ap-tablet-drawer .ap-mhead { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 8px; box-sizing: border-box; position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
+    .ap-shell.ap-tablet-drawer.ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
+    .ap-top.ap-tablet-drawer.ap-nav-open > .rk-side { top: var(--topbar); }
+    .ap-shell.ap-tablet-drawer.ap-nav-open > .ap-nav-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
+  }
+  /* layout.responsive.phone: tabs (contract 0038) */
+  @media (max-width: 767px) {
+    .ap-tabbar.ap-tabbar-layout { display: grid; position: sticky; bottom: 0; z-index: 20; background: var(--surface); border-top: 1px solid var(--line); padding: 6px 6px calc(6px + env(safe-area-inset-bottom)); }
+    .ap-tabbar-layout a, .ap-tabbar-layout button { position: relative; display: grid; justify-items: center; gap: 2px; min-height: 48px; padding: 6px 0; border: 0; border-radius: 10px;
+      background: none; color: var(--muted); font: 500 11px/14px var(--font-sans); text-decoration: none; cursor: pointer; }
+    .ap-tabbar-layout [aria-current="page"] { color: var(--ink); background: var(--selected); font-weight: 600; }
+    .ap-tabbar-layout .rk-icon { width: 20px; height: 20px; }
+    .ap-tabbar-layout .ap-tabbar-n { position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box; border-radius: 8px; background: var(--ink); color: var(--surface); font: 700 10px/16px var(--font-sans); font-style: normal; }
+  }
   @media (min-width: 768px) and (max-width: 1023px) {
     /* tablet portrait: the sidebar is the icon rail (shell.js); unfolded it floats over the page with a scrim */
     .ap-rail-scrim { display: block; position: fixed; inset: 0; background: var(--scrim); z-index: 39; }
@@ -320,6 +351,7 @@
 <script src="vendor/react.production.min.js"></script>
 <script src="vendor/react-dom.production.min.js"></script>
 <script src="../design-system/bundle.js"></script>
+<script src="readcache.js"></script>
 <script src="api.js"></script>
 <script src="engine.js"></script>
 <script src="list.js"></script>
@@ -332,8 +364,10 @@
 <script src="import.js"></script>
 <script src="../canvas/canvas.js"></script>
 <script src="process.js"></script>
+<script src="catalogue.js"></script>
 <script src="ai.js"></script>
 <script src="outbox.js"></script>
 <script src="screens.js"></script>
 <script src="counter.js"></script>
+<script src="pwa.js"></script>
 <script src="shell.js"></script>

@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: contacts
+version: 1.2.0
+title: {id: Kontak, en: Contacts}
+requires: {rangka: '>=0.5'}
+summary: {id: Modul uji contacts.}

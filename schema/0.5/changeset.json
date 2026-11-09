@@ -145,9 +145,10 @@
     },
     "source": {
       "enum": [
-        "ai"
+        "ai",
+        "catalogue"
       ],
-      "description": "Set by the kernel when the AI assistant (an assistant token, contract 0020) proposed the change set; absent otherwise"
+      "description": "Set by the kernel: ai when the AI assistant (an assistant token, contract 0020) proposed the change set, catalogue when POST /api/v1/catalogue/propose built it (contract 0036); absent otherwise"
     },
     "status": {
       "enum": [

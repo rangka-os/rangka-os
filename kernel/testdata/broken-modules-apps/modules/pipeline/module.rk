@@ -3,3 +3,4 @@ name: pipeline
 version: 1.0.0
 title: {id: Pipeline}
 requires: {rangka: '>=0.5', contacts: '>=1.5', billing: ^1.0}
+summary: {id: Modul uji pipeline.}

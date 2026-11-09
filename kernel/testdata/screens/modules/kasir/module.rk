@@ -3,3 +3,4 @@ name: kasir
 version: 1.0.0
 title: {id: Kasir contoh}
 requires: {rangka: '>=0.5'}
+summary: {id: Modul uji kasir.}

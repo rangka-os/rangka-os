@@ -39,7 +39,8 @@ Open `gallery.html` (served over http from `web/`) to see every component in lig
 
 - **Breakpoints** (`breakpoint` in tokens.json): phone ≤ 767px, tablet portrait 768–1023px, tablet landscape 1024–1279px, desktop ≥ 1280px. Media queries write the numbers: `(max-width: 767px)`, `(min-width: 768px) and (max-width: 1023px)`, `(max-width: 1279px)`. Scripts use `Rangka.breakpoint()`, `Rangka.useBreakpoint()` and `Rangka.isTouch()`.
 - **Tap targets**: 44px (`touch`) on phones and, with `(pointer: coarse)`, on tablets; a desktop window with a mouse keeps the dense sizes at any width. Checkboxes stay 20px but their table cell is the target.
-- **Navigation**: drawer from a 48px bar on phones, icon rail on tablet portrait, full sidebar from 1024px.
+- **Navigation**: drawer from a 48px bar on phones, icon rail on tablet portrait, full sidebar from 1024px. A site layout can change this with `responsive` (contract 0038: `tablet: rail | sidebar | drawer`, `phone: drawer | tabs`).
+- **Long navigation**: groups fold on a click of their label (remembered); more than 15 links start with only the current page's group open; a group's `collapsed` sets its starting state. An entry with `items` is a sub-menu (contract 0037): a row with a chevron, children indented, open when it holds the current page; on the rail it opens its first child.
 - **Tables** scroll sideways inside their box below 1280px with the first data column (and the checkbox column) sticky; lists in the app become card lists on phones.
 - **Dialogs** are bottom sheets on phones with stacked full-width actions; the command menu is full screen there. Drawers and the chat drawer are full width on phones.
 - **No horizontal page scroll** at any width. Per-screen status: `docs/responsive-coverage.md`.

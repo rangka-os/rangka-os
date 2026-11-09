@@ -1,4 +1,4 @@
-# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/layout.json
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/layout.json
 name: crm_first
 label: {id: CRM dulu}
 extends: rangka/top-nav
@@ -11,6 +11,14 @@ nav:
     - {to: 'model:sales_invoice', label: {id: Faktur}, if: "app_installed('sales')"}
   create: [deal, lead, sales_invoice]
   app_switcher: true
+# phone (below 768px): bottom tabs instead of the squeezed top bar; a last Menu tab opens the drawer (contract 0038)
+responsive:
+  phone: tabs
+  tabs:
+    - {to: 'dashboard:crm_overview', label: {id: Beranda}, icon: home}
+    - {to: 'model:deal', label: {id: Peluang}}
+    - {to: 'model:sales_invoice', label: {id: Faktur}, if: "app_installed('sales')"}
+    - {to: 'page:approvals'}
 pages:
   - name: pagi_ini
     label: {id: Pagi ini}

@@ -20,6 +20,16 @@
     "label": {
       "$ref": "model.json#/$defs/label"
     },
+    "summary": {
+      "$ref": "model.json#/$defs/label",
+      "description": "One sentence in plain words for the catalogue (contract 0036)"
+    },
+    "category": {
+      "$ref": "model.json#/$defs/catalogue_category"
+    },
+    "icon": {
+      "$ref": "model.json#/$defs/icon"
+    },
     "version": {
       "type": "string",
       "pattern": "^[0-9]+\\.[0-9]+\\.[0-9]+$"
@@ -186,6 +196,15 @@
       "items": {
         "$ref": "#/$defs/setting"
       }
+    },
+    "hosts": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[A-Za-z0-9.-]+$"
+      },
+      "uniqueItems": true,
+      "description": "Hosts the connector talks to, e.g. [graph.facebook.com]. An action that carries a secret may only send it to these hosts (contract 0017 §5)."
     },
     "limits": {
       "type": "object",

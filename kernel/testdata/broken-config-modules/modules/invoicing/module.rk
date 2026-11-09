@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: invoicing
+version: 1.2.0
+title: {id: Tagihan, en: Invoicing}
+requires: {rangka: '>=0.5', contacts: ^1.0}
+summary: {id: Modul uji invoicing.}

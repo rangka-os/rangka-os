@@ -33,20 +33,21 @@ actions:
 
 ## Hooks and automations
 
-Hooks are named Go functions in the kernel or an app (`crm.convert_lead`, `crm.mark_won`, `stock.post_moves`,
-`ledger.post_receivable`). `on_submit:` and `on_cancel:` attach them to the document lifecycle, and `automations:` run
+Hooks are named Go functions in the kernel (`crm.convert_lead`, `crm.mark_won`, `stock.post_moves`,
+`ledger.post_receivable`, `payments.allocate`, …). `on_submit:` and `on_cancel:` attach them to the document lifecycle, and `automations:` run
 them when a condition becomes true on save — the CRM turns a won deal into a draft invoice this way:
 
 ```yaml
 automations:
   - name: won_to_invoice
     when: stage changes to 'won'
-    if: app_installed('sales')
+    if: app_installed('invoicing')
     do: crm.mark_won
 ```
 
- Apps declare the
-hooks they provide in `app.rk`; the validator refuses unknown ones.
+ A module (or app) declares the hooks it uses in `module.rk` or `app.rk` (`hooks: [crm.convert_lead, crm.mark_won]`);
+the validator refuses unknown ones. A model can also ask for a person's approval before submit, cancel or an action:
+see [Approvals](./documents#approvals).
 
 ## Declared stock moves
 

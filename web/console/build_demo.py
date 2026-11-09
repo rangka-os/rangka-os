@@ -656,6 +656,54 @@ status = {
     "orgs": len(orgs), "members": len({m["email"] for ms in members.values() for m in ms}),
 }
 
+# ------------------------------------------------------------------ catalogue (/api/v1/catalogue, contract 0036 §3)
+def build_catalogue():
+    """The kernel's api.Catalogue over the demo files: every unit and connector on disk, installed or not."""
+    def keys(raw):
+        exp = raw.get("experimental") or {}
+        return tuple(raw.get(k) if raw.get(k) is not None else exp.get(k) for k in ("summary", "category", "icon"))
+    plan = cfg.get("plan") or ""
+    apps_out = []
+    units = sorted(n for n in os.listdir(APPS_DIR) if rkfile.find(os.path.join(APPS_DIR, n), "app"))
+    for name in units:
+        man = rkfile.load(rkfile.find(os.path.join(APPS_DIR, name), "app"))[0]
+        summary, category, icon = keys(man)
+        installed = name in INSTALLED
+        req = [r for r in (man.get("requires") or {}) if r in units]
+        required_by = [o for o in units if o != name and o in INSTALLED and name in (rkfile.load(rkfile.find(os.path.join(APPS_DIR, o), "app"))[0].get("requires") or {})]
+        unit_models = [{"name": m["name"], "label": m.get("label")} for m in models.values() if m.get("app") == name and not m.get("is_child")]
+        apps_out.append({"name": name, "kind": "app", "title": man.get("title") or {"id": name}, "summary": summary, "category": category or "other", "icon": icon,
+                         "version": man.get("version"), "installed": installed, "installed_by": ["config"] if installed else [], "requires": req,
+                         "required_by": required_by, "models": unit_models, "in_plan": True, "plan": plan, "source": "directory"})
+    health = {c["name"]: c for c in status["connectors"]}
+    used_by = {}
+    for fname in sorted(flows):
+        f = flows[fname]
+        heads = {str(f.get("on", "")).split(".")[0]} if f.get("on") else set()
+        heads |= {x.split(".")[0] for x in re.findall(r"'call': '([a-z0-9_]+\.[a-z0-9_]+)'", str(f.get("steps")))}
+        for hd in heads:
+            if hd in connectors_all:
+                used_by.setdefault(hd, []).append(fname)
+    conns = []
+    for name in sorted(connectors_all):
+        c = connectors_all[name]
+        summary, category, icon = keys(c)
+        auth = [{"name": f["name"], "label": f.get("label"), "secret": bool(f.get("secret")), "required": f.get("required") is not False, "set": False}
+                for f in ((c.get("auth") or {}).get("fields") or [])]
+        hosts = sorted({re.sub(r"^https?://([^/]+).*$", r"\1", (a.get("request") or {}).get("url", "")) for a in c.get("actions", []) + c.get("triggers", [])
+                        if re.match(r"^https?://[^/${}]+", (a.get("request") or {}).get("url", ""))})
+        h = health.get(name)
+        installed = name in conn_installed
+        state = "available" if not installed else "error" if h and h.get("ok") is False else "needs_auth" if any(f["required"] for f in auth) else "ready"
+        conns.append({"name": name, "label": c.get("label"), "summary": summary, "category": category or "other", "icon": icon, "vendor": c.get("vendor"),
+                      "docs": c.get("docs"), "version": c.get("version"), "company": name.startswith("x_"), "money": c.get("money") is True,
+                      "hosts": c.get("hosts") or hosts, "provides": sorted(c.get("provides") or {}), "ports_selected": [], "used_by": used_by.get(name, []),
+                      "auth": auth, "installed": installed, "state": state, "errors_24h": (h or {}).get("errors_24h", 0), "last_event_at": (h or {}).get("last_event_at")})
+    return {"modules": [], "apps": apps_out, "connectors": conns}
+
+
+catalogue = build_catalogue()
+
 # ------------------------------------------------------------------ jobs (/api/v1/system/jobs)
 jobs = []
 JOB_KINDS = [("connector.whatsapp_business.send_template", "whatsapp"), ("flow", "flows"), ("notify.email", "notify"),
@@ -747,7 +795,7 @@ demo = {"generated_at": iso(dt.datetime.now(dt.timezone.utc)), "now": iso(NOW), 
         "me": {"user": {"id": 1, "email": "ceo@saga.co.id", "full_name": "Dede Kurniawan", "org": "kopi-senja", "roles": ["owner"], "record": "USR-001"},
                "via": "session", "approver": True, "human": True},
         "meta": meta, "files": files, "status": status, "jobs": jobs, "audit": audit, "changesets": CS, "orgs": orgs, "members": members,
-        "live_events": live_events, "base_tokens": {"light": lt, "dark": dk}, "app_models": app_models,
+        "live_events": live_events, "catalogue": catalogue, "base_tokens": {"light": lt, "dark": dk}, "app_models": app_models,
         "record_counts": {k: len(v) for k, v in fixtures.items() if isinstance(v, list)}}
 out = os.path.join(args.out, "demo-data.js")
 with open(out, "w", encoding="utf-8") as fh:

@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+locale: id-ID
+currency: IDR
+timezone: Asia/Jakarta
+apps: [shop]
+connectors: [chat, chatt]
+orgs:
+  cabang:
+    name: Cabang Bandung
+    config: {connectors: [chat]}

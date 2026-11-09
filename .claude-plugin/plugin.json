@@ -1,0 +1,13 @@
+{
+  "name": "rangka-skills",
+  "description": "Rangka OS platform skills for AI agents: concepts, change sets, and composing a site from the live catalogue (contract 0035).",
+  "version": "0.5.0",
+  "author": {
+    "name": "Saga Tekno Studio",
+    "url": "https://github.com/rangka-os"
+  },
+  "homepage": "https://rangka-os.github.io/rangka-os/skills/",
+  "repository": "https://github.com/rangka-os/rangka-os",
+  "license": "Elastic-2.0",
+  "keywords": ["rangka", "erp", "business-apps", "skills"]
+}

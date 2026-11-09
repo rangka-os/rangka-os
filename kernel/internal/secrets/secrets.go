@@ -2,8 +2,8 @@
 // metadata files. The site picks one driver in system.rk secrets.driver:
 //
 //   - env, file, vault: read only. system.rk connector_auth: binds each field to a ${VAR} reference (or a literal for a
-//     field that is not secret); env reads the process environment, file reads <secrets.path>/<VAR>. vault is not
-//     available yet, so its fields report unset.
+//     field that is not secret); env reads the process environment, file reads <secrets.path>/<VAR>, vault reads key
+//     <VAR> of the KV secret at secrets.path (vault.go).
 //   - db: values set through the write-only API, stored in rk_secrets with envelope encryption (keys.go).
 //
 // Nothing in this package returns a value to a caller outside the kernel: Status reports set, hint and version only.
@@ -63,6 +63,10 @@ type Service struct {
 	DB  *pg.Pool
 	Reg func() *meta.Registry
 	KEK *KEK // nil = no key: the db driver refuses writes with secrets_key_missing
+	// Vault reads the vault driver's KV secret (VAULT_ADDR, VAULT_TOKEN); nil = vault bindings read as unset.
+	Vault *Vault
+	// Log reports driver problems (never a value); nil = silent.
+	Log func(format string, args ...any)
 	// Getenv reads the environment (os.LookupEnv when nil).
 	Getenv func(string) (string, bool)
 	Now    func() time.Time
@@ -156,11 +160,11 @@ func (s *Service) Status(ctx context.Context, org, connector string) ([]Status, 
 			}
 			// a field that is not secret may still be bound in system.rk (e.g. phone_number_id)
 			if !st.Set && !f.Secret {
-				if v, ok := s.bound(reg, org, connector, f.Name); ok {
+				if v, ok := s.bound(ctx, reg, org, connector, f.Name); ok {
 					st.Set, st.Value = true, v
 				}
 			}
-		} else if v, ok := s.bound(reg, org, connector, f.Name); ok {
+		} else if v, ok := s.bound(ctx, reg, org, connector, f.Name); ok {
 			st.Set = true
 			if !f.Secret {
 				st.Value = v
@@ -191,7 +195,7 @@ var varRef = regexp.MustCompile(`^\$\{([A-Z][A-Z0-9_]*)\}$`)
 
 // bound resolves a system.rk connector_auth binding: orgs.<org>.<connector>.<field> first, then
 // <connector>.<field>. A ${VAR} reads the environment (env) or <secrets.path>/<VAR> (file); an unset variable is unset.
-func (s *Service) bound(reg *meta.Registry, org, connector, field string) (string, bool) {
+func (s *Service) bound(ctx context.Context, reg *meta.Registry, org, connector, field string) (string, bool) {
 	ca := meta.AsMap(reg.SystemConfig("connector_auth"))
 	raw, ok := meta.AsMap(meta.AsMap(meta.AsMap(ca["orgs"])[org])[connector])[field]
 	if !ok {
@@ -218,7 +222,17 @@ func (s *Service) bound(reg *meta.Registry, org, connector, field string) (strin
 		v := strings.TrimRight(string(b), "\r\n")
 		return v, v != ""
 	case "vault":
-		return "", false // the vault driver is not available yet (build order step 3)
+		// ${VAR} is key VAR of the KV secret at secrets.path; Vault down or the key missing reads as unset
+		path, _ := reg.SystemConfig("secrets.path").(string)
+		if path == "" || s.Vault == nil {
+			return "", false
+		}
+		v, ok, err := s.Vault.Read(ctx, path, m[1])
+		if err != nil {
+			s.logf("secrets: vault: %v", err)
+			return "", false
+		}
+		return v, ok
 	default: // env, and db for fields that are not secret
 		get := s.Getenv
 		if get == nil {
@@ -370,7 +384,7 @@ func (s *Service) Accepted(ctx context.Context, org, connector, field string) ([
 
 func (s *Service) values(ctx context.Context, org, connector, field string, inGrace bool) ([]string, error) {
 	if s.Driver() != "db" {
-		if v, ok := s.bound(s.Reg(), org, connector, field); ok {
+		if v, ok := s.bound(ctx, s.Reg(), org, connector, field); ok {
 			return []string{v}, nil
 		}
 		return nil, nil
@@ -396,7 +410,7 @@ func (s *Service) values(ctx context.Context, org, connector, field string, inGr
 	}
 	out := []string{}
 	for _, r := range res.Rows {
-		dek, err := s.KEK.unwrap(org, r[5].(string), r[6].(string), r[3].([]byte), r[4].([]byte))
+		dek, err := s.KEK.unwrap(ctx, org, r[5].(string), r[6].(string), r[3].([]byte), r[4].([]byte))
 		if err != nil {
 			return nil, err
 		}
@@ -479,3 +493,9 @@ func (s *Service) Requires(installed func(*meta.Registry) []string) func(ctx con
 // Forget clears the cached values of one (org, connector), so the next read goes to the database (another worker
 // may have rotated them).
 func (s *Service) Forget(org, connector string) { s.forget(org, connector) }
+
+func (s *Service) logf(format string, args ...any) {
+	if s.Log != nil {
+		s.Log(format, args...)
+	}
+}

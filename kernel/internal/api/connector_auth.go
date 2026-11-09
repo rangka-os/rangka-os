@@ -4,14 +4,15 @@ import (
 	"errors"
 	"net/http"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 )
 
 // Connector secrets, write-only (contract 0017 §3). GET reports per field whether a value is set, never the value;
 // PUT and DELETE change one field for the caller's org. Only a person who is the org's owner, or holds a role named in
-// config.rk connector_auth:, reaches these routes. The assistant and OIDC helpers never do, and API tokens may read
-// but not write (no token carries the secrets:write scope yet).
+// config.rk connector_auth:, reaches these routes. The assistant and OIDC helpers never do; API tokens may read, and
+// write only with the secrets:write scope (Rangka Cloud provisioning).
 
 const msgConnectorAuthForbidden = "Kunci penghubung hanya bisa diatur oleh pemilik atau peran yang diberi izin connector_auth"
 
@@ -39,7 +40,7 @@ func (s *Server) connectorAuthGuard(w http.ResponseWriter, c *caller, write bool
 		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa membaca atau mengatur kunci penghubung; minta pemilik usaha.")
 		return false
 	}
-	if write && !c.p.Human() { // an API token needs secrets:write, which no token carries yet
+	if write && !c.p.Human() && !(c.p.Via == "token" && c.p.HasScope(auth.ScopeSecretsWrite)) { // an API token needs secrets:write
 		writeError(w, 403, "forbidden", msgConnectorAuthForbidden)
 		return false
 	}

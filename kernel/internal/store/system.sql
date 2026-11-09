@@ -49,6 +49,7 @@ create table if not exists rk_tokens (
   last_used_at timestamptz,
   expires_at   timestamptz
 );
+alter table rk_tokens add column if not exists scopes text[] not null default '{}'; -- secrets:write (contract 0017 §3)
 create table if not exists rk_keys (
   kid         text primary key,
   alg         text not null,

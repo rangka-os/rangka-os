@@ -1,6 +1,7 @@
 package secrets
 
 import (
+	"context"
 	"errors"
 	"testing"
 )
@@ -41,8 +42,8 @@ func TestSealBindsAAD(t *testing.T) {
 			t.Errorf("open with %s: %v", aad, err)
 		}
 	}
-	w, n, _ := k.wrap("a", "d1", dek)
-	if _, err := k.unwrap("b", "d1", k.ID, w, n); !errors.Is(err, ErrDecrypt) {
+	w, n, _ := k.wrap(context.Background(), "a", "d1", dek)
+	if _, err := k.unwrap(context.Background(), "b", "d1", k.ID, w, n); !errors.Is(err, ErrDecrypt) {
 		t.Errorf("data key of org a opened for org b: %v", err)
 	}
 }

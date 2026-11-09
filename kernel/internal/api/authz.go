@@ -136,8 +136,9 @@ func (s *Server) switchOrg(w http.ResponseWriter, r *http.Request, c *caller) {
 
 func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) {
 	var body struct {
-		Name          string `json:"name"`
-		ExpiresInDays int    `json:"expires_in_days"`
+		Name          string   `json:"name"`
+		ExpiresInDays int      `json:"expires_in_days"`
+		Scopes        []string `json:"scopes"`
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, 400, "bad_json", err.Error())
@@ -150,12 +151,23 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) 
 	if body.Name == "" {
 		body.Name = "api"
 	}
-	tok, id, err := s.Auth.CreateToken(r.Context(), c.p.User, body.Name, time.Duration(body.ExpiresInDays)*24*time.Hour)
+	for _, sc := range body.Scopes {
+		if !auth.TokenScopes[sc] {
+			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write)")
+			return
+		}
+		// secrets:write (contract 0017 §3): minted only by a person who may manage connector secrets
+		if sc == auth.ScopeSecretsWrite && (!c.p.Human() || !s.mayManageSecrets(c)) {
+			writeError(w, 403, "forbidden", msgConnectorAuthForbidden)
+			return
+		}
+	}
+	tok, id, err := s.Auth.CreateToken(r.Context(), c.p.User, body.Name, time.Duration(body.ExpiresInDays)*24*time.Hour, body.Scopes...)
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "name": body.Name, "token": tok, "note": "shown once; send as Authorization: Bearer " + tok[:6] + "…"})
+	writeJSON(w, http.StatusCreated, map[string]any{"id": id, "name": body.Name, "scopes": nonNil(body.Scopes), "token": tok, "note": "shown once; send as Authorization: Bearer " + tok[:6] + "…"})
 }
 
 // ---------- change sets
@@ -241,4 +253,11 @@ func (s *Server) changesetVerb(w http.ResponseWriter, r *http.Request, c *caller
 		return
 	}
 	writeJSON(w, 200, cs)
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }

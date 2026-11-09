@@ -24,7 +24,14 @@ import (
 // KEK is a key-encryption key.
 type KEK struct {
 	key []byte
-	ID  string // first 16 hex characters of sha256(key): names the key in rk_org_keys and backup manifests
+	ID  string // first 16 hex characters of sha256(key), or vault-transit:<name>: names the key in rk_org_keys and backup manifests
+	// transit, when set, wraps data keys in Vault transit instead of key (RANGKA_MASTER_KEY_VAULT)
+	transit *transitKEK
+}
+
+// TransitKEK is a KEK held in Vault transit under key name: data keys are encrypted and decrypted by Vault.
+func TransitKEK(v *Vault, name string) *KEK {
+	return &KEK{ID: "vault-transit:" + name, transit: &transitKEK{v: v, name: name}}
 }
 
 // ErrBadKey is a KEK that is not base64 of 32 bytes.
@@ -40,7 +47,8 @@ func ParseKEK(text string) (*KEK, error) {
 	return &KEK{key: b, ID: hex.EncodeToString(sum[:8])}, nil
 }
 
-// LoadKEK reads RANGKA_MASTER_KEY, else the file named by RANGKA_MASTER_KEY_FILE. nil, nil when neither is set: the
+// LoadKEK reads RANGKA_MASTER_KEY, else a Vault transit key named by RANGKA_MASTER_KEY_VAULT, else the file named by
+// RANGKA_MASTER_KEY_FILE. nil, nil when neither is set: the
 // kernel starts, and db-driver writes answer secrets_key_missing.
 func LoadKEK(getenv func(string) string) (*KEK, error) {
 	if getenv == nil {
@@ -48,6 +56,13 @@ func LoadKEK(getenv func(string) string) (*KEK, error) {
 	}
 	if v := getenv("RANGKA_MASTER_KEY"); v != "" {
 		return ParseKEK(v)
+	}
+	if name := getenv("RANGKA_MASTER_KEY_VAULT"); name != "" {
+		v := VaultFromEnv(getenv)
+		if v == nil || v.Token == "" {
+			return nil, fmt.Errorf("RANGKA_MASTER_KEY_VAULT: %w", ErrVaultConfig)
+		}
+		return TransitKEK(v, name), nil
 	}
 	if p := getenv("RANGKA_MASTER_KEY_FILE"); p != "" {
 		b, err := os.ReadFile(p)
@@ -108,13 +123,20 @@ func open(key, ct, nonce, aad []byte) ([]byte, error) {
 
 func dekAAD(org, dekID string) []byte { return []byte("rk_org_keys|" + org + "|" + dekID) }
 
-func (k *KEK) wrap(org, dekID string, dek []byte) (wrapped, nonce []byte, err error) {
+func (k *KEK) wrap(ctx context.Context, org, dekID string, dek []byte) (wrapped, nonce []byte, err error) {
+	if k.transit != nil {
+		w, err := k.transit.wrap(ctx, org, dekID, dek)
+		return w, []byte{}, err
+	}
 	return seal(k.key, dek, dekAAD(org, dekID))
 }
 
-func (k *KEK) unwrap(org, dekID, kekID string, wrapped, nonce []byte) ([]byte, error) {
+func (k *KEK) unwrap(ctx context.Context, org, dekID, kekID string, wrapped, nonce []byte) ([]byte, error) {
 	if kekID != k.ID {
 		return nil, fmt.Errorf("%w: data key of org %s is wrapped by KEK %s, this kernel has %s", ErrDecrypt, org, kekID, k.ID)
+	}
+	if k.transit != nil {
+		return k.transit.unwrap(ctx, org, dekID, wrapped)
 	}
 	return open(k.key, wrapped, nonce, dekAAD(org, dekID))
 }
@@ -127,7 +149,7 @@ func (s *Service) orgKey(ctx context.Context, q pg.Querier, org string) (string,
 	}
 	if len(res.Rows) > 0 {
 		r := res.Rows[0]
-		dek, err := s.KEK.unwrap(org, r[0].(string), r[3].(string), r[1].([]byte), r[2].([]byte))
+		dek, err := s.KEK.unwrap(ctx, org, r[0].(string), r[3].(string), r[1].([]byte), r[2].([]byte))
 		return r[0].(string), dek, err
 	}
 	dek := make([]byte, 32)
@@ -139,7 +161,7 @@ func (s *Service) orgKey(ctx context.Context, q pg.Querier, org string) (string,
 		return "", nil, err
 	}
 	dekID := hex.EncodeToString(idb)
-	wrapped, nonce, err := s.KEK.wrap(org, dekID, dek)
+	wrapped, nonce, err := s.KEK.wrap(ctx, org, dekID, dek)
 	if err != nil {
 		return "", nil, err
 	}
@@ -168,11 +190,11 @@ func Rewrap(ctx context.Context, db *pg.Pool, old, next *KEK) (int, error) {
 		if kekID == next.ID {
 			continue
 		}
-		dek, err := old.unwrap(org, dekID, kekID, r[2].([]byte), r[3].([]byte))
+		dek, err := old.unwrap(ctx, org, dekID, kekID, r[2].([]byte), r[3].([]byte))
 		if err != nil {
 			return 0, err
 		}
-		wrapped, nonce, err := next.wrap(org, dekID, dek)
+		wrapped, nonce, err := next.wrap(ctx, org, dekID, dek)
 		if err != nil {
 			return 0, err
 		}

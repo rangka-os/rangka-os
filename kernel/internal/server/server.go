@@ -47,21 +47,27 @@ type Config struct {
 	AI                              *api.AIConfig    // rangka-ai sidecar (--ai-url); nil = assistant off
 	Now                             func() time.Time // fixed clocks in tests
 	Logf                            func(format string, args ...any)
+	// RequestOnly runs the kernel for platforms that freeze the process between requests (contract 0040 §1): no
+	// migrate or writes at start, no background loops; the scheduler and queue run on POST /_rangka/tick.
+	RequestOnly bool
+	// InternalToken guards /_rangka/ (contract 0040 §1); "" = those endpoints do not exist.
+	InternalToken string
 }
 
 // Server is a running kernel.
 type Server struct {
-	Cfg     Config
-	DB      *pg.Pool
-	Engine  *engine.Engine
-	Hub     *realtime.Hub
-	Queue   *jobs.Queue
-	Sched   *jobs.Scheduler
-	Auth    *auth.Service
-	Changes *changeset.Service
-	API     *api.Server
-	reload  sync.Mutex
-	wg      sync.WaitGroup
+	migrated migratedState // request-only: does the database match the metadata (requestonly.go)
+	Cfg      Config
+	DB       *pg.Pool
+	Engine   *engine.Engine
+	Hub      *realtime.Hub
+	Queue    *jobs.Queue
+	Sched    *jobs.Scheduler
+	Auth     *auth.Service
+	Changes  *changeset.Service
+	API      *api.Server
+	reload   sync.Mutex
+	wg       sync.WaitGroup
 }
 
 // LoadRegistry validates the metadata directories and refuses to continue on errors.
@@ -121,28 +127,36 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			cfg.Org = filepath.Base(filepath.Clean(cfg.SiteDir))
 		}
 	}
-	db, err := pg.NewPool(ctx, cfg.DatabaseURL, intCfg(reg, "db.pool", 10))
+	db, err := pg.NewPool(ctx, cfg.DatabaseURL, cfg.poolSize(reg))
 	if err != nil {
 		return nil, fmt.Errorf("database: %w", err)
 	}
-	warnIfBypassRLS(ctx, db, cfg.Logf)
-	if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", Before: cfg.preBackup(db, reg)}); err != nil {
-		db.Close()
-		return nil, fmt.Errorf("migrate: %w", err)
-	}
-	if err := SyncOrgs(ctx, db, reg); err != nil {
-		db.Close()
-		return nil, err
-	}
-	if err := plan.Sync(ctx, db, reg); err != nil { // contract 0028: rangka user add reads the limits from here
-		db.Close()
-		return nil, fmt.Errorf("plan: %w", err)
-	}
-	if err := auth.EnsureOrg(ctx, db, cfg.Org, titleCase(cfg.Org)); err != nil {
-		db.Close()
-		return nil, err
-	}
 	s := &Server{Cfg: cfg, DB: db}
+	if cfg.RequestOnly {
+		// No writes at start: the hosting side runs `rangka migrate` and `rangka seed` (contract 0040 §2).
+		if err := s.checkMigrated(ctx, reg); err != nil {
+			db.Close()
+			return nil, err
+		}
+	} else {
+		warnIfBypassRLS(ctx, db, cfg.Logf)
+		if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", Before: cfg.preBackup(db, reg)}); err != nil {
+			db.Close()
+			return nil, fmt.Errorf("migrate: %w", err)
+		}
+		if err := SyncOrgs(ctx, db, reg); err != nil {
+			db.Close()
+			return nil, err
+		}
+		if err := plan.Sync(ctx, db, reg); err != nil { // contract 0028: rangka user add reads the limits from here
+			db.Close()
+			return nil, fmt.Errorf("plan: %w", err)
+		}
+		if err := auth.EnsureOrg(ctx, db, cfg.Org, titleCase(cfg.Org)); err != nil {
+			db.Close()
+			return nil, err
+		}
+	}
 	e := engine.New(db, reg)
 	e.Now = cfg.Now
 	e.Log = cfg.Logf
@@ -162,6 +176,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	s.Sched = jobs.NewScheduler(s.Queue, loc)
 	s.Sched.SetNow(cfg.Now)
+	if cfg.RequestOnly {
+		// A cold instance must still enqueue what came due since the last tick; the unique key per flow and minute
+		// drops repeats (contract 0040 §3).
+		s.Sched.CatchUp = time.Duration(intCfg(reg, "scheduler.catch_up_s", 600)) * time.Second
+	}
 	s.Sched.Log = cfg.Logf
 	s.Sched.SetFlows(reg, cfg.Org)
 	s.Hub = realtime.NewHub()
@@ -185,6 +204,10 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.API = &api.Server{Version: cfg.Version, Started: time.Now(), Engine: e, DB: db, Auth: s.Auth, Hub: s.Hub, Queue: s.Queue,
 		Sched: s.Sched, Changes: s.Changes, Imports: &imports.Service{DB: db, Engine: e}, WebDir: cfg.WebDir, TemplatesDir: cfg.TemplatesDir, Org: cfg.Org, Site: site, Log: cfg.Logf, DeployTarget: cfg.DeployTarget,
 		MaxUploadMB: intCfg(reg, "files.max_upload_mb", 20), AI: cfg.AI}
+	if cfg.InternalToken != "" {
+		budget := time.Duration(intCfg(reg, "queue.tick_budget_s", 40)) * time.Second
+		s.API.Internal = &api.Internal{Token: cfg.InternalToken, Tick: func(ctx context.Context) (any, error) { return s.Tick(ctx, budget) }}
+	}
 	if fstore != nil {
 		s.API.Files = fstore // keep a nil *Local out of the interface
 	}
@@ -344,7 +367,7 @@ func (s *Server) Handler() http.Handler { return s.API.Handler() }
 
 // ListenAndServe serves HTTP until ctx ends, then shuts down gracefully.
 func (s *Server) ListenAndServe(ctx context.Context) error {
-	hs := &http.Server{Addr: s.Cfg.Addr, Handler: s.Handler(), ReadHeaderTimeout: 10 * time.Second}
+	hs := &http.Server{Addr: s.Cfg.Addr, Handler: s.requestOnly(s.Handler()), ReadHeaderTimeout: 10 * time.Second}
 	errc := make(chan error, 1)
 	go func() { errc <- hs.ListenAndServe() }()
 	select {

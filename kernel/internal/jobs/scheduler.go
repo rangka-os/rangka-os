@@ -29,6 +29,10 @@ type Scheduler struct {
 	mu    sync.Mutex
 	items []*Schedule
 	Bad   []string // schedules that did not parse
+	// CatchUp makes SetFlows start each schedule this far in the past, so a freshly started instance (request-only
+	// mode, contract 0040 §3) still enqueues runs that came due before it existed. Repeats are dropped by the
+	// unique key per flow and minute. 0 = start from now (rangka serve, where the loop never stops).
+	CatchUp time.Duration
 }
 
 // NewScheduler makes a scheduler in a time zone (system.rk scheduler.timezone).
@@ -59,6 +63,9 @@ func (s *Scheduler) SetFlows(reg *meta.Registry, org string) {
 	var items []*Schedule
 	var bad []string
 	now := s.Now().In(s.Loc)
+	s.mu.Lock()
+	from := now.Add(-s.CatchUp)
+	s.mu.Unlock()
 	for _, name := range sortedFlowNames(reg) {
 		f := reg.Flows[name]
 		if f.Schedule == "" || !reg.IsInstalled(f.App) {
@@ -69,7 +76,7 @@ func (s *Scheduler) SetFlows(reg *meta.Registry, org string) {
 			bad = append(bad, name+": "+err.Error())
 			continue
 		}
-		items = append(items, &Schedule{Name: name, Source: reg.App[f.App].DocKey("flows/" + name + ".rk"), Cron: c, Org: org, next: c.Next(now)})
+		items = append(items, &Schedule{Name: name, Source: reg.App[f.App].DocKey("flows/" + name + ".rk"), Cron: c, Org: org, next: c.Next(from)})
 	}
 	s.mu.Lock()
 	s.items, s.Bad = items, bad

@@ -43,6 +43,7 @@ type Server struct {
 	MaxUploadMB  int              // files.max_upload_mb; 0 = 20
 	AI           *AIConfig        // rangka-ai sidecar; nil = assistant off (contract 0020)
 	Secrets      *secrets.Service // connector secrets (contract 0017); nil = every auth field reports unset
+	Internal     *Internal        // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0040 §1)
 	Log          func(format string, args ...any)
 
 	previewMu sync.Mutex // guards previews (preview.go)
@@ -235,6 +236,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/", func(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "not_found", "no such endpoint "+r.URL.Path)
 	})
+	if s.Internal != nil && s.Internal.Token != "" {
+		mux.HandleFunc("POST /_rangka/tick", s.internalOnly(s.tick))
+	}
 	// static web (app, console, design system)
 	if s.WebDir != "" {
 		mux.Handle("GET /", s.static())

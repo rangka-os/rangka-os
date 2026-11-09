@@ -94,6 +94,18 @@ test("a composed site (contract 0032): meta.menu groups after app menus, home fr
   assert.strictEqual(A.homeHash(META), "#/d/crm_overview"); // app sites keep their home
 });
 
+test("homeHash: the layout's home comes before the app and module defaults (contract 0032 §5)", () => {
+  // a composed site whose layout sets nav.side: /meta.menu is empty, so only layout.home gives a home
+  const laid = { apps: [], menu: [], layout: { home: "model:invoice", nav: { side: [{ items: [{ to: "model:invoice" }] }] } },
+    models: { invoice: {} }, dashboards: { billing: {} } };
+  assert.strictEqual(A.homeHash(laid), "#/r/invoice");
+  assert.strictEqual(A.homeHash({ ...laid, layout: { home: "dashboard:billing" } }), "#/d/billing");
+  assert.strictEqual(A.homeHash({ ...META, layout: { home: "model:customer" } }), "#/r/customer");
+  // a home that names nothing installed falls back
+  assert.strictEqual(A.homeHash({ ...META, layout: { home: "model:gone" } }), "#/d/crm_overview");
+  assert.strictEqual(A.homeHash({ ...META, layout: { home: "page:x" } }), "#/d/crm_overview");
+});
+
 test("navGroups: Proses bisnis only when the kernel has processes", () => {
   const off = plain(A.navGroups(META, { processes: false }));
   assert.ok(!off.some((g) => g.items.some((i) => i.id === "proses")));

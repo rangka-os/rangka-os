@@ -417,10 +417,12 @@
     return out;
   };
 
-  /** nav.side groups for the menu the app shows without a layout nav: dashboards, then each app's menu groups. */
+  /** nav.side groups for the menu the app shows without a layout nav: dashboards, then each app's menu groups, then the
+   *  module groups of a composed site (meta.menu). */
   RA.sideFromMenus = function (meta) {
     var models = meta.models || {}, dashes = meta.dashboards || {}, out = [], d = [];
-    (meta.apps || []).forEach(function (a) {
+    // the kernel's module groups of a composed site (contract 0032 §5) count like app menus
+    (meta.apps || []).concat(meta.menu || []).forEach(function (a) {
       (a.dashboards || []).forEach(function (n) { if (dashes[n]) d.push({ to: "dashboard:" + n }); });
     });
     if (d.length) out.push({ group: lbl("Dasbor"), items: d });
@@ -439,6 +441,10 @@
         if (typeof g.collapsed === "boolean") grp.collapsed = g.collapsed;
         if (items.length) out.push(grp);
       });
+    });
+    (meta.menu || []).forEach(function (g) {
+      var items = (g.items || []).filter(function (m) { return models[m]; }).map(function (m) { return { to: "model:" + m }; });
+      if (items.length) out.push({ group: lbl(L(g.group) || g.module), items: items });
     });
     return out;
   };

@@ -276,6 +276,24 @@ test("sideFromMenus turns the shown menu into nav.side groups", () => {
   ]);
 });
 
+test("sideFromMenus: a composed site's module groups (meta.menu) are part of the shown menu", () => {
+  const meta = {
+    apps: [],
+    menu: [
+      { module: "pipeline", group: { id: "Pipeline penjualan" }, items: ["deal", "gone"], dashboards: ["sales"] },
+      { module: "users", group: { id: "Pengguna" }, items: ["user"], dashboards: [] },
+    ],
+    models: { deal: {}, user: {} },
+    dashboards: { sales: {} },
+  };
+  assert.deepStrictEqual(RA.sideFromMenus(meta), [
+    { group: { id: "Dasbor" }, items: [{ to: "dashboard:sales" }] },
+    { group: { id: "Pipeline penjualan" }, items: [{ to: "model:deal" }] },
+    { group: { id: "Pengguna" }, items: [{ to: "model:user" }] },
+  ]);
+  assert.deepStrictEqual(RA.menuSide(meta), RA.sideFromMenus(meta)); // the Ubah sidebar shows them
+});
+
 test("dashDef keeps only dashboard schema keys and names the dashboard", () => {
   const meta = { dashboards: { d: { label: { id: "D" }, app: "crm", periods: [7], widgets: [{ name: "a", type: "number", span: 3, model: "deal", extra: 1 }] } } };
   assert.deepStrictEqual(RA.dashDef(meta, "d"), { name: "d", label: { id: "D" }, periods: [7], widgets: [{ name: "a", type: "number", span: 3, model: "deal" }] });

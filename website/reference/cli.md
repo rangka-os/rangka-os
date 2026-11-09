@@ -25,6 +25,8 @@ rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--apps <dir>
 rangka plan show|set <plan>|clear [--by <who>] [--note "..."] [--json] [--apps <dir>] [--site <dir>] [--db <url>]
 rangka catalogue [--json] [--apps <dir>] [--site <dir>] [--modules <dir>] [--connectors <dir>]
 rangka skills list|install|pack|check [--to <dir> | --harness claude|agents] [--out <file.zip>] [--apps <dir>] [dir ...]
+rangka keygen
+rangka secrets rewrap --new-key-file <file> [--db <url>]
 rangka version
 ```
 
@@ -43,6 +45,7 @@ the ones built into the binary. `rangka help` prints a short usage.
 | `user remove` | Ends a membership. Exits 1 with `<email> is not a member of <org>` when it is not one. |
 | `plan show` / `plan set` / `plan clear` | The tenant's plan ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)). `show` prints the plan, usage against its limits (`ok`, `near` from 80%, `full`, `over`) and what is read-only. `set <plan>` is an operator's upgrade or downgrade to a plan of `features.rk` (kept in `rk_plan_changes` with `--by` and `--note`); a downgrade deletes nothing, the newest outlets and people past a lower limit become read-only. `clear` goes back to `config.rk` `plan`. A running kernel picks the change up within 10 seconds. `user add` refuses a new person past the `users` limit. |
 | `catalogue` | Every app, module and connector with its state for the site (`installed`, `available`, `not_in_plan`); for each app the installed modules it `shares` and the ones it `adds`; whether connectors run. Without `--site` nothing counts as installed. `--json` is what agents read ([contract 0035](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0035-raka-skills.md)). |
+| `keygen` / `secrets rewrap` | `keygen` prints a new key-encryption key (base64 of 32 bytes) for `RANGKA_MASTER_KEY`, which the `db` secrets driver needs ([contract 0017](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0017-connector-secrets.md)). Keep it out of the database and out of backups. `secrets rewrap` re-wraps every org's data key under the key in `--new-key-file` without touching the values; the current key comes from `RANGKA_MASTER_KEY`. Start the kernel with the new key afterwards. |
 | `skills list` / `install` / `pack` / `check` | The [skills for AI agents](/skills/). `list` shows them; `install` copies them into `.claude/skills/` (or `--harness agents`, or `--to <dir>`); `pack --out` writes the release zip and refuses a failing skill; `check [dir ...]` lints skill folders. |
 | `numbering set` | Once at go-live, makes `<next>` the number a series issues next for an org, so Rangka continues the client's own numbering. It applies to the current period in the site timezone, or to `--period` (`2026` for a yearly series, `2026-11` for a monthly one). It exits 1 instead of lowering a counter, reissuing an existing number or going below the series `start`, and prints the next number. Missing arguments exit 2. See [Number series](/concepts/models#number-series). |
 
@@ -176,6 +179,7 @@ made by `npm create @rangka-os` needs no flags:
 | `RANGKA_WEB`, `RANGKA_TEMPLATES` | `--web`, `--templates` |
 | `RANGKA_AI_URL`, `RANGKA_AI_CALLBACK_URL` | `--ai-url` (the rangka-ai sidecar; unset turns the assistant off), `--ai-callback-url` (default `http://127.0.0.1` + the listen port) |
 | `RANGKA_AI_SECRET` | none: sent to the sidecar as `Authorization: Bearer`; the same value as the sidecar's `RAKA_SERVE_TOKEN` |
+| `RANGKA_MASTER_KEY`, `RANGKA_MASTER_KEY_FILE` | none: the key-encryption key of the `db` secrets driver (base64 of 32 bytes, from `rangka keygen`), or a file that holds it. Unset: the kernel starts and refuses to store secrets |
 | `RANGKA_CHROMIUM`, `RANGKA_PDF_CONCURRENCY` | none: the browser for PDF print (`off` disables PDF) and how many run at once (default 2) |
 
 Makefile shortcuts in `kernel/`: `make build`, `make test` (throwaway Postgres), `make test-unit` (no database),

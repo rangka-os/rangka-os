@@ -181,6 +181,25 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/plan` | The tenant's plan, every plan of `features.rk`, usage against the limits (`ok`, `near` from 80%, `full`, `over`), notices and what is read-only after a downgrade ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)) |
 | GET | `/catalogue` | Every module, app and connector this kernel can install, with its state for the site; for people who may propose change sets. Read only for now ([contract 0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md)) |
 
+### Connector secrets
+
+Write-only ([contract 0017](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0017-connector-secrets.md)): no
+answer, audit entry, change set, export or log ever holds a secret value, the owner's included. The routes are for the
+org's `owner` and roles named in `config.rk` `connector_auth: [role, …]`; a `sales_rep` gets `403 forbidden`, Raka and
+OIDC helpers `403 ai_forbidden`. API tokens may read; writing needs a browser session.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/connectors/{connector}/auth` | `{connector, org, driver, writable, fields}`; per field `field`, `label`, `secret`, `required`, `set`, and with the `db` driver `hint` (last 4 characters of a value of 16 or more), `version`, `set_by`, `set_at`. Fields that are not secret also return their `value` |
+| PUT | `/connectors/{connector}/auth/{field}` | `{"value": "…"}` → `204`, for the current org. Adds a version; the previous one still verifies inbound webhooks for 24 hours. Audited as `secret.set` |
+| DELETE | `/connectors/{connector}/auth/{field}` | `204`; removes every version. Audited as `secret.delete` |
+
+`system.rk` `secrets.driver` decides where values live. `db` keeps them in `rk_secrets`, AES-256-GCM per org with a
+data key wrapped by `RANGKA_MASTER_KEY` (`rangka keygen`); without that key writes answer `409 secrets_key_missing`.
+`env`, `file` and `vault` are read only (`409 secrets_read_only_driver`): bind fields in `system.rk`
+`connector_auth: {<connector>: {<field>: "${VAR}"}}`, per org under `connector_auth.orgs.<org>`. An installed
+connector shows `state: ready` in `/catalogue` once every required field is set.
+
 ## AI chat
 
 The embedded assistant Raka (contract 0020). The kernel relays the chat to the rangka-ai sidecar set with

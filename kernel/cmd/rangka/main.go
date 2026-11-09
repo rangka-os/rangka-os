@@ -31,11 +31,16 @@ Usage:
     (apps, modules and connectors with their state for the site; per app what it shares and adds, contract 0035)
   rangka skills list|install|pack|check [--to <dir> | --harness claude|agents] [--out <file.zip>] [dir ...]
     (Rangka skills for AI agents, contract 0035: list, install into a harness's folder, pack the zip, lint)
+  rangka keygen
+    (prints a new key-encryption key for RANGKA_MASTER_KEY: the db secrets driver, contract 0017)
+  rangka secrets rewrap --new-key-file <file> [--db <url>]
+    (re-wraps every org data key under a new key-encryption key; the values stay as they are)
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:
   DATABASE_URL, RANGKA_APPS, RANGKA_SITE, RANGKA_CONNECTORS, RANGKA_FIXTURES, RANGKA_ORG, RANGKA_ADDR,
-  RANGKA_OWNER_EMAIL, RANGKA_OWNER_PASSWORD (seed), RANGKA_USER_PASSWORD (user add: new accounts or --reset-password). Values already set in the environment win.
+  RANGKA_OWNER_EMAIL, RANGKA_OWNER_PASSWORD (seed), RANGKA_USER_PASSWORD (user add: new accounts or --reset-password),
+  RANGKA_MASTER_KEY or RANGKA_MASTER_KEY_FILE (serve: the key-encryption key of the db secrets driver). Values already set in the environment win.
 
 Start a new project: npm create @rangka-os@latest my-shop
 `)
@@ -71,6 +76,10 @@ func main() {
 		code = cmdCatalogue(os.Args[2:])
 	case "skills":
 		code = cmdSkills(os.Args[2:])
+	case "keygen":
+		code = cmdKeygen(os.Args[2:])
+	case "secrets":
+		code = cmdSecrets(os.Args[2:])
 	case "version", "--version":
 		fmt.Println("rangka", Version)
 	case "help", "-h", "--help":

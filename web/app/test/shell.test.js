@@ -94,6 +94,18 @@ test("a composed site (contract 0032): meta.menu groups after app menus, home fr
   assert.strictEqual(A.homeHash(META), "#/d/crm_overview"); // app sites keep their home
 });
 
+test("homeHash: the layout's home comes before the app and module defaults (contract 0032 §5)", () => {
+  // a composed site whose layout sets nav.side: /meta.menu is empty, so only layout.home gives a home
+  const laid = { apps: [], menu: [], layout: { home: "model:invoice", nav: { side: [{ items: [{ to: "model:invoice" }] }] } },
+    models: { invoice: {} }, dashboards: { billing: {} } };
+  assert.strictEqual(A.homeHash(laid), "#/r/invoice");
+  assert.strictEqual(A.homeHash({ ...laid, layout: { home: "dashboard:billing" } }), "#/d/billing");
+  assert.strictEqual(A.homeHash({ ...META, layout: { home: "model:customer" } }), "#/r/customer");
+  // a home that names nothing installed falls back
+  assert.strictEqual(A.homeHash({ ...META, layout: { home: "model:gone" } }), "#/d/crm_overview");
+  assert.strictEqual(A.homeHash({ ...META, layout: { home: "page:x" } }), "#/d/crm_overview");
+});
+
 test("navGroups: Proses bisnis only when the kernel has processes", () => {
   const off = plain(A.navGroups(META, { processes: false }));
   assert.ok(!off.some((g) => g.items.some((i) => i.id === "proses")));
@@ -325,6 +337,14 @@ test("appOf: the app a page belongs to names the top-nav sidebar, else the first
   assert.strictEqual(A.appOf({ apps: [] }, { kind: "home" }), null);
 });
 
+test("lastSeen: today, yesterday, else the date, with local hours.minutes", () => {
+  const now = new Date(2026, 10, 9, 16, 0);
+  assert.strictEqual(A.lastSeen(new Date(2026, 10, 9, 14, 5).toISOString(), now), "hari ini 14.05");
+  assert.strictEqual(A.lastSeen(new Date(2026, 10, 8, 9, 30).toISOString(), now), "kemarin 09.30");
+  assert.strictEqual(A.lastSeen(new Date(2026, 9, 27, 8, 0).toISOString(), now), "27 Okt 2026 08.00");
+  assert.strictEqual(A.lastSeen("nope", now), "");
+});
+
 // contract 0037: sub-menus in app menus and nav.side, collapsed per group
 const NESTED = {
   ...META,
@@ -365,4 +385,17 @@ test("tabLinks: models, dashboards, approvals and search; unknown links left out
     { to: "page:approvals" }, { to: "page:search" }, { to: "model:none" }], { kind: "dash", dash: "crm_overview" }, "#/d/crm_overview");
   assert.deepStrictEqual(plain(tabs).map((t) => [t.label, t.href, t.current]),
     [["Beranda", "#/d/crm_overview", true], ["Peluang", "#/r/deal", false], ["Setujui", "#/approvals", false], ["Cari", null, false]]);
+});
+
+test("accountSections: Mode only for proposers, then Aplikasi from pwaMenu keys", () => {
+  const S = A.accountSections;
+  assert.deepStrictEqual(plain(S({ propose: false, pwa: [] })), []);
+  const m = plain(S({ propose: true, ubah: false, pwa: [] }));
+  assert.deepStrictEqual(m.map((g) => g.heading), ["Mode"]);
+  assert.deepStrictEqual(m[0].items.map((i) => [i.key, i.on]), [["mode:pakai", true], ["mode:ubah", false]]);
+  assert.strictEqual(plain(S({ propose: true, ubah: true, pwa: [] }))[0].items[1].on, true);
+  const a = plain(S({ propose: false, pwa: ["update", "install"] }));
+  assert.deepStrictEqual(a.map((g) => g.heading), ["Aplikasi"]);
+  assert.deepStrictEqual(a[0].items.map((i) => i.key), ["app:update", "app:install"]);
+  assert.deepStrictEqual(plain(S({ propose: false, pwa: ["ios"] }))[0].items.map((i) => i.label), ["Pasang di layar utama"]);
 });

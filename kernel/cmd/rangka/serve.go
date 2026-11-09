@@ -29,7 +29,7 @@ func cmdServe(args []string) int {
 	devOpen := fs.Bool("dev-open", false, "serve /api and /mcp without sign-in, as the org owner (local demos only)")
 	aiURL := fs.String("ai-url", os.Getenv("RANGKA_AI_URL"), "rangka-ai sidecar URL, e.g. http://127.0.0.1:8787 (unset: the assistant is off)")
 	aiCallback := fs.String("ai-callback-url", os.Getenv("RANGKA_AI_CALLBACK_URL"), "kernel URL the sidecar reaches /mcp on (default http://127.0.0.1 + the listen port)")
-	requestOnly := fs.Bool("request-only", envBool("RANGKA_REQUEST_ONLY"), "for platforms that freeze the process between requests (Lambda, Cloud Run): no migrate at start, no background loops; drive the scheduler with POST /_rangka/tick (contract 0039)")
+	requestOnly := fs.Bool("request-only", envBool("RANGKA_REQUEST_ONLY"), "for platforms that freeze the process between requests (Lambda, Cloud Run): no migrate at start, no background loops; drive the scheduler with POST /_rangka/tick (contract 0040)")
 	fs.Parse(args)
 	set, err := loadSchemas(c.schemas)
 	if err != nil {

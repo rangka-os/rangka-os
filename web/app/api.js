@@ -184,7 +184,27 @@
         });
       });
     }
-    function json(method, path, body) { return call(method, path, body).then(function (r) { return r.body; }); }
+    /**
+     * With opts.readCache (readcache.js), a GET it keeps reads through it: a good answer is stored and opts.onFresh()
+     * is told; without a connection (status 0) the stored answer comes back instead and opts.onStale(at) gets its time.
+     * A path never opened on this device rejects with a status 0 error that says so.
+     */
+    function json(method, path, body) {
+      var rc = opts.readCache;
+      if (!rc || method !== "GET" || !rc.cacheable(path)) return call(method, path, body).then(function (r) { return r.body; });
+      return call(method, path, body).then(function (r) {
+        rc.put(path, r.body);
+        if (opts.onFresh) opts.onFresh(path);
+        return r.body;
+      }, function (e) {
+        if (!e || e.status !== 0) throw e;
+        return rc.get(path).then(function (hit) {
+          if (!hit) throw ApiError(0, "network", "Belum ada koneksi, dan halaman ini belum pernah dibuka di perangkat ini.", e.body);
+          if (opts.onStale) opts.onStale(hit.at, path);
+          return hit.body;
+        });
+      });
+    }
 
     /** "/api/v1" or, while a change set is previewed, "/api/v1/preview/{id}": the four read routes only. */
     function root() { return previewing ? "/api/v1/preview/" + enc(previewing) : "/api/v1"; }
@@ -409,6 +429,8 @@
     /* ----- process canvas (contract 0014, stream S10): the list; the canvas itself talks to the kernel through RangkaCanvas */
     /** GET /api/v1/catalogue (contract 0036): modules, apps and connectors; 403 for members who may not propose changes. */
     api.catalogue = function () { return json("GET", "/api/v1/catalogue"); };
+    /** POST /api/v1/catalogue/propose {add, remove} → the change set, validated and previewed (contract 0036 §4). */
+    api.catalogueChange = function (body) { return json("POST", "/api/v1/catalogue/propose", body); };
     api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };
 
     /* ----- Raka (contract 0020) */

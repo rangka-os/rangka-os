@@ -1372,6 +1372,70 @@ def test_catalogue_page(page, ctx):
     page.get_by_text("Kamu tidak punya akses ke Modul dan sambungan").first.wait_for(timeout=10000)
 
 
+def test_phone_layout_tabs(page, ctx):
+    """Kopi Senja's layout turns on phone tabs (responsive.phone: tabs, contract 0038): Beranda, Peluang, Faktur,
+    Setujui and a last Menu tab that opens the drawer; Escape closes it. Wider screens have no tab bar."""
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-shell").wait_for(timeout=10000)
+    bar = page.locator(".ap-tabbar-layout")
+    if ctx.args.width >= 768:
+        assert bar.count() == 0, "no bottom tabs from 768px"
+        return
+    bar.wait_for(timeout=5000)
+    labels = [t.strip() for t in bar.locator("a, button").all_inner_texts()]
+    assert [l.split("\n")[0] for l in labels] == ["Beranda", "Peluang", "Faktur", "Setujui", "Menu"], labels
+    assert bar.locator("[aria-current=page]").inner_text().startswith("Beranda"), "home is the current tab"
+    bar.get_by_role("link", name="Peluang").click()
+    page.wait_for_function("() => location.hash.startsWith('#/r/deal')", timeout=5000)
+    bar.get_by_role("button", name="Menu").click()
+    page.locator(".ap-nav-open").wait_for(timeout=5000)
+    page.keyboard.press("Escape")
+    page.locator(".ap-nav-open").wait_for(state="detached", timeout=5000)
+
+
+def test_catalogue_install_module(page, ctx):
+    """Contract 0036 §4: the owner installs module catatan from "Modul dan sambungan": Pasang opens the change-set card
+    with the risk word, Setujui & terapkan applies it, and its menu group appears without a reload. The change set is
+    reverted afterwards so later scenarios see the site as it was."""
+    open_route(page, ctx, "#/pengaturan/katalog")
+    card = page.locator(f'.ap-cat-card[data-name="{CATALOGUE_MODULE}"]')
+    card.wait_for(timeout=10000)
+    assert "Belum dipasang" in card.inner_text(), card.inner_text()
+    open_nav(page)
+    assert page.locator(".rk-side").get_by_role("link", name="Catatan", exact=True).count() == 0, "catatan has a menu entry before it is installed"
+    if page.locator(".ap-nav-open").count():
+        page.keyboard.press("Escape")
+    card.click()
+    drawer = page.locator(".rk-drawer")
+    drawer.get_by_role("button", name="Pasang", exact=True).click()
+    cs_card = page.locator(".ap-ubah-card")
+    cs_card.wait_for(timeout=15000)
+    txt = cs_card.inner_text()
+    assert "Pasang Buku catatan" in txt and "Risiko" in txt, txt
+    assert "Memasang catatan beserta yang dibutuhkannya" in txt and "installs" not in txt, "risk reason in Bahasa Indonesia: " + txt
+    if ctx.args.shots:
+        page.screenshot(path=os.path.join(ctx.args.shots, f"catalogue-pasang-{ctx.args.width}.png"))
+    loaded = page.evaluate("() => performance.getEntriesByType('navigation').length")
+    cs_card.get_by_role("button", name="Setujui & terapkan").click()
+    cs_card.wait_for(state="detached", timeout=20000)
+    open_nav(page)
+    page.locator(".rk-side").get_by_role("link", name="Catatan", exact=True).wait_for(timeout=15000)
+    assert page.evaluate("() => performance.getEntriesByType('navigation').length") == loaded, "the app reloaded the page"
+    if page.locator(".ap-nav-open").count():
+        page.keyboard.press("Escape")
+    page.wait_for_function("(n) => { const c = document.querySelector('.ap-cat-card[data-name=\"' + n + '\"]'); return c && c.innerText.includes('Terpasang'); }",
+                           arg=CATALOGUE_MODULE, timeout=10000)
+    # an app named by config.rk can be taken out again: its detail offers Lepas (not clicked)
+    page.locator('.ap-cat-card[data-name="crm"]').click()
+    page.locator(".rk-drawer").get_by_role("button", name="Lepas", exact=True).wait_for(timeout=5000)
+
+    h = Http(ctx.base).login(*ctx.owner)
+    done = [c for c in h.call("GET", "/api/v1/changesets?status=applied")[1]["data"] if c.get("source") == "catalogue" and c.get("title") == "Pasang Buku catatan"]
+    assert done, "no applied catalogue change set"
+    st, body = h.call("POST", f"/api/v1/changesets/{done[0]['id']}/revert")
+    assert st == 200, (st, body)
+
+
 # ---------------------------------------------------------------------------------------------- forms and the document lifecycle (Task 6)
 def rupiah(n):
     s = f"{abs(int(n)):,}".replace(",", ".")
@@ -2955,6 +3019,46 @@ def enable_print_formats(site):
     return True
 
 
+CATALOGUE_MODULE = "catatan"
+CATATAN_MODULE_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: catatan
+version: 1.0.0
+title: {id: Buku catatan, en: Notebook}
+summary: {id: Catat hal kecil yang perlu diingat tim., en: Notes the team needs to remember.}
+category: operations
+icon: sticky-note-line
+requires: {rangka: '>=0.5'}
+"""
+CATATAN_MODEL_RK = """# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: catatan
+label: {id: Catatan}
+naming: CAT-{####}
+title_field: judul
+fields:
+  - {name: judul, type: data, label: {id: Judul}, required: true, in_list: true}
+"""
+
+
+def enable_catalogue_module(catalogue, site):
+    """Contract 0036 §4 needs something to install: a module catatan next to the v0 apps, allowed by plan tumbuh. The
+    site's config.rk and features.rk move to schema 0.5 (config.modules, plan modules); nothing installs it yet."""
+    d = os.path.join(catalogue, "modules", CATALOGUE_MODULE)
+    os.makedirs(os.path.join(d, "models"), exist_ok=True)
+    with open(os.path.join(d, "module.rk"), "w") as f:
+        f.write(CATATAN_MODULE_RK)
+    with open(os.path.join(d, "models", "catatan.rk"), "w") as f:
+        f.write(CATATAN_MODEL_RK)
+    for name, subs in (("config.rk", []), ("features.rk", [(r"(?m)^(    apps: \[core, crm, sales\])$", r"\1\n    modules: [catatan]")])):
+        path = os.path.join(site, name)
+        with open(path) as f:
+            text = f.read().replace("/schema/0.4/", "/schema/0.5/", 1)
+        for pat, rep in subs:
+            text, n = re.subn(pat, rep, text)
+            assert n == 1, f"enable_catalogue_module: {name} has no line for {pat}"
+        with open(path, "w") as f:
+            f.write(text)
+
+
 def use_side_only(site):
     """The demo site's layout (crm_first) names `shell: top-nav`; the suite runs the default shell (side-only, contract
     0019), so the temp copy says side-only. test_top_nav_shell covers top-nav on a mocked meta."""
@@ -3048,12 +3152,70 @@ def test_content_full_width(page, ctx):
         assert all(g is not None and g <= 1 for g in gap), f"{route}: header/content stop {gap}px before the right edge"
 
 
-SW_SCENARIOS = {"test_pwa_installable_and_offline"}
+SW_SCENARIOS = {"test_pwa_installable_and_offline", "test_pwa_reads_last_seen_offline"}
+
+
+def read_cache_count(page):
+    """How many answers the device copy (readcache.js, IndexedDB "rangka-read") holds, owner row included."""
+    return page.evaluate("""() => new Promise((resolve) => {
+        const req = indexedDB.open('rangka-read', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('pages', { keyPath: 'key' });
+        req.onsuccess = () => { const q = req.result.transaction('pages').objectStore('pages').count();
+            q.onsuccess = () => { req.result.close(); resolve(q.result); }; };
+        req.onerror = () => resolve(-1);
+    })""")
+
+
+def test_pwa_reads_last_seen_offline(page, ctx):
+    """PWA phase 2 (readcache.js): a dashboard, a list and a record seen online open again without a connection, from
+    the device copy, read only and labelled; a page never opened says so; back online the label goes; sign-out empties
+    the device copy."""
+    ctx.allowed_failed.append(re.compile(r"/(api|auth)/"))
+    ensure_records(ctx, "sales_invoice", 1)
+    home, _ = ctx.home()
+    open_route(page, ctx, home)
+    page.locator(".ap-main").wait_for(timeout=10000)
+    page.wait_for_timeout(800)
+    page.evaluate("() => { location.hash = '#/r/sales_invoice'; }")
+    wait_rows(page)
+    name = page.evaluate("""async () => (await (await fetch('/api/v1/r/sales_invoice?limit=1', {credentials: 'include'})).json()).data[0].name""")
+    page.evaluate("(n) => { location.hash = '#/r/sales_invoice/' + encodeURIComponent(n); }", name)
+    page.locator(".ap-main .rk-pagehead").wait_for(timeout=10000)
+    page.wait_for_timeout(800)
+    assert read_cache_count(page) > 3, "the pages seen are on the device"
+
+    # no connection: the app opens again from the device copy, on the record, read only and labelled
+    page.context.set_offline(True)
+    page.reload()
+    page.locator(".ap-offline").get_by_text("data terakhir dilihat").wait_for(timeout=15000)
+    page.get_by_role("button", name="Simpan saat online").wait_for(timeout=10000)
+    assert page.get_by_role("button", name="Ajukan", exact=True).count() == 0, "no submit from the device copy"
+    page.evaluate("() => { location.hash = '#/r/sales_invoice'; }")
+    wait_rows(page)
+    page.evaluate("(h) => { location.hash = h; }", home)
+    page.wait_for_function("(h) => location.hash === h", arg=home, timeout=5000)
+    page.wait_for_timeout(800)
+    assert page.locator(".ap-main .rk-alert").filter(has_text="belum pernah dibuka").count() == 0, "the home dashboard came from the copy"
+    # a page this device never opened
+    page.evaluate("() => { location.hash = '#/r/lead'; }")
+    page.get_by_text("belum pernah dibuka di perangkat ini").first.wait_for(timeout=10000)
+
+    # back online: the server answers again and the label goes
+    page.context.set_offline(False)
+    page.evaluate("(h) => { location.hash = h; }", home)
+    page.locator(".ap-offline").wait_for(state="detached", timeout=15000)
+
+    # sign-out takes the device copy with it
+    account_menu(page).get_by_role("menuitem", name="Keluar").click()
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
+    page.wait_for_timeout(300)
+    assert read_cache_count(page) == 0, "sign-out left pages on the device"
 
 
 def test_pwa_installable_and_offline(page, ctx):
     """Installable app (pwa.js, sw.js): the manifest and its headers, the worker in control, the shell cached without
-    record data, the offline strip, and a start without connection that opens by itself once the connection is back."""
+    record data, the offline strip, a start without connection (from the device copy, or "Belum ada koneksi" without
+    one) that opens by itself once the connection is back."""
     ctx.allowed_failed.append(re.compile(r"/(api|auth)/"))
     open_route(page, ctx, ctx.home()[0])
     assert page.locator('link[rel="manifest"]').get_attribute("href") == "manifest.webmanifest"
@@ -3074,7 +3236,11 @@ def test_pwa_installable_and_offline(page, ctx):
     # the connection drops while the app is open: the desk shell says so under its top bar
     page.context.set_offline(True)
     page.locator(".ap-offline").wait_for(timeout=5000)
-    # opened again without a connection: the cached shell starts and says it waits for the connection
+    # opened again without a connection: the cached shell starts from the device copy of the pages (readcache.js)
+    page.reload()
+    page.locator(".ap-offline").get_by_text("data terakhir dilihat").wait_for(timeout=15000)
+    # with no device copy (another phone, cleared data) it says it waits for the connection
+    page.evaluate("() => window.RangkaApp.readCache.clear()")
     page.reload()
     page.get_by_text("Belum ada koneksi").wait_for(timeout=15000)
     # the connection comes back: the app opens without pressing anything
@@ -3131,11 +3297,8 @@ def widget_order(ctx, dash):
 
 
 def ubah_on(page):
-    rail = page.get_by_role("button", name="Masuk mode Ubah")  # the icon rail (tablet portrait, or folded) has an icon toggle
-    if rail.count() and rail.first.is_visible():
-        rail.first.click()
-    else:
-        page.get_by_role("group", name="Mode").get_by_role("button", name="Ubah", exact=True).click()
+    """Pakai / Ubah lives in the account menu (the switcher's menu in the side shell)."""
+    account_menu(page).get_by_text("Ubah tampilan dan data", exact=True).click()
     page.get_by_role("region", name="Mode ubah").wait_for(timeout=5000)
 
 
@@ -3234,13 +3397,30 @@ def test_ubah_marks_raka_proposals(page, ctx):
     page.get_by_text(f"Diusulkan Raka atas permintaan {ctx.owner[0]}").wait_for(timeout=5000)
 
 
+def test_ubah_from_account_menu(page, ctx):
+    """The mode sits in the account menu, not in the bars; Selesai on the Ubah bar goes back to Pakai."""
+    open_route(page, ctx, ctx.home()[0])
+    page.locator(".ap-shell").wait_for(timeout=10000)
+    assert page.locator(".ap-ubah-mode").count() == 0, "no Pakai/Ubah toggle in the top bar, phone bar or sidebar"
+    ubah_on(page)
+    bar = page.get_by_role("region", name="Mode ubah")
+    bar.get_by_role("button", name="Selesai").click()
+    bar.wait_for(state="detached", timeout=5000)
+    assert page.locator(".ap-ubah-mode").count() == 0
+    # and Ubah can be turned on again from the menu
+    ubah_on(page)
+    ctx.live.add("ubah")
+
+
 def test_ubah_hidden_for_rep(page, ctx):
     page.goto(ctx.base + "/app/?mode=ubah")
     sign_in(page, *SALES)
     page.locator(".ap-shell").wait_for(timeout=15000)
     page.evaluate("() => { location.hash = location.hash.split('?')[0] + '?ubah=1'; }")
     page.locator("[data-loading=false]").wait_for(timeout=15000)  # the dashboard rendered with ?ubah=1 in the hash
-    assert page.get_by_role("group", name="Mode").count() == 0, "a sales_rep gets no Pakai/Ubah toggle"
+    menu = account_menu(page)
+    assert menu.get_by_text("Ubah tampilan dan data", exact=True).count() == 0, "a sales_rep gets no Ubah in the account menu"
+    page.keyboard.press("Escape")
     assert page.get_by_role("region", name="Mode ubah").count() == 0, "and no Ubah bar"
     ctx.live.add("ubah")
 
@@ -3644,6 +3824,7 @@ def main():
         enable_import_def(SITE)
         enable_print_formats(SITE)
         use_side_only(SITE)
+        enable_catalogue_module(os.path.join(work, "catalogue"), SITE)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

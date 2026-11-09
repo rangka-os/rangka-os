@@ -95,12 +95,16 @@
   }
 
   /** Home: the first work screen marked home for the user (contract 0030 §3: meta.work is already theirs, in order),
-   *  else the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list; on a
-   *  composed site (contract 0032 §5, meta.menu) the first dashboard of a module group, else its first list. */
+   *  else the layout's home when it names an installed dashboard or model (contract 0032 §5), else the first dashboard
+   *  of the first app in meta.apps that has dashboards, else the first menu item's list; on a composed site
+   *  (meta.menu) the first dashboard of a module group, else its first list. */
   function homeHash(meta) {
     var apps = (meta && meta.apps) || [], work = (meta && meta.work) || [], screens = (meta && meta.screens) || {}, i, j;
     var mods = (meta && meta.menu) || [];
     for (i = 0; i < work.length; i++) if (work[i].home && screens[work[i].screen]) return "#/w/" + work[i].screen;
+    var lh = String((meta && meta.layout && meta.layout.home) || ""), lk = lh.slice(0, lh.indexOf(":")), ln = lh.slice(lh.indexOf(":") + 1);
+    if (lk === "dashboard" && ((meta.dashboards || {})[ln])) return "#/d/" + ln;
+    if (lk === "model" && ((meta.models || {})[ln])) return "#/r/" + ln;
     for (i = 0; i < apps.length; i++) if ((apps[i].dashboards || []).length) return "#/d/" + apps[i].dashboards[0];
     for (i = 0; i < apps.length; i++) {
       var menu = apps[i].menu || [];
@@ -399,8 +403,41 @@
     return out;
   }
 
+  /** When a device copy was made, for "data terakhir dilihat …": "hari ini 14.05", "kemarin 09.30", else "8 Nov 2026 14.05" (local time). */
+  function lastSeen(iso, now) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var hm = (d.getHours() < 10 ? "0" : "") + d.getHours() + "." + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+    var day = function (x) { return x.getFullYear() + "-" + x.getMonth() + "-" + x.getDate(); };
+    var y = new Date(now.getTime()); y.setDate(y.getDate() - 1);
+    if (day(d) === day(now)) return "hari ini " + hm;
+    if (day(d) === day(y)) return "kemarin " + hm;
+    var M = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    return d.getDate() + " " + M[d.getMonth()] + " " + d.getFullYear() + " " + hm;
+  }
+
+  /**
+   * The account menu's extra sections: "Mode" (Pakai / Ubah) when the person may propose changes (o.propose), then
+   * "Aplikasi" from pwaMenu() keys (o.pwa). Items are {key, icon, label, on}; empty sections are left out.
+   */
+  function accountSections(o) {
+    var out = [];
+    if (o.propose) out.push({ heading: "Mode", items: [
+      { key: "mode:pakai", icon: "eye", label: "Pakai", on: !o.ubah },
+      { key: "mode:ubah", icon: "edit", label: "Ubah tampilan dan data", on: !!o.ubah }] });
+    var app = (o.pwa || []).map(function (k) {
+      return k === "update" ? { key: "app:update", icon: "download", label: "Muat versi baru" }
+        : k === "install" ? { key: "app:install", icon: "phone", label: "Pasang aplikasi" }
+        : { key: "app:ios", icon: "phone", label: "Pasang di layar utama" };
+    });
+    if (app.length) out.push({ heading: "Aplikasi", items: app });
+    return out;
+  }
+
   RA.L = L;
+  RA.accountSections = accountSections;
   RA.pwaMenu = pwaMenu;
+  RA.lastSeen = lastSeen;
   RA.orgByLabel = orgByLabel;
   RA.parseRoute = parseRoute;
   RA.homeHash = homeHash;
@@ -433,11 +470,20 @@
   var onExpired = null; // set by App while signed in
   function watchingFetch(url, init) {
     return global.fetch(url, init).then(function (res) {
-      if (res.status === 401 && onExpired && !/\/auth\/(login|logout)$/.test(String(url))) onExpired();
+      if (res.status === 401 && !/\/auth\/(login|logout)$/.test(String(url))) {
+        // a session that ended takes the device's copy of its pages with it (readcache.js)
+        if (RA.readCache) RA.readCache.clear();
+        if (onExpired) onExpired();
+      }
       return res;
     });
   }
-  var api = global.RangkaAppAPI({ baseUrl: "", fetch: watchingFetch });
+  // Pages read from the device copy while there is no connection (readcache.js): the time of the copy on screen, and
+  // the App's listeners for "shown from the copy" / "the server answers again".
+  var lastStale = null, staleImpl = null, freshImpl = null;
+  var api = global.RangkaAppAPI({ baseUrl: "", fetch: watchingFetch, readCache: RA.readCache || null,
+    onStale: function (at) { lastStale = at; if (staleImpl) staleImpl(at); },
+    onFresh: function () { if (!lastStale) return; lastStale = null; if (freshImpl) freshImpl(); } });
 
   /* ---------------------------------------------------------------- record cache (feeds the engine's lookup) */
   function makeCache(onChange) {
@@ -746,6 +792,9 @@
     var cms = useState(false), cmdOpen = cms[0], setCmdOpen = cms[1];
     var sms = useState(null), switchAt = sms[0], setSwitchAt = sms[1]; // the switcher's rect while its menu is open
     var pws = useState(RA.pwa ? RA.pwa.state() : null), pwa = pws[0], setPwa = pws[1]; // pwa.js: online, install, update
+    var sas = useState(lastStale), staleAt = sas[0], setStaleAt = sas[1]; // the time of the device copy on screen
+    // no connection, or a page shown from the device copy: the app reads only until the server answers again
+    var offline = !!staleAt || !!(pwa && !pwa.online);
     var phone = usePhone();
     // tablet portrait (768-1023): the sidebar is the icon rail; its unfold button floats the full sidebar over the page
     // layout.responsive (contract 0038): tablet rail (default) | sidebar | drawer, phone drawer (default) | tabs
@@ -776,6 +825,18 @@
       if (boot.previewErr) toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError ? RA.ubahError(boot.previewErr) : boot.previewErr.message);
       return function () { onExpired = null; toastImpl = null; boot.cacheListener.fn = null; };
     }, []);
+
+    // pages from the device copy (readcache.js): show its time; when the server answers again, load the view afresh
+    useEffect(function () {
+      staleImpl = setStaleAt;
+      freshImpl = function () { setStaleAt(null); setRev(function (x) { return x + 1; }); };
+      return function () { staleImpl = null; freshImpl = null; };
+    }, []);
+    var onlineNow = !pwa || pwa.online;
+    useEffect(function () {
+      // the phone is back online while a copy is on screen: ask the server again (its answer clears staleAt)
+      if (onlineNow && staleAt) setRev(function (x) { return x + 1; });
+    }, [onlineNow]);
 
     // installable app (pwa.js): register the worker once, say when a new version is ready, track online / install
     useEffect(function () {
@@ -829,6 +890,14 @@
 
     useEffect(function () { global.document.documentElement.dataset.density = densityOf(meta); }, [meta]);
 
+    // Escape closes the navigation drawer (phone, tablet drawer) or the floating rail, like any other overlay
+    useEffect(function () {
+      if (!navOpen && !railOpen) return undefined;
+      function key(e) { if (e.key === "Escape") { setNavOpen(false); setRailOpen(false); } }
+      global.addEventListener("keydown", key);
+      return function () { global.removeEventListener("keydown", key); };
+    }, [navOpen, railOpen]);
+
     // ⌘K on a Mac, Ctrl+K elsewhere, opens the command menu from anywhere in the app (not under the sign-in dialog)
     var expiredRef = useRef(expired);
     expiredRef.current = expired;
@@ -870,8 +939,11 @@
       setSwitching(true);
       api.switchOrg(o.id).then(function () {
         onExpired = null;
-        global.history.replaceState(null, "", global.location.pathname + global.location.search + "#/");
-        global.location.reload();
+        // the device copy belongs to the old org: gone before the reload reads anything
+        return (RA.readCache ? RA.readCache.clear() : Promise.resolve()).then(function () {
+          global.history.replaceState(null, "", global.location.pathname + global.location.search + "#/");
+          global.location.reload();
+        });
       }, function (e) {
         setSwitching(false);
         if (e && e.status === 401) return;
@@ -893,6 +965,7 @@
 
     function logout() {
       onExpired = null;
+      if (RA.readCache) RA.readCache.clear();
       api.logout().then(null, function () {}).then(function () { p.onSignedOut(); });
     }
 
@@ -979,7 +1052,7 @@
     /** After a failed action in the card: show the change set as it is now (an approve may have gone through). */
     function reloadCs(id) { return api.changeset(id).then(function (cs) { setCard(function (c) { return c && c.cs && c.cs.id === id ? { cs: cs } : c; }); }, function () {}); }
     function toggleUbah(on) { setUbah(on); setQuery({ ubah: on }); }
-    var ubahOn = ubah && !previewCs && !!cs8.propose && !!RA.UbahCtx;
+    var ubahOn = ubah && !previewCs && !offline && !!cs8.propose && !!RA.UbahCtx;
     var uctx = { on: ubahOn, preview: previewCs, busy: ubahBusy, canApprove: caps.approve, canApproveHigh: caps.approveHigh,
       run: runUbah, edit: editUbah, menu: menuUbah, quiet: quiet, toggle: function () { toggleUbah(!ubah); }, showPending: function () { setCard({ list: true }); } };
 
@@ -989,7 +1062,9 @@
     var current = orgs.filter(function (o) { return o.id === me.org; })[0];
     var companyName = me.orgName || (current ? current.name || current.id : name);
     var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta,
-      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs };
+      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs || offline, offline: offline,
+      // a change set built elsewhere (the catalogue's Pasang / Lepas) opens in the same card as Ubah's
+      showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); } };
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 
     var kind = shellKind(meta);
@@ -1004,7 +1079,15 @@
     function goApp(a) { var h2 = homeHash({ apps: installed.filter(function (x) { return x.name === a.id; }) }); if (h2) RA.navigate(h2); }
     function help() { toast("info", "Bantuan", "Hubungi pemilik usaha atau admin kalau kamu butuh akses ke halaman lain."); }
     function account(k) {
-      if (k.indexOf("theme:") === 0) { setThemePick(k.slice(6)); writeThemePick(k.slice(6)); }
+      if (k === "mode:pakai" || k === "mode:ubah") {
+        // on a phone the menu sits in the drawer: close it so the Ubah bar and the page are in view
+        setNavOpen(false); setSwitchAt(null);
+        if ((k === "mode:ubah") !== ubah) toggleUbah(k === "mode:ubah");
+      }
+      else if (k === "app:update") RA.pwa.applyUpdate();
+      else if (k === "app:install") RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
+      else if (k === "app:ios") toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
+      else if (k.indexOf("theme:") === 0) { setThemePick(k.slice(6)); writeThemePick(k.slice(6)); }
       else if (k === "logout" || k === "switch") logout();
       else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
       else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
@@ -1012,7 +1095,7 @@
     function onNavigate(id) { RA.navigate(id === "home" ? home || "#/" : "#/" + id); setNavOpen(false); setRailOpen(false); }
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmdOpen(true); }
     function toggleCollapsed() { if (rail) { setRailOpen(!railOpen); return; } var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
-    var modeToggle = cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
+    // offline: Ubah writes change sets, so it waits for the connection like every other write
 
     /* ---------------------------------------------------------------- Raka (ai.js, contract 0020) */
     var aiKey = RA.aiStorageKey ? RA.aiStorageKey(me && me.org, me && me.email) : null; // one conversation per person
@@ -1046,16 +1129,10 @@
     }
 
     /** Install / update entries for the switcher's menu (pwa.js state); empty when there is nothing to offer. */
-    function appItems(s) {
-      return pwaMenu(s).map(function (k) {
-        if (k === "update") return { label: "Muat versi baru", icon: "download", onSelect: function () { RA.pwa.applyUpdate(); } };
-        if (k === "install") return { label: "Pasang aplikasi", icon: "phone", onSelect: function () {
-          RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
-        } };
-        return { label: "Pasang di layar utama", icon: "phone", onSelect: function () {
-          toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
-        } };
-      });
+    /** Extra sections of the account menu (TopNav's avatar menu and the side shell's switcher menu): the Pakai / Ubah
+     *  mode for people who may propose changes, then install / update of the app (pwa.js). */
+    function accountExtra() {
+      return accountSections({ propose: !!cs8.propose && !previewCs && !offline, ubah: ubah, pwa: pwaMenu(pwa) });
     }
 
     /** The switcher's menu: the apps (what TopNav's app switcher listed), companies, theme, help and the account. */
@@ -1068,7 +1145,11 @@
         return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
       }), ["-", { heading: "Tema" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
         return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
-      }), ["-"], appItems(pwa), [{ label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
+      }), ["-"], [].concat.apply([], accountExtra().map(function (g) {
+        return [{ heading: g.heading }].concat(g.items.map(function (it) {
+          return { label: it.label, icon: it.icon, checked: it.on, onSelect: function () { account(it.key); } };
+        }), ["-"]);
+      })), [{ label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
         { label: "Profil", icon: "user", onSelect: function () { account("profile"); } },
         { label: "Ganti akun", icon: "switch", onSelect: function () { account("switch"); } },
         { label: "Keluar", icon: "logout", onSelect: function () { account("logout"); } }]);
@@ -1083,7 +1164,7 @@
     if (ubahOn) {
       side = h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
         switcher: kind === "side-only" ? switcher : null,
-        footer: sideFooter(false, kind === "side-only" && modeToggle ? h(React.Fragment, { key: "mode" }, modeToggle) : null),
+        footer: sideFooter(false, null),
         onNavigate: function (id) { RA.navigate("#/" + id); setNavOpen(false); } });
     } else if (kind === "top-nav") {
       // the top bar already names the business; the sidebar is the open app (openApp above)
@@ -1099,9 +1180,7 @@
         search: { label: "Cari", onOpen: openCmd },
         pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route, home || "#/"), onNavigate: onNavigate,
         collapsed: narrow, float: floating, onToggleCollapse: drawerNav ? undefined : toggleCollapsed,
-        footer: sideFooter(narrow, !modeToggle ? null : narrow
-          ? h(R.IconButton, { key: "mode", icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })
-          : h(React.Fragment, { key: "mode" }, modeToggle))
+        footer: sideFooter(narrow, null)
       });
     }
 
@@ -1110,8 +1189,10 @@
       searchPlaceholder: "Cari", currentApp: openApp ? openApp.name : null,
       apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: appIcon(a), color: "var(--primary)" }; }),
       user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },
-      actions: h(React.Fragment, null, modeToggle,
-        h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } })),
+      // a phone with layout tabs opens the menu from its last tab: no second menu button in the top bar
+      actions: phone && resp.phone === "tabs" && tabLinks(meta, resp.tabs, route, home).length ? null
+        : h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
+      accountExtra: accountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
       onNotifications: function () { toast("info", "Belum ada notifikasi"); }
@@ -1120,8 +1201,7 @@
     var phoneBar = kind === "top-nav" ? null : h("header", { className: "ap-mhead" },
       h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
       h("b", { className: "ap-mhead-t" }, companyName),
-      h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }),
-      phone ? modeToggle : null);
+      h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }));
 
     // phone (desain arah E, P7): a bottom tab bar for the three things an owner does most; Menu opens the drawer
     var onHome = route.kind === "dash" && home && ("#/d/" + route.dash) === home;
@@ -1179,13 +1259,15 @@
         floating && !ubahOn ? h("div", { className: "ap-rail-scrim", onClick: function () { setRailOpen(false); } }) : null,
         h("div", { className: "rk-shell-main" },
           phoneBar,
-          pwa && !pwa.online ? h("div", { className: "ap-offline", role: "status" }, h(R.Icon, { name: "offline" }),
-            h("span", null, h("b", null, "Kamu sedang offline. "), "Halaman yang sudah terbuka masih bisa dibaca; menyimpan menunggu koneksi.")) : null,
+          offline ? h("div", { className: "ap-offline", role: "status" }, h(R.Icon, { name: "offline" }),
+            h("span", null, h("b", null, "Kamu sedang offline. "), staleAt
+              ? "Menampilkan data terakhir dilihat " + lastSeen(staleAt, new Date()) + ". Menyimpan menunggu koneksi."
+              : "Halaman yang sudah pernah dibuka masih bisa dibaca; menyimpan menunggu koneksi.")) : null,
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
-          ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
-          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs })), tabBar),
+          ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending, onDone: function () { toggleUbah(false); } }) : null,
+          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs || offline })), tabBar),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
-        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
+        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs || offline, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
         aiOn ? h(RA.AssistantRoot, { key: aiKey, api: api, storageKey: aiKey, getContext: aiPage, navigate: RA.navigate,
           onPreview: aiPreview, onOpenUbah: aiOpenUbah, blocked: function () { return expiredRef.current; }, control: aiRef }) : null,
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,

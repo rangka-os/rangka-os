@@ -27,6 +27,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
+	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -46,10 +47,10 @@ type Config struct {
 	AI                              *api.AIConfig    // rangka-ai sidecar (--ai-url); nil = assistant off
 	Now                             func() time.Time // fixed clocks in tests
 	Logf                            func(format string, args ...any)
-	// RequestOnly runs the kernel for platforms that freeze the process between requests (contract 0039 §1): no
+	// RequestOnly runs the kernel for platforms that freeze the process between requests (contract 0040 §1): no
 	// migrate or writes at start, no background loops; the scheduler and queue run on POST /_rangka/tick.
 	RequestOnly bool
-	// InternalToken guards /_rangka/ (contract 0039 §1); "" = those endpoints do not exist.
+	// InternalToken guards /_rangka/ (contract 0040 §1); "" = those endpoints do not exist.
 	InternalToken string
 }
 
@@ -132,7 +133,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	s := &Server{Cfg: cfg, DB: db}
 	if cfg.RequestOnly {
-		// No writes at start: the hosting side runs `rangka migrate` and `rangka seed` (contract 0039 §2).
+		// No writes at start: the hosting side runs `rangka migrate` and `rangka seed` (contract 0040 §2).
 		if err := s.checkMigrated(ctx, reg); err != nil {
 			db.Close()
 			return nil, err
@@ -177,7 +178,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Sched.SetNow(cfg.Now)
 	if cfg.RequestOnly {
 		// A cold instance must still enqueue what came due since the last tick; the unique key per flow and minute
-		// drops repeats (contract 0039 §3).
+		// drops repeats (contract 0040 §3).
 		s.Sched.CatchUp = time.Duration(intCfg(reg, "scheduler.catch_up_s", 600)) * time.Second
 	}
 	s.Sched.Log = cfg.Logf
@@ -210,6 +211,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if fstore != nil {
 		s.API.Files = fstore // keep a nil *Local out of the interface
 	}
+	// connector secrets (contract 0017): without a KEK the kernel starts and db-driver writes answer secrets_key_missing
+	kek, err := secrets.LoadKEK(nil)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	if kek == nil && strCfg(reg, "secrets.driver", "env") == "db" {
+		cfg.Logf("secrets: driver db without RANGKA_MASTER_KEY; connector secrets cannot be set (run rangka keygen)")
+	}
+	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now}
 	return s, nil
 }
 

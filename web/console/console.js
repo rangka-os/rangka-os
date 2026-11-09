@@ -792,9 +792,25 @@
     });
     var cur = open && units.filter(function (u) { return u.kind + ":" + u.name === open; })[0];
     var installed = units.filter(function (u) { return u.installed; }).length;
+    var bs = useState(null), busy = bs[0], setBusy = bs[1];
+    // Pasang / Lepas (contract 0036 §4): the kernel writes config.rk and returns the change set, validated and previewed
+    function change(u, kind) {
+      if (busy) return;
+      setBusy(kind);
+      api.catalogueChange(kind === "add" ? { add: [u.name] } : { remove: [u.name] }).then(function (c) {
+        setBusy(null); setOpen(null);
+        ctx.toast("ok", "Change set diusulkan", c.title + " · " + (RISK[c.risk] || [0, c.risk])[1]);
+        ctx.csChanged(); ctx.nav("/changesets/" + c.id);
+      }, function (e) { setBusy(null); ctx.toast("bad", "Tidak bisa diusulkan", (e && e.message) || String(e)); });
+    }
+    function actionsOf(u) {
+      if (!u.installed && u.in_plan !== false) return h(R.Button, { variant: "primary", icon: "add", loading: busy === "add", disabled: !!busy, onClick: function () { change(u, "add"); } }, "Pasang");
+      if (u.installed && (u.kind === "app" || (u.installed_by || []).indexOf("config") >= 0)) return h(R.Button, { loading: busy === "remove", disabled: !!busy, onClick: function () { change(u, "remove"); } }, "Lepas");
+      return null;
+    }
     return h(React.Fragment, null,
       h(R.PageHeader, { title: "Katalog", breadcrumb: ["Rangka Console", "Lapis 5", "Katalog"], onNavigate: function () {},
-        subtitle: cat.data ? units.length + " modul dan app di folder kernel · " + installed + " terpasang · hanya baca" : "Modul dan app yang bisa dipasang kernel ini" }),
+        subtitle: cat.data ? units.length + " modul dan app di folder kernel · " + installed + " terpasang" : "Modul dan app yang bisa dipasang kernel ini" }),
       h("div", { className: "rk-shell-content" },
         cat.error ? (cat.error.status === 403 ? h(R.Alert, { tone: "warn", title: "Tidak ada akses" }, "Katalog hanya untuk yang boleh mengusulkan perubahan.") : h(ErrorBox, { error: cat.error, onRetry: cat.reload }))
         : !cat.data ? h(Loading)
@@ -809,6 +825,8 @@
         : h(R.EmptyState, { title: "Katalog kosong" }, "Tidak ada modul atau app di folder kernel.")),
       cur ? h(R.Drawer, { title: L(cur.title) || cur.name, subtitle: cur.name + " " + (cur.version || "") + " · " + (cur.kind === "module" ? "modul" : "app"), icon: "store", wide: true,
           onClose: function () { setOpen(null); }, headerActions: catalogueStatus(cur) },
+        actionsOf(cur) ? h(R.DrawerSection, { title: "Tindakan" }, h("div", { className: "cn-chips" }, actionsOf(cur)),
+          h("p", { className: "cn-note" }, "Menulis config.rk lewat change set: divalidasi dan dipratinjau, lalu perlu disetujui.")) : null,
         h(R.DrawerSection, { title: "Ringkasan" }, h(R.Descriptions, { column: 2, items: [["Ringkasan", L(cur.summary) || "Belum ada ringkasan"], ["Kategori", CAT_LABEL[cur.category] || cur.category],
           ["Ikon", cur.icon ? mono(cur.icon) : "—"], ["Sumber", cur.source], ["Paket", (cur.plan || "—") + (cur.in_plan === false ? " · tidak termasuk" : "")],
           ["Dipasang oleh", (cur.installed_by || []).length ? mono(cur.installed_by.join(", ")) : "—"]] })),

@@ -30,7 +30,7 @@ type Scheduler struct {
 	items []*Schedule
 	Bad   []string // schedules that did not parse
 	// CatchUp makes SetFlows start each schedule this far in the past, so a freshly started instance (request-only
-	// mode, contract 0039 §3) still enqueues runs that came due before it existed. Repeats are dropped by the
+	// mode, contract 0040 §3) still enqueues runs that came due before it existed. Repeats are dropped by the
 	// unique key per flow and minute. 0 = start from now (rangka serve, where the loop never stops).
 	CatchUp time.Duration
 }

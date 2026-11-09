@@ -19,6 +19,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/mcp"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
+	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 )
 
 // Server holds what the handlers need. The server package fills it.
@@ -33,15 +34,16 @@ type Server struct {
 	Sched        *jobs.Scheduler
 	Changes      *changeset.Service
 	Imports      *imports.Service
-	WebDir       string      // rangka-os/web, served at /
-	TemplatesDir string      // rangka-os/templates (theme and layout templates)
-	Org          string      // default organisation
-	Site         string      // site name
-	DeployTarget string      // dev, docker, helm, desktop, cloud, partner
-	Files        files.Store // attachments blob store; nil = files capability disabled (501 files_disabled)
-	MaxUploadMB  int         // files.max_upload_mb; 0 = 20
-	AI           *AIConfig   // rangka-ai sidecar; nil = assistant off (contract 0020)
-	Internal     *Internal   // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0039 §1)
+	WebDir       string           // rangka-os/web, served at /
+	TemplatesDir string           // rangka-os/templates (theme and layout templates)
+	Org          string           // default organisation
+	Site         string           // site name
+	DeployTarget string           // dev, docker, helm, desktop, cloud, partner
+	Files        files.Store      // attachments blob store; nil = files capability disabled (501 files_disabled)
+	MaxUploadMB  int              // files.max_upload_mb; 0 = 20
+	AI           *AIConfig        // rangka-ai sidecar; nil = assistant off (contract 0020)
+	Secrets      *secrets.Service // connector secrets (contract 0017); nil = every auth field reports unset
+	Internal     *Internal        // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0040 §1)
 	Log          func(format string, args ...any)
 
 	previewMu sync.Mutex // guards previews (preview.go)
@@ -183,8 +185,13 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/system/jobs", a(s.listJobs))
 	mux.HandleFunc("GET /api/v1/system/jobs/{id}", a(s.getJob))
 	mux.HandleFunc("GET /api/v1/system/audit", a(s.listAudit))
-	mux.HandleFunc("GET /api/v1/catalogue", a(s.getCatalogue)) // modules, apps and connectors to install (contract 0036)
-	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan))           // plan limits and usage (contract 0028)
+	mux.HandleFunc("GET /api/v1/catalogue", a(s.getCatalogue))              // modules, apps and connectors to install (contract 0036)
+	mux.HandleFunc("POST /api/v1/catalogue/propose", a(s.proposeCatalogue)) // Pasang / Lepas (contract 0036 §4)
+	// connector secrets, write-only (contract 0017 §3): no answer ever carries a value
+	mux.HandleFunc("GET /api/v1/connectors/{connector}/auth", a(s.getConnectorAuth))
+	mux.HandleFunc("PUT /api/v1/connectors/{connector}/auth/{field}", a(s.putConnectorAuth))
+	mux.HandleFunc("DELETE /api/v1/connectors/{connector}/auth/{field}", a(s.deleteConnectorAuth))
+	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)
 	mux.HandleFunc("GET /api/v1/orgs", a(s.listOrgs))
 	mux.HandleFunc("GET /api/v1/orgs/{id}/members", a(s.listMembers))
 	mux.HandleFunc("GET /api/v1/files", a(s.listFiles))

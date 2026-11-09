@@ -715,6 +715,61 @@ def kind_of(path):
     return first[i + 8:].strip().rsplit("/", 1)[-1][:-5] if i >= 0 else ""
 
 
+def _strings(x):
+    if isinstance(x, str):
+        yield x
+    elif isinstance(x, dict):
+        for v in x.values():
+            yield from _strings(v)
+    elif isinstance(x, list):
+        for v in x:
+            yield from _strings(v)
+
+
+def url_host(url):
+    """The host of a request URL, as kernel meta.urlHost reads it: after the scheme, before /, ?, #, user@ and :port."""
+    rest = url.split("://", 1)[1] if "://" in url else url
+    for sep in "/?#":
+        rest = rest.split(sep, 1)[0]
+    rest = rest.rsplit("@", 1)[-1]
+    if not rest.startswith("["):
+        rest = rest.split(":", 1)[0]
+    return rest.lower()
+
+
+def check_secret_hosts(rep, p, c):
+    """Contract 0017 §5: an action that carries a secret uses https and, when the connector declares hosts:, sends it
+    only to those hosts (after templating the URL with the settings' defaults)."""
+    fields = (c.get("auth") or {}).get("fields") if isinstance(c.get("auth"), dict) else None
+    secret = [f.get("name") for f in fields or [] if isinstance(f, dict) and f.get("secret") is True and isinstance(f.get("name"), str)]
+    if not secret:
+        return
+    hosts = c.get("hosts") if isinstance(c.get("hosts"), list) else None
+    defaults = {}  # a setting's default is CEL: only a quoted string literal templates the URL
+    for s in c.get("settings") or []:
+        dv = s.get("default") if isinstance(s, dict) else None
+        if isinstance(s, dict) and isinstance(s.get("name"), str) and isinstance(dv, str) and len(dv) >= 2 and dv[0] == dv[-1] and dv[0] in "'\"":
+            defaults[s["name"]] = dv[1:-1]
+    for i, a in enumerate(c.get("actions") or []):
+        req = a.get("request") if isinstance(a, dict) else None
+        if not isinstance(req, dict) or not isinstance(req.get("url"), str):
+            continue
+        if not any("{auth." + n + "}" in t for t in _strings(req) for n in secret):
+            continue
+        url, name = req["url"], a.get("name")
+        if url.lower().startswith("http://"):
+            rep.add("error", p, f"actions/{i}/request/url", "secret_plain_http", f'action "{name}" sends a secret over plain http: use https (contract 0017 §5)')
+        if hosts is None:
+            continue
+        for k in sorted(defaults):
+            url = url.replace("{" + k + "}", defaults[k])
+        host = url_host(url)
+        if "{" in host or "$" in host:
+            continue
+        if host not in [h.lower() for h in hosts if isinstance(h, str)]:
+            rep.add("error", p, f"actions/{i}/request/url", "secret_host_undeclared", f'action "{name}" sends a secret to {host}, which is not in hosts ({", ".join(str(h) for h in hosts)}) (contract 0017 §5)')
+
+
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
@@ -824,6 +879,8 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             rep.add("error", p, "name", "name_mismatch", f'connector name "{c.get("name")}" must match the directory name "{cn}"')
         if not cn.startswith("x_") and isinstance(c, dict) and not c.get("summary"):
             rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
+        if isinstance(c, dict):
+            check_secret_hosts(rep, p, c)
 
     if site:
         check_site(rep, V, root, apps, allmodels, sdocs, conns, overlays, flows)

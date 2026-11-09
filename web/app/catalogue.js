@@ -1,10 +1,11 @@
-/* Rangka end-user app: "Modul dan sambungan", the catalogue read only (contract 0036 §6, build step 2).
+/* Rangka end-user app: "Modul dan sambungan", the catalogue read only (contract 0036 §6, build steps 2 and 3).
  *
  * RangkaApp.CataloguePage({route}) #/pengaturan/katalog: GET /api/v1/catalogue in plain words. Two tabs, Modul
  * (modules and apps) and Sambungan (connectors), grouped by category, with a search box and a filter Semua ·
  * Terpasang · Belum dipasang. Every card says its status in a word. A card opens a detail panel: what it adds, what
- * it needs, who uses it and, for a connector, the hosts it talks to. Buttons that install or connect come later
- * (they need contracts 0032 and 0017); nothing here changes anything.
+ * it needs, who uses it and, for a connector, the hosts it talks to. A module or app has Pasang (not installed, in the
+ * plan) or Lepas (named by config.rk): POST /api/v1/catalogue/propose builds the change set and the shell's change-set
+ * card (Ubah, contract 0015) shows its preview, risk word and approve/apply. Connecting a connector comes later (0017).
  * The sidebar entry only exists when features.catalogue is on (api.js: the route answers 200). Anyone else who
  * opens the address sees "no access".
  */
@@ -73,9 +74,33 @@
       rows.push(["Dipakai oleh", (x.required_by || []).length ? nameList(x.required_by, p.byName) : "Tidak ada"]);
       if (x.in_plan === false) rows.push(["Paket", "Tidak termasuk paket " + (x.plan || "kamu")]);
     }
+    // Pasang / Lepas (contract 0036 §4): the kernel builds the change set; the shell's change-set card takes it from there
+    var bs = useState(null), busy = bs[0], setBusy = bs[1];
+    var es = useState(null), err = es[0], setErr = es[1];
+    var removable = x.installed && (x.kind === "app" || (x.installed_by || []).indexOf("config") >= 0);
+    function act(kind) {
+      if (busy) return;
+      setBusy(kind); setErr(null);
+      var body = kind === "add" ? { add: [x.name] } : { remove: [x.name] };
+      p.ctx.api.catalogueChange(body).then(function (cs) { setBusy(null); p.onProposed(cs); },
+        function (e) { setBusy(null); setErr((e && e.message) || "Perubahan tidak bisa diusulkan"); });
+    }
+    var actions = null;
+    if (!conn && p.ctx.showChangeSet && !p.ctx.readOnly) { // no change while offline or previewing a change set
+      if (!x.installed && x.in_plan !== false) {
+        actions = h(R.Button, { variant: "primary", icon: "add", loading: busy === "add", disabled: !!busy, onClick: function () { act("add"); } }, "Pasang");
+      } else if (removable) {
+        actions = h(R.Button, { loading: busy === "remove", disabled: !!busy, onClick: function () { act("remove"); } }, "Lepas");
+      } else if (x.installed) {
+        actions = h("p", { className: "ap-muted" }, "Terpasang karena dibutuhkan " + (nameList(x.required_by || [], p.byName) || "bagian lain") + ".");
+      }
+    }
     return h(R.Drawer, { title: titleOf(x), subtitle: summaryOf(x), icon: conn ? "plug" : "apps", onClose: p.onClose,
       headerActions: h(R.Lozenge, { tone: st[0] }, st[1]) },
       h(R.DrawerSection, null, h(R.Descriptions, { column: 1, items: rows })),
+      actions ? h(R.DrawerSection, null, err ? h(R.Alert, { tone: "bad", title: err }) : null,
+        h("div", { className: "ap-cat-acts" }, actions),
+        !x.installed || removable ? h("p", { className: "ap-muted" }, "Perubahan ini jadi usulan yang perlu disetujui dulu sebelum berlaku.") : null) : null,
       conn && x.state === "needs_auth" ? h(R.DrawerSection, null, h("p", { className: "ap-muted" }, "Kunci diatur oleh pemilik usaha. Mengisi kunci dari sini menyusul.")) : null,
       h(R.DrawerSection, null, h("p", { className: "ap-cat-tech" }, (conn ? "Konektor " : x.kind === "module" ? "Modul " : "App ") + x.name + (x.version ? " · versi " + x.version : ""))));
   }
@@ -92,7 +117,7 @@
       ctx.api.catalogue().then(function (d) { if (live) set({ loading: false, data: d, error: null }); },
         function (e) { if (live) set({ loading: false, data: null, error: e }); });
       return function () { live = false; };
-    }, []);
+    }, [ctx.meta]); // an applied change set reloads meta: read the catalogue again
     if (s.error && s.error.status === 403) return h(React.Fragment, null, h(R.PageHeader, { title: "Modul dan sambungan" }), h(RA.ForbiddenState || "div", { what: "Modul dan sambungan" }));
 
     var d = s.data || {}, units = (d.modules || []).concat(d.apps || []), conns = d.connectors || [];
@@ -127,6 +152,7 @@
           h(R.Segmented, { key: tab, label: "Saring", value: filter, onChange: setFilter,
             options: [{ value: "all", label: "Semua" }, { value: "on", label: "Terpasang" }, { value: "off", label: "Belum dipasang" }] })),
         body),
-      cur ? h(Detail, { item: cur, tab: tab, byName: byName, onClose: function () { setOpen(null); } }) : null);
+      cur ? h(Detail, { key: cur.name, item: cur, tab: tab, byName: byName, ctx: ctx, onClose: function () { setOpen(null); },
+        onProposed: function (cs) { setOpen(null); ctx.showChangeSet(cs); } }) : null);
   };
 })(window);

@@ -20,7 +20,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-// TestRequestOnly covers contract 0039 §1 to §3: start without writing, 503 until migrated, /_rangka/tick behind
+// TestRequestOnly covers contract 0040 §1 to §3: start without writing, 503 until migrated, /_rangka/tick behind
 // the internal token, a tick runs queued jobs, and only one instance ticks at a time.
 func TestRequestOnly(t *testing.T) {
 	url := testdb.New(t)

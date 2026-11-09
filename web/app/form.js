@@ -598,7 +598,12 @@
     }
     // The one primary verb is a button; the other lifecycle steps and the model's actions sit in the ⋯ menu.
     var acts = [], more = [];
-    if (ctx.readOnly) { /* preview: nothing is written */ }
+    if (ctx.readOnly) {
+      // preview: nothing is written. Offline (a device copy, or no connection): say why there is nothing to press.
+      if (ctx.offline && !isNew) acts.push(btn("offline", "Simpan saat online", { icon: "offline", onClick: function () {
+        ctx.toast("info", "Belum ada koneksi", "Data ini dari salinan di perangkatmu. Mengubah dan mengajukan bisa lagi begitu tersambung.");
+      } }));
+    }
     else if (sub) {
       if (own && !bannerOn) { /* waiting, read-only: no buttons */ }
       else if (docstatus === 0) {

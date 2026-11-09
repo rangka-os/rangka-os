@@ -51,6 +51,12 @@ func parsed(r roots, files map[string]*string) func(string) (map[string]any, boo
 
 // Propose stores a new change set (body = changeset.json without computed fields) with layers and risk.
 func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*ChangeSet, error) {
+	return s.ProposeFrom(ctx, a, body, "")
+}
+
+// ProposeFrom is Propose with the kernel's own source mark: "catalogue" when the catalogue built the change set
+// (contract 0036 §4). The assistant's "ai" mark wins: a body never sets source itself.
+func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any, source string) (*ChangeSet, error) {
 	if body == nil {
 		body = map[string]any{}
 	}
@@ -89,6 +95,7 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 	}
 	cs := &ChangeSet{}
 	remarshal(doc, cs)
+	cs.Source = source
 	if a.Assistant {
 		cs.Source = "ai"
 	}

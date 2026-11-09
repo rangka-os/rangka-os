@@ -15,7 +15,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Request-only mode (contract 0039 §1 to §3): the same kernel for platforms that freeze or discard the process
+// Request-only mode (contract 0040 §1 to §3): the same kernel for platforms that freeze or discard the process
 // between requests. Nothing is written at start, nothing runs in the background, and the scheduler and queue run when
 // the hosting side calls POST /_rangka/tick.
 
@@ -103,7 +103,7 @@ type TickReport struct {
 	MS   int64 `json:"ms"`
 }
 
-// Tick runs the scheduler once and then due jobs until none is left or budget is spent (contract 0039 §3). One
+// Tick runs the scheduler once and then due jobs until none is left or budget is spent (contract 0040 §3). One
 // instance at a time: the others answer {"skipped": true} at once.
 func (s *Server) Tick(ctx context.Context, budget time.Duration) (TickReport, error) {
 	start := time.Now()

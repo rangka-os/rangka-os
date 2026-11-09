@@ -6,7 +6,7 @@ import (
 	"net/http"
 )
 
-// Internal is what the hosting side may call under /_rangka/ (contract 0039 §1): only with the header
+// Internal is what the hosting side may call under /_rangka/ (contract 0040 §1): only with the header
 // X-Rangka-Internal set to Token. The hosting adapter strips that header from public requests and the router strips
 // /_rangka/ paths, so the public cannot reach these endpoints.
 type Internal struct {

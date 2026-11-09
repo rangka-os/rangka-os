@@ -64,7 +64,7 @@ func TestCatalogueShapes(t *testing.T) {
 			t.Errorf("connector entry has no %s: %v", k, wa)
 		}
 	}
-	// installed through a flow and notify; auth fields are never set before the secrets API of contract 0017
+	// installed through a flow and notify; the env driver binds no auth field here (system.rk has no connector_auth)
 	if wa["state"] != "needs_auth" || get(wa, "used_by", 0) != "whatsapp_to_lead" || wa["company"] != false ||
 		get(wa, "auth", 0, "name") != "access_token" || get(wa, "auth", 0, "set") != false || get(wa, "auth", 0, "secret") != true {
 		t.Errorf("whatsapp_business: %v", wa)

@@ -13,3 +13,4 @@ Shared by rangka-ai and rangka-cloud: copy verbatim into tests. The contract (`.
 - `ops-remove-piece.json`: removing a piece removes it from every stage (stages kept); unknown id, and an id from another collection, drop as `unknown_id`.
 - `facts-to-map-complete.json`: all 13 facts to a map: trim, whitespace-only fact is absent, setting order (`data_to_move` before `pain_points`, `t_replace` last), `p_current`, 300 UTF-16 unit cut with an emoji before the cut.
 - `facts-to-map-missing.json`: absent, null, non-string and blank facts are absent; `o_<key>` scripted questions for missing required facts; an unrecognised `replace_or_complement` gives neither setting nor open item.
+- `facts-to-map-normalise.json`: surrounding whitespace is trimmed before use (`  Ganti penuh ` gives setting `t_replace` "Juragan: ganti penuh"; ` Kue basah ` gives summary `Kue basah`).

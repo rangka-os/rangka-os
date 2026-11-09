@@ -54,6 +54,8 @@ Cloud stores the map with the project. rangka-ai stays stateless: it receives th
 | order | `{"op": "order", "ids": [stage ids]}` | Listed stages first in that order; stages not listed keep their relative order after them. Unknown ids are ignored; an empty list is a no-op. |
 | business | `{"op": "business", "value": {name?, kind?, summary?}}` | Merge. |
 
+A `put` whose id exists replaces that item in place; a new item is appended to the end of its collection.
+
 rangka-ai applies ops in order and returns the resulting map. A failing op is dropped and reported as `{"index": n, "reason": "..."}` with reasons `bad_shape`, `unknown_id`, `unconfirmed_guess`, `limit` (only for an op that would push a collection over its limit). Dangling `stage.pieces` references are removed silently after all ops (the stage is kept).
 
 ### 3. Guesses from files

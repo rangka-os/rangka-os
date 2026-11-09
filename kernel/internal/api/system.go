@@ -2,11 +2,14 @@ package api
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -150,6 +153,43 @@ func (s *Server) getJob(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	writeJSON(w, 200, j)
+}
+
+// replayJob enqueues a dead-lettered job again (contract 0002 §A.5): POST /system/jobs/{id}/replay. A connector call
+// is rendered again with the org's current keys, so the owner fixes the keys, then replays. Only the owner or a role
+// named in config.rk connector_auth replays; the assistant and OIDC helpers never do (a replay can resend a payment).
+func (s *Server) replayJob(w http.ResponseWriter, r *http.Request, c *caller) {
+	if c.p.Via == "ai" || c.p.Via == "oidc" {
+		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa mengulang tugas yang gagal; minta pemilik usaha.")
+		return
+	}
+	if !s.mayManageSecrets(c) {
+		writeError(w, 403, "forbidden", "Tugas yang gagal hanya bisa diulang oleh pemilik atau peran yang diberi izin connector_auth")
+		return
+	}
+	if s.Queue == nil {
+		writeError(w, 501, "queue_disabled", "the queue is not running on this kernel")
+		return
+	}
+	id, _ := strconv.ParseInt(r.PathValue("id"), 10, 64)
+	ctx := r.Context()
+	nid, err := s.Queue.Replay(ctx, c.actor.Org, id)
+	switch {
+	case errors.Is(err, jobs.ErrNotDead):
+		writeError(w, 409, "job_not_dead", "Hanya tugas yang gagal permanen (dead letter) yang bisa diulang")
+		return
+	case err != nil:
+		fail(w, err)
+		return
+	case nid == 0:
+		writeError(w, 404, "not_found", "job not found")
+		return
+	}
+	if err := store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "job.replay", "job/"+strconv.FormatInt(id, 10),
+		fmt.Sprintf("job %d diulang sebagai job %d", id, nid), map[string]any{"job": id, "replay": nid}); err != nil && s.Log != nil {
+		s.Log("audit: %v", err)
+	}
+	writeJSON(w, 202, map[string]any{"id": nid, "replay_of": id})
 }
 
 // jobActor is "" for unscoped callers (every job of the org) and the caller's id for members with a row

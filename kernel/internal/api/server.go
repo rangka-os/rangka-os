@@ -186,6 +186,7 @@ func (s *Server) Handler() http.Handler {
 	}))
 	mux.HandleFunc("GET /api/v1/system/jobs", a(s.listJobs))
 	mux.HandleFunc("GET /api/v1/system/jobs/{id}", a(s.getJob))
+	mux.HandleFunc("POST /api/v1/system/jobs/{id}/replay", a(s.replayJob))
 	mux.HandleFunc("GET /api/v1/system/audit", a(s.listAudit))
 	mux.HandleFunc("GET /api/v1/catalogue", a(s.getCatalogue))              // modules, apps and connectors to install (contract 0036)
 	mux.HandleFunc("POST /api/v1/catalogue/propose", a(s.proposeCatalogue)) // Pasang / Lepas (contract 0036 §4)

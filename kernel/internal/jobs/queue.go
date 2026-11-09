@@ -17,6 +17,7 @@ import (
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -271,6 +272,30 @@ func (q *Queue) Get(ctx context.Context, org, actor string, id int64) (map[strin
 		return nil, err
 	}
 	return jobOut(res.Maps()[0]), nil
+}
+
+// ErrNotDead is a replay of a job that is not in the dead-letter state (discarded).
+var ErrNotDead = errors.New("only a dead-lettered (discarded) job can be replayed")
+
+// Replay enqueues a dead-lettered job of org again as a new job with the same kind and args (plus replay_of), so the
+// dead-letter row stays as the record of what failed. A connector call is rendered again at send time, with the keys
+// the org has now. The unique key makes a second replay of the same job return the first replay. 0, nil when org has
+// no such job.
+func (q *Queue) Replay(ctx context.Context, org string, id int64) (int64, error) {
+	res, err := q.DB.Query(ctx, "select kind, args, state, max_attempts from rk_jobs where id = $1 and org_id = $2 and org_id <> ''", id, org)
+	if err != nil || len(res.Rows) == 0 {
+		return 0, err
+	}
+	r := res.Rows[0]
+	if r[2].(string) != "discarded" {
+		return 0, ErrNotDead
+	}
+	args := map[string]any{}
+	for k, v := range meta.AsMap(r[1]) {
+		args[k] = v
+	}
+	args["replay_of"] = id
+	return q.Enqueue(ctx, nil, r[0].(string), org, args, engine.EnqueueOpts{MaxAttempts: int(r[3].(int64)), UniqueKey: "replay:" + strconv.FormatInt(id, 10)})
 }
 
 // MarshalArgs is a helper for tests.

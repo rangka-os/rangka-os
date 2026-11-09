@@ -18,8 +18,8 @@ import (
 
 // Envelope encryption for the db driver (contract 0017 §2). Each org has a data key (DEK, 32 random bytes) stored in
 // rk_org_keys sealed by the key-encryption key (KEK). The KEK never sits in the database: it comes from
-// RANGKA_MASTER_KEY (base64 of 32 bytes) or the file named by RANGKA_MASTER_KEY_FILE. Vault transit and cloud KMS
-// sources come later.
+// RANGKA_MASTER_KEY (base64 of 32 bytes), a Vault transit key (RANGKA_MASTER_KEY_VAULT) or the file named by
+// RANGKA_MASTER_KEY_FILE. Cloud KMS sources wait for the Rangka Cloud hosting decision.
 
 // KEK is a key-encryption key.
 type KEK struct {

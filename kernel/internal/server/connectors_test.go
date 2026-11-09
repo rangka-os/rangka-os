@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"io"
 	"net/http"
 	"os"
@@ -16,6 +17,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 )
 
@@ -200,6 +202,51 @@ func TestConnectorNeedsAuth(t *testing.T) {
 	st, errs := waitJob(t, e, id)
 	if st != "discarded" || !strings.Contains(errs, "connector_needs_auth") || strings.Count(errs, `"attempt"`) != 1 {
 		t.Fatalf("needs auth: %s %s", st, errs)
+	}
+}
+
+// A dead-lettered call is replayed after the owner sets the missing key: the replay is a new job rendered with the
+// current keys, the dead-letter row stays, a second replay returns the first, and a sales_rep cannot replay.
+func TestReplayDeadLetter(t *testing.T) {
+	e, v := runtimeEnv(t)
+	e.must(204, "DELETE", "/api/v1/connectors/whatsapp_business/auth/access_token", nil)
+	id := callJob(t, e, "whatsapp_business", "send_template", map[string]any{"to": "6281234", "template": "halo", "idempotency_key": "r1"})
+	if st, errs := waitJob(t, e, id); st != "discarded" || !strings.Contains(errs, "connector_needs_auth") {
+		t.Fatalf("dead letter: %s %s", st, errs)
+	}
+	path := fmt.Sprintf("/api/v1/system/jobs/%d/replay", id)
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "rep@kopisenja.id", "Sales", "rahasia-123", "kopi-senja", "sales_rep", "USR-003"); err != nil {
+		t.Fatal(err)
+	}
+	if r := loginAs(e, "rep@kopisenja.id", "rahasia-123").do("POST", path, nil); r.Status != 403 {
+		t.Fatalf("sales_rep replay: %d %s", r.Status, r.Body)
+	}
+	e.must(204, "PUT", "/api/v1/connectors/whatsapp_business/auth/access_token", map[string]any{"value": waToken})
+	r := e.must(202, "POST", path, nil)
+	nid := int64(r.JSON["id"].(float64))
+	if nid == id || r.JSON["replay_of"] != float64(id) {
+		t.Fatalf("replay answer: %s", r.Body)
+	}
+	if st, errs := waitJob(t, e, nid); st != "completed" {
+		t.Fatalf("replayed call: %s %s", st, errs)
+	}
+	if len(v.reqs) != 1 || v.reqs[0].Header.Get("Authorization") != "Bearer "+waToken {
+		t.Fatalf("replay request: %d", len(v.reqs))
+	}
+	if again := e.must(202, "POST", path, nil); int64(again.JSON["id"].(float64)) != nid {
+		t.Fatalf("second replay made another job: %s", again.Body)
+	}
+	if st, _ := waitJob(t, e, id); st != "discarded" {
+		t.Fatalf("dead-letter row changed: %s", st)
+	}
+	if r := e.do("POST", fmt.Sprintf("/api/v1/system/jobs/%d/replay", nid), nil); r.Status != 409 || get(r.JSON, "error", "code") != "job_not_dead" {
+		t.Fatalf("replay of a completed job: %d %s", r.Status, r.Body)
+	}
+	if r := e.do("POST", "/api/v1/system/jobs/999999/replay", nil); r.Status != 404 {
+		t.Fatalf("replay of a missing job: %d", r.Status)
+	}
+	if !strings.Contains(dump(t, e, "select kind from rk_audit"), "job.replay") {
+		t.Fatal("replay not audited")
 	}
 }
 

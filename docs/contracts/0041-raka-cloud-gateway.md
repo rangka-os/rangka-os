@@ -1,4 +1,4 @@
-# 0041: Raka Cloud gateway
+# 0041 Raka Cloud gateway
 
 Status: proposed (9 Nov 2026) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (gateway-aware MCP backend, `place`, prompts), rangka-cloud (gateway, proposals, console chat; private) · Builds on: 0000, 0020, 0035
 
@@ -23,7 +23,7 @@ This contract is phase 1: read tools only. Writes are reserved (below), not offe
 - **One MCP server per turn.** The host (Rangka Cloud) serves an MCP endpoint on loopback for each turn and passes it to Raka in `/v1/turn` as `kernel.url` with the per-turn bearer as `kernel.token` (§2). Raka's existing MCP client talks to it unchanged.
 - **Two tool families behind one endpoint:**
   - `cloud_*`: Cloud tools for the business (§3), answered by the host itself.
-  - the kernel tools Raka already knows (`rangka_meta`, `rangka_get_file`, `rangka_query`, `rangka_get_record`, `rangka_dashboard`, `rangka_skills`, `rangka_skill`, `rangka_skill_file`, `rangka_changeset_propose/validate/preview/status`), which the host forwards to the business's kernel with a kernel token Raka never sees. Forwarding is a later phase; a host that does not forward offers only the `cloud_*` tools.
+  - the kernel tools Raka already knows (`rangka_meta`, `rangka_get_file`, `rangka_query`, `rangka_get_record`, `rangka_dashboard`, `rangka_skills`, `rangka_skill`, `rangka_skill_file`, `rangka_changeset_propose/validate/preview/status`), which the host forwards to the business's kernel with a kernel token Raka never sees. Forwarding is a later phase; a host that does not forward offers only the `cloud_*` tools. Phase 1 forwards nothing from the console: no kernel tool, and in particular no `rangka_changeset_*`, so a console turn cannot propose a change set.
 - **Bearer per turn.** The host mints a random token bound to (owner, business, place), valid for the turn's time limit, held in memory. It authorises the gateway only: it is not a kernel token and not a Cloud session. It cannot approve, apply, reject or revert anything. The gateway refuses any tool whose name contains `approve`, `apply`, `reject` or `revert`, as rangka-ai's MCP client already does.
 - **Loopback.** The gateway URL is a loopback address. rangka-ai's kernel URL check (`RAKA_KERNEL_HOSTS`) applies to it as to any MCP URL.
 - **The business is in the token, not in the arguments.** No tool takes a business id. Raka cannot ask about another business.
@@ -35,7 +35,7 @@ Request (existing fields unchanged: `messages`, `kernel`). One field is added:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `place` | `"studio" \| "console" \| "app"`, optional | Where the owner opened Raka. Raka's system prompt opens with it and says what to look at first: studio, the interview and the build; console, `cloud_business` and then the problem; app, the page in `context`. It changes what Raka looks at first, never which tools exist or what it may do. An unknown value is `400 bad_request`. |
+| `place` | `"studio" \| "console" \| "app"`, optional | Where the owner opened Raka. Raka's system prompt opens with it and says what to look at first: studio, the interview and the build; console, `cloud_business` and then the problem; app, the page the owner is on, which arrives with the kernel relay (0020), not in `/v1/turn`. It changes what Raka looks at first, never which tools exist or what it may do. An unknown value is `400 bad_request`. |
 
 Response: unchanged: `{ status, text, summary, changeset_ids, escalations, usage }`. `usage` is `{ "inputTokens": n, "outputTokens": n }` for the turn (already sent today); the host counts turns against the plan's Raka allowance from it. The response never carries the gateway or kernel token, and logs never carry either.
 
@@ -43,20 +43,20 @@ Response: unchanged: `{ status, text, summary, changeset_ids, escalations, usage
 
 ### 3. Phase 1 tools
 
-All phase-1 tools are read-only. Each result is the JSON the console API returns for the same view, so the owner and Raka see one truth. Owner-facing strings in results (history text, errors) are already Bahasa Indonesia. Timestamps are RFC 3339. A tool whose view fails returns an MCP tool error carrying the console's owner-facing message and nothing else: no provider, AWS, kernel or LLM text.
+All phase-1 tools are read-only. Each result is the JSON the console API returns for the same view, so the owner and Raka see one truth, except the personal data that `cloud_team`, `cloud_history` and `cloud_logs` mask (§6). Owner-facing strings in results (history text, errors) are already Bahasa Indonesia. Timestamps are RFC 3339. A tool whose view fails returns an MCP tool error whose text is the gateway's fixed `Data ini sedang tidak bisa dibaca.` and nothing else: no provider, AWS, kernel or LLM text.
 
 | Tool | Input (JSON Schema, all properties optional unless listed) | Mirrors console route | Result |
 | --- | --- | --- | --- |
 | `cloud_business` | none | `GET /api/konsol/businesses/{id}` | One object: `id`, `slug`, `title`, `state`, `url`, `tier`, `tier_label`, `protected`, `tested_at` (latest successful restore drill, or null), `last_backup` (`{at, size}` or null), `next_deploy` (`{at, release?, kind}` of the soonest queued upgrade or tier change, or null), `users_this_month`, `outlets_this_month`, `documents_this_month`. |
-| `cloud_history` | none | `GET /api/konsol/businesses/{id}/history` | `{ data: [{ at, kind, text }], partial }`, newest first, at most 50. `kind` is `deploy` or `change` (an applied change set, with who approved it). `partial` is true when change sets could not be read (the system is stopped or unreachable). |
-| `cloud_logs` | `{ "q": string }`: case-insensitive substring filter, applied by the gateway (the console route has no filter). | `GET /api/konsol/businesses/{id}/logs` | `{ data: [{ at, text }] }`: the kernel's warn and error lines of the last 24 h, oldest first, at most the newest 200, secrets already redacted by the host. Empty while the business is provisioning. |
+| `cloud_history` | none | `GET /api/konsol/businesses/{id}/history` | `{ data: [{ at, kind, text }], partial }`, newest first, at most 50. `kind` is `deploy` or `change` (an applied change set, with who approved it: `pemilik` or `tim` in the tool, §6). `partial` is true when change sets could not be read (the system is stopped or unreachable). |
+| `cloud_logs` | `{ "q": string }`: case-insensitive substring filter, applied by the gateway (the console route has no filter). | `GET /api/konsol/businesses/{id}/logs` | `{ data: [{ at, text }] }`: the kernel's warn and error lines of the last 24 h, oldest first, at most the newest 200, secrets already redacted by the host and, in the tool, personal data scrubbed (§6). Empty while the business is provisioning. |
 | `cloud_backups` | none | `GET /api/konsol/businesses/{id}/backups` | `{ data: [{ at, kind, size, tested_at }], protected, exports: [time] }`. `kind` is `nightly`, `pre_migrate` or `export`; `tested_at` is the latest successful restore drill of that backup, or null; `exports` are the times of recent data exports. The latest drill overall is `tested_at` of `cloud_business`. |
 | `cloud_domains` | none | `GET /api/konsol/businesses/{id}/domains` | `{ data: [{ name, state, primary, reason?, records: [{ type, name, value }], created_at }], custom_domain, address }`. `state` is `pending_dns`, `issuing`, `active` or `failed`; `custom_domain` says whether the plan allows own domains; `address` is the business's default address. |
-| `cloud_team` | none | `GET /api/konsol/businesses/{id}/team` | `{ data: [{ name, email, role, outlets: [string], invited_at }], roles: [string] }`. |
+| `cloud_team` | none | `GET /api/konsol/businesses/{id}/team` | `{ data: [{ name, email, role, outlets: [string], invited_at }], roles: [string] }`. In the tool `name` and `email` are `[disamarkan]` (§6). |
 | `cloud_usage` | `{ "days": integer, 1 to 90, default 30 }` | `GET /api/konsol/businesses/{id}/usage` | `{ days: [{ day, active_users, outlets, documents, db_bytes, file_bytes }], month }`. `day` is `yyyy-mm-dd` in WIB; `month` is the newest sample of the current WIB month, same shape as a day, or null. Out-of-range `days` is a tool error. |
 | `cloud_billing` | none | `GET /api/konsol/businesses/{id}/billing` | `{ tier, tier_label, includes: [string], price_note, plans: [{ tier, tier_label, includes: [string], current }] }`. It is the bill as the owner sees it: plan and what it includes. It carries no payment method and no invoice numbers, and Raka cannot change the plan. |
 
-The gateway adds no field and removes none; where the console API changes a view, the tool follows in the same release. Money, when a view carries it, is shown as the console shows it; Raka never computes a price.
+The gateway adds no field and removes none (it only masks values, §6); where the console API changes a view, the tool follows in the same release. Money, when a view carries it, is shown as the console shows it; Raka never computes a price.
 
 ### 4. Reserved tool names
 
@@ -77,7 +77,7 @@ Names containing `approve`, `apply`, `reject` or `revert` are never offered and 
 
 A `cloud_propose_*` call writes nothing in the owner's system. The host stores the proposal (id, business, kind, params, impact text, created by Raka, status `proposed`, `confirmed`, `cancelled` or `failed`, timestamps) and the chat shows it as a card like a change-set card, with the impact in plain words. A person confirms it outside Raka, with their own session, through the same handler the console uses; the result, or the handler's owner-facing error copy, is written back to the conversation. Raka never sees a confirm route and no Raka token can confirm. Every write is a proposal; there is no mode that skips confirmation.
 
-### 6. Live-data mask (reserved)
+### 6. Personal-data mask (kernel part reserved)
 
 Until the legal and consent step on data leaving Indonesia is done, a gateway that forwards to a live (hosted) kernel masks personal data in the results of `rangka_query`, `rangka_get_record` and `rangka_dashboard` before Raka sees them. It replaces with `[disamarkan]`:
 
@@ -85,7 +85,13 @@ Until the legal and consent step on data leaving Indonesia is done, a gateway th
 - every `name` or `title` of a person-like model (customer, contact, lead, employee, worker, member);
 - NPWP- and NIK-shaped values.
 
-Amounts, dates, statuses, item names and counts pass. Metadata, change sets, counts and totals are not masked. The preview kernel (sample data) is not masked. Masked values never enter Raka's memory. Lifting the mask needs an owner consent step and a compliant provider region, and is a separate decision. Phase 1 has no kernel forwarding, so the mask has nothing to act on yet; `cloud_team` returns the member names and e-mails the owner already sees in the console.
+Amounts, dates, statuses, item names and counts pass. Metadata, change sets, counts and totals are not masked. The preview kernel (sample data) is not masked. Masked values never enter Raka's memory. Lifting the mask needs an owner consent step and a compliant provider region, and is a separate decision. Phase 1 has no kernel forwarding, so this mask has nothing to act on yet.
+
+For the same reason, three phase-1 tools mask the personal data their console view shows the owner. The console routes stay unmasked; only the tool results change:
+
+- `cloud_team`: every member's `name` and `email` is `[disamarkan]`. `role`, `outlets`, `invited_at`, the member count and `roles` pass.
+- `cloud_history`: the approver of a change set is named `pemilik` when it is the owner and `tim` for anyone else, never by name or e-mail.
+- `cloud_logs`: every line passes the host's deterministic scrubber before it leaves (names, e-mails, phones, links and numbers become placeholders such as `[nama]`, `[email]`, `[telepon]`); the `q` filter matches the scrubbed text.
 
 ### 7. Memory deletion (reserved)
 

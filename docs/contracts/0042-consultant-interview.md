@@ -195,16 +195,18 @@ rangka-ai reads `RAKA_<ROLE>_PROVIDER`, `RAKA_<ROLE>_MODEL`, `RAKA_<ROLE>_BASE_U
 | `VISION` | images and scanned PDFs in `/v1/extract` |
 | `DRAFT` | change-set drafting in `/v1/turn` and `/v1/plan` |
 
-Each unset value falls back to the matching `RAKA_*`. `VISION` has no fallback: without `RAKA_VISION_MODEL` images are `unreadable` with reason `vision_unavailable`. `RAKA_GUEST_MODEL` keeps applying to guest consult turns.
+Inheritance is restricted so the default vendor's key never reaches another host. A role inherits `RAKA_BASE_URL`, `RAKA_API_KEY` and the vendor keys (`ANTHROPIC_API_KEY`, `OPENAI_API_KEY`), and for `CONSULT` and `DRAFT` also `RAKA_MODEL`, only when the role's provider equals the default provider and the role sets no `RAKA_<ROLE>_BASE_URL` of its own. Otherwise only the role's own `RAKA_<ROLE>_*` values apply (no key means none). `VISION` has no fallback: without `RAKA_VISION_MODEL` images are `unreadable` with reason `vision_unavailable`. `RAKA_GUEST_MODEL` keeps applying to guest consult turns.
 
 ### 8. Susun rancangan: initial plan
 
-Cloud builds as today from the map's `catalogue`, `cloud_service` and `edge`-with-`ref` pieces (their `ref` into `config.modules`, through `keepComposition` and the validator), then calls `POST /v1/plan {map, kernel, slug}` against the preview kernel (`slug` is the project slug, the process file name, matching `^[a-z][a-z0-9-]{0,62}$`; Cloud guarantees it and rangka-ai answers `400 bad_request` otherwise). rangka-ai proposes:
+Cloud builds as today from the map's `catalogue`, `cloud_service` and `edge`-with-`ref` pieces (their `ref` into `config.modules`, through `keepComposition` and the validator), then calls `POST /v1/plan {map, kernel, slug}` against the preview kernel (`slug` is the project slug, matching `^[a-z][a-z0-9-]{0,62}$`; Cloud guarantees it and rangka-ai answers `400 bad_request` otherwise). The process file name is the slug with `-` replaced by `_`, because 0014 names match `^[a-z][a-z0-9_]*$`: slug `kopi-senja` gives `processes/kopi_senja.rk` with `name: kopi_senja`. rangka-ai proposes:
 
-- (a) `processes/<slug>.rk` (0014) with the stages that have a `model` the kernel's `rangka_meta` knows, in map order, `label: {id: <stage label>}`; stages whose model is unknown are skipped and listed nowhere;
+- (a) `processes/<name>.rk` (0014; `<name>` is the slug with `-` as `_`; change-set paths allow site `processes/` since this contract) with the stages that have a `model` the kernel's `rangka_meta` knows, in map order, `label: {id: <stage label>}`; stages whose model is unknown are skipped and listed nowhere;
 - (b) when `settings` is non-empty, one agent run that turns the settings into overlay defaults and rules (`site/custom/<model>.rk`); settings it cannot express come back in `unexpressed: [setting ids]`.
 
 `custom` pieces are not built in this contract (they wait for 0033): `/v1/plan` returns them in `deferred: [piece ids]` and Cloud records them as gaps. `connector` pieces, and `edge` pieces without `ref`, come back in `switch_on: [piece ids]`: Cloud lists them as things to switch on once they exist or once the owner connects them. `existing` pieces are ignored. Response: `{changesets: [{id, title, summary}], unexpressed, deferred, switch_on}`.
+
+On a plan timeout, change sets already proposed on the preview kernel are not reported in the response; Cloud may list the kernel's change sets to find them.
 
 ## Consequences
 

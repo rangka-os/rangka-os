@@ -1,0 +1,265 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_0",
+        "label": "Tahap 0",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_1",
+        "label": "Tahap 1",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_2",
+        "label": "Tahap 2",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_3",
+        "label": "Tahap 3",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_4",
+        "label": "Tahap 4",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_5",
+        "label": "Tahap 5",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_6",
+        "label": "Tahap 6",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_7",
+        "label": "Tahap 7",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_8",
+        "label": "Tahap 8",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_9",
+        "label": "Tahap 9",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_10",
+        "label": "Tahap 10",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_11",
+        "label": "Tahap 11",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_12",
+        "label": "Tahap 12",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_13",
+        "label": "Tahap 13",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_14",
+        "label": "Tahap 14",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_15",
+        "label": "Tahap 15",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_16",
+        "label": "Tahap 16",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_17",
+        "label": "Tahap 17",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_18",
+        "label": "Tahap 18",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_19",
+        "label": "Tahap 19",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_20",
+        "label": "Tahap 20",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_21",
+        "label": "Tahap 21",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_22",
+        "label": "Tahap 22",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_23",
+        "label": "Tahap 23",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_24",
+        "label": "Tahap 24",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_25",
+        "label": "Tahap 25",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_26",
+        "label": "Tahap 26",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_27",
+        "label": "Tahap 27",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_28",
+        "label": "Tahap 28",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_29",
+        "label": "Tahap 29",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_30",
+        "label": "Tahap 30",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "valid": false,
+  "error": "map_too_large"
+}

@@ -1,0 +1,41 @@
+{
+  "facts": {
+    "industry": "Kafe",
+    "customers": "Mahasiswa",
+    "ordering": "Lewat WA",
+    "payment": null,
+    "fulfilment": 5,
+    "pain_points": "   ",
+    "replace_or_complement": "belum tahu"
+  },
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "",
+      "kind": "Kafe",
+      "summary": ""
+    },
+    "stages": [],
+    "pieces": [],
+    "open": [
+      {
+        "id": "o_business_name",
+        "text": "Nama usahamu apa? (dipakai di aplikasi, tidak dibagikan)"
+      },
+      {
+        "id": "o_offer",
+        "text": "Kamu jual barang atau jasa apa?"
+      },
+      {
+        "id": "o_current_tools",
+        "text": "Sekarang semua ini dicatat pakai apa? Buku, Excel, grup WA, atau aplikasi lain?"
+      }
+    ],
+    "settings": [
+      {
+        "id": "t_ordering",
+        "text": "Cara pesan: Lewat WA"
+      }
+    ]
+  }
+}

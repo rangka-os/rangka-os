@@ -1,0 +1,25 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "S_Pesan",
+        "label": "Pesanan masuk",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "valid": false,
+  "error": "bad_id"
+}

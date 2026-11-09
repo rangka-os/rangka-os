@@ -1,0 +1,64 @@
+{
+  "facts": {
+    "business_name": "  Sewa Pesta Makmur  ",
+    "industry": "Rental alat pesta",
+    "offer": "Sewa tenda, kursi, dan sound system",
+    "customers": "Keluarga dan panitia acara",
+    "ordering": "Lewat WhatsApp",
+    "payment": " DP 50% transfer, sisanya tunai ",
+    "fulfilment": "Diantar kurir sendiri",
+    "locations": "Satu gudang di Bekasi",
+    "team": "  \n ",
+    "current_tools": "Excel dan buku nota",
+    "replace_or_complement": "pendamping",
+    "data_to_move": "Daftar pelanggan dan jadwal sewa",
+    "pain_points": "Stok sering tidak cocok 😀 dengan catatan dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA"
+  },
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Sewa Pesta Makmur",
+      "kind": "Rental alat pesta",
+      "summary": "Sewa tenda, kursi, dan sound system"
+    },
+    "stages": [],
+    "pieces": [
+      {
+        "id": "p_current",
+        "kind": "existing",
+        "label": "Excel dan buku nota"
+      }
+    ],
+    "open": [],
+    "settings": [
+      {
+        "id": "t_ordering",
+        "text": "Cara pesan: Lewat WhatsApp"
+      },
+      {
+        "id": "t_payment",
+        "text": "Pembayaran: DP 50% transfer, sisanya tunai"
+      },
+      {
+        "id": "t_fulfilment",
+        "text": "Antar atau ambil: Diantar kurir sendiri"
+      },
+      {
+        "id": "t_locations",
+        "text": "Lokasi dan cabang: Satu gudang di Bekasi"
+      },
+      {
+        "id": "t_data_to_move",
+        "text": "Data yang perlu dipindah: Daftar pelanggan dan jadwal sewa"
+      },
+      {
+        "id": "t_pain_points",
+        "text": "Yang paling repot: Stok sering tidak cocok 😀 dengan catatan dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup"
+      },
+      {
+        "id": "t_replace",
+        "text": "Juragan: pendamping"
+      }
+    ]
+  }
+}

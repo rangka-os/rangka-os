@@ -1,0 +1,113 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_x"
+        ]
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_x",
+        "kind": "existing",
+        "label": "Excel"
+      }
+    ],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_b",
+        "label": "Bayar",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_late",
+          "p_missing",
+          "p_x"
+        ]
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_late",
+        "kind": "custom",
+        "label": "Rekap harian",
+        "design": {
+          "records": [],
+          "steps": []
+        }
+      }
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_x"
+        ]
+      },
+      {
+        "id": "s_b",
+        "label": "Bayar",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_late",
+          "p_x"
+        ]
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_x",
+        "kind": "existing",
+        "label": "Excel"
+      },
+      {
+        "id": "p_late",
+        "kind": "custom",
+        "label": "Rekap harian",
+        "design": {
+          "records": [],
+          "steps": []
+        }
+      }
+    ],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": []
+}

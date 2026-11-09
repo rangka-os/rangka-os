@@ -1,0 +1,164 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Sewa Pesta Makmur",
+      "kind": "Rental alat pesta",
+      "summary": "Sewa tenda, kursi, dan sound system untuk acara"
+    },
+    "stages": [
+      {
+        "id": "s_pesan",
+        "label": "Pesanan masuk",
+        "actor": "Admin",
+        "documents": [
+          "Nota"
+        ],
+        "systems": [
+          "WhatsApp"
+        ],
+        "pieces": [
+          "p_wa",
+          "p_rental"
+        ],
+        "model": "rental_order"
+      },
+      {
+        "id": "s_deposit",
+        "label": "Deposit 50%",
+        "actor": "Admin",
+        "documents": [
+          "Faktur DP"
+        ],
+        "systems": [
+          "Transfer bank"
+        ],
+        "pieces": [
+          "p_invoice",
+          "p_payments"
+        ]
+      },
+      {
+        "id": "s_antar",
+        "label": "Antar & serah",
+        "actor": "Kurir",
+        "documents": [
+          "Surat jalan"
+        ],
+        "systems": [],
+        "pieces": [
+          "p_kurir"
+        ]
+      },
+      {
+        "id": "s_kembali",
+        "label": "Kembali & cek",
+        "actor": "Gudang",
+        "documents": [
+          "Berita acara"
+        ],
+        "systems": [],
+        "pieces": [
+          "p_denda"
+        ]
+      },
+      {
+        "id": "s_lunas",
+        "label": "Pelunasan",
+        "actor": "Admin",
+        "documents": [
+          "Faktur pelunasan"
+        ],
+        "systems": [
+          "Accurate"
+        ],
+        "pieces": [
+          "p_invoice",
+          "p_payments",
+          "p_accurate"
+        ]
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_wa",
+        "kind": "connector",
+        "label": "Konektor WhatsApp",
+        "ref": "whatsapp_business",
+        "why": "Pesanan datang lewat WA"
+      },
+      {
+        "id": "p_invoice",
+        "kind": "catalogue",
+        "label": "Penagihan",
+        "ref": "invoicing",
+        "why": "Faktur DP dan pelunasan"
+      },
+      {
+        "id": "p_payments",
+        "kind": "catalogue",
+        "label": "Pembayaran",
+        "ref": "payments",
+        "why": "Catat transfer dan DP"
+      },
+      {
+        "id": "p_rental",
+        "kind": "catalogue",
+        "label": "Sewa alat",
+        "ref": "rental",
+        "why": "Stok alat dan jadwal sewa"
+      },
+      {
+        "id": "p_kurir",
+        "kind": "custom",
+        "label": "Jadwal kurir",
+        "why": "Pengantaran diatur per hari dan per kurir",
+        "design": {
+          "records": [
+            "Jadwal antar",
+            "Kurir"
+          ],
+          "steps": [
+            "Pilih pesanan",
+            "Tetapkan kurir dan jam"
+          ]
+        }
+      },
+      {
+        "id": "p_denda",
+        "kind": "custom",
+        "label": "Denda kerusakan",
+        "why": "Alat rusak atau hilang dikenai denda",
+        "design": {
+          "records": [
+            "Temuan kerusakan"
+          ],
+          "steps": [
+            "Cek alat saat kembali",
+            "Hitung denda",
+            "Tagih"
+          ]
+        }
+      },
+      {
+        "id": "p_accurate",
+        "kind": "existing",
+        "label": "Accurate",
+        "why": "Pembukuan tetap di Accurate"
+      }
+    ],
+    "open": [
+      {
+        "id": "o_denda",
+        "text": "Denda kerusakan dihitung bagaimana?"
+      }
+    ],
+    "settings": [
+      {
+        "id": "t_dp",
+        "text": "DP 50% dari harga sewa"
+      }
+    ]
+  },
+  "valid": true
+}

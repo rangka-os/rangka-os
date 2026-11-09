@@ -95,15 +95,19 @@
   }
 
   /** Home: the first work screen marked home for the user (contract 0030 §3: meta.work is already theirs, in order),
-   *  else the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list. */
+   *  else the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list; on a
+   *  composed site (contract 0032 §5, meta.menu) the first dashboard of a module group, else its first list. */
   function homeHash(meta) {
     var apps = (meta && meta.apps) || [], work = (meta && meta.work) || [], screens = (meta && meta.screens) || {}, i, j;
+    var mods = (meta && meta.menu) || [];
     for (i = 0; i < work.length; i++) if (work[i].home && screens[work[i].screen]) return "#/w/" + work[i].screen;
     for (i = 0; i < apps.length; i++) if ((apps[i].dashboards || []).length) return "#/d/" + apps[i].dashboards[0];
     for (i = 0; i < apps.length; i++) {
       var menu = apps[i].menu || [];
       for (j = 0; j < menu.length; j++) if (menuModels(menu[j]).length) return "#/r/" + menuModels(menu[j])[0];
     }
+    for (i = 0; i < mods.length; i++) if ((mods[i].dashboards || []).length) return "#/d/" + mods[i].dashboards[0];
+    for (i = 0; i < mods.length; i++) if ((mods[i].items || []).length) return "#/r/" + mods[i].items[0];
     return null;
   }
 
@@ -157,10 +161,11 @@
     }).filter(function (g) { return g.items.length; });
   }
 
-  /** The default sidebar: every app's dashboards, then each app's menu groups. */
+  /** The default sidebar: every app's dashboards, then each app's menu groups, then the kernel's one group per module
+   *  of a composed site (meta.menu, contract 0032 §5: modules no installed app brings in). */
   function appGroups(meta) {
     var models = meta.models || {}, dashes = meta.dashboards || {}, groups = [], dashItems = [];
-    (meta.apps || []).forEach(function (a) {
+    (meta.apps || []).concat(meta.menu || []).forEach(function (a) {
       (a.dashboards || []).forEach(function (d) {
         dashItems.push({ id: "d/" + d, label: L((dashes[d] || {}).label) || d, icon: "dashboard" });
       });
@@ -178,6 +183,10 @@
         if (typeof g.collapsed === "boolean") grp.collapsed = g.collapsed;
         if (items.length) groups.push(grp);
       });
+    });
+    (meta.menu || []).forEach(function (g) {
+      var items = (g.items || []).map(function (m) { return models[m] ? { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" } : null; }).filter(Boolean);
+      if (items.length) groups.push({ label: L(g.group) || g.module, items: items });
     });
     return groups;
   }

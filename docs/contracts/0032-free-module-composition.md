@@ -1,6 +1,6 @@
 # 0032 Free module composition
 
-Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel, scaffold) · Affects:
+Status: implemented (rangka-os) (9 Nov 2026; proposed 8 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel, scaffold) · Affects:
 rangka-cloud (scaffold and interview build), rangka-ai (guardrails for `config.modules`), nothing existing in
 rangka-apps · Builds on: 0001, 0015, 0016, 0028
 
@@ -122,6 +122,21 @@ It would reuse app machinery (menu, home, roles, onboarding), but:
   marked high before drafting, because preview may find data.
 - rangka-cloud (not this repo): the build writes the composition into `config.modules` plus the generated layout,
   instead of copying `catalogue/apps/<app>`.
+
+## As built in rangka-os (9 Nov 2026)
+
+- `uses_uninstalled_model` is reported on sites that set `config.modules`. App-only sites keep the codes they had
+  (`optional_model` in layouts, `not_installed` warning in `numbering`), so their reports do not change.
+- The modules a plan allows include what its listed modules require, not only the closure of its apps.
+- `features.rk` plan `modules` naming no module is `unknown_module`.
+- The default menu is `/api/v1/meta` `menu`: `[{group, module, items, dashboards}]`, empty when the site names no
+  modules or the layout sets `nav.side`. The web app appends these groups after the app menus and takes home from
+  them when no app gives one. A module counts as covered when an installed app brings it in.
+- Preview of a `config.rk` change carries `preview.modules`: `added` (the whole closure), `removed`, `rows` (per
+  removed model, all organisations) and `kept` (`{name, required_by}`), with notes in Bahasa Indonesia ("tetap
+  terpasang: dibutuhkan oleh …"). The raised risk is written to the change set at preview.
+- `GET /api/v1/catalogue` and MCP `rangka_catalogue` read `installed_by` and `in_plan` from the same resolution. A
+  module outside the plan is `not_in_plan` in the MCP catalogue.
 
 ## Open
 

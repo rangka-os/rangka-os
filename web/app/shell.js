@@ -383,7 +383,38 @@
     return (orgs || []).filter(function (o) { return o && (o.name || o.id) === label; })[0] || null;
   }
 
+  /**
+   * What the account menu offers for the installable app, from pwa.js state(): "update" when a new version waits,
+   * then "install" (the browser can prompt) or "ios" (iPhone/iPad: how to add it from the Share sheet). An app that
+   * already runs from the home screen offers no install.
+   */
+  function pwaMenu(s) {
+    if (!s) return [];
+    var out = [];
+    if (s.updateReady) out.push("update");
+    if (!s.standalone) {
+      if (s.installable) out.push("install");
+      else if (s.iosHint) out.push("ios");
+    }
+    return out;
+  }
+
+  /** When a device copy was made, for "data terakhir dilihat …": "hari ini 14.05", "kemarin 09.30", else "8 Nov 2026 14.05" (local time). */
+  function lastSeen(iso, now) {
+    var d = new Date(iso);
+    if (isNaN(d.getTime())) return "";
+    var hm = (d.getHours() < 10 ? "0" : "") + d.getHours() + "." + (d.getMinutes() < 10 ? "0" : "") + d.getMinutes();
+    var day = function (x) { return x.getFullYear() + "-" + x.getMonth() + "-" + x.getDate(); };
+    var y = new Date(now.getTime()); y.setDate(y.getDate() - 1);
+    if (day(d) === day(now)) return "hari ini " + hm;
+    if (day(d) === day(y)) return "kemarin " + hm;
+    var M = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+    return d.getDate() + " " + M[d.getMonth()] + " " + d.getFullYear() + " " + hm;
+  }
+
   RA.L = L;
+  RA.pwaMenu = pwaMenu;
+  RA.lastSeen = lastSeen;
   RA.orgByLabel = orgByLabel;
   RA.parseRoute = parseRoute;
   RA.homeHash = homeHash;
@@ -416,11 +447,20 @@
   var onExpired = null; // set by App while signed in
   function watchingFetch(url, init) {
     return global.fetch(url, init).then(function (res) {
-      if (res.status === 401 && onExpired && !/\/auth\/(login|logout)$/.test(String(url))) onExpired();
+      if (res.status === 401 && !/\/auth\/(login|logout)$/.test(String(url))) {
+        // a session that ended takes the device's copy of its pages with it (readcache.js)
+        if (RA.readCache) RA.readCache.clear();
+        if (onExpired) onExpired();
+      }
       return res;
     });
   }
-  var api = global.RangkaAppAPI({ baseUrl: "", fetch: watchingFetch });
+  // Pages read from the device copy while there is no connection (readcache.js): the time of the copy on screen, and
+  // the App's listeners for "shown from the copy" / "the server answers again".
+  var lastStale = null, staleImpl = null, freshImpl = null;
+  var api = global.RangkaAppAPI({ baseUrl: "", fetch: watchingFetch, readCache: RA.readCache || null,
+    onStale: function (at) { lastStale = at; if (staleImpl) staleImpl(at); },
+    onFresh: function () { if (!lastStale) return; lastStale = null; if (freshImpl) freshImpl(); } });
 
   /* ---------------------------------------------------------------- record cache (feeds the engine's lookup) */
   function makeCache(onChange) {
@@ -728,6 +768,10 @@
     var cls = useState(readCollapsed()), collapsed = cls[0], setCollapsed = cls[1];
     var cms = useState(false), cmdOpen = cms[0], setCmdOpen = cms[1];
     var sms = useState(null), switchAt = sms[0], setSwitchAt = sms[1]; // the switcher's rect while its menu is open
+    var pws = useState(RA.pwa ? RA.pwa.state() : null), pwa = pws[0], setPwa = pws[1]; // pwa.js: online, install, update
+    var sas = useState(lastStale), staleAt = sas[0], setStaleAt = sas[1]; // the time of the device copy on screen
+    // no connection, or a page shown from the device copy: the app reads only until the server answers again
+    var offline = !!staleAt || !!(pwa && !pwa.online);
     var phone = usePhone();
     // tablet portrait (768-1023): the sidebar is the icon rail; its unfold button floats the full sidebar over the page
     // layout.responsive (contract 0038): tablet rail (default) | sidebar | drawer, phone drawer (default) | tabs
@@ -757,6 +801,29 @@
       // ?preview=<id> that could not be opened (403, 404, 409 preview_permissions …): say why, the live app is shown
       if (boot.previewErr) toast("bad", "Pratinjau tidak bisa dibuka", RA.ubahError ? RA.ubahError(boot.previewErr) : boot.previewErr.message);
       return function () { onExpired = null; toastImpl = null; boot.cacheListener.fn = null; };
+    }, []);
+
+    // pages from the device copy (readcache.js): show its time; when the server answers again, load the view afresh
+    useEffect(function () {
+      staleImpl = setStaleAt;
+      freshImpl = function () { setStaleAt(null); setRev(function (x) { return x + 1; }); };
+      return function () { staleImpl = null; freshImpl = null; };
+    }, []);
+    var onlineNow = !pwa || pwa.online;
+    useEffect(function () {
+      // the phone is back online while a copy is on screen: ask the server again (its answer clears staleAt)
+      if (onlineNow && staleAt) setRev(function (x) { return x + 1; });
+    }, [onlineNow]);
+
+    // installable app (pwa.js): register the worker once, say when a new version is ready, track online / install
+    useEffect(function () {
+      if (!RA.pwa) return;
+      RA.pwa.start({
+        onChange: setPwa,
+        onUpdate: function () {
+          toast("info", "Versi baru tersedia", "Muat ulang untuk memakainya.", { action: "Muat ulang", onAction: RA.pwa.applyUpdate });
+        }
+      });
     }, []);
 
     useEffect(function () {
@@ -789,6 +856,8 @@
         if (theme !== "system") root.setAttribute("data-theme", theme);
         else if (mq) root.setAttribute("data-theme", mq.matches ? "dark" : "light");
         else root.removeAttribute("data-theme");
+        // the installed app's status bar takes the top bar's colour (--surface), light or dark
+        if (RA.pwa && global.getComputedStyle) RA.pwa.themeColor(global.getComputedStyle(root).getPropertyValue("--surface").trim());
       }
       apply();
       if (!mq || theme !== "system") return undefined;
@@ -839,8 +908,11 @@
       setSwitching(true);
       api.switchOrg(o.id).then(function () {
         onExpired = null;
-        global.history.replaceState(null, "", global.location.pathname + global.location.search + "#/");
-        global.location.reload();
+        // the device copy belongs to the old org: gone before the reload reads anything
+        return (RA.readCache ? RA.readCache.clear() : Promise.resolve()).then(function () {
+          global.history.replaceState(null, "", global.location.pathname + global.location.search + "#/");
+          global.location.reload();
+        });
       }, function (e) {
         setSwitching(false);
         if (e && e.status === 401) return;
@@ -862,6 +934,7 @@
 
     function logout() {
       onExpired = null;
+      if (RA.readCache) RA.readCache.clear();
       api.logout().then(null, function () {}).then(function () { p.onSignedOut(); });
     }
 
@@ -948,7 +1021,7 @@
     /** After a failed action in the card: show the change set as it is now (an approve may have gone through). */
     function reloadCs(id) { return api.changeset(id).then(function (cs) { setCard(function (c) { return c && c.cs && c.cs.id === id ? { cs: cs } : c; }); }, function () {}); }
     function toggleUbah(on) { setUbah(on); setQuery({ ubah: on }); }
-    var ubahOn = ubah && !previewCs && !!cs8.propose && !!RA.UbahCtx;
+    var ubahOn = ubah && !previewCs && !offline && !!cs8.propose && !!RA.UbahCtx;
     var uctx = { on: ubahOn, preview: previewCs, busy: ubahBusy, canApprove: caps.approve, canApproveHigh: caps.approveHigh,
       run: runUbah, edit: editUbah, menu: menuUbah, quiet: quiet, toggle: function () { toggleUbah(!ubah); }, showPending: function () { setCard({ list: true }); } };
 
@@ -958,7 +1031,7 @@
     var current = orgs.filter(function (o) { return o.id === me.org; })[0];
     var companyName = me.orgName || (current ? current.name || current.id : name);
     var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta,
-      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs,
+      refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs || offline, offline: offline,
       // a change set built elsewhere (the catalogue's Pasang / Lepas) opens in the same card as Ubah's
       showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); } };
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
@@ -983,7 +1056,8 @@
     function onNavigate(id) { RA.navigate(id === "home" ? home || "#/" : "#/" + id); setNavOpen(false); setRailOpen(false); }
     function openCmd() { setSwitchAt(null); setNavOpen(false); setCmdOpen(true); }
     function toggleCollapsed() { if (rail) { setRailOpen(!railOpen); return; } var on = !collapsed; setCollapsed(on); writeCollapsed(on); }
-    var modeToggle = cs8.propose && !previewCs && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
+    // offline: Ubah writes change sets, so it waits for the connection like every other write
+    var modeToggle = cs8.propose && !previewCs && !offline && RA.ModeToggle ? h(RA.ModeToggle, { on: ubah, onChange: toggleUbah }) : null;
 
     /* ---------------------------------------------------------------- Raka (ai.js, contract 0020) */
     var aiKey = RA.aiStorageKey ? RA.aiStorageKey(me && me.org, me && me.email) : null; // one conversation per person
@@ -1016,6 +1090,19 @@
       return iconOnly ? h(React.Fragment, null, items) : h("div", { className: "rk-side-foot ap-side-foot" }, items);
     }
 
+    /** Install / update entries for the switcher's menu (pwa.js state); empty when there is nothing to offer. */
+    function appItems(s) {
+      return pwaMenu(s).map(function (k) {
+        if (k === "update") return { label: "Muat versi baru", icon: "download", onSelect: function () { RA.pwa.applyUpdate(); } };
+        if (k === "install") return { label: "Pasang aplikasi", icon: "phone", onSelect: function () {
+          RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
+        } };
+        return { label: "Pasang di layar utama", icon: "phone", onSelect: function () {
+          toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
+        } };
+      });
+    }
+
     /** The switcher's menu: the apps (what TopNav's app switcher listed), companies, theme, help and the account. */
     function switcherItems() {
       var items = [];
@@ -1026,7 +1113,7 @@
         return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
       }), ["-", { heading: "Tema" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
         return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
-      }), ["-", { label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
+      }), ["-"], appItems(pwa), [{ label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
         { label: "Profil", icon: "user", onSelect: function () { account("profile"); } },
         { label: "Ganti akun", icon: "switch", onSelect: function () { account("switch"); } },
         { label: "Keluar", icon: "logout", onSelect: function () { account("logout"); } }]);
@@ -1137,11 +1224,15 @@
         floating && !ubahOn ? h("div", { className: "ap-rail-scrim", onClick: function () { setRailOpen(false); } }) : null,
         h("div", { className: "rk-shell-main" },
           phoneBar,
+          offline ? h("div", { className: "ap-offline", role: "status" }, h(R.Icon, { name: "offline" }),
+            h("span", null, h("b", null, "Kamu sedang offline. "), staleAt
+              ? "Menampilkan data terakhir dilihat " + lastSeen(staleAt, new Date()) + ". Menyimpan menunggu koneksi."
+              : "Halaman yang sudah pernah dibuka masih bisa dibaca; menyimpan menunggu koneksi.")) : null,
           previewCs && RA.PreviewBanner ? h(RA.PreviewBanner, { cs: previewCs, onExit: exitPreview }) : null,
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending }) : null,
-          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs })), tabBar),
+          h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs || offline })), tabBar),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
-        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
+        cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs || offline, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
         aiOn ? h(RA.AssistantRoot, { key: aiKey, api: api, storageKey: aiKey, getContext: aiPage, navigate: RA.navigate,
           onPreview: aiPreview, onOpenUbah: aiOpenUbah, blocked: function () { return expiredRef.current; }, control: aiRef }) : null,
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
@@ -1194,10 +1285,23 @@
     }
     useEffect(start, []);
 
+    // no connection at start (the installed app opened from the home screen without signal): try again by itself
+    // as soon as the phone is back online
+    var noNet = phase === "error" && err && err.status === 0;
+    useEffect(function () {
+      if (!noNet) return undefined;
+      global.addEventListener("online", start);
+      return function () { global.removeEventListener("online", start); };
+    }, [noNet]);
+
     if (phase === "signin") return h(SignInScreen, { onDone: start });
+    if (phase === "error" && noNet) {
+      return h("div", { className: "ap-splash" }, h(R.Alert, { tone: "warn", title: "Belum ada koneksi", actions: h(R.Button, { onClick: start }, "Coba lagi") },
+        "Rangka terbuka lagi begitu HP-mu tersambung ke internet atau server bisnismu."));
+    }
     if (phase === "error") {
       return h("div", { className: "ap-splash" }, h(R.Alert, { tone: "bad", title: "Aplikasi tidak bisa dimuat", actions: h(R.Button, { onClick: start }, "Coba lagi") },
-        err && err.status === 0 ? "Server tidak terjangkau." : (err && err.message) || String(err)));
+        (err && err.message) || String(err)));
     }
     if (phase !== "ready") return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Memuat" }), h("span", null, "Memuat…"));
     return h(App, { boot: boot, me: me, setMe: setMe, onSignedOut: function () {

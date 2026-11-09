@@ -44,6 +44,37 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   on reconnect, every 15 s or with "Kirim sekarang"); a write the server refuses later stays on screen until dismissed.
   The screen is cached and shown with "data terakhir <jam>" offline.
 
+### Install as an app (PWA)
+
+- **Installable.** `manifest.webmanifest` (Sendi icons in `icons/`, standalone, shortcut "Setujui") and `sw.js` make
+  `/app/` installable: Chrome and Edge offer it, and the account menu shows "Pasang aplikasi". iPhone and iPad have no
+  prompt, so the menu shows "Pasang di layar utama" with the Share-sheet steps. Once installed, neither entry shows.
+- **Network first.** `sw.js` asks the kernel first for every app file and uses its cache only when the network fails
+  or takes over 4 s. A cached file is therefore never older than a reachable kernel, and upgrades need no
+  cache-busting. Google Fonts are cached on first use.
+- **Never cached:** `/api/`, `/auth/`, `/oauth/`, `/mcp` and `/.well-known/`. Record data stays out of Cache Storage
+  (shared phones, org switch); work screens keep their own per-user copy (`outbox.js`).
+- **Offline: last-seen pages** (`readcache.js`).
+  - Every answer the person already got for the session, meta, dashboards, lists, list sums, records (with their
+    attachment lists), approvals and processes is kept on the device (IndexedDB `rangka-read`). Nothing is
+    prefetched; change-set previews, the event stream, AI and work screens are not kept here.
+  - Without a connection, `api.js` answers those GETs from the device copy. The app opens on the page it was on,
+    read only (like a preview): no create, save, submit, kanban moves or Ubah. A record shows "Simpan saat online".
+  - The strip under the top bar says "Menampilkan data terakhir dilihat <hari ini 14.05>". A page never opened on
+    this device says so.
+  - When the server answers again, the strip goes and the view loads afresh.
+  - The copy belongs to one person in one org. A different person or org on `/auth/me` empties it first, and so do
+    sign-out, an org switch and any 401. At most 400 answers and 8 MB, least recently used out first.
+  - With no copy at all (another phone, cleared data), the app says "Belum ada koneksi" and opens by itself once
+    back online.
+- **Updates.** When `sw.js` changes (a new `PRECACHE` list or `VERSION`), the new worker waits. A "Versi baru tersedia"
+  toast, or "Muat versi baru" in the account menu, switches over and reloads.
+- **When the worker is off.** `pwa.js` does not register the worker inside a frame (Rangka Cloud embeds the app), on
+  plain HTTP other than localhost (a LAN address), or with `?sw=0`. The app then works as a normal website.
+- **Kernel headers.** The kernel serves `sw.js`, the manifest and the page with `Cache-Control: no-cache`.
+- **Adding a file.** A new local file in `index.html` must also go into `PRECACHE` in `sw.js`. `test/sw.test.js`
+  fails until it does.
+
 ### Ubah (change and preview)
 
 - **Who sees it.** Only people with `meta.changesets.propose` (a browser session and the owner, or a role in
@@ -77,6 +108,10 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `dashboard.js` | Dashboard view from `GET /dashboards/{name}` |
 | `approvals.js` | Approval inbox and the "Menunggu persetujuan" banner |
 | `docs.js` | Print menu and attachments panel |
+| `readcache.js` | The device copy of the pages a person saw, for reading without a connection (per user and org, LRU) |
+| `pwa.js` | Installable app on the page side: registers `sw.js`, install prompt, update toast, online state, status-bar colour |
+| `sw.js` | Service worker: network-first app shell, Google Fonts cache, never API data |
+| `manifest.webmanifest`, `icons/` | Web app manifest and the Sendi icons (192, 512, maskable, Apple touch) |
 | `outbox.js` | Safe writes for work screens: idempotency keys, the IndexedDB outbox and the read cache (contract 0030 §6, §7) |
 | `counter.js` | The `counter` work screen (cashier): catalogue, cart, hold, tender, session, receipt (contract 0030 §2) |
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |

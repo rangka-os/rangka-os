@@ -32,6 +32,14 @@ create table if not exists rk_members (
 );
 alter table rk_orgs add column if not exists code text not null default '';
 alter table rk_members add column if not exists outlets text[] not null default '{}';
+create table if not exists rk_identities (
+  issuer     text not null,                -- upstream OIDC issuer URL
+  subject    text not null,                -- the issuer's stable user id (sub)
+  user_id    bigint not null references rk_users(id) on delete cascade,
+  created_at timestamptz not null default now(),
+  primary key (issuer, subject)
+);
+create index if not exists rk_identities_user on rk_identities (user_id);
 create table if not exists rk_sessions (
   id         text primary key,          -- sha256 of the cookie value
   user_id    bigint not null references rk_users(id) on delete cascade,

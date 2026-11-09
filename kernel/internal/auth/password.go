@@ -125,6 +125,26 @@ func EnsureUser(ctx context.Context, q pg.Querier, email, fullName, password, or
 	return id, err
 }
 
+// UpsertMember creates the user without a password when the e-mail is new, sets the name only when it is empty,
+// and upserts the membership in org with role and outlets (nil outlets clear them). It never touches an existing
+// password, the membership record, or the user's memberships in other orgs. created reports a new user.
+func UpsertMember(ctx context.Context, q pg.Querier, email, fullName, org, role string, outlets []string) (userID int64, created bool, err error) {
+	email = strings.ToLower(strings.TrimSpace(email))
+	if outlets == nil {
+		outlets = []string{}
+	}
+	res, err := q.Query(ctx, `insert into rk_users (email, full_name) values ($1, $2)
+		on conflict (email) do update set full_name = case when rk_users.full_name = '' then excluded.full_name else rk_users.full_name end
+		returning id, (xmax = 0)`, email, fullName)
+	if err != nil {
+		return 0, false, err
+	}
+	userID, created = res.Rows[0][0].(int64), res.Rows[0][1].(bool)
+	_, err = q.Query(ctx, `insert into rk_members (org_id, user_id, role, outlets) values ($1, $2, $3, $4)
+		on conflict (org_id, user_id) do update set role = excluded.role, outlets = excluded.outlets`, org, userID, role, pg.Array(outlets))
+	return userID, created, err
+}
+
 func nullIf(s string) any {
 	if s == "" {
 		return nil

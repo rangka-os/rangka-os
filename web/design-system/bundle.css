@@ -584,6 +584,10 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-navgroup-t:hover .rk-icon, .rk-navgroup-t:focus-visible .rk-icon, .rk-navgroup.folded .rk-navgroup-t .rk-icon { opacity: 1; }
 .rk-navgroup-t:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
 .rk-navgroup-n { font-variant-numeric: tabular-nums; text-transform: none; letter-spacing: 0; }
+/* a parent entry (contract 0037): chevron on the right, children indented under it */
+.rk-navparent > .rk-icon:last-child { margin-left: auto; width: 12px; height: 12px; color: var(--muted); }
+.rk-navparent.holds { color: var(--ink); font-weight: 500; }
+.rk-navsub { display: flex; flex-direction: column; gap: 1px; padding-left: 16px; margin-left: 8px; border-left: 1px solid var(--line); }
 .rk-navlink { position: relative; display: flex; align-items: center; gap: 8px; width: 100%; margin: 0; height: var(--control); padding: 0 8px; border: 0; border-radius: var(--r);
   background: transparent; color: var(--ink-2); font: 400 var(--font-size)/var(--line-height) var(--font-sans); text-align: left; cursor: pointer; text-decoration: none; box-sizing: border-box; transition: background .1s; white-space: nowrap; }
 .rk-navlink .rk-icon { color: var(--muted); }

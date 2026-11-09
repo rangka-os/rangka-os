@@ -194,8 +194,25 @@
               "$ref": "model.json#/$defs/name"
             },
             "available": {
-              "$ref": "model.json#/$defs/name",
-              "description": "A number field of the catalogue model: what is left to sell. The card shows 'Sisa N' at 5 or less and 'Habis' at 0 or less; it never blocks a sale (contract 0034)"
+              "description": "What is left to sell: a number field of the catalogue model (contract 0034), or a balance model read for the open session's outlet (contract 0039). The card shows 'Sisa N' at 5 or less and 'Habis' at 0 or less; it never blocks a sale",
+              "oneOf": [
+                {"$ref": "model.json#/$defs/name"},
+                {
+                  "type": "object",
+                  "required": ["model", "item", "qty"],
+                  "additionalProperties": false,
+                  "properties": {
+                    "model": {"$ref": "model.json#/$defs/name", "description": "The balance model (e.g. stock_balance)"},
+                    "item": {"$ref": "model.json#/$defs/name", "description": "Its link field to the catalogue model"},
+                    "qty": {"$ref": "model.json#/$defs/name", "description": "Its number field, summed per item"},
+                    "match": {
+                      "type": "object",
+                      "description": "Balance field: session field; only rows whose field equals the open session's value",
+                      "additionalProperties": {"$ref": "model.json#/$defs/name"}
+                    }
+                  }
+                }
+              ]
             },
             "limit": {
               "type": "integer",

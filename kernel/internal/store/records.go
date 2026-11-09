@@ -431,6 +431,15 @@ func Count(ctx context.Context, q pg.Querier, org, model string) (int64, error) 
 	return res.Rows[0][0].(int64), nil
 }
 
+// CountAllOrgs counts a model's rows in every organisation (row-level security lifted for this count).
+func CountAllOrgs(ctx context.Context, q pg.Querier, model string) (int64, error) {
+	res, err := q.Query(pg.WithOrg(ctx, ""), fmt.Sprintf("select count(*) from %s", pg.QuoteIdent(TableName(model))))
+	if err != nil {
+		return 0, err
+	}
+	return res.Rows[0][0].(int64), nil
+}
+
 func loadChildren(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *meta.Model, recs []Record) error {
 	if len(recs) == 0 {
 		return nil

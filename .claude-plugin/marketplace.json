@@ -1,0 +1,19 @@
+{
+  "name": "rangka-os",
+  "owner": {
+    "name": "Saga Tekno Studio",
+    "url": "https://github.com/rangka-os"
+  },
+  "metadata": {
+    "description": "Rangka OS skills for AI agents (contract 0035): how Rangka sites are composed and changed, for Claude Code and other harnesses."
+  },
+  "plugins": [
+    {
+      "name": "rangka-skills",
+      "source": "./",
+      "description": "Rangka OS platform skills: concepts, change sets, and composing a site from the catalogue. App, module and connector skills come with rangka skills install or the release zip.",
+      "category": "development",
+      "homepage": "https://rangka-os.github.io/rangka-os/skills/"
+    }
+  ]
+}

@@ -889,6 +889,27 @@
           "description": "out only: read-only currency line field that gets the value the line took out"
         }
       }
+    },
+    "catalogue_category": {
+      "enum": [
+        "sales",
+        "purchasing",
+        "stock",
+        "finance",
+        "tax",
+        "people",
+        "operations",
+        "messaging",
+        "payments",
+        "marketplace",
+        "other"
+      ],
+      "description": "Catalogue group (contract 0036)"
+    },
+    "icon": {
+      "type": "string",
+      "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$",
+      "description": "A Remix icon name from the design system, e.g. store-2-line (contract 0036)"
     }
   }
 }

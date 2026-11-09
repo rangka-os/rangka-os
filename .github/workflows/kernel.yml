@@ -48,6 +48,12 @@ jobs:
       - name: Vet, test and compare with the Python validator
         run: make -C rangka-os/kernel vet test compare-python
 
+      # Contract 0035: the release zip of every skill must pack (it refuses a skill that fails rangka skills check).
+      - name: Skills pack
+        run: |
+          make -C rangka-os/kernel build
+          rangka-os/kernel/bin/rangka skills pack --apps rangka-apps/apps --modules rangka-apps/modules --connectors rangka-connectors --out "$RUNNER_TEMP/rangka-skills.zip"
+
       # The apps' acceptance test on the F&B demo against this kernel (a few seconds): kernel changes that break a real
       # site (contract 0028 plan limits did, rangka-os#74) fail here instead of on rangka-apps main afterwards.
       - name: rangka-apps day_one (demo-fnb) against this kernel

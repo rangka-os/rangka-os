@@ -24,13 +24,13 @@
 
   /* ================================================================ pure helpers */
 
-  /** Whether a GET path is kept: the session, meta, records (with their attachment lists), list sums, dashboards,
+  /** Whether a GET path is kept: the session, meta, records (with their attachment lists), list sums, dashboards, the catalogue,
    *  approvals and processes. */
   function cacheable(path) {
     var p = String(path || "");
     if (p === "/auth/me") return true;
     if (p.indexOf("/api/v1/") !== 0 || p.indexOf("/api/v1/preview/") === 0) return false;
-    return /^\/api\/v1\/(meta|r\/|aggregate\/|dashboards\/|approvals|processes)/.test(p);
+    return /^\/api\/v1\/(meta|r\/|aggregate\/|dashboards\/|approvals|processes|catalogue)/.test(p);
   }
 
   /** "org|email" of a raw /auth/me body ({user, org} or the user itself; org an id or {id}); "" when unknown. */

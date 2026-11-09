@@ -148,6 +148,32 @@
     return (cart || []).reduce(function (s, l) { return s + (Number(l.qty) || 0); }, 0);
   }
 
+  /** The list filter for a balance slot (contract 0039): each match pair as field == 'session value', AND; null when
+   *  there is no session or a matched session value is empty (no badges rather than another outlet's stock). */
+  function balanceFilter(av, session) {
+    var m = (av && av.match) || {}, keys = Object.keys(m).sort(), parts = [];
+    if (keys.length && !(session && typeof session === "object")) return null;
+    for (var i = 0; i < keys.length; i++) {
+      var v = session[m[keys[i]]];
+      if (v === undefined || v === null || v === "") return null;
+      parts.push(keys[i] + " == '" + String(v).replace(/\\/g, "\\\\").replace(/'/g, "\\'") + "'");
+    }
+    return parts.join(" && ");
+  }
+
+  /** Balance rows summed per item: {item name: qty}. */
+  function sumBalances(rows, av) {
+    var out = {};
+    (rows || []).forEach(function (r) {
+      var k = r[av.item];
+      if (!k) return;
+      out[k] = (out[k] || 0) + (Number(r[av.qty]) || 0);
+    });
+    return out;
+  }
+
+  RA.balanceFilter = balanceFilter;
+  RA.sumBalances = sumBalances;
   RA.summaryRows = summaryRows;
   RA.padPress = padPress;
   RA.denomTotal = denomTotal;
@@ -286,7 +312,9 @@
     var noteAt = useState(null), noteLine = noteAt[0], setNoteLine = noteAt[1];
     var shs = useState(false), sheet = shs[0], setSheet = shs[1]; // phone: the order sheet is open
     var cas = useState(null), calc = cas[0], setCalc = cas[1]; // {key, rec, errors} | {key, failed}
+    var bls = useState(null), bal = bls[0], setBal = bls[1]; // contract 0039: {item: qty} for the open session, or null
     var jobRef = useRef(null), searchRef = useRef(null), calcSeq = useRef(0);
+    var avSlot = cat.available && typeof cat.available === "object" ? cat.available : null;
 
     function loadSession() {
       if (!ses) return Promise.resolve();
@@ -303,7 +331,7 @@
         var rows = ((r && r.data) || []).map(function (x) {
           return { item: x.name, title: String(x[cat.title] || x.title || x.name), price: x[cat.price], group: cat.group_by ? String(x[cat.group_by] || "") : "",
             barcode: cat.barcode ? x[cat.barcode] : "", search: (cat.search || []).map(function (f) { return x[f] || ""; }).join(" "),
-            image: cat.image ? x[cat.image] || "" : "", left: cat.available && x[cat.available] != null ? Number(x[cat.available]) : null };
+            image: cat.image ? x[cat.image] || "" : "", left: typeof cat.available === "string" && x[cat.available] != null ? Number(x[cat.available]) : null };
         });
         setItems(rows);
         RA.outbox.cache.put(key, rows);
@@ -311,7 +339,20 @@
         return RA.outbox.cache.get(key).then(function (x) { if (x) setItems(x.value); else setCatErr(errText(e)); });
       });
     }
+    function loadBalances() {
+      if (!avSlot || (ses && !(session && typeof session === "object"))) return Promise.resolve();
+      var f = balanceFilter(avSlot, session && typeof session === "object" ? session : null), key = "balance:" + scope + ":" + s.name;
+      if (f === null) { setBal(null); return Promise.resolve(); }
+      return ctx.api.list(avSlot.model, { filter: f || undefined, limit: 2000, sort: avSlot.item }).then(function (r) {
+        var b = sumBalances((r && r.data) || [], avSlot);
+        setBal(b);
+        RA.outbox.cache.put(key, b);
+      }, function () {
+        return RA.outbox.cache.get(key).then(function (x) { if (x) setBal(x.value); });
+      });
+    }
     useEffect(function () { loadSession(); loadCatalogue(); }, [s.name]);
+    useEffect(function () { loadBalances(); }, [s.name, session && typeof session === "object" ? session.name : String(session)]);
     useEffect(function () { if (session && typeof session === "object") RA.outbox.cache.put("session:" + scope + ":" + s.name, session); }, [session]);
 
     var estimate = cartTotal(cart);
@@ -395,6 +436,7 @@
         setDone({ name: rec.name || null, total: srvTotal != null ? srvTotal : est.total, change: srvChange != null ? srvChange : est.change,
           estimate: srvChange == null, queued: !!res.queued, approval: !!res.approval });
         loadCatalogue(); // prices may have changed since the screen opened
+        loadBalances(); // and the sale moved stock
         setCart([]); setCustomer(""); setPay(null);
         if (res.queued) ctx.toast("info", "Belum terkirim", "Transaksi tersimpan di perangkat dan dikirim saat koneksi kembali.");
       }, function (e) {
@@ -509,12 +551,13 @@
         })) : null,
       catErr ? h("div", { className: "ap-work-err" }, catErr) : !items ? h("p", { className: "ap-work-loading" }, "Memuat katalog…") :
         h("div", { className: "ap-counter-grid" }, shown.map(function (it) {
-          var out = it.left != null && it.left <= 0, low = it.left != null && it.left > 0 && it.left <= 5, n = inCart[it.item] || 0;
+          var left = avSlot ? (bal && bal[it.item] != null ? bal[it.item] : null) : it.left;
+          var out = left != null && left <= 0, low = left != null && left > 0 && left <= 5, n = inCart[it.item] || 0;
           return h("button", { key: it.item, type: "button", className: "ap-counter-item" + (out ? " out" : "") + (n ? " picked" : ""), onClick: function () { add(it); },
-            "aria-label": it.title + ", " + rp(it.price) + (out ? ", habis" : low ? ", sisa " + it.left : "") + (n ? ", " + n + " di pesanan" : "") },
+            "aria-label": it.title + ", " + rp(it.price) + (out ? ", habis" : low ? ", sisa " + left : "") + (n ? ", " + n + " di pesanan" : "") },
             h("span", { className: "ap-counter-pic " + tintOf(it.title), "aria-hidden": "true" },
               it.image ? h("img", { src: imageSrc(it.image), alt: "", loading: "lazy" }) : h("i", null, initials(it.title)),
-              out ? h("em", { className: "ap-counter-left out" }, "Habis") : low ? h("em", { className: "ap-counter-left" }, "Sisa " + it.left) : null,
+              out ? h("em", { className: "ap-counter-left out" }, "Habis") : low ? h("em", { className: "ap-counter-left" }, "Sisa " + left) : null,
               n ? h("strong", { className: "ap-counter-n" }, n) : null),
             h("span", { className: "ap-counter-item-t" }, it.title), h("span", { className: "ap-counter-item-p" }, rp(it.price)));
         }), !shown.length ? h("p", { className: "ap-work-loading" }, "Tidak ada yang cocok.") : null));

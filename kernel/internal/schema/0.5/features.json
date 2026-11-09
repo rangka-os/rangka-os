@@ -36,6 +36,13 @@
               "$ref": "model.json#/$defs/name"
             }
           },
+          "modules": {
+            "type": "array",
+            "items": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "description": "Modules the plan allows on their own (contract 0032), next to the closure of its apps. A plan chain with neither apps nor modules allows every module."
+          },
           "capabilities": {
             "type": "array",
             "items": {

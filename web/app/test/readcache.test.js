@@ -18,7 +18,7 @@ const ME = { user: { id: "u1", email: "ceo@saga.co.id" }, org: { id: "kopi-senja
 test("cacheable: session, meta, records, sums, dashboards, approvals, processes; never previews, events, AI or screens", () => {
   for (const p of ["/auth/me", "/api/v1/meta", "/api/v1/r/sales_invoice?limit=20", "/api/v1/r/sales_invoice/INV-1",
     "/api/v1/r/sales_invoice/INV-1/attachments", "/api/v1/aggregate/deal?group=stage", "/api/v1/dashboards/crm_overview?period=30",
-    "/api/v1/approvals?state=pending&limit=1", "/api/v1/processes"]) assert.ok(H.cacheable(p), p);
+    "/api/v1/approvals?state=pending&limit=1", "/api/v1/processes", "/api/v1/catalogue"]) assert.ok(H.cacheable(p), p);
   for (const p of ["/api/v1/preview/cs1/meta", "/api/v1/preview/cs1/r/lead", "/api/v1/events", "/api/v1/ai/chat",
     "/api/v1/screens/kasir", "/api/v1/changesets", "/api/v1/files/a.pdf", "/auth/login", "/api/v1/imports/x", "", null]) {
     assert.ok(!H.cacheable(p), String(p));

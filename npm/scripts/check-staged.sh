@@ -14,7 +14,8 @@ REPO=$(cd "$HERE/../.." && pwd)
 APPS_REPO=${APPS_REPO:-$(dirname "$REPO")/rangka-apps}
 CONNECTORS_REPO=${CONNECTORS_REPO:-$(dirname "$REPO")/rangka-connectors}
 RANGKA_BIN=${RANGKA_BIN:-$REPO/kernel/bin/rangka}
-TEMPLATES=${TEMPLATES:-"demo blank"}
+# modules:<a,b> scaffolds a composed site with --modules a,b (contract 0032) instead of a template.
+TEMPLATES=${TEMPLATES:-"demo blank modules:contacts,invoicing"}
 VERSION=0.0.0-check
 
 if [ ! -x "$RANGKA_BIN" ]; then make -C "$REPO/kernel" build >&2; fi
@@ -34,9 +35,17 @@ node "$REPO/npm/scripts/stage.mjs" --version "$VERSION" --bin-dir "$WORK/bins" -
 
 status=0
 for tpl in $TEMPLATES; do
-  dir="$WORK/project-$tpl"
-  echo "== create --template $tpl"
-  node "$WORK/out/create/index.js" "$dir" --template "$tpl" --name "Toko Cek" --email owner@cek.test --yes >/dev/null
+  dir="$WORK/project-${tpl%%:*}"
+  if [[ $tpl == modules:* ]]; then
+    echo "== create --modules ${tpl#modules:}"
+    node "$WORK/out/create/index.js" "$dir" --modules "${tpl#modules:}" --name "Toko Cek" --email owner@cek.test --yes >/dev/null
+    if grep -q '^apps:' "$dir/site/config.rk" || ! grep -q '^modules: {' "$dir/site/config.rk"; then
+      echo "check-staged: $tpl did not write config.modules without apps" >&2; status=1
+    fi
+  else
+    echo "== create --template $tpl"
+    node "$WORK/out/create/index.js" "$dir" --template "$tpl" --name "Toko Cek" --email owner@cek.test --yes >/dev/null
+  fi
   for d in modules apps connectors site fixtures; do
     [ -d "$dir/$d" ] || { echo "check-staged: $tpl has no $d/" >&2; status=1; }
   done
@@ -48,8 +57,9 @@ for tpl in $TEMPLATES; do
   echo "== $tpl: npm run validate"
   if ! out=$(cd "$dir" && npm run --silent validate 2>&1); then status=1; fi
   echo "$out"
-  # The validator prints "N error(s), M warning(s)"; anything but zero of both fails the check.
-  if ! grep -q '^0 error(s), 0 warning(s)$' <<<"$out"; then
+  # The validator prints "N error(s), M warning(s)"; any error or warning fails the check, except
+  # catalogue_summary_missing (contract 0036): rangka-apps and rangka-connectors add summaries after the schema ships.
+  if ! grep -q '^0 error(s), ' <<<"$out" || grep -E '  warn  ' <<<"$out" | grep -vq 'catalogue_summary_missing'; then
     echo "check-staged: $tpl is not clean" >&2
     status=1
   fi

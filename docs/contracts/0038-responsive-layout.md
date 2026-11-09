@@ -1,6 +1,6 @@
 # 0038 Responsive behaviour in layout.rk
 
-Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema 0.5, both validators, web app) · Affects:
+Status: accepted and implemented (8 Nov 2026) · Owner of the change: rangka-os (schema 0.5, both validators, web app) · Affects:
 rangka-apps sites and templates (optional) · Builds on 0019, 0030 · Follows `docs/responsive-coverage.md`
 
 ## Context
@@ -41,3 +41,9 @@ responsive:
 - Templates (`templates/layouts/*.rk`) can ship a default: `pos` with `tablet: sidebar`, `portal` with
   `phone: tabs`.
 - Rangka AI may propose a `responsive` change like any other layout change (layer 6, change set).
+
+## Implementation (8 Nov 2026)
+- Schema 0.5 `layout.json` `responsive`; `responsive_tabs` and tab link checks in both validators.
+- Web app: `tablet` sets the shell class `ap-tablet-sidebar` / `ap-tablet-drawer` (rail is the default);
+  `phone: tabs` draws `.ap-tabbar-layout` from `RangkaApp.tabLinks` (model, dashboard, `page:approvals`,
+  `page:search`) plus a Menu tab. Other `page:` names are left out until the app routes layout pages.

@@ -76,6 +76,24 @@ test("navGroups: dashboards, each app's menu groups, then approvals and imports 
   assert.deepStrictEqual(grp.items.map((i) => [i.id, i.label]), [["import/a", "Alfa"], ["import/b", "Zebra"]]);
 });
 
+test("a composed site (contract 0032): meta.menu groups after app menus, home from the first module dashboard or list", () => {
+  const composed = {
+    apps: [],
+    menu: [
+      { module: "payments", group: { id: "Pembayaran" }, items: ["payment"], dashboards: [] },
+      { module: "invoicing", group: { id: "Tagihan" }, items: ["invoice", "gone"], dashboards: ["billing"] },
+    ],
+    models: { payment: { label: { id: "Pembayaran" } }, invoice: { label: { id: "Tagihan" } } },
+    dashboards: { billing: { label: { id: "Ringkasan tagihan" } } },
+  };
+  const g = plain(A.navGroups(composed, {}));
+  assert.deepStrictEqual(g.map((x) => x.label).slice(0, 3), ["Dasbor", "Pembayaran", "Tagihan"]);
+  assert.deepStrictEqual(g[2].items.map((x) => x.id), ["r/invoice"]); // a model /meta does not list is left out
+  assert.strictEqual(A.homeHash(composed), "#/d/billing");
+  assert.strictEqual(A.homeHash({ ...composed, dashboards: {}, menu: [composed.menu[0]] }), "#/r/payment");
+  assert.strictEqual(A.homeHash(META), "#/d/crm_overview"); // app sites keep their home
+});
+
 test("navGroups: Proses bisnis only when the kernel has processes", () => {
   const off = plain(A.navGroups(META, { processes: false }));
   assert.ok(!off.some((g) => g.items.some((i) => i.id === "proses")));
@@ -313,4 +331,46 @@ test("lastSeen: today, yesterday, else the date, with local hours.minutes", () =
   assert.strictEqual(A.lastSeen(new Date(2026, 10, 8, 9, 30).toISOString(), now), "kemarin 09.30");
   assert.strictEqual(A.lastSeen(new Date(2026, 9, 27, 8, 0).toISOString(), now), "27 Okt 2026 08.00");
   assert.strictEqual(A.lastSeen("nope", now), "");
+});
+
+// contract 0037: sub-menus in app menus and nav.side, collapsed per group
+const NESTED = {
+  ...META,
+  apps: [{ name: "stok", title: { id: "Stok" }, dashboards: [], menu: [{ group: { id: "Stok" }, collapsed: true,
+    items: ["item", { label: { id: "Transfer" }, icon: "stock", items: ["deal", "gone"] }, { label: { id: "Kosong" }, items: ["gone"] }] }] }],
+};
+test("menuModels: model names in order, sub-menus included", () => {
+  assert.deepStrictEqual(plain(A.menuModels(NESTED.apps[0].menu[0])), ["item", "deal", "gone", "gone"]);
+});
+test("navGroups: a sub-menu becomes a parent entry, empty ones are left out, collapsed is kept", () => {
+  const g = plain(A.navGroups(NESTED, {}))[0];
+  assert.strictEqual(g.collapsed, true);
+  assert.deepStrictEqual(g.items.map((x) => x.label), ["Barang", "Transfer"]);
+  assert.deepStrictEqual(g.items[1].items.map((x) => x.id), ["r/deal"]);
+  assert.strictEqual(g.items[1].icon, "stock");
+});
+test("navFromLayout: nav.side sub-menus of links, collapsed", () => {
+  const meta = { ...META, layout: { nav: { side: [{ group: { id: "Jual" }, collapsed: false, items: [{ to: "model:deal" },
+    { label: { id: "Data" }, items: [{ to: "model:customer" }, { to: "dashboard:crm_overview", label: { id: "Ringkas" } }, { to: "model:none" }] }] }] } } };
+  const g = plain(A.navFromLayout(meta))[0];
+  assert.strictEqual(g.collapsed, false);
+  assert.deepStrictEqual(g.items[1].items.map((x) => [x.id, x.label]), [["r/customer", "Pelanggan"], ["d/crm_overview", "Ringkas"]]);
+});
+test("appOf and homeHash see models inside sub-menus", () => {
+  assert.strictEqual(A.appOf(NESTED, { kind: "list", model: "deal" }).name, "stok");
+  const subOnly = { ...NESTED, apps: [{ ...NESTED.apps[0], menu: [{ group: { id: "S" }, items: [{ label: { id: "T" }, items: ["deal"] }] }] }] };
+  assert.strictEqual(A.homeHash(subOnly), "#/r/deal");
+});
+test("commandGroups: children are pages with the parent in their subtitle", () => {
+  const nav = A.sideNav(NESTED, {}, {});
+  const pages = plain(A.commandGroups(NESTED, {}, nav, [], false))[0].items;
+  const deal = pages.find((p) => p.id === "r/deal");
+  assert.ok(deal && /Transfer/.test(deal.sub), JSON.stringify(deal));
+});
+// contract 0038: layout.responsive.tabs
+test("tabLinks: models, dashboards, approvals and search; unknown links left out; home marks current", () => {
+  const tabs = A.tabLinks(META, [{ to: "dashboard:crm_overview", label: { id: "Beranda" }, icon: "home" }, { to: "model:deal" },
+    { to: "page:approvals" }, { to: "page:search" }, { to: "model:none" }], { kind: "dash", dash: "crm_overview" }, "#/d/crm_overview");
+  assert.deepStrictEqual(plain(tabs).map((t) => [t.label, t.href, t.current]),
+    [["Beranda", "#/d/crm_overview", true], ["Peluang", "#/r/deal", false], ["Setujui", "#/approvals", false], ["Cari", null, false]]);
 });

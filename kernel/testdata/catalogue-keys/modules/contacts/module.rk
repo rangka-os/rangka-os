@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: contacts
+version: 1.2.0
+title: {id: Kontak, en: Contacts}
+summary: {id: Catat pelanggan dan pemasok di satu tempat., en: Keep customers and suppliers in one place.}
+category: sales
+icon: contacts-book-line
+requires: {rangka: '>=0.5'}

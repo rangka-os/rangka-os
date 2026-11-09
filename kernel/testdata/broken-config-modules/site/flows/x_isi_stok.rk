@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_isi_stok
+label: {id: Isi stok saat sewa}
+on: stock_item.created
+steps:
+  - {find: x_sewa, where: "alat == event.name", as: sewa}
+  - {if: "sewa != null", then: [{create: stock_item, set: {item_name: "'cadangan'"}}]}

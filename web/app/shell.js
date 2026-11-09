@@ -49,21 +49,65 @@
     if (parts[0] === "approvals" && parts.length === 1) return { kind: "approvals" };
     if (parts[0] === "proses" && parts.length === 1) return { kind: "processes" };
     if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
+    if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
     if (parts[0] === "w" && parts.length === 2) return { kind: "work", screen: parts[1] };
     return { kind: "notfound" };
   }
 
+  /** The models a menu group lists in order, sub-menus {label, items} (contract 0037) included. */
+  function menuModels(g) {
+    var out = [];
+    ((g && g.items) || []).forEach(function (it) {
+      if (typeof it === "string") out.push(it);
+      else if (it && Array.isArray(it.items)) it.items.forEach(function (x) { if (typeof x === "string") out.push(x); });
+    });
+    return out;
+  }
+  /** Nav entries with their children flattened (parents left out): [{...item, parent: label|undefined}]. */
+  function flatNav(items) {
+    var out = [];
+    (items || []).forEach(function (it) {
+      if (it && it.items) it.items.forEach(function (c) { out.push(Object.assign({ parent: it.label }, c)); });
+      else out.push(it);
+    });
+    return out;
+  }
+
+  /** layout.responsive.tabs (contract 0038) → phone tabs [{href, label, icon, current, approvals?, search?}]. Links to
+   *  models or dashboards that are not installed are left out; page:approvals and page:search are the app's own. */
+  function tabLinks(meta, tabs, route, home) {
+    var models = (meta && meta.models) || {}, dashes = (meta && meta.dashboards) || {}, here = navId(route, home), out = [];
+    (tabs || []).forEach(function (t) {
+      var to = String((t && t.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1), x = null;
+      if (k === "model" && models[n]) x = { id: "r/" + n, label: L(models[n].label) || n, icon: models[n].icon || "invoice" };
+      else if (k === "dashboard" && dashes[n]) x = { id: "d/" + n, label: L(dashes[n].label) || n, icon: "dashboard" };
+      else if (to === "page:approvals") x = { id: "approvals", label: "Setujui", icon: "check", approvals: true };
+      else if (to === "page:search") x = { id: null, label: "Cari", icon: "search", search: true };
+      if (!x) return;
+      if (t.label) x.label = L(t.label);
+      if (t.icon) x.icon = t.icon;
+      x.href = x.id ? (home && "#/" + x.id === home ? home : "#/" + x.id) : null;
+      x.current = !!x.id && (x.id === here || (here === "home" && home === "#/" + x.id));
+      out.push(x);
+    });
+    return out;
+  }
+
   /** Home: the first work screen marked home for the user (contract 0030 §3: meta.work is already theirs, in order),
-   *  else the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list. */
+   *  else the first dashboard of the first app in meta.apps that has dashboards, else the first menu item's list; on a
+   *  composed site (contract 0032 §5, meta.menu) the first dashboard of a module group, else its first list. */
   function homeHash(meta) {
     var apps = (meta && meta.apps) || [], work = (meta && meta.work) || [], screens = (meta && meta.screens) || {}, i, j;
+    var mods = (meta && meta.menu) || [];
     for (i = 0; i < work.length; i++) if (work[i].home && screens[work[i].screen]) return "#/w/" + work[i].screen;
     for (i = 0; i < apps.length; i++) if ((apps[i].dashboards || []).length) return "#/d/" + apps[i].dashboards[0];
     for (i = 0; i < apps.length; i++) {
       var menu = apps[i].menu || [];
-      for (j = 0; j < menu.length; j++) if ((menu[j].items || []).length) return "#/r/" + menu[j].items[0];
+      for (j = 0; j < menu.length; j++) if (menuModels(menu[j]).length) return "#/r/" + menuModels(menu[j])[0];
     }
+    for (i = 0; i < mods.length; i++) if ((mods[i].dashboards || []).length) return "#/d/" + mods[i].dashboards[0];
+    for (i = 0; i < mods.length; i++) if ((mods[i].items || []).length) return "#/r/" + mods[i].items[0];
     return null;
   }
 
@@ -97,21 +141,31 @@
     var side = meta && meta.layout && meta.layout.nav && meta.layout.nav.side;
     if (!Array.isArray(side) || !side.length) return null;
     var models = meta.models || {}, dashes = meta.dashboards || {};
+    function linkItem(it) {
+      var to = String((it && it.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1);
+      if (k === "model" && models[n]) return { id: "r/" + n, label: L(it.label) || L(models[n].label) || n, icon: it.icon || models[n].icon || "invoice" };
+      if (k === "dashboard" && dashes[n]) return { id: "d/" + n, label: L(it.label) || L(dashes[n].label) || n, icon: it.icon || "dashboard" };
+      return null;
+    }
     return side.map(function (g) {
       var items = ((g && g.items) || []).map(function (it) {
-        var to = String((it && it.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1);
-        if (k === "model" && models[n]) return { id: "r/" + n, label: L(it.label) || L(models[n].label) || n, icon: it.icon || models[n].icon || "invoice" };
-        if (k === "dashboard" && dashes[n]) return { id: "d/" + n, label: L(it.label) || L(dashes[n].label) || n, icon: it.icon || "dashboard" };
-        return null;
+        if (it && Array.isArray(it.items)) { // a sub-menu (contract 0037); empty once its links are left out
+          var kids = it.items.map(linkItem).filter(Boolean);
+          return kids.length ? { label: L(it.label) || kids[0].label, icon: it.icon || kids[0].icon, items: kids } : null;
+        }
+        return linkItem(it);
       }).filter(Boolean);
-      return { label: L(g && g.group), items: items };
+      var out = { label: L(g && g.group), items: items };
+      if (typeof (g && g.collapsed) === "boolean") out.collapsed = g.collapsed;
+      return out;
     }).filter(function (g) { return g.items.length; });
   }
 
-  /** The default sidebar: every app's dashboards, then each app's menu groups. */
+  /** The default sidebar: every app's dashboards, then each app's menu groups, then the kernel's one group per module
+   *  of a composed site (meta.menu, contract 0032 §5: modules no installed app brings in). */
   function appGroups(meta) {
     var models = meta.models || {}, dashes = meta.dashboards || {}, groups = [], dashItems = [];
-    (meta.apps || []).forEach(function (a) {
+    (meta.apps || []).concat(meta.menu || []).forEach(function (a) {
       (a.dashboards || []).forEach(function (d) {
         dashItems.push({ id: "d/" + d, label: L((dashes[d] || {}).label) || d, icon: "dashboard" });
       });
@@ -119,11 +173,20 @@
     if (dashItems.length) groups.push({ label: "Dasbor", items: dashItems });
     (meta.apps || []).forEach(function (a) {
       (a.menu || []).forEach(function (g) {
-        var items = (g.items || []).filter(function (m) { return models[m]; }).map(function (m) {
-          return { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" };
-        });
-        if (items.length) groups.push({ label: L(g.group) || L(a.title) || a.name, items: items });
+        function modelItem(m) { return models[m] ? { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" } : null; }
+        var items = (g.items || []).map(function (it) {
+          if (typeof it === "string") return modelItem(it);
+          var kids = ((it && it.items) || []).map(modelItem).filter(Boolean); // a sub-menu (contract 0037)
+          return kids.length ? { label: L(it.label) || kids[0].label, icon: it.icon || kids[0].icon, items: kids } : null;
+        }).filter(Boolean);
+        var grp = { label: L(g.group) || L(a.title) || a.name, items: items };
+        if (typeof g.collapsed === "boolean") grp.collapsed = g.collapsed;
+        if (items.length) groups.push(grp);
       });
+    });
+    (meta.menu || []).forEach(function (g) {
+      var items = (g.items || []).map(function (m) { return models[m] ? { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" } : null; }).filter(Boolean);
+      if (items.length) groups.push({ label: L(g.group) || g.module, items: items });
     });
     return groups;
   }
@@ -141,7 +204,7 @@
     for (var i = 0; i < (apps || []).length; i++) {
       var a = apps[i];
       if (route.kind === "dash" && (a.dashboards || []).indexOf(route.dash) >= 0) return a;
-      if ((route.kind === "list" || route.kind === "form") && (a.menu || []).some(function (g) { return (g.items || []).indexOf(route.model) >= 0; })) return a;
+      if ((route.kind === "list" || route.kind === "form") && (a.menu || []).some(function (g) { return menuModels(g).indexOf(route.model) >= 0; })) return a;
     }
     return null;
   }
@@ -181,7 +244,7 @@
   /** The work shell's bottom bar: up to 5 screens, then Lainnya (lists the user may read, approvals) when there is any. */
   function workBar(meta, features, counts) {
     var items = workItems(meta).slice(0, 5), more = [];
-    navGroups(Object.assign({}, meta, { work: [] }), features, counts).forEach(function (g) { more = more.concat(g.items); });
+    navGroups(Object.assign({}, meta, { work: [] }), features, counts).forEach(function (g) { more = more.concat(flatNav(g.items)); });
     return { items: items, more: more };
   }
 
@@ -191,6 +254,7 @@
     var more = [], imports = null;
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
     if (features.processes) more.push({ id: "proses", label: "Proses bisnis", icon: "time" });
+    if (features.catalogue) more.push({ id: "pengaturan/katalog", label: "Modul dan sambungan", icon: "apps" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
     if (imps.length > 1) {
@@ -265,7 +329,7 @@
       pages.push({ id: it.id, label: it.label, sub: sub || undefined, icon: it.icon, hash: it.id === "home" ? homeHash(meta) || "#/" : "#/" + it.id });
     }
     (nav.pinned || []).forEach(function (it) { add(it, ""); });
-    (nav.groups || []).forEach(function (g) { g.items.forEach(function (it) { add(it, g.label); }); });
+    (nav.groups || []).forEach(function (g) { flatNav(g.items).forEach(function (it) { add(it, it.parent ? g.label + " · " + it.parent : g.label); }); });
     if (pages.length) out.push({ label: "Halaman", items: pages });
     var create = ((meta.layout && meta.layout.nav && meta.layout.nav.create) || []).filter(function (m) {
       return models[m] && !(models[m].can && models[m].can.create === false);
@@ -297,6 +361,7 @@
       case "approvals": return "approvals";
       case "processes": case "process": return "proses";
       case "import": return "import/" + route.import;
+      case "catalogue": return "pengaturan/katalog";
       case "work": return home && home === "#/w/" + route.screen ? "home" : "w/" + route.screen;
       default: return null;
     }
@@ -307,7 +372,7 @@
     var apps = ((meta && meta.apps) || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
     var owns = function (a) {
       if (route && route.kind === "dash") return (a.dashboards || []).indexOf(route.dash) >= 0;
-      if (route && (route.kind === "list" || route.kind === "form")) return (a.menu || []).some(function (g) { return (g.items || []).indexOf(route.model) >= 0; });
+      if (route && (route.kind === "list" || route.kind === "form")) return (a.menu || []).some(function (g) { return menuModels(g).indexOf(route.model) >= 0; });
       return false;
     };
     return apps.filter(owns)[0] || apps[0] || null;
@@ -367,6 +432,9 @@
   RA.withHashQuery = withHashQuery;
   RA.navId = navId;
   RA.appOf = appOf;
+  RA.menuModels = menuModels;
+  RA.tabLinks = tabLinks;
+  RA.flatNav = flatNav;
 
   /* ================================================================ browser only from here */
   var React = global.React, ReactDOM = global.ReactDOM, R = global.Rangka;
@@ -513,7 +581,7 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", work: "WorkScreenView" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", work: "WorkScreenView" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
@@ -525,7 +593,7 @@
     if (route.kind === "import") return !!(meta.imports || {})[route.import];
     if (route.kind === "work") return !!(meta.screens || {})[route.screen];
     if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
-    return route.kind === "approvals";
+    return route.kind === "approvals" || route.kind === "catalogue"; // the catalogue page itself answers "no access"
   }
 
   function Page(p) {
@@ -545,6 +613,7 @@
     var rs = useState(null), renaming = rs[0], setRenaming = rs[1]; // {g, text}
     var escRef = useRef(false); // Escape: the blur that follows cancels instead of saving
     function itemOf(it) {
+      if (it && Array.isArray(it.items)) return { id: null, label: (L(it.label) || "Sub-menu") + " (" + it.items.length + ")", icon: it.icon || "list" }; // moved and hidden as one
       var to = String((it && it.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1);
       if (k === "model") return { id: "r/" + n, label: L(it.label) || L((models[n] || {}).label) || n, icon: it.icon || (models[n] || {}).icon || "invoice" };
       if (k === "dashboard") return { id: "d/" + n, label: L(it.label) || L((dashes[n] || {}).label) || n, icon: it.icon || "dashboard" };
@@ -630,7 +699,7 @@
     var seq = useRef(0), timer = useRef(null);
     useEffect(function () { return function () { seq.current++; clearTimeout(timer.current); }; }, []);
     var models = p.meta.models || {}, searchable = [];
-    [].concat.apply([], p.nav.groups.map(function (g) { return g.items; })).forEach(function (it) {
+    [].concat.apply([], p.nav.groups.map(function (g) { return flatNav(g.items); })).forEach(function (it) {
       var m = it.id.indexOf("r/") === 0 ? it.id.slice(2) : null;
       if (m && models[m] && searchable.indexOf(m) < 0 && !(models[m].can && models[m].can.read === false)) searchable.push(m);
     });
@@ -705,7 +774,12 @@
     var offline = !!staleAt || !!(pwa && !pwa.online);
     var phone = usePhone();
     // tablet portrait (768-1023): the sidebar is the icon rail; its unfold button floats the full sidebar over the page
-    var rail = (R.useBreakpoint ? R.useBreakpoint() : "desktop") === "tablet-portrait";
+    // layout.responsive (contract 0038): tablet rail (default) | sidebar | drawer, phone drawer (default) | tabs
+    var bp = R.useBreakpoint ? R.useBreakpoint() : "desktop";
+    var resp = (meta && meta.layout && meta.layout.responsive) || {};
+    var tabletMode = resp.tablet === "sidebar" || resp.tablet === "drawer" ? resp.tablet : "rail";
+    var rail = bp === "tablet-portrait" && tabletMode === "rail";
+    var drawerNav = phone || (bp === "tablet-portrait" && tabletMode === "drawer"); // the sidebar opens over the page
     var ros = useState(false), railOpen = ros[0], setRailOpen = ros[1];
     var cacheRef = useRef(boot.cache);
     var featRef = useRef(features);
@@ -1047,7 +1121,7 @@
     var sideNavItems = sideNav(meta, features, { approvals: approvalCount });
     var switcher = { title: companyName, subtitle: roleText || undefined,
       onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } };
-    var narrow = !phone && (rail ? !railOpen : collapsed), floating = rail && railOpen;
+    var narrow = !drawerNav && (rail ? !railOpen : collapsed), floating = rail && railOpen;
     var side;
     if (ubahOn) {
       side = h(UbahSidebar, { meta: meta, features: features, counts: { approvals: approvalCount }, current: navId(route), route: route, u: uctx, name: name,
@@ -1067,7 +1141,7 @@
         switcher: switcher,
         search: { label: "Cari", onOpen: openCmd },
         pinned: sideNavItems.pinned, groups: sideNavItems.groups, current: navId(route, home || "#/"), onNavigate: onNavigate,
-        collapsed: narrow, float: floating, onToggleCollapse: phone ? undefined : toggleCollapsed,
+        collapsed: narrow, float: floating, onToggleCollapse: drawerNav ? undefined : toggleCollapsed,
         footer: sideFooter(narrow, !modeToggle ? null : narrow
           ? h(R.IconButton, { key: "mode", icon: "edit", label: ubah ? "Kembali ke mode Pakai" : "Masuk mode Ubah", "aria-pressed": ubah ? "true" : "false", onClick: function () { toggleUbah(!ubah); } })
           : h(React.Fragment, { key: "mode" }, modeToggle))
@@ -1094,7 +1168,15 @@
 
     // phone (desain arah E, P7): a bottom tab bar for the three things an owner does most; Menu opens the drawer
     var onHome = route.kind === "dash" && home && ("#/d/" + route.dash) === home;
-    var tabBar = phone && kind !== "top-nav" && global.document.documentElement.getAttribute("data-brand") === "juragan" ? h("nav", { className: "ap-tabbar", "aria-label": "Navigasi bawah" },
+    var layoutTabs = phone && resp.phone === "tabs" ? tabLinks(meta, resp.tabs, route, home) : [];
+    var tabBar = layoutTabs.length ? h("nav", { className: "ap-tabbar ap-tabbar-layout", "aria-label": "Navigasi bawah", style: { gridTemplateColumns: "repeat(" + (layoutTabs.length + 1) + ", 1fr)" } },
+      layoutTabs.map(function (t) {
+        return t.search ? h("button", { key: "search", type: "button", onClick: openCmd }, h(R.Icon, { name: t.icon }), h("span", null, t.label))
+          : h("a", { key: t.href, href: t.href, "aria-current": t.current ? "page" : undefined }, h(R.Icon, { name: t.icon }), h("span", null, t.label),
+            t.approvals && approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null);
+      }),
+      h("button", { type: "button", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }, h(R.Icon, { name: "menu" }), h("span", null, "Menu")))
+    : phone && kind !== "top-nav" && global.document.documentElement.getAttribute("data-brand") === "juragan" ? h("nav", { className: "ap-tabbar", "aria-label": "Navigasi bawah" },
       h("a", { href: home || "#/", "aria-current": onHome ? "page" : undefined }, h(R.Icon, { name: "home" }), h("span", null, "Beranda")),
       h("a", { href: "#/approvals", "aria-current": route.kind === "approvals" ? "page" : undefined }, h(R.Icon, { name: "check" }), h("span", null, "Setujui"),
         approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null),
@@ -1133,7 +1215,8 @@
       return h(RA.Ctx.Provider, { value: ctx }, work);
     }
 
-    var shell = h("div", { className: cx("rk-shell ap-shell", kind === "top-nav" ? "top ap-top" : "ap-side", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on") },
+    var shell = h("div", { className: cx("rk-shell ap-shell", kind === "top-nav" ? "top ap-top" : "ap-side", navOpen && "ap-nav-open", ubahOn && "ap-ubah-on",
+        tabletMode !== "rail" && "ap-tablet-" + tabletMode) },
         top, side,
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
         floating && !ubahOn ? h("div", { className: "ap-rail-scrim", onClick: function () { setRailOpen(false); } }) : null,

@@ -29,8 +29,8 @@ Usage:
     (the tenant's plan, contract 0028: an operator's upgrade or downgrade; a downgrade deletes nothing)
   rangka catalogue [--json] [--apps <dir>] [--site <dir>]
     (apps, modules and connectors with their state for the site; per app what it shares and adds, contract 0035)
-  rangka skills list|check [dir ...]
-    (Rangka skills for AI agents, contract 0035: list them, or lint skill folders)
+  rangka skills list|install|pack|check [--to <dir> | --harness claude|agents] [--out <file.zip>] [dir ...]
+    (Rangka skills for AI agents, contract 0035: list, install into a harness's folder, pack the zip, lint)
   rangka version
 
 Settings can also come from the environment or a .env file in the current directory:

@@ -3,3 +3,4 @@ name: contacts
 version: 1.0.0
 title: {id: Kontak}
 modules: {contacts: ^1.0}
+summary: {id: App uji contacts.}

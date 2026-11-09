@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: deal
+label: {id: Peluang}
+naming: DEAL-{#####}
+title_field: customer
+fields:
+  - {name: customer, type: link, to: customer, label: {id: Pelanggan}}
+permissions:
+  - {role: sales_rep, read: true, write: true, create: true}

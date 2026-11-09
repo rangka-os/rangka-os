@@ -332,6 +332,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
             rep.add("warn", p, "(root)", "deprecated_layout", f"0.4 app.rk: split into modules/{name}/module.rk and an app (contract 0001)")
         for e in schema_for(V, "module" if a["kind"] == "module" else "app", a["manifest"]).iter_errors(a["manifest"]) if p else ():
             rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message)
+        if a["kind"] in ("module", "app") and isinstance(a["manifest"], dict) and not a["manifest"].get("summary"):
+            rep.add("warn", p, "(root)", "catalogue_summary_missing", f'{a["kind"]} "{name}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
         if a["kind"] == "app" and rkfile.listdir(os.path.join(a["dir"], "models")):
             rep.add("error", p, "models", "app_defines_model", f'app "{name}" has models/; an app defines no models, move them into a module (contract 0001)')
         for mname, (p, m) in a["models"].items():
@@ -397,8 +399,11 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
         hooks = CORE_HOOKS | set(a["manifest"].get("hooks", []))
         for gi, g in enumerate(a["manifest"].get("menu", [])):
             for i, it in enumerate(g.get("items", [])):
-                if it not in visible:
-                    rep.add("error", a["app_path"], f"menu/{gi}/items/{i}", "unknown_model", f'"{it}" is not a model in this app or its dependencies{suggest(it, visible)}')
+                # a sub-menu {label, items} lists its models one level down (contract 0037)
+                subs = [(f"menu/{gi}/items/{i}/items/{j}", x) for j, x in enumerate(it.get("items", []))] if isinstance(it, dict) else [(f"menu/{gi}/items/{i}", it)]
+                for where, m in subs:
+                    if isinstance(m, str) and m not in visible:
+                        rep.add("error", a["app_path"], where, "unknown_model", f'"{m}" is not a model in this app or its dependencies{suggest(m, visible)}')
         for mname, (p, m) in a["models"].items():
             fields = {f["name"]: f for f in m.get("fields", []) if "name" in f}
             known = set(fields) | SYSTEM_FIELDS
@@ -817,9 +822,11 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         schema_errors(rep, V, "connector", p, c)
         if c.get("name") != cn:
             rep.add("error", p, "name", "name_mismatch", f'connector name "{c.get("name")}" must match the directory name "{cn}"')
+        if not cn.startswith("x_") and isinstance(c, dict) and not c.get("summary"):
+            rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
 
     if site:
-        check_site(rep, V, root, apps, allmodels, sdocs)
+        check_site(rep, V, root, apps, allmodels, sdocs, conns, overlays, flows)
         for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
             check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
@@ -980,6 +987,24 @@ def plan_info(features, plan):
     return apps
 
 
+def plan_modules(apps, features, plan):
+    """The modules a plan allows (contract 0032 section 6): the closure of its apps and modules, following extends.
+    None when no plan in the chain has apps or modules (every module is allowed)."""
+    plans = {x.get("name"): x for x in features.get("plans", []) if isinstance(x, dict)}
+    names, keyed, seen = [], False, set()
+    name, depth = plan, 0
+    while name and name in plans and depth < 10 and name not in seen:
+        seen.add(name)
+        for key in ("apps", "modules"):
+            if isinstance(plans[name].get(key), list):
+                keyed = True
+                names += [a for a in plans[name][key] if isinstance(a, str)]
+        name, depth = plans[name].get("extends"), depth + 1
+    if not keyed:
+        return None
+    return {n for n in closure(apps, names) if apps[n]["kind"] == "module"}
+
+
 def template_exists(kind, name):
     for n in (name, name.replace("_", "-"), name.replace("-", "_")):
         if os.path.isfile(os.path.join(TEMPLATES_DIR, kind, n + ".rk")):
@@ -1044,7 +1069,80 @@ def reset_needs_date(rep, path, where, series):
     rep.add("error", path, where, "reset_needs_date", f"reset {reset} needs {what} in the pattern, or numbers repeat")
 
 
-def check_site(rep, V, root, apps, allmodels, sdocs):
+def check_config_modules(rep, cp, cfg, apps, features, plan):
+    """config.modules (contract 0032 section 2): each key a module in range and allowed by the plan. Returns the
+    keys that name a module."""
+    mod_names = [k for k, u in apps.items() if u["kind"] == "module"]
+    allowed = plan_modules(apps, features, plan) if plan else None
+    out = []
+    for k, rng in cfg["modules"].items():
+        where = f"modules/{k}"
+        if k == SITE_UNIT:
+            rep.add("error", cp, where, "unknown_module", f'"{k}" is the company module (contract 0016): it comes with the site and cannot be named')
+        elif k in apps and is_app(apps[k]):
+            rep.add("error", cp, where, "unknown_module", f'"{k}" is an app, not a module; list it under apps')
+        elif k not in mod_names:
+            rep.add("error", cp, where, "unknown_module", f'"{k}" is not a module{suggest(k, mod_names)}')
+        elif not satisfies(apps[k]["manifest"].get("version"), rng):
+            rep.add("error", cp, where, "version_mismatch", f'"{k}" is {apps[k]["manifest"].get("version")}; this needs {rng}')
+        else:
+            out.append(k)
+            if allowed is not None and k not in allowed:
+                rep.add("error", cp, where, "module_not_in_plan", f'plan "{plan}" does not include module "{k}" (it allows {", ".join(sorted(allowed)) or "no modules"})')
+    return out
+
+
+def check_uninstalled_models(rep, apps, allmodels, installed, sdocs, overlays, flows):
+    """uses_uninstalled_model (contract 0032 section 2), on a site that names modules: overlays, company models and
+    flows, and site dashboards that name a model of a unit the site does not install. Layouts and numbering report it
+    where they check models."""
+    def gone(mn):
+        return isinstance(mn, str) and mn in allmodels and allmodels[mn][0] not in installed
+
+    def say(p, where, mn):
+        rep.add("error", p, where, "uses_uninstalled_model", uninstalled_msg(mn, allmodels))
+    for st in sorted(overlays):
+        p, o = overlays[st]
+        if gone(o.get("model")):
+            say(p, "model", o["model"])
+    company = apps.get(SITE_UNIT) if SITE_UNIT in apps and apps[SITE_UNIT]["kind"] == "site" else None
+    for mn in sorted(company["models"]) if company else []:
+        p, m = company["models"][mn]
+        for i, f in enumerate(m.get("fields", []) if isinstance(m, dict) else []):
+            for key in ("to", "of"):
+                if isinstance(f, dict) and gone(f.get(key)):
+                    say(p, f"fields/{i}/{key}", f[key])
+    for fn in sorted(flows):
+        app, p, f = flows[fn]
+        if app != SITE_UNIT or not isinstance(f, dict):
+            continue
+        on = f.get("on")
+        if isinstance(on, str) and gone(on.split(".", 1)[0]):
+            say(p, "on", on.split(".", 1)[0])
+        flow_steps_uninstalled(p, "steps", f.get("steps"), gone, say)
+    for stem in sorted(k.split("/", 1)[1][:-3] for k in sdocs if k.startswith("dashboards/")):
+        p, db = sdocs[f"dashboards/{stem}.rk"]
+        for i, w in enumerate(db.get("widgets", []) if isinstance(db, dict) else []):
+            if isinstance(w, dict) and gone(w.get("model")):
+                say(p, f"widgets/{i}/model", w["model"])
+
+
+def flow_steps_uninstalled(p, at, steps, gone, say):
+    for i, st in enumerate(steps if isinstance(steps, list) else []):
+        if not isinstance(st, dict):
+            continue
+        for k in ("find", "find_all", "create"):
+            if gone(st.get(k)):
+                say(p, f"{at}/{i}/{k}", st[k])
+        for k in ("then", "else", "do"):
+            flow_steps_uninstalled(p, f"{at}/{i}/{k}", st.get(k), gone, say)
+
+
+def uninstalled_msg(mn, allmodels):
+    return f'"{mn}" comes from module "{allmodels[mn][0]}", which this site does not install; add the module to config.modules'
+
+
+def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, flows=None):
     for key in sorted(sdocs):
         p, d = sdocs[key]
         kind = kind_of(p) or (key[:-3] if "/" not in key else key.split("/")[0][:-1])
@@ -1064,6 +1162,11 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             for j, a in enumerate(pl.get("apps", [])):
                 if a not in apps or not is_app(apps[a]):
                     rep.add("error", features[0], f"plans/{i}/apps/{j}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, [k for k, u in apps.items() if is_app(u)])}')
+        mod_names = [k for k, u in apps.items() if u["kind"] == "module"]
+        for i, pl in enumerate(features[1].get("plans", [])):
+            for j, m in enumerate(pl.get("modules", []) if isinstance(pl.get("modules"), list) else []):
+                if m not in mod_names:
+                    rep.add("error", features[0], f"plans/{i}/modules/{j}", "unknown_module", f'"{m}" is not a module{suggest(m, mod_names)}')
         for i, pl in enumerate(features[1].get("plans", [])):
             ext = pl.get("extends")
             if ext and ext not in plans:
@@ -1077,8 +1180,8 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
         allowed = plan_info(features[1], plan) if plan and plan in plans else None
         if plan and features[0] and plan not in plans:
             rep.add("error", cp, "plan", "unknown_plan", f'plan "{plan}" is not in features.rk{suggest(plan, plans)}')
-        if isinstance(cfg.get("apps"), list):
-            installed = closure(apps, [a for a in cfg["apps"] if a in app_names]) + company
+        listed_apps, listed_mods = isinstance(cfg.get("apps"), list), isinstance(cfg.get("modules"), dict)
+        if listed_apps:
             for i, a in enumerate(cfg["apps"]):
                 if a not in app_names:
                     rep.add("error", cp, f"apps/{i}", "unknown_app", f'"{a}" is not an app in {root}{suggest(a, app_names)}')
@@ -1088,8 +1191,17 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
                 for dep in apps[a]["manifest"].get("requires", {}) if apps[a]["kind"] == "legacy" else ():
                     if dep in apps and apps[dep]["kind"] == "legacy" and dep not in cfg["apps"]:
                         rep.add("error", cp, f"apps/{i}", "missing_dependency", f'"{a}" requires "{dep}"; add it to apps')
+        chosen = [m for m in check_config_modules(rep, cp, cfg, apps, features[1], plan if allowed is not None else None)] if listed_mods else []
+        if listed_apps or listed_mods:  # either key replaces the plan's apps as the fallback (contract 0032)
+            installed = closure(apps, [a for a in cfg.get("apps") or [] if listed_apps and a in app_names] + chosen) + company
         elif allowed is not None:
             installed = closure(apps, [a for a in allowed if a in app_names]) + company
+        if listed_mods:
+            check_uninstalled_models(rep, apps, allmodels, installed, sdocs, overlays or {}, flows or {})
+        if conns and isinstance(cfg.get("connectors"), list):
+            for i, cn in enumerate(cfg["connectors"]):
+                if isinstance(cn, str) and cn not in conns:
+                    rep.add("error", cp, f"connectors/{i}", "unknown_connector", f'"{cn}" is not a connector{suggest(cn, conns)}')
         th = cfg.get("theme")
         if th and th not in themes and not template_exists("themes", th):
             rep.add("error", cp, "theme", "unknown_theme", f'theme "{th}" has no file themes/{th}.rk{suggest(th, themes)}')
@@ -1103,6 +1215,8 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
                 continue
             if mn not in allmodels:
                 rep.add("error", cp, f"numbering/{mn}", "unknown_model", f'"{mn}" is not a model{suggest(mn, allmodels)}')
+            elif allmodels[mn][0] not in installed and listed_mods:
+                rep.add("error", cp, f"numbering/{mn}", "uses_uninstalled_model", uninstalled_msg(mn, allmodels))
             elif allmodels[mn][0] not in installed:
                 rep.add("warn", cp, f"numbering/{mn}", "not_installed", f'"{mn}" comes from app "{allmodels[mn][0]}", which this site does not install')
             elif isinstance(numbering[mn], str) and numbering[mn]:
@@ -1124,6 +1238,10 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
             oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None
             if isinstance(oc, dict) and "orgs" in oc:
                 rep.add("error", cp, f"orgs/{oid}/config/orgs", "nested_orgs", f'org "{oid}" config cannot contain orgs')
+            if isinstance(oc, dict) and "connectors" in oc:
+                rep.add("error", cp, f"orgs/{oid}/config/connectors", "org_config_key", f'org "{oid}" config cannot set connectors: one site has one installed set (contract 0036)')
+            if isinstance(oc, dict) and "modules" in oc:
+                rep.add("error", cp, f"orgs/{oid}/config/modules", "org_config_key", f'org "{oid}" config cannot set modules: one kernel has one schema (contract 0032)')
         dpp_where = [("tax/dpp_ratio", cfg.get("tax"))]
         for oid in sorted(orgs):
             oc = orgs[oid].get("config") if isinstance(orgs[oid], dict) else None
@@ -1158,7 +1276,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs):
         if dn in dash_app:  # a site dashboard replaces the installed one of its name (contract 0015 section 3)
             dashboards[dn] = db
     for ln in sorted(layouts):
-        check_layout(rep, layouts[ln][0], layouts[ln][1], allmodels, dashboards, installed)
+        check_layout(rep, layouts[ln][0], layouts[ln][1], allmodels, dashboards, installed, isinstance(cfg, dict) and isinstance(cfg.get("modules"), dict))
     for dn in sorted(site_dash):
         dp, db = site_dash[dn]
         if dn not in dash_app:
@@ -1176,7 +1294,7 @@ def parse_dpp_ratio(s):
     return int(a), int(b)
 
 
-def check_layout(rep, p, l, allmodels, dashboards, installed):
+def check_layout(rep, p, l, allmodels, dashboards, installed, composed=False):
     def target(where, to, cond):
         if not isinstance(to, str) or ":" not in to:
             return
@@ -1184,6 +1302,8 @@ def check_layout(rep, p, l, allmodels, dashboards, installed):
         if kind == "model":
             if name not in allmodels:
                 rep.add("error", p, where, "unknown_model", f'"{name}" is not a model{suggest(name, allmodels)}')
+            elif allmodels[name][0] not in installed and f"app_installed('{allmodels[name][0]}')" not in (cond or "") and composed:
+                rep.add("error", p, where, "uses_uninstalled_model", uninstalled_msg(name, allmodels))
             elif allmodels[name][0] not in installed and f"app_installed('{allmodels[name][0]}')" not in (cond or ""):
                 app = allmodels[name][0]
                 rep.add("error", p, where, "optional_model", f'"{name}" comes from app "{app}", which this site does not install; add  if: app_installed(\'{app}\')')
@@ -1194,10 +1314,30 @@ def check_layout(rep, p, l, allmodels, dashboards, installed):
     nav = l.get("nav") or {}
     for sec in sorted(nav):
         for i, it in enumerate(nav[sec] if isinstance(nav[sec], list) else []):
-            if isinstance(it, dict):
+            if isinstance(it, dict) and sec == "side":
+                # nav.side: groups of links and sub-menus of links (contract 0037)
+                for j, x in enumerate(it.get("items") or []):
+                    if not isinstance(x, dict):
+                        continue
+                    if isinstance(x.get("items"), list):
+                        for k, y in enumerate(x["items"]):
+                            if isinstance(y, dict):
+                                target(f"nav/side/{i}/items/{j}/items/{k}/to", y.get("to"), y.get("if"))
+                    else:
+                        target(f"nav/side/{i}/items/{j}/to", x.get("to"), x.get("if"))
+            elif isinstance(it, dict):
                 target(f"nav/{sec}/{i}/to", it.get("to"), it.get("if"))
             elif isinstance(it, str) and sec == "create" and it not in allmodels:
                 rep.add("error", p, f"nav/{sec}/{i}", "unknown_model", f'"{it}" is not a model{suggest(it, allmodels)}')
+    # responsive (contract 0038): phone tabs come with phone: tabs and the reverse
+    resp = l.get("responsive") if isinstance(l.get("responsive"), dict) else {}
+    if resp.get("phone") == "tabs" and not resp.get("tabs"):
+        rep.add("error", p, "responsive", "responsive_tabs", "phone: tabs needs 2 to 5 tabs")
+    elif resp.get("tabs") and resp.get("phone") != "tabs":
+        rep.add("error", p, "responsive/tabs", "responsive_tabs", "tabs are drawn only with phone: tabs")
+    for i, it in enumerate(resp.get("tabs") or []):
+        if isinstance(it, dict):
+            target(f"responsive/tabs/{i}/to", it.get("to"), it.get("if"))
 
     def blocks(where, bl):
         for i, b in enumerate(bl if isinstance(bl, list) else []):
@@ -1802,6 +1942,27 @@ def check_screen_counter(rep, p, b, visible, prints):
                     for i, x in enumerate(cl.get("fields") if isinstance(cl.get("fields"), list) else []):
                         slot_field(rep, p, f"counter/session/close/fields/{i}", cn2, cf2, x)
                     slot_set(rep, p, "counter/session/close/set", cn2, cf2, cl.get("set"))
+    # contract 0039: available as a balance model per the open session (e.g. stock_balance per outlet)
+    av = cat.get("available") if cat is not None and isinstance(cat.get("available"), dict) else None
+    if av is not None and cat_name:
+        where = "counter/catalogue/available"
+        an, am, af = slot_model(rep, p, where + "/model", av, visible)
+        if an:
+            it = slot_field(rep, p, where + "/item", an, af, av.get("item"), ["link"])
+            if it is not None and it.get("to") != cat_name:
+                rep.add("error", p, where + "/item", "screen_slot_type", f'"{av.get("item")}" links to {it.get("to")}; the catalogue is {cat_name}')
+            slot_field(rep, p, where + "/qty", an, af, av.get("qty"), NUMERIC_KINDS)
+            match = av.get("match") if isinstance(av.get("match"), dict) else {}
+            ses2 = b.get("session") if isinstance(b.get("session"), dict) else None
+            if match and ses2 is None:
+                rep.add("error", p, where + "/match", "screen_slot_type", "match compares with the open session; add the session slot")
+            sn2 = sf2 = None
+            if ses2 is not None and isinstance(ses2.get("model"), str) and ses2["model"] in visible:
+                sn2, sf2 = ses2["model"], fields_of(visible[ses2["model"]][2])
+            for k in sorted(match):
+                slot_field(rep, p, f"{where}/match/{k}", an, af, k)
+                if sn2:
+                    slot_field(rep, p, f"{where}/match/{k}", sn2, sf2, match[k])
 
 
 def screen_model(rep, p, where, b, visible):

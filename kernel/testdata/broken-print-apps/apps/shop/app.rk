@@ -7,3 +7,4 @@ modules: {core: ^1.0}
 menu:
   - group: {id: Penjualan}
     items: [customer, sales_invoice]
+summary: {id: App uji shop.}

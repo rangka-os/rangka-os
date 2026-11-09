@@ -403,4 +403,38 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			}
 		}
 	}
+	// contract 0039: available as a balance model per the open session (e.g. stock_balance per outlet)
+	if av := asMap(asMap(b["catalogue"])["available"]); av != nil && catModel != nil {
+		where := "counter/catalogue/available"
+		am, af := v.slotModel(p, where+"/model", av, visible)
+		if am != nil {
+			if it := v.slotField(p, where+"/item", am, af, av["item"], linkKind); it != nil && str(it, "to") != catModel.Name {
+				v.rep.extra("error", p, where+"/item", "screen_slot_type", fmt.Sprintf(`"%s" links to %s; the catalogue is %s`, pyStr(av["item"]), str(it, "to"), catModel.Name))
+			}
+			v.slotField(p, where+"/qty", am, af, av["qty"], numericKinds)
+			match := asMap(av["match"])
+			ses := asMap(b["session"])
+			if len(match) > 0 && ses == nil {
+				v.rep.extra("error", p, where+"/match", "screen_slot_type", "match compares with the open session; add the session slot")
+			}
+			var sm *Model
+			var sf map[string]map[string]any
+			if ses != nil {
+				if x, ok := visible[str(ses, "model")]; ok {
+					sm, sf = x.m, fieldMap(x.m)
+				}
+			}
+			ks := make([]string, 0, len(match))
+			for k := range match {
+				ks = append(ks, k)
+			}
+			sort.Strings(ks)
+			for _, k := range ks {
+				v.slotField(p, where+"/match/"+k, am, af, k, nil)
+				if sm != nil {
+					v.slotField(p, where+"/match/"+k, sm, sf, match[k], nil)
+				}
+			}
+		}
+	}
 }

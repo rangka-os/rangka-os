@@ -4,7 +4,10 @@ type: counter
 label: {id: Kasir B}
 roles: [staf]
 counter:
-  catalogue: {model: catatan_harian, price: ghost}
+  catalogue:
+    model: catatan_harian
+    price: ghost
+    available: {model: jam_kerja, item: staff, qty: note, match: {ghost: text, date: nope}}
   document:
     model: jam_kerja
     lines: breaks

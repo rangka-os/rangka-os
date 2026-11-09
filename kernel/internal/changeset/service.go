@@ -62,6 +62,23 @@ type Preview struct {
 	Affected   map[string]int64 `json:"affected"`
 	Reversible bool             `json:"reversible"`
 	Notes      []string         `json:"notes,omitempty"`
+	// Modules is the difference in installed units a config.rk change makes (contract 0032 §3); nil otherwise.
+	Modules *ModulesDiff `json:"modules,omitempty"`
+}
+
+// ModulesDiff lists the units a change installs (the whole closure) and removes, the rows each removed model holds
+// in all organisations, and the units that leave config but stay installed because another unit requires them.
+type ModulesDiff struct {
+	Added   []string         `json:"added"`
+	Removed []string         `json:"removed"`
+	Rows    map[string]int64 `json:"rows"`
+	Kept    []KeptUnit       `json:"kept"`
+}
+
+// KeptUnit is a unit config no longer names that stays installed.
+type KeptUnit struct {
+	Name       string   `json:"name"`
+	RequiredBy []string `json:"required_by"`
 }
 
 // FileDiff is a file's full text before and after (null when absent), for diffs.

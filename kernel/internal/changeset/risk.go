@@ -71,6 +71,20 @@ func unitPath(p string) bool {
 // custom/<model>.rk). Medium: features.rk, flows, new fields/rules/overlays, config.apps and other settings,
 // connectors, new models. Low: themes, layouts, labels, dashboards, new work screens.
 func Assess(ops []Op, before, after func(path string) (map[string]any, bool), model func(name string) map[string]any) *Assessment {
+	return AssessWith(ops, before, after, Env{Model: model})
+}
+
+// Env is what Assess may look up besides the files: an installed model's own file, and the units a config.rk
+// would install (contract 0032 §3). Either may be nil.
+type Env struct {
+	Model     func(name string) map[string]any
+	Installed func(cfg map[string]any) map[string]bool
+}
+
+// AssessWith is Assess with an Env. With Installed set, a config.rk change to apps or modules is judged by the
+// difference in installed units, not by which key changed.
+func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool), env Env) *Assessment {
+	model := env.Model
 	a := &Assessment{Risk: "low"}
 	layers := map[int]bool{}
 	for _, op := range ops {
@@ -131,7 +145,7 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 		case strings.HasPrefix(p, "themes/") || strings.HasPrefix(p, "layouts/"):
 			a.raise("low", "presentation ("+p+")")
 		case p == "config.rk":
-			assessConfig(a, old, nw)
+			assessConfig(a, old, nw, env.Installed)
 		case p == "features.rk":
 			a.raise("medium", "changes plans (features.rk)")
 		default:
@@ -145,7 +159,7 @@ func Assess(ops []Op, before, after func(path string) (map[string]any, bool), mo
 	return a
 }
 
-func assessConfig(a *Assessment, old, nw map[string]any) {
+func assessConfig(a *Assessment, old, nw map[string]any, installed func(map[string]any) map[string]bool) {
 	keys := map[string]bool{}
 	for k := range old {
 		keys[k] = true
@@ -163,7 +177,17 @@ func assessConfig(a *Assessment, old, nw map[string]any) {
 	if len(changed) == 0 {
 		a.raise("low", "config.rk unchanged")
 	}
+	composition := false
 	for _, k := range changed {
+		composition = composition || ((k == "apps" || k == "modules" || k == "plan") && installed != nil)
+	}
+	if composition {
+		assessInstalledSet(a, old, nw, installed)
+	}
+	for _, k := range changed {
+		if composition && (k == "apps" || k == "modules") {
+			continue
+		}
 		switch k {
 		case "tax", "ai":
 			a.raise("high", "changes config."+k)
@@ -173,6 +197,63 @@ func assessConfig(a *Assessment, old, nw map[string]any) {
 			a.raise("medium", "changes config."+k)
 		}
 	}
+}
+
+// assessInstalledSet judges config.apps / config.modules (and a plan change, which may change the fallback) by the
+// units installed before and after (contract 0032 §3): adding is medium, a changed range is medium, removing is
+// medium here and becomes high at preview when a removed model holds rows. A change that installs and removes
+// nothing is low.
+func assessInstalledSet(a *Assessment, old, nw map[string]any, installed func(map[string]any) map[string]bool) {
+	if old == nil {
+		old = map[string]any{}
+	}
+	if nw == nil {
+		nw = map[string]any{}
+	}
+	before, after := installed(old), installed(nw)
+	added, removed := setDiff(after, before), setDiff(before, after)
+	if len(added) > 0 {
+		a.raise("medium", "installs "+strings.Join(added, ", ")+" (with what they require)")
+	}
+	if len(removed) > 0 {
+		a.raise("medium", "removes "+strings.Join(removed, ", ")+" (preview counts their rows; rows stay, tables are kept)")
+	}
+	om, nm := meta.AsMap(old["modules"]), meta.AsMap(nw["modules"])
+	var ranges []string
+	for k, v := range nm {
+		if o, ok := om[k]; ok && !reflect.DeepEqual(o, v) {
+			ranges = append(ranges, k)
+		}
+	}
+	sort.Strings(ranges)
+	for _, k := range ranges {
+		a.raise("medium", fmt.Sprintf("changes the range of module %s (%v → %v)", k, om[k], nm[k]))
+	}
+	var kept []string
+	for k := range om {
+		if _, still := nm[k]; !still && after[k] {
+			kept = append(kept, k)
+		}
+	}
+	sort.Strings(kept)
+	for _, k := range kept {
+		a.raise("low", k+" leaves config.modules but stays installed (another unit requires it)")
+	}
+	if len(added) == 0 && len(removed) == 0 && len(ranges) == 0 {
+		a.raise("low", "config.apps / config.modules: the installed units stay the same")
+	}
+}
+
+// setDiff returns the names in a and not in b, sorted.
+func setDiff(a, b map[string]bool) []string {
+	var out []string
+	for k := range a {
+		if !b[k] {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 func fieldsByName(m map[string]any) (map[string]map[string]any, []string) {

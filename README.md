@@ -1,45 +1,162 @@
-# Rangka OS
+<p align="center">
+  <a href="https://rangka-os.github.io/rangka-os/">
+    <picture>
+      <source media="(prefers-color-scheme: dark)" srcset="website/public/brand/rangka-horizontal-reversed.svg">
+      <img src="website/public/brand/rangka-horizontal.svg" alt="Rangka" width="220">
+    </picture>
+  </a>
+</p>
 
-**A source-available, declarative operating system for business apps** — CRM, sales, POS, inventory, ERP — built for
-Indonesian small and medium businesses.
+<p align="center">
+  <strong>The business OS your AI can safely change.</strong><br>
+  Business apps as readable <code>.rk</code> files, served by one Go binary and one Postgres,
+  changed through reviewed change sets.
+</p>
 
-Every app, model, rule, dashboard, theme, layout and backend capability is a `.rk` file (strict YAML, validated by
-JSON Schema). The kernel turns those files into a Postgres database, a REST + MCP API, realtime events and screens,
-and changes them while the system runs through reviewed **change sets** — so an owner, the Console or an AI agent
-can adapt the software without an engineer writing code.
+<p align="center">
+  <a href="LICENSE"><img alt="Licence: ELv2" src="https://img.shields.io/badge/licence-ELv2-1C1917"></a>
+  <a href="https://github.com/rangka-os/rangka-os/releases"><img alt="Release" src="https://img.shields.io/github/v/release/rangka-os/rangka-os?include_prereleases&color=A33B23"></a>
+  <a href="https://www.npmjs.com/package/@rangka-os/cli"><img alt="npm" src="https://img.shields.io/npm/v/@rangka-os/cli/next?label=npm%20%40next&color=A33B23"></a>
+  <a href="https://github.com/rangka-os/rangka-os/actions/workflows/kernel.yml"><img alt="Kernel CI" src="https://github.com/rangka-os/rangka-os/actions/workflows/kernel.yml/badge.svg"></a>
+  <a href="https://rangka-os.github.io/rangka-os/"><img alt="Docs" src="https://img.shields.io/badge/docs-rangka--os.github.io-1C1917"></a>
+</p>
 
-> **Status: v0 (October 2026).** Everything below runs and is tested, but the kernel still uses small in-tree
-> stand-ins for its third-party Go libraries (see [Status](#status)). Not production-ready.
+<p align="center">
+  <a href="https://rangka-os.github.io/rangka-os/guide/quick-start">Quick start</a> ·
+  <a href="https://rangka-os.github.io/rangka-os/guide/what-is-rangka">Docs</a> ·
+  <a href="https://rangka-os.github.io/rangka-os/reference/">Reference</a> ·
+  <a href="https://rangka-os.github.io/rangka-os/roadmap">Roadmap</a> ·
+  <a href="docs/contracts/">Contracts</a>
+</p>
 
-## The Rangka family
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="website/public/screens/dashboard-dark.webp">
+  <img alt="Rangka web app: the CRM dashboard of the Kopi Senja demo company, generated from .rk files" src="website/public/screens/dashboard-light.webp">
+</picture>
 
-| Repo | What | Licence |
-| --- | --- | --- |
-| **[rangka-os](https://github.com/rangka-os/rangka-os)** (this repo) | Kernel, schemas, validator, design system, Console, docs | ELv2 |
-| [rangka-apps](https://github.com/rangka-os/rangka-apps) | Apps (core, sales, crm), templates, example site | ELv2 |
-| [rangka-connectors](https://github.com/rangka-os/rangka-connectors) | Business integrations as `connector.rk` (WhatsApp, QRIS, …) | ELv2 |
-| [rangka-ai](https://github.com/rangka-os/rangka-ai) | Agent that changes an installation through change sets | ELv2 |
-| [rangka-edge](https://github.com/rangka-os/rangka-edge) | Agent at the outlet: runs device connectors (printer, RFID, scanner, cash drawer), works offline, syncs | ELv2 |
-| rangka-cloud | Managed hosting, onboarding chat, billing | private |
+## What is Rangka OS?
+
+Rangka OS is a source-available, declarative operating system for business apps (CRM, sales, invoicing, payments,
+stock, POS), built first for Indonesian small and medium businesses.
+
+Every module, model, rule, flow, dashboard, print format, theme and backend capability is a `.rk` file: strict YAML,
+checked by JSON Schema. The kernel turns those files into Postgres tables, a REST + MCP API, realtime events and the
+screens of the web app. A running installation changes only through **change sets**: proposed (by a person, the
+Console or the Raka AI agent), validated on a copy, previewed with their SQL, approved by a person, applied live and
+revertible. Money and stock never depend on an LLM.
+
+> **Status: alpha (`v0.5.0-alpha`).** Rangka runs end to end, backs up and restores, enforces permissions and row
+> scope per organisation and outlet, and is being readied for its first pilot businesses. It is not yet a stable
+> release. See [Status](#status).
+
+## Features
+
+- **Apps as files.** Modules hold models, flows, roles, imports and print formats; apps compose modules into what a
+  business uses, with dashboards and processes ([contract 0001](docs/contracts/0001-modules-and-apps.md)). An
+  organisation's own fields and rules are overlays in `custom/<model>.rk`, never edits to the app.
+- **Documents that behave.** Draft → submitted → cancelled, with amend; numbering at submit with per-organisation
+  series; approvals; rupiah as integers (no floats), PPN 12% on DPP 11/12; declared stock moves with recipes and
+  returns; recurring documents.
+- **Work screens for staff.** Screens declared in `.rk` for the people at the counter or in the field, starting with
+  the POS counter: cart, hold, split tender, sessions with a blind close, receipts, stock per outlet; an offline outbox
+  with idempotency keys ([contract 0030](docs/contracts/0030-work-screens.md)).
+- **Generated everything.** Tables and safe migrations (`--dry-run`, `--rollback`, destructive steps refused unless
+  allowed), REST (`/api/v1`), SSE events, MCP tools, list aggregates, dashboards, PDF print formats, spreadsheet
+  imports, CSV export, attachments, plan limits. Every screen works from phone to desktop.
+- **Change sets.** Propose → validate → preview → approve → apply → revert. High-risk changes need the owner; an AI
+  token can never approve or apply.
+- **Raka in the app.** The Rangka AI agent answers in the web app and Console through a sidecar
+  ([contract 0020](docs/contracts/0020-ai-assistant-relay.md)) and changes things only by proposing change sets.
+  [`skills/`](skills) gives Raka and any other agent harness the same Rangka skills
+  ([contract 0035](docs/contracts/0035-raka-skills.md)).
+- **Rangka ID built in.** Password sign-in (bcrypt), sessions, API tokens, an OpenID Connect provider, roles with
+  outlet scope and Postgres row-level security per organisation.
+- **One binary.** Queue, scheduler, realtime, cache and files run on Postgres and the local disk by default;
+  `system.rk` decides the drivers. `rangka backup` / `rangka restore` archive the database, metadata and uploads.
+- **A strict validator, twice.** The Go kernel and the Python reference (`tools/rangka_validate.py`) print
+  byte-identical reports: 107 codes, each with `file:line:col`.
+
+## Quick start
+
+### Start a project with npm
+
+Needs Node.js 18+ and Docker (for Postgres), or a Postgres 16 of your own. Releases are pre-releases on the `next`
+tag for now.
+
+```bash
+npm create @rangka-os@next my-shop     # asks for the business name, template demo or blank
+cd my-shop
+npm install                            # installs the rangka binary for your platform
+npm run db                             # Postgres 16 in Docker on port 54329
+npm run setup                          # validate, migrate, seed
+npm run dev                            # http://localhost:8080/app/
+```
+
+The CLI on its own: `npx @rangka-os/cli@next validate --apps apps --site site`.
+
+### Run the container
+
+```bash
+docker run --rm -p 8080:8080 -v "$PWD:/srv" -e DATABASE_URL=postgres://… ghcr.io/rangka-os/rangka:0.5.0-alpha.5 serve
+```
+
+Pre-releases are tagged by version only; `:latest` follows the first stable release.
+
+`/srv` is a project folder as written by `npm create @rangka-os`. A production compose file (Postgres, Caddy,
+backups, systemd) with a runbook lives in [`deploy/juragan/`](deploy/juragan/RUNBOOK.md).
+
+### Build from source
+
+Needs Go 1.24+ and PostgreSQL 16 server binaries (`scripts/pgtemp.sh` finds Homebrew, DBngin, Postgres.app and Debian
+installs, or set `PGBIN`).
+
+```bash
+mkdir rangka && cd rangka
+git clone git@github.com:rangka-os/rangka-os.git
+git clone git@github.com:rangka-os/rangka-connectors.git
+git clone git@github.com:rangka-os/rangka-ai.git          # optional: Raka answers in the demo when built
+
+cd rangka-os/kernel
+make run-demo                  # throwaway Postgres → migrate → seed → serve on :8080; Ctrl-C cleans up
+make run-demo ADDR=:8090       # when 8080 is taken
+```
+
+| URL | What |
+| --- | --- |
+| http://localhost:8080/app/ | The web app: dashboards, lists, forms, approvals, imports, print |
+| http://localhost:8080/console/ | Rangka Console for operators (demo sign-in `ceo@saga.co.id` / `rangka-demo`) |
+| http://localhost:8080/api/v1/meta | Metadata API |
+| `POST http://localhost:8080/mcp` | MCP endpoint for AI clients |
+
+`make run-demo` serves with `--dev-open` (API without sign-in, as the owner). Never use that flag on a real server.
+
+Other commands, from `kernel/`:
+
+```bash
+make test-unit        # go test without a database
+make test             # every package against a throwaway Postgres
+make validate         # validate the catalogue, sites and connectors
+make compare-python   # Go and Python validators must print identical reports
+```
+
+Every `rangka` setting can come from flags, the environment or a `.env` file in the current directory
+(`DATABASE_URL`, `RANGKA_APPS`, `RANGKA_SITE`, `RANGKA_ORG`, `RANGKA_OWNER_EMAIL`, …). See the
+[CLI reference](https://rangka-os.github.io/rangka-os/reference/cli).
 
 ## How it fits together
 
 ```
- 6  Presentation    themes/*.rk · layouts/*.rk            ← owners, Rangka AI (low risk)
- 5  Apps            apps/<app>/{app,models,dashboards,flows,roles}.rk   ← app authors
- 4  Organisation    config.rk · features.rk · custom/<model>.rk overlays ← owners, Rangka AI
- 3  Integrations    rangka-connectors/<c>/connector.rk     ← admin
+ 6  Presentation    themes/*.rk · layouts/*.rk · print formats       ← owners, Raka (low risk)
+ 5  Apps            modules/<m>/… · apps/<app>/{app,dashboards,processes}.rk   ← module and app authors
+ 4  Organisation    config.rk · features.rk · custom/<model>.rk overlays       ← owners, Raka
+ 3  Integrations    rangka-connectors/<c>/connector.rk               ← admin
  2  Capabilities    system.rk: db · cache · queue · scheduler · realtime · files · search · notify · auth
- 1  Kernel          this repo: rangka validate · migrate · seed · serve (Go)
- 0  Deploy          Docker · Helm · desktop · partner one-click · Rangka Cloud
+ 1  Kernel          this repo: rangka validate · migrate · seed · serve · backup · restore (Go)
+ 0  Deploy          npm · Docker · compose · desktop · partner one-click · Rangka Cloud
 ```
 
 An installation is a **site** folder (`system.rk`, `features.rk`, `config.rk`, `themes/`, `layouts/`, `custom/`)
-plus the apps and connectors it uses. App authors declare needs in one line — `realtime: true` on a model,
-`schedule: "0 8 * * 1-5"` on a flow, `queue:` on an action, `cache: 5m` on a dashboard — and `system.rk` decides which
-driver serves them. By default everything runs on one Postgres and one binary.
-
-A small model:
+plus the modules, apps and connectors it uses. A model in one file:
 
 ```yaml
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
@@ -59,90 +176,72 @@ views:
   kanban: {group_by: stage, sum: value}
 ```
 
-## Quick start
-
-Requirements: Go 1.24+, PostgreSQL 16 (binaries on the machine; the scripts start a throwaway cluster), Python 3 with
-`pyyaml` and `jsonschema` for the reference tools. Clone the repos side by side:
-
-```bash
-mkdir rangka && cd rangka
-git clone git@github.com:rangka-os/rangka-os.git
-git clone git@github.com:rangka-os/rangka-apps.git
-git clone git@github.com:rangka-os/rangka-connectors.git
-
-cd rangka-os/kernel
-make run-demo        # temp Postgres → migrate → seed → serve on :8080 (Ctrl-C cleans up)
-```
-
-Then open:
-
-| URL | What |
-| --- | --- |
-| http://localhost:8080/console/ | Rangka Console (sign in: `ceo@saga.co.id` / `rangka-demo`) |
-| http://localhost:8080/app/ | The end-user web app: dashboards, lists, forms, approvals, imports |
-| http://localhost:8080/api/v1/meta | Metadata API |
-| `POST http://localhost:8080/mcp` | MCP endpoint for AI clients |
-
-Other commands:
-
-```bash
-make test             # every package against a throwaway Postgres
-make validate         # validate rangka-apps + the kopi-senja site + rangka-connectors
-make compare-python   # Go validator vs tools/rangka_validate.py (must be byte-identical)
-python3 tools/rangka_validate.py ../rangka-apps/apps --site ../rangka-apps/sites/kopi-senja --connectors ../rangka-connectors
-```
-
-The Console also runs without a kernel: `cd web && python3 -m http.server 8000`, then open
-http://localhost:8000/console/?demo=1.
+Read more: [architecture and layers](https://rangka-os.github.io/rangka-os/guide/architecture),
+[`.rk` files](https://rangka-os.github.io/rangka-os/guide/rk-files),
+[change sets](https://rangka-os.github.io/rangka-os/concepts/change-sets).
 
 ## Repository layout
 
 | Path | What |
 | --- | --- |
-| [`kernel/`](kernel/README.md) | Go kernel: `.rk` loader + validator, migrations, CEL, lifecycle, REST, SSE, queue, scheduler, cache, Rangka ID (sessions, API tokens, OIDC provider), change sets, MCP |
-| [`schema/0.5/`](schema/0.5) | JSON Schemas for all 14 `.rk` kinds (current): app, model, dashboard, flow, overlay, role, connector, template, system, theme, layout, features, config, changeset. `schema/0.4/` stays published for existing files |
-| [`tools/`](tools) | Reference validator `rangka_validate.py`, strict `.rk` reader `rkfile.py`, `rk_convert.py` (JSON → `.rk`), API-docs and prototype builders |
-| [`templates/`](templates) | Theme templates (`standard`, `retail`, `clinic`) and layout templates (`top-nav`, `side-only`, `pos`, `portal`) |
-| [`web/design-system/`](web/design-system) | React component bundle (`window.Rangka`, 76 exports), tokens, TypeScript types — Frappe UI structure in Rangka colours (Ink, Bata, warm stone), light and dark |
-| [`web/console/`](web/console/README.md) | Rangka Console, the control pane for operators: capabilities, apps and models, change sets, connectors, organisations, themes, audit |
-| [`web/app/`](web/app) | The end-user web app (served at `/app/`); its engine is the reference semantics for the kernel |
-| [`docs/contracts.md`](docs/contracts.md) | The binding contract: REST, SSE events, MCP tools, CEL dialect, change sets, v0.1 decisions |
-| [`docs/site/`](docs/site) | API reference page generated from metadata |
+| [`kernel/`](kernel/README.md) | Go kernel: `.rk` loader and validator, migrations, CEL, document lifecycle, REST, SSE, MCP, queue and scheduler, Rangka ID, change sets, files, imports, print, backup |
+| [`schema/0.5/`](schema/0.5) | JSON Schemas for every `.rk` kind (module, model, flow, app, dashboard, print, import, system, config, …). `schema/0.4/` stays published for older files |
+| [`tools/`](tools) | Python reference validator `rangka_validate.py`, strict `.rk` reader `rkfile.py`, converters and doc builders |
+| [`templates/`](templates) | Theme and layout templates |
+| [`skills/`](skills/README.md) | Skills for AI agents (Agent Skills format, contract 0035). Claude Code: `/plugin marketplace add rangka-os/rangka-os`, then `/plugin install rangka-skills@rangka-os`; any harness: `rangka skills install`. [Docs](https://rangka-os.github.io/rangka-os/skills/) |
+| [`web/app/`](web/app) | The web app served at `/app/` |
+| [`web/console/`](web/console/README.md) | Rangka Console, the control pane for operators |
+| [`web/design-system/`](web/design-system) | React components and `tokens.json` (Ink, Bata, warm stone; light and dark) |
+| [`website/`](website) | This documentation site (VitePress), published to GitHub Pages |
+| [`npm/`](npm) | `@rangka-os/cli` and `@rangka-os/create` |
+| [`deploy/`](deploy) | Container image and the production compose setup |
+| [`docs/contracts/`](docs/contracts) | Contracts: how cross-repo formats and APIs change ([0000](docs/contracts/0000-how-contracts-change.md)) |
 
-## Concepts in one page
+## The Rangka family
 
-- **`.rk` files** are YAML with strict rules so every tool reads them the same way: YAML 1.2 types only; unquoted
-  `yes`/`no`/`on`/`off`, leading-zero numbers (phone, NPWP) and `08:30` are refused; no duplicate keys, tabs or anchors.
-  Errors point at `file:line:col`. VS Code gets completion through the `$schema` comment on the first line.
-- **Expressions** (defaults, computed fields, rules, filters) use a CEL dialect with `today()`, `option()`,
-  `app_installed()`, link traversal such as `customer.payment_days`, and more — see `docs/contracts.md`.
-- **Documents** (`is_submittable`) follow draft → submitted → cancelled, with amendment; numbering happens at submit;
-  submitted documents are immutable.
-- **Company layer**: an organisation's own fields and rules live in `custom/<model>.rk` overlays (`x_` names), merged
-  at load, stored in a JSONB column, never colliding with app upgrades.
-- **Change sets** are the only way a running installation changes: propose → validate → preview (SQL, affected
-  records, before/after files) → approve (a person; high risk = owner only) → apply → revert.
-- **Rangka ID** is built in: password login, API tokens and an OpenID Connect provider so Omilo and other apps sign in
-  with the same account.
+| Repo | What | Licence |
+| --- | --- | --- |
+| **[rangka-os](https://github.com/rangka-os/rangka-os)** (this repo) | Kernel, schemas, validators, web app, Console, design system, docs | ELv2 |
+| [rangka-apps](https://github.com/rangka-os/rangka-apps) | Modules and apps (CRM, sales, invoicing, payments, stock, …), example sites | ELv2 |
+| [rangka-connectors](https://github.com/rangka-os/rangka-connectors) | Integrations as `connector.rk` (WhatsApp Business first) | ELv2 |
+| [rangka-ai](https://github.com/rangka-os/rangka-ai) | Raka, the AI agent: guardrails in code, works only through change sets | ELv2 |
+| [rangka-edge](https://github.com/rangka-os/rangka-edge) | Outlet device agent: printers, scanners, cash drawers; offline first | ELv2 |
+| rangka-cloud | Managed hosting, chat onboarding, billing | private |
 
 ## Status
 
-| Area | v0 |
-| --- | --- |
-| Validator (Go + Python), migrations, lifecycle, dashboards, REST, SSE, queue, scheduler, memory cache, Rangka ID + OIDC, change sets, MCP | Working, tested on Postgres 16 |
-| Console | 26 screens, demo and live mode, Playwright tests |
-| Go dependencies | In-tree stand-ins for pgx, chi, cel-go, River, jsonschema, yaml.v3 and bcrypt (each behind one package) — **to be replaced with the real libraries next** |
-| Not yet | Valkey drivers, file uploads, sending email/push/WhatsApp (logged only), connector runtime, model `permissions:` enforcement, payments, SQL-level list filters, OIDC refresh tokens, relations (reverse lists, on-delete, many-to-many) |
+Done and tested on Postgres 16: validators, migrations with dry run and rollback, document lifecycle, numbering,
+approvals, multi-organisation with row scope and RLS, permissions, attachments, imports, CSV export, print formats,
+list aggregates, dashboards, declared stock moves, recurring documents, plan limits, change sets, Rangka ID + OIDC,
+MCP and skills, backup and restore, the responsive web app and Console, the POS counter work screen, the Raka relay,
+releases on npm, GitHub and ghcr.io.
+
+Still open: the CEL engine, YAML reader, JSON Schema validator, HTTP router and job queue are small in-tree packages
+to be swapped for the upstream libraries ([contract 0005 §1](docs/contracts/0005-pilot-readiness.md)); the connector
+runtime ([0002](docs/contracts/0002-connector-runtime-and-ports.md)) and connector secrets
+([0017](docs/contracts/0017-connector-secrets.md)); sending email, push and WhatsApp (logged only); Valkey and S3
+drivers; edge sync ([0006](docs/contracts/0006-edge-sync.md)). The [roadmap](https://rangka-os.github.io/rangka-os/roadmap)
+has the full list.
 
 ## Contributing
 
-Issues and pull requests are welcome. Before a PR: `make test`, `make validate` and `make compare-python` must pass,
-and any change to `.rk` semantics must land in both validators and in `docs/contracts.md`. UI copy is Bahasa Indonesia;
-code, comments and docs are English.
+Issues and pull requests are welcome; read the
+[contributing guide](https://rangka-os.github.io/rangka-os/contributing) first. In short:
+
+- `make test`, `make validate` and `make compare-python` pass before a PR.
+- A change to `.rk` semantics lands in both validators and in a contract under [`docs/contracts/`](docs/contracts).
+  Changes that cross repos start as a contract proposal.
+- Code, comments and docs are English. UI text is Bahasa Indonesia first: sentence case, "kamu", `Rp 1.250.000`,
+  `27 Okt 2026`.
+- Contributions need a contributor agreement (to be published).
+
+## Security
+
+Please do not open a public issue for a vulnerability. See [SECURITY.md](SECURITY.md).
 
 ## Licence
 
-Elastic License 2.0 (ELv2), see `LICENSE`. Copyright 2026 Saga Tekno Studio. The code is public and free to
-self-host, change and use in your own business. You may not offer it to others as a hosted or managed service;
-partners who want to host Rangka for clients need a partner agreement with Saga. Rangka Cloud is the only
-closed part. Contributions need a contributor agreement (to be published).
+Rangka OS is **source-available** under the [Elastic License 2.0 (ELv2)](LICENSE), copyright 2026 Saga Tekno Studio.
+You may use, copy, change and self-host it, including for your own business. You may not offer it to others as a
+hosted or managed service, or remove or work around its licence notices. Partners who want to host Rangka for clients
+need a partner agreement with Saga Tekno Studio. Rangka Cloud is the only closed part of the family.

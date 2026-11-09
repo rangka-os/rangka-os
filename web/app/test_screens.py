@@ -33,8 +33,12 @@ def page_for(browser, ctx, who, viewport, allow=()):
     r = c.request.post("/auth/login", data=json.dumps({"email": who[0], "password": who[1]}), headers={"Content-Type": "application/json"})
     assert r.status == 200, f"login {who[0]}: {r.status}"
     p = c.new_page()
-    p.on("console", lambda m: m.type == "error" and "401" not in m.text and ctx["errors"].append(f"console: {m.text}"))
+    # a 403 is reported below with its URL (the response check), so the browser's own "Failed to load resource" line
+    # adds nothing; the shell probes GET /api/v1/catalogue on every load and only the owner may read it (contract 0036)
+    p.on("console", lambda m: m.type == "error" and "401" not in m.text and "status of 403" not in m.text and ctx["errors"].append(f"console: {m.text}"))
     def resp(res):
+        if res.status == 403 and res.url.endswith("/api/v1/catalogue"):
+            return
         if res.status >= 400 and "/auth/" not in res.url and not any(a in res.url for a in allow):
             ctx["errors"].append(f"HTTP {res.status} {res.request.method} {res.url}")
     p.on("response", resp)
@@ -163,6 +167,11 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     for name, cat, price, code in (("Kopi susu", "Minuman", 18000, "899001"), ("Es teh", "Minuman", 8000, ""), ("Roti bakar", "Makanan", 15000, "")):
         r = owner.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": name, "category": cat, "price": price, "barcode": code}), headers={"Content-Type": "application/json"})
         assert r.status == 201, r.text()
+    # stock per outlet (contract 0039): the open session's outlet is Pusat; Roti bakar has stock only in Cabang
+    menus = {m["menu_name"]: m["name"] for m in owner.request.get("/api/v1/r/menu?limit=50").json()["data"]}
+    for menu, outlet, qty in (("Kopi susu", "Pusat", 3), ("Es teh", "Pusat", 0), ("Roti bakar", "Cabang", 2)):
+        r = owner.request.post("/api/v1/r/stok_menu", data=json.dumps({"menu": menus[menu], "outlet": outlet, "qty": qty}), headers={"Content-Type": "application/json"})
+        assert r.status == 201, r.text()
     owner.close()
     c, p = page_for(browser, ctx, KASIR, TABLET)
     p.goto("/app/")
@@ -172,6 +181,10 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     p.locator(".ap-counter-open input").first.fill("100000")
     p.get_by_role("button", name="Buka sesi").click()
     p.wait_for_selector(".ap-counter-item")
+    p.wait_for_selector(".ap-counter-left")
+    badge = lambda name: p.locator(".ap-counter-item", has_text=name).locator(".ap-counter-left")
+    assert badge("Kopi susu").inner_text() == "Sisa 3" and badge("Es teh").inner_text() == "Habis", "the Pusat balances"
+    assert badge("Roti bakar").count() == 0, "stock of another outlet shows no badge"
     sales_before = total(c, "penjualan")
     # the price changes after the catalogue loaded: the receipt panel shows the server's total and change (audit M1)
     kopi = c.request.get("/api/v1/r/menu?filter=" + urllib.parse.quote("menu_name == 'Kopi susu'")).json()["data"][0]["name"]
@@ -354,7 +367,7 @@ def test_counter_fits_phone_and_tablet(browser, ctx):
         c = browser.new_context(viewport=vp, base_url=ctx["base"], is_mobile=size == "phone", has_touch=touch)
         assert c.request.post("/auth/login", data=json.dumps({"email": KASIR[0], "password": KASIR[1]}), headers={"Content-Type": "application/json"}).status == 200
         p = c.new_page()
-        p.on("console", lambda m: m.type == "error" and "401" not in m.text and ctx["errors"].append(f"console: {m.text}"))
+        p.on("console", lambda m: m.type == "error" and "401" not in m.text and "status of 403" not in m.text and ctx["errors"].append(f"console: {m.text}"))
         p.goto("/app/#/w/jual")
         p.wait_for_selector(".ap-counter-open, .ap-counter-item")
         if p.locator(".ap-counter-open").count():

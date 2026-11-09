@@ -1,6 +1,6 @@
 # Relations
 
-Models connect to each other, inside one app and across apps.
+Models connect to each other, inside one module and across modules.
 
 | Relation | How you write it | Example |
 | --- | --- | --- |
@@ -23,13 +23,14 @@ fields:
   - {name: items, type: table, of: sales_invoice_item}
 ```
 
-## Across apps
+## Across modules
 
-Relations follow app dependencies:
+Relations follow module dependencies:
 
-- An app may link to its own models and to models of apps it `requires` (`crm` → `core`).
-- Models from an `optional` app need a guard: `if: app_installed('sales')`.
-- Never the other way: `core` does not link to `crm`, so the core apps install on their own.
+- A module may link to its own models and to models of modules it `requires` (`pipeline` → `contacts`).
+- Models from an `optional` module need a guard: `if: app_installed('invoicing')`.
+- Never the other way: `contacts` does not link to `pipeline`, so the shared modules install on their own.
+- An app's menu and dashboards see the models of the modules it lists.
 - Company overlays may add link fields, and overlay fields are readable through links
   (`customer.x_customer_group`).
 

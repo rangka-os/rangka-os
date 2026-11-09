@@ -4,3 +4,4 @@ version: 1.0.0
 title: {id: Pipeline penjualan, en: Sales pipeline}
 requires: {rangka: '>=0.5', contacts: ^1.0}
 hooks: [crm.mark_won]
+summary: {id: Modul uji pipeline.}

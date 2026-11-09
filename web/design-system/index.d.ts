@@ -143,10 +143,11 @@ export declare function Badge(props: { appearance?: 'primary' | 'important'; max
 export interface AppEntry { id: string; name: string; desc: string; icon: IconName; color: string; external?: boolean }
 export interface RecentEntry { name: string; sub?: string; icon?: IconName; [k: string]: any }
 export declare function AppSwitcher(props: { apps?: AppEntry[]; current?: string; recent?: RecentEntry[]; float?: boolean; onSelect?: (app: any) => void; onManage?: () => void; onMarket?: () => void }): React.ReactElement;
-export interface AccountMenuProps { name: string; email?: string; company?: string; companies?: string[]; theme?: 'light' | 'dark' | 'system'; float?: boolean; onSelect?: (key: string) => void }
+export interface AccountMenuSection { heading?: string; items: { key: string; icon: IconName; label: string; on?: boolean }[] }
+export interface AccountMenuProps { name: string; email?: string; company?: string; companies?: string[]; theme?: 'light' | 'dark' | 'system'; extra?: AccountMenuSection[]; float?: boolean; onSelect?: (key: string) => void }
 export declare function AccountMenu(props: AccountMenuProps): React.ReactElement;
 export interface TopNavProps { product?: { name: string; icon: IconName; color: string }; items?: { id?: string; label: string; menu?: boolean }[]; current?: string; createLabel?: string | false; searchPlaceholder?: string; unread?: boolean;
-  user?: { name: string; email?: string; company?: string; companies?: string[] }; theme?: 'light' | 'dark' | 'system'; apps?: AppEntry[]; currentApp?: string; recent?: RecentEntry[]; actions?: Node; defaultOpen?: 'switcher' | 'account';
+  user?: { name: string; email?: string; company?: string; companies?: string[] }; theme?: 'light' | 'dark' | 'system'; apps?: AppEntry[]; currentApp?: string; recent?: RecentEntry[]; actions?: Node; accountExtra?: AccountMenuSection[]; defaultOpen?: 'switcher' | 'account';
   onHome?: () => void; onNavigate?: (id: string) => void; onCreate?: () => void; onSearch?: () => void; onSwitch?: (app: any) => void; onAccount?: (key: string) => void; onNotifications?: () => void; onHelp?: () => void; onManageApps?: () => void; onMarketplace?: () => void }
 export declare function TopNav(props: TopNavProps): React.ReactElement;
 export declare function Spinner(props: { size?: 'sm' | 'md' | 'lg'; label?: string }): React.ReactElement;

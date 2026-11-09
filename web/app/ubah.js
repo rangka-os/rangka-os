@@ -637,7 +637,8 @@
     return h("div", { className: "ap-ubah-bar", role: "region", "aria-label": "Mode ubah" },
       h(R.Icon, { name: "edit" }), h("span", { className: "ap-ubah-bar-t" }, "Mode ubah · perubahan jadi change set"),
       p.busy ? h(R.Spinner, { size: "sm", label: "Menyimpan perubahan" }) : null,
-      h(R.Button, { size: "sm", variant: "quiet", icon: "time", onClick: p.onPending }, "Perubahan menunggu"));
+      h(R.Button, { size: "sm", variant: "quiet", icon: "time", onClick: p.onPending }, "Perubahan menunggu"),
+      p.onDone ? h(R.Button, { size: "sm", icon: "check", onClick: p.onDone }, "Selesai") : null);
   };
 
   RA.PreviewBanner = function (p) {

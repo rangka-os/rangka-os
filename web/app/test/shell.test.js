@@ -374,3 +374,16 @@ test("tabLinks: models, dashboards, approvals and search; unknown links left out
   assert.deepStrictEqual(plain(tabs).map((t) => [t.label, t.href, t.current]),
     [["Beranda", "#/d/crm_overview", true], ["Peluang", "#/r/deal", false], ["Setujui", "#/approvals", false], ["Cari", null, false]]);
 });
+
+test("accountSections: Mode only for proposers, then Aplikasi from pwaMenu keys", () => {
+  const S = A.accountSections;
+  assert.deepStrictEqual(plain(S({ propose: false, pwa: [] })), []);
+  const m = plain(S({ propose: true, ubah: false, pwa: [] }));
+  assert.deepStrictEqual(m.map((g) => g.heading), ["Mode"]);
+  assert.deepStrictEqual(m[0].items.map((i) => [i.key, i.on]), [["mode:pakai", true], ["mode:ubah", false]]);
+  assert.strictEqual(plain(S({ propose: true, ubah: true, pwa: [] }))[0].items[1].on, true);
+  const a = plain(S({ propose: false, pwa: ["update", "install"] }));
+  assert.deepStrictEqual(a.map((g) => g.heading), ["Aplikasi"]);
+  assert.deepStrictEqual(a[0].items.map((i) => i.key), ["app:update", "app:install"]);
+  assert.deepStrictEqual(plain(S({ propose: false, pwa: ["ios"] }))[0].items.map((i) => i.label), ["Pasang di layar utama"]);
+});

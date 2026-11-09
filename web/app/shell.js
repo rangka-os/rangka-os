@@ -886,6 +886,14 @@
 
     useEffect(function () { global.document.documentElement.dataset.density = densityOf(meta); }, [meta]);
 
+    // Escape closes the navigation drawer (phone, tablet drawer) or the floating rail, like any other overlay
+    useEffect(function () {
+      if (!navOpen && !railOpen) return undefined;
+      function key(e) { if (e.key === "Escape") { setNavOpen(false); setRailOpen(false); } }
+      global.addEventListener("keydown", key);
+      return function () { global.removeEventListener("keydown", key); };
+    }, [navOpen, railOpen]);
+
     // ⌘K on a Mac, Ctrl+K elsewhere, opens the command menu from anywhere in the app (not under the sign-in dialog)
     var expiredRef = useRef(expired);
     expiredRef.current = expired;
@@ -1177,7 +1185,9 @@
       searchPlaceholder: "Cari", currentApp: openApp ? openApp.name : null,
       apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: appIcon(a), color: "var(--primary)" }; }),
       user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },
-      actions: h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
+      // a phone with layout tabs opens the menu from its last tab: no second menu button in the top bar
+      actions: phone && resp.phone === "tabs" && tabLinks(meta, resp.tabs, route, home).length ? null
+        : h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
       accountExtra: accountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,

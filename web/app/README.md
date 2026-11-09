@@ -19,6 +19,9 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   its count, Proses bisnis, Impor data) and the layout's `nav.side` groups (else each app's menu). The footer holds the
   collapse button; collapsed state is kept in `localStorage["rk.sidebar.collapsed"]`.
   At 600px and below the sidebar is a drawer opened from a 48px bar (menu, company, search).
+  With `layout.responsive.phone: tabs` (contract 0038) a phone gets bottom tabs from `responsive.tabs` plus a last Menu
+  tab that opens the drawer; the top-nav shell then drops its own menu button, and toasts sit above the tabs. Escape
+  closes the drawer.
 - **`top-nav`**: the TopNav (app switcher, search, account menu) with the sidebar below it.
 
 ⌘K or Ctrl+K opens the command menu in both: Halaman (every sidebar entry), Buat baru (`layout.nav.create`) and Data

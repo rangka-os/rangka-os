@@ -687,3 +687,8 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-offline { display: flex; align-items: flex-start; gap: 8px; padding: 8px 16px; background: var(--warn-tint); color: var(--ink);
   border-bottom: 1px solid var(--warn-line); font-size: 13px; line-height: 18px; }
 .ap-offline .rk-icon { flex: 0 0 auto; width: 16px; height: 16px; margin-top: 1px; color: var(--warn); }
+
+/* phone with the desk tab bar (layout tabs or the Juragan bar): toasts sit above it, not on it (the work shell has its own rule) */
+@media (max-width: 767px) {
+  .ap-shell:has(.ap-tabbar) .rk-toasts.float { bottom: calc(80px + env(safe-area-inset-bottom)); }
+}

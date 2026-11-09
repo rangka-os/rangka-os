@@ -1,0 +1,17 @@
+../site/features.rk:5:26  error  unknown_module  plans/0/modules/1  "gudang" is not a module
+../site/config.rk:8:22  error  version_mismatch  modules/invoicing  "invoicing" is 1.2.0; this needs ^2.0
+../site/config.rk:8:49  error  unknown_module  modules/crm  "crm" is an app, not a module; list it under apps
+../site/config.rk:8:61  error  unknown_module  modules/site  "site" is the company module (contract 0016): it comes with the site and cannot be named
+../site/config.rk:8:76  error  unknown_module  modules/contcts  "contcts" is not a module; did you mean "contacts"?
+../site/config.rk:8:92  error  module_not_in_plan  modules/pipeline  plan "sewa" does not include module "pipeline" (it allows contacts, invoicing, payments)
+../site/custom/stock_item.rk:2:8  error  uses_uninstalled_model  model  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../site/models/x_sewa.rk:6:34  error  uses_uninstalled_model  fields/0/to  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../site/flows/x_isi_stok.rk:4:5  error  uses_uninstalled_model  on  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../site/flows/x_isi_stok.rk:7:42  error  uses_uninstalled_model  steps/1/then/0/create  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../site/config.rk:10:15  error  uses_uninstalled_model  numbering/stock_item  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../site/config.rk:15:16  error  org_config_key  orgs/cabang/config/modules  org "cabang" config cannot set modules: one kernel has one schema (contract 0032)
+../site/layouts/utama.rk:3:7  error  uses_uninstalled_model  home  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../site/layouts/utama.rk:9:16  error  uses_uninstalled_model  nav/side/0/items/1/to  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../site/config.rk:13:5  warn   letterhead_missing  orgs/cabang  org "cabang" has no letterheads/cabang.rk; its documents print without address, bank or signatory
+
+14 error(s), 1 warning(s)

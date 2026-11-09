@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/features.json
+plans:
+  - name: dasar
+    label: {id: Dasar}
+    modules: [invoicing, gudang]
+  - name: sewa
+    label: {id: Sewa}
+    extends: dasar
+    modules: [payments]

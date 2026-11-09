@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/layout.json
+name: utama
+home: 'model:stock_item'
+nav:
+  side:
+    - group: {id: Sewa}
+      items:
+        - {to: 'model:x_sewa'}
+        - {to: 'model:stock_item'}
+        - {to: 'model:deal', if: "app_installed('pipeline')"}

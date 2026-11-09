@@ -451,18 +451,23 @@ func (r *Registry) Capabilities() map[string]bool {
 	return out
 }
 
-// resolveInstalled installs config.apps (else the plan's apps, else every unit) plus, transitively, each
-// app's modules and every unit's requires, dependencies first (contract 0001).
+// resolveInstalled installs config.apps and config.modules (else the plan's apps, else every unit) plus,
+// transitively, each app's modules and every unit's requires, dependencies first (contracts 0001, 0032). Apps come
+// in config.apps order, then the modules config.modules names, by name.
 func (r *Registry) resolveInstalled() {
 	var want []string
-	listed := false
+	listed := r.configListed()
 	if r.Site != nil {
-		if l, ok := r.Site.Config["apps"].([]any); ok {
-			listed = true
-			for _, x := range l {
-				if n, _ := x.(string); r.App[n] != nil && r.App[n].IsApp() {
-					want = append(want, n)
-				}
+		for _, x := range asList(r.Site.Config["apps"]) {
+			if n, _ := x.(string); r.App[n] != nil && r.App[n].IsApp() {
+				want = append(want, n)
+			}
+		}
+		mods := append([]string{}, r.ConfigModules()...)
+		sort.Strings(mods)
+		for _, n := range mods {
+			if r.App[n] != nil && r.App[n].Kind == KindModule {
+				want = append(want, n)
 			}
 		}
 	}

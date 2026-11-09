@@ -60,31 +60,17 @@ func catalogueKeys(raw map[string]any) (summary, category, icon any) {
 }
 
 func catalogueUnits(reg *meta.Registry, apps bool) []any {
-	cfgApps, listed := reg.SiteConfig("apps").([]any)
-	inConfig := map[string]bool{}
-	for _, x := range cfgApps {
-		if n, ok := x.(string); ok {
-			inConfig[n] = true
-		}
-	}
+	_, listed := reg.SiteConfig("apps").([]any)
 	plan, _ := reg.SiteConfig("plan").(string)
 	planApps := reg.PlanApps()
 	inPlan := map[string]bool{}
 	for _, n := range reg.Closure(planApps) {
 		inPlan[n] = true
 	}
-	// who brings each installed unit in: installed apps whose closure holds it
-	broughtBy := map[string][]string{}
-	for _, a := range reg.Apps {
-		if !a.IsApp() || !reg.IsInstalled(a.Name) {
-			continue
-		}
-		for _, n := range reg.Closure([]string{a.Name}) {
-			if n != a.Name {
-				broughtBy[n] = append(broughtBy[n], a.Name)
-			}
-		}
-	}
+	// a module is in the plan when the plan allows it (contract 0032 §6): every module when the plan names neither
+	// apps nor modules
+	planMods := reg.PlanModules()
+	mods := reg.ConfigModules()
 	out := []any{}
 	for _, a := range reg.Apps {
 		// a 0.4 unit is both a module and an app: it is listed once, as an app
@@ -98,15 +84,21 @@ func catalogueUnits(reg *meta.Registry, apps bool) []any {
 		installed := reg.IsInstalled(a.Name)
 		by := []string{}
 		if installed {
+			// the same resolution as /meta (meta.Registry.InstalledBy): config, then the installed apps that bring it;
+			// an app installed by the plan's or the default fallback says so
+			by = reg.InstalledBy(a.Name)
+			composed := mods != nil
 			switch {
-			case inConfig[a.Name]:
-				by = append(by, "config")
-			case !listed && planApps != nil && a.IsApp():
-				by = append(by, "plan")
-			case !listed && planApps == nil && a.IsApp():
-				by = append(by, "default")
+			case len(by) > 0 && by[0] == "config":
+			case !listed && !composed && planApps != nil && a.IsApp():
+				by = append([]string{"plan"}, by...)
+			case !listed && !composed && planApps == nil && a.IsApp():
+				by = append([]string{"default"}, by...)
 			}
-			by = append(by, broughtBy[a.Name]...)
+		}
+		inPlanNow := planApps == nil || inPlan[a.Name]
+		if a.Kind == meta.KindModule {
+			inPlanNow = planMods == nil || planMods[a.Name]
 		}
 		requires := []string{}
 		requires = append(requires, meta.OrderedKeys(a, "modules")...)
@@ -140,7 +132,7 @@ func catalogueUnits(reg *meta.Registry, apps bool) []any {
 		out = append(out, map[string]any{
 			"name": a.Name, "kind": kind, "title": title, "summary": summary, "category": categoryOr(category), "icon": icon,
 			"version": a.Version, "installed": installed, "installed_by": by, "requires": requires, "required_by": requiredBy,
-			"models": models, "in_plan": planApps == nil || inPlan[a.Name], "plan": plan, "source": "directory",
+			"models": models, "in_plan": inPlanNow, "plan": plan, "source": "directory",
 		})
 	}
 	return out

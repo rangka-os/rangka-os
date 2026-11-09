@@ -39,13 +39,58 @@ func configModules(cfg map[string]any, d *rk.Doc) []string {
 // Composed reports whether config.rk names modules directly (contract 0032).
 func (r *Registry) Composed() bool { return r.ConfigModules() != nil }
 
-// configListed reports whether config.rk sets apps or modules: either replaces the plan's apps as the fallback.
-func (r *Registry) configListed() bool {
-	if r.Site == nil {
-		return false
+// selected returns the units a config.rk names, before the closure: config.apps (apps, in order) then the modules of
+// mods (config.modules keys) by name. With neither key, the plan's apps, else every unit (contract 0001).
+func (r *Registry) selected(cfg map[string]any, mods []string) []string {
+	var want []string
+	l, apps := cfg["apps"].([]any)
+	for _, x := range l {
+		if n, _ := x.(string); r.App[n] != nil && r.App[n].IsApp() {
+			want = append(want, n)
+		}
 	}
-	_, apps := r.Site.Config["apps"].([]any)
-	return apps || r.Composed()
+	_, composed := cfg["modules"].(map[string]any)
+	sorted := append([]string{}, mods...)
+	sort.Strings(sorted)
+	for _, n := range sorted {
+		if r.App[n] != nil && r.App[n].Kind == KindModule {
+			want = append(want, n)
+		}
+	}
+	if apps || composed {
+		return want
+	}
+	if plan := r.planApps(str(cfg, "plan")); plan != nil {
+		for _, n := range plan {
+			if r.App[n] != nil && r.App[n].IsApp() {
+				want = append(want, n)
+			}
+		}
+		return want
+	}
+	for _, a := range r.Apps {
+		if a.Kind != KindSite {
+			want = append(want, a.Name)
+		}
+	}
+	return want
+}
+
+// InstalledFor returns the units another config.rk would install with this registry's units and plans (the
+// site unit included when there is one): how a change set to config.rk is judged (contract 0032 §3).
+func (r *Registry) InstalledFor(cfg map[string]any) map[string]bool {
+	var mods []string
+	if m, ok := cfg["modules"].(map[string]any); ok {
+		mods = sortedKeys(m)
+	}
+	out := map[string]bool{}
+	for _, n := range r.Closure(r.selected(cfg, mods)) {
+		out[n] = true
+	}
+	if u := r.App[SiteUnit]; u != nil && u.Kind == KindSite {
+		out[SiteUnit] = true
+	}
+	return out
 }
 
 // PlanModules returns the modules the site's plan allows (contract 0032 §6): the closure of its apps and modules,

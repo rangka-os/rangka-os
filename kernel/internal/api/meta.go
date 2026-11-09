@@ -60,7 +60,9 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 			if req == nil {
 				req = map[string]any{}
 			}
-			modules = append(modules, map[string]any{"name": ap.Name, "kind": ap.Kind, "version": ap.Version, "title": ap.Title, "requires": req})
+			// installed_by: "config" when config.apps / config.modules names it, then the installed apps that bring it (contract 0032 §4)
+			modules = append(modules, map[string]any{"name": ap.Name, "kind": ap.Kind, "version": ap.Version, "title": ap.Title, "requires": req,
+				"installed_by": reg.InstalledBy(ap.Name)})
 		}
 	}
 	models := map[string]any{}
@@ -143,11 +145,12 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 	if work == nil {
 		work = []engine.WorkItem{}
 	}
+	layout := s.layout(reg)
 	out := map[string]any{
 		"apps": apps, "modules": modules, "models": models, "dashboards": dashboards, "flows": flows, "imports": imports, "roles": roles,
 		"screens": screens, "work": work,
 		"connectors": connectorsMeta(reg), "site": siteMeta(reg),
-		"theme": s.theme(reg), "layout": s.layout(reg),
+		"theme": s.theme(reg), "layout": layout, "menu": defaultMenu(reg, layout),
 		"installed": reg.AppOrder(), "org": a.Org,
 		"config": siteConfig(reg), "capabilities": capabilityList(reg),
 		"user":       map[string]any{"email": a.ID, "name": a.UserName, "roles": a.Roles},
@@ -452,6 +455,18 @@ func (s *Server) theme(reg *meta.Registry) map[string]any {
 		out["mode"] = "system"
 	}
 	return out
+}
+
+// defaultMenu is /meta.menu (contract 0032 §5): one side group per module a composed site names and no installed app
+// brings in, when the layout sets no nav.side. Empty for app-only sites and for layouts with nav.side.
+func defaultMenu(reg *meta.Registry, layout map[string]any) []meta.MenuGroup {
+	if side, _ := meta.AsMap(layout["nav"])["side"].([]any); len(side) > 0 {
+		return []meta.MenuGroup{}
+	}
+	if m := reg.DefaultMenu(); m != nil {
+		return m
+	}
+	return []meta.MenuGroup{}
 }
 
 func (s *Server) layout(reg *meta.Registry) map[string]any {

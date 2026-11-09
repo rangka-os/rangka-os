@@ -397,11 +397,14 @@ func loadSite(dir string, ld *loader, r *Registry) *Site {
 
 // PlanApps returns the apps of the site's plan (following extends), or nil when the site names no plan.
 func (r *Registry) PlanApps() []string {
-	if r.Site == nil || r.Site.Config == nil || r.Site.Features == nil {
+	if r.Site == nil || r.Site.Config == nil {
 		return nil
 	}
-	plan := str(r.Site.Config, "plan")
-	if plan == "" {
+	return r.planApps(str(r.Site.Config, "plan"))
+}
+
+func (r *Registry) planApps(plan string) []string {
+	if r.Site == nil || r.Site.Features == nil || plan == "" {
 		return nil
 	}
 	plans := map[string]map[string]any{}
@@ -455,35 +458,12 @@ func (r *Registry) Capabilities() map[string]bool {
 // transitively, each app's modules and every unit's requires, dependencies first (contracts 0001, 0032). Apps come
 // in config.apps order, then the modules config.modules names, by name.
 func (r *Registry) resolveInstalled() {
-	var want []string
-	listed := r.configListed()
+	var cfg map[string]any
+	var mods []string
 	if r.Site != nil {
-		for _, x := range asList(r.Site.Config["apps"]) {
-			if n, _ := x.(string); r.App[n] != nil && r.App[n].IsApp() {
-				want = append(want, n)
-			}
-		}
-		mods := append([]string{}, r.ConfigModules()...)
-		sort.Strings(mods)
-		for _, n := range mods {
-			if r.App[n] != nil && r.App[n].Kind == KindModule {
-				want = append(want, n)
-			}
-		}
+		cfg, mods = r.Site.Config, r.ConfigModules()
 	}
-	if !listed {
-		if plan := r.PlanApps(); plan != nil {
-			for _, n := range plan {
-				if r.App[n] != nil && r.App[n].IsApp() {
-					want = append(want, n)
-				}
-			}
-		} else {
-			for _, a := range r.Apps {
-				want = append(want, a.Name)
-			}
-		}
-	}
+	want := r.selected(cfg, mods)
 	if r.App[SiteUnit] != nil && r.App[SiteUnit].Kind == KindSite {
 		defer func() { // after every app: nothing depends on it (contract 0016)
 			r.Installed[SiteUnit] = true

@@ -3048,12 +3048,70 @@ def test_content_full_width(page, ctx):
         assert all(g is not None and g <= 1 for g in gap), f"{route}: header/content stop {gap}px before the right edge"
 
 
-SW_SCENARIOS = {"test_pwa_installable_and_offline"}
+SW_SCENARIOS = {"test_pwa_installable_and_offline", "test_pwa_reads_last_seen_offline"}
+
+
+def read_cache_count(page):
+    """How many answers the device copy (readcache.js, IndexedDB "rangka-read") holds, owner row included."""
+    return page.evaluate("""() => new Promise((resolve) => {
+        const req = indexedDB.open('rangka-read', 1);
+        req.onupgradeneeded = () => req.result.createObjectStore('pages', { keyPath: 'key' });
+        req.onsuccess = () => { const q = req.result.transaction('pages').objectStore('pages').count();
+            q.onsuccess = () => { req.result.close(); resolve(q.result); }; };
+        req.onerror = () => resolve(-1);
+    })""")
+
+
+def test_pwa_reads_last_seen_offline(page, ctx):
+    """PWA phase 2 (readcache.js): a dashboard, a list and a record seen online open again without a connection, from
+    the device copy, read only and labelled; a page never opened says so; back online the label goes; sign-out empties
+    the device copy."""
+    ctx.allowed_failed.append(re.compile(r"/(api|auth)/"))
+    ensure_records(ctx, "sales_invoice", 1)
+    home, _ = ctx.home()
+    open_route(page, ctx, home)
+    page.locator(".ap-main").wait_for(timeout=10000)
+    page.wait_for_timeout(800)
+    page.evaluate("() => { location.hash = '#/r/sales_invoice'; }")
+    wait_rows(page)
+    name = page.evaluate("""async () => (await (await fetch('/api/v1/r/sales_invoice?limit=1', {credentials: 'include'})).json()).data[0].name""")
+    page.evaluate("(n) => { location.hash = '#/r/sales_invoice/' + encodeURIComponent(n); }", name)
+    page.locator(".ap-main .rk-pagehead").wait_for(timeout=10000)
+    page.wait_for_timeout(800)
+    assert read_cache_count(page) > 3, "the pages seen are on the device"
+
+    # no connection: the app opens again from the device copy, on the record, read only and labelled
+    page.context.set_offline(True)
+    page.reload()
+    page.locator(".ap-offline").get_by_text("data terakhir dilihat").wait_for(timeout=15000)
+    page.get_by_role("button", name="Simpan saat online").wait_for(timeout=10000)
+    assert page.get_by_role("button", name="Ajukan", exact=True).count() == 0, "no submit from the device copy"
+    page.evaluate("() => { location.hash = '#/r/sales_invoice'; }")
+    wait_rows(page)
+    page.evaluate("(h) => { location.hash = h; }", home)
+    page.wait_for_function("(h) => location.hash === h", arg=home, timeout=5000)
+    page.wait_for_timeout(800)
+    assert page.locator(".ap-main .rk-alert").filter(has_text="belum pernah dibuka").count() == 0, "the home dashboard came from the copy"
+    # a page this device never opened
+    page.evaluate("() => { location.hash = '#/r/lead'; }")
+    page.get_by_text("belum pernah dibuka di perangkat ini").first.wait_for(timeout=10000)
+
+    # back online: the server answers again and the label goes
+    page.context.set_offline(False)
+    page.evaluate("(h) => { location.hash = h; }", home)
+    page.locator(".ap-offline").wait_for(state="detached", timeout=15000)
+
+    # sign-out takes the device copy with it
+    account_menu(page).get_by_role("menuitem", name="Keluar").click()
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
+    page.wait_for_timeout(300)
+    assert read_cache_count(page) == 0, "sign-out left pages on the device"
 
 
 def test_pwa_installable_and_offline(page, ctx):
     """Installable app (pwa.js, sw.js): the manifest and its headers, the worker in control, the shell cached without
-    record data, the offline strip, and a start without connection that opens by itself once the connection is back."""
+    record data, the offline strip, a start without connection (from the device copy, or "Belum ada koneksi" without
+    one) that opens by itself once the connection is back."""
     ctx.allowed_failed.append(re.compile(r"/(api|auth)/"))
     open_route(page, ctx, ctx.home()[0])
     assert page.locator('link[rel="manifest"]').get_attribute("href") == "manifest.webmanifest"
@@ -3074,7 +3132,11 @@ def test_pwa_installable_and_offline(page, ctx):
     # the connection drops while the app is open: the desk shell says so under its top bar
     page.context.set_offline(True)
     page.locator(".ap-offline").wait_for(timeout=5000)
-    # opened again without a connection: the cached shell starts and says it waits for the connection
+    # opened again without a connection: the cached shell starts from the device copy of the pages (readcache.js)
+    page.reload()
+    page.locator(".ap-offline").get_by_text("data terakhir dilihat").wait_for(timeout=15000)
+    # with no device copy (another phone, cleared data) it says it waits for the connection
+    page.evaluate("() => window.RangkaApp.readCache.clear()")
     page.reload()
     page.get_by_text("Belum ada koneksi").wait_for(timeout=15000)
     # the connection comes back: the app opens without pressing anything

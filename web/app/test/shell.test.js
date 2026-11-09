@@ -325,6 +325,14 @@ test("appOf: the app a page belongs to names the top-nav sidebar, else the first
   assert.strictEqual(A.appOf({ apps: [] }, { kind: "home" }), null);
 });
 
+test("lastSeen: today, yesterday, else the date, with local hours.minutes", () => {
+  const now = new Date(2026, 10, 9, 16, 0);
+  assert.strictEqual(A.lastSeen(new Date(2026, 10, 9, 14, 5).toISOString(), now), "hari ini 14.05");
+  assert.strictEqual(A.lastSeen(new Date(2026, 10, 8, 9, 30).toISOString(), now), "kemarin 09.30");
+  assert.strictEqual(A.lastSeen(new Date(2026, 9, 27, 8, 0).toISOString(), now), "27 Okt 2026 08.00");
+  assert.strictEqual(A.lastSeen("nope", now), "");
+});
+
 // contract 0037: sub-menus in app menus and nav.side, collapsed per group
 const NESTED = {
   ...META,

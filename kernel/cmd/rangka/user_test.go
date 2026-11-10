@@ -222,6 +222,64 @@ func TestUserAdd(t *testing.T) {
 	}
 }
 
+// An account linked to upstream sign-in and not yet in the org is refused unless --allow-linked: adding it would
+// let whoever holds that upstream identity enter the org as this person (final review I1).
+func TestUserAddLinkedAccount(t *testing.T) {
+	url := testdb.New(t)
+	prevIter := auth.Iterations
+	auth.Iterations = 1000
+	t.Cleanup(func() { auth.Iterations = prevIter })
+	ctx := context.Background()
+	db, err := pg.NewPool(ctx, url, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(ctx, store.SystemSQL()); err != nil {
+		t.Fatal(err)
+	}
+	for _, org := range []string{"a", "b"} {
+		if err := auth.EnsureOrg(ctx, db, org, org); err != nil {
+			t.Fatal(err)
+		}
+	}
+	// org a's member API linked an upstream subject to v@x.test
+	uid, _, err := auth.UpsertMember(ctx, db, "v@x.test", "V", "a", "sales_rep", nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.LinkIdentity(ctx, db, "https://cloud.example", "sub-1", uid); err != nil {
+		t.Fatal(err)
+	}
+	members := func(org string) int64 {
+		t.Helper()
+		res, err := db.Query(ctx, "select count(*) from rk_members where org_id = $1 and user_id = $2", org, uid)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return res.Rows[0][0].(int64)
+	}
+
+	_, err = runUserOut(t, "add", "--db", url, "--org", "b", "--email", "v@x.test", "--role", "sales_rep")
+	if err == nil || !strings.Contains(err.Error(), "https://cloud.example") || !strings.Contains(err.Error(), "--allow-linked") {
+		t.Fatalf("linked account into b: err = %v, want a refusal naming the issuer and --allow-linked", err)
+	}
+	if members("b") != 0 {
+		t.Fatal("the refused add wrote a membership")
+	}
+	// a member of a already: updating that membership is not refused
+	if _, err := runUserOut(t, "add", "--db", url, "--org", "a", "--email", "v@x.test", "--role", "sales_manager"); err != nil {
+		t.Fatalf("existing member of a: %v", err)
+	}
+	out, err := runUserOut(t, "add", "--db", url, "--org", "b", "--email", "v@x.test", "--role", "sales_rep", "--allow-linked")
+	if err != nil || !strings.Contains(out, "user v@x.test is sales_rep in b") {
+		t.Fatalf("--allow-linked: %v %q", err, out)
+	}
+	if members("b") != 1 {
+		t.Fatal("--allow-linked did not add the membership")
+	}
+}
+
 func TestUserAddMissingFlagNoDB(t *testing.T) {
 	t.Setenv("DATABASE_URL", "")
 	err := runUser([]string{"add", "--org", "t", "--email", "a@b.test", "--password", "x", "--role", "owner"})

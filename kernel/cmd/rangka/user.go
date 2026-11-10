@@ -23,7 +23,7 @@ type usageError struct{ msg string }
 func (e usageError) Error() string { return e.msg }
 
 const userUsage = `usage: rangka user add <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]
-                       [--reset-password] [--create-org] [--db <url>]
+                       [--reset-password] [--create-org] [--allow-linked] [--db <url>]
        rangka user remove <email> --org <id> [--db <url>]
 The email may also be given as --email <e>. The password comes from $RANGKA_USER_PASSWORD (or --password <p>)
 and is needed only for a new account or with --reset-password. --db defaults to $DATABASE_URL, --org to $RANGKA_ORG.`
@@ -42,6 +42,7 @@ type userArgs struct {
 	Password      string // --password, else $RANGKA_USER_PASSWORD
 	ResetPassword bool
 	CreateOrg     bool
+	AllowLinked   bool // add an existing account that is linked to upstream sign-in and not yet in the org
 }
 
 // parseUserArgs reads the arguments after `rangka user`: the sub command, the email (positional, anywhere among
@@ -65,6 +66,7 @@ func parseUserArgs(args []string) (*userArgs, error) {
 		fs.StringVar(&ua.Password, "password", "", "password (prefer $RANGKA_USER_PASSWORD: flags land in shell history)")
 		fs.BoolVar(&ua.ResetPassword, "reset-password", false, "set the password of an account that already exists")
 		fs.BoolVar(&ua.CreateOrg, "create-org", false, "create the organisation when it does not exist")
+		fs.BoolVar(&ua.AllowLinked, "allow-linked", false, "add an account that is linked to upstream sign-in elsewhere (its linked identities also enter this org)")
 	}
 	var positional []string
 	rest := args[1:]
@@ -188,6 +190,20 @@ func runUser(args []string) error {
 		}
 		fmt.Fprintf(userOut, "removed %s from %s\n", ua.Email, ua.Org)
 		return nil
+	}
+
+	// an account linked to upstream sign-in (by another org's member API) and not yet in this org: adding it
+	// also lets whoever holds those upstream identities in here, so the operator must say so (contract 0043)
+	if exists && oldRole == "" && !ua.AllowLinked {
+		linked, err := auth.LinkedOutside(ctx, pool, ua.Email, ua.Org)
+		if err != nil {
+			return err
+		}
+		if len(linked) > 0 {
+			return fmt.Errorf("account %s is linked to upstream sign-in (%s) and is not a member of %s: whoever holds "+
+				"that sign-in would enter %s as this person; pass --allow-linked if that is intended",
+				ua.Email, strings.Join(linked, ", "), ua.Org, ua.Org)
+		}
 	}
 
 	if (!exists || ua.ResetPassword) && ua.Password == "" {

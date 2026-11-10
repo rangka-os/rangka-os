@@ -83,7 +83,7 @@ An upstream identity is the pair `(issuer, sub)`, stored in `rk_identities(issue
 Resolution at the callback:
 
 1. **Known pair.** `(issuer, sub)` exists: that user. The e-mail claim is ignored.
-2. **Unknown pair, first sign-in.** The kernel links by e-mail only when `email_verified` is `true` AND a user with that e-mail already has a membership in the organisation AND that user has no identity yet at this issuer. It then stores the link and continues. A user already linked at the issuer under another `sub` is not linked again by e-mail: an address the provider reassigned, or a second account claiming it, must not become a second way in. Such a sign-in gets rule 3. E-mails are compared trimmed and lower-cased (every writer of `rk_users.email` stores them so).
+2. **Unknown pair, first sign-in.** The kernel links by e-mail only when `email_verified` is `true` AND a user with that e-mail already has a membership in an organisation of this kernel AND that user has no identity yet at this issuer. It then stores the link and continues. A user already linked at the issuer under another `sub` is not linked again by e-mail: an address the provider reassigned, or a second account claiming it, must not become a second way in. Such a sign-in gets rule 3. E-mails are compared trimmed and lower-cased (every writer of `rk_users.email` stores them so).
 3. **Otherwise** it refuses: `403 membership_pending`, "Aksesmu sedang disiapkan. Coba lagi sebentar." Sign-in never creates a user, a membership or a role. A provider account with the victim's e-mail and `email_verified: false` gets no link.
 
 `(issuer, sub)` already linked to another user is never re-linked at sign-in.
@@ -117,7 +117,7 @@ Browser routes show these on the sign-in page; JSON clients (`/auth/providers` a
 | Status | Code | Message (Bahasa Indonesia) | When |
 | --- | --- | --- | --- |
 | 404 | `unknown_upstream` | Penyedia akun tidak ditemukan. | `{id}` not configured |
-| 400 | `invalid_state` | Sesi masuk sudah habis. Mulai lagi. | state missing, expired, used or for another upstream |
+| 400 | `invalid_state` | Sesi masuk sudah habis. Mulai lagi. | state missing, expired, used or for another upstream; `rk_upstream` cookie missing or different |
 | 401 | `upstream_invalid` | Masuk dengan <label> belum berhasil. Coba lagi. | any §4 check, provider `error`, token exchange refused |
 | 502 | `upstream_unavailable` | <label> sedang tidak bisa dihubungi. Coba lagi sebentar. | discovery, JWKS or token endpoint unreachable or malformed |
 | 403 | `membership_pending` | Aksesmu sedang disiapkan. Coba lagi sebentar. | §5 rule 3 |
@@ -160,3 +160,4 @@ No message echoes provider text, a token, a code or a claim.
 
 - A provider-side logout does not end a kernel session before its 12 hours. Back-channel logout is not in this contract.
 - Several organisations in one kernel and one upstream: the person enters the organisation they last used, else the first membership. A picker is not part of this contract.
+- Several organisations in one kernel with different hosts or operators: `rk_users` is installation-wide, so an identity link created by one organisation's member API stays on the account. An operator who then adds that e-mail to another organisation also lets whoever holds the linked `(issuer, sub)` enter that organisation as this person. `rangka user add` refuses such an account (linked, no membership in the target organisation) unless the operator passes `--allow-linked`, and `rangka seed` refuses it as the owner outright. A per-organisation link is not part of this contract.

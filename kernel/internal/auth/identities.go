@@ -3,6 +3,7 @@ package auth
 import (
 	"context"
 	"errors"
+	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -43,4 +44,21 @@ func LinkIdentity(ctx context.Context, q pg.Querier, issuer, subject string, use
 		return ErrConflict
 	}
 	return nil
+}
+
+// LinkedOutside returns the upstream issuers an existing account (by e-mail) is linked to when that account has no
+// membership in org: adding it to org would also let whoever holds those upstream identities enter org. It returns
+// nil when the e-mail has no account, the account already belongs to org, or it has no links.
+func LinkedOutside(ctx context.Context, q pg.Querier, email, org string) ([]string, error) {
+	res, err := q.Query(ctx, `select distinct i.issuer from rk_users u join rk_identities i on i.user_id = u.id
+		where u.email = $1 and not exists (select 1 from rk_members m where m.user_id = u.id and m.org_id = $2)
+		order by i.issuer`, strings.ToLower(strings.TrimSpace(email)), org)
+	if err != nil {
+		return nil, err
+	}
+	var issuers []string
+	for _, r := range res.Rows {
+		issuers = append(issuers, r[0].(string))
+	}
+	return issuers, nil
 }

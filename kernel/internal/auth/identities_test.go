@@ -220,3 +220,36 @@ func TestUpsertMemberLeavesOtherOrgAlone(t *testing.T) {
 		t.Fatalf("other org changed: %+v", u)
 	}
 }
+
+func TestLinkedOutside(t *testing.T) {
+	ctx, db := identEnv(t)
+	got := func(email, org string) []string {
+		t.Helper()
+		l, err := LinkedOutside(ctx, db, email, org)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return l
+	}
+	if l := got("nobody@x.id", "pt_beta"); l != nil {
+		t.Fatalf("no account: %v", l)
+	}
+	uid := mustUser(t, ctx, db, "a@x.id") // member of pt_alpha
+	if l := got("a@x.id", "pt_beta"); l != nil {
+		t.Fatalf("no links: %v", l)
+	}
+	for _, iss := range []string{"https://b.example", "https://a.example"} {
+		if err := LinkIdentity(ctx, db, iss, "sub-1", uid); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := LinkIdentity(ctx, db, "https://a.example", "sub-2", uid); err != nil {
+		t.Fatal(err)
+	}
+	if l := got(" A@X.ID ", "pt_beta"); !reflect.DeepEqual(l, []string{"https://a.example", "https://b.example"}) {
+		t.Fatalf("linked, not in pt_beta: %v", l)
+	}
+	if l := got("a@x.id", "pt_alpha"); l != nil {
+		t.Fatalf("already a member of pt_alpha: %v", l)
+	}
+}

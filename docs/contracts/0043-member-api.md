@@ -93,7 +93,7 @@ Each write is audited (`member.upsert`, `member.remove`) with actor = the token'
 
 ## Security notes
 
-- Token only, owner-minted, one organisation: a leaked token can add and remove non-owner members of one organisation, never an owner of any organisation, never read data, never mint another token, never reach another organisation: it links a subject by e-mail only to an account no other organisation holds, and changes the e-mail only of such an account.
+- Token only, owner-minted, one organisation: a leaked token can add and remove non-owner members of one organisation, never an owner of any organisation, never read data, never mint another token. It links a subject by e-mail only to an account no other organisation holds, and changes the e-mail only of such an account. The link stays on the account (`rk_users` is installation-wide): on a kernel that serves several organisations, an operator who later adds that e-mail to another organisation would also let the linked subject in there. `rangka user add` therefore refuses an existing account that has identity links and no membership in the target organisation unless `--allow-linked` is passed, and `rangka seed` refuses it as the owner (0042 Open).
 - `owner` is excluded in every direction, so a compromised host or token cannot take an owner's place or lock the owner out.
 - Role and outlet checks use the kernel's own registry; the host cannot invent a role.
 - Removal revokes at once, so access ends when the host decides, not at session expiry.

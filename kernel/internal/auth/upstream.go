@@ -140,6 +140,33 @@ func (s *Service) PasswordSetting() any {
 	return true
 }
 
+// ErrPasswordDisabled is returned by Login when auth.password does not let this member sign in with a password
+// (contract 0042 §6). Message is the copy to show.
+type ErrPasswordDisabled struct{ Message string }
+
+func (e *ErrPasswordDisabled) Error() string { return e.Message }
+
+// checkPasswordPolicy applies auth.password to a member whose password has verified: false refuses everyone,
+// "owners" refuses every role but owner.
+func (s *Service) checkPasswordPolicy(u *User) error {
+	switch s.PasswordSetting() {
+	case false:
+	case "owners":
+		for _, r := range u.Roles {
+			if r == "owner" {
+				return nil
+			}
+		}
+	default:
+		return nil
+	}
+	msg := "Masuk lewat penyedia akun organisasimu."
+	if len(s.Upstreams) > 0 {
+		msg = "Masuk dengan " + s.Upstreams[0].Label + "."
+	}
+	return &ErrPasswordDisabled{Message: msg}
+}
+
 // Providers serves GET /auth/providers: how a person may sign in. It reveals no issuer, client id or secret.
 func (s *Service) Providers(w http.ResponseWriter, r *http.Request) {
 	ups := []map[string]string{}

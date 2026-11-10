@@ -404,6 +404,13 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 /* ---- sign-in (AuthLayout): the pen's serif headline and white fields; the brand panel runs the full height ---- */
 .ap-signin { display: flex; flex-direction: column; }
 .ap-signin > .rk-auth { flex: 1 0 auto; }
+.ap-signin-options { display: flex; flex-direction: column; gap: 16px; width: 100%; }
+.ap-signin-wait { display: flex; justify-content: center; padding: 24px 0; }
+.ap-signin-upstream { width: 100%; text-decoration: none; justify-content: center; }
+.ap-signin-or { display: flex; align-items: center; gap: 12px; color: var(--muted); font: 400 12px/16px var(--font-sans); }
+.ap-signin-or::before, .ap-signin-or::after { content: ""; flex: 1; height: 1px; background: var(--ap-field-line); }
+.ap-signin-owner { align-self: center; border: 0; background: none; padding: 4px 8px; color: var(--link); font: 500 13px/20px var(--font-sans); cursor: pointer; text-decoration: underline; }
+.ap-signin-owner:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .rk-auth-pitch h2 { font: 500 34px/40px var(--font-serif); letter-spacing: -.01em; }
 .rk-auth-form h1 { font: 600 20px/28px var(--font-sans); }
 .rk-auth .rk-field > label { font: 500 12px/16px var(--font-sans); color: var(--ink-2); }

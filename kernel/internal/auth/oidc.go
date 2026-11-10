@@ -223,7 +223,12 @@ func (s *Service) Authorize(w http.ResponseWriter, r *http.Request) {
 		tok, user, err := s.Login(r.Context(), r.Form.Get("email"), r.Form.Get("password"), s.DefaultOrg)
 		if err != nil {
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(401)
+			var pd *ErrPasswordDisabled
+			if errors.As(err, &pd) {
+				w.WriteHeader(403)
+			} else {
+				w.WriteHeader(401)
+			}
 			loginPage.Execute(w, map[string]any{"Client": c.Label, "Params": p, "Error": err.Error()})
 			return
 		}

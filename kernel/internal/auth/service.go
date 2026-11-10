@@ -90,6 +90,9 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 	if err != nil {
 		return "", nil, err
 	}
+	if err := s.checkPasswordPolicy(u); err != nil {
+		return "", nil, err
+	}
 	ttl := s.SessionTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour

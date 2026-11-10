@@ -36,6 +36,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 403, "no_membership", err.Error())
 		return
 	}
+	var pd *auth.ErrPasswordDisabled
+	if errors.As(err, &pd) {
+		writeError(w, 403, "password_disabled", pd.Message)
+		return
+	}
 	if err != nil {
 		fail(w, err)
 		return

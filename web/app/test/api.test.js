@@ -584,3 +584,16 @@ test("read-through cache: a kept GET is stored, served from the device copy with
   const api2 = RA({ fetch: f2, readCache: rc });
   assert.strictEqual((await rejected(api2.meta())).status, 403);
 });
+
+test("providers: password policy and upstream list, defaults when unanswered", async () => {
+  const body = { password: "owners", upstream: [{ id: "kantor", label: "Kantor" }, { id: "x" }, {}] };
+  const p = await RA({ fetch: stub([json(200, body)]) }).providers();
+  assert.strictEqual(p.password, "owners");
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(p.upstream)), [{ id: "kantor", label: "Kantor" }, { id: "x", label: "x" }]);
+  assert.strictEqual((await RA({ fetch: stub([json(200, { password: false, upstream: [] })]) }).providers()).password, false);
+  assert.strictEqual((await RA({ fetch: stub([json(200, { password: "junk" })]) }).providers()).password, true);
+  const old = await RA({ fetch: stub([json(404, { error: { code: "not_found", message: "no such endpoint" } })]) }).providers();
+  assert.strictEqual(old.password, true);
+  assert.strictEqual(old.upstream.length, 0);
+  assert.strictEqual((await RA({ fetch: stub([new Error("offline")]) }).providers()).password, true);
+});

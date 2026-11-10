@@ -800,8 +800,12 @@ def check_poll_triggers(rep, p, c):
         act = t.get("action")
         if not isinstance(act, str) or not act:
             continue  # only described (a spec connector): a flow listening to it gets poll_action_missing
+        names = [a for a in actions if isinstance(a, str)]
         if act not in actions:
-            rep.add("error", p, f"triggers/{i}/action", "unknown_action", f'connector {c.get("name")} has no action "{act}"{suggest(act, [a for a in actions if isinstance(a, str)])}')
+            rep.add("error", p, f"triggers/{i}/action", "unknown_action", f'connector {c.get("name")} has no action "{act}"{suggest(act, names)}')
+        each = t.get("each")
+        if isinstance(each, dict) and isinstance(each.get("action"), str) and each["action"] not in actions:
+            rep.add("error", p, f"triggers/{i}/each/action", "unknown_action", f'connector {c.get("name")} has no action "{each["action"]}"{suggest(each["action"], names)}')
 
 
 def check_connector_auth(rep, sysdoc, conns):

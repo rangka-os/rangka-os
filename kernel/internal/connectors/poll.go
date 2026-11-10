@@ -44,16 +44,92 @@ type PollResult struct {
 	Events  int    `json:"events"`
 	Dupes   int    `json:"dupes"`
 	Cursor  bool   `json:"cursor_moved"`
+	Items   int    `json:"items,omitempty"` // calls made: 1, or one per item of each:
 }
 
-// Poll runs one poll of org's connector trigger.
+// Poll runs one poll of org's connector trigger. With each: the trigger's list action is called first and the
+// action is sent once per item (an outlet), with its own cursor; the item is bound under each.as for input and emit.
 func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*PollResult, error) {
 	c, t, ok := rt.triggerVia(connector, trigger, "poll")
 	if !ok {
 		return nil, &jobs.Permanent{Err: fmt.Errorf("%w: no poll trigger %s.%s", ErrUnknown, connector, trigger)}
 	}
+	// a connector still waiting for its keys is skipped quietly: polling it every few minutes would only fill the
+	// dead-letter queue and the audit trail. OAuth2 connectors refresh first, as Call does.
+	if meta.Str(meta.AsMap(c["auth"]), "type") == "oauth2" {
+		if err := rt.refreshIfDue(ctx, org, connector); errors.Is(err, ErrNeedsAuth) {
+			return &PollResult{Skipped: "needs_auth"}, nil
+		}
+	}
+	targets := []pollTarget{{key: trigger}}
+	if each := meta.AsMap(t["each"]); each != nil {
+		list := meta.Str(each, "action")
+		if _, err := rt.Render(ctx, org, connector, list, nil); errors.Is(err, ErrNeedsAuth) {
+			return &PollResult{Skipped: "needs_auth"}, nil
+		}
+		out, err := rt.Call(ctx, org, connector, list, nil)
+		if err != nil {
+			return nil, err
+		}
+		if targets, err = eachTargets(trigger, each, out); err != nil {
+			return nil, &jobs.Permanent{Err: fmt.Errorf("poll %s.%s: each: %v", connector, trigger, err)}
+		}
+	}
+	res := &PollResult{}
+	for _, tg := range targets {
+		r, err := rt.pollOne(ctx, org, connector, trigger, c, t, tg)
+		if err != nil {
+			return nil, err
+		}
+		if r.Skipped != "" {
+			return r, nil
+		}
+		res.Events += r.Events
+		res.Dupes += r.Dupes
+		res.Cursor = res.Cursor || r.Cursor
+		res.Items++
+	}
+	return res, nil
+}
+
+// pollTarget is one call of a poll: the whole trigger, or one item of each: with its own cursor key.
+type pollTarget struct {
+	key  string         // rk_poll_cursors.trigger: <trigger>, or <trigger>@<item key>
+	vars map[string]any // {<each.as>: item}
+}
+
+// eachTargets reads each.items (CEL over the list action's answer, a list) and each.key (CEL over the item).
+func eachTargets(trigger string, each, out map[string]any) ([]pollTarget, error) {
+	vars := map[string]any{"body": out}
+	for k, v := range out {
+		vars[k] = v
+	}
+	v, err := cel.Eval(meta.Str(each, "items"), varsEnv(vars))
+	if err != nil {
+		return nil, fmt.Errorf("items: %v", err)
+	}
+	as := meta.Str(each, "as")
+	var targets []pollTarget
+	for _, it := range meta.AsList(cel.Unwrap(v)) {
+		k, err := cel.Eval(meta.Str(each, "key"), varsEnv(map[string]any{as: it}))
+		if err != nil {
+			return nil, fmt.Errorf("key: %v", err)
+		}
+		key := fmt.Sprint(cel.Unwrap(k))
+		if f, ok := cel.Unwrap(k).(float64); ok && f == float64(int64(f)) {
+			key = fmt.Sprint(int64(f))
+		}
+		if key == "" || key == "<nil>" {
+			return nil, errors.New("key is empty for an item")
+		}
+		targets = append(targets, pollTarget{key: trigger + "@" + key, vars: map[string]any{as: it}})
+	}
+	return targets, nil
+}
+
+func (rt *Runtime) pollOne(ctx context.Context, org, connector, trigger string, c, t map[string]any, tg pollTarget) (*PollResult, error) {
 	action := meta.Str(t, "action")
-	cursor, err := rt.cursor(ctx, org, connector, trigger)
+	cursor, err := rt.cursor(ctx, org, connector, tg.key)
 	if err != nil {
 		return nil, err
 	}
@@ -61,8 +137,12 @@ func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*P
 	if cursor != "" {
 		cur = cursor
 	}
+	vars := map[string]any{"cursor": cur, "settings": settings(c)}
+	for k, v := range tg.vars {
+		vars[k] = v
+	}
 	input := map[string]any{}
-	env := varsEnv(map[string]any{"cursor": cur, "settings": settings(c)})
+	env := varsEnv(vars)
 	for k, x := range meta.AsMap(t["input"]) {
 		src, ok := x.(string)
 		if !ok {
@@ -76,13 +156,6 @@ func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*P
 			input[k] = u
 		}
 	}
-	// a connector still waiting for its keys is skipped quietly: polling it every few minutes would only fill the
-	// dead-letter queue and the audit trail. OAuth2 connectors refresh first, as Call does.
-	if meta.Str(meta.AsMap(c["auth"]), "type") == "oauth2" {
-		if err := rt.refreshIfDue(ctx, org, connector); errors.Is(err, ErrNeedsAuth) {
-			return &PollResult{Skipped: "needs_auth"}, nil
-		}
-	}
 	if _, err := rt.Render(ctx, org, connector, action, input); errors.Is(err, ErrNeedsAuth) {
 		return &PollResult{Skipped: "needs_auth"}, nil
 	}
@@ -91,14 +164,14 @@ func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*P
 		return nil, err
 	}
 	res := &PollResult{}
-	if res.Events, res.Dupes, err = rt.dispatch(ctx, org, connector, trigger, t, out); err != nil {
+	if res.Events, res.Dupes, err = rt.dispatch(ctx, org, connector, trigger, t, out, tg.vars); err != nil {
 		return nil, err
 	}
 	if next := nextCursor(meta.Str(t, "cursor"), out); next != "" && next != cursor {
 		scrub, _ := rt.Scrubber(ctx, org, connector)
 		if _, err := rt.DB.Exec(ctx, `insert into rk_poll_cursors (org_id, connector, trigger, cursor) values ($1, $2, $3, $4)
 			on conflict (org_id, connector, trigger) do update set cursor = excluded.cursor, updated_at = now()`,
-			org, connector, trigger, scrub.String(next)); err != nil {
+			org, connector, tg.key, scrub.String(next)); err != nil {
 			return nil, fmt.Errorf("poll cursor: %w", err)
 		}
 		res.Cursor = true

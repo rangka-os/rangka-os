@@ -116,7 +116,7 @@ A reply may carry `guesses: [{"id": "g_dp", "file": "f_1", "claim": "Deposit sel
 - `suggest_build` (boolean) is set by Raka when the map covers the flow from first contact to money in. Cloud then offers the "Susun rancangan" action. It never ends the interview, and the owner can build without it.
 - `budget.near_limit`: Cloud sets it once the session has used 80% of its interview budget. Raka then says so once in its reply, offers "Susun rancangan" by setting `suggest_build` when the map has anything to build, and says that the story and the map move to the account on sign-in. Cloud adds the sign-in and paket link actions under the reply; Raka never writes links.
 
-**Facts to map for legacy projects.** Cloud still keeps facts for its scripted fallback and for projects made before this contract; it turns them into a map with these rules.
+**Facts to map for legacy projects.** Projects made before this contract have facts and no map; Cloud turns them into a map with these rules. The interview has no scripted fallback (amended 10 Nov 2026): when Raka cannot answer, Cloud says so and the owner retries.
 
 Fact keys and labels (rangka-cloud `FactKeys`, in this order, verbatim):
 

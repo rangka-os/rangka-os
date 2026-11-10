@@ -11,3 +11,4 @@ fields:
   - {name: active, type: check, label: {id: Aktif}, default: 'true'}
 permissions:
   - {role: kasir, read: true}
+  - {role: dapur, read: true}

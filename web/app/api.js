@@ -256,7 +256,7 @@
     /* ----- records */
     api.list = function (model, o) {
       o = o || {};
-      return json("GET", rec(model) + qs([["q", o.q], ["filter", o.filter], ["sort", o.sort], ["limit", o.limit], ["offset", o.offset]]));
+      return json("GET", rec(model) + qs([["q", o.q], ["filter", o.filter], ["sort", o.sort], ["limit", o.limit], ["offset", o.offset], ["children", o.children ? 1 : null]]));
     };
     api.get = function (model, name) { return json("GET", rec(model, name)); };
     /** Write options (contract 0030 §6, §7): {key} sends Idempotency-Key (a retry with the same key never writes twice);

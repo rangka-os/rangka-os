@@ -66,6 +66,7 @@
     "outbox.js",
     "screens.js",
     "counter.js",
+    "queue.js",
     "pwa.js",
     "shell.js"
   ];

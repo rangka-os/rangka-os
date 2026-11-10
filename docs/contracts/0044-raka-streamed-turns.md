@@ -84,7 +84,7 @@ Text arrives one model call at a time, split into chunks of about 40 characters 
   - Map ops, dropped ops, guesses and `suggest_build` are not streamed; they come in `result`. No `changeset` or
     `escalate` occurs.
 - **Consumers that post-check.** A consumer may run checks of its own on the reply. rangka-cloud does: it discards an
-  interview reply that echoes another owner's example and answers with its scripted step instead. A consumer that
+  interview reply that echoes another owner's example (it asks once more without examples, else shows an error). A consumer that
   post-checks must hold `text` until `result` has arrived and its checks pass. Cloud holds interview `text` this way;
   on `/v1/interview` this costs nothing, since `text` comes right before `result`.
 

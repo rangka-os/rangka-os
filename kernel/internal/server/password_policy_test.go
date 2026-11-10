@@ -40,3 +40,28 @@ func TestLoginPasswordPolicyHTTP(t *testing.T) {
 		t.Fatalf("default: %d %s", r.Status, r.Body)
 	}
 }
+
+// POST /auth/org from a password session into an organisation where auth.password refuses this member's password
+// is 403 password_disabled and leaves the session where it was (final review M2).
+func TestSwitchOrgPasswordPolicyHTTP(t *testing.T) {
+	e := newEnv(t, false, nil)
+	ctx := context.Background()
+	if err := auth.EnsureOrg(ctx, e.s.DB, "pt_beta", "PT Beta"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := auth.EnsureUser(ctx, e.s.DB, "ceo@saga.co.id", "", "rangka-demo", "pt_beta", "cashier", ""); err != nil {
+		t.Fatal(err)
+	}
+	e.s.Auth.Upstreams = []auth.Upstream{{ID: "kantor", Label: "Kantor"}}
+	e.s.Auth.Password = func() any { return "owners" }
+	e.login()
+	r := e.must(403, "POST", "/auth/org", map[string]any{"org": "pt_beta"})
+	if get(r.JSON, "error", "code") != "password_disabled" || get(r.JSON, "error", "message") != "Masuk dengan Kantor." {
+		t.Fatalf("switch into pt_beta: %s", r.Body)
+	}
+	if me := e.must(200, "GET", "/auth/me", nil).JSON; get(me, "org", "id") != "kopi-senja" {
+		t.Fatalf("a refused switch moved the session: %v", me)
+	}
+	e.s.Auth.Password = nil
+	e.must(200, "POST", "/auth/org", map[string]any{"org": "pt_beta"})
+}

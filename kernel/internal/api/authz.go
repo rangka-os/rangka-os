@@ -122,9 +122,13 @@ func (s *Server) switchOrg(w http.ResponseWriter, r *http.Request, c *caller) {
 		return
 	}
 	u, err := s.Auth.SwitchOrg(r.Context(), ck.Value, body.Org)
+	var pd *auth.ErrPasswordDisabled
 	switch {
 	case errors.Is(err, auth.ErrNoMembership):
 		fail(w, engine.Denied("org", "switch"))
+		return
+	case errors.As(err, &pd):
+		writeError(w, 403, "password_disabled", pd.Message)
 		return
 	case errors.Is(err, auth.ErrUnauthenticated):
 		writeError(w, 401, "unauthenticated", err.Error())

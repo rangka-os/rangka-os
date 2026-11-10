@@ -110,6 +110,8 @@ An upstream session lasts 12 hours, stored in `rk_sessions` and carried by the s
 
 `auth.session_ttl` still governs password sessions and is not applied to upstream sessions.
 
+A session records how it was opened (`rk_sessions.method`: `password` or `upstream`). A password session moves to another organisation (`POST /auth/org`) only when `auth.password` lets this member sign in there with a password, else `403 password_disabled` and the session stays where it was; a person who is `owner` in one organisation and `cashier` in another signs in through the upstream to use the second one under `owners`. An upstream session switches freely among the person's memberships.
+
 ### 8. Errors
 
 Browser routes show these on the sign-in page; JSON clients (`/auth/providers` aside, which has no error) get `{ "error": { "code", "message" } }`.
@@ -122,7 +124,7 @@ Browser routes show these on the sign-in page; JSON clients (`/auth/providers` a
 | 502 | `upstream_unavailable` | <label> sedang tidak bisa dihubungi. Coba lagi sebentar. | discovery, JWKS or token endpoint unreachable or malformed |
 | 403 | `membership_pending` | Aksesmu sedang disiapkan. Coba lagi sebentar. | §5 rule 3 |
 | 403 | `no_membership` | (existing copy) | known identity, no membership |
-| 403 | `password_disabled` | Masuk dengan <label>. | §6 |
+| 403 | `password_disabled` | Masuk dengan <label>. | §6; a password session switching organisation (§7) |
 | 500 | `internal` | Terjadi kesalahan. Coba lagi. | the kernel's own failure (database) during start or callback |
 
 No message echoes provider text, a token, a code or a claim.
@@ -149,10 +151,10 @@ No message echoes provider text, a token, a code or a claim.
 ## Contract changes
 
 - **rangka-os:**
-  - `kernel/internal/auth`: relying party (discovery, JWKS cache, code flow with PKCE, id_token checks), `rk_identities`, `rk_upstream_states`, passwordless user upsert, password policy in `Login` and in `Authorize`;
+  - `kernel/internal/auth`: relying party (discovery, JWKS cache, code flow with PKCE, id_token checks), `rk_identities`, `rk_upstream_states`, passwordless user upsert, password policy in `Login`, in `Authorize` (whose page also offers the upstreams) and in `SwitchOrg` for password sessions (`rk_sessions.method`);
   - routes `GET /auth/providers`, `GET /auth/upstream/{id}/start`, `GET /auth/upstream/{id}/callback`;
   - schema 0.5 `auth.password` accepts `"owners"` (`make sync-schemas`, `make compare-python`);
-  - `web/app` sign-in: upstream buttons first, password form only when allowed, "Masuk sebagai pemilik" link under `owners`.
+  - `web/app` sign-in: upstream buttons first, password form only when allowed, "Masuk sebagai pemilik" link under `owners`; the password form alone when `/auth/providers` has not answered within 5 s.
 - **rangka-cloud (private):** an OpenID Provider for hosted businesses (issuer, client per business, redirect URI registration), and the member push (0043).
 - **rangka-apps, rangka-connectors, rangka-ai, rangka-edge:** none.
 

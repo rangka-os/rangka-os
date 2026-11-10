@@ -56,6 +56,8 @@ create table if not exists rk_sessions (
   created_at timestamptz not null default now(),
   expires_at timestamptz not null
 );
+-- how the session was opened: password or upstream (contract 0042 §6 applies auth.password when it switches org)
+alter table rk_sessions add column if not exists method text not null default 'password';
 create table if not exists rk_tokens (
   id           bigserial primary key,
   user_id      bigint not null references rk_users(id) on delete cascade,

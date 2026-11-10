@@ -97,7 +97,7 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	tok, err := s.openSession(ctx, u, ttl)
+	tok, err := s.openSession(ctx, u, ttl, SessionPassword)
 	if err != nil {
 		return "", nil, err
 	}
@@ -105,20 +105,29 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 	return tok, u, nil
 }
 
+// How a session was opened (rk_sessions.method).
+const (
+	SessionPassword = "password"
+	SessionUpstream = "upstream"
+)
+
 // openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
-// auth.session_ttl; upstream sessions UpstreamSessionTTL.
-func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration) (string, error) {
+// auth.session_ttl; upstream sessions UpstreamSessionTTL. method is SessionPassword or SessionUpstream.
+func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string) (string, error) {
 	tok := RandomToken("", 32)
-	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at) values ($1, $2, $3, $4)", HashToken(tok), u.ID, u.Org, s.now().Add(ttl)); err != nil {
+	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at, method) values ($1, $2, $3, $4, $5)",
+		HashToken(tok), u.ID, u.Org, s.now().Add(ttl), method); err != nil {
 		return "", err
 	}
 	return tok, nil
 }
 
-// SwitchOrg moves a live session to another organisation the user belongs to.
+// SwitchOrg moves a live session to another organisation the user belongs to. A session opened with a password
+// moves only into an organisation where auth.password lets this member sign in with one (*ErrPasswordDisabled
+// otherwise); an upstream session is not limited.
 func (s *Service) SwitchOrg(ctx context.Context, cookie, org string) (*User, error) {
 	id := HashToken(cookie)
-	res, err := s.DB.Query(ctx, "select user_id from rk_sessions where id = $1 and expires_at > $2", id, s.now())
+	res, err := s.DB.Query(ctx, "select user_id, method from rk_sessions where id = $1 and expires_at > $2", id, s.now())
 	if err != nil {
 		return nil, err
 	}
@@ -131,6 +140,11 @@ func (s *Service) SwitchOrg(ctx context.Context, cookie, org string) (*User, err
 	}
 	if org == "" || u.Org != org {
 		return nil, ErrNoMembership
+	}
+	if res.Rows[0][1].(string) != SessionUpstream {
+		if err := s.checkPasswordPolicy(u); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := s.DB.Query(ctx, "update rk_sessions set org_id = $1 where id = $2", u.Org, id); err != nil {
 		return nil, err

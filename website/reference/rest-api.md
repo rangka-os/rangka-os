@@ -315,7 +315,7 @@ data: {}
 
 `POST /auth/login`, `POST /auth/logout`, `GET /auth/me` (user with outlets, every org membership, the current org),
 `POST /auth/org {"org": "<id>"}` (switch a browser session to another org of the user; tokens have a fixed org: 400
-`org_fixed`), and the OIDC endpoints in [Rangka ID](/concepts/rangka-id).
+`org_fixed`; a password session into an org whose `auth.password` refuses this member's password: 403 `password_disabled`), and the OIDC endpoints in [Rangka ID](/concepts/rangka-id).
 
 The CRM app's own endpoints, generated from its models with examples, are in the
 [CRM API reference](/api/crm/index.html).

@@ -235,3 +235,47 @@ func TestOAuthLoginPageAfterPost(t *testing.T) {
 		t.Fatalf("owner, wrong password: %d %s", w.Code, w.Body)
 	}
 }
+
+// SwitchOrg applies auth.password to a session opened with a password, not to an upstream session (final review
+// M2). a@x.id (orgEnv) is owner in pt_alpha and sales_rep in pt_beta.
+func TestSwitchOrgPasswordPolicy(t *testing.T) {
+	ctx, s, uid := orgEnv(t)
+	s.Password = func() any { return "owners" }
+	s.Upstreams = []Upstream{{ID: "kantor", Label: "Kantor"}}
+	tok, u, err := s.Login(ctx, "a@x.id", "rahasia-123", "pt_alpha")
+	if err != nil || u.Org != "pt_alpha" {
+		t.Fatalf("owner password sign-in: %v", err)
+	}
+	var pd *ErrPasswordDisabled
+	if _, err := s.SwitchOrg(ctx, tok, "pt_beta"); !errors.As(err, &pd) || pd.Message != "Masuk dengan Kantor." {
+		t.Fatalf("password session into pt_beta: %v", err)
+	}
+	res, err := s.DB.Query(ctx, "select org_id from rk_sessions where id = $1", HashToken(tok))
+	if err != nil || res.Rows[0][0] != "pt_alpha" {
+		t.Fatalf("a refused switch moved the session: %v %v", res, err)
+	}
+	if _, err := s.SwitchOrg(ctx, tok, "pt_alpha"); err != nil {
+		t.Fatalf("password session staying in pt_alpha: %v", err)
+	}
+
+	alpha, err := LoadUser(ctx, s.DB, uid, "pt_alpha")
+	if err != nil {
+		t.Fatal(err)
+	}
+	up, err := s.openSession(ctx, alpha, UpstreamSessionTTL, SessionUpstream)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if u, err := s.SwitchOrg(ctx, up, "pt_beta"); err != nil || u.Org != "pt_beta" {
+		t.Fatalf("upstream session into pt_beta: %v", err)
+	}
+
+	s.Password = nil
+	if u, err := s.SwitchOrg(ctx, tok, "pt_beta"); err != nil || u.Org != "pt_beta" {
+		t.Fatalf("password session, auth.password true: %v", err)
+	}
+	s.Password = func() any { return false }
+	if _, err := s.SwitchOrg(ctx, tok, "pt_alpha"); !errors.As(err, &pd) {
+		t.Fatalf("auth.password false, password session: %v", err)
+	}
+}

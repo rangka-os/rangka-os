@@ -11,10 +11,12 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"fmt"
+	"html"
 	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"sync"
 	"testing"
@@ -882,5 +884,48 @@ func TestCheckUpstreamRedirect(t *testing.T) {
 	}
 	if checkUpstreamRedirect(req("https://keys.example/b"), via) == nil {
 		t.Error("sixth redirect followed")
+	}
+}
+
+// The OAuth sign-in page's upstream button (auth.password false) signs in upstream and comes back to the same
+// /oauth/authorize request, which then issues the code (final review I2).
+func TestUpstreamFromOAuthLoginPage(t *testing.T) {
+	e := newUpEnv(t, testSecret, newRSAKey(t, "rsa-1"))
+	e.s.Password = func() any { return false }
+	e.s.Clients = func() []Client {
+		return []Client{{ID: "omilo", Label: "Omilo", RedirectURIs: []string{"https://omilo.example/cb"}, Scopes: []string{"openid"}}}
+	}
+	e.member("dewi@x.id", "sub-dewi")
+	q := url.Values{"response_type": {"code"}, "client_id": {"omilo"}, "redirect_uri": {"https://omilo.example/cb"}, "scope": {"openid"},
+		"state": {"omilo-state"}, "code_challenge": {"abc"}, "code_challenge_method": {"S256"}}
+	w := httptest.NewRecorder()
+	e.s.Authorize(w, httptest.NewRequest("GET", "/oauth/authorize?"+q.Encode(), nil))
+	m := regexp.MustCompile(`href="(/auth/upstream/kantor/start\?[^"]+)"`).FindStringSubmatch(w.Body.String())
+	if w.Code != 200 || m == nil || strings.Contains(w.Body.String(), `name="password"`) {
+		t.Fatalf("page: %d %s", w.Code, w.Body)
+	}
+	href, _ := url.Parse(html.UnescapeString(m[1]))
+	to := href.Query().Get("to")
+	code, state := e.op.authorize(t, e.start("kantor", to), e.now, "sub-dewi", "dewi@x.id", true, nil)
+	cb := e.callback("kantor", code, state)
+	if cb.Code != 302 || cb.Header().Get("Location") != to {
+		t.Fatalf("callback: %d to %q, want %q", cb.Code, cb.Header().Get("Location"), to)
+	}
+	var sess *http.Cookie
+	for _, c := range cb.Result().Cookies() {
+		if c.Name == CookieName {
+			sess = c
+		}
+	}
+	if sess == nil {
+		t.Fatal("no session cookie")
+	}
+	r := httptest.NewRequest("GET", to, nil)
+	r.AddCookie(sess)
+	w = httptest.NewRecorder()
+	e.s.Authorize(w, r)
+	loc := w.Header().Get("Location")
+	if w.Code != 302 || !strings.HasPrefix(loc, "https://omilo.example/cb?") || !strings.Contains(loc, "code=") || !strings.Contains(loc, "state=omilo-state") {
+		t.Fatalf("authorize after upstream: %d %q", w.Code, loc)
 	}
 }

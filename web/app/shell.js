@@ -594,15 +594,21 @@
     return "/auth/upstream/" + encodeURIComponent(id) + "/start?to=" + encodeURIComponent(to);
   }
 
+  /** How long the sign-in screen waits for /auth/providers before it shows the password form alone. */
+  var PROVIDERS_WAIT_MS = 5000;
+
   /** The ways to sign in, from /auth/providers (contract 0042 §6): provider buttons first, then the password form
-   *  when allowed; under "owners" the form sits behind "Masuk sebagai pemilik". */
+   *  when allowed; under "owners" the form sits behind "Masuk sebagai pemilik". When the kernel has not answered
+   *  within PROVIDERS_WAIT_MS the password form shows alone, as for a kernel without the endpoint. */
   function SignInOptions(p) {
     var ps = useState(null), prov = ps[0], setProv = ps[1];
     var os = useState(false), ownerForm = os[0], setOwnerForm = os[1];
     useEffect(function () {
-      var live = true;
-      api.providers().then(function (x) { if (live) setProv(x); });
-      return function () { live = false; };
+      var live = true, settled = false, timer;
+      function settle(x) { global.clearTimeout(timer); if (live && !settled) { settled = true; setProv(x); } }
+      timer = global.setTimeout(function () { settle({ password: true, upstream: [] }); }, PROVIDERS_WAIT_MS);
+      api.providers().then(settle);
+      return function () { live = false; global.clearTimeout(timer); };
     }, []);
     if (!prov) return h("div", { className: "ap-signin-wait", role: "status", "aria-busy": "true" }, h(R.Spinner, null));
     var form = h(SignInForm, { idPrefix: p.idPrefix, email: p.email, onDone: p.onDone });

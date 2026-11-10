@@ -836,6 +836,25 @@ def test_sign_in_providers_unreachable(page, ctx):
     assert page.get_by_label("Kata sandi").is_visible() and not page.get_by_role("link", name="Masuk dengan Kantor").count()
 
 
+def test_sign_in_providers_slow(page, ctx):
+    """/auth/providers that does not answer within 5 s: the password form shows alone instead of a spinner forever."""
+    held = []
+    page.route(re.compile(r".*/auth/providers$"), lambda route: held.append(route))  # held until the end of the scenario
+    page.goto(ctx.base + "/app/")
+    page.locator(".ap-signin-wait").wait_for(timeout=15000)
+    t0 = time.time()
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
+    waited = time.time() - t0
+    assert waited > 3, f"the form came after {waited:.1f}s, before the 5 s wait"
+    assert page.get_by_label("Kata sandi").is_visible() and not page.locator(".ap-signin-upstream").count()
+    for route in held:  # a late answer changes nothing on the screen already shown
+        _json(route, 200, {"password": False, "upstream": [{"id": "kantor", "label": "Kantor"}]})
+    page.wait_for_timeout(300)
+    assert page.get_by_label("Kata sandi").is_visible() and not page.locator(".ap-signin-upstream").count(), "a late answer replaced the form"
+    sign_in(page)
+    expect_signed_in(page, ctx)
+
+
 def test_root_redirect(page, ctx):
     page.goto(ctx.base + "/")
     assert page.url.startswith(ctx.base + "/app/"), "GET / lands on /app/, got " + page.url

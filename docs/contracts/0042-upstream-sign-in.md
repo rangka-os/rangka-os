@@ -46,7 +46,7 @@ No other key is added. Which organisation a person enters is not configured here
 
 | Route | Auth | Purpose |
 | --- | --- | --- |
-| `GET /auth/providers` | public | `{ "password": true \| false \| "owners", "upstream": [{ "id", "label" }] }`. The sign-in screen reads it. It reveals no issuer, client id or secret. |
+| `GET /auth/providers` | public | `{ "password": true \| false \| "owners", "upstream": [{ "id", "label" }] }`. The sign-in screen reads it. It reveals no issuer, client id or secret. When it has not answered within 5 s the screen shows the password form alone, as for a kernel without the route. |
 | `GET /auth/upstream/{id}/start?to=<path>` | public | Begins sign-in. Unknown `id` is `404 unknown_upstream`. |
 | `GET /auth/upstream/{id}/callback` | public | The redirect URI registered at the provider: `{kernel origin}/auth/upstream/{id}/callback`. |
 
@@ -100,7 +100,7 @@ Why `membership_pending` exists: a host may let someone through the provider's f
 | `"owners"` | Only members whose role in the organisation is `owner`. |
 | `false` | Nobody. |
 
-The rule applies everywhere a password is checked: `POST /auth/login`, and the sign-in form of the kernel's own OAuth provider (`POST /oauth/authorize`, used by Omilo and other `auth.clients`). Passkeys and upstream sign-in are not affected. A refused password sign-in is `403 password_disabled`, message `Masuk dengan <label>.` where label is the first upstream's; with no upstream, `Masuk lewat penyedia akun organisasimu.` The check happens after the password verifies, so the answer does not tell a stranger whether an e-mail exists; a wrong password is still `401 bad_login`. Under `owners`, a user with no membership in the organisation who gives the right password gets the existing `403 no_membership` (after the password verifies), not `password_disabled`; `password_disabled` is for members whose role is not `owner`.
+The rule applies everywhere a password is checked: `POST /auth/login`, and the sign-in form of the kernel's own OAuth provider (`POST /oauth/authorize`, used by Omilo and other `auth.clients`). Passkeys and upstream sign-in are not affected. Both sign-in pages offer every upstream as a "Masuk dengan <label>" button first and show the password form as the setting allows: as is (`true`), behind "Masuk sebagai pemilik" (`"owners"`), or not at all (`false`). On the kernel's OAuth page the button goes to `/auth/upstream/{id}/start?to=<this /oauth/authorize request>`, so the upstream sign-in comes back to the client's request and the code is issued. A refused password sign-in is `403 password_disabled`, message `Masuk dengan <label>.` where label is the first upstream's; with no upstream, `Masuk lewat penyedia akun organisasimu.` The check happens after the password verifies, so the answer does not tell a stranger whether an e-mail exists; a wrong password is still `401 bad_login`. Under `owners`, a user with no membership in the organisation who gives the right password gets the existing `403 no_membership` (after the password verifies), not `password_disabled`; `password_disabled` is for members whose role is not `owner`.
 
 The schema (0.5 `system.json`) changes `auth.password` from `boolean` to `oneOf [boolean, const "owners"]`, default `true`. Nothing else in the schema changes.
 

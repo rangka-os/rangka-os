@@ -2,9 +2,11 @@ package auth
 
 import (
 	"errors"
+	"html"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -133,5 +135,103 @@ func TestPasswordPolicyOAuthForm(t *testing.T) {
 	s.Password = nil
 	if w := postAuthorize(s, "kasir@x.id", "rahasia-123"); w.Code != http.StatusFound {
 		t.Fatalf("default: %d %s", w.Code, w.Body)
+	}
+}
+
+func getAuthorize(s *Service) *httptest.ResponseRecorder {
+	q := url.Values{"response_type": {"code"}, "client_id": {"omilo"}, "redirect_uri": {"https://omilo.example/cb"}, "scope": {"openid"},
+		"state": {"st-1"}, "code_challenge": {"abc"}, "code_challenge_method": {"S256"}}
+	w := httptest.NewRecorder()
+	s.Authorize(w, httptest.NewRequest("GET", "/oauth/authorize?"+q.Encode(), nil))
+	return w
+}
+
+var upstreamHref = regexp.MustCompile(`<a class="btn" href="([^"]+)">Masuk dengan ([^<]+)</a>`)
+
+// The kernel's own OAuth sign-in page (Omilo and other auth.clients) offers the upstreams and shows the password
+// form only as auth.password allows (final review I2).
+func TestOAuthLoginPageUpstreams(t *testing.T) {
+	kantor, lain := Upstream{ID: "kantor", Label: "Kantor"}, Upstream{ID: "lain", Label: "Lain"}
+	cases := []struct {
+		name    string
+		setting any
+		ups     []Upstream
+		form    string // "open": the form as is, "owner": behind "Masuk sebagai pemilik", "": no form
+	}{
+		{"default, no upstream", nil, nil, "open"},
+		{"true, upstreams", true, []Upstream{kantor, lain}, "open"},
+		{"owners", "owners", []Upstream{kantor}, "owner"},
+		{"owners, no upstream", "owners", nil, "owner"},
+		{"false", false, []Upstream{kantor, lain}, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			s := policyEnv(t, c.setting, c.ups...)
+			w := getAuthorize(s)
+			body := w.Body.String()
+			if w.Code != 200 {
+				t.Fatalf("status %d", w.Code)
+			}
+			links := upstreamHref.FindAllStringSubmatch(body, -1)
+			if len(links) != len(c.ups) {
+				t.Fatalf("want %d upstream buttons, got %d in %s", len(c.ups), len(links), body)
+			}
+			for i, l := range links {
+				if l[2] != c.ups[i].Label {
+					t.Fatalf("button %d label %q", i, l[2])
+				}
+				href, err := url.Parse(html.UnescapeString(l[1]))
+				if err != nil || href.Path != "/auth/upstream/"+c.ups[i].ID+"/start" {
+					t.Fatalf("button %d href %q", i, l[1])
+				}
+				to := href.Query().Get("to")
+				if SafePath(to) != to {
+					t.Fatalf("SafePath rewrites the return path %q", to)
+				}
+				back, _ := url.Parse(to)
+				if back.Path != "/oauth/authorize" {
+					t.Fatalf("return path %q", to)
+				}
+				for k, v := range map[string]string{"client_id": "omilo", "redirect_uri": "https://omilo.example/cb", "state": "st-1",
+					"code_challenge": "abc", "code_challenge_method": "S256", "response_type": "code", "scope": "openid"} {
+					if got := back.Query().Get(k); got != v {
+						t.Fatalf("return path %s = %q, want %q", k, got, v)
+					}
+				}
+			}
+			hasForm := strings.Contains(body, `name="password"`)
+			behindOwner := strings.Contains(body, "<summary>Masuk sebagai pemilik</summary>")
+			switch c.form {
+			case "open":
+				if !hasForm || behindOwner {
+					t.Fatalf("want the password form shown: %s", body)
+				}
+				if (len(c.ups) > 0) != strings.Contains(body, `role="separator"`) {
+					t.Fatal("the separator belongs between upstream buttons and the form")
+				}
+			case "owner":
+				if !hasForm || !behindOwner || strings.Contains(body, "<details open>") {
+					t.Fatalf("want the form closed behind Masuk sebagai pemilik: %s", body)
+				}
+			default:
+				if hasForm || behindOwner {
+					t.Fatalf("auth.password false must not show a password form: %s", body)
+				}
+			}
+		})
+	}
+}
+
+// Under owners, a refused non-owner gets the upstream buttons with the form closed; an owner's wrong password keeps
+// the owner form open.
+func TestOAuthLoginPageAfterPost(t *testing.T) {
+	s := policyEnv(t, "owners", Upstream{ID: "kantor", Label: "Kantor"})
+	w := postAuthorize(s, "kasir@x.id", "rahasia-123")
+	if w.Code != 403 || !upstreamHref.MatchString(w.Body.String()) || strings.Contains(w.Body.String(), "<details open>") {
+		t.Fatalf("cashier: %d %s", w.Code, w.Body)
+	}
+	w = postAuthorize(s, "own@x.id", "salah")
+	if w.Code != 401 || !strings.Contains(w.Body.String(), "<details open>") {
+		t.Fatalf("owner, wrong password: %d %s", w.Code, w.Body)
 	}
 }

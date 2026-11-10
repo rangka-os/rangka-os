@@ -60,3 +60,26 @@ func TestCounterScreen(t *testing.T) {
 		t.Fatalf("session after close: %v", s)
 	}
 }
+
+// PATCH with _if (contract 0030 §2 queue): the update runs only when the locked record still holds the values.
+func TestConditionalPatch(t *testing.T) {
+	owner, _, _ := screensEnv(t)
+	tk := owner.must(201, "POST", "/api/v1/r/tiket_dapur", map[string]any{"table_no": "Meja 7"}).JSON["name"].(string)
+	r := owner.must(200, "PATCH", "/api/v1/r/tiket_dapur/"+tk, map[string]any{"status": "cooking", "_if": map[string]any{"status": "new"}}).JSON
+	if r["status"] != "cooking" {
+		t.Fatalf("first step: %v", r)
+	}
+	// a second device still shows "new": its step is refused, the status does not go back
+	c := owner.must(409, "PATCH", "/api/v1/r/tiket_dapur/"+tk, map[string]any{"status": "cooking", "_if": map[string]any{"status": "new"}})
+	if get(c.JSON, "error", "code") != "precondition_failed" {
+		t.Fatalf("stale step: %s", c.Body)
+	}
+	owner.must(400, "PATCH", "/api/v1/r/tiket_dapur/"+tk, map[string]any{"status": "ready", "_if": map[string]any{"ghost": 1}})
+	owner.must(400, "PATCH", "/api/v1/r/tiket_dapur/"+tk, map[string]any{"status": "ready", "_if": "status"})
+	// a number compares by value whatever its JSON form
+	m := owner.must(201, "POST", "/api/v1/r/menu", map[string]any{"menu_name": "Teh", "price": 5000}).JSON["name"].(string)
+	owner.must(200, "PATCH", "/api/v1/r/menu/"+m, map[string]any{"price": 6000, "_if": map[string]any{"price": 5000.0}})
+	if s := owner.must(200, "GET", "/api/v1/r/tiket_dapur/"+tk, nil).JSON; s["status"] != "cooking" {
+		t.Fatalf("after refusals: %v", s)
+	}
+}

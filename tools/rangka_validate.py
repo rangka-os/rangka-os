@@ -1930,6 +1930,70 @@ def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints=()):
         check_screen_entry(rep, p, raw["entry"], visible)
     if typ == "counter" and isinstance(raw.get("counter"), dict):
         check_screen_counter(rep, p, raw["counter"], visible, prints)
+    if typ == "queue" and isinstance(raw.get("queue"), dict):
+        check_screen_queue(rep, p, raw["queue"], visible)
+
+
+def pystr(x):
+    return x if isinstance(x, str) else repr(x) if not isinstance(x, bool) else ("True" if x else "False")
+
+
+def check_screen_queue(rep, p, b, visible):
+    src = b.get("source") if isinstance(b.get("source"), dict) else None
+    if src is None:
+        return
+    mn, m, fields = slot_model(rep, p, "queue/source/model", src, visible)
+    if not mn:
+        return
+    parens(rep, p, "queue/source/filter", src.get("filter"))
+    card = b.get("card") if isinstance(b.get("card"), dict) else {}
+    slot_field(rep, p, "queue/card/title", mn, fields, card.get("title"))
+    slot_field(rep, p, "queue/card/subtitle", mn, fields, card.get("subtitle"))
+    for i, x in enumerate(card.get("fields") if isinstance(card.get("fields"), list) else []):
+        slot_field(rep, p, f"queue/card/fields/{i}", mn, fields, x)
+    lines = slot_field(rep, p, "queue/card/lines", mn, fields, card.get("lines"), ["table"])
+    ln, lm, lf = child_of(lines, visible)
+    if ln:
+        for i, x in enumerate(card.get("line") if isinstance(card.get("line"), list) else []):
+            slot_field(rep, p, f"queue/card/line/{i}", ln, lf, x)
+    af = card.get("age_from")
+    if isinstance(af, str) and af not in ("created_at", "modified_at"):
+        slot_field(rep, p, "queue/card/age_from", mn, fields, af, ["date", "datetime"])
+    actions = {a.get("name") for a in (m.get("actions") or []) if isinstance(a, dict) and isinstance(a.get("name"), str)}
+    for i, st in enumerate(b.get("steps") if isinstance(b.get("steps"), list) else []):
+        st = st if isinstance(st, dict) else {}
+        at = f"queue/steps/{i}"
+        parens(rep, p, f"{at}/when", st.get("when"))
+        act = st.get("action") if isinstance(st.get("action"), str) else None
+        sset = st.get("set") if isinstance(st.get("set"), dict) else None
+        if act is None and sset is None:
+            rep.add("error", p, at, "screen_slot_type", "a step needs an action or a set")
+        if act is not None and sset is not None:
+            rep.add("error", p, at, "screen_slot_type", "a step takes an action or a set, not both")
+        if act is not None:
+            if act == "submit":
+                if m.get("is_submittable") is not True:
+                    rep.add("error", p, f"{at}/action", "screen_not_submittable", f"{mn} is not submittable; a step cannot submit it")
+            elif act not in actions:
+                rep.add("error", p, f"{at}/action", "unknown_action", f'"{act}" is not an action of {mn}{suggest(act, actions)}')
+        sset = {str(k): v for k, v in sset.items()} if sset else {}
+        for k in sorted(sset):
+            if k not in fields:
+                rep.add("error", p, f"{at}/set/{k}", "unknown_field", f'"{k}" is not a field of {mn}{suggest(k, fields)}')
+            elif fields[k].get("compute") is not None or fields[k].get("read_only") is True:
+                rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"{k}" is computed or read-only; set: cannot fill it')
+            elif fields[k].get("type") == "select":
+                val = pystr(sset[k])
+                if val not in option_values(fields[k]):
+                    rep.add("error", p, f"{at}/set/{k}", "screen_slot_type", f'"{val}" is not an option of {k}')
+    cols = b.get("columns") if isinstance(b.get("columns"), dict) else None
+    if cols is not None:
+        f = slot_field(rep, p, "queue/columns/by", mn, fields, cols.get("by"))
+        if f is not None and f.get("type") == "select":
+            opts = option_values(f)
+            for i, x in enumerate(cols.get("values") if isinstance(cols.get("values"), list) else []):
+                if isinstance(x, str) and x not in opts:
+                    rep.add("error", p, f"queue/columns/values/{i}", "screen_slot_type", f'"{x}" is not an option of {cols.get("by")}')
 
 
 NUMERIC_KINDS = ["currency", "money", "float", "int", "percent"]

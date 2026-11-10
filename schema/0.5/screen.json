@@ -85,7 +85,7 @@
       "$ref": "#/$defs/counter"
     },
     "queue": {
-      "$ref": "#/$defs/block"
+      "$ref": "#/$defs/queue"
     },
     "roll": {
       "$ref": "#/$defs/block"
@@ -412,6 +412,140 @@
         },
         "submit": {
           "type": "boolean"
+        }
+      }
+    },
+    "queue": {
+      "type": "object",
+      "description": "Work through cards that change state: kitchen tickets, today's jobs (contract 0030 §2)",
+      "required": [
+        "source",
+        "card",
+        "steps"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "source": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "filter": {
+              "type": "string",
+              "description": "List filter (field names, CEL, with user and today())"
+            },
+            "sort": {
+              "type": "string",
+              "description": "List sort, e.g. created_at or -date"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            }
+          }
+        },
+        "card": {
+          "type": "object",
+          "required": [
+            "title"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "title": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "subtitle": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "lines": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "line": {
+              "type": "array",
+              "items": {
+                "$ref": "model.json#/$defs/name"
+              }
+            },
+            "fields": {
+              "type": "array",
+              "items": {
+                "$ref": "model.json#/$defs/name"
+              }
+            },
+            "age_from": {
+              "type": "string",
+              "description": "A date or datetime field (or created_at, modified_at) the card's age counts from"
+            }
+          }
+        },
+        "steps": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "when",
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "when": {
+                "type": "string",
+                "description": "CEL over the card's record"
+              },
+              "label": {
+                "$ref": "model.json#/$defs/label"
+              },
+              "action": {
+                "type": "string",
+                "description": "submit, or an action of the model"
+              },
+              "set": {
+                "type": "object",
+                "propertyNames": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "additionalProperties": {
+                  "type": [
+                    "string",
+                    "number",
+                    "boolean"
+                  ]
+                },
+                "description": "field: literal value"
+              }
+            }
+          }
+        },
+        "columns": {
+          "type": "object",
+          "required": [
+            "by"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "by": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "values": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
+        },
+        "refresh": {
+          "type": "integer",
+          "minimum": 3,
+          "maximum": 300,
+          "description": "Seconds between refreshes (default 10)"
         }
       }
     }

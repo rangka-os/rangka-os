@@ -20,6 +20,7 @@ JSON over HTTP at `/api/v1`. Authenticate with the `rk_session` cookie (from `/a
 | GET | `/export/r/{model}` | `?filter=&q=&sort=&columns=a,b&sep=semicolon`: the list as CSV (UTF-8 with BOM, plain numbers, select labels, Ya/Tidak). Needs the model's `export` permission on top of read ([contract 0024](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0024-list-and-dashboard-export.md)) |
 | GET | `/export/dashboards/{name}` | `?period=`: every widget the caller may export, one CSV block per widget |
 | (header) | `Idempotency-Key` on `POST /r/{model}`, `/submit`, `/cancel`, `/amend`, `/actions/{action}` | A retry with the same key answers the stored result (`Idempotency-Replayed: true`) and writes nothing; another body is 409 `idempotency_conflict`, the same request still running 409 `idempotency_in_progress`. Body `_occurred_at` (RFC 3339) goes to the audit ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md) §6, §7) |
+| (body) | `_if` on `PATCH /r/{model}/{name}` | `{field: value}` checked under the row lock; a mismatch is 409 `precondition_failed` (contract 0030 §6a) |
 | GET | `/screens/{name}` | A work screen the caller may open: `{name, screen, set}`, `set` = the screen's `set:` evaluated for the caller now; 404 otherwise ([contract 0030](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0030-work-screens.md)) |
 | POST | `/flows/{name}/run` | Run a flow now with `{event: {…}}` |
 

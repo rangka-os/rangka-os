@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
@@ -176,6 +177,29 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 	more, err := o.checkValues(m, rec, "")
 	errs = append(errs, more...)
 	return append(errs, s.checkMoney("", "", "", map[string]bool{})...), warns, err
+}
+
+// checkExpect compares the locked record with the caller's precondition (UpdateIf).
+func (o *op) checkExpect(m *meta.Model, cur store.Record) error {
+	keys := make([]string, 0, len(o.expect))
+	for k := range o.expect {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		f := m.Field(k)
+		if f == nil || f.Type == "table" || o.e.FieldHidden(o.actor, m, f) {
+			return badRequest("_if: " + k + " is not a field of " + m.Name + " the caller can compare")
+		}
+		got := cur[k]
+		if got == nil {
+			got = store.Zero(f)
+		}
+		if !cel.Equal(got, o.expect[k]) {
+			return conflict("precondition_failed", "Data ini sudah diubah di perangkat lain ("+labelOr(f)+"). Muat ulang lalu coba lagi.")
+		}
+	}
+	return nil
 }
 
 // cancelRules evaluates the rules with on: cancel over the submitted record (fail closed, like check). Required
@@ -488,9 +512,17 @@ func (o *op) load(m *meta.Model, name string) (store.Record, error) {
 // Update merges patch into a draft (or non-submittable) record, recomputes and runs save rules. The actor
 // needs write on the stored record and on the record after the patch.
 func (e *Engine) Update(ctx context.Context, a Actor, model, name string, patch map[string]any) (*Result, error) {
+	return e.UpdateIf(ctx, a, model, name, patch, nil)
+}
+
+// UpdateIf is Update that first checks, under the record's row lock, that every field of expect holds that value
+// (contract 0030 §2 queue: a step or its undo never overwrites a change another device made meanwhile). A
+// mismatch is 409 precondition_failed; a field the caller cannot see or that does not exist is 400.
+func (e *Engine) UpdateIf(ctx context.Context, a Actor, model, name string, patch, expect map[string]any) (*Result, error) {
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
+		o.expect = expect
 		res, err = o.update(model, name, patch, true, true)
 		return err
 	})
@@ -525,6 +557,12 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 		if err := o.e.Guard(o.ctx, o.actor, m.Name, cur, "update"); err != nil {
 			return nil, err
 		}
+	}
+	if o.expect != nil {
+		if err := o.checkExpect(m, cur); err != nil {
+			return nil, err
+		}
+		o.expect = nil // flows the update starts write without the precondition
 	}
 	if m.IsSubmittable && toInt(cur["docstatus"]) != 0 {
 		return nil, conflict("immutable", "Dokumen yang sudah diajukan tidak bisa diubah; batalkan lalu ubah (amend)")

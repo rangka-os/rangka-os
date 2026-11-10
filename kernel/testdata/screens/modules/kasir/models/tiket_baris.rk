@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: tiket_baris
+label: {id: Baris tiket}
+is_child: true
+fields:
+  - {name: menu, type: link, to: menu, label: {id: Menu}, required: true}
+  - {name: qty, type: float, label: {id: Qty}, default: '1'}
+  - {name: note, type: data, label: {id: Catatan}}

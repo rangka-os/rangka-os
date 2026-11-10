@@ -56,7 +56,7 @@ Adding a type is a contract change.
 | type | Job | Slots (required **bold**) | Writes |
 |---|---|---|---|
 | `counter` | Sell or take payment at a counter: catalogue, cart, tender, receipt | **`catalogue`** {**model**, filter, title, search, group_by, **price** (a number field), barcode, image, limit (default 500)}, **`document`** {**model** (submittable unless `submit: false`), **lines** (a table), **line**: {**item** (a link to the catalogue model), **qty**, price, note}, total and change (number fields the receipt panel reads from the server's answer; the screen's own sums are only an estimate), set: {field: CEL, fetched again for every sale}}, `payments` {table, method, amount, ref, methods (options of method)}, `session` {model, link (a link of the document to it), filter (the caller's session, e.g. `cashier == user.email`), state: {field, open, closed}, open: [fields], set, close: {model (submittable), link, fields, set}, blind (bool, default true: the cashier counts cash without seeing the expected amount; the model enforces it with `hidden_for`)}, `hold` (bool), `customer` {field, required}, `print` (a print format of the document), `submit` (default true) | creates one `document` per sale with its lines and payment rows, then submits it |
-| `queue` | Work through cards that change state: kitchen tickets, today's work orders, pick lists, today's rental jobs | **`source`** {model, filter, sort}, **`card`** {title, subtitle, lines, fields, age_from}, **`steps`** [{when: CEL, action: submit / action name / {set: {...}}, label}], `columns` {by: field, values}, `refresh` (seconds, default 10) | runs the step's action on one record |
+| `queue` | Work through cards that change state: kitchen tickets, today's work orders, pick lists, today's rental jobs | **`source`** {**model**, filter, sort, limit (default 200)}, **`card`** {**title**, subtitle, fields, lines (a table; loaded with `?children=1`), line (row fields shown), age_from (a date/datetime field, `created_at` default; amber from 10 minutes, red from 20)}, **`steps`** [{**when**: CEL over the card, **label**, `set`: {field: literal value, an option for a select} or `action`: `submit` / an action of the model}], `columns` {by: field, values: options in order}, `refresh` (seconds, 3-300, default 10) | runs the first matching step on one record: `set` is a conditional PATCH (`_if`: the values the card showed), "Urungkan" for 3 seconds is a conditional PATCH back (`_if`: what the step wrote); submit/action carry an Idempotency-Key kept per card until an answer |
 | `roll` | One parent record, many rows marked fast or added by scan: class attendance, team attendance, stock count, receiving | **`document`** {model, find or create: CEL, set}, **`rows`** {table, label, mark: {field, values, default} or qty: field} (default: every row starts at e.g. `present` and staff change only the exceptions, as Teachworks and Jackrabbit do), `add_by` (scan / search / none), `scan` {field, match}, `submit` | updates the parent's table, then submits |
 | `route` | Today's list of places to visit, check in, act there | **`stops`** {model, filter, sort, title, address, location}, `visit` {model, link, set, capture: [location, photo]}, **`actions`** [{label, screen or create: model, set}] | creates a visit record (optional) and opens another screen or form with the stop prefilled |
 | `handover` | Hand items over with proof: rental out/in, proof of delivery, BAST | **`document`** {model, find or create, set}, **`rows`** {table, unit or item, qty, condition}, `scan` {field, match}, `photos` {field, min}, `signature` {field, by}, `print`, `submit` | fills rows, attaches photos and signature, submits, prints |
@@ -155,6 +155,12 @@ and one actor (another user's same key is another key). The kernel keeps `rk_ide
   tokens of one user share the key space.
 This is what makes a double tap, a dropped connection or a phase-1 queue safe, and it is the same rule edge events
 already follow (0006 §3).
+
+### 6a. Conditional update
+`PATCH /api/v1/r/<model>/<name>` accepts `_if: {field: value}`: under the record's row lock every listed field must
+still hold that value, else `409 precondition_failed` and nothing is written. A field that does not exist, is a table or
+is hidden from the caller is `400`. Screens use it so a step from a stale card, or an undo after another device moved
+the card, never overwrites someone else's change.
 
 ### 7. Offline, phase 1: browser queue (`offline: queue`)
 - The web app keeps an IndexedDB outbox (`rangka-outbox`) per device, with jobs scoped to org and user (another person
@@ -296,7 +302,7 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 - Payment methods other than `cash` and `qris` are not offered by the renderer yet.
 - A held approval of a cancel re-runs the cancel (and its `on: cancel` rules) as the requester at approval time;
   warn-level cancel rules are not shown to the caller.
-- A sale whose answer was lost locks the cart, tender and buyer until "Kirim ulang" gets an answer (same keys).
+- A sale whose answer was lost locks the cart, tender, buyer and "Tutup sesi" until "Kirim ulang" gets an answer (same keys); the pending sale survives a page reload on that device (WS4).
 - With two open sessions the screen takes the newest; the catalogue loads at most `limit` rows (default 500).
 - Offline across midnight, the last cached `set:` values keep yesterday's date until the screen reloads online.
 
@@ -305,8 +311,9 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 |---|---|---|
 | WS1 | `screen.json`, `app.work`, change-set path `modules/<m>/screens/`, validators, registry, `/meta` `screens` + `work`, `GET /api/v1/screens/{name}`, home per role, `#/w/<screen>`, "Kerja" group, work shell, renderer `entry` | merged |
 | WS2 | `Idempotency-Key` on create, submit, cancel, amend and actions (`rk_idempotency`); `_occurred_at`; IndexedDB outbox; cached screen | merged |
-| WS3 | `counter` slots and checks, `sets` in `GET /screens`, renderer `counter` (catalogue cached, cart, hold, split tender, session open and blind close, receipt print), `on: cancel` rules evaluated | this PR |
-| WS4, WS6, WS9a, WS7, WS5, WS8, WS9b | `queue`; `geo` + photo/signature; `clock`; `roll`; camera scan; `handover`; `route` | |
+| WS3 | `counter` slots and checks, `sets` in `GET /screens`, renderer `counter` (catalogue cached, cart, hold, split tender, session open and blind close, receipt print), `on: cancel` rules evaluated | merged |
+| WS4 | `queue` slots and checks (`unknown_action`, step values are options), renderer `queue` (columns, age, steps, undo, polling, offline copy) | this PR |
+| WS6, WS9a, WS7, WS5, WS8, WS9b | `geo` + photo/signature; `clock`; `roll`; camera scan; `handover`; `route` | |
 
 ## Open
 - Should `entry` and `roll` also be offered to the owner on the desk as quick actions? Proposed: yes, through the

@@ -425,10 +425,22 @@
     // A sale whose answer got lost stays pending: the cart, tender and buyer are locked and every press sends that
     // same job (same keys, same body) until the server answers, so one cart is one sale (audit WS3 R2-1, R3-1).
     var sts = useState(false), stuck = sts[0], setStuck = sts[1];
+    var sendingRef = useRef(false); // synchronous guard: two presses in one task never start two sales (audit WS3 L-R4-1)
+    var pendingKey = "pending:" + scope + ":" + s.name;
+    // a pending sale survives a page reload: it comes back locked with its cart (audit WS3 L-R4-2)
+    useEffect(function () {
+      RA.outbox.cache.get(pendingKey).then(function (x) {
+        var v = x && x.value;
+        if (!v || !v.job || jobRef.current) return;
+        jobRef.current = { job: v.job, est: v.est };
+        setCart(v.cart || []); setCustomer(v.customer || ""); setStuck(true);
+      });
+    }, [pendingKey]);
     function send(job, est) {
       setBusy(true); setErr("");
       return RA.outbox.send(ctx.api, job, s.offline === "queue").then(function (res) {
-        jobRef.current = null; setStuck(false);
+        jobRef.current = null; setStuck(false); sendingRef.current = false;
+        RA.outbox.cache.put(pendingKey, null);
         var rec = res.record || {};
         // the receipt panel shows the server's total and change (audit WS3 M1); the screen's sums are only an estimate
         var dt = doc.total, dc = doc.change;
@@ -440,21 +452,29 @@
         setCart([]); setCustomer(""); setPay(null);
         if (res.queued) ctx.toast("info", "Belum terkirim", "Transaksi tersimpan di perangkat dan dikirim saat koneksi kembali.");
       }, function (e) {
-        if (RA.outboxRetryable(e)) { setStuck(true); return; }
+        sendingRef.current = false;
+        if (RA.outboxRetryable(e)) {
+          setStuck(true);
+          RA.outbox.cache.put(pendingKey, { job: job, est: est, cart: cart, customer: customer });
+          return;
+        }
+        RA.outbox.cache.put(pendingKey, null);
         // refused: the job is over (a draft it created stays reachable from the list); the cart may be changed again
         jobRef.current = null; setStuck(false);
         setErr(errText(e));
       }).then(function () { setBusy(false); }, function () { setBusy(false); });
     }
     function resend() {
-      if (busy || !jobRef.current) return;
+      if (busy || sendingRef.current || !jobRef.current) return;
+      sendingRef.current = true;
       send(jobRef.current.job, jobRef.current.est);
     }
     function finish(cash, qris) {
-      if (busy) return;
+      if (busy || sendingRef.current) return;
       if (jobRef.current) { resend(); return; } // a pending sale goes again exactly as it was
       var change = changeOf(total, cash, qris);
       if (change === null) { setErr("Uang tunai kurang dari yang harus dibayar."); return; }
+      sendingRef.current = true;
       setBusy(true); setErr("");
       var payRows = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
       var est = { total: total, change: change };
@@ -534,6 +554,12 @@
           h(R.Button, { type: "submit", variant: "primary", loading: busy, disabled: busy }, "Tutup sesi")));
     }
 
+    // a group_by link shows its record's title (category name), not the stored code
+    var groupField = cat.group_by ? (((ctx.meta.models || {})[cat.model] || {}).fields || []).filter(function (f) { return f.name === cat.group_by; })[0] : null;
+    function groupLabel(g) {
+      var to = groupField && groupField.type === "link" ? (ctx.meta.models || {})[groupField.to] : null;
+      return to && !(to.can && to.can.read === false) && ctx.cache && ctx.cache.title ? ctx.cache.title(groupField.to, g) : g;
+    }
     var groups = [];
     (items || []).forEach(function (it) { if (it.group && groups.indexOf(it.group) < 0) groups.push(it.group); });
     var shown = catalogueMatch(items, q, group);
@@ -547,7 +573,7 @@
         h("span", { className: "ap-counter-sync" + (online ? "" : " off") }, online ? "Online" : "Offline")),
       groups.length > 1 ? h("div", { className: "ap-counter-groups", role: "tablist" },
         [""].concat(groups).map(function (g) {
-          return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g || "Semua");
+          return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g ? groupLabel(g) : "Semua");
         })) : null,
       catErr ? h("div", { className: "ap-work-err" }, catErr) : !items ? h("p", { className: "ap-work-loading" }, "Memuat katalog…") :
         h("div", { className: "ap-counter-grid" }, shown.map(function (it) {
@@ -628,7 +654,7 @@
         h("b", null, "Pesanan"),
         h("span", { className: "ap-counter-tools" },
           c.hold && held.length ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setHeldOpen(!heldOpen); } }, "Ditahan (" + held.length + ")") : null,
-          ses && ses.close ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null,
+          ses && ses.close && !stuck ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null,
           h("button", { type: "button", className: "ap-counter-sheet-x", "aria-label": "Tutup pesanan", onClick: function () { setSheet(false); } }, h(R.Icon, { name: "close" })))),
       heldList,
       c.customer && !(pay && !stuck) ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),

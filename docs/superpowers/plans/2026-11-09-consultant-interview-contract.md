@@ -1,5 +1,7 @@
 # Consultant interview: contract 0042 and skills (rangka-os) Implementation Plan
 
+> **Note (10 Nov 2026):** 0042 was amended after this plan: there is no interview v1/v2 and no `version` field. `POST /v1/interview` is the consult turn, and the facts-based interview is removed by 0042 itself. The plan below is kept as written.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Fix the shared interface for Raka's consultant interview (the peta alur, interview v2 wire shape, studio knowledge tools, owner files) in contract 0042 with fixtures both sides test against, and fix the skills so Raka stops saying "belum ada" for things Rangka can build.

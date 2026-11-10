@@ -1,6 +1,6 @@
 # 0042 Consultant interview
 
-Status: proposed (9 Nov 2026) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (interview v2, `/v1/extract`, `/v1/plan`, model roles), rangka-cloud (map storage, studio gateway tools, owner files, build; private) · Builds on: 0014, 0016, 0032, 0033, 0035, 0036, 0041 · Amends: 0041 for place `studio` (section 5)
+Status: proposed (9 Nov 2026; amended 10 Nov 2026: one interview, no `version` field, the facts-based interview is removed here) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (interview turn, `/v1/extract`, `/v1/plan`, model roles), rangka-cloud (map storage, studio gateway tools, owner files, build; private) · Builds on: 0014, 0016, 0032, 0033, 0035, 0036, 0041 · Amends: 0041 for place `studio` (section 5)
 
 ## Context
 
@@ -107,17 +107,16 @@ A reply may carry `guesses: [{"id": "g_dp", "file": "f_1", "claim": "Deposit sel
 - Cloud shows guesses as chips. Pressing the first option adds the guess id to the project's confirmed guesses and sends the option text as the owner's message.
 - Any `put` whose value carries `from_guess` that is not in the request's `confirmed_guesses` is dropped with `unconfirmed_guess`.
 
-### 4. Interview v2
+### 4. Interview
 
-`POST /v1/interview` with `"version": 2`.
+`POST /v1/interview` is the consult turn. It replaces the previous interview (request with `facts` and `catalogue`, response `{reply, facts, done, done_refused}`); it is not a second version next to it. There is no `version` field: a request that carries one has it ignored.
 
-- Request adds: `map` (required in v2), `confirmed_guesses: [id]`, `files: [{id, name, media_type, status}]`, `kernel: {url, token}` (the gateway, section 5; optional: without it Raka works from the map and conversation only), `budget: {near_limit: boolean}` (optional; absent means false). Examples may carry `map` next to `facts`. The request drops `facts`; a v2 request that still sends `facts` has them ignored.
+- Request adds: `map` (required), `confirmed_guesses: [id]`, `files: [{id, name, media_type, status}]`, `kernel: {url, token}` (the gateway, section 5; optional: without it Raka works from the map and conversation only), `budget: {near_limit: boolean}` (optional; absent means false). Examples may carry `map` next to `facts`. The request drops `facts` and `catalogue`; a request that still sends them has them ignored.
 - Response: `{reply, map, dropped_ops, guesses, suggest_build, usage, provider, model}`. No `done`, no `facts`.
 - `suggest_build` (boolean) is set by Raka when the map covers the flow from first contact to money in. Cloud then offers the "Susun rancangan" action. It never ends the interview, and the owner can build without it.
 - `budget.near_limit`: Cloud sets it once the session has used 80% of its interview budget. Raka then says so once in its reply, offers "Susun rancangan" by setting `suggest_build` when the map has anything to build, and says that the story and the map move to the account on sign-in. Cloud adds the sign-in and paket link actions under the reply; Raka never writes links.
-- A request without `version` is v1 (unchanged) until Cloud has moved; v1 is removed in a later contract.
 
-**Facts to map for legacy projects.**
+**Facts to map for legacy projects.** Cloud still keeps facts for its scripted fallback and for projects made before this contract; it turns them into a map with these rules.
 
 Fact keys and labels (rangka-cloud `FactKeys`, in this order, verbatim):
 
@@ -210,7 +209,7 @@ On a plan timeout, change sets already proposed on the preview kernel are not re
 
 ## Consequences
 
-- v1 of `/v1/interview` is removed in a later contract, once Cloud has moved.
+- The facts-based interview is removed by this contract: rangka-ai drops its facts handler for `/v1/interview`, and Cloud drops its flag `RANGKA_CLOUD_INTERVIEW_V2`.
 - Gateway kernel forwarding stays 0041's later phase; until then studio tools answer from Cloud's bundled copy.
 - 0041's bearer is bound to (owner, project) in place `studio` (section 5).
 - Cloud services marked with ◆ are written as modules in `config.modules`, with entries only in Cloud (no catalogue entry in the kernel).
@@ -220,4 +219,3 @@ On a plan timeout, change sets already proposed on the preview kernel are not re
 
 - Building `custom` pieces (0033).
 - Gateway write tools and kernel forwarding (0041).
-- Removing interview v1.

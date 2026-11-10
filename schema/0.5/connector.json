@@ -66,6 +66,61 @@
           "items": {
             "$ref": "#/$defs/setting"
           }
+        },
+        "sign": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "header",
+            "key",
+            "lines"
+          ],
+          "description": "Sign every request with an HMAC over canonical lines (DOKU Non-SNAP; contract 0002, refinement of 11 Nov 2026). Placeholders: {auth.x}, {settings.x}, {request.id} (UUID v4), {request.timestamp} (UTC), {request.method}, {request.target} (path), {request.digest} (base64 SHA-256 of the body; its line is left out without a body)",
+          "properties": {
+            "alg": {
+              "enum": [
+                "hmac-sha256",
+                "sha256",
+                "hmac-sha1",
+                "sha1",
+                "hmac-sha512",
+                "sha512"
+              ]
+            },
+            "key": {
+              "type": "string",
+              "description": "auth field holding the HMAC key"
+            },
+            "encoding": {
+              "enum": [
+                "hex",
+                "base64"
+              ]
+            },
+            "header": {
+              "type": "string",
+              "description": "header that carries the signature"
+            },
+            "prefix": {
+              "type": "string",
+              "description": "text before the signature, e.g. HMACSHA256="
+            },
+            "lines": {
+              "type": "array",
+              "minItems": 1,
+              "items": {
+                "type": "string"
+              },
+              "description": "joined with \\n, no trailing newline"
+            },
+            "headers": {
+              "type": "object",
+              "additionalProperties": {
+                "type": "string"
+              },
+              "description": "headers sent with the request, each a line template (Request-Id: '{request.id}')"
+            }
+          }
         }
       }
     },

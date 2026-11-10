@@ -95,7 +95,9 @@ work:
 - A screen not named in any installed app's `work` is not offered (a module can ship screens an app does not use).
   `roles` here narrows the screen's own `roles`; it never adds a role the screen does not allow (`screen_role_not_allowed`).
 - **Home per role.** On sign-in the web app opens, in order: the first `work` entry with `home: true` for one of the
-  user's roles; else the layout's `home`; else today's `homeHash`. The owner keeps the dashboard home.
+  user's roles; else the layout's `home`; else the first dashboard (apps in order) whose `roles` names one of the
+  user's roles; else the first dashboard the user may open (a dashboard they may not open is never home); else the
+  first menu list. The owner keeps the dashboard home.
 - **Work shell.** A user whose every role says `desk: false` (role.json) and who has a home screen gets the work shell: no sidebar, the home screen full screen, a bottom bar with their other
   screens (at most 5) and "Lainnya" for lists they may read. Everyone else gets the sidebar with a "Kerja" group that
   lists their screens. This retires `shell: pos` (it stays valid in the enum and keeps falling back, 0019).

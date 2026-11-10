@@ -31,7 +31,8 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 ### Work screens (contract 0030)
 
 - **Home per role.** `meta.work` lists the screens the user may open, in the apps' `work:` order. The first one with
-  `home: true` is where they land (`homeHash`); the owner has none and keeps the dashboard home.
+  `home: true` is where they land (`homeHash`); the owner has none and keeps the dashboard home. Without a home
+  screen a user lands on the first dashboard that names one of their roles, else the first one they may open.
 - **Kerja group.** Everyone with screens gets a "Kerja" group at the top of the sidebar.
 - **Work shell.** A user whose every role is `desk: false` and who has a home screen gets no sidebar: a 48px bar
   (company, account menu), the screen full width, and a bottom bar with up to 5 screens plus "Lainnya" (the lists and

@@ -276,6 +276,26 @@ const WORK = {
   work: [{ screen: "catat", home: false }, { screen: "isi_jam", home: true }],
 };
 
+test("homeHash: a dashboard the user may not open is never home; one naming the user's role wins (contract 0030 §3)", () => {
+  const apps = [
+    { name: "langganan", menu: [{ group: { id: "L" }, items: ["subscription"] }], dashboards: ["ringkas", "penagihan"] },
+    { name: "stok", menu: [], dashboards: ["stok_ringkas", "outlet_hari_ini"] },
+  ];
+  const dash = {
+    ringkas: { roles: ["finance_manager"] },
+    penagihan: { roles: ["collector", "finance_manager"] },
+    stok_ringkas: {},
+    outlet_hari_ini: { roles: ["outlet_staff", "head_office"] },
+  };
+  const as = (roles, names) => ({ apps, user: { roles }, dashboards: Object.fromEntries(names.map((n) => [n, dash[n]])) });
+  assert.strictEqual(A.homeHash(as(["collector"], ["penagihan", "stok_ringkas"])), "#/d/penagihan", "collector: not the finance dashboard it may not open");
+  assert.strictEqual(A.homeHash(as(["finance_manager"], ["ringkas", "penagihan", "stok_ringkas"])), "#/d/ringkas");
+  assert.strictEqual(A.homeHash(as(["outlet_staff"], ["stok_ringkas", "outlet_hari_ini"])), "#/d/outlet_hari_ini", "the role's own dashboard over one open to all");
+  assert.strictEqual(A.homeHash(as(["owner"], Object.keys(dash))), "#/d/ringkas", "the owner keeps the first dashboard");
+  assert.strictEqual(A.homeHash(as(["staf"], ["stok_ringkas"])), "#/d/stok_ringkas", "no dashboard names the role: the first one open");
+  assert.strictEqual(A.homeHash(as(["staf"], [])), "#/r/subscription", "no dashboard open: the first menu list");
+});
+
 test("parseRoute: #/w/<screen> is a work screen", () => {
   assert.deepStrictEqual(plain(A.parseRoute("#/w/isi_jam")), { kind: "work", screen: "isi_jam" });
   assert.deepStrictEqual(plain(A.parseRoute("#/w/isi_jam?stop=C-1")), { kind: "work", screen: "isi_jam" });

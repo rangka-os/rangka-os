@@ -37,7 +37,7 @@ No other key is added. Which organisation a person enters is not configured here
 
 - The kernel fetches `{issuer}/.well-known/openid-configuration` and the `jwks_uri` it names. The document's `issuer` must equal the configured `issuer` exactly, or the upstream is unusable (sign-in answers `502 upstream_unavailable`).
 - Discovery and the JWKS are cached for 1 hour per issuer.
-- An id_token whose `kid` is not in the cached JWKS makes the kernel refetch the JWKS once, at most once per minute per issuer, then decide. A key rotation therefore heals itself; a flood of bad `kid`s cannot make the kernel hammer the provider.
+- An id_token whose `kid` is not in the cached JWKS makes the kernel refetch the JWKS once, at most once per minute per issuer, then decide. A key rotation therefore heals itself; a flood of bad `kid`s cannot make the kernel hammer the provider. Keys without a `kid` (or sharing one) are all kept and tried in turn against an id_token with that `kid` (or none).
 - Algorithms: RS256 and ES256. `none`, HS* and every other algorithm are refused, whatever the header says.
 - The discovery document's `authorization_endpoint`, `token_endpoint` and `jwks_uri` must be `https` (the same loopback exception as `issuer`), or the upstream is unusable (`502 upstream_unavailable`): a plain-http JWKS would let the network substitute keys.
 - Outgoing requests to the provider have a 10 s timeout and read at most 1 MiB. A redirect is followed only to the same host as the request being followed, with the same scheme or http to https (never a downgrade), at most 5 times. The JWKS and token endpoint may live on another host than the issuer.

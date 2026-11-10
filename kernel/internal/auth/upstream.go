@@ -454,7 +454,7 @@ type issuerCache struct {
 	mu          sync.Mutex
 	disc        *upstreamDiscovery
 	discAt      time.Time
-	keys        map[string]crypto.PublicKey
+	keys        map[string][]crypto.PublicKey // by kid; keys without a kid (or sharing one) are kept in order and tried in turn
 	keysAt      time.Time
 	lastRefetch time.Time // last JWKS fetch caused by an unknown kid (at most one per minute)
 }
@@ -564,9 +564,11 @@ func (s *Service) discovery(ctx context.Context, up *Upstream) (*upstreamDiscove
 	return c.disc, nil
 }
 
-// upstreamKey returns the issuer's key for kid. The JWKS is cached for an hour; an unknown kid refetches it at
-// most once a minute, so a rotation heals itself and a flood of bad kids does not reach the provider.
-func (s *Service) upstreamKey(ctx context.Context, up *Upstream, kid string) (crypto.PublicKey, *upstreamError) {
+// upstreamKeys returns the issuer's keys for kid: usually one; several when the JWKS has more than one key without
+// a kid (kid "") or with the same kid, which the caller tries in turn. The JWKS is cached for an hour; an unknown
+// kid refetches it at most once a minute, so a rotation heals itself and a flood of bad kids does not reach the
+// provider.
+func (s *Service) upstreamKeys(ctx context.Context, up *Upstream, kid string) ([]crypto.PublicKey, *upstreamError) {
 	disc, uerr := s.discovery(ctx, up)
 	if uerr != nil {
 		return nil, uerr
@@ -580,8 +582,8 @@ func (s *Service) upstreamKey(ctx context.Context, up *Upstream, kid string) (cr
 			return nil, uerr
 		}
 	}
-	if k, ok := c.keys[kid]; ok {
-		return k, nil
+	if ks := c.keys[kid]; len(ks) > 0 {
+		return ks, nil
 	}
 	if now.Sub(c.lastRefetch) < jwksRefetchEvery {
 		return nil, errUpstreamInvalid(up, "id_token kid is not in the JWKS")
@@ -590,8 +592,8 @@ func (s *Service) upstreamKey(ctx context.Context, up *Upstream, kid string) (cr
 	if uerr := s.fetchJWKS(ctx, up, disc, c); uerr != nil {
 		return nil, uerr
 	}
-	if k, ok := c.keys[kid]; ok {
-		return k, nil
+	if ks := c.keys[kid]; len(ks) > 0 {
+		return ks, nil
 	}
 	return nil, errUpstreamInvalid(up, "id_token kid is not in the JWKS")
 }
@@ -607,14 +609,14 @@ func (s *Service) fetchJWKS(ctx context.Context, up *Upstream, disc *upstreamDis
 	if err := json.Unmarshal(b, &set); err != nil {
 		return errUpstreamUnavailable(up, "jwks is not JSON")
 	}
-	keys := map[string]crypto.PublicKey{}
+	keys := map[string][]crypto.PublicKey{}
 	for _, k := range set.Keys {
 		if use, _ := k["use"].(string); use != "" && use != "sig" {
 			continue
 		}
 		kid, _ := k["kid"].(string)
 		if pk := parseJWK(k); pk != nil {
-			keys[kid] = pk
+			keys[kid] = append(keys[kid], pk)
 		}
 	}
 	c.keys, c.keysAt = keys, s.now()
@@ -715,18 +717,23 @@ func (s *Service) verifyIDToken(ctx context.Context, up *Upstream, raw, nonceHas
 	if err != nil {
 		return nil, errUpstreamInvalid(up, "id_token signature unreadable")
 	}
-	key, uerr := s.upstreamKey(ctx, up, hdr.Kid)
+	keys, uerr := s.upstreamKeys(ctx, up, hdr.Kid)
 	if uerr != nil {
 		return nil, uerr
 	}
 	sum := sha256.Sum256([]byte(parts[0] + "." + parts[1]))
 	ok := false
-	switch pk := key.(type) {
-	case *rsa.PublicKey: // the key type must match alg: an RSA key never verifies an ES256 header, and back
-		ok = hdr.Alg == "RS256" && rsa.VerifyPKCS1v15(pk, crypto.SHA256, sum[:], sig) == nil
-	case *ecdsa.PublicKey:
-		ok = hdr.Alg == "ES256" && len(sig) == 64 &&
-			ecdsa.Verify(pk, sum[:], new(big.Int).SetBytes(sig[:32]), new(big.Int).SetBytes(sig[32:]))
+	for _, key := range keys {
+		switch pk := key.(type) {
+		case *rsa.PublicKey: // the key type must match alg: an RSA key never verifies an ES256 header, and back
+			ok = hdr.Alg == "RS256" && rsa.VerifyPKCS1v15(pk, crypto.SHA256, sum[:], sig) == nil
+		case *ecdsa.PublicKey:
+			ok = hdr.Alg == "ES256" && len(sig) == 64 &&
+				ecdsa.Verify(pk, sum[:], new(big.Int).SetBytes(sig[:32]), new(big.Int).SetBytes(sig[32:]))
+		}
+		if ok {
+			break
+		}
 	}
 	if !ok {
 		return nil, errUpstreamInvalid(up, "id_token signature does not verify")

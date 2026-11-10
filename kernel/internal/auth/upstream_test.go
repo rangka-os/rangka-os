@@ -929,3 +929,29 @@ func TestUpstreamFromOAuthLoginPage(t *testing.T) {
 		t.Fatalf("authorize after upstream: %d %q", w.Code, loc)
 	}
 }
+
+// JWKS keys without a kid are kept apart and tried in turn: whichever of them signed the id_token verifies it, and
+// a key the provider does not publish still does not (final review M5).
+func TestUpstreamKeysWithoutKid(t *testing.T) {
+	a, b, c := newRSAKey(t, ""), newRSAKey(t, ""), newECKey(t, "")
+	e := newUpEnv(t, testSecret, a)
+	e.op.mu.Lock()
+	e.op.published = []*opKey{a, b, c}
+	e.op.mu.Unlock()
+	e.member("dewi@kopi.id", "sub-dewi")
+	for i, k := range []*opKey{a, b, c} {
+		e.op.mu.Lock()
+		e.op.signer = k
+		e.op.mu.Unlock()
+		if w := e.signIn("sub-dewi", "", nil, nil); w.Code != 302 {
+			t.Fatalf("kid-less key %d: %d %s", i, w.Code, w.Body)
+		}
+	}
+	if e.op.jwksHits != 1 {
+		t.Fatalf("jwks fetched %d times, want 1", e.op.jwksHits)
+	}
+	e.op.mu.Lock()
+	e.op.signer = newRSAKey(t, "")
+	e.op.mu.Unlock()
+	wantRefused(t, e.signIn("sub-dewi", "", nil, nil), 401, "upstream_invalid", "Masuk dengan Kantor belum berhasil.")
+}

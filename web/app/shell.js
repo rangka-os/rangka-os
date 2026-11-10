@@ -588,10 +588,45 @@
       h(R.Button, { variant: "primary", type: "submit", size: "lg", loading: busy, disabled: busy }, "Masuk"));
   }
 
+  /** Where an upstream sign-in returns to: the page the person is on (the hash stays on this side). */
+  function upstreamHref(id) {
+    var loc = global.location || {}, to = (loc.pathname || "/app/") + (loc.search || "");
+    return "/auth/upstream/" + encodeURIComponent(id) + "/start?to=" + encodeURIComponent(to);
+  }
+
+  /** How long the sign-in screen waits for /auth/providers before it shows the password form alone. */
+  var PROVIDERS_WAIT_MS = 5000;
+
+  /** The ways to sign in, from /auth/providers (contract 0042 §6): provider buttons first, then the password form
+   *  when allowed; under "owners" the form sits behind "Masuk sebagai pemilik". When the kernel has not answered
+   *  within PROVIDERS_WAIT_MS the password form shows alone, as for a kernel without the endpoint. */
+  function SignInOptions(p) {
+    var ps = useState(null), prov = ps[0], setProv = ps[1];
+    var os = useState(false), ownerForm = os[0], setOwnerForm = os[1];
+    useEffect(function () {
+      var live = true, settled = false, timer;
+      function settle(x) { global.clearTimeout(timer); if (live && !settled) { settled = true; setProv(x); } }
+      timer = global.setTimeout(function () { settle({ password: true, upstream: [] }); }, PROVIDERS_WAIT_MS);
+      api.providers().then(settle);
+      return function () { live = false; global.clearTimeout(timer); };
+    }, []);
+    if (!prov) return h("div", { className: "ap-signin-wait", role: "status", "aria-busy": "true" }, h(R.Spinner, null));
+    var form = h(SignInForm, { idPrefix: p.idPrefix, email: p.email, onDone: p.onDone });
+    var buttons = prov.upstream.map(function (u) {
+      return h("a", { key: u.id, className: "rk-btn rk-btn-primary rk-btn-lg ap-signin-upstream", href: upstreamHref(u.id) }, "Masuk dengan " + u.label);
+    });
+    var showForm = prov.password === true || (prov.password === "owners" && ownerForm);
+    var ownerLink = prov.password === "owners" && !ownerForm
+      ? h("button", { type: "button", className: "ap-signin-owner", onClick: function () { setOwnerForm(true); } }, "Masuk sebagai pemilik") : null;
+    return h("div", { className: "ap-signin-options" }, buttons,
+      buttons.length && showForm ? h("div", { className: "ap-signin-or", role: "separator" }, "atau") : null,
+      showForm ? form : null, ownerLink);
+  }
+
   function SignInScreen(p) {
     return h("div", { className: "ap-signin" }, h(R.AuthLayout, { title: "Masuk ke akunmu", subtitle: "Pakai email dan kata sandi akunmu.",
       footer: [h("span", { key: "id" }, "Rangka ID")] },
-      h(SignInForm, { idPrefix: "ap-signin", onDone: p.onDone })));
+      h(SignInOptions, { idPrefix: "ap-signin", onDone: p.onDone })));
   }
 
   function SignInDialog(p) {
@@ -600,7 +635,7 @@
         h("div", { className: "rk-dialog-head" }, h("h2", { id: "ap-expired-t" }, "Sesi kamu berakhir")),
         h("div", { className: "rk-dialog-main" },
           h("p", { className: "ap-muted" }, "Masuk lagi untuk melanjutkan. Halaman dan isian yang belum disimpan tetap ada."),
-          h(SignInForm, { idPrefix: "ap-expired", email: p.email, onDone: p.onDone }))));
+          h(SignInOptions, { idPrefix: "ap-expired", email: p.email, onDone: p.onDone }))));
   }
 
   /* ---------------------------------------------------------------- views */

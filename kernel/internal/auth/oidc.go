@@ -126,7 +126,8 @@ func oauthError(w http.ResponseWriter, status int, code, desc string) {
 }
 
 // loginPage is Rangka ID's sign-in page, in the design system's AuthLayout look (web/design-system AuthLayout):
-// a Bata brand panel with the Sendi joint beside the form, a strip above it on phones, light and dark.
+// a Bata brand panel with the Sendi joint beside the form, a strip above it on phones, light and dark. With Back
+// set it shows only the error and a link back (a refused upstream sign-in, contract 0042 §8).
 var loginPage = template.Must(template.New("login").Parse(`<!doctype html><html lang="id"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1"><meta name="color-scheme" content="light dark"><title>Masuk · Rangka ID</title>
 <style>
@@ -138,15 +139,20 @@ var loginPage = template.Must(template.New("login").Parse(`<!doctype html><html 
 .joint{position:absolute;right:-12%;bottom:-10%;width:70%;max-width:420px;opacity:.14;pointer-events:none}
 .pitch{position:relative;max-width:360px}.pitch h2{margin:0;font-weight:600;font-size:32px;line-height:38px;letter-spacing:-.02em}.pitch p{margin:12px 0 0;font-size:14px;line-height:22px;color:#f6ede6}
 main{flex:1;min-width:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;padding:40px 24px}
-form{width:min(360px,100%);display:flex;flex-direction:column;gap:16px}
+form,.box{width:min(360px,100%);display:flex;flex-direction:column;gap:16px}details form{width:100%}
 .chip{align-self:flex-start;display:inline-flex;align-items:center;height:24px;padding:0 10px;border-radius:999px;background:var(--chip);color:var(--chip-ink);font-size:12px;font-weight:500}
 h1{margin:0;font-size:20px;line-height:28px;font-weight:600;letter-spacing:-.01em}.sub{margin:-8px 0 0;color:var(--muted)}
 label{display:flex;flex-direction:column;gap:4px;font-size:12px;line-height:16px;color:var(--ink2)}
 input{font:inherit;height:28px;padding:0 8px;border:1px solid var(--border);border-radius:6px;background:var(--field);color:var(--ink)}
 input:focus{outline:0;border-color:var(--focus);box-shadow:0 0 0 2px var(--chip);background:var(--app)}
 button{font:inherit;font-weight:500;height:32px;border:0;border-radius:6px;background:var(--primary);color:var(--on-primary);cursor:pointer}button:hover{background:var(--primary-hover)}
-button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+button:focus-visible,.btn:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
+.btn{display:inline-flex;align-items:center;justify-content:center;height:32px;border-radius:6px;background:var(--primary);color:var(--on-primary);font-weight:500;text-decoration:none}.btn:hover{background:var(--primary-hover)}
 .err{margin:0;padding:8px 12px;border-radius:6px;background:var(--bad-tint);color:var(--bad)}
+.or{display:flex;align-items:center;gap:8px;color:var(--muted);font-size:12px}.or::before,.or::after{content:"";flex:1;border-top:1px solid var(--line)}
+details{display:flex;flex-direction:column;gap:16px}summary{align-self:center;cursor:pointer;color:var(--chip-ink);font-weight:500;list-style:none}summary::-webkit-details-marker{display:none}
+summary:focus-visible{outline:2px solid var(--focus);outline-offset:2px;border-radius:4px}details[open]>summary{margin-bottom:16px}
+.note{margin:0;color:var(--muted)}
 .foot{width:min(360px,100%);color:var(--muted);font-size:12px}
 @media (max-width:860px){body{flex-direction:column}.brand{flex:none;max-width:none;padding:20px 16px;gap:12px}.pitch h2{font-size:20px;line-height:26px}.pitch p{display:none}.joint{width:160px;right:-24px;bottom:-40px}main{justify-content:flex-start;padding:24px 16px}}
 @media (max-width:600px){input,button{height:40px}}
@@ -154,12 +160,49 @@ button:focus-visible{outline:2px solid var(--focus);outline-offset:2px}
 <body><div class="brand"><span class="logo"><svg viewBox="0 0 256 256" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg>rangka</span>
 <svg class="joint" viewBox="0 0 256 256" aria-hidden="true"><path fill="#fff" fill-rule="evenodd" d="M215.15 95L153.15 33L69.64 33L131.64 95ZM61.15 217L123.15 217L123.15 103.49L61.15 41.49Z"/></svg>
 <div class="pitch"><h2>Jadi juragan, bukan admin.</h2><p>Raka menyusun alur bisnismu dan ikut menjalankannya. Uang tetap kamu yang setujui.</p></div></div>
-<main><form method="post" action="/oauth/authorize"><span class="chip">{{.Client}}</span><h1>Masuk ke akunmu</h1><p class="sub">Pakai akun Rangka ID untuk masuk ke {{.Client}}.</p>
+<main>{{if .Back}}<div class="box"><h1>Masuk ke akunmu</h1><p class="err" role="alert">{{.Error}}</p><a class="btn" href="{{.Back}}">Kembali ke halaman masuk</a></div>{{else}}<div class="box"><span class="chip">{{.Client}}</span><h1>Masuk ke akunmu</h1><p class="sub">Pakai akun Rangka ID untuk masuk ke {{.Client}}.</p>
 {{if .Error}}<p class="err" role="alert">{{.Error}}</p>{{end}}
-<label>Email<input name="email" type="email" autocomplete="username" required autofocus></label>
+{{range .Upstreams}}<a class="btn" href="{{.Href}}">Masuk dengan {{.Label}}</a>
+{{end}}{{if eq .Password "all"}}{{if .Upstreams}}<div class="or" role="separator">atau</div>{{end}}{{template "pwform" .}}
+{{else if eq .Password "owners"}}<details{{if .OwnerOpen}} open{{end}}><summary>Masuk sebagai pemilik</summary>{{template "pwform" .}}</details>
+{{else if not .Upstreams}}<p class="note">Masuk lewat penyedia akun organisasimu.</p>{{end}}</div>{{end}}<div class="foot">Rangka ID</div></main></body></html>
+{{define "pwform"}}<form method="post" action="/oauth/authorize">
+<label>Email<input name="email" type="email" autocomplete="username" required{{if eq .Password "all"}} autofocus{{end}}></label>
 <label>Kata sandi<input name="password" type="password" autocomplete="current-password" required></label>
 {{range $k, $v := .Params}}<input type="hidden" name="{{$k}}" value="{{$v}}">{{end}}
-<button>Masuk</button></form><div class="foot">Rangka ID</div></main></body></html>`))
+<button>Masuk</button></form>{{end}}`))
+
+// loginOption is an upstream button on the OAuth sign-in page.
+type loginOption struct{ Label, Href string }
+
+// renderLogin writes the OAuth sign-in page for client c with the request parameters p (contract 0042 §6): a
+// "Masuk dengan <label>" button per upstream that comes back to this /oauth/authorize request, then the password
+// form as auth.password allows: always (true), behind "Masuk sebagai pemilik" ("owners", opened when ownerOpen),
+// or not at all (false).
+func (s *Service) renderLogin(w http.ResponseWriter, status int, c *Client, p map[string]string, errMsg string, ownerOpen bool) {
+	q := url.Values{}
+	for k, v := range p {
+		if v != "" {
+			q.Set(k, v)
+		}
+	}
+	back := "/oauth/authorize?" + q.Encode()
+	ups := []loginOption{}
+	for _, u := range s.Upstreams {
+		ups = append(ups, loginOption{u.Label, "/auth/upstream/" + url.PathEscape(u.ID) + "/start?to=" + url.QueryEscape(back)})
+	}
+	mode := "all"
+	switch s.PasswordSetting() {
+	case false:
+		mode = "none"
+	case "owners":
+		mode = "owners"
+	}
+	w.Header().Set("Content-Type", "text/html; charset=utf-8")
+	w.Header().Set("Cache-Control", "no-store")
+	w.WriteHeader(status)
+	loginPage.Execute(w, map[string]any{"Client": c.Label, "Params": p, "Error": errMsg, "Upstreams": ups, "Password": mode, "OwnerOpen": ownerOpen})
+}
 
 // Authorize handles GET/POST /oauth/authorize (code flow with PKCE S256). Without a session it shows a
 // sign-in form; the POST of that form signs in and continues.
@@ -220,9 +263,13 @@ func (s *Service) Authorize(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodPost && r.Form.Get("email") != "" {
 		tok, user, err := s.Login(r.Context(), r.Form.Get("email"), r.Form.Get("password"), s.DefaultOrg)
 		if err != nil {
-			w.Header().Set("Content-Type", "text/html; charset=utf-8")
-			w.WriteHeader(401)
-			loginPage.Execute(w, map[string]any{"Client": c.Label, "Params": p, "Error": err.Error()})
+			status := 401
+			var pd *ErrPasswordDisabled
+			if errors.As(err, &pd) {
+				status = 403
+			}
+			// an owner who tried the form keeps it open; a refused non-owner sees the upstream buttons first
+			s.renderLogin(w, status, c, p, err.Error(), status == 401)
 			return
 		}
 		http.SetCookie(w, s.SessionCookie(tok, int(s.SessionTTL.Seconds())))
@@ -231,8 +278,7 @@ func (s *Service) Authorize(w http.ResponseWriter, r *http.Request) {
 		u = pr.User
 	}
 	if u == nil {
-		w.Header().Set("Content-Type", "text/html; charset=utf-8")
-		loginPage.Execute(w, map[string]any{"Client": c.Label, "Params": p})
+		s.renderLogin(w, 200, c, p, "", false)
 		return
 	}
 	code := RandomToken("", 24)

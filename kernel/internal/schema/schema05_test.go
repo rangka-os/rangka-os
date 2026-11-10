@@ -82,3 +82,21 @@ func TestSchema05LoadDir(t *testing.T) {
 		t.Error("LoadDir(schema/0.5) should load print, letterhead and model")
 	}
 }
+
+// auth.password is true, false or "owners" (contract 0042 §6); anything else fails.
+func TestSchema05AuthPasswordOwners(t *testing.T) {
+	s := Embedded()
+	sys := func(v any) []Error {
+		return s.Validate("system", FromData(map[string]any{"db": map[string]any{}, "auth": map[string]any{"password": v}}))
+	}
+	for _, v := range []any{true, false, "owners"} {
+		if errs := sys(v); len(errs) != 0 {
+			t.Errorf("auth.password %v should validate: %v", v, errs)
+		}
+	}
+	for _, v := range []any{"owner", "Owners", "true", int64(1)} {
+		if errs := sys(v); len(errs) == 0 {
+			t.Errorf("auth.password %v should fail", v)
+		}
+	}
+}

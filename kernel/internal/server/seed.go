@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
@@ -28,6 +29,17 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 	}
 	if err := SyncOrgs(ctx, db, reg); err != nil {
 		return nil, err
+	}
+	// an existing account linked to an upstream sign-in and not yet in this org would let that upstream
+	// identity in as the owner: the seed never does that (`rangka user add --allow-linked` is the deliberate way)
+	linked, err := auth.LinkedOutside(ctx, db, o.Email, o.Org)
+	if err != nil {
+		return nil, err
+	}
+	if len(linked) > 0 {
+		return nil, fmt.Errorf("seed: account %s is linked to upstream sign-in (%s) and is not a member of %s; "+
+			"refusing to make it the owner (use another e-mail, or add it with `rangka user add --allow-linked`)",
+			strings.ToLower(strings.TrimSpace(o.Email)), strings.Join(linked, ", "), o.Org)
 	}
 	if err := auth.EnsureOrg(ctx, db, o.Org, titleCase(o.Org)); err != nil {
 		return nil, err

@@ -231,6 +231,15 @@
 
     api.me = function () { return json("GET", "/auth/me").then(normaliseMe); };
     api.login = function (email, password) { return json("POST", "/auth/login", { email: email, password: password }); };
+    /** GET /auth/providers (contract 0042): {password: true|false|"owners", upstream: [{id, label}]}. Anything the
+     *  kernel does not answer (an older kernel, a network error) reads as the password form alone, as before. */
+    api.providers = function () {
+      return json("GET", "/auth/providers").then(function (b) {
+        var pw = b && (b.password === false || b.password === "owners") ? b.password : true;
+        var ups = b && Array.isArray(b.upstream) ? b.upstream.filter(function (u) { return u && u.id; }) : [];
+        return { password: pw, upstream: ups.map(function (u) { return { id: String(u.id), label: String(u.label || u.id) }; }) };
+      }, function () { return { password: true, upstream: [] }; });
+    };
     api.logout = function () { return json("POST", "/auth/logout"); };
     api.switchOrg = function (org) { return json("POST", "/auth/org", { org: org }).then(normaliseMe); };
 

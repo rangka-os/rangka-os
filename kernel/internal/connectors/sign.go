@@ -52,7 +52,7 @@ func parseSign(v any) *signSpec {
 	if m == nil {
 		return nil
 	}
-	s := &signSpec{alg: meta.Str(m, "alg"), key: meta.Str(m, "key"), encoding: meta.Str(m, "encoding"),
+	s := &signSpec{alg: meta.Str(m, "alg"), key: strings.TrimPrefix(strings.TrimSpace(meta.Str(m, "key")), "auth."), encoding: meta.Str(m, "encoding"),
 		header: meta.Str(m, "header"), prefix: meta.Str(m, "prefix"), headers: map[string]string{}}
 	for _, l := range meta.AsList(m["lines"]) {
 		s.lines = append(s.lines, fmt.Sprint(l))
@@ -159,6 +159,9 @@ func signRequest(s *signSpec, out *Rendered, target string, auth func(field stri
 	if s.header == "" || s.key == "" || len(s.lines) == 0 {
 		return errors.New("auth.sign needs header, key and lines")
 	}
+	if target == "" {
+		target = "/" // an URL without a path is sent as /
+	}
 	reqVals := map[string]string{
 		"id":        uuid4(),
 		"timestamp": signNow().UTC().Format("2006-01-02T15:04:05Z"),
@@ -182,8 +185,11 @@ func signRequest(s *signSpec, out *Rendered, target string, auth func(field stri
 			v, ok, err := auth(name)
 			if err != nil {
 				authErr = err
+			} else if !ok || v == "" {
+				// an unset auth field is the org's missing setup, like any other {auth.x}
+				authErr = fmt.Errorf("%w: auth.%s is not set", ErrNeedsAuth, name)
 			}
-			return v, ok && err == nil
+			return v, ok && err == nil && v != ""
 		}
 		return "", false
 	}
@@ -196,6 +202,12 @@ func signRequest(s *signSpec, out *Rendered, target string, auth func(field stri
 		if err != nil {
 			return fmt.Errorf("auth.sign header %s: %w", k, err)
 		}
+		// the signed value replaces a header of the same name whatever its case (an action's own Request-Id)
+		for h := range out.Headers {
+			if strings.EqualFold(h, k) {
+				delete(out.Headers, h)
+			}
+		}
 		out.Headers[k] = v
 	}
 	msg, err := canonical(s.lines, val, hasBody)
@@ -204,6 +216,13 @@ func signRequest(s *signSpec, out *Rendered, target string, auth func(field stri
 	}
 	if err != nil {
 		return fmt.Errorf("auth.sign: %w", err)
+	}
+	if s.header != "" {
+		for h := range out.Headers {
+			if strings.EqualFold(h, s.header) {
+				delete(out.Headers, h)
+			}
+		}
 	}
 	key, ok, err := auth(s.key)
 	if err != nil {

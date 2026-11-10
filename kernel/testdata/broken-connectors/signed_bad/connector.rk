@@ -1,0 +1,25 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+# sign_key_not_secret: an HMAC key in a plain field (contract 0002, canonical-line signatures)
+name: signed_bad
+label: {id: Signed bad}
+summary: {id: Kunci tanda tangan di field yang tidak rahasia.}
+version: 1.0.0
+hosts: [api.example.com]
+auth:
+  type: hmac
+  fields:
+    - {name: client_id, label: {id: Client ID}}
+    - {name: secret_key, label: {id: Secret key}}
+  sign:
+    key: secret_key
+    header: Signature
+    lines: ['Client-Id:{auth.client_id}']
+triggers:
+  - name: paid
+    via: webhook
+    verify:
+      signature: {header: Signature, key: auth.client_id, encoding: base64, lines: ['Request-Target:{request.target}']}
+    emit: {ref: id}
+actions:
+  - name: ping
+    request: {method: GET, url: https://api.example.com/ping}

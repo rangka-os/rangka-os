@@ -81,9 +81,18 @@ headers, the path and a digest of the body, instead of over the raw body. Both d
   the request has no body (a GET). Lines are joined with `\n`, no trailing newline. A placeholder without a value
   stops the call (`connector_needs_auth` for an unset auth field). A signed request carries a secret, so the https and
   declared-host rules of 0017 §5 apply.
-- **Incoming** (`verify.signature`): `lines:` (same placeholders, plus `{header.<Name>}` of the incoming request;
+- **Incoming** (`verify.signature`): `lines:` (placeholders `{auth.x}`, `{request.method}`, `{request.target}`,
+  `{request.digest}` and `{header.<Name>}` of the incoming request; no `{settings.x}`, `{request.id}` or
+  `{request.timestamp}`, which only an outgoing call makes;
   `{request.target}` is the hook's path as received, so a proxy must not rewrite it), `encoding:` and `prefix:` (the
   exact text to strip; a header without it is 401). Without `lines:` the HMAC is over the raw body, as before. The
   digest is taken over the raw body before it is parsed. Every accepted version of the key is tried, in constant time.
+- The key named by `auth.sign.key` and `verify.signature.key` (with or without `auth.`) must be a secret auth field
+  (validator `sign_key_not_secret`): a plain field is neither scrubbed nor host-checked, and anyone who reads it could
+  sign a webhook. An unset field in a line is `connector_needs_auth`. A sign header replaces an action header of the
+  same name in any case. An URL without a path signs `/`. The query string is not signed (DOKU signs the path only).
 - No timestamp window yet: a gateway may resend a notification hours later with its first timestamp (DOKU retries at
-  +30 min, +6 h, +12 h); event dedupe and flow idempotency stop a replay from doing anything twice.
+  +30 min, +6 h, +12 h). Event dedupe (30 days) and flow idempotency (7 days) stop a replay inside those windows; a
+  signed notification replayed later starts its flows again, so a flow that records money must also hold its gateway
+  id in a unique record (rangka-apps `gateway_ref_claim`), and the connector must emit an id that is stable per
+  payment.

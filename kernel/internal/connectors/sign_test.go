@@ -107,6 +107,11 @@ func TestSignRequestFails(t *testing.T) {
 	if !errors.Is(err, ErrNeedsAuth) || out.Headers["Signature"] != "" {
 		t.Fatalf("missing key: %v %v", err, out.Headers)
 	}
+	// the client id is not set: needs auth too (not a plain failure)
+	err = signRequest(dokuSpec(), &Rendered{Method: "POST", Headers: map[string]string{}}, "/x", authOf(map[string]string{"secret_key": "k"}), nil)
+	if !errors.Is(err, ErrNeedsAuth) {
+		t.Fatalf("missing client id: %v", err)
+	}
 	// a line names a value nobody has
 	s := dokuSpec()
 	s.lines = append(s.lines, "Extra:{settings.nope}")
@@ -122,6 +127,22 @@ func TestSignRequestFails(t *testing.T) {
 	s.encoding = "base32"
 	if err := signRequest(s, &Rendered{Method: "POST", Headers: map[string]string{}}, "/x", authOf(map[string]string{"client_id": "c", "secret_key": "k"}), nil); err == nil {
 		t.Fatal("base32 accepted")
+	}
+}
+
+func TestSignReplacesHeadersAnyCaseAndRootTarget(t *testing.T) {
+	out := &Rendered{Method: "GET", Headers: map[string]string{"request-id": "mine", "SIGNATURE": "old"}}
+	if err := signRequest(dokuSpec(), out, "", authOf(map[string]string{"client_id": "c", "secret_key": "k"}), nil); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok := out.Headers["request-id"]; ok || out.Headers["SIGNATURE"] != "" || len(out.Headers["Request-Id"]) != 36 {
+		t.Fatalf("headers %v", out.Headers)
+	}
+	h, _ := hashOf("hmac-sha256")
+	msg := "Client-Id:c\nRequest-Id:" + out.Headers["Request-Id"] + "\nRequest-Timestamp:" + out.Headers["Request-Timestamp"] + "\nRequest-Target:/"
+	want, _ := encodeSig(mac(h, "k", msg), "base64")
+	if out.Headers["Signature"] != "HMACSHA256="+want {
+		t.Fatal("an URL without a path signs /")
 	}
 }
 

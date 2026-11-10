@@ -59,7 +59,7 @@ type Service struct {
 type Principal struct {
 	User  *User
 	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken)
-	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write)
+	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write, members:write)
 }
 
 // AIForbiddenMessage is the message of the ai_forbidden error: an assistant asked for something only a
@@ -178,8 +178,22 @@ func (s *Service) CreateToken(ctx context.Context, u *User, name string, ttl tim
 // provisioning. Only a person who may manage secrets can mint it; Omilo helper and Rangka AI tokens never carry it.
 const ScopeSecretsWrite = "secrets:write"
 
+// ScopeMembersWrite lets an API token create, change and remove the non-owner members of its organisation through
+// the member API (contract 0043), for Rangka Cloud. Only an owner with a browser session can mint it.
+const ScopeMembersWrite = "members:write"
+
 // TokenScopes are the scopes an API token may carry.
-var TokenScopes = map[string]bool{ScopeSecretsWrite: true}
+var TokenScopes = map[string]bool{ScopeSecretsWrite: true, ScopeMembersWrite: true}
+
+// RevokeMember deletes a person's sessions and API tokens in one organisation (contract 0043 §4); their sessions and
+// tokens for other organisations stay. q may be the transaction that changes the membership.
+func (s *Service) RevokeMember(ctx context.Context, q pg.Querier, userID int64, org string) error {
+	if _, err := q.Query(ctx, "delete from rk_sessions where user_id = $1 and org_id = $2", userID, org); err != nil {
+		return err
+	}
+	_, err := q.Query(ctx, "delete from rk_tokens where user_id = $1 and org_id = $2", userID, org)
+	return err
+}
 
 // HasScope reports whether the principal's scopes include scope.
 func (p *Principal) HasScope(scope string) bool {

@@ -158,7 +158,12 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) 
 	}
 	for _, sc := range body.Scopes {
 		if !auth.TokenScopes[sc] {
-			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write)")
+			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write, members:write)")
+			return
+		}
+		// members:write (contract 0043 §1): minted only by an owner of the organisation with their own session
+		if sc == auth.ScopeMembersWrite && (!c.p.Human() || !isOwner(c)) {
+			writeError(w, 403, "forbidden", msgMembersMintForbidden)
 			return
 		}
 		// secrets:write (contract 0017 §3): minted only by a person who may manage connector secrets

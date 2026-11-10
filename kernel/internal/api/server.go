@@ -194,6 +194,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/connectors/{connector}/auth", a(s.getConnectorAuth))
 	mux.HandleFunc("PUT /api/v1/connectors/{connector}/auth/{field}", a(s.putConnectorAuth))
 	mux.HandleFunc("DELETE /api/v1/connectors/{connector}/auth/{field}", a(s.deleteConnectorAuth))
+	// member API (contract 0043): API tokens with members:write only
+	mux.HandleFunc("PUT /api/v1/members/{upstream}/{subject}", a(s.putMember))
+	mux.HandleFunc("DELETE /api/v1/members/{upstream}/{subject}", a(s.deleteMember))
 	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)
 	mux.HandleFunc("GET /api/v1/orgs", a(s.listOrgs))
 	mux.HandleFunc("GET /api/v1/orgs/{id}/members", a(s.listMembers))

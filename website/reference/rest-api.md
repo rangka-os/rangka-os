@@ -178,7 +178,7 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/system/audit?kind=&actor=&org=&limit=` | Audit log |
 | GET | `/orgs` · `/orgs/{id}/members` | Organisations (with plan and usage) and members |
 | GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form (`/files/meta/…` is an older alias) |
-| POST | `/tokens` | Create an API token: `{name, expires_in_days, scopes}`; the only scope is `secrets:write` |
+| POST | `/tokens` | Create an API token: `{name, expires_in_days, scopes}` → `201`, the token shown once; scopes are `secrets:write` and `members:write` |
 | GET | `/plan` | The tenant's plan, every plan of `features.rk`, usage against the limits (`ok`, `near` from 80%, `full`, `over`), notices and what is read-only after a downgrade ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)) |
 | GET | `/catalogue` | Every module, app and connector this kernel can install, with its state for the site; for people who may propose change sets. Read only for now ([contract 0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md)) |
 
@@ -208,6 +208,30 @@ connector shows `state: ready` in `/catalogue` once every required field is set.
 A change set that installs a connector lists its unset required fields in `preview.requires`
 (`[{connector, field, label, secret}]`). It can still be applied; the connector stays `needs_auth` until a person sets
 them.
+
+### Members
+
+For the host that decides who is a member (Rangka Cloud), keyed by the upstream provider's subject
+([contract 0043](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0043-member-api.md)). Only an API token
+with the `members:write` scope reaches these routes; a browser session, the owner's included, or a token without the
+scope gets `403 forbidden`. An owner mints it with their own browser session, and it acts in that owner's organisation:
+
+```http
+POST /api/v1/tokens
+{"name": "cloud-members", "expires_in_days": 0, "scopes": ["members:write"]}
+```
+
+A non-owner, or a token, minting it gets `403 forbidden`. Rotate by minting a new token and deleting the old.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| PUT | `/members/{upstream}/{subject}` | `{email, name?, role, outlets?}` → `200 {user_id, created}`. Creates the person without a password when new, links `{subject}` of upstream `{upstream}` (an `auth.upstream` id), and sets the role and outlets in the token's organisation; omitted `outlets` keep a member's outlets. A changed e-mail of a linked subject updates the account. A real change of role or outlets revokes the person's sessions and tokens in this organisation. Audited as `member.upsert` |
+| DELETE | `/members/{upstream}/{subject}` | `204`, also when the subject is unknown or not a member here. Removes the membership in the token's organisation and revokes the person's sessions and tokens there; the account and the link stay. Audited as `member.remove` |
+
+Each call is one transaction and refuses before it writes: `404 unknown_upstream`, `409 owner_protected` (the owner is
+never created, changed or removed here), `422 unknown_role` (also `owner`), `422 unknown_outlet`, `422 bad_request`
+(body or e-mail), `409 identity_conflict` (the e-mail's account is linked to another subject at that provider),
+`409 email_taken`, `403 plan_limit` (a new person past the plan's `users` limit).
 
 ## Connector webhooks and calls
 

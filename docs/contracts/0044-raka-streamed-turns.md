@@ -20,14 +20,15 @@ proof before claim (0035 §5): nothing the owner sees while Raka works is later 
 ### 1. Streaming on request
 
 - `POST /v1/turn` and `POST /v1/interview` answer `text/event-stream` when the request has `Accept: text/event-stream`
-  (the header lists it; parameters and other media types next to it do not matter). Request bodies are unchanged.
+  (the header lists it; parameters, `q` values included, and other media types next to it do not matter). Request bodies are unchanged.
 - Without that header the response is today's JSON, byte for byte, with today's status codes.
 - The stream opens (`200`, the headers of `/v1/chat`: `content-type: text/event-stream; charset=utf-8`,
   `cache-control: no-cache`, `connection: keep-alive`, `x-accel-buffering: no`) after the bearer check, after the body
   is read and validated and, for `/v1/interview`, after the provider profile is found. Everything that fails before
   that keeps today's status and JSON body `{"error": {"code", "message", …}}`: `401 unauthorized`,
   `400 bad_request` (including 0042 §1's map codes in the message), `413 payload_too_large`, `404 unknown_profile`
-  (`/v1/interview`), `500 internal_error`.
+  (`/v1/interview`), `500 internal_error`. Building the provider and the backend comes after the stream opens: its
+  failure is an `error` event (`upstream_error` on `/v1/turn`, `provider_error` on `/v1/interview`), not a JSON 502.
 - Each event is one `event: <name>` line and one `data: <JSON>` line, as in 0020 §3. `/v1/chat` keeps `done {}` as
   its last event; `/v1/turn` and `/v1/interview` have no `done`: their stream ends after `result` or `error`. A stream
   that ends with neither is a failed turn.
@@ -73,7 +74,9 @@ Text arrives one model call at a time, split into chunks of about 40 characters 
     `rangka_skills`, `rangka_skill`, `rangka_skill_file`, `cloud_docs`, `cloud_doc`, `owner_files`, `owner_file`).
     A failing gateway call is `tool` with `ok: false`. A call refused without running (not offered, over the 8-call
     cap, no gateway) gets neither event. `consult_reply` is the answer, not a step: it gets neither event.
-  - `note` for text the model sends with read tool calls (rules above).
+  - `note` for text the model sends with read tool calls that run (rules above). There is no `note` when the same
+    model call also sends `consult_reply` (its read calls do not run), nor when the 8-call cap is reached: that text
+    is the reply.
   - `text` for the final reply only, once the whole consult turn is done: after the empty-reply check, the claim
     repair or fallback (0035 §5) and the 2,000-character cut, immediately before `result`. Joined, the deltas equal
     `result.reply` after `scrub` (§4). A turn that fails (`bad_output`, `provider_error`, `timeout`) streams no `text`.
@@ -94,10 +97,12 @@ Text arrives one model call at a time, split into chunks of about 40 characters 
   the input or the result. This is required in place `console`: 0041 §6 masks tool results, not tool inputs, and a
   label must not show what Raka searched for (`cloud_logs` `q`). rangka-ai applies the same rule to `cloud_*` tools in
   every place.
-- Every streamed string (`text`, `note`, `thinking`, `label`, `summary`, `escalate.reason`, `error.message`) passes
+- Every streamed string (`text`, `note`, `thinking`, `label`, `summary`, `escalate.reason`, `changeset.title`,
+  `error.message`) passes
   the same `scrub` rangka-ai applies today to error and failure text (`raka/server/app.py`), with the turn's secrets (the kernel or gateway token,
-  the serve token, provider keys). Text is scrubbed before it is chunked, without the 300-character cut; labels and
-  summaries keep the cut.
+  the serve token, provider keys). `text`, `note` and `escalate.reason` are scrubbed without the 300-character cut (text before it is
+  chunked); labels and summaries keep the cut. A call whose arguments are not valid JSON still runs the tool path: it
+  gets `tool_start` and `tool` with `ok: false`.
 
 ### 5. Errors
 
@@ -136,6 +141,9 @@ running for a client that left, and runs nothing extra for one that stays. A hos
 its own client left must keep reading the stream itself.
 
 ### 8. Examples
+
+Labels, summaries and error messages below are illustrative; the wording is rangka-ai's (labels name the model id,
+for example "Membaca sales_invoice…"; provider errors read `<provider> <status>: <vendor text>`).
 
 ```
 POST /v1/turn   Accept: text/event-stream   (answered)

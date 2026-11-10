@@ -96,8 +96,10 @@
 
   /** Home: the first work screen marked home for the user (contract 0030 §3: meta.work is already theirs, in order),
    *  else the layout's home when it names an installed dashboard or model (contract 0032 §5), else the first dashboard
-   *  of the first app in meta.apps that has dashboards, else the first menu item's list; on a composed site
-   *  (meta.menu) the first dashboard of a module group, else its first list. */
+   *  (apps in meta.apps order) that names one of the user's roles in its `roles`, else the first dashboard the user may
+   *  open, else the first menu item's list; on a composed site (meta.menu) the first dashboard of a module group, else
+   *  its first list. A dashboard the user may not open is not in meta.dashboards (0027) and is never home; the owner's
+   *  role is not listed by dashboards, so the owner keeps the first dashboard. */
   function homeHash(meta) {
     var apps = (meta && meta.apps) || [], work = (meta && meta.work) || [], screens = (meta && meta.screens) || {}, i, j;
     var mods = (meta && meta.menu) || [];
@@ -105,7 +107,16 @@
     var lh = String((meta && meta.layout && meta.layout.home) || ""), lk = lh.slice(0, lh.indexOf(":")), ln = lh.slice(lh.indexOf(":") + 1);
     if (lk === "dashboard" && ((meta.dashboards || {})[ln])) return "#/d/" + ln;
     if (lk === "model" && ((meta.models || {})[ln])) return "#/r/" + ln;
-    for (i = 0; i < apps.length; i++) if ((apps[i].dashboards || []).length) return "#/d/" + apps[i].dashboards[0];
+    var described = meta && meta.dashboards, mine = ((meta && meta.user && meta.user.roles) || []).filter(function (r) { return r !== "owner"; });
+    var open = [];
+    for (i = 0; i < apps.length; i++) {
+      (apps[i].dashboards || []).forEach(function (d) { if (!described || described[d]) open.push(d); });
+    }
+    for (i = 0; i < open.length; i++) {
+      var roles = (described && described[open[i]] && described[open[i]].roles) || [];
+      if (mine.some(function (r) { return roles.indexOf(r) >= 0; })) return "#/d/" + open[i];
+    }
+    if (open.length) return "#/d/" + open[0];
     for (i = 0; i < apps.length; i++) {
       var menu = apps[i].menu || [];
       for (j = 0; j < menu.length; j++) if (menuModels(menu[j]).length) return "#/r/" + menuModels(menu[j])[0];

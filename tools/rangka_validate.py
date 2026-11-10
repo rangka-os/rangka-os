@@ -746,6 +746,14 @@ def check_secret_hosts(rep, p, c):
     for i, f in enumerate(fields or []):
         if isinstance(f, dict) and f.get("secret") is True and "default" in f:
             rep.add("error", p, f"auth/fields/{i}/default", "secret_literal", f'secret field "{f.get("name")}" cannot have a default: bind its value per org (contract 0017 §1)')
+    # contract 0002 (canonical-line signatures): an HMAC key is a secret field
+    sg = (c.get("auth") or {}).get("sign") if isinstance(c.get("auth"), dict) else None
+    if isinstance(sg, dict) and isinstance(sg.get("key"), str) and sg.get("key") and sg.get("key").removeprefix("auth.") not in secret:
+        rep.add("error", p, "auth/sign/key", "sign_key_not_secret", f'auth.sign.key "{sg.get("key")}" must name a secret auth field (contract 0002)')
+    for i, t in enumerate(c.get("triggers") if isinstance(c.get("triggers"), list) else []):
+        vs = ((t.get("verify") or {}) if isinstance(t, dict) and isinstance(t.get("verify"), dict) else {}).get("signature")
+        if isinstance(vs, dict) and isinstance(vs.get("key"), str) and vs.get("key") and vs.get("key").removeprefix("auth.") not in secret:
+            rep.add("error", p, f"triggers/{i}/verify/signature/key", "sign_key_not_secret", f'verify.signature.key "{vs.get("key")}" must name a secret auth field (contract 0002)')
     if not secret:
         return
     hosts = c.get("hosts") if isinstance(c.get("hosts"), list) else None

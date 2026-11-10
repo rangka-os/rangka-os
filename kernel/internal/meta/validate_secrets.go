@@ -24,6 +24,28 @@ func (v *validator) secretHosts(d *rk.Doc, c map[string]any) {
 			v.rep.extra("error", d.Path, fmt.Sprintf("auth/fields/%d/default", i), "secret_literal", fmt.Sprintf(`secret field "%s" cannot have a default: bind its value per org (contract 0017 §1)`, pyStr(f["name"])))
 		}
 	}
+	// contract 0002 (canonical-line signatures): an HMAC key is a secret field, else it is neither scrubbed nor
+	// host-checked and a webhook signed with it can be forged by anyone who reads the plain field
+	isSecret := func(n string) bool {
+		for _, x := range secret {
+			if x == n {
+				return true
+			}
+		}
+		return false
+	}
+	if sg := asMap(asMap(c["auth"])["sign"]); sg != nil {
+		if k, _ := sg["key"].(string); k != "" && !isSecret(strings.TrimPrefix(k, "auth.")) {
+			v.rep.extra("error", d.Path, "auth/sign/key", "sign_key_not_secret", fmt.Sprintf(`auth.sign.key "%s" must name a secret auth field (contract 0002)`, k))
+		}
+	}
+	for i, x := range asList(c["triggers"]) {
+		if sg := asMap(asMap(asMap(x)["verify"])["signature"]); sg != nil {
+			if k, _ := sg["key"].(string); k != "" && !isSecret(strings.TrimPrefix(k, "auth.")) {
+				v.rep.extra("error", d.Path, fmt.Sprintf("triggers/%d/verify/signature/key", i), "sign_key_not_secret", fmt.Sprintf(`verify.signature.key "%s" must name a secret auth field (contract 0002)`, k))
+			}
+		}
+	}
 	if len(secret) == 0 {
 		return
 	}

@@ -78,12 +78,8 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 		return nil, rt.fail(ctx, org, connector, action, nil, err)
 	}
 	var body io.Reader
-	if req.Body != nil && req.Method != http.MethodGet {
-		b, err := json.Marshal(req.Body)
-		if err != nil {
-			return nil, &jobs.Permanent{Err: err}
-		}
-		body = bytes.NewReader(b)
+	if req.BodyBytes != nil {
+		body = bytes.NewReader(req.BodyBytes)
 	}
 	hr, err := http.NewRequestWithContext(ctx, req.Method, req.URL, body)
 	if err != nil {

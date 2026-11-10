@@ -120,6 +120,8 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-connectors/leaky/connector.rk:67:22  warn   secret_in_query  actions/8/allow_secret_in  action "key_in_query_allowed" sends secret api_key in the query string (allow_secret_in); proxies and logs may keep it (contract 0017 §5)
 ../broken-connectors/leaky/connector.rk:23:44  error  unknown_action  triggers/2/action  connector leaky has no action "templated_okk"; did you mean "templated_ok"?
 ../broken-connectors/leaky/connector.rk:27:20  error  unknown_action  triggers/3/each/action  connector leaky has no action "list_outletz"
+../broken-connectors/signed_bad/connector.rk:14:10  error  sign_key_not_secret  auth/sign/key  auth.sign.key "secret_key" must name a secret auth field (contract 0002)
+../broken-connectors/signed_bad/connector.rk:21:43  error  sign_key_not_secret  triggers/0/verify/signature/key  verify.signature.key "auth.client_id" must name a secret auth field (contract 0002)
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'
 ../broken-connectors/whatsapp_business/connector.rk:2:7  error  name_mismatch  name  connector name "whatsapp" must match the directory name "whatsapp_business"
 ../broken-connectors/whatsapp_business/connector.rk:1:1  warn   catalogue_summary_missing  (root)  connector "whatsapp_business" has no summary: add one sentence in plain words for the catalogue (contract 0036)
@@ -187,4 +189,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-164 error(s), 24 warning(s)
+166 error(s), 24 warning(s)

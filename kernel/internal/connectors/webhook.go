@@ -208,7 +208,8 @@ func placeholderAuth(expr string) []string {
 	return out
 }
 
-// verify checks verify.signature (HMAC over the raw body, header value hex with an optional sha256= prefix) or
+// verify checks verify.signature (HMAC over the raw body, or over canonical lines when lines: is set; the header value
+// hex with an optional sha256= prefix, or base64 / an explicit prefix: as declared) or
 // verify.header + verify.equals (a shared token), against every accepted version of the secret, in constant time.
 func (rt *Runtime) verify(ctx context.Context, org, connector string, verify map[string]any, r *http.Request, raw []byte) (HookResult, bool) {
 	if sig := meta.AsMap(verify["signature"]); sig != nil {
@@ -216,12 +217,17 @@ func (rt *Runtime) verify(ctx context.Context, org, connector string, verify map
 		if got == "" {
 			return HookResult{Status: 401, Body: "signature missing"}, false
 		}
-		if i := strings.Index(got, "="); i > 0 && i < 10 {
+		if p := meta.Str(sig, "prefix"); p != "" {
+			if !strings.HasPrefix(got, p) {
+				return HookResult{Status: 401, Body: "signature prefix missing"}, false
+			}
+			got = got[len(p):]
+		} else if i := strings.Index(got, "="); i > 0 && i < 10 && meta.Str(sig, "encoding") != "base64" {
 			got = got[i+1:]
 		}
-		want, err := hex.DecodeString(strings.ToLower(got))
+		want, err := decodeSig(got, meta.Str(sig, "encoding"))
 		if err != nil {
-			return HookResult{Status: 401, Body: "signature is not hex"}, false
+			return HookResult{Status: 401, Body: "signature is not " + strings.ToLower(orDefault(meta.Str(sig, "encoding"), "hex"))}, false
 		}
 		newHash, err := hashOf(meta.Str(sig, "alg"))
 		if err != nil {
@@ -231,9 +237,37 @@ func (rt *Runtime) verify(ctx context.Context, org, connector string, verify map
 		if err != nil || len(keys) == 0 {
 			return HookResult{Status: 401, Body: "connector_needs_auth"}, false
 		}
+		msg := raw
+		if lines := meta.AsList(sig["lines"]); len(lines) > 0 {
+			// canonical lines (DOKU Non-SNAP): headers of this request, the hook's path, a digest of the raw body
+			tpl := make([]string, len(lines))
+			for i, l := range lines {
+				tpl[i] = fmt.Sprint(l)
+			}
+			reqVals := map[string]string{"method": r.Method, "target": r.URL.EscapedPath(), "digest": digest(raw)}
+			val := func(scope, name string) (string, bool) {
+				switch scope {
+				case "request":
+					v, ok := reqVals[name]
+					return v, ok
+				case "header":
+					v := r.Header.Get(name)
+					return v, v != ""
+				case "auth":
+					v, ok, err := rt.authValue(ctx, org, connector, name)
+					return v, ok && err == nil && v != ""
+				}
+				return "", false
+			}
+			text, err := canonical(tpl, val, len(raw) > 0)
+			if err != nil {
+				return HookResult{Status: 401, Body: "signature lines incomplete"}, false
+			}
+			msg = []byte(text)
+		}
 		for _, k := range keys {
 			m := hmac.New(newHash, []byte(k))
-			m.Write(raw)
+			m.Write(msg)
 			if hmac.Equal(m.Sum(nil), want) {
 				return HookResult{}, true
 			}
@@ -363,4 +397,11 @@ func (rt *Runtime) remember(ctx context.Context, org, connector, trigger, key st
 		rt.DB.Exec(ctx, "delete from rk_hook_events where at < now() - interval '30 days'")
 	}
 	return len(res.Rows) == 1, nil
+}
+
+func orDefault(s, d string) string {
+	if s == "" {
+		return d
+	}
+	return s
 }

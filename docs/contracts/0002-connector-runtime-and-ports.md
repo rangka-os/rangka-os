@@ -55,3 +55,44 @@ Gate: in the Kopi Senja demo site, a real WhatsApp message creates a lead within
   per item (an outlet), each with its own cursor; the item is visible to `input:` and `emit` under `as`.
 - **Replay** (§A.5) is `POST /api/v1/system/jobs/{id}/replay` for any dead-lettered job. It makes a new job, and the
   dead-letter row stays. A connector call is rendered again with the org's current keys.
+
+## Refinements (11 Nov 2026): canonical-line signatures
+Some gateways (DOKU Non-SNAP, used for QRIS and payment links) sign a request with an HMAC over a few lines made from
+headers, the path and a digest of the body, instead of over the raw body. Both directions use the same line templates.
+- **Outgoing** (`auth.sign`): after the request is rendered, the kernel marshals the JSON body once, fills the lines,
+  signs them and sends exactly those bytes.
+  ```yaml
+  auth:
+    type: hmac
+    fields: [{name: client_id}, {name: secret_key, secret: true}]
+    sign:
+      alg: hmac-sha256          # hmac-sha1 | hmac-sha256 | hmac-sha512
+      key: secret_key           # the auth field holding the key
+      encoding: base64          # base64 | hex (default hex)
+      header: Signature
+      prefix: HMACSHA256=
+      headers: {Client-Id: '{auth.client_id}', Request-Id: '{request.id}', Request-Timestamp: '{request.timestamp}'}
+      lines: ['Client-Id:{auth.client_id}', 'Request-Id:{request.id}', 'Request-Timestamp:{request.timestamp}',
+              'Request-Target:{request.target}', 'Digest:{request.digest}']
+  ```
+  Placeholders: `{auth.x}`, `{settings.x}`, `{request.id}` (a fresh UUID v4 per call), `{request.timestamp}` (UTC,
+  `2006-01-02T15:04:05Z`), `{request.method}`, `{request.target}` (the URL's path, no host or query) and
+  `{request.digest}` (base64 of the SHA-256 of the body bytes). A line that names `{request.digest}` is left out when
+  the request has no body (a GET). Lines are joined with `\n`, no trailing newline. A placeholder without a value
+  stops the call (`connector_needs_auth` for an unset auth field). A signed request carries a secret, so the https and
+  declared-host rules of 0017 §5 apply.
+- **Incoming** (`verify.signature`): `lines:` (placeholders `{auth.x}`, `{request.method}`, `{request.target}`,
+  `{request.digest}` and `{header.<Name>}` of the incoming request; no `{settings.x}`, `{request.id}` or
+  `{request.timestamp}`, which only an outgoing call makes;
+  `{request.target}` is the hook's path as received, so a proxy must not rewrite it), `encoding:` and `prefix:` (the
+  exact text to strip; a header without it is 401). Without `lines:` the HMAC is over the raw body, as before. The
+  digest is taken over the raw body before it is parsed. Every accepted version of the key is tried, in constant time.
+- The key named by `auth.sign.key` and `verify.signature.key` (with or without `auth.`) must be a secret auth field
+  (validator `sign_key_not_secret`): a plain field is neither scrubbed nor host-checked, and anyone who reads it could
+  sign a webhook. An unset field in a line is `connector_needs_auth`. A sign header replaces an action header of the
+  same name in any case. An URL without a path signs `/`. The query string is not signed (DOKU signs the path only).
+- No timestamp window yet: a gateway may resend a notification hours later with its first timestamp (DOKU retries at
+  +30 min, +6 h, +12 h). Event dedupe (the same emitted event, 30 days) stops a byte-identical replay inside that
+  window; a flow's `idempotency:` is not enforced by the kernel yet (open kernel card), and a replay later or with a
+  changed field starts the flows again. A flow that records money must therefore hold its gateway id in a unique
+  record (rangka-apps `gateway_ref_claim`), and the connector must emit an id that is stable per payment.

@@ -9,6 +9,7 @@ package connectors
 import (
 	"context"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
@@ -35,9 +36,12 @@ type Rendered struct {
 	URL     string
 	Headers map[string]string
 	Body    any // nil = no body; sent as JSON
-	Secret  bool
-	Host    string
-	scrub   *Scrubber
+	// BodyBytes is the JSON body exactly as sent (nil = none). A signed request (auth.sign) hashes these bytes, so
+	// Call sends them as they are and never marshals the body again.
+	BodyBytes []byte
+	Secret    bool
+	Host      string
+	scrub     *Scrubber
 }
 
 // Resolver reads a connector's settings and auth values for an org.
@@ -258,6 +262,30 @@ func (r *Resolver) Render(ctx context.Context, org, connector, action string, in
 	u, err := url.Parse(out.URL)
 	if err != nil || u.Host == "" {
 		return nil, fmt.Errorf("url %q does not render to an absolute URL", scrub.String(out.URL))
+	}
+	if out.Body != nil && out.Method != "GET" {
+		b, err := json.Marshal(out.Body)
+		if err != nil {
+			return nil, fmt.Errorf("body: %w", err)
+		}
+		out.BodyBytes = b
+	}
+	// auth.sign: an HMAC over canonical lines (DOKU Non-SNAP), contract 0002 refinement of 11 Nov 2026
+	if spec := parseSign(meta.AsMap(c["auth"])["sign"]); spec != nil {
+		authFn := func(field string) (string, bool, error) {
+			v, have, err := r.authValue(ctx, org, connector, field)
+			if err != nil || !have {
+				return "", false, err
+			}
+			if sec[field] {
+				carries = true
+				scrub.Add(field, v)
+			}
+			return v, true, nil
+		}
+		if err := signRequest(spec, out, u.EscapedPath(), authFn, set); err != nil {
+			return nil, err
+		}
 	}
 	out.Host = strings.ToLower(u.Hostname())
 	out.Secret = carries

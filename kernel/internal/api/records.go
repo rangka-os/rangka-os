@@ -89,7 +89,14 @@ func (s *Server) patchRecord(w http.ResponseWriter, r *http.Request, c *caller) 
 	if !ok {
 		return
 	}
-	res, err := s.Engine.Update(r.Context(), c.actor, r.PathValue("model"), r.PathValue("name"), body)
+	// _if: {field: value} makes the update conditional (contract 0030 §2): 409 precondition_failed on a mismatch
+	expect, hasIf := body["_if"].(map[string]any)
+	if _, present := body["_if"]; present && !hasIf {
+		writeError(w, http.StatusBadRequest, "bad_json", "_if must be an object of field: value")
+		return
+	}
+	delete(body, "_if")
+	res, err := s.Engine.UpdateIf(r.Context(), c.actor, r.PathValue("model"), r.PathValue("name"), body, expect)
 	if err != nil {
 		fail(w, err)
 		return

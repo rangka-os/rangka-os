@@ -22,6 +22,7 @@ OWNER = ("ceo@saga.co.id", PASSWORD)
 STAF = ("staf@contoh.test", PASSWORD)
 MANDOR = ("mandor@contoh.test", PASSWORD)
 KASIR = ("kasir@contoh.test", PASSWORD)
+DAPUR = ("dapur@contoh.test", PASSWORD)
 TABLET = {"width": 1024, "height": 768}
 PHONE = {"width": 390, "height": 844}
 DESK = {"width": 1280, "height": 800}
@@ -278,6 +279,11 @@ def test_counter_lost_answer_then_press_again_is_one_sale(browser, ctx):
     lines = p.locator(".ap-counter-lines").inner_text()
     p.locator(".ap-counter-item").nth(1).click() if p.locator(".ap-counter-item").count() > 1 else p.locator(".ap-counter-item").first.click()
     assert p.locator(".ap-counter-lines").inner_text() == lines
+    assert p.get_by_role("button", name="Tutup sesi").count() == 0, "no closing while a sale is pending"
+    # a reload keeps the pending sale locked with its cart
+    p.reload()
+    p.get_by_role("button", name="Kirim ulang").wait_for()
+    assert p.locator(".ap-counter-lines").inner_text() == lines
     time.sleep(1.2)  # now() moves on
     p.get_by_role("button", name="Kirim ulang").click()
     p.wait_for_selector(".ap-counter-done")
@@ -312,6 +318,74 @@ def test_lost_answer_on_queue_screen_is_replayed_once(browser, ctx):
     rows = c.request.get("/api/v1/r/jam_kerja?limit=1&sort=-created_at").json()["data"]
     assert rows[0]["hours"] == 5 and rows[0]["docstatus"] == 1, rows
     ctx["errors"] = [x for x in ctx["errors"] if "ERR_CONNECTION_RESET" not in x and "Failed to fetch" not in x]
+    c.close()
+
+
+def test_kitchen_queue_moves_cards_and_undoes(browser, ctx):
+    o, _ = page_for(browser, ctx, OWNER, DESK)
+    menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
+    if not menu:  # run alone (-k): make one
+        o.request.post("/api/v1/r/menu", data=json.dumps({"menu_name": "Nasi goreng", "category": "Makanan", "price": 25000}), headers={"Content-Type": "application/json"})
+        menu = o.request.get("/api/v1/r/menu?limit=1").json()["data"]
+    o.close()
+    k, _ = page_for(browser, ctx, KASIR, PHONE)
+    for table in ("Meja 1", "Meja 2"):
+        r = k.request.post("/api/v1/r/tiket_dapur", data=json.dumps({"table_no": table, "items": [{"menu": menu[0]["name"], "qty": 2, "note": "pedas"}]}),
+                           headers={"Content-Type": "application/json"})
+        assert r.status == 201, r.text()
+    k.close()
+    c, p = page_for(browser, ctx, DAPUR, TABLET, allow=("/api/v1/r/tiket_dapur/",))
+    p.goto("/app/")
+    p.wait_for_url("**/#/w/dapur")
+    p.wait_for_selector(".ap-queue-card")
+    heads = p.locator(".ap-queue-col h2").all_inner_texts()
+    assert [h.split("\n")[0] for h in heads] == ["Baru", "Dimasak", "Siap"], heads
+    baru = p.locator(".ap-queue-col").nth(0)
+    assert baru.locator(".ap-queue-card").count() == 2
+    assert "×2" in baru.inner_text() and "pedas" in baru.inner_text(), baru.inner_text()
+    card = baru.locator(".ap-queue-card", has_text="Meja 1")
+    card.get_by_role("button", name="Masak").click()
+    p.locator(".ap-queue-col").nth(1).locator(".ap-queue-card", has_text="Meja 1").wait_for()
+    # undo within 3 seconds puts it back
+    p.get_by_role("button", name="Urungkan").click()
+    p.locator(".ap-queue-col").nth(0).locator(".ap-queue-card", has_text="Meja 1").wait_for()
+    shot(ctx, p, "dapur")
+    # through to served: the card leaves the screen (filter status != 'served')
+    for label, col in (("Masak", 1), ("Siap", 2)):
+        p.locator(".ap-queue-card", has_text="Meja 2").get_by_role("button", name=label).click()
+        p.locator(".ap-queue-col").nth(col).locator(".ap-queue-card", has_text="Meja 2").wait_for()
+    p.locator(".ap-queue-card", has_text="Meja 2").get_by_role("button", name="Diantar").click()
+    p.locator(".ap-queue-card", has_text="Meja 2").wait_for(state="detached")
+    rows = c.request.get("/api/v1/r/tiket_dapur?limit=5").json()["data"]
+    assert sorted(r["status"] for r in rows) == ["new", "served"], rows
+    # a stale card: another device moved Meja 1 to ready; this screen still shows it as Baru and its step is refused
+    m1 = [r for r in rows if r["table_no"] == "Meja 1"][0]["name"]
+    frozen = {}
+    def freeze(route):  # this tablet keeps seeing the old list (its refresh has not come yet)
+        if route.request.method == "GET" and "frozen" in frozen:
+            route.fulfill(status=200, content_type="application/json", body=frozen["frozen"])
+        else:
+            resp = route.fetch()
+            if route.request.method == "GET":
+                frozen.setdefault("last", resp.text())
+            route.fulfill(response=resp)
+    p.route("**/api/v1/r/tiket_dapur?*", freeze)
+    p.wait_for_timeout(6000)  # one refresh through the route
+    frozen["frozen"] = frozen["last"]
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{m1}", data=json.dumps({"status": "ready"}), headers={"Content-Type": "application/json"}).status == 200
+    p.locator(".ap-queue-card", has_text="Meja 1").get_by_role("button", name="Masak").click()
+    p.wait_for_selector("text=sudah diubah di perangkat lain")
+    assert c.request.get(f"/api/v1/r/tiket_dapur/{m1}").json()["status"] == "ready", "the stale step did not move it back"
+    p.unroute("**/api/v1/r/tiket_dapur?*")
+    p.wait_for_timeout(6000)  # the real list again
+    # undo after another device changed the card: refused
+    p.locator(".ap-queue-col").nth(2).locator(".ap-queue-card", has_text="Meja 1").get_by_role("button", name="Diantar").click()
+    p.get_by_role("button", name="Urungkan").wait_for()
+    assert c.request.patch(f"/api/v1/r/tiket_dapur/{m1}", data=json.dumps({"status": "new"}), headers={"Content-Type": "application/json"}).status == 200
+    p.get_by_role("button", name="Urungkan").click()
+    p.wait_for_selector("text=Tidak bisa diurungkan")
+    assert c.request.get(f"/api/v1/r/tiket_dapur/{m1}").json()["status"] == "new"
+    ctx["errors"] = [x for x in ctx["errors"] if "409" not in x]  # the two refused conditional writes
     c.close()
 
 
@@ -433,7 +507,7 @@ def main():
         db = pg.stdout.strip().splitlines()[-1]
         common = ["--apps", apps, "--site", site, "--db", db]
         steps = [["migrate"] + common, ["seed"] + common + ["--email", OWNER[0], "--password", OWNER[1]]]
-        for email, role, name in (("staf@contoh.test", "staf", "Sari Staf"), ("mandor@contoh.test", "mandor", "Mandor"), ("kasir@contoh.test", "kasir", "Kasir")):
+        for email, role, name in (("staf@contoh.test", "staf", "Sari Staf"), ("mandor@contoh.test", "mandor", "Mandor"), ("kasir@contoh.test", "kasir", "Kasir"), ("dapur@contoh.test", "dapur", "Dapur")):
             steps.append(["user", "add", email, "--db", db, "--org", "site", "--role", role, "--name", name, "--password", PASSWORD])
         for cmd in steps:
             r = subprocess.run([bin_path] + cmd, capture_output=True, text=True, timeout=180)

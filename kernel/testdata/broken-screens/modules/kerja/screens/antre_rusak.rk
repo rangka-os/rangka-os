@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: antre_rusak
+type: queue
+label: {id: Antre rusak}
+roles: [staf]
+queue:
+  source: {model: jam_kerja, filter: "hours > (1"}
+  card: {title: staf, lines: note, age_from: hours, fields: [ghost]}
+  columns: {by: hours}
+  steps:
+    - {when: "hours > 0", action: approve, label: {id: Setujui}}
+    - {when: "hours > 0", action: submit, set: {total: 1, staff: x}, label: {id: Ajukan}}
+    - {when: "hours > 0", label: {id: Kosong}}

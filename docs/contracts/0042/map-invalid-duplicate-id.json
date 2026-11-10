@@ -1,0 +1,37 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_x"
+        ]
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_x",
+        "kind": "existing",
+        "label": "Excel"
+      },
+      {
+        "id": "p_x",
+        "kind": "existing",
+        "label": "Buku nota"
+      }
+    ],
+    "open": [],
+    "settings": []
+  },
+  "valid": false,
+  "error": "duplicate_id"
+}

@@ -80,6 +80,8 @@ func TestAssess(t *testing.T) {
 		{"change overlay field of submittable", []Op{{Op: "replace", Path: "custom/sales_invoice.rk"}}, with("custom/sales_invoice.rk", map[string]any{"model": "sales_invoice", "fields": []any{map[string]any{"name": "x_po", "type": "int"}}}), "high", 4},
 		{"overlay views", []Op{{Op: "replace", Path: "custom/sales_invoice.rk"}}, with("custom/sales_invoice.rk", map[string]any{"model": "sales_invoice", "fields": ovl["fields"], "views": map[string]any{"list": map[string]any{"add": []any{map[string]any{"field": "x_po"}}}}}), "low", 4},
 		{"theme", []Op{{Op: "replace", Path: "themes/kopi_senja.rk"}}, before, "low", 6},
+		{"new site process", []Op{{Op: "create", Path: "processes/kopi_senja.rk"}}, with("processes/kopi_senja.rk", map[string]any{"name": "kopi_senja"}), "low", 6},
+		{"replace site process", []Op{{Op: "replace", Path: "processes/kopi_senja.rk"}}, with("processes/kopi_senja.rk", map[string]any{"name": "kopi_senja"}), "low", 6},
 		{"system", []Op{{Op: "patch", Path: "system.rk"}}, before, "high", 2},
 		{"delete", []Op{{Op: "delete", Path: "custom/sales_invoice.rk"}}, before, "high", 4},
 		{"role", []Op{{Op: "create", Path: "apps/crm/roles/viewer.rk"}}, before, "high", 5},
@@ -259,5 +261,27 @@ func TestResultStaleBase(t *testing.T) {
 	op.Base = ""
 	if _, err := r.result([]Op{op}); err != nil {
 		t.Fatalf("no base: %v", err)
+	}
+}
+
+// Site process files (contract 0014) are change-set paths at the site level only (0042 section 8).
+func TestSchemaAllowsSiteProcesses(t *testing.T) {
+	for path, ok := range map[string]bool{
+		"processes/kopi_senja.rk":       true,
+		"processes/a.rk":                true,
+		"processes/Kopi.rk":             false,
+		"processes/kopi-senja.rk":       false,
+		"processes/1kopi.rk":            false,
+		"processes/_x.rk":               false,
+		"processes/a/b.rk":              false,
+		"apps/crm/processes/kopi.rk":    false,
+		"modules/crm/processes/kopi.rk": false,
+	} {
+		doc := map[string]any{"id": newID(), "status": "proposed", "title": "Proses usaha", "author": map[string]any{"kind": "user", "id": "o@contoh.test"},
+			"ops": []any{map[string]any{"op": "create", "path": path, "content": "name: x\n"}}}
+		errs := schema.Embedded().Validate("changeset", schema.FromData(normalize(doc)))
+		if (len(errs) == 0) != ok {
+			t.Errorf("%s: accepted=%v, want %v (%v)", path, len(errs) == 0, ok, errs)
+		}
 	}
 }

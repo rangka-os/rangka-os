@@ -21,7 +21,7 @@ func Layer(path string) int {
 	case unitPath(path):
 		return 5
 	}
-	return 6 // themes, layouts
+	return 6 // themes, layouts, site processes
 }
 
 var riskRank = map[string]int{"low": 0, "medium": 1, "high": 2}
@@ -69,7 +69,7 @@ func unitPath(p string) bool {
 // roles and permissions, config.tax (and config.ai, which decides approvals), deletions, existing fields of
 // submittable models, and edits to existing app files (app files belong to app authors; organisations use
 // custom/<model>.rk). Medium: features.rk, flows, new fields/rules/overlays, config.apps and other settings,
-// connectors, new models. Low: themes, layouts, labels, dashboards, new work screens.
+// connectors, new models. Low: themes, layouts, site processes, labels, dashboards, new work screens.
 func Assess(ops []Op, before, after func(path string) (map[string]any, bool), model func(name string) map[string]any) *Assessment {
 	return AssessWith(ops, before, after, Env{Model: model})
 }
@@ -144,6 +144,8 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			a.raise("low", "site dashboard ("+p+")")
 		case strings.HasPrefix(p, "themes/") || strings.HasPrefix(p, "layouts/"):
 			a.raise("low", "presentation ("+p+")")
+		case strings.HasPrefix(p, "processes/"): // site process file (contract 0014): a view of the flow, no data or rules
+			a.raise("low", "process ("+p+")")
 		case p == "config.rk":
 			assessConfig(a, old, nw, env.Installed)
 		case p == "features.rk":

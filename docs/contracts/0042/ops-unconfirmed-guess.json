@@ -1,0 +1,62 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Sewa Pesta",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "put",
+      "kind": "setting",
+      "value": {
+        "id": "t_dp",
+        "text": "DP 50% dari harga sewa",
+        "from_guess": "g_dp"
+      }
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Sewa Pesta",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": [
+    {
+      "index": 0,
+      "reason": "unconfirmed_guess"
+    }
+  ]
+}

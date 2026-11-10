@@ -1,0 +1,101 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Tahap A",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_b",
+        "label": "Tahap B",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_c",
+        "label": "Tahap C",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "order",
+      "ids": [
+        "s_c",
+        "s_a",
+        "s_c"
+      ]
+    },
+    {
+      "op": "order",
+      "ids": [
+        "s_b",
+        "s_b"
+      ]
+    },
+    {
+      "op": "order",
+      "ids": [
+        "s_a",
+        7
+      ]
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_b",
+        "label": "Tahap B",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_c",
+        "label": "Tahap C",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_a",
+        "label": "Tahap A",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": [
+    {
+      "index": 2,
+      "reason": "bad_shape"
+    }
+  ]
+}

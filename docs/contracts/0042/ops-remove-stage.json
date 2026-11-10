@@ -1,0 +1,115 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_x"
+        ]
+      },
+      {
+        "id": "s_b",
+        "label": "Bayar",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_x"
+        ]
+      },
+      {
+        "id": "s_c",
+        "label": "Antar",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_x",
+        "kind": "existing",
+        "label": "Excel"
+      }
+    ],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "remove",
+      "kind": "stage",
+      "id": "s_b"
+    },
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_d",
+        "label": "Lunas"
+      }
+    },
+    {
+      "op": "remove",
+      "kind": "stage",
+      "id": "s_b"
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_x"
+        ]
+      },
+      {
+        "id": "s_c",
+        "label": "Antar",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_d",
+        "label": "Lunas",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_x",
+        "kind": "existing",
+        "label": "Excel"
+      }
+    ],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": [
+    {
+      "index": 2,
+      "reason": "unknown_id"
+    }
+  ]
+}

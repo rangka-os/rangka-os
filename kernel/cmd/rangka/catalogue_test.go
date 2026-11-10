@@ -37,8 +37,25 @@ func TestSkillsCheckPlatform(t *testing.T) {
 	if code := cmdSkills([]string{"check"}); code != 0 {
 		t.Fatalf("exit %d: %s", code, buf.String())
 	}
-	if !strings.Contains(buf.String(), "3 skill(s) checked") {
+	want := []string{"rangka-changesets", "rangka-compose", "rangka-concepts", "rangka-consult"}
+	if !strings.Contains(buf.String(), "4 skill(s) checked") {
 		t.Errorf("output: %s", buf.String())
+	}
+	for _, n := range want {
+		if _, err := os.Stat(filepath.Join("..", "..", "..", "skills", n, "SKILL.md")); err != nil {
+			t.Errorf("platform skill %s: %v", n, err)
+		}
+	}
+	if ents, _ := os.ReadDir(filepath.Join("..", "..", "..", "skills")); len(ents) > 0 {
+		var dirs []string
+		for _, e := range ents {
+			if e.IsDir() {
+				dirs = append(dirs, e.Name())
+			}
+		}
+		if !slices.Equal(dirs, want) {
+			t.Errorf("skills/ folders %v, want %v", dirs, want)
+		}
 	}
 	if code := cmdSkills([]string{"check", "../../../skills"}); code != 0 {
 		t.Errorf("repo skills/: exit %d: %s", code, buf.String())

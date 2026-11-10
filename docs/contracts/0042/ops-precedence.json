@@ -1,0 +1,113 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Sewa Pesta",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_b",
+        "label": "Deposit",
+        "from_guess": "g_dp"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "setting",
+      "value": {
+        "id": "t_a",
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx",
+        "from_guess": "g_dp"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "setting",
+      "value": {
+        "id": "t_b",
+        "text": "DP 50%",
+        "from_guess": "g_dp",
+        "note": "dari nota"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "setting",
+      "value": {
+        "id": "t_c",
+        "text": "DP 50%",
+        "from_guess": "G DP"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "setting",
+      "value": {
+        "id": "t_d",
+        "text": "DP 50%",
+        "from_guess": "g_dp"
+      }
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Sewa Pesta",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": [
+    {
+      "index": 0,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 1,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 2,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 3,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 4,
+      "reason": "unconfirmed_guess"
+    }
+  ]
+}

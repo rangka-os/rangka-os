@@ -1,0 +1,130 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Tahap A",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_b",
+        "label": "Tahap B",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_c",
+        "label": "Tahap C",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_d",
+        "label": "Tahap D",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_e",
+        "label": "Tahap E",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "order",
+      "ids": [
+        "s_d",
+        "s_zz",
+        "s_b"
+      ]
+    },
+    {
+      "op": "order",
+      "ids": []
+    },
+    {
+      "op": "order",
+      "ids": [
+        "s_e"
+      ]
+    }
+  ],
+  "confirmed_guesses": [],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Toko",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_e",
+        "label": "Tahap E",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_d",
+        "label": "Tahap D",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_b",
+        "label": "Tahap B",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_a",
+        "label": "Tahap A",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_c",
+        "label": "Tahap C",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [],
+    "settings": []
+  },
+  "want_dropped": []
+}

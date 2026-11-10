@@ -1,0 +1,217 @@
+{
+  "map": {
+    "version": 1,
+    "business": {
+      "name": "Warung Kopi",
+      "kind": "",
+      "summary": ""
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_b",
+        "label": "Bayar",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    ],
+    "pieces": [],
+    "open": [
+      {
+        "id": "o_x",
+        "text": "Jam buka?"
+      }
+    ],
+    "settings": []
+  },
+  "ops": [
+    {
+      "op": "business",
+      "value": {
+        "kind": "F&B",
+        "summary": "Kopi dan roti"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_c",
+        "label": "Antar",
+        "actor": "Kurir",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    },
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "s_c",
+        "label": "Antar atau ambil",
+        "actor": "Kurir",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_pos"
+        ]
+      }
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_pos",
+        "kind": "catalogue",
+        "label": "Kasir",
+        "ref": "pos",
+        "why": "Penjualan di outlet"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "open",
+      "value": {
+        "id": "o_jam",
+        "text": "Buka jam berapa saja?"
+      }
+    },
+    {
+      "op": "put",
+      "kind": "setting",
+      "value": {
+        "id": "t_dp",
+        "text": "DP 50% dari harga sewa",
+        "from_guess": "g_dp"
+      }
+    },
+    {
+      "op": "remove",
+      "kind": "open",
+      "id": "o_x"
+    },
+    {
+      "op": "put",
+      "kind": "piece",
+      "value": {
+        "id": "p_bad",
+        "kind": "catalogue",
+        "label": "Tanpa ref"
+      }
+    },
+    {
+      "op": "remove",
+      "kind": "stage",
+      "id": "s_zzz"
+    },
+    {
+      "op": "put",
+      "kind": "stage",
+      "value": {
+        "id": "Bad Id",
+        "label": "Id salah",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      }
+    },
+    {
+      "op": "put",
+      "kind": "setting",
+      "value": {
+        "id": "t_long",
+        "text": "xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
+      }
+    }
+  ],
+  "confirmed_guesses": [
+    "g_dp"
+  ],
+  "want_map": {
+    "version": 1,
+    "business": {
+      "name": "Warung Kopi",
+      "kind": "F&B",
+      "summary": "Kopi dan roti"
+    },
+    "stages": [
+      {
+        "id": "s_a",
+        "label": "Pesanan masuk",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_b",
+        "label": "Bayar",
+        "actor": "",
+        "documents": [],
+        "systems": [],
+        "pieces": []
+      },
+      {
+        "id": "s_c",
+        "label": "Antar atau ambil",
+        "actor": "Kurir",
+        "documents": [],
+        "systems": [],
+        "pieces": [
+          "p_pos"
+        ]
+      }
+    ],
+    "pieces": [
+      {
+        "id": "p_pos",
+        "kind": "catalogue",
+        "label": "Kasir",
+        "ref": "pos",
+        "why": "Penjualan di outlet"
+      }
+    ],
+    "open": [
+      {
+        "id": "o_jam",
+        "text": "Buka jam berapa saja?"
+      }
+    ],
+    "settings": [
+      {
+        "id": "t_dp",
+        "text": "DP 50% dari harga sewa",
+        "from_guess": "g_dp"
+      }
+    ]
+  },
+  "want_dropped": [
+    {
+      "index": 7,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 8,
+      "reason": "unknown_id"
+    },
+    {
+      "index": 9,
+      "reason": "bad_shape"
+    },
+    {
+      "index": 10,
+      "reason": "bad_shape"
+    }
+  ]
+}

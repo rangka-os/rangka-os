@@ -453,16 +453,29 @@ func TestMemberAPIAccountElsewhere(t *testing.T) {
 	}
 	refused("sub-boss", "boss@beta.test", "owner_protected") // another organisation's owner
 	refused("sub-staff", "staff@beta.test", "account_elsewhere")
-	// an orphan account (no membership anywhere) and a member of this organisation are accepted
-	r := host.must(200, "PUT", memberPath("sub-orphan"), map[string]any{"email": "orphan@example.test", "role": "sales_rep"})
+	// a member of this organisation that pt_beta also holds is not linked either: the subject would enter pt_beta
+	if r := host.do("PUT", memberPath("sub-dual"), map[string]any{"email": "dual@example.test", "role": "sales_manager"}); r.Status != 409 || errCode(r) != "account_elsewhere" {
+		t.Fatalf("dual: %d %s", r.Status, r.Body)
+	}
+	if countRows(e, "select 1 from rk_identities where subject = 'sub-dual'") != 0 {
+		t.Fatal("dual linked")
+	}
+	if dbOne(e, "select role from rk_members m join rk_users u on u.id = m.user_id where u.email = 'dual@example.test' and m.org_id = 'kopi-senja'") != "sales_rep" {
+		t.Fatal("a refused push changed the membership here")
+	}
+	// an orphan account (no membership anywhere) is accepted
+	r := host.must(200, "PUT", memberPath("sub-orphan"), map[string]any{"email": "orphan@example.test", "role": "sales_rep", "outlets": []any{"OUT-01", "OUT-01", "OUT-02"}})
 	if r.JSON["created"] != false || dbOne(e, "select subject from rk_identities i join rk_users u on u.id = i.user_id where u.email = 'orphan@example.test'") != "sub-orphan" {
 		t.Fatalf("orphan: %s", r.Body)
 	}
-	host.must(200, "PUT", memberPath("sub-dual"), map[string]any{"email": "dual@example.test", "role": "sales_manager", "outlets": []any{"OUT-01", "OUT-01", "OUT-02"}})
-	if dbOne(e, "select array_to_string(m.outlets, ',') from rk_members m join rk_users u on u.id = m.user_id where u.email = 'dual@example.test' and m.org_id = 'kopi-senja'") != "OUT-01,OUT-02" {
+	if dbOne(e, "select array_to_string(m.outlets, ',') from rk_members m join rk_users u on u.id = m.user_id where u.email = 'orphan@example.test' and m.org_id = 'kopi-senja'") != "OUT-01,OUT-02" {
 		t.Fatal("duplicate outlets kept")
 	}
-	// the e-mail of a linked account pt_beta also holds is not this token's to change
+	// the e-mail of a linked account pt_beta also holds is not this token's to change (linked here by its own sign-in)
+	dual := dbOne(e, "select id from rk_users where email = 'dual@example.test'").(int64)
+	if err := auth.LinkIdentity(ctx, db, memberIssuer, "sub-dual", dual); err != nil {
+		t.Fatal(err)
+	}
 	r = host.do("PUT", memberPath("sub-dual"), map[string]any{"email": "dual.baru@example.test", "role": "sales_manager"})
 	if r.Status != 409 || errCode(r) != "account_elsewhere" {
 		t.Fatalf("e-mail change of a shared account: %d %s", r.Status, r.Body)
@@ -479,7 +492,16 @@ func TestMemberAPIAccountElsewhere(t *testing.T) {
 		t.Fatal(err)
 	}
 	r = host.do("PUT", memberPath("sub-boss2"), map[string]any{"email": "boss.baru@example.test", "role": "sales_rep"})
-	if r.Status != 409 || errCode(r) != "account_elsewhere" || dbOne(e, "select email from rk_users where id = $1", boss) != "boss@beta.test" {
+	if r.Status != 409 || errCode(r) != "owner_protected" || dbOne(e, "select email from rk_users where id = $1", boss) != "boss@beta.test" {
 		t.Fatalf("owner elsewhere e-mail change: %d %s", r.Status, r.Body)
+	}
+	// a subject already linked to another organisation's owner is refused before any write, even unchanged e-mail
+	if _, err := db.Query(ctx, "delete from rk_members where org_id = 'kopi-senja' and user_id = $1", boss); err != nil {
+		t.Fatal(err)
+	}
+	r = host.do("PUT", memberPath("sub-boss2"), map[string]any{"email": "boss@beta.test", "role": "sales_manager"})
+	if r.Status != 409 || errCode(r) != "owner_protected" ||
+		countRows(e, "select 1 from rk_members where org_id = 'kopi-senja' and user_id = $1", boss) != 0 {
+		t.Fatalf("linked owner of pt_beta: %d %s", r.Status, r.Body)
 	}
 }

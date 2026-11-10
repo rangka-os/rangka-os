@@ -147,20 +147,15 @@ func sameSet(a, b []string) bool {
 	return norm(a) == norm(b)
 }
 
-// accountHere refuses an existing account found by e-mail unless it is a member of org or of no organisation at all;
-// an owner anywhere is owner_protected.
-func (s *Server) accountHere(ctx context.Context, q pg.Querier, userID int64, org string) error {
-	res, err := q.Query(ctx, "select bool_or(role = 'owner'), bool_or(org_id = $2), count(*) from rk_members where user_id = $1", userID, org)
+// ownerAnywhere refuses an account that is an owner of any organisation: the owner is never created, changed or
+// removed through this API, and an owner's account is never linked or edited from another organisation.
+func ownerAnywhere(ctx context.Context, q pg.Querier, userID int64) error {
+	res, err := q.Query(ctx, "select 1 from rk_members where user_id = $1 and role = 'owner' limit 1", userID)
 	if err != nil {
 		return err
 	}
-	owner, _ := res.Rows[0][0].(bool)
-	here, _ := res.Rows[0][1].(bool)
-	switch {
-	case owner:
+	if len(res.Rows) > 0 {
 		return &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
-	case res.Rows[0][2].(int64) > 0 && !here:
-		return &memberError{http.StatusConflict, "account_elsewhere", msgAccountElsewhere}
 	}
 	return nil
 }
@@ -257,10 +252,12 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 				if len(res.Rows) > 0 {
 					return &memberError{http.StatusConflict, "identity_conflict", msgIdentityConflict}
 				}
-				// an account found by e-mail is this token's only when it already belongs to this organisation, or
-				// to none: linking a subject to another organisation's person would hand that person's access to
-				// whoever holds the subject
-				if err := s.accountHere(ctx, tx, target, org); err != nil {
+				// an account found by e-mail is linked only when no other organisation holds it: linking a subject to
+				// another organisation's person would hand that person's access there to whoever holds the subject
+				if err := ownerAnywhere(ctx, tx, target); err != nil {
+					return err
+				}
+				if err := s.accountOnlyHere(ctx, tx, target, org); err != nil {
 					return err
 				}
 			}
@@ -279,9 +276,11 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 			}
 		}
 
-		// refuse before writing
-		if m.member && m.role == "owner" {
-			return &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
+		// refuse before writing: an owner here or in any organisation (a linked subject included)
+		if target != 0 {
+			if err := ownerAnywhere(ctx, tx, target); err != nil {
+				return err
+			}
 		}
 		if linked && targetEmail != email {
 			// the e-mail is the account's, not this membership's: changed only for a person no other organisation holds

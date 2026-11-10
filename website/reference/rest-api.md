@@ -228,9 +228,9 @@ A non-owner minting it gets `403 forbidden`; a token never mints a token (`POST 
 | PUT | `/members/{upstream}/{subject}` | `{email, name?, role, outlets?}` → `200 {user_id, created}`. Creates the person without a password when new, links `{subject}` of upstream `{upstream}` (an `auth.upstream` id), and sets the role and outlets in the token's organisation; omitted `outlets` keep a member's outlets. A changed e-mail of a linked subject updates the account. A real change of role or outlets revokes the person's sessions and tokens in this organisation. Audited as `member.upsert` |
 | DELETE | `/members/{upstream}/{subject}` | `204`, also when the subject is unknown or not a member here. Removes the membership in the token's organisation and revokes the person's sessions and tokens there; the account and the link stay. Audited as `member.remove` |
 
-Each call is one transaction and refuses before it writes: `404 unknown_upstream`, `409 owner_protected` (the owner is
+Each call is one transaction and refuses before it writes: `404 unknown_upstream`, `409 owner_protected` (an owner of any organisation is
 never created, changed or removed here), `422 unknown_role` (also `owner`), `422 unknown_outlet`, `422 bad_request`
-(body or e-mail), `409 identity_conflict` (the e-mail's account is linked to another subject at that provider), `409 account_elsewhere` (the e-mail's account belongs to other organisations and not this one, or an e-mail change for an account another organisation also holds),
+(body or e-mail), `409 identity_conflict` (the e-mail's account is linked to another subject at that provider), `409 account_elsewhere` (the e-mail's account has a membership in another organisation, or an e-mail change for an account another organisation also holds),
 `409 email_taken`, `403 plan_limit` (a new person past the plan's `users` limit).
 
 ## Connector webhooks and calls

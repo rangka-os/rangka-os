@@ -1,6 +1,6 @@
 # 0043 Member API
 
-Status: proposed (9 Nov 2026; amended 10 Nov 2026 after review: `account_elsewhere`, `scope_limited`, token callers cannot mint) · Owner of the change: rangka-os (kernel API, auth) · Affects: rangka-cloud (private: the host that pushes members) · Builds on: 0000, 0017, 0028, 0042
+Status: proposed (9 Nov 2026; amended 10 Nov 2026 after review: `account_elsewhere`, `scope_limited`, token callers cannot mint, owner of any organisation protected) · Owner of the change: rangka-os (kernel API, auth) · Affects: rangka-cloud (private: the host that pushes members) · Builds on: 0000, 0017, 0028, 0042
 
 ## Context
 
@@ -42,8 +42,8 @@ Request:
 Behaviour:
 
 1. Resolves `{upstream}` to its issuer; unknown is `404 unknown_upstream`.
-2. **Resolve the target, writing nothing yet.** If `(issuer, subject)` is already linked, that user is the target. Else, if a user with `email` exists, that user is the target; when that user is already linked under the same issuer to a different subject, `409 identity_conflict`; when that user is an `owner` in any organisation, `409 owner_protected`; when that user has memberships but none in this organisation, `409 account_elsewhere` (an account found by e-mail is this token's only when it already belongs to this organisation or to none, so a subject the host controls is never linked to another organisation's person). Else the target is a new person.
-3. **Refuse before writing.** A target that is already an `owner` in this organisation: `409 owner_protected`. A new person past the plan's `users` limit (0028): the existing `403 plan_limit` with its owner-facing message (an existing member is not a new person). A linked target whose `email` differs: `409 account_elsewhere` when the account has a membership in another organisation (an owner elsewhere included), since the e-mail is the account's and not this organisation's alone; else `409 email_taken` when the e-mail belongs to another account.
+2. **Resolve the target, writing nothing yet.** If `(issuer, subject)` is already linked, that user is the target. Else, if a user with `email` exists, that user is the target; when that user is already linked under the same issuer to a different subject, `409 identity_conflict`; when that user is an `owner` in any organisation, `409 owner_protected`; when that user has a membership in any other organisation (also when it is a member of this one too), `409 account_elsewhere`. An existing account is linked by e-mail only when no organisation but this one holds it (a member here only, or a member nowhere), so a subject the host controls never becomes a way into another organisation. Else the target is a new person.
+3. **Refuse before writing.** A target that is an `owner` in any organisation, also one resolved by an existing link: `409 owner_protected`. A new person past the plan's `users` limit (0028): the existing `403 plan_limit` with its owner-facing message (an existing member is not a new person). A linked target whose `email` differs: `409 account_elsewhere` when the account has a membership in another organisation (an owner elsewhere included), since the e-mail is the account's and not this organisation's alone; else `409 email_taken` when the e-mail belongs to another account.
 4. **Write.** Create the user if new (no password); link `(issuer, subject)` if not linked; update `rk_users.email` when it changed; create or update the membership in the token's organisation with `role` and `outlets`. Another organisation's membership of the same person is never touched.
 5. The whole PUT (and DELETE) runs in one transaction; every error leaves nothing written.
 6. Sessions and tokens are revoked per step 7 in that same transaction.
@@ -65,13 +65,13 @@ Both routes answer errors as `{ "error": { "code", "message" } }`.
 | 403 | `forbidden` | a session instead of a token, or a token without `members:write`; any token calling `POST /api/v1/tokens` |
 | 403 | `scope_limited` | a `members:write` token on any route other than the two member routes |
 | 404 | `unknown_upstream` | `{upstream}` not in `auth.upstream` |
-| 409 | `owner_protected` | the target is already an owner in this organisation |
+| 409 | `owner_protected` | the target (resolved by link or by e-mail) is an owner in any organisation; DELETE of an owner of this organisation |
 | 422 | `unknown_role` | `role` is missing from the organisation's roles, or is `owner`. `owner` is never created, changed or removed through this API |
 | 422 | `unknown_outlet` | an outlet in `outlets` does not exist |
 | 422 | `bad_request` | body is not valid JSON or `email` is missing or invalid |
 | 409 | `identity_conflict` | the e-mail's user is already linked under this issuer to a different subject |
 | 409 | `email_taken` | e-mail change for a linked subject collides with another account |
-| 409 | `account_elsewhere` | an existing account found by e-mail belongs to other organisations and not this one; or an e-mail change for a linked account that has a membership in another organisation |
+| 409 | `account_elsewhere` | an existing account found by e-mail has a membership in another organisation (whether or not it is a member here); or an e-mail change for a linked account that has a membership in another organisation |
 | 403 | `plan_limit` | a new person would pass the plan's `users` limit (0028) |
 
 Messages are Bahasa Indonesia, sentence case, plain (read by operators and logs); `plan_limit` keeps the 0028 owner-facing copy.
@@ -93,7 +93,7 @@ Each write is audited (`member.upsert`, `member.remove`) with actor = the token'
 
 ## Security notes
 
-- Token only, owner-minted, one organisation: a leaked token can add and remove non-owner members of one organisation, never an owner, never read data, never mint another token, never reach another organisation: it cannot link a subject to, or change the e-mail of, an account another organisation holds.
+- Token only, owner-minted, one organisation: a leaked token can add and remove non-owner members of one organisation, never an owner of any organisation, never read data, never mint another token, never reach another organisation: it links a subject by e-mail only to an account no other organisation holds, and changes the e-mail only of such an account.
 - `owner` is excluded in every direction, so a compromised host or token cannot take an owner's place or lock the owner out.
 - Role and outlet checks use the kernel's own registry; the host cannot invent a role.
 - Removal revokes at once, so access ends when the host decides, not at session expiry.

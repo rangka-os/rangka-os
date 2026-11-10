@@ -51,5 +51,7 @@ Gate: in the Kopi Senja demo site, a real WhatsApp message creates a lead within
   like a webhook body, with the same dedupe. The cursor is stored per org (`rk_poll_cursors`). Only triggers that an
   installed flow listens to are polled. A poll trigger without `action:` is
   not polled, and a flow listening to it gets the warning `poll_action_missing`; an unknown action is `unknown_action`. A connector without its keys is skipped, not dead-lettered.
+- **Per-item polls** (§A.1): `each: {action, items, as, key}` calls a list action first and sends the poll action once
+  per item (an outlet), each with its own cursor; the item is visible to `input:` and `emit` under `as`.
 - **Replay** (§A.5) is `POST /api/v1/system/jobs/{id}/replay` for any dead-lettered job. It makes a new job, and the
   dead-letter row stays. A connector call is rendered again with the org's current keys.

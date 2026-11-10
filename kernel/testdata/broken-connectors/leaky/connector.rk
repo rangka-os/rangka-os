@@ -21,6 +21,10 @@ triggers:
   - {name: orders_ok, via: poll, every: 5m, action: templated_ok, cursor: next_cursor, for_each: "orders[]"}
   - {name: orders_no_action, via: poll, every: 5m}
   - {name: orders_typo, via: poll, action: templated_okk}
+  - name: orders_per_outlet
+    via: poll
+    action: templated_ok
+    each: {action: list_outletz, items: outlets, as: outlet, key: outlet.id}
 actions:
   - name: plain_http
     request:

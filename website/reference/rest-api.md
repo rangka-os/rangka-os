@@ -250,6 +250,16 @@ triggers:
     emit: {order_id: item.id, phone: item.phone}
 ```
 
+`each:` sends the action once per item, such as per outlet. On every poll the kernel first calls `each.action`
+(without input). `each.items` (CEL over its answer) is the list, and each item is bound under `each.as` in `input:` and
+`emit`. `each.key` (CEL over the item) keys the item's own cursor.
+
+```yaml
+    each: {action: list_outlets, items: outlets, as: outlet, key: outlet.id}
+    input: {outlet_id: outlet.id, since: "cursor != null ? cursor : today()"}
+    cursor: "size(payments) > 0 ? max(payments.map(p, p.created_at)) : null"
+```
+
 `auth.type: basic` sends the first secret field as the user name; `auth.type: oauth2` refreshes `access_token` at
 `auth.token_url` a minute before `expires_at`, and a failed refresh removes it so the connector needs auth again.
 

@@ -613,3 +613,133 @@ func waitFor(t *testing.T, ok func() bool) {
 	}
 	t.Fatal("condition not met in time")
 }
+
+const outletPoller = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: outlet_poller
+label: {id: Outlet poller}
+summary: {id: Penghubung uji yang mengambil transaksi per outlet.}
+version: 1.0.0
+hosts: [api.example.com]
+auth:
+  type: token
+  fields:
+    - {name: api_key, label: {id: API key}, secret: true}
+triggers:
+  - name: sales
+    via: poll
+    every: 15m
+    action: latest
+    each: {action: outlets, items: outlets, as: outlet, key: outlet.id}
+    input: {outlet_id: outlet.id, since: "cursor != null ? cursor : '2026-11-01'"}
+    cursor: "size(payments) > 0 ? max(payments.map(p, p.created_at)) : null"
+    for_each: "payments[]"
+    emit: {order_id: item.id, outlet: outlet.name, customer: item.customer, phone: item.phone}
+actions:
+  - name: outlets
+    request:
+      method: GET
+      url: https://api.example.com/v1/outlets
+      headers: {Authorization: 'Bearer {auth.api_key}'}
+    output: {outlets: data}
+  - name: latest
+    request:
+      method: GET
+      url: https://api.example.com/v1/outlets/{input.outlet_id}/sales
+      headers: {Authorization: 'Bearer {auth.api_key}'}
+      query: {since: '{input.since}'}
+    input:
+      - {name: outlet_id, type: data, required: true}
+      - {name: since, type: data, required: true}
+    output: {payments: data.payments}
+`
+
+const outletSaleFlow = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: outlet_sale_to_lead
+label: {id: Transaksi outlet jadi lead}
+on: outlet_poller.sales
+steps:
+  - create: lead
+    set:
+      lead_name: event.customer
+      phone: event.phone
+      source: "'whatsapp'"
+      status: "'new'"
+idempotency: event.order_id
+`
+
+// outletVendor answers by path: two outlets, and per outlet the sales after since.
+type outletVendor struct {
+	mu   sync.Mutex
+	reqs []*http.Request
+}
+
+func (o *outletVendor) RoundTrip(r *http.Request) (*http.Response, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.reqs = append(o.reqs, r)
+	body := `{"data":[{"id":11,"name":"Senja Kemang"},{"id":12,"name":"Senja Depok"}]}`
+	since := r.URL.Query().Get("since")
+	switch r.URL.Path {
+	case "/v1/outlets/11/sales":
+		body = `{"data":{"payments":[{"id":"p1","customer":"Ani","phone":"62811000001","created_at":"2026-11-10T08:00:00Z"},{"id":"p2","customer":"Bayu","phone":"62811000002","created_at":"2026-11-10T09:00:00Z"}]}}`
+		if since != "2026-11-01" {
+			body = `{"data":{"payments":[]}}`
+		}
+	case "/v1/outlets/12/sales":
+		body = `{"data":{"payments":[{"id":"p3","customer":"Citra","phone":"62811000003","created_at":"2026-11-10T07:30:00Z"}]}}`
+	}
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+}
+
+// each: lists the outlets first, then polls each outlet with its own cursor; the outlet is visible to emit.
+func TestPollEachOutlet(t *testing.T) {
+	t.Setenv("RANGKA_MASTER_KEY", testKEK(t))
+	t.Setenv("RANGKA_MASTER_KEY_FILE", "")
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "system.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, []byte(strings.Replace(string(b), "secrets: {driver: env}", "secrets: {driver: db}", 1)), 0o644)
+		dir := filepath.Join(filepath.Dir(apps), "rangka-connectors", "outlet_poller")
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, "connector.rk"), []byte(outletPoller), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(apps, "crm", "flows", "outlet_sale_to_lead.rk"), []byte(outletSaleFlow), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	v := &outletVendor{}
+	e.s.Connectors.HTTP = &http.Client{Transport: v, Timeout: 5 * time.Second}
+	e.login()
+	ctx := context.Background()
+	if res, err := e.s.Connectors.Poll(ctx, "kopi-senja", "outlet_poller", "sales"); err != nil || res.Skipped != "needs_auth" || len(v.reqs) != 0 {
+		t.Fatalf("poll without a key: %+v %v, %d requests", res, err, len(v.reqs))
+	}
+	e.must(204, "PUT", "/api/v1/connectors/outlet_poller/auth/api_key", map[string]any{"value": "outlet-api-key-0002-zzzz"})
+	res, err := e.s.Connectors.Poll(ctx, "kopi-senja", "outlet_poller", "sales")
+	if err != nil || res.Items != 2 || res.Events != 3 || !res.Cursor {
+		t.Fatalf("first poll: %+v %v", res, err)
+	}
+	if len(v.reqs) != 3 || v.reqs[0].URL.Path != "/v1/outlets" || v.reqs[1].URL.Query().Get("since") != "2026-11-01" {
+		t.Fatalf("requests: %v", v.reqs)
+	}
+	cursors := dump(t, e, "select trigger || '=' || cursor from rk_poll_cursors order by trigger")
+	if cursors != "sales@11=2026-11-10T09:00:00Z sales@12=2026-11-10T07:30:00Z " {
+		t.Fatalf("cursors: %q", cursors)
+	}
+	waitFor(t, func() bool { return leadsByPhone(t, e, "62811000003") == 1 && leadsByPhone(t, e, "62811000002") == 1 })
+	if !strings.Contains(dump(t, e, "select coalesce(data::text, '') from rk_audit where kind = 'connector.event'"), "Senja Depok") {
+		t.Fatal("the outlet is not in the event")
+	}
+	// next poll: each outlet sends its own cursor; outlet 12 answers the same sale again, which starts nothing
+	res, err = e.s.Connectors.Poll(ctx, "kopi-senja", "outlet_poller", "sales")
+	if err != nil || res.Events != 0 || res.Dupes != 1 {
+		t.Fatalf("second poll: %+v %v", res, err)
+	}
+	if got := v.reqs[4].URL.Query().Get("since"); got != "2026-11-10T09:00:00Z" {
+		t.Fatalf("outlet 11 since: %q", got)
+	}
+	if got := v.reqs[5].URL.Query().Get("since"); got != "2026-11-10T07:30:00Z" {
+		t.Fatalf("outlet 12 since: %q", got)
+	}
+}

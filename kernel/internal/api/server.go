@@ -93,13 +93,28 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if p != nil && p.User.Org == "" && p.Via == "dev" {
 		p.User.Org = s.Org
 	}
+	// a members:write token reaches the member API and nothing else (contract 0043 §1)
+	if p != nil && p.Via == "token" && p.HasScope(auth.ScopeMembersWrite) && !memberRoute(r) {
+		return nil, errScopeLimited
+	}
 	return p, nil
+}
+
+// errScopeLimited refuses a scoped API token outside the routes its scope is for.
+var errScopeLimited = errors.New("Token ini hanya untuk API anggota (members:write).")
+
+func memberRoute(r *http.Request) bool {
+	return (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/api/v1/members/")
 }
 
 // authed wraps handlers that need a signed-in caller.
 func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, err := s.principal(r)
+		if errors.Is(err, errScopeLimited) {
+			writeError(w, http.StatusForbidden, "scope_limited", err.Error())
+			return
+		}
 		if err != nil && !errors.Is(err, auth.ErrUnauthenticated) {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return
@@ -194,6 +209,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/connectors/{connector}/auth", a(s.getConnectorAuth))
 	mux.HandleFunc("PUT /api/v1/connectors/{connector}/auth/{field}", a(s.putConnectorAuth))
 	mux.HandleFunc("DELETE /api/v1/connectors/{connector}/auth/{field}", a(s.deleteConnectorAuth))
+	// member API (contract 0043): API tokens with members:write only
+	mux.HandleFunc("PUT /api/v1/members/{upstream}/{subject}", a(s.putMember))
+	mux.HandleFunc("DELETE /api/v1/members/{upstream}/{subject}", a(s.deleteMember))
 	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)
 	mux.HandleFunc("GET /api/v1/orgs", a(s.listOrgs))
 	mux.HandleFunc("GET /api/v1/orgs/{id}/members", a(s.listMembers))
@@ -214,6 +232,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /auth/logout", s.logout)
 	mux.HandleFunc("POST /auth/org", a(s.switchOrg))
 	mux.HandleFunc("GET /auth/me", a(s.me))
+	// upstream sign-in (contract 0042): the kernel as relying party of an external OpenID Provider
+	mux.HandleFunc("GET /auth/providers", s.Auth.Providers)
+	mux.HandleFunc("GET /auth/upstream/{id}/start", s.Auth.UpstreamStart)
+	mux.HandleFunc("GET /auth/upstream/{id}/callback", s.Auth.UpstreamCallback)
 	mux.HandleFunc("GET /.well-known/openid-configuration", s.Auth.Discovery)
 	mux.HandleFunc("GET /oauth/authorize", s.Auth.Authorize)
 	mux.HandleFunc("POST /oauth/authorize", s.Auth.Authorize)
@@ -346,7 +368,11 @@ func (s *Server) logRequests(h http.Handler) http.Handler {
 		sw := &statusWriter{ResponseWriter: w, status: 200}
 		h.ServeHTTP(sw, r)
 		if s.Log != nil && (strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/oauth/")) {
-			s.Log("%s %s %d %s", r.Method, r.URL.RequestURI(), sw.status, time.Since(start).Round(time.Millisecond))
+			target := r.URL.RequestURI()
+			if strings.HasPrefix(r.URL.Path, "/auth/upstream/") {
+				target = r.URL.EscapedPath() // the callback's query carries the provider's code and our state
+			}
+			s.Log("%s %s %d %s", r.Method, target, sw.status, time.Since(start).Round(time.Millisecond))
 		}
 	})
 }

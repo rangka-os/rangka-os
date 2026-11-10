@@ -93,7 +93,7 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return HookResult{Status: 400, Body: "body is not JSON"}
 	}
-	ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, body)
+	ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, body, nil)
 	if err != nil {
 		return HookResult{Status: 500, Body: err.Error()}
 	}
@@ -101,13 +101,14 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 }
 
 // dispatch turns a webhook body or a poll answer into events (for_each, emit), scrubs them, drops duplicates and
-// starts each listening flow once per event. It returns how many events were new and how many were duplicates.
-func (rt *Runtime) dispatch(ctx context.Context, org, connector, trigger string, t map[string]any, body any) (int, int, error) {
+// starts each listening flow once per event. extra (a poll's each: item) is visible to emit. It returns how many
+// events were new and how many were duplicates.
+func (rt *Runtime) dispatch(ctx context.Context, org, connector, trigger string, t map[string]any, body any, extra map[string]any) (int, int, error) {
 	scrub, _ := rt.Scrubber(ctx, org, connector)
 	flows := rt.flowsOn(connector + "." + trigger)
 	events, dupes := 0, 0
 	for _, it := range forEach(body, meta.Str(t, "for_each")) {
-		ev := emit(meta.AsMap(t["emit"]), body, it)
+		ev := emit(meta.AsMap(t["emit"]), body, it, extra)
 		ev = scrub.Value(ev).(map[string]any)
 		key := eventKey(org, connector, trigger, ev)
 		fresh, err := rt.remember(ctx, org, connector, trigger, key)
@@ -312,8 +313,11 @@ func with(m map[string]any, k string, v any) map[string]any {
 }
 
 // emit evaluates each emit expression (CEL) over the body's fields, the for_each scope and item.
-func emit(spec map[string]any, body any, it item) map[string]any {
+func emit(spec map[string]any, body any, it item, extra map[string]any) map[string]any {
 	vars := map[string]any{"body": body}
+	for k, v := range extra {
+		vars[k] = v
+	}
 	for k, v := range meta.AsMap(body) {
 		vars[k] = v
 	}

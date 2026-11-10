@@ -106,7 +106,7 @@ rangka seed     --apps <dir> [--site <dir>] --db <url> [--fixtures <dir>] [--org
 rangka serve    --apps <dir> [--site <dir>] --db <url> [--addr :8080] [--web <dir>] [--templates <dir>] [--connectors <dir>]
                 [--deploy-target dev] [--files-dir <dir>] [--dev-open] [--ai-url <url>] [--ai-callback-url <url>]
 rangka user add    <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]
-                   [--reset-password] [--create-org] [--db <url>]
+                   [--reset-password] [--create-org] [--allow-linked] [--db <url>]
 rangka user remove <email> --org <id> [--db <url>]
 rangka numbering set <org> <series> <next> [--period 2026|2026-11] [--db <url>]
 rangka version
@@ -187,7 +187,8 @@ with a browser session and an approver role (`config.rk ai.approvers`, always `o
   member's outlets, `--outlets ""` clears them). The email is the first argument or `--email`. The password
   comes from the `RANGKA_USER_PASSWORD` environment variable (or `--password`, which lands in shell history)
   and is needed only for a new account or with `--reset-password`; an existing account's password is never
-  changed otherwise. An unknown org is refused unless `--create-org` is given. `--db` and `--org` default to
+  changed otherwise. An unknown org is refused unless `--create-org` is given. An existing account linked to
+  upstream sign-in (contract 0042) with no membership in the org is refused unless `--allow-linked` is given. `--db` and `--org` default to
   `$DATABASE_URL` and `$RANGKA_ORG`. `rangka user remove <email> --org <id>` ends a membership and exits 1 with
   `<email> is not a member of <org>` when it is not one. Missing or wrong flags exit 2.
 

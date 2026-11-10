@@ -15,6 +15,7 @@ auth:
   issuer: http://localhost:8080
   session_ttl: 24h
   two_factor: owners
+  password: owners # schema 0.5 oneOf [boolean, "owners"]: Go and Python must agree (compare-python)
   clients:
     - id: omilo
       label: Omilo

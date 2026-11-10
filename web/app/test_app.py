@@ -792,6 +792,69 @@ def test_sign_in(page, ctx):
         assert side.get_by_role("link", name=label, exact=True).is_visible(), f"sidebar lists {label!r}"
 
 
+def test_sign_in_providers(page, ctx):
+    """/auth/providers decides the sign-in screen (contract 0042 §6): upstream buttons first, the password form only
+    when allowed, and behind "Masuk sebagai pemilik" under "owners"."""
+    state = {"body": {"password": True, "upstream": [{"id": "kantor", "label": "Kantor"}]}}
+    page.route(re.compile(r".*/auth/providers$"), lambda route: _json(route, 200, state["body"]))
+    start = page.get_by_role("link", name="Masuk dengan Kantor", exact=True)
+    pw = page.get_by_label("Kata sandi")
+    owner_link = page.get_by_role("button", name="Masuk sebagai pemilik", exact=True)
+
+    page.goto(ctx.base + "/app/")
+    start.wait_for(timeout=15000)
+    assert (start.get_attribute("href") or "") == "/auth/upstream/kantor/start?to=%2Fapp%2F", start.get_attribute("href")
+    assert pw.is_visible() and not owner_link.count(), "password true: provider button and the form"
+    first = page.evaluate("document.querySelector('.ap-signin-upstream').compareDocumentPosition(document.querySelector('form.ap-signin-form')) & Node.DOCUMENT_POSITION_FOLLOWING")
+    assert first, "provider buttons come before the password form"
+
+    state["body"] = {"password": "owners", "upstream": [{"id": "kantor", "label": "Kantor"}]}
+    page.reload()
+    start.wait_for(timeout=15000)
+    owner_link.wait_for(timeout=5000)
+    assert not pw.count(), "owners: no password form until asked"
+    owner_link.click()
+    pw.wait_for(timeout=5000)
+    assert not owner_link.count(), "the link gives way to the form"
+    sign_in(page)
+    expect_signed_in(page, ctx)
+
+
+def test_sign_in_password_disabled(page, ctx):
+    page.route(re.compile(r".*/auth/providers$"), lambda route: _json(route, 200, {"password": False, "upstream": [{"id": "kantor", "label": "Kantor"}]}))
+    page.goto(ctx.base + "/app/")
+    page.get_by_role("link", name="Masuk dengan Kantor", exact=True).wait_for(timeout=15000)
+    assert not page.get_by_label("Kata sandi").count() and not page.get_by_role("button", name="Masuk sebagai pemilik").count(), "password false: no form, no owner link"
+
+
+def test_sign_in_providers_unreachable(page, ctx):
+    """An older kernel (no such endpoint) reads as the password form alone."""
+    ctx.allow_http(404, r"^/auth/providers$")
+    page.route(re.compile(r".*/auth/providers$"), lambda route: _json(route, 404, {"error": {"code": "not_found", "message": "no such endpoint"}}))
+    page.goto(ctx.base + "/app/")
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=15000)
+    assert page.get_by_label("Kata sandi").is_visible() and not page.get_by_role("link", name="Masuk dengan Kantor").count()
+
+
+def test_sign_in_providers_slow(page, ctx):
+    """/auth/providers that does not answer within 5 s: the password form shows alone instead of a spinner forever."""
+    held = []
+    page.route(re.compile(r".*/auth/providers$"), lambda route: held.append(route))  # held until the end of the scenario
+    page.goto(ctx.base + "/app/")
+    page.locator(".ap-signin-wait").wait_for(timeout=15000)
+    t0 = time.time()
+    page.get_by_role("button", name="Masuk", exact=True).wait_for(timeout=10000)
+    waited = time.time() - t0
+    assert waited > 3, f"the form came after {waited:.1f}s, before the 5 s wait"
+    assert page.get_by_label("Kata sandi").is_visible() and not page.locator(".ap-signin-upstream").count()
+    for route in held:  # a late answer changes nothing on the screen already shown
+        _json(route, 200, {"password": False, "upstream": [{"id": "kantor", "label": "Kantor"}]})
+    page.wait_for_timeout(300)
+    assert page.get_by_label("Kata sandi").is_visible() and not page.locator(".ap-signin-upstream").count(), "a late answer replaced the form"
+    sign_in(page)
+    expect_signed_in(page, ctx)
+
+
 def test_root_redirect(page, ctx):
     page.goto(ctx.base + "/")
     assert page.url.startswith(ctx.base + "/app/"), "GET / lands on /app/, got " + page.url

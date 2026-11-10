@@ -236,13 +236,17 @@ func (v *validator) pollTriggers(d *rk.Doc, c map[string]any) {
 		if t == nil || t["via"] != "poll" {
 			continue
 		}
-
 		act, ok := t["action"].(string)
-
-		switch {
-		case !ok || act == "":
-		case !contains(actions, act):
+		if !ok || act == "" {
+			continue // only described (a spec connector): a flow listening to it gets poll_action_missing
+		}
+		if !contains(actions, act) {
 			v.rep.extra("error", d.Path, fmt.Sprintf("triggers/%d/action", i), "unknown_action", fmt.Sprintf(`connector %s has no action "%s"%s`, pyStr(c["name"]), act, suggest(act, actions)))
+		}
+		if each := asMap(t["each"]); each != nil {
+			if la, ok := each["action"].(string); ok && !contains(actions, la) {
+				v.rep.extra("error", d.Path, fmt.Sprintf("triggers/%d/each/action", i), "unknown_action", fmt.Sprintf(`connector %s has no action "%s"%s`, pyStr(c["name"]), la, suggest(la, actions)))
+			}
 		}
 	}
 }

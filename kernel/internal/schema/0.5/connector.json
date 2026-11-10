@@ -107,6 +107,35 @@
             },
             "description": "poll: the action's input, each value CEL over cursor (the stored cursor, null on the first poll) and settings"
           },
+          "each": {
+            "type": "object",
+            "required": [
+              "action",
+              "items",
+              "as",
+              "key"
+            ],
+            "additionalProperties": false,
+            "description": "poll: send the action once per item (an outlet): the list action is called first on every poll, and each item has its own cursor",
+            "properties": {
+              "action": {
+                "$ref": "model.json#/$defs/name",
+                "description": "the action that lists the items, called without input"
+              },
+              "items": {
+                "type": "string",
+                "description": "CEL over the list action's answer: the list of items"
+              },
+              "as": {
+                "$ref": "model.json#/$defs/name",
+                "description": "the name an item has in input and emit (outlet)"
+              },
+              "key": {
+                "type": "string",
+                "description": "CEL over the item: its stable id, which keys its cursor"
+              }
+            }
+          },
           "cursor": {
             "type": "string",
             "description": "poll: CEL over the answer giving the next cursor (for example next_page_token); empty keeps the cursor"

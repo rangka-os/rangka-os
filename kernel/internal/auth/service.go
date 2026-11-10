@@ -37,6 +37,17 @@ type Service struct {
 	DevOpen    bool
 	DefaultOrg string
 	Now        func() time.Time
+	// Upstreams are the external OpenID Providers of system.rk auth.upstream, ${ENV} resolved at start (contract 0042).
+	Upstreams []Upstream
+	// Password reads system.rk auth.password (true, false or "owners"); nil means true.
+	Password func() any
+	// UpstreamHTTP supplies the transport for calls to upstream providers (tests); nil uses the default transport.
+	UpstreamHTTP *http.Client
+	// Log receives operator messages; it never gets a token, code, secret or claim value.
+	Log func(format string, args ...any)
+
+	upMu    sync.Mutex
+	upCache map[string]*issuerCache // discovery and JWKS per issuer (upstream.go)
 
 	keyOnce sync.Once
 	key     *rsa.PrivateKey
@@ -48,7 +59,7 @@ type Service struct {
 type Principal struct {
 	User  *User
 	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken)
-	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write)
+	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write, members:write)
 }
 
 // AIForbiddenMessage is the message of the ai_forbidden error: an assistant asked for something only a
@@ -79,22 +90,44 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 	if err != nil {
 		return "", nil, err
 	}
-	tok := RandomToken("", 32)
+	if err := s.checkPasswordPolicy(u); err != nil {
+		return "", nil, err
+	}
 	ttl := s.SessionTTL
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at) values ($1, $2, $3, $4)", HashToken(tok), u.ID, u.Org, s.now().Add(ttl)); err != nil {
+	tok, err := s.openSession(ctx, u, ttl, SessionPassword)
+	if err != nil {
 		return "", nil, err
 	}
 	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.login", "user/"+u.Email, "signed in", nil)
 	return tok, u, nil
 }
 
-// SwitchOrg moves a live session to another organisation the user belongs to.
+// How a session was opened (rk_sessions.method).
+const (
+	SessionPassword = "password"
+	SessionUpstream = "upstream"
+)
+
+// openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
+// auth.session_ttl; upstream sessions UpstreamSessionTTL. method is SessionPassword or SessionUpstream.
+func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string) (string, error) {
+	tok := RandomToken("", 32)
+	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at, method) values ($1, $2, $3, $4, $5)",
+		HashToken(tok), u.ID, u.Org, s.now().Add(ttl), method); err != nil {
+		return "", err
+	}
+	return tok, nil
+}
+
+// SwitchOrg moves a live session to another organisation the user belongs to. A session opened with a password
+// moves only into an organisation where auth.password lets this member sign in with one (*ErrPasswordDisabled
+// otherwise); an upstream session is not limited.
 func (s *Service) SwitchOrg(ctx context.Context, cookie, org string) (*User, error) {
 	id := HashToken(cookie)
-	res, err := s.DB.Query(ctx, "select user_id from rk_sessions where id = $1 and expires_at > $2", id, s.now())
+	res, err := s.DB.Query(ctx, "select user_id, method from rk_sessions where id = $1 and expires_at > $2", id, s.now())
 	if err != nil {
 		return nil, err
 	}
@@ -107,6 +140,11 @@ func (s *Service) SwitchOrg(ctx context.Context, cookie, org string) (*User, err
 	}
 	if org == "" || u.Org != org {
 		return nil, ErrNoMembership
+	}
+	if res.Rows[0][1].(string) != SessionUpstream {
+		if err := s.checkPasswordPolicy(u); err != nil {
+			return nil, err
+		}
 	}
 	if _, err := s.DB.Query(ctx, "update rk_sessions set org_id = $1 where id = $2", u.Org, id); err != nil {
 		return nil, err
@@ -154,8 +192,22 @@ func (s *Service) CreateToken(ctx context.Context, u *User, name string, ttl tim
 // provisioning. Only a person who may manage secrets can mint it; Omilo helper and Rangka AI tokens never carry it.
 const ScopeSecretsWrite = "secrets:write"
 
+// ScopeMembersWrite lets an API token create, change and remove the non-owner members of its organisation through
+// the member API (contract 0043), for Rangka Cloud. Only an owner with a browser session can mint it.
+const ScopeMembersWrite = "members:write"
+
 // TokenScopes are the scopes an API token may carry.
-var TokenScopes = map[string]bool{ScopeSecretsWrite: true}
+var TokenScopes = map[string]bool{ScopeSecretsWrite: true, ScopeMembersWrite: true}
+
+// RevokeMember deletes a person's sessions and API tokens in one organisation (contract 0043 §4); their sessions and
+// tokens for other organisations stay. q may be the transaction that changes the membership.
+func (s *Service) RevokeMember(ctx context.Context, q pg.Querier, userID int64, org string) error {
+	if _, err := q.Query(ctx, "delete from rk_sessions where user_id = $1 and org_id = $2", userID, org); err != nil {
+		return err
+	}
+	_, err := q.Query(ctx, "delete from rk_tokens where user_id = $1 and org_id = $2", userID, org)
+	return err
+}
 
 // HasScope reports whether the principal's scopes include scope.
 func (p *Principal) HasScope(scope string) bool {

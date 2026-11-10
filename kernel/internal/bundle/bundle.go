@@ -33,24 +33,35 @@ func Has(name string) bool {
 }
 
 // Dir returns a directory holding the bundled `name`, extracting it on first use; "" when not bundled
-// or when it cannot be written.
+// or when it cannot be written. It extracts into the user cache, or into the temp directory when the cache
+// cannot be written (a container user whose HOME is "/" has an unwritable ~/.cache).
 func Dir(name string) string {
 	if !Has(name) {
 		return ""
 	}
 	once.Do(func() { key = hash() })
-	base, err := os.UserCacheDir()
-	if err != nil || base == "" {
-		base = os.TempDir()
+	var bases []string
+	if base, err := os.UserCacheDir(); err == nil && base != "" {
+		bases = append(bases, base)
 	}
-	root := filepath.Join(base, "rangka", key)
+	bases = append(bases, os.TempDir())
+	for _, base := range bases {
+		if dst := extract(filepath.Join(base, "rangka", key), name); dst != "" {
+			return dst
+		}
+	}
+	return ""
+}
+
+// extract writes the bundled `name` to root/name once (marked by root/.name.ok); "" when it cannot.
+func extract(root, name string) string {
 	dst := filepath.Join(root, name)
 	if st, err := os.Stat(filepath.Join(root, "."+name+".ok")); err == nil && !st.IsDir() {
 		return dst
 	}
 	tmp := dst + ".tmp"
 	os.RemoveAll(tmp)
-	err = fs.WalkDir(files, path.Join("files", name), func(p string, d fs.DirEntry, err error) error {
+	err := fs.WalkDir(files, path.Join("files", name), func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
@@ -66,6 +77,7 @@ func Dir(name string) string {
 		return os.WriteFile(out, b, 0o644)
 	})
 	if err != nil {
+		os.RemoveAll(tmp)
 		return ""
 	}
 	os.RemoveAll(dst)

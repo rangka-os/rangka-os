@@ -92,7 +92,7 @@ headers, the path and a digest of the body, instead of over the raw body. Both d
   sign a webhook. An unset field in a line is `connector_needs_auth`. A sign header replaces an action header of the
   same name in any case. An URL without a path signs `/`. The query string is not signed (DOKU signs the path only).
 - No timestamp window yet: a gateway may resend a notification hours later with its first timestamp (DOKU retries at
-  +30 min, +6 h, +12 h). Event dedupe (30 days) and flow idempotency (7 days) stop a replay inside those windows; a
-  signed notification replayed later starts its flows again, so a flow that records money must also hold its gateway
-  id in a unique record (rangka-apps `gateway_ref_claim`), and the connector must emit an id that is stable per
-  payment.
+  +30 min, +6 h, +12 h). Event dedupe (the same emitted event, 30 days) stops a byte-identical replay inside that
+  window; a flow's `idempotency:` is not enforced by the kernel yet (open kernel card), and a replay later or with a
+  changed field starts the flows again. A flow that records money must therefore hold its gateway id in a unique
+  record (rangka-apps `gateway_ref_claim`), and the connector must emit an id that is stable per payment.

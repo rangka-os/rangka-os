@@ -908,6 +908,8 @@ def test_user_menu_lists_orgs(page, ctx):
 def test_theme_default_light(page, ctx):
     """Light by default even when the computer is in dark mode and an old auto-saved "system" is in storage; a mode the
     person picks in the switcher sticks across a reload."""
+    # the scenario leaves the sign-in page at once (open_route), so its providers request may be cut off on the way
+    ctx.allowed_failed.append(re.compile(r"/auth/providers$"))
     page.emulate_media(color_scheme="dark")
     page.goto(ctx.base + "/app/")
     page.evaluate("() => localStorage.setItem('rk-app-theme', 'system')")

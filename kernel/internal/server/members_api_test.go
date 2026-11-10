@@ -102,8 +102,9 @@ func TestMemberAPICreate(t *testing.T) {
 	}
 	sess.must(200, "GET", "/auth/me", nil)
 	tok.must(200, "GET", "/auth/me", nil)
+	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "name": "", "role": "sales_rep", "outlets": []any{"OUT-01"}})
 	if dbOne(e, "select full_name from rk_users where id = $1", id) != "Sari" {
-		t.Fatal("a name is set only when empty")
+		t.Fatal("a name is set only when empty; an empty name never overwrites")
 	}
 	// omitted outlets keep the member's outlets: no change, no revocation
 	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep"})
@@ -206,10 +207,31 @@ func TestMemberAPIGuards(t *testing.T) {
 	if r := e.do("POST", "/api/v1/tokens", map[string]any{"name": "z", "scopes": []any{"members:admin"}}); r.Status != 400 || !strings.Contains(errMsg(r), "members:write") {
 		t.Fatalf("unknown scope: %d %s", r.Status, r.Body)
 	}
-	// the token has no other API rights through its scope: still the owner's token, but no secrets writes
-	if r := host.do("PUT", "/api/v1/connectors/whatsapp_business/auth/access_token", map[string]any{"value": "x-long-enough-value"}); r.Status != 403 {
-		t.Fatalf("members:write writing secrets: %d %s", r.Status, r.Body)
+	// the token reaches the member API and nothing else: no data, no change sets, no secrets, no tokens
+	for _, c := range []struct {
+		method, path string
+		body         any
+	}{
+		{"GET", "/api/v1/r/customer", nil},
+		{"POST", "/api/v1/r/customer", map[string]any{"customer_name": "Lewat token"}},
+		{"GET", "/api/v1/changesets", nil},
+		{"POST", "/api/v1/changesets", map[string]any{"title": "x", "ops": []any{}}},
+		{"PUT", "/api/v1/connectors/whatsapp_business/auth/access_token", map[string]any{"value": "x-long-enough-value"}},
+		{"POST", "/api/v1/tokens", map[string]any{"name": "child"}},
+		{"GET", "/auth/me", nil},
+	} {
+		if r := host.do(c.method, c.path, c.body); r.Status != 403 || errCode(r) != "scope_limited" {
+			t.Fatalf("members:write token on %s %s: %d %s", c.method, c.path, r.Status, r.Body)
+		}
 	}
+	if countRows(e, "select 1 from rk_tokens where name = 'child'") != 0 {
+		t.Fatal("a token minted a token")
+	}
+	// a plain token cannot mint a token either; an owner session still mints secrets:write
+	if r := plain.do("POST", "/api/v1/tokens", map[string]any{"name": "child"}); r.Status != 403 || errCode(r) != "forbidden" {
+		t.Fatalf("plain token minting: %d %s", r.Status, r.Body)
+	}
+	e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "s2", "scopes": []any{"secrets:write"}})
 	// unknown upstream
 	for _, m := range []string{"PUT", "DELETE"} {
 		r := host.do(m, "/api/v1/members/lain/sub-sari", body)
@@ -393,5 +415,71 @@ func TestMemberAPIOtherOrgUntouched(t *testing.T) {
 	betaTok.must(200, "GET", "/auth/me", nil)
 	if countRows(e, "select 1 from rk_members where org_id = 'kopi-senja' and user_id = $1", id) != 0 {
 		t.Fatal("kopi-senja membership kept")
+	}
+}
+
+// An existing account found by e-mail is this token's only when it belongs to this organisation or to none; the
+// e-mail of a linked account another organisation holds is not changed (contract 0043 §2).
+func TestMemberAPIAccountElsewhere(t *testing.T) {
+	e, host := memberEnv(t)
+	ctx := context.Background()
+	db := e.s.DB
+	if err := auth.EnsureOrgCode(ctx, db, "pt_beta", "PT Beta", "BETA"); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range []struct{ email, org, role string }{
+		{"boss@beta.test", "pt_beta", "owner"},
+		{"staff@beta.test", "pt_beta", "sales_rep"},
+		{"dual@example.test", "pt_beta", "sales_rep"},
+		{"dual@example.test", "kopi-senja", "sales_rep"},
+	} {
+		if _, err := auth.EnsureUser(ctx, db, u.email, "", "rangka-demo", u.org, u.role, ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := db.Query(ctx, "insert into rk_users (email, full_name) values ('orphan@example.test', 'Yatim')"); err != nil {
+		t.Fatal(err)
+	}
+	refused := func(sub, email, code string) {
+		t.Helper()
+		r := host.do("PUT", memberPath(sub), map[string]any{"email": email, "role": "sales_rep"})
+		if r.Status != 409 || errCode(r) != code {
+			t.Fatalf("%s: %d %s", email, r.Status, r.Body)
+		}
+		if countRows(e, "select 1 from rk_identities where subject = $1", sub) != 0 ||
+			countRows(e, "select 1 from rk_members m join rk_users u on u.id = m.user_id where u.email = $1 and m.org_id = 'kopi-senja'", email) != 0 {
+			t.Fatalf("%s: a refusal wrote", email)
+		}
+	}
+	refused("sub-boss", "boss@beta.test", "owner_protected") // another organisation's owner
+	refused("sub-staff", "staff@beta.test", "account_elsewhere")
+	// an orphan account (no membership anywhere) and a member of this organisation are accepted
+	r := host.must(200, "PUT", memberPath("sub-orphan"), map[string]any{"email": "orphan@example.test", "role": "sales_rep"})
+	if r.JSON["created"] != false || dbOne(e, "select subject from rk_identities i join rk_users u on u.id = i.user_id where u.email = 'orphan@example.test'") != "sub-orphan" {
+		t.Fatalf("orphan: %s", r.Body)
+	}
+	host.must(200, "PUT", memberPath("sub-dual"), map[string]any{"email": "dual@example.test", "role": "sales_manager", "outlets": []any{"OUT-01", "OUT-01", "OUT-02"}})
+	if dbOne(e, "select array_to_string(m.outlets, ',') from rk_members m join rk_users u on u.id = m.user_id where u.email = 'dual@example.test' and m.org_id = 'kopi-senja'") != "OUT-01,OUT-02" {
+		t.Fatal("duplicate outlets kept")
+	}
+	// the e-mail of a linked account pt_beta also holds is not this token's to change
+	r = host.do("PUT", memberPath("sub-dual"), map[string]any{"email": "dual.baru@example.test", "role": "sales_manager"})
+	if r.Status != 409 || errCode(r) != "account_elsewhere" {
+		t.Fatalf("e-mail change of a shared account: %d %s", r.Status, r.Body)
+	}
+	if countRows(e, "select 1 from rk_users where email = 'dual@example.test'") != 1 {
+		t.Fatal("a refused e-mail change wrote")
+	}
+	// the owner of pt_beta, linked by its own sign-in and a non-owner member here, keeps its e-mail too
+	boss := dbOne(e, "select id from rk_users where email = 'boss@beta.test'").(int64)
+	if err := auth.LinkIdentity(ctx, db, memberIssuer, "sub-boss2", boss); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query(ctx, "insert into rk_members (org_id, user_id, role) values ('kopi-senja', $1, 'sales_rep')", boss); err != nil {
+		t.Fatal(err)
+	}
+	r = host.do("PUT", memberPath("sub-boss2"), map[string]any{"email": "boss.baru@example.test", "role": "sales_rep"})
+	if r.Status != 409 || errCode(r) != "account_elsewhere" || dbOne(e, "select email from rk_users where id = $1", boss) != "boss@beta.test" {
+		t.Fatalf("owner elsewhere e-mail change: %d %s", r.Status, r.Body)
 	}
 }

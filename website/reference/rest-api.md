@@ -178,7 +178,7 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/system/audit?kind=&actor=&org=&limit=` | Audit log |
 | GET | `/orgs` · `/orgs/{id}/members` | Organisations (with plan and usage) and members |
 | GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form (`/files/meta/…` is an older alias) |
-| POST | `/tokens` | Create an API token: `{name, expires_in_days, scopes}` → `201`, the token shown once; scopes are `secrets:write` and `members:write` |
+| POST | `/tokens` | Create an API token: `{name, expires_in_days, scopes}` → `201`, the token shown once; scopes are `secrets:write` and `members:write`. Browser sessions only: a token caller gets `403 forbidden` |
 | GET | `/plan` | The tenant's plan, every plan of `features.rk`, usage against the limits (`ok`, `near` from 80%, `full`, `over`), notices and what is read-only after a downgrade ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)) |
 | GET | `/catalogue` | Every module, app and connector this kernel can install, with its state for the site; for people who may propose change sets. Read only for now ([contract 0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md)) |
 
@@ -221,7 +221,7 @@ POST /api/v1/tokens
 {"name": "cloud-members", "expires_in_days": 0, "scopes": ["members:write"]}
 ```
 
-A non-owner, or a token, minting it gets `403 forbidden`. Rotate by minting a new token and deleting the old.
+A non-owner minting it gets `403 forbidden`; a token never mints a token (`POST /tokens` from any token is `403 forbidden`). The token reaches only these two routes: anything else answers `403 scope_limited`. Rotate by minting a new token and deleting the old.
 
 | Method | Path | Notes |
 | --- | --- | --- |
@@ -230,7 +230,7 @@ A non-owner, or a token, minting it gets `403 forbidden`. Rotate by minting a ne
 
 Each call is one transaction and refuses before it writes: `404 unknown_upstream`, `409 owner_protected` (the owner is
 never created, changed or removed here), `422 unknown_role` (also `owner`), `422 unknown_outlet`, `422 bad_request`
-(body or e-mail), `409 identity_conflict` (the e-mail's account is linked to another subject at that provider),
+(body or e-mail), `409 identity_conflict` (the e-mail's account is linked to another subject at that provider), `409 account_elsewhere` (the e-mail's account belongs to other organisations and not this one, or an e-mail change for an account another organisation also holds),
 `409 email_taken`, `403 plan_limit` (a new person past the plan's `users` limit).
 
 ## Connector webhooks and calls

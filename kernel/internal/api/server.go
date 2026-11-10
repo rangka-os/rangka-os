@@ -93,13 +93,28 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if p != nil && p.User.Org == "" && p.Via == "dev" {
 		p.User.Org = s.Org
 	}
+	// a members:write token reaches the member API and nothing else (contract 0043 §1)
+	if p != nil && p.Via == "token" && p.HasScope(auth.ScopeMembersWrite) && !memberRoute(r) {
+		return nil, errScopeLimited
+	}
 	return p, nil
+}
+
+// errScopeLimited refuses a scoped API token outside the routes its scope is for.
+var errScopeLimited = errors.New("Token ini hanya untuk API anggota (members:write).")
+
+func memberRoute(r *http.Request) bool {
+	return (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/api/v1/members/")
 }
 
 // authed wraps handlers that need a signed-in caller.
 func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		p, err := s.principal(r)
+		if errors.Is(err, errScopeLimited) {
+			writeError(w, http.StatusForbidden, "scope_limited", err.Error())
+			return
+		}
 		if err != nil && !errors.Is(err, auth.ErrUnauthenticated) {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return

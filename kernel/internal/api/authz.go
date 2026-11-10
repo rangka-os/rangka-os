@@ -139,6 +139,8 @@ func (s *Server) switchOrg(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, 200, s.meBody(r.Context(), nc, s.isApprover(u)))
 }
 
+const msgTokenMintForbidden = "Token API hanya bisa dibuat oleh orang yang masuk lewat browser, bukan oleh token."
+
 func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) {
 	var body struct {
 		Name          string   `json:"name"`
@@ -153,6 +155,11 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) 
 		writeError(w, 403, "no_user", "the dev-open demo user cannot create tokens; seed the database first")
 		return
 	}
+	// a token never mints a token (contracts 0017 §3, 0043 §1): minting needs a person with a browser session
+	if !c.p.Human() {
+		writeError(w, 403, "forbidden", msgTokenMintForbidden)
+		return
+	}
 	if body.Name == "" {
 		body.Name = "api"
 	}
@@ -162,12 +169,12 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) 
 			return
 		}
 		// members:write (contract 0043 §1): minted only by an owner of the organisation with their own session
-		if sc == auth.ScopeMembersWrite && (!c.p.Human() || !isOwner(c)) {
+		if sc == auth.ScopeMembersWrite && !isOwner(c) {
 			writeError(w, 403, "forbidden", msgMembersMintForbidden)
 			return
 		}
 		// secrets:write (contract 0017 §3): minted only by a person who may manage connector secrets
-		if sc == auth.ScopeSecretsWrite && (!c.p.Human() || !s.mayManageSecrets(c)) {
+		if sc == auth.ScopeSecretsWrite && !s.mayManageSecrets(c) {
 			writeError(w, 403, "forbidden", msgConnectorAuthForbidden)
 			return
 		}

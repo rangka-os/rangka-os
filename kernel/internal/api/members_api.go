@@ -27,6 +27,7 @@ const (
 	msgIdentityConflict     = "E-mail ini milik akun yang sudah terhubung ke akun lain di penyedia ini."
 	msgEmailTaken           = "E-mail ini sudah dipakai akun lain."
 	msgUnknownUpstream      = "Penyedia akun tidak ditemukan."
+	msgAccountElsewhere     = "Akun dengan e-mail ini juga dipakai di usaha lain, jadi tidak bisa diatur lewat API anggota usaha ini."
 )
 
 // memberError is a refusal of the member API: status, code and copy.
@@ -146,6 +147,49 @@ func sameSet(a, b []string) bool {
 	return norm(a) == norm(b)
 }
 
+// accountHere refuses an existing account found by e-mail unless it is a member of org or of no organisation at all;
+// an owner anywhere is owner_protected.
+func (s *Server) accountHere(ctx context.Context, q pg.Querier, userID int64, org string) error {
+	res, err := q.Query(ctx, "select bool_or(role = 'owner'), bool_or(org_id = $2), count(*) from rk_members where user_id = $1", userID, org)
+	if err != nil {
+		return err
+	}
+	owner, _ := res.Rows[0][0].(bool)
+	here, _ := res.Rows[0][1].(bool)
+	switch {
+	case owner:
+		return &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
+	case res.Rows[0][2].(int64) > 0 && !here:
+		return &memberError{http.StatusConflict, "account_elsewhere", msgAccountElsewhere}
+	}
+	return nil
+}
+
+// accountOnlyHere refuses a change to the account itself (its e-mail) when the account has a membership outside org
+// (an owner elsewhere included): the account is not this organisation's alone.
+func (s *Server) accountOnlyHere(ctx context.Context, q pg.Querier, userID int64, org string) error {
+	res, err := q.Query(ctx, "select 1 from rk_members where user_id = $1 and org_id <> $2 limit 1", userID, org)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) > 0 {
+		return &memberError{http.StatusConflict, "account_elsewhere", msgAccountElsewhere}
+	}
+	return nil
+}
+
+// dedupe keeps the first of each value, in order.
+func dedupe(in []string) []string {
+	seen, out := map[string]bool{}, []string{}
+	for _, v := range in {
+		if !seen[v] {
+			seen[v] = true
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
 // putMember is PUT /api/v1/members/{upstream}/{subject} (contract 0043 §2).
 func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 	up, ok := s.memberGuard(w, r, c)
@@ -213,6 +257,12 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 				if len(res.Rows) > 0 {
 					return &memberError{http.StatusConflict, "identity_conflict", msgIdentityConflict}
 				}
+				// an account found by e-mail is this token's only when it already belongs to this organisation, or
+				// to none: linking a subject to another organisation's person would hand that person's access to
+				// whoever holds the subject
+				if err := s.accountHere(ctx, tx, target, org); err != nil {
+					return err
+				}
 			}
 		default:
 			return err
@@ -234,6 +284,10 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 			return &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
 		}
 		if linked && targetEmail != email {
+			// the e-mail is the account's, not this membership's: changed only for a person no other organisation holds
+			if err := s.accountOnlyHere(ctx, tx, target, org); err != nil {
+				return err
+			}
 			res, err := tx.Query(ctx, "select 1 from rk_users where email = $1 and id <> $2", email, target)
 			if err != nil {
 				return err
@@ -255,7 +309,7 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		outlets := []string{}
 		switch {
 		case body.Outlets != nil:
-			outlets = *body.Outlets
+			outlets = dedupe(*body.Outlets)
 		case m.member:
 			outlets = m.outlets
 		}

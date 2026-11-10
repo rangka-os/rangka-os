@@ -227,6 +227,16 @@ func TestMemberAPIGuards(t *testing.T) {
 	if countRows(e, "select 1 from rk_tokens where name = 'child'") != 0 {
 		t.Fatal("a token minted a token")
 	}
+	// nor MCP: the token is refused before any method runs (0043 §1), where a plain token is served
+	plain.must(200, "POST", "/mcp", map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list"})
+	for _, m := range []map[string]any{
+		{"jsonrpc": "2.0", "id": 1, "method": "tools/list"},
+		{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]any{"name": "rangka_list", "arguments": map[string]any{"model": "customer"}}},
+	} {
+		if r := host.do("POST", "/mcp", m); r.Status != 401 || strings.Contains(string(r.Body), "customer_name") {
+			t.Fatalf("members:write token on MCP %s: %d %s", m["method"], r.Status, r.Body)
+		}
+	}
 	// a plain token cannot mint a token either; an owner session still mints secrets:write
 	if r := plain.do("POST", "/api/v1/tokens", map[string]any{"name": "child"}); r.Status != 403 || errCode(r) != "forbidden" {
 		t.Fatalf("plain token minting: %d %s", r.Status, r.Body)

@@ -78,8 +78,11 @@ func flowModelEvent(e *Engine, f *meta.Flow) (model, op string, ok bool) {
 
 // manualRecordEvent is the event a hand-started run of a <model>.<op> flow gets for a non-owner: the shape
 // recordFlows gives (fields at top level, model, name, op, record) built from the record body's name names, with
-// before null. Any other key in the body is dropped.
+// before null. Any other key in the body is dropped. An empty body stays empty; a body without name is 422.
 func (e *Engine) manualRecordEvent(ctx context.Context, a Actor, model, op string, body map[string]any) (map[string]any, error) {
+	if len(body) == 0 {
+		return map[string]any{}, nil // no event at all claims nothing: the flow sees what any run without on: sees
+	}
 	name, _ := body["name"].(string)
 	if name == "" {
 		return nil, &StatusError{422, "event_name", "flow " + model + "." + op + ": event.name (nama " + model + ") wajib diisi"}

@@ -39,7 +39,7 @@ func Zero(f *meta.Field) any {
 		return money.Decimal{}
 	case "table", "multiselect":
 		return []any{}
-	case "json", "daterange":
+	case "json", "daterange", "geo":
 		return nil
 	}
 	return ""
@@ -135,6 +135,8 @@ func Coerce(f *meta.Field, v any) (any, error) {
 		case time.Time:
 			return x.Format(time.RFC3339), nil
 		}
+	case "geo":
+		return CoerceGeo(f.Name, v)
 	case "multiselect", "json", "daterange", "table":
 		return v, nil
 	default:
@@ -220,7 +222,7 @@ func sqlValue(f *meta.Field, v any) any {
 		if d, ok := v.(money.Decimal); ok {
 			return d.String()
 		}
-	case "multiselect", "json", "daterange":
+	case "multiselect", "json", "daterange", "geo":
 		return pg.JSON{V: v}
 	}
 	return v

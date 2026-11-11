@@ -971,6 +971,25 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			return nil, err
 		}
 		return b.Unix()/86400 - a.Unix()/86400, nil // both midnight UTC: whole days, no duration saturation
+	case "distance_m":
+		// distance_m(a, b): metres between two positions ({lat, lng}, the geo field type, contract 0030 §4) on the
+		// earth's mean radius (haversine); -1 when either has no position, so `distance_m(p, site) <= r` alone never
+		// passes without one.
+		if err := need(2); err != nil {
+			return nil, err
+		}
+		pa, oka, err := geoArg(args[0])
+		if err != nil {
+			return nil, err
+		}
+		pb, okb, err := geoArg(args[1])
+		if err != nil {
+			return nil, err
+		}
+		if !oka || !okb {
+			return -1.0, nil
+		}
+		return Haversine(pa[0], pa[1], pb[0], pb[1]), nil
 	case "round":
 		if len(args) < 1 || len(args) > 2 {
 			return nil, errf("round() takes 1 or 2 arguments, got %d", len(args))

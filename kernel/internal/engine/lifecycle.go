@@ -409,6 +409,11 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	}
 	if opts.client { // a client cannot save a document with fewer rows than min_rows; a hook's draft may start empty
 		errs = append(errs, minRows(m, rec, nil)...)
+		more, err := o.checkAttachFields(m, rec, nil, "")
+		if err != nil {
+			return nil, err
+		}
+		errs = append(errs, more...)
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)
@@ -583,6 +588,11 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	}
 	if guard { // a client patch that sends a table must leave at least min_rows rows in it
 		errs = append(errs, minRows(m, rec, func(f string) bool { _, sent := patch[f]; return sent })...)
+		more, err := o.checkAttachFields(m, rec, cur, name)
+		if err != nil {
+			return nil, err
+		}
+		errs = append(errs, more...)
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)

@@ -296,6 +296,10 @@ func (s *Server) deleteAttachment(w http.ResponseWriter, r *http.Request, c *cal
 		writeError(w, http.StatusConflict, "submitted", "Lampiran dokumen yang sudah diajukan tidak bisa dihapus")
 		return
 	}
+	if s.Engine.HoldsAttachment(row.Model, rec, row.ID) { // an image or signature field points at it (0030 §4)
+		writeError(w, http.StatusConflict, "in_use", "Lampiran ini dipakai sebagai foto atau tanda tangan catatan; kosongkan field itu dulu")
+		return
+	}
 	s.blobMu.Lock()
 	err := store.DeleteAttachment(ctx, s.DB, row.Org, row.ID)
 	if err == nil {

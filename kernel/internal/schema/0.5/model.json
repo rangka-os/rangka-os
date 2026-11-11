@@ -430,7 +430,8 @@
             "color",
             "json",
             "signature",
-            "money"
+            "money",
+            "geo"
           ]
         },
         "label": {

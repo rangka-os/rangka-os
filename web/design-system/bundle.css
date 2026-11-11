@@ -527,7 +527,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-topnav-item .rk-icon { width: 14px; height: 14px; }
 .rk-topnav-create { margin-left: 8px; }
 .rk-topnav-end { margin-left: auto; display: flex; align-items: center; gap: 4px; flex-shrink: 0; }
-.rk-topnav .rk-av-btn { border: 0; background: transparent; padding: 2px; border-radius: 50%; cursor: pointer; display: inline-grid; }
+.rk-topnav .rk-av-btn { border: 0; background: transparent; padding: 2px; border-radius: 50%; cursor: pointer; display: inline-grid; place-items: center; place-content: center; }
 .rk-topnav .rk-av-btn:hover { background: var(--hover); }
 .rk-topnav .rk-av-btn:focus-visible { outline: 2px solid var(--focus); }
 .rk-ask { display: inline-flex; align-items: center; gap: 6px; height: var(--control); padding: 0 4px 0 8px; border-radius: var(--r); border: 0;

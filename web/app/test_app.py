@@ -1034,6 +1034,10 @@ def test_top_nav_shell(page, ctx):
     expect_signed_in(page, ctx)
     assert page.locator(".rk-topnav").is_visible() and page.locator(".ap-shell.ap-top").count() == 1
     assert not page.locator(".ap-mhead").is_visible(), "no phone bar in top-nav"
+    # the avatar sits in the middle of its button (a 44px touch target on phones), level with the search icon
+    btn, av = page.locator(".rk-topnav .rk-av-btn").bounding_box(), page.locator(".rk-topnav .rk-av-btn .rk-av").bounding_box()
+    assert abs((av["y"] + av["height"] / 2) - (btn["y"] + btn["height"] / 2)) <= 1, f"avatar centred vertically: {av} in {btn}"
+    assert abs((av["x"] + av["width"] / 2) - (btn["x"] + btn["width"] / 2)) <= 1, f"avatar centred horizontally: {av} in {btn}"
     page.locator(".rk-topnav .rk-ask").click()
     page.get_by_role("dialog", name="Menu perintah").wait_for(timeout=5000)
     page.keyboard.press("Escape")

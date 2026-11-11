@@ -374,3 +374,22 @@ func TestValidateRequireDocShadowed(t *testing.T) {
 		t.Errorf("field doc on the related model not warned:\n%s", buf.String())
 	}
 }
+
+// An XML format's related filter may not read user: the file must be the same for everyone (audit xml-followups #2).
+func TestValidateXMLFilterUser(t *testing.T) {
+	dir := t.TempDir()
+	copyDir(t, printRoot, dir)
+	copyDir(t, printSite, dir+"/site")
+	head := "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\n"
+	for name, filter := range map[string]string{"u1_xml": "owner == user.name", "u2_xml": "docstatus == 1 && 'user' != customer"} {
+		writeFile(t, dir+"/site/print/"+name+".rk", head+"name: "+name+"\nmodel: customer\noutput: xml\ntemplate: "+name+".xml\nrelated:\n  invoices:\n    model: sales_invoice\n    match: {customer: name}\n    filter: \""+filter+"\"\n")
+		writeFile(t, dir+"/site/print/"+name+".xml", `<A/>`)
+	}
+	_, rep := Validate(dir+"/apps", dir+"/site", nil, schema.Embedded())
+	var buf bytes.Buffer
+	rep.Print(&buf)
+	out := buf.String()
+	if !strings.Contains(out, "u1_xml.rk") || !strings.Contains(out, "xml_filter_user") || strings.Contains(out, "u2_xml.rk") {
+		t.Errorf("user in an XML filter (u1 only, not a quoted 'user'):\n%s", out)
+	}
+}

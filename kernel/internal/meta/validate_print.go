@@ -5,6 +5,7 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
+	"regexp"
 	ttemplate "text/template"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
@@ -53,6 +54,9 @@ func (v *validator) validatePrints() {
 	}
 }
 
+// readsUser finds the CEL variable user outside quoted text.
+var readsUser = regexp.MustCompile(`(^|[^A-Za-z0-9_.'"])user\b`)
+
 func (v *validator) printFormat(p *Print, all map[string]vis) {
 	d, raw := p.Doc, p.Raw
 	v.schemaErr("print", d)
@@ -97,6 +101,12 @@ func (v *validator) printFormat(p *Print, all map[string]vis) {
 			if _, err := cel.Compile(q.Check); err != nil {
 				v.rep.extra("error", d.Path, fmt.Sprintf("%s/require/%d/check", at, i), "cel_syntax", truncMsg(err.Error()))
 			}
+		}
+		// a tax file is the same whoever downloads it: an XML format's related filter may not read user (the kernel
+		// counts the rows it lost to the caller's grants without one; audit xml-followups #2)
+		if str(raw, "output") == "xml" && readsUser.MatchString(rel.Filter) {
+			v.rep.extra("error", d.Path, at+"/filter", "xml_filter_user",
+				"an XML format's related filter may not read user: the file must not depend on who downloads it (use grants and row scope)")
 		}
 		// a field of the row named doc wins over the printed document in require (Engine.Holds): warn (contract 0029 §4)
 		if len(rel.Require) > 0 && relFields["doc"] {

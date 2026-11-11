@@ -41,7 +41,8 @@ needs a safe way to turn a document and its related lists into a well-formed XML
    - For an XML format the rows are those the caller may export (contract 0024 grants), and a list cut at its `limit` is refused with `422 export_too_large` (a tax file must hold every
      row); HTML formats keep `.Truncated`. A list that lost rows to the caller's row scope or an `if:` of their read
      or export grant is refused with `422 export_partial` (the count of missing rows, nothing of them), so a partial
-     file never looks complete.
+     file never looks complete. An XML format's related `filter` may not read `user` (`rangka validate` error
+     `xml_filter_user`): the file is the same whoever downloads it.
    - In `require`, a field of the related model named `doc` wins over the printed document; `rangka validate` warns
      (`require_doc_shadowed`).
 5. **Endpoint.** The same `GET /api/v1/r/{model}/{name}/print?format=<xml format>`; `as` is omitted or `xml` (`html`

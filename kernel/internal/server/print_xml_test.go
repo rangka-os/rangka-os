@@ -296,10 +296,18 @@ related:
 // A tax file holds every row or none: rows the caller loses to an if: of their grants (or a row scope) refuse the
 // file with 422 export_partial instead of serving a file that looks complete (audit pajak 7 Nov #11).
 func TestPrintXMLPartialRefused(t *testing.T) {
+	// also with a filter that reads the child table (children: true; audit xml-followups #1)
+	for _, rk := range []string{ledgerXMLRK, strings.Replace(ledgerXMLRK, "filter: docstatus == 1", "filter: docstatus == 1 && size(items) > 0", 1)} {
+		partialRefused(t, rk)
+	}
+}
+
+func partialRefused(t *testing.T, rk string) {
+	t.Helper()
 	e := printEnv(t, func(apps, site string) {
 		dir := filepath.Join(site, "print")
 		os.MkdirAll(dir, 0o755)
-		os.WriteFile(filepath.Join(dir, "ledger_xml.rk"), []byte(ledgerXMLRK), 0o644)
+		os.WriteFile(filepath.Join(dir, "ledger_xml.rk"), []byte(rk), 0o644)
 		os.WriteFile(filepath.Join(dir, "ledger_xml.xml"), []byte(ledgerXML), 0o644)
 		inv := filepath.Join(apps, "sales", "models", "sales_invoice.rk")
 		b, _ := os.ReadFile(inv)

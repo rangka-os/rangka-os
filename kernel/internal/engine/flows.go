@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -154,6 +155,16 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	if err := r.steps(list, "", start); err != nil {
 		return err
 	}
+	if start > 0 && r.key == "" { // a resumed run adds its documents to the key it claimed when it started
+		r.key, _ = vars[flowKeyVar].(string)
+	}
+	if r.key != "" { // the documents this run made: the key is free again once none of them is alive
+		docs := append([]string{}, out.Created...)
+		waiting := out.WaitingJob != 0 || out.WaitingApproval != ""
+		if err := store.AddFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, docs, start == 0, waiting); err != nil {
+			return err
+		}
+	}
 	return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.run", "flow/"+f.Name, fmt.Sprintf("%d step(s), %d created, %d notification(s)", len(out.Steps), len(out.Created), len(out.Notifications)), nil)
 }
 
@@ -179,13 +190,91 @@ func (r *flowRun) claimKey() (dup bool, err error) {
 		}
 		return false, &StatusError{422, "idempotency_key", msg}
 	}
-	ok, err := store.ClaimFlowKey(r.o.ctx, r.o.tx, r.a.Org, r.f.Name, key)
+	fresh, docs, err := store.ClaimFlowKey(r.o.ctx, r.o.tx, r.a.Org, r.f.Name, key)
 	if err != nil {
 		return false, err
 	}
-	if !ok {
-		r.out.Skipped = true
-		return true, store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.duplicate", "flow/"+r.f.Name, "idempotency key sudah dipakai: "+key, nil)
+	if !fresh {
+		alive, err := r.anyAlive(docs)
+		if err != nil {
+			return false, err
+		}
+		if len(docs) == 0 || alive {
+			r.out.Skipped = true
+			return true, store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.duplicate", "flow/"+r.f.Name, "idempotency key sudah dipakai: "+key, nil)
+		}
+		// every document the earlier run made was deleted or cancelled: the event is recorded again
+		if err := store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.key_reused", "flow/"+r.f.Name, "idempotency key "+key+" dipakai lagi: dokumen run sebelumnya sudah dihapus atau dibatalkan ("+strings.Join(docs, ", ")+")", nil); err != nil {
+			return false, err
+		}
+	}
+	r.key = key
+	r.vars[flowKeyVar] = key
+	return false, nil
+}
+
+// flowKeyPending stands in a key's documents while its run waits (wait:, approve:): the run is not finished, so the
+// key is held whatever its documents so far (audit flowkey-release 1).
+const flowKeyPending = "flow:pending"
+
+// flowKeyVar carries the claimed key in the run's saved variables, so a resumed run adds its documents to it.
+const flowKeyVar = "_idempotency_key"
+
+// anyAlive reports whether the documents of a key hold it: the submittable ones among docs (all of docs when none
+// is), alive while one exists and is not cancelled, or cancelled with a live amended copy (one document, contract
+// 0009). A run still waiting holds its key, and so does a document of a model this site no longer has (fail closed).
+func (r *flowRun) anyAlive(docs []string) (bool, error) {
+	var sub []string
+	for _, d := range docs {
+		if d == flowKeyPending {
+			return true, nil
+		}
+		mn, _, _ := strings.Cut(d, "/")
+		m := r.e.Reg().Model(mn)
+		if m == nil {
+			return true, nil
+		}
+		if m.IsSubmittable {
+			sub = append(sub, d)
+		}
+	}
+	if len(sub) > 0 {
+		docs = sub
+	}
+	for _, d := range docs {
+		mn, name, _ := strings.Cut(d, "/")
+		alive, err := r.docAlive(r.e.Reg().Model(mn), name, 0)
+		if err != nil || alive {
+			return alive, err
+		}
+	}
+	return false, nil
+}
+
+// docAlive: the record exists and is not cancelled, or a copy amended from it is alive.
+func (r *flowRun) docAlive(m *meta.Model, name string, depth int) (bool, error) {
+	rec, err := store.Get(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !m.IsSubmittable || toInt(rec["docstatus"]) != 2 {
+		return true, nil
+	}
+	if depth > 50 {
+		return true, nil
+	}
+	copies, err := store.Find(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, map[string]any{"amended_from": name}, store.FindOpts{})
+	if err != nil {
+		return false, err
+	}
+	for _, c := range copies {
+		alive, err := r.docAlive(m, str(c["name"]), depth+1)
+		if err != nil || alive {
+			return alive, err
+		}
 	}
 	return false, nil
 }
@@ -230,6 +319,7 @@ type flowRun struct {
 	vars map[string]any
 	out  *FlowResult
 	stop bool
+	key  string // the idempotency key this run claimed
 }
 
 func (r *flowRun) env() *cel.Env {

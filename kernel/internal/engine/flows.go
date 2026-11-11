@@ -155,8 +155,13 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	if err := r.steps(list, "", start); err != nil {
 		return err
 	}
+	if start > 0 && r.key == "" { // a resumed run adds its documents to the key it claimed when it started
+		r.key, _ = vars[flowKeyVar].(string)
+	}
 	if r.key != "" { // the documents this run made: the key is free again once none of them is alive
-		if err := store.SetFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, r.keyDocs()); err != nil {
+		docs := append([]string{}, out.Created...)
+		waiting := out.WaitingJob != 0 || out.WaitingApproval != ""
+		if err := store.AddFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, docs, start == 0, waiting); err != nil {
 			return err
 		}
 	}
@@ -204,47 +209,74 @@ func (r *flowRun) claimKey() (dup bool, err error) {
 		}
 	}
 	r.key = key
+	r.vars[flowKeyVar] = key
 	return false, nil
 }
 
-// anyAlive reports whether one of docs (<model>/<name>) still exists and, for a submittable model, is not cancelled.
+// flowKeyPending stands in a key's documents while its run waits (wait:, approve:): the run is not finished, so the
+// key is held whatever its documents so far (audit flowkey-release 1).
+const flowKeyPending = "flow:pending"
+
+// flowKeyVar carries the claimed key in the run's saved variables, so a resumed run adds its documents to it.
+const flowKeyVar = "_idempotency_key"
+
+// anyAlive reports whether the documents of a key hold it: the submittable ones among docs (all of docs when none
+// is), alive while one exists and is not cancelled, or cancelled with a live amended copy (one document, contract
+// 0009). A run still waiting holds its key, and so does a document of a model this site no longer has (fail closed).
 func (r *flowRun) anyAlive(docs []string) (bool, error) {
+	var sub []string
 	for _, d := range docs {
-		mn, name, _ := strings.Cut(d, "/")
+		if d == flowKeyPending {
+			return true, nil
+		}
+		mn, _, _ := strings.Cut(d, "/")
 		m := r.e.Reg().Model(mn)
 		if m == nil {
-			continue
+			return true, nil
 		}
-		rec, err := store.Get(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, name)
-		if errors.Is(err, store.ErrNotFound) {
-			continue
-		}
-		if err != nil {
-			return false, err
-		}
-		if m.IsSubmittable && toInt(rec["docstatus"]) == 2 {
-			continue
-		}
-		return true, nil
-	}
-	return false, nil
-}
-
-// keyDocs are the documents a run's idempotency key stands for: the submittable records it created, or every
-// record it created when it made none (a lead and its activity).
-func (r *flowRun) keyDocs() []string {
-	var sub, all []string
-	for _, c := range r.out.Created {
-		all = append(all, c)
-		mn, _, _ := strings.Cut(c, "/")
-		if m := r.e.Reg().Model(mn); m != nil && m.IsSubmittable {
-			sub = append(sub, c)
+		if m.IsSubmittable {
+			sub = append(sub, d)
 		}
 	}
 	if len(sub) > 0 {
-		return sub
+		docs = sub
 	}
-	return all
+	for _, d := range docs {
+		mn, name, _ := strings.Cut(d, "/")
+		alive, err := r.docAlive(r.e.Reg().Model(mn), name, 0)
+		if err != nil || alive {
+			return alive, err
+		}
+	}
+	return false, nil
+}
+
+// docAlive: the record exists and is not cancelled, or a copy amended from it is alive.
+func (r *flowRun) docAlive(m *meta.Model, name string, depth int) (bool, error) {
+	rec, err := store.Get(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, name)
+	if errors.Is(err, store.ErrNotFound) {
+		return false, nil
+	}
+	if err != nil {
+		return false, err
+	}
+	if !m.IsSubmittable || toInt(rec["docstatus"]) != 2 {
+		return true, nil
+	}
+	if depth > 50 {
+		return true, nil
+	}
+	copies, err := store.Find(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, map[string]any{"amended_from": name}, store.FindOpts{})
+	if err != nil {
+		return false, err
+	}
+	for _, c := range copies {
+		alive, err := r.docAlive(m, str(c["name"]), depth+1)
+		if err != nil || alive {
+			return alive, err
+		}
+	}
+	return false, nil
 }
 
 // flowKey is the stored form of an idempotency value, typed so that 5 and "5" never meet: "s:<text>" or

@@ -2,8 +2,12 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -40,6 +44,11 @@ type FlowResult struct {
 // here is manual (contract 0026): it may not create append_only ledger rows, also after a wait or an approval.
 func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event map[string]any) (*FlowResult, error) {
 	if e.RowScope(a) != nil {
+		return nil, Denied("flow", "run")
+	}
+	// a flow a connector event starts records what a gateway or a vendor said happened (a payment, a sale): run by
+	// hand, its event is whatever the caller writes, so only the owner may (audit rel uang B, temuan 6)
+	if f := e.Reg().Flows[flowName]; f != nil && flowConnector(e, f) != "" && !a.System && !hasAnyRole(a, []string{"owner"}) {
 		return nil, Denied("flow", "run")
 	}
 	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
@@ -132,6 +141,12 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 			return nil
 		}
 	}
+	if start == 0 && f.Idempotency != "" {
+		dup, err := r.claimKey()
+		if err != nil || dup {
+			return err
+		}
+	}
 	var list []any
 	for _, st := range f.Steps {
 		list = append(list, map[string]any(st))
@@ -140,6 +155,68 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 		return err
 	}
 	return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.run", "flow/"+f.Name, fmt.Sprintf("%d step(s), %d created, %d notification(s)", len(out.Steps), len(out.Created), len(out.Notifications)), nil)
+}
+
+// claimKey enforces the flow's idempotency: (contract 0002 §A.2): the same key never runs the flow twice in an org.
+// dup is true (the run is skipped) when a committed run holds the key. A key is a non-empty string or a whole
+// number. An empty string or null means the event has no key: the run goes on without dedupe, and the flow
+// handles it (a payment notification without its gateway id tells the owner and records nothing). Anything else
+// (a list, a map, a fraction, true/false, an expression error) fails the run: a flow that dedupes money must not
+// skip a payment because two different events gave the same text.
+func (r *flowRun) claimKey() (dup bool, err error) {
+	v, err := cel.Eval(r.f.Idempotency, r.env())
+	if err == nil && (v == nil || v == "") {
+		return false, nil
+	}
+	key := ""
+	if err == nil {
+		key = flowKey(v)
+	}
+	if key == "" {
+		msg := "flow " + r.f.Name + ": idempotency: harus berupa teks atau bilangan bulat"
+		if err != nil {
+			msg += " (" + err.Error() + ")"
+		}
+		return false, &StatusError{422, "idempotency_key", msg}
+	}
+	ok, err := store.ClaimFlowKey(r.o.ctx, r.o.tx, r.a.Org, r.f.Name, key)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		r.out.Skipped = true
+		return true, store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.duplicate", "flow/"+r.f.Name, "idempotency key sudah dipakai: "+key, nil)
+	}
+	return false, nil
+}
+
+// flowKey is the stored form of an idempotency value, typed so that 5 and "5" never meet: "s:<text>" or
+// "i:<integer>", and "h:<sha256>" of the typed form when it is longer than 200 characters. "" when v is no key.
+func flowKey(v any) string {
+	var k string
+	switch x := v.(type) {
+	case string:
+		if x == "" {
+			return ""
+		}
+		k = "s:" + x
+	case int64:
+		k = "i:" + strconv.FormatInt(x, 10)
+	case int:
+		k = "i:" + strconv.Itoa(x)
+	case float64:
+		if x != math.Trunc(x) || math.IsInf(x, 0) || math.Abs(x) > 1<<53 {
+			return ""
+		}
+		k = "i:" + strconv.FormatInt(int64(x), 10)
+	default:
+		return ""
+	}
+	if len(k) > 200 {
+		sum := sha256.Sum256([]byte(k))
+		k = "h:" + hex.EncodeToString(sum[:])
+	}
+	return k
 }
 
 // maxForEach bounds one for_each step (one flow run is one transaction).
@@ -518,7 +595,7 @@ func (r *flowRun) requestApproval(spec map[string]any, i string, resume int, as 
 	ap := store.Approval{Org: a.Org, Verb: "flow:" + r.f.Name, Policy: policy, Label: label, Approvers: approvers,
 		State: "pending", Snapshot: hashJSON(map[string]any{"event": event, "vars": vars}),
 		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as, "manual": o.manualRun},
-		RequestedBy: a.ID, Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System}}
+		RequestedBy: a.ID, Requester: a.requesterArgs(roles)}
 	if err := store.InsertApproval(o.ctx, o.tx, &ap); err != nil {
 		return "", err
 	}

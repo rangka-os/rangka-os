@@ -411,7 +411,7 @@ func (s *Server) runActionJob(ctx context.Context, j *jobs.Job) (any, error) {
 	act := meta.AsMap(j.Args["actor"])
 	// a queued action replays a person's request: same roles, same permission checks (not System). The roles
 	// are the ones captured at enqueue time; a member demoted before the job runs keeps the old grants.
-	a := engine.Actor{Org: j.Org, ID: meta.Str(act, "id"), UserName: meta.Str(act, "user"), Roles: meta.StrList(act["roles"])}
+	a := engine.Actor{Org: j.Org, ID: meta.Str(act, "id"), UserName: meta.Str(act, "user"), Roles: meta.StrList(act["roles"]), Outlets: meta.StrList(act["outlets"])}
 	if a.ID == "" {
 		a.ID = "queue"
 	}

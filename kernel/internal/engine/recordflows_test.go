@@ -216,3 +216,29 @@ steps:
 		t.Fatalf("want %q, got %+v", want, got)
 	}
 }
+
+// A flow on the record's own updated event that writes the record keeps the person's edit: the edit is stored
+// before flows run and the flow's update loads the stored record (card t_cb89c0a4, payroll audit 7 Nov).
+func TestRecordEventFlowKeepsUserEdit(t *testing.T) {
+	e, a := approvalSetupFiles(t, dealFlag("deal.updated"), "")
+	ctx := context.Background()
+	res, err := e.Create(ctx, a, "deal", map[string]any{"deal_name": "Uji", "customer": "CUST-0012", "value": 1, "expected_close": "2026-12-01"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	name := str(res.Record["name"])
+	res, err = e.Update(ctx, a, "deal", name, map[string]any{"stage": "qualified", "contact_person": "Budi", "value": 7})
+	if err != nil {
+		t.Fatal(err)
+	}
+	got, err := e.Get(ctx, a, "deal", name)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range []map[string]any{res.Record, got} {
+		if str(r["notes"]) != "menang" || str(r["contact_person"]) != "Budi" || str(r["stage"]) != "qualified" || num(r["value"]) != 7 {
+			t.Fatalf("record after a self-writing flow = notes %v contact %v stage %v value %v; want the edit kept",
+				r["notes"], r["contact_person"], r["stage"], r["value"])
+		}
+	}
+}

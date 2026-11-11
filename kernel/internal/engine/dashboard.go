@@ -167,17 +167,17 @@ func aggregate(rows []store.Record, kind, field string) any {
 }
 
 func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
-	m := dc.e.Reg().Model(w.Model)
-	if m == nil {
-		return map[string]any{"error": "Model " + w.Model + " tidak terpasang"}, nil
-	}
-	if w.If != "" {
+	if w.If != "" { // before the model: a widget of an optional app is guarded by app_installed() (schema dashboard.json)
 		v, err := cel.Eval(w.If, &cel.Env{Today: dc.e.Today, Apps: dc.e.Reg().IsInstalled, Vars: func(n string) (any, bool) {
 			return GlobalVar(dc.e.Reg(), dc.a, n)
 		}})
 		if err != nil || !cel.Truthy(v) {
 			return map[string]any{"hidden": true}, nil
 		}
+	}
+	m := dc.e.Reg().Model(w.Model)
+	if m == nil {
+		return map[string]any{"error": "Model " + w.Model + " tidak terpasang"}, nil
 	}
 	if err := dc.e.Authorize(dc.ctx, dc.a, m.Name, "read", nil); err != nil {
 		return map[string]any{"error": map[string]any{"code": "permission_denied", "message": err.Error(), "model": m.Name, "action": "read"}}, nil

@@ -6,7 +6,7 @@
  * Every method returns a Promise. Failures reject with ApiError {status, code, message, body, fieldErrors, warnings,
  * needsForce}. 422 bodies are {errors:[{field?,rule?,code,message}], warnings, needs_force?}; other bodies are
  * {error:{code,message}}; network errors have status 0 and code "network". All requests send credentials.
- * Helpers on the namespace: parseRupiah, rupiah, tanggal, isMissingRoute, isFilesOff, printFormats, formatSize, parseSSE, ApiError.
+ * Helpers on the namespace: parseRupiah, rupiah, money, tanggal, isMissingRoute, isFilesOff, printFormats, formatSize, parseSSE, ApiError.
  */
 (function (global) {
   "use strict";
@@ -97,6 +97,26 @@
     n = Math.round(Number(n) || 0);
     var s = String(Math.abs(n)).replace(/\B(?=(\d{3})+(?!\d))/g, ".");
     return (n < 0 ? "-" : "") + "Rp " + s;
+  }
+
+  /** An amount in a currency (contract 0013 money fields): IDR (or no code) as rupiah; any other ISO code before the
+   *  amount, rounded half away from zero to 2 decimals on the decimal text (not a binary float: 10.005 -> 10,01), with
+   *  the sign first as id-ID does ("-EUR 10,01"). "" for a value that is not a number. */
+  function money(n, cur) {
+    if (n == null || n === "") return "";
+    cur = String(cur || "IDR").toUpperCase();
+    if (cur === "IDR") return isFinite(Number(n)) ? rupiah(n) : "";
+    var m = /^\s*([+-]?)(\d*)(?:\.(\d*))?(?:e([+-]?\d+))?\s*$/i.exec(String(n));
+    if (!m || (!m[2] && !m[3])) return "";
+    var digits = (m[2] || "0") + (m[3] || ""), point = (m[2] || "0").length + (m[4] ? parseInt(m[4], 10) : 0);
+    while (point < 1) { digits = "0" + digits; point++; }
+    while (digits.length < point + 3) digits += "0";
+    var keep = digits.slice(0, point + 2).split("").map(Number), carry = Number(digits.charAt(point + 2)) >= 5 ? 1 : 0;
+    for (var i = keep.length - 1; i >= 0 && carry; i--) { keep[i] += 1; carry = keep[i] === 10 ? 1 : 0; if (carry) keep[i] = 0; }
+    if (carry) keep.unshift(1);
+    var whole = keep.slice(0, keep.length - 2).join("").replace(/^0+(?=\d)/, ""), cents = keep.slice(-2).join("");
+    var zero = /^0*$/.test(whole + cents);
+    return (m[1] === "-" && !zero ? "-" : "") + cur + " " + whole.replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + cents;
   }
 
   function tanggal(iso) {
@@ -509,6 +529,7 @@
   create.formatSize = formatSize;
   create.parseRupiah = parseRupiah;
   create.rupiah = rupiah;
+  create.money = money;
   create.tanggal = tanggal;
   create.parseSSE = parseSSE;
   global.RangkaAppAPI = create;

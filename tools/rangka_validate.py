@@ -30,7 +30,17 @@ SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
 BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 LEGACY = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
-SET_ONCE_EMPTY_IS_VALUE = {"int", "float", "currency", "percent", "rating", "money", "check", "duration", "table"}
+SET_ONCE_EMPTY_IS_VALUE = {"int", "float", "currency", "percent", "rating", "money", "check", "duration", "table", "multiselect"}
+
+
+def check_set_once(rep, p, i, f, child):
+    """Contract 0030 §4: set_once only on top-level fields whose empty value means "not filled" (validate.go setOnceCheck)."""
+    if f.get("set_once") is not True:
+        return
+    if child:
+        rep.add("error", p, f"fields/{i}/set_once", "set_once_child", "set_once is for fields of the document itself; a table row can be removed and added again")
+    elif f.get("type") in SET_ONCE_EMPTY_IS_VALUE:
+        rep.add("error", p, f"fields/{i}/set_once", "set_once_type", f'set_once needs a field whose empty value means "not filled"; a {pystr(f.get("type"))} field starts at 0, false or empty')
 FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
@@ -420,11 +430,7 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                     t = f.get(key)
                     if t and t not in visible:
                         rep.add("error", p, f"fields/{i}/{key}", "unknown_model", f'"{t}" is not a model in this app or its dependencies{suggest(t, visible)}')
-                if f.get("set_once") is True:  # contract 0030 §4 (validate.go setOnceEmptyIsValue)
-                    if m.get("is_child") is True:
-                        rep.add("error", p, f"fields/{i}/set_once", "set_once_child", "set_once is for fields of the document itself; a table row can be removed and added again")
-                    elif f.get("type") in SET_ONCE_EMPTY_IS_VALUE:
-                        rep.add("error", p, f"fields/{i}/set_once", "set_once_type", f'set_once needs a field whose empty value means "not filled"; a {f.get("type")} field starts at 0 or false')
+                check_set_once(rep, p, i, f, m.get("is_child") is True)
                 if f.get("of") in visible and not visible[f["of"]][2].get("is_child"):
                     rep.add("error", p, f"fields/{i}/of", "not_child", f'"{f["of"]}" must set is_child: true to be used in a table field')
                 for pk in f.get("peek", []):
@@ -1718,6 +1724,7 @@ def check_overlays(rep, V, apps, allmodels, overlays):
             if n in seen:
                 rep.add("error", p, f"fields/{i}", "duplicate_field", f'"{n}" is already a field of {mn}')
             seen.add(n)
+            check_set_once(rep, p, i, f, m.get("is_child") is True)  # an overlay may not unlock what a module may not
             for key in ("to", "of"):
                 t = f.get(key)
                 if t and t not in visible:

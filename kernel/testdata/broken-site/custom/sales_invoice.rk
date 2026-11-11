@@ -8,6 +8,7 @@ fields:
   - {name: x_a, type: int, compute: x_b + 1}
   - {name: x_b, type: int, compute: x_a + 1}
   - {name: x_po_number, type: data}
+  - {name: x_checked, type: int, set_once: true}
 rules:
   - name: po_needed
     on: submit

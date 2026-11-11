@@ -133,7 +133,8 @@ the field while it is empty, never change or clear a value it holds (`422 set_on
 passes, datetimes compared as instants); flows and other kernel writes may. Clock-in time, position and photo use
 it, so a worker cannot move a clock-in the kernel measured as outside. Only on fields of the document itself
 (`set_once_child`: a row can be removed and added again) whose empty value means "not filled" (`set_once_type` for
-numbers, check, money, duration and tables, which start at 0 or false). A correction goes through a flow or an
+numbers, check, money, duration, multiselect and tables, which start at 0, false or empty), checked the same in a
+module's model and in a company overlay (`custom/<model>.rk`). A correction goes through a flow or an
 owner action the module declares: cancel and amend copy the values, so the copy is locked too. A record created
 without a position may get one later, once (the same trust as a position sent at create). `image` and `signature` hold an
 attachment id: a value a client writes (create, update, rows included) must be an attachment of that same record

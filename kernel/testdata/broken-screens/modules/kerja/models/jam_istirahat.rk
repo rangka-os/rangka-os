@@ -3,4 +3,4 @@ name: jam_istirahat
 label: {id: Istirahat}
 is_child: true
 fields:
-  - {name: minutes, type: int, label: {id: Menit}}
+  - {name: minutes, type: int, label: {id: Menit}, set_once: true}

@@ -129,9 +129,13 @@ in -180..180, accuracy_m >= 0, at RFC 3339 stored in UTC, no other key; `""`/`{}
 `f.lng`; `distance_m(a, b)` is the haversine distance in metres on the mean earth radius 6 371 008.8 m, and
 `1e9` when either has no position: farther than any two points on earth, so "unknown" counts as far and
 `distance_m(p, site) <= r` fails, `> r` holds, without a position). Field option `set_once: true`: a client may fill
-the field while it is empty, never change a value it holds (`422 set_once`; the same value sent again passes,
-datetimes compared as instants); flows and other kernel writes may. Clock-in time, position and photo use it, so a
-worker cannot move a clock-in the kernel measured as outside. `image` and `signature` hold an
+the field while it is empty, never change or clear a value it holds (`422 set_once`; the same value sent again
+passes, datetimes compared as instants); flows and other kernel writes may. Clock-in time, position and photo use
+it, so a worker cannot move a clock-in the kernel measured as outside. Only on fields of the document itself
+(`set_once_child`: a row can be removed and added again) whose empty value means "not filled" (`set_once_type` for
+numbers, check, money, duration and tables, which start at 0 or false). A correction goes through a flow or an
+owner action the module declares: cancel and amend copy the values, so the copy is locked too. A record created
+without a position may get one later, once (the same trust as a position sent at create). `image` and `signature` hold an
 attachment id: a value a client writes (create, update, rows included) must be an attachment of that same record
 (model and name; rows use their parent's) whose content type is `image/*`, else 422 `attachment` on the field; a
 record being created has none yet, so a screen saves the record, attaches, then sets the field. A value the record

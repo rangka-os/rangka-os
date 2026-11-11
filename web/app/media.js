@@ -24,7 +24,8 @@
 
   function isGeo(g) { return !!g && typeof g === "object" && typeof g.lat === "number" && typeof g.lng === "number"; }
 
-  /** Metres between two positions on the mean earth radius (the kernel's distance_m); -1 when either is missing. */
+  /** Metres between two positions on the mean earth radius, for the phone's own message; -1 when either is missing
+   *  (the kernel's distance_m answers 1e9 there, so its radius rules fail closed). */
   function distanceM(a, b) {
     if (!isGeo(a) || !isGeo(b)) return -1;
     var rad = Math.PI / 180, dLat = (b.lat - a.lat) * rad, dLng = (b.lng - a.lng) * rad;

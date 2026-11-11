@@ -4,5 +4,7 @@ label: {id: Catatan harian}
 naming: CAT-{#####}
 fields:
   - {name: text, type: text, label: {id: Catatan}, required: true}
+  - {name: score, type: int, label: {id: Nilai}, set_once: true}
+  - {name: seen_at, type: datetime, label: {id: Dibaca}, set_once: true}
 permissions:
   - {role: staf, read: true, create: true}

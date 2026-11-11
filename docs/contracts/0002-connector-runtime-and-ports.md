@@ -19,9 +19,10 @@ Status: proposed (1 Nov 2026) · Owner: rangka-os (kernel) · Affects: rangka-co
      The kernel evaluates it (CEL over `event`) when a run starts, after the flow's `if:`, and records the key in
      `rk_flow_keys (org, flow, key)` in the run's transaction: a run whose key a committed run holds is skipped
      (`skipped: true`, audit `flow.duplicate`), a failed run frees its key, and a key that is empty or cannot be
-     evaluated fails the run with 422 `idempotency_key` (fail closed). It holds for every way a flow starts (events,
+     evaluated, or is not a non-empty text or a whole number (a list, a map, a fraction, true/false), fails the run with
+     422 `idempotency_key` (fail closed). Keys are typed (`5` and `"5"` differ). It holds for every way a flow starts (events,
      record events, schedules, `POST /api/v1/flows/<name>/run`); a run resumed after `wait:` or `approve:` is the same
-     run. Keys are kept; longer than 200 characters they are stored as their SHA-256.
+     run. Keys are kept; longer than 200 characters they are stored as their SHA-256, apart from short keys.
    - A flow whose `on:` is a connector trigger may be run by hand (`/flows/<name>/run`) only by the owner: its event
      says what a vendor reported (a payment, a sale), so other roles get 403.
 3. **Outbound actions.**

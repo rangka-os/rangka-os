@@ -33,6 +33,12 @@ func TestFlowIdempotencyAndConnectorRun(t *testing.T) {
 	if r := e.do("POST", "/api/v1/flows/whatsapp_to_lead/run", map[string]any{"event": noKey}); r.Status != 422 {
 		t.Fatalf("run without a key: %d %s", r.Status, r.Body)
 	}
+	for _, bad := range []any{[]any{}, map[string]any{}, 1.5, true} {
+		ev := map[string]any{"message_id": bad, "from": "6281277770002", "profile_name": "Tono", "text": "kunci aneh"}
+		if r := e.do("POST", "/api/v1/flows/whatsapp_to_lead/run", map[string]any{"event": ev}); r.Status != 422 {
+			t.Fatalf("run with key %#v: %d %s", bad, r.Status, r.Body)
+		}
+	}
 	if n := leadsByPhone(t, e, "6281277770002"); n != 0 {
 		t.Fatalf("a run without its key wrote %d leads", n)
 	}

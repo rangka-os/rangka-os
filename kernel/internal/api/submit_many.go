@@ -13,8 +13,9 @@ const maxSubmitMany = 100
 // is submitted on its own, exactly as POST .../{name}/submit would (rules, approvals, numbering, hooks, flows), so
 // one refused draft does not stop the others. The answer is 200 with one result per name in the order given:
 // status 200 (submitted; new_name is its number), 202 (held for approval; approval is the pending request) or the
-// error status and body the single submit would answer. A retry is safe: a draft already submitted answers 409
-// not_draft. Contract 0007 §4 (approvals), card t_35afb0bc.
+// error status and body the single submit would answer. A retry is safe without an Idempotency-Key (the header
+// is not used here): a submitted draft got its number, so its draft name answers 404 not_found and its number
+// 409 not_draft; a held draft reuses its pending request. Card t_35afb0bc.
 func (s *Server) submitMany(w http.ResponseWriter, r *http.Request, c *caller) {
 	body, ok := readObject(w, r)
 	if !ok {

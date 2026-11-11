@@ -2,8 +2,12 @@ package engine
 
 import (
 	"context"
+	"crypto/sha256"
+	"encoding/hex"
 	"fmt"
+	"math"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
@@ -154,27 +158,21 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 }
 
 // claimKey enforces the flow's idempotency: (contract 0002 §A.2): the same key never runs the flow twice in an org.
-// dup is true (the run is skipped) when a committed run holds the key. A key that cannot be evaluated or is
-// empty fails the run: a flow that dedupes money must not run without its key (fail closed).
+// dup is true (the run is skipped) when a committed run holds the key. Only a non-empty string or a whole number
+// is a key; anything else (empty, null, a list, a map, a fraction, an error) fails the run: a flow that dedupes
+// money must not run without its key, nor skip a payment because two different events gave the same text.
 func (r *flowRun) claimKey() (dup bool, err error) {
 	v, err := cel.Eval(r.f.Idempotency, r.env())
 	key := ""
-	if err == nil && v != nil {
-		if s, ok := v.(string); ok {
-			key = s
-		} else {
-			key = fmt.Sprint(v)
-		}
+	if err == nil {
+		key = flowKey(v)
 	}
 	if key == "" {
-		msg := "flow " + r.f.Name + ": idempotency: tidak menghasilkan kunci"
+		msg := "flow " + r.f.Name + ": idempotency: harus berupa teks tidak kosong atau bilangan bulat"
 		if err != nil {
 			msg += " (" + err.Error() + ")"
 		}
 		return false, &StatusError{422, "idempotency_key", msg}
-	}
-	if len(key) > 200 { // long keys are kept as their hash
-		key = hashJSON(key)
 	}
 	ok, err := store.ClaimFlowKey(r.o.ctx, r.o.tx, r.a.Org, r.f.Name, key)
 	if err != nil {
@@ -185,6 +183,35 @@ func (r *flowRun) claimKey() (dup bool, err error) {
 		return true, store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.duplicate", "flow/"+r.f.Name, "idempotency key sudah dipakai: "+key, nil)
 	}
 	return false, nil
+}
+
+// flowKey is the stored form of an idempotency value, typed so that 5 and "5" never meet: "s:<text>" or
+// "i:<integer>", and "h:<sha256>" of the typed form when it is longer than 200 characters. "" when v is no key.
+func flowKey(v any) string {
+	var k string
+	switch x := v.(type) {
+	case string:
+		if x == "" {
+			return ""
+		}
+		k = "s:" + x
+	case int64:
+		k = "i:" + strconv.FormatInt(x, 10)
+	case int:
+		k = "i:" + strconv.Itoa(x)
+	case float64:
+		if x != math.Trunc(x) || math.IsInf(x, 0) || math.Abs(x) > 1<<53 {
+			return ""
+		}
+		k = "i:" + strconv.FormatInt(int64(x), 10)
+	default:
+		return ""
+	}
+	if len(k) > 200 {
+		sum := sha256.Sum256([]byte(k))
+		k = "h:" + hex.EncodeToString(sum[:])
+	}
+	return k
 }
 
 // maxForEach bounds one for_each step (one flow run is one transaction).

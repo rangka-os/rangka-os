@@ -1,0 +1,30 @@
+name: Accessibility barrier
+description: Something stops you, or someone you support, from using Rangka with a keyboard, screen reader, zoom or other assistive technology.
+labels: [accessibility, bug]
+body:
+  - type: input
+    id: screen
+    attributes:
+      label: Screen
+      description: The page or URL, such as /app/ list of invoices or the POS counter.
+    validations:
+      required: true
+  - type: textarea
+    id: barrier
+    attributes:
+      label: What you tried and what happened
+      description: What you wanted to do, what you did, and where it stopped working.
+    validations:
+      required: true
+  - type: input
+    id: tech
+    attributes:
+      label: Browser and assistive technology
+      placeholder: Chrome 131 on Windows 11 with NVDA 2025.3
+    validations:
+      required: true
+  - type: textarea
+    id: more
+    attributes:
+      label: Anything else
+      description: Screenshots, a recording, or what would work better for you.

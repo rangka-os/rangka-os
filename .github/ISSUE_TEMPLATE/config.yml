@@ -1,0 +1,11 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Report a security vulnerability
+    url: https://github.com/rangka-os/rangka-os/security/advisories/new
+    about: Report security problems privately, never in a public issue. See SECURITY.md.
+  - name: Documentation
+    url: https://rangka-os.github.io/rangka-os/
+    about: Guides, the .rk reference and the roadmap.
+  - name: Apps, connectors, Raka or the edge agent
+    url: https://github.com/rangka-os
+    about: Modules and apps live in rangka-apps, integrations in rangka-connectors, Raka in rangka-ai, the outlet agent in rangka-edge.

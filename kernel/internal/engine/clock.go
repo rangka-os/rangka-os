@@ -68,22 +68,29 @@ func (e *Engine) clockFieldsOf(m *meta.Model, visiting map[*meta.Model]bool) map
 // refreshClock recomputes the clock computes of rec and of its child rows in place. children tells whether
 // rec carries its child rows (a list read without children has empty tables): without them, computes that
 // read a table are left as stored.
+// A compute whose link load fails is zero and the rest are still refreshed, so rec is never left half
+// refreshed (audit kernel fix 1111 O6).
 func (e *Engine) refreshClock(ctx context.Context, a Actor, m *meta.Model, rec store.Record, children bool, links map[string]map[string]any) {
-	_ = e.refreshClockErr(ctx, a, m, rec, children, links)
+	_ = e.refreshClockMode(ctx, a, m, rec, children, links, false)
 }
 
 // refreshClockErr is refreshClock that stops on a database error met while a compute loads a linked record
 // (rec is then partly refreshed and must not be used); an expression error still leaves the field zero.
 func (e *Engine) refreshClockErr(ctx context.Context, a Actor, m *meta.Model, rec store.Record, children bool, links map[string]map[string]any) error {
+	return e.refreshClockMode(ctx, a, m, rec, children, links, true)
+}
+
+// refreshClockMode is refreshClockErr (strict) or refreshClock.
+func (e *Engine) refreshClockMode(ctx context.Context, a Actor, m *meta.Model, rec store.Record, children bool, links map[string]map[string]any, strict bool) error {
 	clock := e.clockFields(m)
 	if len(clock) == 0 && !(children && e.hasClockRows(m)) {
 		return nil
 	}
 	s := e.newScope(ctx, e.DB, a, m, rec, links)
-	return s.refreshClock(clock, children)
+	return s.refreshClock(clock, children, strict)
 }
 
-func (s *scope) refreshClock(clock map[string]bool, children bool) error {
+func (s *scope) refreshClock(clock map[string]bool, children, strict bool) error {
 	tables := map[string]bool{}
 	for _, f := range s.m.Fields {
 		if f.Type != "table" {
@@ -101,7 +108,7 @@ func (s *scope) refreshClock(clock map[string]bool, children bool) error {
 		for _, row := range rows(s.rec[f.Name]) {
 			child := s.e.newScope(s.ctx, s.q, s.actor, cm, row, s.links)
 			child.parent = s
-			if err := child.refreshClock(cc, children); err != nil {
+			if err := child.refreshClock(cc, children, strict); err != nil {
 				return err
 			}
 		}
@@ -114,7 +121,7 @@ func (s *scope) refreshClock(clock map[string]bool, children bool) error {
 			continue
 		}
 		v, err := s.eval(f.Compute)
-		if err != nil && isLoadError(err) {
+		if err != nil && strict && isLoadError(err) {
 			return err
 		}
 		if err != nil || v == nil {

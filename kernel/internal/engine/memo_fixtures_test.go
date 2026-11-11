@@ -30,5 +30,6 @@ naming: MC-{#####}
 fields:
   - {name: customer, type: link, to: customer, label: {id: Pelanggan}}
   - {name: city_today, type: data, label: {id: Kota hari ini}, compute: "today() != '' ? customer.city : ''"}
+  - {name: day, type: data, label: {id: Hari ini}, compute: "today() != '' ? 'ada' : ''"}
 `,
 }

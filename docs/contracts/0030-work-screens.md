@@ -269,8 +269,8 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 `rental_return`, `queue` + `entry` for `work_order` and `production_batch`.
 
 ### 10. Kernel facts found by the cashier work (8 Nov)
-- **Links to a submittable record break on submit.** Submitting renames `DRAFT-…` to the series number, and links held
-  by other records are not rewritten. Until the kernel rewrites them (or numbers on create), a record that others link
+- **Links to a submittable record broke on submit** (fixed 11 Nov: submit now rewrites links to the draft, 0009 §4).
+  The rule below stays for its other reasons (a submitted record is immutable, so an open shift cannot change): a record that others link
   to while it is open (a shift, a route day, a site visit) must not be submittable; its closing is a separate
   submittable document (`session.close.model`). Same rule for `clock` (an `attendance_log` is linked by nothing) and
   `route` visits.

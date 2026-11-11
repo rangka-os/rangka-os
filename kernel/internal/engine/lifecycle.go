@@ -748,6 +748,13 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if err := store.RenameRecordApprovals(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
 			return nil, err
 		}
+		// links to the draft (fields and child rows of any model) follow it, so none is left on a name that is gone
+		if err := store.RenameRecordLinks(o.ctx, o.tx, e.Reg(), a.Org, m.Name, name, newName); err != nil {
+			return nil, err
+		}
+		for k := range o.links { // a link loaded under the draft name is stale now
+			delete(o.links, k)
+		}
 	}
 	if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
 		return nil, err

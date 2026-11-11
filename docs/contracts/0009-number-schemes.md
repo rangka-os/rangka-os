@@ -93,6 +93,9 @@ A series must repeat its reset period in the number, or numbers collide: `reset:
 ### 4. Allocation
 - The number is taken when a submittable document is submitted (drafts keep `DRAFT-xxxxx`), or on create for
   non-submittable models, inside the same transaction as the write.
+- In that transaction every link to the draft is rewritten to the number (link fields of any installed model,
+  child rows and `x_` custom link fields; `store.RenameRecordLinks`), like its attachments (0011) and approvals
+  (0007). The linking records are not saved again: no hooks, flows or `modified_at` change.
 - Counters live in `rk_number_series (org_id, series, period, last)`. `period` is `""` (never), `2026` (yearly)
   or `2026-11` (monthly), from the submit time in the site timezone.
 - **Gap-free:** the counter row is incremented with `insert … on conflict do update` in the document's

@@ -432,7 +432,9 @@ func (v *validator) site(all map[string]vis) {
 		c := s.Config
 		plan, _ := c["plan"].(string)
 		var allowed []string
-		hasAllowed := plan != "" && plans[plan]
+		// A plan limits apps only when it (or a plan it extends) lists apps or modules: one that lists neither
+		// allows every app, as it allows every module (planModules, contract 0032 §6).
+		hasAllowed := plan != "" && plans[plan] && v.reg.planModules(s.Features, plan) != nil
 		if hasAllowed {
 			allowed = planApps(s.Features, plan)
 		}

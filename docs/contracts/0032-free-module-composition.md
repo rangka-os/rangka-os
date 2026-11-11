@@ -82,7 +82,7 @@ rangka-apps · Builds on: 0001, 0015, 0016, 0028
 6. **Plans (0028).**
    - `features.rk` plans gain an optional `modules: [...]`. The modules a plan allows are its `modules` plus the
      closure of its `apps`, following `extends`.
-   - A plan with neither key allows every module. Juragan's per-outlet plans list neither.
+   - A plan with neither key allows every module and every app. Juragan's per-outlet plans list neither.
    - `module_not_in_plan` works like `app_not_in_plan`: it is checked when `config.rk` changes, not on
      `rangka plan set`.
    - The enforced limits of 0028 (`outlets`, `users`, `ai_credits_month`) do not depend on the composition. The

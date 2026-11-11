@@ -1311,7 +1311,9 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
     company = [SITE_UNIT] if SITE_UNIT in apps and apps[SITE_UNIT]["kind"] == "site" else []
     if cp:
         plan = cfg.get("plan")
-        allowed = plan_info(features[1], plan) if plan and plan in plans else None
+        # a plan that lists neither apps nor modules limits no app, as it limits no module (plan_modules)
+        limits = plan and plan in plans and plan_modules(apps, features[1], plan) is not None
+        allowed = plan_info(features[1], plan) if limits else None
         if plan and features[0] and plan not in plans:
             rep.add("error", cp, "plan", "unknown_plan", f'plan "{plan}" is not in features.rk{suggest(plan, plans)}')
         listed_apps, listed_mods = isinstance(cfg.get("apps"), list), isinstance(cfg.get("modules"), dict)

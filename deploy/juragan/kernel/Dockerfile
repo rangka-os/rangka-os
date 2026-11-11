@@ -5,7 +5,7 @@
 ARG RANGKA_IMAGE
 FROM ${RANGKA_IMAGE} AS rangka
 
-FROM debian:12.13-slim
+FROM debian:12.15-slim
 # chromium: PDF output. fonts-noto-core: Latin text (Indonesian needs nothing more). ca-certificates: OIDC/HTTPS calls.
 RUN apt-get update \
  && apt-get install -y --no-install-recommends chromium fonts-noto-core ca-certificates \

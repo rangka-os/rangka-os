@@ -26,7 +26,7 @@ build:
 test:
 	@URL=$$(PGTEMP_STATE=.pgtemp-test scripts/pgtemp.sh start) || exit 1; \
 	echo "temporary postgres: $$URL"; \
-	RANGKA_TEST_DATABASE_URL="$$URL" $(GO) test -count=1 ./...; rc=$$?; \
+	RANGKA_WORKSPACE="$(WS)" RANGKA_TEST_DATABASE_URL="$$URL" $(GO) test -count=1 ./...; rc=$$?; \
 	PGTEMP_STATE=.pgtemp-test scripts/pgtemp.sh stop; exit $$rc
 
 # Tests that need no database (DB tests skip).

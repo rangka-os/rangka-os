@@ -138,7 +138,9 @@ scope: {field: outlet, from: user.outlets}
   - a `filter` the caller supplies (list, aggregate, MCP `rangka_query`, export) that walks a link reads a
     record the member could not read with `GET /api/v1/r/{model}/{name}` as a missing one (only `name`, the
     stored code, is set), on every hop; a database error while loading it fails the expression (the row is left
-    out), it never reads as missing. The `filter` of a print format's related list runs the same way, as the
+    out), it never reads as missing. The same holds while deciding whether that record is readable: a database
+    error in a read grant's `if:` or in a clock compute of the linked record fails the expression too (an
+    `if:` that cannot be evaluated still counts as false). The `filter` of a print format's related list runs the same way, as the
     caller's filter, so a member may see a shorter related list than the owner. Other expressions in metadata
     (permission `if:`, compute, hooks, flows, dashboard widget filters) are not limited; a change set preview,
     which evaluates new ones, is therefore refused to a member with a row scope.

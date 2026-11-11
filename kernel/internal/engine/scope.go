@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"math/big"
 	"sort"
 
@@ -171,13 +172,13 @@ func (s *scope) link(model, name string) *cel.Link {
 			var err error
 			rec, _, err = s.e.readableLinkErr(s.ctx, s.actor, s.rs, model, name, s.links)
 			if err != nil {
-				return nil, err
+				return nil, &loadError{err}
 			}
 		} else {
 			var err error
 			rec, err = store.Get(s.ctx, s.q, s.e.Reg(), s.org, tm, name)
 			if err != nil && err != store.ErrNotFound {
-				return nil, err
+				return nil, &loadError{err}
 			}
 		}
 		if rec == nil {
@@ -229,6 +230,20 @@ func (s *scope) clientRows(f *meta.Field, l []any) []any {
 
 // eval evaluates src in this scope.
 func (s *scope) eval(src string) (any, error) { return cel.Eval(src, s.env()) }
+
+// loadError is a database error while an expression loads a linked record. It is not an expression error:
+// callers that read a failed expression as false (a grant's if:, a clock compute) pass it on instead, so a
+// client filter fails rather than reading the record as missing (contract 0010 §5).
+type loadError struct{ err error }
+
+func (e *loadError) Error() string { return e.err.Error() }
+func (e *loadError) Unwrap() error { return e.err }
+
+// isLoadError reports whether err comes from loading a linked record (see loadError).
+func isLoadError(err error) bool {
+	var le *loadError
+	return errors.As(err, &le)
+}
 
 // ---------- defaults, compute
 

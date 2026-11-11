@@ -69,15 +69,21 @@ func (e *Engine) clockFieldsOf(m *meta.Model, visiting map[*meta.Model]bool) map
 // rec carries its child rows (a list read without children has empty tables): without them, computes that
 // read a table are left as stored.
 func (e *Engine) refreshClock(ctx context.Context, a Actor, m *meta.Model, rec store.Record, children bool, links map[string]map[string]any) {
-	clock := e.clockFields(m)
-	if len(clock) == 0 && !(children && e.hasClockRows(m)) {
-		return
-	}
-	s := e.newScope(ctx, e.DB, a, m, rec, links)
-	s.refreshClock(clock, children)
+	_ = e.refreshClockErr(ctx, a, m, rec, children, links)
 }
 
-func (s *scope) refreshClock(clock map[string]bool, children bool) {
+// refreshClockErr is refreshClock that stops on a database error met while a compute loads a linked record
+// (rec is then partly refreshed and must not be used); an expression error still leaves the field zero.
+func (e *Engine) refreshClockErr(ctx context.Context, a Actor, m *meta.Model, rec store.Record, children bool, links map[string]map[string]any) error {
+	clock := e.clockFields(m)
+	if len(clock) == 0 && !(children && e.hasClockRows(m)) {
+		return nil
+	}
+	s := e.newScope(ctx, e.DB, a, m, rec, links)
+	return s.refreshClock(clock, children)
+}
+
+func (s *scope) refreshClock(clock map[string]bool, children bool) error {
 	tables := map[string]bool{}
 	for _, f := range s.m.Fields {
 		if f.Type != "table" {
@@ -95,7 +101,9 @@ func (s *scope) refreshClock(clock map[string]bool, children bool) {
 		for _, row := range rows(s.rec[f.Name]) {
 			child := s.e.newScope(s.ctx, s.q, s.actor, cm, row, s.links)
 			child.parent = s
-			child.refreshClock(cc, children)
+			if err := child.refreshClock(cc, children); err != nil {
+				return err
+			}
 		}
 	}
 	for _, f := range computeOrder(s.m) {
@@ -106,6 +114,9 @@ func (s *scope) refreshClock(clock map[string]bool, children bool) {
 			continue
 		}
 		v, err := s.eval(f.Compute)
+		if err != nil && isLoadError(err) {
+			return err
+		}
 		if err != nil || v == nil {
 			s.rec[f.Name] = store.Zero(f)
 			continue
@@ -120,6 +131,7 @@ func (s *scope) refreshClock(clock map[string]bool, children bool) {
 		s.rec[f.Name] = c
 		s.settleOwn()
 	}
+	return nil
 }
 
 // hasClockRows tells whether a table of m has rows with clock computes (m itself may have none: a worker whose

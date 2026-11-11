@@ -34,10 +34,12 @@ Match by the app's title and summary and by the owner's words (see `rangka-conce
 | an `available` app covers it | Explain it (step 3), then propose adding it (step 4). |
 | a `not_in_plan` app covers it | Say it exists and their plan does not include it. Do not propose it. Tell them to change the plan with Juragan (an operator does it). |
 | nothing covers it, in the studio | Say which part nothing covers, then design it as a `custom` piece on the map (`rangka-consult`). Money and stock records stay in core modules. |
+| no app covers it, but the modules it needs are installed or available, in the console | Compose a custom app from those modules (step 4, "Custom app"). Do not send the owner to an operator. |
 | nothing covers it, in the console | Say which part nothing covers. Draft company pieces (site `models/x_*`, `flows/`, overlays; 0016, 0033) only once contract 0033 is accepted; until then name the gap plainly and change nothing. |
 
 Only two gaps are real in either place: a system with no usable API, and edge hardware with no edge module. Never
-draft a fake app or module.
+draft a fake module or model, and never name an app that is neither in the catalogue nor created in the same change
+set. A custom app made only of real modules is not fake.
 
 ## 3. Explain what it shares before proposing
 
@@ -68,6 +70,21 @@ Adding or removing an app is one patch on `config.rk`, judged medium risk by the
 3. Validate and preview. `app_not_in_plan` means the catalogue's `not_in_plan` was right: drop the change set and
    tell the owner (step 2's table).
 4. Tell the owner what you prepared, never that it is done (`rangka-changesets`, "Telling the owner").
+
+Custom app (step 2: no catalogue app covers it, the modules do). An app is only `apps/<name>/app.rk` composing modules,
+so one change set creates it and lists it:
+
+```json
+{"title": "Tambah aplikasi Kasir", "reason": "Pemilik minta kasir; katalog tidak punya aplikasinya",
+ "ops": [
+  {"op": "create", "path": "apps/kasir_toko/app.rk", "content": "name: kasir_toko\nversion: 1.0.0\ntitle: {id: Kasir, en: Cashier}\nmodules: {pos: ^1.0, stock: ^1.3}\nmenu:\n  - group: {id: Kasir, en: Cashier}\n    items: [pos_sale, pos_shift]\nhome: {model: pos_sale}\n"},
+  {"op": "patch", "path": "config.rk", "patch": [{"op": "add", "path": "/apps/-", "value": "kasir_toko"}]}]}
+```
+
+- Use a snake_case name that no catalogue app has.
+- List only real modules, each with `^major.minor` read from its `modules/<m>/module.rk`. Menu items and `home` are
+  models of those modules.
+- `unknown_app` means the app.rk is missing from the change set. `app_not_in_plan` works as above.
 
 Removing an app: only when the owner asks explicitly. Modules other installed apps still use stay installed; data is
 never deleted, but the owner must hear that its screens disappear.

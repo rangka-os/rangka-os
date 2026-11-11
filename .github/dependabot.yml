@@ -1,0 +1,45 @@
+# Dependabot version updates: weekly, minor and patch grouped per ecosystem to keep the PR count low.
+# Security updates are separate and arrive as soon as an advisory is published.
+version: 2
+updates:
+  - package-ecosystem: gomod
+    directory: /kernel
+    schedule: { interval: weekly, day: monday }
+    groups:
+      go-minor-patch:
+        update-types: [minor, patch]
+    commit-message: { prefix: "kernel" }
+
+  - package-ecosystem: npm
+    directory: /website
+    schedule: { interval: weekly, day: monday }
+    groups:
+      website-minor-patch:
+        update-types: [minor, patch]
+    commit-message: { prefix: "website" }
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule: { interval: weekly, day: monday }
+    groups:
+      actions:
+        patterns: ["*"]
+    commit-message: { prefix: "ci" }
+
+  # Base images. Majors are ignored: Rangka targets PostgreSQL 16 and the Go version in kernel/go.mod.
+  - package-ecosystem: docker
+    directories:
+      - /deploy
+      - /deploy/juragan/backup
+      - /deploy/juragan/kernel
+      - /deploy/juragan/local
+      - /deploy/juragan/host/backup
+      - /deploy/juragan/host/kernel
+    schedule: { interval: weekly, day: monday }
+    ignore:
+      - dependency-name: "*"
+        update-types: [version-update:semver-major]
+    groups:
+      docker:
+        patterns: ["*"]
+    commit-message: { prefix: "deploy" }

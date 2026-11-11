@@ -2,7 +2,9 @@ package engine
 
 import (
 	"errors"
+	"strings"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -140,4 +142,53 @@ func renameLinksIn(reg *meta.Registry, rm *meta.Model, rec store.Record, model, 
 		}
 	}
 	return changed
+}
+
+// forgetLinks updates the unit of work's link cache for the rename of model's record from to to: the record under
+// its draft name is dropped, and cached records that link it get the new name in place (link fields, x_ links,
+// child rows), as RenameRecordLinks did in the database. Nothing else is read again: the computes a hook
+// recomputes later in the submit (stock cogs set on a row) read linked records as the submit read them, never a
+// commit another transaction made meanwhile, so a value like delivery_note.credit_over_seen keeps meaning "the
+// approval policy matched" (card t_48e24a91; audit credit-race 1: dropping a whole referrer model's entries let a
+// customer with a link back to deliveries be read again).
+func (o *op) forgetLinks(model, from, to string) {
+	reg := o.e.Reg()
+	for k, out := range o.links {
+		client := strings.HasPrefix(k, "client:")
+		lm, ln, _ := strings.Cut(strings.TrimPrefix(k, "client:"), "/")
+		if lm == model && ln == from {
+			delete(o.links, k)
+			continue
+		}
+		rm := reg.Model(lm)
+		if rm == nil || !linksTo(reg, rm, model) {
+			continue
+		}
+		if client { // a client filter's view is built per call; none is kept by a submit
+			delete(o.links, k)
+			continue
+		}
+		s := o.scope(rm, nil)
+		for _, f := range rm.Fields {
+			switch {
+			case f.Type == "link" && f.To == model:
+				if l, ok := out[f.Name].(*cel.Link); ok && l.Name == from {
+					out[f.Name] = s.link(model, to)
+				}
+			case f.Type == "table":
+				cm := reg.Model(f.Of)
+				if cm == nil {
+					continue
+				}
+				l, _ := out[f.Name].([]any)
+				for _, row := range rows(l) {
+					for _, cf := range cm.Fields {
+						if cf.Type == "link" && cf.To == model && str(row[cf.Name]) == from {
+							row[cf.Name] = to
+						}
+					}
+				}
+			}
+		}
+	}
 }

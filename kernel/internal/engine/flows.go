@@ -52,7 +52,49 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 	if f := e.Reg().Flows[flowName]; f != nil && flowConnector(e, f) != "" && !a.System && !hasAnyRole(a, []string{"owner"}) {
 		return nil, Denied("flow", "run")
 	}
+	// a flow on <model>.<event> trusts its event as what the kernel saw happen to a record: run by hand by someone
+	// other than the owner, the event is rebuilt from the stored record event.name names (read with the caller's
+	// rights), never taken from the body, so a member cannot feed a flow values the record does not hold
+	if f := e.Reg().Flows[flowName]; f != nil && !a.System && !hasAnyRole(a, []string{"owner"}) {
+		if m, op, ok := flowModelEvent(e, f); ok {
+			ev, err := e.manualRecordEvent(ctx, a, m, op, event)
+			if err != nil {
+				return nil, err
+			}
+			event = ev
+		}
+	}
 	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
+}
+
+// flowModelEvent splits a flow's on: <model>.<event> (ok false for connector events and flows without on:).
+func flowModelEvent(e *Engine, f *meta.Flow) (model, op string, ok bool) {
+	head, tail, cut := strings.Cut(f.On, ".")
+	if !cut || e.Reg().Models[head] == nil {
+		return "", "", false
+	}
+	return head, tail, true
+}
+
+// manualRecordEvent is the event a hand-started run of a <model>.<op> flow gets for a non-owner: the shape
+// recordFlows gives (fields at top level, model, name, op, record) built from the record body's name names, with
+// before null. Any other key in the body is dropped.
+func (e *Engine) manualRecordEvent(ctx context.Context, a Actor, model, op string, body map[string]any) (map[string]any, error) {
+	name, _ := body["name"].(string)
+	if name == "" {
+		return nil, &StatusError{422, "event_name", "flow " + model + "." + op + ": event.name (nama " + model + ") wajib diisi"}
+	}
+	rec, err := e.Get(ctx, a, model, name)
+	if err != nil {
+		return nil, err
+	}
+	ev := map[string]any{}
+	for k, v := range rec {
+		ev[k] = v
+	}
+	ev["model"], ev["name"], ev["op"] = model, str(rec["name"]), op
+	ev["record"], ev["before"] = map[string]any(copyRecord(rec)), nil
+	return ev, nil
 }
 
 // RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (the

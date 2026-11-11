@@ -93,6 +93,14 @@ func (e *Engine) manualRecordEvent(ctx context.Context, a Actor, model, op strin
 	if err != nil {
 		return nil, err
 	}
+	// the record must be in the state the event says happened: a .cancelled flow for a live document, or a
+	// .submitted one for a draft, would act on an event that did not happen (audit kernel-aman 2)
+	if m := e.Reg().Model(model); m != nil && m.IsSubmittable {
+		want := map[string]int64{"submitted": 1, "cancelled": 2}
+		if ds, ok := want[op]; ok && toInt(rec["docstatus"]) != ds {
+			return nil, conflict("event_state", fmt.Sprintf("flow %s.%s: %s %s tidak dalam keadaan %s", model, op, model, name, op))
+		}
+	}
 	ev := map[string]any{}
 	for k, v := range rec {
 		ev[k] = v
@@ -223,6 +231,11 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	if r.key != "" { // the documents this run made: the key is free again once none of them is alive
 		docs := append([]string{}, out.Created...)
 		waiting := out.WaitingJob != 0 || out.WaitingApproval != ""
+		if waiting && (len(out.Updated) > 0 || len(out.Calls) > 0) {
+			// the run changed records or called out before it waits: releasing it later must not free the key,
+			// or the same event would apply those again (audit kernel-aman 1)
+			docs = append(docs, flowKeyActed)
+		}
 		if err := store.AddFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, docs, start == 0, waiting, flowKeyMarker(r.token)); err != nil {
 			return err
 		}
@@ -283,6 +296,10 @@ const flowKeyPending = "flow:pending"
 // request's "flow_key" arg, where an as: cannot overwrite it (audit flowkey-release N2). Runs that waited before
 // that still resume with it.
 const flowKeyVar = "_idempotency_key"
+
+// flowKeyActed stays in a key's documents once a run updated records or made calls before it waited: the key is
+// then held for good, whatever becomes of its run (a release only drops the pending marker).
+const flowKeyActed = "flow:acted"
 
 // flowKeyArg is the job and approval arg holding a waiting run's key: {"key": ..., "token": ...}.
 const flowKeyArg = "flow_key"
@@ -348,7 +365,7 @@ func (e *Engine) ReleaseFlowJob(ctx context.Context, org string, args map[string
 func (r *flowRun) anyAlive(docs []string) (bool, error) {
 	var sub []string
 	for _, d := range docs {
-		if strings.HasPrefix(d, flowKeyPending) {
+		if strings.HasPrefix(d, "flow:") { // a waiting run, or a run that acted before it waited
 			return true, nil
 		}
 		mn, _, _ := strings.Cut(d, "/")

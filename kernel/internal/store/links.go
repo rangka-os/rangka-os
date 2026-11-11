@@ -3,7 +3,6 @@ package store
 import (
 	"context"
 	"fmt"
-	"sort"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -138,12 +137,13 @@ func LiveReferrer(ctx context.Context, q pg.Querier, reg *meta.Registry, org, mo
 		if len(cand) == 0 {
 			continue
 		}
-		if !rm.IsSubmittable {
-			sort.Strings(cand)
-			return rm.Name, cand[0], true, nil
+		// a child table shared by two parent models gives names of both: keep only rm's own, live records
+		live := ""
+		if rm.IsSubmittable {
+			live = " and docstatus <> 2"
 		}
-		res, err := q.Query(ctx, fmt.Sprintf("select name from %s where org_id = $1 and name = any($2) and docstatus <> 2 order by name limit 1",
-			pg.QuoteIdent(TableName(rm.Name))), org, pg.Array(cand))
+		res, err := q.Query(ctx, fmt.Sprintf("select name from %s where org_id = $1 and name = any($2)%s order by name limit 1",
+			pg.QuoteIdent(TableName(rm.Name)), live), org, pg.Array(cand))
 		if err != nil {
 			return "", "", false, fmt.Errorf("live links to %s in %s: %w", model, rm.Name, err)
 		}

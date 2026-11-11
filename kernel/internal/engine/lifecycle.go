@@ -653,11 +653,16 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if rm, rn, ok, err := store.LiveReferrer(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m.Name, name); err != nil {
 			return err
 		} else if ok {
-			label := rm
-			if x := o.e.Reg().Model(rm); x != nil && x.Label.Text() != "" {
-				label = x.Label.Text()
+			// name the referrer only to someone who may read it (audit kernel-aman 4)
+			what := "record lain"
+			if o.authorizeRead(rm, rn) == nil {
+				label := rm
+				if x := o.e.Reg().Model(rm); x != nil && x.Label.Text() != "" {
+					label = x.Label.Text()
+				}
+				what = label + " " + rn
 			}
-			return conflict("linked", fmt.Sprintf("Tidak bisa dihapus: masih dipakai di %s %s. Lepaskan dulu tautannya, batalkan dokumen itu, atau biarkan record ini tetap ada", label, rn))
+			return conflict("linked", fmt.Sprintf("Tidak bisa dihapus: masih dipakai di %s. Lepaskan dulu tautannya, batalkan dokumen itu, atau biarkan record ini tetap ada", what))
 		}
 		if err := store.Delete(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name); err != nil {
 			return err

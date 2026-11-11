@@ -162,9 +162,36 @@ func XMLFuncs(asOf time.Time) template.FuncMap {
 	}
 	fm["label"] = func(string) string { return "" }
 	fm["option"] = func(string, any) string { return "" }
+	// A tax file never turns a value that is not a number into 0 or "": the number helpers fail the render (500,
+	// nothing sent, detail in the log) on a non-empty operand they cannot read; nil and "" still count as 0 / "".
+	fm["add"] = func(vs ...any) (string, error) { return Add(vs...), numbers(vs...) }
+	fm["mul"] = func(vs ...any) (string, error) { return Mul(vs...), numbers(vs...) }
+	fm["div"] = func(a, b any) (string, error) { return Div(a, b), numbers(a, b) }
+	fm["sub"] = func(a, b any) (string, error) { return Sub(a, b), numbers(a, b) }
+	fm["round"] = func(v any, n ...int) (string, error) { return Round(v, n...), numbers(v) }
+	fm["dec"] = func(v any, n ...int) (string, error) { return Dec(v, n...), numbers(v) }
 	fm[xmlEscaperName] = xmlText
 	return fm
 }
+
+// numbers fails on the first operand that is set but is not a number (audit pajak 7 Nov #10).
+func numbers(vs ...any) error {
+	for _, v := range vs {
+		if v == nil {
+			continue
+		}
+		if s, ok := v.(string); ok && strings.TrimSpace(s) == "" {
+			continue
+		}
+		if _, ok := toRat(v); !ok {
+			return fmt.Errorf("%w: %q is not a number", ErrNotNumber, fmt.Sprint(v))
+		}
+	}
+	return nil
+}
+
+// ErrNotNumber is the render error of a number helper given a value it cannot read.
+var ErrNotNumber = errors.New("xml: not a number")
 
 // ParseXMLTemplate parses src as an XML format's template and appends the XML escaper to every action that
 // writes output (an action without a variable declaration or assignment), the way html/template escapes HTML.

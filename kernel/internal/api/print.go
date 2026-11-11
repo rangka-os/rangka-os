@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net/http"
 	"net/url"
 	"regexp"
@@ -75,7 +76,7 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 		writeError(w, http.StatusBadRequest, "bad_request", "as harus html atau pdf")
 		return
 	}
-	related, truncated, err := s.printRelated(ctx, c.actor, f, rec, false)
+	related, truncated, _, err := s.printRelated(ctx, c.actor, f, rec, false)
 	if err != nil {
 		fail(w, err)
 		return
@@ -195,24 +196,44 @@ func (s *Server) printLinks(ctx context.Context, a engine.Actor, m *meta.Model, 
 // matching rows than the limit.
 // With export true (an XML file, contract 0029) the rows are the ones the caller may export (Engine.Export), so a
 // tax file never carries rows its reader could not download as a list.
-func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record, export bool) (out map[string][]map[string]any, truncated map[string]bool, err error) {
-	out, truncated = map[string][]map[string]any{}, map[string]bool{}
+func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print, rec store.Record, export bool) (out map[string][]map[string]any, truncated map[string]bool, missing map[string]int, err error) {
+	out, truncated, missing = map[string][]map[string]any{}, map[string]bool{}, map[string]int{}
 	for key, rel := range f.Related {
 		list := []map[string]any{}
 		out[key] = list
 		filter, ok, err := relatedFilter(rel, rec)
 		if err != nil {
-			return nil, nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
+			return nil, nil, nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
 		}
 		if !ok {
 			continue // the document has no value to match on
 		}
 		opts := engine.ListOpts{Filter: filter, Sort: rel.Sort, Limit: rel.Limit, Children: rel.Children}
+		keep := func(row store.Record) bool { // defence in depth: the filter already holds these
+			return matches(row, rec, rel.Match) && inRange(row, rec, rel.Range)
+		}
 		var rows []store.Record
 		var total int
 		if export {
 			_, rows, _, err = s.Engine.Export(ctx, a, rel.Model, opts)
 			if err == nil {
+				// every row the list holds for the kernel, with the same options and the same defence-in-depth check:
+				// the rows the caller lost to their row scope or an if: of their grants (contract 0029 §4, export_partial)
+				var all []store.Record
+				all, _, err = s.Engine.List(ctx, engine.Actor{Org: a.Org, ID: "system", System: true}, rel.Model,
+					engine.ListOpts{Filter: filter, Sort: rel.Sort, Limit: math.MaxInt32, Children: rel.Children})
+				n := 0
+				for _, r := range all {
+					if keep(r) {
+						n++
+					}
+				}
+				for _, r := range rows {
+					if keep(r) {
+						n--
+					}
+				}
+				missing[key] = n
 				total = len(rows)
 				if len(rows) > rel.Limit {
 					rows = rows[:rel.Limit]
@@ -222,17 +243,17 @@ func (s *Server) printRelated(ctx context.Context, a engine.Actor, f *meta.Print
 			rows, total, err = s.Engine.List(ctx, a, rel.Model, opts)
 		}
 		if err != nil {
-			return nil, nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
+			return nil, nil, nil, fmt.Errorf("print %s: related %s: %w", f.Name, key, err)
 		}
 		truncated[key] = total > len(rows)
 		for _, row := range rows {
-			if matches(row, rec, rel.Match) && inRange(row, rec, rel.Range) { // defence in depth: the filter already holds these
+			if keep(row) {
 				list = append(list, row)
 			}
 		}
 		out[key] = list
 	}
-	return out, truncated, nil
+	return out, truncated, missing, nil
 }
 
 var celIdent = regexp.MustCompile(`^[A-Za-z_][A-Za-z0-9_]*$`)
@@ -317,6 +338,26 @@ func inRange(row, doc store.Record, rng map[string][2]string) bool {
 // maxProblems caps the problems a 422 export_invalid lists (contract 0029 §4).
 const maxProblems = 100
 
+// refusePartial refuses an XML file (422 export_partial) when a related list lost rows to the caller's row scope or
+// an if: of their read or export grant (missing, from printRelated): a tax file must hold every document of its
+// period, and a caller who may see only part of them gets no file rather than a partial one that looks complete
+// (audit pajak 7 Nov #11). Only the count is told; nothing of those rows reaches the caller.
+func refusePartial(w http.ResponseWriter, f *meta.Print, missing map[string]int) bool {
+	keys := make([]string, 0, len(f.Related))
+	for k := range f.Related {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		if n := missing[key]; n > 0 {
+			writeError(w, http.StatusUnprocessableEntity, "export_partial",
+				fmt.Sprintf("%d dokumen untuk file ini (%s) tidak boleh kamu lihat atau unduh, jadi filenya tidak lengkap. Minta pemilik usaha atau peran yang boleh melihat semuanya mengunduhnya.", n, key))
+			return true
+		}
+	}
+	return false
+}
+
 // refuseInvalid checks every related row against its list's require checks (contract 0029 §4) and, when one
 // fails, writes 422 export_invalid with the problems in list order and returns true. A check that errors fails.
 func (s *Server) refuseInvalid(w http.ResponseWriter, ctx context.Context, c *caller, f *meta.Print, rec store.Record, related map[string][]map[string]any) bool {
@@ -367,7 +408,7 @@ func (s *Server) printXML(w http.ResponseWriter, r *http.Request, c *caller, rec
 	}
 	reg := s.Engine.Reg()
 	m := reg.Model(model)
-	related, truncated, err := s.printRelated(ctx, c.actor, f, rec, true)
+	related, truncated, missing, err := s.printRelated(ctx, c.actor, f, rec, true)
 	if err != nil {
 		fail(w, err)
 		return
@@ -378,6 +419,9 @@ func (s *Server) printXML(w http.ResponseWriter, r *http.Request, c *caller, rec
 				fmt.Sprintf("Terlalu banyak dokumen untuk satu file (%s, maksimal %d). Pecah masanya atau hubungi admin.", key, f.Related[key].Limit))
 			return
 		}
+	}
+	if refusePartial(w, f, missing) {
+		return
 	}
 	if s.refuseInvalid(w, ctx, c, f, rec, related) {
 		return

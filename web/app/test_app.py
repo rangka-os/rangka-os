@@ -1736,6 +1736,35 @@ def test_grid_item_search(page, ctx):
     page.wait_for_function("(t) => (document.querySelector('.rk-totals b.grand') || {}).textContent !== 'Rp 0'", arg=None, timeout=5000)
 
 
+def test_link_hides_inactive(page, ctx):
+    """A master switched off (active false; it cannot be deleted while records use it) is not offered by a link
+    picker, but a line that already holds it keeps showing it (rangka-os card t_45f9c276). The temp catalogue gives
+    item an active check field (enable_item_active)."""
+    h = Http(ctx.base).login(*ctx.owner)
+    tag = str(int(time.time() * 1000))[-6:]
+    st, on = h.call("POST", "/api/v1/r/item", {"item_name": f"Teh Saring {tag} Hidup", "uom": "Pcs", "rate": 1000})
+    assert st == 201, f"create item {st} {on}"
+    st, off = h.call("POST", "/api/v1/r/item", {"item_name": f"Teh Saring {tag} Mati", "uom": "Pcs", "rate": 1000, "active": False})
+    assert st == 201, f"create inactive item {st} {off}"
+    st, draft = h.call("POST", "/api/v1/r/sales_invoice", {"customer": "CUST-0047", "outlet": "OUT-01", "items": [{"item": off["name"], "qty": 1}]})
+    assert st == 201, f"draft with the inactive item {st} {draft}"
+    reqs = watch_requests(page)
+    open_route(page, ctx, "#/r/sales_invoice/" + draft["name"])
+    wait_form(page)
+    first = page.get_by_role("combobox", name="Barang baris 1")
+    first.wait_for(timeout=10000)
+    page.wait_for_function("(t) => (document.querySelector('[role=combobox][aria-label=\"Barang baris 1\"]') || {}).value === t",
+                           arg=f"Teh Saring {tag} Mati", timeout=10000)
+    page.get_by_role("button", name="Tambah baris").click()
+    box = page.get_by_role("combobox", name="Barang baris 2")
+    box.click()
+    box.press_sequentially(f"saring {tag}", delay=20)
+    page.locator(f'[role=option][data-value="{on["name"]}"]').wait_for(timeout=10000)
+    assert page.locator(f'[role=option][data-value="{off["name"]}"]').count() == 0, "the inactive item is offered"
+    assert any(m == "GET" and re.search(r"/api/v1/r/item\?.*filter=active != false", u) for m, u in reqs), \
+        f"the picker filters active: {[u for m, u in reqs if '/r/item' in u]}"
+
+
 def test_double_submit_sends_one_request(page, ctx):
     posts = []
     page.on("request", lambda r: posts.append(r.url) if r.method == "POST" and re.search(r"/api/v1/r/lead$", r.url) else None)
@@ -3054,6 +3083,15 @@ def enable_approval_policy(site):
     return True
 
 
+def enable_item_active(apps):
+    """Give the temp catalogue's item an active check field (masters that can be switched off, rangka-apps#63)."""
+    p = os.path.join(apps, "core", "models", "item.rk")
+    with open(p) as f:
+        text = f.read()
+    with open(p, "w") as f:
+        f.write(text.rstrip("\n") + "\n  - name: active\n    type: check\n    label: {id: Aktif}\n    default: 'true'\n")
+
+
 def enable_import_def(site):
     """When the kernel knows the `import` kind (S7: schema/0.5/import.json), give the temp site the import the scenarios
     use, so they run live; otherwise they run on mock_feature('imports'). Returns True when written."""
@@ -4021,6 +4059,7 @@ def main():
         enable_print_formats(SITE)
         use_side_only(SITE)
         enable_catalogue_module(os.path.join(work, "catalogue"), SITE)
+        enable_item_active(APPS)
         pg_started = True  # stop even after a failed start: it may have left a cluster behind
         pg = subprocess.run([pgtemp, "start"], capture_output=True, text=True, env=env, timeout=180)
         if pg.returncode:

@@ -157,7 +157,10 @@
     useEffect(function () {
       if (!perOutlet) return undefined;
       var dead = false;
-      ctx.api.list("outlet", { limit: 100 }).then(function (r) { if (!dead) setOutlets((r && r.data) || []); },
+      // an outlet switched off takes no new imports (it may not be deleted while records use it; rangka-os t_45f9c276)
+      var oo = ((ctx.meta.models || {}).outlet || {}).fields || [];
+      var off = oo.some(function (x) { return x.name === "active" && x.type === "check"; }) ? "active != false" : undefined;
+      ctx.api.list("outlet", { filter: off, limit: 100 }).then(function (r) { if (!dead) setOutlets((r && r.data) || []); },
         function () { if (!dead) setOutlets([]); });
       return function () { dead = true; };
     }, [perOutlet, ctx.me && ctx.me.org]);

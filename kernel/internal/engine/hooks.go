@@ -175,7 +175,7 @@ func (o *op) runAction(model, name, action string, args map[string]any, opts Act
 			attempts = int(toInt(r)) + 1
 		}
 		id, err := e.Queue.Enqueue(o.ctx, o.tx, "action", a.Org, map[string]any{"model": model, "name": name, "action": action, "args": args,
-			"actor": map[string]any{"id": a.ID, "user": a.UserName, "roles": a.Roles}}, EnqueueOpts{MaxAttempts: attempts})
+			"actor": a.JobArgs()}, EnqueueOpts{MaxAttempts: attempts})
 		if err != nil {
 			return nil, err
 		}

@@ -518,7 +518,7 @@ func (r *flowRun) requestApproval(spec map[string]any, i string, resume int, as 
 	ap := store.Approval{Org: a.Org, Verb: "flow:" + r.f.Name, Policy: policy, Label: label, Approvers: approvers,
 		State: "pending", Snapshot: hashJSON(map[string]any{"event": event, "vars": vars}),
 		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as, "manual": o.manualRun},
-		RequestedBy: a.ID, Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System}}
+		RequestedBy: a.ID, Requester: a.requesterArgs(roles)}
 	if err := store.InsertApproval(o.ctx, o.tx, &ap); err != nil {
 		return "", err
 	}

@@ -361,7 +361,7 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 		roles := append([]string{}, a.Roles...)
 		ap := store.Approval{Org: a.Org, Model: m.Name, Name: name, Verb: verb, Policy: p.Name, Label: label, Approvers: approvers,
 			State: "pending", Snapshot: snapshot, Args: args, RequestedBy: a.ID,
-			Requester: map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System}}
+			Requester: a.requesterArgs(roles)}
 		if CanDecide(a, &ap) {
 			now := o.e.Now()
 			ap.State, ap.DecidedBy, ap.DecidedAt = "approved", a.ID, &now
@@ -576,6 +576,7 @@ func requesterActor(org string, r map[string]any) Actor {
 	case []string:
 		a.Roles = append(a.Roles, rs...)
 	}
+	a.Outlets = meta.StrList(r["outlets"]) // requests made before outlets were kept have none
 	return a
 }
 

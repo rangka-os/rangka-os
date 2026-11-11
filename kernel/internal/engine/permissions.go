@@ -326,8 +326,16 @@ func permKey(a Actor) string {
 // JobArgs is the actor as stored in a queued job's args (a flow resumed after wait:), so the job runs as
 // the person who started it.
 func (a Actor) JobArgs() map[string]any {
-	return map[string]any{"id": a.ID, "user": a.UserName, "roles": a.Roles, "system": a.System}
+	return map[string]any{"id": a.ID, "user": a.UserName, "roles": a.Roles, "system": a.System, "outlets": a.outletList()}
 }
+
+// requesterArgs is the person stored on an approval request (contract 0007 §6): an approved verb runs as them,
+// outlets included, so rules, flows and row scope reading user.outlets see the same person.
+func (a Actor) requesterArgs(roles []string) map[string]any {
+	return map[string]any{"id": a.ID, "user": a.UserName, "roles": roles, "human": a.Human, "system": a.System, "outlets": a.outletList()}
+}
+
+func (a Actor) outletList() []string { return append([]string{}, a.Outlets...) }
 
 // JobActor rebuilds the actor of a queued flow job from its args["actor"]. A job without one was started by
 // the kernel (schedules) and runs as System.
@@ -337,5 +345,5 @@ func JobActor(org string, v any) Actor {
 		return Actor{Org: org, ID: "system", System: true}
 	}
 	sys, _ := m["system"].(bool)
-	return Actor{Org: org, ID: meta.Str(m, "id"), UserName: meta.Str(m, "user"), Roles: meta.StrList(m["roles"]), System: sys}
+	return Actor{Org: org, ID: meta.Str(m, "id"), UserName: meta.Str(m, "user"), Roles: meta.StrList(m["roles"]), Outlets: meta.StrList(m["outlets"]), System: sys}
 }

@@ -760,9 +760,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 			return nil, err
 		}
 		renameSelfLinks(e.Reg(), m, rec, name, newName)
-		for k := range o.links { // a link loaded under the draft name is stale now
-			delete(o.links, k)
-		}
+		o.forgetLinks(m.Name, name)
 	}
 	if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
 		return nil, err

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"errors"
+	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -140,4 +141,24 @@ func renameLinksIn(reg *meta.Registry, rm *meta.Model, rec store.Record, model, 
 		}
 	}
 	return changed
+}
+
+// forgetLinks drops from the unit of work's link cache what the rename of model's record from made stale: the
+// record under its draft name and cached records of models that link model (their link fields may have held
+// from). Every other cached record stays: the computes a hook recomputes later in the submit (stock cogs set on
+// a row) read linked records as the submit read them, never a commit another transaction made meanwhile, so a
+// value like delivery_note.credit_over_seen keeps meaning "the approval policy matched" (card t_48e24a91).
+func (o *op) forgetLinks(model, from string) {
+	reg := o.e.Reg()
+	for k := range o.links {
+		key := strings.TrimPrefix(k, "client:")
+		lm, ln, _ := strings.Cut(key, "/")
+		if lm == model && ln == from {
+			delete(o.links, k)
+			continue
+		}
+		if rm := reg.Model(lm); rm != nil && linksTo(reg, rm, model) {
+			delete(o.links, k)
+		}
+	}
 }

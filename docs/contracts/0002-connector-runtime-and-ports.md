@@ -27,9 +27,16 @@ Status: proposed (1 Nov 2026) · Owner: rangka-os (kernel) · Affects: rangka-co
      submit's rename follows; a run resumed after `wait:` or `approve:` adds its own, and a run still waiting holds its key):
      once every one is deleted, or cancelled without a live amended copy, the key is free again and the next run with
      it records the event again (audit `flow.key_reused`), still one at a time (the key's row is locked). A run that
-     made nothing keeps its key, and so does a document of a model the site no longer has. Keys are kept; longer than 200 characters they are stored as their SHA-256, apart from short keys.
+     made nothing keeps its key, and so does a document of a model the site no longer has. A waiting run that will never
+     finish (its `approve:` request rejected, its resumed job dead-lettered) releases its key: the documents it made
+     before it stopped still hold it while alive, and a key with none left is removed (audit `flow.key_released`); a
+     replay of the dead job is then skipped. The key travels in the job's or request's `flow_key` arg, never as a flow
+     variable. Keys are kept; longer than 200 characters they are stored as their SHA-256, apart from short keys.
    - A flow whose `on:` is a connector trigger may be run by hand (`/flows/<name>/run`) only by the owner: its event
-     says what a vendor reported (a payment, a sale), so other roles get 403.
+     says what a vendor reported (a payment, a sale), so other roles get 403. A flow on `<model>.<event>` run by hand by
+     anyone but the owner gets its event rebuilt from the stored record `event.name` names (read with the caller's
+     rights; `before` is null, other keys are dropped); an empty event stays empty, a non-empty one without `name` is
+     422 `event_name`.
 3. **Outbound actions.**
    - A `call` step enqueues a job that renders the request from the action's mapping, sends it, maps the response, and retries per `retry`.
    - When retries run out it goes to the dead-letter queue. Every call is logged in the audit trail, with secrets redacted.

@@ -445,7 +445,16 @@ func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)
 	}
-	return s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true)
+	out, err := s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true, meta.AsMap(j.Args["flow_key"]))
+	var perm *jobs.Permanent
+	if err != nil && (j.Attempt >= j.MaxAttempts || errors.As(err, &perm)) {
+		// the run will never finish: its idempotency key is free again for the same event (audit flowkey-release N1);
+		// a replay of this dead-lettered job is then skipped
+		if rerr := s.Engine.ReleaseFlowJob(context.WithoutCancel(ctx), j.Org, j.Args); rerr != nil {
+			s.Engine.Log("flow %s: release idempotency key: %v", name, rerr)
+		}
+	}
+	return out, err
 }
 
 // runCallJob sends one connector action (a flow's call: step). Its errors are scrubbed; a call that cannot succeed

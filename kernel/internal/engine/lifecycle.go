@@ -756,6 +756,9 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if err := store.RenameRecordLinks(o.ctx, o.tx, e.Reg(), a.Org, m.Name, name, newName); err != nil {
 			return nil, err
 		}
+		if err := store.RenameFlowKeyDocs(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
+			return nil, err
+		}
 		if err := o.restampReferrers(held); err != nil { // a corrected name does not void a request
 			return nil, err
 		}

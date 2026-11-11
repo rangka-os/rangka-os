@@ -290,6 +290,9 @@ create table if not exists rk_flow_keys (
   at     timestamptz not null default now(),
   primary key (org_id, flow, key)
 );
+-- the documents the run that holds the key created (<model>/<name>): once none is alive (deleted, or cancelled for
+-- a submittable model) the key is free again, so a callback recorded after its draft was deleted records again
+alter table rk_flow_keys add column if not exists docs text[] not null default '{}';
 -- poll triggers (contract 0002 §A.1): where the last poll stopped, per org, connector and trigger
 create table if not exists rk_poll_cursors (
   org_id     text not null,

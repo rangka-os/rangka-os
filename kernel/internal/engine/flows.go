@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"math"
 	"sort"
@@ -154,6 +155,11 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	if err := r.steps(list, "", start); err != nil {
 		return err
 	}
+	if r.key != "" { // the documents this run made: the key is free again once none of them is alive
+		if err := store.SetFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, r.keyDocs()); err != nil {
+			return err
+		}
+	}
 	return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.run", "flow/"+f.Name, fmt.Sprintf("%d step(s), %d created, %d notification(s)", len(out.Steps), len(out.Created), len(out.Notifications)), nil)
 }
 
@@ -179,15 +185,66 @@ func (r *flowRun) claimKey() (dup bool, err error) {
 		}
 		return false, &StatusError{422, "idempotency_key", msg}
 	}
-	ok, err := store.ClaimFlowKey(r.o.ctx, r.o.tx, r.a.Org, r.f.Name, key)
+	fresh, docs, err := store.ClaimFlowKey(r.o.ctx, r.o.tx, r.a.Org, r.f.Name, key)
 	if err != nil {
 		return false, err
 	}
-	if !ok {
-		r.out.Skipped = true
-		return true, store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.duplicate", "flow/"+r.f.Name, "idempotency key sudah dipakai: "+key, nil)
+	if !fresh {
+		alive, err := r.anyAlive(docs)
+		if err != nil {
+			return false, err
+		}
+		if len(docs) == 0 || alive {
+			r.out.Skipped = true
+			return true, store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.duplicate", "flow/"+r.f.Name, "idempotency key sudah dipakai: "+key, nil)
+		}
+		// every document the earlier run made was deleted or cancelled: the event is recorded again
+		if err := store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.key_reused", "flow/"+r.f.Name, "idempotency key "+key+" dipakai lagi: dokumen run sebelumnya sudah dihapus atau dibatalkan ("+strings.Join(docs, ", ")+")", nil); err != nil {
+			return false, err
+		}
+	}
+	r.key = key
+	return false, nil
+}
+
+// anyAlive reports whether one of docs (<model>/<name>) still exists and, for a submittable model, is not cancelled.
+func (r *flowRun) anyAlive(docs []string) (bool, error) {
+	for _, d := range docs {
+		mn, name, _ := strings.Cut(d, "/")
+		m := r.e.Reg().Model(mn)
+		if m == nil {
+			continue
+		}
+		rec, err := store.Get(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, name)
+		if errors.Is(err, store.ErrNotFound) {
+			continue
+		}
+		if err != nil {
+			return false, err
+		}
+		if m.IsSubmittable && toInt(rec["docstatus"]) == 2 {
+			continue
+		}
+		return true, nil
 	}
 	return false, nil
+}
+
+// keyDocs are the documents a run's idempotency key stands for: the submittable records it created, or every
+// record it created when it made none (a lead and its activity).
+func (r *flowRun) keyDocs() []string {
+	var sub, all []string
+	for _, c := range r.out.Created {
+		all = append(all, c)
+		mn, _, _ := strings.Cut(c, "/")
+		if m := r.e.Reg().Model(mn); m != nil && m.IsSubmittable {
+			sub = append(sub, c)
+		}
+	}
+	if len(sub) > 0 {
+		return sub
+	}
+	return all
 }
 
 // flowKey is the stored form of an idempotency value, typed so that 5 and "5" never meet: "s:<text>" or
@@ -230,6 +287,7 @@ type flowRun struct {
 	vars map[string]any
 	out  *FlowResult
 	stop bool
+	key  string // the idempotency key this run claimed
 }
 
 func (r *flowRun) env() *cel.Env {

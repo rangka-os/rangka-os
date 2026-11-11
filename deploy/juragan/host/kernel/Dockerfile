@@ -30,7 +30,7 @@ EXPOSE 8080
 ENTRYPOINT ["/usr/local/bin/rangka"]
 CMD ["serve"]
 
-FROM debian:12.13-slim AS pdf
+FROM debian:12.15-slim AS pdf
 RUN apt-get update \
  && apt-get install -y --no-install-recommends chromium fonts-noto-core ca-certificates \
  && rm -rf /var/lib/apt/lists/*

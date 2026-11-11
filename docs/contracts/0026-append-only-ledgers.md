@@ -25,6 +25,8 @@ kernel limitation (DECISIONS 6 Nov).
 3. **No edit, no delete.** Update and delete of a row are refused with 409 `append_only` on every path: the API, flows
    (`update` step), hooks (`Update`, `SetSubmitted`), submit, cancel and amend. A flow that tries rolls back the whole
    write that started it. Attachments of a row cannot be added or removed either (the write check refuses).
+   One exception: when a draft another model links is submitted, the link value in an append-only row is rewritten
+   to the draft's number (0009 §4). The row keeps pointing at the same document; no other field changes.
 4. **Correction.** The only correction is a new row. Apps write the reversing row in the flow on the source
    document's `cancelled` event (amount negated, pointing at the row it reverses), then the amended document posts
    again.

@@ -5,6 +5,10 @@ import "math"
 // EarthRadiusM is the mean earth radius in metres (IUGG), used by distance_m.
 const EarthRadiusM = 6371008.8
 
+// NoPositionM is distance_m without a position: farther than any two points on earth (half the circumference is
+// about 2e7 m), so a radius check fails closed.
+const NoPositionM = 1e9
+
 // Haversine is the great-circle distance in metres between two points in degrees.
 func Haversine(lat1, lng1, lat2, lng2 float64) float64 {
 	rad := math.Pi / 180

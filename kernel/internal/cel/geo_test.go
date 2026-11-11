@@ -35,13 +35,19 @@ func TestDistanceM(t *testing.T) {
 		t.Errorf("not symmetric: %v", d)
 	}
 	for _, src := range []string{"distance_m(a, none)", "distance_m(empty, a)", "distance_m(blank, a)"} {
-		if d := num(src); d != -1 {
-			t.Errorf("%s = %v, want -1 (no position)", src, d)
+		if d := num(src); d != NoPositionM {
+			t.Errorf("%s = %v, want NoPositionM (no position)", src, d)
 		}
 	}
-	v, err := Eval("distance_m(a, c) <= 100.0 && distance_m(a, c) >= 0.0", e)
+	v, err := Eval("distance_m(a, c) <= 100.0", e)
 	if err != nil || v != true {
 		t.Errorf("radius check = %v, %v", v, err)
+	}
+	// audit F1: without a position the plain radius check fails closed (the int radius compares too)
+	for _, src := range []string{"distance_m(none, a) <= 100", "distance_m(none, a) <= 100.0", "distance_m(a, blank) < 20000000.0"} {
+		if v, err := Eval(src, e); err != nil || v != false {
+			t.Errorf("%s = %v, %v; want false", src, v, err)
+		}
 	}
 	if v, err := Eval("a.lat < 0.0", e); err != nil || v != true {
 		t.Errorf("a.lat < 0.0 = %v, %v", v, err)

@@ -50,6 +50,7 @@ type Field struct {
 	Label                     Label
 	Default, Compute, Depends string
 	Required, ReadOnly        bool
+	SetOnce                   bool // contract 0030 §4: a client fills it once; a set value stays (kernel writes are free)
 	Unique, Index             bool
 	Options                   []Option
 	MinRows                   int
@@ -324,7 +325,7 @@ func parseModel(app string, doc *rk.Doc) *Model {
 		}
 		f := &Field{Name: str(fm, "name"), Type: str(fm, "type"), To: str(fm, "to"), Of: str(fm, "of"), Label: label(fm["label"]),
 			Default: celText(fm["default"]), Compute: celText(fm["compute"]), Depends: celText(fm["depends_on"]),
-			Required: boolean(fm, "required"), ReadOnly: boolean(fm, "read_only"), Unique: boolean(fm, "unique"),
+			Required: boolean(fm, "required"), ReadOnly: boolean(fm, "read_only"), SetOnce: boolean(fm, "set_once"), Unique: boolean(fm, "unique"),
 			Index: boolean(fm, "index"), MinRows: integer(fm, "min_rows"), Raw: fm}
 		for _, ov := range asList(fm["options"]) {
 			om := asMap(ov)

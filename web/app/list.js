@@ -817,7 +817,7 @@
       h("p", { className: "ap-bulk-sum" }, [bulkResult.ok.length + " diajukan", bulkResult.held.length ? bulkResult.held.length + " menunggu persetujuan" : null,
         bulkResult.failed.length ? bulkResult.failed.length + " ditolak" : null].filter(Boolean).join(" · ")),
       h("ul", { className: "ap-bulk-list" },
-        bulkResult.failed.map(function (f) { return h("li", { key: "f" + f.name, className: "is-bad" }, h("b", null, bulkResult.titles[f.name] || f.name), h("span", null, f.message + (f.force ? " (peringatan; bisa diajukan tetap)" : ""))); }),
+        bulkResult.failed.map(function (f) { return h("li", { key: "f" + f.name, className: f.force ? "is-held" : "is-bad" }, h("b", null, bulkResult.titles[f.name] || f.name), h("span", null, f.message + (f.force ? " (peringatan; bisa diajukan tetap)" : ""))); }),
         bulkResult.held.map(function (f) { return h("li", { key: "h" + f.name, className: "is-held" }, h("b", null, bulkResult.titles[f.name] || f.name), h("span", null, "Menunggu persetujuan")); }),
         bulkResult.ok.map(function (f) { return h("li", { key: "o" + f.name, className: "is-ok" }, h("b", null, f.number), h("span", null, "Diajukan")); }))) : null;
 

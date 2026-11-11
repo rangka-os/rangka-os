@@ -1,9 +1,11 @@
 package engine
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -88,4 +90,35 @@ func (o *op) checkAttachFields(m *meta.Model, rec, cur store.Record, name string
 		}
 	}
 	return errs, nil
+}
+
+// checkSetOnce returns an issue for every set_once field (contract 0030 §4) that cur held and rec changes: a client
+// may fill it while empty (clock-in time, position, photo) but not rewrite it, so a worker cannot move a clock-in
+// that the kernel measured as outside the site.
+func checkSetOnce(m *meta.Model, rec, cur store.Record) []Issue {
+	var errs []Issue
+	for _, f := range m.Fields {
+		if !f.SetOnce || cur == nil || missing(cur[f.Name]) {
+			continue
+		}
+		if !sameValue(f, cur[f.Name], rec[f.Name]) {
+			errs = append(errs, Issue{Field: f.Name, Code: "set_once", Message: labelOr(f) + " sudah tercatat dan tidak bisa diubah"})
+		}
+	}
+	return errs
+}
+
+// sameValue compares a stored and a written value: datetimes as instants (a client sends +07:00, the store keeps
+// UTC), anything else by its JSON form.
+func sameValue(f *meta.Field, a, b any) bool {
+	if f.Type == "datetime" {
+		ta, ea := time.Parse(time.RFC3339, str(a))
+		tb, eb := time.Parse(time.RFC3339, str(b))
+		if ea == nil && eb == nil {
+			return ta.Equal(tb)
+		}
+	}
+	x, _ := json.Marshal(a)
+	y, _ := json.Marshal(b)
+	return string(x) == string(y)
 }

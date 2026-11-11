@@ -75,8 +75,9 @@ Rules shared by every type:
   RFC 3339 in the org timezone); the web app asks again for every new record. A screen the caller may not open is 404.
   The values prefill the record; they are not trusted more than what a form sends. `?stop=<model>/<name>` and
   `?doc=<name>` (a record of the screen's `document.model`) load that record as `stop` or `doc` for the CEL, through
-  the same read check as `GET /r` (a record the caller may not read is 404, like a missing one); a value that reads
-  `stop` or `doc` when the screen was opened without one is left out.
+  the same read check as `GET /r` (a record or model the caller may not read is 404, like a missing one; a field
+  hidden from the caller reads as its zero value); a value that reads `stop` or `doc` when the screen was opened
+  without one is left out.
 - **Blocks whose renderer is not built yet** are free-form objects in `screen.json`; the PR that adds the renderer
   gives the block its shape and its validator checks. The web app shows a notice for such a screen.
 - **Writes are ordinary API calls** (`POST /api/v1/r/<model>`, `.../submit`, `.../actions/<name>`) by the signed-in
@@ -125,14 +126,19 @@ The five device needs map to browser APIs first, so nothing costs money and no n
 
 Kernel changes behind the widgets (WS6): field type `geo` (jsonb `{lat, lng, accuracy_m, at}`: lat in -90..90, lng
 in -180..180, accuracy_m >= 0, at RFC 3339 stored in UTC, no other key; `""`/`{}` is no position; CEL access `f.lat`,
-`f.lng`; `distance_m(a, b)` is the haversine distance in metres on the mean earth radius 6 371 008.8 m and `-1` when
-either has no position, so `distance_m(p, site) <= r` alone never passes without one). `image` and `signature` hold an
+`f.lng`; `distance_m(a, b)` is the haversine distance in metres on the mean earth radius 6 371 008.8 m, and
+`1e9` when either has no position: farther than any two points on earth, so "unknown" counts as far and
+`distance_m(p, site) <= r` fails, `> r` holds, without a position). Field option `set_once: true`: a client may fill
+the field while it is empty, never change a value it holds (`422 set_once`; the same value sent again passes,
+datetimes compared as instants); flows and other kernel writes may. Clock-in time, position and photo use it, so a
+worker cannot move a clock-in the kernel measured as outside. `image` and `signature` hold an
 attachment id: a value a client writes (create, update, rows included) must be an attachment of that same record
 (model and name; rows use their parent's) whose content type is `image/*`, else 422 `attachment` on the field; a
 record being created has none yet, so a screen saves the record, attaches, then sets the field. A value the record
 already held may stay or move between its fields; writes by the kernel itself (flows, amend copying the cancelled
 original's ids) are not checked. Submit renames the attachments with the record. Deleting an attachment an image or
-signature field still holds is 409 `in_use`. A CEL `device` object `{id, outlet}` stays empty until a device is
+signature field still holds (checked on the stored record, fields hidden from the caller included) is 409 `in_use`.
+An import (client write) cannot carry image or signature ids: attach after the import. A CEL `device` object `{id, outlet}` stays empty until a device is
 paired (§8).
 
 Scan (WS5): the web app reads codes with `BarcodeDetector` (EAN-13, EAN-8, UPC-A/E, Code 128, Code 39, QR) and
@@ -331,7 +337,11 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 - The scanner decodes frames on the device every 180 ms; very small or damaged 1D codes may need the typed box.
 - `route` remembers check-ins of the current visit to the screen; a reload shows every stop again until the list's
   filter leaves visited ones out (e.g. `due > 0`).
-- The phone's distance on `clock` is an estimate; the record's own compute with `distance_m` decides.
+- The phone's distance on `clock` is an estimate; the record's own compute with `distance_m` decides. The position
+  itself is the device's claim (no fake-GPS detection, §4): the photo and the supervisor's review stay the check.
+- Two devices marking the same `roll` parent: the later PATCH of the rows wins (no `_if` on rows yet).
+- Changing a field from `json` or `data` to `geo` keeps the stored values unchecked; a value without numeric `lat`
+  and `lng` reads as no position.
 
 ## Implementation (rangka-os, one PR each, in this order)
 | Stage | Content | State |

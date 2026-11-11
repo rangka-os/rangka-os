@@ -12,4 +12,4 @@ route:
   visit: {model: kunjungan, link: customer, set: {by: user.email}, location: pos, photo: photo}
   actions:
     - {label: {id: Terima bayar}, screen: terima_bayar}
-    - {label: {id: Catat keluhan}, create: keluhan, set: {customer: stop.name, text: "'Keluhan ' + stop.title"}}
+    - {label: {id: Catat keluhan}, create: keluhan, set: {customer: stop.name, text: "'Keluhan ' + stop.title + stop.note_internal"}}

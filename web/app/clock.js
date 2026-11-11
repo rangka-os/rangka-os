@@ -90,9 +90,15 @@
       RA.media.snap().then(function (x) { if (x) { if (photo) global.URL.revokeObjectURL(photo.url); setPhoto(x); } }, function (e) { setErr(msg(e)); });
     }
 
+    // the photo of this press is attached once: pressing again after a lost answer reuses its id (audit F7)
     function attachThen(name) {
       if (!side.photo || !photo) return Promise.resolve(null);
-      return RA.media.attach(ctx.api, rec.model, name, photo.blob, (open ? "keluar" : "masuk") + ".jpg").then(function (a) { return a.id; });
+      var pc = pending.current;
+      if (pc && pc.attId) return Promise.resolve(pc.attId);
+      return RA.media.attach(ctx.api, rec.model, name, photo.blob, (open ? "keluar" : "masuk") + ".jpg").then(function (a) {
+        if (pending.current) pending.current.attId = a.id;
+        return a.id;
+      });
     }
 
     function press() {
@@ -101,7 +107,9 @@
       if (site && !open && !siteName) { setErr("Pilih lokasi kerja dulu."); return; }
       if (needReason && !reason.trim()) { setErr(check.state === "outside" ? "Kamu di luar lokasi kerja: tulis alasannya." : "Lokasi belum didapat: tulis alasannya, atau coba ambil lokasi lagi."); return; }
       setBusy(true); setErr("");
-      var now = new Date().toISOString();
+      var kind = open ? "out" : "in", same = pending.current && pending.current.kind === kind;
+      var now = same ? pending.current.now : new Date().toISOString(); // the first press's time, kept for a retry
+      if (!same) pending.current = { kind: kind, now: now };
       var offlineOk = s.offline === "queue" && !side.photo;
       var work;
       if (!open) {
@@ -110,9 +118,8 @@
         if (inS.location && pos) body[inS.location] = pos;
         if (c.reason && reason.trim()) body[c.reason] = reason.trim();
         if (!inS.photo) body[inS.field] = now; // with a photo the time goes with it (a rule may want both)
-        var job = pending.current && pending.current.kind === "in" ? pending.current.job
-          : RA.outbox.newJob({ scope: scope, screen: s.name, model: rec.model, body: body });
-        pending.current = { kind: "in", job: job };
+        var job = pending.current.job || RA.outbox.newJob({ scope: scope, screen: s.name, model: rec.model, body: body });
+        pending.current.job = job;
         work = RA.outbox.send(ctx.api, job, offlineOk).then(function (res) {
           if (res.queued) return { queued: true };
           var name = job.created;
@@ -128,9 +135,8 @@
           var patch = {}; patch[outS.field] = now;
           if (outS.location && pos) patch[outS.location] = pos;
           if (outS.photo && id) patch[outS.photo] = id;
-          var job = pending.current && pending.current.kind === "out" ? pending.current.job
-            : RA.outbox.newJob({ scope: scope, screen: s.name, model: rec.model, name: name, body: patch, submit: !!c.submit });
-          pending.current = { kind: "out", job: job };
+          var job = pending.current.job || RA.outbox.newJob({ scope: scope, screen: s.name, model: rec.model, name: name, body: patch, submit: !!c.submit });
+          pending.current.job = job;
           return RA.outbox.send(ctx.api, job, offlineOk).then(function (res) {
             return res.queued ? { queued: true } : { name: (res.record && res.record.name) || name, approval: res.approval };
           });

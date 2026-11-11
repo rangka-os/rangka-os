@@ -7,15 +7,16 @@ title_field: worker
 fields:
   - {name: worker, type: data, label: {id: Pekerja}, in_list: true}
   - {name: site, type: link, to: lokasi, label: {id: Lokasi}, required: true, in_list: true}
-  - {name: clock_in, type: datetime, label: {id: Jam masuk}, in_list: true}
-  - {name: in_pos, type: geo, label: {id: Posisi masuk}}
-  - {name: in_photo, type: image, label: {id: Foto masuk}}
-  - {name: clock_out, type: datetime, label: {id: Jam keluar}, in_list: true}
-  - {name: out_pos, type: geo, label: {id: Posisi keluar}}
-  - {name: out_photo, type: image, label: {id: Foto keluar}}
+  - {name: clock_in, type: datetime, label: {id: Jam masuk}, set_once: true, in_list: true}
+  - {name: in_pos, type: geo, label: {id: Posisi masuk}, set_once: true}
+  - {name: in_photo, type: image, label: {id: Foto masuk}, set_once: true}
+  - {name: clock_out, type: datetime, label: {id: Jam keluar}, set_once: true, in_list: true}
+  - {name: out_pos, type: geo, label: {id: Posisi keluar}, set_once: true}
+  - {name: out_photo, type: image, label: {id: Foto keluar}, set_once: true}
   - {name: reason, type: text, label: {id: Alasan}}
+  - {name: checked_sig, type: signature, label: {id: Paraf pemeriksa}, hidden_for: [pekerja]}
   - {name: in_m, type: float, label: {id: Jarak masuk (m)}, read_only: true, compute: "distance_m(in_pos, site.pos)"}
-  - {name: outside, type: check, label: {id: Di luar lokasi}, read_only: true, compute: "in_m < 0.0 || in_m > site.radius_m"}
+  - {name: outside, type: check, label: {id: Di luar lokasi}, read_only: true, compute: "in_m > site.radius_m"}
 rules:
   - name: photo_in
     on: save

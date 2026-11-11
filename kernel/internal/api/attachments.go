@@ -296,7 +296,18 @@ func (s *Server) deleteAttachment(w http.ResponseWriter, r *http.Request, c *cal
 		writeError(w, http.StatusConflict, "submitted", "Lampiran dokumen yang sudah diajukan tidak bisa dihapus")
 		return
 	}
-	if s.Engine.HoldsAttachment(row.Model, rec, row.ID) { // an image or signature field points at it (0030 §4)
+	// an image or signature field points at it (0030 §4): checked on the stored record, since rec is redacted for the
+	// caller and a field hidden from them may hold it (audit F2)
+	raw := rec
+	if m := s.Engine.Reg().Model(row.Model); m != nil {
+		if full, err := store.Get(ctx, s.DB, s.Engine.Reg(), row.Org, m, row.Record); err == nil {
+			raw = full
+		} else {
+			fail(w, err)
+			return
+		}
+	}
+	if s.Engine.HoldsAttachment(row.Model, raw, row.ID) {
 		writeError(w, http.StatusConflict, "in_use", "Lampiran ini dipakai sebagai foto atau tanda tangan catatan; kosongkan field itu dulu")
 		return
 	}

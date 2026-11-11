@@ -973,8 +973,8 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 		return b.Unix()/86400 - a.Unix()/86400, nil // both midnight UTC: whole days, no duration saturation
 	case "distance_m":
 		// distance_m(a, b): metres between two positions ({lat, lng}, the geo field type, contract 0030 §4) on the
-		// earth's mean radius (haversine); -1 when either has no position, so `distance_m(p, site) <= r` alone never
-		// passes without one.
+		// earth's mean radius (haversine). Without a position it is NoPositionM (1e9, farther than any two points on
+		// earth): "unknown" counts as far, so `distance_m(p, site) <= r` fails and `> r` holds without a position.
 		if err := need(2); err != nil {
 			return nil, err
 		}
@@ -987,7 +987,7 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			return nil, err
 		}
 		if !oka || !okb {
-			return -1.0, nil
+			return NoPositionM, nil
 		}
 		return Haversine(pa[0], pa[1], pb[0], pb[1]), nil
 	case "round":

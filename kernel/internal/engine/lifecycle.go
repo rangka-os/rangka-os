@@ -66,12 +66,15 @@ func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Recor
 				issues = append(issues, Issue{Field: k, Code: "bad_value", Message: f.Label.Text() + " harus berupa daftar baris"})
 				continue
 			}
-			for _, rv := range list {
+			for i, rv := range list {
 				row, _ := rv.(map[string]any)
 				if row == nil {
 					continue
 				}
 				nr, is := e.normalize(cm, row, nil, client)
+				for j := range is { // the row's path, as checkValues reports it (a form points at the row)
+					is[j].Field = fmt.Sprintf("%s.%d.%s", k, i, is[j].Field)
+				}
 				if n := str(row["name"]); n != "" {
 					if sr, ok := stored[n]; client && ok {
 						for _, cf := range cm.Fields {
@@ -593,6 +596,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 			return nil, err
 		}
 		errs = append(errs, more...)
+		errs = append(errs, checkSetOnce(m, rec, cur)...)
 	}
 	if len(errs) > 0 {
 		return nil, validation(errs, warns)

@@ -26,7 +26,7 @@ fields:
 | Dates | `date`, `datetime`, `daterange` |
 | Relations | `link`, `dynamic_link`, `table` (child rows) — see [Relations](./relations) |
 | Files | `attach`, `image`, `signature` (an `image` or `signature` holds the id of an image attachment of the same record) |
-| Place | `geo` (`{lat, lng, accuracy_m, at}`; `distance_m(a, b)` in expressions) |
+| Place | `geo` (`{lat, lng, accuracy_m, at}`; `distance_m(a, b)` in expressions). Any field may say `set_once: true`: a client fills it once, never rewrites it |
 | Other | `json` |
 
 ## Money in other currencies

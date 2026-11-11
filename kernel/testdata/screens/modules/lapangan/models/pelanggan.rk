@@ -9,5 +9,6 @@ fields:
   - {name: pos, type: geo, label: {id: Titik}}
   - {name: due, type: currency, label: {id: Tagihan}, in_list: true}
   - {name: collector, type: data, label: {id: Penagih}}
+  - {name: note_internal, type: data, label: {id: Catatan internal}, hidden_for: [penagih]}
 permissions:
   - {role: penagih, read: true}

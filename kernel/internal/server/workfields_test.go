@@ -47,9 +47,9 @@ func TestGeoAndAttachmentFields(t *testing.T) {
 	if m, _ := a["in_m"].(float64); m < 95 || m > 105 || a["outside"] != false || get(a, "in_pos", "at") != "2026-11-08T01:00:00Z" {
 		t.Fatalf("absen: in_m %v outside %v pos %v", a["in_m"], a["outside"], a["in_pos"])
 	}
-	// no position at all is outside (distance_m = -1)
+	// no position at all is outside (distance_m = 1e9: unknown counts as far)
 	b := w.must(201, "POST", "/api/v1/r/absen", map[string]any{"worker": "pekerja@example.test", "site": sn}).JSON
-	if b["in_m"] != -1.0 || b["outside"] != true {
+	if b["in_m"] != 1e9 || b["outside"] != true {
 		t.Fatalf("no position: %v %v", b["in_m"], b["outside"])
 	}
 	// an image id on create is refused (nothing is attached to a record that does not exist yet)
@@ -68,6 +68,18 @@ func TestGeoAndAttachmentFields(t *testing.T) {
 		}
 	}
 	w.must(200, "PATCH", "/api/v1/r/absen/"+an, map[string]any{"in_photo": own, "clock_in": "2026-11-08T08:00:00+07:00"})
+	// set_once (audit F3): the clock-in position and time cannot be rewritten by the worker; the same value may be resent
+	if r := w.must(422, "PATCH", "/api/v1/r/absen/"+an, map[string]any{"in_pos": map[string]any{"lat": -6.2, "lng": 106.8}}); get(r.JSON, "errors", 0, "code") != "set_once" {
+		t.Fatalf("rewrite in_pos: %s", r.Body)
+	}
+	w.must(422, "PATCH", "/api/v1/r/absen/"+an, map[string]any{"clock_in": "2026-11-08T07:00:00+07:00"})
+	w.must(200, "PATCH", "/api/v1/r/absen/"+an, map[string]any{"clock_in": "2026-11-08T08:00:00+07:00", "reason": "x"})
+	// a signature hidden from the worker still counts as in use when the worker deletes it (audit F2)
+	sig := owner.upload("/api/v1/r/absen/"+an+"/attachments", "paraf.png", pngBytes).JSON["id"].(string)
+	owner.must(200, "PATCH", "/api/v1/r/absen/"+an, map[string]any{"checked_sig": sig})
+	if r := w.must(409, "DELETE", "/api/v1/attachments/"+sig, nil); code(r) != "in_use" {
+		t.Fatalf("delete hidden in use: %s", r.Body)
+	}
 	// a held id may move to another image field; the attachment in use cannot be deleted
 	w.must(200, "PATCH", "/api/v1/r/absen/"+an, map[string]any{"out_photo": own})
 	if r := w.must(409, "DELETE", "/api/v1/attachments/"+own, nil); code(r) != "in_use" {
@@ -82,7 +94,7 @@ func TestGeoAndAttachmentFields(t *testing.T) {
 		t.Fatal("photo gone after submit")
 	}
 	l := w.must(200, "GET", "/api/v1/r/absen/"+nn+"/attachments", nil).JSON
-	if len(l["data"].([]any)) != 1 {
+	if len(l["data"].([]any)) != 2 { // the worker's photo and the checker's signature
 		t.Fatalf("attachments after submit: %v", l)
 	}
 	// outside the radius needs a reason (a model rule over the kernel's distance)
@@ -121,6 +133,14 @@ func TestScreenSetsForStop(t *testing.T) {
 	p.must(404, "GET", "/api/v1/screens/terima_bayar?stop=pelanggan/PLG-9999", nil)
 	p.must(400, "GET", "/api/v1/screens/terima_bayar?stop=pelanggan", nil)
 	p.must(404, "GET", "/api/v1/screens/terima_bayar?stop=jam_kerja/x", nil)
+	// a record of a model the penagih may not read is 404 like a missing one (audit F4)
+	j := owner.must(201, "POST", "/api/v1/r/jam_kerja", map[string]any{"date": "2026-11-08", "hours": 8}).JSON
+	p.must(404, "GET", "/api/v1/screens/terima_bayar?stop=jam_kerja/"+j["name"].(string), nil)
+	// a field hidden from the caller reads as empty in set: (audit F5): the screen opens, the value does not leak
+	owner.must(200, "PATCH", "/api/v1/r/pelanggan/"+cn, map[string]any{"note_internal": " (rahasia)"})
+	if r := p.must(200, "GET", "/api/v1/screens/rute_tagih?stop=pelanggan/"+cn, nil).JSON; get(r, "sets", "actions.1", "text") != "Keluhan Bu Ani" {
+		t.Fatalf("hidden stop field: %v", r["sets"])
+	}
 	_ = staf
 	// ?doc= loads the screen's document (roll), checked like a read
 	g := fieldUser(t, owner, "guru@example.test", "pengajar")

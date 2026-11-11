@@ -48,6 +48,13 @@ func (v *vendor) RoundTrip(r *http.Request) (*http.Response, error) {
 		Body: io.NopCloser(strings.NewReader(v.answer)), Request: r}, nil
 }
 
+// sent returns a copy of the requests so far (the job worker appends from another goroutine).
+func (v *vendor) sent() []*http.Request {
+	v.mu.Lock()
+	defer v.mu.Unlock()
+	return append([]*http.Request{}, v.reqs...)
+}
+
 const leakyConnector = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
 name: leaky_test
 label: {id: Leaky test}
@@ -472,11 +479,11 @@ func TestFlowCallQueuesJob(t *testing.T) {
 	if !strings.Contains(string(res.Body), "queued") {
 		t.Fatalf("flow: %s", res.Body)
 	}
-	for i := 0; i < 200 && len(v.reqs) == 0; i++ {
+	for i := 0; i < 200 && len(v.sent()) == 0; i++ {
 		time.Sleep(25 * time.Millisecond)
 	}
-	if len(v.reqs) != 1 || v.reqs[0].Header.Get("Authorization") != "Bearer "+waToken {
-		t.Fatalf("vendor requests: %d", len(v.reqs))
+	if reqs := v.sent(); len(reqs) != 1 || reqs[0].Header.Get("Authorization") != "Bearer "+waToken {
+		t.Fatalf("vendor requests: %d", len(reqs))
 	}
 	noLeak(t, "jobs", []byte(dump(t, e, "select args::text from rk_jobs where kind = 'call'")), waToken)
 }

@@ -56,3 +56,61 @@ func RenameRecordLinks(ctx context.Context, q pg.Querier, reg *meta.Registry, or
 	}
 	return nil
 }
+
+// RecordsLinking lists the names of rm's records in org that link model's record name from: a link field of rm
+// (x_ custom links included) or a link field of one of rm's child rows. Submit uses it to look only at the
+// approvals of records the draft rename touches (card t_6e1fa9ae).
+func RecordsLinking(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, rm *meta.Model, model, from string) ([]string, error) {
+	seen := map[string]bool{}
+	var out []string
+	collect := func(sql string, args ...any) error {
+		res, err := q.Query(ctx, sql, args...)
+		if err != nil {
+			return err
+		}
+		for _, r := range res.Rows {
+			if n, _ := r[0].(string); n != "" && !seen[n] {
+				seen[n] = true
+				out = append(out, n)
+			}
+		}
+		return nil
+	}
+	where := func(m *meta.Model) []string {
+		var w []string
+		for _, f := range m.Fields {
+			if f.Type != "link" || f.To != model {
+				continue
+			}
+			switch {
+			case strings.HasPrefix(f.Name, "x_"):
+				w = append(w, "x->>"+pg.QuoteLiteral(f.Name)+" = $2")
+			case IsColumn(f):
+				w = append(w, pg.QuoteIdent(f.Name)+" = $2")
+			}
+		}
+		return w
+	}
+	if w := where(rm); len(w) > 0 {
+		sql := fmt.Sprintf("select name from %s where org_id = $1 and (%s)", pg.QuoteIdent(TableName(rm.Name)), strings.Join(w, " or "))
+		if err := collect(sql, org, from); err != nil {
+			return nil, fmt.Errorf("links to %s in %s: %w", model, rm.Name, err)
+		}
+	}
+	for _, f := range rm.Fields {
+		if f.Type != "table" {
+			continue
+		}
+		cm := reg.Model(f.Of)
+		if cm == nil {
+			continue
+		}
+		if w := where(cm); len(w) > 0 {
+			sql := fmt.Sprintf("select distinct parent as name from %s where org_id = $1 and parent_field = $3 and (%s)", pg.QuoteIdent(TableName(cm.Name)), strings.Join(w, " or "))
+			if err := collect(sql, org, from, f.Name); err != nil {
+				return nil, fmt.Errorf("links to %s in %s.%s: %w", model, rm.Name, f.Name, err)
+			}
+		}
+	}
+	return out, nil
+}

@@ -5,7 +5,6 @@ import (
 	"html/template"
 	"os"
 	"path/filepath"
-	"regexp"
 	ttemplate "text/template"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
@@ -54,8 +53,21 @@ func (v *validator) validatePrints() {
 	}
 }
 
-// readsUser finds the CEL variable user outside quoted text.
-var readsUser = regexp.MustCompile(`(^|[^A-Za-z0-9_.'"])user\b`)
+// readsUser reports whether a CEL expression reads the variable user, from its parsed form: text in quotes
+// ('a user note'), a field named user (doc.user) and a macro variable called user are not the variable. An
+// expression that does not parse counts as reading it (fail closed; the filter is reported elsewhere too).
+func readsUser(expr string) bool {
+	refs, err := cel.FreeVars(expr)
+	if err != nil {
+		return true
+	}
+	for _, r := range refs {
+		if r.Kind == "ref" && r.Head == "user" {
+			return true
+		}
+	}
+	return false
+}
 
 func (v *validator) printFormat(p *Print, all map[string]vis) {
 	d, raw := p.Doc, p.Raw
@@ -104,7 +116,7 @@ func (v *validator) printFormat(p *Print, all map[string]vis) {
 		}
 		// a tax file is the same whoever downloads it: an XML format's related filter may not read user (the kernel
 		// counts the rows it lost to the caller's grants without one; audit xml-followups #2)
-		if str(raw, "output") == "xml" && readsUser.MatchString(rel.Filter) {
+		if str(raw, "output") == "xml" && rel.Filter != "" && readsUser(rel.Filter) {
 			v.rep.extra("error", d.Path, at+"/filter", "xml_filter_user",
 				"an XML format's related filter may not read user: the file must not depend on who downloads it (use grants and row scope)")
 		}

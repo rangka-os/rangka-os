@@ -25,8 +25,9 @@ type Runtime struct {
 	HTTP *http.Client // nil = a client with a 30 s timeout
 	Now  func() time.Time
 	Log  func(format string, args ...any)
-	// Enqueue starts a flow with an event (the server wires the queue); nil = events are only audited.
-	StartFlow func(ctx context.Context, org, flow string, event map[string]any, uniqueKey string) error
+	// StartFlow queues a flow with an event in qr (the transaction that records the event key; the server wires the
+	// queue); nil = events are only audited.
+	StartFlow func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, uniqueKey string) error
 }
 
 // maxResponse is how much of a vendor's answer the kernel reads; stored responses are cut to 4 KB after scrubbing.

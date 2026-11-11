@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: pelanggan
+label: {id: Pelanggan}
+naming: PLG-{####}
+title_field: title
+fields:
+  - {name: title, type: data, label: {id: Nama}, required: true, in_list: true}
+  - {name: address, type: text, label: {id: Alamat}}
+  - {name: pos, type: geo, label: {id: Titik}}
+  - {name: due, type: currency, label: {id: Tagihan}, in_list: true}
+  - {name: collector, type: data, label: {id: Penagih}}
+permissions:
+  - {role: penagih, read: true}

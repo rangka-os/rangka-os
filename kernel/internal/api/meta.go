@@ -181,7 +181,12 @@ func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
 		fail(w, &engine.StatusError{Status: 404, Code: "not_found", Msg: "no work screen " + name})
 		return
 	}
-	sets, err := s.Engine.ScreenSets(c.actor, sc)
+	vars, err := s.screenVars(r, c, sc)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	sets, err := s.Engine.ScreenSetsFor(c.actor, sc, vars)
 	if err != nil {
 		fail(w, err)
 		return
@@ -193,6 +198,38 @@ func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
 	delete(sets, "")
 	writeJSON(w, 200, map[string]any{"name": sc.Name, "screen": screenMeta(sc), "set": set, "sets": sets})
 }
+
+// screenVars loads the records a screen is opened for: ?stop=<model>/<name> (a route stop) and ?doc=<name> (the
+// parent of a roll or handover, a record of its document model), each through engine.Get, so a record the caller
+// may not read is a 404 like a missing one.
+func (s *Server) screenVars(r *http.Request, c *caller, sc *meta.Screen) (map[string]any, error) {
+	vars := map[string]any{}
+	if st := r.URL.Query().Get("stop"); st != "" {
+		model, name, ok := strings.Cut(st, "/")
+		if !ok || model == "" || name == "" {
+			return nil, &engine.StatusError{Status: 400, Code: "bad_request", Msg: "stop must be <model>/<name>"}
+		}
+		rec, err := s.Engine.Get(r.Context(), c.actor, model, name)
+		if err != nil {
+			return nil, err
+		}
+		vars["stop"] = map[string]any(rec)
+	}
+	if d := r.URL.Query().Get("doc"); d != "" {
+		model, _ := asMapAny(sc.Block()["document"])["model"].(string)
+		if model == "" {
+			return nil, &engine.StatusError{Status: 400, Code: "bad_request", Msg: "screen " + sc.Name + " has no document"}
+		}
+		rec, err := s.Engine.Get(r.Context(), c.actor, model, d)
+		if err != nil {
+			return nil, err
+		}
+		vars["doc"] = map[string]any(rec)
+	}
+	return vars, nil
+}
+
+func asMapAny(x any) map[string]any { m, _ := x.(map[string]any); return m }
 
 // InstalledConnectors are the connectors a flow triggers or calls, or system.rk notify uses.
 func InstalledConnectors(reg *meta.Registry) []string {

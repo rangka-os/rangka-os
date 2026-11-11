@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: roll_rusak
+type: roll
+label: {id: Roll rusak}
+roles: [staf]
+roll:
+  document: {model: catatan_harian, find: "text == (1", set: {ghost: "1"}, title: ghost}
+  rows: {table: text, label: text, mark: {field: text, values: [x]}, qty: text}
+  add_by: scan

@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: absen_masuk
+type: clock
+label: {id: Absen}
+icon: clock
+roles: [pekerja]
+device: phone
+needs: [location, photo]
+clock:
+  record: {model: absen, filter: "worker == user.email && docstatus == 0", set: {worker: user.email}}
+  in: {field: clock_in, location: in_pos, photo: in_photo}
+  out: {field: clock_out, location: out_pos, photo: out_photo}
+  site: {model: lokasi, link: site, title: title, location: pos, radius_m: radius_m}
+  reason: reason
+  submit: true

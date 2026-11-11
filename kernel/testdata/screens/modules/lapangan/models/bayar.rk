@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: bayar
+label: {id: Terima bayar}
+is_submittable: true
+naming: BYR-{#####}
+fields:
+  - {name: customer, type: link, to: pelanggan, label: {id: Pelanggan}, required: true, in_list: true}
+  - {name: amount, type: currency, label: {id: Jumlah}, required: true, in_list: true}
+  - {name: by, type: data, label: {id: Penagih}}
+rules:
+  - name: limit
+    on: submit
+    check: amount <= 5000000
+    message: {id: Di atas batas setoran Rp5 juta}
+  - name: big
+    on: submit
+    level: warn
+    check: amount < 1000000
+    message: {id: "Jumlah besar, periksa lagi"}
+permissions:
+  - {role: penagih, read: true, create: true, submit: true}

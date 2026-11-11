@@ -4,4 +4,6 @@ type: roll
 label: {id: Antrian}
 roles: [staf]
 if: "user.outlets.size() > 0"
-roll: {}
+roll:
+  document: {model: jam_kerja, find: "docstatus == 0"}
+  rows: {table: breaks, label: minutes, qty: minutes}

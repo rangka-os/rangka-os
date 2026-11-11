@@ -2,6 +2,7 @@ package engine
 
 import (
 	"sort"
+	"strconv"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
@@ -15,10 +16,18 @@ type WorkItem struct {
 	Home   bool   `json:"home"`
 }
 
-// screenEnv is the CEL environment of a screen's if: and set: user, org, tax, today() and now().
-func (e *Engine) screenEnv(a Actor) *cel.Env {
+// screenEnv is the CEL environment of a screen's if: and set: user, org, tax, today() and now(); extra adds the
+// record a screen was opened for (stop: the route stop, doc: the roll or handover parent, contract 0030 §2).
+func (e *Engine) screenEnv(a Actor, extra ...map[string]any) *cel.Env {
 	reg := e.Reg()
-	return &cel.Env{Today: e.Today, Now: e.Now, Apps: reg.IsInstalled, Vars: func(n string) (any, bool) { return GlobalVar(reg, a, n) }}
+	return &cel.Env{Today: e.Today, Now: e.Now, Apps: reg.IsInstalled, Vars: func(n string) (any, bool) {
+		for _, x := range extra {
+			if v, ok := x[n]; ok {
+				return v, true
+			}
+		}
+		return GlobalVar(reg, a, n)
+	}}
 }
 
 // screenIf reports whether the screen's if: holds for a (no if: holds; an expression that fails hides the screen).
@@ -101,8 +110,19 @@ func (e *Engine) ScreenSet(a Actor, s *meta.Screen) (map[string]any, error) {
 // ScreenSets evaluates every set: of the type block, keyed by the slot path that holds it: "" for the block's own
 // (entry), "document", "session", "session.close" (counter).
 func (e *Engine) ScreenSets(a Actor, s *meta.Screen) (map[string]any, error) {
+	return e.ScreenSetsFor(a, s, nil)
+}
+
+// ScreenSetsFor is ScreenSets with the screen opened for records (vars "stop" and "doc", each a record the caller
+// may read, or an empty map): a route's actions and a screen opened from a stop prefill from it. Lists of slots
+// (route actions) are keyed by index: "actions.0".
+func (e *Engine) ScreenSetsFor(a Actor, s *meta.Screen, vars map[string]any) (map[string]any, error) {
 	out := map[string]any{}
-	env := e.screenEnv(a)
+	base := map[string]any{"stop": map[string]any{}, "doc": map[string]any{}}
+	for k, v := range vars {
+		base[k] = v
+	}
+	env := e.screenEnv(a, base)
 	var walk func(path string, m map[string]any, depth int) error
 	walk = func(path string, m map[string]any, depth int) error {
 		if set, ok := m["set"].(map[string]any); ok {
@@ -124,13 +144,22 @@ func (e *Engine) ScreenSets(a Actor, s *meta.Screen) (map[string]any, error) {
 			if k == "set" {
 				continue
 			}
+			p := k
+			if path != "" {
+				p = path + "." + k
+			}
 			if sub, ok := m[k].(map[string]any); ok {
-				p := k
-				if path != "" {
-					p = path + "." + k
-				}
 				if err := walk(p, sub, depth+1); err != nil {
 					return err
+				}
+			}
+			if list, ok := m[k].([]any); ok && k == "actions" { // route actions; queue steps' set: are literals, not CEL
+				for i, x := range list {
+					if sub, ok := x.(map[string]any); ok {
+						if err := walk(p+"."+strconv.Itoa(i), sub, depth+1); err != nil {
+							return err
+						}
+					}
 				}
 			}
 		}
@@ -151,6 +180,9 @@ func (e *Engine) evalSet(s *meta.Screen, path string, set map[string]any, env *c
 	sort.Strings(keys)
 	for _, k := range keys {
 		src, _ := set[k].(string)
+		if absentRecord(src, env) { // a value from stop or doc when the screen was opened without one: left out
+			continue
+		}
 		v, err := cel.Eval(src, env)
 		if err != nil {
 			where := k
@@ -168,4 +200,19 @@ func (e *Engine) evalSet(s *meta.Screen, path string, set map[string]any, env *c
 		out[k] = v
 	}
 	return out, nil
+}
+
+// absentRecord reports whether src reads stop or doc while that record is absent (an empty map).
+func absentRecord(src string, env *cel.Env) bool {
+	for _, r := range cel.Idents(src) {
+		if r.Head != "stop" && r.Head != "doc" {
+			continue
+		}
+		if v, ok := env.Vars(r.Head); ok {
+			if m, isMap := v.(map[string]any); isMap && len(m) == 0 {
+				return true
+			}
+		}
+	}
+	return false
 }

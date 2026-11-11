@@ -3,13 +3,15 @@ name: kantor
 version: 1.0.0
 title: {id: Kantor}
 rangka: '>=0.5'
-modules: {kerja: ^1.0, kasir: ^1.0}
-roles: [staf, mandor, kasir, dapur]
+modules: {kerja: ^1.0, kasir: ^1.0, lapangan: ^1.0}
+roles: [staf, mandor, kasir, dapur, pekerja, pengajar, petugas, penagih]
 menu:
   - group: {id: Kerja}
     items: [jam_kerja, catatan_harian]
   - group: {id: Kasir}
     items: [penjualan, sesi_kasir, tutup_sesi, menu, tiket_dapur]
+  - group: {id: Lapangan}
+    items: [absen, lokasi, kelas, siswa, serah, unit_alat, pelanggan, kunjungan, bayar, keluhan]
 work:
   - {screen: isi_jam, roles: [staf], home: true}
   - {screen: catat}
@@ -17,4 +19,9 @@ work:
   - {screen: jual, roles: [kasir], home: true}
   - {screen: dapur, roles: [dapur], home: true}
   - {screen: jual_online, roles: [kasir]}
+  - {screen: absen_masuk, roles: [pekerja], home: true}
+  - {screen: absen_kelas, roles: [pengajar], home: true}
+  - {screen: serah_alat, roles: [petugas], home: true}
+  - {screen: rute_tagih, roles: [penagih], home: true}
+  - {screen: terima_bayar, roles: [penagih]}
 summary: {id: App uji kantor.}

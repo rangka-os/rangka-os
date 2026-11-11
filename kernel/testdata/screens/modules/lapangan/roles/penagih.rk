@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json
+name: penagih
+label: {id: Penagih}
+desk: false

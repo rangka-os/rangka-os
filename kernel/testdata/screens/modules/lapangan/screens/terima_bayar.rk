@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: terima_bayar
+type: entry
+label: {id: Terima bayar}
+icon: cash
+roles: [penagih]
+device: phone
+offline: queue
+entry:
+  model: bayar
+  fields: [customer, amount]
+  set: {customer: "stop.name", by: user.email}
+  submit: true
+  again: false

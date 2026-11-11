@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: siswa
+label: {id: Siswa}
+naming: SIS-{###}
+title_field: title
+fields:
+  - {name: code, type: data, label: {id: Kode kartu}, required: true, unique: true, in_list: true}
+  - {name: title, type: data, label: {id: Nama}, required: true, in_list: true}
+permissions:
+  - {role: pengajar, read: true}

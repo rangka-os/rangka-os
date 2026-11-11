@@ -88,16 +88,16 @@
       "$ref": "#/$defs/queue"
     },
     "roll": {
-      "$ref": "#/$defs/block"
+      "$ref": "#/$defs/roll"
     },
     "route": {
-      "$ref": "#/$defs/block"
+      "$ref": "#/$defs/route"
     },
     "handover": {
-      "$ref": "#/$defs/block"
+      "$ref": "#/$defs/handover"
     },
     "clock": {
-      "$ref": "#/$defs/block"
+      "$ref": "#/$defs/clock"
     }
   },
   "$defs": {
@@ -107,7 +107,7 @@
     },
     "set": {
       "type": "object",
-      "description": "field: CEL over user, org, tax, today() and now(), evaluated by the kernel when the screen opens",
+      "description": "field: CEL over user, org, tax, today(), now() and the record the screen was opened for (stop, doc), evaluated by the kernel when the screen opens",
       "propertyNames": {
         "$ref": "model.json#/$defs/name"
       },
@@ -196,19 +196,36 @@
             "available": {
               "description": "What is left to sell: a number field of the catalogue model (contract 0034), or a balance model read for the open session's outlet (contract 0039). The card shows 'Sisa N' at 5 or less and 'Habis' at 0 or less; it never blocks a sale",
               "oneOf": [
-                {"$ref": "model.json#/$defs/name"},
+                {
+                  "$ref": "model.json#/$defs/name"
+                },
                 {
                   "type": "object",
-                  "required": ["model", "item", "qty"],
+                  "required": [
+                    "model",
+                    "item",
+                    "qty"
+                  ],
                   "additionalProperties": false,
                   "properties": {
-                    "model": {"$ref": "model.json#/$defs/name", "description": "The balance model (e.g. stock_balance)"},
-                    "item": {"$ref": "model.json#/$defs/name", "description": "Its link field to the catalogue model"},
-                    "qty": {"$ref": "model.json#/$defs/name", "description": "Its number field, summed per item"},
+                    "model": {
+                      "$ref": "model.json#/$defs/name",
+                      "description": "The balance model (e.g. stock_balance)"
+                    },
+                    "item": {
+                      "$ref": "model.json#/$defs/name",
+                      "description": "Its link field to the catalogue model"
+                    },
+                    "qty": {
+                      "$ref": "model.json#/$defs/name",
+                      "description": "Its number field, summed per item"
+                    },
                     "match": {
                       "type": "object",
                       "description": "Balance field: session field; only rows whose field equals the open session's value",
-                      "additionalProperties": {"$ref": "model.json#/$defs/name"}
+                      "additionalProperties": {
+                        "$ref": "model.json#/$defs/name"
+                      }
                     }
                   }
                 }
@@ -548,6 +565,451 @@
           "description": "Seconds between refreshes (default 10)"
         }
       }
+    },
+    "roll": {
+      "type": "object",
+      "required": [
+        "document",
+        "rows"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "find": {
+              "type": "string",
+              "description": "List filter of the parent records offered (e.g. today's open drafts of the user); ?doc=<name> opens one directly"
+            },
+            "create": {
+              "type": "boolean",
+              "description": "Offer \"Mulai baru\": create a parent with set: (default false)"
+            },
+            "set": {
+              "$ref": "#/$defs/set"
+            },
+            "title": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "subtitle": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "sort": {
+              "type": "string"
+            }
+          },
+          "description": "The parent record: picked among find:, opened by ?doc=, or created"
+        },
+        "rows": {
+          "type": "object",
+          "required": [
+            "table",
+            "label"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "table": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "label": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "note": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "qty": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "mark": {
+              "type": "object",
+              "required": [
+                "field"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "field": {
+                  "$ref": "model.json#/$defs/name"
+                },
+                "values": {
+                  "type": "array",
+                  "items": {
+                    "type": "string"
+                  }
+                },
+                "default": {
+                  "type": "string"
+                }
+              },
+              "description": "A select field of the row marked with one tap; rows start at default"
+            }
+          }
+        },
+        "add_by": {
+          "enum": [
+            "scan",
+            "search",
+            "none"
+          ]
+        },
+        "scan": {
+          "type": "object",
+          "required": [
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "match": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "description": "Adds a row by camera, scanner or search: field is the row's link filled, match the field of the linked model that holds the code (default its name)"
+        },
+        "submit": {
+          "type": "boolean"
+        }
+      },
+      "description": "One parent, many rows marked fast or added by scan: class attendance, stock count, receiving (contract 0030 §2)"
+    },
+    "handover": {
+      "type": "object",
+      "required": [
+        "document",
+        "rows"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "document": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "find": {
+              "type": "string",
+              "description": "List filter of the parent records offered (e.g. today's open drafts of the user); ?doc=<name> opens one directly"
+            },
+            "create": {
+              "type": "boolean",
+              "description": "Offer \"Mulai baru\": create a parent with set: (default false)"
+            },
+            "set": {
+              "$ref": "#/$defs/set"
+            },
+            "title": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "subtitle": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "sort": {
+              "type": "string"
+            }
+          },
+          "description": "The parent record: picked among find:, opened by ?doc=, or created"
+        },
+        "rows": {
+          "type": "object",
+          "required": [
+            "table",
+            "unit"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "table": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "unit": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "condition": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "qty": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "note": {
+              "$ref": "model.json#/$defs/name"
+            }
+          }
+        },
+        "scan": {
+          "type": "object",
+          "required": [],
+          "additionalProperties": false,
+          "properties": {
+            "match": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "description": "A scanned code adds the unit whose match field (default its name) holds it"
+        },
+        "photos": {
+          "type": "object",
+          "required": [
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "min": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 10
+            }
+          },
+          "description": "field: an image field of the document (the first photo); every photo is an attachment of the document"
+        },
+        "signature": {
+          "type": "object",
+          "required": [
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "by": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "description": "field: a signature field of the document; by: the field naming the signer"
+        },
+        "print": {
+          "type": "string"
+        },
+        "submit": {
+          "type": "boolean"
+        }
+      },
+      "description": "Hand items over with proof: rental out/in, proof of delivery (contract 0030 §2)"
+    },
+    "clock": {
+      "type": "object",
+      "required": [
+        "record",
+        "in",
+        "out"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "record": {
+          "type": "object",
+          "required": [
+            "model"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "filter": {
+              "type": "string",
+              "description": "List filter (field names, CEL, with user and today())"
+            },
+            "set": {
+              "$ref": "#/$defs/set"
+            }
+          }
+        },
+        "in": {
+          "type": "object",
+          "required": [
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "location": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "photo": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "description": "field: a datetime field set at the press; location: a geo field; photo: an image field"
+        },
+        "out": {
+          "type": "object",
+          "required": [
+            "field"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "field": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "location": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "photo": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "description": "field: a datetime field set at the press; location: a geo field; photo: an image field"
+        },
+        "site": {
+          "type": "object",
+          "required": [
+            "model",
+            "link",
+            "location",
+            "radius_m"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "link": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "filter": {
+              "type": "string",
+              "description": "List filter (field names, CEL, with user and today())"
+            },
+            "title": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "location": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "radius_m": {
+              "$ref": "model.json#/$defs/name"
+            }
+          },
+          "description": "Where the user clocks: link is the record's link to the site model, location its geo field, radius_m its radius"
+        },
+        "reason": {
+          "$ref": "model.json#/$defs/name"
+        },
+        "submit": {
+          "type": "boolean",
+          "description": "Submit the record after clock-out (default false)"
+        }
+      },
+      "description": "Clock in and out at a site (contract 0030 §2)"
+    },
+    "route": {
+      "type": "object",
+      "required": [
+        "stops",
+        "actions"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "stops": {
+          "type": "object",
+          "required": [
+            "model",
+            "title"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "filter": {
+              "type": "string",
+              "description": "List filter (field names, CEL, with user and today())"
+            },
+            "sort": {
+              "type": "string"
+            },
+            "limit": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 500
+            },
+            "title": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "subtitle": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "address": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "location": {
+              "$ref": "model.json#/$defs/name"
+            }
+          }
+        },
+        "visit": {
+          "type": "object",
+          "required": [
+            "model",
+            "link"
+          ],
+          "additionalProperties": false,
+          "properties": {
+            "model": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "link": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "set": {
+              "$ref": "#/$defs/set"
+            },
+            "location": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "photo": {
+              "$ref": "model.json#/$defs/name"
+            },
+            "submit": {
+              "type": "boolean"
+            }
+          },
+          "description": "The check-in record made at a stop"
+        },
+        "actions": {
+          "type": "array",
+          "minItems": 1,
+          "items": {
+            "type": "object",
+            "required": [
+              "label"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "label": {
+                "$ref": "model.json#/$defs/label"
+              },
+              "screen": {
+                "$ref": "model.json#/$defs/name"
+              },
+              "create": {
+                "$ref": "model.json#/$defs/name"
+              },
+              "set": {
+                "$ref": "#/$defs/set"
+              }
+            }
+          },
+          "description": "Open another screen for the stop (?stop=) or create a record from it; set: may read stop"
+        }
+      },
+      "description": "Today's stops: visit, check in, act there (contract 0030 §2)"
     }
   }
 }

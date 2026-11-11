@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: kelas_hadir
+label: {id: Kehadiran}
+is_child: true
+fields:
+  - {name: student, type: link, to: siswa, label: {id: Siswa}, required: true}
+  - name: status
+    type: select
+    label: {id: Status}
+    default: "'hadir'"
+    options:
+      - {value: hadir, label: {id: Hadir}}
+      - {value: izin, label: {id: Izin}}
+      - {value: sakit, label: {id: Sakit}}
+      - {value: alpa, label: {id: Alpa}}
+  - {name: note, type: data, label: {id: Catatan}}

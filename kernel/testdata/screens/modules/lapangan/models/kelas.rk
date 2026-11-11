@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: kelas
+label: {id: Sesi kelas}
+is_submittable: true
+naming: KLS-{#####}
+title_field: title
+fields:
+  - {name: title, type: data, label: {id: Kelas}, required: true, in_list: true}
+  - {name: date, type: date, label: {id: Tanggal}, default: today(), in_list: true}
+  - {name: teacher, type: data, label: {id: Pengajar}}
+  - {name: attendance, type: table, of: kelas_hadir, label: {id: Kehadiran}}
+  - {name: present, type: int, label: {id: Hadir}, compute: "attendance.map(r, r.status == 'hadir' ? 1 : 0).sum()", in_list: true}
+permissions:
+  - {role: pengajar, read: true, create: true, write: true, submit: true}

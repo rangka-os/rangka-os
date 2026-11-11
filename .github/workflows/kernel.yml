@@ -21,14 +21,14 @@ jobs:
     # Pinned: ubuntu-latest moved to 26.04, whose apt has no postgresql-16; 24.04 ships it.
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { path: rangka-os }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { repository: rangka-os/rangka-apps, path: rangka-apps }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version-file: rangka-os/kernel/go.mod }
 
       # scripts/pgtemp.sh starts a throwaway cluster from these binaries (ubuntu 24.04 ships PostgreSQL 16).
@@ -40,7 +40,7 @@ jobs:
 
       # tools/rangka_validate.py, the reference the Go validator must match byte for byte. setup-python gives a
       # pip that is not blocked by the system Python (PEP 668).
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: { python-version: '3.12' }
       - name: Install Python packages
         run: python -m pip install jsonschema referencing pyyaml
@@ -68,12 +68,12 @@ jobs:
     # --require-all: a missing tool or a feature on contract mocks fails instead of skipping.
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { path: rangka-os }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version-file: rangka-os/kernel/go.mod }
 
       - name: Install PostgreSQL 16
@@ -82,7 +82,7 @@ jobs:
           sudo apt-get install -y postgresql-16
           echo "PGBIN=/usr/lib/postgresql/16/bin" >> "$GITHUB_ENV"
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with: { python-version: '3.12' }
       - name: Install Playwright and Chromium
         run: |

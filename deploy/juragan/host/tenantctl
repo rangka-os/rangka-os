@@ -99,7 +99,7 @@ tc() { # tc <id> <compose args...>: docker compose for one tenant
     --env-file "$HOST_DIR/registry/$id.env" --env-file "$HOST_DIR/secrets/$id.env" -f "$HERE/tenant.compose.yaml" "$@"
 }
 
-# ---------- lock: one mutating tenantctl at a time per host (create, upgrade, delete, suspend, resume, restart, drill)
+# ---------- lock: one mutating tenantctl at a time per host (create, upgrade, delete, suspend, resume, restart, drill, backup)
 # The lock folder holds "<pid> <start time>". A holder counts as gone only when no process has that pid, or the pid now
 # belongs to a process started at another time (pid reused after a reboot); a live process of another user (kill -0
 # gives EPERM) still holds it. On exit a run removes the lock only while it is still its own.
@@ -184,8 +184,11 @@ ensure_backup_image() {
   ensure_kernel_image "$DEFAULT_TAG" slim
   # rebuilt whenever backup.sh, restore.sh, lib.sh or the Dockerfile change (label juragan.scripts = their hash), so a
   # host never runs a stale copy of the scripts it ships with
+  # The hash also covers the kernel slim image it is built FROM (its Id), so a kernel image rebuilt for the same tag
+  # brings a new rangka binary into the backup image too (audit hosting r3 R3).
   local want have
-  want="$(cat "$HERE/../backup/lib.sh" "$HERE/../backup/backup.sh" "$HERE/../backup/restore.sh" "$HERE/backup/Dockerfile" | sha256_stdin)"
+  want="$( { cat "$HERE/../backup/lib.sh" "$HERE/../backup/backup.sh" "$HERE/../backup/restore.sh" "$HERE/backup/Dockerfile"
+             docker image inspect -f '{{.Id}}' "$(kernel_image "$DEFAULT_TAG" slim)"; } | sha256_stdin)"
   have="$(docker image inspect -f '{{index .Config.Labels "juragan.scripts"}}' "juragan-host-backup:$DEFAULT_TAG" 2>/dev/null || true)"
   [ "$have" = "$want" ] && return 0
   log "building juragan-host-backup:$DEFAULT_TAG (backup scripts changed or image missing)"
@@ -213,14 +216,19 @@ attach_shared() {
     fi
   done
 }
-attached_shared() { # true when Postgres and Caddy are both on the tenant's network
-  local net c svc
+shared_networks() { # shared_networks <svc>: the networks the shared service is on, one per line ("" when not running)
+  local c
+  c="$(shared_container "$1")"
+  [ -n "$c" ] || return 0
+  docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" | tr ' ' '\n'
+}
+detached_shared() { # detached_shared <id> <postgres networks> <caddy networks>: the shared services not on the tenant's
+  # network, comma separated ("" when both are); the lists come from shared_networks, read once per health run
+  local net out=""
   net="$(tenant_net "$1")"
-  for svc in postgres caddy; do
-    c="$(shared_container "$svc")"
-    [ -n "$c" ] || return 1
-    docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" | tr ' ' '\n' | grep -qx "$net" || return 1
-  done
+  grep -qx "$net" <<<"$2" || out="postgres"
+  grep -qx "$net" <<<"$3" || out="${out:+$out,}caddy"
+  echo "$out"
 }
 detach_shared() { # detach_shared <id>: undo attach_shared and remove the network
   local net c svc
@@ -521,6 +529,10 @@ cmd_health() {
   if [ $# -gt 0 ]; then need_tenant "$1"; ids=("$1"); else
     while IFS= read -r id; do [ -n "$id" ] && ids+=("$id"); done <<<"$(tenant_ids active suspended)"
   fi
+  # the shared services' networks, once per run, not per tenant (audit hosting r3 R2)
+  local pg_nets caddy_nets off
+  pg_nets="$(shared_networks postgres)"
+  caddy_nets="$(shared_networks caddy)"
   for id in ${ids[@]+"${ids[@]}"}; do
     case "$(reg "$id" STATUS)" in
       suspended) r="$(probe_route "$id" /)"; [ "$r" = 503 ] || bad=1; echo "SUSPENDED $id route=$r"; continue ;;
@@ -528,9 +540,11 @@ cmd_health() {
       *) echo "SKIP $id status=$(reg "$id" STATUS)"; continue ;;
     esac
     k="$(probe_kernel "$id" || true)"
-    # the kernel needs Postgres on its network: a Postgres recreated outside host-up loses the tenant networks, and the
-    # kernel then fails every login while its OIDC document still answers 200
-    attached_shared "$id" || k="$k/no-db-net"
+    # the kernel needs Postgres on its network and Caddy reaches it there: a shared service recreated outside host-up
+    # loses the tenant networks (the kernel then fails every login while its OIDC document still answers 200). The
+    # line names the service that is off (audit hosting r3 R1): kernel=200/off-net:postgres,caddy
+    off="$(detached_shared "$id" "$pg_nets" "$caddy_nets")"
+    [ -z "$off" ] || k="$k/off-net:$off"
     r="$(probe_route "$id")"
     b="$(newest_local_backup "$id")"
     if [ -n "$b" ]; then age=$(( (now_s - $(stamp_epoch "$b")) / 3600 )); else age=-1; fi
@@ -943,7 +957,8 @@ cmd="$1"; shift
 command -v docker >/dev/null || die "docker not found"
 load_config
 case "$cmd" in
-  create|upgrade|delete|suspend|resume|restart|drill|host-up|host-down) lock ;;
+  # backup too: two at once would build the same backup image twice and race on the archives (audit hosting r3 R4)
+  create|upgrade|delete|suspend|resume|restart|drill|backup|host-up|host-down) lock ;;
 esac
 case "$cmd" in
   host-up) host_up ;;

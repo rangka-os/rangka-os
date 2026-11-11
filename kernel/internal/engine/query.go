@@ -187,11 +187,16 @@ func (e *Engine) readableLinkErr(ctx context.Context, a Actor, rs *RowScope, to,
 	if !rs.Visible(tm, rec) {
 		return nil, false, nil
 	}
-	e.refreshClock(ctx, a, tm, rec, true, links)
+	if err := e.refreshClockErr(ctx, a, tm, rec, true, links); err != nil {
+		return nil, false, err
+	}
 	rec = e.Output(tm, rec)
 	pm := e.permModel(tm.Name)
-	if pm == nil || !e.recordAllowed(ctx, e.DB, a, tm, e.decide(a, pm, "read"), rec, links) {
+	if pm == nil {
 		return nil, false, nil
+	}
+	if ok, err := e.recordAllowedErr(ctx, e.DB, a, tm, e.decide(a, pm, "read"), rec, links); err != nil || !ok {
+		return nil, false, err
 	}
 	return rec, true, nil
 }

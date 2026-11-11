@@ -211,19 +211,31 @@ func (e *Engine) decide(a Actor, m *meta.Model, action string) decision {
 
 // recordAllowed evaluates a decision on a record: some condition must be true (errors count as false).
 func (e *Engine) recordAllowed(ctx context.Context, q pg.Querier, a Actor, m *meta.Model, d decision, rec store.Record, links map[string]map[string]any) bool {
+	ok, _ := e.recordAllowedErr(ctx, q, a, m, d, rec, links)
+	return ok
+}
+
+// recordAllowedErr is recordAllowed that also returns a database error met while a condition loads a linked
+// record (an expression error still counts as false): a client filter fails on it instead of reading the
+// record as unreadable, hence missing (contract 0010 §5).
+func (e *Engine) recordAllowedErr(ctx context.Context, q pg.Querier, a Actor, m *meta.Model, d decision, rec store.Record, links map[string]map[string]any) (bool, error) {
 	if d.all {
-		return true
+		return true, nil
 	}
 	if len(d.conds) == 0 {
-		return false
+		return false, nil
 	}
 	s := e.newScope(ctx, q, a, m, rec, links)
 	for _, c := range d.conds {
-		if v, err := s.eval(c); err == nil && cel.Truthy(v) {
-			return true
+		v, err := s.eval(c)
+		if err == nil && cel.Truthy(v) {
+			return true, nil
+		}
+		if err != nil && isLoadError(err) {
+			return false, err
 		}
 	}
-	return false
+	return false, nil
 }
 
 func (e *Engine) authorize(ctx context.Context, q pg.Querier, links map[string]map[string]any, a Actor, model, action string, rec store.Record) error {

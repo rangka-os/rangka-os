@@ -67,6 +67,13 @@
     "screens.js",
     "counter.js",
     "queue.js",
+    "media.js",
+    "scan.js",
+    "clock.js",
+    "roll.js",
+    "handover.js",
+    "route.js",
+    "vendor/zxing.min.js",
     "pwa.js",
     "shell.js"
   ];

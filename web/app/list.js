@@ -197,6 +197,22 @@
 
   var STATUSES = [["draft", "Draf", ""], ["submitted", "Diajukan", "info"], ["paid", "Lunas", "ok"], ["partly", "Dibayar sebagian", "warn"], ["overdue", "Jatuh tempo", "bad"], ["cancelled", "Dibatalkan", ""]];
 
+  /** The answer of POST /r/{model}/submit as rows for the result dialog: {ok, held, failed}; a failed row says why
+   *  (the rule's words) and whether only warnings stopped it (force: "Ajukan tetap" may resend it with force). */
+  function bulkSubmitSummary(res) {
+    var out = { ok: [], held: [], failed: [] };
+    ((res && res.results) || []).forEach(function (r) {
+      if (r.status === 200) out.ok.push({ name: r.name, number: r.new_name || r.name });
+      else if (r.status === 202) out.held.push({ name: r.name });
+      else {
+        var e = r.error || {}, errs = e.errors || [], warns = e.warnings || [];
+        var words = (errs.length ? errs : warns).map(function (x) { return x.message; }).filter(Boolean).join(" · ") || e.message || "Ditolak";
+        out.failed.push({ name: r.name, message: words, force: !!e.needs_force && !errs.length });
+      }
+    });
+    return out;
+  }
+  RA.bulkSubmitSummary = bulkSubmitSummary;
   RA.celQuote = celQuote;
   RA.inClause = inClause;
   RA.buildFilter = buildFilter;
@@ -610,6 +626,8 @@
     var aes = useState(null), aggErr = aes[0], setAggErr = aes[1];
     var gos = useState({}), opened = gos[0], setOpened = gos[1];
     var sls = useState({}), selected = sls[0], setSelected = sls[1];
+    var bbs = useState(false), bulkBusy = bbs[0], setBulkBusy = bbs[1];
+    var brs = useState(null), bulkResult = brs[0], setBulkResult = brs[1]; // the last "Ajukan" answer, shown in a dialog
     var seq = useRef(0), aseq = useRef(0), gseq = useRef({});
     var filters = useQuickFilters(ctx, m, mm);
     var filter = buildFilter(fval, filters);
@@ -766,8 +784,42 @@
     function onSelect(names, on) {
       setSelected(function (cur) { var n = Object.assign({}, cur); names.forEach(function (x) { if (on) n[x] = true; else delete n[x]; }); return n; });
     }
+    // "Ajukan": drafts among the picked rows, one request (POST /r/{model}/submit), a result per row; warn-only refusals
+    // can be sent again with force after the user confirms them in the dialog
+    var drafts = picked.filter(function (r) { return Number(r.docstatus || 0) === 0; });
+    var canSubmit = mm.is_submittable && !(mm.can && mm.can.submit === false) && !ctx.readOnly;
+    function submitPicked(names, force) {
+      if (bulkBusy || !names.length) return;
+      setBulkBusy(true);
+      var titles = {}; // the row's title as the list shows it (a draft's DRAFT-xxxxx code means nothing to the user)
+      data.rows.forEach(function (r) { if (names.indexOf(r.name) >= 0) titles[r.name] = ctx.eng.title(m, r) || r.name; });
+      if (bulkResult && bulkResult.titles) Object.keys(bulkResult.titles).forEach(function (k) { if (!titles[k]) titles[k] = bulkResult.titles[k]; });
+      ctx.api.submitMany(m, names, force).then(function (res) {
+        var sum = bulkSubmitSummary(res);
+        sum.titles = titles;
+        setBulkResult(sum);
+        setSelected({});
+        setReload(function (x) { return x + 1; });
+      }, function (e) { ctx.toast("bad", "Gagal mengajukan", (e && e.message) || ""); }).then(function () { setBulkBusy(false); });
+    }
     var bulk = view === "list" ? h(R.BulkBar, { count: picked.length },
+      canSubmit ? h(R.Button, { size: "sm", variant: "primary", disabled: !drafts.length || bulkBusy, loading: bulkBusy,
+        title: drafts.length ? undefined : "Yang dipilih sudah diajukan semua",
+        onClick: function () { submitPicked(drafts.map(function (r) { return r.name; }), false); } }, drafts.length ? "Ajukan " + drafts.length + " draf" : "Ajukan") : null,
       h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setSelected({}); } }, "Hapus pilihan")) : null;
+    var forceable = bulkResult ? bulkResult.failed.filter(function (f) { return f.force; }) : [];
+    var bulkDialog = bulkResult ? h(R.Dialog, { title: "Hasil pengajuan", onClose: function () { if (!bulkBusy) setBulkResult(null); },
+      footer: [
+        forceable.length ? h(R.Button, { key: "f", disabled: bulkBusy, loading: bulkBusy, onClick: function () { submitPicked(forceable.map(function (f) { return f.name; }), true); } },
+          "Ajukan tetap " + forceable.length) : null,
+        h(R.Button, { key: "c", variant: "primary", disabled: bulkBusy, onClick: function () { setBulkResult(null); } }, "Tutup")
+      ].filter(Boolean) },
+      h("p", { className: "ap-bulk-sum" }, [bulkResult.ok.length + " diajukan", bulkResult.held.length ? bulkResult.held.length + " menunggu persetujuan" : null,
+        bulkResult.failed.length ? bulkResult.failed.length + " ditolak" : null].filter(Boolean).join(" · ")),
+      h("ul", { className: "ap-bulk-list" },
+        bulkResult.failed.map(function (f) { return h("li", { key: "f" + f.name, className: "is-bad" }, h("b", null, bulkResult.titles[f.name] || f.name), h("span", null, f.message + (f.force ? " (peringatan; bisa diajukan tetap)" : ""))); }),
+        bulkResult.held.map(function (f) { return h("li", { key: "h" + f.name, className: "is-held" }, h("b", null, bulkResult.titles[f.name] || f.name), h("span", null, "Menunggu persetujuan")); }),
+        bulkResult.ok.map(function (f) { return h("li", { key: "o" + f.name, className: "is-ok" }, h("b", null, f.number), h("span", null, "Diajukan")); }))) : null;
 
     var body;
     if (board) {
@@ -786,7 +838,7 @@
       body = h(ListTable, { ctx: ctx, model: m, columns: columns, rows: data.rows, loading: loading, sort: sort, selected: selected, onSelect: onSelect,
         onSort: function (key) { setSortTo(nextSort(sort, key)); }, footer: pager });
     }
-    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, toolbar, bulk, body));
+    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content" }, chips, toolbar, bulk, body), bulkDialog);
   }
 
   /* ---------------------------------------------------------------- Ubah: list columns as chips (order, hide) */

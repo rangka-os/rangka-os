@@ -51,7 +51,11 @@
     if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
     if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
-    if (parts[0] === "w" && parts.length === 2) return { kind: "work", screen: parts[1] };
+    if (parts[0] === "w" && parts.length === 2) { // #/w/<screen>?stop=<model>/<name>&doc=<name> (contract 0030 §3)
+      var q = {}, qs = String(hash || "").split("?")[1] || "";
+      qs.split("&").forEach(function (kv) { var i = kv.indexOf("="); if (i > 0 && /^(stop|doc)$/.test(kv.slice(0, i))) q[kv.slice(0, i)] = dec(kv.slice(i + 1)); });
+      return { kind: "work", screen: parts[1], query: q };
+    }
     return { kind: "notfound" };
   }
 

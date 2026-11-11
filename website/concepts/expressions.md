@@ -18,6 +18,7 @@ if: app_installed('invoicing')
 | `today()`, `now()` | ISO date / datetime in the organisation's timezone |
 | `duration('7d')`, `duration(n)` (n days), date ± duration | Date arithmetic; result is an ISO date |
 | `add_months(date, n)`, `days_between(a, b)` | Calendar months (day clamped to the month's end: `2026-01-31` + 1 = `2026-02-28`) and whole days from a to b |
+| `distance_m(a, b)` | Metres between two `geo` positions (`{lat, lng}`), `-1` when either has none |
 | `round(x)`, `max(…)`, `min(…)`, `size(x)`, `sum(list)`, `list.map(x, expr)`, `list.exists(x, expr)`, `list.all(x, expr)` | Numbers and lists |
 | `int(x)`, `double(x)`, `string(x)` | Conversions |
 | `option('field', 'attr')` | An attribute of the selected option of a select field (e.g. `probability`) |

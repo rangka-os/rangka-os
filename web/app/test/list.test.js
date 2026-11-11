@@ -223,3 +223,19 @@ test("cardSlots: a rupiah column is the amount even when a quantity comes first 
   const n = JSON.parse(JSON.stringify(A.cardSlots(meta, "stock_entry", ["item", "qty", "posting_date"])));
   assert.strictEqual(n.amount, "qty");
 });
+
+test("bulkSubmitSummary: per row submitted, held, refused (warn-only can be forced)", () => {
+  const A = load(), plain = (x) => JSON.parse(JSON.stringify(x));
+  const s = A.bulkSubmitSummary({ results: [
+    { name: "DRAFT-1", status: 200, new_name: "SLIP-0001" },
+    { name: "DRAFT-2", status: 202, approval: { name: "APR-1" } },
+    { name: "DRAFT-3", status: 422, error: { errors: [{ message: "Jam wajib diisi" }], warnings: [] } },
+    { name: "DRAFT-4", status: 422, error: { errors: [], warnings: [{ message: "Melebihi plafon" }], needs_force: true } },
+    { name: "DRAFT-5", status: 404, error: { code: "not_found", message: "not found" } }] });
+  assert.deepStrictEqual(plain(s.ok), [{ name: "DRAFT-1", number: "SLIP-0001" }]);
+  assert.deepStrictEqual(plain(s.held), [{ name: "DRAFT-2" }]);
+  assert.deepStrictEqual(plain(s.failed), [
+    { name: "DRAFT-3", message: "Jam wajib diisi", force: false },
+    { name: "DRAFT-4", message: "Melebihi plafon", force: true },
+    { name: "DRAFT-5", message: "not found", force: false }]);
+});

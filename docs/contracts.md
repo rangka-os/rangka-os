@@ -37,7 +37,8 @@ loads the linked record), list literals. Functions: `today()` (ISO date string, 
 `option('field', 'attr')` (attribute of the selected option of a select field, e.g. probability), `app_installed('sales')`,
 `truncate(s, n)`, `s.contains(t)`, `add_months(date, n)` (a `YYYY-MM-DD` date n calendar months later, the day clamped to the end of
 the target month: `2026-01-31` + 1 = `2026-02-28`; add to an anchor, never to the previous result) and
-`days_between(a, b)` (whole days from a to b, negative when b is earlier, 0 when either is empty; contract 0031). Globals: `user` (`user.name`, `user.roles`), `org` and `tax` (the
+`days_between(a, b)` (whole days from a to b, negative when b is earlier, 0 when either is empty; contract 0031) and
+`distance_m(a, b)` (metres between two `geo` positions, -1 when either has none; contract 0030 §4). Globals: `user` (`user.name`, `user.roles`), `org` and `tax` (the
 current org's PKP status and PPN figures, contract 0010 §8), `event` (flows). Dates are ISO
 strings and compare as strings. Missing values are `''` for data/date/link, `0` for numbers, `false` for check.
 

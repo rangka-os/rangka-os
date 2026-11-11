@@ -297,8 +297,9 @@ test("homeHash: a dashboard the user may not open is never home; one naming the 
 });
 
 test("parseRoute: #/w/<screen> is a work screen", () => {
-  assert.deepStrictEqual(plain(A.parseRoute("#/w/isi_jam")), { kind: "work", screen: "isi_jam" });
-  assert.deepStrictEqual(plain(A.parseRoute("#/w/isi_jam?stop=C-1")), { kind: "work", screen: "isi_jam" });
+  assert.deepStrictEqual(plain(A.parseRoute("#/w/isi_jam")), { kind: "work", screen: "isi_jam", query: {} });
+  assert.deepStrictEqual(plain(A.parseRoute("#/w/bayar?stop=pelanggan%2FPLG-0001&doc=KLS-1&x=1")),
+    { kind: "work", screen: "bayar", query: { stop: "pelanggan/PLG-0001", doc: "KLS-1" } }, "stop and doc are kept, other keys dropped");
   assert.strictEqual(A.parseRoute("#/w").kind, "notfound");
 });
 

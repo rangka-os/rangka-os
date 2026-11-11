@@ -103,6 +103,9 @@ func secretFields(c map[string]any) map[string]bool {
 	return out
 }
 
+// pageURLKey carries the next page's URL (a poll following next:) into Render.
+type pageURLKey struct{}
+
 func varsEnv(vars map[string]any) *cel.Env {
 	return &cel.Env{Vars: func(n string) (any, bool) { v, ok := vars[n]; return v, ok }}
 }
@@ -218,6 +221,21 @@ func (r *Resolver) Render(ctx context.Context, org, connector, action string, in
 		}
 		u.RawQuery = vals.Encode()
 		out.URL = u.String()
+	}
+	if next, ok := ctx.Value(pageURLKey{}).(string); ok && next != "" {
+		// a poll following the answer's next page (next_url): the vendor's URL replaces the rendered one, on the
+		// same host only; its scheme stays the action's (a vendor that links http:// keeps https)
+		orig, err1 := url.Parse(out.URL)
+		nu, err2 := url.Parse(next)
+		if err1 != nil || err2 != nil || nu.Host == "" {
+			return nil, fmt.Errorf("next page %q is not an absolute URL", scrub.String(next))
+		}
+		if !strings.EqualFold(nu.Hostname(), orig.Hostname()) || nu.Port() != orig.Port() {
+			return nil, fmt.Errorf("%w: next page of %s.%s on %s, not %s", ErrHostRefused, connector, action, nu.Hostname(), orig.Hostname())
+		}
+		nu.Scheme = orig.Scheme
+		nu.User = nil
+		out.URL = nu.String()
 	}
 	if b, ok := req["body"]; ok {
 		out.Body = render(b, false)

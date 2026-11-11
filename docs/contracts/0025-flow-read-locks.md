@@ -54,3 +54,11 @@ point-of-sale submits failed with 409s 3 to 14 times in 24 and different orgs fo
   in the same order in flows that may run at the same time.
 - Code inside a unit of work must not send anything outside the database before commit (HTTP, files, logs that
   matter); use `Tx.AfterCommit`, or a retry would repeat it.
+
+## Refinement (11 Nov 2026): find reads only what it can match
+A `find`/`find_all` step still holds the model's read lock, but no longer loads the whole table: the plain operands of
+its `where:` joined by `&&` (a text field or `name` `==` a value, `field in` a list of texts, `docstatus == n` or `!= n`
+on a submittable model, the value read from `event` or flow variables, never from the record) become SQL conditions,
+and rows are read newest first in chunks of 200 until the first match (`find`) or `limit:`. With `sort:` every matching
+row is read and sorted as before. The whole `where:` is evaluated on each row read, so the SQL only narrows; a value
+that is null or empty, `!=` on text, `||`, macros and computed or non-text fields stay CEL only.

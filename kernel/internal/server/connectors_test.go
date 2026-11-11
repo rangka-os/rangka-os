@@ -7,6 +7,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -19,6 +20,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
 // Contract 0002 §A and 0017 §5–§7: the connector runtime. The vendor is a fake transport, so the kernel's own host
@@ -741,5 +743,201 @@ func TestPollEachOutlet(t *testing.T) {
 	}
 	if got := v.reqs[5].URL.Query().Get("since"); got != "2026-11-10T07:30:00Z" {
 		t.Fatalf("outlet 12 since: %q", got)
+	}
+}
+
+const pagerConnector = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: pager_test
+label: {id: Pager test}
+summary: {id: Penghubung uji yang membaca transaksi per halaman.}
+version: 1.0.0
+hosts: [api.example.com]
+auth:
+  type: token
+  fields:
+    - {name: api_key, label: {id: API key}, secret: true}
+triggers:
+  - name: sales
+    via: poll
+    every: 5m
+    action: latest
+    input: {since: "cursor != null ? epoch(cursor) : 1794268800"}
+    next: next
+    cursor: "size(payments) > 0 ? timestamp(max(payments.map(p, epoch(p.created_at)))) : null"
+    for_each: "payments[]"
+    emit: {order_id: item.id, customer: item.customer, phone: item.phone}
+  - name: paged
+    via: poll
+    every: 5m
+    action: numbered
+    input: {page: "page != null ? page : 1"}
+    next: "has_more ? page_no + 1 : null"
+    for_each: "payments[]"
+    emit: {order_id: item.id, customer: item.customer, phone: item.phone}
+actions:
+  - name: latest
+    request:
+      method: GET
+      url: https://api.example.com/v3/sales
+      headers: {Authorization: 'Bearer {auth.api_key}'}
+      query: {since: '{input.since}', per_page: '2'}
+    input:
+      - {name: since, type: int, required: true}
+    output: {payments: data.payments, next: data.next_url}
+  - name: numbered
+    request:
+      method: GET
+      url: https://api.example.com/v1/pages
+      headers: {Authorization: 'Bearer {auth.api_key}'}
+      query: {page: '{input.page}'}
+    input:
+      - {name: page, type: int}
+    output: {payments: data.payments, has_more: data.has_more, page_no: data.page}
+`
+
+func pagerFlow(name, on string) string {
+	return `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+name: ` + name + `
+label: {id: Transaksi jadi lead}
+on: ` + on + `
+steps:
+  - create: lead
+    set:
+      lead_name: event.customer
+      phone: event.phone
+      source: "'whatsapp'"
+      status: "'new'"
+idempotency: event.order_id
+`
+}
+
+// pagerVendor answers Moka-like pages: next_url links the next page (http://, which the kernel keeps on https), and a
+// numbered API answers has_more.
+type pagerVendor struct {
+	mu      sync.Mutex
+	reqs    []*http.Request
+	offHost bool
+}
+
+func (o *pagerVendor) RoundTrip(r *http.Request) (*http.Response, error) {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	o.reqs = append(o.reqs, r)
+	body := `{}`
+	switch r.URL.Path {
+	case "/v3/sales":
+		next := `"http://api.example.com/v3/sales?since=1794268800&per_page=2&cursor=b"`
+		if o.offHost {
+			next = `"https://evil.example.net/v3/sales?cursor=b"`
+		}
+		body = `{"data":{"payments":[{"id":"s3","customer":"Dewi","phone":"62812000003","created_at":"2026-11-10T10:00:00+07:00"},{"id":"s2","customer":"Eko","phone":"62812000002","created_at":"2026-11-10T09:00:00+07:00"}],"next_url":` + next + `}}`
+		switch r.URL.Query().Get("cursor") {
+		case "b":
+			body = `{"data":{"payments":[{"id":"s1","customer":"Fajar","phone":"62812000001","created_at":"2026-11-10T08:00:00+07:00"}],"next_url":"https://api.example.com/v3/sales?since=1794268800&per_page=2&cursor=c"}}`
+		case "c":
+			body = `{"data":{"payments":[],"next_url":null}}`
+		}
+		if r.URL.Query().Get("since") != "1794268800" {
+			body = `{"data":{"payments":[],"next_url":null}}`
+		}
+	case "/v1/pages":
+		switch r.URL.Query().Get("page") {
+		case "1":
+			body = `{"data":{"payments":[{"id":"n1","customer":"Gita","phone":"62813000001"}],"has_more":true,"page":1}}`
+		case "2":
+			body = `{"data":{"payments":[{"id":"n2","customer":"Hadi","phone":"62813000002"}],"has_more":false,"page":2}}`
+		}
+	}
+	return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+}
+
+// t_277ba9bf + t_1320981c: a poll follows next: (Moka's next_url, on the action's host, or a page number) until it is
+// null; the cursor reads every page; epoch()/timestamp() keep the cursor a datetime and send since in seconds.
+// t_346011ed: an event whose flow cannot be queued is not remembered, so the next poll brings it again.
+func TestPollFollowsNextPage(t *testing.T) {
+	t.Setenv("RANGKA_MASTER_KEY", testKEK(t))
+	t.Setenv("RANGKA_MASTER_KEY_FILE", "")
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "system.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, []byte(strings.Replace(string(b), "secrets: {driver: env}", "secrets: {driver: db}", 1)), 0o644)
+		dir := filepath.Join(filepath.Dir(apps), "rangka-connectors", "pager_test")
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, "connector.rk"), []byte(pagerConnector), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		for name, on := range map[string]string{"pager_sale_to_lead": "pager_test.sales", "pager_page_to_lead": "pager_test.paged"} {
+			if err := os.WriteFile(filepath.Join(apps, "crm", "flows", name+".rk"), []byte(pagerFlow(name, on)), 0o644); err != nil {
+				t.Fatal(err)
+			}
+		}
+	})
+	v := &pagerVendor{}
+	e.s.Connectors.HTTP = &http.Client{Transport: v, Timeout: 5 * time.Second}
+	e.login()
+	ctx := context.Background()
+	e.must(204, "PUT", "/api/v1/connectors/pager_test/auth/api_key", map[string]any{"value": "pager-api-key-0002-zzzz"})
+
+	// the flow cannot be queued: the poll fails and remembers nothing
+	start := e.s.Connectors.StartFlow
+	e.s.Connectors.StartFlow = func(context.Context, pg.Querier, string, string, map[string]any, string) error {
+		return errors.New("queue down")
+	}
+	if _, err := e.s.Connectors.Poll(ctx, "kopi-senja", "pager_test", "sales"); err == nil {
+		t.Fatal("poll with a failing queue: no error")
+	}
+	if n := strings.TrimSpace(dump(t, e, "select count(*) from rk_hook_events")); n != "0" {
+		t.Fatalf("events remembered while their flow was not queued: %s", n)
+	}
+	if n := strings.TrimSpace(dump(t, e, "select count(*) from rk_audit where kind = 'connector.event'")); n != "0" {
+		t.Fatalf("events audited while their flow was not queued: %s", n)
+	}
+	e.s.Connectors.StartFlow = start
+	v.reqs = nil
+
+	res, err := e.s.Connectors.Poll(ctx, "kopi-senja", "pager_test", "sales")
+	if err != nil || res.Events != 3 || res.Pages != 3 || !res.Cursor || res.Truncated {
+		t.Fatalf("paged poll: %+v %v", res, err)
+	}
+	if len(v.reqs) != 3 || v.reqs[0].URL.Query().Get("since") != "1794268800" || v.reqs[1].URL.Scheme != "https" ||
+		v.reqs[1].URL.Query().Get("cursor") != "b" || v.reqs[2].URL.Query().Get("cursor") != "c" ||
+		v.reqs[1].Header.Get("Authorization") != "Bearer pager-api-key-0002-zzzz" {
+		t.Fatalf("requests: %v", v.reqs)
+	}
+	waitFor(t, func() bool { return leadsByPhone(t, e, "62812000001") == 1 && leadsByPhone(t, e, "62812000003") == 1 })
+	// the cursor is the newest sale over all pages (page 1 here), as a UTC datetime
+	if c := strings.TrimSpace(dump(t, e, "select cursor from rk_poll_cursors where trigger = 'sales'")); c != "2026-11-10T03:00:00Z" {
+		t.Fatalf("cursor: %q", c)
+	}
+	// the next poll sends since = epoch(cursor)
+	v.reqs = nil
+	if res, err = e.s.Connectors.Poll(ctx, "kopi-senja", "pager_test", "sales"); err != nil || res.Events != 0 || res.Pages != 1 {
+		t.Fatalf("second poll: %+v %v", res, err)
+	}
+	if got := v.reqs[0].URL.Query().Get("since"); got != "1794279600" {
+		t.Fatalf("since from the cursor: %q", got)
+	}
+
+	// a page number: input: sees page
+	v.reqs = nil
+	if res, err = e.s.Connectors.Poll(ctx, "kopi-senja", "pager_test", "paged"); err != nil || res.Events != 2 || res.Pages != 2 {
+		t.Fatalf("numbered poll: %+v %v", res, err)
+	}
+	if len(v.reqs) != 2 || v.reqs[0].URL.Query().Get("page") != "1" || v.reqs[1].URL.Query().Get("page") != "2" {
+		t.Fatalf("numbered requests: %v", v.reqs)
+	}
+
+	// a next_url on another host is refused (the key never leaves the declared host)
+	if _, err := e.s.DB.Exec(ctx, "delete from rk_poll_cursors"); err != nil {
+		t.Fatal(err)
+	}
+	v.offHost, v.reqs = true, nil
+	if _, err := e.s.Connectors.Poll(ctx, "kopi-senja", "pager_test", "sales"); err == nil || !strings.Contains(err.Error(), "evil.example.net") {
+		t.Fatalf("next_url on another host: %v", err)
+	}
+	for _, r := range v.reqs {
+		if r.URL.Hostname() != "api.example.com" {
+			t.Fatalf("request sent to %s", r.URL)
+		}
 	}
 }

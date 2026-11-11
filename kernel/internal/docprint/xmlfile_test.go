@@ -2,6 +2,7 @@ package docprint
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -55,5 +56,30 @@ func TestWellFormed(t *testing.T) {
 		if err := wellFormed([]byte(src)); (err == nil) != ok {
 			t.Errorf("%q: err %v, want ok %v", src, err, ok)
 		}
+	}
+}
+
+// The number helpers of an XML file fail on a value that is set but not a number, instead of writing 0 or ""
+// (audit pajak 7 Nov #10); nil and "" still count as 0 (round) or nothing (dec).
+func TestXMLNumbersRefuseGarbage(t *testing.T) {
+	tpl, err := ParseXMLTemplate("t", `<A>{{dec (round .v 2) 2}}|{{dec .v 2}}</A>`, XMLFuncs(time.Now()))
+	if err != nil {
+		t.Fatal(err)
+	}
+	for v, want := range map[any]string{nil: "<A>0|</A>", "": "<A>0|</A>", "2.345": "<A>2.35|2.35</A>", 7: "<A>7|7</A>"} {
+		var b bytes.Buffer
+		if err := tpl.Execute(&b, map[string]any{"v": v}); err != nil || b.String() != want {
+			t.Errorf("%#v: %q %v, want %q", v, b.String(), err, want)
+		}
+	}
+	for _, v := range []any{"abc", "1,5", true} {
+		var b bytes.Buffer
+		if err := tpl.Execute(&b, map[string]any{"v": v}); !errors.Is(err, ErrNotNumber) {
+			t.Errorf("%#v: %q %v, want ErrNotNumber", v, b.String(), err)
+		}
+	}
+	// HTML prints keep the lenient helpers
+	if Round("abc", 2) != "0" || Dec("abc") != "" {
+		t.Error("base helpers changed")
 	}
 }

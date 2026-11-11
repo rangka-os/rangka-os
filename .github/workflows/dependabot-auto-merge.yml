@@ -1,0 +1,25 @@
+name: dependabot-auto-merge
+
+# Dependabot minor and patch updates merge themselves once the required checks (test, web, staged-starter) pass:
+# this only turns on GitHub's auto-merge, branch protection still decides when. Major updates (e.g. a GitHub
+# Actions major in the actions group) stay open for a person to review.
+
+on: pull_request
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  auto-merge:
+    if: github.event.pull_request.user.login == 'dependabot[bot]' && github.repository == 'rangka-os/rangka-os'
+    runs-on: ubuntu-latest
+    steps:
+      - id: meta
+        uses: dependabot/fetch-metadata@v3.1.0
+      - name: Enable auto-merge for minor and patch updates
+        if: steps.meta.outputs.update-type == 'version-update:semver-minor' || steps.meta.outputs.update-type == 'version-update:semver-patch'
+        run: gh pr merge --auto --merge "$PR_URL"
+        env:
+          PR_URL: ${{ github.event.pull_request.html_url }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

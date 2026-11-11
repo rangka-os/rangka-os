@@ -81,6 +81,7 @@ func TestFlowFindPushdown(t *testing.T) {
 		{"customer == 'A' || customer == 'B'", nil, nil, nil},
 		{"[1].exists(x, customer == 'A')", nil, nil, nil},
 		{"customer in ['A', 1]", nil, nil, nil},
+		{"notes in ['x', '']", nil, nil, nil},
 		{"customer == f.customer", map[string]any{"f": nil}, nil, nil},
 	}
 	err = e.run(ctx, a, func(o *op) error {
@@ -96,6 +97,18 @@ func TestFlowFindPushdown(t *testing.T) {
 		conds, _ := flowFindSQL(o, m, "customer in ['A', 'B']", nil)
 		if len(conds) != 1 || conds[0] != `"customer" = any($2)` {
 			t.Errorf("in list: %v", conds)
+		}
+		// docstatus of a submittable model, == and !=; a flow variable named docstatus is not the column
+		inv, _ := e.model("sales_invoice")
+		conds, args := flowFindSQL(o, inv, "docstatus == 1 && customer == c && docstatus != 2", map[string]any{"c": "CUST-0012"})
+		if !reflect.DeepEqual(conds, []string{"docstatus = $2", `"customer" = $3`, "docstatus <> $4"}) || !reflect.DeepEqual(args, []any{int64(1), "CUST-0012", int64(2)}) {
+			t.Errorf("docstatus: %v %v", conds, args)
+		}
+		if conds, _ := flowFindSQL(o, inv, "docstatus == 1", map[string]any{"docstatus": 0}); len(conds) != 0 {
+			t.Errorf("shadowed docstatus: %v", conds)
+		}
+		if conds, _ := flowFindSQL(o, m, "docstatus == 1", nil); len(conds) != 0 {
+			t.Errorf("docstatus of a model that is not submittable: %v", conds)
 		}
 		return nil
 	})

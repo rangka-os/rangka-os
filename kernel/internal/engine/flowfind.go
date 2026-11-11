@@ -89,7 +89,9 @@ func flowFindSQL(o *op, m *meta.Model, where string, vars map[string]any) ([]str
 			names := make([]string, 0, len(list))
 			for _, x := range list {
 				sx, ok := cel.Unwrap(x).(string)
-				if !ok {
+				if !ok || sx == "" {
+					// a non-text member could match through CEL's heterogeneous equality, and "" matches a column
+					// stored as NULL: leave both to CEL
 					names = nil
 					break
 				}

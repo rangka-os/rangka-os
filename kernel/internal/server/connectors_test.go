@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/connectors"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
@@ -774,6 +775,20 @@ triggers:
     next: "has_more ? page_no + 1 : null"
     for_each: "payments[]"
     emit: {order_id: item.id, customer: item.customer, phone: item.phone}
+  - name: endless
+    via: poll
+    every: 5m
+    action: numbered
+    input: {page: "page != null ? page : 1", mode: "'endless'"}
+    next: "has_more ? page_no + 1 : null"
+    for_each: "payments[]"
+  - name: stuck
+    via: poll
+    every: 5m
+    action: numbered
+    input: {page: "page != null ? page : 1", mode: "'stuck'"}
+    next: "has_more ? page_no + 1 : null"
+    for_each: "payments[]"
 actions:
   - name: latest
     request:
@@ -789,9 +804,10 @@ actions:
       method: GET
       url: https://api.example.com/v1/pages
       headers: {Authorization: 'Bearer {auth.api_key}'}
-      query: {page: '{input.page}'}
+      query: {page: '{input.page}', mode: '{input.mode}'}
     input:
       - {name: page, type: int}
+      - {name: mode, type: data}
     output: {payments: data.payments, has_more: data.has_more, page_no: data.page}
 `
 
@@ -841,6 +857,14 @@ func (o *pagerVendor) RoundTrip(r *http.Request) (*http.Response, error) {
 			body = `{"data":{"payments":[],"next_url":null}}`
 		}
 	case "/v1/pages":
+		switch r.URL.Query().Get("mode") {
+		case "endless": // always one more page
+			body = `{"data":{"payments":[],"has_more":true,"page":` + r.URL.Query().Get("page") + `}}`
+			return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+		case "stuck": // says page 1 whatever was asked: the same next again
+			body = `{"data":{"payments":[],"has_more":true,"page":1}}`
+			return &http.Response{StatusCode: 200, Header: http.Header{"Content-Type": {"application/json"}}, Body: io.NopCloser(strings.NewReader(body)), Request: r}, nil
+		}
 		switch r.URL.Query().Get("page") {
 		case "1":
 			body = `{"data":{"payments":[{"id":"n1","customer":"Gita","phone":"62813000001"}],"has_more":true,"page":1}}`
@@ -925,6 +949,20 @@ func TestPollFollowsNextPage(t *testing.T) {
 	}
 	if len(v.reqs) != 2 || v.reqs[0].URL.Query().Get("page") != "1" || v.reqs[1].URL.Query().Get("page") != "2" {
 		t.Fatalf("numbered requests: %v", v.reqs)
+	}
+
+	// a vendor that always has one more page: 50 pages, then the poll stops and says so
+	v.reqs = nil
+	if res, err = e.s.Connectors.Poll(ctx, "kopi-senja", "pager_test", "endless"); err != nil || res.Pages != connectors.MaxPollPages || !res.Truncated || len(v.reqs) != connectors.MaxPollPages {
+		t.Fatalf("endless poll: %+v %v, %d requests", res, err, len(v.reqs))
+	}
+	if n := strings.TrimSpace(dump(t, e, "select count(*) from rk_audit where data->>'code' = 'poll_pages_truncated'")); n != "1" {
+		t.Fatalf("truncation audited %s times", n)
+	}
+	// a vendor that links the same next page again: read once
+	v.reqs = nil
+	if res, err = e.s.Connectors.Poll(ctx, "kopi-senja", "pager_test", "stuck"); err != nil || res.Pages != 2 || res.Truncated || len(v.reqs) != 2 {
+		t.Fatalf("stuck poll: %+v %v, %d requests", res, err, len(v.reqs))
 	}
 
 	// a next_url on another host is refused (the key never leaves the declared host)

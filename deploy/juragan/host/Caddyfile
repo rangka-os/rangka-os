@@ -20,7 +20,7 @@
 	}
 }
 
-# import tenant <upstream>: the tenant's kernel (network alias t-<id> on the host network)
+# import tenant <upstream>: the tenant's kernel (network alias t-<id> on the tenant's own network, which Caddy joins)
 (tenant) {
 	import compress
 	header Strict-Transport-Security "max-age=31536000"

@@ -657,7 +657,7 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 			if x := o.e.Reg().Model(rm); x != nil && x.Label.Text() != "" {
 				label = x.Label.Text()
 			}
-			return conflict("linked", fmt.Sprintf("Masih dipakai di %s %s; ubah atau hapus record itu dulu", label, rn))
+			return conflict("linked", fmt.Sprintf("Tidak bisa dihapus: masih dipakai di %s %s. Lepaskan dulu tautannya, batalkan dokumen itu, atau biarkan record ini tetap ada", label, rn))
 		}
 		if err := store.Delete(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name); err != nil {
 			return err

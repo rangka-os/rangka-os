@@ -145,3 +145,44 @@ steps:
 		t.Fatalf("same event after the resumed run made its memo: %+v", again)
 	}
 }
+
+// A run that waited before the key moved to the flow_key arg (the key in vars._idempotency_key, a bare
+// flow:pending marker) still resumes into its key, and is released by a reject the same way.
+func TestFlowKeyLegacyWaitingRun(t *testing.T) {
+	e, owner := approvalSetupFiles(t, memoFromRefFiles, "")
+	ctx := context.Background()
+	org, flow, key := owner.Org, "memo_from_ref", "s:LEG-1"
+	setup := func() {
+		t.Helper()
+		if _, _, err := store.ClaimFlowKey(ctx, e.DB, org, flow, key); err != nil {
+			t.Fatal(err)
+		}
+		if err := store.AddFlowKeyDocs(ctx, e.DB, org, flow, key, nil, true, true, flowKeyPending); err != nil {
+			t.Fatal(err)
+		}
+	}
+	setup()
+	if again, err := e.RunFlow(ctx, owner, flow, map[string]any{"ref": "LEG-1"}); err != nil || !again.Skipped {
+		t.Fatalf("event while the legacy run waits: %+v %v", again, err)
+	}
+	// resume at step 0 of a one-step flow is a fresh run; resume at 1 runs nothing but records into the key
+	out, err := e.RunFlowResume(ctx, owner, flow, map[string]any{"ref": "LEG-1"}, 1, map[string]any{flowKeyVar: key}, false, nil)
+	if err != nil || out.Skipped {
+		t.Fatalf("legacy resume: %+v %v", out, err)
+	}
+	held, err := store.FlowKeyHeld(ctx, e.DB, org, flow, key, flowKeyPending)
+	if err != nil || held {
+		t.Fatalf("legacy marker still there after the resume: %v %v", held, err)
+	}
+	// a legacy run released (its job dead) frees the key
+	if _, err := e.DB.Exec(ctx, "delete from rk_flow_keys where org_id = $1 and flow = $2 and key = $3", org, flow, key); err != nil {
+		t.Fatal(err)
+	}
+	setup()
+	if err := e.ReleaseFlowJob(ctx, org, map[string]any{"flow": flow, "vars": map[string]any{flowKeyVar: key}}); err != nil {
+		t.Fatal(err)
+	}
+	if again, err := e.RunFlow(ctx, owner, flow, map[string]any{"ref": "LEG-1"}); err != nil || again.Skipped {
+		t.Fatalf("event after the legacy run was released: %+v %v", again, err)
+	}
+}

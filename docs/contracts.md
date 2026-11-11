@@ -48,7 +48,7 @@ Every model → table `r_<model>` with typed columns (+ `org_id`, `name` PK per 
 → child table `r_<child_model>` with `parent`, `parent_field`, `idx`. Submittable: create as draft with name `DRAFT-xxxx`;
 naming pattern applied at submit (`INV-{YYYY}-{#####}` per org); submitted (1) is immutable (409); cancel → 2; amend →
 new draft with `amended_from` (a unique value still held, e.g. by the cancelled original, is a 422 `unique` issue,
-as on create). Submit renames `DRAFT-xxxx` and every link to it (link fields, child rows, `x_` link fields) follows. Rules run on `save` and `submit`; `level: warn` returns warnings, error blocks. A rule whose
+as on create). Submit renames `DRAFT-xxxx` and every link to it (link fields, child rows, `x_` link fields) follows. Delete is 409 `linked` while a record that is not cancelled still links the record (a link field, a child row, an `x_` link field; a self link does not count). Rules run on `save` and `submit`; `level: warn` returns warnings, error blocks. A rule whose
 check cannot be evaluated counts as failed (`code: rule_error`, the message says it could not be checked): an error
 rule blocks, a warn rule warns.
 Computed fields recomputed on every save. Status for invoices: draft, submitted, partly, paid, overdue, cancelled (see

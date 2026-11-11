@@ -49,8 +49,8 @@ func (o *op) heldReferrers(model, from, to string) ([]heldRef, error) {
 	var live []store.Approval
 	byName := map[string]*meta.Model{}
 	for _, rm := range reg.InstalledModels() {
-		if !linksTo(reg, rm, model) {
-			continue
+		if rm.IsChild || !linksTo(reg, rm, model) {
+			continue // requests are made for documents, never for child rows
 		}
 		byName[rm.Name] = rm
 		names, err := store.RecordsLinking(o.ctx, o.tx, reg, o.actor.Org, rm, model, from)

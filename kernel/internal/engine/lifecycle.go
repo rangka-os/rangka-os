@@ -648,6 +648,17 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 				return conflict("has_amendments", "Dokumen ini sudah diubah menjadi "+str(copies[0]["name"])+"; dokumen batal yang punya salinan tidak bisa dihapus")
 			}
 		}
+		// a live record still linking this one would point at a name that no longer exists, and its next save
+		// (or a flow creating from it) fails link_not_found far from the delete (audit moka N3)
+		if rm, rn, ok, err := store.LiveReferrer(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m.Name, name); err != nil {
+			return err
+		} else if ok {
+			label := rm
+			if x := o.e.Reg().Model(rm); x != nil && x.Label.Text() != "" {
+				label = x.Label.Text()
+			}
+			return conflict("linked", fmt.Sprintf("Masih dipakai di %s %s; ubah atau hapus record itu dulu", label, rn))
+		}
 		if err := store.Delete(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name); err != nil {
 			return err
 		}

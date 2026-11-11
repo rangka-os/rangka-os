@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"fmt"
+	"sort"
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -113,4 +114,43 @@ func RecordsLinking(ctx context.Context, q pg.Querier, reg *meta.Registry, org s
 		}
 	}
 	return out, nil
+}
+
+// LiveReferrer finds a live record that links model's record name: a record of an installed (non-child) model whose
+// link field, x_ custom link or child row holds name, and that is not cancelled (docstatus 2). The record itself
+// (a self link, its own child rows) does not count. ok is false when nothing live links it. Delete refuses while
+// one does, so a draft or a document never points at a name that no longer exists (card t_5a50f661).
+func LiveReferrer(ctx context.Context, q pg.Querier, reg *meta.Registry, org, model, name string) (refModel, refName string, ok bool, err error) {
+	for _, rm := range reg.InstalledModels() {
+		if rm.IsChild {
+			continue
+		}
+		names, err := RecordsLinking(ctx, q, reg, org, rm, model, name)
+		if err != nil {
+			return "", "", false, err
+		}
+		var cand []string
+		for _, n := range names {
+			if !(rm.Name == model && n == name) {
+				cand = append(cand, n)
+			}
+		}
+		if len(cand) == 0 {
+			continue
+		}
+		if !rm.IsSubmittable {
+			sort.Strings(cand)
+			return rm.Name, cand[0], true, nil
+		}
+		res, err := q.Query(ctx, fmt.Sprintf("select name from %s where org_id = $1 and name = any($2) and docstatus <> 2 order by name limit 1",
+			pg.QuoteIdent(TableName(rm.Name))), org, pg.Array(cand))
+		if err != nil {
+			return "", "", false, fmt.Errorf("live links to %s in %s: %w", model, rm.Name, err)
+		}
+		if len(res.Rows) == 1 {
+			n, _ := res.Rows[0][0].(string)
+			return rm.Name, n, true, nil
+		}
+	}
+	return "", "", false, nil
 }

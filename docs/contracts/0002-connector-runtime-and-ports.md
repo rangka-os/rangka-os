@@ -18,9 +18,10 @@ Status: proposed (1 Nov 2026) · Owner: rangka-os (kernel) · Affects: rangka-co
    - `idempotency:` on a flow means the same event never runs the flow twice.
      The kernel evaluates it (CEL over `event`) when a run starts, after the flow's `if:`, and records the key in
      `rk_flow_keys (org, flow, key)` in the run's transaction: a run whose key a committed run holds is skipped
-     (`skipped: true`, audit `flow.duplicate`), a failed run frees its key, and a key that is empty or cannot be
-     evaluated, or is not a non-empty text or a whole number (a list, a map, a fraction, true/false), fails the run with
-     422 `idempotency_key` (fail closed). Keys are typed (`5` and `"5"` differ). It holds for every way a flow starts (events,
+     (`skipped: true`, audit `flow.duplicate`), a failed run frees its key, and a key that cannot be
+     evaluated, or is not a text or a whole number (a list, a map, a fraction, true/false), fails the run with 422
+     `idempotency_key` (fail closed). An empty text or null means the event has no key: the run goes on without dedupe
+     and the flow handles it (`payment_from_doku` tells the owner and records nothing). Keys are typed (`5` and `"5"` differ). It holds for every way a flow starts (events,
      record events, schedules, `POST /api/v1/flows/<name>/run`); a run resumed after `wait:` or `approve:` is the same
      run. Keys are kept; longer than 200 characters they are stored as their SHA-256, apart from short keys.
    - A flow whose `on:` is a connector trigger may be run by hand (`/flows/<name>/run`) only by the owner: its event

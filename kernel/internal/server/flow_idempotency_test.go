@@ -29,6 +29,7 @@ func TestFlowIdempotencyAndConnectorRun(t *testing.T) {
 	if acts != 1 {
 		t.Fatalf("activities after the same key twice = %d", acts)
 	}
+	// an event without a key (missing field: an expression error) fails; an empty key runs without dedupe
 	noKey := map[string]any{"from": "6281277770002", "profile_name": "Tono", "text": "tanpa id"}
 	if r := e.do("POST", "/api/v1/flows/whatsapp_to_lead/run", map[string]any{"event": noKey}); r.Status != 422 {
 		t.Fatalf("run without a key: %d %s", r.Status, r.Body)
@@ -40,7 +41,13 @@ func TestFlowIdempotencyAndConnectorRun(t *testing.T) {
 		}
 	}
 	if n := leadsByPhone(t, e, "6281277770002"); n != 0 {
-		t.Fatalf("a run without its key wrote %d leads", n)
+		t.Fatalf("a run without a valid key wrote %d leads", n)
+	}
+	empty := map[string]any{"message_id": "", "from": "6281277770004", "profile_name": "Kosong", "text": "kunci kosong"}
+	for i := 0; i < 2; i++ {
+		if r := e.do("POST", "/api/v1/flows/whatsapp_to_lead/run", map[string]any{"event": empty}); r.Status != 200 || r.JSON["skipped"] == true {
+			t.Fatalf("run %d with an empty key: %d %s", i, r.Status, r.Body)
+		}
 	}
 
 	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "manajer@example.test", "Manajer", "rangka-demo", "kopi-senja", "sales_manager", ""); err != nil {

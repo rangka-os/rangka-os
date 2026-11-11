@@ -158,17 +158,22 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 }
 
 // claimKey enforces the flow's idempotency: (contract 0002 §A.2): the same key never runs the flow twice in an org.
-// dup is true (the run is skipped) when a committed run holds the key. Only a non-empty string or a whole number
-// is a key; anything else (empty, null, a list, a map, a fraction, an error) fails the run: a flow that dedupes
-// money must not run without its key, nor skip a payment because two different events gave the same text.
+// dup is true (the run is skipped) when a committed run holds the key. A key is a non-empty string or a whole
+// number. An empty string or null means the event has no key: the run goes on without dedupe, and the flow
+// handles it (a payment notification without its gateway id tells the owner and records nothing). Anything else
+// (a list, a map, a fraction, true/false, an expression error) fails the run: a flow that dedupes money must not
+// skip a payment because two different events gave the same text.
 func (r *flowRun) claimKey() (dup bool, err error) {
 	v, err := cel.Eval(r.f.Idempotency, r.env())
+	if err == nil && (v == nil || v == "") {
+		return false, nil
+	}
 	key := ""
 	if err == nil {
 		key = flowKey(v)
 	}
 	if key == "" {
-		msg := "flow " + r.f.Name + ": idempotency: harus berupa teks tidak kosong atau bilangan bulat"
+		msg := "flow " + r.f.Name + ": idempotency: harus berupa teks atau bilangan bulat"
 		if err != nil {
 			msg += " (" + err.Error() + ")"
 		}

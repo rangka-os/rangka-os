@@ -96,6 +96,13 @@ A series must repeat its reset period in the number, or numbers collide: `reset:
 - In that transaction every link to the draft is rewritten to the number (link fields of any installed model,
   child rows and `x_` custom link fields; `store.RenameRecordLinks`), like its attachments (0011) and approvals
   (0007). The linking records are not saved again: no hooks, flows or `modified_at` change.
+  - Stored values derived from the link are not recomputed: a stored compute that reads the link name (for
+    example a heading built from it) keeps the draft name until the linking record is saved again. Values derived
+    from the linked record's fields are unaffected, since the record itself does not change.
+  - A linking record with live approval requests (0007: pending, or approved and not used) whose snapshot matches
+    it before the rename gets the snapshot of the renamed record, so the correction does not void the request.
+  - When the submitted record links itself (a field or a child row), the record the submit returns and the one
+    `on_submit` hooks and flows read carry the number too.
 - Counters live in `rk_number_series (org_id, series, period, last)`. `period` is `""` (never), `2026` (yearly)
   or `2026-11` (monthly), from the submit time in the site timezone.
 - **Gap-free:** the counter row is incremented with `insert … on conflict do update` in the document's

@@ -226,3 +226,31 @@ func RenameRecordApprovals(ctx context.Context, q pg.Querier, org, model, from, 
 	_, err := q.Exec(ctx, "update rk_approvals set name = $4 where org_id = $1 and model = $2 and name = $3", org, model, from, to)
 	return err
 }
+
+// LiveApprovals lists the requests of models that can still let a verb run: pending, or approved and not used
+// yet. Submit uses it to keep their snapshots when a link rename changes the records they were made for.
+func LiveApprovals(ctx context.Context, q pg.Querier, org string, models []string) ([]Approval, error) {
+	if len(models) == 0 {
+		return nil, nil
+	}
+	res, err := q.Query(ctx, `select `+approvalCols+` from rk_approvals where org_id = $1 and model = any($2)
+		and (state = 'pending' or (state = 'approved' and used_at is null)) order by requested_at, id`, org, pg.Array(models))
+	if err != nil {
+		return nil, err
+	}
+	out := []Approval{}
+	for _, r := range res.Rows {
+		out = append(out, scanApproval(r))
+	}
+	return out, nil
+}
+
+// RestampApprovals moves live requests (pending, or approved and unused) from snapshot from to snapshot to.
+func RestampApprovals(ctx context.Context, q pg.Querier, org string, ids []string, from, to string) error {
+	if len(ids) == 0 || from == to {
+		return nil
+	}
+	_, err := q.Exec(ctx, `update rk_approvals set snapshot = $4 where org_id = $1 and id = any($2) and snapshot = $3
+		and (state = 'pending' or (state = 'approved' and used_at is null))`, org, pg.Array(ids), from, to)
+	return err
+}

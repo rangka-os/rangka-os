@@ -1,0 +1,143 @@
+package engine
+
+import (
+	"errors"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
+)
+
+// heldRef is a record that has live approval requests (pending, or approved and unused) whose snapshot matches
+// the record as stored before the link rename; want is the snapshot it has once the rename changed only its links.
+type heldRef struct {
+	m    *meta.Model
+	name string
+	snap string
+	want string
+	ids  []string
+}
+
+// linksTo reports whether rm links model from a field (x_ custom links included) or from a child row.
+func linksTo(reg *meta.Registry, rm *meta.Model, model string) bool {
+	for _, f := range rm.Fields {
+		switch {
+		case f.Type == "link" && f.To == model:
+			return true
+		case f.Type == "table":
+			if cm := reg.Model(f.Of); cm != nil {
+				for _, cf := range cm.Fields {
+					if cf.Type == "link" && cf.To == model {
+						return true
+					}
+				}
+			}
+		}
+	}
+	return false
+}
+
+// heldReferrers finds the records linking the draft from of model that have live requests made for their current
+// state, and the snapshot each will have once only its links point at to. Submit calls it before the link
+// rename, so restampReferrers can carry those requests over: the rename corrects a name, it is not a change of
+// the document someone approves (audit kernel fix 1111 O1). A record that does not link the draft is left out.
+func (o *op) heldReferrers(model, from, to string) ([]heldRef, error) {
+	reg := o.e.Reg()
+	var models []string
+	byName := map[string]*meta.Model{}
+	for _, rm := range reg.InstalledModels() {
+		if linksTo(reg, rm, model) {
+			models = append(models, rm.Name)
+			byName[rm.Name] = rm
+		}
+	}
+	live, err := store.LiveApprovals(o.ctx, o.tx, o.actor.Org, models)
+	if err != nil {
+		return nil, err
+	}
+	var out []heldRef
+	at := map[string]int{}
+	for _, ap := range live {
+		key := ap.Model + "\x00" + ap.Name + "\x00" + ap.Snapshot
+		if i, ok := at[key]; ok {
+			if i >= 0 {
+				out[i].ids = append(out[i].ids, ap.ID)
+			}
+			continue
+		}
+		at[key] = -1
+		rm := byName[ap.Model]
+		rec, err := store.Get(o.ctx, o.tx, reg, o.actor.Org, rm, ap.Name)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				continue
+			}
+			return nil, err
+		}
+		if Snapshot(rm, rec) != ap.Snapshot {
+			continue // made for an older state: Approve voids it, the rename must not revive it
+		}
+		if !renameLinksIn(reg, rm, rec, model, from, to) {
+			continue // does not link the draft: the rename leaves it as it is
+		}
+		at[key] = len(out)
+		out = append(out, heldRef{m: rm, name: ap.Name, snap: ap.Snapshot, want: Snapshot(rm, rec), ids: []string{ap.ID}})
+	}
+	return out, nil
+}
+
+// restampReferrers moves the requests found by heldReferrers to the record's snapshot after the rename, only when
+// that snapshot is exactly the one the rename alone gives. The record was read without a lock: a write another
+// transaction committed meanwhile changes the snapshot, and its requests are then left to be voided (audit
+// kernel 1111b F1: an approval must never carry content the approver did not see).
+func (o *op) restampReferrers(refs []heldRef) error {
+	for _, r := range refs {
+		rec, err := store.Get(o.ctx, o.tx, o.e.Reg(), o.actor.Org, r.m, r.name)
+		if err != nil {
+			if errors.Is(err, store.ErrNotFound) {
+				continue
+			}
+			return err
+		}
+		if Snapshot(r.m, rec) != r.want {
+			continue
+		}
+		if err := store.RestampApprovals(o.ctx, o.tx, o.actor.Org, r.ids, r.snap, r.want); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// renameSelfLinks applies the link rename to the submitted record in memory: a field or child row of m that
+// links m itself and held the draft name now holds the final one, as the stored row does, so on_submit hooks,
+// flows and the caller see what is stored (audit kernel fix 1111 O3).
+func renameSelfLinks(reg *meta.Registry, m *meta.Model, rec store.Record, from, to string) {
+	renameLinksIn(reg, m, rec, m.Name, from, to)
+}
+
+// renameLinksIn sets every link of rm's record rec to model that holds from (fields, x_ custom links, child rows)
+// to to, as store.RenameRecordLinks does in the database. It reports whether anything changed.
+func renameLinksIn(reg *meta.Registry, rm *meta.Model, rec store.Record, model, from, to string) bool {
+	changed := false
+	for _, f := range rm.Fields {
+		switch {
+		case f.Type == "link" && f.To == model:
+			if str(rec[f.Name]) == from {
+				rec[f.Name], changed = to, true
+			}
+		case f.Type == "table":
+			cm := reg.Model(f.Of)
+			if cm == nil {
+				continue
+			}
+			for _, row := range rows(rec[f.Name]) {
+				for _, cf := range cm.Fields {
+					if cf.Type == "link" && cf.To == model && str(row[cf.Name]) == from {
+						row[cf.Name], changed = to, true
+					}
+				}
+			}
+		}
+	}
+	return changed
+}

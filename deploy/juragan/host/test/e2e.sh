@@ -168,7 +168,7 @@ say "health"
 if t health; then ok "health all OK"; else bad "health reported a problem"; fi
 # Postgres detached from a tenant network (recreated outside host-up): health must fail, host-up must repair it
 docker network disconnect "${TP}tokoa" "$PG" >/dev/null
-same "health fails when Postgres left a tenant network" "$(t health 2>/dev/null | grep -c '^FAIL tokoa kernel=200/no-db-net')" 1
+same "health fails when Postgres left a tenant network" "$(t health 2>/dev/null | grep -c '^FAIL tokoa kernel=200/off-net:postgres ')" 1
 t host-up >/dev/null 2>&1
 if t health >/dev/null; then ok "host-up reattaches Postgres"; else bad "health still failing after host-up"; fi
 # a tenant made by an older tenantctl: no connection limit, kernel still on HOST_NETWORK

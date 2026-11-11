@@ -748,7 +748,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if err := store.RenameRecordApprovals(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
 			return nil, err
 		}
-		held, err := o.heldReferrers(m.Name)
+		held, err := o.heldReferrers(m.Name, name, newName)
 		if err != nil {
 			return nil, err
 		}

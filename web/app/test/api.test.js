@@ -54,6 +54,18 @@ test("parseRupiah: a comma or dot before 3-digit groups groups thousands, otherw
   assert.strictEqual(RA.parseRupiah(",5"), 1);
 });
 
+test("money: rupiah for IDR, the ISO code and 2 decimals rounded on the decimal text otherwise", () => {
+  assert.strictEqual(RA.money(2500000, "IDR"), "Rp 2.500.000");
+  assert.strictEqual(RA.money(-5000), "-Rp 5.000");
+  assert.strictEqual(RA.money(10.005, "eur"), "EUR 10,01");
+  assert.strictEqual(RA.money("999.995", "USD"), "USD 1.000,00");
+  assert.strictEqual(RA.money("1234567.8912", "SGD"), "SGD 1.234.567,89");
+  assert.strictEqual(RA.money("-0.004", "USD"), "USD 0,00");
+  assert.strictEqual(RA.money(1e-7, "USD"), "USD 0,00");
+  assert.strictEqual(RA.money("abc", "USD"), "");
+  assert.strictEqual(RA.money(null, "USD"), "");
+});
+
 test("rupiah and tanggal", () => {
   assert.strictEqual(RA.rupiah(1250000), "Rp 1.250.000");
   assert.strictEqual(RA.rupiah(-5000), "-Rp 5.000");

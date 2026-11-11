@@ -57,6 +57,10 @@ test("summaryAmount: rupiah for IDR or no currency, the code otherwise, empty wi
   assert.strictEqual(A.summaryAmount({ amount: 3796200, amount_label: "Total" }), "Rp 3.796.200");
   assert.strictEqual(A.summaryAmount({ amount: "1250000.00", currency: "IDR" }), "Rp 1.250.000");
   assert.strictEqual(A.summaryAmount({ amount: 1250.5, currency: "USD" }), "USD 1.250,50");
+  // 4-decimal amounts round on the decimal text, half away from zero (audit F4), the sign before the code as id-ID
+  assert.strictEqual(A.summaryAmount({ amount: 10.005, currency: "EUR" }), "EUR 10,01");
+  assert.strictEqual(A.summaryAmount({ amount: "-10.0149", currency: "eur" }), "-EUR 10,01");
+  assert.strictEqual(A.summaryAmount({ amount: "-0.004", currency: "USD" }), "USD 0,00");
   assert.strictEqual(A.summaryAmount({ amount: "abc" }), "");
   assert.strictEqual(A.summaryAmount({ title: "Toko" }), "");
   assert.strictEqual(A.summaryAmount(undefined), "");

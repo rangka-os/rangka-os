@@ -2485,6 +2485,57 @@ def test_print_invoice(page, ctx):
     assert main_area(page).get_by_role("button", name="Unduh PDF", exact=True).count() == 0, "no Unduh PDF without formats"
 
 
+def test_xml_download(page, ctx):
+    """An XML file format (contract 0029 §7): "Unduh <label>" in the panel's Unduh section downloads the file the kernel made;
+    a 422 export_invalid shows its problems (the document and what to fix) in a dialog, and nothing is downloaded."""
+    if mock_feature(page, "print"):
+        print("     (skipped: XML formats are the kernel's, this run has no print endpoint)")
+        return
+    h = owner_http(ctx)
+    st, body = h.call("GET", "/api/v1/r/sales_invoice?limit=1&sort=name")
+    assert st == 200 and body["data"], f"invoices: {st} {body}"
+    inv = body["data"][0]
+    cust = inv["customer"]
+    st, c = h.call("GET", f"/api/v1/r/customer/{urllib.parse.quote(cust)}")
+    city = c.get("city") or ""
+    fmts = {f["name"]: f for f in ctx.meta["models"]["customer"].get("prints") or []}
+    assert fmts.get(PRINT_XML, {}).get("output") == "xml", f"meta prints of customer: {list(fmts.values())}"
+    try:
+        st, _ = h.call("PATCH", f"/api/v1/r/customer/{urllib.parse.quote(cust)}", {"city": XML_FAIL_CITY})
+        assert st == 200, st
+        ctx.allow_http(422, r"/print\?")
+        open_route(page, ctx, "#/r/customer/" + urllib.parse.quote(cust))
+        sec = panel_section(page, "Unduh")   # only XML formats: the section is "Unduh", not "Cetak"
+        btn = sec.get_by_role("button", name="Unduh " + PRINT_XML_LABEL, exact=True)
+        btn.wait_for(timeout=10000)
+        downloads = []
+        page.on("download", lambda d: downloads.append(d))
+        with page.expect_response(lambda r: "format=" + PRINT_XML in r.url, timeout=15000) as ri:
+            btn.click()
+        assert ri.value.status == 422, ri.value.status
+        dlg = page.get_by_role("alertdialog")   # R.Dialog variant confirm
+        dlg.wait_for(timeout=5000)
+        text = dlg.inner_text()
+        assert "Belum bisa membuat " + PRINT_XML_LABEL in text and inv["name"] in text and "ganti kotanya" in text, text
+        dlg.get_by_role("button", name="Mengerti").click()
+        dlg.wait_for(state="hidden", timeout=5000)
+        assert not downloads, "a refused file downloads nothing"
+
+        # fixed: the same button downloads the file, named by the kernel, with the invoice in it
+        st, _ = h.call("PATCH", f"/api/v1/r/customer/{urllib.parse.quote(cust)}", {"city": city})
+        assert st == 200, st
+        with page.expect_download(timeout=15000) as dl:
+            btn.click()
+        name = dl.value.suggested_filename
+        assert name == f"{PRINT_XML}-{cust.replace('/', '-')}.xml", name
+        with open(dl.value.path(), encoding="utf-8") as f:
+            xml = f.read()
+        assert xml.startswith("<?xml") and "<Nama>" + c["customer_name"].replace("&", "&amp;") in xml and "<No>" + inv["name"] + "</No>" in xml, xml[:400]
+        print(f"     {cust}: 422 export_invalid -> dialog naming {inv['name']}; after the fix {name} ({len(xml)} bytes)")
+    finally:
+        h.call("PATCH", f"/api/v1/r/customer/{urllib.parse.quote(cust)}", {"city": city})
+
+
 def test_print_permission(page, ctx):
     """lead.rk grants sales_rep no `print`: meta says can.print false, so no Cetak; the server answers 403 too, and when
     the button shows anyway (meta forced) the 403 becomes a message, not a JSON page."""
@@ -3067,6 +3118,37 @@ PRINT_LEAD_HTML = """{{template "letterhead" .}}
 """
 
 
+# An XML file format (contract 0029) on customer: the customer's invoices, refused while the customer's city is
+# XML_FAIL_CITY (a require check on every related row), so the web app's "Unduh" button and its problems dialog run live.
+PRINT_XML = "customer_invoices_xml"
+PRINT_XML_LABEL = "XML faktur pelanggan"
+XML_FAIL_CITY = "Kota Gagal"
+PRINT_XML_RK = f"""# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: {PRINT_XML}
+model: customer
+label: {{id: {PRINT_XML_LABEL}}}
+output: xml
+template: customer_invoices.xml
+related:
+  invoices:
+    model: sales_invoice
+    match: {{customer: name}}
+    sort: name
+    limit: 500
+    require:
+      - check: doc.city != '{XML_FAIL_CITY}'
+        message: {{id: 'Kota pelanggan belum benar: ganti kotanya lalu unduh lagi'}}
+"""
+PRINT_XML_TEMPLATE = """<?xml version="1.0" encoding="utf-8"?>
+<Pelanggan>
+  <Nama>{{.Doc.customer_name}}</Nama>
+  <Faktur>{{range .Related.invoices}}
+    <No>{{.name}}</No>{{end}}
+  </Faktur>
+</Pelanggan>
+"""
+
+
 def enable_print_formats(site):
     """When the kernel knows the `print` kind (S3: schema/0.5/print.json), give the temp site print formats and a
     letterhead, so the print scenarios run live; otherwise they run on mock_feature('print'). Returns True when written."""
@@ -3076,7 +3158,8 @@ def enable_print_formats(site):
     os.makedirs(d, exist_ok=True)
     shutil.copy(os.path.join(ROOT, "templates", "print", "sales_invoice.html"), os.path.join(d, "sales_invoice.html"))
     for fn, text in ((PRINT_INVOICE + ".rk", PRINT_INVOICE_RK), (PRINT_SHORT + ".rk", PRINT_SHORT_RK), (PRINT_SHORT + ".html", PRINT_SHORT_HTML),
-                     ("lead_card.rk", PRINT_LEAD_RK), ("lead_card.html", PRINT_LEAD_HTML)):
+                     ("lead_card.rk", PRINT_LEAD_RK), ("lead_card.html", PRINT_LEAD_HTML),
+                     (PRINT_XML + ".rk", PRINT_XML_RK), ("customer_invoices.xml", PRINT_XML_TEMPLATE)):
         with open(os.path.join(d, fn), "w") as f:
             f.write(text)
     with open(os.path.join(site, "letterhead.rk"), "w") as f:
@@ -3602,6 +3685,7 @@ def test_ai_hidden_without_feature(page, ctx):
     page.keyboard.press("ControlOrMeta+j")
     page.wait_for_timeout(200)
     assert page.locator(".rk-askbar").count() == 0 and page.locator(".rk-chat").count() == 0, "no ask bar or drawer"
+    assert page.locator(".rk-fab").count() == 0, "no floating Raka button on a kernel without AI (plain self-hosting)"
     open_nav(page)
     assert page.locator(AI_SIDE_BTN).count() == 0, "no Tanya Raka in the sidebar"
     page.keyboard.press("Escape")
@@ -3694,6 +3778,49 @@ def test_ai_ask_and_drawer(page, ctx):
         assert page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.ai.')).length") == 0, "cleared"
     finally:
         Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{cs['id']}/reject")
+
+
+def test_ai_launcher(page, ctx):
+    """The floating Raka button (rangka.pen OS / Raka · *): shown when meta.features.ai is on; hover widens it to
+    "Tanya Raka"; a click opens the panel above it and turns the button into the close chevron; tucking it to the
+    edge survives a reload, and a click on the tucked tab opens Raka and brings the button back."""
+    mock_ai(page, ctx, [])
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    page.evaluate("() => localStorage.removeItem('rk.raka.tucked')")
+    fab = page.locator(".rk-fab")
+    fab.wait_for(timeout=5000)
+    btn = fab.locator(".rk-fab-btn")
+    assert fab.get_attribute("data-state") == "rest", fab.get_attribute("data-state")
+    if ctx.args.width >= 768:
+        btn.hover()
+        fab.get_by_text("Tanya Raka", exact=True).wait_for(timeout=3000)
+        shot(page, ctx, "ai-launcher-hover")
+    btn.click()
+    drawer = ai_drawer(page)
+    drawer.wait_for(timeout=5000)
+    if ctx.args.width >= 768:
+        assert fab.get_attribute("data-state") == "open" and btn.get_attribute("aria-expanded") == "true"
+        box, fb = drawer.bounding_box(), btn.bounding_box()
+        assert box["y"] + box["height"] <= fb["y"] - 8, f"the panel floats above the button: {box} {fb}"
+        btn.click()
+        drawer.wait_for(state="detached", timeout=5000)
+    else:
+        drawer.get_by_role("button", name="Tutup").click()
+        drawer.wait_for(state="detached", timeout=5000)
+    # tuck it against the edge
+    btn.focus()
+    fab.get_by_role("button", name="Sembunyikan Raka ke tepi").click()
+    assert fab.get_attribute("data-state") == "tucked"
+    page.reload()
+    page.locator(".rk-fab[data-state=tucked]").wait_for(timeout=15000)
+    shot(page, ctx, "ai-launcher-tucked")
+    check_fits(page, ctx, "tucked Raka button")
+    page.locator(".rk-fab-btn").click()
+    ai_drawer(page).wait_for(timeout=5000)
+    assert page.evaluate("() => localStorage.getItem('rk.raka.tucked')") is None, "opening Raka brings the button back"
 
 
 def test_ai_error_message(page, ctx):

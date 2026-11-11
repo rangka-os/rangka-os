@@ -139,13 +139,17 @@ test("docSummary: open amount first on a submitted invoice, total and paid besid
     { name: "paid_amount", type: "currency", label: { id: "Sudah dibayar" } }, { name: "outstanding", type: "currency", label: { id: "Sisa tagihan" } }, { name: "due_date", type: "date" }] };
   const rec = { docstatus: 1, grand_total: 1000, amount_due: 1000, paid_amount: 400, outstanding: 600, due_date: "2026-11-10" };
   const s = plain(A.docSummary(mm, rec, "partly", "2026-11-07"));
-  assert.deepStrictEqual(s.big, { name: "outstanding", label: "Sisa tagihan", value: 600 });
+  assert.deepStrictEqual(s.big, { name: "outstanding", label: "Sisa tagihan", value: 600, currency: "IDR" });
   assert.deepStrictEqual(s.facts.map((f) => f.name), ["amount_due", "paid_amount"]);
   assert.strictEqual(s.progress, 0.4);
   assert.strictEqual(A.summaryLine(s.line), "Dibayar sebagian, jatuh tempo 2026-11-10 (3 hari lagi)");
   const late = plain(A.docSummary(mm, Object.assign({}, rec, { paid_amount: 0, outstanding: 1000 }), "overdue", "2026-11-22"));
   assert.strictEqual(A.summaryLine(late.line), "Lewat jatuh tempo 12 hari");
   assert.strictEqual(late.line.tone, "bad");
+  // a part paid and past due: both said (audit F8)
+  const partLate = plain(A.docSummary(mm, rec, "partly", "2026-11-22"));
+  assert.strictEqual(A.summaryLine(partLate.line), "Dibayar sebagian, lewat jatuh tempo 12 hari");
+  assert.strictEqual(partLate.line.tone, "bad");
   assert.strictEqual(A.summaryLine(plain(A.docSummary(mm, Object.assign({}, rec, { outstanding: 0 }), "paid", "2026-11-22")).line), "Lunas");
   // a draft shows its total, not an open amount
   const d = plain(A.docSummary(mm, { docstatus: 0, grand_total: 500, amount_due: 500 }, "draft", "2026-11-07"));
@@ -154,11 +158,22 @@ test("docSummary: open amount first on a submitted invoice, total and paid besid
   assert.strictEqual(A.docSummary({ fields: [{ name: "subject", type: "data" }] }, { docstatus: 1 }, "submitted"), null);
 });
 
-test("docSummary: only rupiah (currency) fields, never a money amount in its own currency or a count (audit F1, F2)", () => {
+test("docSummary: a money amount carries its own currency code, a count is not an amount (audit F1, F2, F7)", () => {
   const A = load();
-  // a USD bill (contract 0013 money field): the summary prints rupiah, so it shows nothing rather than "Rp 1.251"
-  const bill = { fields: [{ name: "currency", type: "data" }, { name: "grand_total", type: "money", currency_field: "currency" }] };
-  assert.strictEqual(A.docSummary(bill, { docstatus: 1, currency: "USD", grand_total: "1250.55" }, "submitted", "2026-11-07"), null);
+  // a USD bill (contract 0013 money field): the amount with the code from its currency_field, never as rupiah
+  const bill = { fields: [{ name: "currency", type: "data" }, { name: "grand_total", type: "money", currency_field: "currency", label: { id: "Total" } },
+    { name: "paid_amount", type: "money", currency_field: "currency", label: { id: "Dibayar" } },
+    { name: "outstanding", type: "money", currency_field: "currency", label: { id: "Sisa" } }] };
+  const u = plain(A.docSummary(bill, { docstatus: 1, currency: "usd", grand_total: "1250.55", paid_amount: "250.55", outstanding: "1000" }, "partly", "2026-11-07"));
+  assert.deepStrictEqual(u.big, { name: "outstanding", label: "Sisa", value: "1000", currency: "USD" });
+  assert.deepStrictEqual(u.facts.map((f) => [f.name, f.currency]), [["grand_total", "USD"], ["paid_amount", "USD"]]);
+  assert.ok(Math.abs(u.progress - 250.55 / 1250.55) < 1e-9);
+  // no currency on the record: IDR
+  assert.strictEqual(plain(A.docSummary(bill, { docstatus: 0, grand_total: "10" }, "draft", "2026-11-07")).big.currency, "IDR");
+  // an open amount in rupiah over a total in dollars: no progress bar between two currencies
+  const mixed = { fields: [{ name: "currency", type: "data" }, { name: "grand_total", type: "money", currency_field: "currency" },
+    { name: "outstanding", type: "currency" }] };
+  assert.strictEqual(plain(A.docSummary(mixed, { docstatus: 1, currency: "EUR", grand_total: "10", outstanding: 165000 }, "submitted", "2026-11-07")).progress, null);
   // a count named total is not an amount
   assert.strictEqual(A.docSummary({ fields: [{ name: "total", type: "int" }] }, { docstatus: 1, total: 12 }, "submitted", "2026-11-07"), null);
   assert.strictEqual(A.docSummary({ fields: [{ name: "total", type: "float" }] }, { docstatus: 0, total: 2.5 }, "draft", "2026-11-07"), null);

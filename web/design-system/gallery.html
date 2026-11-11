@@ -359,6 +359,16 @@
         { role: "assistant", activity: ["Menyusun change set…"], text: "Aku sudah menyusun usulannya. Cek pratinjaunya dulu.",
           changesets: [{ id: "cs-0815", title: "Nomor PO wajib untuk pelanggan grosir", risk: "low", status: "previewed" }] }] }));
     },
+    RakaLauncher: function () {
+      var t = useState(false);
+      // the fixed button sits inside a positioned frame here; each state side by side
+      return h("div", { className: "gx-row", style: { flexWrap: "wrap", gap: 16 } },
+        [["Diam", { pending: 1 }], ["Terbuka", { open: true }], ["Tersembunyi", { tucked: true, pending: 1 }]].map(function (x) {
+          return h("div", { key: x[0], style: { position: "relative", width: 200, height: 96, border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden", transform: "translateZ(0)" } },
+            h("small", { style: { position: "absolute", left: 10, top: 8, color: "var(--muted)" } }, x[0]),
+            h(R.RakaLauncher, Object.assign({ onToggle: function () {}, onTuck: function () { t[1](!t[0]); } }, x[1])));
+        }));
+    },
     Logo: function () { return h("div", { className: "gx-row" }, h(R.Logo, null), h(R.Logo, { word: false, size: 32 }), h("span", { style: { background: "#b4432a", padding: 8, borderRadius: 6 } }, h(R.Logo, { reversed: true }))); },
     AuthLayout: function () {
       return h("div", { className: "gx-wide", style: { height: 520, border: "1px solid var(--line)", borderRadius: 8, overflow: "hidden" } },

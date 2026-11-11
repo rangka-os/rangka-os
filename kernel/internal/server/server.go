@@ -236,8 +236,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows
 	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf,
-		StartFlow: func(ctx context.Context, org, flow string, event map[string]any, key string) error {
-			_, err := s.Queue.Enqueue(ctx, nil, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
+		StartFlow: func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, key string) error {
+			_, err := s.Queue.Enqueue(ctx, qr, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
 			return err
 		}}
 	s.API.Connectors = s.Connectors

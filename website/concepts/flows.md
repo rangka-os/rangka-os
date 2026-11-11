@@ -29,7 +29,7 @@ idempotency: event.message_id
 
 | Step | Does |
 | --- | --- |
-| `find`, `find_all` | Load one / many records with a CEL `where` |
+| `find`, `find_all` | Load one / many records with a CEL `where`, newest first (or `sort:`, `limit:`). Plain conditions joined by `&&` (`field == value`, `field in list` on text fields and `name`, `docstatus == n`/`!= n`, the value read from `event` or flow variables) are read in SQL; the whole `where` is still checked on every row, and a `find` without `sort:` stops at its first match |
 | `create`, `update` | Write a record with `set:` values (CEL) |
 | `notify` | Send through a `system.rk` notify channel (logged only in v0, and written to the audit log) |
 | `call` | Call a connector action (recorded in the audit log in v0; the connector runtime is not built yet) |

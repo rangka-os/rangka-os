@@ -111,26 +111,15 @@ func (rt *Runtime) dispatch(ctx context.Context, org, connector, trigger string,
 		ev := emit(meta.AsMap(t["emit"]), body, it, extra)
 		ev = scrub.Value(ev).(map[string]any)
 		key := eventKey(org, connector, trigger, ev)
-		fresh, err := rt.remember(ctx, org, connector, trigger, key)
+		fresh, err := rt.record(ctx, org, connector, trigger, key, ev, flows)
 		if err != nil {
-			rt.logf("connectors: dedupe: %v", err)
-			return events, dupes, errors.New("could not record the event")
+			return events, dupes, err
 		}
 		if !fresh {
 			dupes++
 			continue
 		}
 		events++
-		store.Audit(ctx, rt.DB, org, "connector:"+connector, "connector.event", "connector/"+connector, trigger, map[string]any{"trigger": trigger, "event": ev})
-		for _, f := range flows {
-			if rt.StartFlow == nil {
-				continue
-			}
-			if err := rt.StartFlow(ctx, org, f, ev, "hook:"+key+":"+f); err != nil {
-				rt.logf("connectors: start flow %s: %v", f, err)
-				return events, dupes, errors.New("could not start the flow")
-			}
-		}
 	}
 	return events, dupes, nil
 }
@@ -386,17 +375,46 @@ func eventKey(org, connector, trigger string, ev map[string]any) string {
 	return hex.EncodeToString(sum[:16])
 }
 
-// remember records an event key; false when it was seen before (a vendor retry or a replay).
-func (rt *Runtime) remember(ctx context.Context, org, connector, trigger, key string) (bool, error) {
-	res, err := rt.DB.Query(ctx, `insert into rk_hook_events (org_id, connector, trigger, key) values ($1, $2, $3, $4)
+// record remembers an event key and queues each listening flow in one transaction: false when the key was seen
+// before (a vendor retry or a replay). A flow that cannot be queued rolls the key back, so the vendor's retry (or
+// the next poll) brings the event again instead of it being taken for a duplicate forever.
+func (rt *Runtime) record(ctx context.Context, org, connector, trigger, key string, ev map[string]any, flows []string) (bool, error) {
+	tx, err := rt.DB.Begin(ctx)
+	if err != nil {
+		rt.logf("connectors: dedupe: %v", err)
+		return false, errors.New("could not record the event")
+	}
+	defer tx.Rollback(ctx)
+	res, err := tx.Query(ctx, `insert into rk_hook_events (org_id, connector, trigger, key) values ($1, $2, $3, $4)
 		on conflict do nothing returning key`, org, connector, trigger, key)
 	if err != nil {
-		return false, fmt.Errorf("hook events: %w", err)
+		rt.logf("connectors: dedupe: hook events: %v", err)
+		return false, errors.New("could not record the event")
 	}
-	if len(res.Rows) == 1 && rand.IntN(200) == 0 { // now and then, forget events older than 30 days
+	if len(res.Rows) != 1 {
+		return false, nil
+	}
+	if err := store.Audit(ctx, tx, org, "connector:"+connector, "connector.event", "connector/"+connector, trigger, map[string]any{"trigger": trigger, "event": ev}); err != nil {
+		rt.logf("connectors: audit: %v", err)
+		return false, errors.New("could not record the event")
+	}
+	for _, f := range flows {
+		if rt.StartFlow == nil {
+			continue
+		}
+		if err := rt.StartFlow(ctx, tx, org, f, ev, "hook:"+key+":"+f); err != nil {
+			rt.logf("connectors: start flow %s: %v", f, err)
+			return false, errors.New("could not start the flow")
+		}
+	}
+	if err := tx.Commit(ctx); err != nil {
+		rt.logf("connectors: dedupe: commit: %v", err)
+		return false, errors.New("could not record the event")
+	}
+	if rand.IntN(200) == 0 { // now and then, forget events older than 30 days
 		rt.DB.Exec(ctx, "delete from rk_hook_events where at < now() - interval '30 days'")
 	}
-	return len(res.Rows) == 1, nil
+	return true, nil
 }
 
 func orDefault(s, d string) string {

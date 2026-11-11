@@ -551,11 +551,44 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if err := o.lockFlowRead(m.Name); err != nil {
 				return err
 			}
-			recs, err := store.All(o.ctx, o.tx, e.Reg(), a.Org, m, false)
-			if err != nil {
-				return err
+			srt, _ := st["sort"].(string)
+			limit := int(toInt(st["limit"]))
+			where, _ := st["where"].(string)
+			// the where:'s plain conditions (field == value, field in list, docstatus) narrow the rows in SQL; the whole
+			// expression is still checked on every row read, so SQL only ever reads more than where: keeps
+			conds, args := flowFindSQL(o, m, where, r.vars)
+			var found []any
+			keep := func(rec store.Record) (bool, error) {
+				e.Output(m, rec)
+				if !e.recordAllowed(o.ctx, o.tx, a, m, readable, rec, o.links) {
+					return false, nil
+				}
+				if where != "" {
+					sc := o.scope(m, rec)
+					sc.extra = r.vars
+					v, err := sc.eval(where)
+					if err != nil || !cel.Truthy(v) {
+						return false, nil
+					}
+				}
+				return true, nil
 			}
-			if srt, _ := st["sort"].(string); srt != "" {
+			if srt == "" {
+				// newest first, as before; reading stops at the first match (find) or at limit:
+				err = store.Scan(o.ctx, o.tx, m, a.Org, conds, args, 200, func(rec store.Record) (bool, error) {
+					ok, err := keep(rec)
+					if err != nil || !ok {
+						return false, err
+					}
+					found = append(found, record(mn, rec))
+					return !all || (limit > 0 && len(found) >= limit), nil
+				})
+			} else {
+				var recs []store.Record
+				err = store.Scan(o.ctx, o.tx, m, a.Org, conds, args, 1000, func(rec store.Record) (bool, error) {
+					recs = append(recs, e.Output(m, rec))
+					return false, nil
+				})
 				desc := strings.HasPrefix(srt, "-")
 				k := strings.TrimPrefix(srt, "-")
 				sort.SliceStable(recs, func(x, y int) bool {
@@ -565,27 +598,26 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 					}
 					return c < 0
 				})
-			}
-			limit := int(toInt(st["limit"]))
-			where, _ := st["where"].(string)
-			var found []any
-			for _, rec := range recs {
-				e.Output(m, rec)
-				if !e.recordAllowed(o.ctx, o.tx, a, m, readable, rec, o.links) {
-					continue
-				}
-				if where != "" {
-					sc := o.scope(m, rec)
-					sc.extra = r.vars
-					v, err := sc.eval(where)
-					if err != nil || !cel.Truthy(v) {
+				for _, rec := range recs {
+					if err != nil {
+						break
+					}
+					ok, kerr := keep(rec)
+					if kerr != nil {
+						err = kerr
+						break
+					}
+					if !ok {
 						continue
 					}
+					found = append(found, record(mn, rec))
+					if !all || (limit > 0 && len(found) >= limit) {
+						break
+					}
 				}
-				found = append(found, record(mn, rec))
-				if !all || (limit > 0 && len(found) >= limit) {
-					break
-				}
+			}
+			if err != nil {
+				return err
 			}
 			var val any
 			if all {

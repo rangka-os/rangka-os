@@ -5,12 +5,14 @@ import (
 	"errors"
 	"fmt"
 	"sort"
+	"strconv"
 	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // Polling triggers (contract 0002 §A.1): a trigger with via: poll names one of the connector's actions. Every `every`
@@ -44,7 +46,10 @@ type PollResult struct {
 	Events  int    `json:"events"`
 	Dupes   int    `json:"dupes"`
 	Cursor  bool   `json:"cursor_moved"`
-	Items   int    `json:"items,omitempty"` // calls made: 1, or one per item of each:
+	Pages   int    `json:"pages,omitempty"` // pages read (next:), summed over the items
+	// Truncated: a target still had a next page after MaxPollPages (audited as poll_pages_truncated)
+	Truncated bool `json:"truncated,omitempty"`
+	Items     int  `json:"items,omitempty"` // calls made: 1, or one per item of each:
 }
 
 // Poll runs one poll of org's connector trigger. With each: the trigger's list action is called first and the
@@ -87,6 +92,8 @@ func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*P
 		res.Events += r.Events
 		res.Dupes += r.Dupes
 		res.Cursor = res.Cursor || r.Cursor
+		res.Pages += r.Pages
+		res.Truncated = res.Truncated || r.Truncated
 		res.Items++
 	}
 	return res, nil
@@ -137,37 +144,85 @@ func (rt *Runtime) pollOne(ctx context.Context, org, connector, trigger string, 
 	if cursor != "" {
 		cur = cursor
 	}
-	vars := map[string]any{"cursor": cur, "settings": settings(c)}
-	for k, v := range tg.vars {
-		vars[k] = v
+	// input: (CEL over cursor, settings, the each: item and page: null on the first page, then the answer's next:)
+	inputFor := func(page any) (map[string]any, error) {
+		vars := map[string]any{"cursor": cur, "settings": settings(c), "page": page}
+		for k, v := range tg.vars {
+			vars[k] = v
+		}
+		input := map[string]any{}
+		env := varsEnv(vars)
+		for k, x := range meta.AsMap(t["input"]) {
+			src, ok := x.(string)
+			if !ok {
+				continue
+			}
+			v, err := cel.Eval(src, env)
+			if err != nil {
+				return nil, &jobs.Permanent{Err: fmt.Errorf("poll %s.%s: input %s: %v", connector, trigger, k, err)}
+			}
+			if u := cel.Unwrap(v); u != nil {
+				input[k] = u
+			}
+		}
+		return input, nil
 	}
-	input := map[string]any{}
-	env := varsEnv(vars)
-	for k, x := range meta.AsMap(t["input"]) {
-		src, ok := x.(string)
-		if !ok {
-			continue
-		}
-		v, err := cel.Eval(src, env)
-		if err != nil {
-			return nil, &jobs.Permanent{Err: fmt.Errorf("poll %s.%s: input %s: %v", connector, trigger, k, err)}
-		}
-		if u := cel.Unwrap(v); u != nil {
-			input[k] = u
-		}
+	input, err := inputFor(nil)
+	if err != nil {
+		return nil, err
 	}
 	if _, err := rt.Render(ctx, org, connector, action, input); errors.Is(err, ErrNeedsAuth) {
 		return &PollResult{Skipped: "needs_auth"}, nil
 	}
-	out, err := rt.Call(ctx, org, connector, action, input)
-	if err != nil {
-		return nil, err
-	}
 	res := &PollResult{}
-	if res.Events, res.Dupes, err = rt.dispatch(ctx, org, connector, trigger, t, out, tg.vars); err != nil {
-		return nil, err
+	var merged map[string]any
+	callCtx := ctx
+	seen := map[string]bool{}
+	for page := 1; ; page++ {
+		out, err := rt.Call(callCtx, org, connector, action, input)
+		if err != nil {
+			return nil, err
+		}
+		ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, out, tg.vars)
+		res.Events += ev
+		res.Dupes += dupes
+		if err != nil {
+			return nil, err
+		}
+		merged = mergePage(merged, out)
+		res.Pages = page
+		// next: (CEL over the answer) names the next page: an absolute URL (Moka's next_url) is fetched as it is, on
+		// the action's host (a path such as /v3/...?page=2 is resolved against the action's URL); any other value is bound
+		// as page for input:. null, "" or a value seen before stops.
+		next := nextCursor(meta.Str(t, "next"), out)
+		if next == "" || seen[next] {
+			break
+		}
+		if page >= MaxPollPages {
+			res.Truncated = true
+			store.Audit(ctx, rt.DB, org, "connector:"+connector, "connector.error", "connector/"+connector,
+				fmt.Sprintf("%s: poll stopped after %d pages", trigger, MaxPollPages), map[string]any{"trigger": trigger, "code": "poll_pages_truncated", "target": tg.key})
+			break
+		}
+		seen[next] = true
+		if strings.Contains(next, "://") || strings.HasPrefix(next, "/") {
+			callCtx = context.WithValue(ctx, pageURLKey{}, next)
+		} else {
+			callCtx = ctx
+			var pv any = next
+			if n, err := strconv.ParseInt(next, 10, 64); err == nil {
+				pv = n
+			}
+			if input, err = inputFor(pv); err != nil {
+				return nil, err
+			}
+		}
 	}
-	if next := nextCursor(meta.Str(t, "cursor"), out); next != "" && next != cursor {
+	// the cursor reads every page at once: list fields of the answers joined in page order, other fields from the
+	// last page (a max() over the items, or the last page's next_cursor). A poll cut at MaxPollPages keeps the old
+	// cursor: moving it past pages not read would lose them for good (newest-first vendors); the next poll reads the
+	// same window again and dedupe drops what was seen
+	if next := nextCursor(meta.Str(t, "cursor"), merged); next != "" && next != cursor && !res.Truncated {
 		scrub, _ := rt.Scrubber(ctx, org, connector)
 		if _, err := rt.DB.Exec(ctx, `insert into rk_poll_cursors (org_id, connector, trigger, cursor) values ($1, $2, $3, $4)
 			on conflict (org_id, connector, trigger) do update set cursor = excluded.cursor, updated_at = now()`,
@@ -177,6 +232,27 @@ func (rt *Runtime) pollOne(ctx context.Context, org, connector, trigger string, 
 		res.Cursor = true
 	}
 	return res, nil
+}
+
+// MaxPollPages bounds how many pages one poll of one target follows.
+const MaxPollPages = 50
+
+// mergePage joins a page's answer into the answers before it: lists are appended, other fields replaced.
+func mergePage(acc, out map[string]any) map[string]any {
+	if acc == nil {
+		acc = map[string]any{}
+	}
+	for k, v := range out {
+		if l, ok := v.([]any); ok {
+			if prev, ok := acc[k].([]any); ok {
+				joined := make([]any, 0, len(prev)+len(l))
+				acc[k] = append(append(joined, prev...), l...)
+				continue
+			}
+		}
+		acc[k] = v
+	}
+	return acc
 }
 
 func (rt *Runtime) cursor(ctx context.Context, org, connector, trigger string) (string, error) {

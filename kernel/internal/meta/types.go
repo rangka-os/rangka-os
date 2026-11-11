@@ -13,7 +13,7 @@ var SystemFields = map[string]bool{"name": true, "status": true, "created_by": t
 	"company": true, "docstatus": true, "amended_from": true}
 
 // Functions of the CEL dialect (rangka_validate.py FUNCTIONS).
-var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between"}
+var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "epoch", "timestamp"}
 
 // Globals readable in expressions (org and tax: contract 0010 §8).
 var Globals = map[string]bool{"user": true, "org": true, "tax": true, "true": true, "false": true, "null": true, "event": true}
@@ -122,15 +122,28 @@ func (m *Model) ApprovalsFor(verb string) []Approval {
 	return out
 }
 
-// Field returns the field called name, or nil.
+// Field returns the field called name, or nil. It only reads: the registry is shared by every request and job,
+// so the index is built when the model is parsed (a lazy fill raced into concurrent map writes, card t_63054d4b);
+// a Model built by hand without it is searched field by field.
 func (m *Model) Field(name string) *Field {
-	if m.byName == nil {
-		m.byName = map[string]*Field{}
-		for _, f := range m.Fields {
-			m.byName[f.Name] = f
+	if m.byName != nil {
+		return m.byName[name]
+	}
+	for i := len(m.Fields) - 1; i >= 0; i-- {
+		if m.Fields[i].Name == name {
+			return m.Fields[i]
 		}
 	}
-	return m.byName[name]
+	return nil
+}
+
+// indexFields is Model.byName for fields: a later field of the same name wins, as Field's scan does.
+func indexFields(fields []*Field) map[string]*Field {
+	out := make(map[string]*Field, len(fields))
+	for _, f := range fields {
+		out[f.Name] = f
+	}
+	return out
 }
 
 // Action returns the action called name.
@@ -364,6 +377,7 @@ func parseModel(app string, doc *rk.Doc) *Model {
 		m.Approvals = append(m.Approvals, Approval{Name: str(am, "name"), On: str(am, "on"), When: celText(am["when"]),
 			Approvers: strList(am["approvers"]), Label: label(am["label"]), Raw: am})
 	}
+	m.byName = indexFields(m.Fields)
 	return m
 }
 

@@ -129,7 +129,8 @@
   var NUMERIC = { currency: 1, money: 1, float: 1, int: 1 };
   // the summary prints its amounts with API.rupiah, so it takes only rupiah (currency) fields: a money field (an amount
   // in its own currency, contract 0013) or a count (an int/float "total") never shows as Rp (audit 2026-11-07 F1, F2)
-  var SUM_TYPES = { currency: 1 };
+  // currency: rupiah; money (contract 0013): an amount in the currency its currency_field names (audit F7)
+  var SUM_TYPES = { currency: 1, money: 1 };
   var SUM_OPEN = ["outstanding", "outstanding_amount"];
   var SUM_TOTAL = ["amount_due", "grand_total", "net_total", "total_amount", "total"];
 
@@ -154,9 +155,12 @@
     var open = ds === 1 ? first(SUM_OPEN) : null, total = first(SUM_TOTAL), big = open || total;
     if (!big) return null;
     var facts = [], paid = open ? fd("paid_amount") : null, progress = null;
-    if (open && total) facts.push({ name: total.name, label: labelText(total.label), value: rec[total.name] });
-    if (paid) facts.push({ name: paid.name, label: labelText(paid.label), value: rec[paid.name] || 0 });
-    if (open && total && Number(rec[total.name]) > 0) {
+    // the currency code of an amount: IDR for currency fields, the record's currency_field value for money fields
+    function cur(f) { return f.type === "money" ? String(rec[f.currency_field] || "IDR").toUpperCase() : "IDR"; }
+    if (open && total) facts.push({ name: total.name, label: labelText(total.label), value: rec[total.name], currency: cur(total) });
+    if (paid) facts.push({ name: paid.name, label: labelText(paid.label), value: rec[paid.name] || 0, currency: cur(paid) });
+    // a share only between amounts of one currency
+    if (open && total && cur(open) === cur(total) && Number(rec[total.name]) > 0) {
       var share = 1 - Number(rec[open.name] || 0) / Number(rec[total.name]);
       progress = Math.max(0, Math.min(1, share));
     }
@@ -164,10 +168,11 @@
     if (status === "paid") line = { kind: "paid", tone: "ok" };
     else if (status === "cancelled" || ds === 2) line = { kind: "cancelled", tone: "" };
     else if (ds === 0) line = { kind: "draft", tone: "" };
-    else if (status === "overdue" || (left != null && left < 0 && Number(rec[big.name]) > 0)) line = { kind: "overdue", tone: "bad", days: left == null ? null : -left, due: due };
+    else if (status === "overdue" || (left != null && left < 0 && Number(rec[big.name]) > 0)) line = { kind: "overdue", tone: "bad", days: left == null ? null : -left, due: due,
+      partly: status === "partly" || !!(paid && Number(rec[paid.name]) > 0) };   // audit F8: a part paid stays said
     else if (status === "partly") line = { kind: "partly", tone: "warn", days: left, due: due };
     else line = { kind: "due", tone: "", days: left, due: due };
-    return { big: { name: big.name, label: labelText(big.label), value: rec[big.name] }, facts: facts, progress: progress, line: line };
+    return { big: { name: big.name, label: labelText(big.label), value: rec[big.name], currency: cur(big) }, facts: facts, progress: progress, line: line };
   }
 
   /** The sentence for docSummary's line; fmt formats an ISO date ("7 Des 2026"). */
@@ -177,7 +182,10 @@
     if (line.kind === "paid") return "Lunas";
     if (line.kind === "cancelled") return "Dibatalkan";
     if (line.kind === "draft") return "Draf, belum diajukan";
-    if (line.kind === "overdue") return line.days ? "Lewat jatuh tempo " + line.days + " hari" : "Lewat jatuh tempo";
+    if (line.kind === "overdue") {
+      var late = line.days ? "ewat jatuh tempo " + line.days + " hari" : "ewat jatuh tempo";
+      return line.partly ? "Dibayar sebagian, l" + late : "L" + late;
+    }
     var when = line.due ? "jatuh tempo " + fmt(line.due) + (line.days === 0 ? " (hari ini)" : line.days > 0 ? " (" + line.days + " hari lagi)" : "") : "";
     if (line.kind === "partly") return "Dibayar sebagian" + (when ? ", " + when : "");
     return when ? when.charAt(0).toUpperCase() + when.slice(1) : "Belum dibayar";
@@ -664,7 +672,7 @@
     var sum = !isNew && sub ? docSummary(mm, rec, status, todayISO()) : null, sumEl = null;
     if (sum) {
       var day2 = API ? API.tanggal : function (x) { return String(x || "").slice(0, 10); };
-      var money = function (v) { return API ? API.rupiah(Number(v) || 0) : String(v); };
+      var money = function (v, c) { return API ? (c && c !== "IDR" && API.money ? API.money(v, c) : API.rupiah(Number(v) || 0)) : String(v); };
       var tf = mm.title_field && eng.field(m, mm.title_field), party = tf && rec[tf.name] ? RA.fieldText(ctx, tf, rec[tf.name]) : null;
       var lineText = summaryLine(sum.line, day2);
       var showTools = RA.DocTools && prints.length && docstatus === 1 && !(can.print === false);
@@ -673,11 +681,11 @@
           h("div", { className: "ap-docsum-main" },
             party ? h("span", { className: "ap-docsum-party" }, party) : null,
             h("span", { className: "ap-docsum-l" }, sum.big.label),
-            h("b", { className: "ap-docsum-big" }, money(sum.big.value)),
+            h("b", { className: "ap-docsum-big" }, money(sum.big.value, sum.big.currency)),
             lineText ? h("span", { className: cx("ap-docsum-line", sum.line.tone && "t-" + sum.line.tone) },
               sum.line.tone === "bad" ? h(R.Icon, { name: "warning" }) : null, lineText) : null),
           sum.facts.length ? h("dl", { className: "ap-docsum-kv" }, sum.facts.map(function (f) {
-            return h("div", { key: f.name }, h("dt", null, f.label), h("dd", null, money(f.value)));
+            return h("div", { key: f.name }, h("dt", null, f.label), h("dd", null, money(f.value, f.currency)));
           })) : null),
         sum.progress ? h("div", { className: "ap-docsum-bar", role: "img", "aria-label": Math.round(sum.progress * 100) + "% sudah dibayar" },
           h("i", { style: { width: (sum.progress * 100).toFixed(1) + "%" } })) : null,

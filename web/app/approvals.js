@@ -69,9 +69,9 @@
     var n = Number(s.amount);
     if (!isFinite(n)) return "";
     var cur = String(s.currency || "IDR").toUpperCase();
-    if (cur === "IDR") return global.RangkaAppAPI ? global.RangkaAppAPI.rupiah(n) : "Rp " + Math.round(n);
-    var neg = n < 0, parts = Math.abs(n).toFixed(2).split(".");
-    return (neg ? "-" : "") + cur + " " + parts[0].replace(/\B(?=(\d{3})+(?!\d))/g, ".") + "," + parts[1];
+    if (global.RangkaAppAPI && global.RangkaAppAPI.money) return global.RangkaAppAPI.money(s.amount, cur);   // decimal rounding (audit F4)
+    if (cur === "IDR") return "Rp " + Math.round(n);
+    return (n < 0 ? "-" : "") + cur + " " + Math.abs(n).toFixed(2).replace(".", ",");
   }
 
   function countDecidable(items) {

@@ -70,6 +70,23 @@ Gate: in the Kopi Senja demo site, a real WhatsApp message creates a lead within
 - **Replay** (§A.5) is `POST /api/v1/system/jobs/{id}/replay` for any dead-lettered job. It makes a new job, and the
   dead-letter row stays. A connector call is rendered again with the org's current keys.
 
+## Refinements (11 Nov 2026): pages, cursors in seconds, events kept with their flows
+- **Pages** (`next:` on a poll trigger): CEL over each answer giving the next page. An absolute URL (Moka's
+  `next_url`), or a path starting with `/` (resolved against the action's URL), is sent as it is, with the action's headers and auth, only to the host of the rendered action URL (another
+  host is `ErrHostRefused`; the scheme stays the action's, so an `http://` link from the vendor goes out on https). Any
+  other value is bound as `page` for `input:` (null on the first page). null, `""` or a value seen before in the same
+  poll stops; at most 50 pages per target, after which the poll stops, audits `poll_pages_truncated` and keeps the old cursor (the next poll reads the pages again; dedupe drops what was seen). Every page
+  goes through `for_each`/`emit` and dedupe as it arrives. `cursor:` is evaluated once over all pages: list fields of
+  the answers joined in page order, other fields from the last page.
+- **Seconds** for vendors that take Unix time: CEL `epoch(t)` (RFC 3339 datetime or `YYYY-MM-DD`, to whole seconds) and
+  `timestamp(n)` (seconds to an RFC 3339 UTC datetime); both keep null. A cursor stays a datetime
+  (`timestamp(max(payments.map(p, epoch(p.created_at))))`) and `input:` sends `epoch(cursor)`.
+- **Dedupe and queue in one transaction**: the event key (`rk_hook_events`), the `connector.event` audit row and the
+  flow jobs of an event commit together. A flow that cannot be queued rolls the key back, so the vendor's retry or the
+  next poll brings the event again instead of it being dropped as a duplicate.
+- **Empty idempotency keys**: a flow that books money or stock from connector events must refuse an event whose key
+  field is empty (flow `idempotency:` does not dedupe an empty key), e.g. a Moka transaction without `id`.
+
 ## Refinements (11 Nov 2026): canonical-line signatures
 Some gateways (DOKU Non-SNAP, used for QRIS and payment links) sign a request with an HMAC over a few lines made from
 headers, the path and a digest of the body, instead of over the raw body. Both directions use the same line templates.

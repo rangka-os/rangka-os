@@ -20,7 +20,10 @@ needs a safe way to turn a document and its related lists into a well-formed XML
 2. **Rendering.** Go `text/template` with the print helpers of contract 0008 §3 plus `add`, `mul`, `div`
    (exact rationals, `div` by zero is 0), `round x n` (half away from zero to n decimals, default 0), `dec x n` (a
    plain number with `.` as decimal point, at most n decimals, trailing zeros dropped: `2.5`, `15000`), `digits`
-   (only 0-9 of a value) and `isodate` (`YYYY-MM-DD`, "" when empty). Every action that writes output is escaped as
+   (only 0-9 of a value) and `isodate` (`YYYY-MM-DD`, "" when empty). In an XML format the number helpers (`add`,
+   `sub`, `mul`, `div`, `round`, `dec`) fail the render (`500`, nothing sent, the value in the server log) on an operand
+   that is set but is not a number; an empty or missing operand still counts as 0 (`dec` of it is ""). HTML formats
+   keep the lenient helpers. Every action that writes output is escaped as
    XML text (`&`, `<`, `>`, `'`, `"`; characters XML forbids become U+FFFD): the kernel appends the escaper to each
    output action, the way `html/template` does, so a template cannot emit markup from data. Data is the print data
    (`.Doc`, `.Links`, `.Related`, `.Org`, `.Tax`, `.Printed`, ...), related rows filled like `.Doc` (every field
@@ -36,7 +39,11 @@ needs a safe way to turn a document and its related lists into a well-formed XML
      row like a list filter, with the printed document as `doc` (a check that errors or is not `true` fails). Any failure: `422 export_invalid` with
      `problems: [{list, name, message}]` (at most 100, in list order), nothing rendered and no audit entry.
    - For an XML format the rows are those the caller may export (contract 0024 grants), and a list cut at its `limit` is refused with `422 export_too_large` (a tax file must hold every
-     row); HTML formats keep `.Truncated`.
+     row); HTML formats keep `.Truncated`. A list that lost rows to the caller's row scope or an `if:` of their read
+     or export grant is refused with `422 export_partial` (the count of missing rows, nothing of them), so a partial
+     file never looks complete.
+   - In `require`, a field of the related model named `doc` wins over the printed document; `rangka validate` warns
+     (`require_doc_shadowed`).
 5. **Endpoint.** The same `GET /api/v1/r/{model}/{name}/print?format=<xml format>`; `as` is omitted or `xml` (`html`
    or `pdf` on an XML format, or `xml` on an HTML format: `400 bad_request`). The caller needs the model's `print`
    and `export` grants (a tax file is an export). Response: `application/xml; charset=utf-8`,

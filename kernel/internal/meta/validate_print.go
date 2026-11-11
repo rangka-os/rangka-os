@@ -98,6 +98,11 @@ func (v *validator) printFormat(p *Print, all map[string]vis) {
 				v.rep.extra("error", d.Path, fmt.Sprintf("%s/require/%d/check", at, i), "cel_syntax", truncMsg(err.Error()))
 			}
 		}
+		// a field of the row named doc wins over the printed document in require (Engine.Holds): warn (contract 0029 §4)
+		if len(rel.Require) > 0 && relFields["doc"] {
+			v.rep.extra("warn", d.Path, at+"/require", "require_doc_shadowed",
+				fmt.Sprintf(`%s has a field named "doc": in require it hides the printed document (doc.*); rename the field`, rel.Model))
+		}
 	}
 	v.printTemplate(p)
 }

@@ -346,3 +346,31 @@ func TestValidateXMLPrints(t *testing.T) {
 		t.Errorf("template extension not checked against output:\n%s", out)
 	}
 }
+
+// A related model with a field named doc hides the printed document in require: a warning (audit pajak 7 Nov #12).
+func TestValidateRequireDocShadowed(t *testing.T) {
+	dir := t.TempDir()
+	copyDir(t, printRoot, dir)
+	copyDir(t, printSite, dir+"/site")
+	head := "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\n"
+	writeFile(t, dir+"/site/print/shadow_xml.rk", head+"name: shadow_xml\nmodel: customer\noutput: xml\ntemplate: shadow_xml.xml\nrelated:\n  invoices:\n    model: sales_invoice\n    match: {customer: name}\n    require:\n      - {check: \"doc.name != ''\", message: {id: Ada}}\n")
+	writeFile(t, dir+"/site/print/shadow_xml.xml", `<A/>`)
+	_, rep := Validate(dir+"/apps", dir+"/site", nil, schema.Embedded())
+	var buf bytes.Buffer
+	rep.Print(&buf)
+	if strings.Contains(buf.String(), "require_doc_shadowed") {
+		t.Fatalf("no field doc yet, but warned:\n%s", buf.String())
+	}
+	inv, err := filepath.Glob(dir + "/modules/*/models/sales_invoice.rk")
+	if err != nil || len(inv) != 1 {
+		t.Fatalf("sales_invoice.rk: %v %v", inv, err)
+	}
+	b, _ := os.ReadFile(inv[0])
+	writeFile(t, inv[0], strings.Replace(string(b), "fields:\n", "fields:\n  - {name: doc, type: data, label: {id: Dokumen}}\n", 1))
+	_, rep = Validate(dir+"/apps", dir+"/site", nil, schema.Embedded())
+	buf.Reset()
+	rep.Print(&buf)
+	if !strings.Contains(buf.String(), "require_doc_shadowed") {
+		t.Errorf("field doc on the related model not warned:\n%s", buf.String())
+	}
+}

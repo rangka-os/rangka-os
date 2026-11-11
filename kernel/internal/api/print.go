@@ -317,6 +317,37 @@ func inRange(row, doc store.Record, rng map[string][2]string) bool {
 // maxProblems caps the problems a 422 export_invalid lists (contract 0029 §4).
 const maxProblems = 100
 
+// refusePartial refuses an XML file (422 export_partial) when a related list lost rows to the caller's row scope or
+// an if: of their read or export grant: a tax file must hold every document of its period, and a caller who may see
+// only part of them gets no file rather than a partial one that looks complete (audit pajak 7 Nov #11). The count
+// of all matching rows is taken as the kernel; only the count is used, nothing of those rows reaches the caller.
+func (s *Server) refusePartial(w http.ResponseWriter, ctx context.Context, c *caller, f *meta.Print, rec store.Record, related map[string][]map[string]any) bool {
+	sys := engine.Actor{Org: c.actor.Org, ID: "system", System: true}
+	keys := make([]string, 0, len(f.Related))
+	for k := range f.Related {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		rel := f.Related[key]
+		filter, ok, err := relatedFilter(rel, rec)
+		if err != nil || !ok {
+			continue // printRelated already failed on err; no value to match on = an empty list for everyone
+		}
+		_, total, err := s.Engine.List(ctx, sys, rel.Model, engine.ListOpts{Filter: filter, Limit: 1})
+		if err != nil {
+			fail(w, err)
+			return true
+		}
+		if missing := total - len(related[key]); missing > 0 {
+			writeError(w, http.StatusUnprocessableEntity, "export_partial",
+				fmt.Sprintf("%d dokumen untuk file ini (%s) tidak boleh kamu lihat atau unduh, jadi filenya tidak lengkap. Minta pemilik usaha atau peran yang boleh melihat semuanya mengunduhnya.", missing, key))
+			return true
+		}
+	}
+	return false
+}
+
 // refuseInvalid checks every related row against its list's require checks (contract 0029 §4) and, when one
 // fails, writes 422 export_invalid with the problems in list order and returns true. A check that errors fails.
 func (s *Server) refuseInvalid(w http.ResponseWriter, ctx context.Context, c *caller, f *meta.Print, rec store.Record, related map[string][]map[string]any) bool {
@@ -378,6 +409,9 @@ func (s *Server) printXML(w http.ResponseWriter, r *http.Request, c *caller, rec
 				fmt.Sprintf("Terlalu banyak dokumen untuk satu file (%s, maksimal %d). Pecah masanya atau hubungi admin.", key, f.Related[key].Limit))
 			return
 		}
+	}
+	if s.refusePartial(w, ctx, c, f, rec, related) {
+		return
 	}
 	if s.refuseInvalid(w, ctx, c, f, rec, related) {
 		return

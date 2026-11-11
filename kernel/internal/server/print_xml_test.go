@@ -292,3 +292,42 @@ related:
 		t.Errorf("doc in require: %d %s", r.Status, r.Body)
 	}
 }
+
+// A tax file holds every row or none: rows the caller loses to an if: of their grants (or a row scope) refuse the
+// file with 422 export_partial instead of serving a file that looks complete (audit pajak 7 Nov #11).
+func TestPrintXMLPartialRefused(t *testing.T) {
+	e := printEnv(t, func(apps, site string) {
+		dir := filepath.Join(site, "print")
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "ledger_xml.rk"), []byte(ledgerXMLRK), 0o644)
+		os.WriteFile(filepath.Join(dir, "ledger_xml.xml"), []byte(ledgerXML), 0o644)
+		inv := filepath.Join(apps, "sales", "models", "sales_invoice.rk")
+		b, _ := os.ReadFile(inv)
+		os.WriteFile(inv, []byte(strings.Replace(string(b), "  - {role: sales_manager, read: true, print: true}",
+			"  - {role: sales_manager, read: true, print: true, export: true, if: \"outlet == 'OUT-01'\"}", 1)), 0o644)
+		cust := filepath.Join(apps, "core", "models", "customer.rk")
+		b, _ = os.ReadFile(cust)
+		os.WriteFile(cust, []byte(string(b)+"permissions:\n  - {role: owner, read: true, create: true, write: true, print: true, export: true}\n"+
+			"  - {role: sales_manager, read: true, print: true, export: true}\n"), 0o644)
+	})
+	c := e.must(201, "POST", "/api/v1/r/customer", map[string]any{"customer_name": "PT Sebagian Contoh"}).JSON["name"].(string)
+	e.submittedInvoice(c)
+	other := e.must(201, "POST", "/api/v1/r/sales_invoice", map[string]any{"customer": c, "outlet": "OUT-02",
+		"items": []any{map[string]any{"item": "BRG-0044", "qty": 1}}}).JSON["name"].(string)
+	e.must(200, "POST", "/api/v1/r/sales_invoice/"+other+"/submit", map[string]any{"force": true})
+	url := "/api/v1/r/customer/" + c + "/print?format=ledger_xml"
+	if r := e.must(200, "GET", url, nil); strings.Count(string(r.Body), "<Invoice>") != 2 {
+		t.Fatalf("owner: both invoices: %s", r.Body)
+	}
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "sm@contoh.test", "SM", "rahasia-123", "kopi-senja", "sales_manager", ""); err != nil {
+		t.Fatal(err)
+	}
+	e.jar, _ = cookiejar.New(nil)
+	e.must(200, "POST", "/auth/login", map[string]any{"email": "sm@contoh.test", "password": "rahasia-123"})
+	for _, method := range []string{"GET", "HEAD"} {
+		r := e.do(method, url, nil)
+		if r.Status != 422 || (method == "GET" && (code(r) != "export_partial" || !strings.Contains(string(r.Body), "1 dokumen"))) {
+			t.Errorf("%s, one of two invoices outside the grant: %d %s", method, r.Status, r.Body)
+		}
+	}
+}

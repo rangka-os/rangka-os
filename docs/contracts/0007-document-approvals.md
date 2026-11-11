@@ -40,7 +40,7 @@ When a person asks for a verb (`submit`, `cancel`, or an action) and one or more
    approved this way, the verb runs at once and the call answers as before (200).
 
 When the last pending request of a (record, verb) is approved, the kernel runs the verb in the same transaction,
-**as the requester** (their id, user record and roles, stored on the request), with the request's arguments
+**as the requester** (their id, user record, roles and outlets, stored on the request), with the request's arguments
 (`force` for submit, `args` for actions). Audit entries record both requester and approver. If the verb now fails
 (a rule fails because linked data changed, a warning needs `force` that was not given), the approval is rolled back
 and the error is returned; the request stays pending. Once the verb has run, the other pending requests of the
@@ -101,7 +101,7 @@ create table if not exists rk_approvals (
   snapshot     text not null,              -- sha256 hex
   args         jsonb not null default '{}', -- {force} / action args / flow resume state
   requested_by text not null,
-  requester    jsonb not null,             -- {id, user, roles, human, system} the verb runs as
+  requester    jsonb not null,             -- {id, user, roles, human, system, outlets} the verb runs as
   requested_at timestamptz not null default now(),
   decided_by   text,
   decided_at   timestamptz,
@@ -117,6 +117,8 @@ create index if not exists rk_approvals_record_idx on rk_approvals (org_id, mode
 - `requester.human` records whether the requester was a person; the verb then runs as a person or not, so a
   token-made request never self-approves a policy that starts to match at approve time. Rows without the key are
   read as a person.
+- `requester.outlets` are the requester's outlets when they asked (contract 0010 §5): rules, flows and row scope
+  of the verb read the same `user.outlets`. Requests stored before the key existed run with no outlets.
 
 ### 7. Interfaces
 - REST (`/api/v1`): `GET /approvals?state=pending|approved|rejected|void&model=&name=` → `{data, total}` (another

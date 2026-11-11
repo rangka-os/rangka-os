@@ -148,6 +148,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/r/{model}/{name}", a(s.getRecord))
 	mux.HandleFunc("PATCH /api/v1/r/{model}/{name}", a(s.patchRecord))
 	mux.HandleFunc("DELETE /api/v1/r/{model}/{name}", a(s.deleteRecord))
+	mux.HandleFunc("POST /api/v1/r/{model}/submit", a(s.submitMany))
 	mux.HandleFunc("POST /api/v1/r/{model}/{name}/{verb}", a(s.idempotent(s.lifecycle)))
 	mux.HandleFunc("GET /api/v1/attachments/{id}", a(s.getAttachment))
 	mux.HandleFunc("DELETE /api/v1/attachments/{id}", a(s.deleteAttachment))

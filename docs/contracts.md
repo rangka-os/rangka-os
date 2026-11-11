@@ -108,6 +108,13 @@ Additive; nothing above changed. Clients may rely on these.
   `required`, `min_rows`, `rule`, `link_not_found`, `bad_option`, `bad_value`, `unique`. Successful writes may carry
   `_warnings:[…]` (save rules with `level: warn`).
 - `POST …/submit` with warnings and no `force` → 422 `{errors:[], warnings:[…], needs_force:true}`.
+- (Nov 2026) `POST /r/{model}/submit {names:[…], force}` submits up to 100 drafts of one model, each on its own as
+  `POST /r/{model}/{name}/submit` would (rules, approvals, numbering, hooks, flows). 200
+  `{results:[{name, status, new_name? | approval? | error?, warnings?}], submitted, held, failed}` in the order given
+  (duplicates once): `status` 200 submitted, 202 held (the pending request), or the single submit's error status with
+  its `error`. One refused draft does not stop the others. A retry is safe and `Idempotency-Key` is not used here: a
+  submitted draft has its number, so its draft name answers 404 `not_found` (the number 409 `not_draft`), and a held
+  draft reuses its pending request.
 - (Nov 2026) `read_only` fields, also on child rows, are ignored in client writes; `min_rows` is checked on a
   client create (and on a PATCH that sends the table) as well as on submit; date-dependent computes are
   recomputed on read. See kernel/README.md.

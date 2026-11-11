@@ -44,20 +44,32 @@ func permissionDenied(w http.ResponseWriter, pe *engine.PermissionError) {
 
 // fail maps engine errors to HTTP: 422 validation, 403 permission, StatusError codes, 404, else 500.
 func fail(w http.ResponseWriter, err error) {
+	status, body := failBody(err)
+	writeJSON(w, status, body)
+}
+
+// failBody is the status and body fail writes for err.
+func failBody(err error) (int, any) {
 	var ve *engine.ValidationError
 	var se *engine.StatusError
 	var pe *engine.PermissionError
+	errOf := func(code, msg string) any {
+		var b errorBody
+		b.Error.Code, b.Error.Message = code, msg
+		return b
+	}
 	switch {
 	case errors.As(err, &pe):
-		permissionDenied(w, pe)
+		return http.StatusForbidden, map[string]any{"error": map[string]any{
+			"code": "permission_denied", "message": pe.Error(), "model": pe.Model, "action": pe.Action}}
 	case errors.As(err, &ve):
-		writeJSON(w, http.StatusUnprocessableEntity, ve)
+		return http.StatusUnprocessableEntity, ve
 	case errors.As(err, &se):
-		writeError(w, se.Status, se.Code, se.Msg)
+		return se.Status, errOf(se.Code, se.Msg)
 	case errors.Is(err, store.ErrNotFound):
-		writeError(w, http.StatusNotFound, "not_found", err.Error())
+		return http.StatusNotFound, errOf("not_found", err.Error())
 	default:
-		writeError(w, http.StatusInternalServerError, "internal", err.Error())
+		return http.StatusInternalServerError, errOf("internal", err.Error())
 	}
 }
 

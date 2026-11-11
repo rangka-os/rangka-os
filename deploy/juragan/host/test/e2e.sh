@@ -18,6 +18,7 @@ TAG_OLD="${TAG_OLD:-v0.5.0-alpha.8}"
 TAG_NEW="${TAG_NEW:-v0.5.0-alpha.9}"
 PORT="${HTTP_PORT:-18480}"
 SUFFIX="e2e$$"
+TP="juragan-host-$SUFFIX-t-" # tenant projects and networks are named per host
 TMP="$(mktemp -d "${TMPDIR:-/tmp}/tenant-host-e2e.XXXXXX")"
 TMP="$(cd "$TMP" && pwd -P)"
 ENV="$TMP/host.env"
@@ -135,8 +136,10 @@ cross="$(docker exec -e PGPASSWORD="$PWB" "$PG" psql -h 127.0.0.1 -U tokob -d po
 case "$cross" in *"permission denied for database"*) ok "tenant role cannot connect to the postgres database" ;; *) bad "tenant role reached postgres: $cross" ;; esac
 same "tenant role has a connection limit" "$(docker exec "$PG" psql -U postgres -qAtX -c "select rolconnlimit from pg_roles where rolname = 'tokoa'")" 20
 # network isolation: a container on tokoa's network reaches tokoa's kernel, not tokob's, nor tokob's network name
-same "tokoa network reaches its own kernel" "$(docker run --rm --network juragan-t-tokoa alpine:3.20 wget -q -O /dev/null http://t-tokoa:8080/.well-known/openid-configuration >/dev/null 2>&1; echo $?)" 0
-same "tokoa network cannot reach tokob's kernel" "$(docker run --rm --network juragan-t-tokoa alpine:3.20 wget -q -T 3 -O /dev/null http://t-tokob:8080/.well-known/openid-configuration >/dev/null 2>&1; echo $?)" 1
+same "tokoa network reaches its own kernel" "$(docker run --rm --network "${TP}tokoa" alpine:3.20 wget -q -O /dev/null http://t-tokoa:8080/.well-known/openid-configuration >/dev/null 2>&1; echo $?)" 0
+same "tenant network is named per host" "$(docker network inspect juragan-t-tokoa >/dev/null 2>&1 && echo shared || echo per-host)" per-host
+same "registry records the project" "$(sed -n 's/^TENANT_PROJECT=//p' "$TMP/host/registry/tokoa.env")" "${TP}tokoa"
+same "tokoa network cannot reach tokob's kernel" "$(docker run --rm --network "${TP}tokoa" alpine:3.20 wget -q -T 3 -O /dev/null http://t-tokob:8080/.well-known/openid-configuration >/dev/null 2>&1; echo $?)" 1
 same "bad org refused before anything is made" "$(RANGKA_OWNER_PASSWORD=x t create tokoc --bundle "$BUNDLE" --owner-email x@e2e.localhost --org $'org_a\nRANGKA_AI_URL=http://x.invalid' >/dev/null 2>&1; echo $?; [ -e "$TMP/host/registry/tokoc.env" ] && echo registry)" 1
 
 say "memory (idle kernels)"
@@ -158,14 +161,23 @@ same "no drill volumes left" "$(docker volume ls -q --filter "label=juragan.dril
 same "no drill networks left" "$(docker network ls -q --filter "label=juragan.drill=juragan-host-$SUFFIX" | wc -l | tr -d ' ')" 0
 same "no restored folders left" "$(ls "$TMP/host/drill" 2>/dev/null | wc -l | tr -d ' ')" 0
 same "failed drill is logged" "$(grep -c '^DRILL FAILED tokoa' "$TMP/host/drill.log")" 1
+same "health fails at once after a failed drill" "$(t health 2>/dev/null | grep -c '^FAIL tokoa .*drill-failed')" 1
+if t drill tokoa --identity "$TMP/age.key" >/dev/null 2>&1; then ok "drill tokoa again"; else bad "second drill of tokoa failed"; fi
 
 say "health"
 if t health; then ok "health all OK"; else bad "health reported a problem"; fi
 # Postgres detached from a tenant network (recreated outside host-up): health must fail, host-up must repair it
-docker network disconnect "juragan-t-tokoa" "$PG" >/dev/null
+docker network disconnect "${TP}tokoa" "$PG" >/dev/null
 same "health fails when Postgres left a tenant network" "$(t health 2>/dev/null | grep -c '^FAIL tokoa kernel=200/no-db-net')" 1
 t host-up >/dev/null 2>&1
 if t health >/dev/null; then ok "host-up reattaches Postgres"; else bad "health still failing after host-up"; fi
+# a tenant made by an older tenantctl: no connection limit, kernel still on HOST_NETWORK
+docker exec "$PG" psql -U postgres -qAtX -c 'ALTER ROLE tokoa CONNECTION LIMIT -1' >/dev/null
+docker network connect "juragan-tenants-$SUFFIX" "${TP}tokoa-kernel-1"
+t host-up >/dev/null 2>&1
+same "host-up caps an old tenant role" "$(docker exec "$PG" psql -U postgres -qAtX -c "select rolconnlimit from pg_roles where rolname = 'tokoa'")" 20
+same "host-up moves an old kernel off HOST_NETWORK" "$(docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "${TP}tokoa-kernel-1" | tr ' ' '\n' | grep -cx "juragan-tenants-$SUFFIX" || true)" 0
+same "tokoa serves after the recreate" "$(http tokoa.localhost GET /.well-known/openid-configuration)" 200
 echo "HEALTH_DISK_MAX_PCT=1" >>"$ENV"
 same "health fails when the disk limit is crossed" "$(t health 2>/dev/null | grep -c '^FAIL host disk_used_pct')" 1
 echo "HEALTH_DISK_MAX_PCT=101" >>"$ENV"
@@ -178,24 +190,41 @@ if t health >/dev/null; then ok "health OK with a suspended tenant"; else bad "h
 # an exported RANGKA_TAG / TENANT_ID in the caller's shell must not move the tenant off its pin
 RANGKA_TAG="$TAG_OLD" TENANT_ID=tokoa HOST_NETWORK=bogus t resume tokob
 same "resumed route" "$(http tokob.localhost GET /.well-known/openid-configuration)" 200
-same "shell RANGKA_TAG does not override the tenant's pin" "$(docker exec juragan-t-tokob-kernel-1 /usr/local/bin/rangka version | head -1)" "rangka ${TAG_NEW#v}"
+same "shell RANGKA_TAG does not override the tenant's pin" "$(docker exec "${TP}tokob-kernel-1" /usr/local/bin/rangka version | head -1)" "rangka ${TAG_NEW#v}"
 same "owner B signs in after resume" "$(login tokob.localhost "$OWNER_B" "$PW_B")" 200
 
+say "lock"
+mkdir "$TMP/host/.lock"
+echo "$$ Thu Jan  1 00:00:00 1970" >"$TMP/host/.lock/pid" # our pid, but another start time: a pid reused after a reboot
+if t restart tokob >/dev/null 2>&1; then ok "a lock whose pid was reused is taken over"; else bad "reused-pid lock blocked restart"; fi
+same "lock released after the run" "$([ -e "$TMP/host/.lock" ] && echo present || echo gone)" gone
+mkdir "$TMP/host/.lock"
+echo 1 >"$TMP/host/.lock/pid" # pid 1 is alive and belongs to root: kill -0 gives EPERM, which must count as alive
+t restart tokob >/dev/null 2>&1 &
+BG=$!
+sleep 5
+if kill -0 "$BG" 2>/dev/null; then ok "waits for a live holder of another user"; else bad "took a lock held by a live process"; fi
+rm -rf "$TMP/host/.lock"
+if wait "$BG"; then ok "runs once the holder is gone"; else bad "restart failed after the lock was freed"; fi
+
 say "upgrade tokoa $TAG_OLD -> $TAG_NEW"
-same "tokoa runs $TAG_OLD" "$(docker exec juragan-t-tokoa-kernel-1 /usr/local/bin/rangka version | head -1)" "rangka ${TAG_OLD#v}"
+same "tokoa runs $TAG_OLD" "$(docker exec "${TP}tokoa-kernel-1" /usr/local/bin/rangka version | head -1)" "rangka ${TAG_OLD#v}"
 t upgrade tokoa --tag "$TAG_NEW"
-same "tokoa runs $TAG_NEW" "$(docker exec juragan-t-tokoa-kernel-1 /usr/local/bin/rangka version | head -1)" "rangka ${TAG_NEW#v}"
+same "tokoa runs $TAG_NEW" "$(docker exec "${TP}tokoa-kernel-1" /usr/local/bin/rangka version | head -1)" "rangka ${TAG_NEW#v}"
 same "registry keeps the previous tag" "$(sed -n 's/^PREV_TAG=//p' "$TMP/host/registry/tokoa.env")" "$TAG_OLD"
 same "owner A signs in after upgrade" "$(login tokoa.localhost "$OWNER_A" "$PW_A")" 200
 same "data kept across the upgrade" "$(api tokoa.localhost GET /api/v1/r/stock_note >/dev/null; grep -c 'stok awal e2e' "$TMP/body" || true)" 1
 grep -q 'stok awal e2e' "$TMP/body" || head -c 600 "$TMP/body"
 same "pre-upgrade archive taken" "$(ls "$TMP/host/backups/tokoa" | grep -c '\.tar\.age$')" 2
+same "previous code saved in upgrades/" "$(ls "$TMP/host/upgrades" | grep -c '^tokoa-')" 1
 
 say "delete tokob"
 same "delete refuses an active tenant" "$(t delete tokob --confirm tokob >/dev/null 2>&1; echo $?)" 1
 t suspend tokob
 same "delete needs the id typed again" "$(t delete tokob --confirm tokoa >/dev/null 2>&1; echo $?)" 1
+mkdir -p "$TMP/host/upgrades/tokob-20261101T000000Z/apps" # as an earlier upgrade of tokob would have left
 t delete tokob --confirm tokob
+same "saved upgrade code gone" "$(ls "$TMP/host/upgrades" | grep -c '^tokob-' || true)" 0
 same "database gone" "$(docker exec "$PG" psql -U postgres -qAtX -c "select count(*) from pg_database where datname = 'tokob'")" 0
 same "role gone" "$(docker exec "$PG" psql -U postgres -qAtX -c "select count(*) from pg_roles where rolname = 'tokob'")" 0
 same "files gone" "$([ -e "$TMP/host/tenants/tokob" ] && echo present || echo gone)" gone
@@ -203,9 +232,20 @@ same "secret gone" "$([ -e "$TMP/host/secrets/tokob.env" ] && echo present || ec
 same "route gone" "$([ -e "$TMP/host/caddy/tokob.caddy" ] && echo present || echo gone)" gone
 same "tombstone kept" "$(sed -n 's/^STATUS=//p' "$TMP/host/registry/tokob.env")" deleted
 same "tombstone has no host or org in clear" "$(grep -cE '^(TENANT_HOST|TENANT_ORG)=' "$TMP/host/registry/tokob.env" || true)" 0
-same "network gone" "$(docker network inspect juragan-t-tokob >/dev/null 2>&1 && echo present || echo gone)" gone
+same "network gone" "$(docker network inspect "${TP}tokob" >/dev/null 2>&1 && echo present || echo gone)" gone
 same "deleted host cannot be reused" "$(RANGKA_OWNER_PASSWORD=x t create tokod --bundle "$BUNDLE" --owner-email x@e2e.localhost --host tokob.localhost >/dev/null 2>&1; echo $?)" 1
 same "deleted id cannot be reused" "$(RANGKA_OWNER_PASSWORD=x t create tokob --bundle "$BUNDLE" --owner-email x@e2e.localhost >/dev/null 2>&1; echo $?)" 1
 same "final archive kept until retention" "$(ls "$TMP/host/backups/tokob" | grep -c '\.tar\.age$')" 2
 same "tokoa still serves" "$(http tokoa.localhost GET /.well-known/openid-configuration)" 200
+
+say "failed create, then retry with the same id"
+cp -R "$BUNDLE" "$TMP/badbundle"
+printf '\nthis is: [not valid\n' >>"$TMP/badbundle/apps/stok/app.rk"
+same "create with a broken bundle fails" "$(RANGKA_OWNER_PASSWORD="$PW_A" t create tokoc --bundle "$TMP/badbundle" --owner-email "$OWNER_A" >/dev/null 2>&1; echo $?)" 1
+same "failed create recorded" "$(sed -n 's/^STATUS=//p' "$TMP/host/registry/tokoc.env")" failed
+t delete tokoc --confirm tokoc --force
+same "failed create leaves no registry entry" "$([ -e "$TMP/host/registry/tokoc.env" ] && echo present || echo gone)" gone
+same "failed create leaves no database" "$(docker exec "$PG" psql -U postgres -qAtX -c "select count(*) from pg_database where datname = 'tokoc'")" 0
+RANGKA_OWNER_PASSWORD="$PW_A" t create tokoc --bundle "$BUNDLE" --owner-email "$OWNER_A" --host tokoc.localhost >/dev/null
+same "retry with the same id and host serves" "$(http tokoc.localhost GET /.well-known/openid-configuration)" 200
 t list

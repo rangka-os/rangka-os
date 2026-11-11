@@ -27,6 +27,7 @@ HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 ENV_FILE="$HERE/.env"
 RESERVED=" postgres template0 template1 jasa fnb www app api admin mail juragan rangka caddy backup host drill status "
 LOCKED=""
+LOCK_ME=""
 
 log() { echo "tenantctl: $*" >&2; }
 die() { log "$*"; exit 1; }
@@ -46,6 +47,7 @@ load_config() {
   [ -n "$HOST_DIR" ] || die "HOST_DIR is not set in $ENV_FILE"
   case "$HOST_DIR" in /*) ;; *) die "HOST_DIR must be an absolute path" ;; esac
   HOST_PROJECT="$(cfg HOST_PROJECT juragan-host)"
+  [[ "$HOST_PROJECT" =~ ^[a-z0-9][a-z0-9_-]{0,40}$ ]] || die "HOST_PROJECT must be lowercase letters, digits, - or _"
   HOST_NETWORK="$(cfg HOST_NETWORK juragan-tenants)"
   DEFAULT_TAG="$(cfg RANGKA_TAG)"
   KERNEL_TARGET="$(cfg KERNEL_TARGET pdf)"
@@ -79,21 +81,51 @@ hc() { # docker compose for the shared services (+ HOST_COMPOSE_OVERRIDE, e.g. a
   [ -z "$o" ] || files+=(-f "$o")
   dc -p "$HOST_PROJECT" --project-directory "$HERE" --env-file "$ENV_FILE" "${files[@]}" "$@"
 }
+# tenant_project <id>: the tenant's compose project and network. Named per host so two hosts on one Docker daemon (a
+# local demo and the e2e test) never share one; the production host (HOST_PROJECT=juragan-host) keeps juragan-t-<id>.
+# Recorded in the registry at create; a tenant made before that keeps the old name (backfilled on first use).
+tenant_project_for_new() { if [ "$HOST_PROJECT" = juragan-host ]; then echo "juragan-t-$1"; else echo "$HOST_PROJECT-t-$1"; fi; }
+tenant_project() {
+  local p
+  p="$(reg "$1" TENANT_PROJECT)"
+  if [ -z "$p" ]; then p="juragan-t-$1"; [ ! -f "$HOST_DIR/registry/$1.env" ] || reg_set "$1" TENANT_PROJECT "$p"; fi
+  echo "$p"
+}
 tc() { # tc <id> <compose args...>: docker compose for one tenant
-  local id="$1"
+  local id="$1" p
   shift
-  dc -p "juragan-t-$id" --project-directory "$HERE" --env-file "$ENV_FILE" \
+  p="$(tenant_project "$id")"
+  dc -p "$p" --project-directory "$HERE" --env-file "$ENV_FILE" \
     --env-file "$HOST_DIR/registry/$id.env" --env-file "$HOST_DIR/secrets/$id.env" -f "$HERE/tenant.compose.yaml" "$@"
 }
 
 # ---------- lock: one mutating tenantctl at a time per host (create, upgrade, delete, suspend, resume, restart, drill)
+# The lock folder holds "<pid> <start time>". A holder counts as gone only when no process has that pid, or the pid now
+# belongs to a process started at another time (pid reused after a reboot); a live process of another user (kill -0
+# gives EPERM) still holds it. On exit a run removes the lock only while it is still its own.
+proc_start() { LC_ALL=C ps -o lstart= -p "$1" 2>/dev/null | tr -s ' ' | sed 's/^ //; s/ $//' || true; }
+lock_alive() { # lock_alive "<pid> <start>": an old lock file with a pid only is judged by the pid
+  local pid="${1%% *}" st="" now_st
+  [ "$pid" = "$1" ] || st="${1#* }"
+  [[ "$pid" =~ ^[0-9]+$ ]] || return 1
+  now_st="$(proc_start "$pid")"
+  [ -n "$now_st" ] || return 1
+  [ -z "$st" ] || [ "$st" = "$now_st" ]
+}
+unlock() {
+  if [ -n "$LOCKED" ] && [ "$(cat "$LOCKED/pid" 2>/dev/null || true)" = "$LOCK_ME" ]; then rm -rf "$LOCKED"; fi
+  return 0
+}
 lock() {
   local l="$HOST_DIR/.lock" i owner
+  LOCK_ME="$$ $(proc_start $$)"
   for i in $(seq 1 600); do
-    if mkdir "$l" 2>/dev/null; then echo $$ >"$l/pid"; LOCKED="$l"; trap 'rm -rf "$LOCKED"' EXIT; return 0; fi
+    if mkdir "$l" 2>/dev/null; then echo "$LOCK_ME" >"$l/pid"; LOCKED="$l"; trap unlock EXIT; return 0; fi
     owner="$(cat "$l/pid" 2>/dev/null || true)"
-    if [ -n "$owner" ] && ! kill -0 "$owner" 2>/dev/null; then rm -rf "$l"; continue; fi
-    [ $((i % 30)) -ne 1 ] || log "waiting for another tenantctl (pid ${owner:-?})"
+    # an empty pid file is a holder between its mkdir and its write: give it a few seconds before calling it dead
+    if [ -z "$owner" ] && [ "$i" -lt 5 ]; then sleep 1; continue; fi
+    if ! lock_alive "$owner"; then rm -rf "$l"; continue; fi
+    [ $((i % 30)) -ne 1 ] || log "waiting for another tenantctl (pid ${owner%% *})"
     sleep 1
   done
   die "another tenantctl holds $l for 10 minutes; check it, remove the folder only if that process is gone"
@@ -165,7 +197,7 @@ ensure_backup_image() {
 pg() { # pg <psql args...>: psql as the superuser inside the shared Postgres (stdin passes through)
   hc exec -T postgres psql -U postgres -v ON_ERROR_STOP=1 -qAtX "$@"
 }
-tenant_net() { echo "juragan-t-$1"; }
+tenant_net() { tenant_project "$1"; }
 shared_container() { hc ps -q "$1" 2>/dev/null | head -1; }
 # attach_shared <id>: Postgres (alias postgres) and Caddy join the tenant's own network; idempotent. Recreating the
 # shared containers drops these attachments, so host-up runs it for every tenant.
@@ -200,13 +232,28 @@ detach_shared() { # detach_shared <id>: undo attach_shared and remove the networ
   done
   docker network rm "$net" >/dev/null 2>&1 || true
 }
+kernel_on_host_network() { # true when the tenant's kernel container is attached to HOST_NETWORK (pre-isolation tenant)
+  local c
+  c="$(docker ps -aq --filter "label=com.docker.compose.project=$(tenant_project "$1")" --filter label=com.docker.compose.service=kernel | head -1)"
+  [ -n "$c" ] || return 1
+  docker inspect -f '{{range $k, $v := .NetworkSettings.Networks}}{{$k}} {{end}}' "$c" | tr ' ' '\n' | grep -qx "$HOST_NETWORK"
+}
 host_up() {
   local id
   [ -n "$(cfg POSTGRES_PASSWORD)" ] || die "POSTGRES_PASSWORD is not set in $ENV_FILE"
   hc up -d --wait postgres caddy >/dev/null
   # tenant roles must not connect to the maintenance databases either
   pg -c 'REVOKE CONNECT ON DATABASE postgres FROM PUBLIC' -c 'REVOKE CONNECT ON DATABASE template1 FROM PUBLIC' >/dev/null
-  for id in $(tenant_ids active suspended); do attach_shared "$id"; done
+  for id in $(tenant_ids active suspended); do
+    attach_shared "$id"
+    # tenants made before the per-tenant cap and network: cap the role, and recreate a kernel still on HOST_NETWORK
+    pg -c "ALTER ROLE \"$id\" CONNECTION LIMIT $(cfg TENANT_CONNECTION_LIMIT 20)" >/dev/null
+    if [ "$(reg "$id" STATUS)" = active ] && kernel_on_host_network "$id"; then
+      log "$id: kernel still on $HOST_NETWORK; recreating it on its own network"
+      tc "$id" up -d --force-recreate kernel >/dev/null 2>&1
+      wait_kernel "$id" || log "$id: kernel did not answer after the recreate; see tenantctl logs $id"
+    fi
+  done
   log "host up: postgres and caddy ($HOST_PROJECT)"
 }
 caddy_reload() {
@@ -260,9 +307,9 @@ probe_route() {
   rm -f "$body"
   echo "$code"
 }
-wait_kernel() { # wait_kernel <id> [tries]
-  local i code
-  for i in $(seq 1 "${2:-90}"); do
+wait_kernel() { # wait_kernel <id> [seconds]: wall-clock budget (a probe can itself take seconds)
+  local code end=$((SECONDS + ${2:-90}))
+  while [ "$SECONDS" -lt "$end" ]; do
     code="$(probe_kernel "$1" || true)"
     [ "$code" = 200 ] && return 0
     sleep 1
@@ -336,6 +383,7 @@ cmd_create() {
     orgs=("$org")
   fi
   valid_org "$org" || die "invalid org '$org'"
+  [ -z "$(docker network ls -q --filter "name=^$(tenant_project_for_new "$id")$")" ] || die "Docker network $(tenant_project_for_new "$id") already exists (another host on this daemon with the same HOST_PROJECT?)"
   [ -z "$(reg_host_owner "$host")" ] || die "host $host is already used by tenant $(reg_host_owner "$host")"
 
   log "$id: creating ($host, $tag, org $org)"
@@ -343,6 +391,7 @@ cmd_create() {
     echo "TENANT_ID=$id"
     echo "TENANT_ORG=$org"
     echo "TENANT_HOST=$host"
+    echo "TENANT_PROJECT=$(tenant_project_for_new "$id")"
     echo "RANGKA_TAG=$tag"
     echo "STATUS=creating"
     echo "CREATED_AT=$(now)"
@@ -353,7 +402,7 @@ cmd_create() {
   step="files"
   # set -E hands this trap to $(...) subshells too; only the main shell records the failure (a failed command inside an
   # `if out="$(...)"` test is handled there)
-  trap 'if [ "$BASH_SUBSHELL" = 0 ]; then reg_set "$id" STATUS failed; reg_set "$id" FAILED_STEP "$step"; log "$id: FAILED at $step; inspect, then tenantctl delete $id --confirm $id --force"; fi' ERR
+  trap 'if [ "$BASH_SUBSHELL" = 0 ]; then reg_set "$id" STATUS failed; reg_set "$id" FAILED_STEP "$step"; log "$id: FAILED at $step; inspect, then tenantctl delete $id --confirm $id --force (frees the id and host for a retry)"; fi' ERR
   mkdir -p "$HOST_DIR/tenants/$id"
   for d in apps modules site fixtures connectors; do
     [ -d "$bundle/$d" ] && cp -R "$bundle/$d" "$HOST_DIR/tenants/$id/$d"
@@ -454,6 +503,9 @@ stamp_epoch() { # stamp_epoch <archive name>: epoch of the UTC stamp in it
   date -u -d "${ts% *} ${ts#* }" +%s 2>/dev/null || date -u -j -f '%Y%m%d %H:%M:%S' "$ts" +%s
 }
 epoch_of_iso() { date -u -d "$1" +%s 2>/dev/null || date -u -j -f '%Y-%m-%dT%H:%M:%SZ' "$1" +%s; }
+last_drill_failed() { # true when the newest drill line of <id> is FAILED (a failure alarms at once, not after the window)
+  grep -E "^DRILL (PASSED|FAILED) $1 " "$HOST_DIR/drill.log" 2>/dev/null | tail -1 | grep -q '^DRILL FAILED '
+}
 last_drill_pass() { # epoch of the newest "DRILL PASSED <id>" line in drill.log, or nothing
   local t
   t="$(grep -E "^DRILL PASSED $1 " "$HOST_DIR/drill.log" 2>/dev/null | tail -1 | awk '{print $NF}' || true)"
@@ -495,6 +547,7 @@ cmd_health() {
     elif [ "$age" -gt "$max_age" ]; then verdict=FAIL; why="$why backup-age"; fi
     if [ "$d" -lt 0 ]; then [ "$since" -lt "$drill_max" ] || { verdict=FAIL; why="$why no-drill"; }
     elif [ "$d" -gt "$drill_max" ]; then verdict=FAIL; why="$why drill-age"; fi
+    if last_drill_failed "$id"; then verdict=FAIL; why="$why drill-failed"; fi
     [ "$verdict" = OK ] || bad=1
     echo "$verdict $id kernel=$k route=$r backup_age_h=$age drill_age_h=$d files_kb=${size:-?} db_kb=$dbsize${why:+ problem:$why}"
   done
@@ -716,15 +769,14 @@ cmd_upgrade() {
   save="$HOST_DIR/upgrades/$id-$(date -u +%Y%m%dT%H%M%SZ)"
   mkdir -p "$save"
   for d in apps modules connectors fixtures; do [ ! -d "$HOST_DIR/tenants/$id/$d" ] || cp -R "$HOST_DIR/tenants/$id/$d" "$save/$d"; done
+  prune_upgrades "$id" "$(cfg UPGRADE_KEEP 3)"
   reg_set "$id" PREV_TAG "$prev"
   if [ -n "$bundle" ]; then
-    # code only; never site/ or data/, which belong to the tenant
-    for d in apps modules connectors fixtures; do
-      [ -d "$bundle/$d" ] || continue
-      remove_dir "$HOST_DIR/tenants/$id" "$d"
-      cp -R "$bundle/$d" "$HOST_DIR/tenants/$id/$d"
-    done
-    fix_owner "$HOST_DIR/tenants/$id"
+    # code only; never site/ or data/, which belong to the tenant. A failed copy (disk full) puts the old code back.
+    if ! replace_code "$id" "$bundle"; then
+      upgrade_back "$id" "$prev" "$save" "$bundle"
+      die "$id: copying the new code failed; still on $prev with its code"
+    fi
   fi
   reg_set "$id" RANGKA_TAG "$tag"
   if ! out="$(tc "$id" run --rm -T --no-deps kernel migrate --dry-run 2>&1)"; then
@@ -734,7 +786,7 @@ cmd_upgrade() {
   fi
   echo "$out" | grep -E '^-- ' | tail -3 >&2 || true
   tc "$id" up -d kernel >/dev/null 2>&1
-  if wait_kernel "$id" 120; then
+  if wait_kernel "$id" "$(cfg UPGRADE_WAIT_SECONDS 900)"; then
     reg_set "$id" UPGRADED_AT "$(now)"
     log "$id: $prev -> $tag, route $(probe_route "$id") (previous code kept in $save)"
   else
@@ -744,6 +796,27 @@ cmd_upgrade() {
     wait_kernel "$id" 60 || true
     die "$id: $tag did not come up; rolled back to $prev and its code. If $tag already migrated the database, restore the pre-upgrade archive (README: restore)"
   fi
+}
+replace_code() { # replace_code <id> <dir>: apps, modules, connectors, fixtures of <dir> into the tenant; 1 on any failure
+  local d
+  for d in apps modules connectors fixtures; do
+    [ -d "$2/$d" ] || continue
+    remove_dir "$HOST_DIR/tenants/$1" "$d" || return 1
+    cp -R "$2/$d" "$HOST_DIR/tenants/$1/$d" || return 1
+  done
+  fix_owner "$HOST_DIR/tenants/$1" || return 1
+}
+upgrade_dirs() { # upgrade_dirs <id>: names of the saved code copies of <id>, oldest first
+  ls "$HOST_DIR/upgrades" 2>/dev/null | grep -E "^$1-[0-9]{8}T[0-9]{6}Z$" | sort || true
+}
+prune_upgrades() { # prune_upgrades <id> <keep>: drop all but the newest <keep> copies
+  local n x
+  n="$(upgrade_dirs "$1" | wc -l | tr -d ' ')"
+  for x in $(upgrade_dirs "$1"); do
+    [ "$n" -gt "$2" ] || break
+    remove_dir "$HOST_DIR/upgrades" "$x" || true
+    n=$((n - 1))
+  done
 }
 upgrade_back() { # upgrade_back <id> <prev tag> <saved code dir> <bundle or empty>
   local d
@@ -781,12 +854,16 @@ cmd_delete() {
     deleted) die "$id is already deleted" ;;
     *) die "$id is $st; suspend it first (and give the owner the export window agreed in the terms)" ;;
   esac
+  # a create that never went live had no owner data and no live host: the whole entry goes, so the id and host can be
+  # used again for the retry (an id that was ever active keeps its tombstone)
+  local never_live=0
+  [ "$st" = suspended ] || [ -n "$(reg "$id" ACTIVE_AT)" ] || never_live=1
   if [ "$st" = suspended ]; then
     log "$id: final backup"
     cmd_backup "$id" || { [ "$force" = 1 ] || die "$id: final backup failed; nothing deleted (--force deletes without it)"; }
   fi
   if [ -f "$HOST_DIR/secrets/$id.env" ]; then tc "$id" down --remove-orphans >/dev/null 2>&1 || true; fi
-  [ -z "$(docker ps -q --filter "label=com.docker.compose.project=juragan-t-$id")" ] || die "$id: its kernel is still running; nothing deleted"
+  [ -z "$(docker ps -q --filter "label=com.docker.compose.project=$(tenant_project "$id")")" ] || die "$id: its kernel is still running; nothing deleted"
   pg >/dev/null <<SQL || die "$id: could not drop the database; nothing else removed"
 DROP DATABASE IF EXISTS "$id" WITH (FORCE);
 DROP ROLE IF EXISTS "$id";
@@ -795,14 +872,20 @@ SQL
   [ ! -f "$HOST_DIR/caddy/$id.caddy" ] || route "$id" none
   remove_dir "$HOST_DIR/tenants" "$id"
   sweep_drills "$id"
+  prune_upgrades "$id" 0
   rm -f "$HOST_DIR/secrets/$id.env"
+  if [ "$never_live" = 1 ]; then
+    rm -f "$HOST_DIR/registry/$id.env"
+    log "$id: failed create removed (database, role, network, files, routing, secret, registry); the id and host are free again"
+    return 0
+  fi
   host="$(reg "$id" TENANT_HOST)"
   [ -z "$host" ] || reg_set "$id" HOST_SHA256 "$(sha256 "$host")"
   reg_unset "$id" TENANT_HOST
   reg_unset "$id" TENANT_ORG
   reg_set "$id" STATUS deleted
   reg_set "$id" DELETED_AT "$(now)"
-  log "$id: deleted (database, role, network, files, routing, secret). Archives remain until retention: local $(cfg BACKUP_KEEP_LOCAL 7) days, off-box per the bucket lifecycle"
+  log "$id: deleted (database, role, network, files, saved upgrade code, routing, secret). Archives remain until retention: local $(cfg BACKUP_KEEP_LOCAL 7) days, off-box per the bucket lifecycle"
 }
 
 cmd_host_down() {

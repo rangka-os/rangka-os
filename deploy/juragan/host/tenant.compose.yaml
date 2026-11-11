@@ -1,8 +1,9 @@
-# One tenant = one compose project juragan-t-<id> with one kernel. tenantctl runs it with
+# One tenant = one compose project TENANT_PROJECT (juragan-t-<id> on the production host, <HOST_PROJECT>-t-<id> on any
+# other) with one kernel. tenantctl runs it with
 #   --env-file <host .env> --env-file $HOST_DIR/registry/<id>.env --env-file $HOST_DIR/secrets/<id>.env
-# registry/<id>.env: TENANT_ID, TENANT_ORG, TENANT_HOST, RANGKA_TAG (the tenant's own pin); secrets/<id>.env: DB_PASSWORD.
-# The kernel is only on the tenant's own network juragan-t-<id> (made by tenantctl), which the shared Postgres
-# (alias postgres) and Caddy join: one tenant cannot reach another tenant's kernel.
+# registry/<id>.env: TENANT_ID, TENANT_ORG, TENANT_HOST, TENANT_PROJECT, RANGKA_TAG (the tenant's own pin);
+# secrets/<id>.env: DB_PASSWORD. The kernel is only on the tenant's own network, named like the project (made by
+# tenantctl), which the shared Postgres (alias postgres) and Caddy join: one tenant cannot reach another tenant's kernel.
 services:
   kernel:
     build:
@@ -43,5 +44,5 @@ services:
 
 networks:
   tenants:
-    name: juragan-t-${TENANT_ID:?}
+    name: ${TENANT_PROJECT:?}
     external: true

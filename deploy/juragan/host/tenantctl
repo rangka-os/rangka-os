@@ -806,8 +806,13 @@ replace_code() { # replace_code <id> <dir>: apps, modules, connectors, fixtures 
   done
   fix_owner "$HOST_DIR/tenants/$1" || return 1
 }
-upgrade_dirs() { # upgrade_dirs <id>: names of the saved code copies of <id>, oldest first
-  ls "$HOST_DIR/upgrades" 2>/dev/null | grep -E "^$1-[0-9]{8}T[0-9]{6}Z$" | sort || true
+upgrade_dirs() { # upgrade_dirs <id>: names of the saved code copies of <id>, oldest first (the glob sorts)
+  local x
+  for x in "$HOST_DIR/upgrades/$1-"*; do
+    x="$(basename "$x")"
+    [[ "$x" =~ ^$1-[0-9]{8}T[0-9]{6}Z$ ]] && echo "$x"
+  done
+  return 0
 }
 prune_upgrades() { # prune_upgrades <id> <keep>: drop all but the newest <keep> copies
   local n x

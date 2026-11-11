@@ -216,7 +216,7 @@ same "owner A signs in after upgrade" "$(login tokoa.localhost "$OWNER_A" "$PW_A
 same "data kept across the upgrade" "$(api tokoa.localhost GET /api/v1/r/stock_note >/dev/null; grep -c 'stok awal e2e' "$TMP/body" || true)" 1
 grep -q 'stok awal e2e' "$TMP/body" || head -c 600 "$TMP/body"
 same "pre-upgrade archive taken" "$(ls "$TMP/host/backups/tokoa" | grep -c '\.tar\.age$')" 2
-same "previous code saved in upgrades/" "$(ls "$TMP/host/upgrades" | grep -c '^tokoa-')" 1
+same "previous code saved in upgrades/" "$(find "$TMP/host/upgrades" -mindepth 1 -maxdepth 1 -name 'tokoa-*' | wc -l | tr -d ' ')" 1
 
 say "delete tokob"
 same "delete refuses an active tenant" "$(t delete tokob --confirm tokob >/dev/null 2>&1; echo $?)" 1
@@ -224,7 +224,7 @@ t suspend tokob
 same "delete needs the id typed again" "$(t delete tokob --confirm tokoa >/dev/null 2>&1; echo $?)" 1
 mkdir -p "$TMP/host/upgrades/tokob-20261101T000000Z/apps" # as an earlier upgrade of tokob would have left
 t delete tokob --confirm tokob
-same "saved upgrade code gone" "$(ls "$TMP/host/upgrades" | grep -c '^tokob-' || true)" 0
+same "saved upgrade code gone" "$(find "$TMP/host/upgrades" -mindepth 1 -maxdepth 1 -name 'tokob-*' | wc -l | tr -d ' ')" 0
 same "database gone" "$(docker exec "$PG" psql -U postgres -qAtX -c "select count(*) from pg_database where datname = 'tokob'")" 0
 same "role gone" "$(docker exec "$PG" psql -U postgres -qAtX -c "select count(*) from pg_roles where rolname = 'tokob'")" 0
 same "files gone" "$([ -e "$TMP/host/tenants/tokob" ] && echo present || echo gone)" gone

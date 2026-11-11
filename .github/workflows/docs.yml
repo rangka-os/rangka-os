@@ -21,19 +21,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { path: rangka-os }
       # Example pages quote real files from the sibling repos.
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { repository: rangka-os/rangka-apps, path: rangka-apps }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with:
           node-version: 20
           cache: npm
           cache-dependency-path: rangka-os/website/package-lock.json
-      - uses: actions/configure-pages@v5
+      - uses: actions/configure-pages@v6
       - name: Build
         working-directory: rangka-os/website
         env:
@@ -41,7 +41,7 @@ jobs:
         run: |
           npm ci
           npm run build
-      - uses: actions/upload-pages-artifact@v3
+      - uses: actions/upload-pages-artifact@v5
         with: { path: rangka-os/website/.vitepress/dist }
 
   deploy:
@@ -52,4 +52,4 @@ jobs:
       url: ${{ steps.deployment.outputs.page_url }}
     steps:
       - id: deployment
-        uses: actions/deploy-pages@v4
+        uses: actions/deploy-pages@v5

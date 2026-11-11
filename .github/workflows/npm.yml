@@ -20,16 +20,16 @@ jobs:
   staged-starter:
     runs-on: ubuntu-24.04
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { path: rangka-os }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { repository: rangka-os/rangka-apps, path: rangka-apps }
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
         with: { repository: rangka-os/rangka-connectors, path: rangka-connectors }
 
-      - uses: actions/setup-go@v5
+      - uses: actions/setup-go@v7
         with: { go-version-file: rangka-os/kernel/go.mod }
-      - uses: actions/setup-node@v4
+      - uses: actions/setup-node@v7
         with: { node-version: 20 }
 
       - name: Build the kernel

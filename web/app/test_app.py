@@ -3602,6 +3602,7 @@ def test_ai_hidden_without_feature(page, ctx):
     page.keyboard.press("ControlOrMeta+j")
     page.wait_for_timeout(200)
     assert page.locator(".rk-askbar").count() == 0 and page.locator(".rk-chat").count() == 0, "no ask bar or drawer"
+    assert page.locator(".rk-fab").count() == 0, "no floating Raka button on a kernel without AI (plain self-hosting)"
     open_nav(page)
     assert page.locator(AI_SIDE_BTN).count() == 0, "no Tanya Raka in the sidebar"
     page.keyboard.press("Escape")
@@ -3694,6 +3695,49 @@ def test_ai_ask_and_drawer(page, ctx):
         assert page.evaluate("() => Object.keys(sessionStorage).filter(k => k.startsWith('rk.ai.')).length") == 0, "cleared"
     finally:
         Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{cs['id']}/reject")
+
+
+def test_ai_launcher(page, ctx):
+    """The floating Raka button (rangka.pen OS / Raka · *): shown when meta.features.ai is on; hover widens it to
+    "Tanya Raka"; a click opens the panel above it and turns the button into the close chevron; tucking it to the
+    edge survives a reload, and a click on the tucked tab opens Raka and brings the button back."""
+    mock_ai(page, ctx, [])
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+    page.evaluate("() => localStorage.removeItem('rk.raka.tucked')")
+    fab = page.locator(".rk-fab")
+    fab.wait_for(timeout=5000)
+    btn = fab.locator(".rk-fab-btn")
+    assert fab.get_attribute("data-state") == "rest", fab.get_attribute("data-state")
+    if ctx.args.width >= 768:
+        btn.hover()
+        fab.get_by_text("Tanya Raka", exact=True).wait_for(timeout=3000)
+        shot(page, ctx, "ai-launcher-hover")
+    btn.click()
+    drawer = ai_drawer(page)
+    drawer.wait_for(timeout=5000)
+    if ctx.args.width >= 768:
+        assert fab.get_attribute("data-state") == "open" and btn.get_attribute("aria-expanded") == "true"
+        box, fb = drawer.bounding_box(), btn.bounding_box()
+        assert box["y"] + box["height"] <= fb["y"] - 8, f"the panel floats above the button: {box} {fb}"
+        btn.click()
+        drawer.wait_for(state="detached", timeout=5000)
+    else:
+        drawer.get_by_role("button", name="Tutup").click()
+        drawer.wait_for(state="detached", timeout=5000)
+    # tuck it against the edge
+    btn.focus()
+    fab.get_by_role("button", name="Sembunyikan Raka ke tepi").click()
+    assert fab.get_attribute("data-state") == "tucked"
+    page.reload()
+    page.locator(".rk-fab[data-state=tucked]").wait_for(timeout=15000)
+    shot(page, ctx, "ai-launcher-tucked")
+    check_fits(page, ctx, "tucked Raka button")
+    page.locator(".rk-fab-btn").click()
+    ai_drawer(page).wait_for(timeout=5000)
+    assert page.evaluate("() => localStorage.getItem('rk.raka.tucked')") is None, "opening Raka brings the button back"
 
 
 def test_ai_error_message(page, ctx):

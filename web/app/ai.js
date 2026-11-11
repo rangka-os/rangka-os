@@ -11,6 +11,12 @@
  *   onPreview, onOpenUbah   (id) → void, optional: replace those defaults
  *   blocked      () → boolean, optional: ⌘J does nothing while it is true (the expired-session dialog)
  *   control      a ref, optional: gets {ask(query), open()} so ⌘K and the sidebar can open the ask bar or the drawer
+ *   subtitle     optional: the line under "Raka" in the panel head (the company, the Console's site)
+ *   launcher     false to leave out the floating Raka button (R.RakaLauncher, rangka.pen "OS / Raka · *"); with it
+ *                the panel floats above the button on wide screens. Shown only where AssistantRoot is mounted, which
+ *                the hosts do only when meta.features.ai === true (Rangka Cloud), never on a plain self-hosted kernel.
+ *   tuckFor      optional CSS selector: while an element matches (a screen with its own button at the bottom right),
+ *                the launcher sits tucked against the right edge
  * ⌘J (Ctrl+J off a Mac) opens the ask bar; with the ask bar open it opens the drawer instead; with the drawer open it
  * focuses the drawer's composer. The ask bar is not rendered while the drawer is open. Mount it only when
  * meta.features.ai === true.
@@ -168,6 +174,10 @@
       else global.sessionStorage.removeItem(key);
     } catch (e) { /* private mode or full: the conversation lives until the reload */ }
   }
+  var WAITING = { proposed: true, validated: true, previewed: true };
+  var TUCK_KEY = "rk.raka.tucked";
+  function readTuck() { try { return global.localStorage.getItem(TUCK_KEY) === "1"; } catch (e) { return false; } }
+  function writeTuck(v) { try { if (v) global.localStorage.setItem(TUCK_KEY, "1"); else global.localStorage.removeItem(TUCK_KEY); } catch (e) { /* no storage */ } }
   function withQuery(hash, kv) { return (String(hash || "#/").split("?")[0] || "#/") + "?" + kv; }
 
   RA.AssistantRoot = function (p) {
@@ -179,6 +189,19 @@
     var cs = useState(null), askCtx = cs[0], setAskCtx = cs[1];
     var seq = useRef(0), abort = useRef(null), live = useRef({});
     var inflight = useRef(false); // set at once, so a double Enter before the next render sends one request
+    var tk = useState(readTuck()), tucked = tk[0], setTucked = tk[1];
+    var at = useState(false), autoTuck = at[0], setAutoTuck = at[1];
+    function setTuck(v) { setTucked(!!v); writeTuck(!!v); }
+    // OS / Raka · Tersembunyi is used on its own on a screen that has its own button at the bottom right
+    useEffect(function () {
+      if (!p.tuckFor || !global.MutationObserver) return;
+      var raf = 0;
+      function check() { raf = 0; setAutoTuck(!!global.document.querySelector(p.tuckFor)); }
+      var mo = new global.MutationObserver(function () { if (!raf) raf = global.requestAnimationFrame(check); });
+      mo.observe(global.document.body, { childList: true, subtree: true });
+      check();
+      return function () { mo.disconnect(); if (raf) global.cancelAnimationFrame(raf); };
+    }, [p.tuckFor]);
     live.current = { s: s, askOpen: askOpen, drawerOpen: drawerOpen, p: p };
 
     useEffect(function () { writeTurns(p.storageKey, s.turns); }, [s.turns, p.storageKey]);
@@ -258,9 +281,16 @@
       else if (p.navigate) p.navigate(withQuery(hereHash(), "ubah=1"));
     }
 
+    // the launcher's count: Raka's change sets in this conversation that still wait for a person
+    var pending = 0;
+    s.turns.forEach(function (t) { (t.changesets || []).forEach(function (c) { if (WAITING[c.status]) pending++; }); });
+    var here = drawerOpen && p.getContext ? p.getContext() : null;
     return h(React.Fragment, null,
       h(R.ChatDrawer, { open: drawerOpen, turns: s.turns, busy: s.busy, onNew: fresh, onClose: function () { setDrawerOpen(false); },
+        floating: !!R.RakaLauncher && p.launcher !== false, subtitle: p.subtitle, context: here ? here.title : null,
         onSend: function (t) { send(t, p.getContext ? p.getContext() : null); }, onPreview: preview, onOpenUbah: openUbah }),
+      R.RakaLauncher && p.launcher !== false ? h(R.RakaLauncher, { open: drawerOpen, pending: pending, tucked: tucked || autoTuck,
+        onToggle: function () { if (drawerOpen) setDrawerOpen(false); else { setTuck(false); openDrawer(); } }, onTuck: setTuck }) : null,
       drawerOpen ? null : h(R.AskBar, { open: askOpen, context: askCtx ? { label: askCtx.title } : null, onRemoveContext: function () { setAskCtx(null); },
         value: value, onChange: setValue, onSend: sendAsk, onOpenChat: openDrawer, onClose: function () { setAskOpen(false); }, busy: s.busy }));
   };

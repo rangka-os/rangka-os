@@ -72,10 +72,10 @@ Gate: in the Kopi Senja demo site, a real WhatsApp message creates a lead within
 
 ## Refinements (11 Nov 2026): pages, cursors in seconds, events kept with their flows
 - **Pages** (`next:` on a poll trigger): CEL over each answer giving the next page. An absolute URL (Moka's
-  `next_url`) is sent as it is, with the action's headers and auth, only to the host of the rendered action URL (another
+  `next_url`), or a path starting with `/` (resolved against the action's URL), is sent as it is, with the action's headers and auth, only to the host of the rendered action URL (another
   host is `ErrHostRefused`; the scheme stays the action's, so an `http://` link from the vendor goes out on https). Any
   other value is bound as `page` for `input:` (null on the first page). null, `""` or a value seen before in the same
-  poll stops; at most 50 pages per target, after which the poll stops and audits `poll_pages_truncated`. Every page
+  poll stops; at most 50 pages per target, after which the poll stops, audits `poll_pages_truncated` and keeps the old cursor (the next poll reads the pages again; dedupe drops what was seen). Every page
   goes through `for_each`/`emit` and dedupe as it arrives. `cursor:` is evaluated once over all pages: list fields of
   the answers joined in page order, other fields from the last page.
 - **Seconds** for vendors that take Unix time: CEL `epoch(t)` (RFC 3339 datetime or `YYYY-MM-DD`, to whole seconds) and

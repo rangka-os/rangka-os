@@ -227,8 +227,11 @@ func (r *Resolver) Render(ctx context.Context, org, connector, action string, in
 		// same host only; its scheme stays the action's (a vendor that links http:// keeps https)
 		orig, err1 := url.Parse(out.URL)
 		nu, err2 := url.Parse(next)
+		if err1 == nil && err2 == nil && nu.Host == "" && strings.HasPrefix(next, "/") && !strings.HasPrefix(next, "//") {
+			nu = orig.ResolveReference(nu) // a path on the action's host
+		}
 		if err1 != nil || err2 != nil || nu.Host == "" {
-			return nil, fmt.Errorf("next page %q is not an absolute URL", scrub.String(next))
+			return nil, fmt.Errorf("next page %q is not a URL", scrub.String(next))
 		}
 		if !strings.EqualFold(nu.Hostname(), orig.Hostname()) || nu.Port() != orig.Port() {
 			return nil, fmt.Errorf("%w: next page of %s.%s on %s, not %s", ErrHostRefused, connector, action, nu.Hostname(), orig.Hostname())

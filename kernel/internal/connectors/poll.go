@@ -192,7 +192,8 @@ func (rt *Runtime) pollOne(ctx context.Context, org, connector, trigger string, 
 		merged = mergePage(merged, out)
 		res.Pages = page
 		// next: (CEL over the answer) names the next page: an absolute URL (Moka's next_url) is fetched as it is, on
-		// the action's host; any other value is bound as page for input:. null, "" or a value seen before stops.
+		// the action's host (a path such as /v3/...?page=2 is resolved against the action's URL); any other value is bound
+		// as page for input:. null, "" or a value seen before stops.
 		next := nextCursor(meta.Str(t, "next"), out)
 		if next == "" || seen[next] {
 			break
@@ -204,7 +205,7 @@ func (rt *Runtime) pollOne(ctx context.Context, org, connector, trigger string, 
 			break
 		}
 		seen[next] = true
-		if strings.Contains(next, "://") {
+		if strings.Contains(next, "://") || strings.HasPrefix(next, "/") {
 			callCtx = context.WithValue(ctx, pageURLKey{}, next)
 		} else {
 			callCtx = ctx
@@ -218,8 +219,10 @@ func (rt *Runtime) pollOne(ctx context.Context, org, connector, trigger string, 
 		}
 	}
 	// the cursor reads every page at once: list fields of the answers joined in page order, other fields from the
-	// last page (a max() over the items, or the last page's next_cursor)
-	if next := nextCursor(meta.Str(t, "cursor"), merged); next != "" && next != cursor {
+	// last page (a max() over the items, or the last page's next_cursor). A poll cut at MaxPollPages keeps the old
+	// cursor: moving it past pages not read would lose them for good (newest-first vendors); the next poll reads the
+	// same window again and dedupe drops what was seen
+	if next := nextCursor(meta.Str(t, "cursor"), merged); next != "" && next != cursor && !res.Truncated {
 		scrub, _ := rt.Scrubber(ctx, org, connector)
 		if _, err := rt.DB.Exec(ctx, `insert into rk_poll_cursors (org_id, connector, trigger, cursor) values ($1, $2, $3, $4)
 			on conflict (org_id, connector, trigger) do update set cursor = excluded.cursor, updated_at = now()`,

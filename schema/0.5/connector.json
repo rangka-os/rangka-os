@@ -197,7 +197,7 @@
           },
           "next": {
             "type": "string",
-            "description": "poll: CEL over the answer giving the next page (a next_url on the action's host, or a page value bound as page for input:); null or empty stops. At most 50 pages per poll"
+            "description": "poll: CEL over the answer giving the next page (a next_url or /path on the action's host, or a page value bound as page for input:); null or empty stops. At most 50 pages per poll; a cut poll keeps its cursor"
           },
           "verify": {
             "type": "object"

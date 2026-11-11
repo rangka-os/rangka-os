@@ -781,6 +781,7 @@ triggers:
     action: numbered
     input: {page: "page != null ? page : 1", mode: "'endless'"}
     next: "has_more ? page_no + 1 : null"
+    cursor: page_no
     for_each: "payments[]"
   - name: stuck
     via: poll
@@ -849,7 +850,7 @@ func (o *pagerVendor) RoundTrip(r *http.Request) (*http.Response, error) {
 		body = `{"data":{"payments":[{"id":"s3","customer":"Dewi","phone":"62812000003","created_at":"2026-11-10T10:00:00+07:00"},{"id":"s2","customer":"Eko","phone":"62812000002","created_at":"2026-11-10T09:00:00+07:00"}],"next_url":` + next + `}}`
 		switch r.URL.Query().Get("cursor") {
 		case "b":
-			body = `{"data":{"payments":[{"id":"s1","customer":"Fajar","phone":"62812000001","created_at":"2026-11-10T08:00:00+07:00"}],"next_url":"https://api.example.com/v3/sales?since=1794268800&per_page=2&cursor=c"}}`
+			body = `{"data":{"payments":[{"id":"s1","customer":"Fajar","phone":"62812000001","created_at":"2026-11-10T08:00:00+07:00"}],"next_url":"/v3/sales?since=1794268800&per_page=2&cursor=c"}}`
 		case "c":
 			body = `{"data":{"payments":[],"next_url":null}}`
 		}
@@ -900,6 +901,15 @@ func TestPollFollowsNextPage(t *testing.T) {
 	e.s.Connectors.HTTP = &http.Client{Transport: v, Timeout: 5 * time.Second}
 	e.login()
 	ctx := context.Background()
+	// the scheduler's own polls would race the polls below (audit F4): stop them, and let any already queued finish
+	e.s.Sched.SetPolls("kopi-senja", nil)
+	res0, err := e.s.DB.Query(ctx, "select id from rk_jobs where kind = 'poll'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res0.Rows {
+		waitJob(t, e, r[0].(int64))
+	}
 	e.must(204, "PUT", "/api/v1/connectors/pager_test/auth/api_key", map[string]any{"value": "pager-api-key-0002-zzzz"})
 
 	// the flow cannot be queued: the poll fails and remembers nothing
@@ -958,6 +968,10 @@ func TestPollFollowsNextPage(t *testing.T) {
 	}
 	if n := strings.TrimSpace(dump(t, e, "select count(*) from rk_audit where data->>'code' = 'poll_pages_truncated'")); n != "1" {
 		t.Fatalf("truncation audited %s times", n)
+	}
+	// pages not read must come again: the cursor of a cut poll does not move
+	if c := strings.TrimSpace(dump(t, e, "select count(*) from rk_poll_cursors where trigger = 'endless'")); c != "0" {
+		t.Fatalf("cursor moved after a cut poll: %s", c)
 	}
 	// a vendor that links the same next page again: read once
 	v.reqs = nil

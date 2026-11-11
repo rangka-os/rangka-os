@@ -67,7 +67,7 @@ func TestMessages(t *testing.T) {
 	want := map[string]string{
 		"(root)":        "Additional properties are not allowed ('extra' was unexpected)",
 		"name":          "'Bad Name' does not match '^[a-z][a-z0-9_]{0,62}$'",
-		"fields/0/type": "'nope' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', 'daterange', 'datetime', 'duration', 'phone', 'npwp', 'attach', 'image', 'rating', 'color', 'json', 'signature', 'money']",
+		"fields/0/type": "'nope' is not one of ['data', 'text', 'int', 'float', 'currency', 'percent', 'check', 'select', 'multiselect', 'link', 'dynamic_link', 'table', 'date', 'daterange', 'datetime', 'duration', 'phone', 'npwp', 'attach', 'image', 'rating', 'color', 'json', 'signature', 'money', 'geo']",
 		"fields/1":      "'to' is a required property",
 	}
 	got := map[string]string{}

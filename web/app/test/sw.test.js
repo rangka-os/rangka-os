@@ -43,7 +43,7 @@ test("PRECACHE lists exactly the local files index.html loads, plus manifest and
   const re = /<(?:script[^>]*\ssrc|link[^>]*\shref)="([^"]+)"/g;
   let m;
   while ((m = re.exec(html))) if (!/^https?:/.test(m[1])) refs.push(m[1]);
-  const extra = SW.PRECACHE.filter((p) => p === "./" || p.startsWith("icons/") || p === "manifest.webmanifest");
+  const extra = SW.PRECACHE.filter((p) => p === "./" || p.startsWith("icons/") || p === "manifest.webmanifest" || p === "vendor/zxing.min.js"); // zxing: loaded by scan.js on first need, precached for offline
   assert.deepStrictEqual([...SW.PRECACHE].filter((p) => !extra.includes(p)).sort(),
     refs.filter((p) => !p.startsWith("icons/") && p !== "manifest.webmanifest").sort());
   for (const r of refs) assert.ok(SW.PRECACHE.includes(r), r + " is loaded by index.html but not precached");

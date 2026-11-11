@@ -760,7 +760,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 			return nil, err
 		}
 		renameSelfLinks(e.Reg(), m, rec, name, newName)
-		o.forgetLinks(m.Name, name)
+		o.forgetLinks(m.Name, name, newName)
 	}
 	if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
 		return nil, err

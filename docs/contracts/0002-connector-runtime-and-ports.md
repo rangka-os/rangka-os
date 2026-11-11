@@ -16,6 +16,14 @@ Status: proposed (1 Nov 2026) · Owner: rangka-os (kernel) · Affects: rangka-co
    - `via: poll`: a scheduled job per installed connector, with a cursor stored per site.
 2. **Flows run from events** through the existing queue.
    - `idempotency:` on a flow means the same event never runs the flow twice.
+     The kernel evaluates it (CEL over `event`) when a run starts, after the flow's `if:`, and records the key in
+     `rk_flow_keys (org, flow, key)` in the run's transaction: a run whose key a committed run holds is skipped
+     (`skipped: true`, audit `flow.duplicate`), a failed run frees its key, and a key that is empty or cannot be
+     evaluated fails the run with 422 `idempotency_key` (fail closed). It holds for every way a flow starts (events,
+     record events, schedules, `POST /api/v1/flows/<name>/run`); a run resumed after `wait:` or `approve:` is the same
+     run. Keys are kept; longer than 200 characters they are stored as their SHA-256.
+   - A flow whose `on:` is a connector trigger may be run by hand (`/flows/<name>/run`) only by the owner: its event
+     says what a vendor reported (a payment, a sale), so other roles get 403.
 3. **Outbound actions.**
    - A `call` step enqueues a job that renders the request from the action's mapping, sends it, maps the response, and retries per `retry`.
    - When retries run out it goes to the dead-letter queue. Every call is logged in the audit trail, with secrets redacted.
@@ -93,6 +101,6 @@ headers, the path and a digest of the body, instead of over the raw body. Both d
   same name in any case. An URL without a path signs `/`. The query string is not signed (DOKU signs the path only).
 - No timestamp window yet: a gateway may resend a notification hours later with its first timestamp (DOKU retries at
   +30 min, +6 h, +12 h). Event dedupe (the same emitted event, 30 days) stops a byte-identical replay inside that
-  window; a flow's `idempotency:` is not enforced by the kernel yet (open kernel card), and a replay later or with a
-  changed field starts the flows again. A flow that records money must therefore hold its gateway id in a unique
+  window; a flow's `idempotency:` (§A.2) stops a later replay with the same key, but a replay with a changed field
+  or a flow without the key starts the flows again. A flow that records money must therefore hold its gateway id in a unique
   record (rangka-apps `gateway_ref_claim`), and the connector must emit an id that is stable per payment.

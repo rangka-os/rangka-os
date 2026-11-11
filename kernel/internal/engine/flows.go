@@ -42,6 +42,11 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 	if e.RowScope(a) != nil {
 		return nil, Denied("flow", "run")
 	}
+	// a flow a connector event starts records what a gateway or a vendor said happened (a payment, a sale): run by
+	// hand, its event is whatever the caller writes, so only the owner may (audit rel uang B, temuan 6)
+	if f := e.Reg().Flows[flowName]; f != nil && flowConnector(e, f) != "" && !a.System && !hasAnyRole(a, []string{"owner"}) {
+		return nil, Denied("flow", "run")
+	}
 	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
 }
 
@@ -132,6 +137,12 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 			return nil
 		}
 	}
+	if start == 0 && f.Idempotency != "" {
+		dup, err := r.claimKey()
+		if err != nil || dup {
+			return err
+		}
+	}
 	var list []any
 	for _, st := range f.Steps {
 		list = append(list, map[string]any(st))
@@ -140,6 +151,40 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 		return err
 	}
 	return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.run", "flow/"+f.Name, fmt.Sprintf("%d step(s), %d created, %d notification(s)", len(out.Steps), len(out.Created), len(out.Notifications)), nil)
+}
+
+// claimKey enforces the flow's idempotency: (contract 0002 §A.2): the same key never runs the flow twice in an org.
+// dup is true (the run is skipped) when a committed run holds the key. A key that cannot be evaluated or is
+// empty fails the run: a flow that dedupes money must not run without its key (fail closed).
+func (r *flowRun) claimKey() (dup bool, err error) {
+	v, err := cel.Eval(r.f.Idempotency, r.env())
+	key := ""
+	if err == nil && v != nil {
+		if s, ok := v.(string); ok {
+			key = s
+		} else {
+			key = fmt.Sprint(v)
+		}
+	}
+	if key == "" {
+		msg := "flow " + r.f.Name + ": idempotency: tidak menghasilkan kunci"
+		if err != nil {
+			msg += " (" + err.Error() + ")"
+		}
+		return false, &StatusError{422, "idempotency_key", msg}
+	}
+	if len(key) > 200 { // long keys are kept as their hash
+		key = hashJSON(key)
+	}
+	ok, err := store.ClaimFlowKey(r.o.ctx, r.o.tx, r.a.Org, r.f.Name, key)
+	if err != nil {
+		return false, err
+	}
+	if !ok {
+		r.out.Skipped = true
+		return true, store.Audit(r.o.ctx, r.o.tx, r.a.Org, r.a.ID, "flow.duplicate", "flow/"+r.f.Name, "idempotency key sudah dipakai: "+key, nil)
+	}
+	return false, nil
 }
 
 // maxForEach bounds one for_each step (one flow run is one transaction).

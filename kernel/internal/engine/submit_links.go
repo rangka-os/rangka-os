@@ -44,17 +44,24 @@ func linksTo(reg *meta.Registry, rm *meta.Model, model string) bool {
 // the document someone approves (audit kernel fix 1111 O1). A record that does not link the draft is left out.
 func (o *op) heldReferrers(model, from, to string) ([]heldRef, error) {
 	reg := o.e.Reg()
-	var models []string
+	// only the requests of records that link the draft now: a referrer model may hold many live requests for
+	// records that have nothing to do with this draft (card t_6e1fa9ae)
+	var live []store.Approval
 	byName := map[string]*meta.Model{}
 	for _, rm := range reg.InstalledModels() {
-		if linksTo(reg, rm, model) {
-			models = append(models, rm.Name)
-			byName[rm.Name] = rm
+		if rm.IsChild || !linksTo(reg, rm, model) {
+			continue // requests are made for documents, never for child rows
 		}
-	}
-	live, err := store.LiveApprovals(o.ctx, o.tx, o.actor.Org, models)
-	if err != nil {
-		return nil, err
+		byName[rm.Name] = rm
+		names, err := store.RecordsLinking(o.ctx, o.tx, reg, o.actor.Org, rm, model, from)
+		if err != nil {
+			return nil, err
+		}
+		aps, err := store.LiveApprovalsOf(o.ctx, o.tx, o.actor.Org, rm.Name, names)
+		if err != nil {
+			return nil, err
+		}
+		live = append(live, aps...)
 	}
 	var out []heldRef
 	at := map[string]int{}

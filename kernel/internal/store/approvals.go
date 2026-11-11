@@ -227,14 +227,14 @@ func RenameRecordApprovals(ctx context.Context, q pg.Querier, org, model, from, 
 	return err
 }
 
-// LiveApprovals lists the requests of models that can still let a verb run: pending, or approved and not used
-// yet. Submit uses it to keep their snapshots when a link rename changes the records they were made for.
-func LiveApprovals(ctx context.Context, q pg.Querier, org string, models []string) ([]Approval, error) {
-	if len(models) == 0 {
+// LiveApprovalsOf lists the requests of the named records of model that can still let a verb run: pending, or
+// approved and not used yet (submit carries them over a draft rename, see engine heldReferrers).
+func LiveApprovalsOf(ctx context.Context, q pg.Querier, org, model string, names []string) ([]Approval, error) {
+	if len(names) == 0 {
 		return nil, nil
 	}
-	res, err := q.Query(ctx, `select `+approvalCols+` from rk_approvals where org_id = $1 and model = any($2)
-		and (state = 'pending' or (state = 'approved' and used_at is null)) order by requested_at, id`, org, pg.Array(models))
+	res, err := q.Query(ctx, `select `+approvalCols+` from rk_approvals where org_id = $1 and model = $2 and name = any($3)
+		and (state = 'pending' or (state = 'approved' and used_at is null)) order by requested_at, id`, org, model, pg.Array(names))
 	if err != nil {
 		return nil, err
 	}

@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -14,6 +15,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -52,7 +54,60 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 	if f := e.Reg().Flows[flowName]; f != nil && flowConnector(e, f) != "" && !a.System && !hasAnyRole(a, []string{"owner"}) {
 		return nil, Denied("flow", "run")
 	}
+	// a flow on <model>.<event> trusts its event as what the kernel saw happen to a record: run by hand by someone
+	// other than the owner, the event is rebuilt from the stored record event.name names (read with the caller's
+	// rights), never taken from the body, so a member cannot feed a flow values the record does not hold
+	if f := e.Reg().Flows[flowName]; f != nil && !a.System && !hasAnyRole(a, []string{"owner"}) {
+		if m, op, ok := flowModelEvent(e, f); ok {
+			ev, err := e.manualRecordEvent(ctx, a, m, op, event)
+			if err != nil {
+				return nil, err
+			}
+			event = ev
+		}
+	}
 	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true)
+}
+
+// flowModelEvent splits a flow's on: <model>.<event> (ok false for connector events and flows without on:).
+func flowModelEvent(e *Engine, f *meta.Flow) (model, op string, ok bool) {
+	head, tail, cut := strings.Cut(f.On, ".")
+	if !cut || e.Reg().Models[head] == nil {
+		return "", "", false
+	}
+	return head, tail, true
+}
+
+// manualRecordEvent is the event a hand-started run of a <model>.<op> flow gets for a non-owner: the shape
+// recordFlows gives (fields at top level, model, name, op, record) built from the record body's name names, with
+// before null. Any other key in the body is dropped. An empty body stays empty; a body without name is 422.
+func (e *Engine) manualRecordEvent(ctx context.Context, a Actor, model, op string, body map[string]any) (map[string]any, error) {
+	if len(body) == 0 {
+		return map[string]any{}, nil // no event at all claims nothing: the flow sees what any run without on: sees
+	}
+	name, _ := body["name"].(string)
+	if name == "" {
+		return nil, &StatusError{422, "event_name", "flow " + model + "." + op + ": event.name (nama " + model + ") wajib diisi"}
+	}
+	rec, err := e.Get(ctx, a, model, name)
+	if err != nil {
+		return nil, err
+	}
+	// the record must be in the state the event says happened: a .cancelled flow for a live document, or a
+	// .submitted one for a draft, would act on an event that did not happen (audit kernel-aman 2)
+	if m := e.Reg().Model(model); m != nil && m.IsSubmittable {
+		want := map[string]int64{"submitted": 1, "cancelled": 2}
+		if ds, ok := want[op]; ok && toInt(rec["docstatus"]) != ds {
+			return nil, conflict("event_state", fmt.Sprintf("flow %s.%s: %s %s tidak dalam keadaan %s", model, op, model, name, op))
+		}
+	}
+	ev := map[string]any{}
+	for k, v := range rec {
+		ev[k] = v
+	}
+	ev["model"], ev["name"], ev["op"] = model, str(rec["name"]), op
+	ev["record"], ev["before"] = map[string]any(copyRecord(rec)), nil
+	return ev, nil
 }
 
 // RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (the
@@ -68,19 +123,24 @@ func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, even
 }
 
 // RunFlowResume is RunFlowFrom for a queued flow job resuming after wait:; manual is the job's "manual" arg, so a
-// run a caller started by hand stays manual after the wait (contract 0026).
-func (e *Engine) RunFlowResume(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool) (*FlowResult, error) {
-	return e.runFlowFrom(ctx, a, flowName, event, start, vars, manual)
+// run a caller started by hand stays manual after the wait (contract 0026), and flowKey its "flow_key" arg (the
+// idempotency key the run holds, nil when none).
+func (e *Engine) RunFlowResume(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool, flowKey map[string]any) (*FlowResult, error) {
+	return e.runFlowFrom(ctx, a, flowName, event, start, vars, manual, flowKey)
 }
 
 // runFlowFrom is RunFlowFrom; manual marks a run a caller started with an event they wrote (REST), which may not
 // create append_only ledger rows (contract 0026): those come only from real events, hooks and seed.
-func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool) (*FlowResult, error) {
+func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool, fk ...map[string]any) (*FlowResult, error) {
 	f := e.Reg().Flows[flowName]
 	if f == nil || !e.Reg().IsInstalled(f.App) {
 		return nil, notFound("flow " + flowName)
 	}
 	out := newFlowResult(flowName)
+	var key map[string]any
+	if len(fk) > 0 {
+		key = fk[0]
+	}
 	err := e.run(ctx, a, func(o *op) error {
 		o.manualRun = manual
 		// a fresh result and copy of the variables per attempt: a retried run (contract 0025) must not report the
@@ -90,7 +150,7 @@ func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, even
 		for k, x := range vars {
 			v[k] = x
 		}
-		return e.flowIn(o, f, event, start, v, out)
+		return e.flowIn(o, f, event, start, v, key, out)
 	})
 	if c := flowConnector(e, f); err != nil && c != "" {
 		store.Audit(context.WithoutCancel(ctx), e.DB, a.Org, a.ID, "connector.error", "connector/"+c, "flow "+flowName+": "+err.Error(), nil)
@@ -117,7 +177,7 @@ func flowConnector(e *Engine, f *meta.Flow) string {
 }
 
 // flowIn runs f's steps inside o's transaction, as o's actor, from top-level step start.
-func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, vars map[string]any, out *FlowResult) error {
+func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, vars map[string]any, fk map[string]any, out *FlowResult) error {
 	a := o.actor
 	if event == nil {
 		event = map[string]any{}
@@ -148,6 +208,19 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 			return err
 		}
 	}
+	if start > 0 { // a resumed run adds its documents to the key it claimed when it started
+		r.key, r.token = resumedFlowKey(fk, vars)
+		if r.key != "" {
+			held, err := store.FlowKeyHeld(o.ctx, o.tx, a.Org, f.Name, r.key, flowKeyMarker(r.token))
+			if err != nil {
+				return err
+			}
+			if !held { // released (its job was dead-lettered): a replay must not record the event a second time
+				out.Skipped = true
+				return store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.key_released", "flow/"+f.Name, "run tidak dilanjutkan: idempotency key sudah dilepas", nil)
+			}
+		}
+	}
 	var list []any
 	for _, st := range f.Steps {
 		list = append(list, map[string]any(st))
@@ -155,13 +228,15 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	if err := r.steps(list, "", start); err != nil {
 		return err
 	}
-	if start > 0 && r.key == "" { // a resumed run adds its documents to the key it claimed when it started
-		r.key, _ = vars[flowKeyVar].(string)
-	}
 	if r.key != "" { // the documents this run made: the key is free again once none of them is alive
 		docs := append([]string{}, out.Created...)
 		waiting := out.WaitingJob != 0 || out.WaitingApproval != ""
-		if err := store.AddFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, docs, start == 0, waiting); err != nil {
+		if waiting && (len(out.Updated) > 0 || len(out.Calls) > 0) {
+			// the run changed records or called out before it waits: releasing it later must not free the key,
+			// or the same event would apply those again (audit kernel-aman 1)
+			docs = append(docs, flowKeyActed)
+		}
+		if err := store.AddFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, docs, start == 0, waiting, flowKeyMarker(r.token)); err != nil {
 			return err
 		}
 	}
@@ -208,17 +283,81 @@ func (r *flowRun) claimKey() (dup bool, err error) {
 			return false, err
 		}
 	}
-	r.key = key
-	r.vars[flowKeyVar] = key
+	r.key, r.token = key, newFlowToken()
 	return false, nil
 }
 
 // flowKeyPending stands in a key's documents while its run waits (wait:, approve:): the run is not finished, so the
-// key is held whatever its documents so far (audit flowkey-release 1).
+// key is held whatever its documents so far (audit flowkey-release 1). The marker is flowKeyPending + ":" + the
+// run's token; a bare flowKeyPending is a run that waited before tokens (also held, released by a legacy run).
 const flowKeyPending = "flow:pending"
 
-// flowKeyVar carries the claimed key in the run's saved variables, so a resumed run adds its documents to it.
+// flowKeyVar carried the claimed key in the run's saved variables before the key moved to the job's or the
+// request's "flow_key" arg, where an as: cannot overwrite it (audit flowkey-release N2). Runs that waited before
+// that still resume with it.
 const flowKeyVar = "_idempotency_key"
+
+// flowKeyActed stays in a key's documents once a run updated records or made calls before it waited: the key is
+// then held for good, whatever becomes of its run (a release only drops the pending marker).
+const flowKeyActed = "flow:acted"
+
+// flowKeyArg is the job and approval arg holding a waiting run's key: {"key": ..., "token": ...}.
+const flowKeyArg = "flow_key"
+
+func flowKeyMarker(token string) string {
+	if token == "" {
+		return flowKeyPending
+	}
+	return flowKeyPending + ":" + token
+}
+
+func newFlowToken() string {
+	b := make([]byte, 8)
+	_, _ = rand.Read(b)
+	return hex.EncodeToString(b)
+}
+
+// keyArgs is the flow_key arg of a job or request the run waits on (nil when the run holds no key).
+func (r *flowRun) keyArgs() map[string]any {
+	if r.key == "" {
+		return nil
+	}
+	return map[string]any{"key": r.key, "token": r.token}
+}
+
+// resumedFlowKey reads the key and token a waiting run holds from its flow_key arg, else (a run that waited
+// before the arg existed) from its saved variables, with no token.
+func resumedFlowKey(fk, vars map[string]any) (key, token string) {
+	if k := str(fk["key"]); k != "" {
+		return k, str(fk["token"])
+	}
+	k, _ := vars[flowKeyVar].(string)
+	return k, ""
+}
+
+// releaseFlowKey frees the key of a run that will never finish (its approval was rejected, its job dead-lettered):
+// the run's pending marker goes, and a key left with no documents is removed, so the same event is recorded again
+// (audit flowkey-release N1). Documents the run made before it stopped keep holding the key while alive.
+func releaseFlowKey(ctx context.Context, q pg.Querier, org, flow string, fk, vars map[string]any) error {
+	key, token := resumedFlowKey(fk, vars)
+	if key == "" {
+		return nil
+	}
+	return store.ReleaseFlowKey(ctx, q, org, flow, key, flowKeyMarker(token))
+}
+
+// ReleaseFlowJob releases the key of a flow job that failed for good (dead-lettered): args are the job's.
+func (e *Engine) ReleaseFlowJob(ctx context.Context, org string, args map[string]any) error {
+	flow := str(args["flow"])
+	if flow == "" {
+		return nil
+	}
+	err := releaseFlowKey(ctx, e.DB, org, flow, meta.AsMap(args[flowKeyArg]), meta.AsMap(args["vars"]))
+	if err == nil {
+		_ = store.Audit(ctx, e.DB, org, "system", "flow.key_released", "flow/"+flow, "job flow gagal permanen: idempotency key dilepas", nil)
+	}
+	return err
+}
 
 // anyAlive reports whether the documents of a key hold it: the submittable ones among docs (all of docs when none
 // is), alive while one exists and is not cancelled, or cancelled with a live amended copy (one document, contract
@@ -226,7 +365,7 @@ const flowKeyVar = "_idempotency_key"
 func (r *flowRun) anyAlive(docs []string) (bool, error) {
 	var sub []string
 	for _, d := range docs {
-		if d == flowKeyPending {
+		if strings.HasPrefix(d, "flow:") { // a waiting run, or a run that acted before it waited
 			return true, nil
 		}
 		mn, _, _ := strings.Cut(d, "/")
@@ -320,6 +459,9 @@ type flowRun struct {
 	out  *FlowResult
 	stop bool
 	key  string // the idempotency key this run claimed
+	// token names this run in the key's pending marker (flowKeyPending + ":" + token), so releasing a run that will
+	// never finish frees the key only from that run, and a replay of its job sees it was released
+	token string
 }
 
 func (r *flowRun) env() *cel.Env {
@@ -648,7 +790,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if _, isUntil := st["wait"].(map[string]any); isUntil {
 				next = idx // check the condition again
 			}
-			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs(), "manual": o.manualRun},
+			id, err := e.Queue.Enqueue(o.ctx, o.tx, "flow", a.Org, map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs(), "manual": o.manualRun, flowKeyArg: r.keyArgs()},
 				EnqueueOpts{RunAt: e.Now().Add(d)})
 			if err != nil {
 				return err
@@ -716,7 +858,7 @@ func (r *flowRun) requestApproval(spec map[string]any, i string, resume int, as 
 	roles := append([]string{}, a.Roles...)
 	ap := store.Approval{Org: a.Org, Verb: "flow:" + r.f.Name, Policy: policy, Label: label, Approvers: approvers,
 		State: "pending", Snapshot: hashJSON(map[string]any{"event": event, "vars": vars}),
-		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as, "manual": o.manualRun},
+		Args:        map[string]any{"resume": resume, "vars": vars, "event": event, "as": as, "manual": o.manualRun, flowKeyArg: r.keyArgs()},
 		RequestedBy: a.ID, Requester: a.requesterArgs(roles)}
 	if err := store.InsertApproval(o.ctx, o.tx, &ap); err != nil {
 		return "", err
@@ -834,7 +976,7 @@ func (o *op) recordFlows(m *meta.Model, before, rec store.Record, event string) 
 		ev["model"], ev["name"], ev["op"] = m.Name, str(rec["name"]), event
 		ev["record"], ev["before"] = map[string]any(copyRecord(rec)), prev
 		out := newFlowResult(n)
-		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, out); err != nil {
+		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, nil, out); err != nil {
 			return ran, fmt.Errorf("flow %s: %w", n, err)
 		}
 		ran = ran || !out.Skipped

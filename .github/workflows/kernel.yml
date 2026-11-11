@@ -12,6 +12,12 @@ on:
 permissions:
   contents: read
 
+# The sibling checkouts sit next to rangka-os in the workspace: name it, so tests that need rangka-apps or
+# rangka-connectors (internal/testdb Sibling) never fall back to guessing, and fail rather than skip when missing.
+env:
+  RANGKA_WORKSPACE: ${{ github.workspace }}
+  RANGKA_REQUIRE_SIBLINGS: "1"
+
 concurrency:
   group: kernel-${{ github.ref }}
   cancel-in-progress: true

@@ -2,8 +2,12 @@ package engine
 
 import (
 	"context"
+	"fmt"
+	"sort"
 	"testing"
 	"time"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // Submitting a draft renames DRAFT-xxx; links to it (a field, a child row) follow, so they never point at a name
@@ -277,4 +281,41 @@ func TestSubmitRenameNeverRestampsAnEdit(t *testing.T) {
 		t.Fatal(err)
 	}
 	mgrAsked(n2, p2)
+}
+
+// store.RecordsLinking finds exactly the records whose field or child row links the draft, so submit loads only
+// their live requests (card t_6e1fa9ae): an unrelated record of a referrer model is not looked at.
+func TestRecordsLinkingOnlyTheDraft(t *testing.T) {
+	e, owner := approvalSetupFiles(t, memoHoldFiles, "")
+	ctx := context.Background()
+	mk := func() string {
+		res, err := e.Create(ctx, owner, "memo_self", map[string]any{})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return str(res.Record["name"])
+	}
+	draft, byField, byLine, other := mk(), mk(), mk(), mk()
+	if _, err := e.Update(ctx, owner, "memo_self", byField, map[string]any{"prev": draft}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Update(ctx, owner, "memo_self", byLine, map[string]any{"lines": []any{map[string]any{"ref": other}, map[string]any{"ref": draft}}}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.Update(ctx, owner, "memo_self", other, map[string]any{"prev": byField, "lines": []any{map[string]any{"ref": byLine}}}); err != nil {
+		t.Fatal(err)
+	}
+	got, err := store.RecordsLinking(ctx, e.DB, e.Reg(), owner.Org, e.Reg().Model("memo_self"), "memo_self", draft)
+	if err != nil {
+		t.Fatal(err)
+	}
+	sort.Strings(got)
+	want := []string{byField, byLine}
+	sort.Strings(want)
+	if fmt.Sprint(got) != fmt.Sprint(want) {
+		t.Fatalf("RecordsLinking = %v, want %v", got, want)
+	}
+	if got, _ := store.RecordsLinking(ctx, e.DB, e.Reg(), "org-lain", e.Reg().Model("memo_self"), "memo_self", draft); len(got) != 0 {
+		t.Fatalf("other org sees %v", got)
+	}
 }

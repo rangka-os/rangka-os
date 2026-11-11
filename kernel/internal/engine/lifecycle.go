@@ -942,8 +942,10 @@ func (o *op) amend(model, name string) (*Result, error) {
 	rec["name"], rec["docstatus"], rec["amended_from"] = "DRAFT-"+store.RandomName(5), int64(0), name
 	rec["created_by"] = a.ID
 	o.prepare(m, rec, false)
+	// a unique value the cancelled original still holds (the index covers cancelled rows) is a validation error,
+	// as on create, not a database error
 	if err := store.Insert(o.ctx, o.tx, e.Reg(), a.Org, m, rec); err != nil {
-		return nil, err
+		return nil, dbIssue(m, err)
 	}
 	if err := o.event(m, rec, "created"); err != nil {
 		return nil, err

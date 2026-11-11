@@ -15,7 +15,7 @@ Readers: the operator (Dede, or whoever is on call) and the builder that turns o
 | Path | What |
 | --- | --- |
 | `compose.yaml` | shared services: `postgres`, `caddy`, and the `backup` tool image (profile `tools`) |
-| `tenant.compose.yaml` | one tenant = compose project `juragan-t-<id>`, service `kernel`, alias `t-<id>` on network `juragan-t-<id>` |
+| `tenant.compose.yaml` | one tenant = compose project and network `juragan-t-<id>` (`<HOST_PROJECT>-t-<id>` on a host whose `HOST_PROJECT` is not `juragan-host`, so two hosts on one Docker daemon never share one), service `kernel`, alias `t-<id>` |
 | `Caddyfile` | snippets `tenant` / `suspended`; imports `$HOST_DIR/caddy/*.caddy` (written by tenantctl) |
 | `kernel/Dockerfile` | the release binary from GitHub Releases, verified against `checksums.txt`; target `pdf` (Chromium) or `slim` |
 | `backup/Dockerfile` | `../backup/{backup,restore,lib}.sh` on postgres:16-alpine with rclone, age, jq |
@@ -26,10 +26,12 @@ Readers: the operator (Dede, or whoever is on call) and the builder that turns o
 Under `HOST_DIR` (default `/opt/juragan/host`): `tenants/<id>/` (bundle + `data/` + `backups/`, mounted at `/srv`,
 owned by uid 65532), `registry/<id>.env` (id, org, host, tag, plan, status, dates; no secrets), `secrets/<id>.env`
 (generated database password, mode 600), `caddy/<id>.caddy`, `backups/<id>/`, `upgrades/<id>-<stamp>/` (the code
-before each upgrade), `drill.log` (`DRILL PASSED` / `DRILL FAILED` lines).
+before each upgrade; the newest `UPGRADE_KEEP` (3) are kept, all go with `delete`), `drill.log` (`DRILL PASSED` / `DRILL FAILED` lines).
 
-tenantctl takes a lock (`$HOST_DIR/.lock`) for every command that changes something, so a double submit from the
-onboarding cannot create one tenant twice. Variables the compose files interpolate are removed from the caller's
+tenantctl takes a lock (`$HOST_DIR/.lock`, holding the pid and its start time) for every command that changes
+something, so a double submit from the onboarding cannot create one tenant twice. A lock whose process is gone, or
+whose pid now belongs to a process started at another time (reuse after a reboot), is taken over; a live holder of
+another user is waited for. Variables the compose files interpolate are removed from the caller's
 environment first: a `RANGKA_TAG` exported in the shell never moves a tenant off its pin.
 
 The GHCR image `ghcr.io/rangka-os/rangka` refused anonymous pulls on 6 Nov 2026; the release assets on GitHub are
@@ -73,8 +75,9 @@ The password reaches the kernel through the environment only. Steps, each record
 copy the bundle, create role + database, build the image for the tag if missing, `rangka validate`, `rangka migrate`,
 `rangka seed --org` for every org in `site/config.rk` (with `fixtures/<org>` when present), `rangka plan set <plan>`
 (contract 0028; on a release without it the plan comes from `config.rk`), start the kernel, wait for 200, write the
-Caddy site and reload. It prints the tenant URL. Ids are 3-30 lowercase letters and digits and are never reused, nor
-are hosts. A failed create: read the error, then `./tenantctl delete <id> --confirm <id> --force`.
+Caddy site and reload. It prints the tenant URL. Ids are 3-30 lowercase letters and digits; an id or host that was
+ever active is never reused. A failed create: read the error, then `./tenantctl delete <id> --confirm <id> --force`,
+which removes everything including the registry entry (it never went live), so the retry may use the same id and host.
 
 Locally, from onboarding answers in one command (Juragan workspace): `scripts/tenant-host.sh baru jasa-proyek`.
 
@@ -94,7 +97,8 @@ Health fails when a kernel or its route does not answer 200 with the tenant's OI
 is not on the tenant's network (`kernel=200/no-db-net`: the shared containers were recreated outside `host-up`; run
 `./tenantctl host-up`), when the newest local
 archive is older than `HEALTH_BACKUP_MAX_AGE_HOURS` (26), when the last `DRILL PASSED` for the tenant is older than
-`HEALTH_DRILL_MAX_AGE_HOURS` (50; a failed upload shows here too, since the drill reads the off-box copy), or when the
+`HEALTH_DRILL_MAX_AGE_HOURS` (50; a failed upload shows here too, since the drill reads the off-box copy), when the
+tenant's newest drill line is `DRILL FAILED` (`drill-failed`, at once; a later PASSED clears it), or when the
 disk is above `HEALTH_DISK_MAX_PCT` (85). Tenants younger than a window are not judged by it yet.
 
 ## 5. Backup and restore drill
@@ -131,7 +135,8 @@ recreate the database and role (empty), empty the tenant folder, run `restore.sh
 
 Backup first (must succeed), build the image, replace `apps/ modules/ connectors/ fixtures/` when `--bundle` is given
 (never `site/` or `data/`), show the `migrate --dry-run` plan, restart (the kernel migrates on start and takes its own
-pre-migrate backup into `backups/`), wait for 200. A kernel that does not come up is rolled back to the previous tag;
+pre-migrate backup into `backups/`), wait for 200 (up to `UPGRADE_WAIT_SECONDS`, 900, wall clock). A failed code copy
+(disk full) or a kernel that does not come up is rolled back to the previous tag and code;
 if the new release already migrated the database, restore the pre-upgrade archive. Upgrade tenants one at a time,
 the internal ones first, as juragan-pilots does with its pins.
 
@@ -141,7 +146,7 @@ the internal ones first, as juragan-pilots does with its pins.
   deletion request.
 - `resume <id>`: back to active.
 - `delete <id> --confirm <id>`: only a suspended tenant. Final backup first, then the kernel project, the database
-  and role, the network, the route, the files, drill leftovers and the secret go; the registry keeps a tombstone (id, a
+  and role, the network, the route, the files, saved upgrade code, drill leftovers and the secret go; the registry keeps a tombstone (id, a
   SHA-256 of the host, dates; no host or org in clear) so neither is reused. Archives remain
   until retention (local `BACKUP_KEEP_LOCAL` days, off-box 35 days by the bucket lifecycle), which the terms must say.
   Before deleting, give the owner the agreed export window (CSV export per list, or an archive).
@@ -155,6 +160,14 @@ tenant under load: a 4 GB VM holds about 15-20 small tenants; above 70 % memory 
 role is capped at `TENANT_CONNECTION_LIMIT` (20), Postgres allows `POSTGRES_MAX_CONNECTIONS` (300). Networks: one per
 tenant; Docker's default address pools give about 30 networks, so above ~25 tenants set `default-address-pools` with
 `/24` subnets in `/etc/docker/daemon.json`.
+
+`host-up` also brings tenants made by an older tenantctl up to date: it sets `CONNECTION LIMIT` on their roles and
+recreates a kernel that still sits on `HOST_NETWORK` onto its own network (a short restart of that tenant).
+
+What a tenant can still see (accepted): its role can list the names of all databases and roles in the shared catalog
+(`pg_database`, `pg_roles`), i.e. the other tenants' ids, but no rows. Ids often are business names and are kept in
+clear in the registry, also in a deleted tenant's tombstone (only the host is hashed, and the default host is
+`<id>.<domain>`), so the terms of service should say that the id is kept.
 
 The pilots can become tenants `jasa` and `fnb`... except those names are reserved here so that they never collide
 with the pilot deploy on the same Postgres. Moving them is a separate, planned step (new ids, restore from their

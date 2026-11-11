@@ -1314,7 +1314,7 @@
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs || offline })), tabBar),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
         cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs || offline, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
-        aiOn ? h(RA.AssistantRoot, { key: aiKey, api: api, storageKey: aiKey, getContext: aiPage, navigate: RA.navigate,
+        aiOn ? h(RA.AssistantRoot, { key: aiKey, api: api, storageKey: aiKey, getContext: aiPage, navigate: RA.navigate, subtitle: companyName, tuckFor: ".ap-counter-bar",
           onPreview: aiPreview, onOpenUbah: aiOpenUbah, blocked: function () { return expiredRef.current; }, control: aiRef }) : null,
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,

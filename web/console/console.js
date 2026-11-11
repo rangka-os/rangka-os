@@ -1274,7 +1274,7 @@
         onSelect: function (it, q) { if (it.ai) askRaka(q); } }) : null,
       aiOn ? h(window.RangkaApp.AssistantRoot, { key: aiKey, api: aiApi, storageKey: aiKey, getContext: aiPage, navigate: function (hash) { location.hash = hash; },
         onPreview: function (id) { nav("/changesets/" + encodeURIComponent(id)); }, onOpenUbah: function (id) { nav("/changesets/" + encodeURIComponent(id)); },
-        blocked: function () { return false; }, control: aiRef }) : null,
+        blocked: function () { return false; }, control: aiRef, subtitle: "Rangka Console" }) : null,
       propose ? h(ProposeDialog, Object.assign({}, ctx, { onClose: function () { setPropose(false); } })) : null,
       h(R.Toaster, { float: true }, toasts.map(function (t) { return h(R.Toast, { key: t.id, tone: t.tone, title: t.title, onClose: function () { setToasts(function (x) { return x.filter(function (y) { return y.id !== t.id; }); }); } }, t.body); })));
   }

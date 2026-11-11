@@ -206,8 +206,13 @@ export declare function AskBar(props: { open: boolean; context: { label: string 
 export type ChangesetRisk = 'low' | 'medium' | 'high' | 'unknown';
 export interface ChatChangeset { id: string; title: string; risk: ChangesetRisk; status: string }
 export interface ChatTurn { role: 'user' | 'assistant'; text: string; activity?: string[]; changesets?: ChatChangeset[]; escalate?: string; error?: string }
-/** 420px chat with Raka on the right, non-modal (no scrim), full screen at 600px and below. The log is aria-live="polite" and scrolls to the newest turn.
+/** 440px chat with Raka on the right, non-modal (no scrim), full screen at 600px and below. The log is aria-live="polite" and scrolls to the newest turn.
  *  The default change set card shows title, risk pill, "Lihat pratinjau" (onPreview) and "Buka di Ubah" (onOpenUbah); renderChangeset replaces it. */
 export declare function ChatDrawer(props: { open: boolean; turns: ChatTurn[]; busy?: boolean; onSend: (text: string) => void; onNew?: () => void; onClose: () => void;
-  renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void }): React.ReactElement | null;
+/** OS / Raka · Diam | Hover | Tersembunyi | Terbuka: the floating Raka button, 24px from the bottom right. Hover or focus
+ *  widens it to "Tanya Raka ⌘J" with the waiting count; its small button tucks it against the right edge. Mount it only
+ *  where Raka is on (meta.features.ai === true). */
+export declare function RakaLauncher(props: { open: boolean; pending?: number; tucked?: boolean; onToggle: () => void; onTuck?: (tucked: boolean) => void }): React.ReactElement;
+  renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void;
+  /** a 440px panel above RakaLauncher instead of a full-height drawer */ floating?: boolean; subtitle?: string; /** the page title as a context chip */ context?: string | null }): React.ReactElement | null;
 declare global { interface Window { Rangka: Record<string, any> } }

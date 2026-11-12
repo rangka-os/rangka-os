@@ -96,12 +96,30 @@ func (e *Engine) Location() *time.Location {
 	r := e.Reg()
 	for _, tz := range []any{r.SiteConfig("timezone"), r.SystemConfig("scheduler.timezone")} {
 		if s, ok := tz.(string); ok && s != "" {
-			if loc, err := time.LoadLocation(s); err == nil {
+			if loc := loadLocation(s); loc != nil {
 				return loc
 			}
 		}
 	}
 	return time.UTC
+}
+
+// locations caches time.LoadLocation by name: it reads the zoneinfo file on every call, and Location runs for
+// every record a request creates or computes (card t_58a60f6b: 16% of a submit's CPU, all file syscalls).
+var locations sync.Map
+
+// loadLocation is time.LoadLocation through the cache; nil when the name is unknown (not cached, so a zoneinfo
+// installed later is found).
+func loadLocation(name string) *time.Location {
+	if v, ok := locations.Load(name); ok {
+		return v.(*time.Location)
+	}
+	loc, err := time.LoadLocation(name)
+	if err != nil {
+		return nil
+	}
+	locations.Store(name, loc)
+	return loc
 }
 
 // Today is the ISO date in the organisation time zone.

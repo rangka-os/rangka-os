@@ -353,3 +353,14 @@ func TestListSearchMatchesLinkTitle(t *testing.T) {
 		}
 	}
 }
+
+// Location loads a zone once (time.LoadLocation reads the zoneinfo file on every call; card t_58a60f6b).
+func TestLoadLocationCached(t *testing.T) {
+	a, b := loadLocation("Asia/Jakarta"), loadLocation("Asia/Jakarta")
+	if a == nil || a != b {
+		t.Fatalf("loadLocation = %p, %p; want the same cached zone", a, b)
+	}
+	if loadLocation("Bukan/Zona") != nil {
+		t.Fatal("an unknown zone must be nil")
+	}
+}

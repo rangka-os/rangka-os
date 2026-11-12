@@ -122,7 +122,7 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 				". Bagian ini diubah lewat Console oleh admin atau pemilik.", map[string]any{"paths": paths}}
 		}
 	}
-	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor})
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
 	cs.Layers, cs.Risk = as.Layers, as.Risk
 	if cs.Layers == nil {
 		cs.Layers = []int{}
@@ -254,6 +254,17 @@ func sortedSet(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// moduleOf returns the unit (app or module) a model belongs to, "" when unknown (contract 0045 §2b).
+func (s *Service) moduleOf(name string) string {
+	if s.Reg == nil {
+		return ""
+	}
+	if m := s.Reg().Models[name]; m != nil {
+		return m.App
+	}
+	return ""
 }
 
 // appModel returns the app's own model file (without overlays) by name.

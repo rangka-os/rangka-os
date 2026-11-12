@@ -50,6 +50,7 @@ compare-python: build
 	@D=$$(mktemp -d); rc=0; \
 	for args in "$(APPS) --site $(SITE) --connectors $(CONN)" "$(APPS) --site testdata/overlay-site --connectors $(CONN)" \
 	            "$(APPS) --site testdata/numbering-site --connectors $(CONN)" "testdata/broken-apps" \
+	            "$(APPS) --site testdata/rate-site --connectors $(CONN)" "$(APPS) --site testdata/broken-rate-site --connectors $(CONN)" \
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors" \
 	            "testdata/modules-apps/apps --site testdata/modules-apps/site" \
 	            "testdata/broken-modules-apps/apps --site testdata/broken-modules-apps/site" \

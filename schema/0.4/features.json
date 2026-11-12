@@ -62,7 +62,38 @@
               "type": "integer",
               "minimum": 0
             },
-            "description": "users, outlets, records, storage_mb, ai_credits_month, api_calls_day"
+            "description": "users, outlets, records, storage_mb, ai_credits_month, api_calls_day (whole numbers); rate (traffic shaping, contract 0040 §9)",
+            "properties": {
+              "rate": {
+                "type": "object",
+                "additionalProperties": false,
+                "required": [
+                  "rps",
+                  "burst",
+                  "max_wait_ms",
+                  "max_waiting"
+                ],
+                "description": "Token bucket per tenant (contract 0040 §9): rps tokens a second, at most burst; a request without a token waits up to max_wait_ms, with at most max_waiting requests waiting; past that 429 rate_limited.",
+                "properties": {
+                  "rps": {
+                    "type": "number",
+                    "exclusiveMinimum": 0
+                  },
+                  "burst": {
+                    "type": "integer",
+                    "minimum": 1
+                  },
+                  "max_wait_ms": {
+                    "type": "integer",
+                    "minimum": 0
+                  },
+                  "max_waiting": {
+                    "type": "integer",
+                    "minimum": 0
+                  }
+                }
+              }
+            }
           },
           "flags": {
             "type": "object",

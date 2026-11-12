@@ -69,5 +69,15 @@ func (s *Server) getPlan(w http.ResponseWriter, r *http.Request, c *caller) {
 	sort.Strings(outlets)
 	sort.Strings(users)
 	rep["read_only"] = map[string]any{"outlets": outlets, "users": users}
+	// traffic shaping (contract 0040 §9): this process's counters for today, approximate under several instances
+	usage := map[string]any{}
+	if ms, ok := rep["usage"].(map[string]plan.Meter); ok {
+		for k, v := range ms {
+			usage[k] = v
+		}
+	}
+	throttled, waitedMS, refused := s.limiter.Today()
+	usage["rate"] = map[string]any{"throttled_today": throttled, "throttled_ms_today": waitedMS, "refused_today": refused, "approximate": true}
+	rep["usage"] = usage
 	writeJSON(w, http.StatusOK, rep)
 }

@@ -32,6 +32,64 @@ type Def struct {
 	Name   string           `json:"name"`
 	Label  string           `json:"label"`
 	Limits map[string]int64 `json:"limits"`
+	// Rate is limits.rate, the tenant's traffic shaping (contract 0040 §9); nil means none. A child's rate replaces
+	// its parent's as a whole.
+	Rate *Rate `json:"-"`
+}
+
+// Rate is a token bucket: RPS tokens a second, at most Burst; a request without a token waits up to MaxWaitMS,
+// with at most MaxWaiting requests waiting.
+type Rate struct {
+	RPS        float64 `json:"rps"`
+	Burst      int64   `json:"burst"`
+	MaxWaitMS  int64   `json:"max_wait_ms"`
+	MaxWaiting int64   `json:"max_waiting"`
+}
+
+// MarshalJSON reports the rate under limits, as features.rk writes it.
+func (d Def) MarshalJSON() ([]byte, error) {
+	lim := map[string]any{}
+	for k, v := range d.Limits {
+		lim[k] = v
+	}
+	if d.Rate != nil {
+		lim["rate"] = d.Rate
+	}
+	return json.Marshal(struct {
+		Name   string         `json:"name"`
+		Label  string         `json:"label"`
+		Limits map[string]any `json:"limits"`
+	}{d.Name, d.Label, lim})
+}
+
+func toFloat(v any) (float64, bool) {
+	switch n := v.(type) {
+	case int:
+		return float64(n), true
+	case int64:
+		return float64(n), true
+	case float64:
+		return n, true
+	case json.Number:
+		f, err := n.Float64()
+		return f, err == nil
+	}
+	return 0, false
+}
+
+func parseRate(v any) *Rate {
+	m, ok := v.(map[string]any)
+	if !ok {
+		return nil
+	}
+	rps, ok1 := toFloat(m["rps"])
+	burst, ok2 := toInt(m["burst"])
+	wait, ok3 := toInt(m["max_wait_ms"])
+	waiting, ok4 := toInt(m["max_waiting"])
+	if !ok1 || !ok2 || !ok3 || !ok4 || rps <= 0 || burst < 1 || wait < 0 || waiting < 0 {
+		return nil
+	}
+	return &Rate{RPS: rps, Burst: burst, MaxWaitMS: wait, MaxWaiting: waiting}
 }
 
 // Defs returns the plans of features.rk in file order.
@@ -61,7 +119,13 @@ func Defs(reg *meta.Registry) []Def {
 		}
 		for _, pm := range chain {
 			lm, _ := pm["limits"].(map[string]any)
+			if r, ok := lm["rate"]; ok {
+				d.Rate = parseRate(r)
+			}
 			for k, v := range lm {
+				if k == "rate" {
+					continue
+				}
 				if i, ok := toInt(v); ok {
 					d.Limits[k] = i
 				}
@@ -175,6 +239,14 @@ func (c *Current) Limit(key string) (int64, bool) {
 	}
 	v, ok := c.Def.Limits[key]
 	return v, ok
+}
+
+// Rate is the tenant's traffic shaping, or nil.
+func (c *Current) Rate() *Rate {
+	if c == nil || c.Def == nil {
+		return nil
+	}
+	return c.Def.Rate
 }
 
 // Label is the plan's label for messages ("Mulai").

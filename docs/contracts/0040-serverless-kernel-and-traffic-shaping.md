@@ -145,7 +145,8 @@ No change. `files.Local` uses a directory, and on AWS that directory is an EFS a
 A token bucket per tenant **delays** requests over the allowance instead of refusing them. It refuses only when the
 wait would be too long.
 
-- `features.rk` plan limits gain `rate` (schema 0.4, both validators):
+- `features.rk` plan limits gain `rate` (schema 0.5, with the same change in the published 0.4 copy; both
+  validators):
   ```yaml
   plans:
     juragan:
@@ -178,8 +179,15 @@ wait would be too long.
   whole** before it invokes the function (rangka-cloud spec), because waiting inside a function is billed time.
 - No `rate` in the plan, or no plan, means no shaping. Self-hosted installs behave as today unless they set a plan
   with `rate`.
-- `GET /api/v1/plan` (0028 §5) reports `rate` under `limits` and adds `usage.rate: {throttled_ms_today,
-  refused_today}` from in-process counters, labelled approximate.
+- `GET /api/v1/plan` (0028 §5) reports `rate` under `limits` and adds `usage.rate: {throttled_today,
+  throttled_ms_today, refused_today, approximate: true}` from in-process counters (this process, its local date).
+- A child plan's `rate` replaces its parent's as a whole (other limits are merged key by key, as in 0028 §1).
+- Which bucket: a request with credentials (`Authorization` or the session cookie) takes the tenant's; one without
+  takes its client's, keyed by a hash of the connection address and the first `X-Forwarded-For` hop.
+- The rate is read from the plan snapshot of 0028 §4 (refreshed about every 10 seconds, never in the request), so
+  a plan change reaches shaping within about 10 seconds and shaping never takes a database connection.
+- Implemented in `kernel/internal/ratelimit` and `kernel/internal/api/shape.go` (§9 only; the rest of this contract is
+  separate work).
 
 ### 10. What does not change
 - The REST, MCP and CEL contracts, change-set lifecycle, RLS, plan limits and backups stay the same.

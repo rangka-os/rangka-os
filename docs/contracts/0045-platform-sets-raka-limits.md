@@ -93,6 +93,21 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 
 A new flow file in an app or a module (`apps/<a>/flows/`, `modules/<m>/flows/`) is rated as a company flow. High is owner only (`owner_required`, unchanged).
 
+| model (new, or a company model changed) that starts calling a kernel hook: `on_submit`, `on_cancel`, an automation's `do`, an action's `hook` (`stock.post_moves`, `ledger.post_receivable`, `crm.mark_won`, ...) | high |
+
+A hook is Go code that writes stock, money or core records in the record's transaction, out of reach of the field
+and flow rows above. When a flow or this table reads a model's fields it follows the loader: the model's own field
+wins over an overlay field of the same name.
+
+The risk is assessed again at apply, against the files as they are then. When it rose (the files changed since the
+proposal, so a whole-file `replace` would now undo a later change), apply answers `409 risk_changed`, stores the
+higher risk and sends the change set back to `validated`: preview and approve again. Preview may raise the risk too
+(a removed unit still holds rows); every raised risk is stored, and approve reads the stored risk.
+
+`revert` refuses with `409 stale_base` when a file changed since the apply (another change set, the operator): it
+would put back an older text over that change. Make a new change set instead. Change sets applied before the
+kernel kept the applied text are not checked.
+
 ### 3. Raka is an assistant everywhere; agents and the Cloud ask the platform
 
 - **Assistant API tokens.** `POST /api/v1/tokens` accepts the scope `assistant`. Such a token resolves with

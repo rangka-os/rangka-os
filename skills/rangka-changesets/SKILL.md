@@ -37,10 +37,13 @@ The kernel computes risk; you cannot set it.
 - **high** (owner only): tax, AI settings, money or stock fields, removing data, and also:
   - a new company model that is submittable, append-only or moves stock;
   - a company flow that writes a money or stock field, or creates a draft in invoicing, payments or stock;
-  - removing a select option (rows may still hold the value).
+  - removing a select option (rows may still hold the value);
+  - a model that starts calling a kernel hook (`on_submit`, an automation's `do`, an action's `hook`), such as
+    `stock.post_moves` or `crm.mark_won`.
 
 These lists are a guide; the kernel decides. Read `risk` and `approvable_by` from the change set the kernel returns
-(MCP: `rangka_changeset_status {id}`), and read them again after preview, which can raise the risk. Mention the risk
+(MCP: `rangka_changeset_status {id}`), and read them again after preview, which can raise the risk. Apply can
+raise it too when the files changed since the proposal (`409 risk_changed`): the change set needs approving again. Mention the risk
 only when it is high. When `approvable_by` is `["owner"]`, say "Perubahan ini perlu disetujui pemilik."
 
 ## When the platform refuses

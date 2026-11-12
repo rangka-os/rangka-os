@@ -155,6 +155,7 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 				a.raise("medium", "new flow "+p)
 				assessCompanyFlow(a, p, nw, env)
 			case kind == "models":
+				newHooks(a, p, nil, nw)
 				if strings.HasPrefix(p, "models/") && (nw["is_submittable"] == true || nw["append_only"] == true || nw["stock"] != nil) {
 					a.raise("high", "new company model "+p+" is submittable, append-only or moves stock")
 				}
@@ -366,6 +367,7 @@ func assessFields(a *Assessment, p string, old, nw map[string]any, submittable b
 }
 
 func assessModel(a *Assessment, p string, old, nw map[string]any) {
+	newHooks(a, p, old, nw)
 	submittable, _ := old["is_submittable"].(bool)
 	assessFields(a, p, old, nw, submittable)
 	if !reflect.DeepEqual(normalize(old["permissions"]), normalize(nw["permissions"])) {
@@ -373,6 +375,45 @@ func assessModel(a *Assessment, p string, old, nw map[string]any) {
 	}
 	if ao, an := old["append_only"] == true, nw["append_only"] == true; ao != an {
 		a.raise("high", "changes append_only of "+p+" (a ledger's rows become editable or stop being so, contract 0026)")
+	}
+}
+
+// modelHooks are the kernel hooks a model file calls (on_submit, on_cancel, automations' do, actions' hook): named Go
+// functions that run in the record's transaction and create or update other records (stock.post_moves posts stock,
+// ledger.post_receivable money, crm.mark_won drafts an invoice), out of reach of the flow and field rules above.
+func modelHooks(m map[string]any) map[string]bool {
+	out := map[string]bool{}
+	for _, k := range []string{"on_submit", "on_cancel"} {
+		for _, h := range meta.AsList(m[k]) {
+			if s, _ := h.(string); s != "" {
+				out[s] = true
+			}
+		}
+	}
+	for _, k := range [][2]string{{"automations", "do"}, {"actions", "hook"}} {
+		for _, it := range meta.AsList(m[k[0]]) {
+			if s := meta.Str(meta.AsMap(it), k[1]); s != "" {
+				out[s] = true
+			}
+		}
+	}
+	return out
+}
+
+// newHooks rates a model that starts calling a kernel hook high: whatever the model's own fields, the hook writes
+// stock, money or core records (audit changeset-set-once, round 3: a new unit model with on_submit: [stock.post_moves]
+// or automations crm.mark_won was medium).
+func newHooks(a *Assessment, p string, old, nw map[string]any) {
+	was := modelHooks(old)
+	var added []string
+	for h := range modelHooks(nw) {
+		if !was[h] {
+			added = append(added, h)
+		}
+	}
+	sort.Strings(added)
+	for _, h := range added {
+		a.raise("high", "model "+p+" calls kernel hook "+h+" (it writes records outside the change set's rules)")
 	}
 }
 
@@ -598,27 +639,33 @@ func companyModelFields(env Env, model string) map[string]map[string]any {
 	if model == "" {
 		return nil
 	}
-	var out map[string]map[string]any
-	add := func(doc map[string]any) {
-		if doc == nil {
-			return
-		}
-		if out == nil {
-			out = map[string]map[string]any{}
-		}
-		fs, _ := fieldsByName(doc)
-		for k, v := range fs {
-			out[k] = v
-		}
-	}
+	// the loader's rule (applyOverlays): the model's own fields win, an overlay only adds names the model lacks.
+	// The company model file after the change set replaces the installed one (audit changeset-set-once, note 1).
+	var base map[string]any
 	if env.Model != nil {
-		add(env.Model(model))
+		base = env.Model(model)
 	}
+	var overlay map[string]any
 	if env.after != nil {
-		for _, path := range []string{"models/" + model + ".rk", "custom/" + model + ".rk"} {
-			if doc, ok := env.after(path); ok {
-				add(doc)
-			}
+		if doc, ok := env.after("models/" + model + ".rk"); ok && doc != nil {
+			base = doc
+		}
+		if doc, ok := env.after("custom/" + model + ".rk"); ok {
+			overlay = doc
+		}
+	}
+	if base == nil && overlay == nil {
+		return nil
+	}
+	out := map[string]map[string]any{}
+	fs, _ := fieldsByName(base)
+	for k, v := range fs {
+		out[k] = v
+	}
+	ov, _ := fieldsByName(overlay)
+	for k, v := range ov {
+		if _, ok := out[k]; !ok {
+			out[k] = v
 		}
 	}
 	return out

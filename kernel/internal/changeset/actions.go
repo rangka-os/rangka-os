@@ -131,6 +131,7 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 	if len(as.Reasons) > 0 {
 		note += ": " + strings.Join(as.Reasons, "; ")
 	}
+	cs.ApprovableBy = s.ApprovableBy(cs)
 	if err := s.transition(ctx, cs, a, "proposed", note, true); err != nil {
 		return nil, err
 	}
@@ -484,6 +485,19 @@ func (s *Service) Approvers() map[string]bool {
 			out[r] = true
 		}
 	}
+	return out
+}
+
+// ApprovableBy lists the roles that may approve cs: owner alone for high risk, else every approver, sorted.
+func (s *Service) ApprovableBy(cs *ChangeSet) []string {
+	if cs.Risk == "high" {
+		return []string{"owner"}
+	}
+	out := []string{}
+	for r := range s.Approvers() {
+		out = append(out, r)
+	}
+	sort.Strings(out)
 	return out
 }
 

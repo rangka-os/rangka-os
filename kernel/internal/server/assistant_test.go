@@ -285,3 +285,47 @@ func TestAssistantForbiddenPaths(t *testing.T) {
 		t.Fatalf("config.ai: %v", res)
 	}
 }
+
+func TestApprovableBy(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	low := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Warna grafik",
+		"ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/color/chart-1", "value": "#0055cc"}}}}}).JSON
+	want := "[owner sales_manager]"
+	if low["risk"] != "low" || fmt.Sprint(low["approvable_by"]) != want {
+		t.Fatalf("low risk: risk %v approvable_by %v", low["risk"], low["approvable_by"])
+	}
+	id := low["id"].(string)
+	if got := e.must(200, "GET", "/api/v1/changesets/"+id, nil).JSON; fmt.Sprint(got["approvable_by"]) != want {
+		t.Fatalf("get: %v", got["approvable_by"])
+	}
+	if v := e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil).JSON; fmt.Sprint(v["approvable_by"]) != want {
+		t.Fatalf("validate: %v", v["approvable_by"])
+	}
+	if p := e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil).JSON; fmt.Sprint(p["approvable_by"]) != want {
+		t.Fatalf("preview: %v", p["approvable_by"])
+	}
+	high := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Ganti versi CRM", "ops": []any{map[string]any{"op": "patch", "path": "apps/crm/app.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/version", "value": "0.1.1"}}}}}).JSON
+	if high["risk"] != "high" || fmt.Sprint(high["approvable_by"]) != "[owner]" {
+		t.Fatalf("high risk: risk %v approvable_by %v", high["risk"], high["approvable_by"])
+	}
+	items, _ := e.must(200, "GET", "/api/v1/changesets", nil).JSON["data"].([]any)
+	if len(items) == 0 {
+		t.Fatal("list is empty")
+	}
+	for _, it := range items {
+		m := it.(map[string]any)
+		w := want
+		if m["risk"] == "high" {
+			w = "[owner]"
+		}
+		if fmt.Sprint(m["approvable_by"]) != w {
+			t.Fatalf("list item %v risk %v: approvable_by %v", m["id"], m["risk"], m["approvable_by"])
+		}
+	}
+	if st := call(e, "rangka_changeset_status", map[string]any{"id": high["id"]}); fmt.Sprint(st["approvable_by"]) != "[owner]" {
+		t.Fatalf("mcp status: %v", st["approvable_by"])
+	}
+}

@@ -114,9 +114,11 @@ type ChangeSet struct {
 	Validation *Validation `json:"validation,omitempty"`
 	Preview    *Preview    `json:"preview,omitempty"`
 	History    []Event     `json:"history"`
-	CreatedAt  string      `json:"created_at,omitempty"`
-	UpdatedAt  string      `json:"updated_at,omitempty"`
-	previous   map[string]*string
+	// ApprovableBy lists the roles that may approve this change set; computed on every return, not stored.
+	ApprovableBy []string `json:"approvable_by"`
+	CreatedAt    string   `json:"created_at,omitempty"`
+	UpdatedAt    string   `json:"updated_at,omitempty"`
+	previous     map[string]*string
 }
 
 // Actor is who acts on a change set.
@@ -506,7 +508,9 @@ func (s *Service) Get(ctx context.Context, org, id string) (*ChangeSet, error) {
 	if len(res.Rows) == 0 {
 		return nil, &Error{404, "not_found", "change set " + id + " not found", nil}
 	}
-	return fromRow(res.Maps()[0]), nil
+	cs := fromRow(res.Maps()[0])
+	cs.ApprovableBy = s.ApprovableBy(cs)
+	return cs, nil
 }
 
 // List returns change sets, newest first, optionally by status.
@@ -523,7 +527,9 @@ func (s *Service) List(ctx context.Context, org, status string, limit int) ([]*C
 	}
 	out := []*ChangeSet{}
 	for _, m := range res.Maps() {
-		out = append(out, fromRow(m))
+		cs := fromRow(m)
+		cs.ApprovableBy = s.ApprovableBy(cs)
+		out = append(out, cs)
 	}
 	return out, nil
 }

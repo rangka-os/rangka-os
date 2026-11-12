@@ -202,7 +202,15 @@ func csFail(w http.ResponseWriter, err error) {
 				return
 			}
 		}
-		body := map[string]any{"error": map[string]any{"code": ce.Code, "message": ce.Msg}}
+		errBody := map[string]any{"code": ce.Code, "message": ce.Msg}
+		if d, ok := ce.Detail.(map[string]any); ok && ce.Status == 403 { // e.g. ai_forbidden_path's paths
+			for k, v := range d {
+				if k != "code" && k != "message" {
+					errBody[k] = v
+				}
+			}
+		}
+		body := map[string]any{"error": errBody}
 		if cs, ok := ce.Detail.(*changeset.ChangeSet); ok {
 			body["changeset"] = cs
 		}

@@ -116,6 +116,12 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 	if err != nil {
 		return nil, &Error{422, "bad_ops", err.Error(), nil}
 	}
+	if a.Assistant { // the platform's hard limits (contract 0045 §2): no risk level makes these proposable
+		if paths := AssistantForbidden(cs.Ops, parsed(live, nil), parsed(live, files)); len(paths) > 0 {
+			return nil, &Error{403, "ai_forbidden_path", "Raka tidak bisa mengusulkan perubahan ini: " + strings.Join(paths, ", ") +
+				". Bagian ini diubah lewat Console oleh admin atau pemilik.", map[string]any{"paths": paths}}
+		}
+	}
 	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor})
 	cs.Layers, cs.Risk = as.Layers, as.Risk
 	if cs.Layers == nil {

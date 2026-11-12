@@ -243,3 +243,45 @@ func TestAssistantScopedAPIToken(t *testing.T) {
 		t.Fatalf("mint with an assistant token: %d %s", r.Status, r.Body)
 	}
 }
+
+// The platform's hard limits (contract 0045 §2): an assistant cannot propose an edit to a catalogue app file, at
+// any risk level, while the owner can (high risk, owner only); config.apps stays proposable.
+func TestAssistantForbiddenPaths(t *testing.T) {
+	e := newEnv(t, false, nil)
+	ai := assistantEnv(t, e, 10*time.Minute)
+	body := map[string]any{"title": "Ganti versi CRM", "ops": []any{map[string]any{"op": "patch", "path": "apps/crm/app.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/version", "value": "0.1.1"}}}}}
+	// over REST the assistant never proposes (contract 0020 §4): refused before the change-set service
+	if r := ai.do("POST", "/api/v1/changesets", body); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("rest propose: %d %s", r.Status, r.Body)
+	}
+	res := rpc(ai, 3, "tools/call", map[string]any{"name": "rangka_changeset_propose", "arguments": body})
+	if res["isError"] != true || get(res, "structuredContent", "error", "code") != "ai_forbidden_path" ||
+		fmt.Sprint(get(res, "structuredContent", "detail", "paths")) != "[apps/crm/app.rk]" ||
+		!strings.Contains(fmt.Sprint(get(res, "structuredContent", "error", "message")), "apps/crm/app.rk") {
+		t.Fatalf("mcp propose: %v", res)
+	}
+	// the service answers the same 403 with the paths
+	_, err := e.s.Changes.Propose(context.Background(), changeset.Actor{ID: "ceo@saga.co.id", Org: "kopi-senja", Roles: []string{"owner"}, Kind: "ai", Assistant: true}, body)
+	if ce, ok := err.(*changeset.Error); !ok || ce.Status != 403 || ce.Code != "ai_forbidden_path" || fmt.Sprint(get(ce.Detail, "paths")) != "[apps/crm/app.rk]" {
+		t.Fatalf("service propose: %#v", err)
+	}
+	// the owner may propose it; it is high risk
+	e.login()
+	if cs := e.must(201, "POST", "/api/v1/changesets", body).JSON; cs["risk"] != "high" {
+		t.Fatalf("owner propose: risk %v", cs["risk"])
+	}
+	// config.apps stays proposable for the assistant
+	cs := call(ai, "rangka_changeset_propose", map[string]any{"title": "Pasang kasir", "ops": []any{map[string]any{"op": "patch", "path": "config.rk",
+		"patch": []any{map[string]any{"op": "add", "path": "/apps/-", "value": "kasir"}}}}})
+	if cs["status"] != "proposed" || cs["source"] != "ai" {
+		t.Fatalf("config.apps: %v", cs)
+	}
+	// but config.ai is not
+	res = rpc(ai, 4, "tools/call", map[string]any{"name": "rangka_changeset_propose", "arguments": map[string]any{"title": "Terapkan sendiri",
+		"ops": []any{map[string]any{"op": "patch", "path": "config.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/ai/auto_apply", "value": "low_risk"}}}}}})
+	if get(res, "structuredContent", "error", "code") != "ai_forbidden_path" {
+		t.Fatalf("config.ai: %v", res)
+	}
+}

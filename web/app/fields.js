@@ -147,6 +147,15 @@
     };
   }
 
+  /** The list filter a link picker searches with: a model with a check field named active hides records set to
+   *  false (a master the owner switched off, since a record still in use cannot be deleted); empty or unset counts
+   *  as active, and a value already in the field keeps showing (rangka-os card t_45f9c276). */
+  function pickFilter(ctx, to) {
+    var tm = (ctx.meta.models || {})[to];
+    var fd = tm && (tm.fields || []).filter(function (x) { return x.name === "active"; })[0];
+    return fd && fd.type === "check" ? "active != false" : undefined;
+  }
+
   function LinkInput(p) {
     var ctx = p.ctx, f = p.field, to = f.to;
     var qs = useState(null), q = qs[0], setQ = qs[1]; // null until the field is first opened
@@ -156,7 +165,7 @@
       if (q === null) return undefined;
       var dead = false;
       var t = setTimeout(function () {
-        ctx.api.list(to, { q: q || undefined, limit: 20 }).then(function (r) {
+        ctx.api.list(to, { q: q || undefined, filter: pickFilter(ctx, to), limit: 20 }).then(function (r) {
           if (dead) return;
           (r.data || []).forEach(function (x) { ctx.cache.put(to, x); });
           setHits(r.data || []);
@@ -202,7 +211,7 @@
       if (q === null) return undefined;
       var dead = false;
       var t = setTimeout(function () {
-        ctx.api.list(to, { q: q.trim() || undefined, limit: HITS_LIMIT }).then(function (r) {
+        ctx.api.list(to, { q: q.trim() || undefined, filter: pickFilter(ctx, to), limit: HITS_LIMIT }).then(function (r) {
           if (dead) return;
           (r.data || []).forEach(function (x) { ctx.cache.put(to, x); });
           setHits(r.data || []);

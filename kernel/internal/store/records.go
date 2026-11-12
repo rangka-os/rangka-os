@@ -646,3 +646,43 @@ func toInt(v any) int64 {
 	}
 	return 0
 }
+
+// Scan reads a model's records for an org that match conds (SQL over the table's columns, $1 is the org and args
+// follow from $2), newest first like All, chunk rows at a time, and hands each to fn until fn says stop. A flow's
+// find reads only the rows its where: can match and stops at its first (or limit:) match instead of the whole table.
+func Scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, fn func(Record) (bool, error)) error {
+	if chunk <= 0 {
+		chunk = 200
+	}
+	where := append([]string{"org_id = $1"}, conds...)
+	base := append([]any{org}, args...)
+	var lastAt any
+	var lastName string
+	for {
+		w, a := where, base
+		if lastAt != nil {
+			a = append(append([]any{}, base...), lastAt, lastName)
+			w = append(append([]string{}, where...), fmt.Sprintf("(created_at, name) < ($%d, $%d)", len(a)-1, len(a)))
+		}
+		res, err := q.Query(ctx, fmt.Sprintf("select %s from %s where %s order by created_at desc, name desc limit %d",
+			selectList(m), pg.QuoteIdent(TableName(m.Name)), strings.Join(w, " and "), chunk), a...)
+		if err != nil {
+			return err
+		}
+		rows := res.Maps()
+		for _, row := range rows {
+			lastAt, lastName = row["created_at"], str(row["name"])
+			r, err := fromRow(m, row)
+			if err != nil {
+				return err
+			}
+			stop, err := fn(r)
+			if err != nil || stop {
+				return err
+			}
+		}
+		if len(rows) < chunk {
+			return nil
+		}
+	}
+}

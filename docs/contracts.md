@@ -37,7 +37,7 @@ loads the linked record), list literals. Functions: `today()` (ISO date string, 
 `option('field', 'attr')` (attribute of the selected option of a select field, e.g. probability), `app_installed('sales')`,
 `truncate(s, n)`, `s.contains(t)`, `add_months(date, n)` (a `YYYY-MM-DD` date n calendar months later, the day clamped to the end of
 the target month: `2026-01-31` + 1 = `2026-02-28`; add to an anchor, never to the previous result) and
-`days_between(a, b)` (whole days from a to b, negative when b is earlier, 0 when either is empty; contract 0031) and
+`days_between(a, b)` (whole days from a to b, negative when b is earlier, 0 when either is empty; contract 0031), `epoch(t)` (a datetime or `YYYY-MM-DD` date as whole Unix seconds, null when empty), `timestamp(n)` (Unix seconds as an RFC 3339 UTC datetime, null when empty), for poll cursors (contract 0002), and
 `distance_m(a, b)` (metres between two `geo` positions, `1e9` when either has none, so a radius check fails without a position; contract 0030 §4). Globals: `user` (`user.name`, `user.roles`), `org` and `tax` (the
 current org's PKP status and PPN figures, contract 0010 §8), `event` (flows). Dates are ISO
 strings and compare as strings. Missing values are `''` for data/date/link, `0` for numbers, `false` for check.
@@ -49,7 +49,7 @@ Every model → table `r_<model>` with typed columns (+ `org_id`, `name` PK per 
 → child table `r_<child_model>` with `parent`, `parent_field`, `idx`. Submittable: create as draft with name `DRAFT-xxxx`;
 naming pattern applied at submit (`INV-{YYYY}-{#####}` per org); submitted (1) is immutable (409); cancel → 2; amend →
 new draft with `amended_from` (a unique value still held, e.g. by the cancelled original, is a 422 `unique` issue,
-as on create). Submit renames `DRAFT-xxxx` and every link to it (link fields, child rows, `x_` link fields) follows. Rules run on `save` and `submit`; `level: warn` returns warnings, error blocks. A rule whose
+as on create). Submit renames `DRAFT-xxxx` and every link to it (link fields, child rows, `x_` link fields) follows. Delete is 409 `linked` while a record that is not cancelled still links the record (a link field, a child row, an `x_` link field; a self link does not count); the message names that record only to someone who may read it. Rules run on `save` and `submit`; `level: warn` returns warnings, error blocks. A rule whose
 check cannot be evaluated counts as failed (`code: rule_error`, the message says it could not be checked): an error
 rule blocks, a warn rule warns.
 Computed fields recomputed on every save. Status for invoices: draft, submitted, partly, paid, overdue, cancelled (see

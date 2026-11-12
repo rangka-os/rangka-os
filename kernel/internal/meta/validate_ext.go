@@ -80,7 +80,7 @@ func (v *validator) withOverlayFields(m *Model, name string) *Model {
 	}
 	raw["fields"] = append(append([]any{}, asList(m.Raw["fields"])...), extra...)
 	cp := *m
-	cp.Raw, cp.byName = raw, nil
+	cp.Raw, cp.byName = raw, indexFields(cp.Fields)
 	return &cp
 }
 

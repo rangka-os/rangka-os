@@ -41,7 +41,7 @@ def check_set_once(rep, p, i, f, child):
         rep.add("error", p, f"fields/{i}/set_once", "set_once_child", "set_once is for fields of the document itself; a table row can be removed and added again")
     elif f.get("type") in SET_ONCE_EMPTY_IS_VALUE:
         rep.add("error", p, f"fields/{i}/set_once", "set_once_type", f'set_once needs a field whose empty value means "not filled"; a {pystr(f.get("type"))} field starts at 0, false or empty')
-FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m"}
+FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
 # documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)

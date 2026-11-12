@@ -735,7 +735,7 @@ func (o *op) resumeFlow(ap *store.Approval, d *Decision) error {
 	// a flow a caller started by hand stays manual after its approval (contract 0026)
 	prev := o.manualRun
 	o.manualRun = ap.Args["manual"] == true
-	err := o.e.flowIn(o, f, meta.AsMap(ap.Args["event"]), int(toInt(ap.Args["resume"])), vars, out)
+	err := o.e.flowIn(o, f, meta.AsMap(ap.Args["event"]), int(toInt(ap.Args["resume"])), vars, meta.AsMap(ap.Args[flowKeyArg]), out)
 	o.manualRun = prev
 	if err != nil {
 		return err
@@ -768,6 +768,10 @@ func (e *Engine) Reject(ctx context.Context, a Actor, id, reason string) (*Decis
 		if isFlowApproval(ap) {
 			f := strings.TrimPrefix(ap.Verb, "flow:")
 			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "flow.rejected", "flow/"+f, approvalLabel(ap)+": "+reason, map[string]any{"approval": ap.ID, "reason": reason}); err != nil {
+				return err
+			}
+			// the run ends here: its idempotency key is free again for the same event (audit flowkey-release N1)
+			if err := releaseFlowKey(o.ctx, o.tx, a.Org, f, meta.AsMap(ap.Args[flowKeyArg]), meta.AsMap(ap.Args["vars"])); err != nil {
 				return err
 			}
 		} else if err := o.voidExcept(ap.Model, ap.Name, ap.Verb, ap.ID); err != nil {

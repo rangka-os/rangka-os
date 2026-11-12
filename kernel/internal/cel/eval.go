@@ -493,6 +493,18 @@ func typeName(v any) string {
 	return reflect.TypeOf(v).String()
 }
 
+// parseInstant reads an RFC 3339 datetime (fraction optional), a datetime without zone (UTC), or an ISO date
+// (midnight UTC).
+func parseInstant(s string) (time.Time, error) {
+	s = strings.TrimSpace(s)
+	for _, layout := range []string{time.RFC3339Nano, "2006-01-02T15:04:05", "2006-01-02 15:04:05", "2006-01-02T15:04", "2006-01-02"} {
+		if t, err := time.Parse(layout, s); err == nil {
+			return t, nil
+		}
+	}
+	return time.Time{}, errf("not a datetime")
+}
+
 // IsDate reports whether s is an ISO date (YYYY-MM-DD).
 func IsDate(s string) bool {
 	if len(s) != 10 || s[4] != '-' || s[7] != '-' {
@@ -990,6 +1002,52 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			return NoPositionM, nil
 		}
 		return Haversine(pa[0], pa[1], pb[0], pb[1]), nil
+	case "epoch":
+		// epoch(t): a datetime (RFC 3339, with or without seconds' fraction) or an ISO date (midnight UTC) as whole
+		// Unix seconds; null for null or "". A poll cursor kept as a datetime becomes a vendor's since in seconds.
+		if err := need(1); err != nil {
+			return nil, err
+		}
+		switch a := Unwrap(args[0]).(type) {
+		case nil:
+			return nil, nil
+		case time.Time:
+			return a.Unix(), nil
+		case string:
+			if a == "" {
+				return nil, nil
+			}
+			if t, err := parseInstant(a); err == nil {
+				return t.Unix(), nil
+			}
+			return nil, errf("epoch() needs a datetime like '2026-11-11T08:00:00Z' or a date, got '%s'", a)
+		}
+		return nil, errf("epoch() needs a datetime, got %s", typeName(args[0]))
+	case "timestamp":
+		// timestamp(n): Unix seconds (a number or numeric text; fractions dropped) as an RFC 3339 UTC datetime;
+		// null for null or "".
+		if err := need(1); err != nil {
+			return nil, err
+		}
+		a := Unwrap(args[0])
+		if s, ok := a.(string); ok {
+			if s == "" {
+				return nil, nil
+			}
+			n, err := strconv.ParseFloat(strings.TrimSpace(s), 64)
+			if err != nil {
+				return nil, errf("timestamp() needs Unix seconds, got '%s'", s)
+			}
+			a = n
+		}
+		if a == nil {
+			return nil, nil
+		}
+		f, ok := toFloat(a)
+		if !ok || math.IsNaN(f) || math.Abs(f) > 253402300799 { // year 9999
+			return nil, errf("timestamp() needs Unix seconds, got %v", a)
+		}
+		return time.Unix(int64(f), 0).UTC().Format(time.RFC3339), nil
 	case "round":
 		if len(args) < 1 || len(args) > 2 {
 			return nil, errf("round() takes 1 or 2 arguments, got %d", len(args))

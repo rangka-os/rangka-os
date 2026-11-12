@@ -381,7 +381,9 @@ func TestValidateXMLFilterUser(t *testing.T) {
 	copyDir(t, printRoot, dir)
 	copyDir(t, printSite, dir+"/site")
 	head := "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json\n"
-	for name, filter := range map[string]string{"u1_xml": "owner == user.name", "u2_xml": "docstatus == 1 && 'user' != customer"} {
+	for name, filter := range map[string]string{"u1_xml": "owner == user.name", "u2_xml": "docstatus == 1 && 'user' != customer",
+		"u3_xml": "remarks != 'a user note'", "u4_xml": "customer.user != ''", "u5_xml": "[1].exists(user, user > 0)",
+		"u6_xml": "has(user.name) && docstatus == 1"} {
 		writeFile(t, dir+"/site/print/"+name+".rk", head+"name: "+name+"\nmodel: customer\noutput: xml\ntemplate: "+name+".xml\nrelated:\n  invoices:\n    model: sales_invoice\n    match: {customer: name}\n    filter: \""+filter+"\"\n")
 		writeFile(t, dir+"/site/print/"+name+".xml", `<A/>`)
 	}
@@ -389,7 +391,24 @@ func TestValidateXMLFilterUser(t *testing.T) {
 	var buf bytes.Buffer
 	rep.Print(&buf)
 	out := buf.String()
-	if !strings.Contains(out, "u1_xml.rk") || !strings.Contains(out, "xml_filter_user") || strings.Contains(out, "u2_xml.rk") {
-		t.Errorf("user in an XML filter (u1 only, not a quoted 'user'):\n%s", out)
+	for _, ok := range []string{"u2_xml.rk", "u3_xml.rk", "u4_xml.rk", "u5_xml.rk"} { // quoted text, a field, a macro variable
+		if lineWith(out, ok, "xml_filter_user") {
+			t.Errorf("%s does not read user:\n%s", ok, out)
+		}
 	}
+	for _, bad := range []string{"u1_xml.rk", "u6_xml.rk"} {
+		if !lineWith(out, bad, "xml_filter_user") {
+			t.Errorf("%s reads user:\n%s", bad, out)
+		}
+	}
+}
+
+// lineWith reports whether a line of out holds both a and b.
+func lineWith(out, a, b string) bool {
+	for _, l := range strings.Split(out, "\n") {
+		if strings.Contains(l, a) && strings.Contains(l, b) {
+			return true
+		}
+	}
+	return false
 }

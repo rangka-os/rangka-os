@@ -236,8 +236,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	}
 	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows
 	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf,
-		StartFlow: func(ctx context.Context, org, flow string, event map[string]any, key string) error {
-			_, err := s.Queue.Enqueue(ctx, nil, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
+		StartFlow: func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, key string) error {
+			_, err := s.Queue.Enqueue(ctx, qr, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
 			return err
 		}}
 	s.API.Connectors = s.Connectors
@@ -445,7 +445,16 @@ func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)
 	}
-	return s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true)
+	out, err := s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true, meta.AsMap(j.Args["flow_key"]))
+	var perm *jobs.Permanent
+	if err != nil && (j.Attempt >= j.MaxAttempts || errors.As(err, &perm)) {
+		// the run will never finish: its idempotency key is free again for the same event (audit flowkey-release N1);
+		// a replay of this dead-lettered job is then skipped
+		if rerr := s.Engine.ReleaseFlowJob(context.WithoutCancel(ctx), j.Org, j.Args); rerr != nil {
+			s.Engine.Log("flow %s: release idempotency key: %v", name, rerr)
+		}
+	}
+	return out, err
 }
 
 // runCallJob sends one connector action (a flow's call: step). Its errors are scrubbed; a call that cannot succeed

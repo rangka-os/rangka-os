@@ -102,12 +102,14 @@ fields:
   - {name: lines, type: table, of: memo_credit_line, label: {id: Baris}}
   - {name: total, type: currency, label: {id: Total}, compute: "lines.map(l, l.qty).sum()"}
   - {name: over_seen, type: check, label: {id: Lewat batas saat diajukan}, compute: "acct.limit_amt > 0 && acct.used + total > acct.limit_amt"}
+  - {name: b_limit, type: currency, label: {id: Batas akun lain}, compute: "acct2.limit_amt"}
   - {name: back, type: data, label: {id: Rujukan balik}, read_only: true}
 `,
 }
 
 // The rename does not read a referrer again either: an account that links the document back keeps the values the
-// submit read, with the link names moved to the number (audit credit-race 1).
+// submit read, with the link names moved to the number (audit credit-race 1). B is read by a compute before the
+// rename, so the hook sees the cache entry the rename corrected in place (credit-race putaran 2 temuan 3).
 func TestSubmitRenameKeepsReferrerReadBySubmit(t *testing.T) {
 	files := map[string]string{}
 	for k, v := range memoCreditFiles {
@@ -139,7 +141,11 @@ func TestSubmitRenameKeepsReferrerReadBySubmit(t *testing.T) {
 		t.Fatal(err)
 	}
 	var back string
+	var cachedBefore bool
 	e.Hooks["crm.mark_won"] = func(h *HookCtx) (map[string]any, error) {
+		// b_limit read B while submit computed, before the rename: the rename must have moved B's cached links in
+		// place, not dropped B so the read below loads it fresh (audit credit-race putaran 2 temuan 3)
+		_, cachedBefore = h.op.links["memo_acct/"+bn]
 		// another unit of work uses A's room while this submit runs (A's row is not locked by the submit)
 		if _, err := e.Update(ctx, owner, "memo_acct", an, map[string]any{"used": 600}); err != nil {
 			return nil, err
@@ -164,6 +170,9 @@ func TestSubmitRenameKeepsReferrerReadBySubmit(t *testing.T) {
 	}
 	if got["over_seen"] != false {
 		t.Fatalf("over_seen = %v after the hook, want false (the account as the submit read it)", got["over_seen"])
+	}
+	if !cachedBefore {
+		t.Fatalf("account B was not in the link cache when the hook ran: the test does not exercise the in-place rename")
 	}
 	if back != fin+"|"+fin {
 		t.Fatalf("cached account links = %q, want %s|%s", back, fin, fin)

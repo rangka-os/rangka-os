@@ -1,0 +1,3 @@
+<div>BAST {{.Doc.name}} {{.Doc.customer}}</div>
+{{range $row := .Doc.units}}<div>{{$row.unit}} {{$row.condition}}</div>{{end}}
+<div>Ditandatangani {{.Doc.signed_by}}</div>

@@ -391,6 +391,7 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 				}
 			}
 		}
+		setOnceCheck(v.rep.add, p, i, f, boolean(m.Raw, "is_child"))
 		if of, _ := f["of"].(string); of != "" {
 			if x, ok := visible[of]; ok && !boolean(x.m.Raw, "is_child") {
 				v.rep.add("error", p, fmt.Sprintf("fields/%d/of", i), "not_child", fmt.Sprintf(`"%s" must set is_child: true to be used in a table field`, of))
@@ -545,6 +546,25 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 		}
 	}
 	v.cycles(p, m)
+}
+
+// setOnceEmptyIsValue: types whose empty value (0, false, an empty list) is also a real value, so set_once would
+// lock them from the start.
+var setOnceEmptyIsValue = map[string]bool{"int": true, "float": true, "currency": true, "percent": true, "rating": true, "money": true,
+	"check": true, "duration": true, "table": true, "multiselect": true}
+
+// setOnceCheck (contract 0030 §4): set_once only on top-level fields whose empty value means "not filled"; the
+// same check for a model's fields and an overlay's (check_set_once in rangka_validate.py).
+func setOnceCheck(add func(level, path, where, code, msg string), p string, i int, f map[string]any, child bool) {
+	if f["set_once"] != true {
+		return
+	}
+	switch {
+	case child:
+		add("error", p, fmt.Sprintf("fields/%d/set_once", i), "set_once_child", `set_once is for fields of the document itself; a table row can be removed and added again`)
+	case setOnceEmptyIsValue[pyStr(f["type"])]:
+		add("error", p, fmt.Sprintf("fields/%d/set_once", i), "set_once_type", fmt.Sprintf(`set_once needs a field whose empty value means "not filled"; a %s field starts at 0, false or empty`, pyStr(f["type"])))
+	}
 }
 
 var optionRe = regexp.MustCompile(`option\(\s*'(\w+)'`)

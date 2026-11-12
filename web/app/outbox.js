@@ -4,9 +4,9 @@
  * IndexedDB is not there) and sends them again, in order, when the connection is back. Every write carries an
  * Idempotency-Key made when the user pressed the button, so a double tap, a lost answer or a replay never writes twice.
  *
- * A job is one press: {id, scope, screen, model, body, submit, keys: {create, submit}, at, created?, state, error?}.
+ * A job is one press: {id, scope, screen, model, name?, body, submit, keys: {create, submit}, at, created?, state, error?}.
  * run(api, job) creates the record (and submits it when job.submit); a job that already created its record only
- * submits. Errors:
+ * submits. A job with a name updates that existing draft (PATCH body) instead of creating one (a roll's parent). Errors:
  *   - retryable (no connection, 5xx, 409 idempotency_in_progress): the job stays "queued" and is tried again
  *   - any other refusal (4xx: a rule, a permission): the job becomes "failed" with the server's words, is never sent
  *     again on its own, and stays until the user dismisses it
@@ -118,6 +118,9 @@
     var at = queued ? job.at : null;
     function create() {
       if (job.created) return Promise.resolve({ name: job.created });
+      if (job.name) { // an existing draft (roll): PATCH its rows, then submit; a PATCH repeated with the same body writes the same
+        return api.update(job.model, job.name, job.body).then(function (r) { job.created = (r && r.name) || job.name; return r; });
+      }
       return api.create(job.model, job.body, { key: job.keys.create, occurredAt: at }).then(function (r) {
         job.created = r.name;
         return r;
@@ -171,7 +174,7 @@
     dismiss: function (id) { return del("jobs", id).then(emit); },
     subscribe: function (fn) { listeners.push(fn); return function () { listeners = listeners.filter(function (x) { return x !== fn; }); }; },
     newJob: function (o) {
-      return { id: newKey(), scope: o.scope, screen: o.screen, model: o.model, body: o.body, submit: !!o.submit,
+      return { id: newKey(), scope: o.scope, screen: o.screen, model: o.model, name: o.name || null, body: o.body, submit: !!o.submit,
         keys: { create: newKey(), submit: newKey() }, at: new Date().toISOString(), state: "queued", tries: 0 };
     },
     cache: {

@@ -96,7 +96,10 @@
       case "currency": return API.rupiah(v);
       case "percent": return formatNumber(v) + "%";
       case "int": case "float": return formatNumber(v);
-      default: return String(v);
+      case "geo": return RA.geoText ? RA.geoText(v) || "—" : "—";
+      case "image": return "Ada foto";
+      case "signature": return "Sudah tanda tangan";
+      default: return typeof v === "object" ? JSON.stringify(v) : String(v);
     }
   }
   RA.fieldText = fieldText;
@@ -379,13 +382,18 @@
           onChange: function (e) { set(e.target.value); } });
       case "currency":
         return h(CurrencyInput, { id: id, label: label, required: f.required, value: v, error: p.error, hint: hint, onChange: set });
+      case "geo":
+        if (RA.GeoInput) return h(RA.GeoInput, { id: id, label: label, value: v, error: p.error, hint: hint, onChange: set });
+        break;
+      case "image": case "signature":
+        if (RA.AttachmentInput) return h(RA.AttachmentInput, { id: id, label: label, kind: f.type, model: m, recordName: rec.name, value: v, error: p.error, hint: hint, onChange: set });
+        break;
       case "int": case "float": case "percent":
         return h(NumberInput, { id: id, field: f, label: label, required: f.required, value: v, error: p.error, hint: hint, onChange: set });
-      default:
-        return h(R.Field, { id: id, label: label, required: f.required, value: v == null ? "" : String(v), error: p.error, hint: hint, autoComplete: "off",
-          type: f.type === "phone" ? "tel" : undefined, numeric: f.type === "npwp",
-          onChange: function (e) { set(f.type === "npwp" ? e.target.value.replace(/\D/g, "") : e.target.value); } });
     }
+    return h(R.Field, { id: id, label: label, required: f.required, value: v == null ? "" : String(v), error: p.error, hint: hint, autoComplete: "off",
+      type: f.type === "phone" ? "tel" : undefined, numeric: f.type === "npwp",
+      onChange: function (e) { set(f.type === "npwp" ? e.target.value.replace(/\D/g, "") : e.target.value); } });
   }
 
   RA.FieldEditor = FieldEditor;

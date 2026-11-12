@@ -30,7 +30,18 @@ SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
 BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 LEGACY = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
-FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "epoch", "timestamp"}
+SET_ONCE_EMPTY_IS_VALUE = {"int", "float", "currency", "percent", "rating", "money", "check", "duration", "table", "multiselect"}
+
+
+def check_set_once(rep, p, i, f, child):
+    """Contract 0030 §4: set_once only on top-level fields whose empty value means "not filled" (validate.go setOnceCheck)."""
+    if f.get("set_once") is not True:
+        return
+    if child:
+        rep.add("error", p, f"fields/{i}/set_once", "set_once_child", "set_once is for fields of the document itself; a table row can be removed and added again")
+    elif f.get("type") in SET_ONCE_EMPTY_IS_VALUE:
+        rep.add("error", p, f"fields/{i}/set_once", "set_once_type", f'set_once needs a field whose empty value means "not filled"; a {pystr(f.get("type"))} field starts at 0, false or empty')
+FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
 # documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)
@@ -419,6 +430,7 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                     t = f.get(key)
                     if t and t not in visible:
                         rep.add("error", p, f"fields/{i}/{key}", "unknown_model", f'"{t}" is not a model in this app or its dependencies{suggest(t, visible)}')
+                check_set_once(rep, p, i, f, m.get("is_child") is True)
                 if f.get("of") in visible and not visible[f["of"]][2].get("is_child"):
                     rep.add("error", p, f"fields/{i}/of", "not_child", f'"{f["of"]}" must set is_child: true to be used in a table field')
                 for pk in f.get("peek", []):
@@ -1712,6 +1724,7 @@ def check_overlays(rep, V, apps, allmodels, overlays):
             if n in seen:
                 rep.add("error", p, f"fields/{i}", "duplicate_field", f'"{n}" is already a field of {mn}')
             seen.add(n)
+            check_set_once(rep, p, i, f, m.get("is_child") is True)  # an overlay may not unlock what a module may not
             for key in ("to", "of"):
                 t = f.get(key)
                 if t and t not in visible:
@@ -1909,14 +1922,14 @@ def check_screens(rep, V, apps, allmodels, only, screens, prints=()):
         if dup:
             rep.add("error", p, "name", "duplicate_screen", f'screen "{stem}" is already shipped by {first[stem][0]}; screen names are unique per site')
             continue
-        check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints)
+        check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints, {st for _a, st, _p, _d in screens})
     for name, a in apps.items():
         if a["kind"] != "app" or (only and name not in only) or not a["app_path"]:
             continue
         check_work(rep, apps, name, a, first)
 
 
-def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints=()):
+def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints=(), names=()):
     schema_errors(rep, V, "screen", p, d)
     raw = d if isinstance(d, dict) else {}
     if not isinstance(raw.get("name"), str) or raw["name"] != stem:
@@ -1942,6 +1955,183 @@ def check_screen(rep, V, apps, allmodels, roles, app, stem, p, d, prints=()):
         check_screen_counter(rep, p, raw["counter"], visible, prints)
     if typ == "queue" and isinstance(raw.get("queue"), dict):
         check_screen_queue(rep, p, raw["queue"], visible)
+    b = raw.get(typ) if isinstance(raw.get(typ), dict) else None
+    if b is not None and typ == "roll":
+        check_screen_roll(rep, p, b, visible)
+    if b is not None and typ == "handover":
+        check_screen_handover(rep, p, b, visible, prints)
+    if b is not None and typ == "clock":
+        check_screen_clock(rep, p, b, visible)
+    if b is not None and typ == "route":
+        check_screen_route(rep, p, b, visible, names)
+
+
+def _d(x):
+    return x if isinstance(x, dict) else None
+
+
+def screen_document(rep, p, typ, b, visible):
+    """The parent document slot of a roll or handover screen (validate_screen_ws.go screenDocument)."""
+    doc = _d(b.get("document"))
+    if doc is None:
+        return None, None, None
+    mn, m, fields = slot_model(rep, p, f"{typ}/document/model", doc, visible)
+    if not mn:
+        return None, None, None
+    parens(rep, p, f"{typ}/document/find", doc.get("find"))
+    slot_set(rep, p, f"{typ}/document/set", mn, fields, doc.get("set"))
+    slot_field(rep, p, f"{typ}/document/title", mn, fields, doc.get("title"))
+    slot_field(rep, p, f"{typ}/document/subtitle", mn, fields, doc.get("subtitle"))
+    if b.get("submit") is not False and m.get("is_submittable") is not True:
+        rep.add("error", p, f"{typ}/document/model", "screen_not_submittable", f"{mn} is not submittable; set submit: false or pick a submittable document")
+    return mn, m, fields
+
+
+def linked_model(f, visible):
+    if not f or f.get("type") != "link" or not isinstance(f.get("to"), str) or f["to"] not in visible:
+        return None, None
+    return f["to"], fields_of(visible[f["to"]][2])
+
+
+def check_screen_roll(rep, p, b, visible):
+    mn, m, fields = screen_document(rep, p, "roll", b, visible)
+    if not mn:
+        return
+    rows = _d(b.get("rows")) or {}
+    table = slot_field(rep, p, "roll/rows/table", mn, fields, rows.get("table"), ["table"])
+    rn, rm, rf = child_of(table, visible)
+    if not rn:
+        return
+    slot_field(rep, p, "roll/rows/label", rn, rf, rows.get("label"))
+    slot_field(rep, p, "roll/rows/note", rn, rf, rows.get("note"), ["data", "text"])
+    slot_field(rep, p, "roll/rows/qty", rn, rf, rows.get("qty"), NUMERIC_KINDS)
+    mark = _d(rows.get("mark"))
+    if mark is not None and rows.get("qty") is not None:
+        rep.add("error", p, "roll/rows", "screen_slot_type", "rows take mark or qty, not both")
+    if mark is not None:
+        f = slot_field(rep, p, "roll/rows/mark/field", rn, rf, mark.get("field"), ["select"])
+        if f is not None:
+            opts = option_values(f)
+            for i, x in enumerate(mark.get("values") if isinstance(mark.get("values"), list) else []):
+                if isinstance(x, str) and x not in opts:
+                    rep.add("error", p, f"roll/rows/mark/values/{i}", "screen_slot_type", f'"{x}" is not an option of {pystr(mark.get("field"))}')
+            dv = mark.get("default")
+            if isinstance(dv, str) and dv not in opts:
+                rep.add("error", p, "roll/rows/mark/default", "screen_slot_type", f'"{dv}" is not an option of {pystr(mark.get("field"))}')
+    add_by = b.get("add_by") if isinstance(b.get("add_by"), str) else ""
+    sc = _d(b.get("scan"))
+    if add_by in ("scan", "search") and sc is None:
+        rep.add("error", p, "roll/add_by", "screen_slot_type", f"add_by {add_by} needs the scan slot (the row link it fills)")
+    if sc is not None:
+        lf = slot_field(rep, p, "roll/scan/field", rn, rf, sc.get("field"), ["link"])
+        ln, lff = linked_model(lf, visible)
+        if ln:
+            slot_field(rep, p, "roll/scan/match", ln, lff, sc.get("match"))
+
+
+def screen_print(rep, p, where, x, mn, prints):
+    if isinstance(x, str) and not any(st == x and isinstance(d, dict) and d.get("model") == mn for (_a, _r, st, _p, d) in prints):
+        rep.add("error", p, where, "unknown_print", f'"{x}" is not a print format of {mn}')
+
+
+def check_screen_handover(rep, p, b, visible, prints):
+    mn, m, fields = screen_document(rep, p, "handover", b, visible)
+    if not mn:
+        return
+    rows = _d(b.get("rows")) or {}
+    table = slot_field(rep, p, "handover/rows/table", mn, fields, rows.get("table"), ["table"])
+    rn, rm, rf = child_of(table, visible)
+    if rn:
+        unit = slot_field(rep, p, "handover/rows/unit", rn, rf, rows.get("unit"), ["link"])
+        slot_field(rep, p, "handover/rows/condition", rn, rf, rows.get("condition"), ["select"])
+        slot_field(rep, p, "handover/rows/qty", rn, rf, rows.get("qty"), NUMERIC_KINDS)
+        slot_field(rep, p, "handover/rows/note", rn, rf, rows.get("note"), ["data", "text"])
+        sc = _d(b.get("scan"))
+        if sc is not None:
+            un, uf = linked_model(unit, visible)
+            if un:
+                slot_field(rep, p, "handover/scan/match", un, uf, sc.get("match"))
+    ph = _d(b.get("photos"))
+    if ph is not None:
+        slot_field(rep, p, "handover/photos/field", mn, fields, ph.get("field"), ["image"])
+    sg = _d(b.get("signature"))
+    if sg is not None:
+        slot_field(rep, p, "handover/signature/field", mn, fields, sg.get("field"), ["signature"])
+        slot_field(rep, p, "handover/signature/by", mn, fields, sg.get("by"), ["data", "text"])
+    screen_print(rep, p, "handover/print", b.get("print"), mn, prints)
+
+
+def check_screen_clock(rep, p, b, visible):
+    rec = _d(b.get("record"))
+    if rec is None:
+        return
+    mn, m, fields = slot_model(rep, p, "clock/record/model", rec, visible)
+    if not mn:
+        return
+    parens(rep, p, "clock/record/filter", rec.get("filter"))
+    slot_set(rep, p, "clock/record/set", mn, fields, rec.get("set"))
+    for side in ("in", "out"):
+        sd = _d(b.get(side)) or {}
+        slot_field(rep, p, f"clock/{side}/field", mn, fields, sd.get("field"), ["datetime"])
+        slot_field(rep, p, f"clock/{side}/location", mn, fields, sd.get("location"), ["geo"])
+        slot_field(rep, p, f"clock/{side}/photo", mn, fields, sd.get("photo"), ["image"])
+    slot_field(rep, p, "clock/reason", mn, fields, b.get("reason"), ["data", "text"])
+    if b.get("submit") is True and m.get("is_submittable") is not True:
+        rep.add("error", p, "clock/submit", "screen_not_submittable", f"{mn} is not submittable; drop submit: true")
+    site = _d(b.get("site"))
+    if site is not None:
+        sn, sm, sf = slot_model(rep, p, "clock/site/model", site, visible)
+        if sn:
+            l = slot_field(rep, p, "clock/site/link", mn, fields, site.get("link"), ["link"])
+            if l is not None and l.get("to") != sn:
+                rep.add("error", p, "clock/site/link", "screen_slot_type", f'"{pystr(site.get("link"))}" links to {l.get("to")}; the site is {sn}')
+            parens(rep, p, "clock/site/filter", site.get("filter"))
+            slot_field(rep, p, "clock/site/title", sn, sf, site.get("title"))
+            slot_field(rep, p, "clock/site/location", sn, sf, site.get("location"), ["geo"])
+            slot_field(rep, p, "clock/site/radius_m", sn, sf, site.get("radius_m"), NUMERIC_KINDS)
+
+
+def check_screen_route(rep, p, b, visible, names):
+    st = _d(b.get("stops"))
+    if st is None:
+        return
+    mn, m, fields = slot_model(rep, p, "route/stops/model", st, visible)
+    if not mn:
+        return
+    parens(rep, p, "route/stops/filter", st.get("filter"))
+    for k in ("title", "subtitle", "address"):
+        slot_field(rep, p, f"route/stops/{k}", mn, fields, st.get(k))
+    slot_field(rep, p, "route/stops/location", mn, fields, st.get("location"), ["geo"])
+    vi = _d(b.get("visit"))
+    if vi is not None:
+        vn, vm, vf = slot_model(rep, p, "route/visit/model", vi, visible)
+        if vn:
+            l = slot_field(rep, p, "route/visit/link", vn, vf, vi.get("link"), ["link"])
+            if l is not None and l.get("to") != mn:
+                rep.add("error", p, "route/visit/link", "screen_slot_type", f'"{pystr(vi.get("link"))}" links to {l.get("to")}; the stops are {mn}')
+            slot_set(rep, p, "route/visit/set", vn, vf, vi.get("set"))
+            slot_field(rep, p, "route/visit/location", vn, vf, vi.get("location"), ["geo"])
+            slot_field(rep, p, "route/visit/photo", vn, vf, vi.get("photo"), ["image"])
+            if vi.get("submit") is True and vm.get("is_submittable") is not True:
+                rep.add("error", p, "route/visit/submit", "screen_not_submittable", f"{vn} is not submittable; drop submit: true")
+    for i, a in enumerate(b.get("actions") if isinstance(b.get("actions"), list) else []):
+        a = a if isinstance(a, dict) else {}
+        at = f"route/actions/{i}"
+        scr = a.get("screen") if isinstance(a.get("screen"), str) else None
+        cr = a.get("create") if isinstance(a.get("create"), str) else None
+        if (scr is None) == (cr is None):
+            rep.add("error", p, at, "screen_slot_type", "an action opens a screen or creates a record (one of screen, create)")
+            continue
+        if scr is not None:
+            if scr not in names:
+                rep.add("error", p, f"{at}/screen", "unknown_screen", f'"{scr}" is not a screen of this site')
+            if a.get("set") is not None:
+                rep.add("error", p, f"{at}/set", "screen_slot_type", "an action that opens a screen takes no set: (the screen's own set: reads stop)")
+            continue
+        if cr not in visible:
+            rep.add("error", p, f"{at}/create", "unknown_model", f'"{cr}" is not a model of this module or its requires{suggest(cr, visible)}')
+            continue
+        slot_set(rep, p, f"{at}/set", cr, fields_of(visible[cr][2]), a.get("set"))
 
 
 def pystr(x):

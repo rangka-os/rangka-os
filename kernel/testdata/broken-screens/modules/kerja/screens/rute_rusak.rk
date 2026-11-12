@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: rute_rusak
+type: route
+label: {id: Rute rusak}
+roles: [staf]
+offline: queue
+route:
+  stops: {model: jam_kerja, filter: "(", title: ghost, location: hours}
+  visit: {model: catatan_harian, link: text, submit: true}
+  actions:
+    - {label: {id: A}, screen: tidak_ada}
+    - {label: {id: B}, create: tidak_ada}
+    - {label: {id: C}, screen: catat, create: catatan_harian}
+    - {label: {id: D}, screen: catat, set: {text: "1"}}
+    - {label: {id: E}, create: catatan_harian, set: {ghost: "1"}}

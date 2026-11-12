@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: jam_rusak
+type: clock
+label: {id: Jam rusak}
+roles: [staf]
+offline: queue
+clock:
+  record: {model: catatan_harian, filter: "text == (", set: {nope: "1"}}
+  in: {field: text, location: text}
+  out: {field: ghost, photo: text}
+  site: {model: jam_kerja, link: text, location: hours, radius_m: note}
+  reason: ghost
+  submit: true

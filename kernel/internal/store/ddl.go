@@ -48,7 +48,7 @@ func SQLType(fieldType string) string {
 		return "date"
 	case "datetime":
 		return "timestamptz"
-	case "multiselect", "json", "daterange":
+	case "multiselect", "json", "daterange", "geo":
 		return "jsonb"
 	}
 	return "text"

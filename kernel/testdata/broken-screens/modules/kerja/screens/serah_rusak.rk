@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: serah_rusak
+type: handover
+label: {id: Serah rusak}
+roles: [staf]
+handover:
+  document: {model: jam_kerja, create: true}
+  rows: {table: breaks, unit: minutes, condition: minutes}
+  photos: {field: note}
+  signature: {field: staff, by: hours}
+  print: tidak_ada

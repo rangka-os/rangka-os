@@ -983,6 +983,25 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			return nil, err
 		}
 		return b.Unix()/86400 - a.Unix()/86400, nil // both midnight UTC: whole days, no duration saturation
+	case "distance_m":
+		// distance_m(a, b): metres between two positions ({lat, lng}, the geo field type, contract 0030 §4) on the
+		// earth's mean radius (haversine). Without a position it is NoPositionM (1e9, farther than any two points on
+		// earth): "unknown" counts as far, so `distance_m(p, site) <= r` fails and `> r` holds without a position.
+		if err := need(2); err != nil {
+			return nil, err
+		}
+		pa, oka, err := geoArg(args[0])
+		if err != nil {
+			return nil, err
+		}
+		pb, okb, err := geoArg(args[1])
+		if err != nil {
+			return nil, err
+		}
+		if !oka || !okb {
+			return NoPositionM, nil
+		}
+		return Haversine(pa[0], pa[1], pb[0], pb[1]), nil
 	case "epoch":
 		// epoch(t): a datetime (RFC 3339, with or without seconds' fraction) or an ISO date (midnight UTC) as whole
 		// Unix seconds; null for null or "". A poll cursor kept as a datetime becomes a vendor's since in seconds.

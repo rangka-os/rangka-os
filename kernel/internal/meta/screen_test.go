@@ -26,7 +26,7 @@ func TestLoadScreensAndWork(t *testing.T) {
 		}
 		got = append(got, x+"/"+w.App)
 	}
-	if want := "isi_jam*@staf/kantor catat/kantor antrian@staf/kantor jual*@kasir/kantor dapur*@dapur/kantor jual_online@kasir/kantor"; join(got) != want {
+	if want := "isi_jam*@staf/kantor catat/kantor antrian@staf/kantor jual*@kasir/kantor dapur*@dapur/kantor jual_online@kasir/kantor absen_masuk*@pekerja/kantor absen_kelas*@pengajar/kantor serah_alat*@petugas/kantor rute_tagih*@penagih/kantor terima_bayar@penagih/kantor"; join(got) != want {
 		t.Fatalf("work = %q, want %q", join(got), want)
 	}
 }
@@ -34,7 +34,7 @@ func TestLoadScreensAndWork(t *testing.T) {
 // A screen of a unit that is not installed is neither returned nor offered.
 func TestScreenNotInstalled(t *testing.T) {
 	reg := Load("../../testdata/screens/apps", "../../testdata/screens/site", nil)
-	reg.Installed["kerja"], reg.Installed["kasir"] = false, false
+	reg.Installed["kerja"], reg.Installed["kasir"], reg.Installed["lapangan"] = false, false, false
 	if reg.Screen("isi_jam") != nil || len(reg.Work()) != 0 {
 		t.Fatal("screen of an uninstalled module is offered")
 	}

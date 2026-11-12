@@ -839,6 +839,7 @@ func (v *validator) overlays(all map[string]vis) {
 				v.rep.extra("error", p, fmt.Sprintf("fields/%d", i), "duplicate_field", fmt.Sprintf(`"%s" is already a field of %s`, n, mn))
 			}
 			seen[n] = true
+			setOnceCheck(v.rep.extra, p, i, f, boolean(own.Raw, "is_child")) // an overlay may not unlock what a module may not (audit R3-1)
 			for _, key := range []string{"to", "of"} {
 				if t, _ := f[key].(string); t != "" {
 					if _, ok := visible[t]; !ok {

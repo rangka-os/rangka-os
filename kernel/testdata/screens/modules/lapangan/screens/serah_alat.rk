@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: serah_alat
+type: handover
+label: {id: Serah terima alat}
+icon: truck
+roles: [petugas]
+device: tablet
+needs: [scan, photo, signature, print]
+handover:
+  document: {model: serah, find: "docstatus == 0", create: true, set: {customer: "'Penyewa baru'"}, title: customer, subtitle: date}
+  rows: {table: units, unit: unit, condition: condition, note: note}
+  scan: {match: code}
+  photos: {field: photo, min: 1}
+  signature: {field: signature, by: signed_by}
+  print: bast

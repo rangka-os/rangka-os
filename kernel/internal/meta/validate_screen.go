@@ -96,6 +96,18 @@ func (v *validator) screen(s *Screen, all map[string]vis, roles map[string]bool)
 			v.screenQueue(p, b, visible)
 		}
 	}
+	if b := asMap(raw[typ]); b != nil {
+		switch typ {
+		case "roll":
+			v.screenRoll(p, b, visible)
+		case "handover":
+			v.screenHandover(p, b, visible)
+		case "clock":
+			v.screenClock(p, b, visible)
+		case "route":
+			v.screenRoute(p, b, visible)
+		}
+	}
 }
 
 // screenModel resolves the model a slot names among the models the screen's unit sees, reporting unknown_model.

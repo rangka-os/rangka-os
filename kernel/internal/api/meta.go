@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"path/filepath"
 	"regexp"
@@ -181,7 +182,12 @@ func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
 		fail(w, &engine.StatusError{Status: 404, Code: "not_found", Msg: "no work screen " + name})
 		return
 	}
-	sets, err := s.Engine.ScreenSets(c.actor, sc)
+	vars, err := s.screenVars(r, c, sc)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	sets, err := s.Engine.ScreenSetsFor(c.actor, sc, vars)
 	if err != nil {
 		fail(w, err)
 		return
@@ -192,6 +198,61 @@ func (s *Server) getScreen(w http.ResponseWriter, r *http.Request, c *caller) {
 	}
 	delete(sets, "")
 	writeJSON(w, 200, map[string]any{"name": sc.Name, "screen": screenMeta(sc), "set": set, "sets": sets})
+}
+
+// screenVars loads the records a screen is opened for: ?stop=<model>/<name> (a route stop) and ?doc=<name> (the
+// parent of a roll or handover, a record of its document model), each through engine.Get, so a record the caller
+// may not read is a 404 like a missing one.
+func (s *Server) screenVars(r *http.Request, c *caller, sc *meta.Screen) (map[string]any, error) {
+	vars := map[string]any{}
+	if st := r.URL.Query().Get("stop"); st != "" {
+		model, name, ok := strings.Cut(st, "/")
+		if !ok || model == "" || name == "" {
+			return nil, &engine.StatusError{Status: 400, Code: "bad_request", Msg: "stop must be <model>/<name>"}
+		}
+		rec, err := s.screenRecord(r, c, model, name)
+		if err != nil {
+			return nil, err
+		}
+		vars["stop"] = rec
+	}
+	if d := r.URL.Query().Get("doc"); d != "" {
+		model, _ := asMapAny(sc.Block()["document"])["model"].(string)
+		if model == "" {
+			return nil, &engine.StatusError{Status: 400, Code: "bad_request", Msg: "screen " + sc.Name + " has no document"}
+		}
+		rec, err := s.screenRecord(r, c, model, d)
+		if err != nil {
+			return nil, err
+		}
+		vars["doc"] = rec
+	}
+	return vars, nil
+}
+
+func asMapAny(x any) map[string]any { m, _ := x.(map[string]any); return m }
+
+// screenRecord reads a record for a screen's set: through engine.Get (read permission, row scope, hidden fields).
+// A record the caller may not read is 404 like a missing one (audit F4); a field hidden from the caller reads as
+// its zero value, so a set: over it neither fails the screen nor learns the value (audit F5).
+func (s *Server) screenRecord(r *http.Request, c *caller, model, name string) (map[string]any, error) {
+	rec, err := s.Engine.Get(r.Context(), c.actor, model, name)
+	var pe *engine.PermissionError
+	if errors.As(err, &pe) {
+		return nil, &engine.StatusError{Status: 404, Code: "not_found", Msg: model + " " + name + " not found"}
+	}
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any(rec)
+	if m := s.Engine.Reg().Model(model); m != nil {
+		for _, f := range m.Fields {
+			if _, ok := out[f.Name]; !ok {
+				out[f.Name] = store.Zero(f)
+			}
+		}
+	}
+	return out, nil
 }
 
 // InstalledConnectors are the connectors a flow triggers or calls, or system.rk notify uses.

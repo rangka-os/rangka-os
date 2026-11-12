@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: serah_unit
+label: {id: Unit diserahkan}
+is_child: true
+fields:
+  - {name: unit, type: link, to: unit_alat, label: {id: Unit}, required: true}
+  - name: condition
+    type: select
+    label: {id: Kondisi}
+    default: "'baik'"
+    options:
+      - {value: baik, label: {id: Baik}}
+      - {value: lecet, label: {id: Lecet}}
+      - {value: rusak, label: {id: Rusak}}
+  - {name: note, type: data, label: {id: Catatan}}

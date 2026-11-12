@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: serah
+label: {id: Serah terima alat}
+is_submittable: true
+naming: SRH-{#####}
+title_field: customer
+fields:
+  - {name: customer, type: data, label: {id: Penyewa}, required: true, in_list: true}
+  - {name: date, type: date, label: {id: Tanggal}, default: today(), in_list: true}
+  - {name: units, type: table, of: serah_unit, label: {id: Unit}}
+  - {name: photo, type: image, label: {id: Foto alat}}
+  - {name: signature, type: signature, label: {id: Tanda tangan penyewa}}
+  - {name: signed_by, type: data, label: {id: Nama penanda tangan}}
+rules:
+  - name: units_required
+    on: submit
+    check: units.size() > 0
+    message: {id: Isi unit yang diserahkan}
+  - name: signed
+    on: submit
+    check: "signature != '' && signed_by != ''"
+    message: {id: Penyewa belum tanda tangan}
+permissions:
+  - {role: petugas, read: true, create: true, write: true, submit: true, print: true}

@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: roll_rusak2
+type: roll
+label: {id: Roll rusak 2}
+roles: [staf]
+roll:
+  document: {model: jam_kerja}
+  rows: {table: breaks, label: ghost, qty: minutes, note: minutes}
+  scan: {field: minutes}

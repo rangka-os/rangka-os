@@ -307,6 +307,9 @@
         return { record: r.body, approval: null };
       });
     };
+    /** POST /r/{model}/submit {names, force} (Kernel v0 additions, Nov 2026) → {results: [{name, status, new_name |
+     *  approval | error}], submitted, held, failed}: each draft on its own, one refusal does not stop the others. */
+    api.submitMany = function (model, names, force) { return json("POST", wrec(model) + "/submit", { names: names, force: !!force }); };
     api.amend = function (model, name) { return json("POST", wrec(model, name) + "/amend", {}); };
     /** → the action's result; {queued, jobId} for a queued job (202 {job_id, status:"queued"}); {record, approval} when
      *  an approval policy holds the action (202 {approval, approvals, record}). */
@@ -328,7 +331,7 @@
       return json("GET", "/api/v1/aggregate/" + enc(model) + qs([["q", o.q], ["filter", o.filter], ["group", o.group], ["fn", fns.join(",")]]));
     };
     /** GET /api/v1/screens/{name} (contract 0030) → {name, screen, set}: set: evaluated for the caller now. */
-    api.screen = function (name) { return json("GET", "/api/v1/screens/" + enc(name)); };
+    api.screen = function (name, q) { q = q || {}; return json("GET", "/api/v1/screens/" + enc(name) + qs([["stop", q.stop], ["doc", q.doc]])); };
     api.dashboard = function (name, period) { return json("GET", root() + "/dashboards/" + enc(name) + qs([["period", period]])); };
 
     /* ----- approvals */
@@ -446,7 +449,7 @@
     /* ----- preview mode: reads go to /preview/{id}, every write is refused */
     api.setPreview = function (id) { previewing = id || null; };
     api.previewId = function () { return previewing; };
-    [ "create", "update", "remove", "submit", "cancel", "amend", "action", "upload", "removeAttachment", "importUpload",
+    [ "create", "update", "remove", "submit", "submitMany", "cancel", "amend", "action", "upload", "removeAttachment", "importUpload",
       "importCommit", "approve", "reject", "propose", "csVerb" ].forEach(function (name) {
       var inner = api[name];
       api[name] = function () {

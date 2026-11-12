@@ -57,10 +57,10 @@ Adding a type is a contract change.
 |---|---|---|---|
 | `counter` | Sell or take payment at a counter: catalogue, cart, tender, receipt | **`catalogue`** {**model**, filter, title, search, group_by, **price** (a number field), barcode, image, limit (default 500)}, **`document`** {**model** (submittable unless `submit: false`), **lines** (a table), **line**: {**item** (a link to the catalogue model), **qty**, price, note}, total and change (number fields the receipt panel reads from the server's answer; the screen's own sums are only an estimate), set: {field: CEL, fetched again for every sale}}, `payments` {table, method, amount, ref, methods (options of method)}, `session` {model, link (a link of the document to it), filter (the caller's session, e.g. `cashier == user.email`), state: {field, open, closed}, open: [fields], set, close: {model (submittable), link, fields, set}, blind (bool, default true: the cashier counts cash without seeing the expected amount; the model enforces it with `hidden_for`)}, `hold` (bool), `customer` {field, required}, `print` (a print format of the document), `submit` (default true) | creates one `document` per sale with its lines and payment rows, then submits it |
 | `queue` | Work through cards that change state: kitchen tickets, today's work orders, pick lists, today's rental jobs | **`source`** {**model**, filter, sort, limit (default 200)}, **`card`** {**title**, subtitle, fields, lines (a table; loaded with `?children=1`), line (row fields shown), age_from (a date/datetime field, `created_at` default; amber from 10 minutes, red from 20)}, **`steps`** [{**when**: CEL over the card, **label**, `set`: {field: literal value, an option for a select} or `action`: `submit` / an action of the model}], `columns` {by: field, values: options in order}, `refresh` (seconds, 3-300, default 10) | runs the first matching step on one record: `set` is a conditional PATCH (`_if`: the values the card showed), "Urungkan" for 3 seconds is a conditional PATCH back (`_if`: what the step wrote); submit/action carry an Idempotency-Key kept per card until an answer |
-| `roll` | One parent record, many rows marked fast or added by scan: class attendance, team attendance, stock count, receiving | **`document`** {model, find or create: CEL, set}, **`rows`** {table, label, mark: {field, values, default} or qty: field} (default: every row starts at e.g. `present` and staff change only the exceptions, as Teachworks and Jackrabbit do), `add_by` (scan / search / none), `scan` {field, match}, `submit` | updates the parent's table, then submits |
-| `route` | Today's list of places to visit, check in, act there | **`stops`** {model, filter, sort, title, address, location}, `visit` {model, link, set, capture: [location, photo]}, **`actions`** [{label, screen or create: model, set}] | creates a visit record (optional) and opens another screen or form with the stop prefilled |
-| `handover` | Hand items over with proof: rental out/in, proof of delivery, BAST | **`document`** {model, find or create, set}, **`rows`** {table, unit or item, qty, condition}, `scan` {field, match}, `photos` {field, min}, `signature` {field, by}, `print`, `submit` | fills rows, attaches photos and signature, submits, prints |
-| `clock` | Clock in and out: workers at client sites, outlet staff | **`record`** {model, set}, **`in`** {field}, **`out`** {field}, `site` {from: CEL, location, radius_m}, `capture` [photo, location], `shift` {model, filter} | creates one record per clock-in, sets out on clock-out |
+| `roll` | One parent record, many rows marked fast or added by scan: class attendance, team attendance, stock count, receiving | **`document`** {**model**, find (a list filter of the drafts offered; one opens by itself), create (bool: "Mulai baru" with set), set, title, subtitle, sort}, **`rows`** {**table**, **label** (a row field), mark: {**field** (a select), values (options in order), default} or qty (a number field), note (data/text)} (default: every row starts at e.g. `present` and staff change only the exceptions, as Teachworks and Jackrabbit do), `add_by` (scan / search / none; scan and search need `scan`), `scan` {**field** (the row link a code fills), match (the field of the linked model holding the code, default its name)}, `submit` (default true) | PATCHes the parent's table, then submits; `?doc=<name>` opens one parent |
+| `route` | Today's list of places to visit, check in, act there | **`stops`** {**model**, filter, sort, limit, **title**, subtitle, address, location (a geo field)}, `visit` {**model**, **link** (to the stops model), set, location (geo), photo (image), submit}, **`actions`** [{**label**, screen \| create: model, set (create only)}] | creates a visit record (optional); an action opens another screen with `?stop=<model>/<name>` (its own `set:` reads `stop`) or creates a record from the stop and opens its form |
+| `handover` | Hand items over with proof: rental out/in, proof of delivery, BAST | **`document`** {**model**, find, create, set, title, subtitle, sort}, **`rows`** {**table**, **unit** (a link), condition (a select), qty, note}, `scan` {match (the unit model's field holding the code)}, `photos` {**field** (an image field: the first photo), min}, `signature` {**field** (a signature field), by (the signer's name field)}, `print`, `submit` (default true) | fills rows, attaches photos and signature, submits, prints |
+| `clock` | Clock in and out: workers at client sites, outlet staff | **`record`** {**model**, filter (the user's records), set}, **`in`** {**field** (datetime), location (geo), photo (image)}, **`out`** {the same}, `site` {**model**, **link** (the record's link to it), filter, title, **location** (geo), **radius_m** (number)}, `reason` (data/text, typed when outside or without a position), `submit` (after clock-out) | creates one record per clock-in (photo attached, then the time and photo set together), sets out on clock-out and submits |
 | `entry` | A short phone form, save and next: hours, expense with receipt, waste, batch output, overtime | **`model`**, **`fields`** [names, at most 8, plain fields: no table, no compute], `set` {field: CEL}, `submit` (bool), `again` (bool, default true); `capture` comes with §4's widgets (WS6) | creates one record (and submits when asked) |
 
 Rules shared by every type:
@@ -70,10 +70,14 @@ Rules shared by every type:
   `now()`, `device` (§4) and `stop` (route) or `doc` (roll/handover parent); the same CEL subset as dashboards. Prices,
   tax and totals are computed by the model's computes and rules, never by the screen.
 - **`set` is evaluated by the kernel.** `GET /api/v1/screens/<name>` answers `{name, screen, set, sets}`: `set` is the
-  type block's own `set` (entry), `sets` the nested ones by slot path (`document`, `session`, `session.close`), all
-  evaluated for the caller at that moment (a `now()` is RFC 3339 in the org timezone); the web app asks
-  again for every new record. A screen the caller may not open is 404. The values prefill the record; they are not
-  trusted more than what a form sends.
+  type block's own `set` (entry), `sets` the nested ones by slot path (`document`, `session`, `session.close`,
+  `record`, `visit`; list items by index, `actions.1`), all evaluated for the caller at that moment (a `now()` is
+  RFC 3339 in the org timezone); the web app asks again for every new record. A screen the caller may not open is 404.
+  The values prefill the record; they are not trusted more than what a form sends. `?stop=<model>/<name>` and
+  `?doc=<name>` (a record of the screen's `document.model`) load that record as `stop` or `doc` for the CEL, through
+  the same read check as `GET /r` (a record or model the caller may not read is 404, like a missing one; a field
+  hidden from the caller reads as its zero value); a value that reads `stop` or `doc` when the screen was opened
+  without one is left out.
 - **Blocks whose renderer is not built yet** are free-form objects in `screen.json`; the PR that adds the renderer
   gives the block its shape and its validator checks. The web app shows a notice for such a screen.
 - **Writes are ordinary API calls** (`POST /api/v1/r/<model>`, `.../submit`, `.../actions/<name>`) by the signed-in
@@ -120,9 +124,33 @@ The five device needs map to browser APIs first, so nothing costs money and no n
 | `signature` | canvas pad, saved as PNG attachment with signer name | n/a | a `signature` field (attachment id) |
 | `print` | the record's print format (0008) at `80mm` or `A5` in a hidden frame and the browser print dialog; Android with a Bluetooth printer uses the system print service | ESC/POS through Edge (0003 §4), cash drawer kick | n/a |
 
-Kernel changes behind the widgets: field type `geo` (jsonb, validated shape, CEL access `f.lat`, `f.lng`,
-`distance_m(a, b)`); `image` and `signature` stored as attachment ids with the attachment checked to belong to the
-record (today plain text); a CEL `device` object `{id, outlet}` that is empty until a device is paired (§8).
+Kernel changes behind the widgets (WS6): field type `geo` (jsonb `{lat, lng, accuracy_m, at}`: lat in -90..90, lng
+in -180..180, accuracy_m >= 0, at RFC 3339 stored in UTC, no other key; `""`/`{}` is no position; CEL access `f.lat`,
+`f.lng`; `distance_m(a, b)` is the haversine distance in metres on the mean earth radius 6 371 008.8 m, and
+`1e9` when either has no position: farther than any two points on earth, so "unknown" counts as far and
+`distance_m(p, site) <= r` fails, `> r` holds, without a position). Field option `set_once: true`: a client may fill
+the field while it is empty, never change or clear a value it holds (`422 set_once`; the same value sent again
+passes, datetimes compared as instants); flows and other kernel writes may. Clock-in time, position and photo use
+it, so a worker cannot move a clock-in the kernel measured as outside. Only on fields of the document itself
+(`set_once_child`: a row can be removed and added again) whose empty value means "not filled" (`set_once_type` for
+numbers, check, money, duration, multiselect and tables, which start at 0, false or empty), checked the same in a
+module's model and in a company overlay (`custom/<model>.rk`). A correction goes through a flow or an
+owner action the module declares: cancel and amend copy the values, so the copy is locked too. A record created
+without a position may get one later, once (the same trust as a position sent at create). `image` and `signature` hold an
+attachment id: a value a client writes (create, update, rows included) must be an attachment of that same record
+(model and name; rows use their parent's) whose content type is `image/*`, else 422 `attachment` on the field; a
+record being created has none yet, so a screen saves the record, attaches, then sets the field. A value the record
+already held may stay or move between its fields; writes by the kernel itself (flows, amend copying the cancelled
+original's ids) are not checked. Submit renames the attachments with the record. Deleting an attachment an image or
+signature field still holds (checked on the stored record, fields hidden from the caller included) is 409 `in_use`.
+An import (client write) cannot carry image or signature ids: attach after the import. A CEL `device` object `{id, outlet}` stays empty until a device is
+paired (§8).
+
+Scan (WS5): the web app reads codes with `BarcodeDetector` (EAN-13, EAN-8, UPC-A/E, Code 128, Code 39, QR) and
+otherwise with ZXing (`web/app/vendor/zxing.min.js`, @zxing/library 0.21.3, Apache-2.0, loaded on first need and
+precached); an EAN/UPC read whose check digit fails is dropped, the same code is taken once per 2 seconds, and a
+typed code or a HID scanner (types and presses Enter) goes through the same box. Photos leave the device as JPEG with
+the longest side at most 1600 px; the signature pad saves a PNG on white.
 `clock.site.radius_m` is checked twice: on the device for the message, and in the kernel by a compute using
 `distance_m`. A clock-in outside the radius is **not refused**: the record is saved with `outside_site: true` and the
 reason the worker typed, and waits for the supervisor (approval 0007), as Talenta and Gadjian do (pending review).
@@ -171,6 +199,8 @@ the card, never overwrites someone else's change.
   the same press keeps its keys, so pressing again after a lost answer never writes twice.
 - The screen (and later its reference data: `catalogue`, `stops`, `source` of the user's scope) is cached after each
   successful load and shown with "data terakhir <time>" when offline.
+- A press that uploads a photo or a signature needs the connection (attachments are not queued): `clock` and `route`
+  queue only when their slot has no photo; `roll` queues its PATCH of the rows and the submit as one job.
 - Allowed only for `counter`, `roll`, `route`, `clock`, `entry` (`screen_offline`). The kernel accepts a late write like
   any other. A replayed write carries `_occurred_at` (RFC 3339, the moment the user pressed the button) in its body: the
   kernel takes it out of the body, keeps it as `occurred_at` in the audit entries of the records written, and refuses a
@@ -306,14 +336,26 @@ client site, `route` for salesmen over `customer` filtered by `route_day`, `hand
 - With two open sessions the screen takes the newest; the catalogue loads at most `limit` rows (default 500).
 - Offline across midnight, the last cached `set:` values keep yesterday's date until the screen reloads online.
 
+### Known gaps of WS5-WS9b (low)
+- `clock` has no `shift` slot yet (the shift of the day comes with the manpower screens); the site is picked among the
+  site model's records the user may read.
+- The scanner decodes frames on the device every 180 ms; very small or damaged 1D codes may need the typed box.
+- `route` remembers check-ins of the current visit to the screen; a reload shows every stop again until the list's
+  filter leaves visited ones out (e.g. `due > 0`).
+- The phone's distance on `clock` is an estimate; the record's own compute with `distance_m` decides. The position
+  itself is the device's claim (no fake-GPS detection, §4): the photo and the supervisor's review stay the check.
+- Two devices marking the same `roll` parent: the later PATCH of the rows wins (no `_if` on rows yet).
+- Changing a field from `json` or `data` to `geo` keeps the stored values unchecked; a value without numeric `lat`
+  and `lng` reads as no position.
+
 ## Implementation (rangka-os, one PR each, in this order)
 | Stage | Content | State |
 |---|---|---|
 | WS1 | `screen.json`, `app.work`, change-set path `modules/<m>/screens/`, validators, registry, `/meta` `screens` + `work`, `GET /api/v1/screens/{name}`, home per role, `#/w/<screen>`, "Kerja" group, work shell, renderer `entry` | merged |
 | WS2 | `Idempotency-Key` on create, submit, cancel, amend and actions (`rk_idempotency`); `_occurred_at`; IndexedDB outbox; cached screen | merged |
 | WS3 | `counter` slots and checks, `sets` in `GET /screens`, renderer `counter` (catalogue cached, cart, hold, split tender, session open and blind close, receipt print), `on: cancel` rules evaluated | merged |
-| WS4 | `queue` slots and checks (`unknown_action`, step values are options), renderer `queue` (columns, age, steps, undo, polling, offline copy) | this PR |
-| WS6, WS9a, WS7, WS5, WS8, WS9b | `geo` + photo/signature; `clock`; `roll`; camera scan; `handover`; `route` | |
+| WS4 | `queue` slots and checks (`unknown_action`, step values are options), renderer `queue` (columns, age, steps, undo, polling, offline copy) | merged |
+| WS5-WS9b | camera scan (BarcodeDetector + ZXing); `geo` + `distance_m`, attachment-backed `image`/`signature`, widgets (location, photo, signature pad); slots, checks and renderers `roll`, `handover`, `clock`, `route`; `?stop=`/`?doc=`; outbox jobs that update a draft | this PR |
 
 ## Open
 - Should `entry` and `roll` also be offered to the owner on the desk as quick actions? Proposed: yes, through the

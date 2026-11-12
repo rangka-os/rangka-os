@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: lokasi
+label: {id: Lokasi kerja}
+naming: LOK-{###}
+title_field: title
+fields:
+  - {name: title, type: data, label: {id: Nama lokasi}, required: true, in_list: true}
+  - {name: pos, type: geo, label: {id: Titik lokasi}}
+  - {name: radius_m, type: int, label: {id: Radius (m)}, default: '100'}
+permissions:
+  - {role: pekerja, read: true}

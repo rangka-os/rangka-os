@@ -1,0 +1,30 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: absen
+label: {id: Absen}
+is_submittable: true
+naming: ABS-{#####}
+title_field: worker
+fields:
+  - {name: worker, type: data, label: {id: Pekerja}, in_list: true}
+  - {name: site, type: link, to: lokasi, label: {id: Lokasi}, required: true, in_list: true}
+  - {name: clock_in, type: datetime, label: {id: Jam masuk}, set_once: true, in_list: true}
+  - {name: in_pos, type: geo, label: {id: Posisi masuk}, set_once: true}
+  - {name: in_photo, type: image, label: {id: Foto masuk}, set_once: true}
+  - {name: clock_out, type: datetime, label: {id: Jam keluar}, set_once: true, in_list: true}
+  - {name: out_pos, type: geo, label: {id: Posisi keluar}, set_once: true}
+  - {name: out_photo, type: image, label: {id: Foto keluar}, set_once: true}
+  - {name: reason, type: text, label: {id: Alasan}}
+  - {name: checked_sig, type: signature, label: {id: Paraf pemeriksa}, hidden_for: [pekerja]}
+  - {name: in_m, type: float, label: {id: Jarak masuk (m)}, read_only: true, compute: "distance_m(in_pos, site.pos)"}
+  - {name: outside, type: check, label: {id: Di luar lokasi}, read_only: true, compute: "in_m > site.radius_m"}
+rules:
+  - name: photo_in
+    on: save
+    check: "clock_in == '' || in_photo != ''"
+    message: {id: Foto masuk wajib}
+  - name: reason_outside
+    on: save
+    check: "!outside || clock_in == '' || reason != ''"
+    message: {id: "Di luar lokasi kerja, tulis alasannya"}
+permissions:
+  - {role: pekerja, read: true, create: true, write: true, submit: true}

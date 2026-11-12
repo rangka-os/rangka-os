@@ -49,7 +49,7 @@ func TestWorkScreensMeta(t *testing.T) {
 	owner, staf, mandor := screensEnv(t)
 	// the owner opens every bound screen whose if: holds and keeps the dashboard home (no *)
 	om := owner.must(200, "GET", "/api/v1/meta", nil).JSON
-	if got := workOf(t, om); got != "isi_jam catat jual dapur jual_online " {
+	if got := workOf(t, om); got != "isi_jam catat jual dapur jual_online absen_masuk absen_kelas serah_alat rute_tagih terima_bayar " {
 		t.Fatalf("owner work: %q", got)
 	}
 	if get(om, "screens", "isi_jam", "module") != "kerja" || get(om, "screens", "isi_jam", "entry", "model") != "jam_kerja" || get(om, "screens", "isi_jam", "$schema") != nil {

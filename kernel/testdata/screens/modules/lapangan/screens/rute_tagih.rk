@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: rute_tagih
+type: route
+label: {id: Rute tagih}
+icon: map
+roles: [penagih]
+device: phone
+needs: [location, photo]
+offline: queue
+route:
+  stops: {model: pelanggan, filter: "due > 0", sort: title, title: title, subtitle: due, address: address, location: pos}
+  visit: {model: kunjungan, link: customer, set: {by: user.email}, location: pos, photo: photo}
+  actions:
+    - {label: {id: Terima bayar}, screen: terima_bayar}
+    - {label: {id: Catat keluhan}, create: keluhan, set: {customer: stop.name, text: "'Keluhan ' + stop.title + stop.note_internal"}}

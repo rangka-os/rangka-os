@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: absen_kelas
+type: roll
+label: {id: Absen kelas}
+icon: users
+roles: [pengajar]
+device: phone
+needs: [scan]
+offline: queue
+roll:
+  document: {model: kelas, find: "docstatus == 0 && date == today()", create: true, set: {teacher: user.email, title: "'Kelas baru'"}, title: title, subtitle: date}
+  rows: {table: attendance, label: student, mark: {field: status, values: [hadir, izin, sakit, alpa], default: hadir}, note: note}
+  add_by: scan
+  scan: {field: student, match: code}

@@ -391,6 +391,12 @@
       if (hit) { add(hit); setQ(""); }
     }
 
+    var scs = useState(false), scanning = scs[0], setScanning = scs[1]; // camera scan (WS5): every code read adds its item
+    function onScan(code) {
+      var hit = findByBarcode(items, code);
+      if (hit) { add(hit); ctx.toast("ok", "Ditambah", hit.title); } else ctx.toast("bad", "Kode tidak dikenal", code);
+    }
+
     function hold() {
       if (!cart.length || jobRef.current) return;
       var next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, cart: cart, total: total }].concat(held).slice(0, 20);
@@ -570,6 +576,8 @@
       h("div", { className: "ap-counter-searchrow" },
         h("input", { ref: searchRef, className: "ap-counter-search", type: "search", placeholder: cat.barcode ? "Cari menu atau scan barcode" : "Cari",
           "aria-label": "Cari barang", value: q, onChange: function (e) { setQ(e.target.value); }, onKeyDown: onSearchKey }),
+        cat.barcode && RA.Scanner ? h(R.Button, { className: "ap-counter-scan", onClick: function () { setScanning(true); }, "aria-label": "Pindai barcode dengan kamera" }, "Pindai") : null,
+        scanning ? h(RA.Scanner, { title: "Pindai barcode", keepOpen: true, onCode: onScan, onClose: function () { setScanning(false); } }) : null,
         h("span", { className: "ap-counter-sync" + (online ? "" : " off") }, online ? "Online" : "Offline")),
       groups.length > 1 ? h("div", { className: "ap-counter-groups", role: "tablist" },
         [""].concat(groups).map(function (g) {

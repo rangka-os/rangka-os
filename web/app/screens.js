@@ -214,15 +214,15 @@
 
   /* ---------------------------------------------------------------- the route */
   function WorkScreenView(p) {
-    var ctx = useContext(RA.Ctx), name = p.route.screen;
+    var ctx = useContext(RA.Ctx), name = p.route.screen, query = p.route.query || {}, qkey = (query.stop || "") + "|" + (query.doc || "");
     var ss = useState(null), data = ss[0], setData = ss[1];
     var es = useState(null), err = es[0], setErr = es[1];
     var st = useState(null), stale = st[0], setStale = st[1]; // the time of the cached screen shown while offline
     var q = useOutbox(ctx);
-    var cacheKey = "screen:" + RA.outboxScope(ctx.me) + ":" + name;
+    var cacheKey = "screen:" + RA.outboxScope(ctx.me) + ":" + name + (qkey !== "|" ? ":" + qkey : "");
     // quiet (a renderer reloading mid-task): a refusal does not replace the screen with an error page
     function load(quiet) {
-      return ctx.api.screen(name).then(function (d) {
+      return ctx.api.screen(name, query).then(function (d) {
         setData(d); setStale(null);
         RA.outbox.cache.put(cacheKey, d);
         return d;
@@ -235,7 +235,7 @@
         });
       });
     }
-    useEffect(function () { load(); }, [name]);
+    useEffect(function () { setData(null); setErr(null); load(); }, [name, qkey]);
     if (err) return h("div", { className: "rk-shell-content ap-work" }, h(R.EmptyState, { title: err.status === 404 ? "Layar tidak ditemukan" : "Layar tidak bisa dibuka" },
       err.status === 404 ? "Layar ini tidak ada atau bukan untuk peranmu." : err.status === 0 ? "Belum ada koneksi dan layar ini belum pernah dibuka di perangkat ini." : err.message));
     if (!data) return h("div", { className: "rk-shell-content ap-work", "aria-busy": "true" }, h("p", { className: "ap-work-loading" }, "Memuat…"));
@@ -246,7 +246,7 @@
       stale ? h("p", { className: "ap-work-note" }, "Belum ada koneksi. Layar dari data terakhir " + hhmm(stale) + ".") : null,
       h(QueueBar, { q: q }),
       missing.length ? h("p", { className: "ap-work-note" }, "Perangkat ini belum mendukung " + missing.join(", ") + ". Layar tetap bisa dipakai tanpa fitur itu.") : null,
-      Renderer ? h(Renderer, { ctx: ctx, screen: s, set: data.set || {}, sets: data.sets || {}, reload: load })
+      Renderer ? h(Renderer, { key: qkey, ctx: ctx, screen: s, set: data.set || {}, sets: data.sets || {}, query: query, reload: load })
         : h(R.EmptyState, { title: "Jenis layar ini belum tersedia" }, "Layar " + (L(s.label) || s.name) + " memakai jenis \u201c" + s.type + "\u201d yang belum ada di versi aplikasi ini. Pakai menu Lainnya untuk membuka formulirnya."));
   }
   RA.WorkScreenView = WorkScreenView;

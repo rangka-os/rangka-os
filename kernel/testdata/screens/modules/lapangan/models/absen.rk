@@ -17,6 +17,8 @@ fields:
   - {name: checked_sig, type: signature, label: {id: Paraf pemeriksa}, hidden_for: [pekerja]}
   - {name: in_m, type: float, label: {id: Jarak masuk (m)}, read_only: true, compute: "distance_m(in_pos, site.pos)"}
   - {name: outside, type: check, label: {id: Di luar lokasi}, read_only: true, compute: "in_m > site.radius_m"}
+  - {name: in_m_bulat, type: int, label: {id: Jarak masuk dibulatkan (m)}, read_only: true, compute: "int(double(in_m))"}
+  - {name: in_m_teks, type: data, label: {id: Jarak masuk (teks)}, read_only: true, compute: "string(int(in_m)) + ' m'"}
 rules:
   - name: photo_in
     on: save

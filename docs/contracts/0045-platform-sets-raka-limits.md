@@ -87,10 +87,11 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | company flow that writes any field from a `call` step's output into a money or stock field | high |
 | other company flows | medium (as today) |
 | removing a field or a select option (overlay or company model) | high |
+| making a `set_once` field editable (dropping or switching off `set_once`, changing such a field), or a company flow that writes a `set_once` field | high |
 | changing `config.connector_auth` (who sets connector secrets and replays jobs), like `config.tax` and `config.ai` | high |
 | 0033 §2's company connector table | as written there |
 
-High is owner only (`owner_required`, unchanged).
+A new flow file in an app or a module (`apps/<a>/flows/`, `modules/<m>/flows/`) is rated as a company flow. High is owner only (`owner_required`, unchanged).
 
 ### 3. Raka is an assistant everywhere; agents and the Cloud ask the platform
 

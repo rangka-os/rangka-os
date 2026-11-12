@@ -47,7 +47,7 @@ Always call `rangka_catalogue` first; never name a module, connector or service 
 | Kind | Fits when | `ref` |
 | --- | --- | --- |
 | `catalogue` | a catalogue app or module covers the stage | app or module name |
-| `custom` | nothing covers it: you design a company piece (section 5) | none, plus `design` |
+| `custom` | the catalogue does not cover the stage: you design a company piece (section 5) | none, plus `design` |
 | `connector` | the stage talks to an outside service the catalogue lists a connector for | connector name |
 | `edge` | a device at the outlet (printer, cash drawer, offline cashier); rangka-edge runs offline there (0003) | the edge module name if `rangka_catalogue` has one; otherwise leave `ref` out and say it is "belum tersedia" |
 | `cloud_service` | a Rangka Cloud service, for example the payment gateway (`payment_gateway`) | `id` from `rangka_catalogue.cloud_services` (the module name) |
@@ -71,18 +71,22 @@ Always call `rangka_catalogue` first; never name a module, connector or service 
   it says when the app fits and how to explain it. A business that serves buyers at a counter (kedai, kafe,
   restoran, toko) always needs `rangka-app-kasir` loaded, because it decides whether the cashier goes on the map.
 
-## 5. Custom pieces: design, do not stop
+## 5. Custom pieces: design and build
 
-When nothing in the catalogue covers a part of the flow, say which part, then design it as a `custom` piece
-(company models `models/x_*` and `flows/`, see `rangka-compose` and 0033).
+When the catalogue does not cover a part of the flow, say which part, then design it as a `custom` piece (company
+models `models/x_*` and `flows/`, see `rangka-compose`, 0033 and 0045). Custom pieces are designed **and built**: each
+one becomes its own change set, so the owner approves or rejects each one.
 
 - `design.records`: what must be remembered (for rental: "Kondisi alat saat keluar", "Denda kerusakan"), `design.steps`:
   what happens in order ("Admin foto alat saat keluar", "Admin cek dan catat denda saat kembali"). At most 20 each.
-- Money and stock records never go in a custom piece (0033). Prices, payments, invoices and stock levels stay in the
-  core modules: map the stage to a `catalogue` piece for those and keep the custom piece to the extra information.
-- Only two gaps are real: a system with no usable API, and edge hardware with no edge module. Put the first on the map
-  as an honest `open` item; put the second as an `edge` piece without `ref` ("belum tersedia"). Never invent a
-  connector or a module.
+- Keep payments, invoices and stock moves in the core modules when you can: one ledger is easier to reconcile. A
+  company table may still hold money fields; the kernel rates it high.
+- A real gap is only one of these: a platform refusal or validator code that could not be repaired; a system with no
+  usable API (no connector can be drafted); edge hardware with no edge module in `rangka_catalogue`; something no
+  schema key can express. Put a missing API on the map as an honest `open` item; put missing edge hardware as an
+  `edge` piece without `ref` ("belum tersedia"). Never invent a connector or a module.
+- For a real gap, say it plainly, in the owner's words, with no date: "Bagian ini belum bisa aku susun sekarang karena
+  Rangka belum mendukungnya. Tim kami akan secepatnya menambah dukungannya, dan aku kabari begitu bisa."
 
 ## 6. Suggesting the build
 

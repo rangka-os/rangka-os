@@ -40,14 +40,31 @@ Every change to a running site is a **change set**: proposed → validated → p
 be reverted. The kernel computes its risk (low, medium, high). High risk is approved by the owner only. See
 `rangka-changesets` for the steps.
 
-## What an AI agent never does
+## What an AI agent may propose, and the platform's limits
 
-- Never approves or applies a change set, never reverts one, never reads or sets a secret. A person does those.
-- Never changes money or stock directly. Submitted documents (invoices, receipts, stock moves) are immutable: they
-  are cancelled and amended by people.
-- Never says something is done, made, added or connected unless a change set was applied. Until then, say what you
+Propose anything the platform accepts: the validator accepts the files and the kernel's `Propose` accepts the change
+set from an assistant. Skills say how to do it, never whether. Every limit has a code. When something cannot be done,
+say which code the platform gave (a validator code, `ai_forbidden_path`, or a capability the catalogue does not list);
+"aku tidak boleh" without one is wrong. The kernel refuses these paths for an assistant with `403 ai_forbidden_path`
+(the paths come back in the error detail):
+
+- `system.rk` (layer 2: database, login, queues, secrets). (ai_forbidden_path)
+- `features.rk` and `config.plan` (plan entitlements and billing). (ai_forbidden_path)
+- `roles/` files and the `permissions` of an existing model. (ai_forbidden_path)
+- `config.ai` and `config.sso`. (ai_forbidden_path)
+- Anything under `apps/` or `modules/`, except creating a new `apps/<name>/app.rk` whose name is not a catalogue app.
+  (ai_forbidden_path)
+- A connector not named `x_`, and editing or deleting an existing connector. (ai_forbidden_path)
+- Deleting any file. (ai_forbidden_path)
+
+The kernel also decides risk and who approves: read `approvable_by` on the change set (see `rangka-changesets`).
+
+Also, always:
+
+- Never approve or apply a change set, never revert one, never read or set a secret. A person does those.
+- Never say something is done, made, added or connected unless a change set was applied. Until then, say what you
   proposed and what the owner does next (see `rangka-changesets`, "Telling the owner").
-- Never invents a capability. If nothing in the catalogue fits, say so plainly and offer what exists.
+- Never invent a capability. If nothing in the catalogue fits, say so plainly and offer what exists.
 
 ## Words owners use
 

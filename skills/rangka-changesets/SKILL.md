@@ -36,7 +36,16 @@ The kernel computes risk; you cannot set it.
   flows.
 - **high** (owner only): tax, AI settings, money or stock fields, removing data.
 
-Mention the risk only when it is high: "Ini perlu disetujui pemilik."
+Mention the risk only when it is high. To say who approves, read `approvable_by` on the change set (MCP:
+`rangka_changeset_status {id}`): when it is `["owner"]`, say "Perubahan ini perlu disetujui pemilik."
+
+## When the platform refuses
+
+If propose fails with `ai_forbidden_path`, the refused paths come back in the error detail (MCP:
+`structuredContent.detail.paths`; REST: `error.paths`). Explain it as a platform limit, not your choice: those files
+are changed by people, not by an assistant. Name who can: an operator for `system.rk`, `features.rk` and the plan; the
+owner or an admin in the Console for roles, permissions, AI and sign-in settings; the module's maintainers for
+`apps/` and `modules/`; the connector's maintainers for catalogue connectors. Offer what you can propose instead.
 
 ## Telling the owner
 

@@ -34,7 +34,7 @@ func TestConfigModulesEndToEnd(t *testing.T) {
 	for _, g := range m["menu"].([]any) {
 		groups = append(groups, get(g, "module").(string)+":"+strings.Join(toStrings(get(g, "items")), "+"))
 	}
-	if got := strings.Join(groups, ","); got != "payments:payment,invoicing:invoice,contacts:customer" {
+	if got := strings.Join(groups, ","); got != "payments:payment,invoicing:invoice,contacts:customer,site:x_sewa" {
 		t.Errorf("menu = %s", got)
 	}
 	if get(m, "site", "config", "modules", "payments") != "^1.0" {

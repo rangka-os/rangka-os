@@ -65,6 +65,17 @@ func unitPath(p string) bool {
 	return strings.HasPrefix(p, "apps/") || strings.HasPrefix(p, "modules/")
 }
 
+// unitKind is the kind of a module or app file: the folder after the unit's name (models, flows, screens,
+// dashboards, roles), "" for app.rk / module.rk. Read from the path's third segment, so a unit named like a kind
+// (modules/flows/models/x.rk) is not taken for one (audit changeset-set-once 2, 3).
+func unitKind(p string) string {
+	parts := strings.Split(p, "/")
+	if len(parts) < 4 {
+		return ""
+	}
+	return parts[2]
+}
+
 // Assess computes layers and risk (CONTRACTS v0.1 decisions 2 and 3). High: money/stock fields, system.rk,
 // roles and permissions, config.tax (and config.ai and config.connector_auth, which decide approvals and connector
 // secrets), deletions, existing fields of submittable models, and edits to existing app files (app files belong to
@@ -121,7 +132,7 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			a.raise("medium", "company automation "+p)
 			assessCompanyFlow(a, p, nw, env)
 		case unitPath(p) && existed:
-			if strings.Contains(p, "/models/") {
+			if unitKind(p) == "models" {
 				assessModel(a, p, old, nw)
 			}
 			what := "app"
@@ -130,16 +141,20 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			}
 			a.raise("high", "edits "+what+" file "+p+" ("+what+" files belong to app authors; organisations change models through custom/<model>.rk)")
 		case unitPath(p) || strings.HasPrefix(p, "models/"):
+			kind := unitKind(p)
+			if strings.HasPrefix(p, "models/") {
+				kind = "models"
+			}
 			switch {
-			case strings.Contains(p, "/dashboards/"):
+			case kind == "dashboards":
 				a.raise("low", "new dashboard "+p)
-			case strings.Contains(p, "/screens/"): // UI over the record API; offered only once an app binds it (contract 0030)
+			case kind == "screens": // UI over the record API; offered only once an app binds it (contract 0030)
 				a.raise("low", "new work screen "+p)
-			case strings.Contains(p, "/flows/"):
+			case kind == "flows":
 				// a new flow in an app or module runs like a company flow (unguarded writes): judged the same way
 				a.raise("medium", "new flow "+p)
 				assessCompanyFlow(a, p, nw, env)
-			case strings.Contains(p, "/models/") || strings.HasPrefix(p, "models/"):
+			case kind == "models":
 				if strings.HasPrefix(p, "models/") && (nw["is_submittable"] == true || nw["append_only"] == true || nw["stock"] != nil) {
 					a.raise("high", "new company model "+p+" is submittable, append-only or moves stock")
 				}

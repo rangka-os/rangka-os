@@ -381,6 +381,11 @@ func TestAssessSetOnce(t *testing.T) {
 		{"new module flow writes a set_once field", "modules/lapangan/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
 		{"new app flow writes a set_once field", "apps/absen/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
 		{"new module flow writes another field", "modules/lapangan/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"note": "'ok'"}}), "medium"},
+		// the kind is the folder after the unit's name, whatever the unit is called (audit changeset-set-once 2, 3)
+		{"flow of a module named screens", "modules/screens/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
+		{"flow of an app named dashboards", "apps/dashboards/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
+		{"money model of a module named flows", "modules/flows/models/x_m.rk", map[string]any{"name": "x_m", "fields": []any{field("fee", "currency")}, "permissions": []any{}}, "high"},
+		{"screen of a module named flows", "modules/flows/screens/x_s.rk", map[string]any{"name": "x_s"}, "low"},
 	}
 	for _, c := range cases {
 		op := "replace"

@@ -1,0 +1,5 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/letterhead.json
+legal_name: PT Alpha Inspeksi
+address: |
+  Jl. Contoh No. 3
+  Jakarta 10110

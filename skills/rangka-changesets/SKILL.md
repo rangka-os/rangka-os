@@ -42,7 +42,7 @@ Mention the risk only when it is high. To say who approves, read `approvable_by`
 ## When the platform refuses
 
 If propose fails with `ai_forbidden_path`, the refused paths come back in the error detail (MCP:
-`structuredContent.detail.paths`; REST: `error.paths`). Explain it as a platform limit, not your choice: those files
+`structuredContent.detail.paths`; over REST an assistant's write gets `403 ai_forbidden` without the paths). Explain it as a platform limit, not your choice: those files
 are changed by people, not by an assistant. Name who can: an operator for `system.rk`, `features.rk` and the plan; the
 owner or an admin in the Console for roles, permissions, AI and sign-in settings; the module's maintainers for
 `apps/` and `modules/`; the connector's maintainers for catalogue connectors. Offer what you can propose instead.

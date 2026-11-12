@@ -33,11 +33,11 @@ Match by the app's title and summary and by the owner's words (see `rangka-conce
 | an `installed` app already covers it | Say where it is in their system (menu or screen). Change nothing. |
 | an `available` app covers it | Explain it (step 3), then propose adding it (step 4). |
 | a `not_in_plan` app covers it | Say it exists and their plan does not include it. Do not propose it. Tell them to change the plan with Juragan (an operator does it). |
-| nothing covers it, in the studio | Say which part nothing covers, then design it as a `custom` piece on the map (`rangka-consult`). Money and stock records stay in core modules. |
+| nothing covers it, in the studio | Say which part nothing covers, then design it as a `custom` piece on the map (`rangka-consult`). Keep payments, invoices and stock moves in the core modules when you can: one ledger is easier to reconcile. A company table may still hold money fields; the kernel rates it high. |
 | no app covers it, but the modules it needs are installed or available, in the console | Compose a custom app from those modules (step 4, "Custom app"). Do not send the owner to an operator. |
 | nothing covers it, in the console | Say which part nothing covers. Draft company pieces (site `models/x_*`, `flows/`, overlays; 0016, 0045). |
 
-Only two gaps are real in either place: a system with no usable API, and edge hardware with no edge module. Never
+The real gaps are listed in `rangka-consult` section 5 (0045 section 5). Never
 draft a fake module or model, and never name an app that is neither in the catalogue nor created in the same change
 set. A custom app made only of real modules is not fake.
 

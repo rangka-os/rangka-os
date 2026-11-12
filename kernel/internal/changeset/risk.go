@@ -66,9 +66,9 @@ func unitPath(p string) bool {
 }
 
 // Assess computes layers and risk (CONTRACTS v0.1 decisions 2 and 3). High: money/stock fields, system.rk,
-// roles and permissions, config.tax (and config.ai, which decides approvals), deletions, existing fields of
-// submittable models, and edits to existing app files (app files belong to app authors; organisations use
-// custom/<model>.rk). Medium: features.rk, flows, new fields/rules/overlays, config.apps and other settings,
+// roles and permissions, config.tax (and config.ai and config.connector_auth, which decide approvals and connector
+// secrets), deletions, existing fields of submittable models, and edits to existing app files (app files belong to
+// app authors; organisations use custom/<model>.rk). Medium: features.rk, flows, new fields/rules/overlays, config.apps and other settings,
 // connectors, new models. Low: themes, layouts, site processes, labels, dashboards, new work screens.
 func Assess(ops []Op, before, after func(path string) (map[string]any, bool), model func(name string) map[string]any) *Assessment {
 	return AssessWith(ops, before, after, Env{Model: model})
@@ -202,7 +202,7 @@ func assessConfig(a *Assessment, old, nw map[string]any, installed func(map[stri
 			continue
 		}
 		switch k {
-		case "tax", "ai":
+		case "tax", "ai", "connector_auth": // connector_auth decides who sets connector secrets and replays jobs
 			a.raise("high", "changes config."+k)
 		case "theme", "layout", "locale":
 			a.raise("low", "changes config."+k)

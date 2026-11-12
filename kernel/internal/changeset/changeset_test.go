@@ -101,6 +101,7 @@ func TestAssess(t *testing.T) {
 		{"connector", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, before, "medium", 3},
 		{"config apps", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": []any{"core", "crm"}, "tax": cfg["tax"], "theme": "a"}), "medium", 4},
 		{"config tax", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": map[string]any{"ppn_rate": 11}, "theme": "a"}), "high", 4},
+		{"config connector_auth", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": cfg["tax"], "theme": "a", "connector_auth": []any{"kasir"}}), "high", 4},
 		{"config theme", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": cfg["tax"], "theme": "b"}), "low", 4},
 		{"features", []Op{{Op: "patch", Path: "features.rk"}}, before, "medium", 4},
 		// contract 0045 §2b: company pieces that touch money, stock or core drafts

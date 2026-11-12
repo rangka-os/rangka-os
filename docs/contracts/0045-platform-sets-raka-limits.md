@@ -64,7 +64,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | touches `system.rk` | layer 2: database, login, queues, secrets; admin in the Console |
 | touches `features.rk`, or `config.plan` | plan entitlements and billing (0028); an operator changes them |
 | touches `roles/` files, or changes `permissions` of an existing model | who may do what is decided by people |
-| changes `config.ai` or `config.sso` | decides who approves and how people sign in |
+| changes `config.ai`, `config.sso` or `config.connector_auth` | decides who approves, how people sign in, and who sets connector secrets and replays jobs |
 | any op under `apps/` or `modules/`, except a `create` of `apps/<name>/app.rk` whose name is not a catalogue app | catalogue files belong to their authors and are replaced on upgrade (0016); a company composes its own app from real modules (0032) |
 | touches a connector not named `x_`, or edits or deletes an existing connector | catalogue connectors belong to rangka-connectors (0033 §2, §5) |
 | deletes any file | deletion of a whole table, flow or file is a person's decision |
@@ -87,6 +87,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | company flow that writes any field from a `call` step's output into a money or stock field | high |
 | other company flows | medium (as today) |
 | removing a field or a select option (overlay or company model) | high |
+| changing `config.connector_auth` (who sets connector secrets and replays jobs), like `config.tax` and `config.ai` | high |
 | 0033 §2's company connector table | as written there |
 
 High is owner only (`owner_required`, unchanged).

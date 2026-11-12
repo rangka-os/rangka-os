@@ -51,7 +51,8 @@ say which code the platform gave (a validator code, `ai_forbidden_path`, or a ca
 - `system.rk` (layer 2: database, login, queues, secrets). (ai_forbidden_path)
 - `features.rk` and `config.plan` (plan entitlements and billing). (ai_forbidden_path)
 - `roles/` files and the `permissions` of an existing model. (ai_forbidden_path)
-- `config.ai` and `config.sso`. (ai_forbidden_path)
+- `config.ai`, `config.sso` and `config.connector_auth` (who approves, how people sign in, who sets connector
+  secrets). (ai_forbidden_path)
 - Anything under `apps/` or `modules/`, except creating a new `apps/<name>/app.rk` whose name is not a catalogue app.
   (ai_forbidden_path)
 - A connector not named `x_`, and editing or deleting an existing connector. (ai_forbidden_path)

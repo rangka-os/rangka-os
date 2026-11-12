@@ -42,7 +42,7 @@ func assistantForbiddenOp(op Op, before, after func(string) (map[string]any, boo
 	case p == "system.rk", p == "features.rk": // layer 2 and plan entitlements
 		return true
 	case p == "config.rk":
-		return differs("plan") || differs("ai") || differs("sso")
+		return differs("plan") || differs("ai") || differs("sso") || differs("connector_auth") // connector_auth: who sets connector secrets
 	case strings.HasPrefix(p, "roles/") || strings.Contains(p, "/roles/"):
 		return true
 	case unitPath(p): // catalogue files belong to their authors; a company may start its own app

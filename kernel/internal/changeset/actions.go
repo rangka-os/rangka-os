@@ -721,6 +721,15 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 	if cs.Status != "applied" || cs.previous == nil {
 		return nil, &Error{409, "bad_status", "only an applied change set can be reverted (it is " + cs.Status + ")", nil}
 	}
+	// restoring an older features.rk would undo the operator's plans as surely as a new change set (audit
+	// cloud-package-plan F-5)
+	restores := make([]Op, 0, len(cs.previous))
+	for p := range cs.previous {
+		restores = append(restores, Op{Op: "replace", Path: p})
+	}
+	if err := s.operatorPlan(ctx, restores); err != nil {
+		return nil, err
+	}
 	live := s.live()
 	current := map[string]*string{}
 	for p := range cs.previous {

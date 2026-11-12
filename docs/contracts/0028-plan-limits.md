@@ -59,7 +59,7 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    the plan's limits to `rk_site_plan` at start and on reload, so `rangka user add` (which reads no metadata) sees
    them.
    While an operator set the plan, the plans in `features.rk` are the operator's too: a change set that touches
-   `features.rk` is refused with `403 plan_managed` when proposed and when applied, so a business cannot raise its own
+   `features.rk` is refused with `403 plan_managed` when proposed, applied or reverted, so a business cannot raise its own
    limits. The operator edits the file and runs `rangka plan set` again. On the company's own plan (`config.rk`, no
    operator) a change set may edit `features.rk` as before.
 

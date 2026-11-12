@@ -19,21 +19,23 @@ const cloudPlans = `  - {name: cloud_juragan, label: {id: "Juragan"}, limits: {u
   - {name: cloud_pro, label: {id: "Pro"}, limits: {users: 10, outlets: 6, ai_credits_month: 500, rate: {rps: 50, burst: 100, max_wait_ms: 3000, max_waiting: 50}}}
 `
 
-// cloudEnv starts kopi-senja (config.rk plan tumbuh) with the Cloud package plans in features.rk.
-func cloudEnv(t *testing.T) *env {
+// cloudEnv starts kopi-senja (config.rk plan tumbuh) with the Cloud package plans in features.rk; base is the
+// site's own features.rk, which Cloud keeps when it writes its plans again.
+func cloudEnv(t *testing.T) (e *env, base string) {
 	t.Helper()
-	e := newEnv(t, false, func(apps, site string) {
+	e = newEnv(t, false, func(apps, site string) {
 		f := filepath.Join(site, "features.rk")
 		b, err := os.ReadFile(f)
 		if err != nil {
 			t.Fatal(err)
 		}
-		if err := os.WriteFile(f, []byte(strings.TrimRight(string(b), "\n")+"\n"+cloudPlans), 0o644); err != nil {
+		base = strings.TrimRight(string(b), "\n") + "\n"
+		if err := os.WriteFile(f, []byte(base+cloudPlans), 0o644); err != nil {
 			t.Fatal(err)
 		}
 	})
 	e.login()
-	return e
+	return e, base
 }
 
 // A business on a Cloud package (contract 0028 + 0040 §9, card t_56c86525): `rangka plan set cloud_juragan` limits
@@ -42,9 +44,21 @@ func cloudEnv(t *testing.T) *env {
 // not change features.rk through a change set, and a person the plan made read-only decides no change set. On the
 // company's own plan a change set to features.rk applies at once. No restart anywhere.
 func TestCloudPackagePlan(t *testing.T) {
-	e := cloudEnv(t)
+	e, base := cloudEnv(t)
 	ctx := context.Background()
+	// before Cloud manages the plan (an older business, or a package step that failed), the company applied a change
+	// set to features.rk; reverting it once an operator set the plan is refused like a new one (audit F-5)
+	early := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Batas Pro sendiri", "ops": []any{map[string]any{
+		"op": "patch", "path": "features.rk", "patch": []any{map[string]any{"op": "replace", "path": "/plans/3/limits/ai_credits_month", "value": 600}}}}}).JSON
+	earlyID, _ := early["id"].(string)
+	e.must(200, "POST", "/api/v1/changesets/"+earlyID+"/validate", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+earlyID+"/preview", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+earlyID+"/approve", map[string]any{"note": "uji"})
+	e.must(200, "POST", "/api/v1/changesets/"+earlyID+"/apply", nil)
 	setPlan(e, "cloud_juragan")
+	if r := e.must(403, "POST", "/api/v1/changesets/"+earlyID+"/revert", nil); errCode(r) != "plan_managed" {
+		t.Fatalf("revert of a features.rk change set under an operator's plan: %s", r.Body)
+	}
 
 	rep := e.must(200, "GET", "/api/v1/plan", nil).JSON
 	if get(rep, "plan", "name") != "cloud_juragan" || get(rep, "plan", "source") != "operator" || get(rep, "usage", "outlets", "limit") != float64(3) {
@@ -135,12 +149,8 @@ func TestCloudPackagePlan(t *testing.T) {
 	if errCode(r) != "plan_managed" {
 		t.Fatalf("a change set to features.rk under an operator's plan: %s", r.Body)
 	}
-	f := filepath.Join(e.site, "features.rk")
-	b, err := os.ReadFile(f)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(f, []byte(strings.Replace(string(b), "users: 10, outlets: 6,", "users: 10, outlets: 4,", 1)), 0o644); err != nil {
+	// Cloud writes its package plans again (provision.writePackagePlans keeps the company's own plans)
+	if err := os.WriteFile(filepath.Join(e.site, "features.rk"), []byte(base+strings.Replace(cloudPlans, "users: 10, outlets: 6,", "users: 10, outlets: 4,", 1)), 0o644); err != nil {
 		t.Fatal(err)
 	}
 	if err := e.s.Reload(ctx); err != nil {

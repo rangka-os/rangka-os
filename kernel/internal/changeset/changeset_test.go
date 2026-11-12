@@ -126,6 +126,8 @@ func TestAssess(t *testing.T) {
 			map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}},
 			map[string]any{"create": "x_sewa", "set": map[string]any{"catatan": "b"}, "as": "baru"},
 			map[string]any{"update": "baru", "set": map[string]any{"catatan": "c"}})), "medium", 4},
+		{"flow on a non-record event updates doc", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.paid", map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}})), "high", 4},
+		{"flow on a submitted record updates doc text", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.submitted", map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}})), "medium", 4},
 		{"overlay removes an option", []Op{{Op: "patch", Path: "custom/x_tugas.rk"}}, with("custom/x_tugas.rk", map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}}}}), "high", 4},
 		{"overlay adds an option", []Op{{Op: "patch", Path: "custom/x_tugas.rk"}}, with("custom/x_tugas.rk", map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}, map[string]any{"value": "batal", "label": "Batal"}, map[string]any{"value": "tunda", "label": "Tunda"}}}}), "medium", 4},
 		{"company model removes an option", []Op{{Op: "patch", Path: "models/x_tiket.rk"}}, with("models/x_tiket.rk", map[string]any{"name": "x_tiket", "fields": []any{map[string]any{"name": "status", "type": "select", "options": []any{map[string]any{"value": "baru", "label": "Baru"}}}}}), "high", 4},

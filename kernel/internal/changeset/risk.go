@@ -428,12 +428,17 @@ func removedOptions(a *Assessment, p, field string, old, nw any) {
 func assessCompanyFlow(a *Assessment, p string, flow map[string]any, env Env) {
 	vars := map[string]map[string]bool{} // variable → every model it may hold
 	if on, _ := flow["on"].(string); on != "" {
-		if m, _, ok := strings.Cut(on, "."); ok && companyModelFields(env, m) != nil {
+		// doc is the on: model only for a record event (flow.json: <model>.created|updated|submitted|cancelled); any
+		// other event (a connector trigger, an unknown suffix) leaves it unbound, so update: doc rates high
+		if m, ev, ok := strings.Cut(on, "."); ok && recordEvents[ev] && companyModelFields(env, m) != nil {
 			vars["doc"] = map[string]bool{m: true}
 		}
 	}
 	walkFlowSteps(a, p, meta.AsList(flow["steps"]), vars, env)
 }
+
+// recordEvents are the <model>.<event> suffixes flow.json names for a record's own event.
+var recordEvents = map[string]bool{"created": true, "updated": true, "submitted": true, "cancelled": true}
 
 // bind adds model to the models a variable may hold: a variable bound in both branches of an if, or bound twice,
 // may hold either at runtime, so a write is judged against all of them.

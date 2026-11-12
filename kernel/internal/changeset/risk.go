@@ -422,19 +422,32 @@ func removedOptions(a *Assessment, p, field string, old, nw any) {
 }
 
 // assessCompanyFlow rates a company flow (contract 0045 §2b): creating a draft in a core module, or writing a money or
-// stock field of the created or updated record, is high; so is an update whose record it cannot resolve. flow.json has
-// no submit, cancel, amend or model-action step, and a call step's output reaches a record only through a set.
+// stock field of the created or updated record, is high; so is an update whose record, or a write whose model, it
+// cannot resolve. flow.json has no submit, cancel, amend or model-action step, and a call step's output reaches a
+// record only through a set.
 func assessCompanyFlow(a *Assessment, p string, flow map[string]any, env Env) {
-	vars := map[string]string{} // variable → model
+	vars := map[string]map[string]bool{} // variable → every model it may hold
 	if on, _ := flow["on"].(string); on != "" {
 		if m, _, ok := strings.Cut(on, "."); ok && companyModelFields(env, m) != nil {
-			vars["doc"] = m
+			vars["doc"] = map[string]bool{m: true}
 		}
 	}
 	walkFlowSteps(a, p, meta.AsList(flow["steps"]), vars, env)
 }
 
-func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]string, env Env) {
+// bind adds model to the models a variable may hold: a variable bound in both branches of an if, or bound twice,
+// may hold either at runtime, so a write is judged against all of them.
+func bind(vars map[string]map[string]bool, v, model string) {
+	if v == "" {
+		return
+	}
+	if vars[v] == nil {
+		vars[v] = map[string]bool{}
+	}
+	vars[v][model] = true
+}
+
+func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[string]bool, env Env) {
 	for _, s := range steps {
 		st := meta.AsMap(s)
 		as, _ := st["as"].(string)
@@ -444,9 +457,7 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]string,
 			if m == "" {
 				m, _ = st["find_all"].(string)
 			}
-			if as != "" {
-				vars[as] = m
-			}
+			bind(vars, as, m)
 		case st["create"] != nil:
 			m, _ := st["create"].(string)
 			if env.ModuleOf != nil {
@@ -455,21 +466,25 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]string,
 				}
 			}
 			flowWrites(a, p, m, st["set"], env)
-			if as != "" {
-				vars[as] = m
-			}
+			bind(vars, as, m)
 		case st["update"] != nil:
 			v, _ := st["update"].(string)
-			m, ok := vars[v]
-			if !ok || m == "" {
+			if len(vars[v]) == 0 {
 				a.raise("high", "company automation "+p+" updates a record it cannot resolve")
 				continue
 			}
-			flowWrites(a, p, m, st["set"], env)
+			for _, m := range sortedSet(vars[v]) {
+				flowWrites(a, p, m, st["set"], env)
+			}
 		case st["for_each"] != nil:
-			if src, _ := st["for_each"].(string); as != "" {
-				if m, ok := vars[strings.TrimSpace(src)]; ok {
-					vars[as] = m
+			if as != "" {
+				src, _ := st["for_each"].(string)
+				if ms := vars[strings.TrimSpace(src)]; len(ms) > 0 {
+					for m := range ms {
+						bind(vars, as, m)
+					}
+				} else { // the loop variable shadows any earlier binding with something unknown
+					delete(vars, as)
 				}
 			}
 			walkFlowSteps(a, p, meta.AsList(st["do"]), vars, env)
@@ -480,9 +495,13 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]string,
 	}
 }
 
-// flowWrites raises high for each money or stock field of model that set names.
+// flowWrites raises high for each money or stock field of model that set names, and when model is unknown.
 func flowWrites(a *Assessment, p, model string, set any, env Env) {
 	fields := companyModelFields(env, model)
+	if fields == nil {
+		a.raise("high", "company automation "+p+" writes to a model it cannot resolve")
+		return
+	}
 	sm := meta.AsMap(set)
 	names := make([]string, 0, len(sm))
 	for f := range sm {

@@ -91,7 +91,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | changing `config.connector_auth` (who sets connector secrets and replays jobs), like `config.tax` and `config.ai` | high |
 | 0033 §2's company connector table | as written there |
 
-High is owner only (`owner_required`, unchanged).
+A new flow file in an app or a module (`apps/<a>/flows/`, `modules/<m>/flows/`) is rated as a company flow. High is owner only (`owner_required`, unchanged).
 
 ### 3. Raka is an assistant everywhere; agents and the Cloud ask the platform
 

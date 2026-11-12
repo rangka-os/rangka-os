@@ -377,6 +377,10 @@ func TestAssessSetOnce(t *testing.T) {
 		{"overlay switches off set_once", "custom/attendance_log.rk", map[string]any{"model": "attendance_log", "fields": []any{field("x_lokasi", "data"), field("clock_in", "datetime", "set_once", false)}}, "high"},
 		{"flow writes a set_once field", "flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
 		{"flow writes another field", "flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"note": "'ok'"}}), "medium"},
+		// a new flow file in an app or module runs the same way (audit changeset-set-once 1)
+		{"new module flow writes a set_once field", "modules/lapangan/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
+		{"new app flow writes a set_once field", "apps/absen/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
+		{"new module flow writes another field", "modules/lapangan/flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"note": "'ok'"}}), "medium"},
 	}
 	for _, c := range cases {
 		op := "replace"

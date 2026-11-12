@@ -135,6 +135,10 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 				a.raise("low", "new dashboard "+p)
 			case strings.Contains(p, "/screens/"): // UI over the record API; offered only once an app binds it (contract 0030)
 				a.raise("low", "new work screen "+p)
+			case strings.Contains(p, "/flows/"):
+				// a new flow in an app or module runs like a company flow (unguarded writes): judged the same way
+				a.raise("medium", "new flow "+p)
+				assessCompanyFlow(a, p, nw, env)
 			case strings.Contains(p, "/models/") || strings.HasPrefix(p, "models/"):
 				if strings.HasPrefix(p, "models/") && (nw["is_submittable"] == true || nw["append_only"] == true || nw["stock"] != nil) {
 					a.raise("high", "new company model "+p+" is submittable, append-only or moves stock")

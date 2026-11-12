@@ -154,6 +154,9 @@ type Service struct {
 	// Requires lists the unset auth fields of the connectors a change installs (contract 0017 §4); nil = none.
 	// before is the live registry, after the change's copy (which has no connector files of its own).
 	Requires func(ctx context.Context, org string, before, after *meta.Registry) []Requirement
+	// ReadOnly says why a person may not decide (contract 0028 §4: past the plan's people limit a person is
+	// read-only and decides nothing); "" when they may. Nil = no plan check.
+	ReadOnly func(personID string) string
 	mu       sync.Mutex
 }
 

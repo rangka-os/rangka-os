@@ -11,6 +11,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -107,6 +108,9 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 		if op.Op == "patch" && len(op.Patch) == 0 {
 			return nil, &Error{422, "invalid_changeset", fmt.Sprintf("ops/%d: patch needs a JSON Patch list", i), nil}
 		}
+	}
+	if err := s.operatorPlan(ctx, cs.Ops); err != nil {
+		return nil, err
 	}
 	live := s.live()
 	files, err := live.result(cs.Ops)
@@ -520,6 +524,9 @@ func (s *Service) isApprover(a Actor) bool {
 }
 
 func (s *Service) mayApprove(a Actor) error {
+	if err := s.planReadOnly(a); err != nil {
+		return err
+	}
 	if !a.Human {
 		return &Error{403, "human_required", "a person signed in to the Console or the app must approve change sets (API and MCP tokens cannot)", nil}
 	}
@@ -530,6 +537,42 @@ func (s *Service) mayApprove(a Actor) error {
 		}
 	}
 	return &Error{403, "not_approver", "only " + strings.Join(meta.StrList(keysOf(ap)), ", ") + " may approve change sets", nil}
+}
+
+// planReadOnly refuses a person the plan made read-only (contract 0028 §4): approving, rejecting or applying a
+// change set is a decision, and one could raise the very limit that holds them (audit cloud-package-plan F-2).
+func (s *Service) planReadOnly(a Actor) error {
+	if s.ReadOnly == nil || a.ID == "" {
+		return nil
+	}
+	if msg := s.ReadOnly(a.ID); msg != "" {
+		return &Error{403, "plan_read_only", msg, nil}
+	}
+	return nil
+}
+
+// operatorPlan refuses a change to features.rk while an operator set the tenant's plan (`rangka plan set`,
+// contract 0028): the plans are the operator's (a hosting provider's packages), so the business may not raise its
+// own limits through a change set (audit cloud-package-plan F-1). The operator changes them: the file, then
+// rangka plan set.
+func (s *Service) operatorPlan(ctx context.Context, ops []Op) error {
+	touches := false
+	for _, op := range ops {
+		if op.Path == "features.rk" {
+			touches = true
+		}
+	}
+	if !touches || s.DB == nil {
+		return nil
+	}
+	st, err := plan.LoadStored(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	if st != nil && st.Source == "operator" {
+		return &Error{403, "plan_managed", "Paket usaha ini diatur oleh penyedia layanan, jadi features.rk tidak bisa diubah lewat change set. Hubungi penyedia untuk naik atau ganti paket.", nil}
+	}
+	return nil
 }
 
 func keysOf(m map[string]bool) any {
@@ -591,6 +634,13 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	}
 	if cs.Status == "approved" && !s.isApprover(a) {
 		return nil, &Error{403, "not_approver", "only an approver applies an approved change set", nil}
+	}
+	if err := s.planReadOnly(a); err != nil {
+		return nil, err
+	}
+	// the operator may have taken over the plan since the proposal
+	if err := s.operatorPlan(ctx, cs.Ops); err != nil {
+		return nil, err
 	}
 	v, _, _, cleanup, err := s.check(cs)
 	if err != nil {
@@ -670,6 +720,15 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 	}
 	if cs.Status != "applied" || cs.previous == nil {
 		return nil, &Error{409, "bad_status", "only an applied change set can be reverted (it is " + cs.Status + ")", nil}
+	}
+	// restoring an older features.rk would undo the operator's plans as surely as a new change set (audit
+	// cloud-package-plan F-5)
+	restores := make([]Op, 0, len(cs.previous))
+	for p := range cs.previous {
+		restores = append(restores, Op{Op: "replace", Path: p})
+	}
+	if err := s.operatorPlan(ctx, restores); err != nil {
+		return nil, err
 	}
 	live := s.live()
 	current := map[string]*string{}

@@ -206,7 +206,15 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }, Upstreams: ups, Log: cfg.Logf,
 		Password: func() any { return s.Engine.Reg().SystemConfig("auth.password") }}
 	s.Changes = &changeset.Service{DB: db, AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir, ModulesDir: cfg.ModulesDir,
-		Schemas: cfg.Schemas, Reg: e.Reg, Reload: s.Reload, Now: cfg.Now}
+		Schemas: cfg.Schemas, Reg: e.Reg, Reload: s.Reload, Now: cfg.Now,
+		ReadOnly: func(id string) string { // contract 0028 §4: a person past the people limit decides nothing
+			if snap := e.Plan.Peek(db, e.Reg(), e.Now(), cfg.Logf); snap != nil {
+				if pe := snap.ReadOnlyPerson(id); pe != nil {
+					return pe.Msg
+				}
+			}
+			return ""
+		}}
 	site := ""
 	if cfg.SiteDir != "" {
 		site = filepath.Base(filepath.Clean(cfg.SiteDir))

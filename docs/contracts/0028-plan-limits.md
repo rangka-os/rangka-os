@@ -39,7 +39,8 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    - people: the newest members past the limit; owners come first and the first person is never read-only. Every
      change by such a person is refused.
    The same holds for adding or removing attachments of such a record, and for approving or rejecting a request: a
-   read-only person decides nothing, and nobody decides on a record of a read-only outlet. Reading, printing and exporting are
+   read-only person decides nothing (change sets included: approving, rejecting or applying one is refused with
+   `plan_read_only`), and nobody decides on a record of a read-only outlet. Reading, printing and exporting are
    never refused. Kernel actors (seed, flows and hooks the kernel starts) are not checked.
    The check reads a snapshot cached in memory and never takes a database connection inside a write: a stale
    snapshot (older than 10 seconds, or after an outlet was created) is served while one background refresh measures
@@ -57,6 +58,10 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    (concierge, QRIS), so Juragan Cloud changes the plan after it marks the invoice paid. The serving kernel copies
    the plan's limits to `rk_site_plan` at start and on reload, so `rangka user add` (which reads no metadata) sees
    them.
+   While an operator set the plan, the plans in `features.rk` are the operator's too: a change set that touches
+   `features.rk` is refused with `403 plan_managed` when proposed and when applied, so a business cannot raise its own
+   limits. The operator edits the file and runs `rangka plan set` again. On the company's own plan (`config.rk`, no
+   operator) a change set may edit `features.rk` as before.
 
 ## Not decided here
 

@@ -38,7 +38,9 @@ func cloudEnv(t *testing.T) *env {
 
 // A business on a Cloud package (contract 0028 + 0040 §9, card t_56c86525): `rangka plan set cloud_juragan` limits
 // outlets and people and shapes the traffic, the apps stay those of config.rk's plan, a package change applies at
-// once, and so does a change set that edits the package's limits in features.rk. No restart anywhere.
+// once, and so does the operator's edit of the package's limits. While an operator set the plan the business may
+// not change features.rk through a change set, and a person the plan made read-only decides no change set. On the
+// company's own plan a change set to features.rk applies at once. No restart anywhere.
 func TestCloudPackagePlan(t *testing.T) {
 	e := cloudEnv(t)
 	ctx := context.Background()
@@ -125,35 +127,61 @@ func TestCloudPackagePlan(t *testing.T) {
 		t.Fatalf("a person on cloud_pro: %v", err)
 	}
 
-	// a change set that edits the package in features.rk applies at once: cloud_pro down to 4 outlets
-	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Batas paket Pro", "ops": []any{map[string]any{
-		"op": "patch", "path": "features.rk", "patch": []any{map[string]any{"op": "replace", "path": "/plans/3/limits/outlets", "value": 4}}}}}).JSON
-	id, _ := cs["id"].(string)
-	if id == "" {
-		t.Fatalf("propose: %v", cs)
+	// while an operator set the plan, the plans are the operator's: a change set may not touch features.rk, so the
+	// business cannot raise its own package (audit cloud-package-plan F-1). The operator changes the file and runs
+	// rangka plan set; here the file is rewritten and reloaded, then the plan set again, all without a restart.
+	r = e.must(403, "POST", "/api/v1/changesets", map[string]any{"title": "Naikkan paket sendiri", "ops": []any{map[string]any{
+		"op": "patch", "path": "features.rk", "patch": []any{map[string]any{"op": "replace", "path": "/plans/3/limits/outlets", "value": 99}}}}})
+	if errCode(r) != "plan_managed" {
+		t.Fatalf("a change set to features.rk under an operator's plan: %s", r.Body)
 	}
-	e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
-	e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
-	e.must(200, "POST", "/api/v1/changesets/"+id+"/approve", map[string]any{"note": "uji"})
-	e.must(200, "POST", "/api/v1/changesets/"+id+"/apply", nil)
-	refreshPlan(e)
+	f := filepath.Join(e.site, "features.rk")
+	b, err := os.ReadFile(f)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(f, []byte(strings.Replace(string(b), "users: 10, outlets: 6,", "users: 10, outlets: 4,", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := e.s.Reload(ctx); err != nil {
+		t.Fatal(err)
+	}
+	setPlan(e, "cloud_pro")
 	rep = e.must(200, "GET", "/api/v1/plan", nil).JSON
 	if get(rep, "plan", "name") != "cloud_pro" || get(rep, "usage", "outlets", "limit") != float64(4) || get(rep, "usage", "outlets", "used") != float64(4) {
-		t.Fatalf("after the change set %v", get(rep, "usage", "outlets"))
+		t.Fatalf("after the operator's change %v", get(rep, "usage", "outlets"))
 	}
 	r = e.must(403, "POST", "/api/v1/r/outlet", map[string]any{"outlet_name": "Kopi Senja · Bekasi"})
 	if errCode(r) != "plan_limit" || !strings.Contains(errMsg(r), "Paket Pro berlaku untuk 4 outlet") {
-		t.Fatalf("fifth outlet after the change set: %s", r.Body)
+		t.Fatalf("fifth outlet after the operator's change: %s", r.Body)
 	}
 	// rangka user add (no metadata) reads the limits Reload synced to rk_site_plan
 	if st, err := plan.LoadStored(ctx, e.s.DB); err != nil || st == nil || st.Plan != "cloud_pro" || st.Limits["outlets"] != 4 {
-		t.Fatalf("rk_site_plan after the change set: %+v %v", st, err)
+		t.Fatalf("rk_site_plan after the operator's change: %+v %v", st, err)
 	}
-	// down to a smaller package: nothing is deleted, the newest outlet past 3 becomes read-only (0028 §4)
+	// down to a smaller package: nothing is deleted, the newest outlet past 3 becomes read-only (0028 §4), and a
+	// person past the people limit decides no change set either, not even one raising the limit (audit F-2)
 	setPlan(e, "cloud_juragan")
 	rep = e.must(200, "GET", "/api/v1/plan", nil).JSON
 	if ro, _ := get(rep, "read_only", "outlets").([]any); get(rep, "usage", "outlets", "state") != "over" || len(ro) != 1 {
 		t.Fatalf("cloud_juragan with 4 outlets: %v %v", get(rep, "usage", "outlets"), get(rep, "read_only"))
+	}
+	if _, err := auth.EnsureUser(ctx, e.s.DB, "f@kopisenja.id", "F", "rahasia-123", "kopi-senja", "sales_manager", ""); err != nil {
+		t.Fatal(err)
+	}
+	refreshPlan(e)
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Warna merek", "ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/color/brand", "value": "#7a4520"}}}}}).JSON
+	id, _ := cs["id"].(string)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
+	f2 := &env{t: t, s: e.s, ts: e.ts, apps: e.apps, site: e.site, jar: newJar()}
+	f2.must(200, "POST", "/auth/login", map[string]any{"email": "f@kopisenja.id", "password": "rahasia-123"})
+	if r := f2.must(403, "POST", "/api/v1/changesets/"+id+"/approve", nil); errCode(r) != "plan_read_only" {
+		t.Fatalf("a read-only person approves: %s", r.Body)
+	}
+	if r := f2.must(403, "POST", "/api/v1/changesets/"+id+"/reject", map[string]any{"note": "x"}); errCode(r) != "plan_read_only" {
+		t.Fatalf("a read-only person rejects: %s", r.Body)
 	}
 	// back to the company's own plan (Cloud stops managing it): config.rk's tumbuh again
 	if err := plan.Clear(ctx, e.s.DB, e.s.Engine.Reg(), "test"); err != nil {
@@ -162,5 +190,17 @@ func TestCloudPackagePlan(t *testing.T) {
 	refreshPlan(e)
 	if get(e.must(200, "GET", "/api/v1/plan", nil).JSON, "plan", "name") != "tumbuh" {
 		t.Fatal("clear did not go back to config.rk's plan")
+	}
+	// the company's own plan (no operator): a change set to features.rk applies at once, tumbuh up to 8 outlets
+	cs = e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Batas Tumbuh", "ops": []any{map[string]any{
+		"op": "patch", "path": "features.rk", "patch": []any{map[string]any{"op": "replace", "path": "/plans/1/limits/outlets", "value": 8}}}}}).JSON
+	id, _ = cs["id"].(string)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/approve", map[string]any{"note": "uji"})
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/apply", nil)
+	refreshPlan(e)
+	if get(e.must(200, "GET", "/api/v1/plan", nil).JSON, "usage", "outlets", "limit") != float64(8) {
+		t.Fatal("a change set to the company's own plan did not apply")
 	}
 }

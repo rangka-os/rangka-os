@@ -28,6 +28,17 @@ storage), rangka-apps (an offer section in app skills) · Amends: 0042 §4 (`sug
   - Console: the agent drafts a change set as soon as it understands a request (`INSTRUCTIONS` step 3); the only gate
     is approving the change set afterwards.
   - `rangka-consult` and agent `INSTRUCTIONS` rank catalogue apps first and custom last.
+  - **rangka-os/rangka-ai#27 (merged 12 Nov 2026)** added to `consult_prompt.py`: put a stage's piece on the map in
+    the same turn the stage is clear; never write the map into the reply, at most five sentences; and when the owner
+    says "tolong susun", "sudah cukup jelas" or "buatkan saja", fill every stage, set `suggest_build` and point at
+    "Susun rancangan". These are playbook rules in the engine prompt, and the last one leads straight to a build.
+  - **The questionnaire path** `/v1/onboarding/*` (rangka-ai `raka/onboarding/questionnaire.py`, `recommend.py`,
+    `initial.py`) picks one bundle from the business type (`APP_FOR`; since #27 rental → `sewa_alat`, training →
+    `kelas_kursus`, subscriptions → `langganan_jasa`) and drafts the initial change set as soon as the required answers
+    are in, with no offer. No Cloud, kernel or web code calls it today; it is documented in rangka-ai
+    `docs/onboarding-http.md` and its own tests.
+  - #27 also added `stage_model` to `/v1/plan` (a stage's model from its app or module, by label words), which the
+    build from an accepted option uses, and a retry when the consult answer arrives without `consult_reply`.
 - **The catalogue has little to explain with.** Apps, modules and connectors carry `title`, `summary`, `category` and
   `icon` (0036); the studio's `rangka_catalogue` serves only `name`, `title`, `summary` (and `modules` for apps). Only
   `kasir` ships a skill that explains, in prose, what an owner gets.
@@ -107,6 +118,14 @@ Raka designs from the map (0042). For the offer it builds up to three **options*
 - **When Raka offers.** Only when the map covers the flow from first contact to money in, every stage with a piece or
   an honest `open` item (the old `suggest_build` condition). Raka offers once per map state; it offers again when the
   map changed or the owner asked to change the offer.
+- **When the owner asks to put it together** ("tolong susun", "sudah cukup", "buatkan saja", "siap", "gas"), Raka
+  fills the map as #27 does (every stage gets a piece or an honest `open` item) and **makes the offer in that same
+  turn**. It never points at a build button; the card's "Setuju, susun" is the only way to build. If the map still
+  lacks the money stage, Raka offers what it has, lists the missing stage in `not_covered`, and asks one question at
+  the end.
+- **Mapping is not offering.** Putting pieces on the map as soon as a stage is clear (#27) stays: the map is a working
+  draft the owner watches. Pieces on the map are never described in the reply as something the owner gets; only the
+  offer card does that.
 - **Map state** is a hash of `stages` and `pieces` only (ids, labels, kinds, refs, designs, stage piece lists).
   `business`, `open` and `settings` do not count, so answering a question or confirming a value does not supersede an
   open offer; a new stage or a changed piece does.
@@ -173,6 +192,15 @@ Cloud shows the recommended option as a card with three actions, and "Lihat pili
   `make_offer` tool (offered only with `offers: true`). With `offers: true`, `draft_changeset` is refused
   (`offer_first`) for adding pieces unless the request carries an accepted `offer_answer` whose option names them.
 
+### 5b. The questionnaire path is retired
+
+- `/v1/onboarding/*` is deprecated with this contract and removed when 0046 is implemented: it picks a bundle from a
+  business type and drafts without an offer, the opposite of §1–§4, and nothing calls it. Onboarding goes through the
+  consult interview (`/v1/interview`) and the offer.
+- What it knows is kept, as skills: the business-type → app mapping (`APP_FOR`), the pains and reasons
+  (`_PAIN_EFFECT`), owner jobs, layouts and `seed.products` move into the "Offer" sections of the app skills (§6), for
+  example "Rental alat → `sewa_alat` fits when …". `stage_model` and the consult retry stay in rangka-ai (engine).
+
 ### 6. Know-how lives in skills
 
 - `rangka-consult`: a section "Making the offer": the order and the recommendation rule of §1, when to offer, the
@@ -185,6 +213,9 @@ Cloud shows the recommended option as a card with three actions, and "Lihat pili
 - rangka-cloud `docs/skills/cloud-offer/SKILL.md` (private): how plans, prices and Cloud services are mentioned
   around an offer, only from `cloud_docs`.
 - Engine prompts keep no ordering rule of their own (0045 §1).
+- The playbook lines #27 put in `consult_prompt.py` (when to put a piece on the map, the five-sentence reply, what to
+  do on "tolong susun") move to `rangka-consult`; the prompt keeps only the output contract (`consult_reply`, no map in
+  the reply text) and points at the skill.
 
 ## Contract changes
 
@@ -195,7 +226,10 @@ Cloud shows the recommended option as a card with three actions, and "Lihat pili
 **rangka-ai**
 - `/v1/interview`: `offer` replaces `suggest_build`; request `offer_answer` and `budget.final_offer`; the code-set
   `suggest_build` for `near_limit` is removed; validation of §1 and §2 (`bad_offer`).
-- Consult prompt: the ordering and card rules move to `rangka-consult`; the prompt only points at it.
+- Consult prompt: the ordering and card rules, and #27's playbook lines, move to `rangka-consult`; the prompt only
+  points at it. "Tolong susun" makes an offer (§2), never `suggest_build`.
+- Remove `/v1/onboarding/*` with `questionnaire.py`, `recommend.py`, `initial.py` and their tests and docs, after
+  their know-how is in app skills (§5b).
 - `/v1/turn`: `offers` and `offer_answer` on the request, `make_offer` tool, `offer` terminal path, `offer_first`
   refusal (§5); `/v1/chat` unchanged.
 - Tests: no offer before the map reaches money in; a revised offer gets a new id; `draft_changeset` for a new app
@@ -212,7 +246,8 @@ Cloud shows the recommended option as a card with three actions, and "Lihat pili
 
 **rangka-apps**
 - An "Offer" section in every app and module skill, starting with the five business types of the landing
-  (Outsourcing, Rental alat, Kursus & pelatihan, Layanan langganan, F&B).
+  (Outsourcing, Rental alat, Kursus & pelatihan, Layanan langganan, F&B), carrying what rangka-ai's questionnaire
+  knew for them (§5b).
 
 ## Open
 

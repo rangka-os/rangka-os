@@ -66,25 +66,32 @@ func unitPath(p string) bool {
 }
 
 // Assess computes layers and risk (CONTRACTS v0.1 decisions 2 and 3). High: money/stock fields, system.rk,
-// roles and permissions, config.tax (and config.ai, which decides approvals), deletions, existing fields of
-// submittable models, and edits to existing app files (app files belong to app authors; organisations use
-// custom/<model>.rk). Medium: features.rk, flows, new fields/rules/overlays, config.apps and other settings,
+// roles and permissions, config.tax (and config.ai and config.connector_auth, which decide approvals and connector
+// secrets), deletions, existing fields of submittable models, and edits to existing app files (app files belong to
+// app authors; organisations use custom/<model>.rk). Medium: features.rk, flows, new fields/rules/overlays, config.apps and other settings,
 // connectors, new models. Low: themes, layouts, site processes, labels, dashboards, new work screens.
 func Assess(ops []Op, before, after func(path string) (map[string]any, bool), model func(name string) map[string]any) *Assessment {
 	return AssessWith(ops, before, after, Env{Model: model})
 }
 
-// Env is what Assess may look up besides the files: an installed model's own file, and the units a config.rk
-// would install (contract 0032 §3). Either may be nil.
+// Env is what Assess may look up besides the files: an installed model's own file, the units a config.rk
+// would install (contract 0032 §3) and the unit a model belongs to ("" unknown, contract 0045 §2b). Any may be nil.
 type Env struct {
 	Model     func(name string) map[string]any
 	Installed func(cfg map[string]any) map[string]bool
+	ModuleOf  func(model string) string
+
+	after func(path string) (map[string]any, bool) // the files after the change set, set by AssessWith
 }
+
+// coreDraftModules are the core modules a company flow may not fill with drafts without the owner (contract 0045 §2b).
+var coreDraftModules = map[string]bool{"invoicing": true, "payments": true, "stock": true}
 
 // AssessWith is Assess with an Env. With Installed set, a config.rk change to apps or modules is judged by the
 // difference in installed units, not by which key changed.
 func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool), env Env) *Assessment {
 	model := env.Model
+	env.after = after
 	a := &Assessment{Risk: "low"}
 	layers := map[int]bool{}
 	for _, op := range ops {
@@ -112,6 +119,7 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			assessModel(a, p, old, nw)
 		case strings.HasPrefix(p, "flows/"):
 			a.raise("medium", "company automation "+p)
+			assessCompanyFlow(a, p, nw, env)
 		case unitPath(p) && existed:
 			if strings.Contains(p, "/models/") {
 				assessModel(a, p, old, nw)
@@ -128,6 +136,9 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			case strings.Contains(p, "/screens/"): // UI over the record API; offered only once an app binds it (contract 0030)
 				a.raise("low", "new work screen "+p)
 			case strings.Contains(p, "/models/") || strings.HasPrefix(p, "models/"):
+				if strings.HasPrefix(p, "models/") && (nw["is_submittable"] == true || nw["append_only"] == true || nw["stock"] != nil) {
+					a.raise("high", "new company model "+p+" is submittable, append-only or moves stock")
+				}
 				for _, f := range meta.AsList(nw["fields"]) {
 					if sensitiveField(meta.AsMap(f)) {
 						a.raise("high", "new model "+p+" with money/stock field "+meta.Str(meta.AsMap(f), "name"))
@@ -191,7 +202,7 @@ func assessConfig(a *Assessment, old, nw map[string]any, installed func(map[stri
 			continue
 		}
 		switch k {
-		case "tax", "ai":
+		case "tax", "ai", "connector_auth": // connector_auth decides who sets connector secrets and replays jobs
 			a.raise("high", "changes config."+k)
 		case "theme", "layout", "locale":
 			a.raise("low", "changes config."+k)
@@ -306,6 +317,9 @@ func assessFields(a *Assessment, p string, old, nw map[string]any, submittable b
 	for _, name := range order {
 		f := nf[name]
 		o, ok := of[name]
+		if ok {
+			removedOptions(a, p, name, o["options"], f["options"])
+		}
 		switch {
 		case !ok && sensitiveField(f):
 			a.raise("high", fmt.Sprintf("adds money/stock field %s to %s", name, p))
@@ -354,6 +368,15 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 		a.raise("medium", "changes approvals of "+p)
 	}
 	if !reflect.DeepEqual(normalize(old["options"]), normalize(nw["options"])) {
+		oo, no := meta.AsMap(old["options"]), meta.AsMap(nw["options"])
+		var names []string
+		for f := range oo {
+			names = append(names, f)
+		}
+		sort.Strings(names)
+		for _, f := range names {
+			removedOptions(a, p, f, oo[f], no[f])
+		}
 		if submittable {
 			a.raise("high", "changes select options of a submittable model ("+p+")")
 		} else {
@@ -375,4 +398,190 @@ func isEmpty(v any) bool {
 		return len(x) == 0
 	}
 	return false
+}
+
+// optionValue is a select option's value: the option itself when it is text, else its value key.
+func optionValue(o any) string {
+	if v, ok := o.(string); ok {
+		return v
+	}
+	return meta.Str(meta.AsMap(o), "value")
+}
+
+// removedOptions rates removing a select option high (contract 0045 §2b): rows may still hold the value.
+func removedOptions(a *Assessment, p, field string, old, nw any) {
+	kept := map[string]bool{}
+	for _, o := range meta.AsList(nw) {
+		kept[optionValue(o)] = true
+	}
+	for _, o := range meta.AsList(old) {
+		if v := optionValue(o); v != "" && !kept[v] {
+			a.raise("high", fmt.Sprintf("removes select option %s of %s (%s)", v, field, p))
+		}
+	}
+}
+
+// assessCompanyFlow rates a company flow (contract 0045 §2b): creating a draft in a core module, or writing a money or
+// stock field of the created or updated record (or of its child-table rows), is high; so is an update whose record, or a write whose model, it
+// cannot resolve. flow.json has no submit, cancel, amend or model-action step, and a call step's output reaches a
+// record only through a set.
+func assessCompanyFlow(a *Assessment, p string, flow map[string]any, env Env) {
+	vars := map[string]map[string]bool{} // variable → every model it may hold
+	if on, _ := flow["on"].(string); on != "" {
+		// doc is the on: model only for a record event (flow.json: <model>.created|updated|submitted|cancelled); any
+		// other event (a connector trigger, an unknown suffix) leaves it unbound, so update: doc rates high
+		if m, ev, ok := strings.Cut(on, "."); ok && recordEvents[ev] && companyModelFields(env, m) != nil {
+			vars["doc"] = map[string]bool{m: true}
+		}
+	}
+	walkFlowSteps(a, p, meta.AsList(flow["steps"]), vars, env)
+}
+
+// recordEvents are the <model>.<event> suffixes flow.json names for a record's own event.
+var recordEvents = map[string]bool{"created": true, "updated": true, "submitted": true, "cancelled": true}
+
+// bind adds model to the models a variable may hold: a variable bound in both branches of an if, or bound twice,
+// may hold either at runtime, so a write is judged against all of them.
+func bind(vars map[string]map[string]bool, v, model string) {
+	if v == "" {
+		return
+	}
+	if vars[v] == nil {
+		vars[v] = map[string]bool{}
+	}
+	vars[v][model] = true
+}
+
+func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[string]bool, env Env) {
+	for _, s := range steps {
+		st := meta.AsMap(s)
+		as, _ := st["as"].(string)
+		switch {
+		case st["find"] != nil || st["find_all"] != nil:
+			m, _ := st["find"].(string)
+			if m == "" {
+				m, _ = st["find_all"].(string)
+			}
+			bind(vars, as, m)
+		case st["create"] != nil:
+			m, _ := st["create"].(string)
+			if env.ModuleOf != nil {
+				if mod := env.ModuleOf(m); coreDraftModules[mod] {
+					a.raise("high", "company automation "+p+" creates a draft in "+mod)
+				}
+			}
+			flowWrites(a, p, m, st["set"], env)
+			bind(vars, as, m)
+		case st["update"] != nil:
+			v, _ := st["update"].(string)
+			if len(vars[v]) == 0 {
+				a.raise("high", "company automation "+p+" updates a record it cannot resolve")
+				continue
+			}
+			for _, m := range sortedSet(vars[v]) {
+				flowWrites(a, p, m, st["set"], env)
+			}
+		case st["for_each"] != nil:
+			if as != "" {
+				src, _ := st["for_each"].(string)
+				if ms := vars[strings.TrimSpace(src)]; len(ms) > 0 {
+					for m := range ms {
+						bind(vars, as, m)
+					}
+				} else { // the loop variable shadows any earlier binding with something unknown
+					delete(vars, as)
+				}
+			}
+			walkFlowSteps(a, p, meta.AsList(st["do"]), vars, env)
+		case st["if"] != nil:
+			walkFlowSteps(a, p, meta.AsList(st["then"]), vars, env)
+			walkFlowSteps(a, p, meta.AsList(st["else"]), vars, env)
+		}
+	}
+}
+
+// flowWrites raises high for each money or stock field of model that set names, and when model is unknown.
+func flowWrites(a *Assessment, p, model string, set any, env Env) {
+	fields := companyModelFields(env, model)
+	if fields == nil {
+		a.raise("high", "company automation "+p+" writes to a model it cannot resolve")
+		return
+	}
+	sm := meta.AsMap(set)
+	names := make([]string, 0, len(sm))
+	for f := range sm {
+		names = append(names, f)
+	}
+	sort.Strings(names)
+	for _, f := range names {
+		fd, ok := fields[f]
+		switch {
+		case !ok:
+		case sensitiveField(fd):
+			a.raise("high", "company automation "+p+" writes money/stock field "+f)
+		case fd["type"] == "table":
+			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
+			// record's rows), so any money or stock field of the child model counts as written
+			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, map[string]bool{})
+		}
+	}
+}
+
+// childRowsWrites raises high when the child model of table field f (or a table nested in it) has a money or stock
+// field, or cannot be resolved.
+func childRowsWrites(a *Assessment, p, f, child string, env Env, seen map[string]bool) {
+	if seen[child] {
+		return
+	}
+	seen[child] = true
+	fields := companyModelFields(env, child)
+	if fields == nil {
+		a.raise("high", "company automation "+p+" writes rows of "+f+" whose model it cannot resolve")
+		return
+	}
+	names := make([]string, 0, len(fields))
+	for n := range fields {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		switch fd := fields[n]; {
+		case sensitiveField(fd):
+			a.raise("high", "company automation "+p+" writes rows of "+f+" with money/stock field "+n)
+		case fd["type"] == "table":
+			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, seen)
+		}
+	}
+}
+
+// companyModelFields is a model's fields after the change set: the installed model's own file (or the company model
+// file models/<m>.rk) plus its overlay custom/<m>.rk. Nil when the model is unknown.
+func companyModelFields(env Env, model string) map[string]map[string]any {
+	if model == "" {
+		return nil
+	}
+	var out map[string]map[string]any
+	add := func(doc map[string]any) {
+		if doc == nil {
+			return
+		}
+		if out == nil {
+			out = map[string]map[string]any{}
+		}
+		fs, _ := fieldsByName(doc)
+		for k, v := range fs {
+			out[k] = v
+		}
+	}
+	if env.Model != nil {
+		add(env.Model(model))
+	}
+	if env.after != nil {
+		for _, path := range []string{"models/" + model + ".rk", "custom/" + model + ".rk"} {
+			if doc, ok := env.after(path); ok {
+				add(doc)
+			}
+		}
+	}
+	return out
 }

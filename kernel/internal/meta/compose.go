@@ -182,8 +182,38 @@ type MenuGroup struct {
 
 // DefaultMenu is the kernel's menu for the modules a composed site names directly (contract 0032 §5): one group per
 // installed module that no installed app brings in, config.modules file order first, then the modules they require
-// by name. Nil when the site names no modules. /meta leaves it out when the layout sets nav.side (that is the menu).
+// by name, then the company group "Perusahaan" (contract 0045 §5). Nil when there is neither. /meta leaves it out when the layout sets nav.side (that is the menu).
 func (r *Registry) DefaultMenu() []MenuGroup {
+	out := r.composedMenu()
+	if g, ok := r.siteGroup(); ok {
+		out = append(out, g)
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
+}
+
+// siteGroup is the last group, "Perusahaan": the company's own tables (contract 0045 §5), for composed and app-only
+// sites alike. Child tables stay out; the group is absent when the site has no table of its own.
+func (r *Registry) siteGroup() (MenuGroup, bool) {
+	u := r.App[SiteUnit]
+	if u == nil || u.Kind != KindSite {
+		return MenuGroup{}, false
+	}
+	g := MenuGroup{Group: Label{"id": "Perusahaan", "en": "Company"}, Module: SiteUnit, Items: []string{}, Dashboards: []string{}}
+	models := append([]string{}, u.Models...)
+	sort.Strings(models)
+	for _, mn := range models {
+		if m := r.Models[mn]; m != nil && !m.IsChild {
+			g.Items = append(g.Items, mn)
+		}
+	}
+	return g, len(g.Items) > 0
+}
+
+// composedMenu is the module groups of a composed site; empty for an app-only one.
+func (r *Registry) composedMenu() []MenuGroup {
 	if !r.Composed() {
 		return nil
 	}

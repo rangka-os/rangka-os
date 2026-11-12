@@ -196,8 +196,12 @@ const ScopeSecretsWrite = "secrets:write"
 // the member API (contract 0043), for Rangka Cloud. Only an owner with a browser session can mint it.
 const ScopeMembersWrite = "members:write"
 
+// ScopeAssistant marks an API token as the assistant's (contract 0045 §3): it resolves with Via "ai", so the kernel
+// treats its holder as Raka acting for the person who minted it.
+const ScopeAssistant = "assistant"
+
 // TokenScopes are the scopes an API token may carry.
-var TokenScopes = map[string]bool{ScopeSecretsWrite: true, ScopeMembersWrite: true}
+var TokenScopes = map[string]bool{ScopeSecretsWrite: true, ScopeMembersWrite: true, ScopeAssistant: true}
 
 // RevokeMember deletes a person's sessions and API tokens in one organisation (contract 0043 §4); their sessions and
 // tokens for other organisations stay. q may be the transaction that changes the membership.
@@ -247,7 +251,12 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &Principal{User: u, Via: "token", Scope: res.Rows[0][2].(string)}, nil
+			scope := res.Rows[0][2].(string)
+			p := &Principal{User: u, Via: "token", Scope: scope}
+			if p.HasScope(ScopeAssistant) {
+				p.Via = "ai"
+			}
+			return p, nil
 		}
 		claims, err := s.VerifyJWT(tok)
 		if err != nil {

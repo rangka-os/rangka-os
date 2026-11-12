@@ -145,6 +145,16 @@ func TestCloudPackagePlan(t *testing.T) {
 	if errCode(r) != "plan_limit" || !strings.Contains(errMsg(r), "Paket Pro berlaku untuk 4 outlet") {
 		t.Fatalf("fifth outlet after the change set: %s", r.Body)
 	}
+	// rangka user add (no metadata) reads the limits Reload synced to rk_site_plan
+	if st, err := plan.LoadStored(ctx, e.s.DB); err != nil || st == nil || st.Plan != "cloud_pro" || st.Limits["outlets"] != 4 {
+		t.Fatalf("rk_site_plan after the change set: %+v %v", st, err)
+	}
+	// down to a smaller package: nothing is deleted, the newest outlet past 3 becomes read-only (0028 §4)
+	setPlan(e, "cloud_juragan")
+	rep = e.must(200, "GET", "/api/v1/plan", nil).JSON
+	if ro, _ := get(rep, "read_only", "outlets").([]any); get(rep, "usage", "outlets", "state") != "over" || len(ro) != 1 {
+		t.Fatalf("cloud_juragan with 4 outlets: %v %v", get(rep, "usage", "outlets"), get(rep, "read_only"))
+	}
 	// back to the company's own plan (Cloud stops managing it): config.rk's tumbuh again
 	if err := plan.Clear(ctx, e.s.DB, e.s.Engine.Reg(), "test"); err != nil {
 		t.Fatal(err)

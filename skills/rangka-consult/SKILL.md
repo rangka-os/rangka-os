@@ -59,6 +59,18 @@ Always call `rangka_catalogue` first; never name a module, connector or service 
 - Each piece gets a `why` in the owner's words ("Pesanan datang lewat WA"). A stage lists its pieces by id; `model` on
   a stage is the main model when a catalogue piece backs it.
 
+### Compose one app per role
+
+- Design the solution as one catalogue app per role or touchpoint in the flow, not one app plus modules: who sells at
+  the front, who looks after stock, purchasing and the books at the back, who looks after customers. Read the app
+  summaries in `rangka_catalogue` to see which apps complement each other.
+- Each app goes on the map as its own piece (`kind: catalogue`, `ref` = the app name) at the stages where that role
+  works. Explain the split to the owner in a sentence, for a coffee shop for example: kasir for the counter,
+  fnb_cabang for head office, crm only when the owner's story shows regular customers or members.
+- Before you place an app, load its skill when the catalogue lists one (`rangka_skill {name: "rangka-app-<app>"}`):
+  it says when the app fits and how to explain it. A business that serves buyers at a counter (kedai, kafe,
+  restoran, toko) always needs `rangka-app-kasir` loaded, because it decides whether the cashier goes on the map.
+
 ## 5. Custom pieces: design, do not stop
 
 When nothing in the catalogue covers a part of the flow, say which part, then design it as a `custom` piece

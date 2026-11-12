@@ -369,7 +369,8 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 		}
 	}
 	assessFields(a, p, old, nw, submittable && existed)
-	// an overlay field may switch off set_once of the model's own field (overlay fields win)
+	// an overlay that names a set_once field of the model with set_once off: the loader keeps the model's own field
+	// (applyOverlays skips names it has), so this is the intent to make evidence editable; rated high to be safe
 	base, _ := fieldsByName(target)
 	over, order := fieldsByName(nw)
 	for _, name := range order {

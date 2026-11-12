@@ -19,6 +19,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/mcp"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/ratelimit"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
 	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 )
@@ -54,6 +55,8 @@ type Server struct {
 	blobMu sync.Mutex // orders blob removal against uploads of the same bytes (one process)
 
 	ai aiState // assistant limits and health probe (ai.go)
+
+	limiter ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
 }
 
 type ctxKey struct{}
@@ -274,7 +277,7 @@ func (s *Server) Handler() http.Handler {
 	if s.WebDir != "" {
 		mux.Handle("GET /", s.static())
 	}
-	return s.logRequests(cors(mux))
+	return s.logRequests(cors(s.shape(mux)))
 }
 
 func (s *Server) static() http.Handler {

@@ -334,3 +334,76 @@ func TestSchemaAllowsSiteProcesses(t *testing.T) {
 		}
 	}
 }
+
+// A value meant to be written once (set_once, contract 0030 §4: clock-in time, position, a signature) stays
+// evidence: a company change that makes it editable again, or a company flow that writes it, is high risk, so it
+// never applies on a config.ai approver's word (audit layar-kerja C1, card t_721b9456).
+func TestAssessSetOnce(t *testing.T) {
+	absen := map[string]any{"name": "x_absen", "fields": []any{map[string]any{"name": "jam_masuk", "type": "datetime", "set_once": true}, map[string]any{"name": "catatan", "type": "text"}}}
+	log := map[string]any{"name": "attendance_log", "fields": []any{map[string]any{"name": "clock_in", "type": "datetime", "set_once": true}, map[string]any{"name": "note", "type": "text"}}}
+	files := map[string]map[string]any{"models/x_absen.rk": absen, "custom/attendance_log.rk": {"model": "attendance_log", "fields": []any{map[string]any{"name": "x_lokasi", "type": "data"}}}}
+	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
+	with := func(p string, m map[string]any) func(string) (map[string]any, bool) {
+		return func(q string) (map[string]any, bool) {
+			if q == p {
+				return m, true
+			}
+			return before(q)
+		}
+	}
+	model := func(n string) map[string]any {
+		return map[string]map[string]any{"attendance_log": log, "x_absen": absen}[n]
+	}
+	field := func(name, typ string, extra ...any) map[string]any {
+		f := map[string]any{"name": name, "type": typ}
+		for i := 0; i+1 < len(extra); i += 2 {
+			f[extra[i].(string)] = extra[i+1]
+		}
+		return f
+	}
+	flow := func(on string, steps ...any) map[string]any {
+		return map[string]any{"name": "x_f", "on": on, "steps": steps}
+	}
+	cases := []struct {
+		name  string
+		path  string
+		after map[string]any
+		risk  string
+	}{
+		{"company model drops set_once", "models/x_absen.rk", map[string]any{"name": "x_absen", "fields": []any{field("jam_masuk", "datetime"), field("catatan", "text")}}, "high"},
+		{"company model changes a set_once field", "models/x_absen.rk", map[string]any{"name": "x_absen", "fields": []any{field("jam_masuk", "date", "set_once", true), field("catatan", "text")}}, "high"},
+		{"company model relabels a set_once field", "models/x_absen.rk", map[string]any{"name": "x_absen", "fields": []any{field("jam_masuk", "datetime", "set_once", true, "label", map[string]any{"id": "Jam datang"}), field("catatan", "text")}}, "low"},
+		{"company model changes another field", "models/x_absen.rk", map[string]any{"name": "x_absen", "fields": []any{field("jam_masuk", "datetime", "set_once", true), field("catatan", "data")}}, "medium"},
+		{"overlay switches off set_once", "custom/attendance_log.rk", map[string]any{"model": "attendance_log", "fields": []any{field("x_lokasi", "data"), field("clock_in", "datetime", "set_once", false)}}, "high"},
+		{"flow writes a set_once field", "flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"clock_in": "now()"}}), "high"},
+		{"flow writes another field", "flows/x_f.rk", flow("attendance_log.updated", map[string]any{"update": "doc", "set": map[string]any{"note": "'ok'"}}), "medium"},
+	}
+	for _, c := range cases {
+		op := "replace"
+		if _, ok := files[c.path]; !ok {
+			op = "create"
+		}
+		a := AssessWith([]Op{{Op: op, Path: c.path}}, before, with(c.path, c.after), Env{Model: model})
+		if a.Risk != c.risk {
+			t.Errorf("%s: risk %s (%v), want %s", c.name, a.Risk, a.Reasons, c.risk)
+		}
+	}
+}
+
+// changeset.json takes a work screen in an app as it does in a module (the loader reads both; audit layar-kerja C2).
+func TestSchemaAllowsAppScreens(t *testing.T) {
+	for path, ok := range map[string]bool{
+		"apps/kasir/screens/kasir.rk":   true,
+		"modules/pos/screens/kasir.rk":  true,
+		"apps/kasir/screens/Kasir.rk":   false,
+		"apps/kasir/screens/a/kasir.rk": false,
+		"screens/kasir.rk":              false,
+	} {
+		doc := map[string]any{"id": newID(), "status": "proposed", "title": "Layar", "author": map[string]any{"kind": "user", "id": "o@contoh.test"},
+			"ops": []any{map[string]any{"op": "create", "path": path, "content": "name: kasir\n"}}}
+		errs := schema.Embedded().Validate("changeset", schema.FromData(normalize(doc)))
+		if (len(errs) == 0) != ok {
+			t.Errorf("%s: accepted=%v, want %v (%v)", path, len(errs) == 0, ok, errs)
+		}
+	}
+}

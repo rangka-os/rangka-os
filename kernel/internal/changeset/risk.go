@@ -326,10 +326,15 @@ func assessFields(a *Assessment, p string, old, nw map[string]any, submittable b
 		case !ok:
 			a.raise("medium", fmt.Sprintf("adds field %s to %s", name, p))
 		case reflect.DeepEqual(normalize(o), normalize(f)):
+		case o["set_once"] == true && f["set_once"] != true:
+			// a value written once (clock-in time, position, a signature) becomes editable: evidence could be rewritten
+			a.raise("high", fmt.Sprintf("drops set_once from field %s of %s (a value meant to be written once becomes editable)", name, p))
 		case onlyLabels(o, f):
 			a.raise("low", fmt.Sprintf("relabels field %s of %s", name, p))
 		case sensitiveField(o) || sensitiveField(f):
 			a.raise("high", fmt.Sprintf("changes money/stock field %s of %s", name, p))
+		case o["set_once"] == true:
+			a.raise("high", fmt.Sprintf("changes set_once field %s of %s", name, p))
 		case submittable:
 			a.raise("high", fmt.Sprintf("changes field %s of a submittable model (%s)", name, p))
 		default:
@@ -364,6 +369,16 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 		}
 	}
 	assessFields(a, p, old, nw, submittable && existed)
+	// an overlay field may switch off set_once of the model's own field (overlay fields win)
+	base, _ := fieldsByName(target)
+	over, order := fieldsByName(nw)
+	for _, name := range order {
+		if bf, ok := base[name]; ok && bf["set_once"] == true {
+			if v, set := over[name]["set_once"]; set && v != true {
+				a.raise("high", fmt.Sprintf("overlay %s switches off set_once of field %s", p, name))
+			}
+		}
+	}
 	if !reflect.DeepEqual(normalize(old["approvals"]), normalize(nw["approvals"])) {
 		a.raise("medium", "changes approvals of "+p)
 	}
@@ -519,6 +534,9 @@ func flowWrites(a *Assessment, p, model string, set any, env Env) {
 		case !ok:
 		case sensitiveField(fd):
 			a.raise("high", "company automation "+p+" writes money/stock field "+f)
+		case fd["set_once"] == true:
+			// the kernel lets a flow write a set_once field once; a company flow that writes it decides the evidence
+			a.raise("high", "company automation "+p+" writes set_once field "+f)
 		case fd["type"] == "table":
 			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
 			// record's rows), so any money or stock field of the child model counts as written

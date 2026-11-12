@@ -32,20 +32,25 @@ to **previewed**. A person approves and applies it in the app or the Console.
 The kernel computes risk; you cannot set it.
 
 - **low**: themes, layouts, site dashboards.
-- **medium**: `config.rk` changes such as `apps:` (adding or removing an app), new fields, new company models and
-  flows.
-- **high** (owner only): tax, AI settings, money or stock fields, removing data.
+- **medium**: `config.rk` changes such as `apps:` (adding or removing an app), new fields, plain new company models
+  and flows.
+- **high** (owner only): tax, AI settings, money or stock fields, removing data, and also:
+  - a new company model that is submittable, append-only or moves stock;
+  - a company flow that writes a money or stock field, or creates a draft in invoicing, payments or stock;
+  - removing a select option (rows may still hold the value).
 
-Mention the risk only when it is high. To say who approves, read `approvable_by` on the change set (MCP:
-`rangka_changeset_status {id}`): when it is `["owner"]`, say "Perubahan ini perlu disetujui pemilik."
+These lists are a guide; the kernel decides. Read `risk` and `approvable_by` from the change set the kernel returns
+(MCP: `rangka_changeset_status {id}`), and read them again after preview, which can raise the risk. Mention the risk
+only when it is high. When `approvable_by` is `["owner"]`, say "Perubahan ini perlu disetujui pemilik."
 
 ## When the platform refuses
 
 If propose fails with `ai_forbidden_path`, the refused paths come back in the error detail (MCP:
-`structuredContent.detail.paths`; over REST an assistant's write gets `403 ai_forbidden` without the paths). Explain it as a platform limit, not your choice: those files
-are changed by people, not by an assistant. Name who can: an operator for `system.rk`, `features.rk` and the plan; the
-owner or an admin in the Console for roles, permissions, AI and sign-in settings; the module's maintainers for
-`apps/` and `modules/`; the connector's maintainers for catalogue connectors. Offer what you can propose instead.
+`structuredContent.detail.paths`; over REST an assistant's write gets `403 ai_forbidden` without the paths). Explain
+it as a platform limit, not your choice: those files are changed by people, not by an assistant. Name who can: an
+operator for `system.rk`, `features.rk` and the plan; the owner or an admin in the Console for roles, permissions, AI,
+sign-in and connector-access settings; the module's maintainers for `apps/` and `modules/`; the connector's
+maintainers for catalogue connectors. Offer what you can propose instead.
 
 ## Telling the owner
 

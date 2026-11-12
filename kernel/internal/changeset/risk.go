@@ -65,6 +65,17 @@ func unitPath(p string) bool {
 	return strings.HasPrefix(p, "apps/") || strings.HasPrefix(p, "modules/")
 }
 
+// unitKind is the kind of a module or app file: the folder after the unit's name (models, flows, screens,
+// dashboards, roles), "" for app.rk / module.rk. Read from the path's third segment, so a unit named like a kind
+// (modules/flows/models/x.rk) is not taken for one (audit changeset-set-once 2, 3).
+func unitKind(p string) string {
+	parts := strings.Split(p, "/")
+	if len(parts) < 4 {
+		return ""
+	}
+	return parts[2]
+}
+
 // Assess computes layers and risk (CONTRACTS v0.1 decisions 2 and 3). High: money/stock fields, system.rk,
 // roles and permissions, config.tax (and config.ai and config.connector_auth, which decide approvals and connector
 // secrets), deletions, existing fields of submittable models, and edits to existing app files (app files belong to
@@ -121,7 +132,7 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			a.raise("medium", "company automation "+p)
 			assessCompanyFlow(a, p, nw, env)
 		case unitPath(p) && existed:
-			if strings.Contains(p, "/models/") {
+			if unitKind(p) == "models" {
 				assessModel(a, p, old, nw)
 			}
 			what := "app"
@@ -130,12 +141,20 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			}
 			a.raise("high", "edits "+what+" file "+p+" ("+what+" files belong to app authors; organisations change models through custom/<model>.rk)")
 		case unitPath(p) || strings.HasPrefix(p, "models/"):
+			kind := unitKind(p)
+			if strings.HasPrefix(p, "models/") {
+				kind = "models"
+			}
 			switch {
-			case strings.Contains(p, "/dashboards/"):
+			case kind == "dashboards":
 				a.raise("low", "new dashboard "+p)
-			case strings.Contains(p, "/screens/"): // UI over the record API; offered only once an app binds it (contract 0030)
+			case kind == "screens": // UI over the record API; offered only once an app binds it (contract 0030)
 				a.raise("low", "new work screen "+p)
-			case strings.Contains(p, "/models/") || strings.HasPrefix(p, "models/"):
+			case kind == "flows":
+				// a new flow in an app or module runs like a company flow (unguarded writes): judged the same way
+				a.raise("medium", "new flow "+p)
+				assessCompanyFlow(a, p, nw, env)
+			case kind == "models":
 				if strings.HasPrefix(p, "models/") && (nw["is_submittable"] == true || nw["append_only"] == true || nw["stock"] != nil) {
 					a.raise("high", "new company model "+p+" is submittable, append-only or moves stock")
 				}
@@ -326,10 +345,15 @@ func assessFields(a *Assessment, p string, old, nw map[string]any, submittable b
 		case !ok:
 			a.raise("medium", fmt.Sprintf("adds field %s to %s", name, p))
 		case reflect.DeepEqual(normalize(o), normalize(f)):
+		case o["set_once"] == true && f["set_once"] != true:
+			// a value written once (clock-in time, position, a signature) becomes editable: evidence could be rewritten
+			a.raise("high", fmt.Sprintf("drops set_once from field %s of %s (a value meant to be written once becomes editable)", name, p))
 		case onlyLabels(o, f):
 			a.raise("low", fmt.Sprintf("relabels field %s of %s", name, p))
 		case sensitiveField(o) || sensitiveField(f):
 			a.raise("high", fmt.Sprintf("changes money/stock field %s of %s", name, p))
+		case o["set_once"] == true:
+			a.raise("high", fmt.Sprintf("changes set_once field %s of %s", name, p))
 		case submittable:
 			a.raise("high", fmt.Sprintf("changes field %s of a submittable model (%s)", name, p))
 		default:
@@ -364,6 +388,17 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 		}
 	}
 	assessFields(a, p, old, nw, submittable && existed)
+	// an overlay that names a set_once field of the model with set_once off: the loader keeps the model's own field
+	// (applyOverlays skips names it has), so this is the intent to make evidence editable; rated high to be safe
+	base, _ := fieldsByName(target)
+	over, order := fieldsByName(nw)
+	for _, name := range order {
+		if bf, ok := base[name]; ok && bf["set_once"] == true {
+			if v, set := over[name]["set_once"]; set && v != true {
+				a.raise("high", fmt.Sprintf("overlay %s switches off set_once of field %s", p, name))
+			}
+		}
+	}
 	if !reflect.DeepEqual(normalize(old["approvals"]), normalize(nw["approvals"])) {
 		a.raise("medium", "changes approvals of "+p)
 	}
@@ -519,6 +554,9 @@ func flowWrites(a *Assessment, p, model string, set any, env Env) {
 		case !ok:
 		case sensitiveField(fd):
 			a.raise("high", "company automation "+p+" writes money/stock field "+f)
+		case fd["set_once"] == true:
+			// the kernel lets a flow write a set_once field once; a company flow that writes it decides the evidence
+			a.raise("high", "company automation "+p+" writes set_once field "+f)
 		case fd["type"] == "table":
 			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
 			// record's rows), so any money or stock field of the child model counts as written

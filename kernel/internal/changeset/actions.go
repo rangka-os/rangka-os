@@ -131,7 +131,6 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 	if len(as.Reasons) > 0 {
 		note += ": " + strings.Join(as.Reasons, "; ")
 	}
-	cs.ApprovableBy = s.ApprovableBy(cs)
 	if err := s.transition(ctx, cs, a, "proposed", note, true); err != nil {
 		return nil, err
 	}

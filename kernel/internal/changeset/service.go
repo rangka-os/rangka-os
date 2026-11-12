@@ -537,6 +537,9 @@ func (s *Service) List(ctx context.Context, org, status string, limit int) ([]*C
 func (s *Service) transition(ctx context.Context, cs *ChangeSet, a Actor, status, note string, insert bool) error {
 	cs.Status = status
 	cs.History = append(cs.History, Event{Status: status, At: s.now(), By: a.ID, Note: note})
+	// a step may change the risk (preview raises it when a removed unit still holds rows), so who may approve is
+	// recomputed from the risk being saved, never carried over from the load
+	cs.ApprovableBy = s.ApprovableBy(cs)
 	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err

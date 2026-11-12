@@ -93,7 +93,7 @@ High is owner only (`owner_required`, unchanged).
 
 ### 3. Raka is an assistant everywhere; agents and the Cloud ask the platform
 
-- **Assistant API tokens.** `POST /api/v1/tokens` accepts `assistant: true`. Such a token resolves with
+- **Assistant API tokens.** `POST /api/v1/tokens` accepts the scope `assistant`. Such a token resolves with
   `Via: "ai"`, so the kernel treats its holder as the assistant acting for the person who made it: §2 applies,
   proposals get source `ai`, `Apply` refuses it. Only a person can create one. The Cloud mints Raka's token this way;
   existing `raka` tokens are replaced on the next build or Buka sistem.

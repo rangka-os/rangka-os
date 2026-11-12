@@ -452,7 +452,7 @@ func RequireScope(p *auth.Principal) bool {
 		return true
 	}
 	for _, s := range splitFields(p.Scope) {
-		if s == "rangka.mcp" {
+		if s == "rangka.mcp" || s == auth.ScopeAssistant { // an assistant-scoped API token is Raka's MCP credential
 			return true
 		}
 	}

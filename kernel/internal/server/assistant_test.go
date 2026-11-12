@@ -218,3 +218,28 @@ func TestProposeOrgMismatch(t *testing.T) {
 		t.Fatalf("mcp same org: %v", cs["org"])
 	}
 }
+
+func TestAssistantScopedAPIToken(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, []byte(strings.Replace(string(b), "auto_apply: never", "auto_apply: low_risk", 1)), 0o644)
+	})
+	e.login()
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "raka", "scopes": []any{"assistant"}}).JSON["token"].(string)
+	ai := &env{t: t, s: e.s, ts: e.ts, token: tok}
+	cs := call(ai, "rangka_changeset_propose", map[string]any{"title": "Warna grafik",
+		"ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/color/chart-1", "value": "#0055cc"}}}}})
+	if cs["source"] != "ai" || get(cs, "author", "kind") != "ai" {
+		t.Fatalf("propose: source %v author %v", cs["source"], cs["author"])
+	}
+	id := cs["id"].(string)
+	if r := ai.do("POST", "/api/v1/changesets/"+id+"/apply", nil); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("apply with an assistant-scoped token: %d %s", r.Status, r.Body)
+	}
+	// an assistant never mints a token, not even an assistant one
+	if r := ai.do("POST", "/api/v1/tokens", map[string]any{"name": "again", "scopes": []any{"assistant"}}); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("mint with an assistant token: %d %s", r.Status, r.Body)
+	}
+}

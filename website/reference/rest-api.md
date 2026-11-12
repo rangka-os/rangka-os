@@ -140,8 +140,8 @@ data: {"id":"cs_rzlzncahuf","status":"applied"}
 
 | Method | Path | Notes |
 | --- | --- | --- |
-| GET · POST | `/changesets` | List; propose → 201 with `layers`, `risk`, `status: proposed` |
-| GET | `/changesets/{id}` | Full change set with validation, preview (`migrations`, `affected`, `files[{path, before, after}]`) and history |
+| GET · POST | `/changesets` | List; propose → 201 with `layers`, `risk`, `status: proposed`. An assistant (Raka) proposes over MCP: a change set that touches a part only a person may change (`apps/`, `system.rk`, roles, `config.ai`…) is refused with `ai_forbidden_path` and the paths (sorted, unique) at `structuredContent.detail.paths`. Over REST an assistant's write is refused earlier with 403 `ai_forbidden` |
+| GET | `/changesets/{id}` | Full change set with validation, preview (`migrations`, `affected`, `files[{path, before, after}]`) and history. Every change set carries `approvable_by`: the roles that may approve it (`["owner"]` for high risk, else `config.ai.approvers` plus `owner`, sorted) |
 | POST | `/changesets/{id}/validate` · `preview` · `approve` · `reject` · `apply` · `revert` | Approve only from `previewed`, by a signed-in approver; high risk owner only (403 `owner_required`) |
 
 ### Live preview

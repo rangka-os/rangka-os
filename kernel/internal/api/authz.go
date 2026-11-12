@@ -169,7 +169,7 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) 
 	}
 	for _, sc := range body.Scopes {
 		if !auth.TokenScopes[sc] {
-			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write, members:write)")
+			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write, members:write, assistant)")
 			return
 		}
 		// members:write (contract 0043 §1): minted only by an owner of the organisation with their own session
@@ -202,7 +202,15 @@ func csFail(w http.ResponseWriter, err error) {
 				return
 			}
 		}
-		body := map[string]any{"error": map[string]any{"code": ce.Code, "message": ce.Msg}}
+		errBody := map[string]any{"code": ce.Code, "message": ce.Msg}
+		if d, ok := ce.Detail.(map[string]any); ok && ce.Status == 403 { // e.g. ai_forbidden_path's paths
+			for k, v := range d {
+				if k != "code" && k != "message" {
+					errBody[k] = v
+				}
+			}
+		}
+		body := map[string]any{"error": errBody}
 		if cs, ok := ce.Detail.(*changeset.ChangeSet); ok {
 			body["changeset"] = cs
 		}

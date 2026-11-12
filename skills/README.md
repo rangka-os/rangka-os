@@ -31,6 +31,8 @@ Per-harness details: [docs, Skills → Install](https://rangka-os.github.io/rang
 - `name` is kebab-case, starts with `rangka-` and equals the folder; `description` says what it does and when to use
   it, at most 1024 characters.
 - Give each action as the MCP tool and as the CLI or file equivalent; never assume one harness.
+- Skills describe how, never whether: a ban belongs in the kernel (`ai_forbidden_path`, validator codes), and a skill
+  only names it.
 - A skill never tells an agent to approve, apply or read secrets, and never contains keys or customer data.
 - Run `rangka skills check skills` (here) or `rangka skills check apps modules` (rangka-apps). The kernel copies this
   folder into `kernel/internal/skills/platform/` with `make sync-schemas`; a test fails when they differ.

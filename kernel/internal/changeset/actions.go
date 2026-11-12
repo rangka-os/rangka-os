@@ -116,7 +116,13 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 	if err != nil {
 		return nil, &Error{422, "bad_ops", err.Error(), nil}
 	}
-	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor})
+	if a.Assistant { // the platform's hard limits (contract 0045 §2): no risk level makes these proposable
+		if paths := AssistantForbidden(cs.Ops, parsed(live, nil), parsed(live, files)); len(paths) > 0 {
+			return nil, &Error{403, "ai_forbidden_path", "Raka tidak bisa mengusulkan perubahan ini: " + strings.Join(paths, ", ") +
+				". Bagian ini diubah lewat Console oleh admin atau pemilik.", map[string]any{"paths": paths}}
+		}
+	}
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
 	cs.Layers, cs.Risk = as.Layers, as.Risk
 	if cs.Layers == nil {
 		cs.Layers = []int{}
@@ -248,6 +254,17 @@ func sortedSet(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+// moduleOf returns the unit (app or module) a model belongs to, "" when unknown (contract 0045 §2b).
+func (s *Service) moduleOf(name string) string {
+	if s.Reg == nil {
+		return ""
+	}
+	if m := s.Reg().Models[name]; m != nil {
+		return m.App
+	}
+	return ""
 }
 
 // appModel returns the app's own model file (without overlays) by name.
@@ -467,6 +484,19 @@ func (s *Service) Approvers() map[string]bool {
 			out[r] = true
 		}
 	}
+	return out
+}
+
+// ApprovableBy lists the roles that may approve cs: owner alone for high risk, else every approver, sorted.
+func (s *Service) ApprovableBy(cs *ChangeSet) []string {
+	if cs.Risk == "high" {
+		return []string{"owner"}
+	}
+	out := []string{}
+	for r := range s.Approvers() {
+		out = append(out, r)
+	}
+	sort.Strings(out)
 	return out
 }
 

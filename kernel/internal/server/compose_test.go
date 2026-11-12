@@ -1,6 +1,7 @@
 package server
 
 import (
+	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
@@ -16,6 +17,15 @@ func TestConfigModulesEndToEnd(t *testing.T) {
 		if err := exec.Command("cp", "-r", "../../testdata/config-modules/.", dir).Run(); err != nil {
 			t.Fatal(err)
 		}
+		// a second approver, so approvable_by tells medium (owner + approvers) from high (owner only)
+		f, err := os.OpenFile(filepath.Join(dir, "site", "config.rk"), os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString("ai: {approvers: [admin]}\n"); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
 		return filepath.Join(dir, "apps"), filepath.Join(dir, "site")
 	})
 	e.login()
@@ -34,7 +44,7 @@ func TestConfigModulesEndToEnd(t *testing.T) {
 	for _, g := range m["menu"].([]any) {
 		groups = append(groups, get(g, "module").(string)+":"+strings.Join(toStrings(get(g, "items")), "+"))
 	}
-	if got := strings.Join(groups, ","); got != "payments:payment,invoicing:invoice,contacts:customer" {
+	if got := strings.Join(groups, ","); got != "payments:payment,invoicing:invoice,contacts:customer,site:x_sewa" {
 		t.Errorf("menu = %s", got)
 	}
 	if get(m, "site", "config", "modules", "payments") != "^1.0" {
@@ -85,6 +95,9 @@ func TestConfigModulesEndToEnd(t *testing.T) {
 		map[string]any{"op": "add", "path": "/modules/stock", "value": "^1.0"},
 		map[string]any{"op": "add", "path": "/modules/contacts", "value": "^1.0"},
 	})
+	if got := strings.Join(toStrings(add["approvable_by"]), ","); got != "admin,owner" {
+		t.Fatalf("add stock: approvable_by %v, want [admin owner]", add["approvable_by"])
+	}
 	if add["proposed_risk"] != "medium" || add["risk"] != "medium" || strings.Join(toStrings(get(add, "preview", "modules", "added")), ",") != "stock" ||
 		!strings.Contains(string(mustJSON(get(add, "preview", "migrations"))), "stock_item") {
 		t.Fatalf("add stock: risk %v/%v preview %v", add["proposed_risk"], add["risk"], add["preview"])
@@ -106,6 +119,10 @@ func TestConfigModulesEndToEnd(t *testing.T) {
 	rm := run("Lepas stok", []any{map[string]any{"op": "remove", "path": "/modules/stock"}})
 	if rm["proposed_risk"] != "medium" || rm["risk"] != "high" || get(rm, "preview", "modules", "rows", "stock_item") != 1.0 {
 		t.Fatalf("remove stock: risk %v/%v preview %v", rm["proposed_risk"], rm["risk"], rm["preview"])
+	}
+	// the preview raised the risk, so approvable_by follows it: owner only (contract 0045 §3)
+	if got := strings.Join(toStrings(rm["approvable_by"]), ","); got != "owner" {
+		t.Fatalf("remove stock: approvable_by %v after preview raised risk to high, want [owner]", rm["approvable_by"])
 	}
 	apply(rm)
 	if m := e.must(200, "GET", "/api/v1/meta", nil).JSON; get(m, "models", "stock_item") != nil {

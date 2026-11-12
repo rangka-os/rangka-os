@@ -443,7 +443,9 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 	return nil, fmt.Errorf("%w %s", errUnknownTool, name)
 }
 
-// RequireScope is used by the API to accept OIDC and assistant tokens on /mcp only with the rangka.mcp scope.
+// RequireScope is used by the API to accept OIDC and assistant tokens on /mcp only with the rangka.mcp scope. An
+// assistant token (Via "ai") may instead carry the assistant scope, which is its MCP credential; that scope opens
+// /mcp for no other principal, so an OIDC client given it still needs rangka.mcp (contract 0045 §3).
 func RequireScope(p *auth.Principal) bool {
 	if p == nil {
 		return false
@@ -452,7 +454,7 @@ func RequireScope(p *auth.Principal) bool {
 		return true
 	}
 	for _, s := range splitFields(p.Scope) {
-		if s == "rangka.mcp" {
+		if s == "rangka.mcp" || (s == auth.ScopeAssistant && p.Via == "ai") {
 			return true
 		}
 	}

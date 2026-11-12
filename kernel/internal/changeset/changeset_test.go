@@ -59,7 +59,24 @@ func TestAssess(t *testing.T) {
 			return before(q)
 		}
 	}
-	model := func(n string) map[string]any { return map[string]map[string]any{"sales_invoice": inv, "deal": deal}[n] }
+	sewa := map[string]any{"name": "x_sewa", "fields": []any{map[string]any{"name": "deposit", "type": "currency"}, map[string]any{"name": "catatan", "type": "text"},
+		map[string]any{"name": "baris", "type": "table", "of": "x_sewa_baris"}, map[string]any{"name": "catatan_baris", "type": "table", "of": "x_sewa_catatan"},
+		map[string]any{"name": "hilang", "type": "table", "of": "x_tidak_ada"}}}
+	sewaBaris := map[string]any{"name": "x_sewa_baris", "fields": []any{map[string]any{"name": "alat", "type": "data"}, map[string]any{"name": "harga", "type": "currency"}}}
+	sewaCatatan := map[string]any{"name": "x_sewa_catatan", "fields": []any{map[string]any{"name": "isi", "type": "text"}}}
+	invoice := map[string]any{"name": "invoice", "is_submittable": true, "fields": []any{map[string]any{"name": "catatan", "type": "text"}}}
+	status := map[string]any{"name": "status", "type": "select", "options": []any{map[string]any{"value": "baru", "label": "Baru"}, map[string]any{"value": "batal", "label": "Batal"}}}
+	files["custom/x_tugas.rk"] = map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}, map[string]any{"value": "batal", "label": "Batal"}}}}
+	files["models/x_tiket.rk"] = map[string]any{"name": "x_tiket", "fields": []any{status}}
+	model := func(n string) map[string]any {
+		return map[string]map[string]any{"sales_invoice": inv, "deal": deal, "x_sewa": sewa, "invoice": invoice, "x_sewa_baris": sewaBaris, "x_sewa_catatan": sewaCatatan}[n]
+	}
+	moduleOf := func(n string) string {
+		return map[string]string{"invoice": "invoicing", "deal": "crm", "x_sewa": "site"}[n]
+	}
+	flow := func(on string, steps ...any) map[string]any {
+		return map[string]any{"name": "x_f", "on": on, "steps": steps}
+	}
 	cases := []struct {
 		name  string
 		ops   []Op
@@ -88,11 +105,43 @@ func TestAssess(t *testing.T) {
 		{"connector", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, before, "medium", 3},
 		{"config apps", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": []any{"core", "crm"}, "tax": cfg["tax"], "theme": "a"}), "medium", 4},
 		{"config tax", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": map[string]any{"ppn_rate": 11}, "theme": "a"}), "high", 4},
+		{"config connector_auth", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": cfg["tax"], "theme": "a", "connector_auth": []any{"kasir"}}), "high", 4},
 		{"config theme", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": cfg["tax"], "theme": "b"}), "low", 4},
 		{"features", []Op{{Op: "patch", Path: "features.rk"}}, before, "medium", 4},
+		// contract 0045 §2b: company pieces that touch money, stock or core drafts
+		{"submittable company model", []Op{{Op: "create", Path: "models/x_baru.rk"}}, with("models/x_baru.rk", map[string]any{"name": "x_baru", "is_submittable": true, "permissions": []any{}}), "high", 4},
+		{"append-only company model", []Op{{Op: "create", Path: "models/x_baru.rk"}}, with("models/x_baru.rk", map[string]any{"name": "x_baru", "append_only": true, "permissions": []any{}}), "high", 4},
+		{"company model moving stock", []Op{{Op: "create", Path: "models/x_baru.rk"}}, with("models/x_baru.rk", map[string]any{"name": "x_baru", "stock": map[string]any{"moves": "items"}, "permissions": []any{}}), "high", 4},
+		{"flow creates a core draft", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "invoice", "set": map[string]any{"catatan": "dari deal"}})), "high", 4},
+		{"flow updates a money field of doc", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.created", map[string]any{"update": "doc", "set": map[string]any{"deposit": "0"}})), "high", 4},
+		{"flow money write nested in if", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated",
+			map[string]any{"find": "x_sewa", "where": "true", "as": "s"},
+			map[string]any{"if": "true", "then": []any{map[string]any{"for_each": "[1]", "as": "i", "do": []any{map[string]any{"update": "s", "set": map[string]any{"deposit": "1"}}}}}})), "high", 4},
+		{"flow creates with a money field", []Op{{Op: "replace", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_sewa", "set": map[string]any{"deposit": "1"}})), "high", 4},
+		{"flow updates an unbound record", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"update": "x", "set": map[string]any{"catatan": "a"}})), "high", 4},
+		{"flow rebinds a variable in if/else", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated",
+			map[string]any{"if": "true", "then": []any{map[string]any{"find": "x_sewa", "where": "true", "as": "r"}}, "else": []any{map[string]any{"find": "deal", "where": "true", "as": "r"}}},
+			map[string]any{"update": "r", "set": map[string]any{"deposit": "1"}})), "high", 4},
+		{"flow shadows a variable in for_each", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated",
+			map[string]any{"find": "deal", "where": "true", "as": "s"},
+			map[string]any{"for_each": "doc.items", "as": "s", "do": []any{map[string]any{"update": "s", "set": map[string]any{"notes": "1"}}}})), "high", 4},
+		{"flow creates an unknown model", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_hilang", "set": map[string]any{"a": "1"}})), "high", 4},
+		{"flow sets only a text field", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.updated",
+			map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}},
+			map[string]any{"create": "x_sewa", "set": map[string]any{"catatan": "b"}, "as": "baru"},
+			map[string]any{"update": "baru", "set": map[string]any{"catatan": "c"}})), "medium", 4},
+		{"flow on a non-record event updates doc", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.paid", map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}})), "high", 4},
+		{"flow on a submitted record updates doc text", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.submitted", map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}})), "medium", 4},
+		{"flow fills child rows with a money field", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_sewa", "set": map[string]any{"baris": "[{'alat': 'bor', 'harga': 1}]"}})), "high", 4},
+		{"flow updates child rows with a money field", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.updated", map[string]any{"update": "doc", "set": map[string]any{"baris": "event.record.baris"}})), "high", 4},
+		{"flow fills child rows of an unknown model", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_sewa", "set": map[string]any{"hilang": "[]"}})), "high", 4},
+		{"flow fills child rows with text only", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_sewa", "set": map[string]any{"catatan_baris": "[{'isi': 'a'}]"}})), "medium", 4},
+		{"overlay removes an option", []Op{{Op: "patch", Path: "custom/x_tugas.rk"}}, with("custom/x_tugas.rk", map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}}}}), "high", 4},
+		{"overlay adds an option", []Op{{Op: "patch", Path: "custom/x_tugas.rk"}}, with("custom/x_tugas.rk", map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}, map[string]any{"value": "batal", "label": "Batal"}, map[string]any{"value": "tunda", "label": "Tunda"}}}}), "medium", 4},
+		{"company model removes an option", []Op{{Op: "patch", Path: "models/x_tiket.rk"}}, with("models/x_tiket.rk", map[string]any{"name": "x_tiket", "fields": []any{map[string]any{"name": "status", "type": "select", "options": []any{map[string]any{"value": "baru", "label": "Baru"}}}}}), "high", 4},
 	}
 	for _, c := range cases {
-		a := Assess(c.ops, before, c.after, model)
+		a := AssessWith(c.ops, before, c.after, Env{Model: model, ModuleOf: moduleOf})
 		if a.Risk != c.risk || len(a.Layers) != 1 || a.Layers[0] != c.layer {
 			t.Errorf("%s: risk %s layers %v (%v), want %s %d", c.name, a.Risk, a.Layers, a.Reasons, c.risk, c.layer)
 		}

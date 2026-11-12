@@ -218,3 +218,114 @@ func TestProposeOrgMismatch(t *testing.T) {
 		t.Fatalf("mcp same org: %v", cs["org"])
 	}
 }
+
+func TestAssistantScopedAPIToken(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, []byte(strings.Replace(string(b), "auto_apply: never", "auto_apply: low_risk", 1)), 0o644)
+	})
+	e.login()
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "raka", "scopes": []any{"assistant"}}).JSON["token"].(string)
+	ai := &env{t: t, s: e.s, ts: e.ts, token: tok}
+	cs := call(ai, "rangka_changeset_propose", map[string]any{"title": "Warna grafik",
+		"ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/color/chart-1", "value": "#0055cc"}}}}})
+	if cs["source"] != "ai" || get(cs, "author", "kind") != "ai" {
+		t.Fatalf("propose: source %v author %v", cs["source"], cs["author"])
+	}
+	id := cs["id"].(string)
+	if r := ai.do("POST", "/api/v1/changesets/"+id+"/apply", nil); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("apply with an assistant-scoped token: %d %s", r.Status, r.Body)
+	}
+	// an assistant never mints a token, not even an assistant one
+	if r := ai.do("POST", "/api/v1/tokens", map[string]any{"name": "again", "scopes": []any{"assistant"}}); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("mint with an assistant token: %d %s", r.Status, r.Body)
+	}
+}
+
+// The platform's hard limits (contract 0045 §2): an assistant cannot propose an edit to a catalogue app file, at
+// any risk level, while the owner can (high risk, owner only); config.apps stays proposable.
+func TestAssistantForbiddenPaths(t *testing.T) {
+	e := newEnv(t, false, nil)
+	ai := assistantEnv(t, e, 10*time.Minute)
+	body := map[string]any{"title": "Ganti versi CRM", "ops": []any{map[string]any{"op": "patch", "path": "apps/crm/app.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/version", "value": "0.1.1"}}}}}
+	// over REST the assistant never proposes (contract 0020 §4): refused before the change-set service
+	if r := ai.do("POST", "/api/v1/changesets", body); r.Status != 403 || get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("rest propose: %d %s", r.Status, r.Body)
+	}
+	res := rpc(ai, 3, "tools/call", map[string]any{"name": "rangka_changeset_propose", "arguments": body})
+	if res["isError"] != true || get(res, "structuredContent", "error", "code") != "ai_forbidden_path" ||
+		fmt.Sprint(get(res, "structuredContent", "detail", "paths")) != "[apps/crm/app.rk]" ||
+		!strings.Contains(fmt.Sprint(get(res, "structuredContent", "error", "message")), "apps/crm/app.rk") {
+		t.Fatalf("mcp propose: %v", res)
+	}
+	// the service answers the same 403 with the paths
+	_, err := e.s.Changes.Propose(context.Background(), changeset.Actor{ID: "ceo@saga.co.id", Org: "kopi-senja", Roles: []string{"owner"}, Kind: "ai", Assistant: true}, body)
+	if ce, ok := err.(*changeset.Error); !ok || ce.Status != 403 || ce.Code != "ai_forbidden_path" || fmt.Sprint(get(ce.Detail, "paths")) != "[apps/crm/app.rk]" {
+		t.Fatalf("service propose: %#v", err)
+	}
+	// the owner may propose it; it is high risk
+	e.login()
+	if cs := e.must(201, "POST", "/api/v1/changesets", body).JSON; cs["risk"] != "high" {
+		t.Fatalf("owner propose: risk %v", cs["risk"])
+	}
+	// config.apps stays proposable for the assistant
+	cs := call(ai, "rangka_changeset_propose", map[string]any{"title": "Pasang kasir", "ops": []any{map[string]any{"op": "patch", "path": "config.rk",
+		"patch": []any{map[string]any{"op": "add", "path": "/apps/-", "value": "kasir"}}}}})
+	if cs["status"] != "proposed" || cs["source"] != "ai" {
+		t.Fatalf("config.apps: %v", cs)
+	}
+	// but config.ai is not
+	res = rpc(ai, 4, "tools/call", map[string]any{"name": "rangka_changeset_propose", "arguments": map[string]any{"title": "Terapkan sendiri",
+		"ops": []any{map[string]any{"op": "patch", "path": "config.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/ai/auto_apply", "value": "low_risk"}}}}}})
+	if get(res, "structuredContent", "error", "code") != "ai_forbidden_path" {
+		t.Fatalf("config.ai: %v", res)
+	}
+}
+
+func TestApprovableBy(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	low := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Warna grafik",
+		"ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/color/chart-1", "value": "#0055cc"}}}}}).JSON
+	want := "[owner sales_manager]"
+	if low["risk"] != "low" || fmt.Sprint(low["approvable_by"]) != want {
+		t.Fatalf("low risk: risk %v approvable_by %v", low["risk"], low["approvable_by"])
+	}
+	id := low["id"].(string)
+	if got := e.must(200, "GET", "/api/v1/changesets/"+id, nil).JSON; fmt.Sprint(got["approvable_by"]) != want {
+		t.Fatalf("get: %v", got["approvable_by"])
+	}
+	if v := e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil).JSON; fmt.Sprint(v["approvable_by"]) != want {
+		t.Fatalf("validate: %v", v["approvable_by"])
+	}
+	if p := e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil).JSON; fmt.Sprint(p["approvable_by"]) != want {
+		t.Fatalf("preview: %v", p["approvable_by"])
+	}
+	high := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Ganti versi CRM", "ops": []any{map[string]any{"op": "patch", "path": "apps/crm/app.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/version", "value": "0.1.1"}}}}}).JSON
+	if high["risk"] != "high" || fmt.Sprint(high["approvable_by"]) != "[owner]" {
+		t.Fatalf("high risk: risk %v approvable_by %v", high["risk"], high["approvable_by"])
+	}
+	items, _ := e.must(200, "GET", "/api/v1/changesets", nil).JSON["data"].([]any)
+	if len(items) == 0 {
+		t.Fatal("list is empty")
+	}
+	for _, it := range items {
+		m := it.(map[string]any)
+		w := want
+		if m["risk"] == "high" {
+			w = "[owner]"
+		}
+		if fmt.Sprint(m["approvable_by"]) != w {
+			t.Fatalf("list item %v risk %v: approvable_by %v", m["id"], m["risk"], m["approvable_by"])
+		}
+	}
+	if st := call(e, "rangka_changeset_status", map[string]any{"id": high["id"]}); fmt.Sprint(st["approvable_by"]) != "[owner]" {
+		t.Fatalf("mcp status: %v", st["approvable_by"])
+	}
+}

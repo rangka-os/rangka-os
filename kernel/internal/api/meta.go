@@ -458,7 +458,8 @@ func (s *Server) theme(reg *meta.Registry) map[string]any {
 }
 
 // defaultMenu is /meta.menu (contract 0032 §5): one side group per module a composed site names and no installed app
-// brings in, when the layout sets no nav.side. Empty for app-only sites and for layouts with nav.side.
+// brings in, then the company tables as the last group "Perusahaan" (contract 0045 §5; also for app-only sites), when the
+// layout sets no nav.side. Empty for layouts with nav.side and for sites with neither.
 func defaultMenu(reg *meta.Registry, layout map[string]any) []meta.MenuGroup {
 	if side, _ := meta.AsMap(layout["nav"])["side"].([]any); len(side) > 0 {
 		return []meta.MenuGroup{}

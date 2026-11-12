@@ -422,7 +422,7 @@ func removedOptions(a *Assessment, p, field string, old, nw any) {
 }
 
 // assessCompanyFlow rates a company flow (contract 0045 §2b): creating a draft in a core module, or writing a money or
-// stock field of the created or updated record, is high; so is an update whose record, or a write whose model, it
+// stock field of the created or updated record (or of its child-table rows), is high; so is an update whose record, or a write whose model, it
 // cannot resolve. flow.json has no submit, cancel, amend or model-action step, and a call step's output reaches a
 // record only through a set.
 func assessCompanyFlow(a *Assessment, p string, flow map[string]any, env Env) {
@@ -514,8 +514,42 @@ func flowWrites(a *Assessment, p, model string, set any, env Env) {
 	}
 	sort.Strings(names)
 	for _, f := range names {
-		if fd, ok := fields[f]; ok && sensitiveField(fd) {
+		fd, ok := fields[f]
+		switch {
+		case !ok:
+		case sensitiveField(fd):
 			a.raise("high", "company automation "+p+" writes money/stock field "+f)
+		case fd["type"] == "table":
+			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
+			// record's rows), so any money or stock field of the child model counts as written
+			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, map[string]bool{})
+		}
+	}
+}
+
+// childRowsWrites raises high when the child model of table field f (or a table nested in it) has a money or stock
+// field, or cannot be resolved.
+func childRowsWrites(a *Assessment, p, f, child string, env Env, seen map[string]bool) {
+	if seen[child] {
+		return
+	}
+	seen[child] = true
+	fields := companyModelFields(env, child)
+	if fields == nil {
+		a.raise("high", "company automation "+p+" writes rows of "+f+" whose model it cannot resolve")
+		return
+	}
+	names := make([]string, 0, len(fields))
+	for n := range fields {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		switch fd := fields[n]; {
+		case sensitiveField(fd):
+			a.raise("high", "company automation "+p+" writes rows of "+f+" with money/stock field "+n)
+		case fd["type"] == "table":
+			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, seen)
 		}
 	}
 }

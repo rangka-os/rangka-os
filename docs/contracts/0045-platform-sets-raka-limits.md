@@ -82,7 +82,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | Change | Risk |
 | --- | --- |
 | new company model with `is_submittable` or `append_only`, or a `stock:` block | high |
-| company flow that creates or updates a money or stock field, submits, cancels or amends, or runs a model action | high |
+| company flow that creates or updates a money or stock field (a child table's rows included), submits, cancels or amends, or runs a model action | high |
 | company flow that creates a draft in a core module (`invoicing`, `payments`, `stock`) | high |
 | company flow that writes any field from a `call` step's output into a money or stock field | high |
 | other company flows | medium (as today) |

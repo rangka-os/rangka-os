@@ -59,13 +59,17 @@ func TestAssess(t *testing.T) {
 			return before(q)
 		}
 	}
-	sewa := map[string]any{"name": "x_sewa", "fields": []any{map[string]any{"name": "deposit", "type": "currency"}, map[string]any{"name": "catatan", "type": "text"}}}
+	sewa := map[string]any{"name": "x_sewa", "fields": []any{map[string]any{"name": "deposit", "type": "currency"}, map[string]any{"name": "catatan", "type": "text"},
+		map[string]any{"name": "baris", "type": "table", "of": "x_sewa_baris"}, map[string]any{"name": "catatan_baris", "type": "table", "of": "x_sewa_catatan"},
+		map[string]any{"name": "hilang", "type": "table", "of": "x_tidak_ada"}}}
+	sewaBaris := map[string]any{"name": "x_sewa_baris", "fields": []any{map[string]any{"name": "alat", "type": "data"}, map[string]any{"name": "harga", "type": "currency"}}}
+	sewaCatatan := map[string]any{"name": "x_sewa_catatan", "fields": []any{map[string]any{"name": "isi", "type": "text"}}}
 	invoice := map[string]any{"name": "invoice", "is_submittable": true, "fields": []any{map[string]any{"name": "catatan", "type": "text"}}}
 	status := map[string]any{"name": "status", "type": "select", "options": []any{map[string]any{"value": "baru", "label": "Baru"}, map[string]any{"value": "batal", "label": "Batal"}}}
 	files["custom/x_tugas.rk"] = map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}, map[string]any{"value": "batal", "label": "Batal"}}}}
 	files["models/x_tiket.rk"] = map[string]any{"name": "x_tiket", "fields": []any{status}}
 	model := func(n string) map[string]any {
-		return map[string]map[string]any{"sales_invoice": inv, "deal": deal, "x_sewa": sewa, "invoice": invoice}[n]
+		return map[string]map[string]any{"sales_invoice": inv, "deal": deal, "x_sewa": sewa, "invoice": invoice, "x_sewa_baris": sewaBaris, "x_sewa_catatan": sewaCatatan}[n]
 	}
 	moduleOf := func(n string) string {
 		return map[string]string{"invoice": "invoicing", "deal": "crm", "x_sewa": "site"}[n]
@@ -128,6 +132,10 @@ func TestAssess(t *testing.T) {
 			map[string]any{"update": "baru", "set": map[string]any{"catatan": "c"}})), "medium", 4},
 		{"flow on a non-record event updates doc", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.paid", map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}})), "high", 4},
 		{"flow on a submitted record updates doc text", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.submitted", map[string]any{"update": "doc", "set": map[string]any{"catatan": "a"}})), "medium", 4},
+		{"flow fills child rows with a money field", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_sewa", "set": map[string]any{"baris": "[{'alat': 'bor', 'harga': 1}]"}})), "high", 4},
+		{"flow updates child rows with a money field", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("x_sewa.updated", map[string]any{"update": "doc", "set": map[string]any{"baris": "event.record.baris"}})), "high", 4},
+		{"flow fills child rows of an unknown model", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_sewa", "set": map[string]any{"hilang": "[]"}})), "high", 4},
+		{"flow fills child rows with text only", []Op{{Op: "create", Path: "flows/x_f.rk"}}, with("flows/x_f.rk", flow("deal.updated", map[string]any{"create": "x_sewa", "set": map[string]any{"catatan_baris": "[{'isi': 'a'}]"}})), "medium", 4},
 		{"overlay removes an option", []Op{{Op: "patch", Path: "custom/x_tugas.rk"}}, with("custom/x_tugas.rk", map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}}}}), "high", 4},
 		{"overlay adds an option", []Op{{Op: "patch", Path: "custom/x_tugas.rk"}}, with("custom/x_tugas.rk", map[string]any{"model": "x_tugas", "options": map[string]any{"status": []any{map[string]any{"value": "baru", "label": "Baru"}, map[string]any{"value": "batal", "label": "Batal"}, map[string]any{"value": "tunda", "label": "Tunda"}}}}), "medium", 4},
 		{"company model removes an option", []Op{{Op: "patch", Path: "models/x_tiket.rk"}}, with("models/x_tiket.rk", map[string]any{"name": "x_tiket", "fields": []any{map[string]any{"name": "status", "type": "select", "options": []any{map[string]any{"value": "baru", "label": "Baru"}}}}}), "high", 4},

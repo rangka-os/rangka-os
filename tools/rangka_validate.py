@@ -864,6 +864,21 @@ def check_connector_auth(rep, sysdoc, conns):
                     rep.add("error", p, f"{where}/{cn}/{fn}", "secret_literal", f'{cn}.{fn} is secret: bind it to a ${{VAR}} reference, not a literal (contract 0017 §2)')
 
 
+def check_auth_upstream(rep, sysdoc):
+    """Contract 0017 §2: auth.upstream client_id / client_secret may not read a platform variable."""
+    if not sysdoc or not isinstance(sysdoc[1], dict):
+        return
+    p, auth = sysdoc[0], sysdoc[1].get("auth")
+    ups = auth.get("upstream") if isinstance(auth, dict) else None
+    for i, u in enumerate(ups if isinstance(ups, list) else []):
+        if not isinstance(u, dict):
+            continue
+        for key in ("client_id", "client_secret"):
+            ref = SECRET_REF.match(u[key]) if isinstance(u.get(key), str) else None
+            if ref and platform_env(ref.group(1)):
+                rep.add("error", p, f"auth/upstream/{i}/{key}", "platform_env", f'auth.upstream {key} reads ${{{ref.group(1)}}}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)')
+
+
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
@@ -1308,6 +1323,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
             if d.get("name") != stem:
                 rep.add("error", p, "name", "name_mismatch", f'{kind} name "{d.get("name")}" must match the file name "{stem}"')
     check_connector_auth(rep, sdocs.get("system.rk"), conns)
+    check_auth_upstream(rep, sdocs.get("system.rk"))
     themes = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("themes/")}
     layouts = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("layouts/")}
     config = sdocs.get("config.rk", (None, {}))

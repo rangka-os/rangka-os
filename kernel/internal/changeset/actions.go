@@ -257,6 +257,23 @@ func (s *Service) modulesDiff(ctx context.Context, cs *ChangeSet, live *store.Li
 	return nil
 }
 
+// removedRows raises cs.Risk to high when a unit the change set removes from config.rk still holds rows, counted now
+// against the live database (modulesDiff without a preview to fill).
+func (s *Service) removedRows(ctx context.Context, cs *ChangeSet, after *meta.Registry) error {
+	touches := false
+	for _, op := range cs.Ops {
+		touches = touches || op.Path == "config.rk"
+	}
+	if !touches || s.DB == nil {
+		return nil
+	}
+	live, err := store.Introspect(ctx, s.DB)
+	if err != nil {
+		return err
+	}
+	return s.modulesDiff(ctx, cs, live, after, &Preview{Affected: map[string]int64{}})
+}
+
 func sortedSet(m map[string]bool) []string {
 	out := make([]string, 0, len(m))
 	for k := range m {
@@ -670,9 +687,19 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	if err := s.operatorPlan(ctx, cs.Ops); err != nil {
 		return nil, err
 	}
-	v, _, _, cleanup, err := s.check(cs)
+	v, after, _, cleanup, err := s.check(cs)
 	if err != nil {
 		return nil, err
+	}
+	// the rows of the units the change set removes are counted again now: rows written since the preview, or a
+	// preview from before the kernel kept that risk, would otherwise not raise it (audit changeset-followups 2)
+	var rows *ChangeSet
+	if len(v.Errors) == 0 {
+		rows = &ChangeSet{Ops: cs.Ops, Org: cs.Org, Risk: "low"}
+		if err := s.removedRows(ctx, rows, after); err != nil {
+			cleanup()
+			return nil, err
+		}
 	}
 	cleanup()
 	if len(v.Errors) > 0 {
@@ -683,6 +710,18 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 		return cs, &Error{409, "invalid", "the change no longer validates against the current metadata", cs}
 	}
 	live := s.live()
+	// a features.rk op proposed before plans were pinned (pinPlans) carries no base: if the file exists it may hold
+	// the operator's writes since, so the change set is proposed again (audit changeset-followups 4)
+	for _, op := range cs.Ops {
+		if op.Path != "features.rk" || op.Base != "" {
+			continue
+		}
+		if f, err := live.file(op.Path); err == nil {
+			if c, _ := readFile(f); c != nil {
+				return nil, staleBase(op.Path)
+			}
+		}
+	}
 	files, err := live.result(cs.Ops)
 	if e, ok := err.(*Error); ok {
 		return nil, e
@@ -693,6 +732,10 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	// the files may have changed since the proposal (another change set, the operator): assess the change set again
 	// against them, and send it back for approval when its risk rose (audit changeset-set-once, note 2)
 	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+	if rows != nil && riskRank[rows.Risk] > riskRank[as.Risk] {
+		as.Risk = rows.Risk
+		as.Reasons = append(as.Reasons, "high: a unit the change set removes still holds rows")
+	}
 	if riskRank[as.Risk] > riskRank[cs.Risk] {
 		was := cs.Risk
 		cs.Risk, cs.Layers = as.Risk, as.Layers

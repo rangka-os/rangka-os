@@ -35,7 +35,7 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 				return err
 			}
 		}
-		failed := false
+		failed, nameFailed := false, false
 		for i, in := range inputs {
 			// A savepoint per input: a unique violation aborts the Postgres transaction, and rolling back
 			// to the savepoint lets the next input run.
@@ -52,6 +52,7 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 				}
 				out[i].Err = ve
 				failed = true
+				nameFailed = nameFailed || nameTaken(ve)
 				continue
 			}
 			if err != nil {
@@ -67,6 +68,11 @@ func (e *Engine) CreateMany(ctx context.Context, a Actor, model string, inputs [
 			for i := range out {
 				out[i].Name = ""
 			}
+		}
+		if failed && nameFailed && len(o.counters) > 0 {
+			// a v0 counter gave a name that is already taken (rows written outside it): engine.run moves the
+			// counters past the existing names and imports again, once (contract 0009 §4)
+			return &staleCounter{refs: o.counters, err: errRollback}
 		}
 		if opts.DryRun || failed {
 			return errRollback

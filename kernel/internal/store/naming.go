@@ -39,18 +39,37 @@ func NextName(ctx context.Context, q pg.Querier, org, model, pattern string, now
 	if len(res.Rows) == 1 {
 		return fmt.Sprintf("%s%0*d", prefix, digits, res.Rows[0][0].(int64)), nil
 	}
-	like := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix) + "%"
 	sql := fmt.Sprintf(`insert into rk_naming (org_id, prefix, last)
-		values ($1, $2, coalesce((select max(substring(name from $3::int)::bigint) from %s
-			where org_id = $1 and name like $4 and substring(name from $3::int) ~ '^[0-9]{1,18}$'), 0) + 1)
+		values ($1, $2, %s + 1)
 		on conflict (org_id, prefix) do update set last = rk_naming.last + 1
-		returning last`, pg.QuoteIdent(TableName(model)))
-	res, err = q.Query(ctx, sql, org, prefix, len([]rune(prefix))+1, like)
+		returning last`, highestName(model))
+	res, err = q.Query(ctx, sql, org, prefix, len([]rune(prefix))+1, likePrefix(prefix))
 	if err != nil {
 		return "", err
 	}
 	n := res.Rows[0][0].(int64)
 	return fmt.Sprintf("%s%0*d", prefix, digits, n), nil
+}
+
+// highestName is the SQL for the highest number among model's names in org $1 that are prefix $2 (as LIKE $4,
+// counter from rune $3) followed by digits only, 0 when there is none: the one read of the model's table.
+func highestName(model string) string {
+	return fmt.Sprintf(`coalesce((select max(substring(name from $3::int)::bigint) from %s
+			where org_id = $1 and name like $4 and substring(name from $3::int) ~ '^[0-9]{1,18}$'), 0)`, pg.QuoteIdent(TableName(model)))
+}
+
+func likePrefix(prefix string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix) + "%"
+}
+
+// SyncCounter moves the v0 counter of org and prefix past the highest existing name of model with that prefix
+// (never back). The counter reads only its own row on every allocation, so a name written outside it after it
+// started (rows loaded by SQL, a partial restore) is not seen; the engine calls this when the name it allocated
+// turns out to be taken, then writes again (card t_32af87a2). It reads the model's table once.
+func SyncCounter(ctx context.Context, q pg.Querier, org, model, prefix string) error {
+	sql := fmt.Sprintf(`update rk_naming set last = greatest(last, %s) where org_id = $1 and prefix = $2`, highestName(model))
+	_, err := q.Query(ctx, sql, org, prefix, len([]rune(prefix))+1, likePrefix(prefix))
+	return err
 }
 
 // ResetCounters forgets an org's counters so they restart from the highest existing names (after a seed).

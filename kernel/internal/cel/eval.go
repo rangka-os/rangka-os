@@ -433,14 +433,22 @@ func index(obj, idx any) (any, error) {
 	return nil, errf("cannot index %s", typeName(obj))
 }
 
+// inIntRange: f truncated fits int64. -2^63 is exact as a double; 2^63 is the first double past MaxInt64. NaN
+// fails both comparisons, ±Inf one of them.
+func inIntRange(f float64) bool {
+	return f >= -9223372036854775808.0 && f < 9223372036854775808.0
+}
+
 func toInt(v any) (int64, bool) {
 	switch x := v.(type) {
 	case int64:
 		return x, true
 	case uint64:
-		return int64(x), true
+		if x <= math.MaxInt64 {
+			return int64(x), true
+		}
 	case float64:
-		if x == math.Trunc(x) {
+		if x == math.Trunc(x) && inIntRange(x) {
 			return int64(x), true
 		}
 	case int:
@@ -1132,10 +1140,18 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			}
 			return v, nil
 		case float64:
+			// CEL: a double outside int's range (or NaN, ±Inf) is an error, never a platform-dependent int64
+			if !inIntRange(a) {
+				return nil, errf("cannot convert %v to int: out of range", a)
+			}
 			return int64(a), nil
 		case money.Decimal:
 			r := a.Rat()
-			return new(big.Int).Quo(r.Num(), r.Denom()).Int64(), nil // truncates toward zero, like int(double)
+			q := new(big.Int).Quo(r.Num(), r.Denom()) // truncates toward zero, like int(double)
+			if !q.IsInt64() {
+				return nil, errf("cannot convert %s to int: out of range", a.String())
+			}
+			return q.Int64(), nil
 		case int64:
 			return a, nil
 		case bool:

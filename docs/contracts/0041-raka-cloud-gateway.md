@@ -12,7 +12,7 @@ Raka, the AI agent in `rangka-ai`, should be one agent from the first conversati
 
 The place Raka is opened from sets what it looks at first, never what it may do.
 
-Today `/v1/turn` points Raka at one kernel MCP URL with an AI-scoped token. That is enough for change sets, but it gives Raka no view of the business's Cloud state, and giving Raka the hosted kernel's URL would break two rules: Raka runs as a sidecar that may call loopback only, and a hosted kernel's token must never sit in Raka's container. This contract puts a gateway between them. Cloud serves one MCP endpoint per turn on the Raka task's loopback; Raka sees a single MCP server.
+Today `/v1/turn` points Raka at one kernel MCP URL with an AI-scoped token. That is enough for change sets, but it gives Raka no view of the business's Cloud state, and giving Raka the hosted kernel's URL would break two rules: Raka may call only the hosts it is configured for (loopback for the sidecar), and a hosted kernel's token must never sit in Raka's container. This contract puts a gateway between them. Cloud serves one MCP endpoint per turn, on loopback or on a private network shared only with Raka (§1); Raka sees a single MCP server.
 
 This contract is phase 1: read tools only. Writes are reserved (below), not offered.
 
@@ -25,7 +25,7 @@ This contract is phase 1: read tools only. Writes are reserved (below), not offe
   - `cloud_*`: Cloud tools for the business (§3), answered by the host itself.
   - the kernel tools Raka already knows (`rangka_meta`, `rangka_get_file`, `rangka_query`, `rangka_get_record`, `rangka_dashboard`, `rangka_skills`, `rangka_skill`, `rangka_skill_file`, `rangka_changeset_propose/validate/preview/status`), which the host forwards to the business's kernel with a kernel token Raka never sees. Forwarding is a later phase; a host that does not forward offers only the `cloud_*` tools. Phase 1 forwards nothing from the console: no kernel tool, and in particular no `rangka_changeset_*`, so a console turn cannot propose a change set.
 - **Bearer per turn.** The host mints a random token bound to (owner, business, place), valid for the turn's time limit, held in memory. It authorises the gateway only: it is not a kernel token and not a Cloud session. It cannot approve, apply, reject or revert anything. The gateway refuses any tool whose name contains `approve`, `apply`, `reject` or `revert`, as rangka-ai's MCP client already does.
-- **Loopback.** The gateway URL is a loopback address. rangka-ai's kernel URL check (`RAKA_KERNEL_HOSTS`) applies to it as to any MCP URL.
+- **Where it listens.** By default the gateway listens on loopback (`127.0.0.1`), for a Raka that shares the host's network, such as the Fargate sidecar. A host that runs Raka as its own service may instead bind the gateway to a private network shared only with Raka (a Docker Swarm or Compose overlay network, a VPC subnet). The gateway is then never published or routed to the internet, and the host names the URL it gives Raka explicitly (for example `http://cloud:8791/mcp`), since the bind address is not reachable as written. The per-turn bearer is the access control in both cases; the network is a second fence. rangka-ai's kernel URL check (`RAKA_KERNEL_HOSTS`) applies to the gateway URL as to any MCP URL, so a deployment that uses a private network lists the gateway's host there. The same applies to any other URL the host gives Raka on its own machine, such as a studio project kernel: it binds to the same private network and is named by the host's private name, never published, and still guarded by its own token.
 - **The business is in the token, not in the arguments.** No tool takes a business id. Raka cannot ask about another business.
 - **Reads are free, scoped to the owner.** Each `cloud_*` read returns the same data the owner sees in the console for that view (§3).
 
@@ -116,9 +116,11 @@ Out of scope for the wire format beyond `usage` (§2): the host counts every tur
   - an MCP backend that takes the gateway and passes `cloud_*` tools through; the refusal of approve/apply/reject/revert names applies to both families;
   - a system prompt that opens with the place;
   - later phases: `DELETE /v1/memory/{business}`, memory behind `RAKA_DATABASE_URL`.
-- **rangka-cloud (private):** the gateway (MCP server on the Raka task's loopback, per-turn bearer), the phase-1 `cloud_*` tools backed by the console handlers' data, allowance counting from `usage`, the console chat. Later phases: proposals and cards, kernel forwarding with the mask, escalation, Cloud skills.
+- **rangka-cloud (private):** the gateway (MCP server on loopback or on a private network shared with Raka, per-turn bearer), the phase-1 `cloud_*` tools backed by the console handlers' data, allowance counting from `usage`, the console chat. Later phases: proposals and cards, kernel forwarding with the mask, escalation, Cloud skills.
 - **rangka-os:** this file only.
 
 ## Status
 
 proposed. Accepted before the rangka-ai and rangka-cloud changes merge; those may be built in parallel against this text.
+
+Amended 13 Nov 2026: the gateway may listen on a private network shared only with Raka, with an explicit URL, so Raka can run as its own service (§1). Loopback stays the default.

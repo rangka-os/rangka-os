@@ -261,6 +261,7 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 		fail(w, err)
 		return
 	}
+	s.verified.note(keyOf("b:" + token)) // the sidecar's MCP calls share the tenant's bucket from the first (0040 §9)
 	out := aiSidecarBody{Message: body.Message, History: trimHistory(body.History), Context: body.Context, Org: u.Org}
 	out.MCP.URL, out.MCP.Token = strings.TrimRight(s.AI.CallbackURL, "/")+"/mcp", token
 	out.User.ID, out.User.Name, out.User.Roles = u.Email, u.FullName, u.Roles

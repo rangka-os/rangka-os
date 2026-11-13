@@ -140,6 +140,19 @@ with sync_playwright() as pw:
                     fail(f"{tag}: Escape did not close the viewer")
                 if page.evaluate("document.activeElement && document.activeElement.getAttribute('aria-label')") != "Perbesar":
                     fail(f"{tag}: focus did not return to Perbesar")
+            if width == 400 and theme == "light":
+                page.set_viewport_size({"width": 740, "height": 900})
+                page.wait_for_timeout(150)
+                page.locator("[data-component=Diagram] [data-case=ok] button[aria-label=Perbesar]").click()
+                page.wait_for_selector(".rk-dialog.rk-diagram-viewer .rk-dv-stage svg", timeout=15000)
+                if not page.locator(".rk-dv-hint").count():
+                    fail("740: the drag hint should show at 740 px")
+                # top-down keeps the nodes in one column: LR at 740 is wider than tall
+                bb = page.evaluate("(() => { const r = document.querySelector('.rk-dv-stage svg').getBoundingClientRect(); const v = document.querySelector('.rk-dv-stage svg').viewBox.baseVal; return [v.width, v.height]; })()")
+                if bb[0] <= bb[1]:
+                    fail(f"740: source should not be top-down (viewBox {bb})")
+                page.keyboard.press("Escape")
+                page.set_viewport_size({"width": 400, "height": 900})
             doc, vw = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
             if doc > vw + 1:
                 fail(f"{tag}: horizontal page scroll {doc} > {vw}")

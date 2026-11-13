@@ -90,7 +90,6 @@
     map: "M2 5L9 2L15 5L21.303 2.2987C21.5569 2.18992 21.8508 2.30749 21.9596 2.56131C21.9862 2.62355 22 2.69056 22 2.75827V19L15 22L9 19L2.69696 21.7013C2.44314 21.8101 2.14921 21.6925 2.04043 21.4387C2.01375 21.3765 2 21.3094 2 21.2417V5ZM16 19.3955L20 17.6812V5.03308L16 6.74736V19.3955ZM14 19.2639V6.73607L10 4.73607V17.2639L14 19.2639ZM8 17.2526V4.60451L4 6.31879V18.9669L8 17.2526Z",
     plus: "M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z",
     minus: "M5 11H19V13H5V11Z",
-    minus: "M5 11H19V13H5V11Z",
     receipt: "M9 4L6 2L3 4V19C3 20.6569 4.34315 22 6 22H20C21.6569 22 23 20.6569 23 19V16H21V4L18 2L15 4L12 2L9 4ZM19 16H7V19C7 19.5523 6.55228 20 6 20C5.44772 20 5 19.5523 5 19V5.07037L6 4.4037L9 6.4037L12 4.4037L15 6.4037L18 4.4037L19 5.07037V16ZM20 20H8.82929C8.93985 19.6872 9 19.3506 9 19V18H21V19C21 19.5523 20.5523 20 20 20Z",
     repeat: "M6 4H21C21.5523 4 22 4.44772 22 5V12H20V6H6V9L1 5L6 1V4ZM18 20H3C2.44772 20 2 19.5523 2 19V12H4V18H18V15L23 19L18 23V20Z",
     tag: "M10.9042 2.10025L20.8037 3.51446L22.2179 13.414L13.0255 22.6063C12.635 22.9969 12.0019 22.9969 11.6113 22.6063L1.71184 12.7069C1.32131 12.3163 1.32131 11.6832 1.71184 11.2926L10.9042 2.10025ZM11.6113 4.22157L3.83316 11.9997L12.3184 20.485L20.0966 12.7069L19.036 5.28223L11.6113 4.22157ZM13.7327 10.5855C12.9516 9.80448 12.9516 8.53815 13.7327 7.7571C14.5137 6.97606 15.78 6.97606 16.5611 7.7571C17.3421 8.53815 17.3421 9.80448 16.5611 10.5855C15.78 11.3666 14.5137 11.3666 13.7327 10.5855Z",
@@ -1711,33 +1710,6 @@
       h("div", { className: "rk-diagram-errhead", role: "alert" }, h(Icon, { name: "warning" }), h("b", null, "Diagram belum bisa ditampilkan")),
       h("details", { className: "rk-diagram-src" }, h("summary", null, "Lihat sumber"), h("pre", { className: "rk-md-pre" }, h("code", null, source))));
   }
-  /** The shared render state for a Mermaid source: {status: loading|ok|err, svg, err}. quiet = do not tell the host (a viewer variant of a source the inline Diagram already reported). */
-  function useDiagramSvg(source, pending, quiet) {
-    var st = useState({ status: "loading", svg: "", err: "" }), s = st[0], set = st[1];
-    useEffect(function () {
-      if (pending) return;
-      var live = true;
-      if (Object.prototype.hasOwnProperty.call(dgCache, source)) { set({ status: "ok", svg: dgCache[source], err: "" }); return; }
-      set({ status: "loading", svg: "", err: "" });
-      dgRender(source).then(function (svg) { dgCache[source] = svg; if (live) set({ status: "ok", svg: svg, err: "" }); }, function (e) {
-        if (!live) return;
-        var msg = e && e.message ? String(e.message) : String(e);
-        set({ status: "err", svg: "", err: msg });
-        /* once per source for the whole page; a script that did not load is not the diagram's fault */
-        if (!quiet && !(e && e.rkLoad) && !Object.prototype.hasOwnProperty.call(dgReported, source)) {
-          dgReported[source] = true;
-          if (dgCfg.onRenderError) { try { dgCfg.onRenderError(source, msg); } catch (e2) {} }
-        }
-      });
-      return function () { live = false; };
-    }, [source, pending]);
-    return s;
-  }
-  function dgErr(source) {
-    return h("div", { className: "rk-diagram-err" },
-      h("div", { className: "rk-diagram-errhead", role: "alert" }, h(Icon, { name: "warning" }), h("b", null, "Diagram belum bisa ditampilkan")),
-      h("details", { className: "rk-diagram-src" }, h("summary", null, "Lihat sumber"), h("pre", { className: "rk-md-pre" }, h("code", null, source))));
-  }
   /** Chat / Format / Diagram: p.source (mermaid). p.pending = the fence is still streaming: skeleton only, never the source.
       p.onOpen: the host owns the viewer. Without it "Perbesar" opens a DiagramViewer here (title = title or alt). */
   function Diagram(p) {
@@ -1780,8 +1752,22 @@
     if (p.open === false || !p.open) return null;
     return h(DiagramViewerBody, p);
   }
+  /* the viewer's phone flag: the same 720 px the CSS uses (full screen, top-down source, no drag hint) */
+  function useNarrow() {
+    var mq = function () { return typeof window !== "undefined" && window.matchMedia ? window.matchMedia("(max-width: 719px)") : null; };
+    var st = useState(function () { var m = mq(); return m ? m.matches : false; }), narrow = st[0], set = st[1];
+    useEffect(function () {
+      var m = mq();
+      if (!m) return;
+      var on = function () { set(m.matches); };
+      if (m.addEventListener) m.addEventListener("change", on); else if (m.addListener) m.addListener(on);
+      on();
+      return function () { if (m.removeEventListener) m.removeEventListener("change", on); else if (m.removeListener) m.removeListener(on); };
+    }, []);
+    return narrow;
+  }
   function DiagramViewerBody(p) {
-    var phone = useBreakpoint() === "phone";
+    var phone = useNarrow();
     var source = phone ? diagramTopDown(p.source) : p.source;
     var s = useDiagramSvg(source, false, source !== p.source);
     var vs = useState({ k: 1, x: 0, y: 0 }), view = vs[0], setView = vs[1];

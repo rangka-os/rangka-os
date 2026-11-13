@@ -210,15 +210,19 @@ func (r *Registry) TaxSettings(org string) map[string]any {
 	}
 	pkp, _ := out["pkp"].(bool)
 	out["pkp"] = pkp
+	// ppn_fee_only: PPN on the service fee only, the workers' wages billed on their own line left out of the base
+	// (DPP nilai lain, PMK 83/2012 for jasa penyediaan tenaga kerja). Default false: PPN on the whole invoice.
+	feeOnly, _ := out["ppn_fee_only"].(bool)
+	out["ppn_fee_only"] = feeOnly
 	return out
 }
 
-// TaxVar is the CEL tax global for org (contract 0010 §8): ppn_rate (percent), dpp_num, dpp_den and pkp
-// from TaxSettings(org). pkp is the one PKP flag (default false: no PPN unless the org is declared PKP).
+// TaxVar is the CEL tax global for org (contract 0010 §8): ppn_rate (percent), dpp_num, dpp_den, pkp and
+// ppn_fee_only from TaxSettings(org). pkp is the one PKP flag (default false: no PPN unless the org is declared PKP).
 func (r *Registry) TaxVar(org string) map[string]any {
 	t := r.TaxSettings(org)
 	num, den, _ := ParseDPPRatio(t["dpp_ratio"].(string))
-	return map[string]any{"ppn_rate": t["ppn_rate"], "dpp_num": num, "dpp_den": den, "pkp": t["pkp"]}
+	return map[string]any{"ppn_rate": t["ppn_rate"], "dpp_num": num, "dpp_den": den, "pkp": t["pkp"], "ppn_fee_only": t["ppn_fee_only"]}
 }
 
 // OrgVar is the CEL org global for org (contract 0010 §8), identity only: OrgIdentity(org) cut to id (the

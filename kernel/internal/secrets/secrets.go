@@ -14,11 +14,12 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"os"
-	"path/filepath"
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
@@ -121,7 +122,9 @@ func PlatformFromEnv(getenv func(string) string) (Platform, error) {
 
 // path is the file folder or Vault path: the platform's, else system.rk secrets.path.
 func (s *Service) path(reg *meta.Registry) string {
-	if s.Platform.Path != "" {
+	// a platform that fixes the driver fixes its path too: with RANGKA_SECRETS_DRIVER file or vault and no
+	// RANGKA_SECRETS_PATH the bindings read as unset, never at the path system.rk names (audit secrets-platform-driver 2)
+	if s.Platform.Path != "" || s.Platform.Driver != "" {
 		return s.Platform.Path
 	}
 	p, _ := reg.SystemConfig("secrets.path").(string)
@@ -129,43 +132,48 @@ func (s *Service) path(reg *meta.Registry) string {
 }
 
 // readSecretFile reads <dir>/<name> only when dir holds an entry spelled exactly name (a case-insensitive file system
-// would otherwise turn ${HOSTKEYS} into hostkeys) that is a regular file, or a symlink to a regular file inside dir
-// (Kubernetes mounts each secret key as KEY -> ..data/KEY); a symlink out of dir is not followed.
+// would otherwise turn ${HOSTKEYS} into hostkeys) that opens, through an os.Root on dir, as a regular file. The root
+// follows a relative symlink only while it stays inside dir (Kubernetes mounts each secret key as KEY -> ..data/KEY;
+// an absolute symlink is not followed) and the
+// file is checked on the open descriptor, so a symlink swapped between the check and the read cannot lead out of the
+// folder (audit secrets-platform-driver 1).
+// maxSecretFile is the largest secret the file driver reads.
+const maxSecretFile = 1 << 20
+
 func readSecretFile(dir, name string) (string, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		return "", false
 	}
+	found := false
 	for _, e := range entries {
-		if e.Name() != name {
-			continue
-		}
-		p := filepath.Join(dir, name)
-		if !e.Type().IsRegular() {
-			if e.Type()&os.ModeSymlink == 0 {
-				return "", false
-			}
-			root, err1 := filepath.EvalSymlinks(dir)
-			target, err2 := filepath.EvalSymlinks(p)
-			if err1 != nil || err2 != nil {
-				return "", false
-			}
-			if rel, err := filepath.Rel(root, target); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return "", false
-			}
-			if fi, err := os.Stat(target); err != nil || !fi.Mode().IsRegular() {
-				return "", false
-			}
-			p = target
-		}
-		b, err := os.ReadFile(p)
-		if err != nil {
-			return "", false
-		}
-		v := strings.TrimRight(string(b), "\r\n")
-		return v, v != ""
+		found = found || e.Name() == name
 	}
-	return "", false
+	if !found {
+		return "", false
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		return "", false
+	}
+	defer root.Close()
+	// O_NONBLOCK: a FIFO named like the variable would otherwise block the open; the descriptor check below refuses it
+	f, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return "", false
+	}
+	defer f.Close()
+	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
+		return "", false
+	}
+	// a secret is at most maxSecretFile bytes (a Kubernetes Secret is capped at 1 MiB too); a longer file is refused
+	// whole, never cut
+	b, err := io.ReadAll(io.LimitReader(f, maxSecretFile+1))
+	if err != nil || len(b) > maxSecretFile {
+		return "", false
+	}
+	v := strings.TrimRight(string(b), "\r\n")
+	return v, v != ""
 }
 
 // Writable reports whether values are set through the API (the db driver).

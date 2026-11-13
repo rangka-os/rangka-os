@@ -250,6 +250,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return nil, err
 	}
 	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now, Vault: secrets.VaultFromEnv(nil), Log: cfg.Logf, Platform: platformSecrets}
+	if d := platformSecrets.Driver; (d == "file" || d == "vault") && platformSecrets.Path == "" {
+		cfg.Logf("secrets: RANGKA_SECRETS_DRIVER=%s without RANGKA_SECRETS_PATH; connector secrets read as unset", d)
+	}
 	if kek == nil && s.API.Secrets.Driver() == "db" {
 		cfg.Logf("secrets: driver db without RANGKA_MASTER_KEY; connector secrets cannot be set (run rangka keygen)")
 	}

@@ -171,7 +171,7 @@
       var cs = global.document && global.document.currentScript;
       if (cs && cs.src) src = cs.src.replace(/[^\/]*(\?.*)?$/, "") + src;
     } catch (e) { /* keep the relative path */ }
-    global.Rangka.configureDiagrams({ src: src, onRenderError: function (error) { console.warn("raka diagram", error); } });
+    global.Rangka.configureDiagrams({ src: src, onRenderError: function (source, message) { console.warn("raka diagram", message); } });
   })();
 
   /* ================================================================ browser only from here */

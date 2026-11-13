@@ -140,7 +140,9 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .rk-seg button { border-radius: var(--r); color: var(--muted); font: 500 12.5px/1 var(--font-sans); padding: 0 10px; }
 .ap-main .rk-seg button[aria-pressed="true"] { background: var(--ap-seg-on); color: var(--ink); font-weight: 600; box-shadow: var(--ap-seg-shadow); }
 /* the pen's list header: search and "Buat …" on the right of the title, a count pill after it */
-.ap-main .ap-head-search { flex: 0 1 220px; }
+/* width as well as the basis: the header sizes its tools by their content, and a bare input is narrower than 220px,
+   so without it the search overflowed its share and pushed "Buat …" onto a second row */
+.ap-main .ap-head-search { flex: 0 1 220px; width: 220px; }
 .ap-main .rk-pagehead-extra { flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .ap-headcount { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--r-pill); background: var(--ap-pill); color: var(--ap-pill-ink); font: 400 11.5px/20px var(--font-sans); white-space: nowrap; }
 /* under it one ruled row: the views as underline tabs on the left, filters and tools as small outlined buttons on the right */

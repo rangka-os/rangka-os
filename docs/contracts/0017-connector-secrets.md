@@ -48,7 +48,7 @@ connector_auth:
 - In `connector_auth:` a secret field must be a `${VAR}` reference (validator error `secret_literal`).
 - A `${VAR}` in `connector_auth:` or `auth.upstream` may not name a variable of the platform: `DATABASE_URL` or a name
   starting with `RANGKA_`, `RAKA_`, `ANTHROPIC_`, `OPENAI_`, `VAULT_`, `AWS_`, `ECS_` or `PG` (kernel `meta.PlatformEnv`).
-  - The validator reports it as error `platform_env`.
+  - The validator reports it as error `platform_env`, in `connector_auth` and in `auth.upstream` `client_id` / `client_secret`.
   - At run time the field reads as unset.
   - An upstream sign-in with such a binding stops the start.
   - On a hosted kernel these variables hold the platform's own secrets, such as the assistant's bearer `RANGKA_AI_SECRET`,
@@ -111,7 +111,7 @@ connector_auth:
 - Overlays and the company layer cannot change a connector's `request`, `hosts` or `verify`.
 - **Egress.** Whoever runs the kernel sets `RANGKA_CONNECTOR_EGRESS`; a company's files never set it.
   - `any`, or unset, means no limit. This is for self-hosting and for demos with local mocks.
-  - `public` means connector actions and OAuth refreshes connect only to public addresses. The kernel refuses loopback,
+  - `public` means connector actions, OAuth refreshes and the OIDC upstream issuers of `auth.upstream` (contract 0042) connect only to public addresses. The kernel refuses loopback,
     private, carrier-grade NAT, link-local (including the cloud metadata address), unspecified and multicast addresses,
     with `egress_refused`, which is not retried.
   - The address is checked on the connection, after DNS and redirects.

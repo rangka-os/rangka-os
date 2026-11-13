@@ -93,3 +93,17 @@ func TestEgressReusesTransport(t *testing.T) {
 		t.Fatal("transport shared across runtimes with their own policies")
 	}
 }
+
+// Audit platform-env A5: the OIDC upstream client gets this transport, so an issuer system.rk names on loopback or
+// a private address is refused under "public" like a connector.
+func TestEgressTransport(t *testing.T) {
+	if (Egress{}).Transport() != nil {
+		t.Fatal("open policy: want nil (the default transport)")
+	}
+	issuer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte("{}")) }))
+	defer issuer.Close()
+	c := &http.Client{Transport: Egress{Public: true}.Transport()}
+	if _, err := c.Get(issuer.URL + "/.well-known/openid-configuration"); !errors.Is(err, ErrEgressRefused) {
+		t.Fatalf("loopback issuer: %v, want egress_refused", err)
+	}
+}

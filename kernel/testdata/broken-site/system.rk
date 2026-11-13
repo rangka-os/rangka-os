@@ -21,6 +21,8 @@ auth:
       redirect_uris: [http://localhost:3000/auth/callback]
       public: true
       scopes: [openid, profile, email, rangka.mcp]
+  upstream:
+    - {id: kantor, issuer: 'https://id.kopisenja.id', client_id: kopi-senja, client_secret: '${RANGKA_INTERNAL_TOKEN}'}
 secrets: {driver: env}
 audit: {enabled: true, retention_days: 365}
 observability: {log_level: info, metrics: true}

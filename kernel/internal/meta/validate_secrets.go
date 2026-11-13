@@ -254,6 +254,28 @@ func (v *validator) connectorAuth() {
 	}
 }
 
+// authUpstream is contract 0017 §2 for system.rk auth.upstream (check_auth_upstream in rangka_validate.py): a
+// client_id or client_secret may not read a platform variable. The kernel refuses it at start too; the validator
+// says so before a change set applies it (audit platform-env A8).
+func (v *validator) authUpstream() {
+	d := v.reg.Site.Docs["system.rk"]
+	if d == nil {
+		return
+	}
+	for i, x := range asList(asMap(asMap(d.Data)["auth"])["upstream"]) {
+		u := asMap(x)
+		for _, key := range []string{"client_id", "client_secret"} {
+			s, ok := u[key].(string)
+			if !ok {
+				continue
+			}
+			if m := secretRef.FindStringSubmatch(s); m != nil && PlatformEnv(m[1]) {
+				v.rep.extra("error", d.Path, fmt.Sprintf("auth/upstream/%d/%s", i, key), "platform_env", fmt.Sprintf(`auth.upstream %s reads ${%s}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)`, key, m[1]))
+			}
+		}
+	}
+}
+
 // pollTriggers is contract 0002 §A.1 (check_poll_triggers in rangka_validate.py): a trigger with via: poll names one
 // of the connector's actions, which the kernel sends on every poll. A trigger without one is only described (a spec
 // connector): the kernel does not poll it, and a flow listening to it gets poll_action_missing (validate_ext.go).

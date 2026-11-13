@@ -74,15 +74,20 @@ answer; `flowchart` only; Bahasa Indonesia labels; no styling, no init blocks.
 - limits: at most 30 nodes, 60 edges, 80 characters per label, 4 KB of source;
 - every edge endpoint is declared or defined inline; no empty label in brackets.
 
+The check finds fences with a rule at least as wide as the renderer's (RichText, §3): backtick fences, indented
+fences, `mermaid` in any case, CRLF line ends. Every fence RichText would draw as a diagram is therefore checked.
+`~~~` fences are never diagrams, in the check or in the renderer.
+
 It returns problems in plain words with line numbers ("baris 4: kurung siku tidak ditutup").
 
 **Repair loop**, next to the claim repair in `agent.py` and the same in the consult path:
 
 1. The final reply is checked (claims, then diagrams) before anything is streamed (0044: text is streamed only after
    it is checked, so a broken diagram is never streamed).
-2. A broken diagram: the reply and the problems go back to the model once ("Perbaiki diagram ini: ..."), like
-   `CLAIM_REPAIR`. The repaired reply is checked again.
-3. Still broken after the second try (`max_diagram_repairs = 2`): the fence is removed, the rest of the text stays, and
+2. A broken diagram: the reply and the problems go back to the model ("Perbaiki diagram ini: ..."), like
+   `CLAIM_REPAIR`. The repaired reply is checked again. There are up to two repair rounds (`max_diagram_repairs = 2`);
+   a claim repair and a diagram repair in the same round count as one round.
+3. Still broken after the second repair round: the fence is removed, the rest of the text stays, and
    one line is added: "Diagramnya belum bisa aku gambar, jadi aku jelaskan lewat teks saja." The removed source and
    the problems are logged (`diagram.dropped`).
 4. A `note` streamed with tool calls is checked the same way. A broken diagram in a note is simply dropped, with no
@@ -117,8 +122,8 @@ first time a diagram is in view. Pages without a diagram never load it.
 | `OfferCompare` | the option row of the offer card (§4) |
 
 **Direction is width-driven.** Inline diagrams in offer columns and in the narrow carousel are top-down (`flowchart
-TD`). A single wide card and the desktop zoom popup are left-to-right (`flowchart LR`); the popup turns top-down below
-720 px.
+TD`). A single-option card is left-to-right when its container is 532 px or more and top-down below that (phone). The
+desktop zoom popup is left-to-right and turns top-down below 720 px.
 
 **Fallbacks.** A broken block is a bug, so every failure has a quiet state:
 
@@ -155,8 +160,8 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
   (records, screens, Raka does, needs approval, adds), collapsed after the first two sections ("Lihat rincian") so
   columns stay comparable in height.
 - A gap is visible in the diagram and named under it ("Belum tercakup: ...").
-- **Widths:** the chat column decides. Options sit side by side when each column gets at least 260 px (a container of
-  532 px or more for two options, 804 px or more for three). Otherwise (phone, the Konsol drawer) the row is a
+- **Widths:** the chat column decides. Options sit side by side when each column gets at least 260 px (the gap between columns is
+  12 px, so a container of 532 px or more for two options, 804 px or more for three: 2 x 260 + 12 and 3 x 260 + 24). Otherwise (phone, the Konsol drawer) the row is a
   horizontal scroll-snap row, one card at a time, with "1 / N" and the peeking edge of the next; arrow buttons on
   pointer devices.
 - **One option:** a single wide card with the diagram, no row.

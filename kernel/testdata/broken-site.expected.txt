@@ -128,12 +128,13 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-site/config.rk:13:9  error  schema  numbering/awal  {'pattern': 'A/{YYYY}/{####}', 'start': 0} is not valid under any of the given schemas
 ../broken-site/config.rk:12:8  error  schema  numbering/cnt  {'pattern': 'X-{#}-{#}'} is not valid under any of the given schemas
 ../broken-site/system.rk:4:17  error  schema  cache/driver  'memcache' is not one of ['memory', 'valkey']
-../broken-site/system.rk:33:20  error  secret_literal  connector_auth/leaky/api_key  leaky.api_key is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
-../broken-site/system.rk:34:12  error  unknown_connector  connector_auth/whatsap  "whatsap" is not a connector
-../broken-site/system.rk:29:19  error  secret_literal  connector_auth/whatsapp_business/access_token  whatsapp_business.access_token is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
-../broken-site/system.rk:32:18  error  unknown_auth_field  connector_auth/whatsapp_business/acess_token  connector whatsapp_business has no auth field "acess_token"; did you mean "access_token"?
-../broken-site/system.rk:37:39  error  secret_literal  connector_auth/orgs/pt_beta/whatsapp_business/app_secret  whatsapp_business.app_secret is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
-../broken-site/system.rk:37:70  error  platform_env  connector_auth/orgs/pt_beta/whatsapp_business/phone_number_id  whatsapp_business.phone_number_id reads ${RANGKA_AI_SECRET}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)
+../broken-site/system.rk:35:20  error  secret_literal  connector_auth/leaky/api_key  leaky.api_key is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
+../broken-site/system.rk:36:12  error  unknown_connector  connector_auth/whatsap  "whatsap" is not a connector
+../broken-site/system.rk:31:19  error  secret_literal  connector_auth/whatsapp_business/access_token  whatsapp_business.access_token is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
+../broken-site/system.rk:34:18  error  unknown_auth_field  connector_auth/whatsapp_business/acess_token  connector whatsapp_business has no auth field "acess_token"; did you mean "access_token"?
+../broken-site/system.rk:39:39  error  secret_literal  connector_auth/orgs/pt_beta/whatsapp_business/app_secret  whatsapp_business.app_secret is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)
+../broken-site/system.rk:39:70  error  platform_env  connector_auth/orgs/pt_beta/whatsapp_business/phone_number_id  whatsapp_business.phone_number_id reads ${RANGKA_AI_SECRET}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)
+../broken-site/system.rk:25:93  error  platform_env  auth/upstream/0/client_secret  auth.upstream client_secret reads ${RANGKA_INTERNAL_TOKEN}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)
 ../broken-site/features.rk:6:23  error  unknown_app  plans/0/apps/2  "stock" is not an app in testdata/broken-apps
 ../broken-site/features.rk:5:14  error  unknown_plan  plans/0/extends  plan "basic" does not exist
 ../broken-site/config.rk:16:8  error  missing_dependency  apps/0  "crm" requires "core"; add it to apps
@@ -192,4 +193,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-169 error(s), 24 warning(s)
+170 error(s), 24 warning(s)

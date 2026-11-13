@@ -126,6 +126,15 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		return nil, err
 	}
+	// the platform's egress policy (contract 0017 §5) covers connectors and the OIDC upstream issuers system.rk names
+	egress, err := connectors.EgressFromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	var upstreamHTTP *http.Client
+	if t := egress.Transport(); t != nil {
+		upstreamHTTP = &http.Client{Transport: t}
+	}
 	fstore, err := openFiles(cfg, reg)
 	if err != nil {
 		return nil, err
@@ -203,7 +212,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		ttl = 24 * time.Hour
 	}
 	s.Auth = &auth.Service{DB: db, Issuer: issuer, SessionTTL: ttl, DevOpen: cfg.DevOpen, DefaultOrg: cfg.Org, Now: cfg.Now,
-		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }, Upstreams: ups, Log: cfg.Logf,
+		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }, Upstreams: ups, UpstreamHTTP: upstreamHTTP, Log: cfg.Logf,
 		Password: func() any { return s.Engine.Reg().SystemConfig("auth.password") }}
 	s.Changes = &changeset.Service{DB: db, AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir, ModulesDir: cfg.ModulesDir,
 		Schemas: cfg.Schemas, Reg: e.Reg, Reload: s.Reload, Now: cfg.Now,
@@ -248,10 +257,6 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		cfg.Logf("secrets: driver vault without VAULT_ADDR; connector secrets read as unset")
 	}
 	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows
-	egress, err := connectors.EgressFromEnv(os.Getenv)
-	if err != nil {
-		return nil, err
-	}
 	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf, Egress: egress,
 		StartFlow: func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, key string) error {
 			_, err := s.Queue.Enqueue(ctx, qr, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})

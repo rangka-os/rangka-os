@@ -146,3 +146,12 @@ type transportCache struct {
 	sync.Mutex
 	m map[http.RoundTripper]*http.Transport
 }
+
+// Transport is a transport that dials through the policy, for the kernel's other outbound calls a company's files
+// steer (the OIDC upstream issuer, contract 0042); nil when the policy is open.
+func (e Egress) Transport() http.RoundTripper {
+	if !e.Public {
+		return nil
+	}
+	return e.guard(&http.Client{}, &transportCache{}).Transport
+}

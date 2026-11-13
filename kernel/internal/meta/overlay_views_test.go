@@ -251,3 +251,45 @@ views:
 		t.Errorf("list columns = %s", got)
 	}
 }
+
+// TestOverlayLabelsMerge: contract 0049 §5, the company's word for a model (page title, the create button, widget
+// titles) and for fields of the app model replace the app's labels; names stay, an unknown field is reported.
+func TestOverlayLabelsMerge(t *testing.T) {
+	site := viewsSite(t, map[string]string{"custom/deal.rk": rkHint + `overlay.json
+model: deal
+label: {id: Mobil, en: Car}
+labels:
+  value: {id: Tarif harian}
+`})
+	reg, rep := validateViews(t, site)
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	m := reg.Model("deal")
+	if m == nil || m.Label["id"] != "Mobil" || m.Label["en"] != "Car" || m.Name != "deal" {
+		t.Fatalf("model label %+v", m)
+	}
+	var got Label
+	for _, f := range m.Fields {
+		if f.Name == "value" {
+			got = f.Label
+		}
+	}
+	if got["id"] != "Tarif harian" {
+		t.Fatalf("field label %+v", got)
+	}
+
+	site = viewsSite(t, map[string]string{"custom/deal.rk": rkHint + `overlay.json
+model: deal
+labels:
+  tarif: {id: Tarif}
+`})
+	_, rep = validateViews(t, site)
+	found := false
+	for _, it := range rep.All() {
+		found = found || (it.Code == "unknown_field" && it.Where == "labels/tarif")
+	}
+	if !found {
+		t.Fatalf("unknown field label not reported: %v", rep.All())
+	}
+}

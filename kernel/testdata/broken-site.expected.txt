@@ -162,13 +162,14 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/dashboards/nope.rk:2:7  error  unknown_dashboard  name  "nope" is not an installed dashboard
 ../broken-site/imports/site_bad.rk:5:14  error  unknown_field  map/x_missing  "x_missing" is not a field of customer
 ../broken-site/custom/dealz.rk:2:8  error  unknown_model  model  "dealz" is not a model; did you mean "deal"?
-../broken-site/custom/lead.rk:18:13  error  schema  views/form/layout  {'oops': 1} is not of type 'array'
+../broken-site/custom/lead.rk:20:13  error  schema  views/form/layout  {'oops': 1} is not of type 'array'
 ../broken-site/custom/lead.rk:2:8  error  name_mismatch  model  overlay model "deal" must match the file name "lead"
 ../broken-site/custom/lead.rk:6:21  error  not_submittable  approvals/0/on  approvals on cancel need is_submittable: true
 ../broken-site/custom/lead.rk:13:5  error  unknown_field  options/ghost  "ghost" is not a field of deal
 ../broken-site/custom/lead.rk:11:5  error  not_select  options/owner  "owner" is link; options only apply to select fields
 ../broken-site/custom/lead.rk:9:15  error  bad_option  options/x_segment/0/value  "umkm" is already an option of x_segment
-../broken-site/custom/lead.rk:16:15  error  bad_option  views/kanban/columns/0  "a" is not an option of value
+../broken-site/custom/lead.rk:15:16  error  unknown_field  labels/ghost_label  "ghost_label" is not a field of deal
+../broken-site/custom/lead.rk:18:15  error  bad_option  views/kanban/columns/0  "a" is not an option of value
 ../broken-site/custom/ledger_row.rk:4:40  error  set_once_child  fields/0/set_once  set_once is for fields of the document itself; a table row can be removed and added again
 ../broken-site/custom/sales_invoice.rk:5:12  error  schema  fields/1/name  'po_ref' does not match '^x_[a-z0-9_]{1,60}$'
 ../broken-site/custom/sales_invoice.rk:6:38  error  unknown_model  fields/2/to  "regionn" is not a model in this app or its dependencies
@@ -194,4 +195,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-170 error(s), 25 warning(s)
+171 error(s), 25 warning(s)

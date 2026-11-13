@@ -33,6 +33,7 @@ A low-risk Ubah edit by someone with `approve: false` stays a pending change set
 | Reorder form fields | `custom/<model>.rk` `views.form.layout` | low |
 | Reorder or hide list columns | `custom/<model>.rk` `views.list.columns` | low |
 | Reorder kanban columns | `custom/<model>.rk` `views.kanban.columns` | low |
+| Rename a table or a field in the company's words (contract 0049 §5) | `custom/<model>.rk` `label` (the model: page title, "Buat …", widget titles) and `labels: {<field>: label}` (fields of the app model) | low |
 | Edit the menu (reorder, rename group, hide) | `layouts/<config.layout>.rk` `nav.side` (created when the site has no layout file, with `config.rk` `layout` set) | low |
 | Add a field | `custom/<model>.rk` `fields` (`x_` name) + `views.form.add` (+ `views.list.add`) | medium (high for money/stock) |
 | Add a status / stage | `custom/<model>.rk` `options: {<select field>: [{value, label}]}` | medium (high on a submittable model) |
@@ -40,7 +41,7 @@ A low-risk Ubah edit by someone with `approve: false` stays a pending change set
 | Add an automation | new `flows/<name>.rk` in the site company module (contract 0016) with `on: <model>.created|updated` | medium |
 | Add a table (model) | new `models/x_<name>.rk` in the site company module (contract 0016; never `apps/` or a catalogue module) + a `nav.side` entry in the layout; `permissions` copied from a sibling model (the first model of the menu group the table joins, else the first model with `permissions` of the module of the model on screen, else of the app's first menu model), none when no sibling has them | medium (high with money/stock fields); without `permissions` an extra reason says every role has full access |
 
-An overlay that only changes `views` is low risk whether or not the file is new (this narrows "new overlay → medium"
+An overlay that only changes `views`, `label` or `labels` is low risk whether or not the file is new (this narrows "new overlay → medium"
 in the v0.1 notes to overlays that add fields, rules, approvals or options).
 
 ## 3. New `.rk` keys (schema 0.5)
@@ -53,8 +54,11 @@ in the v0.1 notes to overlays that add fields, rules, approvals or options).
   `views.list.add` applies after it.
 - `views.kanban.columns`: the order of the kanban's `group_by` option values; values left out are hidden.
 - `options: {<field>: [{value, label, color?}]}`: options appended to a `select` field of the model.
+- `label` (contract 0049 §5): replaces the app model's label, so the page title, the create button and references
+  read the company's word ("Mobil" for a rental of cars). The model's name stays.
+- `labels: {<field>: label}` (contract 0049 §5): replaces the label of fields of the app model; field names stay.
 
-Validator codes: `unknown_field` (a layout, column or `options` key that is not a field of the merged model),
+Validator codes: `unknown_field` (a layout, column, `options` or `labels` key that is not a field of the merged model),
 `not_select` (`options` on a field that is not `type: select`), `bad_option` (a kanban column that is not an option
 of `group_by`, or an option value that already exists), `no_kanban` (`views.kanban.columns` on a model without
 `views.kanban`). Go and Python report them identically.

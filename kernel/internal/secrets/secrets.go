@@ -19,6 +19,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
@@ -132,9 +133,13 @@ func (s *Service) path(reg *meta.Registry) string {
 
 // readSecretFile reads <dir>/<name> only when dir holds an entry spelled exactly name (a case-insensitive file system
 // would otherwise turn ${HOSTKEYS} into hostkeys) that opens, through an os.Root on dir, as a regular file. The root
-// follows a symlink only while it stays inside dir (Kubernetes mounts each secret key as KEY -> ..data/KEY) and the
+// follows a relative symlink only while it stays inside dir (Kubernetes mounts each secret key as KEY -> ..data/KEY;
+// an absolute symlink is not followed) and the
 // file is checked on the open descriptor, so a symlink swapped between the check and the read cannot lead out of the
 // folder (audit secrets-platform-driver 1).
+// maxSecretFile is the largest secret the file driver reads.
+const maxSecretFile = 1 << 20
+
 func readSecretFile(dir, name string) (string, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -152,7 +157,8 @@ func readSecretFile(dir, name string) (string, bool) {
 		return "", false
 	}
 	defer root.Close()
-	f, err := root.Open(name)
+	// O_NONBLOCK: a FIFO named like the variable would otherwise block the open; the descriptor check below refuses it
+	f, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NONBLOCK, 0)
 	if err != nil {
 		return "", false
 	}
@@ -160,8 +166,10 @@ func readSecretFile(dir, name string) (string, bool) {
 	if fi, err := f.Stat(); err != nil || !fi.Mode().IsRegular() {
 		return "", false
 	}
-	b, err := io.ReadAll(io.LimitReader(f, 1<<20))
-	if err != nil {
+	// a secret is at most maxSecretFile bytes (a Kubernetes Secret is capped at 1 MiB too); a longer file is refused
+	// whole, never cut
+	b, err := io.ReadAll(io.LimitReader(f, maxSecretFile+1))
+	if err != nil || len(b) > maxSecretFile {
 		return "", false
 	}
 	v := strings.TrimRight(string(b), "\r\n")

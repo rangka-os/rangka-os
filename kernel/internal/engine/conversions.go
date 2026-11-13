@@ -246,24 +246,35 @@ func invoiceFromOrder(h *HookCtx) (map[string]any, error) {
 		}
 		return openResult("sales_invoice", str(d["name"]), "Draf faktur "+str(d["name"])+" sudah ada untuk pesanan ini"), nil
 	}
-	invoiced := map[string]float64{}
+	exact, byItem := map[string]float64{}, map[string]float64{}
 	done, err := h.Find("sales_invoice", map[string]any{"customer_order": name, "docstatus": 1})
 	if err != nil {
 		return nil, err
 	}
 	for _, inv := range done {
 		for _, l := range rows(inv["items"]) {
-			invoiced[lineKey(l)] += qtyOf(l["qty"])
+			exact[lineKey(l)] += qtyOf(l["qty"])
+			byItem[str(l["item"])] += qtyOf(l["qty"])
 		}
 	}
-	var items []any
-	for _, l := range rows(so["items"]) {
-		item := str(l["item"])
-		key := lineKey(l)
+	// billed quantities go first to the order lines with the same item and marks (the wages and the fee of one item
+	// stay apart), then what is left of an item to its other lines whatever their marks: a mark changed on the draft
+	// invoice never bills an order line twice (audit lanjutan 2 N1, D1)
+	lines := rows(so["items"])
+	rests := make([]float64, len(lines))
+	for i, l := range lines {
 		qty := qtyOf(l["qty"])
-		used := math.Min(qty, invoiced[key])
-		invoiced[key] -= used
-		if rest := qty - used; rest > qtyEps {
+		used := math.Min(qty, exact[lineKey(l)])
+		exact[lineKey(l)] -= used
+		byItem[str(l["item"])] -= used
+		rests[i] = qty - used
+	}
+	var items []any
+	for i, l := range lines {
+		item := str(l["item"])
+		used := math.Max(0, math.Min(rests[i], byItem[item]))
+		byItem[item] -= used
+		if rest := rests[i] - used; rest > qtyEps {
 			line := map[string]any{"item": item, "description": l["description"], "qty": rest, "uom": l["uom"], "rate": l["rate"]}
 			carryLineFlags(h, "sales_invoice", line, l)
 			items = append(items, line)

@@ -359,6 +359,49 @@
         { role: "assistant", activity: ["Menyusun change set…"], text: "Aku sudah menyusun usulannya. Cek pratinjaunya dulu.",
           changesets: [{ id: "cs-0815", title: "Nomor PO wajib untuk pelanggan grosir", risk: "low", status: "previewed" }] }] }));
     },
+    RichText: function () {
+      // Chat / Format / *: Raka's markdown (Figma "Raka Chat" › Isi jawaban); the second column folds a long answer
+      var md = [
+        "## Ringkasan piutang",
+        "Ada **7 faktur** lewat jatuh tempo lebih dari 7 hari, total **Rp 18.250.000**. Datanya dari `sales_invoice`. Rinciannya di [laporan piutang](#piutang).",
+        "",
+        "### Yang perlu kamu tahu",
+        "- Hotel Savoy Homann paling lama: 31 hari.",
+        "- Toko Maju belum punya nomor WhatsApp.",
+        "",
+        "| Pelanggan | Lewat | Sisa |",
+        "| --- | --- | --- |",
+        "| Hotel Savoy Homann | 31 hr | Rp 4.200.000 |",
+        "| Kantin PT Len | 28 hr | Rp 2.875.000 |",
+        "| **Total 7 faktur** | | **Rp 18.250.000** |",
+        "",
+        "- **Total jatuh tempo:** Rp 18.250.000",
+        "- **Bisa dihubungi:** 6 dari 7",
+        "",
+        "> [!WARNING] Perlu dicek",
+        "> Toko Maju belum punya nomor WhatsApp, jadi INV-2026-00039 dilewati.",
+        "",
+        "```yaml pengingat.rk",
+        "name: pengingat_jatuh_tempo",
+        "trigger:",
+        "  schedule: \"0 9 * * *\"",
+        "```",
+        "",
+        "1. Kirim pengingat ke 6 pelanggan.",
+        "2. Minta Sari mencari nomor Toko Maju.",
+        "",
+        "> Catatan pemilik: tagih dengan sopan, Hotel Savoy langganan lama."].join("\n");
+      var long = ["Hotel Savoy Homann (31 hari, Rp 4.200.000) biasanya membayar lewat transfer di akhir bulan. Pengingat sopan cukup.",
+        "Kantin PT Len punya dua faktur terbuka. Raka menyarankan satu pesan untuk keduanya.",
+        "Warung Bu Imas dan Toko Roti Sinar di bawah Rp 1.500.000. Bisa diingatkan bersama pesanan berikutnya.",
+        "Cafe Braga baru pertama kali telat. Raka menandainya untuk dicek Senin.",
+        "> [!NOTE]\n> Pengingat hanya dikirim pukul 08.00 sampai 20.00.",
+        "> [!TIP] Berhasil\n> 6 pengingat terjadwal. Raka cek pembayaran besok.",
+        "> [!CAUTION] Gagal dikirim\n> 2 pesan ditolak WhatsApp karena nomornya tidak aktif."].join("\n\n");
+      return h("div", { className: "gx-row", style: { flexWrap: "wrap", alignItems: "flex-start", gap: 24 } },
+        h("div", { style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: md })),
+        h("div", { style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: long, collapse: 8 })));
+    },
     RakaLauncher: function () {
       var t = useState(false);
       // the fixed button sits inside a positioned frame here; each state side by side

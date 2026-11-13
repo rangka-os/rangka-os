@@ -113,6 +113,33 @@ with sync_playwright() as pw:
                     fail(f"{tag}: broken diagram lacks Lihat sumber")
                 if page.locator("[data-component=Diagram] [data-case=streaming] .rk-diagram-skel").count() != 1 or "Mulai" in page.inner_text("[data-component=Diagram] [data-case=streaming]"):
                     fail(f"{tag}: streaming diagram is not a bare skeleton")
+            try:
+                page.locator("[data-component=Diagram] [data-case=ok] button[aria-label=Perbesar]").click()
+                page.wait_for_selector(".rk-dialog.rk-diagram-viewer .rk-dv-stage svg", timeout=15000)
+            except Exception:
+                fail(f"{tag}: Perbesar did not open the DiagramViewer")
+            else:
+                page.wait_for_timeout(200)
+                tf0 = page.evaluate("document.querySelector('.rk-dv-stage').style.transform")
+                page.keyboard.press("+")
+                tf1 = page.evaluate("document.querySelector('.rk-dv-stage').style.transform")
+                if tf0 == tf1:
+                    fail(f"{tag}: + did not change the viewer transform ({tf0})")
+                if page.locator(".rk-diagram-viewer button[aria-label=Perkecil]").count() != 1 or not page.locator(".rk-diagram-viewer button", has_text="Pas di layar").count():
+                    fail(f"{tag}: viewer zoom buttons missing")
+                hint = page.locator(".rk-dv-hint").count()
+                if (width >= 720) != bool(hint):
+                    fail(f"{tag}: drag hint should show only on desktop (found {hint})")
+                tf2 = page.evaluate("document.querySelector('.rk-dv-stage').style.transform")
+                page.keyboard.press("0")
+                if page.evaluate("document.querySelector('.rk-dv-stage').style.transform") == tf2:
+                    fail(f"{tag}: 0 did not fit the drawing")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(150)
+                if page.locator(".rk-diagram-viewer").count():
+                    fail(f"{tag}: Escape did not close the viewer")
+                if page.evaluate("document.activeElement && document.activeElement.getAttribute('aria-label')") != "Perbesar":
+                    fail(f"{tag}: focus did not return to Perbesar")
             doc, vw = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
             if doc > vw + 1:
                 fail(f"{tag}: horizontal page scroll {doc} > {vw}")

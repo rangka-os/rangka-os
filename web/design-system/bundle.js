@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"},{"name":"Diagram"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"},{"name":"Diagram"},{"name":"DiagramViewer"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -89,6 +89,8 @@
     history: "M12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22C6.47715 22 2 17.5228 2 12H4C4 16.4183 7.58172 20 12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C9.25022 4 6.82447 5.38734 5.38451 7.50024L8 7.5V9.5H2V3.5H4L3.99989 5.99918C5.82434 3.57075 8.72873 2 12 2ZM13 7L12.9998 11.585L16.2426 14.8284L14.8284 16.2426L10.9998 12.413L11 7H13Z",
     map: "M2 5L9 2L15 5L21.303 2.2987C21.5569 2.18992 21.8508 2.30749 21.9596 2.56131C21.9862 2.62355 22 2.69056 22 2.75827V19L15 22L9 19L2.69696 21.7013C2.44314 21.8101 2.14921 21.6925 2.04043 21.4387C2.01375 21.3765 2 21.3094 2 21.2417V5ZM16 19.3955L20 17.6812V5.03308L16 6.74736V19.3955ZM14 19.2639V6.73607L10 4.73607V17.2639L14 19.2639ZM8 17.2526V4.60451L4 6.31879V18.9669L8 17.2526Z",
     plus: "M11 11V5H13V11H19V13H13V19H11V13H5V11H11Z",
+    minus: "M5 11H19V13H5V11Z",
+    minus: "M5 11H19V13H5V11Z",
     receipt: "M9 4L6 2L3 4V19C3 20.6569 4.34315 22 6 22H20C21.6569 22 23 20.6569 23 19V16H21V4L18 2L15 4L12 2L9 4ZM19 16H7V19C7 19.5523 6.55228 20 6 20C5.44772 20 5 19.5523 5 19V5.07037L6 4.4037L9 6.4037L12 4.4037L15 6.4037L18 4.4037L19 5.07037V16ZM20 20H8.82929C8.93985 19.6872 9 19.3506 9 19V18H21V19C21 19.5523 20.5523 20 20 20Z",
     repeat: "M6 4H21C21.5523 4 22 4.44772 22 5V12H20V6H6V9L1 5L6 1V4ZM18 20H3C2.44772 20 2 19.5523 2 19V12H4V18H18V15L23 19L18 23V20Z",
     tag: "M10.9042 2.10025L20.8037 3.51446L22.2179 13.414L13.0255 22.6063C12.635 22.9969 12.0019 22.9969 11.6113 22.6063L1.71184 12.7069C1.32131 12.3163 1.32131 11.6832 1.71184 11.2926L10.9042 2.10025ZM11.6113 4.22157L3.83316 11.9997L12.3184 20.485L20.0966 12.7069L19.036 5.28223L11.6113 4.22157ZM13.7327 10.5855C12.9516 9.80448 12.9516 8.53815 13.7327 7.7571C14.5137 6.97606 15.78 6.97606 16.5611 7.7571C17.3421 8.53815 17.3421 9.80448 16.5611 10.5855C15.78 11.3666 14.5137 11.3666 13.7327 10.5855Z",
@@ -431,8 +433,8 @@
             h("button", { type: "button", autoFocus: true, className: cx("rk-btn", p.variant === "danger" ? "rk-btn-danger-solid" : "rk-btn-primary"), onClick: p.onConfirm }, p.confirmLabel || "Lanjutkan"))));
     }
     return h(React.Fragment, null, h("div", { className: "rk-scrim", onClick: p.onClose }),
-      h("div", { className: "rk-dialog wide", role: "dialog", "aria-modal": "true", "aria-labelledby": "rk-dlg-t", onKeyDown: esc },
-        h("div", { className: "rk-dialog-head" }, h("h2", { id: "rk-dlg-t" }, p.title), h(IconButton, { icon: "close", label: "Tutup", onClick: p.onClose })),
+      h("div", { className: cx("rk-dialog wide", p.className), role: "dialog", "aria-modal": "true", "aria-labelledby": "rk-dlg-t", onKeyDown: esc },
+        h("div", { className: "rk-dialog-head" }, h("h2", { id: "rk-dlg-t" }, p.title), p.headerActions || null, h(IconButton, { icon: "close", label: "Tutup", onClick: p.onClose })),
         h("div", { className: "rk-dialog-main" }, p.children),
         h("div", { className: "rk-dialog-foot" }, p.footer || [h(Button, { key: "c", variant: "quiet", onClick: p.onClose }, p.cancelLabel || "Batal"), h(Button, { key: "o", variant: "primary", onClick: p.onConfirm }, p.confirmLabel || "Simpan")])));
   }
@@ -1682,42 +1684,197 @@
       throw e;
     });
   }
-  /** Chat / Format / Diagram: p.source (mermaid). p.pending = the fence is still streaming: skeleton only, never the source.
-      p.onOpen: shows "Perbesar" (the viewer is the host's). */
-  function Diagram(p) {
+  /** The shared render state for a Mermaid source: {status: loading|ok|err, svg, err}. quiet = do not tell the host (a viewer variant of a source the inline Diagram already reported). */
+  function useDiagramSvg(source, pending, quiet) {
     var st = useState({ status: "loading", svg: "", err: "" }), s = st[0], set = st[1];
     useEffect(function () {
-      if (p.pending) return;
+      if (pending) return;
       var live = true;
-      if (Object.prototype.hasOwnProperty.call(dgCache, p.source)) { set({ status: "ok", svg: dgCache[p.source], err: "" }); return; }
+      if (Object.prototype.hasOwnProperty.call(dgCache, source)) { set({ status: "ok", svg: dgCache[source], err: "" }); return; }
       set({ status: "loading", svg: "", err: "" });
-      dgRender(p.source).then(function (svg) { dgCache[p.source] = svg; if (live) set({ status: "ok", svg: svg, err: "" }); }, function (e) {
+      dgRender(source).then(function (svg) { dgCache[source] = svg; if (live) set({ status: "ok", svg: svg, err: "" }); }, function (e) {
         if (!live) return;
         var msg = e && e.message ? String(e.message) : String(e);
         set({ status: "err", svg: "", err: msg });
         /* once per source for the whole page; a script that did not load is not the diagram's fault */
-        if (!(e && e.rkLoad) && !Object.prototype.hasOwnProperty.call(dgReported, p.source)) {
-          dgReported[p.source] = true;
-          if (dgCfg.onRenderError) { try { dgCfg.onRenderError(p.source, msg); } catch (e2) {} }
+        if (!quiet && !(e && e.rkLoad) && !Object.prototype.hasOwnProperty.call(dgReported, source)) {
+          dgReported[source] = true;
+          if (dgCfg.onRenderError) { try { dgCfg.onRenderError(source, msg); } catch (e2) {} }
         }
       });
       return function () { live = false; };
-    }, [p.source, p.pending]);
+    }, [source, pending]);
+    return s;
+  }
+  function dgErr(source) {
+    return h("div", { className: "rk-diagram-err" },
+      h("div", { className: "rk-diagram-errhead", role: "alert" }, h(Icon, { name: "warning" }), h("b", null, "Diagram belum bisa ditampilkan")),
+      h("details", { className: "rk-diagram-src" }, h("summary", null, "Lihat sumber"), h("pre", { className: "rk-md-pre" }, h("code", null, source))));
+  }
+  /** The shared render state for a Mermaid source: {status: loading|ok|err, svg, err}. quiet = do not tell the host (a viewer variant of a source the inline Diagram already reported). */
+  function useDiagramSvg(source, pending, quiet) {
+    var st = useState({ status: "loading", svg: "", err: "" }), s = st[0], set = st[1];
+    useEffect(function () {
+      if (pending) return;
+      var live = true;
+      if (Object.prototype.hasOwnProperty.call(dgCache, source)) { set({ status: "ok", svg: dgCache[source], err: "" }); return; }
+      set({ status: "loading", svg: "", err: "" });
+      dgRender(source).then(function (svg) { dgCache[source] = svg; if (live) set({ status: "ok", svg: svg, err: "" }); }, function (e) {
+        if (!live) return;
+        var msg = e && e.message ? String(e.message) : String(e);
+        set({ status: "err", svg: "", err: msg });
+        /* once per source for the whole page; a script that did not load is not the diagram's fault */
+        if (!quiet && !(e && e.rkLoad) && !Object.prototype.hasOwnProperty.call(dgReported, source)) {
+          dgReported[source] = true;
+          if (dgCfg.onRenderError) { try { dgCfg.onRenderError(source, msg); } catch (e2) {} }
+        }
+      });
+      return function () { live = false; };
+    }, [source, pending]);
+    return s;
+  }
+  function dgErr(source) {
+    return h("div", { className: "rk-diagram-err" },
+      h("div", { className: "rk-diagram-errhead", role: "alert" }, h(Icon, { name: "warning" }), h("b", null, "Diagram belum bisa ditampilkan")),
+      h("details", { className: "rk-diagram-src" }, h("summary", null, "Lihat sumber"), h("pre", { className: "rk-md-pre" }, h("code", null, source))));
+  }
+  /** Chat / Format / Diagram: p.source (mermaid). p.pending = the fence is still streaming: skeleton only, never the source.
+      p.onOpen: the host owns the viewer. Without it "Perbesar" opens a DiagramViewer here (title = title or alt). */
+  function Diagram(p) {
+    var s = useDiagramSvg(p.source, p.pending, false);
+    var os = useState(false), viewing = os[0], setViewing = os[1], back = useRef(null);
     var label = p.alt || p.title || "Diagram";
     var body;
     if (p.pending || s.status === "loading") {
       body = h("div", { className: "rk-diagram-skel", role: "status", "aria-label": "Menyiapkan diagram" }, h(Spinner, null));
     } else if (s.status === "err") {
-      body = h("div", { className: "rk-diagram-err" },
-        h("div", { className: "rk-diagram-errhead", role: "alert" }, h(Icon, { name: "warning" }), h("b", null, "Diagram belum bisa ditampilkan")),
-        h("details", { className: "rk-diagram-src" }, h("summary", null, "Lihat sumber"), h("pre", { className: "rk-md-pre" }, h("code", null, p.source))));
+      body = dgErr(p.source);
     } else {
       body = h("div", { className: "rk-diagram-svg", role: "img", "aria-label": label, dangerouslySetInnerHTML: { __html: s.svg } });
+    }
+    function open(e) {
+      if (p.onOpen) { p.onOpen(e); return; }
+      back.current = e && e.currentTarget ? e.currentTarget : (typeof document !== "undefined" ? document.activeElement : null);
+      setViewing(true);
+    }
+    function close() {
+      setViewing(false);
+      var b = back.current;
+      if (b && b.focus) setTimeout(function () { try { b.focus(); } catch (e) {} }, 0);
     }
     return h("figure", { className: cx("rk-diagram", p.className), "data-state": p.pending ? "pending" : s.status },
       p.title ? h("figcaption", { className: "rk-diagram-title" }, p.title) : null,
       body,
-      p.onOpen && !p.pending && s.status === "ok" ? h("div", { className: "rk-diagram-bar" }, h(IconButton, { icon: "zoom", label: "Perbesar", onClick: p.onOpen })) : null);
+      !p.pending && s.status === "ok" ? h("div", { className: "rk-diagram-bar" }, h(IconButton, { icon: "zoom", label: "Perbesar", onClick: open })) : null,
+      !p.onOpen && viewing ? h(DiagramViewer, { open: true, source: p.source, title: p.title || p.alt || "Diagram", onClose: close }) : null);
+  }
+
+  /* ---- DiagramViewer: a zoom and pan popup (Figma Chat/DiagramViewer). Scale 0.25-4 as a CSS transform on the SVG wrapper. */
+  var DV_MIN = 0.25, DV_MAX = 4;
+  /** First line's direction becomes TD (flowchart LR -> flowchart TD); other diagram types are untouched. */
+  function diagramTopDown(source) {
+    return String(source).replace(/^(\s*(?:flowchart|graph)\s+)(?:LR|RL|TB|BT|TD)\b/i, "$1TD");
+  }
+  function dvClamp(k) { return Math.min(DV_MAX, Math.max(DV_MIN, k)); }
+  function DiagramViewer(p) {
+    if (p.open === false || !p.open) return null;
+    return h(DiagramViewerBody, p);
+  }
+  function DiagramViewerBody(p) {
+    var phone = useBreakpoint() === "phone";
+    var source = phone ? diagramTopDown(p.source) : p.source;
+    var s = useDiagramSvg(source, false, source !== p.source);
+    var vs = useState({ k: 1, x: 0, y: 0 }), view = vs[0], setView = vs[1];
+    var vref = useRef(view), vp = useRef(null), stage = useRef(null), ptrs = useRef({}), gest = useRef(null);
+    function put(v) { vref.current = v; setView(v); }
+    /* the drawing's own size comes from its viewBox, so scale 1 is true size */
+    function natural() {
+      var svg = stage.current && stage.current.querySelector ? stage.current.querySelector("svg") : null;
+      if (!svg) return null;
+      var vb = svg.viewBox && svg.viewBox.baseVal;
+      var w = vb && vb.width ? vb.width : svg.getBoundingClientRect().width, hh = vb && vb.height ? vb.height : svg.getBoundingClientRect().height;
+      svg.setAttribute("width", String(w)); svg.setAttribute("height", String(hh));
+      svg.style.maxWidth = "none";
+      return { w: w, h: hh };
+    }
+    function fit() {
+      var n = natural(), box = vp.current && vp.current.getBoundingClientRect();
+      if (!n || !box || !box.width) return;
+      var k = dvClamp(Math.min((box.width - 32) / n.w, (box.height - 32) / n.h, 1));
+      put({ k: k, x: (box.width - n.w * k) / 2, y: (box.height - n.h * k) / 2 });
+    }
+    function zoomAt(f, cx0, cy0) {
+      var v = vref.current, box = vp.current && vp.current.getBoundingClientRect();
+      var px = cx0 != null ? cx0 : (box ? box.width / 2 : 0), py = cy0 != null ? cy0 : (box ? box.height / 2 : 0);
+      var k = dvClamp(v.k * f), r = k / v.k;
+      put({ k: k, x: px - (px - v.x) * r, y: py - (py - v.y) * r });
+    }
+    function pan(dx, dy) { var v = vref.current; put({ k: v.k, x: v.x + dx, y: v.y + dy }); }
+    useEffect(function () { if (s.status === "ok") fit(); }, [s.status, s.svg]);
+    useEffect(function () { if (vp.current && vp.current.focus) vp.current.focus(); }, []);
+    useEffect(function () {
+      var el = vp.current;
+      if (!el) return;
+      function wheel(e) {
+        e.preventDefault();
+        var box = el.getBoundingClientRect();
+        zoomAt(Math.exp(-e.deltaY * (e.ctrlKey ? 0.01 : 0.002)), e.clientX - box.left, e.clientY - box.top);
+      }
+      el.addEventListener("wheel", wheel, { passive: false });
+      return function () { el.removeEventListener("wheel", wheel); };
+    }, []);
+    function mid() {
+      var ids = Object.keys(ptrs.current), a = ptrs.current[ids[0]], b = ptrs.current[ids[1]];
+      return { x: (a.x + b.x) / 2, y: (a.y + b.y) / 2, d: Math.hypot(a.x - b.x, a.y - b.y) || 1 };
+    }
+    function down(e) {
+      ptrs.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+      if (e.currentTarget.setPointerCapture) { try { e.currentTarget.setPointerCapture(e.pointerId); } catch (x) {} }
+      gest.current = Object.keys(ptrs.current).length >= 2 ? { pinch: mid(), v: vref.current } : null;
+      if (vp.current) vp.current.setAttribute("data-grab", "1");
+    }
+    function move(e) {
+      var o = ptrs.current[e.pointerId];
+      if (!o) return;
+      var n = Object.keys(ptrs.current).length, box = vp.current.getBoundingClientRect();
+      if (n >= 2 && gest.current && gest.current.pinch) {
+        ptrs.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+        var m = mid(), g = gest.current, k = dvClamp(g.v.k * m.d / g.pinch.d), r = k / g.v.k;
+        var px = g.pinch.x - box.left, py = g.pinch.y - box.top;
+        put({ k: k, x: (m.x - box.left) - (px - g.v.x) * r, y: (m.y - box.top) - (py - g.v.y) * r });
+      } else {
+        ptrs.current[e.pointerId] = { x: e.clientX, y: e.clientY };
+        pan(e.clientX - o.x, e.clientY - o.y);
+      }
+    }
+    function up(e) {
+      delete ptrs.current[e.pointerId]; gest.current = null;
+      if (!Object.keys(ptrs.current).length && vp.current) vp.current.removeAttribute("data-grab");
+    }
+    function key(e) {
+      var k = e.key;
+      if (k === "+" || k === "=") { e.preventDefault(); zoomAt(1.25); }
+      else if (k === "-" || k === "_") { e.preventDefault(); zoomAt(0.8); }
+      else if (k === "0") { e.preventDefault(); fit(); }
+      else if (k === "ArrowLeft") { e.preventDefault(); pan(48, 0); }
+      else if (k === "ArrowRight") { e.preventDefault(); pan(-48, 0); }
+      else if (k === "ArrowUp") { e.preventDefault(); pan(0, 48); }
+      else if (k === "ArrowDown") { e.preventDefault(); pan(0, -48); }
+    }
+    var label = p.title || "Diagram", body;
+    if (s.status === "loading") body = h("div", { className: "rk-diagram-skel", role: "status", "aria-label": "Menyiapkan diagram" }, h(Spinner, null));
+    else if (s.status === "err") body = dgErr(p.source);
+    else body = h("div", { className: "rk-dv-stage", ref: stage, role: "img", "aria-label": label, style: { transform: "translate(" + view.x + "px, " + view.y + "px) scale(" + view.k + ")" }, dangerouslySetInnerHTML: { __html: s.svg } });
+    var ok = s.status === "ok";
+    return h(Dialog, { open: true, title: p.title, className: "rk-diagram-viewer", onClose: p.onClose, headerActions: p.actions || null,
+      footer: [
+        h("div", { key: "z", className: "rk-dv-zoom", role: "group", "aria-label": "Zoom" },
+          h(IconButton, { icon: "minus", label: "Perkecil", disabled: !ok, onClick: function () { zoomAt(0.8); } }),
+          h("output", { className: "rk-dv-pct", "aria-live": "off" }, Math.round(view.k * 100) + "%"),
+          h(IconButton, { icon: "plus", label: "Perbesar", disabled: !ok, onClick: function () { zoomAt(1.25); } }),
+          h(Button, { variant: "quiet", disabled: !ok, onClick: fit }, "Pas di layar")),
+        phone ? null : h("span", { key: "hint", className: "rk-dv-hint" }, "Seret untuk menggeser, Esc untuk menutup")] },
+      h("div", { className: "rk-dv-viewport", ref: vp, tabIndex: 0, "data-viewer": "1", onKeyDown: key, onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up }, body));
   }
   function MdCopy(p) {
     var st = useState(false), done = st[0], set = st[1];
@@ -1925,7 +2082,7 @@
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   api.Logo = Logo; api.AuthLayout = AuthLayout;
   api.AskBar = AskBar; api.ChatDrawer = ChatDrawer; api.RakaLauncher = RakaLauncher;
-  api.Diagram = Diagram; api.configureDiagrams = configureDiagrams; api.loadMermaid = loadMermaid;
+  api.Diagram = Diagram; api.DiagramViewer = DiagramViewer; api.diagramTopDown = diagramTopDown; api.configureDiagrams = configureDiagrams; api.loadMermaid = loadMermaid;
   api.RichText = RichText; api.markdownBlocks = mdBlocks; api.safeHref = mdSafeHref;
   api.BREAKPOINTS = BREAKPOINTS; api.breakpoint = breakpoint; api.useBreakpoint = useBreakpoint; api.isTouch = isTouch;
   window.Rangka = Object.assign(window.Rangka || {}, api);

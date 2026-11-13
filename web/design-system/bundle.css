@@ -1217,3 +1217,26 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-diagram .node.covered rect, .rk-diagram .node.covered polygon, .rk-diagram .node.covered circle { fill: var(--selected) !important; stroke: var(--line) !important; stroke-width: 1px !important; }
 .rk-diagram .node.not_covered rect, .rk-diagram .node.not_covered polygon, .rk-diagram .node.not_covered circle { fill: var(--warn-tint) !important; stroke: var(--warn-line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }
 .rk-diagram .node.later rect, .rk-diagram .node.later polygon, .rk-diagram .node.later circle { fill: var(--soft) !important; stroke: var(--line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }
+
+/* ---- DiagramViewer: a big dialog; the drawing sits in a pannable viewport, the foot holds the zoom bar */
+.rk-dialog.rk-diagram-viewer { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.rk-diagram-viewer .rk-dialog-main { flex: 1; min-height: 0; padding: 12px 20px; }
+.rk-diagram-viewer .rk-dialog-foot { flex-direction: row; align-items: center; justify-content: space-between; padding: 0 20px 16px; }
+.rk-diagram-viewer .rk-dialog-foot > * { width: auto; }
+.rk-dv-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: grab; touch-action: none; user-select: none; }
+.rk-dv-viewport[data-grab] { cursor: grabbing; }
+.rk-dv-viewport:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-dv-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.rk-dv-stage svg { display: block; max-width: none; }
+.rk-dv-viewport .rk-diagram-skel, .rk-dv-viewport .rk-diagram-err { margin: 16px; }
+.rk-dv-zoom { display: flex; align-items: center; gap: 4px; }
+.rk-dv-pct { min-width: 48px; text-align: center; color: var(--muted); font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; }
+.rk-dv-hint { color: var(--muted); font: 400 12px/16px var(--font-sans); }
+@media (min-width: 720px) {
+  .rk-dialog.rk-diagram-viewer { left: 50%; top: 50%; bottom: auto; right: auto; transform: translate(-50%, -50%); width: min(1100px, 92vw); height: 86vh; max-height: none; border-radius: var(--r-dialog); }
+}
+@media (max-width: 719px) {
+  .rk-dialog.rk-diagram-viewer { inset: 0; width: auto; height: auto; max-height: none; border-radius: 0; transform: none; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .rk-diagram-viewer .rk-dialog-main { padding: 8px 12px; }
+  .rk-diagram-viewer .rk-dialog-foot { padding: 0 12px 12px; }
+}

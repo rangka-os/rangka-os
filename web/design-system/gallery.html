@@ -415,6 +415,13 @@
         h("div", { "data-case": "bad", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: bad })),
         h("div", { "data-case": "streaming", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: live, streaming: true })));
     },
+    DiagramViewer: function () {
+      // Chat / DiagramViewer: open from the button (a Diagram with no onOpen opens it too: use "Perbesar" in the Diagram section)
+      var o = useState(false), src = "flowchart LR\n  A[Pesanan masuk]:::covered --> B[Faktur dibuat]:::covered\n  B --> C[Pembayaran]:::not_covered\n  C --> D[Laporan piutang]:::later";
+      return h("div", { className: "gx-row" },
+        h(R.Button, { onClick: function () { o[1](true); }, "data-case": "open-viewer" }, "Buka penampil diagram"),
+        h(R.DiagramViewer, { open: o[0], source: src, title: "Alur piutang", actions: h(R.IconButton, { icon: "download", label: "Unduh" }), onClose: function () { o[1](false); } }));
+    },
     RakaLauncher: function () {
       var t = useState(false);
       // the fixed button sits inside a positioned frame here; each state side by side

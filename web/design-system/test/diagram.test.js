@@ -142,3 +142,20 @@ test("initialize locks htmlLabels/theme against %%{init}%%, and directives are s
   assert.ok(!rendered.includes("%%{"), rendered);
   assert.ok(rendered.includes("flowchart LR"));
 });
+
+test("diagramTopDown swaps only the first line's direction", () => {
+  assert.equal(R.diagramTopDown("flowchart LR\nA-->B"), "flowchart TD\nA-->B");
+  assert.equal(R.diagramTopDown("graph RL\nA-->B"), "graph TD\nA-->B");
+  assert.equal(R.diagramTopDown("flowchart TD\nA-->B"), "flowchart TD\nA-->B");
+  assert.equal(R.diagramTopDown("sequenceDiagram\nA->>B: LR"), "sequenceDiagram\nA->>B: LR");
+});
+test("DiagramViewer: closed renders nothing; open shows title, actions and three zoom buttons", () => {
+  assert.equal(render(R.DiagramViewer, { open: false, source: "flowchart LR\nA-->B", title: "Alur", onClose() {} }), null);
+  const t = render(R.DiagramViewer, { open: true, source: "flowchart LR\nA-->B", title: "Alur kas", actions: h("button", { className: "act" }, "Unduh"), onClose() {} });
+  const all = texts(t).join("|");
+  assert.ok(all.includes("Alur kas"));
+  assert.equal(nodes(t, "button.act").length, 1);
+  const labels = nodes(t, "button").map((b) => b.props["aria-label"] || texts(b).join(""));
+  ["Perkecil", "Perbesar", "Pas di layar"].forEach((l) => assert.ok(labels.includes(l), l));
+  assert.equal(nodes(t, ".rk-dialog.rk-diagram-viewer").length, 1);
+});

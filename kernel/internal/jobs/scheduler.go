@@ -34,6 +34,9 @@ type Scheduler struct {
 	// unique key per flow and minute. 0 = start from now (rangka serve, where the loop never stops).
 	CatchUp time.Duration
 	polls   []*pollItem
+	// pollMu is held for a whole tickPolls and by SetPolls, so SetPolls returns only after a tick that copied the old
+	// list has finished enqueueing: once it returns, no poll of a removed spec is queued any more.
+	pollMu sync.Mutex
 }
 
 // PollSpec is a periodic "poll" job (a connector trigger with via: poll, contract 0002 §A.1).
@@ -100,6 +103,8 @@ func (s *Scheduler) SetFlows(reg *meta.Registry, org string) {
 // SetPolls registers the poll triggers of an org (called again after a metadata reload). Slots are aligned to
 // multiples of Every, so several kernel instances enqueue the same slot under one unique key.
 func (s *Scheduler) SetPolls(org string, specs []PollSpec) {
+	s.pollMu.Lock()
+	defer s.pollMu.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	prev := map[string]time.Time{}
@@ -163,6 +168,8 @@ func (s *Scheduler) Tick(ctx context.Context) {
 
 // tickPolls enqueues each poll whose current slot has not been enqueued yet.
 func (s *Scheduler) tickPolls(ctx context.Context, now time.Time) {
+	s.pollMu.Lock()
+	defer s.pollMu.Unlock()
 	s.mu.Lock()
 	polls := append([]*pollItem{}, s.polls...)
 	s.mu.Unlock()

@@ -1,0 +1,18 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/flow.json
+# conditional_as_unguarded: step 2 declares `deals` only when sales is installed; step 3 null-checks it without that
+# condition (an undeclared name when the find is skipped); step 4 states the condition first and is fine.
+name: lead_guarded_find
+label: {id: Lead dengan deal terbuka}
+on: lead.created
+steps:
+  - {find: lead, where: name == event.name, as: me}
+  - find_all: deal
+    if: app_installed('sales')
+    where: lead == event.name
+    as: deals
+  - if: deals != null && size(deals) > 0
+    update: me
+    set: {status: "'qualified'"}
+  - if: app_installed('sales') && size(deals) > 0
+    update: me
+    set: {status: "'qualified'"}

@@ -100,6 +100,7 @@ func (v *validator) more() {
 		if !truthy(f.Raw["on"]) && !truthy(f.Raw["schedule"]) {
 			v.rep.extra("warn", p, "(root)", "never_runs", "a flow needs on: (an event) or schedule: (cron)")
 		}
+		v.conditionalAs(p, f.Raw["steps"])
 		if on, ok := f.Raw["on"].(string); ok && strings.Contains(on, ".") {
 			head, ev, _ := strings.Cut(on, ".")
 			if _, isModel := all[head]; isModel {

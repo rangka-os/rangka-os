@@ -84,6 +84,9 @@ type ModulesDiff struct {
 	Removed []string         `json:"removed"`
 	Rows    map[string]int64 `json:"rows"`
 	Kept    []KeptUnit       `json:"kept"`
+	// Submitted counts the submitted documents (docstatus 1) of each removed model that has any: the apps still
+	// installed no longer see them once the unit is removed (audit 14 Nov L1).
+	Submitted map[string]int64 `json:"submitted,omitempty"`
 }
 
 // KeptUnit is a unit config no longer names that stays installed.

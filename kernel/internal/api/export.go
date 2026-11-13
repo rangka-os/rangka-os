@@ -1,6 +1,7 @@
 package api
 
 import (
+	"bytes"
 	"encoding/csv"
 	"fmt"
 	"math"
@@ -8,6 +9,8 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+
+	"github.com/xuri/excelize/v2"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -19,7 +22,8 @@ import (
 //	GET /api/v1/export/r/{model}?filter=&q=&sort=   the rows of the list, same filter as GET /r/{model}
 //	GET /api/v1/export/dashboards/{name}?period=     every widget the actor may export, one block per widget
 //
-// The file is CSV, UTF-8 with a byte-order mark so Excel reads it as UTF-8; ?sep=semicolon writes ';' for an Excel
+// ?format=xlsx writes the same rows as a workbook (one sheet): plain numbers become number cells, everything else a
+// text cell, never a formula (contract 0024 §8). Otherwise the file is CSV, UTF-8 with a byte-order mark so Excel reads it as UTF-8; ?sep=semicolon writes ';' for an Excel
 // whose list separator is ';' (Windows with Indonesian regional settings). Numbers are written plain (12500000,
 // not Rp 12.500.000) so a spreadsheet can sum them; selects are written as their label, yes/no as Ya/Tidak.
 // Every export needs the model's export grant (permissions: export), on top of read.
@@ -133,7 +137,12 @@ func cell(f *meta.Field, v any) string {
 			s = o.Label.Text()
 		}
 	}
-	// a plain number (also a negative one, or a money Decimal as text) is not a formula
+	return s
+}
+
+// csvSafe neutralises a text cell that a spreadsheet would run as a formula (CSV injection): a leading '. A plain
+// number (also a negative one, or a money Decimal as text) is not a formula.
+func csvSafe(s string) string {
 	if _, err := strconv.ParseFloat(s, 64); err == nil {
 		return s
 	}
@@ -141,6 +150,96 @@ func cell(f *meta.Field, v any) string {
 		return "'" + s
 	}
 	return s
+}
+
+// sheet is where an export writes its lines: CSV or a workbook.
+type sheet interface {
+	Write(line []string)
+	Flush()
+}
+
+type csvSheet struct{ w *csv.Writer }
+
+func (c csvSheet) Write(line []string) {
+	out := make([]string, len(line))
+	for i, v := range line {
+		out[i] = csvSafe(v)
+	}
+	c.w.Write(out)
+}
+func (c csvSheet) Flush() { c.w.Flush() }
+
+// plainNumber: a cell written as a number in a workbook. A code with a leading zero (NPWP, phone 0812...), a plus
+// sign or more than 15 significant digits stays text, so nothing is lost or rounded.
+var plainNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]{0,14})(\.[0-9]+)?$`)
+
+type xlsxSheet struct {
+	w    http.ResponseWriter
+	file string
+	f    *excelize.File
+	sw   *excelize.StreamWriter
+	row  int
+}
+
+func (x *xlsxSheet) Write(line []string) {
+	x.row++
+	vals := make([]any, len(line))
+	for i, v := range line {
+		if plainNumber.MatchString(v) {
+			if n, err := strconv.ParseFloat(v, 64); err == nil {
+				vals[i] = n
+				continue
+			}
+		}
+		vals[i] = excelize.Cell{Value: v} // a string Cell is stored as text: a leading = is not a formula
+	}
+	cell, _ := excelize.CoordinatesToCellName(1, x.row)
+	x.sw.SetRow(cell, vals)
+}
+
+func (x *xlsxSheet) Flush() {
+	x.sw.Flush()
+	var buf bytes.Buffer
+	if err := x.f.Write(&buf); err != nil {
+		writeError(x.w, http.StatusInternalServerError, "export_failed", "File Excel gagal dibuat.")
+		return
+	}
+	h := x.w.Header()
+	h.Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	h.Set("Content-Disposition", `attachment; filename="`+x.file+`"`)
+	h.Set("Cache-Control", "no-store")
+	x.w.WriteHeader(http.StatusOK)
+	x.w.Write(buf.Bytes())
+}
+
+// exportFormat is ?format: "csv" (default) or "xlsx"; ok is false for anything else.
+func exportFormat(r *http.Request) (string, bool) {
+	switch f := r.URL.Query().Get("format"); f {
+	case "", "csv":
+		return "csv", true
+	case "xlsx":
+		return "xlsx", true
+	}
+	return "", false
+}
+
+// sheetOut starts a download named base (without extension) in the request's format; nil after writing a 400.
+func sheetOut(w http.ResponseWriter, r *http.Request, base string) sheet {
+	format, ok := exportFormat(r)
+	if !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "format harus csv atau xlsx")
+		return nil
+	}
+	if format == "xlsx" {
+		f := excelize.NewFile()
+		sw, err := f.NewStreamWriter("Sheet1")
+		if err != nil {
+			writeError(w, http.StatusInternalServerError, "export_failed", "File Excel gagal dibuat.")
+			return nil
+		}
+		return &xlsxSheet{w: w, file: base + ".xlsx", f: f, sw: sw}
+	}
+	return csvSheet{csvOut(w, r, base+".csv")}
 }
 
 // value is the cell of rec for column f: a link as the linked record's title (its code when there is none or it may
@@ -174,11 +273,16 @@ func csvOut(w http.ResponseWriter, r *http.Request, file string) *csv.Writer {
 
 var unsafeFile = regexp.MustCompile(`[^a-z0-9_-]+`)
 
+// exportFile is the download's name without extension.
 func exportFile(name, today string) string {
-	return unsafeFile.ReplaceAllString(strings.ToLower(name), "_") + "-" + today + ".csv"
+	return unsafeFile.ReplaceAllString(strings.ToLower(name), "_") + "-" + today
 }
 
 func (s *Server) exportRecords(w http.ResponseWriter, r *http.Request, c *caller) {
+	if _, ok := exportFormat(r); !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "format harus csv atau xlsx")
+		return
+	}
 	opts := listOptsOf(r)
 	m, rows, more, err := s.Engine.Export(r.Context(), c.actor, r.PathValue("model"), opts)
 	if err != nil {
@@ -199,7 +303,10 @@ func (s *Server) exportRecords(w http.ResponseWriter, r *http.Request, c *caller
 	if more {
 		w.Header().Set("X-Export-Truncated", strconv.Itoa(len(rows)))
 	}
-	cw := csvOut(w, r, exportFile(m.Name, s.Engine.Today()))
+	cw := sheetOut(w, r, exportFile(m.Name, s.Engine.Today()))
+	if cw == nil {
+		return
+	}
 	head := make([]string, len(cols))
 	for i, f := range cols {
 		head[i] = fieldHeader(f)
@@ -220,6 +327,10 @@ func (s *Server) exportRecords(w http.ResponseWriter, r *http.Request, c *caller
 // previous period); chart: Label, Nilai, Jumlah; list: the list's columns. A widget on a model the actor may not
 // export is left out with a line saying so; a hidden or failed widget is skipped.
 func (s *Server) exportDashboard(w http.ResponseWriter, r *http.Request, c *caller) {
+	if _, ok := exportFormat(r); !ok {
+		writeError(w, http.StatusBadRequest, "bad_request", "format harus csv atau xlsx")
+		return
+	}
 	name := r.PathValue("name")
 	d, _, err := s.Engine.Dashboard(r.Context(), c.actor, name, intParam(r, "period", 0))
 	if err != nil {
@@ -229,7 +340,10 @@ func (s *Server) exportDashboard(w http.ResponseWriter, r *http.Request, c *call
 	reg := s.Engine.Reg()
 	def := reg.Dashboard(name)
 	titles := s.Engine.Titles(r.Context(), c.actor)
-	cw := csvOut(w, r, exportFile(name, s.Engine.Today()))
+	cw := sheetOut(w, r, exportFile(name, s.Engine.Today()))
+	if cw == nil {
+		return
+	}
 	if lbl, ok := d["label"].(meta.Label); ok && lbl.Text() != "" {
 		cw.Write([]string{lbl.Text()})
 	}

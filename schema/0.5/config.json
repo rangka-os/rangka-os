@@ -46,6 +46,11 @@
         "pkp": {
           "type": "boolean",
           "default": false
+        },
+        "ppn_fee_only": {
+          "type": "boolean",
+          "default": false,
+          "description": "PPN on the service fee only: invoice lines marked as the workers' wages (ppn_exclude) stay out of the PPN base (DPP nilai lain, PMK 83/2012). Default false."
         }
       }
     },

@@ -27,7 +27,7 @@ func regWith(cfg map[string]any) *Registry {
 }
 
 func TestTaxVar(t *testing.T) {
-	if got, want := (&Registry{}).TaxVar("x"), map[string]any{"ppn_rate": int64(12), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": false}; !reflect.DeepEqual(got, want) {
+	if got, want := (&Registry{}).TaxVar("x"), map[string]any{"ppn_rate": int64(12), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": false, "ppn_fee_only": false}; !reflect.DeepEqual(got, want) {
 		t.Errorf("no site: %v", got)
 	}
 	r := regWith(map[string]any{
@@ -35,14 +35,19 @@ func TestTaxVar(t *testing.T) {
 		"orgs": map[string]any{
 			"pt_kecil": map[string]any{"name": "PT Kecil", "config": map[string]any{"tax": map[string]any{"pkp": false}}},
 			"pt_bad":   map[string]any{"name": "PT Bad", "config": map[string]any{"tax": map[string]any{"dpp_ratio": "bad", "ppn_rate": 12.0}}},
+			"pt_tk":    map[string]any{"name": "PT Tenaga", "config": map[string]any{"tax": map[string]any{"ppn_fee_only": true}}},
+			"pt_str":   map[string]any{"name": "PT Str", "config": map[string]any{"tax": map[string]any{"ppn_fee_only": "yes"}}},
 		},
 	})
 	cases := map[string]map[string]any{
-		"other": {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": true}, // the site's tax:
+		"other": {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": true, "ppn_fee_only": false}, // the site's tax:
 		// a non-PKP org overriding only pkp keeps the site's rate and ratio (deep merge)
-		"pt_kecil": {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": false},
+		"pt_kecil": {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": false, "ppn_fee_only": false},
 		// a malformed org dpp_ratio falls back to 11/12, not to the site's; 12.0 is a whole number
-		"pt_bad": {"ppn_rate": int64(12), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": true},
+		"pt_bad": {"ppn_rate": int64(12), "dpp_num": int64(11), "dpp_den": int64(12), "pkp": true, "ppn_fee_only": false},
+		// fee-only PPN is an org's own switch (PMK 83/2012); anything but true is false
+		"pt_tk":  {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": true, "ppn_fee_only": true},
+		"pt_str": {"ppn_rate": int64(11), "dpp_num": int64(10), "dpp_den": int64(11), "pkp": true, "ppn_fee_only": false},
 	}
 	for org, want := range cases {
 		if got := r.TaxVar(org); !reflect.DeepEqual(got, want) {
@@ -96,10 +101,10 @@ func TestTaxSettings(t *testing.T) {
 		},
 	})
 	// malformed dpp_ratio → the default; whole float → int; pkp always a bool; other keys copied
-	if got, want := r.TaxSettings("other"), map[string]any{"ppn_rate": int64(11), "dpp_ratio": "11/12", "pkp": false, "efaktur": "x"}; !reflect.DeepEqual(got, want) {
+	if got, want := r.TaxSettings("other"), map[string]any{"ppn_rate": int64(11), "dpp_ratio": "11/12", "pkp": false, "ppn_fee_only": false, "efaktur": "x"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("site: %v", got)
 	}
-	if got, want := r.TaxSettings("pt_a"), map[string]any{"ppn_rate": int64(11), "dpp_ratio": "10/11", "pkp": true, "efaktur": "x"}; !reflect.DeepEqual(got, want) {
+	if got, want := r.TaxSettings("pt_a"), map[string]any{"ppn_rate": int64(11), "dpp_ratio": "10/11", "pkp": true, "ppn_fee_only": false, "efaktur": "x"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("pt_a (deep merge): %v", got)
 	}
 	if id := r.OrgIdentity("pt_a"); id["pkp"] != true {

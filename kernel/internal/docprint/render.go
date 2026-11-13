@@ -93,7 +93,7 @@ func Render(in Input) ([]byte, error) {
 }
 
 // taxDefaults are the PPN rate and DPP factor of an org whose config tax leaves them out (schema config.json).
-var taxDefaults = map[string]any{"ppn_rate": 12, "dpp_ratio": "11/12", "pkp": false}
+var taxDefaults = map[string]any{"ppn_rate": 12, "dpp_ratio": "11/12", "pkp": false, "ppn_fee_only": false}
 
 // withTaxDefaults copies tax, filling the keys it lacks (or holds as null) from taxDefaults.
 func withTaxDefaults(tax map[string]any) map[string]any {

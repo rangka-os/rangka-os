@@ -17,6 +17,11 @@ Raka, the AI agent in `rangka-ai`, should answer and propose change sets from in
 2. **Kernel → sidecar: `POST <ai-url>/v1/chat`.**
    - The kernel sends the browser body plus `{"mcp": {"url": "<kernel>/mcp", "token": "<delegated>"}, "org": "…", "user": {"id", "name", "roles"}}`.
    - The delegated token is short-lived (10 minutes), has scope `rangka.mcp`, acts as the person, and carries the claim `ai: true`.
+   - `/mcp` names the principal it serves as `_meta["rangka/principal"]` on `initialize` and `tools/list`:
+     - `chat`: the delegated token, minted for this chat;
+     - `assistant`: an API token with the assistant scope;
+     - otherwise `session`, `token`, `oidc` or `dev`.
+   - Before calling the model, the sidecar checks for `chat`, so a token that is not a chat the kernel admitted and counted is refused (audit business-raka N3).
    - The sidecar answers with an SSE stream.
    - The sidecar URL comes from `--ai-url` / `RANGKA_AI_URL`. It is deployment config, not part of `config.rk`.
    - `GET <ai-url>/healthz` answering 200, together with `config.ai.enabled` not being false, sets `meta.features.ai: true`. The kernel reuses a healthy answer for 30 seconds and a failed probe for 5 seconds; the probe is not cancelled when the browser's request is.

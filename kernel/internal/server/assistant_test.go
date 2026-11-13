@@ -329,3 +329,23 @@ func TestApprovableBy(t *testing.T) {
 		t.Fatalf("mcp status: %v", st["approvable_by"])
 	}
 }
+
+// Audit business-raka N3: /mcp tells the client which principal it serves, so the assistant's preflight can refuse a
+// token that is not the relay's per-chat token (a chat the kernel admitted and counted): an API token with the
+// assistant scope, the owner's API token or session all name themselves differently.
+func TestMCPPrincipalKind(t *testing.T) {
+	e := newEnv(t, false, nil)
+	chat := assistantEnv(t, e, 10*time.Minute)
+	scoped := &env{t: t, s: e.s, ts: e.ts, token: e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "raka", "scopes": []any{"assistant"}}).JSON["token"].(string)}
+	api := &env{t: t, s: e.s, ts: e.ts, token: e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "cli"}).JSON["token"].(string)}
+	for _, c := range []struct {
+		who  *env
+		want string
+	}{{chat, "chat"}, {scoped, "assistant"}, {api, "token"}, {e, "session"}} {
+		for _, m := range []string{"initialize", "tools/list"} {
+			if got := get(rpc(c.who, 1, m, map[string]any{}), "_meta", "rangka/principal"); got != c.want {
+				t.Errorf("%s via %s: %v, want %s", m, c.want, got, c.want)
+			}
+		}
+	}
+}

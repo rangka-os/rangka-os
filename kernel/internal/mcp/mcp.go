@@ -28,6 +28,10 @@ var supported = map[string]bool{"2025-06-18": true, "2025-03-26": true, "2024-11
 type Caller struct {
 	Actor  engine.Actor
 	Change changeset.Actor
+	// Principal is auth.Principal.Kind: chat for the token the chat relay minted (contract 0020 §2). It is
+	// reported as _meta "rangka/principal" on initialize and tools/list, so the assistant can refuse a token
+	// that is not a chat the kernel admitted and counted.
+	Principal string
 }
 
 // Handler serves /mcp.
@@ -146,6 +150,7 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 			"protocolVersion": v,
 			"capabilities":    map[string]any{"tools": map[string]any{"listChanged": false}},
 			"serverInfo":      map[string]any{"name": "rangka-os", "title": "Rangka OS kernel", "version": h.Version},
+			"_meta":           map[string]any{"rangka/principal": c.Principal},
 			"instructions": "Rangka OS: read metadata (rangka_meta, rangka_get_file), query records (rangka_query, rangka_get_record), " +
 				"read dashboards and system status, and propose metadata changes as change sets (propose → validate → preview). " +
 				"A person approves and applies change sets in the Console; there is no tool for that. " +
@@ -168,7 +173,7 @@ func (h *Handler) handle(ctx context.Context, c *Caller, req request) *response 
 			}
 			list = kept
 		}
-		res.Result = map[string]any{"tools": list}
+		res.Result = map[string]any{"tools": list, "_meta": map[string]any{"rangka/principal": c.Principal}}
 	case "tools/call":
 		var p struct {
 			Name      string         `json:"name"`

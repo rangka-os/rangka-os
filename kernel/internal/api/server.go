@@ -265,7 +265,7 @@ func (s *Server) Handler() http.Handler {
 			if err != nil || p == nil || !mcp.RequireScope(p) {
 				return nil, err
 			}
-			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p)}, nil
+			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p), Principal: p.Kind()}, nil
 		},
 		Engine:    func() *engine.Engine { return s.Engine },
 		Changes:   s.Changes,

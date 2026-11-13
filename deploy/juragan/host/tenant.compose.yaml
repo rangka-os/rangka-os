@@ -39,6 +39,9 @@ services:
       # connectors of a hosted company reach only public addresses (contract 0017 §5); list internal CIDRs a
       # connector must still reach in RANGKA_CONNECTOR_EGRESS_ALLOW
       RANGKA_CONNECTOR_EGRESS: public
+      # the secrets driver is the platform's, not system.rk's (contract 0017 §2): a company may not switch to the file
+      # or vault driver and point secrets.path at the host's folders or the platform's Vault
+      RANGKA_SECRETS_DRIVER: ${RANGKA_SECRETS_DRIVER:-env}
       RANGKA_CONNECTOR_EGRESS_ALLOW: ${RANGKA_CONNECTOR_EGRESS_ALLOW:-}
     volumes:
       - ${HOST_DIR:?}/tenants/${TENANT_ID:?}:/srv

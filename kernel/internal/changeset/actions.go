@@ -61,6 +61,11 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 	if body == nil {
 		body = map[string]any{}
 	}
+	// a person the plan made read-only changes nothing (contract 0028 §4), a proposal included: with
+	// config.ai.auto_apply: low_risk the kernel would apply it for them (audit cloud-package-plan F-6)
+	if err := s.planReadOnly(a); err != nil {
+		return nil, err
+	}
 	doc := map[string]any{}
 	for k, v := range body {
 		switch k {
@@ -113,6 +118,7 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 		return nil, err
 	}
 	live := s.live()
+	pinPlans(live, cs.Ops)
 	files, err := live.result(cs.Ops)
 	if e, ok := err.(*Error); ok {
 		return nil, e
@@ -465,7 +471,7 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 	// A low-risk proposal from Raka is applied once previewed when the company opted in with
 	// config.ai.auto_apply: low_risk. The kernel applies it as the system on the company's own setting:
 	// Raka's token still cannot apply (Apply refuses an assistant actor).
-	if a.Assistant && cs.Source == "ai" && cs.Risk == "low" && s.autoApplyLowRisk() {
+	if a.Assistant && cs.Source == "ai" && cs.Risk == "low" && s.autoApplyLowRisk() && s.planReadOnly(a) == nil {
 		return s.Apply(ctx, Actor{ID: "system", Org: a.Org, Kind: "system"}, cs.ID)
 	}
 	return cs, nil
@@ -575,6 +581,24 @@ func (s *Service) operatorPlan(ctx context.Context, ops []Op) error {
 	return nil
 }
 
+// pinPlans pins each op on features.rk to the text it was proposed against (Op.Base): the operator may write its
+// plans and run rangka plan set between the proposal and the apply, and the apply would otherwise write over them
+// (audit cloud-package-plan 9). result then answers stale_base for a features.rk changed since.
+func pinPlans(r roots, ops []Op) {
+	for i, op := range ops {
+		if op.Path != "features.rk" || op.Base != "" {
+			continue
+		}
+		f, err := r.file(op.Path)
+		if err != nil {
+			continue
+		}
+		if c, err := readFile(f); err == nil && c != nil {
+			ops[i].Base = store.FileHash(*c)
+		}
+	}
+}
+
 func keysOf(m map[string]bool) any {
 	var out []any
 	for k := range m {
@@ -662,6 +686,24 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	if err != nil {
 		return nil, &Error{409, "bad_ops", err.Error(), nil}
 	}
+	// the files may have changed since the proposal (another change set, the operator): assess the change set again
+	// against them, and send it back for approval when its risk rose (audit changeset-set-once, note 2)
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+	if riskRank[as.Risk] > riskRank[cs.Risk] {
+		was := cs.Risk
+		cs.Risk, cs.Layers = as.Risk, as.Layers
+		if cs.Layers == nil {
+			cs.Layers = []int{}
+		}
+		note := "risk rose from " + was + " to " + as.Risk + " since the proposal (the files changed); preview and approve again"
+		if len(as.Reasons) > 0 {
+			note += ": " + strings.Join(as.Reasons, "; ")
+		}
+		if err := s.transition(ctx, cs, a, "validated", note, false); err != nil {
+			return nil, err
+		}
+		return cs, &Error{409, "risk_changed", "Risiko perubahan ini naik dari " + was + " ke " + as.Risk + " karena berkasnya berubah sejak diusulkan. Lihat pratinjau dan setujui lagi.", cs}
+	}
 	prev := map[string]*string{}
 	for p := range files {
 		f, _ := live.file(p)
@@ -687,6 +729,13 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 		return cs, &Error{500, "apply_failed", note, cs}
 	}
 	cs.previous = prev
+	cs.applied = map[string]string{}
+	for p, c := range files {
+		cs.applied[p] = ""
+		if c != nil {
+			cs.applied[p] = store.FileHash(*c)
+		}
+	}
 	note := "applied"
 	if autoApply && cs.Status != "approved" {
 		note = "applied automatically (config.ai.auto_apply: low_risk)"
@@ -736,6 +785,28 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 		f, _ := live.file(p)
 		c, _ := readFile(f)
 		current[p] = c
+	}
+	// a file changed since the apply (another change set, the operator's plans): restoring the older text would undo
+	// that change unseen (a lost update), so revert refuses; a change set applied before the hashes were kept is not checked
+	if cs.applied != nil {
+		paths := make([]string, 0, len(current))
+		for p := range current {
+			paths = append(paths, p)
+		}
+		sort.Strings(paths)
+		for _, p := range paths {
+			h, ok := cs.applied[p]
+			if !ok {
+				continue
+			}
+			now := ""
+			if current[p] != nil {
+				now = store.FileHash(*current[p])
+			}
+			if now != h {
+				return nil, &Error{409, "stale_base", "Berkas " + p + " sudah berubah sejak perubahan ini diterapkan; mengembalikannya akan menimpa perubahan itu. Buat change set baru.", map[string]any{"path": p}}
+			}
+		}
 	}
 	if err := s.write(live, cs.previous); err != nil {
 		return nil, err

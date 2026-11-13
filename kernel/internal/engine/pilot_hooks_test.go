@@ -441,6 +441,33 @@ func TestPilotQuotationRevisionOutcomeOrder(t *testing.T) {
 	}
 }
 
+// The workers' wages line keeps its marks from quotation to order to invoice (t_809c5883): with tax.ppn_fee_only the
+// invoice made from the order would otherwise charge PPN on the wages the quotation left out.
+func TestPilotConversionsCarryLineFlags(t *testing.T) {
+	p := setupPilot(t)
+	m := p.masters()
+	q := p.doc("quotation", map[string]any{"customer": m.cust, "subject": "Alih daya", "items": []any{
+		map[string]any{"item": m.jasa, "qty": 1, "rate": 100000000, "pph23_exclude": true, "ppn_exclude": true},
+		map[string]any{"item": m.jasa, "qty": 1, "rate": 10000000}}})
+	p.action("quotation", q, "mark_outcome", map[string]any{"outcome": "accepted"})
+	so := opened(p.action("quotation", q, "make_order", map[string]any{"po_number": "PO-TK-1", "po_date": "2026-10-29"}))
+	flags := func(doc map[string]any) [][2]any {
+		var out [][2]any
+		for _, l := range rows(doc["items"]) {
+			out = append(out, [2]any{l["pph23_exclude"], l["ppn_exclude"]})
+		}
+		return out
+	}
+	if got := flags(p.get("customer_order", so)); len(got) != 2 || got[0] != [2]any{true, true} || got[1] != [2]any{false, false} {
+		t.Fatalf("order line flags = %v", got)
+	}
+	so = p.submit("customer_order", so)
+	inv := opened(p.action("customer_order", so, "make_invoice", nil))
+	if got := flags(p.get("sales_invoice", inv)); len(got) != 2 || got[0] != [2]any{true, true} || got[1] != [2]any{false, false} {
+		t.Fatalf("invoice line flags = %v", got)
+	}
+}
+
 func TestPilotInvoiceFromOrder(t *testing.T) {
 	p := setupPilot(t)
 	m := p.masters()

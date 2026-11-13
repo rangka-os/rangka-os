@@ -186,13 +186,35 @@ func orderFromQuotation(h *HookCtx) (map[string]any, error) {
 		if d := num(l["discount"]); d != 0 { // the order line has no discount: carry the net rate
 			rate = percentOff(rate, d)
 		}
-		items = append(items, map[string]any{"item": l["item"], "description": l["description"], "qty": l["qty"], "uom": l["uom"], "rate": moneyOut(rate)})
+		line := map[string]any{"item": l["item"], "description": l["description"], "qty": l["qty"], "uom": l["uom"], "rate": moneyOut(rate)}
+		carryLineFlags(h, "customer_order", line, l)
+		items = append(items, line)
 	}
 	o, err := h.createDraft("customer_order", map[string]any{"customer": q["customer"], "quotation": name, "po_number": poNumber, "po_date": poDate, "items": items})
 	if err != nil {
 		return nil, err
 	}
 	return openResult("customer_order", str(o["name"]), "Draf pesanan "+str(o["name"])+" dibuat dari penawaran "+name), nil
+}
+
+// lineFlags are the line marks a conversion carries when both line models have them (rangka-apps): the workers'
+// wages line stays outside the PPh 23 base and, with tax.ppn_fee_only, outside the PPN base on the next document.
+var lineFlags = []string{"pph23_exclude", "ppn_exclude"}
+
+// carryLineFlags copies lineFlags from the source line src into line, the new line of model's items table, when
+// that line model has the field and src carries a value. A catalogue without the fields converts as before.
+func carryLineFlags(h *HookCtx, model string, line, src map[string]any) {
+	reg := h.op.e.Reg()
+	m := reg.Model(model)
+	if m == nil || m.Field("items") == nil {
+		return
+	}
+	child := reg.Model(m.Field("items").Of)
+	for _, k := range lineFlags {
+		if v, ok := src[k]; ok && v != nil && has(child, k) {
+			line[k] = v
+		}
+	}
 }
 
 // invoiceFromOrder is invoicing.from_order: a draft sales_invoice for what the order has not invoiced yet,
@@ -229,7 +251,9 @@ func invoiceFromOrder(h *HookCtx) (map[string]any, error) {
 		used := math.Min(qty, invoiced[item])
 		invoiced[item] -= used
 		if rest := qty - used; rest > qtyEps {
-			items = append(items, map[string]any{"item": item, "description": l["description"], "qty": rest, "uom": l["uom"], "rate": l["rate"]})
+			line := map[string]any{"item": item, "description": l["description"], "qty": rest, "uom": l["uom"], "rate": l["rate"]}
+			carryLineFlags(h, "sales_invoice", line, l)
+			items = append(items, line)
 		}
 	}
 	if len(items) == 0 {

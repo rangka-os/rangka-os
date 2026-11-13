@@ -8,3 +8,6 @@ fields:
   - {name: uom, type: link, to: uom, default: "item.sales_uom != '' ? item.sales_uom : item.stock_uom"}
   - {name: rate, type: currency, default: item.rate}
   - {name: amount, type: currency, compute: round(qty * rate)}
+  # rangka-apps: the workers' wages line (outside PPh 23 and, with tax.ppn_fee_only, outside the PPN base)
+  - {name: pph23_exclude, type: check, default: 'false'}
+  - {name: ppn_exclude, type: check, default: 'false'}

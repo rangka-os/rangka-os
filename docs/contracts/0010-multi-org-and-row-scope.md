@@ -187,7 +187,7 @@ org (`Actor.Org`):
 | Global | Members | Source |
 | --- | --- | --- |
 | `org` | `id`, `code`, `name`, `legal_name`, `npwp` | Identity only: `Registry.OrgIdentity(org)` (§2) cut to these members, each a string (`""` when missing), plus `id`, the org id. A listed org gets its `orgs:` `name`/`code` and only its own `config.org` (`legal_name` falling back to its `name`); an unlisted org gets the site's `org:` and empty `name`/`code` |
-| `tax` | `ppn_rate`, `dpp_num`, `dpp_den`, `pkp` | `Registry.TaxSettings(org)`: `OrgConfig(org, "tax")`, the site's `tax:` with the org's `config.tax` deep-merged over it. `ppn_rate` is a percent (default 12; a whole number arrives as an int, a fractional one such as 11.5 as a float); `dpp_ratio` such as `"11/12"` becomes `dpp_num` 11 and `dpp_den` 12 (default 11/12); `pkp` is always a bool, default `false` |
+| `tax` | `ppn_rate`, `dpp_num`, `dpp_den`, `pkp`, `ppn_fee_only` | `Registry.TaxSettings(org)`: `OrgConfig(org, "tax")`, the site's `tax:` with the org's `config.tax` deep-merged over it. `ppn_rate` is a percent (default 12; a whole number arrives as an int, a fractional one such as 11.5 as a float); `dpp_ratio` such as `"11/12"` becomes `dpp_num` 11 and `dpp_den` 12 (default 11/12); `pkp` is always a bool, default `false`; `ppn_fee_only` (added 13 Nov 2026) is always a bool, default `false`: when true, apps charge PPN on the service fee only and leave the invoice lines that bill the workers' wages out of the PPN base (DPP nilai lain, PMK 83/2012 for jasa penyediaan tenaga kerja); print templates see it as `.Tax.ppn_fee_only` |
 
 ```yaml
 - {name: tax_rate, type: int, default: "tax.pkp ? tax.ppn_rate : 0"}

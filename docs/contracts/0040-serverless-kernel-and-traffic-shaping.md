@@ -172,8 +172,8 @@ wait would be too long.
   - `GET /api/v1/events/poll` (it has its own floor: a caller polling faster than `poll_ms / 2` gets its previous
     answer again, with no new query).
 - Sign-in keeps its own failure limiter, and AI chats keep `ai_credits_month` (0028) and the per-person chat limit.
-- Unauthenticated routes (sign-in, public portals) use a second bucket per client IP with the same `rate`. Only a
-  hash of the IP is kept, in memory.
+- Requests that are not signed in (sign-in, public portals, and credentials that are not verified, below) use a
+  second bucket per client IP with the same `rate`. Only a hash of the IP is kept, in memory.
 - Buckets live in process memory. Under `rangka serve` with one process that is the whole tenant. Under Lambda each
   instance has its own buckets, so the kernel's bucket is only a backstop. The **hosting router shapes the tenant as a
   whole** before it invokes the function (rangka-cloud spec), because waiting inside a function is billed time.
@@ -182,11 +182,24 @@ wait would be too long.
 - `GET /api/v1/plan` (0028 §5) reports `rate` under `limits` and adds `usage.rate: {throttled_today,
   throttled_ms_today, refused_today, approximate: true}` from in-process counters (this process, its local date).
 - A child plan's `rate` replaces its parent's as a whole (other limits are merged key by key, as in 0028 §1).
-- Which bucket: a request with credentials (`Authorization` or the session cookie) takes the tenant's; one without
-  takes its client's, keyed by a hash of the connection address and the first `X-Forwarded-For` hop.
+- Which bucket: a request takes the tenant's only when its credential (the bearer token, else the session cookie,
+  the one sign-in reads) is **verified in this process**; every other request takes its client's. A header alone is
+  not proof: a made-up `Authorization` must not spend the tenant's rate.
+  - A credential becomes verified when sign-in resolves it on a request, or when this kernel issues it as a session
+    cookie (sign-in, upstream and OIDC callbacks). Shaping itself never queries the database.
+  - A credential that sign-in refuses, and a session cookie that sign-out clears, are no longer verified. A note
+    lasts 10 minutes, so a revoked credential may keep the tenant's bucket (never its access) that long.
+  - The first request with a credential this process has not seen takes its client's bucket. Under Lambda that
+    is the first request per credential per instance.
+- The client's address is the connection's. `X-Forwarded-For` is read only when the connection comes from a
+  trusted proxy, listed in `RANGKA_TRUSTED_PROXIES` (IPs or CIDRs, separated by commas or spaces; empty by
+  default). The client is then the right-most hop that is not a trusted proxy; hops to its left were written by the
+  client and are ignored. Without the setting, a kernel behind a proxy sees every client as the proxy and they
+  share one bucket, so a deployment behind a proxy sets it (the hosting router's address, or `127.0.0.1` when an
+  adapter in the same function forwards the request).
 - The rate is read from the plan snapshot of 0028 §4 (refreshed about every 10 seconds, never in the request), so
   a plan change reaches shaping within about 10 seconds and shaping never takes a database connection.
-- Implemented in `kernel/internal/ratelimit` and `kernel/internal/api/shape.go` (§9 only; the rest of this contract is
+- Implemented in `kernel/internal/ratelimit` and `kernel/internal/api/shape.go` with `shape_verified.go` (§9 only; the rest of this contract is
   separate work).
 
 ### 10. What does not change

@@ -56,7 +56,9 @@ type Server struct {
 
 	ai aiState // assistant limits and health probe (ai.go)
 
-	limiter ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
+	limiter  ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
+	verified verifiedSet       // credentials verified in this process: they take the tenant's bucket (shape_verified.go)
+	proxies  trustedProxies    // RANGKA_TRUSTED_PROXIES: whose X-Forwarded-For names the client (shape_verified.go)
 }
 
 type ctxKey struct{}
@@ -90,8 +92,14 @@ func ChangeActor(p *auth.Principal) changeset.Actor {
 
 func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	p, err := s.Auth.Resolve(r)
+	if errors.Is(err, auth.ErrUnauthenticated) {
+		s.verified.forget(credential(r))
+	}
 	if err != nil {
 		return nil, err
+	}
+	if p != nil && p.Via != "dev" {
+		s.verified.note(credential(r)) // shaping: this credential now takes the tenant's bucket (contract 0040 §9)
 	}
 	if p != nil && p.User.Org == "" && p.Via == "dev" {
 		p.User.Org = s.Org

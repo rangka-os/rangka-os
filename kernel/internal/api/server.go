@@ -56,7 +56,9 @@ type Server struct {
 
 	ai aiState // assistant limits and health probe (ai.go)
 
-	limiter ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
+	limiter  ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
+	verified verifiedSet       // credentials verified in this process: they take the tenant's bucket (shape_verified.go)
+	proxies  trustedProxies    // RANGKA_TRUSTED_PROXIES: whose X-Forwarded-For names the client (shape_verified.go)
 }
 
 type ctxKey struct{}
@@ -90,6 +92,15 @@ func ChangeActor(p *auth.Principal) changeset.Actor {
 
 func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	p, err := s.Auth.Resolve(r)
+	// shaping (contract 0040 §9): a credential Resolve accepts takes the tenant's bucket from now on; one it does
+	// not accept (refused, or a session cookie that is gone or expired: Resolve answers anonymous or dev) is
+	// forgotten. A database error decides nothing.
+	switch {
+	case err == nil && p != nil && p.Via != "dev":
+		s.verified.note(credential(r))
+	case err == nil || errors.Is(err, auth.ErrUnauthenticated):
+		s.verified.forget(credential(r))
+	}
 	if err != nil {
 		return nil, err
 	}

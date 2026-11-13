@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -1464,6 +1464,242 @@
       })));
   }
   /* Chat / Aksi pesan · Salin */
+  /* ---- Chat / Format / * (Figma "Raka Chat" › Isi jawaban): Raka's markdown drawn as React elements, never as HTML.
+     RichText (headings, bold, italic, inline code, links, lists, quotes, rules), Table (GFM pipes; numbers right),
+     KeyValue (a list whose every item is "**Label:** value"), CodeBlock (``` fences, language and file in the head,
+     Salin, line numbers), Callout (> [!NOTE] / [!TIP] / [!WARNING] / [!CAUTION], Indonesian names too) and
+     Collapsible (an answer longer than `collapse` lines). Any text a link may not open stays text. */
+  var MD_CALLOUT = { NOTE: "info", INFO: "info", CATATAN: "info", TIP: "ok", SUCCESS: "ok", BERHASIL: "ok", IMPORTANT: "warn",
+    WARNING: "warn", PERHATIAN: "warn", CAUTION: "bad", DANGER: "bad", GAGAL: "bad" };
+  var MD_CALLOUT_TITLE = { info: "Catatan", ok: "Berhasil", warn: "Perlu dicek", bad: "Gagal" };
+  var MD_LIST = /^(\s*)([-*+•]|\d{1,3}[.)])\s+(.*)$/;
+  var MD_TABLE_SEP = /^\s*\|?\s*:?-{2,}:?\s*(\|\s*:?-{2,}:?\s*)*\|?\s*$/;
+  /** The address a Raka link may open: http(s), mailto, or a path or anchor of this app; "" for anything else. */
+  function mdSafeHref(u) {
+    u = String(u == null ? "" : u).trim();
+    if (/^(https?:\/\/[^\s]+|mailto:[^\s]+)$/i.test(u)) return u;
+    if (/^(\/(?![\/\\])|#)[^\s]*$/.test(u)) return u;
+    return "";
+  }
+  function mdCells(line) {
+    var t = line.trim();
+    if (t.charAt(0) === "|") t = t.slice(1);
+    if (t.charAt(t.length - 1) === "|" && t.charAt(t.length - 2) !== "\\") t = t.slice(0, -1);
+    var out = [], cur = "";
+    for (var i = 0; i < t.length; i++) {
+      if (t[i] === "\\" && t[i + 1] === "|") { cur += "|"; i++; continue; }
+      if (t[i] === "|") { out.push(cur.trim()); cur = ""; continue; }
+      cur += t[i];
+    }
+    out.push(cur.trim());
+    return out;
+  }
+  function mdStartsBlock(lines, i) {
+    var l = lines[i];
+    return /^\s{0,3}(```|~~~)/.test(l) || /^\s{0,3}#{1,6}\s/.test(l) || /^\s{0,3}>/.test(l) || MD_LIST.test(l) ||
+      /^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l) || (l.indexOf("|") >= 0 && i + 1 < lines.length && MD_TABLE_SEP.test(lines[i + 1]) && lines[i + 1].indexOf("-") >= 0);
+  }
+  /** Markdown source → block list ({t: h|p|list|kv|table|code|quote|callout|hr, …}); unclosed fences run to the end. */
+  function mdBlocks(src) {
+    var lines = String(src == null ? "" : src).replace(/\r\n?/g, "\n").split("\n"), out = [], i = 0, m;
+    while (i < lines.length) {
+      var l = lines[i];
+      if (!l.trim()) { i++; continue; }
+      if ((m = /^\s{0,3}(`{3,}|~{3,})\s*([^\s`]*)\s*(.*)$/.exec(l))) {
+        var fence = m[1], code = [];
+        i++;
+        while (i < lines.length && !(lines[i].trim().indexOf(fence) === 0 && /^\s{0,3}[`~]+\s*$/.test(lines[i]))) code.push(lines[i++]);
+        var open = i >= lines.length;
+        i++;
+        out.push({ t: "code", lang: m[2], file: m[3].trim(), text: code.join("\n"), open: open });
+        continue;
+      }
+      if ((m = /^\s{0,3}(#{1,6})\s+(.*?)(\s+#+)?\s*$/.exec(l))) { out.push({ t: "h", level: m[1].length, text: m[2] }); i++; continue; }
+      if (/^\s{0,3}([-*_])(\s*\1){2,}\s*$/.test(l)) { out.push({ t: "hr" }); i++; continue; }
+      if (/^\s{0,3}>/.test(l)) {
+        var q = [];
+        while (i < lines.length && /^\s{0,3}>/.test(lines[i])) q.push(lines[i++].replace(/^\s{0,3}>\s?/, ""));
+        var c = /^\[!([A-Za-z]+)\]\s*(.*)$/.exec(q[0] || ""), tone = c && MD_CALLOUT[c[1].toUpperCase()];
+        if (tone) out.push({ t: "callout", tone: tone, title: c[2].trim() || MD_CALLOUT_TITLE[tone], text: q.slice(1).join("\n") });
+        else out.push({ t: "quote", text: q.join("\n") });
+        continue;
+      }
+      if (l.indexOf("|") >= 0 && i + 1 < lines.length && MD_TABLE_SEP.test(lines[i + 1]) && lines[i + 1].indexOf("-") >= 0) {
+        var head = mdCells(l), align = mdCells(lines[i + 1]).map(function (x) { return /:$/.test(x) ? (/^:/.test(x) ? "center" : "right") : ""; }), rows = [];
+        i += 2;
+        while (i < lines.length && lines[i].trim() && lines[i].indexOf("|") >= 0) rows.push(mdCells(lines[i++]));
+        out.push({ t: "table", head: head, align: align, rows: rows });
+        continue;
+      }
+      if ((m = MD_LIST.exec(l))) {
+        var ordered = /\d/.test(m[2]), items = [], start = ordered ? parseInt(m[2], 10) : 1;
+        while (i < lines.length) {
+          var lm = MD_LIST.exec(lines[i]);
+          if (lm && /\d/.test(lm[2]) === ordered) { items.push({ text: lm[3], indent: lm[1].length >= 2 }); i++; continue; }
+          // an indented line (not blank, not a new block) continues the item above
+          if (items.length && lines[i].trim() && /^\s{2,}/.test(lines[i]) && !lm) { items[items.length - 1].text += "\n" + lines[i].trim(); i++; continue; }
+          break;
+        }
+        var kv = !ordered && items.length >= 2 && items.every(function (it) { return /^\*\*[^*\n]+?\*\*:?\s+\S/.test(it.text); });
+        if (kv) out.push({ t: "kv", rows: items.map(function (it) {
+          var km = /^\*\*([^*\n]+?):?\*\*:?\s+([\s\S]*)$/.exec(it.text);
+          return [km[1].replace(/:$/, ""), km[2]];
+        }) });
+        else out.push({ t: "list", ordered: ordered, start: start, items: items });
+        continue;
+      }
+      var para = [l];
+      i++;
+      while (i < lines.length && lines[i].trim() && !mdStartsBlock(lines, i)) para.push(lines[i++]);
+      out.push({ t: "p", text: para.join("\n") });
+    }
+    return out;
+  }
+  /** Inline markdown → React children: `code`, **bold**, *italic*, [text](link), line breaks; the rest is text. */
+  function mdInline(s, kp) {
+    s = String(s == null ? "" : s);
+    var out = [], buf = "", i = 0, k = 0, m;
+    function text(t) {
+      t.split("\n").forEach(function (part, j) {
+        if (j) out.push(h("br", { key: kp + "br" + (k++) }));
+        if (part) out.push(part);
+      });
+    }
+    function flush() { if (buf) { text(buf); buf = ""; } }
+    while (i < s.length) {
+      var c = s[i], rest = s.slice(i), prev = s[i - 1] || "";
+      if (c === "\\" && /[\\`*_\[\]()#>|~-]/.test(s[i + 1] || "")) { buf += s[i + 1]; i += 2; continue; }
+      if (c === "`" && (m = /^(`+)(?!`)([\s\S]*?[^`])\1(?!`)/.exec(rest))) {
+        flush();
+        out.push(h("code", { key: kp + "c" + (k++), className: "rk-md-code" }, m[2].replace(/^ ([\s\S]*) $/, "$1")));
+        i += m[0].length;
+        continue;
+      }
+      if ((c === "*" || c === "_") && (m = /^(\*\*|__)(?=\S)([\s\S]*?\S)\1/.exec(rest)) && (c === "*" || !/\w/.test(prev))) {
+        flush();
+        out.push(h("strong", { key: kp + "s" + k }, mdInline(m[2], kp + "s" + (k++) + ".")));
+        i += m[0].length;
+        continue;
+      }
+      if ((c === "*" || c === "_") && (m = /^(\*|_)(?=[^\s*_])([\s\S]*?[^\s*_])\1(?![*_])/.exec(rest)) &&
+          (c === "*" || (!/\w/.test(prev) && !/\w/.test(s[i + m[0].length] || "")))) {
+        flush();
+        out.push(h("em", { key: kp + "e" + k }, mdInline(m[2], kp + "e" + (k++) + ".")));
+        i += m[0].length;
+        continue;
+      }
+      if (c === "[" && (m = /^\[([^\]\n]+)\]\(\s*<?([^\s()<>]+)>?(?:\s+"[^"\n]*")?\s*\)/.exec(rest))) {
+        flush();
+        var href = mdSafeHref(m[2]), label = mdInline(m[1], kp + "a" + k + ".");
+        if (href) {
+          var ext = /^https?:/i.test(href);
+          out.push(h("a", { key: kp + "a" + (k++), className: "rk-md-a", href: href, target: ext ? "_blank" : undefined, rel: ext ? "noopener noreferrer" : undefined }, label));
+        } else {
+          out.push(h(React.Fragment, { key: kp + "a" + (k++) }, label));
+        }
+        i += m[0].length;
+        continue;
+      }
+      buf += c;
+      i++;
+    }
+    flush();
+    return out;
+  }
+  var MD_NUM = /^[-+−]?\s*(Rp\s?)?[-+−]?[\d.,]+\s*(%|x|×|hr|hari|jam|mnt|dtk|kg|pcs|unit)?$/i;
+  /** How many lines a block takes, roughly, for Collapsible. */
+  function mdLines(b) {
+    if (b.t === "table") return b.rows.length + 1;
+    if (b.t === "kv") return b.rows.length;
+    if (b.t === "list") return b.items.length;
+    if (b.t === "code") return b.text.split("\n").length + 1;
+    if (b.t === "hr" || b.t === "h") return 1;
+    var t = b.text || "";
+    return t.split("\n").reduce(function (n, ln) { return n + Math.max(1, Math.ceil(ln.length / 64)); }, 0) + (b.t === "callout" ? 1 : 0);
+  }
+  function MdCopy(p) {
+    var st = useState(false), done = st[0], set = st[1];
+    useEffect(function () { if (!done) return; var t = setTimeout(function () { set(false); }, 2000); return function () { clearTimeout(t); }; }, [done]);
+    function copy() {
+      var c = window.navigator && window.navigator.clipboard;
+      if (c && c.writeText) c.writeText(String(p.text || "")).then(function () { set(true); }, function () {});
+    }
+    return h("button", { type: "button", className: "rk-md-copy", "aria-label": done ? "Tersalin" : "Salin kode", onClick: copy },
+      h(Icon, { name: done ? "check" : "copy" }), done ? "Tersalin" : "Salin");
+  }
+  function mdBlock(b, key) {
+    switch (b.t) {
+      case "h":
+        return h(b.level <= 2 ? "h4" : "h5", { key: key, className: b.level <= 2 ? "rk-md-h1" : "rk-md-h2" }, mdInline(b.text, key + "."));
+      case "hr":
+        return h("hr", { key: key, className: "rk-md-hr" });
+      case "quote":
+        return h("blockquote", { key: key, className: "rk-md-quote" }, mdInline(b.text, key + "."));
+      case "callout":
+        return h("div", { key: key, className: "rk-md-callout rk-md-callout-" + b.tone, role: b.tone === "bad" ? "alert" : "note" },
+          h(Icon, { name: TONE_ICON[b.tone] }),
+          h("div", { className: "tx" }, h("b", null, mdInline(b.title, key + "t.")), b.text ? h("div", null, mdInline(b.text, key + "b.")) : null));
+      case "list":
+        return h(b.ordered ? "ol" : "ul", { key: key, className: "rk-md-list", start: b.ordered && b.start !== 1 ? b.start : undefined },
+          b.items.map(function (it, j) { return h("li", { key: j, className: it.indent ? "rk-md-sub" : undefined }, mdInline(it.text, key + "." + j + ".")); }));
+      case "kv":
+        return h("dl", { key: key, className: "rk-md-kv" }, b.rows.map(function (r, j) {
+          return h("div", { key: j, className: "rk-md-kv-row" }, h("dt", null, mdInline(r[0], key + "k" + j)), h("dd", null, mdInline(r[1], key + "v" + j)));
+        }));
+      case "table":
+        var n = b.head.length;
+        var right = b.head.map(function (_, c) {
+          if (b.align[c]) return b.align[c] === "right";
+          var vals = b.rows.map(function (r) { return (r[c] || "").replace(/\*\*/g, "").trim(); }).filter(Boolean);
+          return c > 0 && vals.length > 0 && vals.every(function (v) { return MD_NUM.test(v); });
+        });
+        return h("div", { key: key, className: "rk-md-table-wrap", tabIndex: 0, role: "region", "aria-label": "Tabel" },
+          h("table", { className: "rk-md-table" },
+            h("thead", null, h("tr", null, b.head.map(function (c, j) { return h("th", { key: j, className: right[j] ? "num" : undefined, style: b.align[j] === "center" ? { textAlign: "center" } : undefined }, mdInline(c, key + "h" + j)); }))),
+            h("tbody", null, b.rows.map(function (r, ri) {
+              return h("tr", { key: ri }, Array.apply(null, Array(n)).map(function (_, j) {
+                return h("td", { key: j, className: right[j] ? "num" : undefined, style: b.align[j] === "center" ? { textAlign: "center" } : undefined }, mdInline(r[j] || "", key + "r" + ri + "c" + j));
+              }));
+            }))));
+      case "code":
+        var lines = b.text.split("\n");
+        return h("div", { key: key, className: "rk-md-codeblock" },
+          h("div", { className: "rk-md-codehead" },
+            b.lang ? h("span", { className: "lang" }, b.lang) : null,
+            b.file ? h("span", { className: "file" }, b.file) : null,
+            h("span", { className: "sp" }),
+            b.open ? null : h(MdCopy, { text: b.text })),
+          h("pre", { className: cx("rk-md-pre", lines.length > 1 && "rk-md-numbered") },
+            h("code", null, lines.map(function (ln, j) { return h("span", { key: j, className: "ln" }, ln || "​"); }))));
+      default:
+        return h("p", { key: key, className: "rk-md-p" }, mdInline(b.text, key + "."));
+    }
+  }
+  /** Chat / Format / RichText: p.text (markdown). p.collapse: fold an answer longer than this many lines (not while
+      p.streaming) behind "Tampilkan semua · n baris lagi" (Chat / Format / Collapsible). */
+  function RichText(p) {
+    var os = useState(false), open = os[0], setOpen = os[1];
+    var blocks = mdBlocks(p.text);
+    var limit = p.collapse > 0 && !p.streaming ? p.collapse : 0;
+    var total = 0, cut = blocks.length;
+    blocks.forEach(function (b) { total += mdLines(b); });
+    if (limit && total > limit + 3) {
+      var n = 0;
+      for (var i = 0; i < blocks.length; i++) { n += mdLines(blocks[i]); if (n > limit) { cut = i; break; } }
+      if (cut === 0) cut = 1;
+    }
+    var folded = cut < blocks.length && !open;
+    var shown = folded ? blocks.slice(0, cut + 1) : blocks;
+    var hidden = 0;
+    blocks.slice(cut + 1).forEach(function (b) { hidden += mdLines(b); });
+    return h("div", { className: cx("rk-md", p.className), "data-folded": folded ? "" : undefined },
+      shown.map(function (b, j) {
+        var el = mdBlock(b, "b" + j);
+        return folded && j === cut ? h("div", { key: "fade", className: "rk-md-fade", "aria-hidden": "true" }, el) : el;
+      }),
+      cut < blocks.length ? h("button", { type: "button", className: "rk-md-more", "aria-expanded": open ? "true" : "false", onClick: function () { setOpen(!open); } },
+        h(Icon, { name: open ? "fold" : "unfold" }), open ? "Ringkas" : "Tampilkan semua · " + (hidden + mdLines(blocks[cut])) + " baris lagi") : null);
+  }
   function CopyReply(p) {
     var st = useState(false), done = st[0], set = st[1];
     useEffect(function () { if (!done) return; var t = setTimeout(function () { set(false); }, 2000); return function () { clearTimeout(t); }; }, [done]);
@@ -1482,7 +1718,7 @@
       h("div", { className: "body" },
         h("div", { className: "rk-chat-who" }, h("b", null, "Raka")),
         h(ChatSteps, { activity: t.activity, running: running && !t.text, start: q.start }),
-        t.text ? h("div", { className: "rk-chat-text" }, t.text) : null,
+        t.text ? h(RichText, { className: "rk-chat-text", text: t.text, streaming: running, collapse: 24 }) : null,
         (t.changesets || []).map(function (cs) {
           return h(React.Fragment, { key: cs.id }, p.renderChangeset ? p.renderChangeset(cs) : h(ChangesetCard, { cs: cs, onPreview: p.onPreview, onOpenUbah: p.onOpenUbah }));
         }),
@@ -1586,6 +1822,7 @@
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   api.Logo = Logo; api.AuthLayout = AuthLayout;
   api.AskBar = AskBar; api.ChatDrawer = ChatDrawer; api.RakaLauncher = RakaLauncher;
+  api.RichText = RichText; api.markdownBlocks = mdBlocks; api.safeHref = mdSafeHref;
   api.BREAKPOINTS = BREAKPOINTS; api.breakpoint = breakpoint; api.useBreakpoint = useBreakpoint; api.isTouch = isTouch;
   window.Rangka = Object.assign(window.Rangka || {}, api);
 })();

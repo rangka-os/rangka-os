@@ -186,13 +186,47 @@ func orderFromQuotation(h *HookCtx) (map[string]any, error) {
 		if d := num(l["discount"]); d != 0 { // the order line has no discount: carry the net rate
 			rate = percentOff(rate, d)
 		}
-		items = append(items, map[string]any{"item": l["item"], "description": l["description"], "qty": l["qty"], "uom": l["uom"], "rate": moneyOut(rate)})
+		line := map[string]any{"item": l["item"], "description": l["description"], "qty": l["qty"], "uom": l["uom"], "rate": moneyOut(rate)}
+		carryLineFlags(h, "customer_order", line, l)
+		items = append(items, line)
 	}
 	o, err := h.createDraft("customer_order", map[string]any{"customer": q["customer"], "quotation": name, "po_number": poNumber, "po_date": poDate, "items": items})
 	if err != nil {
 		return nil, err
 	}
 	return openResult("customer_order", str(o["name"]), "Draf pesanan "+str(o["name"])+" dibuat dari penawaran "+name), nil
+}
+
+// lineFlags are the line marks a conversion carries when both line models have them (rangka-apps): the workers'
+// wages line stays outside the PPh 23 base and, with tax.ppn_fee_only, outside the PPN base on the next document.
+var lineFlags = []string{"pph23_exclude", "ppn_exclude"}
+
+// carryLineFlags copies lineFlags from the source line src into line, the new line of model's items table, when
+// that line model has the field and src carries a value. A catalogue without the fields converts as before.
+func carryLineFlags(h *HookCtx, model string, line, src map[string]any) {
+	reg := h.op.e.Reg()
+	m := reg.Model(model)
+	if m == nil || m.Field("items") == nil {
+		return
+	}
+	child := reg.Model(m.Field("items").Of)
+	for _, k := range lineFlags {
+		if v, ok := src[k]; ok && v != nil && has(child, k) {
+			line[k] = v
+		}
+	}
+}
+
+// lineKey matches an invoice line to the order line it billed: the item and the line marks, so two lines of the same
+// item (the workers' wages and the fee on one service item) are counted apart (audit lanjutan 2 N1).
+func lineKey(l map[string]any) string {
+	k := str(l["item"])
+	for _, f := range lineFlags {
+		if b, _ := l[f].(bool); b {
+			k += "|" + f
+		}
+	}
+	return k
 }
 
 // invoiceFromOrder is invoicing.from_order: a draft sales_invoice for what the order has not invoiced yet,
@@ -212,24 +246,38 @@ func invoiceFromOrder(h *HookCtx) (map[string]any, error) {
 		}
 		return openResult("sales_invoice", str(d["name"]), "Draf faktur "+str(d["name"])+" sudah ada untuk pesanan ini"), nil
 	}
-	invoiced := map[string]float64{}
+	exact, byItem := map[string]float64{}, map[string]float64{}
 	done, err := h.Find("sales_invoice", map[string]any{"customer_order": name, "docstatus": 1})
 	if err != nil {
 		return nil, err
 	}
 	for _, inv := range done {
 		for _, l := range rows(inv["items"]) {
-			invoiced[str(l["item"])] += qtyOf(l["qty"])
+			exact[lineKey(l)] += qtyOf(l["qty"])
+			byItem[str(l["item"])] += qtyOf(l["qty"])
 		}
 	}
-	var items []any
-	for _, l := range rows(so["items"]) {
-		item := str(l["item"])
+	// billed quantities go first to the order lines with the same item and marks (the wages and the fee of one item
+	// stay apart), then what is left of an item to its other lines whatever their marks: a mark changed on the draft
+	// invoice never bills an order line twice (audit lanjutan 2 N1, D1)
+	lines := rows(so["items"])
+	rests := make([]float64, len(lines))
+	for i, l := range lines {
 		qty := qtyOf(l["qty"])
-		used := math.Min(qty, invoiced[item])
-		invoiced[item] -= used
-		if rest := qty - used; rest > qtyEps {
-			items = append(items, map[string]any{"item": item, "description": l["description"], "qty": rest, "uom": l["uom"], "rate": l["rate"]})
+		used := math.Min(qty, exact[lineKey(l)])
+		exact[lineKey(l)] -= used
+		byItem[str(l["item"])] -= used
+		rests[i] = qty - used
+	}
+	var items []any
+	for i, l := range lines {
+		item := str(l["item"])
+		used := math.Max(0, math.Min(rests[i], byItem[item]))
+		byItem[item] -= used
+		if rest := rests[i] - used; rest > qtyEps {
+			line := map[string]any{"item": item, "description": l["description"], "qty": rest, "uom": l["uom"], "rate": l["rate"]}
+			carryLineFlags(h, "sales_invoice", line, l)
+			items = append(items, line)
 		}
 	}
 	if len(items) == 0 {

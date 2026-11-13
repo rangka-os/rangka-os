@@ -118,7 +118,9 @@ func TestConfigModulesEndToEnd(t *testing.T) {
 
 	// removing stock while stock_item holds a row: medium when proposed, high at preview, owner approves
 	rm := run("Lepas stok", []any{map[string]any{"op": "remove", "path": "/modules/stock"}})
-	if rm["proposed_risk"] != "medium" || rm["risk"] != "high" || get(rm, "preview", "modules", "rows", "stock_item") != 1.0 {
+	// stock_item is not submittable: no "submitted documents" note (audit 14 Nov L1, store.CountSubmittedTable)
+	if rm["proposed_risk"] != "medium" || rm["risk"] != "high" || get(rm, "preview", "modules", "rows", "stock_item") != 1.0 ||
+		get(rm, "preview", "modules", "submitted") != nil || strings.Contains(string(mustJSON(get(rm, "preview", "notes"))), "sudah diajukan") {
 		t.Fatalf("remove stock: risk %v/%v preview %v", rm["proposed_risk"], rm["risk"], rm["preview"])
 	}
 	// the preview raised the risk, so approvable_by follows it: owner only (contract 0045 §3)

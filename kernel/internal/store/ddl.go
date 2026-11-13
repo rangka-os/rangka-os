@@ -548,6 +548,7 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 		now = o.Now
 	}
 	steps, notes := PlanSteps(desired, live, now(), o.AllowDestructive)
+	notes = append(notes, submittedLeftNotes(ctx, q, desired, live)...)
 	res := &MigrateResult{Notes: notes, Risk: HighestRisk(steps)}
 	for _, s := range steps {
 		if s.Destructive && !o.AllowDestructive {
@@ -947,4 +948,31 @@ func sortedDocPaths(reg *meta.Registry) []string {
 func firstLine(s string) string {
 	l, _, _ := strings.Cut(s, "\n")
 	return l
+}
+
+// submittedLeftNotes names the tables no longer in the model that hold submitted documents (an app removed from the
+// site): their data stays, but the flows and rules of the apps still installed no longer see it, so a guard such as
+// "one sales source per outlet and day" stops holding for those documents (audit 14 Nov L1). A count that fails is
+// left out: the note is advice, the migration does not depend on it.
+func submittedLeftNotes(ctx context.Context, q pg.Querier, desired []Table, live *Live) []string {
+	want := map[string]bool{}
+	for _, t := range desired {
+		want[t.Name] = true
+	}
+	var tables []string
+	for t := range live.Columns {
+		if !want[t] && strings.HasPrefix(t, "r_") && !strings.HasPrefix(t, softDeletePrefix) {
+			tables = append(tables, t)
+		}
+	}
+	sort.Strings(tables)
+	var out []string
+	for _, t := range tables {
+		n, err := CountSubmittedTable(ctx, q, t, live.Columns[t])
+		if err != nil || n == 0 {
+			continue
+		}
+		out = append(out, fmt.Sprintf("%s holds %d submitted document(s) of an app no longer installed: the apps still installed no longer see them (their checks against these documents stop)", t, n))
+	}
+	return out
 }

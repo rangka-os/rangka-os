@@ -951,6 +951,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             rep.add("error", p, "name", "name_mismatch", f'flow name "{f.get("name")}" must match the file name "{fname}"')
         if not f.get("on") and not f.get("schedule"):
             rep.add("warn", p, "(root)", "never_runs", "a flow needs on: (an event) or schedule: (cron)")
+        conditional_as(rep, p, f.get("steps"))
         on = f.get("on")
         if isinstance(on, str) and "." in on:
             head, ev = on.split(".", 1)
@@ -1295,6 +1296,72 @@ def check_uninstalled_models(rep, apps, allmodels, installed, sdocs, overlays, f
         for i, w in enumerate(db.get("widgets", []) if isinstance(db, dict) else []):
             if isinstance(w, dict) and gone(w.get("model")):
                 say(p, f"widgets/{i}/model", w["model"])
+
+
+def top_conjuncts(expr):
+    """The top-level && parts of a CEL expression, whitespace removed (quotes and brackets kept whole)."""
+    out, cur, depth, q, i = [], "", 0, "", 0
+    e = str(expr)
+    while i < len(e):
+        ch = e[i]
+        if q:
+            cur += ch
+            if ch == "\\" and i + 1 < len(e):
+                cur += e[i + 1]
+                i += 2
+                continue
+            if ch == q:
+                q = ""
+        elif ch in "'\"":
+            q = ch
+            cur += ch
+        elif ch in "([{":
+            depth += 1
+            cur += ch
+        elif ch in ")]}":
+            depth -= 1
+            cur += ch
+        elif depth == 0 and e.startswith("&&", i):
+            out.append(cur)
+            cur = ""
+            i += 2
+            continue
+        else:
+            cur += ch
+        i += 1
+    out.append(cur)
+    return [re.sub(r"\s+", "", x) for x in out if x.strip()]
+
+
+def conditional_as(rep, p, steps):
+    """A step's `as:` under `if:` is not declared when the step is skipped; a later step whose if: null-checks the
+    name (x != null, x == null, size(x), x.size()) without the declaring condition first reads an undeclared name and
+    fails the flow at run time (rangka-apps pos_sale_on_submit, 13 Nov). Top-level steps only."""
+    if not isinstance(steps, list):
+        return
+    uncond = set()
+    for i, st in enumerate(steps):
+        if not isinstance(st, dict):
+            continue
+        x, c = st.get("as"), st.get("if")
+        if isinstance(x, str) and x and not c:
+            uncond.add(x)
+        if not (isinstance(x, str) and x and isinstance(c, str) and c.strip()) or x in uncond:
+            continue
+        cs = top_conjuncts(c)
+        xe = re.escape(x)
+        for j in range(i + 1, len(steps)):
+            t = steps[j]
+            if not isinstance(t, dict):
+                continue
+            if t.get("as") == x and not t.get("if"):
+                break
+            nc = re.sub(r"\s+", "", str(t.get("if") or ""))
+            m = re.search(r"\b" + xe + r"(!=|==)null\b|\bsize\(" + xe + r"\)|\b" + xe + r"\.size\(\)", nc)
+            if not m or all(k in nc[: m.start()] for k in cs):
+                continue
+            rep.add("warn", p, f"steps/{j}/if", "conditional_as_unguarded",
+                    f'step {j + 1} reads "{x}", which step {i + 1} declares only when {c.strip()}; a null check does not cover a skipped step: start this if: with {c.strip()} && ...')
 
 
 def flow_steps_uninstalled(p, at, steps, gone, say):

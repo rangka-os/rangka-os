@@ -442,6 +442,20 @@ func CountAllOrgs(ctx context.Context, q pg.Querier, model string) (int64, error
 	return res.Rows[0][0].(int64), nil
 }
 
+// CountSubmittedTable counts the submitted rows (docstatus 1) of table in all organisations; 0 when the table has no
+// docstatus column. A model's app removed from the site keeps them, but no flow or rule of another app sees them
+// any more (a same-day guard of one app on another's documents, audit 14 Nov L1), so removing it says how many.
+func CountSubmittedTable(ctx context.Context, q pg.Querier, table string, cols map[string]string) (int64, error) {
+	if _, ok := cols["docstatus"]; !ok {
+		return 0, nil
+	}
+	res, err := q.Query(pg.WithOrg(ctx, ""), fmt.Sprintf("select count(*) from %s where docstatus = 1", pg.QuoteIdent(table)))
+	if err != nil {
+		return 0, err
+	}
+	return res.Rows[0][0].(int64), nil
+}
+
 func loadChildren(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *meta.Model, recs []Record) error {
 	if len(recs) == 0 {
 		return nil

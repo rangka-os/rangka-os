@@ -528,3 +528,33 @@ func TestSoftDeleteIndexNames(t *testing.T) {
 		t.Fatalf("indexes %v, table indexes %v", l.Indexes, l.TableIndexes["r_deal"])
 	}
 }
+
+// A table no longer in the model that holds submitted documents (an app removed from the site) is named with its
+// count: the apps still installed no longer see those documents (audit 14 Nov L1: a cashier's same-day guard on
+// daily sales forms stops holding). A table without docstatus, or with none submitted, gets no such note.
+func TestMigrateNamesSubmittedDocumentsLeft(t *testing.T) {
+	e := newMigrateEnv(t)
+	e.mustMigrate(MigrateOpts{Source: "test"})
+	for _, sql := range []string{
+		`create table r_gone_sales (name text primary key, docstatus int not null default 0)`,
+		`insert into r_gone_sales values ('A', 1), ('B', 0), ('C', 1)`,
+		`create table r_gone_plain (name text primary key)`,
+		`insert into r_gone_plain values ('X')`,
+		`create table r_gone_drafts (name text primary key, docstatus int not null default 0)`,
+		`insert into r_gone_drafts values ('D', 0)`,
+	} {
+		if _, err := e.db.Exec(pg.WithOrg(e.ctx, ""), sql); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res := e.mustMigrate(MigrateOpts{Source: "test"})
+	var sub []string
+	for _, n := range res.Notes {
+		if strings.Contains(n, "submitted document") {
+			sub = append(sub, n)
+		}
+	}
+	if len(sub) != 1 || !strings.Contains(sub[0], "r_gone_sales holds 2 submitted document(s)") {
+		t.Fatalf("notes %v", res.Notes)
+	}
+}

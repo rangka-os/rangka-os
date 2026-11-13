@@ -3,10 +3,11 @@
  * RangkaApp.DashboardView({route.dash | name}) renders GET /api/v1/dashboards/<name>?period=N. The definition (label,
  * periods, default_period, widget type/label/span/model/columns) comes from meta.dashboards[name]; the numbers, chart
  * series and list rows come from the kernel and are shown as given. A number card opens its model's list, a list row opens
- * the record, a widget with `error` shows an inline warning, `hidden` widgets are not rendered, a 403 shows the shared
+ * the record, a widget with `error` shows its message as an inline warning (one over a model the person may not read is
+ * not rendered), `hidden` widgets are not rendered, a 403 shows the shared
  * "no access" state. The period selector sends the chosen period; "Muat ulang" asks again.
  *
- * Pure helper (unit-tested in test/dashboard.test.js): periodOptions.
+ * Pure helpers (unit-tested in test/dashboard.test.js): periodOptions, widgetError.
  */
 (function (global) {
   "use strict";
@@ -19,6 +20,21 @@
     return ps.map(function (d) { return { value: String(d), label: d + " hari" }; });
   }
   RA.periodOptions = periodOptions;
+
+  /** What to show for a widget the kernel answered with `error`: null when there is none, {hide: true} for a widget
+   *  over a model the person may not read (permission_denied: the kernel's way of saying "not for you", hidden like
+   *  a widget over hidden fields, contract 0027 §5), else {text} with the message as a string. The kernel sends the
+   *  error as an object {code, message, model, action}; rendering that object crashed the page (React #31). */
+  function widgetError(r) {
+    var e = r && r.error;
+    if (!e) return null;
+    if (typeof e === "object") {
+      if (e.code === "permission_denied") return { hide: true };
+      return { text: String(e.message || e.code || "Widget ini tidak bisa dimuat.") };
+    }
+    return { text: String(e) };
+  }
+  RA.widgetError = widgetError;
 
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
@@ -36,7 +52,9 @@
 
   function widgetCard(ctx, w, r, days, loading, open) {
     var span = w.span || 3, title = L(w.label) || w.name;
-    if (r && r.error) return h(R.Alert, { key: w.name, span: span, tone: "warn", title: title }, r.error);
+    var err = widgetError(r);
+    if (err && err.hide) return null;
+    if (err) return h(R.Alert, { key: w.name, span: span, tone: "warn", title: title }, err.text);
     r = r || {};
     if (w.type === "number") {
       return h(R.NumberCard, { key: w.name, span: span, loading: loading, label: title, value: Number(r.value) || 0, rupiah: !!r.rupiah, compact: w.compact, goodWhen: w.good_when,

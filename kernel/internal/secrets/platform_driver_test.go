@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
@@ -76,4 +77,61 @@ func TestFileDriverExactRegularFile(t *testing.T) {
 			t.Errorf("%s: %v, want %v", name, st[0].Value, want)
 		}
 	}
+}
+
+// Audit secrets-platform-driver 2: a platform that fixes the driver to file without RANGKA_SECRETS_PATH leaves the
+// bindings unset; it never falls back to the folder system.rk names.
+func TestPlatformDriverWithoutPath(t *testing.T) {
+	company := t.TempDir()
+	os.WriteFile(filepath.Join(company, "NOTE"), []byte("read from the company's folder"), 0o600)
+	reg := probeReg(map[string]any{"secrets": map[string]any{"driver": "file", "path": company}}, "${NOTE}")
+	s := &Service{Reg: func() *meta.Registry { return reg }, Platform: Platform{Driver: "file"}}
+	st, err := s.Status(context.Background(), "org1", "x_probe")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if st[0].Set || st[0].Value != nil {
+		t.Fatalf("the company's secrets.path was read: %+v", st[0])
+	}
+}
+
+// Audit secrets-platform-driver 1: an entry that is a regular file when the folder is listed and a symlink out of the
+// folder when it is read (swapped in between) never yields the outside file: the read goes through an os.Root on the
+// folder and checks the open descriptor.
+func TestFileDriverSymlinkSwap(t *testing.T) {
+	dir, outside := t.TempDir(), t.TempDir()
+	os.WriteFile(filepath.Join(outside, "target"), []byte("outside"), 0o600)
+	link := filepath.Join(dir, "SWAP")
+	os.WriteFile(link, []byte("inside"), 0o600)
+	stop := make(chan struct{})
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		tmpFile, tmpLink := filepath.Join(dir, ".f"), filepath.Join(dir, ".l")
+		for i := 0; ; i++ {
+			select {
+			case <-stop:
+				return
+			default:
+			}
+			if i%2 == 0 {
+				os.Remove(tmpLink)
+				os.Symlink(filepath.Join(outside, "target"), tmpLink)
+				os.Rename(tmpLink, link)
+			} else {
+				os.WriteFile(tmpFile, []byte("inside"), 0o600)
+				os.Rename(tmpFile, link)
+			}
+		}
+	}()
+	deadline := time.Now().Add(2 * time.Second)
+	for time.Now().Before(deadline) {
+		if v, _ := readSecretFile(dir, "SWAP"); v == "outside" {
+			close(stop)
+			<-done
+			t.Fatal("a swapped symlink led out of the folder")
+		}
+	}
+	close(stop)
+	<-done
 }

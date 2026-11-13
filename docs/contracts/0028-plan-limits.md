@@ -39,8 +39,9 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    - people: the newest members past the limit; owners come first and the first person is never read-only. Every
      change by such a person is refused.
    The same holds for adding or removing attachments of such a record, and for approving or rejecting a request: a
-   read-only person decides nothing (change sets included: approving, rejecting or applying one is refused with
-   `plan_read_only`), and nobody decides on a record of a read-only outlet. Reading, printing and exporting are
+   read-only person decides nothing (change sets included: proposing, approving, rejecting, applying or reverting one
+   is refused with `plan_read_only`; a proposal would otherwise reach `config.ai.auto_apply: low_risk`), and nobody
+   decides on a record of a read-only outlet. Reading, printing and exporting are
    never refused. Kernel actors (seed, flows and hooks the kernel starts) are not checked.
    The check reads a snapshot cached in memory and never takes a database connection inside a write: a stale
    snapshot (older than 10 seconds, or after an outlet was created) is served while one background refresh measures
@@ -60,7 +61,9 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    them.
    While an operator set the plan, the plans in `features.rk` are the operator's too: a change set that touches
    `features.rk` is refused with `403 plan_managed` when proposed, applied or reverted, so a business cannot raise its own
-   limits. The operator edits the file and runs `rangka plan set` again. On the company's own plan (`config.rk`, no
+   limits. The operator edits the file and runs `rangka plan set` again. A change set that touches `features.rk` is
+   pinned to the file's text when proposed (the op's `base`, contract 0014 §5), so if the operator writes the file
+   before the apply, the apply answers `409 stale_base` instead of writing over the operator's plans. On the company's own plan (`config.rk`, no
    operator) a change set may edit `features.rk` as before.
 
 ## Not decided here

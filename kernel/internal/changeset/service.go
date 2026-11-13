@@ -119,6 +119,7 @@ type ChangeSet struct {
 	CreatedAt    string   `json:"created_at,omitempty"`
 	UpdatedAt    string   `json:"updated_at,omitempty"`
 	previous     map[string]*string
+	applied      map[string]string // path -> store.FileHash of the text Apply wrote, "" when it deleted the file
 }
 
 // Actor is who acts on a change set.
@@ -445,9 +446,12 @@ func (s *Service) sandbox(ops []Op) (roots, func(), map[string]*string, error) {
 // ---------- persistence
 
 func (s *Service) save(ctx context.Context, q pg.Querier, cs *ChangeSet, insert bool) error {
-	var prev any
+	var prev, applied any
 	if cs.previous != nil {
 		prev = pg.JSON{V: cs.previous}
+	}
+	if cs.applied != nil {
+		applied = pg.JSON{V: cs.applied}
 	}
 	var val, pre any
 	if cs.Validation != nil {
@@ -462,8 +466,13 @@ func (s *Service) save(ctx context.Context, q pg.Querier, cs *ChangeSet, insert 
 			pg.JSON{V: cs.Layers}, cs.Risk, cs.Status, val, pre, pg.JSON{V: cs.History}, prev, cs.Source)
 		return err
 	}
-	_, err := q.Query(ctx, `update rk_changesets set status = $2, validation = $3, preview = $4, history = $5, previous = coalesce($6, previous), updated_at = now()
-		where id = $1`, cs.ID, cs.Status, val, pre, pg.JSON{V: cs.History}, prev)
+	// risk and layers are saved on every step: preview may raise the risk (a removed unit still holds rows) and apply
+	// assesses again, and approve reads the stored risk. The risk only rises in SQL: a step that loaded the change set
+	// before a parallel preview raised it does not write the lower risk back (audit changeset-followups 3)
+	_, err := q.Query(ctx, `update rk_changesets set status = $2, validation = $3, preview = $4, history = $5, previous = coalesce($6, previous),
+		applied = coalesce($7, applied), layers = $9, updated_at = now(),
+		risk = case when array_position(array['low','medium','high'], $8::text) > coalesce(array_position(array['low','medium','high'], risk), 0) then $8::text else risk end
+		where id = $1`, cs.ID, cs.Status, val, pre, pg.JSON{V: cs.History}, prev, applied, cs.Risk, pg.JSON{V: cs.Layers})
 	return err
 }
 
@@ -483,6 +492,9 @@ func fromRow(m map[string]any) *ChangeSet {
 	}
 	if m["previous"] != nil {
 		remarshal(m["previous"], &cs.previous)
+	}
+	if m["applied"] != nil {
+		remarshal(m["applied"], &cs.applied)
 	}
 	if cs.Layers == nil {
 		cs.Layers = []int{}

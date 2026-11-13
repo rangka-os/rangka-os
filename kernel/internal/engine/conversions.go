@@ -217,6 +217,18 @@ func carryLineFlags(h *HookCtx, model string, line, src map[string]any) {
 	}
 }
 
+// lineKey matches an invoice line to the order line it billed: the item and the line marks, so two lines of the same
+// item (the workers' wages and the fee on one service item) are counted apart (audit lanjutan 2 N1).
+func lineKey(l map[string]any) string {
+	k := str(l["item"])
+	for _, f := range lineFlags {
+		if b, _ := l[f].(bool); b {
+			k += "|" + f
+		}
+	}
+	return k
+}
+
 // invoiceFromOrder is invoicing.from_order: a draft sales_invoice for what the order has not invoiced yet,
 // per item (quantities of submitted invoices of the order are taken from the order lines in order).
 func invoiceFromOrder(h *HookCtx) (map[string]any, error) {
@@ -241,15 +253,16 @@ func invoiceFromOrder(h *HookCtx) (map[string]any, error) {
 	}
 	for _, inv := range done {
 		for _, l := range rows(inv["items"]) {
-			invoiced[str(l["item"])] += qtyOf(l["qty"])
+			invoiced[lineKey(l)] += qtyOf(l["qty"])
 		}
 	}
 	var items []any
 	for _, l := range rows(so["items"]) {
 		item := str(l["item"])
+		key := lineKey(l)
 		qty := qtyOf(l["qty"])
-		used := math.Min(qty, invoiced[item])
-		invoiced[item] -= used
+		used := math.Min(qty, invoiced[key])
+		invoiced[key] -= used
 		if rest := qty - used; rest > qtyEps {
 			line := map[string]any{"item": item, "description": l["description"], "qty": rest, "uom": l["uom"], "rate": l["rate"]}
 			carryLineFlags(h, "sales_invoice", line, l)

@@ -466,6 +466,16 @@ func TestPilotConversionsCarryLineFlags(t *testing.T) {
 	if got := flags(p.get("sales_invoice", inv)); len(got) != 2 || got[0] != [2]any{true, true} || got[1] != [2]any{false, false} {
 		t.Fatalf("invoice line flags = %v", got)
 	}
+	// bill the fee line alone first: the next invoice from the order is the wages line, not the fee again (both
+	// lines are the same item; the marks tell them apart)
+	if _, err := p.e.Update(p.ctx, p.a, "sales_invoice", inv, map[string]any{"items": []any{map[string]any{"item": m.jasa, "qty": 1, "rate": 10000000}}}); err != nil {
+		t.Fatal(err)
+	}
+	p.submit("sales_invoice", inv)
+	rest := rows(p.get("sales_invoice", opened(p.action("customer_order", so, "make_invoice", nil)))["items"])
+	if len(rest) != 1 || rp(rest[0]["rate"]) != 100000000 || rest[0]["ppn_exclude"] != true {
+		t.Fatalf("second invoice from the order = %v, want the wages line only", rest)
+	}
 }
 
 func TestPilotInvoiceFromOrder(t *testing.T) {

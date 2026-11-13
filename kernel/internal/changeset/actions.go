@@ -652,7 +652,11 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	if err != nil {
 		return nil, err
 	}
-	autoApply := s.autoApplyLowRisk() && cs.Risk == "low" && in(cs.Status, "validated", "previewed")
+	// config.ai.auto_apply: low_risk lets the kernel apply a low-risk change set as the system right after its
+	// preview (contract 0020 §4), and an approver apply one without a separate approval; anyone else needs an
+	// approved change set (audit C3-1 F4)
+	autoApply := s.autoApplyLowRisk() && cs.Risk == "low" && in(cs.Status, "validated", "previewed") &&
+		(a.Kind == "system" || s.isApprover(a))
 	if cs.Status != "approved" && !autoApply {
 		return nil, &Error{409, "not_approved", "apply needs an approved change set (it is " + cs.Status + ")", nil}
 	}

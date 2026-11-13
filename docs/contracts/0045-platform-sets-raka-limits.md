@@ -62,9 +62,9 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | Op | Why it is a platform limit |
 | --- | --- |
 | touches `system.rk` | layer 2: database, login, queues, secrets; admin in the Console |
-| touches `features.rk`, or `config.plan` | plan entitlements and billing (0028); an operator changes them |
+| touches `features.rk`, or `config.plan` (of the site or of an org) | plan entitlements and billing (0028); an operator changes them |
 | touches `roles/` files, or changes `permissions` of an existing model | who may do what is decided by people |
-| changes `config.ai`, `config.sso` or `config.connector_auth` | decides who approves, how people sign in, and who sets connector secrets and replays jobs |
+| changes `config.ai`, `config.sso` or `config.connector_auth`, of the site or of an org (`orgs.<id>.config`) | decides who approves, how people sign in, and who sets connector secrets and replays jobs |
 | any op under `apps/` or `modules/`, except a `create` of `apps/<name>/app.rk` whose name is not a catalogue app | catalogue files belong to their authors and are replaced on upgrade (0016); a company composes its own app from real modules (0032) |
 | touches a connector not named `x_`, or edits or deletes an existing connector | catalogue connectors belong to rangka-connectors (0033 §2, §5) |
 | deletes any file | deletion of a whole table, flow or file is a person's decision |
@@ -89,6 +89,9 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | removing a field or a select option (overlay or company model) | high |
 | making a `set_once` field editable (dropping or switching off `set_once`, changing such a field), or a company flow that writes a `set_once` field | high |
 | changing `config.connector_auth` (who sets connector secrets and replays jobs), like `config.tax` and `config.ai` | high |
+| a key under an org's config (`orgs.<id>.config.<key>`): rated like the same site key, so an org's `tax`, `ai` and `connector_auth` are high (the org's value is merged over the site's, 0010 §2) | as the site key |
+| adding or removing an org (a legal entity), or an org entry or config that is not a map | high |
+| an org's `name` or `code` | medium |
 | model (new, or a company model changed) that starts calling a kernel hook: `on_submit`, `on_cancel`, an automation's `do`, an action's `hook` (`stock.post_moves`, `ledger.post_receivable`, `crm.mark_won`, ...) | high |
 | changing `stock:`, `is_submittable`, `on_submit`, `on_cancel`, `automations` or `actions` of a model that calls a kernel hook | high |
 | 0033 §2's company connector table | as written there |

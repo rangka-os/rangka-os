@@ -193,20 +193,7 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 }
 
 func assessConfig(a *Assessment, old, nw map[string]any, installed func(map[string]any) map[string]bool) {
-	keys := map[string]bool{}
-	for k := range old {
-		keys[k] = true
-	}
-	for k := range nw {
-		keys[k] = true
-	}
-	var changed []string
-	for k := range keys {
-		if !reflect.DeepEqual(normalize(old[k]), normalize(nw[k])) {
-			changed = append(changed, k)
-		}
-	}
-	sort.Strings(changed)
+	changed := changedKeys(old, nw)
 	if len(changed) == 0 {
 		a.raise("low", "config.rk unchanged")
 	}
@@ -221,15 +208,98 @@ func assessConfig(a *Assessment, old, nw map[string]any, installed func(map[stri
 		if composition && (k == "apps" || k == "modules") {
 			continue
 		}
-		switch k {
-		case "tax", "ai", "connector_auth": // connector_auth decides who sets connector secrets and replays jobs
-			a.raise("high", "changes config."+k)
-		case "theme", "layout", "locale":
-			a.raise("low", "changes config."+k)
-		default:
-			a.raise("medium", "changes config."+k)
+		if k == "orgs" {
+			assessOrgs(a, old["orgs"], nw["orgs"])
+			continue
+		}
+		a.raise(configKeyRisk(k), "changes config."+k)
+	}
+}
+
+// configKeyRisk is the risk of changing one config.rk key, of the site or of an org (orgs.<id>.config.<key>).
+func configKeyRisk(k string) string {
+	switch k {
+	case "tax", "ai", "connector_auth": // connector_auth decides who sets connector secrets and replays jobs
+		return "high"
+	case "theme", "layout", "locale":
+		return "low"
+	}
+	return "medium"
+}
+
+// assessOrgs judges config.rk's orgs: map (contract 0010 §2) entry by entry (audit C3-1 F1). An org's config is
+// merged over the site's (meta.OrgConfig), so the tax an org's documents use is orgs.<id>.config.tax: each key
+// under an org's config is rated like the same key of the site. Adding or removing an org (a legal entity), or
+// an entry or a config that is not a map, is high; its name and code are medium.
+func assessOrgs(a *Assessment, old, nw any) {
+	om, _ := old.(map[string]any)
+	nm, _ := nw.(map[string]any)
+	if (old != nil && om == nil) || (nw != nil && nm == nil) {
+		a.raise("high", "replaces config.orgs with a value that is not a map")
+		return
+	}
+	ids := map[string]bool{}
+	for id := range om {
+		ids[id] = true
+	}
+	for id := range nm {
+		ids[id] = true
+	}
+	sorted := make([]string, 0, len(ids))
+	for id := range ids {
+		sorted = append(sorted, id)
+	}
+	sort.Strings(sorted)
+	for _, id := range sorted {
+		o, had := om[id]
+		n, has := nm[id]
+		switch {
+		case !had:
+			a.raise("high", "adds org "+id+" (a legal entity: its own tax and identity)")
+			continue
+		case !has:
+			a.raise("high", "removes org "+id+" (a legal entity)")
+			continue
+		}
+		oe, ok1 := o.(map[string]any)
+		ne, ok2 := n.(map[string]any)
+		if !ok1 || !ok2 {
+			a.raise("high", "replaces orgs."+id+" with a value that is not a map")
+			continue
+		}
+		for _, k := range changedKeys(oe, ne) {
+			if k != "config" {
+				a.raise("medium", "changes orgs."+id+"."+k)
+				continue
+			}
+			oc, ok1 := oe["config"].(map[string]any)
+			nc, ok2 := ne["config"].(map[string]any)
+			if (oe["config"] != nil && !ok1) || (ne["config"] != nil && !ok2) {
+				a.raise("high", "replaces orgs."+id+".config with a value that is not a map")
+				continue
+			}
+			for _, ck := range changedKeys(oc, nc) {
+				a.raise(configKeyRisk(ck), "changes orgs."+id+".config."+ck)
+			}
 		}
 	}
+}
+
+// changedKeys lists the keys whose values differ between two maps, sorted.
+func changedKeys(old, nw map[string]any) []string {
+	var out []string
+	for k := range old {
+		if !reflect.DeepEqual(normalize(old[k]), normalize(nw[k])) {
+			out = append(out, k)
+		}
+	}
+	for k, v := range nw {
+		if _, seen := old[k]; !seen && v != nil {
+			out = append(out, k)
+		}
+	}
+	sort.Strings(out)
+	return out
 }
 
 // assessInstalledSet judges config.apps / config.modules (and a plan change, which may change the fallback) by the

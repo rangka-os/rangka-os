@@ -1199,3 +1199,21 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-md-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 8px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; color: var(--link); font: 500 12px/16px var(--font-sans); cursor: pointer; width: 100%; }
 .rk-md-more .rk-icon { width: 14px; height: 14px; }
 .rk-md-more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ------ diagram (a ```mermaid fence, drawn by the vendored Mermaid) */
+.rk-diagram { position: relative; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-sizing: border-box; }
+.rk-diagram-title { margin: 0 0 8px; color: var(--ink-2); font: 600 12px/16px var(--font-sans); }
+.rk-diagram-svg { overflow-x: auto; text-align: center; }
+.rk-diagram-svg svg { display: inline-block; max-width: 100%; height: auto; }
+.rk-diagram-bar { position: absolute; top: 4px; right: 4px; }
+.rk-diagram-skel { display: flex; align-items: center; justify-content: center; min-height: 120px; border-radius: 6px; background: var(--soft); color: var(--muted); }
+.rk-diagram-err { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px dashed var(--warn-line); border-radius: 6px; background: var(--warn-tint); }
+.rk-diagram-errhead { display: flex; align-items: center; gap: 8px; color: var(--warn); font: 600 13px/20px var(--font-sans); }
+.rk-diagram-errhead .rk-icon { flex: none; width: 16px; height: 16px; }
+.rk-diagram-src summary { cursor: pointer; color: var(--link); font: 500 12px/16px var(--font-sans); }
+.rk-diagram-src summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-diagram-src .rk-md-pre { margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+/* coverage classes Raka puts on nodes (class A covered); !important beats Mermaid's #id-scoped style block */
+.rk-diagram .node.covered rect, .rk-diagram .node.covered polygon, .rk-diagram .node.covered circle { fill: var(--selected) !important; stroke: var(--line) !important; stroke-width: 1px !important; }
+.rk-diagram .node.not_covered rect, .rk-diagram .node.not_covered polygon, .rk-diagram .node.not_covered circle { fill: var(--warn-tint) !important; stroke: var(--warn-line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }
+.rk-diagram .node.later rect, .rk-diagram .node.later polygon, .rk-diagram .node.later circle { fill: var(--soft) !important; stroke: var(--line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }

@@ -98,6 +98,18 @@ with sync_playwright() as pw:
             empty = [n for n in names if page.locator(f"[data-component={n}] .gx-demo").count() and not page.locator(f"[data-component={n}] .gx-demo > *").count()]
             if empty:
                 fail(f"{tag}: empty demo for {empty}")
+            try:
+                page.wait_for_selector("[data-component=Diagram] [data-case=ok] figure.rk-diagram svg", timeout=15000)
+                page.wait_for_selector("[data-component=Diagram] [data-case=bad] .rk-diagram-err", timeout=15000)
+            except Exception:
+                fail(f"{tag}: Diagram did not render its svg / error state")
+            else:
+                if "Diagram belum bisa ditampilkan" not in page.inner_text("[data-component=Diagram] [data-case=bad] .rk-diagram-err"):
+                    fail(f"{tag}: broken diagram lacks its message")
+                if not page.locator("[data-component=Diagram] [data-case=bad] details summary").count():
+                    fail(f"{tag}: broken diagram lacks Lihat sumber")
+                if page.locator("[data-component=Diagram] [data-case=streaming] .rk-diagram-skel").count() != 1 or "Mulai" in page.inner_text("[data-component=Diagram] [data-case=streaming]"):
+                    fail(f"{tag}: streaming diagram is not a bare skeleton")
             doc, vw = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
             if doc > vw + 1:
                 fail(f"{tag}: horizontal page scroll {doc} > {vw}")

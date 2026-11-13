@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"},{"name":"Diagram"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -1511,7 +1511,9 @@
         while (i < lines.length && !(lines[i].trim().indexOf(fence) === 0 && /^\s{0,3}[`~]+\s*$/.test(lines[i]))) code.push(lines[i++]);
         var open = i >= lines.length;
         i++;
-        out.push({ t: "code", lang: m[2], file: m[3].trim(), text: code.join("\n"), open: open });
+        var cb = { t: "code", lang: m[2], file: m[3].trim(), text: code.join("\n"), open: open };
+        if (fence.charAt(0) === "~") cb.tilde = true;
+        out.push(cb);
         continue;
       }
       if ((m = /^\s{0,3}(#{1,6})\s+(.*?)(\s+#+)?\s*$/.exec(l))) { out.push({ t: "h", level: m[1].length, text: m[2] }); i++; continue; }
@@ -1607,15 +1609,110 @@
     return out;
   }
   var MD_NUM = /^[-+−]?\s*(Rp\s?)?[-+−]?[\d.,]+\s*(%|x|×|hr|hari|jam|mnt|dtk|kg|pcs|unit)?$/i;
+  /** A backtick ```mermaid fence (tilde fences stay code; rangka-ai only checks backtick fences). */
+  function mdIsDiagram(b) { return b.t === "code" && !b.tilde && String(b.lang).toLowerCase() === "mermaid"; }
   /** How many lines a block takes, roughly, for Collapsible. */
   function mdLines(b) {
     if (b.t === "table") return b.rows.length + 1;
     if (b.t === "kv") return b.rows.length;
     if (b.t === "list") return b.items.length;
+    if (mdIsDiagram(b)) return 12;
     if (b.t === "code") return b.text.split("\n").length + 1;
     if (b.t === "hr" || b.t === "h") return 1;
     var t = b.text || "";
     return t.split("\n").reduce(function (n, ln) { return n + Math.max(1, Math.ceil(ln.length / 64)); }, 0) + (b.t === "callout" ? 1 : 0);
+  }
+  /* ---- Diagram: a ```mermaid fence drawn as SVG by a vendored, lazily loaded Mermaid (contract 0049 §3).
+     The host app says where the file is (configureDiagrams); nothing is ever fetched from a CDN. */
+  var dgCfg = { src: "", onRenderError: null }, dgP = null, dgN = 0, dgQueue = Promise.resolve();
+  /** configureDiagrams({src, onRenderError}): src = URL of vendor/mermaid.min.js; onRenderError(source, message) once per failing source. */
+  function configureDiagrams(o) {
+    o = o || {};
+    if (typeof o.src === "string" && o.src !== dgCfg.src) { dgCfg.src = o.src; dgP = null; }
+    if ("onRenderError" in o) dgCfg.onRenderError = typeof o.onRenderError === "function" ? o.onRenderError : null;
+  }
+  function dgThemeVars() {
+    var win = typeof window !== "undefined" ? window : null, el = typeof document !== "undefined" ? document.documentElement : null, cs = null;
+    try { cs = win && win.getComputedStyle && el ? win.getComputedStyle(el) : null; } catch (e) { cs = null; }
+    function v(name, fb) { var x = cs && cs.getPropertyValue ? String(cs.getPropertyValue(name)).trim() : ""; return x || fb; }
+    var ink = v("--ink", "#1C1917"), surface = v("--surface", "#FFFFFF"), line = v("--line", "#D6D3D1"), sel = v("--selected", "#F6EDE6"), font = v("--font-sans", "sans-serif");
+    return { background: surface, fontFamily: font, fontSize: "13px", primaryColor: sel, primaryTextColor: ink, primaryBorderColor: line,
+      secondaryColor: surface, tertiaryColor: surface, lineColor: v("--muted", ink), textColor: ink, nodeBorder: line, mainBkg: sel, clusterBkg: surface, clusterBorder: line };
+  }
+  /** One memoised promise for the Mermaid global. Rejects when no src is configured or the script fails (a retry is allowed). */
+  function loadMermaid() {
+    if (dgP) return dgP;
+    var src = dgCfg.src;
+    if (!src) return Promise.reject(new Error("Mermaid belum diatur: panggil configureDiagrams({src})"));
+    var p = new Promise(function (resolve, reject) {
+      var win = typeof window !== "undefined" ? window : {};
+      function ready() {
+        var m = win.mermaid;
+        if (!m || !m.initialize) { reject(new Error("Mermaid tidak termuat")); return; }
+        try {
+          m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", flowchart: { htmlLabels: false }, themeVariables: dgThemeVars() });
+        } catch (e) { reject(e); return; }
+        resolve(m);
+      }
+      if (win.mermaid && win.mermaid.initialize) { ready(); return; }
+      var s = document.createElement("script");
+      s.src = src; s.async = true;
+      s.onload = ready;
+      s.onerror = function () { reject(new Error("Mermaid tidak termuat (koneksi?)")); };
+      document.head.appendChild(s);
+    });
+    dgP = p;
+    p.catch(function () { if (dgP === p) dgP = null; });
+    return p;
+  }
+  /** Mermaid renders one at a time; a failed render leaves a stray node behind that we remove. */
+  function dgRender(source) {
+    var id = "rk-dg-" + (++dgN);
+    var job = dgQueue.then(function () {
+      return loadMermaid().then(function (m) {
+        return Promise.resolve(m.render(id, source)).then(function (r) { return r && r.svg ? r.svg : String(r || ""); });
+      });
+    });
+    dgQueue = job.then(function () {}, function () {});
+    return job.catch(function (e) {
+      try { ["d" + id, id].forEach(function (x) { var n = document.getElementById(x); if (n && n.parentNode) n.parentNode.removeChild(n); }); } catch (e2) {}
+      throw e;
+    });
+  }
+  /** Chat / Format / Diagram: p.source (mermaid). p.pending = the fence is still streaming: skeleton only, never the source.
+      p.onOpen: shows "Perbesar" (the viewer is the host's). */
+  function Diagram(p) {
+    var st = useState({ status: "loading", svg: "", err: "" }), s = st[0], set = st[1], reported = useRef("");
+    useEffect(function () {
+      if (p.pending) return;
+      var live = true;
+      set({ status: "loading", svg: "", err: "" });
+      dgRender(p.source).then(function (svg) { if (live) set({ status: "ok", svg: svg, err: "" }); }, function (e) {
+        if (!live) return;
+        var msg = e && e.message ? String(e.message) : String(e);
+        set({ status: "err", svg: "", err: msg });
+        if (reported.current !== p.source) {
+          reported.current = p.source;
+          if (dgCfg.onRenderError) { try { dgCfg.onRenderError(p.source, msg); } catch (e2) {} }
+        }
+      });
+      return function () { live = false; };
+    }, [p.source, p.pending]);
+    var label = p.alt || p.title || "Diagram";
+    var body;
+    if (p.pending || s.status === "loading") {
+      body = h("div", { className: "rk-diagram-skel", role: "status", "aria-label": "Menyiapkan diagram" }, h(Spinner, null));
+    } else if (s.status === "err") {
+      body = h("div", { className: "rk-diagram-err" },
+        h("div", { className: "rk-diagram-errhead", role: "alert" }, h(Icon, { name: "warning" }), h("b", null, "Diagram belum bisa ditampilkan")),
+        h("details", { className: "rk-diagram-src" }, h("summary", null, "Lihat sumber"), h("pre", { className: "rk-md-pre" }, h("code", null, p.source))));
+    } else {
+      body = h("div", { className: "rk-diagram-svg", role: "img", "aria-label": label, dangerouslySetInnerHTML: { __html: s.svg } });
+    }
+    return h("figure", { className: cx("rk-diagram", p.className), "data-state": p.pending ? "pending" : s.status },
+      p.title ? h("figcaption", { className: "rk-diagram-title" }, p.title) : null,
+      body,
+      p.onOpen && !p.pending && s.status === "ok" ? h("div", { className: "rk-diagram-bar" }, h(IconButton, { icon: "zoom", label: "Perbesar", onClick: p.onOpen })) : null);
   }
   function MdCopy(p) {
     var st = useState(false), done = st[0], set = st[1];
@@ -1662,6 +1759,7 @@
               }));
             }))));
       case "code":
+        if (mdIsDiagram(b)) return h(Diagram, { key: key, source: b.text, pending: b.open });
         var lines = b.text.split("\n");
         return h("div", { key: key, className: "rk-md-codeblock" },
           h("div", { className: "rk-md-codehead" },
@@ -1822,6 +1920,7 @@
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   api.Logo = Logo; api.AuthLayout = AuthLayout;
   api.AskBar = AskBar; api.ChatDrawer = ChatDrawer; api.RakaLauncher = RakaLauncher;
+  api.Diagram = Diagram; api.configureDiagrams = configureDiagrams; api.loadMermaid = loadMermaid;
   api.RichText = RichText; api.markdownBlocks = mdBlocks; api.safeHref = mdSafeHref;
   api.BREAKPOINTS = BREAKPOINTS; api.breakpoint = breakpoint; api.useBreakpoint = useBreakpoint; api.isTouch = isTouch;
   window.Rangka = Object.assign(window.Rangka || {}, api);

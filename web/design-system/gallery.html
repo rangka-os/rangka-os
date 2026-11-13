@@ -47,6 +47,7 @@
 <script>
 (function () {
   var R = window.Rangka, h = React.createElement, useState = React.useState;
+  R.configureDiagrams({ src: "../app/vendor/mermaid.min.js" });
 
   function setParam(k, v) {
     document.documentElement.dataset[k] = v;
@@ -401,6 +402,16 @@
       return h("div", { className: "gx-row", style: { flexWrap: "wrap", alignItems: "flex-start", gap: 24 } },
         h("div", { style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: md })),
         h("div", { style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: long, collapse: 8 })));
+    },
+    Diagram: function () {
+      // Chat / Format / Diagram: a mermaid fence in an answer; a broken one; one still streaming (skeleton, no source)
+      var ok = ["Alurnya begini:", "", "```mermaid", "flowchart LR", "  A[Pesanan masuk]:::covered --> B[Faktur dibuat]:::covered", "  B --> C[Pembayaran]:::not_covered", "  C --> D[Laporan piutang]:::later", "```"].join("\n");
+      var bad = "```mermaid\nflowchart LR\n  A[Mulai --> \n```";
+      var live = "```mermaid\nflowchart LR\n  A[Mulai] -->";
+      return h("div", { className: "gx-row", style: { flexWrap: "wrap", alignItems: "flex-start", gap: 24 } },
+        h("div", { "data-case": "ok", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: ok })),
+        h("div", { "data-case": "bad", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: bad })),
+        h("div", { "data-case": "streaming", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: live, streaming: true })));
     },
     RakaLauncher: function () {
       var t = useState(false);

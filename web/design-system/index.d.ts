@@ -217,6 +217,14 @@ export declare function ChatDrawer(props: { open: boolean; turns: ChatTurn[]; bu
  * key-values (a list of "**Label:** value"), ``` code blocks with language/file and Salin, callouts
  * (> [!NOTE] | [!TIP] | [!WARNING] | [!CAUTION]). `collapse` folds an answer longer than that many lines. */
 export declare function RichText(props: { text: string; collapse?: number; streaming?: boolean; className?: string }): React.ReactElement;
+/** Chat / Format / Diagram: a Mermaid diagram drawn as SVG (vendored Mermaid, loaded on first use; call configureDiagrams first).
+ * `pending` (a fence still streaming) shows a skeleton, never the source. A bad diagram shows "Diagram belum bisa ditampilkan"
+ * with "Lihat sumber". "Perbesar" appears only when `onOpen` is given. RichText draws ```mermaid fences with this. */
+export declare function Diagram(props: { source: string; title?: string; alt?: string; pending?: boolean; onOpen?: () => void; className?: string }): React.ReactElement;
+/** Where Mermaid lives (the host's vendor/mermaid.min.js); onRenderError(source, message) fires once per failing source. */
+export declare function configureDiagrams(o: { src: string; onRenderError?: (source: string, error: string) => void }): void;
+/** The one memoised promise for the Mermaid global (securityLevel strict, htmlLabels off). Rejects without a configured src. */
+export declare function loadMermaid(): Promise<unknown>;
 /** The block list RichText draws (for tests and tools). */
 export declare function markdownBlocks(text: string): Array<{ t: "h" | "p" | "list" | "kv" | "table" | "code" | "quote" | "callout" | "hr"; [k: string]: unknown }>;
 /** The link a Raka answer may open, or "" (javascript:, data:, //host and the like stay text). */

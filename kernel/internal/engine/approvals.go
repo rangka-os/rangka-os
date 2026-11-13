@@ -674,6 +674,8 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 func (o *op) runApproved(ap *store.Approval, d *Decision) (ran bool, err error) {
 	ro := &op{ctx: o.ctx, tx: o.tx, e: o.e, actor: requesterActor(o.actor.Org, ap.Requester), touched: o.touched, links: map[string]map[string]any{},
 		approving: true}
+	// the verb's v0 names count as this attempt's, so a taken one is caught up and run again (engine.run)
+	defer func() { o.counters = append(o.counters, ro.counters...) }()
 	switch {
 	case isFlowApproval(ap):
 		return true, ro.resumeFlow(ap, d)

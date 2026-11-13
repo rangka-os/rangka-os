@@ -774,10 +774,6 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 	if cs.Status != "applied" || cs.previous == nil {
 		return nil, &Error{409, "bad_status", "only an applied change set can be reverted (it is " + cs.Status + ")", nil}
 	}
-	// undoing a high-risk change (tax, roles, money fields) is as much the owner's decision as making it (audit orgs-risk A1)
-	if cs.Risk == "high" && !hasRole(a, "owner") {
-		return nil, &Error{403, "owner_required", "reverting a high-risk change set needs the owner", nil}
-	}
 	// restoring an older features.rk would undo the operator's plans as surely as a new change set (audit
 	// cloud-package-plan F-5)
 	restores := make([]Op, 0, len(cs.previous))
@@ -815,6 +811,28 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 				return nil, &Error{409, "stale_base", "Berkas " + p + " sudah berubah sejak perubahan ini diterapkan; mengembalikannya akan menimpa perubahan itu. Buat change set baru.", map[string]any{"path": p}}
 			}
 		}
+	}
+	// undoing a high-risk change (tax, roles, money fields) is as much the owner's decision as making it (audit
+	// orgs-risk A1). A change set applied before the hashes were kept skipped the check above, so the files may hold
+	// later changes the restore would undo: the restore itself is assessed against the current files (audit D1).
+	risk := cs.Risk
+	if cs.applied == nil {
+		ops := make([]Op, 0, len(cs.previous))
+		for p, c := range cs.previous {
+			op := "replace"
+			if c == nil {
+				op = "delete"
+			}
+			ops = append(ops, Op{Op: op, Path: p})
+		}
+		sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+		as := AssessWith(ops, parsed(live, nil), parsed(live, cs.previous), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+		if riskRank[as.Risk] > riskRank[risk] {
+			risk = as.Risk
+		}
+	}
+	if risk == "high" && !hasRole(a, "owner") {
+		return nil, &Error{403, "owner_required", "reverting a high-risk change set needs the owner", nil}
 	}
 	if err := s.write(live, cs.previous); err != nil {
 		return nil, err

@@ -276,6 +276,29 @@ func TestOrgTaxIsOwnerOnly(t *testing.T) {
 		t.Fatal("the refused revert changed config.rk")
 	}
 	e.must(200, "POST", "/api/v1/changesets/"+id+"/revert", nil)
+
+	// a change set applied before the hashes were kept (alpha.15) skips the stale-base check: reverting it must not
+	// undo the owner's later tax change through the old config.rk text (audit orgs-risk D1)
+	step := func(who *env, title, path string, value any) string {
+		cs := who.must(201, "POST", "/api/v1/changesets", map[string]any{"title": title, "ops": []any{map[string]any{"op": "patch", "path": "config.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": path, "value": value}}}}}).JSON
+		cid := cs["id"].(string)
+		for _, a := range []string{"validate", "preview", "approve", "apply"} {
+			who.must(200, "POST", "/api/v1/changesets/"+cid+"/"+a, nil)
+		}
+		return cid
+	}
+	old := step(mgr, "Bahasa", "/locale", "en-US")
+	if _, err := e.s.DB.Exec(context.Background(), "update rk_changesets set applied = null where id = $1", old); err != nil {
+		t.Fatal(err)
+	}
+	step(e, "Kopi Senja Dua jadi PKP", "/orgs/cabang_dua/config/tax/pkp", true)
+	if r := mgr.do("POST", "/api/v1/changesets/"+old+"/revert", nil); r.Status != 403 || errCode(r) != "owner_required" {
+		t.Fatalf("sales_manager reverted an old change set over the owner's tax change: %d %s", r.Status, r.Body)
+	}
+	if !strings.Contains(readSite(e, "config.rk"), "pkp: true") {
+		t.Fatal("the refused revert changed config.rk")
+	}
 }
 
 // Change sets never apply destructive DDL: a retype that may lose data is a blocking validation error that

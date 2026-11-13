@@ -1905,23 +1905,30 @@
   function offerFlowAlt(flow) {
     return "Alur: " + flow.map(function (s) { return s.label + (s.state === "not_covered" ? " (belum tercakup)" : s.state === "later" ? " (menyusul)" : ""); }).join(", lalu ");
   }
+  /* R11: options sit side by side when each column gets OFFER_COL px (gap OFFER_GAP): 2 from 532 px, 3 from 804 px of card
+     width. One option is a wide, left-to-right card from 532 px. bundle.css repeats these numbers in its container queries. */
+  var OFFER_COL = 260, OFFER_GAP = 12;
+  function offerSideBySide(n, width) {
+    var k = Math.max(2, n || 0);
+    return width >= k * OFFER_COL + (k - 1) * OFFER_GAP;
+  }
   function OfferCompare(p) {
     var offer = p.offer || {}, closed = !!p.closedLabel;
     var all = Array.isArray(offer.options) ? offer.options : [];
     var opts = all.filter(function (o) { return o.id === offer.recommended; }).concat(all.filter(function (o) { return o.id !== offer.recommended; }));
     var single = opts.length === 1;
     var root = useRef(null), row = useRef(null), back = useRef(null);
-    var ws = useState(function () { return typeof window !== "undefined" && window.innerWidth >= 720; }), wide = ws[0], setWide = ws[1];
+    var ws = useState(function () { return typeof window !== "undefined" && offerSideBySide(opts.length, window.innerWidth); }), wide = ws[0], setWide = ws[1];
     var is = useState(0), idx = is[0], setIdx = is[1];
     var vs = useState(null), viewing = vs[0], setViewing = vs[1];
     useEffect(function () {
       var el = root.current;
       if (!el || typeof ResizeObserver === "undefined") return;
       /* a width change can move the row without a scroll event (grid and back): read the visible card again */
-      var ro = new ResizeObserver(function () { setWide(el.getBoundingClientRect().width >= 720); onScroll(); });
+      var ro = new ResizeObserver(function () { setWide(offerSideBySide(opts.length, el.getBoundingClientRect().width)); onScroll(); });
       ro.observe(el);
       return function () { ro.disconnect(); };
-    }, []);
+    }, [opts.length]);
     function cards() { return row.current ? Array.prototype.slice.call(row.current.children) : []; }
     function onScroll() {
       var r = row.current, cs = cards();
@@ -1964,13 +1971,13 @@
     });
     var vo = null;
     opts.forEach(function (o) { if (o.id === viewing) vo = o; });
-    return h("div", { ref: root, className: cx("rk-offer", single && "is-single", closed && "is-closed", p.className), "data-card": "offer", "data-offer": offer.id },
+    return h("div", { ref: root, className: cx("rk-offer", single && "is-single", closed && "is-closed", p.className), "data-card": "offer", "data-offer": offer.id, "data-count": opts.length },
       h("div", { className: "rk-offer-head" },
         h(Icon, { name: "spark" }), h("span", { className: "rk-offer-name" }, "Tawaran Raka"), h("span", { className: "rk-offer-sub" }, "belum dibangun"),
         h("span", { className: "rk-offer-end" },
           closed ? h(Lozenge, null, p.closedLabel) : null,
-          !closed && !single ? h("span", { className: "rk-offer-count", "aria-live": "polite" }, (idx + 1) + " / " + opts.length) : null,
-          !closed && !single ? h("span", { className: "rk-offer-nav" },
+          !closed && !single && !wide ? h("span", { className: "rk-offer-count", "aria-live": "polite" }, (idx + 1) + " / " + opts.length) : null,
+          !closed && !single && !wide ? h("span", { className: "rk-offer-nav" },
             h(IconButton, { icon: "left", label: "Pilihan sebelumnya", disabled: idx <= 0, onClick: function () { go(-1); } }),
             h(IconButton, { icon: "right", label: "Pilihan berikutnya", disabled: idx >= opts.length - 1, onClick: function () { go(1); } })) : null)),
       h("div", { ref: row, className: "rk-offer-row", role: "group", "aria-label": "Pilihan tawaran", onScroll: onScroll }, sections),
@@ -2185,7 +2192,7 @@
   api.Logo = Logo; api.AuthLayout = AuthLayout;
   api.AskBar = AskBar; api.ChatDrawer = ChatDrawer; api.RakaLauncher = RakaLauncher;
   api.Diagram = Diagram; api.DiagramViewer = DiagramViewer; api.diagramTopDown = diagramTopDown; api.configureDiagrams = configureDiagrams; api.loadMermaid = loadMermaid;
-  api.OfferCompare = OfferCompare; api.flowToMermaid = flowToMermaid;
+  api.OfferCompare = OfferCompare; api.flowToMermaid = flowToMermaid; api.offerSideBySide = offerSideBySide;
   api.RichText = RichText; api.markdownBlocks = mdBlocks; api.safeHref = mdSafeHref;
   api.BREAKPOINTS = BREAKPOINTS; api.breakpoint = breakpoint; api.useBreakpoint = useBreakpoint; api.isTouch = isTouch;
   window.Rangka = Object.assign(window.Rangka || {}, api);

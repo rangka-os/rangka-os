@@ -1241,14 +1241,14 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   .rk-diagram-viewer .rk-dialog-foot { padding: 0 12px 12px; }
 }
 /* ---- OfferCompare: Raka's offer options side by side (contract 0049 §4, Figma Agent chat › Chat/OfferCompare).
-   The card's own width decides: a grid of equal columns from 720 px, a scroll-snap carousel with "1 / 3" below. */
+   The card's own width decides: a grid of equal columns once each gets 260 px, a scroll-snap carousel with "1 / 3" below. */
 .rk-offer { container: rk-offer / inline-size; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; box-sizing: border-box; color: var(--ink); font: 400 13px/20px var(--font-sans); }
 .rk-offer-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
 .rk-offer-head > .rk-icon { flex: none; width: 16px; height: 16px; color: var(--ink); }
-.rk-offer-name { font-weight: 600; }
-.rk-offer-sub { color: var(--muted); font-size: 12px; }
-.rk-offer-end { margin-left: auto; display: inline-flex; align-items: center; gap: 4px; }
-.rk-offer-count { color: var(--muted); font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; padding: 0 4px; }
+.rk-offer-name { font-weight: 600; white-space: nowrap; flex: none; }
+.rk-offer-sub { color: var(--muted); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-offer-end { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.rk-offer-count { color: var(--muted); font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; }
 .rk-offer-nav { display: none; gap: 2px; }
 @media (pointer: fine) { .rk-offer-nav { display: inline-flex; } }
 .rk-offer-nav .rk-iconbtn:disabled { opacity: .4; cursor: default; background: transparent; }
@@ -1282,10 +1282,15 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-offer-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
 /* closed (answered or superseded): a ground tint and a lighter border, never opacity, so text keeps its contrast */
 .rk-offer.is-closed .rk-offer-opt { background: var(--soft); border-color: transparent; }
-@container rk-offer (min-width: 720px) {
-  .rk-offer-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow: visible; scroll-snap-type: none; }
-  .rk-offer-count, .rk-offer-nav { display: none !important; }
+/* R11: side by side when every column gets 260 px (gap 12): 2 options from 532 px, 3 from 804 px; keep in step with offerSideBySide() */
+@container rk-offer (min-width: 532px) {
+  .rk-offer[data-count="2"] .rk-offer-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow: visible; scroll-snap-type: none; }
+  .rk-offer[data-count="2"] .rk-offer-count, .rk-offer[data-count="2"] .rk-offer-nav { display: none !important; }
   .rk-offer.is-single .rk-offer-opt > .rk-offer-lists { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
   .rk-offer.is-single .rk-offer-opt > .rk-offer-lists > .rk-offer-more { grid-column: 1 / -1; }
+}
+@container rk-offer (min-width: 804px) {
+  .rk-offer[data-count="3"] .rk-offer-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow: visible; scroll-snap-type: none; }
+  .rk-offer[data-count="3"] .rk-offer-count, .rk-offer[data-count="3"] .rk-offer-nav { display: none !important; }
 }
 @media (prefers-reduced-motion: reduce) { .rk-offer-more > summary .rk-icon { transition: none; } }

@@ -201,6 +201,26 @@ with sync_playwright() as pw:
                     page.evaluate("window.removeEventListener('scroll', window.__rkHold, true)")
                     if got != vis:
                         fail(f"{tag}: OfferCompare count {got!r} after a resize, visible card is {vis!r}")
+                # R11: side by side once every column gets 260 px (2 options from 532 px, 3 from 804 px of card width)
+                lay = page.evaluate("""() => Object.fromEntries(['two600', 'three600', 'three'].map(c => {
+                  const root = document.querySelector('[data-component=OfferCompare] [data-case=' + c + '] .rk-offer');
+                  const opts = [...root.querySelectorAll('.rk-offer-opt')], cnt = root.querySelector('.rk-offer-count'), rr = root.getBoundingClientRect();
+                  const vis = opts.filter(o => { const r = o.getBoundingClientRect(); return r.left >= rr.left - 1 && r.right <= rr.right + 1; }).length;
+                  return [c, { w: Math.round(rr.width), vis, count: cnt && cnt.offsetParent ? cnt.textContent : null }];
+                }))""")
+                if width >= 1280:
+                    if lay["two600"]["vis"] != 2 or lay["two600"]["count"] is not None:
+                        fail(f"{tag}: 2 options in a {lay['two600']['w']} px card should sit side by side: {lay['two600']}")
+                    if lay["three600"]["count"] != "1 / 3":
+                        fail(f"{tag}: 3 options in a {lay['three600']['w']} px card should be a carousel with 1 / 3: {lay['three600']}")
+                    if lay["three"]["vis"] != 3 or lay["three"]["count"] is not None:
+                        fail(f"{tag}: 3 options at 1280 should sit side by side: {lay['three']}")
+                if width == 400:
+                    heads = page.evaluate("""() => [...document.querySelectorAll('[data-component=OfferCompare] .rk-offer-name, [data-component=OfferCompare] .rk-offer-count')]
+                      .filter(e => e.offsetParent).map(e => { const r = document.createRange(); r.selectNodeContents(e); return [e.textContent, new Set([...r.getClientRects()].map(x => Math.round(x.top))).size]; })""")
+                    wrapped = [x for x in heads if x[1] != 1]
+                    if not heads or wrapped:
+                        fail(f"{tag}: offer head text wraps: {wrapped or 'nothing measured'}")
                 # the zoom popup draws LR and carries the option's actions, but never on a closed offer
                 page.locator("[data-component=OfferCompare] [data-case=three] [data-option=opt_custom] button[aria-label=Perbesar]").click()
                 page.wait_for_selector(".rk-diagram-viewer .rk-dv-stage svg", timeout=15000)

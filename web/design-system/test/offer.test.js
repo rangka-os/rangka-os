@@ -127,3 +127,18 @@ test("later shows a Menyusul line and string or object items both work", () => {
   assert.ok(all.includes("Ikut terpasang") && all.includes("Kasir"));
   assert.ok(all.includes("1 / 2"));
 });
+test("offerSideBySide: each column gets at least 260 px (gap 12)", () => {
+  assert.equal(R.offerSideBySide(2, 531), false);
+  assert.equal(R.offerSideBySide(2, 532), true);
+  assert.equal(R.offerSideBySide(2, 596), true);
+  assert.equal(R.offerSideBySide(3, 596), false);
+  assert.equal(R.offerSideBySide(3, 803), false);
+  assert.equal(R.offerSideBySide(3, 804), true);
+  // one option: a wide card (left to right) from 532 px, as two would be
+  assert.equal(R.offerSideBySide(1, 531), false);
+  assert.equal(R.offerSideBySide(1, 532), true);
+});
+test("the offer root carries data-count for the container queries", () => {
+  const t = render(R.OfferCompare, { offer: OFFER, renderActions: () => null });
+  assert.equal(nodes(t, "div.rk-offer")[0].props["data-count"], 3);
+});

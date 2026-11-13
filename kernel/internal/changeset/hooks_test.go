@@ -86,3 +86,48 @@ func TestCompanyModelFieldsModelWins(t *testing.T) {
 		t.Fatalf("a flow writing the model's money field under a same-named overlay field: %s (%s)", as.Risk, strings.Join(as.Reasons, "; "))
 	}
 }
+
+// A model that already calls a kernel hook: changing what the hook reads or when it runs is high (audit
+// changeset-followups 1: doubling the stock: qty, or dropping on_cancel, was low).
+func TestAssessHookModelEdits(t *testing.T) {
+	stock := map[string]any{"from": "outlet", "lines": "items", "qty": "line.qty"}
+	auto := []any{map[string]any{"name": "menang", "when": "status == 'won'", "do": "crm.mark_won"}}
+	base := map[string]any{"name": "x_kirim", "is_submittable": true, "on_submit": []any{"stock.post_moves"}, "on_cancel": []any{"stock.post_moves"},
+		"stock": stock, "automations": auto, "permissions": map[string]any{"owner": "crud"}}
+	files := map[string]map[string]any{"models/x_kirim.rk": base}
+	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
+	edit := func(f func(m map[string]any)) map[string]any {
+		m := map[string]any{}
+		for k, v := range base {
+			m[k] = v
+		}
+		f(m)
+		return m
+	}
+	cases := []struct {
+		name string
+		doc  map[string]any
+		want string
+	}{
+		{"stock qty doubled", edit(func(m map[string]any) {
+			m["stock"] = map[string]any{"from": "outlet", "lines": "items", "qty": "line.qty * 2"}
+		}), "high"},
+		{"stops posting stock", edit(func(m map[string]any) { delete(m, "on_submit"); delete(m, "stock") }), "high"},
+		{"stops reversing on cancel", edit(func(m map[string]any) { delete(m, "on_cancel") }), "high"},
+		{"automation trigger changed", edit(func(m map[string]any) {
+			m["automations"] = []any{map[string]any{"name": "menang", "when": "updated", "do": "crm.mark_won"}}
+		}), "high"},
+		{"label only", edit(func(m map[string]any) { m["label"] = map[string]any{"id": "Kirim"} }), "low"},
+	}
+	for _, c := range cases {
+		as := Assess([]Op{{Op: "replace", Path: "models/x_kirim.rk"}}, before, func(q string) (map[string]any, bool) {
+			if q == "models/x_kirim.rk" {
+				return c.doc, true
+			}
+			return before(q)
+		}, nil)
+		if as.Risk != c.want {
+			t.Errorf("%s: risk %s, want %s (%s)", c.name, as.Risk, c.want, strings.Join(as.Reasons, "; "))
+		}
+	}
+}

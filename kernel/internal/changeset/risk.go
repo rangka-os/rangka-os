@@ -404,9 +404,9 @@ func modelHooks(m map[string]any) map[string]bool {
 // stock, money or core records (audit changeset-set-once, round 3: a new unit model with on_submit: [stock.post_moves]
 // or automations crm.mark_won was medium).
 func newHooks(a *Assessment, p string, old, nw map[string]any) {
-	was := modelHooks(old)
+	was, now := modelHooks(old), modelHooks(nw)
 	var added []string
-	for h := range modelHooks(nw) {
+	for h := range now {
 		if !was[h] {
 			added = append(added, h)
 		}
@@ -415,7 +415,21 @@ func newHooks(a *Assessment, p string, old, nw map[string]any) {
 	for _, h := range added {
 		a.raise("high", "model "+p+" calls kernel hook "+h+" (it writes records outside the change set's rules)")
 	}
+	// a model that calls a hook: what the hook posts and when it runs is in these keys (the stock: block it reads, a
+	// trigger's when/if, cancelling's reversal), so changing any of them changes stock or money (audit
+	// changeset-followups 1: doubling stock: qty or dropping on_cancel was low)
+	if len(was) == 0 && len(now) == 0 {
+		return
+	}
+	for _, k := range hookKeys {
+		if !reflect.DeepEqual(normalize(old[k]), normalize(nw[k])) {
+			a.raise("high", "changes "+k+" of "+p+", a model that calls a kernel hook")
+		}
+	}
 }
+
+// hookKeys are the model keys that decide what a model's kernel hooks write and when they run.
+var hookKeys = []string{"stock", "is_submittable", "on_submit", "on_cancel", "automations", "actions"}
 
 func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw map[string]any, target map[string]any) {
 	submittable, _ := target["is_submittable"].(bool)

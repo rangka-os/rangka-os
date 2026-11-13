@@ -89,11 +89,11 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | removing a field or a select option (overlay or company model) | high |
 | making a `set_once` field editable (dropping or switching off `set_once`, changing such a field), or a company flow that writes a `set_once` field | high |
 | changing `config.connector_auth` (who sets connector secrets and replays jobs), like `config.tax` and `config.ai` | high |
+| model (new, or a company model changed) that starts calling a kernel hook: `on_submit`, `on_cancel`, an automation's `do`, an action's `hook` (`stock.post_moves`, `ledger.post_receivable`, `crm.mark_won`, ...) | high |
+| changing `stock:`, `is_submittable`, `on_submit`, `on_cancel`, `automations` or `actions` of a model that calls a kernel hook | high |
 | 0033 §2's company connector table | as written there |
 
 A new flow file in an app or a module (`apps/<a>/flows/`, `modules/<m>/flows/`) is rated as a company flow. High is owner only (`owner_required`, unchanged).
-
-| model (new, or a company model changed) that starts calling a kernel hook: `on_submit`, `on_cancel`, an automation's `do`, an action's `hook` (`stock.post_moves`, `ledger.post_receivable`, `crm.mark_won`, ...) | high |
 
 A hook is Go code that writes stock, money or core records in the record's transaction, out of reach of the field
 and flow rows above. When a flow or this table reads a model's fields it follows the loader: the model's own field

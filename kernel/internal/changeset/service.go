@@ -467,9 +467,11 @@ func (s *Service) save(ctx context.Context, q pg.Querier, cs *ChangeSet, insert 
 		return err
 	}
 	// risk and layers are saved on every step: preview may raise the risk (a removed unit still holds rows) and apply
-	// assesses again, and approve reads the stored risk
+	// assesses again, and approve reads the stored risk. The risk only rises in SQL: a step that loaded the change set
+	// before a parallel preview raised it does not write the lower risk back (audit changeset-followups 3)
 	_, err := q.Query(ctx, `update rk_changesets set status = $2, validation = $3, preview = $4, history = $5, previous = coalesce($6, previous),
-		applied = coalesce($7, applied), risk = $8, layers = $9, updated_at = now()
+		applied = coalesce($7, applied), layers = $9, updated_at = now(),
+		risk = case when array_position(array['low','medium','high'], $8::text) > coalesce(array_position(array['low','medium','high'], risk), 0) then $8::text else risk end
 		where id = $1`, cs.ID, cs.Status, val, pre, pg.JSON{V: cs.History}, prev, applied, cs.Risk, pg.JSON{V: cs.Layers})
 	return err
 }

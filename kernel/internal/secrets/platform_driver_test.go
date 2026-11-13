@@ -53,14 +53,20 @@ func TestPlatformFixesDriverAndPath(t *testing.T) {
 }
 
 // Audit platform-env A3: the file driver reads only a regular file spelled exactly like the variable, so a
-// case-insensitive file system does not turn ${HOSTKEYS} into hostkeys, and a symlink leads nowhere.
+// case-insensitive file system does not turn ${HOSTKEYS} into hostkeys, and a symlink leads only inside the folder.
 func TestFileDriverExactRegularFile(t *testing.T) {
 	dir, outside := t.TempDir(), t.TempDir()
 	os.WriteFile(filepath.Join(dir, "hostkeys"), []byte("host keys"), 0o600)
 	os.WriteFile(filepath.Join(outside, "target"), []byte("outside"), 0o600)
 	os.Symlink(filepath.Join(outside, "target"), filepath.Join(dir, "LINKED"))
 	os.WriteFile(filepath.Join(dir, "WA_TOKEN"), []byte("company-token\n"), 0o600)
-	for name, want := range map[string]any{"HOSTKEYS": nil, "LINKED": nil, "WA_TOKEN": "company-token"} {
+	// a Kubernetes secret volume: KEY -> ..data/KEY, ..data -> ..<timestamp>, all inside the folder
+	os.MkdirAll(filepath.Join(dir, "..2026_11_14"), 0o700)
+	os.WriteFile(filepath.Join(dir, "..2026_11_14", "DOKU_KEY"), []byte("k8s-value"), 0o600)
+	os.Symlink("..2026_11_14", filepath.Join(dir, "..data"))
+	os.Symlink(filepath.Join("..data", "DOKU_KEY"), filepath.Join(dir, "DOKU_KEY"))
+	os.Mkdir(filepath.Join(dir, "A_DIR"), 0o700)
+	for name, want := range map[string]any{"HOSTKEYS": nil, "LINKED": nil, "A_DIR": nil, "WA_TOKEN": "company-token", "DOKU_KEY": "k8s-value"} {
 		reg := probeReg(map[string]any{"secrets": map[string]any{"driver": "file", "path": dir}}, "${"+name+"}")
 		st, err := (&Service{Reg: func() *meta.Registry { return reg }}).Status(context.Background(), "org1", "x_probe")
 		if err != nil {

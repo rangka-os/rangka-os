@@ -61,8 +61,8 @@ connector_auth:
     token and a path of its own choosing (audit platform-env A3, A4).
   - An unknown driver stops the start.
   - A hosted kernel sets `RANGKA_SECRETS_DRIVER`.
-- The `file` driver reads `<path>/<VAR>` only when the folder holds a regular file spelled exactly `VAR`. So a
-  case-insensitive file system does not match another file, and a symlink is not followed.
+- The `file` driver reads `<path>/<VAR>` only when the folder holds a regular file spelled exactly `VAR`, or a symlink to a regular file inside the folder (Kubernetes secret volumes). So a
+  case-insensitive file system does not match another file, and a symlink out of the folder is not followed.
 - An unset variable is not a start-up error. The connector shows `status: needs_auth` and its calls fail with
   `connector_needs_auth`, without retries.
 

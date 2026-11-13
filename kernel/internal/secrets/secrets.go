@@ -128,8 +128,9 @@ func (s *Service) path(reg *meta.Registry) string {
 	return p
 }
 
-// readSecretFile reads <dir>/<name> only when dir holds an entry spelled exactly name that is a regular file: on a
-// case-insensitive file system ${CREDENTIALS} would otherwise read credentials, and a symlink could point anywhere.
+// readSecretFile reads <dir>/<name> only when dir holds an entry spelled exactly name (a case-insensitive file system
+// would otherwise turn ${HOSTKEYS} into hostkeys) that is a regular file, or a symlink to a regular file inside dir
+// (Kubernetes mounts each secret key as KEY -> ..data/KEY); a symlink out of dir is not followed.
 func readSecretFile(dir, name string) (string, bool) {
 	entries, err := os.ReadDir(dir)
 	if err != nil {
@@ -139,10 +140,25 @@ func readSecretFile(dir, name string) (string, bool) {
 		if e.Name() != name {
 			continue
 		}
+		p := filepath.Join(dir, name)
 		if !e.Type().IsRegular() {
-			return "", false
+			if e.Type()&os.ModeSymlink == 0 {
+				return "", false
+			}
+			root, err1 := filepath.EvalSymlinks(dir)
+			target, err2 := filepath.EvalSymlinks(p)
+			if err1 != nil || err2 != nil {
+				return "", false
+			}
+			if rel, err := filepath.Rel(root, target); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+				return "", false
+			}
+			if fi, err := os.Stat(target); err != nil || !fi.Mode().IsRegular() {
+				return "", false
+			}
+			p = target
 		}
-		b, err := os.ReadFile(filepath.Join(dir, name))
+		b, err := os.ReadFile(p)
 		if err != nil {
 			return "", false
 		}

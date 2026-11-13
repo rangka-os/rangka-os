@@ -60,7 +60,7 @@ the map and the option's `pieces` and `not_covered`. The model never writes it.
 
 ### 2. Diagrams in answers
 
-Raka may write a `mermaid` fence in an answer (consult interview reply and agent turn). The prompts and skills say
+Raka may write a `mermaid` fence in an answer (consult interview reply and agent turn). rangka-ai's prompts say
 when: a flow of 3 or more steps the owner asked about or is deciding on; never as decoration; at most one diagram per
 answer; `flowchart` only; Bahasa Indonesia labels; no styling, no init blocks.
 
@@ -76,6 +76,9 @@ answer; `flowchart` only; Bahasa Indonesia labels; no styling, no init blocks.
 
 The check finds fences with a rule at least as wide as the renderer's (RichText, §3): backtick fences, indented
 fences, `mermaid` in any case, CRLF line ends. Every fence RichText would draw as a diagram is therefore checked.
+The closing fence is the mirror, never wider than RichText's: at most 3 spaces of indent and a backtick run at least
+as long as the opener's, nothing else on the line. So the checked source is exactly the source RichText draws, and a
+fence RichText would not close counts as unclosed (repaired or dropped).
 `~~~` fences are never diagrams, in the check or in the renderer.
 
 It returns problems in plain words with line numbers ("baris 4: kurung siku tidak ditutup").
@@ -88,8 +91,10 @@ It returns problems in plain words with line numbers ("baris 4: kurung siku tida
    `CLAIM_REPAIR`. The repaired reply is checked again. There are up to two repair rounds (`max_diagram_repairs = 2`);
    a claim repair and a diagram repair in the same round count as one round.
 3. Still broken after the second repair round: the fence is removed, the rest of the text stays, and
-   one line is added: "Diagramnya belum bisa aku gambar, jadi aku jelaskan lewat teks saja." The removed source and
-   the problems are logged (`diagram.dropped`).
+   one line is added: "Diagramnya belum bisa aku gambar, jadi aku jelaskan lewat teks saja." The agent path emits
+   `diagram.repair` (each repair round) and `diagram.dropped` to the agent's log hook with the problems only, never
+   the reply or the diagram source (owner data); the host decides whether and where they are logged (rangka-ai's
+   server logs the event name). The consult path (the interview) repairs and drops the same way but does not log.
 4. A `note` streamed with tool calls is checked the same way. A broken diagram in a note is simply dropped, with no
    repair round for notes.
 
@@ -109,8 +114,9 @@ New components in `web/design-system/bundle.js` (namespace `Rangka`), built on R
 (Mermaid 11 ignores `flowchart.htmlLabels` alone). No `click` directives. Any `%%{init}%%` directive from the model is
 stripped, and Mermaid's `secure` list is extended with `htmlLabels`, `flowchart`, `theme`, `themeVariables`,
 `themeCSS` and `fontFamily`, so a directive cannot change them even if one slips through. Labels are text, never HTML. Theme is `base` with
-`themeVariables` taken from `tokens.json`. Mermaid is vendored (no CDN), pinned with a sha256 in `web/VENDOR.md` like
-React, served from the kernel's embedded web as `web/vendor/mermaid.min.js`, and loaded lazily, once and shared, the
+`themeVariables` taken from `tokens.json`. Mermaid is vendored (no CDN) like React: in rangka-os at
+`web/app/vendor/mermaid.min.js`, pinned with a sha256 in `web/app/vendor/README.md` and served from the kernel's embedded
+web; rangka-cloud copies it to `web/vendor/mermaid.min.js`, pinned in its `web/VENDOR.md`. It is loaded lazily, once and shared, the
 first time a diagram is in view. Pages without a diagram never load it.
 
 | Component | What |
@@ -130,7 +136,9 @@ desktop zoom popup is left-to-right and turns top-down below 720 px.
 - **Render fails** (a case the checker passed): a callout "Diagram belum bisa ditampilkan" with "Lihat sumber" (the
   source, collapsed), and `onRenderError(source, error)` is called. The app reports it (`POST
   /api/raka/diagram-error`, logged, so the checker gets fixed).
-- **Mermaid fails to load** (offline, blocked): the same callout, plus the text alternative.
+- **Mermaid fails to load** (offline, blocked): the same callout "Diagram belum bisa ditampilkan" with "Lihat sumber".
+  The text alternative (`alt`) stays the diagram's accessible name; it is not shown as extra text in the callout, and
+  the offer's lists under the diagram already say the same in words.
 
 **Popup on an offer.** In an offer the popup head also carries the option's name and its action ("Pilih ini" or
 "Setuju, susun"), so the owner can decide from the large view. It follows the card's state: for an offer that was
@@ -175,15 +183,15 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
 
 **rangka-os**
 - This contract; the offer `flow` shape in the docs reference next to 0046.
-- Design system: vendored Mermaid (`web/VENDOR.md`, `web/vendor/mermaid.min.js`), `flowToMermaid`, `Diagram`,
+- Design system: vendored Mermaid (`web/app/vendor/mermaid.min.js`, pinned in `web/app/vendor/README.md`), `flowToMermaid`, `Diagram`,
   `DiagramViewer`, RichText fence, `OfferCompare`; Figma designs in "Agent chat" first.
 - The Raka chat in the rangka-os app renders answers through RichText, with diagrams.
-- Skill text for when Raka draws a diagram (§2).
 
 **rangka-ai**
 - `flow` on every option, computed in code in `raka/interview/offer.py` (§1).
 - `raka/diagram.py` check, repair loop in the agent and consult paths, claims in labels, `max_diagram_repairs = 2`,
-  `diagram.dropped` log (§2).
+  `diagram.repair` / `diagram.dropped` to the agent's log hook (§2). The prompt text for when Raka draws a diagram
+  lives in rangka-ai's prompts (§2).
 - Tests: valid subset, each refused construct, limits, line numbers; fixed on the first repair, dropped after two, a
   note dropped without repair, claim and diagram repairs together; `flow` from map and option for every `state`.
 
@@ -191,7 +199,8 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
 - `OfferOption.flow` stored with the offer (§1).
 - Studio: `OfferCompare` replaces the offer card and "Lihat pilihan lain" (§4). Konsol: diagrams in answers now, the
   offer card when 0046 §5 lands.
-- `POST /api/raka/diagram-error` (§3). Copy of the design-system bundle and vendored Mermaid.
+- `POST /api/raka/diagram-error` (§3). Copy of the design-system bundle and vendored Mermaid (`web/vendor/`, pinned in
+  `web/VENDOR.md`).
 - e2e with a fake Raka: three options side by side with diagrams; phone scroll; zoom, then "Pilih ini" from the popup
   accepts that option; an answered or superseded offer has no accept in the popup; an answer with a `mermaid` fence
   renders; a broken fence never reaches the page.

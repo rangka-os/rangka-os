@@ -8,6 +8,7 @@ import (
 	"errors"
 	"fmt"
 	"math/rand"
+	"slices"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -285,6 +286,10 @@ func (e *Engine) syncCounters(ctx context.Context, org string, refs []counterRef
 		return err
 	}
 	defer tx.Rollback(ctx)
+	// one pass per counter, in a fixed order, so two catching up at once do not lock rows in opposite orders
+	refs = slices.Clone(refs)
+	slices.SortFunc(refs, func(a, b counterRef) int { return strings.Compare(a.prefix+"\x00"+a.model, b.prefix+"\x00"+b.model) })
+	refs = slices.Compact(refs)
 	for _, r := range refs {
 		if err := store.SyncCounter(ctx, tx, org, r.model, r.prefix); err != nil {
 			return err
@@ -307,6 +312,10 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 	if err := fn(o); err != nil {
 		if tx.Conflicted() {
 			return true, fmt.Errorf("%w: %v", errConflict, err)
+		}
+		var sc *staleCounter
+		if errors.As(err, &sc) {
+			return false, err
 		}
 		if len(o.counters) > 0 && nameTaken(err) {
 			return false, &staleCounter{refs: o.counters, err: err}

@@ -212,6 +212,15 @@ export declare function ChatDrawer(props: { open: boolean; turns: ChatTurn[]; bu
 /** OS / Raka · Diam | Hover | Tersembunyi | Terbuka: the floating Raka button, 24px from the bottom right. Hover or focus
  *  widens it to "Tanya Raka ⌘J" with the waiting count; its small button tucks it against the right edge. Mount it only
  *  where Raka is on (meta.features.ai === true). */
+/** Chat / Format / * (Figma "Raka Chat" › Isi jawaban): Raka's markdown as React elements, never HTML. Headings, bold,
+ * italic, `code`, safe links (http(s), mailto, "/path", "#anchor"), lists, quotes, GFM tables (numbers right-aligned),
+ * key-values (a list of "**Label:** value"), ``` code blocks with language/file and Salin, callouts
+ * (> [!NOTE] | [!TIP] | [!WARNING] | [!CAUTION]). `collapse` folds an answer longer than that many lines. */
+export declare function RichText(props: { text: string; collapse?: number; streaming?: boolean; className?: string }): React.ReactElement;
+/** The block list RichText draws (for tests and tools). */
+export declare function markdownBlocks(text: string): Array<{ t: "h" | "p" | "list" | "kv" | "table" | "code" | "quote" | "callout" | "hr"; [k: string]: unknown }>;
+/** The link a Raka answer may open, or "" (javascript:, data:, //host and the like stay text). */
+export declare function safeHref(url: string): string;
 export declare function RakaLauncher(props: { open: boolean; pending?: number; tucked?: boolean; onToggle: () => void; onTuck?: (tucked: boolean) => void }): React.ReactElement;
   renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void;
   /** a 440px panel above RakaLauncher instead of a full-height drawer */ floating?: boolean; subtitle?: string; /** the page title as a context chip */ context?: string | null }): React.ReactElement | null;

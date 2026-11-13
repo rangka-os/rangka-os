@@ -340,3 +340,88 @@ test("AskBar and ChatDrawer ignore Enter and Esc while an IME is composing", () 
   nodes(drawer, (n) => hasClass(n, "rk-chat"))[0].props.onKeyDown(key("Escape"));
   assert.deepStrictEqual([sent, closed], [["drawer"], ["drawer"]], "plain keys still work");
 });
+
+// ---- RichText: Raka's markdown (Figma "Raka Chat" › Isi jawaban), drawn as elements, never HTML
+const md = (text, extra) => render(R.RichText(Object.assign({ text }, extra)));
+const tags = (tree, t) => nodes(tree, (n) => n.type === t);
+
+test("RichText draws headings, emphasis, code, lists, quotes and paragraphs", () => {
+  const tree = md("## Ringkasan\nAda **7 faktur**, *lama*, dari `sales_invoice`.\nBaris baru.\n\n- satu\n- dua\n\n1. a\n2. b\n\n> kutipan\n\n---");
+  assert.strictEqual(tags(tree, "h4")[0].props.className, "rk-md-h1");
+  assert.deepStrictEqual(texts(tags(tree, "strong")[0]), ["7 faktur"]);
+  assert.deepStrictEqual(texts(tags(tree, "em")[0]), ["lama"]);
+  assert.deepStrictEqual(texts(tags(tree, "code")[0]), ["sales_invoice"]);
+  assert.strictEqual(tags(tree, "br").length, 1, "a single newline is a line break");
+  assert.deepStrictEqual([...tags(tree, "ul")[0].children[0]].map((li) => texts(li).join("")), ["satu", "dua"]);
+  assert.strictEqual(tags(tree, "ol").length, 1);
+  assert.deepStrictEqual(texts(tags(tree, "blockquote")[0]), ["kutipan"]);
+  assert.strictEqual(tags(tree, "hr").length, 1);
+});
+
+test("RichText keeps plain text as it was: snake_case, 2 * 3 and stars without a pair stay text", () => {
+  const tree = md("Pakai sales_invoice dan days_overdue. Hitung 2 * 3 * 4 = 24. Harga *mulai Rp 10.000");
+  assert.strictEqual(tags(tree, "em").length, 0);
+  assert.strictEqual(texts(tree).join(""), "Pakai sales_invoice dan days_overdue. Hitung 2 * 3 * 4 = 24. Harga *mulai Rp 10.000");
+});
+
+test("RichText never renders HTML and only opens safe links", () => {
+  const tree = md("<img src=x onerror=alert(1)> <script>alert(1)</script>\n\n[a](javascript:alert(1)) [b](data:text/html,x) [c](//evil.com) " +
+    "[d](https://rangka.id/x) [e](/console#faktur) [f](mailto:a@b.id) [g](JaVaScRiPt:alert(1))");
+  assert.strictEqual(nodes(tree, (n) => n.props && n.props.dangerouslySetInnerHTML).length, 0);
+  assert.strictEqual(nodes(tree, (n) => n.type === "img" || n.type === "script").length, 0);
+  assert.ok(texts(tree).join("").indexOf("<script>alert(1)</script>") >= 0, "HTML stays visible as text");
+  const hrefs = tags(tree, "a").map((a) => a.props.href);
+  assert.deepStrictEqual(hrefs, ["https://rangka.id/x", "/console#faktur", "mailto:a@b.id"]);
+  const ext = tags(tree, "a")[0];
+  assert.deepStrictEqual([ext.props.target, ext.props.rel], ["_blank", "noopener noreferrer"]);
+  for (const bad of ["javascript:alert(1)", " javascript:x", "vbscript:x", "data:x", "//evil.com", "/\\evil.com", "https://a b"]) {
+    assert.strictEqual(R.safeHref(bad), "", bad);
+  }
+});
+
+test("RichText tables right-align numbers; a list of **Label:** value is a key-value card", () => {
+  const tree = md("| Pelanggan | Lewat | Sisa |\n| --- | --- | --- |\n| Hotel Savoy | 31 hr | Rp 4.200.000 |\n| Kantin \\| PT Len | 28 hr | Rp 2.875.000 |\n\n" +
+    "- **Total jatuh tempo:** Rp 18.250.000\n- **Faktur**: 7");
+  const th = tags(tree, "th").map((n) => n.props.className);
+  assert.deepStrictEqual(th, [undefined, "num", "num"]);
+  assert.deepStrictEqual(texts(tags(tree, "tr")[2].children[0][0]), ["Kantin | PT Len"], "an escaped pipe stays in its cell");
+  assert.deepStrictEqual(tags(tree, "dt").map((n) => texts(n).join("")), ["Total jatuh tempo", "Faktur"]);
+  assert.deepStrictEqual(tags(tree, "dd").map((n) => texts(n).join("")), ["Rp 18.250.000", "7"]);
+});
+
+test("RichText code blocks show language, file, line numbers and Salin; an open fence streams without Salin", () => {
+  const done = md("```yaml pengingat.rk\nname: x\ntrigger:\n```");
+  assert.deepStrictEqual(texts(nodes(done, (n) => hasClass(n, "rk-md-codehead"))[0]).slice(0, 2), ["yaml", "pengingat.rk"]);
+  assert.ok(nodes(done, (n) => hasClass(n, "rk-md-numbered")).length === 1);
+  assert.strictEqual(nodes(done, (n) => hasClass(n, "rk-md-copy")).length, 1);
+  const open = md("```js\nconst a = 1;", { streaming: true });
+  assert.strictEqual(nodes(open, (n) => hasClass(n, "rk-md-copy")).length, 0);
+  assert.deepStrictEqual(JSON.parse(JSON.stringify(R.markdownBlocks("```\n<b>x</b>\n```")[0])), { t: "code", lang: "", file: "", text: "<b>x</b>", open: false });
+});
+
+test("RichText callouts take GitHub and Indonesian markers with a default or given title", () => {
+  const tree = md("> [!WARNING]\n> Toko Maju belum punya nomor.\n\n> [!TIP] Terjadwal\n> 6 pengingat.\n\n> [!GAGAL]\n> 2 ditolak.");
+  const c = nodes(tree, (n) => hasClass(n, "rk-md-callout"));
+  assert.deepStrictEqual(c.map((n) => n.props.className.split(" ")[1]), ["rk-md-callout-warn", "rk-md-callout-ok", "rk-md-callout-bad"]);
+  assert.deepStrictEqual(c.map((n) => texts(tags(n, "b")[0]).join("")), ["Perlu dicek", "Terjadwal", "Gagal"]);
+  assert.strictEqual(c[2].props.role, "alert");
+});
+
+test("RichText folds a long answer behind Tampilkan semua, not while streaming", () => {
+  const long = Array.from({ length: 12 }, (_, i) => "Paragraf " + (i + 1) + ".").join("\n\n");
+  const folded = md(long, { collapse: 4 });
+  const more = nodes(folded, (n) => hasClass(n, "rk-md-more"))[0];
+  assert.match(texts(more).join(""), /Tampilkan semua · 8 baris lagi$/);
+  assert.strictEqual(nodes(folded, (n) => hasClass(n, "rk-md-fade")).length, 1);
+  assert.strictEqual(tags(folded, "p").length, 5);
+  const streaming = md(long, { collapse: 4, streaming: true });
+  assert.strictEqual(nodes(streaming, (n) => hasClass(n, "rk-md-more")).length, 0);
+  assert.strictEqual(tags(streaming, "p").length, 12);
+  assert.strictEqual(nodes(md("Pendek.", { collapse: 4 }), (n) => hasClass(n, "rk-md-more")).length, 0);
+});
+
+test("ChatDrawer draws Raka's answer with RichText and keeps the owner's text plain", () => {
+  const tree = render(R.ChatDrawer({ open: true, turns: [{ role: "user", text: "**tebal?**" }, { role: "assistant", text: "Ada **3 faktur**." }] }));
+  assert.deepStrictEqual(texts(nodes(tree, (n) => hasClass(n, "rk-chat-me"))[0]), ["**tebal?**"]);
+  assert.deepStrictEqual(texts(tags(nodes(tree, (n) => hasClass(n, "rk-chat-raka"))[0], "strong")[0]), ["3 faktur"]);
+});

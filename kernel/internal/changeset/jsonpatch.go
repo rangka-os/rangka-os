@@ -3,6 +3,7 @@ package changeset
 import (
 	"encoding/json"
 	"fmt"
+	"math"
 	"reflect"
 	"strconv"
 	"strings"
@@ -52,8 +53,47 @@ func ApplyPatch(doc any, patch []map[string]any) (any, error) {
 	return doc, nil
 }
 
+// normalize gives v the shape JSON gives it (numbers float64, maps map[string]any, lists []any), so values read from
+// YAML and from JSON compare with reflect.DeepEqual. JSON has no NaN or Inf: a value holding one is normalized piece
+// by piece and keeps the float, which never equals itself, so a change set touching it always reads as a change
+// instead of the whole value reading as nil on both sides (audit orgs-risk A2).
 func normalize(v any) any {
-	b, _ := json.Marshal(v)
+	b, err := json.Marshal(v)
+	if err != nil {
+		return normalizeEach(v)
+	}
+	var out any
+	json.Unmarshal(b, &out)
+	return out
+}
+
+func normalizeEach(v any) any {
+	switch x := v.(type) {
+	case map[string]any:
+		m := make(map[string]any, len(x))
+		for k, e := range x {
+			m[k] = normalizeEach(e)
+		}
+		return m
+	case []any:
+		l := make([]any, len(x))
+		for i, e := range x {
+			l[i] = normalizeEach(e)
+		}
+		return l
+	case float64:
+		if math.IsNaN(x) || math.IsInf(x, 0) {
+			return x
+		}
+	case float32:
+		if f := float64(x); math.IsNaN(f) || math.IsInf(f, 0) {
+			return f
+		}
+	}
+	b, err := json.Marshal(v)
+	if err != nil {
+		return v // not JSON at all: compared as it is
+	}
 	var out any
 	json.Unmarshal(b, &out)
 	return out

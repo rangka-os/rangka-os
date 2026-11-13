@@ -774,6 +774,10 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 	if cs.Status != "applied" || cs.previous == nil {
 		return nil, &Error{409, "bad_status", "only an applied change set can be reverted (it is " + cs.Status + ")", nil}
 	}
+	// undoing a high-risk change (tax, roles, money fields) is as much the owner's decision as making it (audit orgs-risk A1)
+	if cs.Risk == "high" && !hasRole(a, "owner") {
+		return nil, &Error{403, "owner_required", "reverting a high-risk change set needs the owner", nil}
+	}
 	// restoring an older features.rk would undo the operator's plans as surely as a new change set (audit
 	// cloud-package-plan F-5)
 	restores := make([]Op, 0, len(cs.previous))

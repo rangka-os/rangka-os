@@ -266,6 +266,16 @@ func TestOrgTaxIsOwnerOnly(t *testing.T) {
 	if r := mgr.do("POST", "/api/v1/changesets/"+id+"/approve", nil); r.Status != 403 || errCode(r) != "owner_required" {
 		t.Fatalf("sales_manager approved an org tax change: %d %s", r.Status, r.Body)
 	}
+	// once the owner applied it, undoing it is the owner's too (audit orgs-risk A1)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/approve", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/apply", nil)
+	if r := mgr.do("POST", "/api/v1/changesets/"+id+"/revert", nil); r.Status != 403 || errCode(r) != "owner_required" {
+		t.Fatalf("sales_manager reverted an org tax change: %d %s", r.Status, r.Body)
+	}
+	if !strings.Contains(readSite(e, "config.rk"), "pkp: true") {
+		t.Fatal("the refused revert changed config.rk")
+	}
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/revert", nil)
 }
 
 // Change sets never apply destructive DDL: a retype that may lose data is a blocking validation error that

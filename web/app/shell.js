@@ -804,7 +804,7 @@
     useEffect(function () {
       function down(e) {
         if (ref.current && ref.current.contains(e.target)) return;
-        if (e.target.closest && e.target.closest(".rk-side-switch")) return; // the switcher toggles it itself
+        if (e.target.closest && e.target.closest(".rk-side-switch, .ap-wme")) return; // the switcher toggles it itself
         p.onClose();
       }
       function key(e) { if (e.key === "Escape") p.onClose(); }
@@ -813,9 +813,11 @@
       return function () { global.document.removeEventListener("mousedown", down); global.document.removeEventListener("keydown", key); };
     }, []);
     var top = Math.round(p.at.bottom + 4), left = Math.max(8, Math.round(p.at.left));
+    // p.at.up (the work rail's account button at the bottom): the menu grows upwards from p.at.top
+    var style = p.at.up ? { bottom: Math.round(Math.max(8, global.innerHeight - p.at.top)) + "px", left: left + "px", maxHeight: "calc(100vh - 16px)", overflowY: "auto" }
+      : { top: top + "px", left: left + "px", maxHeight: "calc(100vh - " + (top + 8) + "px)", overflowY: "auto" };
     return h("div", { ref: ref, className: "ap-switch-menu" },
-      h(R.Menu, { float: true, items: p.items, onClose: p.onClose,
-        style: { top: top + "px", left: left + "px", maxHeight: "calc(100vh - " + (top + 8) + "px)", overflowY: "auto" } }));
+      h(R.Menu, { float: true, items: p.items, onClose: p.onClose, style: style }));
   }
 
   /* ---------------------------------------------------------------- the signed-in app */
@@ -1291,11 +1293,21 @@
               h(R.Icon, { name: it.icon || "invoice" }), h("span", null, it.label), it.count ? h("i", { className: "ap-tabbar-n" }, it.count) : null));
           }))) : null,
         h("nav", { className: "ap-workbar", "aria-label": "Layar kerja", style: { gridTemplateColumns: "repeat(" + (wb.items.length + (wb.more.length ? 1 : 0)) + ", 1fr)" } },
+          // tablet and desktop: the rail carries the business tile on top and the connection and account at the bottom
+          // (the 48px header is hidden there); a phone keeps the header and the bottom bar
+          h("span", { className: "ap-wbrand", title: companyName, "aria-hidden": "true" }, String(companyName || "R").trim().charAt(0).toUpperCase()),
           wb.items.map(function (it) {
             return h("a", { key: it.id, href: "#/" + it.id, "aria-current": it.id === here ? "page" : undefined }, h(R.Icon, { name: it.icon }), h("span", null, it.label));
           }),
           wb.more.length ? h("button", { type: "button", "aria-expanded": navOpen, "aria-current": moreHere ? "page" : undefined, onClick: function () { setNavOpen(!navOpen); } },
             h(R.Icon, { name: "menu" }), h("span", null, "Lainnya"), approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null) : null),
+        // the rail's foot (tablet and desktop): connection and account, outside the work screens' nav
+        h("div", { className: "ap-wfoot" },
+            h("span", { className: "ap-wsync" + (offline ? " off" : ""), role: "status" }, offline ? "Offline" : "Online"),
+            h("button", { type: "button", className: "ap-wme", "aria-label": "Akun", title: (me && me.email) || "Akun",
+              onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.right + 8, top: r.bottom, up: true }); } },
+              String((me && (me.name || me.email)) || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0); }).join("").toUpperCase())),
+
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems().slice(installed.length ? installed.length + 2 : 0), onClose: function () { setSwitchAt(null); } }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
         toaster);

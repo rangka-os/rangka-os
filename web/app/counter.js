@@ -272,6 +272,19 @@
     return on;
   }
 
+  // tablet landscape and desktop (the same breakpoint as app.css): the tender takes the catalogue's place
+  var WIDE = "(min-width: 1024px)";
+  function useWide() {
+    var ws = useState(function () { return !!(global.matchMedia && global.matchMedia(WIDE).matches); }), wide = ws[0], setWide = ws[1];
+    useEffect(function () {
+      if (!global.matchMedia) return undefined;
+      var mq = global.matchMedia(WIDE), on = function () { setWide(mq.matches); };
+      if (mq.addEventListener) mq.addEventListener("change", on); else if (mq.addListener) mq.addListener(on);
+      return function () { if (mq.removeEventListener) mq.removeEventListener("change", on); else if (mq.removeListener) mq.removeListener(on); };
+    }, []);
+    return wide;
+  }
+
   function todayText() {
     var d = new Date(), z = function (n) { return (n < 10 ? "0" : "") + n; };
     return global.RangkaAppAPI.tanggal(d.getFullYear() + "-" + z(d.getMonth() + 1) + "-" + z(d.getDate()));
@@ -291,7 +304,7 @@
     var ctx = p.ctx, s = p.screen, c = s.counter || {}, sets = p.sets || {}, scope = RA.outboxScope(ctx.me);
     var cat = c.catalogue || {}, ses = c.session || null, doc = c.document || {};
     var docMeta = (ctx.meta.models || {})[doc.model] || {};
-    var online = useOnline();
+    var online = useOnline(), wide = useWide();
     var ss = useState(ses ? "loading" : "none"), session = ss[0], setSession = ss[1]; // "loading" | null | record | "none"
     var is = useState(null), items = is[0], setItems = is[1];
     var ce = useState(null), catErr = ce[0], setCatErr = ce[1];
@@ -572,7 +585,7 @@
     var inCart = {};
     cart.forEach(function (l) { inCart[l.item] = (inCart[l.item] || 0) + l.qty; });
 
-    var catalogue = h("section", { className: "ap-counter-cat", "aria-label": "Katalog" },
+    var catalogue = h("section", { className: "ap-counter-cat", "aria-label": "Katalog" }, offlineBar,
       h("div", { className: "ap-counter-searchrow" },
         h("input", { ref: searchRef, className: "ap-counter-search", type: "search", placeholder: cat.barcode ? "Cari menu atau scan barcode" : "Cari",
           "aria-label": "Cari barang", value: q, onChange: function (e) { setQ(e.target.value); }, onKeyDown: onSearchKey }),
@@ -596,15 +609,17 @@
             h("span", { className: "ap-counter-item-t" }, it.title), h("span", { className: "ap-counter-item-p" }, rp(it.price)));
         }), !shown.length ? h("p", { className: "ap-work-loading" }, "Tidak ada yang cocok.") : null));
 
+    // tablet landscape: while paying the tender fills the catalogue's place and the order panel keeps the lines, read-only
+    var paying = wide && pay && !stuck;
     var lines = h("ul", { className: "ap-counter-lines", "aria-label": "Keranjang" }, cart.map(function (l, i) {
       return h("li", { key: l.key },
         h("div", { className: "ap-counter-line" },
+          h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
+            l.note ? h("small", null, l.note) : doc.line && doc.line.note ? h("small", { className: "ap-counter-addnote" }, "+ catatan") : null),
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
             h("b", null, l.qty),
             h("button", { type: "button", "aria-label": "Tambah " + l.title, onClick: function () { setLine(i, { qty: l.qty + 1 }); } }, "+")),
-          h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
-            l.note ? h("small", null, l.note) : doc.line && doc.line.note ? h("small", { className: "ap-counter-addnote" }, "+ catatan") : null),
           h("span", { className: "ap-counter-amt" }, rp(l.qty * l.price))),
         noteLine === i && doc.line.note ? h("input", { className: "ap-counter-note", "aria-label": "Catatan " + l.title, placeholder: "Catatan, misalnya kurang manis",
           value: l.note, autoFocus: true, onChange: function (e) { setLine(i, { note: e.target.value }); }, onKeyDown: function (e) { if (e.key === "Enter") setNoteLine(null); } }) : null);
@@ -667,9 +682,13 @@
       heldList,
       c.customer && !(pay && !stuck) ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
         value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } }) : null,
-      pay && !stuck ? null : h("div", { className: "ap-counter-body" }, cart.length ? lines : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
+      pay && !stuck ? (paying ? h("div", { className: "ap-counter-body" }, h("ul", { className: "ap-counter-lines ap-counter-paidlines", "aria-label": "Pesanan dibayar" },
+        cart.map(function (l) {
+          return h("li", { key: l.key }, h("div", { className: "ap-counter-line" },
+            h("span", { className: "ap-counter-line-t" }, l.qty + "× " + l.title, l.note ? h("small", null, l.note) : null), h("span", { className: "ap-counter-amt" }, rp(l.qty * l.price))));
+        }))) : null) : h("div", { className: "ap-counter-body" }, cart.length ? lines : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
-      tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
+      paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
         h("div", { className: "ap-counter-row" },
           c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
           h(R.Button, { variant: "primary", size: "lg", loading: busy && !pay, onClick: openPay }, "Bayar " + rp(total)))) : null));
@@ -678,7 +697,8 @@
       h("span", null, cartCount(cart) + " item", customer ? " · " + customer : ""), h("b", null, rp(total)),
       h(R.Button, { variant: "primary", onClick: function () { setSheet(true); } }, "Lihat pesanan")) : null;
 
-    return h("div", { className: "ap-counter" + (sheet || pay || stuck || (done && !cart.length) ? " sheet" : "") }, offlineBar, catalogue, side, bar);
+    return h("div", { className: "ap-counter" + (sheet || pay || stuck || (done && !cart.length) ? " sheet" : "") + (paying ? " paying" : "") },
+      paying ? h("section", { className: "ap-counter-tender", "aria-label": "Pembayaran" }, tender) : catalogue, side, bar);
   }
   RA.workRenderers = RA.workRenderers || {};
   RA.workRenderers.counter = CounterScreen;

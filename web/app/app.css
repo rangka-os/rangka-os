@@ -812,3 +812,59 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-roll .rk-btn, .ap-handover .rk-btn, .ap-clock .rk-btn, .ap-route .rk-btn, .ap-doc-pick .rk-btn { min-height: 44px; }
 .ap-roll-notebtn, .ap-ho-del, .ap-route-back { display: inline-flex; align-items: center; min-height: 44px; min-width: 44px; }
 .ap-route-dist a { display: inline-flex; align-items: center; min-height: 44px; }
+
+/* ---- work screen frame and counter, after the Figma "Rangka OS · POS" (13 Nov 2026): on a tablet the work shell's
+   rail carries the business tile, the connection and the account (no header); the counter fills the screen with the
+   catalogue left and the order panel right, and the tender takes the catalogue's place while paying ---- */
+.ap-wbrand, .ap-wfoot { display: none; }
+@media (min-width: 768px) {
+  .ap-workshell { grid-template-rows: minmax(0, 1fr); }
+  .ap-workshell > .ap-whead { display: none; }
+  .ap-workshell > .ap-main { grid-row: 1; }
+  .ap-workshell > .ap-workbar { grid-row: 1; display: flex; flex-direction: column; align-items: stretch; overflow-y: auto; }
+  .ap-workshell .ap-counter-sync { display: none; } /* the rail shows the connection */
+  .ap-workshell > .ap-workbar .ap-wbrand { display: grid; white-space: nowrap; place-items: center; flex: none; width: 40px; height: 40px; margin: 4px auto 10px; border-radius: 10px;
+    background: var(--brand); color: #ffffff; font: 600 20px/1 var(--font-display); }
+  .ap-workshell > .ap-wfoot { display: grid; grid-column: 1; grid-row: 1; align-self: end; justify-self: center; justify-items: center; gap: 10px;
+    padding: 10px 0 14px; z-index: 21; }
+  .ap-workshell > .ap-workbar { padding-bottom: 110px; }
+  .ap-workshell > .ap-wfoot .ap-wsync { display: inline-flex; white-space: nowrap; overflow: visible; align-items: center; gap: 5px; padding: 4px 8px; border-radius: 999px; background: var(--ok-tint); color: var(--ok);
+    font: 600 11px/14px var(--font-sans); }
+  .ap-workshell > .ap-wfoot .ap-wsync::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+  .ap-workshell > .ap-wfoot .ap-wsync.off { background: var(--warn-tint); color: var(--warn); }
+  .ap-workshell > .ap-wfoot .ap-wme { display: grid; place-items: center; width: 44px; height: 44px; min-height: 44px; padding: 0; border: 0; border-radius: 50%; background: var(--field-amber);
+    color: var(--ink); font: 600 12px/1 var(--font-sans); cursor: pointer; }
+  .ap-workshell > .ap-wfoot .ap-wme:focus-visible { box-shadow: var(--focus-ring); outline: none; }
+}
+/* catalogue cards: warm tints from the brand (they follow dark mode) */
+.ap-counter-pic { background: color-mix(in srgb, var(--brand) 9%, var(--surface)); }
+.ap-counter-pic.t1 { background: color-mix(in srgb, var(--brand) 15%, var(--surface)); }
+.ap-counter-pic.t2 { background: color-mix(in srgb, var(--chart-4) 16%, var(--surface)); }
+.ap-counter-pic.t3 { background: color-mix(in srgb, var(--chart-5) 14%, var(--surface)); }
+.ap-counter-pic.t4 { background: color-mix(in srgb, var(--brand) 22%, var(--surface)); }
+.ap-counter-pic.t5 { background: color-mix(in srgb, var(--chart-4) 9%, var(--surface)); }
+.ap-counter-pic i { color: color-mix(in srgb, var(--brand) 40%, var(--ink-2)); }
+/* order lines: name left, quantity, amount right */
+.ap-counter-line { grid-template-columns: minmax(0, 1fr) auto auto; }
+.ap-counter-paidlines .ap-counter-line { grid-template-columns: minmax(0, 1fr) auto; }
+.ap-counter-paidlines .ap-counter-line-t { cursor: default; }
+@media (min-width: 1024px) {
+  .ap-workshell .ap-work-counter { max-width: none; padding: 0; }
+  .ap-workshell .ap-work-counter > .ap-work-head { display: none; }
+  .ap-workshell .ap-counter { height: 100vh; height: 100dvh; gap: 0; align-items: stretch; padding: 0; grid-template-rows: minmax(0, 1fr); }
+  .ap-workshell .ap-counter-cat, .ap-workshell .ap-counter-tender { min-height: 0; overflow-y: auto; padding: 20px; background: var(--soft); }
+  .ap-workshell .ap-counter-offline { margin-bottom: 12px; }
+  .ap-workshell .ap-counter-cart { position: static; height: 100%; max-height: none; padding: 16px 20px 20px; gap: 12px; border: 0; border-left: 1px solid var(--line);
+    border-radius: 0; }
+  .ap-workshell .ap-counter-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  .ap-workshell .ap-counter-foot { margin: 0 -20px -20px; padding: 14px 20px 20px; border-top: 1px solid var(--line); background: var(--surface); }
+  .ap-workshell .ap-counter-foot .ap-counter-sum { padding-top: 0; border-top: 0; }
+  /* the tender: amounts and actions left, the keypad right */
+  .ap-counter-tender .ap-counter-pay { grid-template-columns: minmax(0, 1fr) minmax(260px, 340px); column-gap: 32px; row-gap: 14px; align-content: start; max-width: 980px; }
+  .ap-counter-tender .ap-counter-pay > * { grid-column: 1; }
+  .ap-counter-tender .ap-counter-pay > .ap-pad { grid-column: 2; grid-row: 1 / span 8; align-self: start; }
+  .ap-counter-tender .ap-pad button { min-height: 64px; font-size: 22px; background: var(--surface); border-color: var(--line-strong); }
+  .ap-counter-tender .ap-counter-paydone { position: static; margin: 8px 0 0; padding: 0; border: 0; background: none; }
+  .ap-counter-tender .ap-counter-due.big b { font-size: 40px; line-height: 46px; }
+  .ap-counter-tender .ap-counter-cash .rk-btn { min-height: 52px; }
+}

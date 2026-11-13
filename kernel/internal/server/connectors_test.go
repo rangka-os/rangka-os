@@ -116,6 +116,21 @@ func waitJob(t *testing.T, e *env, id int64) (string, string) {
 	return "", ""
 }
 
+// stopScheduledPolls stops the scheduler's own polls of kopi-senja and waits for the poll jobs already queued, so a
+// test's own Poll calls are the only ones (audit F4). SetPolls returns only after a tick in flight has finished
+// enqueueing (jobs.Scheduler.pollMu), so no poll job appears after the look below.
+func stopScheduledPolls(t *testing.T, e *env) {
+	t.Helper()
+	e.s.Sched.SetPolls("kopi-senja", nil)
+	res, err := e.s.DB.Query(context.Background(), "select id from rk_jobs where kind = 'poll'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, r := range res.Rows {
+		waitJob(t, e, r[0].(int64))
+	}
+}
+
 func callJob(t *testing.T, e *env, connector, action string, input map[string]any) int64 {
 	t.Helper()
 	id, err := e.s.Queue.Enqueue(context.Background(), nil, "call", "kopi-senja", map[string]any{"connector": connector, "action": action, "input": input},
@@ -722,6 +737,9 @@ func TestPollEachOutlet(t *testing.T) {
 	e.s.Connectors.HTTP = &http.Client{Transport: v, Timeout: 5 * time.Second}
 	e.login()
 	ctx := context.Background()
+	// the scheduler polls this trigger every 15 minutes once the key is set: only this test's polls may run (the
+	// first poll counted 4 requests or the second saw no duplicate when a scheduled poll ran in between)
+	stopScheduledPolls(t, e)
 	if res, err := e.s.Connectors.Poll(ctx, "kopi-senja", "outlet_poller", "sales"); err != nil || res.Skipped != "needs_auth" || len(v.reqs) != 0 {
 		t.Fatalf("poll without a key: %+v %v, %d requests", res, err, len(v.reqs))
 	}
@@ -908,15 +926,7 @@ func TestPollFollowsNextPage(t *testing.T) {
 	e.s.Connectors.HTTP = &http.Client{Transport: v, Timeout: 5 * time.Second}
 	e.login()
 	ctx := context.Background()
-	// the scheduler's own polls would race the polls below (audit F4): stop them, and let any already queued finish
-	e.s.Sched.SetPolls("kopi-senja", nil)
-	res0, err := e.s.DB.Query(ctx, "select id from rk_jobs where kind = 'poll'")
-	if err != nil {
-		t.Fatal(err)
-	}
-	for _, r := range res0.Rows {
-		waitJob(t, e, r[0].(int64))
-	}
+	stopScheduledPolls(t, e)
 	e.must(204, "PUT", "/api/v1/connectors/pager_test/auth/api_key", map[string]any{"value": "pager-api-key-0002-zzzz"})
 
 	// the flow cannot be queued: the poll fails and remembers nothing

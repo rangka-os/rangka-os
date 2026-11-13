@@ -94,6 +94,8 @@ func (o *op) nextName(m *meta.Model, rec store.Record) (string, error) {
 		if err != nil {
 			return "", err
 		}
+		prefix, _ := store.ExpandPattern(pattern, now)
+		o.counters = append(o.counters, counterRef{model: m.Name, prefix: prefix})
 		return store.NextName(o.ctx, o.tx, o.actor.Org, m.Name, pattern, now)
 	}
 	if s.Pattern == "" {

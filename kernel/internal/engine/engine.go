@@ -193,6 +193,40 @@ type op struct {
 	first, primary string
 	// expect is UpdateIf's precondition, checked once by the update it guards
 	expect map[string]any
+	// counters are the v0 counters this attempt took a name from (nextName): if a write then finds that name
+	// taken, run moves them past the existing names and starts again (staleCounter)
+	counters []counterRef
+}
+
+// counterRef is one v0 counter (rk_naming) and the model whose names it numbers.
+type counterRef struct{ model, prefix string }
+
+// staleCounter is an attempt that failed because a name a v0 counter gave is already taken: rows written outside
+// the counter after it started (SQL, a partial restore). err is what the attempt returned.
+type staleCounter struct {
+	refs []counterRef
+	err  error
+}
+
+func (s *staleCounter) Error() string { return s.err.Error() }
+func (s *staleCounter) Unwrap() error { return s.err }
+
+// nameTaken: err is the unique violation of a record's name (the table's primary key), as store or dbIssue
+// reports it.
+func nameTaken(err error) bool {
+	var pe *pg.Error
+	if errors.As(err, &pe) && pe.Code == "23505" && strings.HasSuffix(pe.Constraint, "_pkey") {
+		return true
+	}
+	var ve *ValidationError
+	if errors.As(err, &ve) {
+		for _, is := range ve.Errors {
+			if is.Field == "name" && is.Code == "unique" {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // writeAttempts bounds how often run starts a unit of work again after it lost a race (contract 0025).
@@ -202,11 +236,30 @@ const writeAttempts = 8
 // lockFlowRead). When the transaction fails because a concurrent one won (a deadlock, SQLSTATE 40P01, or a
 // serialization failure, 40001), run rolls back and runs fn again from current data, up to writeAttempts times
 // (contract 0025). fn must build its results inside the attempt.
+//
+// A v0 counter reads only its own row, so a name written outside it after it started (rows loaded by SQL, a
+// partial restore) is not seen until the counter gives that name: the write then fails on the name, and run moves
+// the counters the attempt used past the existing names (store.SyncCounter, the one read of the model's table)
+// and runs fn again, once (contract 0009 §4, card t_32af87a2).
 func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {
 	var err error
+	synced := false
 	for attempt := 1; ; attempt++ {
 		var retry bool
 		retry, err = e.runOnce(ctx, a, fn)
+		var sc *staleCounter
+		if errors.As(err, &sc) {
+			if synced || attempt >= writeAttempts || ctx.Err() != nil {
+				err = sc.err
+				break
+			}
+			if serr := e.syncCounters(ctx, a.Org, sc.refs); serr != nil {
+				err = serr
+				break
+			}
+			synced = true
+			continue
+		}
 		if !retry || attempt >= writeAttempts || ctx.Err() != nil {
 			break
 		}
@@ -224,6 +277,22 @@ func (e *Engine) run(ctx context.Context, a Actor, fn func(o *op) error) error {
 	return err
 }
 
+// syncCounters moves each counter past the existing names of its model, in a transaction of its own (the failed
+// attempt has rolled back and released the counter rows).
+func (e *Engine) syncCounters(ctx context.Context, org string, refs []counterRef) error {
+	tx, err := e.DB.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback(ctx)
+	for _, r := range refs {
+		if err := store.SyncCounter(ctx, tx, org, r.model, r.prefix); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
+}
+
 // errConflict marks a unit of work that still lost its race after writeAttempts.
 var errConflict = errors.New("engine: concurrent write conflict")
 
@@ -238,6 +307,9 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 	if err := fn(o); err != nil {
 		if tx.Conflicted() {
 			return true, fmt.Errorf("%w: %v", errConflict, err)
+		}
+		if len(o.counters) > 0 && nameTaken(err) {
+			return false, &staleCounter{refs: o.counters, err: err}
 		}
 		return false, err
 	}

@@ -430,12 +430,6 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	switch {
 	case opts.KeepName && str(input["name"]) != "":
 		rec["name"] = str(input["name"])
-		// a kept number moves the v0 counters past it, so they never issue it again (contract 0009 §4)
-		if o.e.scheme(m, o.actor.Org).Series == "" {
-			if err := store.NoteName(o.ctx, o.tx, o.actor.Org, str(rec["name"])); err != nil {
-				return nil, err
-			}
-		}
 	case m.IsSubmittable:
 		rec["name"] = "DRAFT-" + store.RandomName(5)
 	default:

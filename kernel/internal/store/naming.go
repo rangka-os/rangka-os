@@ -39,13 +39,11 @@ func NextName(ctx context.Context, q pg.Querier, org, model, pattern string, now
 	if len(res.Rows) == 1 {
 		return fmt.Sprintf("%s%0*d", prefix, digits, res.Rows[0][0].(int64)), nil
 	}
-	like := strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix) + "%"
 	sql := fmt.Sprintf(`insert into rk_naming (org_id, prefix, last)
-		values ($1, $2, coalesce((select max(substring(name from $3::int)::bigint) from %s
-			where org_id = $1 and name like $4 and substring(name from $3::int) ~ '^[0-9]{1,18}$'), 0) + 1)
+		values ($1, $2, %s + 1)
 		on conflict (org_id, prefix) do update set last = rk_naming.last + 1
-		returning last`, pg.QuoteIdent(TableName(model)))
-	res, err = q.Query(ctx, sql, org, prefix, len([]rune(prefix))+1, like)
+		returning last`, highestName(model))
+	res, err = q.Query(ctx, sql, org, prefix, len([]rune(prefix))+1, likePrefix(prefix))
 	if err != nil {
 		return "", err
 	}
@@ -53,18 +51,24 @@ func NextName(ctx context.Context, q pg.Querier, org, model, pattern string, now
 	return fmt.Sprintf("%s%0*d", prefix, digits, n), nil
 }
 
-// NoteName moves an org's v0 counters past a name the kernel writes as given instead of allocating it (an
-// imported or seeded record that keeps its own number): every counter whose prefix the name starts with, followed
-// only by digits, continues after that number. It reads rk_naming alone (the org's counter rows), never the
-// model's table, so allocation stays one counter update per record (card t_58a60f6b); a counter that is already
-// past the number is left as it is. Without it a counter at 1 would reissue 0002 after an import of 0500, and the
-// insert fails on the name once it reaches 0500 (card t_32af87a2).
-func NoteName(ctx context.Context, q pg.Querier, org, name string) error {
-	_, err := q.Query(ctx, `update rk_naming set last = n.v
-		from (select prefix as p, case when substring($2 from char_length(prefix) + 1) ~ '^[0-9]{1,18}$'
-			then substring($2 from char_length(prefix) + 1)::bigint end as v
-			from rk_naming where org_id = $1 and left($2, char_length(prefix)) = prefix) n
-		where org_id = $1 and prefix = n.p and n.v > last`, org, name)
+// highestName is the SQL for the highest number among model's names in org $1 that are prefix $2 (as LIKE $4,
+// counter from rune $3) followed by digits only, 0 when there is none: the one read of the model's table.
+func highestName(model string) string {
+	return fmt.Sprintf(`coalesce((select max(substring(name from $3::int)::bigint) from %s
+			where org_id = $1 and name like $4 and substring(name from $3::int) ~ '^[0-9]{1,18}$'), 0)`, pg.QuoteIdent(TableName(model)))
+}
+
+func likePrefix(prefix string) string {
+	return strings.NewReplacer(`\`, `\\`, `%`, `\%`, `_`, `\_`).Replace(prefix) + "%"
+}
+
+// SyncCounter moves the v0 counter of org and prefix past the highest existing name of model with that prefix
+// (never back). The counter reads only its own row on every allocation, so a name written outside it after it
+// started (rows loaded by SQL, a partial restore) is not seen; the engine calls this when the name it allocated
+// turns out to be taken, then writes again (card t_32af87a2). It reads the model's table once.
+func SyncCounter(ctx context.Context, q pg.Querier, org, model, prefix string) error {
+	sql := fmt.Sprintf(`update rk_naming set last = greatest(last, %s) where org_id = $1 and prefix = $2`, highestName(model))
+	_, err := q.Query(ctx, sql, org, prefix, len([]rune(prefix))+1, likePrefix(prefix))
 	return err
 }
 

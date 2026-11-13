@@ -189,7 +189,7 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	prevInFlow := o.inFlow
 	o.inFlow = true
 	defer func() { o.inFlow = prevInFlow }()
-	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out}
+	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out, reg: e.Reg()}
 	if c := flowConnector(e, f); start == 0 && c != "" && len(event) > 0 {
 		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+c, f.On+" → flow "+f.Name, nil); err != nil {
 			return err
@@ -369,7 +369,7 @@ func (r *flowRun) anyAlive(docs []string) (bool, error) {
 			return true, nil
 		}
 		mn, _, _ := strings.Cut(d, "/")
-		m := r.e.Reg().Model(mn)
+		m := r.registry().Model(mn)
 		if m == nil {
 			return true, nil
 		}
@@ -382,7 +382,7 @@ func (r *flowRun) anyAlive(docs []string) (bool, error) {
 	}
 	for _, d := range docs {
 		mn, name, _ := strings.Cut(d, "/")
-		alive, err := r.docAlive(r.e.Reg().Model(mn), name, 0)
+		alive, err := r.docAlive(r.registry().Model(mn), name, 0)
 		if err != nil || alive {
 			return alive, err
 		}
@@ -392,7 +392,7 @@ func (r *flowRun) anyAlive(docs []string) (bool, error) {
 
 // docAlive: the record exists and is not cancelled, or a copy amended from it is alive.
 func (r *flowRun) docAlive(m *meta.Model, name string, depth int) (bool, error) {
-	rec, err := store.Get(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, name)
+	rec, err := store.Get(r.o.ctx, r.o.tx, r.registry(), r.a.Org, m, name)
 	if errors.Is(err, store.ErrNotFound) {
 		return false, nil
 	}
@@ -405,7 +405,7 @@ func (r *flowRun) docAlive(m *meta.Model, name string, depth int) (bool, error) 
 	if depth > 50 {
 		return true, nil
 	}
-	copies, err := store.Find(r.o.ctx, r.o.tx, r.e.Reg(), r.a.Org, m, map[string]any{"amended_from": name}, store.FindOpts{})
+	copies, err := store.Find(r.o.ctx, r.o.tx, r.registry(), r.a.Org, m, map[string]any{"amended_from": name}, store.FindOpts{})
 	if err != nil {
 		return false, err
 	}
@@ -451,10 +451,14 @@ func flowKey(v any) string {
 var maxForEach = 2000 // a var so a test can lower it
 
 type flowRun struct {
-	o    *op
-	e    *Engine
-	a    Actor
-	f    *meta.Flow
+	o *op
+	e *Engine
+	a Actor
+	f *meta.Flow
+	// reg is the registry the run started on: every step sees the same installed apps and models, even when a
+	// reload swaps the engine's registry between two steps (audit 14 Nov, I3: a find_all skipped by
+	// app_installed while a later step's app_installed already saw the new registry)
+	reg  *meta.Registry
 	vars map[string]any
 	out  *FlowResult
 	stop bool
@@ -464,12 +468,20 @@ type flowRun struct {
 	token string
 }
 
+// registry is the run's pinned registry (the engine's current one for a run built without it, as tests do).
+func (r *flowRun) registry() *meta.Registry {
+	if r.reg != nil {
+		return r.reg
+	}
+	return r.e.Reg()
+}
+
 func (r *flowRun) env() *cel.Env {
-	return &cel.Env{Today: r.e.Today, Now: r.e.Now, Apps: r.e.Reg().IsInstalled, Vars: func(n string) (any, bool) {
+	return &cel.Env{Today: r.e.Today, Now: r.e.Now, Apps: r.registry().IsInstalled, Vars: func(n string) (any, bool) {
 		if v, ok := r.vars[n]; ok {
 			return v, true
 		}
-		return GlobalVar(r.e.Reg(), r.a, n)
+		return GlobalVar(r.registry(), r.a, n)
 	}}
 }
 
@@ -707,7 +719,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			// the call runs as a queued job after commit (contract 0002 §A.3): the job holds the action, input, org and
 			// connector, never a rendered request (contract 0017 §6)
 			if e.Queue != nil && e.CallTarget != nil {
-				c, act, opts, err := e.CallTarget(e.Reg(), call, input)
+				c, act, opts, err := e.CallTarget(r.registry(), call, input)
 				if err != nil {
 					return fmt.Errorf("step %s call %s: %w", i, call, err)
 				}

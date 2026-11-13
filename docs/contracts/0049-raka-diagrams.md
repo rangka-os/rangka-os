@@ -43,10 +43,13 @@ the map and the option's `pieces` and `not_covered`. The model never writes it.
 | `state` | `covered`, `later` or `not_covered` (below) |
 
 - Order is the map's stage order.
-- `state`, first match wins:
-  1. `not_covered`: the stage is in the option's `not_covered`;
-  2. `later`: every piece of the option on that stage is in the option's `later` (a 0045 §5 gap);
-  3. `covered`: everything else.
+- `state`, first match wins. Matching uses ids, never labels:
+  1. `not_covered`: the option's `not_covered` has an entry whose `stage` equals the stage id;
+  2. `later`: the stage lists at least one of the option's `pieces` (piece ids), and every one of those piece ids is
+     the `piece` of an entry in the option's `later` (a 0045 §5 gap);
+  3. `covered`: everything else. A stage that lists none of the option's pieces and is not in `not_covered` is
+     `covered` with an empty `pieces` line.
+- The flow's `pieces` field holds piece labels for display only; it is never used to decide `state`.
 - Coverage stays Raka's judgement (0046 §1: no coverage model in data). `not_covered` is where Raka already states
   it, so the diagram shows exactly what the option's lists say, no more.
 - A `bundle` option whose apps are not map pieces shows covered stages with an empty `pieces` list. The diagram never

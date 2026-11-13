@@ -54,6 +54,15 @@ connector_auth:
   - On a hosted kernel these variables hold the platform's own secrets, such as the assistant's bearer `RANGKA_AI_SECRET`,
     and the company controls `system.rk`. A field that is not secret shows its value in `GET /api/v1/connectors/<c>/auth`,
     and an issuer or a connector receives what it is sent (audit business-raka F1).
+- Whoever runs the kernel may fix the driver and the path in the environment: `RANGKA_SECRETS_DRIVER`
+  (`env`, `file`, `vault` or `db`) and `RANGKA_SECRETS_PATH`.
+  - Either one wins over `system.rk` `secrets.driver` and `secrets.path`. A hosted company controls `system.rk`, and
+    could otherwise switch to `file` with a path to any folder the kernel reads, or to `vault` with the platform's
+    token and a path of its own choosing (audit platform-env A3, A4).
+  - An unknown driver stops the start.
+  - A hosted kernel sets `RANGKA_SECRETS_DRIVER`.
+- The `file` driver reads `<path>/<VAR>` only when the folder holds a regular file spelled exactly `VAR`. So a
+  case-insensitive file system does not match another file, and a symlink is not followed.
 - An unset variable is not a start-up error. The connector shows `status: needs_auth` and its calls fail with
   `connector_needs_auth`, without retries.
 

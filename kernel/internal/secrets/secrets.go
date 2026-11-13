@@ -60,9 +60,11 @@ type Status struct {
 
 // Service resolves and stores connector secrets.
 type Service struct {
-	DB  *pg.Pool
-	Reg func() *meta.Registry
-	KEK *KEK // nil = no key: the db driver refuses writes with secrets_key_missing
+	// Platform is the driver and path the platform fixed (RANGKA_SECRETS_DRIVER, RANGKA_SECRETS_PATH)
+	Platform Platform
+	DB       *pg.Pool
+	Reg      func() *meta.Registry
+	KEK      *KEK // nil = no key: the db driver refuses writes with secrets_key_missing
 	// Vault reads the vault driver's KV secret (VAULT_ADDR, VAULT_TOKEN); nil = vault bindings read as unset.
 	Vault *Vault
 	// Log reports driver problems (never a value); nil = silent.
@@ -84,8 +86,12 @@ type cached struct {
 
 const cacheTTL = 5 * time.Minute
 
-// Driver is the site's secrets driver: env (the default), file, vault or db.
+// Driver is the site's secrets driver: env (the default), file, vault or db. The platform's RANGKA_SECRETS_DRIVER
+// (Platform.Driver) wins over system.rk, which a hosted company controls (audit platform-env A3).
 func (s *Service) Driver() string {
+	if s.Platform.Driver != "" {
+		return s.Platform.Driver
+	}
 	if s.Reg == nil {
 		return "env"
 	}
@@ -93,6 +99,57 @@ func (s *Service) Driver() string {
 		return d
 	}
 	return "env"
+}
+
+// Platform is what whoever runs the kernel decides about secrets, from the environment: a hosted company controls
+// system.rk, so it may otherwise switch to the file driver and point secrets.path at any folder the kernel can read,
+// or to the vault driver with the platform's Vault token and a path of its choosing (audit platform-env A3, A4).
+type Platform struct {
+	Driver string // RANGKA_SECRETS_DRIVER: env, file, vault or db; "" lets system.rk choose
+	Path   string // RANGKA_SECRETS_PATH: the file folder or Vault path; "" lets system.rk choose
+}
+
+// PlatformFromEnv reads RANGKA_SECRETS_DRIVER and RANGKA_SECRETS_PATH; an unknown driver is an error.
+func PlatformFromEnv(getenv func(string) string) (Platform, error) {
+	p := Platform{Driver: strings.TrimSpace(getenv("RANGKA_SECRETS_DRIVER")), Path: strings.TrimSpace(getenv("RANGKA_SECRETS_PATH"))}
+	switch p.Driver {
+	case "", "env", "file", "vault", "db":
+		return p, nil
+	}
+	return p, fmt.Errorf("RANGKA_SECRETS_DRIVER=%q: use env, file, vault or db", p.Driver)
+}
+
+// path is the file folder or Vault path: the platform's, else system.rk secrets.path.
+func (s *Service) path(reg *meta.Registry) string {
+	if s.Platform.Path != "" {
+		return s.Platform.Path
+	}
+	p, _ := reg.SystemConfig("secrets.path").(string)
+	return p
+}
+
+// readSecretFile reads <dir>/<name> only when dir holds an entry spelled exactly name that is a regular file: on a
+// case-insensitive file system ${CREDENTIALS} would otherwise read credentials, and a symlink could point anywhere.
+func readSecretFile(dir, name string) (string, bool) {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return "", false
+	}
+	for _, e := range entries {
+		if e.Name() != name {
+			continue
+		}
+		if !e.Type().IsRegular() {
+			return "", false
+		}
+		b, err := os.ReadFile(filepath.Join(dir, name))
+		if err != nil {
+			return "", false
+		}
+		v := strings.TrimRight(string(b), "\r\n")
+		return v, v != ""
+	}
+	return "", false
 }
 
 // Writable reports whether values are set through the API (the db driver).
@@ -215,19 +272,14 @@ func (s *Service) bound(ctx context.Context, reg *meta.Registry, org, connector,
 	}
 	switch s.Driver() {
 	case "file":
-		dir, _ := reg.SystemConfig("secrets.path").(string)
+		dir := s.path(reg)
 		if dir == "" {
 			return "", false
 		}
-		b, err := os.ReadFile(filepath.Join(dir, m[1]))
-		if err != nil {
-			return "", false
-		}
-		v := strings.TrimRight(string(b), "\r\n")
-		return v, v != ""
+		return readSecretFile(dir, m[1])
 	case "vault":
 		// ${VAR} is key VAR of the KV secret at secrets.path; Vault down or the key missing reads as unset
-		path, _ := reg.SystemConfig("secrets.path").(string)
+		path := s.path(reg)
 		if path == "" || s.Vault == nil {
 			return "", false
 		}

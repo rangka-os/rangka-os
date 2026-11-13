@@ -169,9 +169,29 @@ func (c csvSheet) Write(line []string) {
 }
 func (c csvSheet) Flush() { c.w.Flush() }
 
-// plainNumber: a cell written as a number in a workbook. A code with a leading zero (NPWP, phone 0812...), a plus
-// sign or more than 15 significant digits stays text, so nothing is lost or rounded.
-var plainNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]{0,14})(\.[0-9]+)?$`)
+// plainNumber: a candidate number cell. A code with a leading zero (NPWP, phone 0812...) or a plus sign stays text;
+// numberCell then keeps a number only when Excel would show it back exactly (no lost digit, no dropped trailing 0).
+var plainNumber = regexp.MustCompile(`^-?(0|[1-9][0-9]*)(\.[0-9]+)?$`)
+
+// numberCell is v as a float when it is a plain number that a float64 (Excel's number) writes back unchanged:
+// "12500000", "-5", "2.5"; not "1.10", not a 16-digit number. ok is false for anything else (written as text).
+func numberCell(v string) (float64, bool) {
+	if !plainNumber.MatchString(v) {
+		return 0, false
+	}
+	// Excel keeps 15 significant digits: a longer number would show changed
+	if digits := strings.TrimLeft(strings.NewReplacer("-", "", ".", "").Replace(v), "0"); len(digits) > 15 {
+		return 0, false
+	}
+	n, err := strconv.ParseFloat(v, 64)
+	if err != nil || strconv.FormatFloat(n, 'f', -1, 64) != v {
+		return 0, false
+	}
+	return n, true
+}
+
+// maxCellText is Excel's limit for one cell; a longer text is cut there (Excel would ask to repair the file).
+const maxCellText = 32767
 
 type xlsxSheet struct {
 	w    http.ResponseWriter
@@ -185,11 +205,12 @@ func (x *xlsxSheet) Write(line []string) {
 	x.row++
 	vals := make([]any, len(line))
 	for i, v := range line {
-		if plainNumber.MatchString(v) {
-			if n, err := strconv.ParseFloat(v, 64); err == nil {
-				vals[i] = n
-				continue
-			}
+		if n, ok := numberCell(v); ok {
+			vals[i] = n
+			continue
+		}
+		if r := []rune(v); len(r) > maxCellText {
+			v = string(r[:maxCellText])
 		}
 		vals[i] = excelize.Cell{Value: v} // a string Cell is stored as text: a leading = is not a formula
 	}
@@ -198,6 +219,7 @@ func (x *xlsxSheet) Write(line []string) {
 }
 
 func (x *xlsxSheet) Flush() {
+	defer x.f.Close() // the stream writer spills rows to a temp file; Close removes it
 	x.sw.Flush()
 	var buf bytes.Buffer
 	if err := x.f.Write(&buf); err != nil {
@@ -234,6 +256,7 @@ func sheetOut(w http.ResponseWriter, r *http.Request, base string) sheet {
 		f := excelize.NewFile()
 		sw, err := f.NewStreamWriter("Sheet1")
 		if err != nil {
+			f.Close()
 			writeError(w, http.StatusInternalServerError, "export_failed", "File Excel gagal dibuat.")
 			return nil
 		}

@@ -35,15 +35,17 @@ rangka-apps (49 grants), yet no endpoint checks it.
 6. **Dashboard layout.** The dashboard label and period, then one block per widget separated by an empty line:
    the widget label, then `Nilai` (and `Periode sebelumnya`, `Jumlah dokumen`) for a number widget, `Label, Nilai,
    Jumlah` per point for a chart, the widget's columns for a list.
-8. **Workbook (added 13 Nov 2026).** `format=xlsx` on both endpoints writes the same lines as one sheet of an
-   Office Open XML workbook (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `<name>-<today>.xlsx`).
-   A cell that is a plain number (`-12500.5`, no leading zero, at most 15 digits before the point) is a number cell;
-   every other cell is a text cell, so an NPWP or a phone number keeps its leading `0` or `+`. No cell is ever a
-   formula: text starting with `=` is stored as text, without the CSV apostrophe. `sep` is ignored. `format=csv` (the
-   default) is unchanged; any other format is `400 bad_request`, before any row is read.
 7. **Web app (follow-up change).** The list toolbar gets "Unduh" (Excel with `;`, or CSV with `,`) carrying the search, quick filters,
    sort and visible columns; dashboards get an "Unduh" button. Neither is shown in a live preview, and the list's
    only when `/meta` says `can.export`. The endpoints land first; the buttons follow once their design is reviewed.
+
+8. **Workbook (added 13 Nov 2026).** `format=xlsx` on both endpoints writes the same lines as one sheet of an
+   Office Open XML workbook (`application/vnd.openxmlformats-officedocument.spreadsheetml.sheet`, `<name>-<today>.xlsx`).
+   A cell that is a plain number Excel shows back unchanged (`12500000`, `-5`, `2.5`; not `1.10`, not 16 digits, no
+   leading zero) is a number cell; every other cell is a text cell, so an NPWP or a phone number keeps its leading `0`
+   or `+`. A text longer than Excel's 32 767 characters is cut there. No cell is ever a
+   formula: text starting with `=` is stored as text, without the CSV apostrophe. `sep` is ignored. `format=csv` (the
+   default) is unchanged; any other format is `400 bad_request`, before any row is read.
 
 ## Not in this change
 

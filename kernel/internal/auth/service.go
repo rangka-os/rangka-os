@@ -60,6 +60,22 @@ type Principal struct {
 	User  *User
 	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken)
 	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write, members:write)
+	// Chat marks the token the chat relay minted for one chat (MintAssistantToken, contract 0020 §2): the kernel
+	// admitted that chat and counted its credit. An API token with the assistant scope is Via "ai" too, but not Chat.
+	Chat bool
+}
+
+// Kind names the principal for a client that must know what it was given (MCP _meta "rangka/principal"): chat
+// (the relay's per-chat token), assistant (an API token with the assistant scope), else Via (session, token,
+// oidc, dev).
+func (p *Principal) Kind() string {
+	switch {
+	case p.Chat:
+		return "chat"
+	case p.Via == "ai":
+		return "assistant"
+	}
+	return p.Via
 }
 
 // AIForbiddenMessage is the message of the ai_forbidden error: an assistant asked for something only a
@@ -273,7 +289,7 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 		}
 		scope, _ := claims["scope"].(string)
 		if ai, _ := claims["ai"].(bool); ai {
-			return &Principal{User: u, Via: "ai", Scope: scope}, nil
+			return &Principal{User: u, Via: "ai", Scope: scope, Chat: true}, nil
 		}
 		return &Principal{User: u, Via: "oidc", Scope: scope}, nil
 	}

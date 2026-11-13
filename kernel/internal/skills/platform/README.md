@@ -34,5 +34,8 @@ Per-harness details: [docs, Skills → Install](https://rangka-os.github.io/rang
 - Skills describe how, never whether: a ban belongs in the kernel (`ai_forbidden_path`, validator codes), and a skill
   only names it.
 - A skill never tells an agent to approve, apply or read secrets, and never contains keys or customer data.
+- App and module skills (rangka-apps) carry an **Offer** section (contract 0046 §6): what the app or module records,
+  its work screens, what Raka can automate with it, what needs the owner's approval, and when it fits or does not.
+  `rangka-consult` fills the offer card from it.
 - Run `rangka skills check skills` (here) or `rangka skills check apps modules` (rangka-apps). The kernel copies this
   folder into `kernel/internal/skills/platform/` with `make sync-schemas`; a test fails when they differ.

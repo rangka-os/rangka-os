@@ -69,7 +69,8 @@ answer; `flowchart` only; Bahasa Indonesia labels; no styling, no init blocks.
 - header `flowchart` or `graph` with `LR`, `RL`, `TD`, `TB` or `BT`;
 - node shapes `[]`, `()`, `([])`, `{}`, `[[ ]]`, `(( ))`; quoted labels; edges `-->`, `---`, `-.->`, `==>` with an
   optional `|label|`; chaining `A --> B --> C`; `&`; `subgraph ... end` (balanced); comments `%%`;
-- refused: `click`, `%%{init`, `style`, `classDef`, `linkStyle`, HTML in labels, other diagram types;
+- refused: `click`, `%%{init`, `style`, `classDef`, `class`, `linkStyle`, HTML in labels, other diagram types (this
+  list applies to model-written diagrams only; code-made offer diagrams use `class`, §3);
 - limits: at most 30 nodes, 60 edges, 80 characters per label, 4 KB of source;
 - every edge endpoint is declared or defined inline; no empty label in brackets.
 
@@ -99,19 +100,25 @@ are not checked again.
 
 New components in `web/design-system/bundle.js` (namespace `Rangka`), built on RichText.
 
-**Mermaid settings.** `securityLevel: "strict"`, `htmlLabels: false`, no `click` directives, and no `%%{init}%%`
-overrides from the model (the check refuses them). Labels are text, never HTML. Theme is `base` with
+**Mermaid settings.** `startOnLoad: false`, `securityLevel: "strict"`, and `htmlLabels: false` at the root level
+(Mermaid 11 ignores `flowchart.htmlLabels` alone). No `click` directives. Any `%%{init}%%` directive from the model is
+stripped, and Mermaid's `secure` list is extended with `htmlLabels`, `flowchart`, `theme`, `themeVariables`,
+`themeCSS` and `fontFamily`, so a directive cannot change them even if one slips through. Labels are text, never HTML. Theme is `base` with
 `themeVariables` taken from `tokens.json`. Mermaid is vendored (no CDN), pinned with a sha256 in `web/VENDOR.md` like
 React, served from the kernel's embedded web as `web/vendor/mermaid.min.js`, and loaded lazily, once and shared, the
 first time a diagram is in view. Pages without a diagram never load it.
 
 | Component | What |
 | --- | --- |
-| `flowToMermaid(flow)` | turns `flow` into Mermaid text: `flowchart LR` on wide cards, `flowchart TD` in the zoom popup on a phone; one node per stage, label = stage label, second line = piece labels (at most 2, then "+n"); `covered` Kapur fill and stone border, `not_covered` dashed warning border with a second line "Belum tercakup", `later` dashed stone border with "Menyusul"; labels are escaped (quotes, brackets, `#`, `;`, newlines) by the function, never trusted |
+| `flowToMermaid(flow)` | turns `flow` into Mermaid text; direction follows the width (below); one node per stage, label = stage label, second line = piece labels (at most 2, then "+n"); the state is set with one `class s<i> <state>` statement per node and styled by the design system's CSS: `covered` Kapur fill and stone border, `not_covered` dashed warning border with a second line "Belum tercakup", `later` dashed stone border with "Menyusul"; labels are escaped (quotes, brackets, `#`, `;`, newlines) by the function, never trusted |
 | `Diagram` `{source, title, alt}` | lazy-loads Mermaid, renders, shows a skeleton while loading and a "Perbesar" button; the SVG gets `role="img"` and `aria-label` = `alt` |
 | `DiagramViewer` | the zoom popup on the existing `Dialog`: full screen on a phone, a large modal on desktop; zoom with buttons (−, +, "Pas di layar"), wheel and pinch; pan by drag; keys `+ - 0` and arrows; `Esc` closes; the title in the head |
-| RichText | a `mermaid` fence becomes `Diagram` instead of `CodeBlock`; other fences stay `CodeBlock` |
+| RichText | a backtick `mermaid` fence (any case) becomes `Diagram` instead of `CodeBlock`; other fences, including `~~~` fences, stay `CodeBlock` |
 | `OfferCompare` | the option row of the offer card (§4) |
+
+**Direction is width-driven.** Inline diagrams in offer columns and in the narrow carousel are top-down (`flowchart
+TD`). A single wide card and the desktop zoom popup are left-to-right (`flowchart LR`); the popup turns top-down below
+720 px.
 
 **Fallbacks.** A broken block is a bug, so every failure has a quiet state:
 
@@ -148,9 +155,10 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
   (records, screens, Raka does, needs approval, adds), collapsed after the first two sections ("Lihat rincian") so
   columns stay comparable in height.
 - A gap is visible in the diagram and named under it ("Belum tercakup: ...").
-- **Widths:** the chat column decides. At 720 px or more the columns sit side by side (2 or 3). Narrower (phone, the
-  Konsol drawer) the row is a horizontal scroll-snap row, one card at a time, with "1 / 3" and the peeking edge of the
-  next; arrow buttons on pointer devices.
+- **Widths:** the chat column decides. Options sit side by side when each column gets at least 260 px (a container of
+  532 px or more for two options, 804 px or more for three). Otherwise (phone, the Konsol drawer) the row is a
+  horizontal scroll-snap row, one card at a time, with "1 / N" and the peeking edge of the next; arrow buttons on
+  pointer devices.
 - **One option:** a single wide card with the diagram, no row.
 - **Closed offers show no accept actions**, in the card and in the zoom popup:
   - an offer the owner already answered shows "Sudah dijawab";

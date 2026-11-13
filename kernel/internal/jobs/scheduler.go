@@ -166,10 +166,17 @@ func (s *Scheduler) Tick(ctx context.Context) {
 	}
 }
 
+// pollEnqueueTimeout bounds one tick's poll enqueues. pollMu is held meanwhile, so a database that does not answer
+// would otherwise hold a metadata reload (SetPolls) as long; a poll not enqueued in time keeps its slot open and is
+// tried again on the next tick (t_3c967f78).
+var pollEnqueueTimeout = 10 * time.Second
+
 // tickPolls enqueues each poll whose current slot has not been enqueued yet.
 func (s *Scheduler) tickPolls(ctx context.Context, now time.Time) {
 	s.pollMu.Lock()
 	defer s.pollMu.Unlock()
+	ctx, cancel := context.WithTimeout(ctx, pollEnqueueTimeout)
+	defer cancel()
 	s.mu.Lock()
 	polls := append([]*pollItem{}, s.polls...)
 	s.mu.Unlock()

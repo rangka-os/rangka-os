@@ -1624,7 +1624,9 @@
   }
   /* ---- Diagram: a ```mermaid fence drawn as SVG by a vendored, lazily loaded Mermaid (contract 0049 §3).
      The host app says where the file is (configureDiagrams); nothing is ever fetched from a CDN. */
-  var dgCfg = { src: "", onRenderError: null }, dgP = null, dgN = 0, dgQueue = Promise.resolve();
+  var dgCfg = { src: "", onRenderError: null }, dgP = null, dgN = 0, dgQueue = Promise.resolve(), dgReported = {}, dgCache = {};
+  /* Mermaid's own list (secure, securityLevel, startOnLoad, maxTextSize, suppressErrorRendering, maxEdges) plus what a model-written %%{init}%% must not change */
+  var DG_SECURE = ["secure", "securityLevel", "startOnLoad", "maxTextSize", "suppressErrorRendering", "maxEdges", "htmlLabels", "flowchart", "theme", "themeVariables", "themeCSS", "fontFamily"];
   /** configureDiagrams({src, onRenderError}): src = URL of vendor/mermaid.min.js; onRenderError(source, message) once per failing source. */
   function configureDiagrams(o) {
     o = o || {};
@@ -1650,7 +1652,7 @@
         var m = win.mermaid;
         if (!m || !m.initialize) { reject(new Error("Mermaid tidak termuat")); return; }
         try {
-          m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", flowchart: { htmlLabels: false }, themeVariables: dgThemeVars() });
+          m.initialize({ startOnLoad: false, securityLevel: "strict", theme: "base", htmlLabels: false, flowchart: { htmlLabels: false }, themeVariables: dgThemeVars(), secure: DG_SECURE });
         } catch (e) { reject(e); return; }
         resolve(m);
       }
@@ -1667,10 +1669,11 @@
   }
   /** Mermaid renders one at a time; a failed render leaves a stray node behind that we remove. */
   function dgRender(source) {
+    var clean = source.replace(/%%\{[\s\S]*?\}%%/g, "");
     var id = "rk-dg-" + (++dgN);
     var job = dgQueue.then(function () {
-      return loadMermaid().then(function (m) {
-        return Promise.resolve(m.render(id, source)).then(function (r) { return r && r.svg ? r.svg : String(r || ""); });
+      return loadMermaid().then(null, function (e) { e.rkLoad = true; throw e; }).then(function (m) {
+        return Promise.resolve(m.render(id, clean)).then(function (r) { return r && r.svg ? r.svg : String(r || ""); });
       });
     });
     dgQueue = job.then(function () {}, function () {});
@@ -1682,17 +1685,19 @@
   /** Chat / Format / Diagram: p.source (mermaid). p.pending = the fence is still streaming: skeleton only, never the source.
       p.onOpen: shows "Perbesar" (the viewer is the host's). */
   function Diagram(p) {
-    var st = useState({ status: "loading", svg: "", err: "" }), s = st[0], set = st[1], reported = useRef("");
+    var st = useState({ status: "loading", svg: "", err: "" }), s = st[0], set = st[1];
     useEffect(function () {
       if (p.pending) return;
       var live = true;
+      if (Object.prototype.hasOwnProperty.call(dgCache, p.source)) { set({ status: "ok", svg: dgCache[p.source], err: "" }); return; }
       set({ status: "loading", svg: "", err: "" });
-      dgRender(p.source).then(function (svg) { if (live) set({ status: "ok", svg: svg, err: "" }); }, function (e) {
+      dgRender(p.source).then(function (svg) { dgCache[p.source] = svg; if (live) set({ status: "ok", svg: svg, err: "" }); }, function (e) {
         if (!live) return;
         var msg = e && e.message ? String(e.message) : String(e);
         set({ status: "err", svg: "", err: msg });
-        if (reported.current !== p.source) {
-          reported.current = p.source;
+        /* once per source for the whole page; a script that did not load is not the diagram's fault */
+        if (!(e && e.rkLoad) && !Object.prototype.hasOwnProperty.call(dgReported, p.source)) {
+          dgReported[p.source] = true;
           if (dgCfg.onRenderError) { try { dgCfg.onRenderError(p.source, msg); } catch (e2) {} }
         }
       });
@@ -1724,7 +1729,7 @@
     return h("button", { type: "button", className: "rk-md-copy", "aria-label": done ? "Tersalin" : "Salin kode", onClick: copy },
       h(Icon, { name: done ? "check" : "copy" }), done ? "Tersalin" : "Salin");
   }
-  function mdBlock(b, key) {
+  function mdBlock(b, key, streaming) {
     switch (b.t) {
       case "h":
         return h(b.level <= 2 ? "h4" : "h5", { key: key, className: b.level <= 2 ? "rk-md-h1" : "rk-md-h2" }, mdInline(b.text, key + "."));
@@ -1759,7 +1764,7 @@
               }));
             }))));
       case "code":
-        if (mdIsDiagram(b)) return h(Diagram, { key: key, source: b.text, pending: b.open });
+        if (mdIsDiagram(b)) return h(Diagram, { key: key, source: b.text, pending: !!(b.open && streaming) });
         var lines = b.text.split("\n");
         return h("div", { key: key, className: "rk-md-codeblock" },
           h("div", { className: "rk-md-codehead" },
@@ -1792,7 +1797,7 @@
     blocks.slice(cut + 1).forEach(function (b) { hidden += mdLines(b); });
     return h("div", { className: cx("rk-md", p.className), "data-folded": folded ? "" : undefined },
       shown.map(function (b, j) {
-        var el = mdBlock(b, "b" + j);
+        var el = mdBlock(b, "b" + j, p.streaming);
         return folded && j === cut ? h("div", { key: "fade", className: "rk-md-fade", "aria-hidden": "true" }, el) : el;
       }),
       cut < blocks.length ? h("button", { type: "button", className: "rk-md-more", "aria-expanded": open ? "true" : "false", onClick: function () { setOpen(!open); } },

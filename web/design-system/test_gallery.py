@@ -106,6 +106,9 @@ with sync_playwright() as pw:
             else:
                 if "Diagram belum bisa ditampilkan" not in page.inner_text("[data-component=Diagram] [data-case=bad] .rk-diagram-err"):
                     fail(f"{tag}: broken diagram lacks its message")
+                page.wait_for_selector("[data-component=Diagram] [data-case=init] figure.rk-diagram svg", timeout=15000)
+                if page.locator("[data-component=Diagram] [data-case=init] foreignObject").count():
+                    fail(f"{tag}: %%{{init}} re-enabled htmlLabels (foreignObject in the svg)")
                 if not page.locator("[data-component=Diagram] [data-case=bad] details summary").count():
                     fail(f"{tag}: broken diagram lacks Lihat sumber")
                 if page.locator("[data-component=Diagram] [data-case=streaming] .rk-diagram-skel").count() != 1 or "Mulai" in page.inner_text("[data-component=Diagram] [data-case=streaming]"):

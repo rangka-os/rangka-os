@@ -85,3 +85,60 @@ test("loadMermaid shares one promise, injects one script and rejects without src
   d.scripts[0].onerror();
   await assert.rejects(a);
 });
+
+const figState = (t) => nodes(t, "figure.rk-diagram")[0].props["data-state"];
+test("an unclosed fence is pending only while streaming; a finished answer tries to render it", () => {
+  const text = "```mermaid\nflowchart LR\nA-->";
+  assert.equal(figState(render(R.RichText, { text, streaming: true })), "pending");
+  assert.equal(figState(render(R.RichText, { text })), "loading");
+  assert.equal(figState(render(R.RichText, { text, streaming: false })), "loading");
+});
+
+// live-effect harness: effects run at once (no cleanup), state is kept per call so a second render is a "remount"
+function loadLive(mermaid) {
+  const doc = fakeDoc();
+  const React = {
+    createElement: (type, props, ...children) => ({ type, props: props || {}, children }),
+    useState: (v) => { const cell = [v, (n) => { cell[0] = n; }]; return cell; },
+    useRef: (v) => ({ current: v === undefined ? null : v }),
+    useEffect: (f) => { f(); }, useMemo: (f) => f(), useCallback: (f) => f, Fragment: "Fragment",
+    Children: { map: (c, f) => [].concat(c || []).map(f), toArray: (c) => [].concat(c || []) },
+  };
+  const w = { React, mermaid };
+  vm.runInNewContext(SRC, { window: w, document: doc }, { filename: "bundle.js" });
+  return { X: w.Rangka, doc };
+}
+const tick = () => new Promise((r) => setTimeout(r, 5));
+
+test("onRenderError fires once per source across remounts; a load failure is not reported", async () => {
+  const mm = { initialize() {}, render: () => Promise.reject(new Error("Parse error")) };
+  const { X } = loadLive(mm);
+  const seen = [];
+  X.configureDiagrams({ src: "/m.js", onRenderError: (s, e) => seen.push([s, e]) });
+  for (let i = 0; i < 3; i++) { render(X.Diagram, { source: "bad A" }); await tick(); }
+  assert.equal(seen.length, 1);
+  assert.equal(seen[0][0], "bad A");
+  render(X.Diagram, { source: "bad B" }); await tick();
+  assert.equal(seen.length, 2);
+  // no src configured: the callout shows, the host hears nothing
+  const none = loadLive(undefined), seen2 = [];
+  none.X.configureDiagrams({ onRenderError: (s) => seen2.push(s) });
+  render(none.X.Diagram, { source: "x" }); await tick();
+  assert.equal(seen2.length, 0);
+});
+test("initialize locks htmlLabels/theme against %%{init}%%, and directives are stripped from the source", async () => {
+  let init = null, rendered = null;
+  const mm = { initialize: (c) => { init = c; }, render: (id, src) => { rendered = src; return Promise.resolve({ svg: "<svg></svg>" }); } };
+  const { X } = loadLive(mm);
+  X.configureDiagrams({ src: "/m.js" });
+  render(X.Diagram, { source: "%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'dark'}}%%\nflowchart LR\nA-->B" });
+  await tick();
+  assert.equal(init.securityLevel, "strict");
+  assert.equal(init.flowchart.htmlLabels, false);
+  assert.equal(init.htmlLabels, false); // 11.4.1 draws foreignObject labels unless the root key is false too
+  assert.equal(init.theme, "base");
+  assert.equal(init.startOnLoad, false);
+  for (const k of ["htmlLabels", "flowchart", "theme", "themeVariables", "themeCSS", "fontFamily", "securityLevel", "secure"]) assert.ok(init.secure.includes(k), k);
+  assert.ok(!rendered.includes("%%{"), rendered);
+  assert.ok(rendered.includes("flowchart LR"));
+});

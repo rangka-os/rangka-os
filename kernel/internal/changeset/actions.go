@@ -180,7 +180,7 @@ func (s *Service) modulesDiff(ctx context.Context, cs *ChangeSet, live *store.Li
 	}
 	sort.Strings(d.Added)
 	sort.Strings(d.Removed)
-	var withRows []string
+	var withRows, submitted []string
 	for _, n := range d.Removed {
 		u := before.App[n]
 		if u == nil {
@@ -199,6 +199,17 @@ func (s *Service) modulesDiff(ctx context.Context, cs *ChangeSet, live *store.Li
 			p.Affected[mn] = c
 			if c > 0 {
 				withRows = append(withRows, fmt.Sprintf("%s (%d)", mn, c))
+				sub, err := store.CountSubmittedTable(ctx, s.DB, store.TableName(mn), live.Columns[store.TableName(mn)])
+				if err != nil {
+					return err
+				}
+				if sub > 0 {
+					if d.Submitted == nil {
+						d.Submitted = map[string]int64{}
+					}
+					d.Submitted[mn] = sub
+					submitted = append(submitted, fmt.Sprintf("%s (%d)", mn, sub))
+				}
 			}
 		}
 	}
@@ -248,6 +259,12 @@ func (s *Service) modulesDiff(ctx context.Context, cs *ChangeSet, live *store.Li
 	}
 	if len(d.Removed) > 0 {
 		p.Notes = append(p.Notes, "dilepas: "+strings.Join(d.Removed, ", ")+" (tabel dan datanya disimpan, kembali saat dipasang lagi)")
+	}
+	if len(submitted) > 0 {
+		// e.g. daily sales forms of today: once their app is removed, the cashier's "one sales source per outlet and
+		// day" guard no longer sees them, and the same day can be recorded twice
+		p.Notes = append(p.Notes, "dokumen yang sudah diajukan di app yang dilepas: "+strings.Join(submitted, ", ")+
+			"; app lain yang masih terpasang tidak melihatnya lagi, jadi pemeriksaan yang memakai dokumen itu (mis. satu sumber penjualan per outlet per hari) berhenti berlaku")
 	}
 	if len(withRows) > 0 && cs.Risk != "high" {
 		cs.Risk = "high"

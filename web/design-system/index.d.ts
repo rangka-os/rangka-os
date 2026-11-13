@@ -230,6 +230,21 @@ export declare function diagramTopDown(source: string): string;
 export declare function configureDiagrams(o: { src: string; onRenderError?: (source: string, error: string) => void }): void;
 /** The one memoised promise for the Mermaid global (securityLevel strict, htmlLabels off). Rejects without a configured src. */
 export declare function loadMermaid(): Promise<unknown>;
+/** One stage of an offer option's flow (contract 0049 §1). `pieces` are display labels only. */
+export interface FlowStage { stage: string; label: string; pieces: string[]; state: "covered" | "not_covered" | "later" }
+/** A flow as Mermaid text: `flowchart <dir>` (default LR), nodes s0..sN labelled "stage<br/>pieces" (at most 2, then +n; "Belum tercakup" or
+ * "Menyusul" for those states), one chain of edges, then `class s<i> <state>`. Labels are escaped (#35; #quot; #lt; #gt; #59;, newline to space). */
+export declare function flowToMermaid(flow: FlowStage[], dir?: "LR" | "TD"): string;
+export interface OfferOption { id: string; path: "custom" | "modules" | "bundle"; title: string; flow?: FlowStage[];
+  records?: string[]; screens?: string[]; raka_does?: string[]; needs_approval?: string[]; adds?: string[];
+  not_covered?: Array<{ stage: string; text: string }>; later?: Array<{ piece: string; text: string; reason?: { code: string; message: string } }> }
+export interface Offer { id: string; recommended: string; options: OfferOption[] }
+/** Chat / OfferCompare (0049 §4): root `[data-card=offer][data-offer=<id>]`, one `section[data-option=<id>]` per option, recommended first
+ * with "Disarankan". Equal columns from 720 px of card width, a scroll-snap carousel with "1 / 3" below. "Perbesar" opens a DiagramViewer
+ * (LR source) whose head carries `renderActions(option, isRecommended)`. `closedLabel` ("Sudah dijawab", "Peta sudah berubah") mutes the
+ * card and drops every action, also in the viewer. `footer` (Ubah sesuatu, Tidak dulu) sits under the row. */
+export declare function OfferCompare(props: { offer: Offer; closedLabel?: string; renderActions: (option: OfferOption, isRecommended: boolean) => Node;
+  footer?: Node; className?: string }): React.ReactElement;
 /** The block list RichText draws (for tests and tools). */
 export declare function markdownBlocks(text: string): Array<{ t: "h" | "p" | "list" | "kv" | "table" | "code" | "quote" | "callout" | "hr"; [k: string]: unknown }>;
 /** The link a Raka answer may open, or "" (javascript:, data:, //host and the like stay text). */

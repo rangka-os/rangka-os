@@ -153,6 +153,52 @@ with sync_playwright() as pw:
                     fail(f"740: source should not be top-down (viewBox {bb})")
                 page.keyboard.press("Escape")
                 page.set_viewport_size({"width": 400, "height": 900})
+            # OfferCompare (0049 §4): recommended first, columns side by side from 720 px, a carousel with "1 / 3" below
+            try:
+                page.wait_for_selector("[data-component=OfferCompare] [data-case=three] [data-option=opt_custom] figure.rk-diagram svg", timeout=15000)
+            except Exception:
+                fail(f"{tag}: OfferCompare diagram did not render")
+            else:
+                oc = page.evaluate("""() => {
+                  const q = (s) => document.querySelector('[data-component=OfferCompare] ' + s);
+                  const opts = [...document.querySelectorAll('[data-component=OfferCompare] [data-case=three] .rk-offer-opt')];
+                  const cnt = q('[data-case=three] .rk-offer-count');
+                  const node = [...document.querySelectorAll('[data-component=OfferCompare] [data-case=three] [data-option=opt_custom] g.node')][3];
+                  return { first: opts[0].dataset.option, tops: opts.map(o => Math.round(o.getBoundingClientRect().top)), hs: opts.map(o => Math.round(o.getBoundingClientRect().height)),
+                    count: cnt && cnt.offsetParent ? cnt.textContent : null, lines: node ? node.querySelectorAll('text > tspan').length : 0, label: node ? node.textContent : '',
+                    closedActs: document.querySelectorAll('[data-component=OfferCompare] [data-case=closed] .rk-offer-acts, [data-component=OfferCompare] [data-case=closed] [data-action]').length,
+                    closedPill: (q('[data-case=closed] .rk-offer-head .rk-pill') || {}).textContent, oneCount: !!q('[data-case=one] .rk-offer-count') };
+                }""")
+                if oc["first"] != "opt_custom":
+                    fail(f"{tag}: OfferCompare should put the recommended option first, got {oc['first']}")
+                if len(set(oc["hs"])) != 1:
+                    fail(f"{tag}: OfferCompare columns differ in height {oc['hs']}")
+                if width >= 720 and (len(set(oc["tops"])) != 1 or oc["count"] is not None):
+                    fail(f"{tag}: OfferCompare should be side by side without a count at {width} ({oc})")
+                if width < 720 and oc["count"] != "1 / 3":
+                    fail(f"{tag}: OfferCompare carousel count is {oc['count']!r}, want '1 / 3'")
+                if oc["lines"] < 2 or '"lunas"; #1' not in oc["label"] or "&" in oc["label"].replace("& deposit", ""):
+                    fail(f"{tag}: flow node label not drawn as two decoded lines: {oc['lines']} {oc['label']!r}")
+                if oc["closedActs"] or oc["closedPill"] != "Peta sudah berubah" or oc["oneCount"]:
+                    fail(f"{tag}: closed / single OfferCompare wrong: {oc}")
+                if width < 720 and theme == "light":
+                    page.locator("[data-component=OfferCompare] [data-case=three] .rk-offer-row").evaluate("r => r.scrollTo({ left: r.children[1].offsetLeft })")
+                    page.wait_for_timeout(300)
+                    if page.inner_text("[data-component=OfferCompare] [data-case=three] .rk-offer-count") != "2 / 3":
+                        fail(f"{tag}: OfferCompare count did not follow the scroll")
+                # the zoom popup draws LR and carries the option's actions, but never on a closed offer
+                page.locator("[data-component=OfferCompare] [data-case=three] [data-option=opt_custom] button[aria-label=Perbesar]").click()
+                page.wait_for_selector(".rk-diagram-viewer .rk-dv-stage svg", timeout=15000)
+                if page.locator(".rk-diagram-viewer [data-action='offer_accept:opt_custom']").count() != 1:
+                    fail(f"{tag}: OfferCompare viewer lacks the option's action")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(150)
+                page.locator("[data-component=OfferCompare] [data-case=closed] [data-option=opt_custom] button[aria-label=Perbesar]").click()
+                page.wait_for_selector(".rk-diagram-viewer .rk-dv-stage svg", timeout=15000)
+                if page.locator(".rk-diagram-viewer [data-action]").count():
+                    fail(f"{tag}: closed OfferCompare viewer shows actions")
+                page.keyboard.press("Escape")
+                page.wait_for_timeout(150)
             doc, vw = page.evaluate("[document.documentElement.scrollWidth, window.innerWidth]")
             if doc > vw + 1:
                 fail(f"{tag}: horizontal page scroll {doc} > {vw}")

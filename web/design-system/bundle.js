@@ -1,4 +1,4 @@
-/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"},{"name":"Diagram"},{"name":"DiagramViewer"}]} */
+/* @ds-bundle: {"format":4,"namespace":"Rangka","components":[{"name":"Button"},{"name":"Icon"},{"name":"StatusChip"},{"name":"Amount"},{"name":"Field"},{"name":"Segmented"},{"name":"StatCard"},{"name":"DataTable"},{"name":"DocumentHeader"},{"name":"PosKeypad"},{"name":"Raka"},{"name":"Table"},{"name":"Pagination"},{"name":"Dialog"},{"name":"Drawer"},{"name":"CommandMenu"},{"name":"ContextMenu"},{"name":"Sidebar"},{"name":"Topbar"},{"name":"Tabs"},{"name":"Alert"},{"name":"Toast"},{"name":"Form"},{"name":"Select"},{"name":"MultiSelect"},{"name":"ChatComposer"},{"name":"Avatar"},{"name":"ImagePreview"},{"name":"EmptyState"},{"name":"LinkField"},{"name":"ChildTable"},{"name":"DatePicker"},{"name":"DateRangePicker"},{"name":"AppShell"},{"name":"PageHeader"},{"name":"Card"},{"name":"Descriptions"},{"name":"Steps"},{"name":"Lozenge"},{"name":"Badge"},{"name":"TopNav"},{"name":"AppSwitcher"},{"name":"AccountMenu"},{"name":"Spinner"},{"name":"Skeleton"},{"name":"FilterBar"},{"name":"FilterBuilder"},{"name":"SettingsLayout"},{"name":"SettingsSection"},{"name":"SettingsRow"},{"name":"NumberCard"},{"name":"Chart"},{"name":"ChartCard"},{"name":"ListCard"},{"name":"DashGrid"},{"name":"Sparkline"},{"name":"ViewSwitcher"},{"name":"BulkBar"},{"name":"GroupList"},{"name":"ReportTable"},{"name":"DocPanel"},{"name":"Logo"},{"name":"AuthLayout"},{"name":"AskBar"},{"name":"ChatDrawer"},{"name":"RakaLauncher"},{"name":"RichText"},{"name":"Diagram"},{"name":"DiagramViewer"},{"name":"OfferCompare"}]} */
 (function () {
   var React = window.React, h = React.createElement;
   function cx() { return Array.prototype.filter.call(arguments, Boolean).join(" "); }
@@ -1668,13 +1668,17 @@
     p.catch(function () { if (dgP === p) dgP = null; });
     return p;
   }
+  /* Mermaid 11.4 with htmlLabels false writes an entity code (#quot;, #35;) and even a plain "&" into SVG text as
+     "&amp;quot;" etc., so "&quot;" shows literally. Turn those back into one entity reference: the browser decodes it
+     as text, never as markup. */
+  function dgEntities(svg) { return String(svg).replace(/&amp;(amp|quot|lt|gt|apos|#\d{1,7}|#x[0-9a-f]{1,6});/gi, "&$1;"); }
   /** Mermaid renders one at a time; a failed render leaves a stray node behind that we remove. */
   function dgRender(source) {
     var clean = source.replace(/%%\{[\s\S]*?\}%%/g, "");
     var id = "rk-dg-" + (++dgN);
     var job = dgQueue.then(function () {
       return loadMermaid().then(null, function (e) { e.rkLoad = true; throw e; }).then(function (m) {
-        return Promise.resolve(m.render(id, clean)).then(function (r) { return r && r.svg ? r.svg : String(r || ""); });
+        return Promise.resolve(m.render(id, clean)).then(function (r) { return dgEntities(r && r.svg ? r.svg : String(r || "")); });
       });
     });
     dgQueue = job.then(function () {}, function () {});
@@ -1861,6 +1865,117 @@
           h(Button, { variant: "quiet", disabled: !ok, onClick: fit }, "Pas di layar")),
         phone ? null : h("span", { key: "hint", className: "rk-dv-hint" }, "Seret untuk menggeser, Esc untuk menutup")] },
       h("div", { className: "rk-dv-viewport", ref: vp, tabIndex: 0, "data-viewer": "1", onKeyDown: key, onPointerDown: down, onPointerMove: move, onPointerUp: up, onPointerCancel: up }, body));
+  }
+  /* ---- flowToMermaid: an offer option's flow (contract 0049 §1) as Mermaid text. Labels are escaped in one pass with
+     Mermaid entity codes (so the "#" of an inserted code is never escaped again); newlines become spaces. */
+  var FLOW_ESC = { "#": "#35;", "\"": "#quot;", "<": "#lt;", ">": "#gt;", ";": "#59;" };
+  function flowEsc(s) { return String(s == null ? "" : s).replace(/[#"<>;]/g, function (c) { return FLOW_ESC[c]; }).replace(/\r\n|\r|\n/g, " "); }
+  var FLOW_STATES = { covered: 1, not_covered: 1, later: 1 };
+  function flowToMermaid(flow, dir) {
+    flow = Array.isArray(flow) ? flow : [];
+    var out = ["flowchart " + (dir === "TD" ? "TD" : "LR")];
+    flow.forEach(function (st, i) {
+      var second = "";
+      if (st.state === "not_covered") second = "Belum tercakup";
+      else if (st.state === "later") second = "Menyusul";
+      else {
+        var ps = Array.isArray(st.pieces) ? st.pieces : [];
+        second = ps.slice(0, 2).join(", ") + (ps.length > 2 ? " +" + (ps.length - 2) : "");
+      }
+      out.push("  s" + i + "[\"" + flowEsc(st.label) + (second ? "<br/>" + flowEsc(second) : "") + "\"]");
+    });
+    if (flow.length > 1) out.push("  " + flow.map(function (_, i) { return "s" + i; }).join(" --> "));
+    flow.forEach(function (st, i) { out.push("  class s" + i + " " + (FLOW_STATES[st.state] ? st.state : "covered")); });
+    return out.join("\n");
+  }
+
+  /* ---- OfferCompare: the option row of Raka's offer card (contract 0049 §4, Figma Agent chat › Chat/OfferCompare).
+     Side by side from 720 px of card width (container query), a scroll-snap carousel below that. */
+  var OFFER_PATH = { custom: "Sesuai alurmu", modules: "Modul + konektor", bundle: "Paket" };
+  var OFFER_LISTS = [["records", "Yang dicatat"], ["screens", "Layar kerja"], ["raka_does", "Yang Raka bantu"], ["needs_approval", "Butuh persetujuanmu"], ["adds", "Ikut terpasang"]];
+  function offerText(x) { return x && typeof x === "object" ? String(x.text || "") : String(x == null ? "" : x); }
+  function offerJoin(xs) {
+    var t = xs.map(offerText).filter(Boolean);
+    return t.length < 2 ? t.join("") : t.slice(0, -1).join(", ") + " dan " + t[t.length - 1];
+  }
+  function offerList(o, key, label) {
+    return h("div", { key: key, className: "rk-offer-list" }, h("h4", null, label),
+      h("ul", null, o[key].map(function (x, i) { return h("li", { key: i }, offerText(x)); })));
+  }
+  function offerFlowAlt(flow) {
+    return "Alur: " + flow.map(function (s) { return s.label + (s.state === "not_covered" ? " (belum tercakup)" : s.state === "later" ? " (menyusul)" : ""); }).join(", lalu ");
+  }
+  function OfferCompare(p) {
+    var offer = p.offer || {}, closed = !!p.closedLabel;
+    var all = Array.isArray(offer.options) ? offer.options : [];
+    var opts = all.filter(function (o) { return o.id === offer.recommended; }).concat(all.filter(function (o) { return o.id !== offer.recommended; }));
+    var single = opts.length === 1;
+    var root = useRef(null), row = useRef(null), back = useRef(null);
+    var ws = useState(function () { return typeof window !== "undefined" && window.innerWidth >= 720; }), wide = ws[0], setWide = ws[1];
+    var is = useState(0), idx = is[0], setIdx = is[1];
+    var vs = useState(null), viewing = vs[0], setViewing = vs[1];
+    useEffect(function () {
+      var el = root.current;
+      if (!el || typeof ResizeObserver === "undefined") return;
+      var ro = new ResizeObserver(function () { setWide(el.getBoundingClientRect().width >= 720); });
+      ro.observe(el);
+      return function () { ro.disconnect(); };
+    }, []);
+    function cards() { return row.current ? Array.prototype.slice.call(row.current.children) : []; }
+    function onScroll() {
+      var r = row.current, cs = cards();
+      if (!r || !cs.length) return;
+      var best = 0;
+      cs.forEach(function (c, i) { if (Math.abs(c.offsetLeft - r.scrollLeft) < Math.abs(cs[best].offsetLeft - r.scrollLeft)) best = i; });
+      setIdx(best);
+    }
+    function go(d) {
+      var r = row.current, cs = cards(), i = Math.max(0, Math.min(cs.length - 1, idx + d));
+      if (!r || !cs[i]) return;
+      if (r.scrollTo) r.scrollTo({ left: cs[i].offsetLeft, behavior: "smooth" }); else r.scrollLeft = cs[i].offsetLeft;
+      setIdx(i);
+    }
+    function open(id, e) { back.current = e && e.currentTarget ? e.currentTarget : null; setViewing(id); }
+    function close() {
+      setViewing(null);
+      var b = back.current;
+      if (b && b.focus) setTimeout(function () { try { b.focus(); } catch (e) {} }, 0);
+    }
+    var dir = single && wide ? "LR" : "TD";
+    var sections = opts.map(function (o) {
+      var rec = o.id === offer.recommended, flow = Array.isArray(o.flow) ? o.flow : [];
+      var lists = OFFER_LISTS.filter(function (l) { return Array.isArray(o[l[0]]) && o[l[0]].length; });
+      var gaps = Array.isArray(o.not_covered) ? o.not_covered : [], later = Array.isArray(o.later) ? o.later : [];
+      return h("section", { key: o.id, className: cx("rk-offer-opt", rec && "is-rec"), "data-option": o.id, "aria-label": (OFFER_PATH[o.path] || o.path || "Pilihan") + (rec ? ", disarankan" : "") },
+        h("div", { className: "rk-offer-opthead" },
+          h("span", { className: "rk-offer-path" }, OFFER_PATH[o.path] || o.path || ""),
+          rec ? h("span", { className: "rk-pill rk-offer-rec" }, h(Icon, { name: "star" }), "Disarankan") : null),
+        h("h3", { className: "rk-offer-title", title: o.title }, o.title),
+        flow.length ? h("div", { className: "rk-offer-flow", "data-flow-dir": dir },
+          h(Diagram, { source: flowToMermaid(flow, dir), title: "Alur kerja", alt: offerFlowAlt(flow), onOpen: function (e) { open(o.id, e); } })) : null,
+        gaps.length ? h("p", { className: "rk-offer-gap is-gap" }, h(Icon, { name: "warning" }), h("span", null, h("b", null, "Belum tercakup:"), " " + offerJoin(gaps))) : null,
+        later.length ? h("p", { className: "rk-offer-gap is-later" }, h(Icon, { name: "time" }), h("span", null, h("b", null, "Menyusul:"), " " + offerJoin(later))) : null,
+        lists.length ? h("div", { className: "rk-offer-lists" },
+          lists.slice(0, 2).map(function (l) { return offerList(o, l[0], l[1]); }),
+          lists.length > 2 ? h("details", { className: "rk-offer-more" }, h("summary", null, h(Icon, { name: "down" }), "Lihat rincian"),
+            h("div", { className: "rk-offer-lists" }, lists.slice(2).map(function (l) { return offerList(o, l[0], l[1]); }))) : null) : null,
+        closed ? null : h("div", { className: "rk-offer-acts" }, p.renderActions ? p.renderActions(o, rec) : null));
+    });
+    var vo = null;
+    opts.forEach(function (o) { if (o.id === viewing) vo = o; });
+    return h("div", { ref: root, className: cx("rk-offer", single && "is-single", closed && "is-closed", p.className), "data-card": "offer", "data-offer": offer.id },
+      h("div", { className: "rk-offer-head" },
+        h(Icon, { name: "spark" }), h("span", { className: "rk-offer-name" }, "Tawaran Raka"), h("span", { className: "rk-offer-sub" }, "belum dibangun"),
+        h("span", { className: "rk-offer-end" },
+          closed ? h(Lozenge, null, p.closedLabel) : null,
+          !closed && !single ? h("span", { className: "rk-offer-count", "aria-live": "polite" }, (idx + 1) + " / " + opts.length) : null,
+          !closed && !single ? h("span", { className: "rk-offer-nav" },
+            h(IconButton, { icon: "left", label: "Pilihan sebelumnya", disabled: idx <= 0, onClick: function () { go(-1); } }),
+            h(IconButton, { icon: "right", label: "Pilihan berikutnya", disabled: idx >= opts.length - 1, onClick: function () { go(1); } })) : null)),
+      h("div", { ref: row, className: "rk-offer-row", role: "group", "aria-label": "Pilihan tawaran", onScroll: onScroll }, sections),
+      p.footer ? h("div", { className: "rk-offer-foot" }, p.footer) : null,
+      vo ? h(DiagramViewer, { open: true, source: flowToMermaid(vo.flow, "LR"), title: vo.title, onClose: close,
+        actions: closed ? null : (p.renderActions ? p.renderActions(vo, vo.id === offer.recommended) : null) }) : null);
   }
   function MdCopy(p) {
     var st = useState(false), done = st[0], set = st[1];
@@ -2069,6 +2184,7 @@
   api.Logo = Logo; api.AuthLayout = AuthLayout;
   api.AskBar = AskBar; api.ChatDrawer = ChatDrawer; api.RakaLauncher = RakaLauncher;
   api.Diagram = Diagram; api.DiagramViewer = DiagramViewer; api.diagramTopDown = diagramTopDown; api.configureDiagrams = configureDiagrams; api.loadMermaid = loadMermaid;
+  api.OfferCompare = OfferCompare; api.flowToMermaid = flowToMermaid;
   api.RichText = RichText; api.markdownBlocks = mdBlocks; api.safeHref = mdSafeHref;
   api.BREAKPOINTS = BREAKPOINTS; api.breakpoint = breakpoint; api.useBreakpoint = useBreakpoint; api.isTouch = isTouch;
   window.Rangka = Object.assign(window.Rangka || {}, api);

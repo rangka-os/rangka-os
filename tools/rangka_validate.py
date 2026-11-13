@@ -808,7 +808,13 @@ def check_secret_hosts(rep, p, c):
             rep.add("error", p, f"actions/{i}/request/url", "secret_host_undeclared", f'action "{name}" sends a secret to {host}, which is not in hosts ({", ".join(str(h) for h in hosts)}) (contract 0017 §5)')
 
 
-SECRET_REF = re.compile(r"^\$\{[A-Z][A-Z0-9_]*\}$")
+SECRET_REF = re.compile(r"^\$\{([A-Z][A-Z0-9_]*)\}$")
+# kernel meta.PlatformEnv: variables of the platform a company's system.rk may not bind (audit business-raka F1)
+PLATFORM_ENV_PREFIXES = ("RANGKA_", "RAKA_", "ANTHROPIC_", "OPENAI_", "VAULT_", "AWS_", "ECS_", "PG")
+
+
+def platform_env(name):
+    return name == "DATABASE_URL" or name.startswith(PLATFORM_ENV_PREFIXES)
 
 
 def check_poll_triggers(rep, p, c):
@@ -848,6 +854,10 @@ def check_connector_auth(rep, sysdoc, conns):
             c = conns[cn][1] if isinstance(conns[cn][1], dict) else {}
             fields = {f.get("name"): f for f in ((c.get("auth") or {}).get("fields") or []) if isinstance(f, dict)}
             for fn in sorted(block[cn]):
+                ref = SECRET_REF.match(block[cn][fn]) if isinstance(block[cn][fn], str) else None
+                if ref and platform_env(ref.group(1)):
+                    rep.add("error", p, f"{where}/{cn}/{fn}", "platform_env", f'{cn}.{fn} reads ${{{ref.group(1)}}}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)')
+                    continue
                 if fn not in fields:
                     rep.add("error", p, f"{where}/{cn}/{fn}", "unknown_auth_field", f'connector {cn} has no auth field "{fn}"{suggest(fn, [k for k in fields if isinstance(k, str)])}')
                 elif fields[fn].get("secret") is True and not (isinstance(block[cn][fn], str) and SECRET_REF.match(block[cn][fn])):

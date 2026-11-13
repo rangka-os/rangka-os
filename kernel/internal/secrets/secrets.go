@@ -209,6 +209,10 @@ func (s *Service) bound(ctx context.Context, reg *meta.Registry, org, connector,
 	if m == nil {
 		return text, text != ""
 	}
+	if meta.PlatformEnv(m[1]) { // the validator refuses it too; never resolve the platform's own variables (audit business-raka F1)
+		s.logf("secrets: connector_auth %s.%s reads ${%s}, a platform variable: left unset", connector, field, m[1])
+		return "", false
+	}
 	switch s.Driver() {
 	case "file":
 		dir, _ := reg.SystemConfig("secrets.path").(string)

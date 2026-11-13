@@ -177,7 +177,7 @@ func URLHost(u string) string {
 	return strings.ToLower(rest)
 }
 
-var secretRef = regexp.MustCompile(`^\$\{[A-Z][A-Z0-9_]*\}$`)
+var secretRef = regexp.MustCompile(`^\$\{([A-Z][A-Z0-9_]*)\}$`)
 
 // connectorAuth is contract 0017 §2 (check_connector_auth in rangka_validate.py): system.rk connector_auth binds known
 // connectors and fields, and a secret field is a ${VAR} reference.
@@ -235,6 +235,12 @@ func (v *validator) connectorAuth() {
 			}
 			for _, fn := range sortedKeysM(bind) {
 				f, ok := fields[fn]
+				if s, isStr := bind[fn].(string); isStr {
+					if m := secretRef.FindStringSubmatch(s); m != nil && PlatformEnv(m[1]) {
+						v.rep.extra("error", d.Path, b.where+"/"+cn+"/"+fn, "platform_env", fmt.Sprintf(`%s.%s reads ${%s}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)`, cn, fn, m[1]))
+						continue
+					}
+				}
 				switch {
 				case !ok:
 					v.rep.extra("error", d.Path, b.where+"/"+cn+"/"+fn, "unknown_auth_field", fmt.Sprintf(`connector %s has no auth field "%s"%s`, cn, fn, suggest(fn, names)))

@@ -36,6 +36,10 @@ services:
       RANGKA_PDF_CONCURRENCY: ${RANGKA_PDF_CONCURRENCY:-1}
       RANGKA_AI_URL: ${RANGKA_AI_URL:-}
       RANGKA_AI_SECRET: ${RANGKA_AI_SECRET:-}
+      # connectors of a hosted company reach only public addresses (contract 0017 §5); list internal CIDRs a
+      # connector must still reach in RANGKA_CONNECTOR_EGRESS_ALLOW
+      RANGKA_CONNECTOR_EGRESS: public
+      RANGKA_CONNECTOR_EGRESS_ALLOW: ${RANGKA_CONNECTOR_EGRESS_ALLOW:-}
     volumes:
       - ${HOST_DIR:?}/tenants/${TENANT_ID:?}:/srv
     networks:

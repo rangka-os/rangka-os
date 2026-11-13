@@ -23,8 +23,11 @@ type Runtime struct {
 	Resolver
 	DB   *pg.Pool
 	HTTP *http.Client // nil = a client with a 30 s timeout
-	Now  func() time.Time
-	Log  func(format string, args ...any)
+	// Egress is the platform's egress policy (RANGKA_CONNECTOR_EGRESS); the zero value allows every address
+	Egress     Egress
+	transports transportCache
+	Now        func() time.Time
+	Log        func(format string, args ...any)
 	// StartFlow queues a flow with an event in qr (the transaction that records the event key; the server wires the
 	// queue); nil = events are only audited.
 	StartFlow func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, uniqueKey string) error
@@ -50,7 +53,7 @@ func (rt *Runtime) client(secret bool, host string) *http.Client {
 	if base == nil {
 		base = &http.Client{Timeout: 30 * time.Second}
 	}
-	c := *base
+	c := *rt.Egress.guard(base, &rt.transports)
 	// a request that carries a secret follows redirects only to the same host (§5)
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
@@ -95,7 +98,7 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	hr.Header.Set("Accept", "application/json")
 	resp, err := rt.client(req.Secret, req.Host).Do(hr)
 	if err != nil {
-		return nil, rt.fail(ctx, org, connector, action, req, &CallError{Message: req.scrub.String(err.Error()), Retryable: !errors.Is(err, ErrHostRefused)})
+		return nil, rt.fail(ctx, org, connector, action, req, &CallError{Message: req.scrub.String(err.Error()), Retryable: !errors.Is(err, ErrHostRefused) && !errors.Is(err, ErrEgressRefused)})
 	}
 	defer resp.Body.Close()
 	raw, _ := io.ReadAll(io.LimitReader(resp.Body, maxResponse))

@@ -243,7 +243,11 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		cfg.Logf("secrets: driver vault without VAULT_ADDR; connector secrets read as unset")
 	}
 	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows
-	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf,
+	egress, err := connectors.EgressFromEnv(os.Getenv)
+	if err != nil {
+		return nil, err
+	}
+	s.Connectors = &connectors.Runtime{Resolver: connectors.Resolver{Reg: e.Reg, Secrets: s.API.Secrets}, DB: db, Now: cfg.Now, Log: cfg.Logf, Egress: egress,
 		StartFlow: func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, key string) error {
 			_, err := s.Queue.Enqueue(ctx, qr, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
 			return err
@@ -347,6 +351,8 @@ func upstreams(cfg any, lookup func(string) (string, bool)) ([]auth.Upstream, er
 			v := meta.Str(um, f.key)
 			m := envRef.FindStringSubmatch(v)
 			switch {
+			case m != nil && meta.PlatformEnv(m[1]):
+				return nil, fmt.Errorf("%s: %s reads ${%s}, a variable of the platform; bind a variable of your own", where, f.key, m[1])
 			case m != nil:
 				val, ok := lookup(m[1])
 				if !ok || val == "" {

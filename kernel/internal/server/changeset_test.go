@@ -6,6 +6,7 @@ import (
 	"net/http/cookiejar"
 	"os"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -202,6 +203,102 @@ func TestAutoApplyLowRisk(t *testing.T) {
 	cs2 := ai.must(201, "POST", "/api/v1/changesets", addRegion()).JSON
 	ai.must(200, "POST", "/api/v1/changesets/"+cs2["id"].(string)+"/validate", nil)
 	ai.must(409, "POST", "/api/v1/changesets/"+cs2["id"].(string)+"/apply", nil)
+}
+
+// Audit C3-1 F4 (contract 0020 §4): with config.ai.auto_apply: low_risk the kernel applies a low-risk change set as
+// the system right after its preview; any other actor still needs an approved change set unless it is an approver.
+// A member who is not an approver (sales_rep) cannot apply someone else's validated low-risk change set.
+func TestAutoApplyOnlySystemOrApprover(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, []byte(strings.Replace(string(b), "auto_apply: never", "auto_apply: low_risk", 1)), 0o644)
+	})
+	e.login()
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "rep@kopisenja.id", "Sales", "rahasia-123", "kopi-senja", "sales_rep", "USR-003"); err != nil {
+		t.Fatal(err)
+	}
+	rep := loginAs(e, "rep@kopisenja.id", "rahasia-123")
+	propose := func(color string) string {
+		cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Warna grafik", "ops": []any{map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": "/color/chart-1", "value": color}}}}}).JSON
+		if cs["risk"] != "low" {
+			t.Fatalf("risk %v", cs["risk"])
+		}
+		id := cs["id"].(string)
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+		return id
+	}
+	id := propose("#0055cc")
+	if r := rep.do("POST", "/api/v1/changesets/"+id+"/apply", nil); r.Status != 409 || errCode(r) != "not_approved" {
+		t.Fatalf("a non-approver applied a validated low-risk change set: %d %s", r.Status, r.Body)
+	}
+	if st := e.must(200, "GET", "/api/v1/changesets/"+id, nil).JSON["status"]; st != "validated" {
+		t.Fatalf("status after the refused apply: %v", st)
+	}
+	// the owner (an approver) still applies it without a separate approval
+	if ap := e.must(200, "POST", "/api/v1/changesets/"+id+"/apply", nil).JSON; ap["status"] != "applied" {
+		t.Fatalf("owner apply: %v", ap["status"])
+	}
+}
+
+// Audit C3-1 F1: the tax an org's documents use is orgs.<id>.config.tax, so changing it is high like config.tax:
+// only the owner approves, not another approver (sales_manager here).
+func TestOrgTaxIsOwnerOnly(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "config.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, append(b, []byte("orgs:\n  cabang_dua:\n    name: Kopi Senja Dua\n    config:\n      tax: {pkp: false}\n")...), 0o644)
+	})
+	e.login()
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "mgr@kopisenja.id", "Manajer", "rahasia-123", "kopi-senja", "sales_manager", "USR-004"); err != nil {
+		t.Fatal(err)
+	}
+	mgr := loginAs(e, "mgr@kopisenja.id", "rahasia-123")
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Kopi Senja jadi PKP", "ops": []any{map[string]any{"op": "patch", "path": "config.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/orgs/cabang_dua/config/tax/pkp", "value": true}}}}}).JSON
+	if cs["risk"] != "high" || !reflect.DeepEqual(cs["approvable_by"], []any{"owner"}) {
+		t.Fatalf("org tax: risk %v approvable_by %v", cs["risk"], cs["approvable_by"])
+	}
+	id := cs["id"].(string)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
+	if r := mgr.do("POST", "/api/v1/changesets/"+id+"/approve", nil); r.Status != 403 || errCode(r) != "owner_required" {
+		t.Fatalf("sales_manager approved an org tax change: %d %s", r.Status, r.Body)
+	}
+	// once the owner applied it, undoing it is the owner's too (audit orgs-risk A1)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/approve", nil)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/apply", nil)
+	if r := mgr.do("POST", "/api/v1/changesets/"+id+"/revert", nil); r.Status != 403 || errCode(r) != "owner_required" {
+		t.Fatalf("sales_manager reverted an org tax change: %d %s", r.Status, r.Body)
+	}
+	if !strings.Contains(readSite(e, "config.rk"), "pkp: true") {
+		t.Fatal("the refused revert changed config.rk")
+	}
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/revert", nil)
+
+	// a change set applied before the hashes were kept (alpha.15) skips the stale-base check: reverting it must not
+	// undo the owner's later tax change through the old config.rk text (audit orgs-risk D1)
+	step := func(who *env, title, path string, value any) string {
+		cs := who.must(201, "POST", "/api/v1/changesets", map[string]any{"title": title, "ops": []any{map[string]any{"op": "patch", "path": "config.rk",
+			"patch": []any{map[string]any{"op": "replace", "path": path, "value": value}}}}}).JSON
+		cid := cs["id"].(string)
+		for _, a := range []string{"validate", "preview", "approve", "apply"} {
+			who.must(200, "POST", "/api/v1/changesets/"+cid+"/"+a, nil)
+		}
+		return cid
+	}
+	old := step(mgr, "Bahasa", "/locale", "en-US")
+	if _, err := e.s.DB.Exec(context.Background(), "update rk_changesets set applied = null where id = $1", old); err != nil {
+		t.Fatal(err)
+	}
+	step(e, "Kopi Senja Dua jadi PKP", "/orgs/cabang_dua/config/tax/pkp", true)
+	if r := mgr.do("POST", "/api/v1/changesets/"+old+"/revert", nil); r.Status != 403 || errCode(r) != "owner_required" {
+		t.Fatalf("sales_manager reverted an old change set over the owner's tax change: %d %s", r.Status, r.Body)
+	}
+	if !strings.Contains(readSite(e, "config.rk"), "pkp: true") {
+		t.Fatal("the refused revert changed config.rk")
+	}
 }
 
 // Change sets never apply destructive DDL: a retype that may lose data is a blocking validation error that

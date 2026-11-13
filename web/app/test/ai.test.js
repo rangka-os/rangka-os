@@ -3,6 +3,8 @@ const test = require("node:test");
 const assert = require("node:assert");
 
 global.window = global;
+const diagramCalls = [];
+global.Rangka = { configureDiagrams: (o) => diagramCalls.push(o) }; // stub: the design-system bundle loads before ai.js in the page
 require("../api.js");
 require("../shell.js"); // parseRoute for aiContext; the browser part stays off without a document
 require("../ai.js");
@@ -149,4 +151,13 @@ test("clearAiStorage removes every Raka conversation and nothing else; never thr
   RA.clearAiStorage(storage);
   assert.deepStrictEqual(Object.keys(data).sort(), ["rk.aix", "rk.app.nav"]);
   assert.doesNotThrow(() => RA.clearAiStorage({ get length() { throw new Error("blocked"); } }));
+});
+
+test("ai.js tells the design system where Mermaid lives, once, and a failed render only warns", () => {
+  assert.strictEqual(diagramCalls.length, 1);
+  assert.match(diagramCalls[0].src, /vendor\/mermaid\.min\.js$/);
+  const warn = console.warn, seen = [];
+  console.warn = (...a) => seen.push(a);
+  try { diagramCalls[0].onRenderError("graph TD", "Parse error"); } finally { console.warn = warn; }
+  assert.deepStrictEqual(seen, [["raka diagram", "Parse error"]]);
 });

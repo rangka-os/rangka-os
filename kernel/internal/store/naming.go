@@ -53,6 +53,21 @@ func NextName(ctx context.Context, q pg.Querier, org, model, pattern string, now
 	return fmt.Sprintf("%s%0*d", prefix, digits, n), nil
 }
 
+// NoteName moves an org's v0 counters past a name the kernel writes as given instead of allocating it (an
+// imported or seeded record that keeps its own number): every counter whose prefix the name starts with, followed
+// only by digits, continues after that number. It reads rk_naming alone (the org's counter rows), never the
+// model's table, so allocation stays one counter update per record (card t_58a60f6b); a counter that is already
+// past the number is left as it is. Without it a counter at 1 would reissue 0002 after an import of 0500, and the
+// insert fails on the name once it reaches 0500 (card t_32af87a2).
+func NoteName(ctx context.Context, q pg.Querier, org, name string) error {
+	_, err := q.Query(ctx, `update rk_naming set last = n.v
+		from (select prefix as p, case when substring($2 from char_length(prefix) + 1) ~ '^[0-9]{1,18}$'
+			then substring($2 from char_length(prefix) + 1)::bigint end as v
+			from rk_naming where org_id = $1 and left($2, char_length(prefix)) = prefix) n
+		where org_id = $1 and prefix = n.p and n.v > last`, org, name)
+	return err
+}
+
 // ResetCounters forgets an org's counters so they restart from the highest existing names (after a seed).
 func ResetCounters(ctx context.Context, q pg.Querier, org string) error {
 	_, err := q.Query(ctx, "delete from rk_naming where org_id = $1", org)

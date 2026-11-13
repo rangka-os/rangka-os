@@ -61,7 +61,8 @@ A cashier receipt is numbered per outlet (`STRK-DAGO-2611-0001`, `STRK-BDO-2611-
 - The v0 counter is keyed by the rendered prefix (`rk_naming`), so each value has its own gap-free counter with no new
   table: two outlets submitting at once lock two different counter rows.
 - Changing the value later (an outlet renames its code) starts a new counter for the new prefix; names already given
-  stay. A value that changes back continues after the highest existing name, as v0 already does.
+  stay. A value that changes back continues its old counter (§4, v0 counter), which is never behind the names the
+  kernel gave or kept for that prefix.
 - Series patterns (`{series, pattern}` and `config.numbering` objects) do not take field tokens: a series counter is
   per org + series + period, and `rangka numbering set` has no value to set it for. The schema's `number_pattern`
   refuses them.
@@ -113,7 +114,13 @@ A series must repeat its reset period in the number, or numbers collide: `reset:
 - **Imported numbers:** on every allocation (not only the first of a period) the number continues after the highest
   existing name that matches the rendered pattern in any model using the series
   (`last = greatest(last + 1, highest + 1)`), so opening data loaded mid-period is skipped over, never reissued.
-- **Pattern or org code changes:** changing a series' pattern or an org's code mid-period keeps counting; the counter is
+- **v0 counter (`rk_naming`, string `naming`):** keyed by org + rendered prefix. It **starts** after the highest
+  existing name with that prefix followed by digits (the only time it reads the model's table), then counts on
+  from the counter row alone, one row update per name. A record the kernel writes with a number of its own
+  (imports and seeds that keep the name) moves every counter whose prefix that name starts with, followed only by
+  digits, past that number in the same transaction (`last` never goes down), so a counter at 1 continues at 0501
+  after an imported 0500. A seed also restarts the org's counters. Names written outside the kernel (SQL, a
+  partial restore) are not seen by a counter that already exists; a series sees them on its next allocation. changing a series' pattern or an org's code mid-period keeps counting; the counter is
   per org + series + period, not per rendered prefix.
 - **Locks:** a transaction that numbers documents of two series takes two counter locks, and Postgres aborts one of two
   such transactions that cross; the retry is safe.

@@ -73,3 +73,23 @@ func TestEgressGuardRefusesInternal(t *testing.T) {
 		resp.Body.Close()
 	}
 }
+
+func TestEgressBlockedRanges(t *testing.T) {
+	pub := Egress{Public: true}
+	for _, addr := range []string{"0.1.2.3", "192.0.0.8", "198.18.0.1", "240.0.0.1", "64:ff9b::7f00:1", "64:ff9b:1::1", "2002:7f00:1::1"} {
+		if pub.Allowed(net.ParseIP(addr)) {
+			t.Errorf("%s allowed", addr)
+		}
+	}
+}
+
+// One guarded transport per runtime and base, so calls reuse connections (audit platform-env A6).
+func TestEgressReusesTransport(t *testing.T) {
+	rt := &Runtime{Egress: Egress{Public: true}}
+	if a, b := rt.client(false, "").Transport, rt.client(true, "x").Transport; a != b {
+		t.Fatal("a new transport per call")
+	}
+	if other := (&Runtime{Egress: Egress{Public: true}}).client(false, "").Transport; other == rt.client(false, "").Transport {
+		t.Fatal("transport shared across runtimes with their own policies")
+	}
+}

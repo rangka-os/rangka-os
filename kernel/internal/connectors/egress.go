@@ -6,6 +6,7 @@ import (
 	"net"
 	"net/http"
 	"strings"
+	"sync"
 	"syscall"
 	"time"
 )
@@ -54,7 +55,18 @@ func EgressFromEnv(getenv func(string) string) (Egress, error) {
 	return e, nil
 }
 
-var cgnat = &net.IPNet{IP: net.IPv4(100, 64, 0, 0).To4(), Mask: net.CIDRMask(10, 32)}
+// blocked are ranges the net.IP predicates do not cover: "this network" 0.0.0.0/8, carrier-grade NAT, IETF protocol
+// assignments, benchmarking, reserved 240.0.0.0/4, and IPv6 prefixes that embed an IPv4 address the gateway reaches
+// (NAT64 64:ff9b::/96 and 64:ff9b:1::/48, 6to4 2002::/16)
+var blocked = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range []string{"0.0.0.0/8", "100.64.0.0/10", "192.0.0.0/24", "198.18.0.0/15", "240.0.0.0/4",
+		"64:ff9b::/96", "64:ff9b:1::/48", "2002::/16"} {
+		_, n, _ := net.ParseCIDR(c)
+		out = append(out, n)
+	}
+	return out
+}()
 
 // Allowed reports whether the policy lets a connector connect to ip.
 func (e Egress) Allowed(ip net.IP) bool {
@@ -69,8 +81,16 @@ func (e Egress) Allowed(ip net.IP) bool {
 	if v4 := ip.To4(); v4 != nil {
 		ip = v4
 	}
-	return !(ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() || cgnat.Contains(ip))
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsInterfaceLocalMulticast() || ip.IsMulticast() || ip.IsUnspecified() {
+		return false
+	}
+	for _, n := range blocked {
+		if n.Contains(ip) {
+			return false
+		}
+	}
+	return true
 }
 
 // control refuses a connection whose address the policy does not allow; it runs for every dialled address.
@@ -87,25 +107,42 @@ func (e Egress) control(_, address string, _ syscall.RawConn) error {
 }
 
 // guard returns c with a transport that dials through the policy; c is returned as it is when the policy is open
-// or its transport is not an *http.Transport (a test's).
-func (e Egress) guard(c *http.Client) *http.Client {
+// or its transport is not an *http.Transport (a test's). cache keeps one guarded transport per base transport, so
+// connections are reused across calls instead of a new pool per call.
+func (e Egress) guard(c *http.Client, cache *transportCache) *http.Client {
 	if !e.Public {
 		return c
 	}
-	var t *http.Transport
-	switch base := c.Transport.(type) {
+	key := c.Transport
+	var base *http.Transport
+	switch b := c.Transport.(type) {
 	case nil:
-		t = http.DefaultTransport.(*http.Transport).Clone()
+		base = http.DefaultTransport.(*http.Transport)
 	case *http.Transport:
-		t = base.Clone()
+		base = b
 	default:
 		return c
 	}
-	d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second, Control: e.control}
-	t.DialContext = d.DialContext
-	t.DialTLSContext = nil
-	t.Proxy = nil // a proxy would dial the internal address for us
+	cache.Lock()
+	defer cache.Unlock()
+	if cache.m == nil {
+		cache.m = map[http.RoundTripper]*http.Transport{}
+	}
+	t, ok := cache.m[key]
+	if !ok {
+		t = base.Clone()
+		d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second, Control: e.control}
+		t.DialContext = d.DialContext
+		t.DialTLSContext = nil
+		t.Proxy = nil // a proxy would dial the internal address for us
+		cache.m[key] = t
+	}
 	out := *c
 	out.Transport = t
 	return &out
+}
+
+type transportCache struct {
+	sync.Mutex
+	m map[http.RoundTripper]*http.Transport
 }

@@ -1330,7 +1330,30 @@ def top_conjuncts(expr):
             cur += ch
         i += 1
     out.append(cur)
-    return [re.sub(r"\s+", "", x) for x in out if x.strip()]
+    return [re.sub(r"\s+", "", x).replace('"', "'") for x in out if x.strip()]
+
+
+def enclosing_groups(expr, pos):
+    """The contents of the parenthesised groups of expr that hold position pos, innermost first, then expr itself."""
+    stack, groups, q, i = [], [], "", 0
+    while i < len(expr):
+        ch = expr[i]
+        if q:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == q:
+                q = ""
+        elif ch in "'\"":
+            q = ch
+        elif ch == "(":
+            stack.append(i)
+        elif ch == ")" and stack:
+            start = stack.pop()
+            if start < pos < i:
+                groups.append((i - start, expr[start + 1:i]))
+        i += 1
+    return [g for _, g in sorted(groups)] + [expr]
 
 
 def conditional_as(rep, p, steps):
@@ -1357,8 +1380,13 @@ def conditional_as(rep, p, steps):
             if t.get("as") == x and not t.get("if"):
                 break
             nc = re.sub(r"\s+", "", str(t.get("if") or ""))
-            m = re.search(r"\b" + xe + r"(!=|==)null\b|\bsize\(" + xe + r"\)|\b" + xe + r"\.size\(\)", nc)
-            if not m or all(k in nc[: m.start()] for k in cs):
+            # a null check of the name itself (not event.x or y.x): no letter, digit, _ or . just before it
+            m = next((m for m in re.finditer(r"\b" + xe + r"(!=|==)null\b|\bsize\(" + xe + r"\)|\b" + xe + r"\.size\(\)", nc)
+                      if not (m.group(0).startswith(x) and m.start() > 0 and (nc[m.start() - 1].isalnum() or nc[m.start() - 1] in "_."))), None)
+            # guarded when every top-level conjunct of the declaring condition is a conjunct of the && chain around the
+            # check: this if: or a parenthesised group holding it (CEL && absorbs an error on either side, so the
+            # order does not matter; || or a ternary does not guard)
+            if not m or any(set(cs) <= set(top_conjuncts(g)) for g in enclosing_groups(nc, m.start())):
                 continue
             rep.add("warn", p, f"steps/{j}/if", "conditional_as_unguarded",
                     f'step {j + 1} reads "{x}", which step {i + 1} declares only when {c.strip()}; a null check does not cover a skipped step: start this if: with {c.strip()} && ...')

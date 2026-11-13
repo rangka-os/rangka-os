@@ -42,7 +42,8 @@ func assistantForbiddenOp(op Op, before, after func(string) (map[string]any, boo
 	case p == "system.rk", p == "features.rk": // layer 2 and plan entitlements
 		return true
 	case p == "config.rk":
-		return differs("plan") || differs("ai") || differs("sso") || differs("connector_auth") // connector_auth: who sets connector secrets
+		return differs("plan") || differs("ai") || differs("sso") || differs("connector_auth") || // connector_auth: who sets connector secrets
+			orgForbidden(old["orgs"], nw["orgs"])
 	case strings.HasPrefix(p, "roles/") || strings.Contains(p, "/roles/"):
 		return true
 	case unitPath(p): // catalogue files belong to their authors; a company may start its own app
@@ -60,4 +61,35 @@ func assistantForbiddenOp(op Op, before, after func(string) (map[string]any, boo
 func ownAppFile(p string) bool {
 	parts := strings.Split(p, "/")
 	return len(parts) == 3 && parts[0] == "apps" && parts[1] != "" && parts[2] == "app.rk"
+}
+
+// orgForbidden reports whether an org's config (orgs.<id>.config) changes a key the assistant may not change for the
+// site: plan, ai, sso, connector_auth (audit C3-1). An org added or removed with any of them set counts too.
+func orgForbidden(old, nw any) bool {
+	cfg := func(orgs any, id string) map[string]any {
+		e, _ := asMapAny(orgs)[id].(map[string]any)
+		c, _ := e["config"].(map[string]any)
+		return c
+	}
+	ids := map[string]bool{}
+	for id := range asMapAny(old) {
+		ids[id] = true
+	}
+	for id := range asMapAny(nw) {
+		ids[id] = true
+	}
+	for id := range ids {
+		o, n := cfg(old, id), cfg(nw, id)
+		for _, k := range []string{"plan", "ai", "sso", "connector_auth"} {
+			if !reflect.DeepEqual(normalize(o[k]), normalize(n[k])) {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+func asMapAny(v any) map[string]any {
+	m, _ := v.(map[string]any)
+	return m
 }

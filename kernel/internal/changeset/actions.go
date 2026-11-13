@@ -652,7 +652,11 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	if err != nil {
 		return nil, err
 	}
-	autoApply := s.autoApplyLowRisk() && cs.Risk == "low" && in(cs.Status, "validated", "previewed")
+	// config.ai.auto_apply: low_risk lets the kernel apply a low-risk change set as the system right after its
+	// preview (contract 0020 §4), and an approver apply one without a separate approval; anyone else needs an
+	// approved change set (audit C3-1 F4)
+	autoApply := s.autoApplyLowRisk() && cs.Risk == "low" && in(cs.Status, "validated", "previewed") &&
+		(a.Kind == "system" || s.isApprover(a))
 	if cs.Status != "approved" && !autoApply {
 		return nil, &Error{409, "not_approved", "apply needs an approved change set (it is " + cs.Status + ")", nil}
 	}
@@ -807,6 +811,28 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 				return nil, &Error{409, "stale_base", "Berkas " + p + " sudah berubah sejak perubahan ini diterapkan; mengembalikannya akan menimpa perubahan itu. Buat change set baru.", map[string]any{"path": p}}
 			}
 		}
+	}
+	// undoing a high-risk change (tax, roles, money fields) is as much the owner's decision as making it (audit
+	// orgs-risk A1). A change set applied before the hashes were kept skipped the check above, so the files may hold
+	// later changes the restore would undo: the restore itself is assessed against the current files (audit D1).
+	risk := cs.Risk
+	if cs.applied == nil {
+		ops := make([]Op, 0, len(cs.previous))
+		for p, c := range cs.previous {
+			op := "replace"
+			if c == nil {
+				op = "delete"
+			}
+			ops = append(ops, Op{Op: op, Path: p})
+		}
+		sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
+		as := AssessWith(ops, parsed(live, nil), parsed(live, cs.previous), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+		if riskRank[as.Risk] > riskRank[risk] {
+			risk = as.Risk
+		}
+	}
+	if risk == "high" && !hasRole(a, "owner") {
+		return nil, &Error{403, "owner_required", "reverting a high-risk change set needs the owner", nil}
 	}
 	if err := s.write(live, cs.previous); err != nil {
 		return nil, err

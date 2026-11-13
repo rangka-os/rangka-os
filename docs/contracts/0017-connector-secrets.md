@@ -46,6 +46,14 @@ connector_auth:
 ```
 
 - In `connector_auth:` a secret field must be a `${VAR}` reference (validator error `secret_literal`).
+- A `${VAR}` in `connector_auth:` or `auth.upstream` may not name a variable of the platform: `DATABASE_URL` or a name
+  starting with `RANGKA_`, `RAKA_`, `ANTHROPIC_`, `OPENAI_`, `VAULT_`, `AWS_`, `ECS_` or `PG` (kernel `meta.PlatformEnv`).
+  - The validator reports it as error `platform_env`.
+  - At run time the field reads as unset.
+  - An upstream sign-in with such a binding stops the start.
+  - On a hosted kernel these variables hold the platform's own secrets, such as the assistant's bearer `RANGKA_AI_SECRET`,
+    and the company controls `system.rk`. A field that is not secret shows its value in `GET /api/v1/connectors/<c>/auth`,
+    and an issuer or a connector receives what it is sent (audit business-raka F1).
 - An unset variable is not a start-up error. The connector shows `status: needs_auth` and its calls fail with
   `connector_needs_auth`, without retries.
 
@@ -92,6 +100,15 @@ connector_auth:
   - The kernel checks the same rules again on the rendered request at send time, and refuses with `secret_host_refused`.
   - Requests that carry a secret follow redirects only to the same host.
 - Overlays and the company layer cannot change a connector's `request`, `hosts` or `verify`.
+- **Egress.** Whoever runs the kernel sets `RANGKA_CONNECTOR_EGRESS`; a company's files never set it.
+  - `any`, or unset, means no limit. This is for self-hosting and for demos with local mocks.
+  - `public` means connector actions and OAuth refreshes connect only to public addresses. The kernel refuses loopback,
+    private, carrier-grade NAT, link-local (including the cloud metadata address), unspecified and multicast addresses,
+    with `egress_refused`, which is not retried.
+  - The address is checked on the connection, after DNS and redirects.
+  - `RANGKA_CONNECTOR_EGRESS_ALLOW` lists CIDRs that stay reachable anyway.
+  - An unknown value stops the start.
+  - A hosted kernel runs with `public`.
 - Until `hosts:` is in a released schema, connectors put it under `experimental:` (0000 §4).
 
 ### 6. Queue, logs and dead-letter

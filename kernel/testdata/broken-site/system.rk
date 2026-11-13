@@ -34,4 +34,4 @@ connector_auth:
   whatsap: {access_token: "${X}"}
   orgs:
     pt_beta:
-      whatsapp_business: {app_secret: plain-secret}
+      whatsapp_business: {app_secret: plain-secret, phone_number_id: "${RANGKA_AI_SECRET}"}

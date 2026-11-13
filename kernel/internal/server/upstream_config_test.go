@@ -85,3 +85,17 @@ func TestProvidersWithoutUpstream(t *testing.T) {
 		t.Fatalf("unknown upstream: %d %s", r.Status, r.Body)
 	}
 }
+
+// Audit business-raka F1: an upstream sign-in may not read a platform variable (the assistant's bearer, the database
+// URL): the issuer, which the company names, would receive it.
+func TestUpstreamsRefusePlatformEnv(t *testing.T) {
+	lookup := func(k string) (string, bool) { return "platform-value", true }
+	for key, ref := range map[string]string{"client_secret": "${RANGKA_AI_SECRET}", "client_id": "${DATABASE_URL}"} {
+		m := map[string]any{"id": "kantor", "issuer": "https://id.example", "client_id": "cid", "client_secret": "${KANTOR_SECRET}"}
+		m[key] = ref
+		_, err := upstreams([]any{m}, lookup)
+		if err == nil || !strings.Contains(err.Error(), "a variable of the platform") || strings.Contains(err.Error(), "platform-value") {
+			t.Errorf("%s %s: %v", key, ref, err)
+		}
+	}
+}

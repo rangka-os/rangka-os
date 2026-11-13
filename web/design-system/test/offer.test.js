@@ -108,7 +108,8 @@ test("a closed offer has no actions, also not in the viewer", () => {
   assert.ok(texts(t).includes("Peta sudah berubah"));
   assert.ok(texts(t).includes("Disarankan"));
   assert.equal(nodes(t, ".rk-offer-acts").length, 0);
-  assert.equal(nodes(t, "div.foot").length, 1);
+  assert.equal(nodes(t, "div.foot").length, 0, "the footer (Ubah sesuatu, Tidak dulu) is an action too");
+  assert.equal(nodes(t, ".rk-offer-foot").length, 0);
 });
 test("an option without flow renders lists only", () => {
   const o = { id: "of_1", recommended: "a", options: [opt("a", "custom", { flow: undefined, not_covered: [] })] };

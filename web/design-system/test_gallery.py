@@ -166,7 +166,7 @@ with sync_playwright() as pw:
                   const node = [...document.querySelectorAll('[data-component=OfferCompare] [data-case=three] [data-option=opt_custom] g.node')][3];
                   return { first: opts[0].dataset.option, tops: opts.map(o => Math.round(o.getBoundingClientRect().top)), hs: opts.map(o => Math.round(o.getBoundingClientRect().height)),
                     count: cnt && cnt.offsetParent ? cnt.textContent : null, lines: node ? node.querySelectorAll('text > tspan').length : 0, label: node ? node.textContent : '',
-                    closedActs: document.querySelectorAll('[data-component=OfferCompare] [data-case=closed] .rk-offer-acts, [data-component=OfferCompare] [data-case=closed] [data-action]').length,
+                    closedActs: document.querySelectorAll('[data-component=OfferCompare] [data-case=closed] .rk-offer-acts, [data-component=OfferCompare] [data-case=closed] .rk-offer-foot, [data-component=OfferCompare] [data-case=closed] button.rk-btn').length,
                     closedPill: (q('[data-case=closed] .rk-offer-head .rk-pill') || {}).textContent, oneCount: !!q('[data-case=one] .rk-offer-count') };
                 }""")
                 if oc["first"] != "opt_custom":
@@ -186,6 +186,21 @@ with sync_playwright() as pw:
                     page.wait_for_timeout(300)
                     if page.inner_text("[data-component=OfferCompare] [data-case=three] .rk-offer-count") != "2 / 3":
                         fail(f"{tag}: OfferCompare count did not follow the scroll")
+                    # wide and back: the count must follow the card that is visible again even when the engine sends no
+                    # scroll event for the move (Chromium does; we hold scroll events back to stand in for one that does not)
+                    page.evaluate("window.__rkHold = e => e.stopImmediatePropagation(); window.addEventListener('scroll', window.__rkHold, true)")
+                    page.locator("[data-component=OfferCompare] [data-case=three] .rk-offer-row").evaluate("r => { r.scrollLeft = r.children[2].offsetLeft; }")
+                    page.wait_for_timeout(100)
+                    page.set_viewport_size({"width": 1280, "height": 900})
+                    page.wait_for_timeout(300)
+                    page.set_viewport_size({"width": 400, "height": 900})
+                    page.wait_for_timeout(300)
+                    vis = page.locator("[data-component=OfferCompare] [data-case=three] .rk-offer-row").evaluate(
+                        "r => { const cs = [...r.children]; let b = 0; cs.forEach((c, i) => { if (Math.abs(c.offsetLeft - r.scrollLeft) < Math.abs(cs[b].offsetLeft - r.scrollLeft)) b = i; }); return (b + 1) + ' / ' + cs.length; }")
+                    got = page.inner_text("[data-component=OfferCompare] [data-case=three] .rk-offer-count")
+                    page.evaluate("window.removeEventListener('scroll', window.__rkHold, true)")
+                    if got != vis:
+                        fail(f"{tag}: OfferCompare count {got!r} after a resize, visible card is {vis!r}")
                 # the zoom popup draws LR and carries the option's actions, but never on a closed offer
                 page.locator("[data-component=OfferCompare] [data-case=three] [data-option=opt_custom] button[aria-label=Perbesar]").click()
                 page.wait_for_selector(".rk-diagram-viewer .rk-dv-stage svg", timeout=15000)

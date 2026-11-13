@@ -242,7 +242,8 @@ export interface Offer { id: string; recommended: string; options: OfferOption[]
 /** Chat / OfferCompare (0049 §4): root `[data-card=offer][data-offer=<id>]`, one `section[data-option=<id>]` per option, recommended first
  * with "Disarankan". Equal columns from 720 px of card width, a scroll-snap carousel with "1 / 3" below. "Perbesar" opens a DiagramViewer
  * (LR source) whose head carries `renderActions(option, isRecommended)`. `closedLabel` ("Sudah dijawab", "Peta sudah berubah") mutes the
- * card and drops every action, also in the viewer. `footer` (Ubah sesuatu, Tidak dulu) sits under the row. */
+ * card and drops every action, also in the viewer. `footer` (Ubah sesuatu, Tidak dulu) sits under the row and is not rendered
+ * when `closedLabel` is set (it holds actions too). */
 export declare function OfferCompare(props: { offer: Offer; closedLabel?: string; renderActions: (option: OfferOption, isRecommended: boolean) => Node;
   footer?: Node; className?: string }): React.ReactElement;
 /** The block list RichText draws (for tests and tools). */

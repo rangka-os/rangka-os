@@ -1917,7 +1917,8 @@
     useEffect(function () {
       var el = root.current;
       if (!el || typeof ResizeObserver === "undefined") return;
-      var ro = new ResizeObserver(function () { setWide(el.getBoundingClientRect().width >= 720); });
+      /* a width change can move the row without a scroll event (grid and back): read the visible card again */
+      var ro = new ResizeObserver(function () { setWide(el.getBoundingClientRect().width >= 720); onScroll(); });
       ro.observe(el);
       return function () { ro.disconnect(); };
     }, []);
@@ -1973,7 +1974,7 @@
             h(IconButton, { icon: "left", label: "Pilihan sebelumnya", disabled: idx <= 0, onClick: function () { go(-1); } }),
             h(IconButton, { icon: "right", label: "Pilihan berikutnya", disabled: idx >= opts.length - 1, onClick: function () { go(1); } })) : null)),
       h("div", { ref: row, className: "rk-offer-row", role: "group", "aria-label": "Pilihan tawaran", onScroll: onScroll }, sections),
-      p.footer ? h("div", { className: "rk-offer-foot" }, p.footer) : null,
+      !closed && p.footer ? h("div", { className: "rk-offer-foot" }, p.footer) : null,
       vo ? h(DiagramViewer, { open: true, source: flowToMermaid(vo.flow, "LR"), title: vo.title, onClose: close,
         actions: closed ? null : (p.renderActions ? p.renderActions(vo, vo.id === offer.recommended) : null) }) : null);
   }

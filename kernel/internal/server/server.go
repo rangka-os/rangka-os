@@ -235,11 +235,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		db.Close()
 		return nil, err
 	}
-	if kek == nil && strCfg(reg, "secrets.driver", "env") == "db" {
+	platformSecrets, err := secrets.PlatformFromEnv(os.Getenv)
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now, Vault: secrets.VaultFromEnv(nil), Log: cfg.Logf, Platform: platformSecrets}
+	if kek == nil && s.API.Secrets.Driver() == "db" {
 		cfg.Logf("secrets: driver db without RANGKA_MASTER_KEY; connector secrets cannot be set (run rangka keygen)")
 	}
-	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now, Vault: secrets.VaultFromEnv(nil), Log: cfg.Logf}
-	if strCfg(reg, "secrets.driver", "env") == "vault" && s.API.Secrets.Vault == nil {
+	if s.API.Secrets.Driver() == "vault" && s.API.Secrets.Vault == nil {
 		cfg.Logf("secrets: driver vault without VAULT_ADDR; connector secrets read as unset")
 	}
 	// the connector runtime (contract 0002 §A): calls run as "call" jobs, webhooks start flows

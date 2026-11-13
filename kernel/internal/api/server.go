@@ -92,14 +92,17 @@ func ChangeActor(p *auth.Principal) changeset.Actor {
 
 func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	p, err := s.Auth.Resolve(r)
-	if errors.Is(err, auth.ErrUnauthenticated) {
+	// shaping (contract 0040 §9): a credential Resolve accepts takes the tenant's bucket from now on; one it does
+	// not accept (refused, or a session cookie that is gone or expired: Resolve answers anonymous or dev) is
+	// forgotten. A database error decides nothing.
+	switch {
+	case err == nil && p != nil && p.Via != "dev":
+		s.verified.note(credential(r))
+	case err == nil || errors.Is(err, auth.ErrUnauthenticated):
 		s.verified.forget(credential(r))
 	}
 	if err != nil {
 		return nil, err
-	}
-	if p != nil && p.Via != "dev" {
-		s.verified.note(credential(r)) // shaping: this credential now takes the tenant's bucket (contract 0040 §9)
 	}
 	if p != nil && p.User.Org == "" && p.Via == "dev" {
 		p.User.Org = s.Org

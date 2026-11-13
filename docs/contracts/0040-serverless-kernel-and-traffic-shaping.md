@@ -187,7 +187,8 @@ wait would be too long.
   not proof: a made-up `Authorization` must not spend the tenant's rate.
   - A credential becomes verified when sign-in resolves it on a request, or when this kernel issues it as a session
     cookie (sign-in, upstream and OIDC callbacks). Shaping itself never queries the database.
-  - A credential that sign-in refuses, and a session cookie that sign-out clears, are no longer verified. A note
+  - A credential that sign-in refuses, a session cookie whose session is gone or expired, and a session cookie
+    that sign-out clears are no longer verified. An assistant token is verified as the kernel mints it. A note
     lasts 10 minutes, so a revoked credential may keep the tenant's bucket (never its access) that long.
   - The first request with a credential this process has not seen takes its client's bucket. Under Lambda that
     is the first request per credential per instance.
@@ -195,8 +196,10 @@ wait would be too long.
   trusted proxy, listed in `RANGKA_TRUSTED_PROXIES` (IPs or CIDRs, separated by commas or spaces; empty by
   default). The client is then the right-most hop that is not a trusted proxy; hops to its left were written by the
   client and are ignored. Without the setting, a kernel behind a proxy sees every client as the proxy and they
-  share one bucket, so a deployment behind a proxy sets it (the hosting router's address, or `127.0.0.1` when an
-  adapter in the same function forwards the request).
+  share one bucket. A deployment behind proxies therefore lists **every** hop it runs (`127.0.0.1` for an adapter
+  in the same function, the load balancer's and the hosting router's ranges), and each of those hops must append
+  the address it received the request from to `X-Forwarded-For`; a hop that replaces the header instead hands the
+  kernel only its own upstream, and the clients behind it share that one bucket.
 - The rate is read from the plan snapshot of 0028 §4 (refreshed about every 10 seconds, never in the request), so
   a plan change reaches shaping within about 10 seconds and shaping never takes a database connection.
 - Implemented in `kernel/internal/ratelimit` and `kernel/internal/api/shape.go` with `shape_verified.go` (§9 only; the rest of this contract is

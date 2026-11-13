@@ -1,10 +1,14 @@
 package server
 
 import (
+	"context"
 	"io"
 	"net/http"
+	"net/url"
 	"testing"
 	"time"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
 // anon sends one request from the test client with the given headers and no cookie jar.
@@ -61,6 +65,35 @@ func TestRateJunkCredentialsTakeTheClientBucket(t *testing.T) {
 	if st := anon(e, "/api/v1/meta", map[string]string{"Authorization": "Bearer " + tok}); st != 429 {
 		t.Fatalf("a verified token does not share the tenant's bucket: %d", st)
 	}
+}
+
+// Audit rate-verified-bucket F-1: a session cookie whose session is gone (signed out elsewhere, revoked, expired)
+// stops taking the tenant's bucket at its next use, so it cannot spend the tenant's rate for the rest of its note.
+func TestRateRevokedSessionLeavesTheTenantBucket(t *testing.T) {
+	e := rateEnv(t, ", rate: {rps: 2, burst: 2, max_wait_ms: 0, max_waiting: 0}")
+	cookie := func() string {
+		u, _ := url.Parse(e.ts.URL)
+		for _, c := range e.jar.Cookies(u) {
+			if c.Name == auth.CookieName {
+				return c.Value
+			}
+		}
+		t.Fatal("no session cookie after sign-in")
+		return ""
+	}
+	old := cookie()
+	e.login() // a second session for the owner; the jar now holds the new cookie
+	if cookie() == old {
+		t.Fatal("second sign-in gave the same cookie")
+	}
+	if _, err := e.s.DB.Exec(context.Background(), "delete from rk_sessions where id = $1", auth.HashToken(old)); err != nil {
+		t.Fatal(err)
+	}
+	time.Sleep(1100 * time.Millisecond)
+	// the old cookie's first use finds its session gone (one tenant token), then it takes its client's bucket
+	count429(e, 4, func(int) map[string]string { return map[string]string{"Cookie": auth.CookieName + "=" + old} })
+	// so the owner's current session still has a token left
+	e.must(200, "GET", "/api/v1/meta", nil)
 }
 
 // Audit F-4: without trusted proxies X-Forwarded-For is ignored, so a new header per request does not give a new

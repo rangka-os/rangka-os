@@ -17,7 +17,9 @@ import (
 // "Authorization: Bearer junk", and if that alone chose the tenant's bucket, a stranger could spend the tenant's
 // rate and get every signed-in person a 429. So the tenant's bucket is for credentials this process has verified,
 // and shaping learns that without a database query of its own:
-//   - principal() notes a credential once auth.Resolve accepts it, and forgets it once Resolve refuses it;
+//   - principal() notes a credential once auth.Resolve accepts it, and forgets it once Resolve does not (refused,
+//     or a session cookie whose session is gone or expired);
+//   - an assistant token is noted as the kernel mints it for the sidecar (ai.go);
 //   - a session cookie this kernel issues (sign-in, upstream and OIDC callbacks) is noted as it is set, and the
 //     request's cookie is forgotten when a response clears it (sign-out).
 // The first request with a credential this process has not seen yet takes its client's bucket; so does every

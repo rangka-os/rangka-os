@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -137,5 +138,72 @@ func TestConfigModulesEndToEnd(t *testing.T) {
 	list := e.must(200, "GET", "/api/v1/r/stock_item", nil).JSON
 	if n := len(list["data"].([]any)); n != 1 {
 		t.Fatalf("stock_item rows after revert = %d, want 1: %v", n, list)
+	}
+}
+
+// Audit changeset-followups 2: the rows of a unit a change set removes are counted again at apply, so a row written
+// after the preview (or a preview from before the kernel kept that risk) sends it back for the owner's approval.
+func TestApplyCountsRemovedRowsAgain(t *testing.T) {
+	e := newEnvFrom(t, func(dir string) (apps, site string) {
+		if err := exec.Command("cp", "-r", "../../testdata/config-modules/.", dir).Run(); err != nil {
+			t.Fatal(err)
+		}
+		return filepath.Join(dir, "apps"), filepath.Join(dir, "site")
+	})
+	e.login()
+	step := func(title string, patch []any, apply bool) string {
+		t.Helper()
+		cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": title, "ops": []any{
+			map[string]any{"op": "patch", "path": "config.rk", "patch": patch}}}).JSON
+		id := cs["id"].(string)
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/approve", map[string]any{"note": "ok"})
+		if apply {
+			e.must(200, "POST", "/api/v1/changesets/"+id+"/apply", nil)
+		}
+		return id
+	}
+	step("Tambah stok", []any{
+		map[string]any{"op": "remove", "path": "/plan"},
+		map[string]any{"op": "add", "path": "/modules/stock", "value": "^1.0"},
+		map[string]any{"op": "add", "path": "/modules/contacts", "value": "^1.0"},
+	}, true)
+	// stock_item is empty at the preview: medium, approved
+	rm := step("Lepas stok", []any{map[string]any{"op": "remove", "path": "/modules/stock"}}, false)
+	if got := e.must(200, "GET", "/api/v1/changesets/"+rm, nil).JSON; got["risk"] != "medium" || got["status"] != "approved" {
+		t.Fatalf("remove stock before any row: risk %v status %v", got["risk"], got["status"])
+	}
+	// a row arrives between the approval and the apply
+	e.must(201, "POST", "/api/v1/r/stock_item", map[string]any{"item_name": "Molen"})
+	r := e.do("POST", "/api/v1/changesets/"+rm+"/apply", nil)
+	if r.Status != 409 || errCode(r) != "risk_changed" {
+		t.Fatalf("apply over a new row: %d %s", r.Status, r.Body)
+	}
+	if got := e.must(200, "GET", "/api/v1/changesets/"+rm, nil).JSON; got["risk"] != "high" || got["status"] != "validated" {
+		t.Fatalf("after risk_changed: risk %v status %v", got["risk"], got["status"])
+	}
+	if m := e.must(200, "GET", "/api/v1/meta", nil).JSON; get(m, "models", "stock_item") == nil {
+		t.Fatal("the refused apply removed stock")
+	}
+}
+
+// Audit changeset-followups 4: a features.rk change set proposed before plans were pinned carries no base, so it
+// could write over the operator's plans; while features.rk exists such a change set is proposed again.
+func TestApplyRefusesFeaturesWithoutBase(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Batas Tumbuh", "ops": []any{map[string]any{"op": "patch", "path": "features.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/plans/1/limits/outlets", "value": 8}}}}}).JSON
+	id := cs["id"].(string)
+	for _, a := range []string{"validate", "preview", "approve"} {
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/"+a, nil)
+	}
+	// the row a kernel from before the pin wrote: the same op without base
+	if _, err := e.s.DB.Exec(context.Background(), `update rk_changesets set ops = (select jsonb_agg(o - 'base') from jsonb_array_elements(ops) o) where id = $1`, id); err != nil {
+		t.Fatal(err)
+	}
+	if r := e.do("POST", "/api/v1/changesets/"+id+"/apply", nil); r.Status != 409 || errCode(r) != "stale_base" {
+		t.Fatalf("apply of a features.rk op without base: %d %s", r.Status, r.Body)
 	}
 }

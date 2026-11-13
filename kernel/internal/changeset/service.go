@@ -563,6 +563,26 @@ func (s *Service) transition(ctx context.Context, cs *ChangeSet, a Actor, status
 		return err
 	}
 	defer tx.Rollback(ctx)
+	// approve decides owner_required from the risk it loaded; a parallel preview may have raised it since. The row is
+	// locked and checked again in this transaction (audit changeset-followups 3)
+	if status == "approved" && !insert {
+		res, err := tx.Query(ctx, "select risk, status from rk_changesets where id = $1 for update", cs.ID)
+		if err != nil {
+			return err
+		}
+		if len(res.Rows) == 1 {
+			if r := str(res.Rows[0][0]); riskRank[r] > riskRank[cs.Risk] {
+				cs.Risk = r
+				cs.ApprovableBy = s.ApprovableBy(cs)
+			}
+			if st := str(res.Rows[0][1]); st != "previewed" {
+				return &Error{409, "bad_status", "approve a change set after its preview (it is " + st + ")", nil}
+			}
+		}
+		if cs.Risk == "high" && !hasRole(a, "owner") {
+			return &Error{403, "owner_required", "a high-risk change set needs the owner's approval", nil}
+		}
+	}
 	if err := s.save(ctx, tx, cs, insert); err != nil {
 		return err
 	}

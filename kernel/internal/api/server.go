@@ -273,6 +273,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/devices/codes", a(s.createPairingCode))
 	mux.HandleFunc("GET /api/v1/devices", a(s.listDevices))
 	mux.HandleFunc("DELETE /api/v1/devices/{id}", a(s.revokeDevice))
+	// head-office exceptions (contract 0057 §10): owner and head office
+	mux.HandleFunc("GET /api/v1/exceptions", a(s.listExceptions))
+	mux.HandleFunc("POST /api/v1/exceptions/{id}/resolve", a(s.resolveException))
 	mux.HandleFunc("POST /auth/device/pair", s.pairBrowser)
 	// cashier PIN and unlock (contract 0057 §2): staff list and unlock take the device cookie alone
 	mux.HandleFunc("PUT /auth/pin", a(s.putPin))

@@ -362,3 +362,18 @@ create table if not exists rk_device_unlock_fails (
 );
 alter table rk_devices add column if not exists unlock_blocked_until timestamptz;
 create index if not exists rk_device_unlock_fails_device on rk_device_unlock_fails (device, at);
+-- head-office exceptions (contract 0057 §10): what an outlet's offline work left for head office to look at;
+-- kinds edge_price_drift, negative_stock, device_number_gap, rule_overridden
+create table if not exists rk_exceptions (
+  id          bigserial primary key,
+  org_id      text not null,
+  outlet      text not null default '',
+  device      text not null default '',
+  kind        text not null,
+  ref         text not null default '',
+  detail      jsonb not null default '{}',
+  created_at  timestamptz not null default now(),
+  resolved_by text,
+  resolved_at timestamptz
+);
+create index if not exists rk_exceptions_org on rk_exceptions (org_id, resolved_at, created_at);

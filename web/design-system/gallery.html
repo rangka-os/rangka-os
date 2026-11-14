@@ -47,6 +47,7 @@
 <script>
 (function () {
   var R = window.Rangka, h = React.createElement, useState = React.useState;
+  R.configureDiagrams({ src: "../app/vendor/mermaid.min.js" });
 
   function setParam(k, v) {
     document.documentElement.dataset[k] = v;
@@ -401,6 +402,56 @@
       return h("div", { className: "gx-row", style: { flexWrap: "wrap", alignItems: "flex-start", gap: 24 } },
         h("div", { style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: md })),
         h("div", { style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: long, collapse: 8 })));
+    },
+    Diagram: function () {
+      // Chat / Format / Diagram: a mermaid fence in an answer; a broken one; one still streaming (skeleton, no source)
+      var ok = ["Alurnya begini:", "", "```mermaid", "flowchart LR", "  A[Pesanan masuk]:::covered --> B[Faktur dibuat]:::covered", "  B --> C[Pembayaran]:::not_covered", "  C --> D[Laporan piutang]:::later", "```"].join("\n");
+      var init = "```mermaid\n%%{init: {'flowchart': {'htmlLabels': true}, 'theme': 'dark'}}%%\nflowchart LR\n  A[Satu] --> B[Dua]\n```";
+      var bad = "```mermaid\nflowchart LR\n  A[Mulai --> \n```";
+      var live = "```mermaid\nflowchart LR\n  A[Mulai] -->";
+      return h("div", { className: "gx-row", style: { flexWrap: "wrap", alignItems: "flex-start", gap: 24 } },
+        h("div", { "data-case": "ok", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: ok })),
+        h("div", { "data-case": "init", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: init })),
+        h("div", { "data-case": "bad", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: bad })),
+        h("div", { "data-case": "streaming", style: { width: 360, maxWidth: "100%" } }, h(R.RichText, { text: live, streaming: true })));
+    },
+    DiagramViewer: function () {
+      // Chat / DiagramViewer: open from the button (a Diagram with no onOpen opens it too: use "Perbesar" in the Diagram section)
+      var o = useState(false), src = "flowchart LR\n  A[Pesanan masuk]:::covered --> B[Faktur dibuat]:::covered\n  B --> C[Pembayaran]:::not_covered\n  C --> D[Laporan piutang]:::later";
+      return h("div", { className: "gx-row" },
+        h(R.Button, { onClick: function () { o[1](true); }, "data-case": "open-viewer" }, "Buka penampil diagram"),
+        h(R.DiagramViewer, { open: o[0], source: src, title: "Alur piutang", actions: h(R.IconButton, { icon: "download", label: "Unduh" }), onClose: function () { o[1](false); } }));
+    },
+    OfferCompare: function () {
+      // Chat / OfferCompare (Figma 42:141725): 3, 2 and 1 options, then superseded; the host renders the actions
+      var F = [
+        { stage: "s1", label: "Pelanggan chat WA", pieces: ["WhatsApp Business"], state: "covered" },
+        { stage: "s2", label: "Cek jadwal alat", pieces: ["Sewa alat"], state: "covered" },
+        { stage: "s3", label: "Serah terima & kondisi", pieces: ["Catatan kondisi"], state: "covered" },
+        { stage: "s4", label: 'Tagihan & deposit (DP) "lunas"; #1', pieces: ["Tagihan", "WA", "Kas"], state: "covered" },
+        { stage: "s5", label: "Alat kembali", pieces: ["Sewa alat"], state: "covered" }];
+      function flow(over) { return F.map(function (s) { return Object.assign({}, s, over[s.stage] || {}); }); }
+      var gap = [{ stage: "s3", text: "serah terima dan kondisi alat" }];
+      var custom = { id: "opt_custom", path: "custom", title: "Sewa alat, tagihan dan WhatsApp, plus catatan kondisi alat", flow: F,
+        records: ["Jadwal sewa per alat, tanpa bentrok", "Kondisi alat saat keluar dan kembali", "Deposit dan tagihan"], screens: ["Kalender sewa", "Serah terima alat"],
+        raka_does: ["Ingatkan pelanggan H-1 lewat WA", "Rekap alat yang belum kembali tiap pagi"], needs_approval: ["Denda telat dan potong deposit"], not_covered: [], adds: [], later: [] };
+      var mod = { id: "opt_mod", path: "modules", title: "Sewa alat, tagihan dan WhatsApp", flow: flow({ s3: { pieces: [], state: "not_covered" } }),
+        records: ["Jadwal sewa per alat, tanpa bentrok", "Deposit dan tagihan"], screens: ["Kalender sewa", "Daftar tagihan"], raka_does: ["Ingatkan pelanggan H-1 lewat WA"], needs_approval: [], not_covered: gap, adds: [], later: [] };
+      var bundle = { id: "opt_bundle", path: "bundle", title: "Paket Rental", flow: flow({ s1: { pieces: [] }, s2: { pieces: [] }, s3: { pieces: [], state: "not_covered" }, s4: { pieces: [] }, s5: { pieces: [] } }),
+        records: ["Penyewaan dan pengembalian", "Pelanggan dan tagihan"], screens: ["Kasir rental", "Kalender sewa"], raka_does: [], needs_approval: [], not_covered: gap, adds: ["Kasir dan laporan stok"], later: [] };
+      var custom2 = Object.assign({}, custom, { flow: flow({ s3: { pieces: ["Catatan kondisi"], state: "later" } }), later: [{ piece: "p_kondisi", text: "catatan kondisi alat", reason: { code: "no_skill", message: "" } }] });
+      function acts(o, rec) { return h(R.Button, { variant: rec ? "primary" : "default", size: "sm", "data-action": "offer_accept:" + o.id }, rec ? "Setuju, susun" : "Pilih ini"); }
+      var foot = [h(R.Button, { key: "c", size: "sm" }, "Ubah sesuatu"), h(R.Button, { key: "d", variant: "quiet", size: "sm" }, "Tidak dulu")];
+      return h("div", { className: "gx-col", style: { gap: 32, flexBasis: "100%" } },
+        h("div", { "data-case": "three" }, h(R.OfferCompare, { offer: { id: "of_3", recommended: "opt_custom", options: [mod, custom, bundle] }, renderActions: acts, footer: foot })),
+        h("div", { "data-case": "two" }, h(R.OfferCompare, { offer: { id: "of_2", recommended: "opt_custom", options: [custom2, mod] }, renderActions: acts, footer: foot })),
+        // a 600 px chat card (Studio): two columns fit (>= 260 px each), three become the carousel
+        h("div", { "data-case": "two600", style: { width: 600, maxWidth: "100%" } }, h(R.OfferCompare, { offer: { id: "of_2b", recommended: "opt_custom", options: [custom, mod] }, renderActions: acts, footer: foot })),
+        h("div", { "data-case": "three600", style: { width: 600, maxWidth: "100%" } }, h(R.OfferCompare, { offer: { id: "of_3b", recommended: "opt_custom", options: [custom, mod, bundle] }, renderActions: acts, footer: foot })),
+        // the narrowest chat column (a 300 px drawer): the head stays on one line, the sub text gives way
+        h("div", { "data-case": "narrow", style: { width: 300, maxWidth: "100%" } }, h(R.OfferCompare, { offer: { id: "of_2c", recommended: "opt_custom", options: [custom, mod] }, renderActions: acts })),
+        h("div", { "data-case": "one" }, h(R.OfferCompare, { offer: { id: "of_1", recommended: "opt_custom", options: [custom] }, renderActions: acts, footer: foot })),
+        h("div", { "data-case": "closed" }, h(R.OfferCompare, { offer: { id: "of_0", recommended: "opt_custom", options: [custom, mod, bundle] }, closedLabel: "Peta sudah berubah", renderActions: acts, footer: foot })));
     },
     RakaLauncher: function () {
       var t = useState(false);

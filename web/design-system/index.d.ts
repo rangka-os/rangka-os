@@ -1,5 +1,5 @@
 import type * as React from 'react';
-export type IconName = 'home' | 'store' | 'cart' | 'stock' | 'invoice' | 'card' | 'qris' | 'add' | 'search' | 'print' | 'check' | 'close' | 'lock' | 'amend' | 'left' | 'right' | 'down' | 'sort' | 'more' | 'bell' | 'attach' | 'send' | 'at' | 'copy' | 'delete' | 'edit' | 'eye' | 'download' | 'zoom' | 'image' | 'info' | 'warning' | 'success' | 'error' | 'user' | 'logout' | 'filter' | 'spark' | 'menu' | 'settings' | 'team' | 'sidebar' | 'mic' | 'updown' | 'calendar' | 'open' | 'drag' | 'time' | 'link' | 'apps' | 'chart' | 'dashboard' | 'help' | 'sun' | 'moon' | 'external' | 'refresh' | 'arrowup' | 'arrowdown' | 'funnel' | 'star' | 'switch' | 'pie' | 'line' | 'building' | 'shield' | 'key' | 'plug' | 'globe' | 'palette' | 'list' | 'kanban' | 'group' | 'table' | 'fold' | 'unfold' | 'bank' | 'book' | 'cash' | 'history' | 'map' | 'plus' | 'receipt' | 'repeat' | 'tag' | 'truck' | 'undo' | 'wallet';
+export type IconName = 'home' | 'store' | 'cart' | 'stock' | 'invoice' | 'card' | 'qris' | 'add' | 'search' | 'print' | 'check' | 'close' | 'lock' | 'amend' | 'left' | 'right' | 'down' | 'sort' | 'more' | 'bell' | 'attach' | 'send' | 'at' | 'copy' | 'delete' | 'edit' | 'eye' | 'download' | 'zoom' | 'image' | 'info' | 'warning' | 'success' | 'error' | 'user' | 'logout' | 'filter' | 'spark' | 'menu' | 'settings' | 'team' | 'sidebar' | 'mic' | 'updown' | 'calendar' | 'open' | 'drag' | 'time' | 'link' | 'apps' | 'chart' | 'dashboard' | 'help' | 'sun' | 'moon' | 'external' | 'refresh' | 'arrowup' | 'arrowdown' | 'funnel' | 'star' | 'switch' | 'pie' | 'line' | 'building' | 'shield' | 'key' | 'plug' | 'globe' | 'palette' | 'list' | 'kanban' | 'group' | 'table' | 'fold' | 'unfold' | 'bank' | 'book' | 'cash' | 'history' | 'map' | 'plus' | 'minus' | 'receipt' | 'repeat' | 'tag' | 'truck' | 'undo' | 'wallet';
 export interface IconProps { name: IconName; size?: number; label?: string; className?: string }
 export declare function Icon(props: IconProps): React.ReactElement | null;
 export interface ButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> { variant?: 'default' | 'primary' | 'quiet' | 'link' | 'danger' | 'danger-solid'; size?: 'sm' | 'md' | 'lg'; icon?: IconName; loading?: boolean }
@@ -32,7 +32,7 @@ export interface TableProps { columns: TableColumn[]; rows: ({ id: string } & Re
 export declare function Table(props: TableProps): React.ReactElement;
 export interface PaginationProps { total: number; page?: number; pageSize?: number; jumper?: boolean; onChange?: (page: number) => void }
 export declare function Pagination(props: PaginationProps): React.ReactElement;
-export interface DialogProps { title: string; children?: Node; variant?: 'form' | 'confirm' | 'danger'; icon?: IconName; open?: boolean; confirmLabel?: string; cancelLabel?: string; footer?: Node; onClose?: () => void; onConfirm?: () => void }
+export interface DialogProps { title: string; children?: Node; variant?: 'form' | 'confirm' | 'danger'; icon?: IconName; open?: boolean; confirmLabel?: string; cancelLabel?: string; footer?: Node; headerActions?: Node; className?: string; onClose?: () => void; onConfirm?: () => void }
 export declare function Dialog(props: DialogProps): React.ReactElement | null;
 export interface DrawerProps { title: string; subtitle?: string; icon?: IconName; headerActions?: Node; footer?: Node; wide?: boolean; open?: boolean; children?: Node; onClose?: () => void }
 export declare function Drawer(props: DrawerProps): React.ReactElement | null;
@@ -217,6 +217,37 @@ export declare function ChatDrawer(props: { open: boolean; turns: ChatTurn[]; bu
  * key-values (a list of "**Label:** value"), ``` code blocks with language/file and Salin, callouts
  * (> [!NOTE] | [!TIP] | [!WARNING] | [!CAUTION]). `collapse` folds an answer longer than that many lines. */
 export declare function RichText(props: { text: string; collapse?: number; streaming?: boolean; className?: string }): React.ReactElement;
+/** Chat / Format / Diagram: a Mermaid diagram drawn as SVG (vendored Mermaid, loaded on first use; call configureDiagrams first).
+ * `pending` (a fence still streaming) shows a skeleton, never the source. A bad diagram shows "Diagram belum bisa ditampilkan"
+ * with "Lihat sumber". "Perbesar" opens a DiagramViewer, or calls `onOpen` when the host passes it (then the host owns the viewer). RichText draws ```mermaid fences with this. */
+export declare function Diagram(props: { source: string; title?: string; alt?: string; pending?: boolean; onOpen?: () => void; className?: string }): React.ReactElement;
+/** Chat / DiagramViewer: a zoom and pan popup (scale 25-400%, wheel/pinch/drag, keys + - 0 and arrows). Below 720 px it is full screen and
+ * draws the source top-down. `actions` sit in the head next to the title. */
+export declare function DiagramViewer(props: { open: boolean; source: string; title: string; actions?: Node; onClose: () => void }): React.ReactElement | null;
+/** The first line's direction of a flowchart/graph becomes TD (`flowchart LR` -> `flowchart TD`); other diagram types are unchanged. */
+export declare function diagramTopDown(source: string): string;
+/** Where Mermaid lives (the host's vendor/mermaid.min.js); onRenderError(source, message) fires once per failing source. */
+export declare function configureDiagrams(o: { src: string; onRenderError?: (source: string, error: string) => void }): void;
+/** The one memoised promise for the Mermaid global (securityLevel strict, htmlLabels off). Rejects without a configured src. */
+export declare function loadMermaid(): Promise<unknown>;
+/** One stage of an offer option's flow (contract 0049 §1). `pieces` are display labels only. */
+export interface FlowStage { stage: string; label: string; pieces: string[]; state: "covered" | "not_covered" | "later" }
+/** A flow as Mermaid text: `flowchart <dir>` (default LR), nodes s0..sN labelled "stage<br/>pieces" (at most 2, then +n; "Belum tercakup" or
+ * "Menyusul" for those states), one chain of edges, then `class s<i> <state>`. Labels are escaped (#35; #quot; #lt; #gt; #59;, newline to space). */
+export declare function flowToMermaid(flow: FlowStage[], dir?: "LR" | "TD"): string;
+export interface OfferOption { id: string; path: "custom" | "modules" | "bundle"; title: string; flow?: FlowStage[];
+  records?: string[]; screens?: string[]; raka_does?: string[]; needs_approval?: string[]; adds?: string[];
+  not_covered?: Array<{ stage: string; text: string }>; later?: Array<{ piece: string; text: string; reason?: { code: string; message: string } }> }
+export interface Offer { id: string; recommended: string; options: OfferOption[] }
+/** Chat / OfferCompare (0049 §4): root `[data-card=offer][data-offer=<id>]`, one `section[data-option=<id>]` per option, recommended first
+ * with "Disarankan". Equal columns once each gets 260 px (2 from 532 px of card width, 3 from 804 px; `offerSideBySide`), a scroll-snap carousel with "1 / 3" below. "Perbesar" opens a DiagramViewer
+ * (LR source) whose head carries `renderActions(option, isRecommended)`. `closedLabel` ("Sudah dijawab", "Peta sudah berubah") mutes the
+ * card and drops every action, also in the viewer. `footer` (Ubah sesuatu, Tidak dulu) sits under the row and is not rendered
+ * when `closedLabel` is set (it holds actions too). */
+/** True when n options sit side by side in a card this wide (each column >= 260 px, gap 12); for one option, whether the card is wide (>= 532 px). */
+export declare function offerSideBySide(n: number, width: number): boolean;
+export declare function OfferCompare(props: { offer: Offer; closedLabel?: string; renderActions: (option: OfferOption, isRecommended: boolean) => Node;
+  footer?: Node; className?: string }): React.ReactElement;
 /** The block list RichText draws (for tests and tools). */
 export declare function markdownBlocks(text: string): Array<{ t: "h" | "p" | "list" | "kv" | "table" | "code" | "quote" | "callout" | "hr"; [k: string]: unknown }>;
 /** The link a Raka answer may open, or "" (javascript:, data:, //host and the like stay text). */

@@ -1199,3 +1199,98 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-md-more { align-self: flex-start; display: inline-flex; align-items: center; gap: 6px; padding: 8px 0 0; border: 0; border-top: 1px solid var(--line); border-radius: 0; background: none; color: var(--link); font: 500 12px/16px var(--font-sans); cursor: pointer; width: 100%; }
 .rk-md-more .rk-icon { width: 14px; height: 14px; }
 .rk-md-more:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+
+/* ------ diagram (a ```mermaid fence, drawn by the vendored Mermaid) */
+.rk-diagram { position: relative; margin: 0; padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); box-sizing: border-box; }
+.rk-diagram-title { margin: 0 0 8px; color: var(--ink-2); font: 600 12px/16px var(--font-sans); }
+.rk-diagram-svg { overflow-x: auto; text-align: center; }
+.rk-diagram-svg svg { display: inline-block; max-width: 100%; height: auto; }
+.rk-diagram-bar { position: absolute; top: 4px; right: 4px; }
+.rk-diagram-skel { display: flex; align-items: center; justify-content: center; min-height: 120px; border-radius: 6px; background: var(--soft); color: var(--muted); }
+.rk-diagram-err { display: flex; flex-direction: column; gap: 8px; padding: 10px 12px; border: 1px dashed var(--warn-line); border-radius: 6px; background: var(--warn-tint); }
+.rk-diagram-errhead { display: flex; align-items: center; gap: 8px; color: var(--warn); font: 600 13px/20px var(--font-sans); }
+.rk-diagram-errhead .rk-icon { flex: none; width: 16px; height: 16px; }
+.rk-diagram-src summary { cursor: pointer; color: var(--link); font: 500 12px/16px var(--font-sans); }
+.rk-diagram-src summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-diagram-src .rk-md-pre { margin-top: 8px; border: 1px solid var(--line); border-radius: 6px; background: var(--surface); }
+/* coverage classes Raka puts on nodes (class A covered); !important beats Mermaid's #id-scoped style block */
+.rk-diagram .node.covered rect, .rk-diagram .node.covered polygon, .rk-diagram .node.covered circle { fill: var(--selected) !important; stroke: var(--line) !important; stroke-width: 1px !important; }
+.rk-diagram .node.not_covered rect, .rk-diagram .node.not_covered polygon, .rk-diagram .node.not_covered circle { fill: var(--warn-tint) !important; stroke: var(--warn-line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }
+.rk-diagram .node.later rect, .rk-diagram .node.later polygon, .rk-diagram .node.later circle { fill: var(--soft) !important; stroke: var(--line) !important; stroke-width: 1px !important; stroke-dasharray: 4 3 !important; }
+
+/* ---- DiagramViewer: a big dialog; the drawing sits in a pannable viewport, the foot holds the zoom bar */
+.rk-dialog.rk-diagram-viewer { display: flex; flex-direction: column; overflow: hidden; padding-bottom: 0; }
+.rk-diagram-viewer .rk-dialog-main { flex: 1; min-height: 0; padding: 12px 20px; }
+.rk-diagram-viewer .rk-dialog-foot { flex-direction: row; align-items: center; justify-content: space-between; padding: 0 20px 16px; }
+.rk-diagram-viewer .rk-dialog-foot > * { width: auto; }
+.rk-dv-viewport { position: relative; flex: 1; min-height: 0; overflow: hidden; border: 1px solid var(--line); border-radius: 8px; background: var(--surface); cursor: grab; touch-action: none; user-select: none; }
+.rk-dv-viewport[data-grab] { cursor: grabbing; }
+.rk-dv-viewport:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-dv-stage { position: absolute; left: 0; top: 0; transform-origin: 0 0; will-change: transform; }
+.rk-dv-stage svg { display: block; max-width: none; }
+.rk-dv-viewport .rk-diagram-skel, .rk-dv-viewport .rk-diagram-err { margin: 16px; }
+.rk-dv-zoom { display: flex; align-items: center; gap: 4px; }
+.rk-dv-pct { min-width: 48px; text-align: center; color: var(--muted); font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; }
+.rk-dv-hint { color: var(--muted); font: 400 12px/16px var(--font-sans); }
+@media (min-width: 720px) {
+  .rk-dialog.rk-diagram-viewer { left: 50%; top: 50%; bottom: auto; right: auto; transform: translate(-50%, -50%); width: min(1100px, 92vw); height: 86vh; max-height: none; border-radius: var(--r-dialog); }
+}
+@media (max-width: 719px) {
+  .rk-dialog.rk-diagram-viewer { inset: 0; width: auto; height: auto; max-height: none; border-radius: 0; transform: none; padding-bottom: env(safe-area-inset-bottom, 0px); }
+  .rk-diagram-viewer .rk-dialog-main { padding: 8px 12px; }
+  .rk-diagram-viewer .rk-dialog-foot { padding: 0 12px 12px; }
+}
+/* ---- OfferCompare: Raka's offer options side by side (contract 0049 §4, Figma Agent chat › Chat/OfferCompare).
+   The card's own width decides: a grid of equal columns once each gets 260 px, a scroll-snap carousel with "1 / 3" below. */
+.rk-offer { container: rk-offer / inline-size; display: flex; flex-direction: column; gap: 12px; min-width: 0; max-width: 100%; box-sizing: border-box; color: var(--ink); font: 400 13px/20px var(--font-sans); }
+.rk-offer-head { display: flex; align-items: center; gap: 6px; min-height: 24px; }
+.rk-offer-head > .rk-icon { flex: none; width: 16px; height: 16px; color: var(--ink); }
+.rk-offer-name { font-weight: 600; white-space: nowrap; flex: none; }
+.rk-offer-sub { color: var(--muted); font-size: 12px; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-offer-end { margin-left: auto; flex: none; display: inline-flex; align-items: center; gap: 4px; }
+.rk-offer-count { color: var(--muted); font: 500 12px/16px var(--font-sans); font-variant-numeric: tabular-nums; padding: 0 4px; white-space: nowrap; }
+.rk-offer-nav { display: none; gap: 2px; }
+@media (pointer: fine) { .rk-offer-nav { display: inline-flex; } }
+.rk-offer-nav .rk-iconbtn:disabled { opacity: .4; cursor: default; background: transparent; }
+.rk-offer-row { position: relative; display: flex; gap: 12px; overflow-x: auto; scroll-snap-type: x mandatory; overscroll-behavior-x: contain; scrollbar-width: none; min-width: 0; }
+.rk-offer-row::-webkit-scrollbar { display: none; }
+.rk-offer-row:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-offer-opt { flex: 0 0 86%; scroll-snap-align: start; display: flex; flex-direction: column; gap: 10px; min-width: 0; padding: 12px; box-sizing: border-box;
+  border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+.rk-offer.is-single .rk-offer-opt { flex-basis: 100%; }
+.rk-offer-opthead { display: flex; align-items: center; justify-content: space-between; gap: 8px; min-height: 20px; }
+.rk-offer-path { color: var(--muted); font: 500 12px/16px var(--font-sans); }
+.rk-pill.rk-offer-rec { background: var(--selected); color: var(--link); flex: none; }
+.rk-pill.rk-offer-rec::before { display: none; }
+.rk-offer-title { margin: 0; font: 600 14px/20px var(--font-sans); color: var(--ink); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; line-clamp: 3; overflow: hidden; overflow-wrap: anywhere; }
+.rk-offer-flow .rk-diagram { padding: 8px; }
+.rk-offer-gap { display: flex; gap: 6px; margin: 0; color: var(--ink-2); font-size: 12px; line-height: 18px; }
+.rk-offer-gap .rk-icon { flex: none; width: 14px; height: 14px; margin-top: 2px; }
+.rk-offer-gap.is-gap .rk-icon, .rk-offer-gap.is-gap b { color: var(--warn); }
+.rk-offer-gap.is-later .rk-icon, .rk-offer-gap.is-later b { color: var(--ink-2); }
+.rk-offer-lists { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.rk-offer-list h4 { margin: 0 0 2px; font: 600 12px/18px var(--font-sans); color: var(--ink); }
+.rk-offer-list ul { margin: 0; padding-left: 16px; color: var(--ink-2); font-size: 12px; line-height: 18px; }
+.rk-offer-list li { overflow-wrap: anywhere; }
+.rk-offer-more > summary { display: inline-flex; align-items: center; gap: 4px; cursor: pointer; list-style: none; color: var(--ink-2); font: 500 12px/18px var(--font-sans); border-radius: var(--r-sm); }
+.rk-offer-more > summary::-webkit-details-marker { display: none; }
+.rk-offer-more > summary .rk-icon { width: 14px; height: 14px; transition: transform .15s; transform: rotate(-90deg); }
+.rk-offer-more[open] > summary .rk-icon { transform: none; }
+.rk-offer-more > summary:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-offer-more[open] > .rk-offer-lists { margin-top: 10px; }
+.rk-offer-acts { margin-top: auto; display: flex; flex-wrap: wrap; gap: 8px; padding-top: 4px; }
+.rk-offer-foot { display: flex; flex-wrap: wrap; justify-content: center; gap: 8px; }
+/* closed (answered or superseded): a ground tint and a lighter border, never opacity, so text keeps its contrast */
+.rk-offer.is-closed .rk-offer-opt { background: var(--soft); border-color: transparent; }
+/* R11: side by side when every column gets 260 px (gap 12): 2 options from 532 px, 3 from 804 px; keep in step with offerSideBySide() */
+@container rk-offer (min-width: 532px) {
+  .rk-offer[data-count="2"] .rk-offer-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow: visible; scroll-snap-type: none; }
+  .rk-offer[data-count="2"] .rk-offer-count, .rk-offer[data-count="2"] .rk-offer-nav { display: none !important; }
+  .rk-offer.is-single .rk-offer-opt > .rk-offer-lists { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); column-gap: 24px; align-items: start; }
+  .rk-offer.is-single .rk-offer-opt > .rk-offer-lists > .rk-offer-more { grid-column: 1 / -1; }
+}
+@container rk-offer (min-width: 804px) {
+  .rk-offer[data-count="3"] .rk-offer-row { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); overflow: visible; scroll-snap-type: none; }
+  .rk-offer[data-count="3"] .rk-offer-count, .rk-offer[data-count="3"] .rk-offer-nav { display: none !important; }
+}
+@media (prefers-reduced-motion: reduce) { .rk-offer-more > summary .rk-icon { transition: none; } }

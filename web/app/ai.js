@@ -160,6 +160,20 @@
   RA.trimHistory = trimHistory;
   RA.aiReduce = aiReduce;
 
+  /* ================================================================ diagrams
+   * Raka's answers may hold ```mermaid fences; RichText draws them with the vendored Mermaid. The URL is resolved from
+   * this script's own address so the Console (which loads ../app/ai.js) finds app/vendor/ too. Not precached by sw.js:
+   * offline, the Diagram fallback shows. The bundle loads before ai.js; the guard keeps older bundles working. */
+  (function () {
+    if (!global.Rangka || typeof global.Rangka.configureDiagrams !== "function") return;
+    var src = "vendor/mermaid.min.js";
+    try {
+      var cs = global.document && global.document.currentScript;
+      if (cs && cs.src) src = cs.src.replace(/[^\/]*(\?.*)?$/, "") + src;
+    } catch (e) { /* keep the relative path */ }
+    global.Rangka.configureDiagrams({ src: src, onRenderError: function (source, message) { console.warn("raka diagram", message); } });
+  })();
+
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;

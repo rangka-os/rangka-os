@@ -63,7 +63,9 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    `features.rk` is refused with `403 plan_managed` when proposed, applied or reverted, so a business cannot raise its own
    limits. The operator edits the file and runs `rangka plan set` again. A change set that touches `features.rk` is
    pinned to the file's text when proposed (the op's `base`, contract 0014 §5), so if the operator writes the file
-   before the apply, the apply answers `409 stale_base` instead of writing over the operator's plans. On the company's own plan (`config.rk`, no
+   before the apply, the apply answers `409 stale_base` instead of writing over the operator's plans. A `features.rk` op
+   without `base` (proposed before plans were pinned) is refused with `409 stale_base` at apply while the file exists,
+   so it is proposed again (apply-rows audit note 4). On the company's own plan (`config.rk`, no
    operator) a change set may edit `features.rk` as before.
 
 ## Not decided here

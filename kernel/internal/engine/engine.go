@@ -310,7 +310,10 @@ var errConflict = errors.New("engine: concurrent write conflict")
 
 // runOnce is one attempt of run; retry reports a lost race (the transaction is rolled back).
 func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (retry bool, err error) {
-	ctx, leave := e.gate.enter(ctx) // per attempt: a retry after a reload runs whole on the new registry
+	ctx, leave, err := e.gate.enter(ctx) // per attempt: a retry after a reload runs whole on the new registry
+	if err != nil {
+		return false, err
+	}
 	defer leave()
 	tx, err := e.DB.Begin(ctx)
 	if err != nil {

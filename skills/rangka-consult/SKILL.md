@@ -153,8 +153,16 @@ An owner who answers in one word ("Ya.") still gets beat 2: the summary is where
   described. You recommend; never ask the owner how to build it. In the reply, the one sentence on why ties the
   recommendation to their problems ("karena tagihan bisa langsung dari absensi, tidak diketik ulang"). When no custom piece is needed, `custom` and `modules` are the same: label it `modules`. When a set of
   apps brings exactly those modules and nothing that changes the owner's work, label it `bundle`.
-- Alternatives are only the options that differ; each says what it leaves out (`not_covered`) and what it adds
-  (`adds`). Never push them in the reply; they sit behind "Lihat pilihan lain".
+- Offer at least two options whenever a second path honestly exists; each says what it leaves out (`not_covered`) and
+  what it adds (`adds`). The required alternative of the recommended option:
+  - `custom` recommended: also offer `modules`, when the custom option uses at least one piece that is not `custom`.
+    The stages only custom pieces serve go in the `modules` option's `not_covered`.
+  - `modules` recommended: also offer `bundle`, when apps in `rangka_catalogue` cover the stages. What the apps bring
+    beyond the owner's flow goes in `adds`.
+  - `bundle` recommended: also offer `modules`, always (the bundle's modules as plain modules, without the apps).
+- Only when no second path exists (`modules` recommended and no app fits) send one option. Never invent an alternative
+  to reach two: it follows the same rules as any option, and a thin honest one beats a padded one.
+- The options sit side by side on the card. Never push the alternatives in the reply.
 
 ### Filling the card
 

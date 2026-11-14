@@ -262,7 +262,7 @@ func TestSwitchOrgPasswordPolicy(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	up, err := s.openSession(ctx, alpha, UpstreamSessionTTL, SessionUpstream)
+	up, err := s.openSession(ctx, alpha, UpstreamSessionTTL, SessionUpstream, false)
 	if err != nil {
 		t.Fatal(err)
 	}

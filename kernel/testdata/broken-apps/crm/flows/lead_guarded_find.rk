@@ -16,3 +16,22 @@ steps:
   - if: app_installed('sales') && size(deals) > 0
     update: me
     set: {status: "'qualified'"}
+  # fine: the condition is a top-level conjunct in any order, with either quote
+  - if: size(deals) > 0 && app_installed("sales")
+    update: me
+    set: {status: "'qualified'"}
+  # flagged: || does not guard a skipped step
+  - if: app_installed('sales') || deals != null
+    update: me
+    set: {status: "'qualified'"}
+  # fine: event.deals is a field of the event, not the step's name
+  - if: event.deals != null
+    update: me
+    set: {status: "'qualified'"}
+  # flagged: || and ?: bind looser than &&, so C does not guard the right side
+  - if: app_installed('sales') && event.vip || deals != null
+    update: me
+    set: {status: "'qualified'"}
+  - if: "app_installed('sales') && event.vip ? true : deals != null"
+    update: me
+    set: {status: "'qualified'"}

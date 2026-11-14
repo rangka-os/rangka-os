@@ -32,6 +32,15 @@ read access away from whole models (rangka-apps `docs/permissions.md`).
    403 and `meta.dashboards` leaves it out. A widget whose `field`, `group_by`, `sort` or a `columns` entry is
    hidden from the actor is returned as `{"hidden": true}`.
 
+6. **Read-only for some roles.** A field with `read_only_for: [roles]` is read-only for an actor whose every role is
+   listed, with the same rule as `hidden_for`: grants add up, and the owner and kernel actors are never restricted.
+   - The actor still reads the field.
+   - A client write by the actor (form, REST, import) does not set it. On create the field's default applies. On
+     update the stored value stays, also in table rows matched by row name.
+   - `GET /api/v1/meta` describes the field as `read_only: true` to that actor.
+   - Flows and hooks still write it.
+   - Use it for a field only some writers decide, such as a customer's credit limit (card t_6c114aa0).
+
 ## Consequences
 
 - Apps can give a role read on a model and still keep some of its fields from that role; rangka-apps may restore

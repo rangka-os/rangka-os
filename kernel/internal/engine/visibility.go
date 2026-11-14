@@ -34,6 +34,57 @@ func (e *Engine) FieldHidden(a Actor, m *meta.Model, f *meta.Field) bool {
 	return true
 }
 
+// FieldReadOnlyFor reports whether field f of m is read-only for a by f's read_only_for: [roles], with the rule of
+// hidden_for (an actor whose every role is listed; the owner and kernel actors never). A client write by a does not
+// set it (dropped on create, the stored value kept on update), like a read_only field; flows and hooks still write it.
+// rangka-apps uses it for fields only some writers decide, such as a customer's credit (card t_6c114aa0).
+func (e *Engine) FieldReadOnlyFor(a Actor, m *meta.Model, f *meta.Field) bool {
+	if unrestricted(a) || len(a.Roles) == 0 || m == nil || f == nil {
+		return false
+	}
+	if base := f.MoneyOf(); base != "" {
+		if bf := m.Field(base); bf != nil && bf != f {
+			return e.FieldReadOnlyFor(a, m, bf)
+		}
+	}
+	locked := meta.StrList(f.Raw["read_only_for"])
+	if len(locked) == 0 {
+		return false
+	}
+	in := map[string]bool{}
+	for _, r := range locked {
+		in[r] = true
+	}
+	for _, r := range a.Roles {
+		if !in[r] {
+			return false // a role that may write it is enough (grants add up)
+		}
+	}
+	return true
+}
+
+// clientLocked reports whether a client write by a may not set field f of m: hidden from a, or read-only for a.
+func (e *Engine) clientLocked(a Actor, m *meta.Model, f *meta.Field) bool {
+	return e.FieldHidden(a, m, f) || e.FieldReadOnlyFor(a, m, f)
+}
+
+// lockedFields is the set of field names of m a client write by a may not set (nil when none).
+func (e *Engine) lockedFields(a Actor, m *meta.Model) map[string]bool {
+	var out map[string]bool
+	if m == nil || unrestricted(a) {
+		return nil
+	}
+	for _, f := range m.Fields {
+		if e.clientLocked(a, m, f) {
+			if out == nil {
+				out = map[string]bool{}
+			}
+			out[f.Name] = true
+		}
+	}
+	return out
+}
+
 // hiddenFields is the set of field names of m hidden from a (nil when none).
 func (e *Engine) hiddenFields(a Actor, m *meta.Model) map[string]bool {
 	var out map[string]bool
@@ -87,15 +138,15 @@ func (e *Engine) redactResult(a Actor, model string, res *Result) *Result {
 	return res
 }
 
-// dropHidden removes from a client's input the fields of m hidden from a (and inside table rows): a person who
-// cannot see a field does not set it either.
+// dropHidden removes from a client's input the fields of m hidden from a or read-only for a (and inside table rows):
+// a person who cannot see a field, or may not decide it, does not set it either.
 func (e *Engine) dropHidden(a Actor, m *meta.Model, input map[string]any) map[string]any {
 	return e.dropHiddenIn(e.Reg(), a, m, input)
 }
 
 // dropHiddenIn is dropHidden against reg (a unit of work's pinned registry).
 func (e *Engine) dropHiddenIn(reg *meta.Registry, a Actor, m *meta.Model, input map[string]any) map[string]any {
-	if input == nil || m == nil || unrestricted(a) || len(e.hiddenFields(a, m)) == 0 && !hasTable(m) {
+	if input == nil || m == nil || unrestricted(a) || len(e.lockedFields(a, m)) == 0 && !hasTable(m) {
 		return input
 	}
 	out := make(map[string]any, len(input))
@@ -118,7 +169,7 @@ func (e *Engine) dropHiddenIn(reg *meta.Registry, a Actor, m *meta.Model, input 
 			}
 			continue
 		}
-		if e.FieldHidden(a, m, f) {
+		if e.clientLocked(a, m, f) {
 			delete(out, f.Name)
 		}
 	}
@@ -172,7 +223,7 @@ func (e *Engine) keepHiddenIn(reg *meta.Registry, a Actor, m *meta.Model, patch 
 		if f.Type == "table" {
 			cm := reg.Model(f.Of)
 			l, ok := out[f.Name].([]any)
-			if !ok || cm == nil || e.hiddenFields(a, cm) == nil {
+			if !ok || cm == nil || e.lockedFields(a, cm) == nil {
 				continue
 			}
 			stored := map[string]map[string]any{}
@@ -189,7 +240,7 @@ func (e *Engine) keepHiddenIn(reg *meta.Registry, a Actor, m *meta.Model, patch 
 				nr := e.dropHiddenIn(reg, a, cm, row)
 				if old := stored[str(row["name"])]; old != nil && str(row["name"]) != "" {
 					for _, cf := range cm.Fields {
-						if e.FieldHidden(a, cm, cf) {
+						if e.clientLocked(a, cm, cf) {
 							if v, ok := old[cf.Name]; ok {
 								nr[cf.Name] = v
 							}
@@ -201,7 +252,7 @@ func (e *Engine) keepHiddenIn(reg *meta.Registry, a Actor, m *meta.Model, patch 
 			out[f.Name] = kept
 			continue
 		}
-		if e.FieldHidden(a, m, f) {
+		if e.clientLocked(a, m, f) {
 			delete(out, f.Name) // the merge keeps the stored value
 		}
 	}

@@ -179,7 +179,7 @@ func (v *validator) scopeFields(d *rk.Doc, all map[string]vis) {
 	fields, level := scopeFields(sc["field"]), "error"
 	for _, f := range fields {
 		if known[f] {
-			level = "warning"
+			level = "warn"
 		}
 	}
 	for _, f := range fields {

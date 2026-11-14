@@ -1,6 +1,6 @@
 # 0051 Raka's learning loop: from company pieces to catalogue pieces
 
-Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (this contract) · Affects: rangka-cloud (candidate job,
+Status: accepted (14 Nov 2026, Dede) · Owner of the change: rangka-os (this contract) · Affects: rangka-cloud (candidate job,
 fingerprints, GitHub App, consent wording), rangka-ai (`/v1/generalise`), rangka-connectors (CODEOWNERS, branch
 protection, path check; owned by the second engineer, needs his agreement), every repo (CODEOWNERS) · Extends: 0047 §8
 (lesson pull requests for skills) · Closes: 0033 Open "promoting a company connector that recurs across tenants" ·

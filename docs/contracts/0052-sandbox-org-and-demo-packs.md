@@ -1,6 +1,6 @@
 # 0052 Ruang coba: a sandbox org with demo data
 
-Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (this contract, kernel) · Affects: rangka-cloud (demo
+Status: accepted (14 Nov 2026, Dede) · Owner of the change: rangka-os (this contract, kernel) · Affects: rangka-cloud (demo
 pack pool, offer after build, console page), rangka-ai (`sandbox` on a turn, demo pack generation), web app (switcher,
 banner), design system (`sandbox` token) · Amends: 0026 §3 (whole-org delete of a sandbox), 0028 §1 (limits skip
 sandbox orgs) · Builds on: 0009, 0010, 0020, 0033, 0046 §4, 0047, 0051

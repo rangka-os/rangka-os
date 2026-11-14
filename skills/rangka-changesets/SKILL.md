@@ -43,7 +43,9 @@ The kernel computes risk; you cannot set it.
 
 These lists are a guide; the kernel decides. Read `risk` and `approvable_by` from the change set the kernel returns
 (MCP: `rangka_changeset_status {id}`), and read them again after preview, which can raise the risk. Apply can
-raise it too when the files changed since the proposal (`409 risk_changed`): the change set needs approving again. Mention the risk
+raise it too when the files changed since the proposal (`409 risk_changed`): the change set needs approving again. A step
+that finds the change set moved on by another step since it loaded it answers `409 stale_status`: read the status
+again and continue from there; nothing was changed. Mention the risk
 only when it is high. When `approvable_by` is `["owner"]`, say "Perubahan ini perlu disetujui pemilik."
 
 ## When the platform refuses

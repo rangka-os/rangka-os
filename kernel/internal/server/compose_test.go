@@ -249,3 +249,36 @@ func TestRevertCountsRowsOfRemovedUnit(t *testing.T) {
 	e.login()
 	e.must(200, "POST", "/api/v1/changesets/"+id+"/revert", nil)
 }
+
+// Changeset followup audit 1: another kernel process rejects the change set while Apply has written its files; the
+// save of applied finds the row moved on (stale_status), so the files go back and the live metadata matches the row.
+func TestApplyLosingToAnotherProcessRestoresFiles(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Label", "ops": []any{
+		map[string]any{"op": "create", "path": "custom/deal.rk", "content": "model: deal\nlabel: {id: Mobil}\n"}}}).JSON
+	id := cs["id"].(string)
+	for _, a := range []string{"validate", "preview", "approve"} {
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/"+a, map[string]any{})
+	}
+	orig := e.s.Changes.Reload
+	e.s.Changes.Reload = func(ctx context.Context) error {
+		e.s.Changes.Reload = orig
+		// the other process: a reject that commits between the file write and the save
+		if _, err := e.s.DB.Exec(ctx, "update rk_changesets set status = 'rejected' where id = $1", id); err != nil {
+			t.Error(err)
+		}
+		return orig(ctx)
+	}
+	r := e.do("POST", "/api/v1/changesets/"+id+"/apply", map[string]any{})
+	e.s.Changes.Reload = orig
+	if r.Status != 409 || errCode(r) != "stale_status" {
+		t.Fatalf("apply that lost to another process: %d %s", r.Status, r.Body)
+	}
+	if _, err := os.Stat(filepath.Join(e.s.Changes.SiteDir, "custom", "deal.rk")); err == nil {
+		t.Fatal("the files of a change set that is not applied stayed live")
+	}
+	if g := e.must(200, "GET", "/api/v1/changesets/"+id, nil).JSON; g["status"] != "rejected" {
+		t.Fatalf("status %v, want the other process's rejected", g["status"])
+	}
+}

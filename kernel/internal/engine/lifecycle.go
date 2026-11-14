@@ -381,6 +381,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
+		o.deviceCreate = deviceWriteFor(ctx, model) != nil
 		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
 		return err
 	})
@@ -388,6 +389,8 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 }
 
 func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Result, error) {
+	own := o.deviceCreate // the device write's own record: the first create of the unit (Engine.Create)
+	o.deviceCreate = false
 	m, err := o.model(model)
 	if err != nil {
 		return nil, err
@@ -438,7 +441,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	case m.IsSubmittable:
 		rec["name"] = "DRAFT-" + store.RandomName(5)
 	default:
-		n, err := o.nextName(m, rec)
+		n, err := o.docName(m, rec, own)
 		if err != nil {
 			return nil, err
 		}
@@ -704,6 +707,9 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
+		if deviceWriteFor(ctx, model) != nil {
+			o.deviceSubmit = model + "/" + name
+		}
 		res, err = o.submit(model, name, force)
 		return err
 	})
@@ -711,6 +717,8 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 }
 
 func (o *op) submit(model, name string, force bool) (*Result, error) {
+	own := o.deviceSubmit == model+"/"+name // the device write's own document (Engine.Submit)
+	o.deviceSubmit = ""
 	e, a := o.e, o.actor
 	m, err := o.model(model)
 	if err != nil {
@@ -766,7 +774,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if af := str(rec["amended_from"]); af != "" {
 			newName, err = o.amendName(m, af)
 		} else {
-			newName, err = o.nextName(m, rec)
+			newName, err = o.docName(m, rec, own)
 		}
 		if err != nil {
 			return nil, err

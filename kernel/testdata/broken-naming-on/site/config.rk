@@ -3,3 +3,5 @@ locale: id-ID
 currency: IDR
 timezone: Asia/Jakarta
 apps: [toko]
+numbering:
+  struk: 'NOTA-{outlet.code}-{YY}{MM}-{#####}'

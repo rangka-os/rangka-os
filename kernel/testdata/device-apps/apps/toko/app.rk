@@ -9,7 +9,7 @@ modules: {kasir: ^1.0}
 roles: [kasir, dapur]
 menu:
   - group: {id: Kasir}
-    items: [penjualan, sesi_kasir, tutup_sesi, menu, tiket_dapur, outlet]
+    items: [penjualan, sesi_kasir, tutup_sesi, setoran, menu, tiket_dapur, outlet]
 work:
   - {screen: jual, roles: [kasir], home: true}
   - {screen: dapur, roles: [dapur], home: true}

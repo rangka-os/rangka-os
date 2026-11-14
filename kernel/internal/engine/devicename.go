@@ -15,9 +15,11 @@ import (
 
 // Names made on the device (contract 0057 §3).
 
-// DeviceWrite is a write that came from a paired device: the document name the device made (used for a model with
-// naming_on: device), when it happened on the device, the money it charged and the event it came with.
+// DeviceWrite is a write that came from a paired device: the model of its own document ("" = the model the
+// Engine.Create or Engine.Submit call names), the name the device made for it (used when that model has naming_on:
+// device), when it happened on the device, the money it charged and the event it came with.
 type DeviceWrite struct {
+	Model      string
 	Name       string
 	OccurredAt time.Time
 	Money      map[string]any
@@ -35,6 +37,36 @@ func WithDeviceWrite(ctx context.Context, dw DeviceWrite) context.Context {
 func deviceWriteOf(ctx context.Context) *DeviceWrite {
 	dw, _ := ctx.Value(deviceWriteKey{}).(*DeviceWrite)
 	return dw
+}
+
+// deviceWriteFor is the device write of ctx when its own document is of model, else nil.
+func deviceWriteFor(ctx context.Context, model string) *DeviceWrite {
+	if dw := deviceWriteOf(ctx); dw != nil && (dw.Model == "" || dw.Model == model) {
+		return dw
+	}
+	return nil
+}
+
+// docName names a new m record: with the device's name when it is the device write's own document (own) of a
+// naming_on: device model, else by the kernel (nextName). Records a flow or hook makes in the same unit are never
+// own, so they are numbered by the kernel.
+func (o *op) docName(m *meta.Model, rec store.Record, own bool) (string, error) {
+	if own && m.NamingOn == "device" {
+		if dw := deviceWriteFor(o.ctx, m.Name); dw != nil {
+			return o.deviceName(m, rec, dw)
+		}
+	}
+	return o.nextName(m, rec)
+}
+
+// devicePattern is the string pattern device names of m follow in org: the scheme the kernel resolves (a
+// config.numbering override included, contract 0009 §3), so head office and devices share it; the model's own
+// naming when that scheme is a series or has no {device.code}.
+func (e *Engine) devicePattern(m *meta.Model, org string) string {
+	if s := e.scheme(m, org); s.Series == "" && strings.Contains(s.Pattern, deviceCodeToken) {
+		return s.Pattern
+	}
+	return m.Naming
 }
 
 // deviceCodeToken is the token of the paired device's code; validation makes it followed by "-".
@@ -75,7 +107,7 @@ func (o *op) deviceName(m *meta.Model, rec store.Record, dw *DeviceWrite) (strin
 		return "", err
 	}
 	series := "device:" + a.Device.ID + ":" + m.Name
-	prev, err := store.ClaimDeviceNumber(o.ctx, o.tx, a.Org, series, store.Period(store.DefaultReset(m.Naming), at), n)
+	prev, err := store.ClaimDeviceNumber(o.ctx, o.tx, a.Org, series, store.Period(store.DefaultReset(e.devicePattern(m, a.Org)), at), n)
 	if err != nil {
 		return "", err
 	}
@@ -99,7 +131,7 @@ func (o *op) deviceName(m *meta.Model, rec store.Record, dw *DeviceWrite) (strin
 // digitsRe is the number part of a device name.
 var digitsRe = regexp.MustCompile(`^[0-9]{1,18}$`)
 
-// checkDeviceName checks that name is m's naming rendered for device a at time at (already in the site timezone):
+// checkDeviceName checks that name is m's device pattern (devicePattern) rendered for device a at time at (already in the site timezone):
 // {device.code} is the device's code, {outlet.<field>} that field of the device's outlet record, the date tokens
 // those of at, and the counter any number from 1, written as the kernel writes it (zero-padded to the counter's
 // width). It returns the number. Any other field token cannot be rendered for a device and refuses the name.
@@ -109,7 +141,7 @@ func (e *Engine) checkDeviceName(ctx context.Context, q pg.Querier, m *meta.Mode
 	}
 	var outlet store.Record
 	var b strings.Builder
-	pattern, last := m.Naming, 0
+	pattern, last := e.devicePattern(m, a.Org), 0
 	for _, loc := range fieldTokenRe.FindAllStringSubmatchIndex(pattern, -1) {
 		path := pattern[loc[0]+1 : loc[1]-1]
 		val := ""

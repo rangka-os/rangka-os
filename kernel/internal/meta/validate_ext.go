@@ -524,6 +524,9 @@ func (v *validator) site(all map[string]vis) {
 				v.rep.extra("warn", cfg.Path, "numbering/"+mn, "not_installed", fmt.Sprintf(`"%s" comes from app "%s", which this site does not install`, mn, x.app))
 			} else if str, _ := numbering[mn].(string); str != "" {
 				v.namingFields(v.rep.extra, cfg.Path, "numbering/"+mn, x.m, str)
+				if x.m.NamingOn == "device" && !strings.Contains(str, "{device.code}") {
+					v.rep.extra("error", cfg.Path, "numbering/"+mn, "naming_on_device", namingOnDeviceMsg)
+				}
 			}
 		}
 		for _, mn := range sortedKeysM(all) {
@@ -1199,3 +1202,7 @@ func (v *validator) appOverlays() {
 		}
 	}
 }
+
+// namingOnDeviceMsg is the naming_on_device error: a device name carries the device's code, so two devices of one
+// outlet never make the same name (contract 0057 §3).
+const namingOnDeviceMsg = `naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)`

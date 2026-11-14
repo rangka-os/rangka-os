@@ -6,3 +6,6 @@ steps:
   - update: s
     if: s != null
     set: {state: "'closed'"}
+  - create: setoran
+    if: s != null
+    set: {outlet: s.outlet, shift: s.name, amount: event.counted_cash}

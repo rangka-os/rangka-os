@@ -213,8 +213,10 @@ type op struct {
 	// counters are the v0 counters this attempt took a name from (nextName): if a write then finds that name
 	// taken, run moves them past the existing names and starts again (staleCounter)
 	counters []counterRef
-	// deviceNamed is set once a record took the name of the unit's device write (contract 0057 §3)
-	deviceNamed bool
+	// deviceCreate and deviceSubmit mark the device write's own document (contract 0057 §3): the record the unit's
+	// Engine.Create makes, or <model>/<draft> that its Engine.Submit submits; only it takes the device's name
+	deviceCreate bool
+	deviceSubmit string
 }
 
 // counterRef is one v0 counter (rk_naming) and the model whose names it numbers.

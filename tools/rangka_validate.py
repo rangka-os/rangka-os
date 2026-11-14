@@ -361,7 +361,7 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
             if isinstance(m.get("naming"), str):
                 naming_fields(rep, p, "naming", mname, m, m["naming"], allmodels_of(apps))
             if m.get("naming_on") == "device" and "{device.code}" not in (m["naming"] if isinstance(m.get("naming"), str) else ""):
-                rep.add("error", p, "naming_on", "naming_on_device", "naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)")
+                rep.add("error", p, "naming_on", "naming_on_device", NAMING_ON_DEVICE_MSG)
         for dname, (p, db) in a["dashboards"].items():
             for e in sorted(V["dashboard"].iter_errors(db), key=lambda e: list(map(str, e.absolute_path))):
                 rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message if len(e.message) < 160 else e.message[:157] + "…")
@@ -1192,6 +1192,8 @@ def template_exists(kind, name):
 
 NAMING_TOKEN = re.compile(r"\{([a-z][a-z0-9_]*)(?:\.([a-z][a-z0-9_]*))?\}")
 NAMING_TYPES = {"data", "link", "select", "int"}
+# a device name carries the device's code, so two devices of one outlet never make the same name (contract 0057 §3)
+NAMING_ON_DEVICE_MSG = "naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)"
 
 
 def allmodels_of(apps):
@@ -1533,6 +1535,8 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
                 rep.add("warn", cp, f"numbering/{mn}", "not_installed", f'"{mn}" comes from app "{allmodels[mn][0]}", which this site does not install')
             elif isinstance(numbering[mn], str) and numbering[mn]:
                 naming_fields(rep, cp, f"numbering/{mn}", mn, allmodels[mn][2], numbering[mn], {k: v[2] for k, v in allmodels.items()})
+                if allmodels[mn][2].get("naming_on") == "device" and "{device.code}" not in numbering[mn]:
+                    rep.add("error", cp, f"numbering/{mn}", "naming_on_device", NAMING_ON_DEVICE_MSG)
         for mn in sorted(allmodels):
             app, mp, mm = allmodels[mn]
             naming = mm.get("naming")

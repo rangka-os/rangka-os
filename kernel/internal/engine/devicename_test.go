@@ -26,10 +26,16 @@ type deviceEnv struct {
 
 func setupDeviceApps(t *testing.T) *deviceEnv {
 	t.Helper()
+	return setupDeviceSite(t, "../../testdata/device-apps/site")
+}
+
+// setupDeviceSite is setupDeviceApps with another site folder.
+func setupDeviceSite(t *testing.T, site string) *deviceEnv {
+	t.Helper()
 	url := testdb.New(t)
 	ctx := context.Background()
 	apps := "../../testdata/device-apps/apps"
-	reg, rep := meta.Validate(apps, "../../testdata/device-apps/site", nil, schema.Embedded())
+	reg, rep := meta.Validate(apps, site, nil, schema.Embedded())
 	if rep.Errors() > 0 {
 		t.Fatalf("device-apps errors: %v", rep.All())
 	}
@@ -133,9 +139,7 @@ func TestDeviceNameOutletMismatch(t *testing.T) {
 	d := setupDeviceApps(t)
 	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
 	_, err := d.e.Create(d.write("SESI-OUT01-K1-2610-001", d.octNow), k1, "sesi_kasir", map[string]any{"outlet": "OUT-02", "opening_cash": 1})
-	if err == nil {
-		t.Fatal("shift of another outlet accepted")
-	}
+	wantStatus(t, err, 422, "device_name_invalid")
 	k1.Outlets = []string{"OUT-01", "OUT-02"}
 	_, err = d.e.Create(d.write("SESI-OUT01-K1-2610-001", d.octNow), k1, "sesi_kasir", map[string]any{"outlet": "OUT-02", "opening_cash": 1})
 	wantStatus(t, err, 422, "device_name_invalid")
@@ -235,5 +239,56 @@ func TestNoDeviceKernelNumbering(t *testing.T) {
 	}
 	if got := str(res.Record["name"]); got != "STRK-OUT01-2610-00001" {
 		t.Fatalf("sale name %q", got)
+	}
+}
+
+// Only the device write's own document takes the device name: a naming_on: device record a flow makes in the same
+// unit (setoran, from tutup_sesi_on_submit) is numbered by the kernel, and a write whose Model is another model
+// leaves the record to the kernel too.
+func TestDeviceNameOnlyOwnDocument(t *testing.T) {
+	d := setupDeviceApps(t)
+	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
+	sh := d.shift(k1, "SESI-OUT01-K1-2610-001")
+	dw := WithDeviceWrite(d.ctx, DeviceWrite{Model: "tutup_sesi", OccurredAt: d.octNow})
+	r, err := d.e.Create(dw, k1, "tutup_sesi", map[string]any{"shift": sh, "counted_cash": 250000})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.e.Submit(dw, k1, "tutup_sesi", str(r.Record["name"]), true); err != nil {
+		t.Fatalf("close shift: %v", err)
+	}
+	all, _, err := d.e.List(d.ctx, d.owner, "setoran", ListOpts{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(all) != 1 || str(all[0]["name"]) != "SETOR-OUT01-2610-001" {
+		t.Fatalf("setoran: %v", all)
+	}
+	// a device write about penjualan does not name a shift
+	r, err = d.e.Create(WithDeviceWrite(d.ctx, DeviceWrite{Model: "penjualan", Name: "STRK-OUT01-K1-2610-00001"}), k1, "sesi_kasir",
+		map[string]any{"outlet": "OUT-01", "opening_cash": 1})
+	if err != nil || str(r.Record["name"]) != "SESI-OUT01-2610-001" {
+		t.Fatalf("shift: %v %v", r, err)
+	}
+}
+
+// A config.numbering override of a naming_on: device model: devices and head office both follow it.
+func TestDeviceNameConfigOverride(t *testing.T) {
+	d := setupDeviceSite(t, "../../testdata/device-apps/site-numbering")
+	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
+	sh := d.shift(k1, "SESI-OUT01-K1-2610-001")
+	_, err := d.sale(k1, sh, "OUT-01", "STRK-OUT01-K1-2610-00001", d.octNow)
+	wantStatus(t, err, 422, "device_name_invalid")
+	if got, err := d.sale(k1, sh, "OUT-01", "NOTA-OUT01-K1-2610-0001", d.octNow); err != nil || got != "NOTA-OUT01-K1-2610-0001" {
+		t.Fatalf("device sale: %q %v", got, err)
+	}
+	r, err := d.e.Create(d.ctx, d.owner, "penjualan", map[string]any{"shift": sh, "outlet": "OUT-01",
+		"items": []any{map[string]any{"menu": d.menu, "qty": 1}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	res, err := d.e.Submit(d.ctx, d.owner, "penjualan", str(r.Record["name"]), true)
+	if err != nil || str(res.Record["name"]) != "NOTA-OUT01-2610-0001" {
+		t.Fatalf("head office sale: %v %v", res, err)
 	}
 }

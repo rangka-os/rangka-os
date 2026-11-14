@@ -71,6 +71,7 @@ compare-python: build
 	            "testdata/config-modules/apps --site testdata/config-modules/site" \
 	            "testdata/broken-config-modules/apps --site testdata/broken-config-modules/site" \
 	            "testdata/device-apps/apps --site testdata/device-apps/site" \
+	            "testdata/device-apps/apps --site testdata/device-apps/site-numbering" \
 	            "testdata/broken-naming-on/apps --site testdata/broken-naming-on/site"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \

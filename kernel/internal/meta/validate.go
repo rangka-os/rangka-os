@@ -130,7 +130,7 @@ func (v *validator) shape() {
 			}
 			if m.Raw["naming_on"] == "device" {
 				if naming, _ := m.Raw["naming"].(string); !strings.Contains(naming, "{device.code}") {
-					v.rep.add("error", m.Doc.Path, "naming_on", "naming_on_device", `naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)`)
+					v.rep.add("error", m.Doc.Path, "naming_on", "naming_on_device", namingOnDeviceMsg)
 				}
 			}
 		}

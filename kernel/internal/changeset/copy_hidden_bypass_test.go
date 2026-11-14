@@ -121,6 +121,18 @@ func TestAssessCopiesHiddenBypasses(t *testing.T) {
 		{"R5 string(record)", "flows/x_f.rk", cflow("string(c)"), true},
 		{"R6 child rows whole", "flows/x_f.rk", cflow("string(c.contact_persons)"), true},
 		{"R7 cond record whole", "flows/x_f.rk", cflow("string(true ? c : event.customer)"), true},
+		// audit copy-hidden H2: a link carried through a function, list concatenation, a list or map literal is still followed
+		{"S1 max list", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "max([customer]).npwp"}), true},
+		{"S1b min index", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "min([customer])['npwp']"}), true},
+		{"S2 list plus", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "([customer] + [])[0].npwp"}), true},
+		{"S2b list plus map", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "([customer] + []).map(x, x.npwp)[0]"}), true},
+		{"S3 list of maps", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "[{'a': customer}][0].a.npwp"}), true},
+		{"S3b nested map list", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "{'a': [{'b': customer}]}.a[0].b.npwp"}), true},
+		{"S4 cond map or link", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "(true ? {'a': customer} : customer).a.npwp"}), true},
+		{"S5 map to maps", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "[customer].map(x, {'a': x})[0].a.npwp"}), true},
+		{"S6 field-named key", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "{'customer_name': customer}.customer_name.npwp"}), true},
+		{"S7 default max", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "default": "max([customer]).npwp"}), true},
+		{"S8 string of link", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "string(max([customer]))"}), false},
 		{"R8 link computed key", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
 			map[string]any{"update": "event", "set": map[string]any{"notes": "event.customer[('np' + 'wp')]"}}}}, true},
 	}

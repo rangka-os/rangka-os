@@ -58,7 +58,16 @@ func join(a, b absVal) absVal {
 	for m := range b.models {
 		out[m] = true
 	}
-	return absVal{models: out, link: a.link && b.link, keyed: a.keyed && b.keyed}
+	return absVal{models: out, link: a.link && b.link, keyed: a.keyed || b.keyed}
+}
+
+// linkPart is the links a value carries on (a link, a list or map of links), dropped when it is a plain value or a
+// record (a record is counted where it is used).
+func linkPart(v absVal) absVal {
+	if v.link {
+		return v
+	}
+	return absVal{}
 }
 
 // copyScan follows an expression's reads (audit flow-locked F2, copy-hidden G1-G4): every field read that has
@@ -108,16 +117,18 @@ func (c *copyScan) leakAll(v absVal, why string) {
 }
 
 func (c *copyScan) field(v absVal, name string) absVal {
-	if v.keyed {
-		return linkOf(v)
-	}
 	var next []string
 	var links []string
+	// a member that is no field of the linked model is a key of a map literal (or a list) holding the link: the link
+	// itself (audit copy-hidden H2); a keyed value may be either, so both are followed
+	carry := v.keyed
 	for m := range v.models {
 		fd := c.fields(m)[name]
 		if fd == nil {
 			if name == "record" || name == "before" { // event.record, event.before: the same record
 				next = append(next, m)
+			} else if v.link {
+				carry = true
 			}
 			continue
 		}
@@ -132,7 +143,11 @@ func (c *copyScan) field(v absVal, name string) absVal {
 			next = append(next, meta.Str(fd, "of"))
 		}
 	}
-	return join(recOf(next...), linkOf(recOf(links...)))
+	out := join(recOf(next...), linkOf(recOf(links...)))
+	if carry {
+		out = join(out, linkOf(v))
+	}
+	return out
 }
 
 func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
@@ -163,7 +178,7 @@ func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
 			case string:
 				return c.field(v, k)
 			case int64, int, float64:
-				return absVal{models: v.models, link: v.link} // an element of a list of records or links
+				return v // an element of a list of records or links
 			}
 		}
 		c.eval(e.I, scope)
@@ -189,18 +204,28 @@ func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
 		c.use(b)
 		return absVal{}
 	case *cel.Call:
-		count := e.Fn == "size" // the number of records or of characters copies none of them
+		// size counts and a conversion turns a link into its name: neither carries a link on; any other function may
+		// return one of its arguments (max, min, a list function), so their links stay followable (audit H2)
+		var out absVal
+		scalar := false
+		switch e.Fn {
+		case "size", "string", "int", "uint", "double", "bool":
+			scalar = true
+		}
+		args := e.Args
 		if e.Target != nil {
-			if v := c.eval(e.Target, scope); !count {
+			args = append([]cel.Expr{e.Target}, args...)
+		}
+		for _, a := range args {
+			v := c.eval(a, scope)
+			if e.Fn != "size" {
 				c.use(v)
 			}
-		}
-		for _, a := range e.Args {
-			if v := c.eval(a, scope); !count {
-				c.use(v)
+			if !scalar {
+				out = join(out, linkPart(v))
 			}
 		}
-		return absVal{}
+		return out
 	case *cel.Unary:
 		c.use(c.eval(e.X, scope))
 		return absVal{}
@@ -212,6 +237,7 @@ func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
 		default:
 			c.use(l)
 			c.use(r)
+			return join(linkPart(l), linkPart(r)) // list + list keeps the links of both
 		}
 		return absVal{}
 	case *cel.Cond:
@@ -223,9 +249,7 @@ func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
 		for _, el := range e.Elems {
 			v := c.eval(el, scope)
 			c.use(v)
-			if v.link {
-				out = join(out, absVal{models: v.models, link: true})
-			}
+			out = join(out, linkPart(v))
 		}
 		return out
 	case *cel.MapLit:

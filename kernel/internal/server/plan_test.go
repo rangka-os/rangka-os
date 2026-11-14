@@ -141,19 +141,19 @@ func TestPlanPeople(t *testing.T) {
 	ctx := context.Background()
 	setPlan(e, "mulai") // 3 people
 	for _, m := range []string{"a@kopisenja.id", "b@kopisenja.id"} {
-		if err := plan.CheckNewPerson(ctx, e.s.DB, m); err != nil {
+		if err := plan.CheckNewPerson(ctx, e.s.DB, "kopi-senja", m); err != nil {
 			t.Fatalf("%s: %v", m, err)
 		}
 		if _, err := auth.EnsureUser(ctx, e.s.DB, m, m, "rahasia-123", "kopi-senja", "sales_manager", ""); err != nil {
 			t.Fatal(err)
 		}
 	}
-	err := plan.CheckNewPerson(ctx, e.s.DB, "c@kopisenja.id")
+	err := plan.CheckNewPerson(ctx, e.s.DB, "kopi-senja", "c@kopisenja.id")
 	var pe *plan.Error
 	if err == nil || !asPlanError(err, &pe) || pe.Code != "plan_limit" || pe.Resource != "users" {
 		t.Fatalf("fourth person: %v", err)
 	}
-	if err := plan.CheckNewPerson(ctx, e.s.DB, "B@kopisenja.id"); err != nil {
+	if err := plan.CheckNewPerson(ctx, e.s.DB, "kopi-senja", "B@kopisenja.id"); err != nil {
 		t.Fatalf("an existing member is not a new person: %v", err)
 	}
 	// a fourth person added before the downgrade (here: behind the check's back) is read-only; the owner never is

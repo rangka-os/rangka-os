@@ -337,7 +337,7 @@ type Usage struct {
 }
 
 func orgs(ctx context.Context, db *pg.Pool) ([]string, error) {
-	res, err := db.Query(ctx, "select id from rk_orgs order by id")
+	res, err := db.Query(ctx, "select id from rk_orgs where not sandbox order by id")
 	if err != nil {
 		return nil, err
 	}
@@ -387,7 +387,9 @@ func outletRows(ctx context.Context, db *pg.Pool, reg *meta.Registry) ([]outletR
 // people lists the tenant's members once each (a person in two organisations counts once): owners first, then
 // in the order they joined. Past a lower limit the last ones become read-only.
 func people(ctx context.Context, q pg.Querier) ([]string, error) {
+	// members of the ruang coba only (contract 0052 §2) are not counted
 	res, err := q.Query(ctx, `select u.email from rk_members m join rk_users u on u.id = m.user_id
+		join rk_orgs o on o.id = m.org_id where not o.sandbox
 		group by u.id, u.email order by bool_or(m.role = 'owner') desc, min(m.added_at), u.id`)
 	if err != nil {
 		return nil, err
@@ -483,6 +485,9 @@ func LimitError(reg *meta.Registry, c *Current, key string) *Error {
 // advisory lock serialises outlet creation, so two at once cannot both take the last place. Every count runs in tx
 // (the row-level setting switched per org with set_config(..., true), then set back to what tx had), never on a second connection.
 func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org string) error {
+	if sb, err := store.IsSandbox(ctx, tx, org); err != nil || sb { // the ruang coba is not counted (contract 0052 §2)
+		return err
+	}
 	c, err := Resolve(ctx, tx, reg)
 	if err != nil {
 		return err
@@ -499,7 +504,7 @@ func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org 
 		return err
 	}
 	before := prev.Rows[0][0].(string)
-	res, err := tx.Query(ctx, "select id from rk_orgs order by id")
+	res, err := tx.Query(ctx, "select id from rk_orgs where not sandbox order by id")
 	if err != nil {
 		return err
 	}
@@ -540,7 +545,10 @@ func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org 
 
 // CheckNewPerson refuses a person who is not yet a member anywhere when the people limit is reached. It reads the
 // limits rk_site_plan holds (synced at serve, set by rangka plan set), so it needs no metadata.
-func CheckNewPerson(ctx context.Context, q pg.Querier, email string) error {
+func CheckNewPerson(ctx context.Context, q pg.Querier, org, email string) error {
+	if sb, err := store.IsSandbox(ctx, q, org); err != nil || sb { // joining only the ruang coba is not a new person (contract 0052 §2)
+		return err
+	}
 	st, err := LoadStored(ctx, q)
 	if err != nil || st == nil {
 		return err

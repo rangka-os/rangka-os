@@ -42,7 +42,7 @@ func PollEvery(t map[string]any) time.Duration {
 
 // PollResult is what a poll job stores.
 type PollResult struct {
-	Skipped string `json:"skipped,omitempty"` // needs_auth: the connector has no keys yet
+	Skipped string `json:"skipped,omitempty"` // needs_auth: the connector has no keys yet; sandbox: the ruang coba polls nothing
 	Events  int    `json:"events"`
 	Dupes   int    `json:"dupes"`
 	Cursor  bool   `json:"cursor_moved"`
@@ -58,6 +58,12 @@ func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*P
 	c, t, ok := rt.triggerVia(connector, trigger, "poll")
 	if !ok {
 		return nil, &jobs.Permanent{Err: fmt.Errorf("%w: no poll trigger %s.%s", ErrUnknown, connector, trigger)}
+	}
+	// nothing from outside reaches the ruang coba (contract 0052 §2)
+	if sb, err := store.IsSandbox(ctx, rt.DB, org); err != nil {
+		return nil, err
+	} else if sb {
+		return &PollResult{Skipped: "sandbox"}, nil
 	}
 	// a connector still waiting for its keys is skipped quietly: polling it every few minutes would only fill the
 	// dead-letter queue and the audit trail. OAuth2 connectors refresh first, as Call does.

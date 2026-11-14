@@ -337,7 +337,10 @@ func (s *Service) resolveUpstreamUser(ctx context.Context, r *http.Request, up *
 	sub, _ := claims["sub"].(string)
 	prefer := s.DefaultOrg
 	if c, err := r.Cookie(orgCookieName); err == nil && c.Value != "" {
-		prefer = c.Value
+		// the cookie never signs anyone in to the ruang coba (contract 0052 §3)
+		if sb, err := store.IsSandbox(ctx, s.DB, c.Value); err == nil && !sb {
+			prefer = c.Value
+		}
 	}
 	uid, err := UserByIdentity(ctx, s.DB, up.Issuer, sub)
 	var u *User

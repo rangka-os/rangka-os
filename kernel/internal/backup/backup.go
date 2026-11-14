@@ -137,7 +137,7 @@ func (t table) has(col string) bool {
 // rk_users and tables with user_id to the org's members. Other tables are whole.
 func (t table) filter(org string) string {
 	if org == "" {
-		return ""
+		return t.notSandbox()
 	}
 	lit := pg.QuoteLiteral(org)
 	members := "(select user_id from rk_members where org_id = " + lit + ")"
@@ -161,6 +161,26 @@ func (t table) filter(org string) string {
 		return ""
 	}
 	return " where " + strings.Join(conds, " and ")
+}
+
+// notSandbox is the where clause of a whole-database archive: the ruang coba (contract 0052 §2) is left out, so
+// a restore never recreates it. Tables without an org link are whole.
+func (t table) notSandbox() string {
+	sandboxes := "(select id from rk_orgs where sandbox)"
+	switch {
+	case t.name == "rk_orgs":
+		if t.has("sandbox") {
+			return " where not sandbox"
+		}
+		return ""
+	case t.name == "rk_sandboxes":
+		return " where false"
+	case t.has("org_id"):
+		return " where coalesce(org_id, '') not in " + sandboxes
+	case t.has("org"):
+		return " where coalesce(org, '') not in " + sandboxes
+	}
+	return ""
 }
 
 // installTables are tables without an org link that an org archive still carries: the restored kernel needs

@@ -70,6 +70,11 @@ func (rt *Runtime) client(secret bool, host string) *http.Client {
 // Call renders and sends one action for an org, maps its output and audits it (scrubbed). The rendered request lives
 // only in this call.
 func (rt *Runtime) Call(ctx context.Context, org, connector, action string, input map[string]any) (map[string]any, error) {
+	if sb, err := store.IsSandbox(ctx, rt.DB, org); err != nil {
+		return nil, err
+	} else if sb {
+		return rt.simulate(ctx, org, connector, action, input)
+	}
 	if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
 		return nil, rt.fail(ctx, org, connector, action, nil, err)
 	}
@@ -256,4 +261,19 @@ func ResolvePort(reg *meta.Registry, call string) (string, string, error) {
 		return "", "", fmt.Errorf("%w: connector %s does not provide %s", ErrUnknown, name, call)
 	}
 	return name, act, nil
+}
+
+// simulate stands in for a call from the ruang coba (contract 0052 §2): nothing is sent. The action and its input
+// go to the audit trail and the job result, so the owner sees what would have gone out. The sandbox has no
+// connector keys, so the request is not rendered.
+func (rt *Runtime) simulate(ctx context.Context, org, connector, action string, input map[string]any) (map[string]any, error) {
+	if _, _, err := rt.Action(connector, action); err != nil {
+		return nil, &jobs.Permanent{Err: err}
+	}
+	out := map[string]any{"simulated": true, "connector": connector, "action": action, "input": input}
+	if err := store.Audit(ctx, rt.DB, org, "connector:"+connector, "connector.simulated", "connector/"+connector,
+		action+" (ruang coba: tidak dikirim)", out); err != nil {
+		rt.logf("connectors: audit: %v", err)
+	}
+	return out, nil
 }

@@ -295,7 +295,7 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 				return &memberError{http.StatusConflict, "email_taken", msgEmailTaken}
 			}
 		}
-		if err := plan.CheckNewPerson(ctx, tx, targetEmail); err != nil { // an existing member is not a new person
+		if err := plan.CheckNewPerson(ctx, tx, org, targetEmail); err != nil { // an existing member is not a new person
 			return err
 		}
 

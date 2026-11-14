@@ -3,6 +3,7 @@ package changeset
 import (
 	"fmt"
 	"reflect"
+	"regexp"
 	"sort"
 	"strings"
 
@@ -139,8 +140,10 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 				target = model(name)
 			}
 			assessOverlay(a, p, old, existed, nw, target)
+			assessCopies(a, p, name, old, nw, env)
 		case strings.HasPrefix(p, "models/") && existed: // the company's own table: judged like an overlay
 			assessModel(a, p, old, nw)
+			assessCopies(a, p, strings.TrimSuffix(strings.TrimPrefix(p, "models/"), ".rk"), old, nw, env)
 		case strings.HasPrefix(p, "flows/"):
 			a.raise("medium", "company automation "+p)
 			assessCompanyFlow(a, p, nw, env)
@@ -178,6 +181,9 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 					}
 				}
 				a.raise("medium", "new model "+p)
+				if strings.HasPrefix(p, "models/") {
+					assessCopies(a, p, strings.TrimSuffix(strings.TrimPrefix(p, "models/"), ".rk"), nil, nw, env)
+				}
 				if nw["permissions"] == nil { // absent (or null): the engine grants everything (engine.perms)
 					a.raise("medium", "new model "+p+" without permissions: every role has full access")
 				}
@@ -714,7 +720,7 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 					a.raise("high", "company automation "+p+" creates a draft in "+mod)
 				}
 			}
-			flowWrites(a, p, m, st["set"], env)
+			flowWrites(a, p, m, st["set"], env, vars)
 			bind(vars, as, m)
 		case st["update"] != nil:
 			v, _ := st["update"].(string)
@@ -723,7 +729,7 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 				continue
 			}
 			for _, m := range sortedSet(vars[v]) {
-				flowWrites(a, p, m, st["set"], env)
+				flowWrites(a, p, m, st["set"], env, vars)
 			}
 		case st["for_each"] != nil:
 			// the runtime gives the loop variable back its earlier value once the loop ends (flows.go for_each), so the
@@ -780,7 +786,7 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 }
 
 // flowWrites raises high for each money or stock field of model that set names, and when model is unknown.
-func flowWrites(a *Assessment, p, model string, set any, env Env) {
+func flowWrites(a *Assessment, p, model string, set any, env Env, vars map[string]map[string]bool) {
 	fields := companyModelFields(env, model)
 	if fields == nil {
 		a.raise("high", "company automation "+p+" writes to a model it cannot resolve")
@@ -807,6 +813,107 @@ func flowWrites(a *Assessment, p, model string, set any, env Env) {
 			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
 			// record's rows), so any money or stock field of the child model counts as written
 			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, map[string]bool{})
+		}
+		if ok {
+			if expr, isStr := sm[f].(string); isStr {
+				for _, src := range hiddenReads(expr, vars, "", env) {
+					if !coversHidden(fd, src.hidden) {
+						a.raise("high", fmt.Sprintf("company automation %s copies %s (hidden from some roles) into field %s, which those roles see", p, src.path, f))
+					}
+				}
+			}
+		}
+	}
+}
+
+// hiddenRef is a field an expression reads that some roles may not see (hidden_for), with the roles.
+type hiddenRef struct {
+	path   string
+	hidden []string
+}
+
+var celString = regexp.MustCompile(`'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"`)
+var celPath = regexp.MustCompile(`[A-Za-z_][A-Za-z0-9_]*(?:\.[A-Za-z_][A-Za-z0-9_]*)*`)
+
+// hiddenReads lists the fields with hidden_for an expression reads (audit flow-locked F2: a value hidden from outlet
+// staff, such as a customer's NPWP, copied into a field they see). A path starts at a flow variable (vars: the models
+// it may hold) or, with self set, at a field of that model; it follows link fields to their models.
+func hiddenReads(expr string, vars map[string]map[string]bool, self string, env Env) []hiddenRef {
+	var out []hiddenRef
+	seen := map[string]bool{}
+	for _, path := range celPath.FindAllString(celString.ReplaceAllString(expr, "''"), -1) {
+		segs := strings.Split(path, ".")
+		var models map[string]bool
+		rest := segs
+		if ms := vars[segs[0]]; len(ms) > 0 {
+			models, rest = ms, segs[1:]
+		} else if self != "" {
+			models = map[string]bool{self: true}
+		}
+		for m := range models {
+			walkHidden(env, m, rest, path, seen, &out)
+		}
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].path < out[j].path })
+	return out
+}
+
+func walkHidden(env Env, model string, segs []string, path string, seen map[string]bool, out *[]hiddenRef) {
+	for depth := 0; len(segs) > 0 && depth < 8; depth++ {
+		fd := companyModelFields(env, model)[segs[0]]
+		if fd == nil {
+			return
+		}
+		if h := meta.StrList(fd["hidden_for"]); len(h) > 0 && !seen[path] {
+			seen[path] = true
+			*out = append(*out, hiddenRef{path: path, hidden: h})
+			return
+		}
+		to, _ := fd["to"].(string)
+		if fd["type"] != "link" || to == "" {
+			return
+		}
+		model, segs = to, segs[1:]
+	}
+}
+
+// coversHidden reports whether field fd is hidden from every role in roles (a copy into it leaks nothing).
+func coversHidden(fd map[string]any, roles []string) bool {
+	in := map[string]bool{}
+	for _, r := range meta.StrList(fd["hidden_for"]) {
+		in[r] = true
+	}
+	for _, r := range roles {
+		if !in[r] {
+			return false
+		}
+	}
+	return true
+}
+
+// assessCopies rates a company model's or overlay's computed and default values (audit flow-locked F2): a field whose
+// compute or default reads a field hidden from some roles, while those roles may see the new field, is high.
+func assessCopies(a *Assessment, p, model string, old, nw map[string]any, env Env) {
+	if model == "" {
+		return
+	}
+	of, _ := fieldsByName(old)
+	nf, order := fieldsByName(nw)
+	for _, name := range order {
+		f := nf[name]
+		if reflect.DeepEqual(normalize(of[name]), normalize(f)) {
+			continue
+		}
+		for _, key := range []string{"compute", "default"} {
+			expr, ok := f[key].(string)
+			if !ok {
+				continue
+			}
+			for _, src := range hiddenReads(expr, nil, model, env) {
+				if src.path != name && !coversHidden(f, src.hidden) {
+					a.raise("high", fmt.Sprintf("field %s of %s copies %s (hidden from some roles) through its %s", name, p, src.path, key))
+				}
+			}
 		}
 	}
 }

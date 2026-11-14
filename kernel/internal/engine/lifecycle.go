@@ -137,8 +137,26 @@ func (o *op) prepare(m *meta.Model, rec store.Record, isNew bool) {
 		}
 	}
 	fill(m, rec)
+	pins, drift := o.pins, o.drift && !o.driftDone
+	o.pins, o.drift = nil, false
+	if pins == nil {
+		s.compute()
+		o.settleMoney(m, rec)
+		return
+	}
+	// a device write's own document (contract 0057 §10): the kernel's values in shadow, the device's stored
+	var shadow store.Record
+	if drift {
+		shadow = cloneRecord(rec)
+		o.scope(m, shadow).compute()
+	}
+	s.pins = pins
 	s.compute()
 	o.settleMoney(m, rec)
+	if drift {
+		o.driftDone = true
+		o.recordDrift(pins, rec, shadow, "")
+	}
 }
 
 // check runs rules (on save, or on submit = submit + save rules), required fields, min_rows (submit; a
@@ -182,6 +200,7 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 			}
 		}
 	}
+	errs = o.overrideRules(m, errs) // a device write's rule failures go to head office (contract 0057 §10)
 	more, err := o.checkValues(m, rec, "")
 	errs = append(errs, more...)
 	return append(errs, s.checkMoney("", "", "", map[string]bool{})...), warns, err
@@ -236,7 +255,7 @@ func (o *op) cancelRules(m *meta.Model, rec store.Record) (errs, warns []Issue) 
 			}
 		}
 	}
-	return errs, warns
+	return o.overrideRules(m, errs), warns
 }
 
 // minRows reports the table fields of rec with fewer rows than their min_rows. only limits the check to
@@ -408,11 +427,17 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
+	if dw := deviceWriteFor(o.ctx, m.Name); own && dw != nil && dw.Money != nil {
+		o.pins, o.drift = dw.Money, true
+	}
 	o.prepare(m, rec, true)
 	if opts.authorize {
 		if err := o.authorize(m, "create", rec); err != nil {
 			return nil, err
 		}
+	}
+	if err := o.deviceLinks(m, rec); err != nil {
+		return nil, err
 	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
@@ -456,7 +481,12 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.planNewRecord(m); err != nil {
 		return nil, err
 	}
-	if err := store.Insert(o.ctx, o.tx, o.registry(), o.actor.Org, m, rec); err != nil {
+	if d := o.actor.Device; d != nil && m.NamingOn == "device" { // the device it was made on (contract 0057 §6)
+		rec["created_device"] = d.ID
+	}
+	err = store.Insert(o.ctx, o.tx, o.registry(), o.actor.Org, m, rec)
+	delete(rec, "created_device")
+	if err != nil {
 		return nil, dbIssue(m, err)
 	}
 	if err := o.event(m, rec, "created"); err != nil {
@@ -592,6 +622,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(rec))); err != nil {
 			return nil, err
 		}
+	}
+	if err := o.deviceLinks(m, rec); err != nil {
+		return nil, err
 	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
@@ -771,7 +804,19 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		}
 	}
 	stored := cloneRecord(rec) // snapshot and approval when: read the stored record (0007 §2, §3)
+	if dw := deviceWriteFor(o.ctx, m.Name); own && dw != nil {
+		// the device's money stays binding at submit: what it sent with this write (a create that submits), else
+		// what the draft stored (contract 0057 §10)
+		if dw.Money != nil {
+			o.pins, o.drift = dw.Money, true
+		} else {
+			o.pins = deviceMoney(o.registry(), m, stored)
+		}
+	}
 	o.prepare(m, rec, false)
+	if err := o.deviceLinks(m, rec); err != nil {
+		return nil, err
+	}
 	errs, warns, err := o.check(m, rec, "submit")
 	if err != nil {
 		return nil, err

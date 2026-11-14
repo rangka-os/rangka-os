@@ -6,7 +6,7 @@ version: 1.0.0
 title: {id: Toko}
 rangka: '>=0.5'
 modules: {kasir: ^1.0}
-roles: [kasir, dapur]
+roles: [kasir, dapur, supervisor]
 menu:
   - group: {id: Kasir}
     items: [penjualan, sesi_kasir, tutup_sesi, setoran, menu, tiket_dapur, outlet]

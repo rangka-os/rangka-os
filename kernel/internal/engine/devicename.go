@@ -40,6 +40,9 @@ func WithDeviceWrite(ctx context.Context, dw DeviceWrite) context.Context {
 
 // deviceWriteOf is the device write ctx carries, or nil.
 func deviceWriteOf(ctx context.Context) *DeviceWrite {
+	if ctx == nil {
+		return nil
+	}
 	dw, _ := ctx.Value(deviceWriteKey{}).(*DeviceWrite)
 	return dw
 }

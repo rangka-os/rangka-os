@@ -344,3 +344,60 @@ func TestEventsPrincipal(t *testing.T) {
 		t.Fatalf("revoked: %s", r.Body)
 	}
 }
+
+// Replay rules (contract 0057 §10): the money the device sent with a create is stored, the kernel's own value is an
+// edge_price_drift exception; a REST create of the same body is recomputed.
+func TestEventsMoneyKept(t *testing.T) {
+	x := newEdgeEnv(t)
+	body := x.saleBody("SESI-OUT01-K1-2610-001", 2) // 2 × 18.000 = 36.000 at the kernel
+	body["grand_total"] = 35000
+	res := x.send(x.shiftEv("k-1", 1, "SESI-OUT01-K1-2610-001"),
+		x.write("k-2", 2, map[string]any{"screen": "jual", "model": "penjualan", "op": "create", "name": "STRK-OUT01-K1-2610-00001",
+			"submit": true, "body": body}))
+	wantResult(t, res[1], "k-2", "accepted", "")
+	if get(res[1], "record", "grand_total") != 35000.0 {
+		t.Fatalf("sale = %v", res[1])
+	}
+	items := openItems(x.owner, "/api/v1/exceptions?kind=edge_price_drift")
+	if len(items) != 1 || get(items[0], "ref") != "penjualan/STRK-OUT01-K1-2610-00001" || get(items[0], "detail", "kernel") != 36000.0 ||
+		get(items[0], "detail", "device") != 35000.0 || get(items[0], "detail", "field") != "grand_total" {
+		t.Fatalf("drift = %v", items)
+	}
+	rest := x.owner.must(201, "POST", "/api/v1/r/penjualan", body).JSON
+	if rest["grand_total"] != 36000.0 {
+		t.Fatalf("REST = %v", rest["grand_total"])
+	}
+}
+
+// A write that would wait for an approval is rejected with approval_needed_offline; nothing is saved.
+func TestEventsApprovalNeededOffline(t *testing.T) {
+	x := newEdgeEnv(t)
+	res := x.send(x.shiftEv("k-1", 1, "SESI-OUT01-K1-2610-001"),
+		x.paidSaleEv("k-2", 2, "SESI-OUT01-K1-2610-001", "STRK-OUT01-K1-2610-00001", 60)) // 1.080.000
+	wantResult(t, res[1], "k-2", "rejected", "approval_needed_offline")
+	if n := x.count("penjualan"); n != 0 {
+		t.Fatalf("penjualan = %v", n)
+	}
+	r, err := x.owner.s.DB.Query(context.Background(), "select count(*) from rk_approvals")
+	if err != nil || r.Rows[0][0] != int64(0) {
+		t.Fatalf("approvals = %v %v", r, err)
+	}
+	// the replay answers the same
+	res = x.send(x.paidSaleEv("k-2", 2, "SESI-OUT01-K1-2610-001", "STRK-OUT01-K1-2610-00001", 60))
+	wantResult(t, res[0], "k-2", "rejected", "approval_needed_offline")
+}
+
+// A sale from K2 on K1's shift is rejected with shift_other_device (contract 0057 §6).
+func TestEventsShiftOtherDevice(t *testing.T) {
+	x := newEdgeEnv(t)
+	wantResult(t, x.send(x.shiftEv("k-1", 1, "SESI-OUT01-K1-2610-001"))[0], "k-1", "accepted", "")
+	k2, _ := x.owner.pair("OUT-01", "Kasir 2")
+	k2.hdr = http.Header{"Rangka-Edge-Sync": {"v1"}}
+	r := k2.must(200, "POST", "/api/v1/edge/events", map[string]any{"events": []any{
+		x.paidSaleEv("k2-1", 1, "SESI-OUT01-K1-2610-001", "STRK-OUT01-K2-2610-00001", 1)}})
+	res, _ := r.JSON["results"].([]any)
+	if len(res) != 1 {
+		t.Fatalf("results %s", r.Body)
+	}
+	wantResult(t, res[0], "k2-1", "rejected", "shift_other_device")
+}

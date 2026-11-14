@@ -485,7 +485,12 @@ func (r *flowRun) registry() *meta.Registry {
 }
 
 func (r *flowRun) env() *cel.Env {
-	return &cel.Env{Today: r.e.Today, Now: r.e.Now, Apps: r.registry().IsInstalled, Vars: func(n string) (any, bool) {
+	today, now := r.e.Today, r.e.Now
+	if r.o != nil && deviceWriteOf(r.o.ctx) != nil { // a flow of a device write runs at its occurred_at (contract 0057 §10)
+		ctx := r.o.ctx
+		today, now = func() string { return r.e.todayIn(ctx) }, func() time.Time { return r.e.nowIn(ctx) }
+	}
+	return &cel.Env{Today: today, Now: now, Apps: r.registry().IsInstalled, Vars: func(n string) (any, bool) {
 		if v, ok := r.vars[n]; ok {
 			return v, true
 		}

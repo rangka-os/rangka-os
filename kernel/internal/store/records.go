@@ -519,6 +519,9 @@ func Insert(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m
 	args := []any{org, r["name"], pg.JSON{V: xData(r)}}
 	if !m.IsChild {
 		cols, args = append(cols, "created_by"), append(args, nilIfEmpty(r["created_by"]))
+		if m.NamingOn == "device" {
+			cols, args = append(cols, "created_device"), append(args, nilIfEmpty(r["created_device"]))
+		}
 	}
 	if m.IsSubmittable {
 		cols, args = append(cols, "docstatus", "amended_from"), append(args, toInt(r["docstatus"]), nilIfEmpty(r["amended_from"]))
@@ -699,4 +702,17 @@ func Scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []
 			return nil
 		}
 	}
+}
+
+// CreatedDevice is the paired device a record of a naming_on: device model was made on ("" when it was made without
+// one, or before the column existed; contract 0057 §6). A missing record is "" too.
+func CreatedDevice(ctx context.Context, q pg.Querier, org string, m *meta.Model, name string) (string, error) {
+	if m.NamingOn != "device" || m.IsChild {
+		return "", nil
+	}
+	res, err := q.Query(ctx, "select created_device from "+pg.QuoteIdent(TableName(m.Name))+" where org_id = $1 and name = $2", org, name)
+	if err != nil || len(res.Rows) == 0 {
+		return "", err
+	}
+	return str(res.Rows[0][0]), nil
 }

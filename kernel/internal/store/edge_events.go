@@ -60,13 +60,6 @@ func EdgeEventOf(ctx context.Context, q pg.Querier, org, key string) (*EdgeEvent
 	return x, nil
 }
 
-// SetEdgeEventStatus changes a stored event's status, code and message (a write the engine held for approval: Task 6
-// rejects it before it is held).
-func SetEdgeEventStatus(ctx context.Context, q pg.Querier, org, key, status, code, message string) error {
-	_, err := q.Query(ctx, `update rk_edge_events set status = $3, code = $4, message = $5 where org_id = $1 and key = $2`, org, key, status, code, message)
-	return err
-}
-
 // PruneEdgeEvents deletes events received more than EdgeEventTTL ago.
 func PruneEdgeEvents(ctx context.Context, q pg.Querier) error {
 	_, err := q.Query(ctx, `delete from rk_edge_events where received_at < now() - make_interval(secs => $1)`, int64(EdgeEventTTL/time.Second))

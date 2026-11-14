@@ -217,6 +217,12 @@ type op struct {
 	// Engine.Create makes, or <model>/<draft> that its Engine.Submit submits; only it takes the device's name
 	deviceCreate bool
 	deviceSubmit string
+	// pins are the device's computed money for the next prepare of the device write's own document (contract 0057
+	// §10); drift marks that prepare to record edge_price_drift, driftDone that the unit already did
+	pins             map[string]any
+	drift, driftDone bool
+	// exceptions are the head-office exceptions of a device write, written when the unit commits
+	exceptions []pendingException
 }
 
 // counterRef is one v0 counter (rk_naming) and the model whose names it numbers.
@@ -359,13 +365,18 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 			return false, err
 		}
 	}
-	if dw := deviceWriteOf(ctx); dw != nil && dw.Commit != nil { // contract 0057 §4: the edge event with the write
+	if dw := deviceWriteOf(ctx); dw != nil { // contract 0057 §4, §10: the exceptions and the edge event with the write
 		target := o.primary
 		if target == "" {
 			target = o.first
 		}
-		if err := dw.Commit(ctx, tx, target); err != nil {
+		if err := o.flushExceptions(target); err != nil {
 			return false, err
+		}
+		if dw.Commit != nil {
+			if err := dw.Commit(ctx, tx, target); err != nil {
+				return false, err
+			}
 		}
 	}
 	if err := tx.Commit(ctx); err != nil {

@@ -88,7 +88,7 @@ func wholeNumber(v any) int64 {
 // A naming_on: device model is numbered with {device.code} left out of the pattern (head office, contract 0057 §3).
 func (o *op) nextName(m *meta.Model, rec store.Record) (string, error) {
 	e := o.e
-	now := e.Now().In(e.Location())
+	now := e.nowIn(o.ctx).In(e.Location()) // a device write's period is its occurred_at (contract 0057 §10)
 	s := e.scheme(m, o.actor.Org)
 	if m.NamingOn == "device" {
 		s.Pattern = withoutDeviceCode(s.Pattern)

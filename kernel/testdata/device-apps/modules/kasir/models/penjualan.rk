@@ -26,5 +26,11 @@ fields:
 rules:
   - {name: paid, on: submit, check: "cash_received + qris_amount >= grand_total", message: {id: Pembayaran kurang}}
   - {name: same_day_void, on: cancel, check: "date == today()", message: {id: Hanya transaksi hari ini yang bisa dibatalkan kasir}}
+  # replay rules of device writes (contract 0057 §10): today() is the event's occurred_at, and a failing rule of this
+  # naming_on: device model becomes a rule_overridden exception instead of a refusal
+  - {name: shift_open, on: save, check: "shift.state == 'open'", message: {id: Sesi kasir sudah ditutup}}
+  - {name: sale_today, on: submit, check: "date == today()", message: {id: Tanggal penjualan harus hari ini}}
+approvals:
+  - {name: big_sale, on: submit, when: "grand_total > 1000000", approvers: [supervisor]}
 permissions:
   - {role: kasir, read: true, create: true, write: true, submit: true, cancel: true, print: true}

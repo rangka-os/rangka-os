@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/big"
 	"sort"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -32,6 +33,9 @@ type scope struct {
 	// record. Client loads are cached under their own keys so the two never share an entry.
 	client bool
 	rs     *RowScope
+	// pins are the device's values of computed currency fields of a device write's own document (contract 0057 §10):
+	// compute stores them instead of evaluating; a table field holds one map per row
+	pins map[string]any
 }
 
 func (e *Engine) newScope(ctx context.Context, q pg.Querier, a Actor, m *meta.Model, rec store.Record, links map[string]map[string]any) *scope {
@@ -96,10 +100,14 @@ func GlobalVar(reg *meta.Registry, a Actor, name string) (any, bool) {
 }
 
 func (s *scope) env() *cel.Env {
+	today, now := s.e.Today, s.e.Now
+	if deviceWriteOf(s.ctx) != nil { // a device write evaluates at its occurred_at (contract 0057 §10)
+		today, now = func() string { return s.e.todayIn(s.ctx) }, func() time.Time { return s.e.nowIn(s.ctx) }
+	}
 	return &cel.Env{
 		Vars:  s.lookup,
-		Today: s.e.Today,
-		Now:   s.e.Now,
+		Today: today,
+		Now:   now,
 		Option: func(field, attr string) (any, error) {
 			f := s.m.Field(field)
 			if f == nil || s.client && s.e.FieldHidden(s.actor, s.m, f) {
@@ -157,7 +165,7 @@ func (s *scope) lookup(name string) (any, bool) {
 	case "docstatus":
 		return toInt(s.rec["docstatus"]), true
 	case "status":
-		if st := Status(s.m, s.rec, s.e.Today()); st != "" {
+		if st := Status(s.m, s.rec, s.e.todayIn(s.ctx)); st != "" {
 			return st, true
 		}
 		return "", true
@@ -367,14 +375,20 @@ func (s *scope) compute() {
 		if cm == nil {
 			continue
 		}
-		for _, row := range rows(s.rec[f.Name]) {
+		for i, row := range rows(s.rec[f.Name]) {
 			child := s.e.newScope(s.ctx, s.q, s.actor, cm, row, s.links)
 			child.parent = s
+			child.pins = rowPins(s.pins, f.Name, i)
 			child.compute()
 		}
 	}
 	s.settleOwn()
 	for _, f := range computeOrder(s.m) {
+		if c, ok := s.pinned(f); ok { // the device's money is binding (contract 0057 §10)
+			s.rec[f.Name] = c
+			s.settleOwn()
+			continue
+		}
 		v, err := s.eval(f.Compute)
 		if err != nil || v == nil {
 			s.rec[f.Name] = store.Zero(f)

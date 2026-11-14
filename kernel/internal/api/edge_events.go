@@ -285,7 +285,13 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 	}
 	// the write, with the event row stored in its transaction
 	var ref string
-	dw := engine.DeviceWrite{Model: sw.Model, Name: sw.Name, OccurredAt: at, Event: key,
+	// Money: the computed currency fields the device sent with a create body, top level and per row (DeviceMoney);
+	// a submit keeps what its draft stored. They are stored as the device charged them (contract 0057 §10).
+	var charged map[string]any
+	if sw.Op == "create" {
+		charged = s.Engine.DeviceMoney(sw.Model, sw.Body)
+	}
+	dw := engine.DeviceWrite{Model: sw.Model, Name: sw.Name, OccurredAt: at, Money: charged, Event: key,
 		Commit: func(ctx context.Context, q pg.Querier, target string) error {
 			_, name, _ := strings.Cut(target, "/")
 			x := base
@@ -297,8 +303,10 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 			return nil
 		}}
 	wctx := engine.WithDeviceWrite(engine.WithOccurredAt(ctx, at), dw)
+	// A device write is never held for approval: the engine refuses it (approval_needed_offline) before anything is
+	// saved (contract 0057 §10, ruling R7). Submits run with force = true: warnings must not block a sale the outlet
+	// already made (§10, rules on replay); only errors that stay refusals there reject it.
 	var record any
-	held := false
 	switch sw.Op {
 	case "create":
 		var out *engine.Result
@@ -308,22 +316,22 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 			out, err = s.Engine.Create(wctx, a, sw.Model, sw.Body)
 		}
 		if err == nil {
-			record, held = recordOut(out), out.Held
+			record = recordOut(out)
 		}
 	case "submit":
 		var out *engine.Result
 		if out, err = s.Engine.Submit(wctx, a, sw.Model, draft, true); err == nil {
-			record, held = recordOut(out), out.Held
+			record = recordOut(out)
 		}
 	case "cancel":
 		var out *engine.Result
 		if out, err = s.Engine.Cancel(wctx, a, sw.Model, sw.Name); err == nil {
-			record, held = recordOut(out), out.Held
+			record = recordOut(out)
 		}
 	case "action":
 		var out *engine.ActionResult
 		if out, err = s.Engine.RunAction(wctx, a, sw.Model, sw.Name, sw.Action, sw.Args, engine.ActionOpts{}); err == nil {
-			record, held = out.Result, out.Held
+			record = out.Result
 		}
 	}
 	if errors.Is(err, store.ErrEdgeKeyTaken) { // sent twice at once: the other write won, this one rolled back
@@ -342,15 +350,6 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 			return reject("internal_error", msgEdgeInternal)
 		}
 		return reject(code, msg)
-	}
-	if held {
-		// approvals are not offered offline (contract 0057 §10); Task 6 refuses such a write before it is held
-		const msg = "Perlu persetujuan, tunggu online."
-		if err := store.SetEdgeEventStatus(ctx, s.DB, d.Org, key, "rejected", "approval_needed_offline", msg); err != nil {
-			return res, err
-		}
-		res.Status, res.Code, res.Message = "rejected", "approval_needed_offline", msg
-		return res, nil
 	}
 	res.Status, res.Ref, res.Record = "accepted", ref, record
 	return res, nil

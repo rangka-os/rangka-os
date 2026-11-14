@@ -355,12 +355,12 @@ func (s *Server) exportDashboard(w http.ResponseWriter, r *http.Request, c *call
 		return
 	}
 	name := r.PathValue("name")
-	d, _, err := s.Engine.Dashboard(r.Context(), c.actor, name, intParam(r, "period", 0))
+	// the definition the result was computed with: widget i of the result is widget i of def (card t_0214482d A2)
+	d, _, reg, err := s.Engine.DashboardWith(r.Context(), c.actor, name, intParam(r, "period", 0))
 	if err != nil {
 		fail(w, err)
 		return
 	}
-	reg := s.Engine.Reg()
 	def := reg.Dashboard(name)
 	titles := s.Engine.Titles(r.Context(), c.actor)
 	cw := sheetOut(w, r, exportFile(name, s.Engine.Today()))

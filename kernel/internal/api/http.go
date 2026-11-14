@@ -3,6 +3,7 @@
 package api
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -68,6 +69,11 @@ func failBody(err error) (int, any) {
 		return se.Status, errOf(se.Code, se.Msg)
 	case errors.Is(err, store.ErrNotFound):
 		return http.StatusNotFound, errOf("not_found", err.Error())
+	// the request ended while it waited (a metadata reload, a lock): not a server fault (card t_0214482d A4)
+	case errors.Is(err, context.DeadlineExceeded):
+		return http.StatusServiceUnavailable, errOf("timeout", "Sistem sedang sibuk, coba lagi sebentar lagi.")
+	case errors.Is(err, context.Canceled):
+		return 499, errOf("client_closed", "Permintaan dibatalkan.")
 	default:
 		return http.StatusInternalServerError, errOf("internal", err.Error())
 	}

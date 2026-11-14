@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: tutup_sesi_on_submit
+on: tutup_sesi.submitted
+steps:
+  - {find: sesi_kasir, where: name == event.shift, as: s}
+  - update: s
+    if: s != null
+    set: {state: "'closed'"}

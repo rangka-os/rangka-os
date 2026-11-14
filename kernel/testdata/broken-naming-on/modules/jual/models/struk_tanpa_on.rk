@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# {device.code} without naming_on: device is a field token of a field that does not exist
+name: struk_tanpa_on
+label: {id: Struk tanpa naming_on}
+naming: STRK-{device.code}-{#####}
+fields:
+  - {name: note, type: data, label: {id: Catatan}}

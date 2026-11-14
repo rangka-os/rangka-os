@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: tiket_dapur
+label: {id: Tiket dapur}
+naming: TKT-{#####}
+title_field: table_no
+fields:
+  - {name: table_no, type: data, label: {id: Meja}, in_list: true}
+  - {name: date, type: date, label: {id: Tanggal}, default: today()}
+  - name: status
+    type: select
+    label: {id: Status}
+    default: "'new'"
+    in_list: true
+    options:
+      - {value: new, label: {id: Baru}}
+      - {value: cooking, label: {id: Dimasak}}
+      - {value: ready, label: {id: Siap}}
+      - {value: served, label: {id: Diantar}}
+  - {name: items, type: table, of: tiket_baris, label: {id: Pesanan}}
+permissions:
+  - {role: kasir, read: true, create: true, write: true}
+  - {role: dapur, read: true, write: true}

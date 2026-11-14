@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+# Receipts and shifts named on the paired device (contract 0057 §3): module kasir of testdata/screens with
+# naming_on: device and an outlet link on penjualan and sesi_kasir.
+name: toko
+version: 1.0.0
+title: {id: Toko}
+rangka: '>=0.5'
+modules: {kasir: ^1.0}
+roles: [kasir, dapur]
+menu:
+  - group: {id: Kasir}
+    items: [penjualan, sesi_kasir, tutup_sesi, menu, tiket_dapur, outlet]
+work:
+  - {screen: jual, roles: [kasir], home: true}
+  - {screen: dapur, roles: [dapur], home: true}
+  - {screen: jual_online, roles: [kasir]}
+summary: {id: App uji nomor dari perangkat.}

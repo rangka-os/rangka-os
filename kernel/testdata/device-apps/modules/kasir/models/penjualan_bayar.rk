@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: penjualan_bayar
+label: {id: Bayar}
+is_child: true
+fields:
+  - name: method
+    type: select
+    label: {id: Cara bayar}
+    required: true
+    default: "'cash'"
+    options:
+      - {value: cash, label: {id: Tunai}}
+      - {value: qris, label: {id: QRIS}}
+  - {name: amount, type: currency, label: {id: Jumlah}, required: true}

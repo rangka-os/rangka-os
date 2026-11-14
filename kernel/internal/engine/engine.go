@@ -213,6 +213,8 @@ type op struct {
 	// counters are the v0 counters this attempt took a name from (nextName): if a write then finds that name
 	// taken, run moves them past the existing names and starts again (staleCounter)
 	counters []counterRef
+	// deviceNamed is set once a record took the name of the unit's device write (contract 0057 §3)
+	deviceNamed bool
 }
 
 // counterRef is one v0 counter (rk_naming) and the model whose names it numbers.

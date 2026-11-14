@@ -1,0 +1,3 @@
+outlet:
+  - {name: OUT-01, outlet_name: Batununggal, code: OUT01}
+  - {name: OUT-02, outlet_name: Dago, code: OUT02}

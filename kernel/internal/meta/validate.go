@@ -128,6 +128,11 @@ func (v *validator) shape() {
 			if naming, ok := m.Raw["naming"].(string); ok {
 				v.namingFields(v.rep.add, m.Doc.Path, "naming", m, naming)
 			}
+			if m.Raw["naming_on"] == "device" {
+				if naming, _ := m.Raw["naming"].(string); !strings.Contains(naming, "{device.code}") {
+					v.rep.add("error", m.Doc.Path, "naming_on", "naming_on_device", `naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)`)
+				}
+			}
 		}
 		for _, dn := range v.appDashboards(a) {
 			d := v.reg.BaseDashboards[dn]

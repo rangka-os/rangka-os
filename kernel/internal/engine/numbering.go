@@ -85,10 +85,23 @@ func wholeNumber(v any) int64 {
 
 // nextName takes the next document name for m inside the op's transaction: a series number, or the v0
 // prefix counter for legacy schemes.
+//
+// A naming_on: device model takes the name a device write brings (once per unit of work: a later record of such a
+// model in the same unit, made by a flow, is numbered by the kernel); without a device write the kernel numbers it
+// with {device.code} left out of the pattern (contract 0057 §3).
 func (o *op) nextName(m *meta.Model, rec store.Record) (string, error) {
 	e := o.e
+	if m.NamingOn == "device" {
+		if dw := deviceWriteOf(o.ctx); dw != nil && !o.deviceNamed {
+			o.deviceNamed = true
+			return o.deviceName(m, rec, dw)
+		}
+	}
 	now := e.Now().In(e.Location())
 	s := e.scheme(m, o.actor.Org)
+	if m.NamingOn == "device" {
+		s.Pattern = withoutDeviceCode(s.Pattern)
+	}
 	if s.Series == "" {
 		pattern, err := o.fieldTokens(m, rec, s.Pattern)
 		if err != nil {

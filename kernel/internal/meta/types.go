@@ -110,6 +110,9 @@ type Model struct {
 
 	// From a map naming {series, pattern?, reset?} (contract 0009); Naming is then "".
 	NamingSeries, NamingPattern, NamingReset string
+	// NamingOn is "device" when the name comes with the write from a paired device and the kernel checks it
+	// instead of making it (contract 0057 §3); "" = the kernel names.
+	NamingOn string
 }
 
 // ApprovalsFor returns the policies whose verb is verb, in declaration order.
@@ -324,7 +327,7 @@ func celText(v any) string {
 
 func parseModel(app string, doc *rk.Doc) *Model {
 	raw := withTwinsRaw(asMap(doc.Data)) // the IDR twins of money fields are fields too (contract 0013)
-	m := &Model{Name: str(raw, "name"), App: app, Naming: str(raw, "naming"), TitleField: str(raw, "title_field"),
+	m := &Model{Name: str(raw, "name"), App: app, Naming: str(raw, "naming"), NamingOn: str(raw, "naming_on"), TitleField: str(raw, "title_field"),
 		Label: label(raw["label"]), IsSubmittable: boolean(raw, "is_submittable"), IsChild: boolean(raw, "is_child"),
 		Realtime: boolean(raw, "realtime"), AppendOnly: boolean(raw, "append_only"), Raw: raw, Doc: doc,
 		OnSubmit: strList(raw["on_submit"]), OnCancel: strList(raw["on_cancel"])}

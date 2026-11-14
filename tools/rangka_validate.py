@@ -360,6 +360,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                 reset_needs_date(rep, p, "naming", m["naming"])
             if isinstance(m.get("naming"), str):
                 naming_fields(rep, p, "naming", mname, m, m["naming"], allmodels_of(apps))
+            if m.get("naming_on") == "device" and "{device.code}" not in (m["naming"] if isinstance(m.get("naming"), str) else ""):
+                rep.add("error", p, "naming_on", "naming_on_device", "naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)")
         for dname, (p, db) in a["dashboards"].items():
             for e in sorted(V["dashboard"].iter_errors(db), key=lambda e: list(map(str, e.absolute_path))):
                 rep.add("error", p, "/".join(map(str, e.absolute_path)) or "(root)", "schema", e.message if len(e.message) < 160 else e.message[:157] + "…")
@@ -1211,6 +1213,8 @@ def naming_fields(rep, path, where, mname, m, naming, models):
         f = field(m, a)
         if g.end() >= len(naming) or naming[g.end()] != "-":
             rep.add("error", path, where, "naming_field", f'naming token {{{tok}}} must be followed by "-"')
+        elif tok == "device.code" and isinstance(m, dict) and m.get("naming_on") == "device":
+            pass  # the paired device's code (contract 0057 §3)
         elif f is None:
             rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: model {mname} has no field "{a}"')
         elif f.get("hidden_for"):

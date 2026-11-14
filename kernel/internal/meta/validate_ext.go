@@ -1130,6 +1130,7 @@ func (v *validator) namingFields(add func(level, path, where, code, msg string),
 		switch {
 		case loc[1] >= len(naming) || naming[loc[1]] != '-':
 			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s} must be followed by "-"`, tok))
+		case tok == "device.code" && m.Raw["naming_on"] == "device": // the paired device's code (contract 0057 §3)
 		case f == nil:
 			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: model %s has no field "%s"`, tok, m.Name, a))
 		case len(StrList(f.Raw["hidden_for"])) > 0:

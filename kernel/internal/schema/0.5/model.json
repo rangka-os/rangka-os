@@ -58,6 +58,12 @@
       ],
       "description": "e.g. INV-{YYYY}-{#####} or STRK-{outlet.code}-{YY}{MM}-{####} (a field token, one counter per rendered prefix), or {series: invoice, pattern: 'INV/{ORG}/{YY}/{####}'} (contract 0009)"
     },
+    "naming_on": {
+      "enum": [
+        "device"
+      ],
+      "description": "device: the name comes with the write from a paired device and the kernel checks it against the string naming, which carries {device.code}, instead of making it; a write without a device keeps the kernel's numbering with {device.code} left out (contract 0057 §3)"
+    },
     "title_field": {
       "$ref": "#/$defs/name"
     },

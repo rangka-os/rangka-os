@@ -191,3 +191,26 @@ func SetNextSeries(ctx context.Context, q pg.Querier, org, orgCode string, s Sch
 	}
 	return FormatNumber(prefix, suffix, digits, next), period, nil
 }
+
+// ClaimDeviceNumber records that a paired device used number n of series in period (contract 0057 §3) inside q's
+// transaction and returns the highest number the series had before. The counter row is locked first, so a
+// second write of the same device waits here and then sees the first one's record. The counter never goes down: a
+// late lower number fills a gap and leaves it as it is.
+func ClaimDeviceNumber(ctx context.Context, q pg.Querier, org, series, period string, n int64) (int64, error) {
+	if _, err := q.Exec(ctx, `insert into rk_number_series (org_id, series, period, last) values ($1, $2, $3, 0)
+		on conflict (org_id, series, period) do nothing`, org, series, period); err != nil {
+		return 0, err
+	}
+	res, err := q.Query(ctx, `select last from rk_number_series where org_id = $1 and series = $2 and period = $3 for update`, org, series, period)
+	if err != nil {
+		return 0, err
+	}
+	prev := res.Rows[0][0].(int64)
+	if n > prev {
+		if _, err := q.Exec(ctx, `update rk_number_series set last = $4 where org_id = $1 and series = $2 and period = $3`,
+			org, series, period, n); err != nil {
+			return 0, err
+		}
+	}
+	return prev, nil
+}

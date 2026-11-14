@@ -9,8 +9,14 @@ import (
 )
 
 // absVal is what an expression evaluates to, as far as hidden fields go: a record (or a list of records) of some
-// models, or a plain value (nil models).
-type absVal struct{ models map[string]bool }
+// models, or a plain value (nil models). link marks the value of a link field: at run time it is only the linked
+// record's name, so copying it or comparing it copies nothing hidden; reading a member of it follows the link
+// (audit copy-hidden H1). keyed marks a map literal holding links: any member of it is one of those links.
+type absVal struct {
+	models map[string]bool
+	link   bool
+	keyed  bool
+}
 
 func recOf(ms ...string) absVal {
 	out := map[string]bool{}
@@ -26,6 +32,34 @@ func recOf(ms ...string) absVal {
 }
 
 func (v absVal) isRec() bool { return len(v.models) > 0 }
+
+// whole is a value that carries a record's hidden fields when it is copied as is: a record, not a link's name.
+func (v absVal) whole() bool { return v.isRec() && !v.link }
+
+func linkOf(v absVal) absVal {
+	if !v.isRec() {
+		return absVal{}
+	}
+	return absVal{models: v.models, link: true}
+}
+
+// join is either of two values (the branches of a condition, the elements of a list): a record if either is one.
+func join(a, b absVal) absVal {
+	if !a.isRec() {
+		return b
+	}
+	if !b.isRec() {
+		return a
+	}
+	out := map[string]bool{}
+	for m := range a.models {
+		out[m] = true
+	}
+	for m := range b.models {
+		out[m] = true
+	}
+	return absVal{models: out, link: a.link && b.link, keyed: a.keyed && b.keyed}
+}
 
 // copyScan follows an expression's reads (audit flow-locked F2, copy-hidden G1-G4): every field read that has
 // hidden_for is collected; a record used whole, indexed by a computed key, or an expression that does not parse
@@ -74,7 +108,11 @@ func (c *copyScan) leakAll(v absVal, why string) {
 }
 
 func (c *copyScan) field(v absVal, name string) absVal {
+	if v.keyed {
+		return linkOf(v)
+	}
 	var next []string
+	var links []string
 	for m := range v.models {
 		fd := c.fields(m)[name]
 		if fd == nil {
@@ -89,12 +127,12 @@ func (c *copyScan) field(v absVal, name string) absVal {
 		}
 		switch fd["type"] {
 		case "link", "dynamic_link":
-			next = append(next, meta.Str(fd, "to"))
+			links = append(links, meta.Str(fd, "to"))
 		case "table":
 			next = append(next, meta.Str(fd, "of"))
 		}
 	}
-	return recOf(next...)
+	return join(recOf(next...), linkOf(recOf(links...)))
 }
 
 func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
@@ -125,7 +163,7 @@ func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
 			case string:
 				return c.field(v, k)
 			case int64, int, float64:
-				return v // an element of a list of records
+				return absVal{models: v.models, link: v.link} // an element of a list of records or links
 			}
 		}
 		c.eval(e.I, scope)
@@ -151,42 +189,56 @@ func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
 		c.use(b)
 		return absVal{}
 	case *cel.Call:
+		count := e.Fn == "size" // the number of records or of characters copies none of them
 		if e.Target != nil {
-			c.use(c.eval(e.Target, scope))
+			if v := c.eval(e.Target, scope); !count {
+				c.use(v)
+			}
 		}
 		for _, a := range e.Args {
-			c.use(c.eval(a, scope))
+			if v := c.eval(a, scope); !count {
+				c.use(v)
+			}
 		}
 		return absVal{}
 	case *cel.Unary:
 		c.use(c.eval(e.X, scope))
 		return absVal{}
 	case *cel.Binary:
-		c.use(c.eval(e.L, scope))
-		c.use(c.eval(e.R, scope))
+		l, r := c.eval(e.L, scope), c.eval(e.R, scope)
+		switch e.Op {
+		case "==", "!=", "<", "<=", ">", ">=", "in", "&&", "||":
+			// a comparison yields a bool; the fields it reads were already counted by field
+		default:
+			c.use(l)
+			c.use(r)
+		}
 		return absVal{}
 	case *cel.Cond:
-		c.use(c.eval(e.C, scope))
-		t, f := c.eval(e.T, scope), c.eval(e.F, scope)
-		var ms []string
-		for m := range t.models {
-			ms = append(ms, m)
-		}
-		for m := range f.models {
-			ms = append(ms, m)
-		}
-		return recOf(ms...)
+		c.eval(e.C, scope)
+		return join(c.eval(e.T, scope), c.eval(e.F, scope))
 	case *cel.List:
+		// a list of links stays one (its elements can be followed); a record in a list is copied whole
+		var out absVal
 		for _, el := range e.Elems {
-			c.use(c.eval(el, scope))
+			v := c.eval(el, scope)
+			c.use(v)
+			if v.link {
+				out = join(out, absVal{models: v.models, link: true})
+			}
 		}
-		return absVal{}
+		return out
 	case *cel.MapLit:
+		var out absVal
 		for i := range e.Keys {
 			c.use(c.eval(e.Keys[i], scope))
-			c.use(c.eval(e.Vals[i], scope))
+			v := c.eval(e.Vals[i], scope)
+			c.use(v)
+			if v.link {
+				out = join(out, absVal{models: v.models, link: true, keyed: true})
+			}
 		}
-		return absVal{}
+		return out
 	}
 	return absVal{}
 }
@@ -194,7 +246,7 @@ func (c *copyScan) eval(x cel.Expr, scope map[string]absVal) absVal {
 // use marks a record that becomes part of a plain value (a function argument, an operand, a list element): its
 // hidden fields go with it.
 func (c *copyScan) use(v absVal) {
-	if v.isRec() {
+	if v.whole() {
 		c.leakAll(v, "used whole")
 	}
 }

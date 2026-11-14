@@ -96,6 +96,33 @@ func TestAssessCopiesHiddenBypasses(t *testing.T) {
 		{"P5 superset cover", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "customer.updated", "steps": []any{findC,
 			map[string]any{"create": "sales_invoice", "set": map[string]any{"secret2": "c.ktp"}}}}, false},
 		{"P6 event.name", "flows/x_f.rk", cflow("event.name + c.customer_name"), false},
+		// audit copy-hidden H1: a link field's value is the linked record's name; copying, comparing or counting
+		// copies nothing hidden, following it still reads the linked record
+		{"Q1 link name copy", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"create": "sales_invoice", "set": map[string]any{"customer": "event.customer"}}}}, false},
+		{"Q2 link compare", "custom/sales_invoice.rk", ov("sales_invoice", map[string]any{"name": "x_n", "type": "data", "compute": "customer != '' ? customer.customer_name : ''"}), false},
+		{"Q3 size find_all", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "customer.updated", "steps": []any{findC,
+			map[string]any{"find_all": "customer", "as": "cs"},
+			map[string]any{"update": "c", "set": map[string]any{"city": "string(size(cs)) + string(cs.size())"}}}}, false},
+		{"Q4 row link in map", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"find": "sales_invoice", "as": "s"},
+			map[string]any{"update": "s", "set": map[string]any{"notes": "[s.customer].map(x, x)[0]"}}}}, false},
+		{"Q5 link in map literal", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"update": "event", "set": map[string]any{"notes": "string({'a': event.customer})"}}}}, false},
+		{"Q6 record compare", "flows/x_f.rk", cflow("c == c ? 'a' : 'b'"), false},
+		{"R1 link list followed", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"update": "event", "set": map[string]any{"notes": "[event.customer][0].npwp"}}}}, true},
+		{"R2 link map followed", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"update": "event", "set": map[string]any{"notes": "{'a': event.customer}.a + {'b': event.customer}['b'].npwp"}}}}, true},
+		{"R3 link followed", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"update": "event", "set": map[string]any{"notes": "event.customer.npwp"}}}}, true},
+		{"R4 link list map followed", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"update": "event", "set": map[string]any{"notes": "[event.customer].map(x, x.npwp)[0]"}}}}, true},
+		{"R5 string(record)", "flows/x_f.rk", cflow("string(c)"), true},
+		{"R6 child rows whole", "flows/x_f.rk", cflow("string(c.contact_persons)"), true},
+		{"R7 cond record whole", "flows/x_f.rk", cflow("string(true ? c : event.customer)"), true},
+		{"R8 link computed key", "flows/x_f.rk", map[string]any{"name": "x_f", "on": "sales_invoice.created", "steps": []any{
+			map[string]any{"update": "event", "set": map[string]any{"notes": "event.customer[('np' + 'wp')]"}}}}, true},
 	}
 	for _, c := range cases {
 		a := AssessWith([]Op{{Op: "create", Path: c.path}}, none, with(c.path, c.doc), Env{Model: model})

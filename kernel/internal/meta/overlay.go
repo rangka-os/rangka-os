@@ -45,6 +45,29 @@ func (r *Registry) applyOverlays() {
 				}
 			}
 		}
+		// the IDR twin of a relabelled money field follows the new word, "<label> (IDR)" as WithTwins names it, unless
+		// labels names the twin itself (contract 0013; audit overlay label N1)
+		labels := asMap(o["labels"])
+		for _, fn := range sortedKeys(labels) {
+			l := asMap(labels[fn])
+			if l == nil {
+				continue
+			}
+			for _, f := range fields {
+				tm := asMap(f)
+				if tm == nil || pyStr(tm["money_of"]) != fn {
+					continue
+				}
+				if _, own := labels[pyStr(tm["name"])]; own {
+					continue
+				}
+				tl := map[string]any{}
+				for k, x := range l {
+					tl[k] = pyStr(x) + " (IDR)"
+				}
+				tm["label"] = tl
+			}
+		}
 		if extra := asList(o["rules"]); len(extra) > 0 {
 			raw["rules"] = append(asList(raw["rules"]), deepCopy(extra).([]any)...)
 		}

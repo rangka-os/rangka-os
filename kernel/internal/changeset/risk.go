@@ -563,9 +563,59 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 	if !reflect.DeepEqual(normalize(old["views"]), normalize(nw["views"])) {
 		a.raise("low", "changes views of "+p)
 	}
-	// the company's words for the model and its fields (0049 §5): display only, like views
-	if !reflect.DeepEqual(normalize(old["label"]), normalize(nw["label"])) || !reflect.DeepEqual(normalize(old["labels"]), normalize(nw["labels"])) {
-		a.raise("low", "changes labels of "+p)
+	// the company's words for the model and its fields (0049 §5): display only, like views; each change names the
+	// field and its old and new word, so the change set's history reads what a total or a stock field is now called
+	// (audit overlay label N3 a)
+	relabels(a, p, old, nw, target)
+}
+
+// relabels raises low for each label an overlay changes: `relabels <model>: "old" -> "new"` for the model and
+// `relabels <field> of <model>: "old" -> "new"` per field. The old word is the overlay's earlier one, else the app's.
+func relabels(a *Assessment, p string, old, nw, target map[string]any) {
+	model := strings.TrimSuffix(strings.TrimPrefix(p, "custom/"), ".rk")
+	// a word is free text (it may come from Raka); the reasons are joined with "; " in the change set's history note,
+	// which the web splits into lines, so a ";" in a word could start a false reason line: it becomes ","
+	// (audit overlay label followup A1)
+	word := func(l any) string {
+		s, _ := meta.AsMap(l)["id"].(string)
+		return strings.ReplaceAll(s, ";", ",")
+	}
+	if !reflect.DeepEqual(normalize(old["label"]), normalize(nw["label"])) {
+		was, now := word(old["label"]), word(nw["label"])
+		if was == "" {
+			was = word(target["label"])
+		}
+		if now == "" { // the overlay drops its word: the app's comes back
+			now = word(target["label"])
+		}
+		a.raise("low", fmt.Sprintf("relabels %s: %q -> %q", model, was, now))
+	}
+	base, _ := fieldsByName(target)
+	ol, nl := meta.AsMap(old["labels"]), meta.AsMap(nw["labels"])
+	names := map[string]bool{}
+	for k := range ol {
+		names[k] = true
+	}
+	for k := range nl {
+		names[k] = true
+	}
+	keys := make([]string, 0, len(names))
+	for k := range names {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, f := range keys {
+		if reflect.DeepEqual(normalize(ol[f]), normalize(nl[f])) {
+			continue
+		}
+		was, now := word(ol[f]), word(nl[f])
+		if was == "" {
+			was = word(base[f]["label"])
+		}
+		if now == "" {
+			now = word(base[f]["label"])
+		}
+		a.raise("low", fmt.Sprintf("relabels %s of %s: %q -> %q", f, model, was, now))
 	}
 }
 

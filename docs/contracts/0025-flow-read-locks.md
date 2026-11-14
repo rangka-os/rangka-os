@@ -62,3 +62,9 @@ on a submittable model, the value read from `event` or flow variables, never fro
 and rows are read newest first in chunks of 200 until the first match (`find`) or `limit:`. With `sort:` every matching
 row is read and sorted as before. The whole `where:` is evaluated on each row read, so the SQL only narrows; a value
 that is null or empty, `!=` on text, `||`, macros and computed or non-text fields stay CEL only.
+
+Refinement (14 Nov 2026, card t_0dba5917): a date field (not computed) compared with `==`, `<`, `<=`, `>` or `>=` to
+a `YYYY-MM-DD` text is an SQL condition too (`value == field` also; an ordering only with the field on the left). A
+flow reads a date as that text, so the text order CEL compares is the calendar order. An empty date is NULL in the
+table but `""` in a flow, which sorts before any date, so `<` and `<=` also read the NULL rows and CEL decides; a value
+in year 0000 stays CEL only (PostgreSQL has no year 0). A backfill can then walk a window of days (`date >= from && date < before`) without reading every row of the table.

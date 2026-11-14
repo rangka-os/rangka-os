@@ -23,6 +23,7 @@ steps:
   - update: t1
     set: {notes: "'top'"}
   - {find_all: deal, where: "docstatus == 0 && customer == event.missing", as: none}
+  - {find_all: deal, where: "expected_close >= '2026-12-01' && expected_close < event.next && '2026-12-01' == expected_close", as: dated}
 `
 
 // t_451714a9: a flow find reads only the rows its where: can match (SQL), in chunks, and stops at its first match or
@@ -43,12 +44,12 @@ func TestFlowFindPushdown(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	res, err := e.RunFlow(ctx, a, "find_probe", map[string]any{"customer": "CUST-0012", "custs": []any{"CUST-0012", "CUST-0031"}, "missing": "CUST-9999"})
+	res, err := e.RunFlow(ctx, a, "find_probe", map[string]any{"customer": "CUST-0012", "custs": []any{"CUST-0012", "CUST-0031"}, "missing": "CUST-9999", "next": "2026-12-02"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	steps := strings.Join(res.Steps, " | ")
-	for _, want := range []string{"find_all deal → 230", "find deal → 1", "find_all deal → 3", "find_all deal → 1", "find_all deal → 0"} {
+	for _, want := range []string{"find_all deal → 230", "find deal → 1", "find_all deal → 3", "find_all deal → 1", "find_all deal → 0", "find_all deal → 236"} { // 236: the 235 created plus the fixture deal closing 2026-12-01
 		if !strings.Contains(steps, want) {
 			t.Fatalf("steps %q lack %q", steps, want)
 		}
@@ -83,6 +84,21 @@ func TestFlowFindPushdown(t *testing.T) {
 		{"customer in ['A', 1]", nil, nil, nil},
 		{"notes in ['x', '']", nil, nil, nil},
 		{"customer == f.customer", map[string]any{"f": nil}, nil, nil},
+		// t_0dba5917: a date column compared to a YYYY-MM-DD text, field on the left (== also flipped)
+		{"expected_close == '2026-12-01'", nil, []string{`"expected_close" = $2::date`}, []any{"2026-12-01"}},
+		{"'2026-12-01' == expected_close", nil, []string{`"expected_close" = $2::date`}, []any{"2026-12-01"}},
+		{"expected_close >= d && expected_close < e", map[string]any{"d": "2026-11-01", "e": "2026-12-01"},
+			[]string{`"expected_close" >= $2::date`, `("expected_close" < $3::date or "expected_close" is null)`}, []any{"2026-11-01", "2026-12-01"}},
+		{"expected_close <= '2026-12-01' && expected_close > '2026-11-30'", nil,
+			[]string{`("expected_close" <= $2::date or "expected_close" is null)`, `"expected_close" > $3::date`}, []any{"2026-12-01", "2026-11-30"}},
+		// not pushed: an ordering with the field on the right, !=, an empty or partial or timestamp value
+		{"'2026-12-01' < expected_close", nil, nil, nil},
+		{"expected_close != '2026-12-01'", nil, nil, nil},
+		{"expected_close == ''", nil, nil, nil},
+		{"expected_close < '2026-12'", nil, nil, nil},
+		{"expected_close < '2026-12-01T00:00:00Z'", nil, nil, nil},
+		{"expected_close < 5", nil, nil, nil},
+		{"expected_close < '0000-01-01'", nil, nil, nil},
 	}
 	err = e.run(ctx, a, func(o *op) error {
 		for _, c := range cases {
@@ -114,5 +130,54 @@ func TestFlowFindPushdown(t *testing.T) {
 	})
 	if err != nil {
 		t.Fatal(err)
+	}
+}
+
+const findDateProbeFlow = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: find_date_probe
+label: {id: Uji find tanggal}
+on: deal.updated
+steps:
+  - {find_all: deal, where: "notes == 'k1probe' && expected_close < '2026-12-01'", as: lt}
+  - {find_all: deal, where: "notes == 'k1probe' && [1].exists(x, expected_close < '2026-12-01')", as: lt_cel}
+  - {find_all: deal, where: "notes == 'k1probe' && expected_close <= '2026-12-01'", as: le}
+  - {find_all: deal, where: "notes == 'k1probe' && [1].exists(x, expected_close <= '2026-12-01')", as: le_cel}
+  - {find_all: deal, where: "notes == 'k1probe' && expected_close > '2026-01-01'", as: gt}
+  - {find_all: deal, where: "notes == 'k1probe' && [1].exists(x, expected_close > '2026-01-01')", as: gt_cel}
+`
+
+// Audit t_0dba5917 K1: an empty date is NULL in SQL but "" in CEL, which sorts before any date; a pushed < or <=
+// finds the same rows as CEL alone (the empty ones too), and > the same as well.
+func TestFlowFindDateEmptyMatchesCEL(t *testing.T) {
+	e, a := approvalSetupFiles(t, map[string]string{"crm/flows/find_date_probe.rk": findDateProbeFlow}, "")
+	ctx := context.Background()
+	for i, d := range []string{"", "", "2026-11-15", "2026-12-15"} {
+		in := map[string]any{"deal_name": fmt.Sprintf("D%d", i), "customer": "CUST-0012", "value": 1, "notes": "k1probe"}
+		if d != "" {
+			in["expected_close"] = d
+		} else {
+			in["stage"], in["lost_reason"] = "lost", "uji" // the deal rule needs a close date unless won or lost
+		}
+		if _, err := e.Create(ctx, a, "deal", in); err != nil {
+			t.Fatal(err)
+		}
+	}
+	res, err := e.RunFlow(ctx, a, "find_date_probe", map[string]any{})
+	if err != nil {
+		t.Fatal(err)
+	}
+	counts := map[string]string{}
+	for _, s := range res.Steps {
+		if i := strings.Index(s, "→ "); i > 0 {
+			counts[strings.SplitN(s, ":", 2)[0]] = s[i+len("→ "):]
+		}
+	}
+	for _, p := range [][2]string{{"1", "2"}, {"3", "4"}, {"5", "6"}} {
+		if counts[p[0]] != counts[p[1]] {
+			t.Errorf("pushed step %s found %s, CEL alone (step %s) %s: %v", p[0], counts[p[0]], p[1], counts[p[1]], res.Steps)
+		}
+	}
+	if counts["1"] != "3" || counts["5"] != "2" {
+		t.Errorf("counts %v, want < 3 (two empty + 2026-11-15) and > 2", counts)
 	}
 }

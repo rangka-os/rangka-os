@@ -119,6 +119,9 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 var errScopeLimited = errors.New("Token ini hanya untuk API anggota (members:write).")
 
 func memberRoute(r *http.Request) bool {
+	if r.Method == http.MethodGet {
+		return r.URL.Path == "/api/v1/members/options" // contract 0055 §3
+	}
 	return (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/api/v1/members/")
 }
 
@@ -232,6 +235,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/connectors/{connector}/auth/{field}", a(s.putConnectorAuth))
 	mux.HandleFunc("DELETE /api/v1/connectors/{connector}/auth/{field}", a(s.deleteConnectorAuth))
 	// member API (contract 0043): API tokens with members:write only
+	mux.HandleFunc("GET /api/v1/members/options", a(s.memberOptions)) // contract 0055 §3
 	mux.HandleFunc("PUT /api/v1/members/{upstream}/{subject}", a(s.putMember))
 	mux.HandleFunc("DELETE /api/v1/members/{upstream}/{subject}", a(s.deleteMember))
 	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)

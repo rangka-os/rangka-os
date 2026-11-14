@@ -481,3 +481,49 @@ func TestUserAddSyncsRecord(t *testing.T) {
 		t.Fatalf("after remove: %q", got)
 	}
 }
+
+// Contract 0055 §3: `rangka user add --record` refuses a record that is another account's (record_taken) and writes
+// nothing; the record of the account itself, or one with no account, is fine.
+func TestUserAddRecordTaken(t *testing.T) {
+	url := testdb.New(t)
+	prevIter := auth.Iterations
+	auth.Iterations = 1000
+	t.Cleanup(func() { auth.Iterations = prevIter })
+	ctx := context.Background()
+	db, err := pg.NewPool(ctx, url, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(ctx, store.SystemSQL()+`; create table r_user (org_id text not null, name text not null, account_id bigint);
+		insert into r_user values ('t', 'USR-001', 0), ('t', 'USR-002', 0)`); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RANGKA_APPS", "")
+	add := func(email, record string) error {
+		_, err := runUserOut(t, "add", "--db", url, "--org", "t", "--create-org", "--email", email, "--password", "pw-123456",
+			"--role", "cashier", "--record", record)
+		return err
+	}
+	if err := add("a@x.test", "USR-001"); err != nil {
+		t.Fatalf("free record: %v", err)
+	}
+	// another membership points at USR-001
+	if err := add("b@x.test", "USR-001"); err == nil || !strings.Contains(err.Error(), "record_taken") {
+		t.Fatalf("pointed at: err = %v", err)
+	}
+	// USR-002 carries a's account
+	if _, err := db.Query(ctx, "update r_user set account_id = (select id from rk_users where email = 'a@x.test') where name = 'USR-002'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := add("b@x.test", "USR-002"); err == nil || !strings.Contains(err.Error(), "record_taken") {
+		t.Fatalf("account_id of another: err = %v", err)
+	}
+	res, err := db.Query(ctx, "select count(*) from rk_users where email = 'b@x.test'")
+	if err != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("a refused add wrote an account: %v", err)
+	}
+	if err := add("a@x.test", "USR-002"); err != nil {
+		t.Fatalf("the account's own record: %v", err)
+	}
+}

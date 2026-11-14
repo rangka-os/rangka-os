@@ -314,3 +314,28 @@ func TestUpgradeBackfillsSignedIn(t *testing.T) {
 		t.Fatalf("signed_in_at should be the first session's time: %v %v", res.Rows, err)
 	}
 }
+
+// A membership whose record carries another account's account_id is not adopted: the sync falls through to the
+// lookup (here: a new record), so the two accounts never take the record from each other on every repair.
+func TestSyncSkipsRecordOfAnotherAccount(t *testing.T) {
+	e, ctx := memberRecordSetup(t)
+	sari := addMember(t, e, "sari@example.test", "Sari", "cashier", nil)
+	sariRec := syncRecord(t, e, sari)
+	budi := addMember(t, e, "budi@example.test", "Budi", "cashier", nil)
+	if _, err := e.DB.Query(ctx, "update rk_members set record = $3 where org_id = $1 and user_id = $2", mrOrg, budi, sariRec); err != nil {
+		t.Fatal(err)
+	}
+	budiRec := syncRecord(t, e, budi)
+	if budiRec == sariRec || budiRec == "" {
+		t.Fatalf("budi synced to %q (sari's is %q)", budiRec, sariRec)
+	}
+	if got := memberRecordColumn(t, e, budi); got != budiRec {
+		t.Fatalf("budi's membership record %q, want %q", got, budiRec)
+	}
+	if acc := toInt(userRecord(t, e, sariRec)["account_id"]); acc != sari {
+		t.Fatalf("sari's record account_id %d, want %d", acc, sari)
+	}
+	if n, err := e.RepairMemberRecords(ctx, mrOrg); err != nil || n != 0 {
+		t.Fatalf("repair after: %d %v", n, err)
+	}
+}

@@ -183,9 +183,9 @@ func runUser(args []string) error {
 	if err != nil {
 		return err
 	}
-	exists, oldRole := len(res.Rows) > 0, ""
+	exists, oldRole, userID := len(res.Rows) > 0, "", int64(0)
 	if exists {
-		oldRole = res.Rows[0][1].(string)
+		userID, oldRole = res.Rows[0][0].(int64), res.Rows[0][1].(string)
 	}
 
 	if ua.Sub == "remove" {
@@ -253,6 +253,12 @@ func runUser(args []string) error {
 			return err
 		}
 	}
+	// contract 0055 §3: the record must not be another account's, or the sync would hand it back and forth
+	if ua.Record != "" {
+		if err := checkRecord(ctx, pool, ua.Org, ua.Record, userID); err != nil {
+			return err
+		}
+	}
 	// contract 0028: a new person past the plan's people limit is refused (an existing member is not a new person)
 	if err := plan.CheckNewPerson(ctx, pool, ua.Org, ua.Email); err != nil {
 		return err
@@ -290,6 +296,19 @@ func runUser(args []string) error {
 	}
 	fmt.Fprintf(userOut, "user %s is %s in %s\n", ua.Email, ua.Role, ua.Org)
 	syncUserRecord(ctx, pool, ua, id)
+	return nil
+}
+
+// checkRecord refuses a user record that is another account's (record_taken). Without a user table with account_id
+// the record is stored as given, as before contract 0055.
+func checkRecord(ctx context.Context, pool *pg.Pool, org, record string, userID int64) error {
+	_, taken, err := engine.MemberRecordClaim(pg.WithOrg(ctx, org), pool, org, record, userID)
+	if err != nil {
+		return err
+	}
+	if taken {
+		return fmt.Errorf("record_taken: employee record %q of %s belongs to another account", record, org)
+	}
 	return nil
 }
 

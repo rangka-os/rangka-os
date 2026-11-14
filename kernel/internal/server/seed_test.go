@@ -48,3 +48,30 @@ func TestSeedRefusesLinkedAccount(t *testing.T) {
 		t.Fatalf("re-seed: %v", err)
 	}
 }
+
+// Contract 0055 §3: the seed never points its owner at a user record that is another account's (record_taken).
+func TestSeedRefusesTakenRecord(t *testing.T) {
+	e := newEnv(t, false, nil)
+	ctx := context.Background()
+	db := e.s.DB
+	reg, err := LoadRegistry(e.s.Cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := SeedOptions{Org: "kopi-senja", FixturesDir: filepath.Join(filepath.Dir(e.apps), "fixtures"),
+		Email: "boss@x.test", Password: "rangka-demo", UserRecord: "USR-001", Now: fixedNow}
+	if _, err := Seed(ctx, db, reg, opts); err == nil || !strings.Contains(err.Error(), "record_taken") {
+		t.Fatalf("seed onto the owner's record: err = %v", err)
+	}
+	res, err := db.Query(ctx, "select count(*) from rk_users where email = 'boss@x.test'")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if n := res.Rows[0][0].(int64); n != 0 {
+		t.Fatal("the refused seed wrote an account")
+	}
+	opts.Email = "ceo@saga.co.id"
+	if _, err := Seed(ctx, db, reg, opts); err != nil {
+		t.Fatalf("re-seed: %v", err)
+	}
+}

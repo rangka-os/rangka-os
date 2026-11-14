@@ -10,6 +10,8 @@ import (
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -28,6 +30,7 @@ const (
 	msgEmailTaken           = "E-mail ini sudah dipakai akun lain."
 	msgUnknownUpstream      = "Penyedia akun tidak ditemukan."
 	msgAccountElsewhere     = "Akun dengan e-mail ini juga dipakai di usaha lain, jadi tidak bisa diatur lewat API anggota usaha ini."
+	msgRecordTaken          = "Data karyawan ini sudah terhubung ke akun lain."
 )
 
 // memberError is a refusal of the member API: status, code and copy.
@@ -47,11 +50,20 @@ func isOwner(c *caller) bool {
 	return false
 }
 
+// memberToken admits an API token with members:write whose owner is still an owner of its organisation. It
+// answers when it refuses.
+func memberToken(w http.ResponseWriter, c *caller) bool {
+	if c.p.Via != "token" || !c.p.HasScope(auth.ScopeMembersWrite) || !isOwner(c) || c.actor.Org == "" {
+		writeError(w, http.StatusForbidden, "forbidden", msgMembersForbidden)
+		return false
+	}
+	return true
+}
+
 // memberGuard admits an API token with members:write whose owner is still an owner of its organisation, and
 // resolves {upstream}. It answers when it refuses.
 func (s *Server) memberGuard(w http.ResponseWriter, r *http.Request, c *caller) (*auth.Upstream, bool) {
-	if c.p.Via != "token" || !c.p.HasScope(auth.ScopeMembersWrite) || !isOwner(c) || c.actor.Org == "" {
-		writeError(w, http.StatusForbidden, "forbidden", msgMembersForbidden)
+	if !memberToken(w, c) {
 		return nil, false
 	}
 	up := s.Auth.Upstream(r.PathValue("upstream"))
@@ -197,6 +209,7 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		Name    string    `json:"name"`
 		Role    string    `json:"role"`
 		Outlets *[]string `json:"outlets"`
+		Record  string    `json:"record"` // an existing user record to link (contract 0055 §3)
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "bad_request", "Isi permintaan harus JSON yang valid.")
@@ -298,6 +311,11 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		if err := plan.CheckNewPerson(ctx, tx, org, targetEmail); err != nil { // an existing member is not a new person
 			return err
 		}
+		if body.Record != "" {
+			if err := s.claimMemberRecord(ctx, tx, org, body.Record, target); err != nil {
+				return err
+			}
+		}
 
 		// write
 		if linked && targetEmail != email {
@@ -322,6 +340,12 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		if target != 0 && userID != target {
 			return fmt.Errorf("member api: upsert wrote user %d, resolved %d", userID, target)
 		}
+		if body.Record != "" {
+			// the sync looks rk_members.record up first, so it links this record instead of making one
+			if _, err := tx.Query(ctx, "update rk_members set record = $3 where org_id = $1 and user_id = $2", org, userID, body.Record); err != nil {
+				return err
+			}
+		}
 		if !linked {
 			if err := auth.LinkIdentity(ctx, tx, up.Issuer, subject, userID); errors.Is(err, auth.ErrConflict) {
 				return &memberError{http.StatusConflict, "identity_conflict", msgIdentityConflict}
@@ -338,7 +362,7 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 			}
 		}
 		return store.Audit(ctx, tx, org, c.p.User.Email, "member.upsert", "user/"+email, "member set by API token",
-			map[string]any{"via": "token", "upstream": up.ID, "subject": subject, "role": body.Role, "outlets": outlets, "created": created, "revoked": revoked})
+			map[string]any{"via": "token", "upstream": up.ID, "subject": subject, "role": body.Role, "outlets": outlets, "record": body.Record, "created": created, "revoked": revoked})
 	})
 	if err != nil {
 		memberFail(w, err)
@@ -346,6 +370,94 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 	}
 	s.syncMemberRecord(ctx, org, userID)
 	writeJSON(w, http.StatusOK, map[string]any{"user_id": userID, "created": created})
+}
+
+// claimMemberRecord refuses a record that is not an existing user record of org (unknown_record; also when the
+// registry has no member record model) or that is another account's (record_taken). userID 0 is an account not
+// created yet.
+func (s *Server) claimMemberRecord(ctx context.Context, q pg.Querier, org, record string, userID int64) error {
+	exists, taken := false, false
+	if s.Engine.HasMemberRecord() {
+		var err error
+		if exists, taken, err = engine.MemberRecordClaim(ctx, q, org, record, userID); err != nil {
+			return err
+		}
+	}
+	switch {
+	case !exists:
+		return &memberError{http.StatusUnprocessableEntity, "unknown_record", fmt.Sprintf(`Data karyawan "%s" tidak ditemukan.`, record)}
+	case taken:
+		return &memberError{http.StatusUnprocessableEntity, "record_taken", msgRecordTaken}
+	}
+	return nil
+}
+
+// memberOptions is GET /api/v1/members/options (contract 0055 §3): what the host's Tim page picks from. Roles that
+// can be given (owner never), active outlets (every outlet when the model has no active field), and employee records
+// with access none that can be invited. Without the outlet model or the member record model, that list is empty.
+func (s *Server) memberOptions(w http.ResponseWriter, r *http.Request, c *caller) {
+	if !memberToken(w, c) {
+		return
+	}
+	org, reg := c.actor.Org, s.Engine.Reg()
+	ctx := pg.WithOrg(r.Context(), org)
+
+	roles := []map[string]any{}
+	names := make([]string, 0, len(reg.Roles))
+	for n := range reg.Roles {
+		if n != "owner" {
+			names = append(names, n)
+		}
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		label := meta.LabelOf(meta.AsMap(reg.Roles[n].Data)["label"]).Text()
+		if label == "" {
+			label = n
+		}
+		roles = append(roles, map[string]any{"name": n, "label": label})
+	}
+
+	outlets := []map[string]any{}
+	if m := reg.Model("outlet"); m != nil {
+		title, code, where := "name", "''", ""
+		if m.TitleField != "" && m.Field(m.TitleField) != nil {
+			title = "coalesce(" + pg.QuoteIdent(m.TitleField) + "::text, '')"
+		}
+		if m.Field("code") != nil {
+			code = "coalesce(code::text, '')"
+		}
+		if f := m.Field("active"); f != nil && f.Type == "check" {
+			where = " and active is not false" // unset reads as the field's default, active
+		}
+		res, err := s.DB.Query(ctx, fmt.Sprintf("select name, %s, %s from %s where org_id = $1%s order by name",
+			title, code, pg.QuoteIdent(store.TableName(m.Name)), where), org)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		for _, row := range res.Rows {
+			label := row[1].(string)
+			if label == "" {
+				label = row[0].(string)
+			}
+			outlets = append(outlets, map[string]any{"name": row[0], "label": label, "code": row[2]})
+		}
+	}
+
+	employees := []map[string]any{}
+	if s.Engine.HasMemberRecord() {
+		res, err := s.DB.Query(ctx, fmt.Sprintf("select name, coalesce(full_name, ''), access from %s where org_id = $1 and access = 'none' order by name",
+			pg.QuoteIdent(store.TableName("user"))), org)
+		if err != nil {
+			fail(w, err)
+			return
+		}
+		for _, row := range res.Rows {
+			employees = append(employees, map[string]any{"name": row[0], "full_name": row[1], "access": row[2]})
+		}
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"roles": roles, "outlets": outlets, "employees": employees})
 }
 
 // syncMemberRecord keeps the member's user record in step after the membership committed (contract 0055 §2, §5).

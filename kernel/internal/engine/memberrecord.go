@@ -179,9 +179,16 @@ func (e *Engine) syncMemberRecord(ctx context.Context, org string, userID int64)
 func (o *op) findMemberRecord(m *meta.Model, linked string, userID int64, email string) (string, error) {
 	table := pg.QuoteIdent(store.TableName(m.Name))
 	if linked != "" {
-		ok, err := store.Exists(o.ctx, o.tx, o.actor.Org, m.Name, linked)
-		if err != nil || ok {
-			return linked, err
+		// a linked record that carries another account's account_id is not this account's (bad data from before
+		// record_taken was enforced): adopting it would flip account_id back and forth on every repair
+		res, err := o.tx.Query(o.ctx, "select coalesce(account_id, 0) from "+table+" where org_id = $1 and name = $2", o.actor.Org, linked)
+		if err != nil {
+			return "", err
+		}
+		if len(res.Rows) > 0 {
+			if acc := toInt(res.Rows[0][0]); acc == 0 || acc == userID {
+				return linked, nil
+			}
 		}
 	}
 	res, err := o.tx.Query(o.ctx, "select name from "+table+" where org_id = $1 and account_id = $2 order by created_at, name limit 1", o.actor.Org, userID)
@@ -260,4 +267,29 @@ func textList(v any) []string {
 		out = append(out, a...)
 	}
 	return out
+}
+
+// MemberRecordClaim checks whether user record `record` of org may become the record of account userID (0: an
+// account not created yet), for every path that sets rk_members.record (contract 0055 §3: the member API's record,
+// `rangka user add --record`, the seed's user record). exists reports that the record is there; taken that it is
+// another account's: it carries another account_id, or another membership in org points at it. It reads the
+// database only (the CLI may run without metadata): without a `user` table with account_id, both are false.
+func MemberRecordClaim(ctx context.Context, q pg.Querier, org, record string, userID int64) (exists, taken bool, err error) {
+	table := store.TableName(memberRecordModel)
+	res, err := q.Query(ctx, `select exists (select 1 from pg_attribute where attrelid = to_regclass($1) and attname = 'account_id' and not attisdropped)`, table)
+	if err != nil || !res.Rows[0][0].(bool) {
+		return false, false, err
+	}
+	res, err = q.Query(ctx, "select coalesce(account_id, 0) from "+pg.QuoteIdent(table)+" where org_id = $1 and name = $2", org, record)
+	if err != nil || len(res.Rows) == 0 {
+		return false, false, err
+	}
+	if acc := toInt(res.Rows[0][0]); acc != 0 && acc != userID {
+		return true, true, nil
+	}
+	res, err = q.Query(ctx, "select 1 from rk_members where org_id = $1 and record = $2 and user_id <> $3 limit 1", org, record, userID)
+	if err != nil {
+		return true, false, err
+	}
+	return true, len(res.Rows) > 0, nil
 }

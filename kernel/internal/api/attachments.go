@@ -118,6 +118,9 @@ func (s *Server) uploadAttachment(w http.ResponseWriter, r *http.Request, c *cal
 	if !s.filesOn(w) {
 		return
 	}
+	if s.planStorageRefused(w, true) { // files_mb or db_mb full (contract 0057 §1)
+		return
+	}
 	ctx := r.Context()
 	model, name := r.PathValue("model"), r.PathValue("name")
 	mb := s.maxUploadMB()

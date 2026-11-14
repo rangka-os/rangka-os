@@ -24,8 +24,10 @@ import (
 // a paired device (rk_device cookie or rke_ token) or a PIN session on one. Each event is handled on its own, in seq
 // order, and answered in request order: accepted, duplicate (the key is stored with the same kind and payload) or
 // rejected with a code. Every outcome is stored in rk_edge_events by (org, key); an accepted write's row is stored
-// inside the write's transaction. A transient failure (database, lost race, deadline) answers the whole request
-// 503: the device sends the batch again with the same keys, and what was done comes back as duplicate.
+// inside the write's transaction. A transient failure (edgeTransient: lost race, database unreachable, deadline)
+// answers the whole request 503: the device sends the batch again with the same keys, and what was done comes back
+// as duplicate. Any other fault is that event's rejected / internal_error, stored, so one event never blocks the
+// device's queue.
 //
 // screen.write payloads:
 //   - create {screen, model, body, name?, submit?}: submit: true creates and submits in one unit (a paid sale);
@@ -139,8 +141,9 @@ func (s *Server) edgeEvents(w http.ResponseWriter, r *http.Request, d *auth.Devi
 			bad[i] = true
 			var k struct{ Key any }
 			json.Unmarshal(raw, &k)
-			evs[i] = edgeEventIn{Key: strings.TrimSpace(str(k.Key))}
+			evs[i] = edgeEventIn{Key: str(k.Key)}
 		}
+		evs[i].Key = strings.TrimSpace(evs[i].Key) // the key as stored, in the answer too
 	}
 	// a device's events run in seq order (0006 §3); the answer keeps request order
 	order := make([]int, len(evs))
@@ -164,6 +167,9 @@ func (s *Server) edgeEvents(w http.ResponseWriter, r *http.Request, d *auth.Devi
 			continue
 		}
 		res, err := s.edgeEvent(r.Context(), d, evs[i])
+		if err != nil && !edgeTransient(err) { // a fault of this event, not of the moment: answered, never blocks the queue
+			res, err = s.edgeInternal(r.Context(), d, evs[i], err)
+		}
 		if err != nil {
 			if s.Log != nil {
 				s.Log("edge events: %s: %v", evs[i].Key, err)
@@ -218,7 +224,7 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 	}
 	reject := func(code, msg string) (edgeResult, error) {
 		x := base
-		x.Status, x.Code = "rejected", code
+		x.Status, x.Code, x.Message = "rejected", code, msg
 		if err := store.InsertEdgeEvent(ctx, s.DB, x); errors.Is(err, store.ErrEdgeKeyTaken) {
 			done, _, err := s.edgeStored(ctx, d, ev, hash) // sent twice at once: the other one stored it first
 			return done, err
@@ -327,16 +333,23 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 	if err != nil {
 		code, msg, refusal := edgeRefusal(err)
 		if !refusal {
-			return res, err
+			if edgeTransient(err) {
+				return res, err
+			}
+			if s.Log != nil {
+				s.Log("edge events: %s: internal error: %v", key, err)
+			}
+			return reject("internal_error", msgEdgeInternal)
 		}
 		return reject(code, msg)
 	}
 	if held {
 		// approvals are not offered offline (contract 0057 §10); Task 6 refuses such a write before it is held
-		if err := store.SetEdgeEventStatus(ctx, s.DB, d.Org, key, "rejected", "approval_needed_offline"); err != nil {
+		const msg = "Perlu persetujuan, tunggu online."
+		if err := store.SetEdgeEventStatus(ctx, s.DB, d.Org, key, "rejected", "approval_needed_offline", msg); err != nil {
 			return res, err
 		}
-		res.Status, res.Code, res.Message = "rejected", "approval_needed_offline", "Perlu persetujuan, tunggu online."
+		res.Status, res.Code, res.Message = "rejected", "approval_needed_offline", msg
 		return res, nil
 	}
 	res.Status, res.Ref, res.Record = "accepted", ref, record
@@ -387,7 +400,7 @@ func (s *Server) edgeStored(ctx context.Context, d *auth.Device, ev edgeEventIn,
 	case x.Hash != hash || x.Device != d.ID:
 		res.Status, res.Code, res.Message = "rejected", "key_conflict", "Kunci kejadian ini sudah dipakai untuk isi yang lain."
 	case x.Status == "rejected":
-		res.Status, res.Code, res.Message = "rejected", x.Code, "Kejadian ini sudah ditolak sebelumnya ("+x.Code+")."
+		res.Status, res.Code, res.Message = "rejected", x.Code, x.Message
 	default:
 		res.Status, res.Ref = "duplicate", x.Ref
 		res.Record = s.edgeRecord(ctx, d, ev, x.Ref)
@@ -432,7 +445,9 @@ func (s *Server) edgeActor(ctx context.Context, d *auth.Device, raw json.RawMess
 	if err != nil {
 		return engine.Actor{}, false, err
 	}
-	if u.Org != d.Org || !slices.Contains(u.Outlets, d.Outlet) {
+	// only someone who can unlock this device with a PIN can have pressed the button on it (contract 0057 §2): never
+	// the owner, never a desk role
+	if u.Org != d.Org || !slices.Contains(u.Outlets, d.Outlet) || len(u.Roles) == 0 || !auth.PinAllowedFor(u.Roles, s.pinRole) {
 		return engine.Actor{}, false, nil
 	}
 	u.Outlets = []string{d.Outlet}
@@ -458,18 +473,21 @@ func (s *Server) edgeDraft(ctx context.Context, d *auth.Device, a engine.Actor, 
 	return sw.Draft, true, nil
 }
 
-// edgeRefusal maps an engine error to a rejection; refusal is false for a transient failure the device retries.
+// edgeRefusal maps an engine error to a rejection with its code and message. refusal is false for anything else:
+// a transient failure (edgeTransient) or a fault the kernel cannot name (internal_error).
 func edgeRefusal(err error) (code, msg string, refusal bool) {
 	var ve *engine.ValidationError
 	var se *engine.StatusError
 	var pe *engine.PermissionError
 	switch {
+	case edgeTransient(err):
+		return "", "", false
 	case errors.As(err, &pe):
 		return "permission_denied", pe.Error(), true
 	case errors.As(err, &ve):
 		return "validation_failed", ve.Error(), true
 	case errors.As(err, &se):
-		if se.Status >= 500 || se.Status == http.StatusTooManyRequests || se.Code == "write_conflict" || se.Code == "idempotency_in_progress" {
+		if se.Status >= 500 {
 			return "", "", false
 		}
 		return se.Code, se.Msg, true
@@ -477,6 +495,49 @@ func edgeRefusal(err error) (code, msg string, refusal bool) {
 		return "not_found", err.Error(), true
 	}
 	return "", "", false
+}
+
+// edgeTransient reports a failure of the moment, not of the event (ruling R10): the request ends, the transaction
+// lost a race or the database is unreachable (pg.Transient), or the engine says so (a write conflict after its
+// retries, a busy key, a timeout, 429, 503). Only these answer the request 503 so the device sends it again.
+func edgeTransient(err error) bool {
+	var se *engine.StatusError
+	if errors.As(err, &se) {
+		switch se.Code {
+		case "write_conflict", "idempotency_in_progress", "timeout":
+			return true
+		}
+		return se.Status == http.StatusTooManyRequests || se.Status == http.StatusServiceUnavailable
+	}
+	return pg.Transient(err)
+}
+
+const msgEdgeInternal = "Terjadi kesalahan di server; kirim ulang atau hubungi kantor pusat."
+
+// edgeInternal answers an event whose handling failed with an error that is neither a refusal nor transient:
+// rejected / internal_error, stored so a replay answers the same and the device's queue moves on; the detail is
+// logged here only. A failure to store it is returned (the request then answers 503).
+func (s *Server) edgeInternal(ctx context.Context, d *auth.Device, ev edgeEventIn, cause error) (edgeResult, error) {
+	if s.Log != nil {
+		s.Log("edge events: %s: internal error: %v", ev.Key, cause)
+	}
+	res := edgeResult{Key: ev.Key, Status: "rejected", Code: "internal_error", Message: msgEdgeInternal}
+	if ev.Key == "" || len(ev.Key) > edgeMaxKey {
+		return res, nil
+	}
+	hash := edgeHash(ev.Kind, ev.Payload)
+	x := store.EdgeEvent{Org: d.Org, Key: ev.Key, Device: d.ID, Seq: seqOf(ev), Kind: ev.Kind, Hash: hash,
+		Status: "rejected", Code: "internal_error", Message: msgEdgeInternal}
+	if at, err := time.Parse(time.RFC3339, ev.OccurredAt); err == nil {
+		x.OccurredAt = at
+	}
+	if err := store.InsertEdgeEvent(ctx, s.DB, x); errors.Is(err, store.ErrEdgeKeyTaken) {
+		done, _, err := s.edgeStored(ctx, d, ev, hash)
+		return done, err
+	} else if err != nil {
+		return res, err
+	}
+	return res, nil
 }
 
 // str is v as text: a JSON string or number ("" for anything else).

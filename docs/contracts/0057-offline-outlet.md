@@ -81,10 +81,11 @@ Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
     stored `ref`) or a draft name the device got online; anything else is `rejected` / `payload_invalid`.
   - `cancel` `{model, name}`: `name` is the submitted document's (device) name.
   - `action` `{model, name, action, args?}`.
-  - The answer per event is `{key, status, code?, message?, ref?, record?}`; `ref` is the written record's name and
-    `record` the record as REST returns it. Rejected outcomes are stored too, so a replay answers the same; a
-    transient kernel failure answers the whole request `503` and the device resends the batch (done events come back
-    `duplicate`).
+  - The answer per event is `{key, status, code?, message?, ref?, record?}`; `record` is the record as REST returns
+    it. `ref` is the document name (amends 0006's `model/name`). Rejected outcomes are stored with their code and
+    message, so a replay answers the same; a transient kernel failure (lost race, database unreachable, timeout)
+    answers the whole request `503` and the device resends the batch (done events come back `duplicate`); any other
+    kernel fault is that event's `rejected` / `internal_error`, so one event never blocks the queue.
 - `actor` is a member of the device's outlet; the kernel refuses an event whose actor is not (`rejected`,
   `actor_not_allowed`). The actor's roles and row scope apply as if they pressed the button online.
 - Idempotency, statuses (`accepted` / `duplicate` / `rejected`), order by `(device, seq)`, backoff, and 400-day key

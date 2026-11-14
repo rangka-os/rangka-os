@@ -388,9 +388,11 @@ create table if not exists rk_edge_events (
   payload_sha256 text not null,
   status         text not null,
   code           text not null default '',
+  message        text not null default '',
   ref            text not null default '',
   occurred_at    timestamptz,
   received_at    timestamptz not null default now(),
   primary key (org_id, key)
 );
+alter table rk_edge_events add column if not exists message text not null default '';
 create index if not exists rk_edge_events_received on rk_edge_events (received_at);

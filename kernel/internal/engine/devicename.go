@@ -32,7 +32,8 @@ type DeviceWrite struct {
 
 type deviceWriteKey struct{}
 
-// WithDeviceWrite marks the units of work run under ctx as dw.
+// WithDeviceWrite marks the units of work run under ctx as dw. One such ctx is meant for one unit of work (one
+// Engine call): dw.Commit fires in every unit run under it.
 func WithDeviceWrite(ctx context.Context, dw DeviceWrite) context.Context {
 	return context.WithValue(ctx, deviceWriteKey{}, &dw)
 }

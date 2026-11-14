@@ -20,6 +20,7 @@ type EdgeEvent struct {
 	Seq              int64
 	Kind, Hash       string
 	Status, Code     string
+	Message          string // the rejection's message, answered again on a replay
 	Ref              string
 	OccurredAt       time.Time
 }
@@ -34,9 +35,9 @@ func InsertEdgeEvent(ctx context.Context, q pg.Querier, x EdgeEvent) error {
 	if !x.OccurredAt.IsZero() {
 		at = x.OccurredAt
 	}
-	res, err := q.Query(ctx, `insert into rk_edge_events (org_id, key, device, seq, kind, payload_sha256, status, code, ref, occurred_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10) on conflict (org_id, key) do nothing returning key`,
-		x.Org, x.Key, x.Device, x.Seq, x.Kind, x.Hash, x.Status, x.Code, x.Ref, at)
+	res, err := q.Query(ctx, `insert into rk_edge_events (org_id, key, device, seq, kind, payload_sha256, status, code, message, ref, occurred_at)
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11) on conflict (org_id, key) do nothing returning key`,
+		x.Org, x.Key, x.Device, x.Seq, x.Kind, x.Hash, x.Status, x.Code, x.Message, x.Ref, at)
 	if err != nil {
 		return err
 	}
@@ -48,20 +49,21 @@ func InsertEdgeEvent(ctx context.Context, q pg.Querier, x EdgeEvent) error {
 
 // EdgeEventOf is the stored event of (org, key), or nil.
 func EdgeEventOf(ctx context.Context, q pg.Querier, org, key string) (*EdgeEvent, error) {
-	res, err := q.Query(ctx, `select device, seq, kind, payload_sha256, status, code, ref, occurred_at from rk_edge_events where org_id = $1 and key = $2`, org, key)
+	res, err := q.Query(ctx, `select device, seq, kind, payload_sha256, status, code, ref, occurred_at, message from rk_edge_events where org_id = $1 and key = $2`, org, key)
 	if err != nil || len(res.Rows) == 0 {
 		return nil, err
 	}
 	r := res.Rows[0]
 	x := &EdgeEvent{Org: org, Key: key, Device: str(r[0]), Seq: toInt(r[1]), Kind: str(r[2]), Hash: str(r[3]), Status: str(r[4]), Code: str(r[5]), Ref: str(r[6])}
 	x.OccurredAt, _ = r[7].(time.Time)
+	x.Message = str(r[8])
 	return x, nil
 }
 
-// SetEdgeEventStatus changes a stored event's status and code (a write the engine held for approval: Task 6 rejects
-// it before it is held).
-func SetEdgeEventStatus(ctx context.Context, q pg.Querier, org, key, status, code string) error {
-	_, err := q.Query(ctx, `update rk_edge_events set status = $3, code = $4 where org_id = $1 and key = $2`, org, key, status, code)
+// SetEdgeEventStatus changes a stored event's status, code and message (a write the engine held for approval: Task 6
+// rejects it before it is held).
+func SetEdgeEventStatus(ctx context.Context, q pg.Querier, org, key, status, code, message string) error {
+	_, err := q.Query(ctx, `update rk_edge_events set status = $3, code = $4, message = $5 where org_id = $1 and key = $2`, org, key, status, code, message)
 	return err
 }
 

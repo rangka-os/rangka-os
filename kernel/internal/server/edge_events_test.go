@@ -156,8 +156,22 @@ func TestEventsDuplicate(t *testing.T) {
 	}
 	// a rejected key replayed answers the same rejection
 	bad := ev("k-3", 3, "sale.recorded", x.kasir, fixedNow(), map[string]any{})
-	wantResult(t, x.send(bad)[0], "k-3", "rejected", "unknown_kind")
-	wantResult(t, x.send(bad)[0], "k-3", "rejected", "unknown_kind")
+	first := x.send(bad)[0]
+	wantResult(t, first, "k-3", "rejected", "unknown_kind")
+	again := x.send(bad)[0]
+	wantResult(t, again, "k-3", "rejected", "unknown_kind")
+	if get(again, "message") != get(first, "message") {
+		t.Fatalf("replayed rejection message %v, first %v", get(again, "message"), get(first, "message"))
+	}
+	// an engine refusal replayed keeps its message too; the answer carries the trimmed key
+	dup := x.paidSaleEv(" k-4 ", 4, "SESI-OUT01-K1-2610-001", "STRK-OUT01-K1-2610-00001", 1)
+	first = x.send(dup)[0]
+	wantResult(t, first, "k-4", "rejected", "duplicate_name")
+	again = x.send(dup)[0]
+	wantResult(t, again, "k-4", "rejected", "duplicate_name")
+	if get(again, "message") != get(first, "message") {
+		t.Fatalf("replayed refusal message %v, first %v", get(again, "message"), get(first, "message"))
+	}
 }
 
 func TestEventsKeyConflict(t *testing.T) {
@@ -180,7 +194,7 @@ func TestEventsBatchOrder(t *testing.T) {
 		x.shiftEv("k-3", 3, "SESI-OUT01-K1-2610-002"),
 	)
 	wantResult(t, res[0], "k-1", "accepted", "")
-	wantResult(t, res[1], "k-2", "rejected", "")
+	wantResult(t, res[1], "k-2", "rejected", "validation_failed")
 	wantResult(t, res[2], "k-3", "accepted", "")
 }
 
@@ -191,9 +205,31 @@ func TestEventsActorNotInOutlet(t *testing.T) {
 	e["actor"] = other
 	unknown := x.shiftEv("k-2", 2, "SESI-OUT01-K1-2610-001")
 	unknown["actor"] = 987654
-	res := x.send(e, unknown)
+	// a desk role (no desk: false) and the owner never unlock a device, so they never press its buttons (0057 §2)
+	ctx := context.Background()
+	desk, err := auth.EnsureUser(ctx, x.owner.s.DB, "kantor@toko.test", "Kantor", "rahasia-123", "kopi-senja", "head_office", "")
+	if err != nil {
+		t.Fatal(err)
+	}
+	q, err := x.owner.s.DB.Query(ctx, "select id from rk_users where email = 'ceo@saga.co.id'")
+	if err != nil || len(q.Rows) != 1 {
+		t.Fatalf("owner id: %v", err)
+	}
+	owner := q.Rows[0][0].(int64)
+	for _, id := range []int64{desk, owner} {
+		if err := auth.SetOutlets(ctx, x.owner.s.DB, "kopi-senja", id, []string{"OUT-01"}); err != nil {
+			t.Fatal(err)
+		}
+	}
+	deskEv := x.shiftEv("k-3", 3, "SESI-OUT01-K1-2610-001")
+	deskEv["actor"] = desk
+	ownerEv := x.shiftEv("k-4", 4, "SESI-OUT01-K1-2610-001")
+	ownerEv["actor"] = owner
+	res := x.send(e, unknown, deskEv, ownerEv)
 	wantResult(t, res[0], "k-1", "rejected", "actor_not_allowed")
 	wantResult(t, res[1], "k-2", "rejected", "actor_not_allowed")
+	wantResult(t, res[2], "k-3", "rejected", "actor_not_allowed")
+	wantResult(t, res[3], "k-4", "rejected", "actor_not_allowed")
 	if n := x.count("sesi_kasir"); n != 0 {
 		t.Fatalf("%v shifts", n)
 	}

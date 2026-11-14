@@ -42,7 +42,7 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 			"refusing to make it the owner (use another e-mail, or add it with `rangka user add --allow-linked`)",
 			strings.ToLower(strings.TrimSpace(o.Email)), strings.Join(linked, ", "), o.Org)
 	}
-	// contract 0055 §3: the owner's record must not be another account's, or the sync would hand it back and forth.
+	// contract 0056 §3: the owner's record must not be another account's, or the sync would hand it back and forth.
 	// Checked before any write; the record may still come from the fixtures, so unknown_record waits for them.
 	if err := seedRecordClaim(ctx, db, o, true); err != nil {
 		return nil, err
@@ -75,7 +75,7 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 	if err != nil {
 		return nil, err
 	}
-	// owners have an employee record too (contract 0055 §5)
+	// owners have an employee record too (contract 0056 §5)
 	if _, err := e.SyncMemberRecord(ctx, o.Org, owner); err != nil {
 		return nil, fmt.Errorf("seed: employee record of %s: %w", o.Email, err)
 	}

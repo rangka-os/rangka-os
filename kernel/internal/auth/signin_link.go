@@ -10,7 +10,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Sign-in links (contract 0055 §4): an owner adds a person in Pengaturan → Tim; a new account gets a link, shown once,
+// Sign-in links (contract 0056 §4): an owner adds a person in Pengaturan → Tim; a new account gets a link, shown once,
 // valid SigninLinkTTL and usable once, with which the person sets a password and signs in.
 
 // SigninLinkTTL is how long a sign-in link stays valid.

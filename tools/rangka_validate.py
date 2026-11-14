@@ -1017,7 +1017,7 @@ MEMBER_OWNED = ("email", "role", "outlets", "access", "account_id")
 
 
 def check_member_record(rep, allmodels, roles):
-    """A model named user with an account_id field is the member record (contract 0055 section 1, 5): its
+    """A model named user with an account_id field is the member record (contract 0056 section 1, 5): its
     kernel-owned fields must be read_only, and phone and email must be hidden from every role but owner and
     head_office."""
     entry = allmodels.get("user")

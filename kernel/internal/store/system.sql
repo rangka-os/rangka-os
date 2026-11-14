@@ -32,7 +32,7 @@ create table if not exists rk_members (
 );
 alter table rk_orgs add column if not exists code text not null default '';
 alter table rk_members add column if not exists outlets text[] not null default '{}';
-alter table rk_users add column if not exists signed_in_at timestamptz;   -- first sign-in (contract 0055 §2: pending until set)
+alter table rk_users add column if not exists signed_in_at timestamptz;   -- first sign-in (contract 0056 §2: pending until set)
 -- when the member last used the organisation (contract 0055 §1), written at most every 5 minutes
 alter table rk_members add column if not exists last_active_at timestamptz;
 create table if not exists rk_identities (
@@ -74,7 +74,7 @@ create table if not exists rk_tokens (
   expires_at   timestamptz
 );
 alter table rk_tokens add column if not exists scopes text[] not null default '{}'; -- secrets:write (contract 0017 §3)
--- contract 0055 §5 upgrade: an account with a session or an API token it created has signed in before signed_in_at
+-- contract 0056 §5 upgrade: an account with a session or an API token it created has signed in before signed_in_at
 -- existed, so it is not pending. A password or an identity link is no proof (invitees get both). Runs on every start;
 -- it only fills nulls, and openSession sets the column from then on.
 update rk_users u set signed_in_at = f.first
@@ -82,7 +82,7 @@ update rk_users u set signed_in_at = f.first
           select user_id, created_at as at from rk_sessions where not system
           union all select user_id, created_at from rk_tokens) a group by user_id) f
   where u.id = f.user_id and u.signed_in_at is null;
--- sign-in links of Pengaturan → Tim (contract 0055 §4): shown once to the owner, 72 hours, one use; the person sets a
+-- sign-in links of Pengaturan → Tim (contract 0056 §4): shown once to the owner, 72 hours, one use; the person sets a
 -- password with it. Only the sha256 of the token is kept.
 create table if not exists rk_signin_links (
   token_hash text primary key,

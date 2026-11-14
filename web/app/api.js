@@ -261,7 +261,7 @@
       }, function () { return { password: true, upstream: [] }; });
     };
     api.logout = function () { return json("POST", "/auth/logout"); };
-    /** POST /auth/link {token, password} (contract 0055 §4): sets the first password of a new member from Tim's
+    /** POST /auth/link {token, password} (contract 0056 §4): sets the first password of a new member from Tim's
      *  sign-in link and opens a session. Rejects 400 link_invalid (unknown, used or expired) or 422 weak_password. */
     api.signinWithLink = function (token, password) { return json("POST", "/auth/link", { token: token, password: password }); };
     api.switchOrg = function (org) { return json("POST", "/auth/org", { org: org }).then(normaliseMe); };
@@ -457,7 +457,7 @@
       });
     };
 
-    /* ----- Pengaturan → Tim (contract 0055 §4): the owner's browser session only; 403 for everyone else */
+    /* ----- Pengaturan → Tim (contract 0056 §4): the owner's browser session only; 403 for everyone else */
     /** GET /api/v1/team → {managed_by: "kernel" | "host", members: [{user_id, email, full_name, role, outlets, record, access}]}. */
     api.team = function () { return json("GET", "/api/v1/team"); };
     /** POST /api/v1/team {email, full_name, role, outlets, record?} → {user_id, record, signin_link?}. */

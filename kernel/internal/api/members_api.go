@@ -209,7 +209,7 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		Name    string    `json:"name"`
 		Role    string    `json:"role"`
 		Outlets *[]string `json:"outlets"`
-		Record  string    `json:"record"` // an existing user record to link (contract 0055 §3)
+		Record  string    `json:"record"` // an existing user record to link (contract 0056 §3)
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, http.StatusUnprocessableEntity, "bad_request", "Isi permintaan harus JSON yang valid.")
@@ -257,7 +257,7 @@ func (s *Server) checkRole(role string) error {
 type memberInput struct {
 	Email, Name, Role string    // Email valid and lowercase; Role known and not owner (checked by the caller)
 	Outlets           *[]string // nil keeps an existing member's outlets (none for a new one)
-	Record            string    // an existing user record to link (contract 0055 §3)
+	Record            string    // an existing user record to link (contract 0056 §3)
 
 	userID int64       // the account, resolved by the caller (Tim PATCH); 0 resolves by link or e-mail
 	link   *memberLink // the upstream subject (Member API): resolve by it, and link it to the account
@@ -445,7 +445,7 @@ func (s *Server) claimMemberRecord(ctx context.Context, q pg.Querier, org, recor
 	return err
 }
 
-// memberOptions is GET /api/v1/members/options (contract 0055 §3): what the host's Tim page picks from. Roles that
+// memberOptions is GET /api/v1/members/options (contract 0056 §3): what the host's Tim page picks from. Roles that
 // can be given (owner never), active outlets (every outlet when the model has no active field), and employee records
 // with access none that can be invited. Without the outlet model or the member record model, that list is empty.
 func (s *Server) memberOptions(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -514,7 +514,7 @@ func (s *Server) memberOptions(w http.ResponseWriter, r *http.Request, c *caller
 	writeJSON(w, http.StatusOK, map[string]any{"roles": roles, "outlets": outlets, "employees": employees})
 }
 
-// syncMemberRecord keeps the member's user record in step after the membership committed (contract 0055 §2, §5).
+// syncMemberRecord keeps the member's user record in step after the membership committed (contract 0056 §2, §5).
 // The member write stands either way: a failure is logged and the repair loop syncs the record later.
 func (s *Server) syncMemberRecord(ctx context.Context, org string, userID int64) {
 	if s.Engine == nil || userID == 0 {

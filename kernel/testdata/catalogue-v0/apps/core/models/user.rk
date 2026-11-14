@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
-# Mirrors rangka-apps modules/users user.rk (contract 0055): the employee record the kernel keeps in step with the
+# Mirrors rangka-apps modules/users user.rk (contract 0056): the employee record the kernel keeps in step with the
 # membership. hidden_for lists the roles this catalogue defines.
 name: user
 label: {id: Karyawan, en: Employee}

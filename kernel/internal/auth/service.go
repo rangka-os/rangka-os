@@ -45,7 +45,7 @@ type Service struct {
 	UpstreamHTTP *http.Client
 	// Log receives operator messages; it never gets a token, code, secret or claim value.
 	Log func(format string, args ...any)
-	// OnFirstSignIn runs after the account's first session set rk_users.signed_in_at (contract 0055 §2: the member
+	// OnFirstSignIn runs after the account's first session set rk_users.signed_in_at (contract 0056 §2: the member
 	// record turns active). nil = nothing to do.
 	OnFirstSignIn func(ctx context.Context, userID int64)
 
@@ -145,7 +145,7 @@ const (
 // openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
 // auth.session_ttl; upstream sessions UpstreamSessionTTL. method is SessionPassword, SessionUpstream or SessionLink.
 // A session that is not a system one counts as the member's activity (contract 0055 §1) and as the person signing in
-// (contract 0055 §2, §4). A system session (contract 0055 §2) is Cloud acting on its own: it is not the person signing
+// (contract 0056 §2, §4). A system session (contract 0055 §2) is Cloud acting on its own: it is not the person signing
 // in, so it neither ends their sign-in links nor marks them signed in.
 func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string, system bool) (string, error) {
 	tok := RandomToken("", 32)
@@ -157,11 +157,11 @@ func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, m
 		return tok, nil
 	}
 	s.touch(ctx, u.ID, u.Org)
-	// a session is a way in: the account's unused sign-in links end (contract 0055 §4)
+	// a session is a way in: the account's unused sign-in links end (contract 0056 §4)
 	if err := dropUnusedLinks(ctx, s.DB, u.ID); err != nil {
 		return "", err
 	}
-	// the first sign-in of the account (contract 0055 §2): pending → active on its member records
+	// the first sign-in of the account (contract 0056 §2): pending → active on its member records
 	res, err := s.DB.Query(ctx, "update rk_users set signed_in_at = $2 where id = $1 and signed_in_at is null returning id", u.ID, s.now())
 	if err != nil {
 		return "", err

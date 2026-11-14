@@ -253,7 +253,7 @@ func TestREST(t *testing.T) {
 		t.Fatalf("file: %v", f)
 	}
 	files := e.must(200, "GET", "/api/v1/files", nil).JSON["data"].([]any)
-	// 24 app, site and system files (user_outlet.rk since contract 0055) plus the connectors of the rangka-connectors
+	// 24 app, site and system files (user_outlet.rk since contract 0056) plus the connectors of the rangka-connectors
 	// checkout, which grows on its own
 	conns, _ := filepath.Glob(filepath.Join(testdb.Sibling(t, "rangka-connectors"), "*", "connector.rk"))
 	if want := 24 + len(conns); len(files) != want || len(e.must(200, "GET", "/api/v1/files/meta", nil).JSON["data"].([]any)) != want {

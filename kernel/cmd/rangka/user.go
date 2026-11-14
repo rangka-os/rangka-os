@@ -30,7 +30,7 @@ const userUsage = `usage: rangka user add <email> --org <id> --role <role> [--ou
 The email may also be given as --email <e>. The password comes from $RANGKA_USER_PASSWORD (or --password <p>)
 and is needed only for a new account or with --reset-password. --db defaults to $DATABASE_URL, --org to $RANGKA_ORG.
 Every outlet must be an existing outlet record of the organisation. With --apps (default $RANGKA_APPS) the member's
-employee record is synced at once (contract 0055); without it the server syncs it within 10 minutes.`
+employee record is synced at once (contract 0056); without it the server syncs it within 10 minutes.`
 
 // userArgs are the parsed arguments of `rangka user add|remove`.
 type userArgs struct {
@@ -47,7 +47,7 @@ type userArgs struct {
 	ResetPassword bool
 	CreateOrg     bool
 	AllowLinked   bool // add an existing account that is linked to upstream sign-in and not yet in the org
-	// metadata for the employee record sync (contract 0055 §2); no apps directory = no sync here
+	// metadata for the employee record sync (contract 0056 §2); no apps directory = no sync here
 	Apps, Site, Modules, Connectors string
 }
 
@@ -247,13 +247,13 @@ func runUser(args []string) error {
 		// the password of an existing account is never changed here; a throwaway value satisfies EnsureUser
 		password = auth.RandomToken("unused", 16)
 	}
-	// contract 0055 §2: every outlet must be an outlet record of the organisation, as the member API checks
+	// contract 0056 §2: every outlet must be an outlet record of the organisation, as the member API checks
 	if ua.SetOutlet {
 		if err := checkOutlets(ctx, pool, ua.Org, ua.Outlets); err != nil {
 			return err
 		}
 	}
-	// contract 0055 §3: the record must not be another account's, or the sync would hand it back and forth
+	// contract 0056 §3: the record must not be another account's, or the sync would hand it back and forth
 	if ua.Record != "" {
 		if err := checkRecord(ctx, pool, ua.Org, ua.Record, userID); err != nil {
 			return err
@@ -301,7 +301,7 @@ func runUser(args []string) error {
 
 // checkRecord refuses a user record that does not exist (unknown_record) or that is another account's or would move
 // the member off the record it already has (record_taken). Without a user table with account_id the record is
-// stored as given, as before contract 0055.
+// stored as given, as before contract 0056.
 func checkRecord(ctx context.Context, pool *pg.Pool, org, record string, userID int64) error {
 	err := engine.MemberRecordClaim(pg.WithOrg(ctx, org), pool, org, record, userID)
 	switch {
@@ -339,7 +339,7 @@ func checkOutlets(ctx context.Context, pool *pg.Pool, org string, outlets []stri
 	return nil
 }
 
-// syncUserRecord keeps the member's employee record in step (contract 0055 §2) when --apps names the metadata.
+// syncUserRecord keeps the member's employee record in step (contract 0056 §2) when --apps names the metadata.
 // The membership is already written: a failure here is reported, not returned, and the server's repair catches up.
 func syncUserRecord(ctx context.Context, pool *pg.Pool, ua *userArgs, userID int64) {
 	if strings.TrimSpace(ua.Apps) == "" {

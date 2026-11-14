@@ -610,7 +610,7 @@ test("providers: password policy and upstream list, defaults when unanswered", a
   assert.strictEqual((await RA({ fetch: stub([new Error("offline")]) }).providers()).password, true);
 });
 
-test("Tim (contract 0055 §4): team calls and the sign-in link", async () => {
+test("Tim (contract 0056 §4): team calls and the sign-in link", async () => {
   const f = stub((url, init) => (init.method === "DELETE" ? json(204) : json(init.method === "POST" ? 201 : 200, { ok: true })));
   const api = RA({ fetch: f });
   await api.team();

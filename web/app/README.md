@@ -124,7 +124,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
 | `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |
-| `team.js` | Pengaturan → Tim (contract 0055 §4): the owner's team list, Undang (with the one-time sign-in link: Salin, Kirim lewat WhatsApp), Ubah, Hapus; read only with "Atur tim di Rangka Cloud." when `managed_by` is `host`. Also the sign-in link page (`#/masuk/tautan`), which the shell opens before asking who is signed in |
+| `team.js` | Pengaturan → Tim (contract 0056 §4): the owner's team list, Undang (with the one-time sign-in link: Salin, Kirim lewat WhatsApp), Ubah, Hapus; read only with "Atur tim di Rangka Cloud." when `managed_by` is `host`. Also the sign-in link page (`#/masuk/tautan`), which the shell opens before asking who is signed in |
 | `process.js` | "Proses bisnis": the process list and the read-only canvas (`../canvas`, `RangkaCanvas.Mounted` with `readOnly: true`) |
 | `test/*.test.js` | `node --test` units for the pure parts of each file |
 | `test_app.py` | Live Playwright suite against a real kernel |

@@ -1468,7 +1468,7 @@ def test_catalogue_page(page, ctx):
 
 
 def test_team_invite_link(page, ctx):
-    """Contract 0055 §4: the owner opens Pengaturan → Tim from the sidebar, invites a person (Undang), gets the sign-in
+    """Contract 0056 §4: the owner opens Pengaturan → Tim from the sidebar, invites a person (Undang), gets the sign-in
     link once with Salin and Kirim lewat WhatsApp; the person opens the link signed out, sets a password with "Simpan dan
     masuk" and lands signed in; the owner then sees "Aktif", changes the role and removes the member after a confirm.
     sales@contoh.test has no Tim entry and the address answers no access."""

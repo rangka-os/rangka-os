@@ -1,4 +1,4 @@
-/* Rangka end-user app: Pengaturan → Tim (contract 0055 §4) and the page a sign-in link opens.
+/* Rangka end-user app: Pengaturan → Tim (contract 0056 §4) and the page a sign-in link opens.
  *
  * RangkaApp.TeamPage #/pengaturan/tim, for the owner (the kernel answers 403 to anyone else, and to API tokens):
  * GET /api/v1/team lists the members with their role, outlets and access. With managed_by "kernel" the owner invites

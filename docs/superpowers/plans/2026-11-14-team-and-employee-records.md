@@ -14,7 +14,7 @@ kernels get `/api/v1/team` routes and a web app page, refused when `auth.team: h
 **Tech Stack:** Go 1.24 kernel (stdlib `net/http`, in-tree `pg`), Python reference validator, vanilla JS web app with
 `node --test`, `.rk` strict YAML in rangka-apps.
 
-**Spec:** `rangka-os/docs/contracts/0055-team-and-employee-records.md` (branch `contract/team-employees`).
+**Spec:** `rangka-os/docs/contracts/0056-team-and-employee-records.md` (branch `contract/team-employees`).
 
 ## Global Constraints
 
@@ -71,7 +71,7 @@ kernels get `/api/v1/team` routes and a web app page, refused when `auth.team: h
   Error per kernel-owned field without `read_only`. Warning per role defined in the registry, other than `owner` and
   `head_office`, missing from `hidden_for` of `phone` or `email` (each field that exists). Mirror it in Python.
 - [ ] **Step 4: Verify.** `go test ./internal/meta/ -run Broken` PASS; `make compare-python` prints identical reports.
-- [ ] **Step 5: Commit** `validate: member record rules (contract 0055)`.
+- [ ] **Step 5: Commit** `validate: member record rules (contract 0056)`.
 
 ### Task 2: Member record model in rangka-apps
 
@@ -91,7 +91,7 @@ kernels get `/api/v1/team` routes and a web app page, refused when `auth.team: h
   except `head_office`. Form section note (field `description` on `access`): "Akses diatur di Tim."
 - [ ] **Step 2: Validate.** `scripts/validate.sh` (rangka-apps; uses the rangka-os validator with Task 1 in it)
   → 0 errors, no `contact_field_visible` warning.
-- [ ] **Step 3: Commit** `users: employee record fields (contract 0055)`.
+- [ ] **Step 3: Commit** `users: employee record fields (contract 0056)`.
 
 ### Task 3: Record sync and repair (rangka-os kernel)
 
@@ -139,7 +139,7 @@ exists. Actor `Actor{Org: org, ID: "system", System: true}`.
   `TestUserAddUnknownOutlet` (error contains `unknown_outlet`).
 - [ ] **Step 5:** Wire the calls (API after commit, CLI, seed, `OnFirstSignIn`, `Start` loop every 10 minutes).
 - [ ] **Step 6: Verify.** `make test` PASS (needs Postgres 16 binaries); `make test-unit` PASS.
-- [ ] **Step 7: Commit** `kernel: keep user records in step with members (contract 0055 §2)`.
+- [ ] **Step 7: Commit** `kernel: keep user records in step with members (contract 0056 §2)`.
 
 ### Task 4: Member API `options` and `record` (rangka-os)
 
@@ -164,7 +164,7 @@ exists. Actor `Actor{Org: org, ID: "system", System: true}`.
 - [ ] **Step 3:** Implement. `record` is checked inside the member tx, before writes; on success it is stored in
   `rk_members.record` so Task 3's lookup picks it first.
 - [ ] **Step 4:** Same command → PASS; `make test` PASS.
-- [ ] **Step 5: Commit** `members api: options and record (contract 0055 §3)`.
+- [ ] **Step 5: Commit** `members api: options and record (contract 0056 §3)`.
 
 ### Task 5: Team routes and sign-in link (rangka-os)
 
@@ -201,7 +201,7 @@ exists. Actor `Actor{Org: org, ID: "system", System: true}`.
   Link token: 32 random bytes, base64url; only its sha256 is stored; `signin_link` is
   `<public base URL>/#/masuk/tautan?t=<token>`.
 - [ ] **Step 4:** `make test` PASS, `make compare-python` identical.
-- [ ] **Step 5: Commit** `kernel: team routes and sign-in links (contract 0055 §4)`.
+- [ ] **Step 5: Commit** `kernel: team routes and sign-in links (contract 0056 §4)`.
 
 ### Task 6: Pengaturan → Tim page (rangka-os web app)
 
@@ -227,9 +227,9 @@ exists. Actor `Actor{Org: org, ID: "system", System: true}`.
   banner "Atur tim di Rangka Cloud." Sign-in link page: password field + "Simpan dan masuk".
 - [ ] **Step 4:** Tests PASS; `python3 web/app/test_app.py` PASS; check the page in the browser preview against
   `make run-demo` (invite, copy link, open link in a private tab, set password, land signed in; record shows "Aktif").
-- [ ] **Step 5: Commit** `web app: Pengaturan → Tim (contract 0055 §4)`.
+- [ ] **Step 5: Commit** `web app: Pengaturan → Tim (contract 0056 §4)`.
 
 ## Not in this plan
 
-- rangka-cloud Tim page using `options` and `record` (contract 0055 §3, work item 5): its own plan in the private
+- rangka-cloud Tim page using `options` and `record` (contract 0056 §3, work item 5): its own plan in the private
   repo, after Task 4 ships in a tagged rangka-os release and the Cloud SSO plan's Member API path exists.

@@ -743,7 +743,7 @@ const directorPolicy = "  - {name: direktur, on: convert, when: \"owner.role == 
 
 func makeDirector(t *testing.T, e *Engine, a Actor) {
 	t.Helper()
-	// user.role is read_only since contract 0055 (the kernel mirrors the membership): set it as a kernel write
+	// user.role is read_only since contract 0056 (the kernel mirrors the membership): set it as a kernel write
 	if err := e.run(context.Background(), a, func(o *op) error {
 		_, err := o.update("user", "USR-002", map[string]any{"role": "Direktur"}, false, false)
 		return err

@@ -49,7 +49,7 @@ func TestSeedRefusesLinkedAccount(t *testing.T) {
 	}
 }
 
-// Contract 0055 §3: the seed never points its owner at a user record that is another account's (record_taken).
+// Contract 0056 §3: the seed never points its owner at a user record that is another account's (record_taken).
 func TestSeedRefusesTakenRecord(t *testing.T) {
 	e := newEnv(t, false, nil)
 	ctx := context.Background()

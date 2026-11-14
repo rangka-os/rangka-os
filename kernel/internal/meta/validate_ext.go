@@ -160,10 +160,10 @@ func (v *validator) more() {
 	}
 }
 
-// memberOwned are the member record's kernel-owned fields (contract 0055 §1): the kernel writes them.
+// memberOwned are the member record's kernel-owned fields (contract 0056 §1): the kernel writes them.
 var memberOwned = []string{"email", "role", "outlets", "access", "account_id"}
 
-// checkMemberRecord applies to a model named user that has an account_id field (contract 0055 §1, §5): its
+// checkMemberRecord applies to a model named user that has an account_id field (contract 0056 §1, §5): its
 // kernel-owned fields must be read_only, and phone and email must be hidden from every role except owner and
 // head_office.
 func (v *validator) checkMemberRecord(all map[string]vis) {

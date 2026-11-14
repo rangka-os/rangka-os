@@ -49,7 +49,7 @@ test("parseRoute covers every hash form", () => {
   assert.deepStrictEqual(plain(p("#/masuk/tautan?t=abc")), { kind: "signinLink" });
 });
 
-test("Tim (contract 0055 §4): only an owner gets the entry, after Modul dan sambungan", () => {
+test("Tim (contract 0056 §4): only an owner gets the entry, after Modul dan sambungan", () => {
   const owner = { ...META, user: { roles: ["owner"] } };
   const n = plain(A.sideNav(owner, { catalogue: true }));
   assert.deepStrictEqual(n.pinned.map((i) => [i.id, i.label]).slice(-2), [["pengaturan/katalog", "Modul dan sambungan"], ["pengaturan/tim", "Tim"]]);

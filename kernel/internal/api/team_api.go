@@ -10,7 +10,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
-// Pengaturan → Tim (contract 0055 §4): the owner of a self-hosted kernel manages the team with their browser
+// Pengaturan → Tim (contract 0056 §4): the owner of a self-hosted kernel manages the team with their browser
 // session. The writes share the Member API's checks, transaction, revocations and record sync (writeMember,
 // removeMember); a new account gets a one-time sign-in link. With system.rk auth.team: host the hosting side owns the
 // team and every write here is 403 team_managed_by_host; the list stays readable.

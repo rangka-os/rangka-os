@@ -223,7 +223,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Auth = &auth.Service{DB: db, Issuer: issuer, SessionTTL: ttl, DevOpen: cfg.DevOpen, DefaultOrg: cfg.Org, Now: cfg.Now,
 		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }, Upstreams: ups, UpstreamHTTP: upstreamHTTP, Log: cfg.Logf,
 		Password: func() any { return s.Engine.Reg().SystemConfig("auth.password") }}
-	s.Auth.OnFirstSignIn = func(ctx context.Context, userID int64) { // contract 0055 §2: pending → active
+	s.Auth.OnFirstSignIn = func(ctx context.Context, userID int64) { // contract 0056 §2: pending → active
 		ms, err := auth.Memberships(ctx, db, userID)
 		if err != nil {
 			cfg.Logf("member records: memberships of account %d: %v", userID, err)
@@ -436,10 +436,10 @@ func (s *Server) expireSandboxes(ctx context.Context) {
 	}
 }
 
-// memberRepairEvery is how often repairMemberRecords runs after its first run at start (contract 0055 §5).
+// memberRepairEvery is how often repairMemberRecords runs after its first run at start (contract 0056 §5).
 const memberRepairEvery = 10 * time.Minute
 
-// repairMemberRecords syncs the user record of every membership of every organisation (contract 0055 §5): a sync
+// repairMemberRecords syncs the user record of every membership of every organisation (contract 0056 §5): a sync
 // that failed after a member write, a backfill after upgrade, or users installed late. At start and every 10 minutes.
 func (s *Server) repairMemberRecords(ctx context.Context) {
 	t := time.NewTicker(memberRepairEvery)

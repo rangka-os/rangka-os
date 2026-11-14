@@ -14,7 +14,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-// Contract 0055 §2/§5: the kernel keeps the `user` record of a member in step with rk_members.
+// Contract 0056 §2/§5: the kernel keeps the `user` record of a member in step with rk_members.
 
 const mrOrg = "kopi-senja"
 
@@ -240,7 +240,7 @@ func TestRepairBackfillsAndIsQuiet(t *testing.T) {
 
 func TestNoMemberRecordModel(t *testing.T) {
 	e, ctx := memberRecordSetup(t)
-	// the catalogue with a user model that has no account_id (apps from before contract 0055)
+	// the catalogue with a user model that has no account_id (apps from before contract 0056)
 	dir := t.TempDir()
 	if err := os.CopyFS(dir, os.DirFS(testdb.Catalogue("apps"))); err != nil {
 		t.Fatal(err)
@@ -274,7 +274,7 @@ func TestNoMemberRecordModel(t *testing.T) {
 	}
 }
 
-// Contract 0055 §5 upgrade: an account that had a session or created an API token before signed_in_at existed has
+// Contract 0056 §5 upgrade: an account that had a session or created an API token before signed_in_at existed has
 // signed in, so the migration backfills signed_in_at and the repair shows it active; an invitee without either stays
 // pending (a password or an identity link alone is no proof: invitees get both).
 func TestUpgradeBackfillsSignedIn(t *testing.T) {

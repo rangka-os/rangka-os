@@ -519,7 +519,7 @@ func TestMemberAPIAccountElsewhere(t *testing.T) {
 	}
 }
 
-// memberRecordOf is the user record (contract 0055) of the account with email in kopi-senja: its name from
+// memberRecordOf is the user record (contract 0056) of the account with email in kopi-senja: its name from
 // rk_members.record (or the record with that account_id) and its access.
 func memberRecordOf(e *env, email string) (name, access string) {
 	e.t.Helper()
@@ -535,7 +535,7 @@ func memberRecordOf(e *env, email string) (name, access string) {
 	return n, a
 }
 
-// Contract 0055 §2: a member pushed by the host gets a user record, pending until the first sign-in.
+// Contract 0056 §2: a member pushed by the host gets a user record, pending until the first sign-in.
 func TestMemberAPICreatesRecord(t *testing.T) {
 	e, host := memberEnv(t)
 	id := int64(host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "name": "Sari", "role": "sales_rep", "outlets": []any{"OUT-01"}}).JSON["user_id"].(float64))
@@ -550,7 +550,7 @@ func TestMemberAPICreatesRecord(t *testing.T) {
 	}
 }
 
-// Contract 0055 §2: removing a member keeps the record, marked removed with no outlets.
+// Contract 0056 §2: removing a member keeps the record, marked removed with no outlets.
 func TestMemberAPIDeleteMarksRemoved(t *testing.T) {
 	e, host := memberEnv(t)
 	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep", "outlets": []any{"OUT-01"}})
@@ -562,7 +562,7 @@ func TestMemberAPIDeleteMarksRemoved(t *testing.T) {
 	}
 }
 
-// Contract 0055 §5: a failed sync does not fail the member write; the repair makes the record later.
+// Contract 0056 §5: a failed sync does not fail the member write; the repair makes the record later.
 func TestMemberAPISyncFailureStillOK(t *testing.T) {
 	e, host := memberEnv(t)
 	ctx := context.Background()
@@ -588,13 +588,13 @@ func TestMemberAPISyncFailureStillOK(t *testing.T) {
 	}
 }
 
-// Contract 0055 §2: the first sign-in sets signed_in_at and makes the record active.
+// Contract 0056 §2: the first sign-in sets signed_in_at and makes the record active.
 func TestFirstSignInActivates(t *testing.T) {
 	e := newEnv(t, false, nil)
 	if name, access := memberRecordOf(e, "ceo@saga.co.id"); name != "USR-001" || access != "pending" {
 		t.Fatalf("seeded owner: %q %q", name, access)
 	}
-	// a system session (contract 0055 last activity §2) is Cloud acting on its own, not the person signing in
+	// a system session (contract 0055 §2) is Cloud acting on its own, not the person signing in
 	e.must(200, "POST", "/auth/login", map[string]any{"email": "ceo@saga.co.id", "password": "rangka-demo", "system": true})
 	if dbOne(e, "select signed_in_at is null from rk_users where email = 'ceo@saga.co.id'") != true {
 		t.Fatal("system session set signed_in_at")
@@ -636,7 +636,7 @@ func memberEnvOutlets(t *testing.T) (e, host *env) {
 	return e, &env{t: t, ts: e.ts, token: tok.JSON["token"].(string)}
 }
 
-// Contract 0055 §3: the options the Tim page picks from: roles that can be given (no owner), active outlets, and
+// Contract 0056 §3: the options the Tim page picks from: roles that can be given (no owner), active outlets, and
 // employee records without access.
 func TestMemberOptions(t *testing.T) {
 	_, host := memberEnvOutlets(t)
@@ -687,7 +687,7 @@ func TestMemberOptionsNoAccessField(t *testing.T) {
 	}
 }
 
-// Contract 0055 §3: options is for a members:write token only, which reaches it.
+// Contract 0056 §3: options is for a members:write token only, which reaches it.
 func TestMemberOptionsScope(t *testing.T) {
 	e, host := memberEnv(t)
 	plain := &env{t: t, ts: e.ts, token: e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "ci"}).JSON["token"].(string)}
@@ -707,7 +707,7 @@ func TestMemberOptionsScope(t *testing.T) {
 	}
 }
 
-// Contract 0055 §3: PUT with record links the member to that existing employee record instead of making a new one.
+// Contract 0056 §3: PUT with record links the member to that existing employee record instead of making a new one.
 func TestMemberAPIRecordLinks(t *testing.T) {
 	e, host := memberEnv(t)
 	before := countRows(e, "select 1 from r_user where org_id = 'kopi-senja'")
@@ -731,7 +731,7 @@ func TestMemberAPIRecordLinks(t *testing.T) {
 	}
 }
 
-// Contract 0055 §3: a record that is another account's is refused (record_taken) and nothing is written.
+// Contract 0056 §3: a record that is another account's is refused (record_taken) and nothing is written.
 func TestMemberAPIRecordTaken(t *testing.T) {
 	e, host := memberEnv(t)
 	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep"})
@@ -771,7 +771,7 @@ func TestMemberAPIRecordTaken(t *testing.T) {
 	}
 }
 
-// Contract 0055 §3: a record that does not exist is refused (unknown_record) and nothing is written.
+// Contract 0056 §3: a record that does not exist is refused (unknown_record) and nothing is written.
 func TestMemberAPIUnknownRecord(t *testing.T) {
 	e, host := memberEnv(t)
 	r := host.do("PUT", memberPath("sub-rina"), map[string]any{"email": "rina@example.com", "role": "sales_rep", "record": "USR-999"})

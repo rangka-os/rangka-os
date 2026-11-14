@@ -12,7 +12,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Member records (contract 0055 §2, §5): when the registry has a model `user` with a field `account_id`, every
+// Member records (contract 0056 §2, §5): when the registry has a model `user` with a field `account_id`, every
 // membership in rk_members has a `user` record the kernel keeps in step with it. The kernel owns email, role,
 // outlets, access and account_id (read_only in the model); these writes run as the system actor, so the read_only
 // guard does not drop them. The membership is written first, in its own transaction; the sync runs after it and is
@@ -174,7 +174,7 @@ func (e *Engine) syncMemberRecord(ctx context.Context, org string, userID int64)
 	return record, changed, err
 }
 
-// findMemberRecord looks the account's record up in the order of contract 0055 §5: the membership's record, else a
+// findMemberRecord looks the account's record up in the order of contract 0056 §5: the membership's record, else a
 // record with this account_id, else the one record with no account_id whose e-mail is the account's (two or more:
 // none is taken). An int field is filled with 0 when unset, so 0 counts as no account. "" means a new record is needed.
 func (o *op) findMemberRecord(m *meta.Model, linked string, userID int64, email string) (string, error) {
@@ -270,14 +270,14 @@ func textList(v any) []string {
 	return out
 }
 
-// Refusals of MemberRecordClaim (contract 0055 §3).
+// Refusals of MemberRecordClaim (contract 0056 §3).
 var (
 	ErrUnknownRecord = errors.New("unknown_record")
 	ErrRecordTaken   = errors.New("record_taken")
 )
 
 // MemberRecordClaim checks whether user record `record` of org may become the record of account userID (0: an
-// account not created yet), for every path that sets rk_members.record (contract 0055 §3: the member API's record,
+// account not created yet), for every path that sets rk_members.record (contract 0056 §3: the member API's record,
 // `rangka user add --record`, the seed's user record). ErrUnknownRecord: no such record. ErrRecordTaken: it is
 // another account's (it carries another account_id, or another membership in org points at it), or the account
 // already has another record in org (its membership points at one, or one carries its account_id): a member is

@@ -66,7 +66,7 @@ func TestUserAddRemove(t *testing.T) {
 	t.Setenv("DATABASE_URL", url)
 	t.Setenv("RANGKA_ORG", "")
 	t.Setenv("RANGKA_USER_PASSWORD", "")
-	outletTable(t, db, "pt-baru", "OUT-01", "OUT-02", "OUT-03") // contract 0055 §2: outlets must exist
+	outletTable(t, db, "pt-baru", "OUT-01", "OUT-02", "OUT-03") // contract 0056 §2: outlets must exist
 
 	add := []string{"add", "staff@example.test", "--org", "pt-baru", "--role", "outlet_staff", "--outlets", "OUT-01,OUT-02", "--name", "Staf", "--create-org"}
 	if code := cmdUser(add); code != 2 {
@@ -391,7 +391,7 @@ func outletTable(t *testing.T, db *pg.Pool, org string, names ...string) {
 	}
 }
 
-// Contract 0055 §2: `rangka user add --outlets` refuses an outlet that is not an outlet record of the org, as the
+// Contract 0056 §2: `rangka user add --outlets` refuses an outlet that is not an outlet record of the org, as the
 // member API does, and writes nothing.
 func TestUserAddUnknownOutlet(t *testing.T) {
 	url := testdb.New(t)
@@ -431,7 +431,7 @@ func TestUserAddUnknownOutlet(t *testing.T) {
 	}
 }
 
-// Contract 0055 §2: with --apps, `rangka user add` and `remove` keep the member's employee record in step.
+// Contract 0056 §2: with --apps, `rangka user add` and `remove` keep the member's employee record in step.
 func TestUserAddSyncsRecord(t *testing.T) {
 	url := testdb.New(t)
 	prevIter := auth.Iterations
@@ -482,7 +482,7 @@ func TestUserAddSyncsRecord(t *testing.T) {
 	}
 }
 
-// Contract 0055 §3: `rangka user add --record` refuses a record that is another account's or would move the member
+// Contract 0056 §3: `rangka user add --record` refuses a record that is another account's or would move the member
 // off its record (record_taken), or does not exist (unknown_record), and writes nothing; the record of the account
 // itself, or one with no account, is fine.
 func TestUserAddRecordTaken(t *testing.T) {

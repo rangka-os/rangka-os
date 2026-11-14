@@ -120,7 +120,7 @@ var errScopeLimited = errors.New("Token ini hanya untuk API anggota (members:wri
 
 func memberRoute(r *http.Request) bool {
 	if r.Method == http.MethodGet {
-		return r.URL.Path == "/api/v1/members/options" // contract 0055 §3
+		return r.URL.Path == "/api/v1/members/options" // contract 0056 §3
 	}
 	return (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/api/v1/members/")
 }
@@ -235,10 +235,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("PUT /api/v1/connectors/{connector}/auth/{field}", a(s.putConnectorAuth))
 	mux.HandleFunc("DELETE /api/v1/connectors/{connector}/auth/{field}", a(s.deleteConnectorAuth))
 	// member API (contract 0043): API tokens with members:write only
-	mux.HandleFunc("GET /api/v1/members/options", a(s.memberOptions)) // contract 0055 §3
+	mux.HandleFunc("GET /api/v1/members/options", a(s.memberOptions)) // contract 0056 §3
 	mux.HandleFunc("PUT /api/v1/members/{upstream}/{subject}", a(s.putMember))
 	mux.HandleFunc("DELETE /api/v1/members/{upstream}/{subject}", a(s.deleteMember))
-	// Pengaturan → Tim (contract 0055 §4): the owner's browser session only
+	// Pengaturan → Tim (contract 0056 §4): the owner's browser session only
 	mux.HandleFunc("GET /api/v1/team", a(s.getTeam))
 	mux.HandleFunc("POST /api/v1/team", a(s.postTeam))
 	mux.HandleFunc("PATCH /api/v1/team/{user_id}", a(s.patchTeam))
@@ -264,7 +264,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /hooks/{connector}/{trigger}", s.hook)
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
-	mux.HandleFunc("POST /auth/link", s.useSigninLink) // sign-in link of Tim (contract 0055 §4)
+	mux.HandleFunc("POST /auth/link", s.useSigninLink) // sign-in link of Tim (contract 0056 §4)
 	mux.HandleFunc("POST /auth/logout", s.logout)
 	mux.HandleFunc("POST /auth/org", a(s.switchOrg))
 	mux.HandleFunc("GET /auth/me", a(s.me))

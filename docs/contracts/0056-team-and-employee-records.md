@@ -1,4 +1,4 @@
-# 0055 Team and employee records
+# 0056 Team and employee records
 
 Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (kernel, web app) · Affects: rangka-apps
 (`modules/users`), rangka-cloud (private: Tim page) · Builds on 0010, 0043, 0048 (counter slots §5)

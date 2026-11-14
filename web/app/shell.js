@@ -51,7 +51,7 @@
     if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
     if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
     if (parts[0] === "pengaturan" && parts[1] === "tim" && parts.length === 2) return { kind: "team" };
-    // a sign-in link from Tim (contract 0055 §4): #/masuk/tautan?t=<token>; Root opens it before asking who you are
+    // a sign-in link from Tim (contract 0056 §4): #/masuk/tautan?t=<token>; Root opens it before asking who you are
     if (parts[0] === "masuk" && parts[1] === "tautan" && parts.length === 2) return { kind: "signinLink" };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
     if (parts[0] === "w" && parts.length === 2) { // #/w/<screen>?stop=<model>/<name>&doc=<name> (contract 0030 §3)
@@ -277,7 +277,7 @@
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
     if (features.processes) more.push({ id: "proses", label: "Proses bisnis", icon: "time" });
     if (features.catalogue) more.push({ id: "pengaturan/katalog", label: "Modul dan sambungan", icon: "apps" });
-    // Tim (contract 0055 §4): the kernel answers its routes for the owner alone
+    // Tim (contract 0056 §4): the kernel answers its routes for the owner alone
     if (((meta.user && meta.user.roles) || []).indexOf("owner") >= 0) more.push({ id: "pengaturan/tim", label: "Tim", icon: "team" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
@@ -1374,7 +1374,7 @@
     var es = useState(null), err = es[0], setErr = es[1];
 
     function start() {
-      // a sign-in link (contract 0055 §4) opens its page without asking who is signed in: the visitor has no session yet
+      // a sign-in link (contract 0056 §4) opens its page without asking who is signed in: the visitor has no session yet
       if (parseRoute(global.location.hash).kind === "signinLink" && RA.SignInLinkPage) { setPhase("link"); return; }
       setPhase("boot");
       setErr(null);

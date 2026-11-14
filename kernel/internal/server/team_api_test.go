@@ -16,7 +16,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
-// Pengaturan → Tim (contract 0055 §4): the owner's session manages the team at /api/v1/team.
+// Pengaturan → Tim (contract 0056 §4): the owner's session manages the team at /api/v1/team.
 
 const linkPrefix = "http://localhost:8080/#/masuk/tautan?t="
 

@@ -7,6 +7,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
 // Contract 0032 end to end on testdata/config-modules: a composed site (config.modules, no apps) installs the closure
@@ -205,5 +207,78 @@ func TestApplyRefusesFeaturesWithoutBase(t *testing.T) {
 	}
 	if r := e.do("POST", "/api/v1/changesets/"+id+"/apply", nil); r.Status != 409 || errCode(r) != "stale_base" {
 		t.Fatalf("apply of a features.rk op without base: %d %s", r.Status, r.Body)
+	}
+}
+
+// Apply-rows audit note 3: reverting a change set that added a unit removes that unit; while the unit holds rows the
+// revert is the owner's, as removing it through a new change set is.
+func TestRevertCountsRowsOfRemovedUnit(t *testing.T) {
+	e := newEnvFrom(t, func(dir string) (apps, site string) {
+		if err := exec.Command("cp", "-r", "../../testdata/config-modules/.", dir).Run(); err != nil {
+			t.Fatal(err)
+		}
+		f, err := os.OpenFile(filepath.Join(dir, "site", "config.rk"), os.O_APPEND|os.O_WRONLY, 0)
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := f.WriteString("ai: {approvers: [admin]}\n"); err != nil {
+			t.Fatal(err)
+		}
+		f.Close()
+		return filepath.Join(dir, "apps"), filepath.Join(dir, "site")
+	})
+	e.login()
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Tambah stok", "ops": []any{
+		map[string]any{"op": "patch", "path": "config.rk", "patch": []any{
+			map[string]any{"op": "remove", "path": "/plan"},
+			map[string]any{"op": "add", "path": "/modules/stock", "value": "^1.0"},
+			map[string]any{"op": "add", "path": "/modules/contacts", "value": "^1.0"}}}}}).JSON
+	id := cs["id"].(string)
+	for _, a := range []string{"validate", "preview", "approve", "apply"} {
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/"+a, map[string]any{})
+	}
+	e.must(201, "POST", "/api/v1/r/stock_item", map[string]any{"item_name": "Molen"})
+	org, _ := e.must(200, "GET", "/auth/me", nil).JSON["org"].(map[string]any)
+	if _, err := auth.EnsureUser(context.Background(), e.s.DB, "admin@example.test", "Admin", "rangka-demo", org["id"].(string), "admin", ""); err != nil {
+		t.Fatal(err)
+	}
+	e.loginAs("admin@example.test")
+	if r := e.do("POST", "/api/v1/changesets/"+id+"/revert", nil); r.Status != 403 || errCode(r) != "owner_required" {
+		t.Fatalf("an approver reverted a change set whose unit holds rows: %d %s", r.Status, r.Body)
+	}
+	e.login()
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/revert", nil)
+}
+
+// Changeset followup audit 1: another kernel process rejects the change set while Apply has written its files; the
+// save of applied finds the row moved on (stale_status), so the files go back and the live metadata matches the row.
+func TestApplyLosingToAnotherProcessRestoresFiles(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Label", "ops": []any{
+		map[string]any{"op": "create", "path": "custom/deal.rk", "content": "model: deal\nlabel: {id: Mobil}\n"}}}).JSON
+	id := cs["id"].(string)
+	for _, a := range []string{"validate", "preview", "approve"} {
+		e.must(200, "POST", "/api/v1/changesets/"+id+"/"+a, map[string]any{})
+	}
+	orig := e.s.Changes.Reload
+	e.s.Changes.Reload = func(ctx context.Context) error {
+		e.s.Changes.Reload = orig
+		// the other process: a reject that commits between the file write and the save
+		if _, err := e.s.DB.Exec(ctx, "update rk_changesets set status = 'rejected' where id = $1", id); err != nil {
+			t.Error(err)
+		}
+		return orig(ctx)
+	}
+	r := e.do("POST", "/api/v1/changesets/"+id+"/apply", map[string]any{})
+	e.s.Changes.Reload = orig
+	if r.Status != 409 || errCode(r) != "stale_status" {
+		t.Fatalf("apply that lost to another process: %d %s", r.Status, r.Body)
+	}
+	if _, err := os.Stat(filepath.Join(e.s.Changes.SiteDir, "custom", "deal.rk")); err == nil {
+		t.Fatal("the files of a change set that is not applied stayed live")
+	}
+	if g := e.must(200, "GET", "/api/v1/changesets/"+id, nil).JSON; g["status"] != "rejected" {
+		t.Fatalf("status %v, want the other process's rejected", g["status"])
 	}
 }

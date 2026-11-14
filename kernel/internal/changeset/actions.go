@@ -374,6 +374,8 @@ func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func
 
 // Validate runs the validator on a copy with the change applied → validated or invalid.
 func (s *Service) Validate(ctx context.Context, a Actor, id string) (*ChangeSet, error) {
+	s.mu.Lock() // not while Apply or Revert of this kernel writes files (audit changeset followup 1)
+	defer s.mu.Unlock()
 	cs, err := s.Get(ctx, a.Org, id)
 	if err != nil {
 		return nil, err
@@ -432,20 +434,35 @@ func in(s string, set ...string) bool {
 // Preview dry-runs the change on a copy: the DDL that would run against the live database and the number
 // of records in the models it touches.
 func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, error) {
-	cs, err := s.Get(ctx, a.Org, id)
+	cs, auto, err := s.preview(ctx, a, id)
+	if err != nil || !auto {
+		return cs, err
+	}
+	// A low-risk proposal from Raka is applied once previewed when the company opted in with
+	// config.ai.auto_apply: low_risk. The kernel applies it as the system on the company's own setting:
+	// Raka's token still cannot apply (Apply refuses an assistant actor). Apply takes s.mu itself.
+	return s.Apply(ctx, Actor{ID: "system", Org: a.Org, Kind: "system"}, cs.ID)
+}
+
+// preview is Preview under s.mu (not while Apply or Revert of this kernel writes files; audit changeset followup 1);
+// auto reports that the change set is to be applied right after.
+func (s *Service) preview(ctx context.Context, a Actor, id string) (cs *ChangeSet, auto bool, err error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	cs, err = s.Get(ctx, a.Org, id)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if !in(cs.Status, "proposed", "validated", "previewed") {
-		return nil, &Error{409, "bad_status", "a change set that is " + cs.Status + " cannot be previewed", nil}
+		return nil, false, &Error{409, "bad_status", "a change set that is " + cs.Status + " cannot be previewed", nil}
 	}
 	v, reg, _, cleanup, err := s.check(cs)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	defer cleanup()
 	if err := s.blockDestructive(ctx, v, reg); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	cs.Validation = v
 	live0 := s.live()
@@ -453,13 +470,13 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 	if len(v.Errors) > 0 {
 		cs.Preview = nil
 		if err := s.transition(ctx, cs, a, "invalid", fmt.Sprintf("%d error(s)", len(v.Errors)), false); err != nil {
-			return nil, err
+			return nil, false, err
 		}
-		return cs, &Error{409, "invalid", "the change set has validation errors", cs}
+		return cs, false, &Error{409, "invalid", "the change set has validation errors", cs}
 	}
 	live, err := store.Introspect(ctx, s.DB)
 	if err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	stmts, notes := store.Plan(store.Tables(reg), live)
 	p := &Preview{Migrations: stmts, Affected: map[string]int64{}, Reversible: true, Notes: notes, Files: []FileDiff{}}
@@ -487,7 +504,7 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 		}
 		n, err := store.Count(ctx, s.DB, cs.Org, model)
 		if err != nil {
-			return nil, err
+			return nil, false, err
 		}
 		p.Affected[model] = n
 		if op.Op == "delete" && n > 0 {
@@ -496,22 +513,16 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 		}
 	}
 	if err := s.modulesDiff(ctx, cs, live, reg, p); err != nil {
-		return nil, err
+		return nil, false, err
 	}
 	if s.Requires != nil && s.Reg != nil {
 		p.Requires = s.Requires(ctx, cs.Org, s.Reg(), reg)
 	}
 	cs.Preview = p
 	if err := s.transition(ctx, cs, a, "previewed", fmt.Sprintf("%d statement(s)", len(stmts)), false); err != nil {
-		return cs, err
+		return cs, false, err
 	}
-	// A low-risk proposal from Raka is applied once previewed when the company opted in with
-	// config.ai.auto_apply: low_risk. The kernel applies it as the system on the company's own setting:
-	// Raka's token still cannot apply (Apply refuses an assistant actor).
-	if a.Assistant && cs.Source == "ai" && cs.Risk == "low" && s.autoApplyLowRisk() && s.planReadOnly(a) == nil {
-		return s.Apply(ctx, Actor{ID: "system", Org: a.Org, Kind: "system"}, cs.ID)
-	}
-	return cs, nil
+	return cs, a.Assistant && cs.Source == "ai" && cs.Risk == "low" && s.autoApplyLowRisk() && s.planReadOnly(a) == nil, nil
 }
 
 // autoApplyLowRisk reports config.ai.auto_apply: low_risk.
@@ -652,6 +663,8 @@ func (s *Service) Approve(ctx context.Context, a Actor, id, note string) (*Chang
 	if err := s.mayApprove(a); err != nil {
 		return nil, err
 	}
+	s.mu.Lock() // not while Apply or Revert of this kernel writes files (audit changeset followup 1)
+	defer s.mu.Unlock()
 	cs, err := s.Get(ctx, a.Org, id)
 	if err != nil {
 		return nil, err
@@ -670,6 +683,8 @@ func (s *Service) Reject(ctx context.Context, a Actor, id, note string) (*Change
 	if err := s.mayApprove(a); err != nil {
 		return nil, err
 	}
+	s.mu.Lock() // not while Apply or Revert of this kernel writes files (audit changeset followup 1)
+	defer s.mu.Unlock()
 	cs, err := s.Get(ctx, a.Org, id)
 	if err != nil {
 		return nil, err
@@ -813,7 +828,21 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	if autoApply && cs.Status != "approved" {
 		note = "applied automatically (config.ai.auto_apply: low_risk)"
 	}
-	return cs, s.transition(ctx, cs, a, "applied", note, false)
+	if err := s.transition(ctx, cs, a, "applied", note, false); err != nil {
+		// another kernel process moved the change set on (rejected it) while its files were written: the files go
+		// back, so the live metadata matches the row, which does not say applied (audit changeset followup 1; within
+		// one process s.mu keeps every step out while Apply runs)
+		if e, ok := err.(*Error); ok && e.Code == "stale_status" {
+			s.write(live, prev)
+			msg := "Change set ini diubah langkah lain saat sedang diterapkan; berkasnya dikembalikan. Tabel atau kolom yang sudah ditambahkan tetap ada."
+			if rerr := s.Reload(ctx); rerr != nil {
+				msg += " Memuat ulang metadata gagal: " + rerr.Error()
+			}
+			return cs, &Error{409, "stale_status", msg, nil}
+		}
+		return cs, err
+	}
+	return cs, nil
 }
 
 func (s *Service) write(r roots, files map[string]*string) error {
@@ -901,6 +930,25 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 		as := AssessWith(ops, parsed(live, nil), parsed(live, cs.previous), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
 		if riskRank[as.Risk] > riskRank[risk] {
 			risk = as.Risk
+		}
+	}
+	// a revert that restores an older config.rk removes the units the change set added: their rows are counted now, as
+	// apply does, so a unit that holds rows is the owner's to remove (apply-rows audit note 3)
+	if prev, ok := cs.previous["config.rk"]; ok && prev != nil && riskRank[risk] < riskRank["high"] {
+		back := &ChangeSet{Ops: []Op{{Op: "replace", Path: "config.rk", Content: *prev}}, Org: cs.Org, Risk: "low"}
+		v, after, _, cleanup, err := s.check(back)
+		if err != nil {
+			return nil, err
+		}
+		if len(v.Errors) == 0 {
+			err = s.removedRows(ctx, back, after)
+		}
+		cleanup()
+		if err != nil {
+			return nil, err
+		}
+		if back.Risk == "high" {
+			risk = "high"
 		}
 	}
 	if risk == "high" && !hasRole(a, "owner") {

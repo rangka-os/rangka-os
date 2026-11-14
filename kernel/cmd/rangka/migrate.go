@@ -43,7 +43,7 @@ func cmdMigrate(args []string) int {
 		return fail(err)
 	}
 	defer db.Close()
-	res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{DryRun: *dry, AllowDestructive: *destructive, Source: "migrate", Before: preBackup(db, &c, reg, *filesDir)})
+	res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{DryRun: *dry, AllowDestructive: *destructive, Source: "migrate", SubmittedNotes: true, Before: preBackup(db, &c, reg, *filesDir)})
 	if err != nil && !errors.Is(err, store.ErrDestructive) {
 		return fail(err)
 	}

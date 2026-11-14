@@ -133,8 +133,10 @@ It would reuse app machinery (menu, home, roles, onboarding), but:
   modules or the layout sets `nav.side`. The web app appends these groups after the app menus and takes home from
   them when no app gives one. A module counts as covered when an installed app brings it in.
 - Preview of a `config.rk` change carries `preview.modules`: `added` (the whole closure), `removed`, `rows` (per
-  removed model, all organisations) and `kept` (`{name, required_by}`), with notes in Bahasa Indonesia ("tetap
-  terpasang: dibutuhkan oleh …"). The raised risk is written to the change set at preview.
+  removed model, all organisations), `kept` (`{name, required_by}`) and, when a removed model holds submitted
+  documents, `submitted` (per model, all organisations; the installed apps no longer see them, so their checks against
+  them stop), with notes in Bahasa Indonesia ("tetap terpasang: dibutuhkan oleh …", "dokumen yang sudah diajukan di
+  app yang dilepas: …"). The raised risk is written to the change set at preview.
 - `GET /api/v1/catalogue` and MCP `rangka_catalogue` read `installed_by` and `in_plan` from the same resolution. A
   module outside the plan is `not_in_plan` in the MCP catalogue.
 

@@ -520,6 +520,10 @@ type MigrateOpts struct {
 	Source                   string
 	Now                      func() time.Time                              // default time.Now
 	Before                   func(ctx context.Context, steps []Step) error // runs before any statement is applied
+	// SubmittedNotes counts the submitted documents of tables no longer in the model (submittedLeftNotes): asked by
+	// `rangka migrate` and once by `serve` at boot, not by a change set's reload, a restore or a cold start, which
+	// would pay the count and drop the notes (audit 14 Nov N1)
+	SubmittedNotes bool
 }
 
 // Migrate creates kernel tables, applies the model diff in one transaction and records file hashes.
@@ -548,7 +552,10 @@ func migrate(ctx context.Context, db *pg.Pool, reg *meta.Registry, desired []Tab
 		now = o.Now
 	}
 	steps, notes := PlanSteps(desired, live, now(), o.AllowDestructive)
-	notes = append(notes, submittedLeftNotes(ctx, q, desired, live)...)
+	if o.SubmittedNotes {
+		// counted on the pool, not q: a count that fails in a dry run's transaction would abort it (audit N4)
+		notes = append(notes, submittedLeftNotes(ctx, db, desired, live)...)
+	}
 	res := &MigrateResult{Notes: notes, Risk: HighestRisk(steps)}
 	for _, s := range steps {
 		if s.Destructive && !o.AllowDestructive {
@@ -972,7 +979,7 @@ func submittedLeftNotes(ctx context.Context, q pg.Querier, desired []Table, live
 		if err != nil || n == 0 {
 			continue
 		}
-		out = append(out, fmt.Sprintf("%s holds %d submitted document(s) of an app no longer installed: the apps still installed no longer see them (their checks against these documents stop)", t, n))
+		out = append(out, fmt.Sprintf("%s holds %d submitted document(s) of a model no longer on the site (its app removed, or the model renamed); the apps still installed do not see them, so their checks against these documents stop", t, n))
 	}
 	return out
 }

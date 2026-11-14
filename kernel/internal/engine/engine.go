@@ -32,7 +32,13 @@ type Actor struct {
 	// System marks kernel-internal actors (seed, flows and automations the kernel starts): they bypass
 	// permission checks. Queue jobs replaying a person's action keep that person's roles and System=false.
 	System bool
+	// Device is the paired device the request came from (contract 0057 §2); nil otherwise. CEL reads it as device.
+	Device *DeviceRef
 }
+
+// DeviceRef is a paired device as the engine sees it: the CEL device object {id, code, outlet} (contract 0030 §4,
+// 0057 §2).
+type DeviceRef struct{ ID, Code, Outlet string }
 
 // Enqueuer puts background jobs on the queue (implemented by package jobs).
 type Enqueuer interface {

@@ -58,13 +58,16 @@ type Service struct {
 // Principal is an authenticated caller.
 type Principal struct {
 	User  *User
-	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken)
+	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken), device (contract 0057 §2)
 	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write, members:write)
 	// Chat marks the token the chat relay minted for one chat (MintAssistantToken, contract 0020 §2): the kernel
 	// admitted that chat and counted its credit. An API token with the assistant scope is Via "ai" too, but not Chat.
 	Chat bool
 	// System marks a system session (contract 0055 §2): nothing it does counts as the member's activity.
 	System bool
+	// Device is the paired device the request came from (contract 0057 §2): set with Via "device" (the device
+	// alone, no User) and on a person's session sent from a paired browser.
+	Device *Device
 }
 
 // Kind names the principal for a client that must know what it was given (MCP _meta "rangka/principal"): chat
@@ -84,7 +87,7 @@ func (p *Principal) Kind() string {
 // person may do (approve, apply, revert, write records).
 const AIForbiddenMessage = "Raka tidak boleh melakukan ini; minta orang yang berwenang."
 
-// Human reports a person signed in with a browser session (or the dev-open demo user).
+// Human reports a person signed in with a browser session (or the dev-open demo user). A device alone is not.
 func (p *Principal) Human() bool { return p.Via == "session" || p.Via == "dev" }
 
 func (s *Service) now() time.Time {
@@ -313,6 +316,13 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 			}
 			return p, nil
 		}
+		if strings.HasPrefix(tok, EdgeTokenPrefix) { // rangka-edge (contract 0057 §2, 0006 §2)
+			d, err := s.DeviceFromSecret(ctx, tok)
+			if err != nil {
+				return nil, err
+			}
+			return &Principal{Via: "device", Device: d}, nil
+		}
 		claims, err := s.VerifyJWT(tok)
 		if err != nil {
 			return nil, ErrUnauthenticated
@@ -349,13 +359,37 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 				return nil, err
 			}
 			system, _ := res.Rows[0][2].(bool)
-			return &Principal{User: u, Via: "session", System: system}, nil
+			p := &Principal{User: u, Via: "session", System: system}
+			// a person on a paired browser: the device rides along when it belongs to the session's org; a
+			// revoked or stale device cookie leaves the person signed in without it
+			if d, err := s.requestDevice(r); err == nil && d != nil && d.Org == u.Org {
+				p.Device = d
+			} else if err != nil && !errors.Is(err, ErrDeviceRevoked) {
+				return nil, err
+			}
+			return p, nil
 		}
+	}
+	// a paired browser alone (contract 0057 §2): the device, no person
+	if d, err := s.requestDevice(r); err != nil || d != nil {
+		if err != nil {
+			return nil, err
+		}
+		return &Principal{Via: "device", Device: d}, nil
 	}
 	if s.DevOpen {
 		return s.devPrincipal(ctx)
 	}
 	return nil, nil
+}
+
+// requestDevice is the device of the request's rk_device cookie: nil, nil without one.
+func (s *Service) requestDevice(r *http.Request) (*Device, error) {
+	c, err := r.Cookie(DeviceCookieName)
+	if err != nil || c.Value == "" {
+		return nil, nil
+	}
+	return s.DeviceFromSecret(r.Context(), c.Value)
 }
 
 // devPrincipal is the owner of the default org (dev-open demos run as that person).

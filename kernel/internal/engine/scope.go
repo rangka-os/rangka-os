@@ -69,12 +69,24 @@ func UserVar(a Actor) map[string]any {
 	return map[string]any{"name": name, "email": a.ID, "roles": roles, "outlets": outlets}
 }
 
-// GlobalVar resolves the read-only globals user, org and tax for a (contract 0010 §8): org and tax come
+// DeviceVar is the CEL device global (contract 0030 §4, 0057 §2): {id, code, outlet} of the paired device, all empty
+// when the request did not come from one.
+func DeviceVar(a Actor) map[string]any {
+	d := a.Device
+	if d == nil {
+		d = &DeviceRef{}
+	}
+	return map[string]any{"id": d.ID, "code": d.Code, "outlet": d.Outlet}
+}
+
+// GlobalVar resolves the read-only globals user, device, org and tax for a (contract 0010 §8): org and tax come
 // from the actor's org settings. ok is false for any other name.
 func GlobalVar(reg *meta.Registry, a Actor, name string) (any, bool) {
 	switch name {
 	case "user":
 		return UserVar(a), true
+	case "device":
+		return DeviceVar(a), true
 	case "org":
 		return reg.OrgVar(a.Org), true
 	case "tax":
@@ -136,6 +148,8 @@ func (s *scope) lookup(name string) (any, bool) {
 	switch name {
 	case "user":
 		return UserVar(s.actor), true
+	case "device":
+		return DeviceVar(s.actor), true
 	case "org", "tax":
 		return GlobalVar(s.e.Reg(), s.actor, name)
 	case "name", "created_by", "created_at", "modified_at", "amended_from":

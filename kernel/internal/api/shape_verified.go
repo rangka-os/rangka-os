@@ -31,7 +31,8 @@ const (
 	verifiedMax = 20000 // entries; past it expired ones are dropped, then everything (a cold start, not an error)
 )
 
-// credKey identifies the credential auth.Resolve reads: the bearer token if there is one, else the session cookie.
+// credKey identifies the credential auth.Resolve reads: the bearer token if there is one, else the session cookie,
+// else the paired-device cookie (contract 0057 §2).
 type credKey [16]byte
 
 // credential is the key of the request's credential, ok=false when it carries none that Resolve would read.
@@ -41,6 +42,9 @@ func credential(r *http.Request) (credKey, bool) {
 	}
 	if c, err := r.Cookie(auth.CookieName); err == nil && c.Value != "" {
 		return keyOf("c:" + c.Value)
+	}
+	if c, err := r.Cookie(auth.DeviceCookieName); err == nil && c.Value != "" {
+		return keyOf("d:" + c.Value)
 	}
 	return credKey{}, false
 }

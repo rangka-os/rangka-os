@@ -317,3 +317,30 @@ create table if not exists rk_sandboxes (
   created_at   timestamptz not null default now(),
   last_used_at timestamptz not null default now()
 );
+-- paired devices (contract 0057 §2, 0048 §5, 0006 §2): browsers (rk_device cookie) and rangka-edge (rke_ token) of
+-- one outlet. code is K1, K2, … per outlet in pairing order and never reused after revoke. Only the sha256 of the
+-- secret is kept.
+create table if not exists rk_devices (
+  id           text primary key,             -- dev_ + 20 hex
+  org_id       text not null,
+  outlet       text not null,
+  code         text not null,
+  name         text not null default '',
+  kind         text not null,                -- browser | edge
+  token_hash   text not null unique,
+  created_by   text not null default '',
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz,
+  revoked_at   timestamptz
+);
+create unique index if not exists rk_devices_code on rk_devices (org_id, outlet, code);
+-- pairing codes: 8 characters, single use, 15 minutes; stored as sha256
+create table if not exists rk_device_codes (
+  code_hash  text primary key,
+  org_id     text not null,
+  outlet     text not null,
+  created_by text not null default '',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at    timestamptz
+);

@@ -60,6 +60,7 @@ type Server struct {
 	limiter  ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
 	verified verifiedSet       // credentials verified in this process: they take the tenant's bucket (shape_verified.go)
 	proxies  trustedProxies    // RANGKA_TRUSTED_PROXIES: whose X-Forwarded-For names the client (shape_verified.go)
+	pairs    pairTries         // device pairing tries per address (devices_api.go, contract 0057 §2)
 }
 
 type ctxKey struct{}
@@ -76,7 +77,11 @@ func Actor(p *auth.Principal) engine.Actor {
 	if name == "" {
 		name = u.Email
 	}
-	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human(), Outlets: u.Outlets}
+	a := engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human(), Outlets: u.Outlets}
+	if d := p.Device; d != nil {
+		a.Device = &engine.DeviceRef{ID: d.ID, Code: d.Code, Outlet: d.Outlet}
+	}
+	return a
 }
 
 // ChangeActor converts a principal into a change-set actor.
@@ -105,7 +110,7 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p != nil && p.User.Org == "" && p.Via == "dev" {
+	if p != nil && p.Via == "dev" && p.User.Org == "" {
 		p.User.Org = s.Org
 	}
 	// a members:write token reaches the member API and nothing else (contract 0043 §1)
@@ -130,11 +135,16 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 			writeError(w, http.StatusForbidden, "scope_limited", err.Error())
 			return
 		}
+		if errors.Is(err, auth.ErrDeviceRevoked) {
+			writeError(w, http.StatusUnauthorized, "device_revoked", auth.DeviceRevokedMessage)
+			return
+		}
 		if err != nil && !errors.Is(err, auth.ErrUnauthenticated) {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return
 		}
-		if p == nil {
+		// a paired device alone is no person: it reads and writes nothing here (contract 0057 §2)
+		if p == nil || p.User == nil {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="rangka"`)
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
 			return
@@ -246,6 +256,12 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/files/meta", a(s.listFiles)) // v0 aliases
 	mux.HandleFunc("GET /api/v1/files/meta/{path...}", a(s.getFile))
 	mux.HandleFunc("POST /api/v1/tokens", a(s.createToken))
+	// paired devices (contract 0057 §2): codes, list and revoke for owner and head office; pairing is not signed in
+	mux.HandleFunc("POST /api/v1/devices/codes", a(s.createPairingCode))
+	mux.HandleFunc("GET /api/v1/devices", a(s.listDevices))
+	mux.HandleFunc("DELETE /api/v1/devices/{id}", a(s.revokeDevice))
+	mux.HandleFunc("POST /auth/device/pair", s.pairBrowser)
+	mux.HandleFunc("POST /api/v1/edge/register", s.registerEdge)
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
 	// connector webhooks (contract 0002 §A.1, 0017 §7): not signed in; the org's secrets verify each request
@@ -273,7 +289,7 @@ func (s *Server) Handler() http.Handler {
 		Version: s.Version,
 		Resolve: func(r *http.Request) (*mcp.Caller, error) {
 			p, err := s.principal(r)
-			if err != nil || p == nil || !mcp.RequireScope(p) {
+			if err != nil || p == nil || p.User == nil || !mcp.RequireScope(p) {
 				return nil, err
 			}
 			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p), Principal: p.Kind()}, nil

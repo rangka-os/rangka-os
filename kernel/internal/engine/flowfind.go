@@ -11,10 +11,12 @@ import (
 )
 
 // flowFindSQL turns the plain conditions of a flow find's where: into SQL over the model's table: each top-level &&
-// operand of the form field == value, value == field, field in list, docstatus == n or docstatus != n, where the
-// value side reads no field of the record (event, flow variables, literals) and evaluates now. Only conditions whose
-// SQL keeps every row the CEL operand keeps are used: text columns (data, link, select...) without compute: compared
-// to a non-empty text, name, and docstatus of a submittable model. Anything else stays CEL only. The caller still
+// operand of the form field == value, value == field, field in list, docstatus == n or docstatus != n, or a date field
+// compared (==, <, <=, >, >=) to a date, where the value side reads no field of the record (event, flow variables,
+// literals) and evaluates now. Only conditions whose SQL keeps every row the CEL operand keeps are used: text columns
+// (data, link, select...) without compute: compared to a non-empty text, name, docstatus of a submittable model, and
+// date columns without compute: compared to a YYYY-MM-DD text (a flow scope reads a date as that text, so CEL's text
+// order is the calendar order; an empty date fails both). Anything else stays CEL only. The caller still
 // evaluates the whole where: on each row, so the SQL only narrows what is read (contract 0025 lock unchanged).
 // conds use $2.. ($1 is the org).
 func flowFindSQL(o *op, m *meta.Model, where string, vars map[string]any) ([]string, []any) {
@@ -74,6 +76,18 @@ func flowFindSQL(o *op, m *meta.Model, where string, vars map[string]any) ([]str
 				op = "<>"
 			}
 			conds = append(conds, fmt.Sprintf("docstatus %s $%d", op, len(args)+1))
+		case kind == "date" && (b.Op == "==" || b.Op == "<" || b.Op == "<=" || b.Op == ">" || b.Op == ">="):
+			sv, ok := v.(string)
+			if !ok || !cel.IsDate(sv) || len(sv) != 10 {
+				continue
+			}
+			op := b.Op
+			if op == "==" {
+				op = "="
+			}
+			// value == field is the only flipped form (above); an ordering keeps the field on the left
+			args = append(args, sv)
+			conds = append(conds, fmt.Sprintf("%s %s $%d::date", pg.QuoteIdent(col), op, len(args)+1))
 		case kind == "text" && b.Op == "==":
 			sv, ok := v.(string)
 			if !ok || sv == "" {
@@ -116,16 +130,23 @@ func conjuncts(x cel.Expr) []cel.Expr {
 }
 
 // pushColumn says how an identifier of a where: maps to a column: "text" (a text column a flow scope reads as it is
-// stored, or name), "docstatus", or "" (not pushed: a flow variable, a computed or non-text field, status).
+// stored, or name), "date" (a date column, read as YYYY-MM-DD), "docstatus", or "" (not pushed: a flow variable, a
+// computed field, another type, status).
 func pushColumn(m *meta.Model, name string, vars map[string]any) string {
 	if name == "" {
 		return ""
 	}
 	if f := m.Field(name); f != nil {
-		if f.Name == "status" || f.Compute != "" || !store.IsColumn(f) || store.SQLType(f.Type) != "text" {
+		if f.Name == "status" || f.Compute != "" || !store.IsColumn(f) {
 			return ""
 		}
-		return "text"
+		switch store.SQLType(f.Type) {
+		case "text":
+			return "text"
+		case "date":
+			return "date"
+		}
+		return ""
 	}
 	if _, shadow := vars[name]; shadow {
 		return ""

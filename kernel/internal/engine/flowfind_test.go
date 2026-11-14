@@ -23,6 +23,7 @@ steps:
   - update: t1
     set: {notes: "'top'"}
   - {find_all: deal, where: "docstatus == 0 && customer == event.missing", as: none}
+  - {find_all: deal, where: "expected_close >= '2026-12-01' && expected_close < event.next && '2026-12-01' == expected_close", as: dated}
 `
 
 // t_451714a9: a flow find reads only the rows its where: can match (SQL), in chunks, and stops at its first match or
@@ -43,12 +44,12 @@ func TestFlowFindPushdown(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	res, err := e.RunFlow(ctx, a, "find_probe", map[string]any{"customer": "CUST-0012", "custs": []any{"CUST-0012", "CUST-0031"}, "missing": "CUST-9999"})
+	res, err := e.RunFlow(ctx, a, "find_probe", map[string]any{"customer": "CUST-0012", "custs": []any{"CUST-0012", "CUST-0031"}, "missing": "CUST-9999", "next": "2026-12-02"})
 	if err != nil {
 		t.Fatal(err)
 	}
 	steps := strings.Join(res.Steps, " | ")
-	for _, want := range []string{"find_all deal → 230", "find deal → 1", "find_all deal → 3", "find_all deal → 1", "find_all deal → 0"} {
+	for _, want := range []string{"find_all deal → 230", "find deal → 1", "find_all deal → 3", "find_all deal → 1", "find_all deal → 0", "find_all deal → 236"} { // 236: the 235 created plus the fixture deal closing 2026-12-01
 		if !strings.Contains(steps, want) {
 			t.Fatalf("steps %q lack %q", steps, want)
 		}
@@ -83,6 +84,20 @@ func TestFlowFindPushdown(t *testing.T) {
 		{"customer in ['A', 1]", nil, nil, nil},
 		{"notes in ['x', '']", nil, nil, nil},
 		{"customer == f.customer", map[string]any{"f": nil}, nil, nil},
+		// t_0dba5917: a date column compared to a YYYY-MM-DD text, field on the left (== also flipped)
+		{"expected_close == '2026-12-01'", nil, []string{`"expected_close" = $2::date`}, []any{"2026-12-01"}},
+		{"'2026-12-01' == expected_close", nil, []string{`"expected_close" = $2::date`}, []any{"2026-12-01"}},
+		{"expected_close >= d && expected_close < e", map[string]any{"d": "2026-11-01", "e": "2026-12-01"},
+			[]string{`"expected_close" >= $2::date`, `"expected_close" < $3::date`}, []any{"2026-11-01", "2026-12-01"}},
+		{"expected_close <= '2026-12-01' && expected_close > '2026-11-30'", nil,
+			[]string{`"expected_close" <= $2::date`, `"expected_close" > $3::date`}, []any{"2026-12-01", "2026-11-30"}},
+		// not pushed: an ordering with the field on the right, !=, an empty or partial or timestamp value
+		{"'2026-12-01' < expected_close", nil, nil, nil},
+		{"expected_close != '2026-12-01'", nil, nil, nil},
+		{"expected_close == ''", nil, nil, nil},
+		{"expected_close < '2026-12'", nil, nil, nil},
+		{"expected_close < '2026-12-01T00:00:00Z'", nil, nil, nil},
+		{"expected_close < 5", nil, nil, nil},
 	}
 	err = e.run(ctx, a, func(o *op) error {
 		for _, c := range cases {

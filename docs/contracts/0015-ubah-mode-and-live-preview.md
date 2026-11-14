@@ -34,6 +34,7 @@ A low-risk Ubah edit by someone with `approve: false` stays a pending change set
 | Reorder or hide list columns | `custom/<model>.rk` `views.list.columns` | low |
 | Reorder kanban columns | `custom/<model>.rk` `views.kanban.columns` | low |
 | Rename a table or a field in the company's words (contract 0049 §5) | `custom/<model>.rk` `label` (the model: page title, "Buat …", widget titles) and `labels: {<field>: label}` (fields of the app model) | low |
+| Rename an app's menu group or sub-menu in the company's words (contract 0049) | `custom/app.<app>.rk` `menu_labels: {<Indonesian text of the group in app.rk>: label}` | low |
 | Edit the menu (reorder, rename group, hide) | `layouts/<config.layout>.rk` `nav.side` (created when the site has no layout file, with `config.rk` `layout` set) | low |
 | Add a field | `custom/<model>.rk` `fields` (`x_` name) + `views.form.add` (+ `views.list.add`) | medium (high for money/stock) |
 | Add a status / stage | `custom/<model>.rk` `options: {<select field>: [{value, label}]}` | medium (high on a submittable model) |
@@ -57,6 +58,14 @@ in the v0.1 notes to overlays that add fields, rules, approvals or options).
 - `label` (contract 0049 §5): replaces the app model's label, so the page title, the create button and references
   read the company's word ("Mobil" for a rental of cars). The model's name stays.
 - `labels: {<field>: label}` (contract 0049 §5): replaces the label of fields of the app model; field names stay.
+- App menu words (contract 0049): `custom/app.<app>.rk` holds `app: <app>` and `menu_labels`, keyed by the Indonesian
+  text of a group or sub-menu label as written in the app's `app.rk` (groups have no other name). Each replaces that
+  label wherever the app menu is drawn (side menu, menu search, Console); the groups, their order and their models
+  stay the app's, and a site layout is not needed. Low risk, like `label`. Validator codes: `name_mismatch` (`app` is
+  not the file name), `unknown_app`, and the warning `unknown_group` (a key that is not a group or sub-menu of that
+  app's menu: an app upgrade may change its group words, so the site still loads and that label is not applied).
+  A change set writes it at `custom/app.<app>.rk` only (`<app>` snake_case); `custom/app.rk` stays the overlay of a
+  model named `app`.
 
 Validator codes: `unknown_field` (a layout, column, `options` or `labels` key that is not a field of the merged model),
 `not_select` (`options` on a field that is not `type: select`), `bad_option` (a kanban column that is not an option

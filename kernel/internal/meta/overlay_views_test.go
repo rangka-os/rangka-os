@@ -293,3 +293,54 @@ labels:
 		t.Fatalf("unknown field label not reported: %v", rep.All())
 	}
 }
+
+// Contract 0049: custom/app.<app>.rk renames an app's menu group by its Indonesian text; the app file is unchanged.
+func TestAppOverlayMenuLabels(t *testing.T) {
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: "../../testdata/overlay-site"}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("metadata errors: %v", rep.All())
+	}
+	a := reg.App["crm"]
+	g := asMap(asList(a.Raw["menu"])[0])
+	if l := asMap(g["group"]); l["id"] != "Pelanggan dan peluang" || l["en"] != "Customers and deals" {
+		t.Errorf("crm menu group = %v, want the company's label", l)
+	}
+	if len(asList(g["items"])) == 0 {
+		t.Error("the group lost its items")
+	}
+	if orig := asMap(asMap(asList(asMap(a.Doc.Data)["menu"])[0])["group"]); orig["id"] != "CRM" {
+		t.Errorf("app.rk data changed: %v", orig)
+	}
+	if reg.Overlays["app.crm"] != nil || reg.AppOverlays["crm"] == nil {
+		t.Error("custom/app.crm.rk must load as an app overlay, not a model overlay")
+	}
+}
+
+// Audit menu-labels F3: an app upgrade that changes a group's words leaves a stale key; the site still loads (warning
+// unknown_group) and the menu keeps the app's label.
+func TestAppOverlayStaleGroupIsWarning(t *testing.T) {
+	site := t.TempDir()
+	if err := os.CopyFS(site, os.DirFS("../../testdata/overlay-site")); err != nil {
+		t.Fatal(err)
+	}
+	stale := "app: crm\nmenu_labels:\n  CRM lama: {id: Pelanggan}\n"
+	if err := os.WriteFile(filepath.Join(site, "custom", "app.crm.rk"), []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: site}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("a stale menu label must not stop the site: %v", rep.All())
+	}
+	warned := false
+	for _, x := range rep.All() {
+		if x.Code == "unknown_group" && x.Level == "warn" {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Error("no unknown_group warning for a stale key")
+	}
+	if g := asMap(asMap(asList(reg.App["crm"].Raw["menu"])[0])["group"]); g["id"] != "CRM" {
+		t.Errorf("crm group = %v, want the app's own label", g)
+	}
+}

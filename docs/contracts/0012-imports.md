@@ -128,6 +128,23 @@ Schema check, `name_mismatch`, `unknown_model` (with suggestion), `lines.field` 
 a field of the link target, `per: outlet` needs an `outlet` link field (`import_per_outlet`), CEL parentheses.
 Columns cannot be checked without a file.
 
+### 7. Templates (added 14 Nov 2026)
+`GET /imports/{import}/template?format=csv|xlsx` (default: the import's `source`) downloads a file to fill in, so an
+owner never guesses column names. Same permission as a preview (`import` on `model`); tokens may download it.
+- Columns: the ones a preview checks, in the same order: `map` columns (formulas have none), then `lines.map`,
+  then `key` and `group` columns not named yet. Each header once.
+- One example row derived from the target field's type, in a form the reader accepts: `currency` `15000`, `int`
+  `1`, `float` `1,5`, `date` today as `dd/mm/yyyy`, `check` `Ya`, `select` the first option's value, a link
+  `Contoh <label>` (the note names the target and the `match` field). Nothing is read from the org's records.
+- XLSX: the data sheet (named `sheet`, else `Data`) with the header at `header_row` and the example under it, plus
+  a `Petunjuk` sheet: general notes (one row per record or line, replace the example row, number and date formats,
+  per-outlet upload, re-uploads skip known keys, drafts) and one line per column (Kolom, Isi, Wajib, Contoh). CSV
+  carries the header and the example only. Every cell is text, never a formula.
+- File name `template-<import>.csv|xlsx`. A bad `format` is 400 `bad_request`; an unknown import 404.
+- The template previews with no missing column (a test uploads it back).
+
+The web wizard offers "Unduh template" (XLSX) and "Template CSV" on its first step.
+
 ## Schema
 New kind, so it lives in `schema/0.5/import.json`; the kernel and the Python validator embed `schema/0.5/*.json`
 next to 0.4 and look a schema up by kind (0.4 first, then 0.5). Only the `$schema` kind is read, as before.

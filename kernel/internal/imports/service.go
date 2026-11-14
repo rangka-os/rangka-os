@@ -577,3 +577,12 @@ func toInt64(v any) int64 {
 	n, _ := v.(int64)
 	return n
 }
+
+// Template returns the template of an import the caller may run (the same "import" permission as a preview).
+func (s *Service) Template(ctx context.Context, a engine.Actor, name string) (*Template, error) {
+	im, err := s.imp(ctx, a, name)
+	if err != nil {
+		return nil, err
+	}
+	return BuildTemplate(s.Engine.Reg(), im, s.Engine.Now().In(s.Engine.Location())), nil
+}

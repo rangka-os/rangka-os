@@ -490,6 +490,16 @@ def _mock_imports(page, ctx):
         if name != IMPORT_NAME:
             _json(route, 404, {"error": {"code": "not_found", "message": "import tidak ditemukan"}})
             return
+        if req.method == "GET" and eid == "template":  # contract 0012 §7: header row + one example row
+            fmt = urllib.parse.parse_qs(urllib.parse.urlparse(req.url).query).get("format", ["csv"])[0]
+            if fmt == "xlsx":  # the mock has no workbook writer: a ZIP signature is enough for the browser side
+                route.fulfill(status=200, body=b"PK\x03\x04mock", headers={
+                    "Content-Type": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                    "Content-Disposition": f'attachment; filename="template-{IMPORT_NAME}.xlsx"'})
+            else:
+                route.fulfill(status=200, body="\ufeff" + csv_text([["Contoh nama barang", "Contoh satuan", "15000"]]), headers={
+                    "Content-Type": "text/csv; charset=utf-8", "Content-Disposition": f'attachment; filename="template-{IMPORT_NAME}.csv"'})
+            return
         if req.method == "GET" and not eid:
             _json(route, 200, {"imports": [dict(entry_json(e), preview=None) for e in st["entries"].values()][-50:]})
             return
@@ -2998,6 +3008,33 @@ def test_import_double_click_commit(page, ctx):
         assert len(items_named(ctx, "Dobel ")) == 2, "two records, once"
     finally:
         shutil.rmtree(tmp, ignore_errors=True)
+
+
+def test_import_template(page, ctx):
+    """Contract 0012 §7: step 1 offers "Unduh template" (Excel) and "Template CSV"; each downloads the file the kernel
+    names, and the CSV starts with the import's column headers followed by one example row."""
+    mock_feature(page, "imports")
+    open_import(page, ctx)
+    btn = main_area(page).get_by_role("button", name="Unduh template", exact=True)
+    btn.wait_for(timeout=5000)
+    with page.expect_download(timeout=15000) as dl:
+        btn.click()
+    assert dl.value.suggested_filename == f"template-{IMPORT_NAME}.xlsx", dl.value.suggested_filename
+    with open(dl.value.path(), "rb") as f:
+        data = f.read()
+    assert data[:4] == b"PK\x03\x04", "an XLSX file is a ZIP"
+    if "imports" in ctx.live:  # the kernel's workbook: the data sheet and the notes sheet
+        import zipfile
+        with zipfile.ZipFile(io.BytesIO(data)) as z:
+            wb = z.read("xl/workbook.xml").decode()
+        assert 'name="Data"' in wb and 'name="Petunjuk"' in wb, wb[:400]
+    with page.expect_download(timeout=15000) as dl:
+        main_area(page).get_by_role("button", name="Template CSV", exact=True).click()
+    assert dl.value.suggested_filename == f"template-{IMPORT_NAME}.csv", dl.value.suggested_filename
+    with open(dl.value.path(), encoding="utf-8-sig") as f:
+        rows = list(csv.reader(f))
+    assert tuple(rows[0][:3]) == IMPORT_COLUMNS and len(rows) == 2, rows
+    assert main_area(page).get_by_role("button", name="Periksa file", exact=True).is_disabled(), "a template download uploads nothing"
 
 
 def test_import_file_too_large(page, ctx):

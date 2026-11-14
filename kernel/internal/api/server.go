@@ -179,6 +179,7 @@ func (s *Server) Handler() http.Handler {
 	// imports
 	mux.HandleFunc("POST /api/v1/imports/{import}", a(s.previewImport))
 	mux.HandleFunc("POST /api/v1/imports/{import}/{id}/commit", a(s.commitImport))
+	mux.HandleFunc("GET /api/v1/imports/{import}/template", a(s.importTemplate))
 	mux.HandleFunc("GET /api/v1/imports/{import}/{id}", a(s.getImport))
 	mux.HandleFunc("GET /api/v1/imports/{import}", a(s.listImports))
 	// realtime

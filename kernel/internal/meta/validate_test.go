@@ -359,3 +359,9 @@ func TestCatalogueKeys(t *testing.T) {
 func TestBrokenCatalogueKeysMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-catalogue-keys.expected.txt", Options{AppsDir: "testdata/broken-catalogue-keys/apps", SiteDir: "testdata/broken-catalogue-keys/site", ConnectorsDir: "testdata/broken-catalogue-keys/connectors"})
 }
+
+// The member record (contract 0055 §1, §5): a user model with account_id keeps its kernel-owned fields read_only
+// and hides phone and email from every role but owner and head_office.
+func TestBrokenMemberRecordMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-member-record.expected.txt", Options{AppsDir: "testdata/broken-member-record/apps", SiteDir: "testdata/broken-member-record/site"})
+}

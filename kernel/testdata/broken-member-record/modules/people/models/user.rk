@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: user
+label: {id: Anggota}
+fields:
+  - {name: account_id, type: data, label: {id: Akun}, read_only: true}
+  - {name: email, type: data, label: {id: Email}, read_only: true}
+  - {name: role, type: data, label: {id: Peran}}
+  - {name: outlets, type: data, label: {id: Outlet}, read_only: true}
+  - {name: access, type: data, label: {id: Akses}, read_only: true}
+  - {name: phone, type: data, label: {id: Telepon}, hidden_for: [cashier]}
+permissions:
+  - {role: owner, read: true, create: true, write: true}

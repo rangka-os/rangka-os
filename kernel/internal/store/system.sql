@@ -427,3 +427,11 @@ create table if not exists rk_edge_events (
 );
 alter table rk_edge_events add column if not exists message text not null default '';
 create index if not exists rk_edge_events_received on rk_edge_events (received_at);
+-- Mulai di sini (contract 0053 §3): the org's hide flag; kernel state, not metadata and not a change set. No foreign
+-- key, like rk_poll_cursors: a dev-open org has no rk_orgs row.
+create table if not exists rk_onboarding (
+  org_id  text primary key,
+  hidden  boolean not null default false,
+  by_user text not null default '',
+  at      timestamptz not null default now()
+);

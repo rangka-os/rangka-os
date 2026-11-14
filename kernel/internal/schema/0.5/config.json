@@ -148,6 +148,17 @@
         }
       }
     },
+    "onboarding": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "process": {
+          "type": "string",
+          "pattern": "^[a-z][a-z0-9_]*$",
+          "description": "The process Mulai di sini follows (contract 0053 §2)"
+        }
+      }
+    },
     "apps": {
       "type": "array",
       "items": {

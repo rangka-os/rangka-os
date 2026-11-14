@@ -169,7 +169,7 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor, 
 		"user":       map[string]any{"email": a.ID, "name": a.UserName, "roles": a.Roles},
 		"changesets": s.changesetsMeta(a, human),
 		"today":      e.Today(),
-		"features":   map[string]any{"ai": s.aiFeature(ctx, reg.SiteConfig("ai.enabled") != false)},
+		"features":   s.aiFeatures(ctx, reg.SiteConfig("ai.enabled") != false),
 	}
 	return out, nil
 }

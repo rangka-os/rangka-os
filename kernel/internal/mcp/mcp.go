@@ -46,6 +46,8 @@ type Handler struct {
 	// Catalogue and Skills serve contract 0035: what exists for this site, and the skills agents load.
 	Catalogue func() any
 	Skills    func() *skills.Library
+	// Onboarding serves rangka_onboarding (contract 0053 §6): GET /api/v1/onboarding for the caller.
+	Onboarding func(ctx context.Context, a engine.Actor) (any, error)
 }
 
 type request struct {
@@ -259,6 +261,7 @@ var assistantTools = map[string]bool{
 	"rangka_system_status": true, "rangka_changeset_propose": true, "rangka_changeset_validate": true,
 	"rangka_changeset_preview": true, "rangka_changeset_status": true, "rangka_approvals_list": true,
 	"rangka_catalogue": true, "rangka_skills": true, "rangka_skill": true, "rangka_skill_file": true,
+	"rangka_onboarding": true,
 }
 
 // ToolNames returns the names of every tool this server lists (rangka skills check rejects others).
@@ -299,6 +302,7 @@ func tools() []any {
 		map[string]any{"name": "rangka_approvals_list", "title": "List approvals", "description": "Document approval requests of this organisation, newest first, each with can_decide for the caller. Filter by state (pending, approved, rejected, void), model and record name.",
 			"inputSchema": obj(map[string]any{"state": map[string]any{"enum": []string{"pending", "approved", "rejected", "void"}}, "model": strp("model name"), "name": strp("record name")}), "annotations": ro},
 		map[string]any{"name": "rangka_catalogue", "title": "Catalogue", "description": "Every app, module and connector this site can use, with state (installed, available, not_in_plan); per app the installed modules it shares and the modules it adds. Read it before naming an app (contract 0035).", "inputSchema": obj(map[string]any{}), "annotations": ro},
+		map[string]any{"name": "rangka_onboarding", "title": "Mulai di sini", "description": "The owner's first steps (contract 0053): the business process stages with state done, open or locked, what each locked one needs, the current step and the locked menus (GET /api/v1/onboarding). Read only: suggest the current step and prepare a draft or an import preview; saving stays the owner's action.", "inputSchema": obj(map[string]any{}), "annotations": ro},
 		map[string]any{"name": "rangka_skills", "title": "List skills", "description": "Rangka skills (Agent Skills): name, description and source of each. Load one with rangka_skill before working in its area.", "inputSchema": obj(map[string]any{}), "annotations": ro},
 		map[string]any{"name": "rangka_skill", "title": "Load a skill", "description": "One skill's SKILL.md instructions and the list of its other files.", "inputSchema": obj(map[string]any{"name": strp("skill name, e.g. rangka-compose")}, "name"), "annotations": ro},
 		map[string]any{"name": "rangka_skill_file", "title": "Read a skill file", "description": "One file of a skill (a reference), by its path inside the skill.", "inputSchema": obj(map[string]any{"name": strp("skill name"), "path": strp("path inside the skill, e.g. references/apps.md")}, "name", "path"), "annotations": ro},
@@ -363,6 +367,11 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 			return nil, errors.New("no catalogue on this server")
 		}
 		return h.Catalogue(), nil
+	case "rangka_onboarding":
+		if h.Onboarding == nil {
+			return nil, errors.New("no onboarding on this server")
+		}
+		return h.Onboarding(ctx, c.Actor)
 	case "rangka_skills":
 		list := []any{}
 		for _, sk := range h.library().Skills {

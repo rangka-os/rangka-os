@@ -547,7 +547,13 @@ func TestMigrateNamesSubmittedDocumentsLeft(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	res := e.mustMigrate(MigrateOpts{Source: "test"})
+	// a plain migrate (a change set's reload, a restore) does not count (audit N1)
+	for _, n := range e.mustMigrate(MigrateOpts{Source: "test"}).Notes {
+		if strings.Contains(n, "submitted document") {
+			t.Fatalf("counted without SubmittedNotes: %s", n)
+		}
+	}
+	res := e.mustMigrate(MigrateOpts{Source: "test", SubmittedNotes: true})
 	var sub []string
 	for _, n := range res.Notes {
 		if strings.Contains(n, "submitted document") {

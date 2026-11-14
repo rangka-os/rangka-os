@@ -209,7 +209,9 @@ func (dc *dashCtx) widget(w *meta.Widget, days int) (map[string]any, error) {
 	}
 	// contract 0027: a widget that totals, groups or lists a field hidden from the actor is not shown to them
 	if hidden := dc.e.hiddenFields(dc.a, m); hidden != nil {
-		if hidden[w.Field] || hidden[w.GroupBy] || hidden[strings.TrimPrefix(w.Sort, "-")] {
+		// a chart sorts its groups by their aggregate or label ('value', 'label'), never by a field of the model: only a
+		// list's sort names a field
+		if hidden[w.Field] || hidden[w.GroupBy] || (w.Type == "list" && hidden[strings.TrimPrefix(w.Sort, "-")]) {
 			return map[string]any{"hidden": true}, nil
 		}
 		for _, c := range w.Columns {

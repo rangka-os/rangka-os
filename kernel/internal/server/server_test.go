@@ -281,7 +281,9 @@ func TestREST(t *testing.T) {
 		t.Fatalf("installed = %v", meta["installed"])
 	}
 	// orgs and members
-	if o := e.must(200, "GET", "/api/v1/orgs", nil).JSON; get(o, "data", 0, "id") != "kopi-senja" || get(o, "data", 0, "role") != "owner" {
+	// last_activity_at: the owner's own requests count (contract 0055 §3)
+	if o := e.must(200, "GET", "/api/v1/orgs", nil).JSON; get(o, "data", 0, "id") != "kopi-senja" || get(o, "data", 0, "role") != "owner" ||
+		get(o, "data", 0, "last_activity_at") == nil {
 		t.Fatalf("orgs: %v", o)
 	}
 	if m := e.must(200, "GET", "/api/v1/orgs/kopi-senja/members", nil).JSON; get(m, "data", 0, "record") != "USR-001" || get(m, "data", 0, "roles", 0) != "owner" ||

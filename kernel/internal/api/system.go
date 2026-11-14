@@ -279,9 +279,22 @@ func (s *Server) listOrgs(w http.ResponseWriter, r *http.Request, c *caller) {
 		if len(m.Roles) > 0 {
 			role = m.Roles[0]
 		}
-		out = append(out, map[string]any{"id": m.ID, "name": m.Name, "code": m.Code, "plan": plan, "usage": s.orgUsage(r.Context(), m.ID), "role": role, "current": m.ID == c.actor.Org})
+		out = append(out, map[string]any{"id": m.ID, "name": m.Name, "code": m.Code, "plan": plan, "usage": s.orgUsage(r.Context(), m.ID), "role": role, "current": m.ID == c.actor.Org,
+			"last_activity_at": s.lastActivity(r.Context(), m.ID)})
 	}
 	writeJSON(w, 200, map[string]any{"data": out})
+}
+
+// lastActivity is the newest rk_members.last_active_at in org as RFC 3339 UTC, or nil (contract 0055 §3).
+func (s *Server) lastActivity(ctx context.Context, org string) any {
+	res, err := s.DB.Query(ctx, "select max(last_active_at) from rk_members where org_id = $1", org)
+	if err != nil || len(res.Rows) == 0 {
+		return nil
+	}
+	if t, ok := res.Rows[0][0].(time.Time); ok {
+		return t.UTC().Format(time.RFC3339)
+	}
+	return nil
 }
 
 func (s *Server) listMembers(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -299,7 +312,7 @@ func (s *Server) listMembers(w http.ResponseWriter, r *http.Request, c *caller) 
 		return
 	}
 	res, err := s.DB.Query(r.Context(), `select u.id, u.email, u.full_name, m.role, coalesce(m.record, ''),
-		greatest((select max(created_at) from rk_sessions x where x.user_id = u.id), (select max(last_used_at) from rk_tokens t where t.user_id = u.id))
+		greatest(m.last_active_at, (select max(created_at) from rk_sessions x where x.user_id = u.id and not x.system), (select max(last_used_at) from rk_tokens t where t.user_id = u.id))
 		from rk_members m join rk_users u on u.id = m.user_id where m.org_id = $1 order by u.email`, r.PathValue("id"))
 	if err != nil {
 		fail(w, err)

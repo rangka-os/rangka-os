@@ -16,6 +16,7 @@ import (
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Email, Password, Org string
+		System               bool // a system session (contract 0055 §2)
 	}
 	if err := readJSON(r, &body); err != nil {
 		writeError(w, 400, "bad_json", err.Error())
@@ -31,7 +32,7 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 			}
 		}
 	}
-	tok, u, err := s.Auth.Login(r.Context(), body.Email, body.Password, org)
+	tok, u, err := s.Auth.LoginAs(r.Context(), body.Email, body.Password, org, body.System)
 	if errors.Is(err, auth.ErrBadLogin) {
 		writeError(w, 401, "bad_login", err.Error())
 		return

@@ -32,6 +32,8 @@ create table if not exists rk_members (
 );
 alter table rk_orgs add column if not exists code text not null default '';
 alter table rk_members add column if not exists outlets text[] not null default '{}';
+-- when the member last used the organisation (contract 0055 §1), written at most every 5 minutes
+alter table rk_members add column if not exists last_active_at timestamptz;
 create table if not exists rk_identities (
   issuer     text not null,                -- upstream OIDC issuer URL
   subject    text not null,                -- the issuer's stable user id (sub)
@@ -58,6 +60,8 @@ create table if not exists rk_sessions (
 );
 -- how the session was opened: password or upstream (contract 0042 §6 applies auth.password when it switches org)
 alter table rk_sessions add column if not exists method text not null default 'password';
+-- a system session (contract 0055 §2): works like any session, but nothing it does counts as activity
+alter table rk_sessions add column if not exists system boolean not null default false;
 create table if not exists rk_tokens (
   id           bigserial primary key,
   user_id      bigint not null references rk_users(id) on delete cascade,

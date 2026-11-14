@@ -257,7 +257,7 @@ func (s *Service) UpstreamCallback(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	ctx := r.Context()
-	tok, err := s.openSession(ctx, u, UpstreamSessionTTL, SessionUpstream)
+	tok, err := s.openSession(ctx, u, UpstreamSessionTTL, SessionUpstream, false)
 	if err != nil {
 		s.upstreamFail(w, r, up, &upstreamError{500, "internal", "Terjadi kesalahan. Coba lagi.", "open session: " + err.Error()})
 		return

@@ -12,18 +12,20 @@ type Membership struct {
 	Name  string   `json:"name"`
 	Code  string   `json:"code"`
 	Roles []string `json:"roles"`
+	// Sandbox marks the ruang coba (contract 0052 §3): demo data, nothing sent outside.
+	Sandbox bool `json:"sandbox"`
 }
 
 // Memberships lists the organisations of a user, sorted by org id.
 func Memberships(ctx context.Context, q pg.Querier, userID int64) ([]Membership, error) {
-	res, err := q.Query(ctx, `select o.id, o.name, case when o.code = '' then upper(o.id) else o.code end, m.role
+	res, err := q.Query(ctx, `select o.id, o.name, case when o.code = '' then upper(o.id) else o.code end, m.role, o.sandbox
 		from rk_members m join rk_orgs o on o.id = m.org_id where m.user_id = $1 order by o.id`, userID)
 	if err != nil {
 		return nil, err
 	}
 	out := []Membership{}
 	for _, r := range res.Rows {
-		m := Membership{ID: r[0].(string), Name: r[1].(string), Code: r[2].(string), Roles: []string{}}
+		m := Membership{ID: r[0].(string), Name: r[1].(string), Code: r[2].(string), Roles: []string{}, Sandbox: r[4] == true}
 		if role := r[3].(string); role != "" {
 			m.Roles = append(m.Roles, role)
 		}

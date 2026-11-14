@@ -30,6 +30,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
+	"github.com/rangka-os/rangka-os/kernel/internal/sandbox"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -395,10 +396,31 @@ func upstreams(cfg any, lookup func(string) (string, bool)) ([]auth.Upstream, er
 
 // Start runs the realtime listener, queue workers and scheduler until ctx ends.
 func (s *Server) Start(ctx context.Context) {
-	s.wg.Add(2)
+	s.wg.Add(3)
 	go func() { defer s.wg.Done(); s.Hub.Run(ctx, s.DB) }()
 	go func() { defer s.wg.Done(); s.Sched.Run(ctx) }()
+	go func() { defer s.wg.Done(); s.expireSandboxes(ctx) }()
 	s.Queue.Start(ctx)
+}
+
+// expireSandboxes deletes a ruang coba unused for sandbox.IdleDays (contract 0052 §1), at start and every hour.
+func (s *Server) expireSandboxes(ctx context.Context) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		gone, err := sandbox.Expire(ctx, s.Engine, s.Engine.Now())
+		if err != nil && ctx.Err() == nil {
+			s.Cfg.Logf("sandbox: expire: %v", err)
+		}
+		for _, sb := range gone {
+			s.Cfg.Logf("sandbox: %s expired after %d idle days", sb, sandbox.IdleDays)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
 }
 
 // Wait waits for background loops after ctx ended.

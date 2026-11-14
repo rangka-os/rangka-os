@@ -17,7 +17,8 @@ func (s *Server) hook(w http.ResponseWriter, r *http.Request) {
 	if org == "" {
 		org = s.Org
 	}
-	res, err := s.DB.Query(r.Context(), "select 1 from rk_orgs where id = $1", org)
+	// the ruang coba takes no webhooks: nothing from outside is routed to it (contract 0052 §2)
+	res, err := s.DB.Query(r.Context(), "select 1 from rk_orgs where id = $1 and not sandbox", org)
 	if err != nil {
 		fail(w, err)
 		return

@@ -58,6 +58,9 @@ func (s *Service) Propose(ctx context.Context, a Actor, body map[string]any) (*C
 // ProposeFrom is Propose with the kernel's own source mark: "catalogue" when the catalogue built the change set
 // (contract 0036 §4). The assistant's "ai" mark wins: a body never sets source itself.
 func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any, source string) (*ChangeSet, error) {
+	if err := s.notInSandbox(ctx, a); err != nil {
+		return nil, err
+	}
 	if body == nil {
 		body = map[string]any{}
 	}
@@ -643,6 +646,9 @@ func keysOf(m map[string]bool) any {
 
 // Approve marks a validated (or previewed) change set approved.
 func (s *Service) Approve(ctx context.Context, a Actor, id, note string) (*ChangeSet, error) {
+	if err := s.notInSandbox(ctx, a); err != nil {
+		return nil, err
+	}
 	if err := s.mayApprove(a); err != nil {
 		return nil, err
 	}
@@ -677,6 +683,9 @@ func (s *Service) Reject(ctx context.Context, a Actor, id, note string) (*Change
 // Apply writes the files, migrates and reloads metadata. It needs approval, or config.ai.auto_apply:
 // low_risk for a low-risk validated change set.
 func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, error) {
+	if err := s.notInSandbox(ctx, a); err != nil {
+		return nil, err
+	}
 	if a.Assistant { // never, not even through config.ai.auto_apply
 		return nil, &Error{403, "ai_forbidden", auth.AIForbiddenMessage, nil}
 	}
@@ -822,6 +831,9 @@ func (s *Service) write(r roots, files map[string]*string) error {
 
 // Revert restores the file versions from before an applied change set and reloads.
 func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, error) {
+	if err := s.notInSandbox(ctx, a); err != nil {
+		return nil, err
+	}
 	if err := s.mayApprove(a); err != nil {
 		return nil, err
 	}
@@ -903,4 +915,17 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 		return nil, &Error{500, "revert_failed", "revert failed and was undone: " + err.Error(), nil}
 	}
 	return cs, s.transition(ctx, cs, a, "reverted", "previous file versions restored (added columns stay; their data is kept)", false)
+}
+
+// notInSandbox refuses a change set decided from the ruang coba (contract 0052 §2): metadata belongs to the site
+// and is shared with the real org, so a change made "in the sandbox" would change the real business.
+func (s *Service) notInSandbox(ctx context.Context, a Actor) error {
+	sb, err := store.IsSandbox(ctx, s.DB, a.Org)
+	if err != nil {
+		return err
+	}
+	if sb {
+		return &Error{409, "sandbox_readonly_meta", "Ruang coba tidak bisa mengubah sistem. Pindah ke usaha asli dulu untuk mengusulkan atau menerapkan perubahan.", nil}
+	}
+	return nil
 }

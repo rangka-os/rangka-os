@@ -10,6 +10,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 func (s *Server) login(w http.ResponseWriter, r *http.Request) {
@@ -23,8 +24,11 @@ func (s *Server) login(w http.ResponseWriter, r *http.Request) {
 	org := body.Org
 	if org == "" {
 		// the cookie is a preference; the session row is the authority
+		// a cookie never signs anyone in to the ruang coba (contract 0052 §3)
 		if c, err := r.Cookie(orgCookie); err == nil {
-			org = c.Value
+			if sb, err := store.IsSandbox(r.Context(), s.DB, c.Value); err == nil && !sb {
+				org = c.Value
+			}
 		}
 	}
 	tok, u, err := s.Auth.Login(r.Context(), body.Email, body.Password, org)
@@ -71,6 +75,7 @@ func (s *Server) memberships(ctx context.Context, c *caller) ([]auth.Membership,
 		return auth.Memberships(ctx, s.DB, c.p.User.ID)
 	}
 	m := auth.Membership{ID: c.p.User.Org, Name: c.p.User.Org, Code: strings.ToUpper(c.p.User.Org), Roles: []string{"owner"}}
+	m.Sandbox, _ = store.IsSandbox(ctx, s.DB, m.ID)
 	if res, err := s.DB.Query(ctx, "select name from rk_orgs where id = $1", m.ID); err == nil && len(res.Rows) > 0 {
 		m.Name = res.Rows[0][0].(string)
 	}

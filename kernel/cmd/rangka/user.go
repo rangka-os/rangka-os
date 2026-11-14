@@ -237,7 +237,7 @@ func runUser(args []string) error {
 		password = auth.RandomToken("unused", 16)
 	}
 	// contract 0028: a new person past the plan's people limit is refused (an existing member is not a new person)
-	if err := plan.CheckNewPerson(ctx, pool, ua.Email); err != nil {
+	if err := plan.CheckNewPerson(ctx, pool, ua.Org, ua.Email); err != nil {
 		return err
 	}
 	id, err := auth.EnsureUser(ctx, pool, ua.Email, ua.Name, password, ua.Org, ua.Role, ua.Record)

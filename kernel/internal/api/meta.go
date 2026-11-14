@@ -86,8 +86,18 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 		if fl, ok := raw["fields"].([]any); ok {
 			kept := make([]any, 0, len(fl))
 			for _, x := range fl {
-				if f := m.Field(meta.Str(meta.AsMap(x), "name")); f != nil && e.FieldHidden(a, m, f) {
+				f := m.Field(meta.Str(meta.AsMap(x), "name"))
+				if f != nil && e.FieldHidden(a, m, f) {
 					continue
+				}
+				// read_only_for: the field is shown read-only to the caller, so a form does not offer what is dropped
+				if fm := meta.AsMap(x); f != nil && fm != nil && e.FieldReadOnlyFor(a, m, f) {
+					cp := make(map[string]any, len(fm)+1)
+					for k, v := range fm {
+						cp[k] = v
+					}
+					cp["read_only"] = true
+					x = cp
 				}
 				kept = append(kept, x)
 			}

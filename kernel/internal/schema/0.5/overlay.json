@@ -17,7 +17,18 @@
       "description": "The app model this overlay extends; must equal the file name"
     },
     "label": {
-      "$ref": "model.json#/$defs/label"
+      "$ref": "model.json#/$defs/label",
+      "description": "The company's word for the model (page title, the create button, widget titles); replaces the app model's label (contract 0049 §5)"
+    },
+    "labels": {
+      "type": "object",
+      "description": "The company's words for fields of the app model, by field name; each replaces that field's label (contract 0049 §5)",
+      "propertyNames": {
+        "pattern": "^[a-z][a-z0-9_]{0,62}$"
+      },
+      "additionalProperties": {
+        "$ref": "model.json#/$defs/label"
+      }
     },
     "fields": {
       "type": "array",

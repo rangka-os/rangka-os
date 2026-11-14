@@ -546,6 +546,10 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 	if !reflect.DeepEqual(normalize(old["views"]), normalize(nw["views"])) {
 		a.raise("low", "changes views of "+p)
 	}
+	// the company's words for the model and its fields (0049 §5): display only, like views
+	if !reflect.DeepEqual(normalize(old["label"]), normalize(nw["label"])) || !reflect.DeepEqual(normalize(old["labels"]), normalize(nw["labels"])) {
+		a.raise("low", "changes labels of "+p)
+	}
 }
 
 func isEmpty(v any) bool {

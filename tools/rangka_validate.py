@@ -1969,6 +1969,10 @@ def check_overlay_options_views(rep, p, mn, o, m, merged, known):
                 continue
             have.add(val)
             added.setdefault(fn, []).append(val)
+    labels = o.get("labels") if isinstance(o.get("labels"), dict) else {}
+    for fn in sorted(labels):  # contract 0049 §5: the company's word for a field of the model
+        if fn not in merged:
+            rep.add("error", p, f"labels/{fn}", "unknown_field", f'"{fn}" is not a field of {mn}{suggest(fn, merged)}')
     ov = o.get("views") if isinstance(o.get("views"), dict) else {}
     form = ov.get("form") if isinstance(ov.get("form"), dict) else {}
     for si, sec in enumerate(form.get("layout", [])):

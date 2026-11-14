@@ -313,6 +313,30 @@ func TestRoleChangeClearsPin(t *testing.T) {
 	}
 }
 
+// Pengaturan → Tim (contract 0056 §4) shares writeMember with the Member API, so a real role change there clears the
+// PIN too (ruling R2); an unchanged PATCH keeps it.
+func TestTeamRoleChangeClearsPin(t *testing.T) {
+	e := pinEnv(t)
+	e.login()
+	id := int64(invite(e, "sari@example.com", "sales_rep", "OUT-01").JSON["user_id"].(float64))
+	if err := e.s.Auth.SetPIN(context.Background(), "kopi-senja", id, "1357"); err != nil {
+		t.Fatal(err)
+	}
+	d, _ := e.pair("OUT-01", "Kasir 1")
+	d.must(200, "POST", "/auth/device/unlock", unlockBody(id, "1357"))
+	path := "/api/v1/team/" + strconv.FormatInt(id, 10)
+	e.must(200, "PATCH", path, map[string]any{"role": "sales_rep"})
+	d.must(200, "GET", "/auth/me", nil)
+	e.must(200, "PATCH", path, map[string]any{"role": "sales_manager"})
+	d.must(401, "GET", "/auth/me", nil)
+	if dbOne(e, "select pin_hash from rk_members where org_id = 'kopi-senja' and user_id = $1", id) != nil {
+		t.Fatal("PIN kept after a Tim role change")
+	}
+	if r := d.must(401, "POST", "/auth/device/unlock", unlockBody(id, "1357")); errCodeOf(r) != "pin_wrong" {
+		t.Fatalf("after Tim role change = %s", r.Body)
+	}
+}
+
 func TestClearPinRoute(t *testing.T) {
 	e := pinEnv(t)
 	id := staffMember(e, "sari@kopisenja.id", "sales_rep", "OUT-01")

@@ -1495,7 +1495,8 @@ def test_team_invite_link(page, ctx):
     link_input = page.locator("#ap-team-link")
     link_input.wait_for(timeout=10000)
     link = link_input.input_value()
-    assert "/#/masuk/tautan?t=" in link, link
+    # the shown link is on the address the owner uses, not the kernel's issuer (localhost:8080 here)
+    assert link.startswith(ctx.base + "/app/#/masuk/tautan?t="), link
     wa = page.get_by_role("link", name="Kirim lewat WhatsApp").get_attribute("href")
     assert wa.startswith("https://wa.me/?text=") and urllib.parse.quote(link, safe="") in wa, wa
     assert page.get_by_role("button", name="Salin").count() == 1
@@ -1507,11 +1508,10 @@ def test_team_invite_link(page, ctx):
     assert "Menunggu masuk" in row.inner_text(), row.inner_text()
 
     # the person, signed out, in a fresh browser context
-    token = link.split("?t=", 1)[1]
     other = page.context.browser.new_context(viewport=page.viewport_size)
     try:
         p2 = other.new_page()
-        p2.goto(ctx.base + "/app/#/masuk/tautan?t=" + token)
+        p2.goto(link)
         p2.get_by_role("heading", name="Buat kata sandi").wait_for(timeout=10000)
         p2.get_by_label("Kata sandi baru").fill("pendek")
         p2.get_by_role("button", name="Simpan dan masuk").click()

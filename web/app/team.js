@@ -12,7 +12,9 @@
  * RangkaApp.SignInLinkPage #/masuk/tautan?t=<token>: shown by the shell's Root before it asks who is signed in. The
  * new member sets a password (POST /auth/link) and lands signed in.
  *
- * Pure helpers (test/team.test.js): accessLabel, accessTone, canEdit, inviteBody, teamRoles, waShare, linkToken.
+ * The link shown, copied and sent is shareLink(): the kernel's token on the address the owner has open.
+ *
+ * Pure helpers (test/team.test.js): accessLabel, accessTone, canEdit, inviteBody, teamRoles, waShare, linkToken, shareLink.
  */
 (function (global) {
   "use strict";
@@ -69,7 +71,17 @@
     return out;
   }
 
+  /** The sign-in link to share: the kernel's token on the address the owner has open (loc.origin + loc.pathname),
+   *  not the kernel's auth.issuer host, which defaults to localhost on a self-hosted install reached over a LAN or
+   *  VPS address. Without a token the kernel's link comes back unchanged. */
+  function shareLink(signinLink, loc) {
+    var t = linkToken(signinLink);
+    if (!t || !loc || !loc.origin) return signinLink;
+    return loc.origin + (loc.pathname || "/") + "#/masuk/tautan?t=" + encodeURIComponent(t);
+  }
+
   RA.accessLabel = accessLabel;
+  RA.shareLink = shareLink;
   RA.accessTone = accessTone;
   RA.canEdit = canEdit;
   RA.inviteBody = inviteBody;
@@ -289,7 +301,7 @@
     if (dialog && dialog.kind === "invite") {
       dlg = h(InviteDialog, { ctx: ctx, pickers: pickers, onClose: function () { setDialog(null); }, onDone: function (b, res) {
         reload();
-        if (res.signin_link) setDialog({ kind: "link", name: b.full_name, link: res.signin_link });
+        if (res.signin_link) setDialog({ kind: "link", name: b.full_name, link: shareLink(res.signin_link, global.location) });
         else { setDialog(null); ctx.toast("ok", b.full_name + " masuk tim", "Dia bisa masuk dengan akun yang sudah dia punya."); }
       } });
     } else if (dialog && dialog.kind === "edit") {

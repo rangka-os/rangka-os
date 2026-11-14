@@ -42,6 +42,15 @@ test("linkToken reads t from the hash query", () => {
   assert.strictEqual(A.linkToken("#/masuk/tautan"), "");
 });
 
+test("shareLink puts the kernel's token on the address the owner is using", () => {
+  const loc = { origin: "https://toko.example", pathname: "/app/" };
+  assert.strictEqual(A.shareLink("http://localhost:8080/#/masuk/tautan?t=Ab-9_z", loc), "https://toko.example/app/#/masuk/tautan?t=Ab-9_z");
+  assert.strictEqual(A.shareLink("http://localhost:8080/#/masuk/tautan?t=a%2Bb", loc), "https://toko.example/app/#/masuk/tautan?t=a%2Bb");
+  assert.strictEqual(A.shareLink("http://192.168.1.5:8080/#/masuk/tautan?t=x", { origin: "http://192.168.1.5:8080", pathname: "/app/" }), "http://192.168.1.5:8080/app/#/masuk/tautan?t=x");
+  // no token in what the kernel sent: show it as it came
+  assert.strictEqual(A.shareLink("http://localhost:8080/", loc), "http://localhost:8080/");
+});
+
 test("waShare opens WhatsApp with the text and the link", () => {
   assert.strictEqual(A.waShare("Halo Ani", "http://x/#/masuk/tautan?t=a&b"), "https://wa.me/?text=" + encodeURIComponent("Halo Ani\nhttp://x/#/masuk/tautan?t=a&b"));
 });

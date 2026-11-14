@@ -160,7 +160,7 @@ An owner who answers in one word ("Ya.") still gets beat 2: the summary is where
   - `modules` recommended: also offer `bundle`, when apps in `rangka_catalogue` cover the stages. What the apps bring
     beyond the owner's flow goes in `adds`.
   - `bundle` recommended: also offer `modules`, always (the bundle's modules as plain modules, without the apps).
-- Only when no second path exists (`modules` recommended and no app fits) send one option. Never invent an alternative
+- Only when no second path exists (an all-custom `custom` option, or `modules` recommended and no app fits) send one option. Never invent an alternative
   to reach two: it follows the same rules as any option, and a thin honest one beats a padded one.
 - The options sit side by side on the card. Never push the alternatives in the reply.
 

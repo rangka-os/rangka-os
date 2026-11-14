@@ -199,28 +199,31 @@ never pushes the others in the reply. What changes is that an alternative is no 
   | `modules` | `bundle` | a set of apps in `rangka_catalogue` covers the stages; what the apps bring beyond the owner's flow goes in `adds` |
   | `bundle` | `modules` | always (the bundle's modules as plain modules, without the apps) |
 
-  When no second path exists (only the `modules` row applies and no app fits), the offer has one option. A third
-  option is still allowed (at most one per path, 0046 §2).
+  When no second path exists (an all-custom `custom` option, or `modules` recommended and no app fits), the offer has
+  one option. A third option is still allowed (at most one per path, 0046 §2).
 - **Never invented.** An alternative follows the same rules as any option (0046 §2): names from `rangka_catalogue`,
   `pieces` on the map, owner's-words lists that are true for that option, gaps in `not_covered`. A thin honest
   alternative beats a padded one.
 - **The check in rangka-ai** (`raka/interview/consult.py`, after the offer is checked):
-  1. When the cleaned offer has one option, Raka is asked once more (`ALT_ASKS = 1`, apart from `OFFER_ASKS`) with
+  1. When the cleaned offer has one option, Raka is asked once more (once per turn, apart from `OFFER_ASKS`) with
      `ALT_REQUIRED`: the offer as cleaned, the path of the required alternative from the table, the map's pieces, and
-     the reason. For `modules` recommended the ask says "kalau tidak ada app yang pas, kirim tawaran yang sama".
-     **No ask when code can already see no second path:** a `custom` option whose pieces are all `custom`.
+     the reason. For `bundle` required the ask says that when no app fits, Raka answers with `offer` and empty
+     `options` (a cheap "no"; code keeps the single option). **No ask when code can already see no second path:** a
+     `custom` option whose pieces are all `custom`.
   2. The answer's ops are not applied: the map, its hash and every option's `flow` stay those of the first offer.
   3. From the answer's offer, options are cleaned with `clean_offer` rules against the same map; options whose path is
      already in the offer are ignored; the rest are appended after the first offer's options. The recommended option
      is the first offer's, then 0050 §4 (more pains answered) runs over all options exactly as in `clean_offer`, so an
      appended option that covers every stage and answers more pains may become the recommendation. That is 0050's
      rule, not a side effect.
-  4. **Gaps are enforced for the `modules` alternative of a `custom` offer.** Code adds to the alternative's
-     `not_covered` every stage that lists one of the custom option's pieces and none of the alternative's pieces (text:
-     "Butuh kepingan khusus yang tidak ada di modul katalog."), before `flow` is computed, so the diagram never shows
-     such a stage as covered.
+  4. **Gaps are enforced for every non-`custom` alternative of a `custom` offer.** Code adds to the alternative's
+     `not_covered` every stage that lists a piece of the custom option whose kind is `custom` and none of the
+     alternative's pieces (the table's "stages only custom pieces serve"; text: "Butuh kepingan khusus yang tidak ada
+     di modul katalog."), before `flow` is computed, so the diagram never shows such a stage as covered. Stages served
+     only by catalogue pieces the alternative omits get nothing from code.
   5. A broken answer, no new path, or no time (`OFFER_ASK_MIN_LEFT_S`, the same deadline check as the offer ask)
-     keeps the single-option offer. The reply text is always the first answer's.
+     keeps the single-option offer. So does a timeout or a provider error in the ask itself: it runs under the turn's
+     deadline (less a few seconds of margin) and never loses a valid offer. The reply text is always the first answer's.
   6. "Budget" here means only that: the deadline check, and the ask's tokens are reported to Cloud as usage like
      every other call. No new token counting in rangka-ai. The ask also runs under `budget.final_offer` (the offer is
      that turn's job).
@@ -249,10 +252,12 @@ never pushes the others in the reply. What changes is that an alternative is no 
   lives in rangka-ai's prompts (§2).
 - Tests: valid subset, each refused construct, limits, line numbers; fixed on the first repair, dropped after two, a
   note dropped without repair, claim and diagram repairs together; `flow` from map and option for every `state`.
-- §5: the alternative ask in the consult path; `clean_offer` returns dropped duplicates. Tests: a single `custom`
+- §5: the alternative ask in the consult path; `clean_offer` returns dropped duplicates; `ConsultResult.alt_added` and
+  the log field `altAdded` (next to `altAsks`) say whether the ask added an option. Tests: a single `custom`
   option gets a `modules` alternative appended; the map hash and `flow` do not change and ops in the answer are not
   applied; the recommendation stays unless 0050 §4 moves it; stages served only by custom pieces land in the
-  alternative's `not_covered`; a broken answer or a same-path answer keeps one option; a relabelled duplicate triggers
+  alternative's `not_covered` (also for a `bundle` alternative); a broken answer, a same-path answer, a timeout or a
+  provider error in the ask keeps one option; a relabelled duplicate triggers
   the ask with its reason; no ask with two options, with an all-custom option, or without time left.
 
 **rangka-cloud**

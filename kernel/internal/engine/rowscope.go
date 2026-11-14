@@ -58,16 +58,16 @@ func (e *Engine) rowScopeIn(reg *meta.Registry, a Actor) *RowScope {
 		}
 	}
 	if s != nil {
-		s.targets = e.scopeTargets(s)
+		s.targets = scopeTargets(reg, s)
 	}
 	return s
 }
 
 // scopeTargets finds the models the scope fields link to on any installed model (outlet for outlet,
 // from_outlet, to_outlet). A scope field that is a link nowhere has no target.
-func (e *Engine) scopeTargets(s *RowScope) map[string]bool {
+func scopeTargets(reg *meta.Registry, s *RowScope) map[string]bool {
 	out := map[string]bool{}
-	for _, m := range e.Reg().Models {
+	for _, m := range reg.Models {
 		for _, fn := range s.Fields {
 			if f := m.Field(fn); f != nil && f.Type == "link" && f.To != "" {
 				out[f.To] = true

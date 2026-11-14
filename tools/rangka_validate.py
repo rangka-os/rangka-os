@@ -1889,7 +1889,7 @@ def check_app_overlays(rep, V, apps, app_overlays):
         ml = o.get("menu_labels") if isinstance(o.get("menu_labels"), dict) else {}
         for k in sorted(ml):
             if k not in keys:
-                rep.add("warning", p, f"menu_labels/{k}", "unknown_group", f'"{k}" is not a menu group or sub-menu of {name}{suggest(k, keys)}')
+                rep.add("warn", p, f"menu_labels/{k}", "unknown_group", f'"{k}" is not a menu group or sub-menu of {name}{suggest(k, keys)}')
 
 
 def check_overlays(rep, V, apps, allmodels, overlays):

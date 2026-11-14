@@ -333,7 +333,7 @@ func TestAppOverlayStaleGroupIsWarning(t *testing.T) {
 	}
 	warned := false
 	for _, x := range rep.All() {
-		if x.Code == "unknown_group" && x.Level != "error" {
+		if x.Code == "unknown_group" && x.Level == "warn" {
 			warned = true
 		}
 	}

@@ -137,7 +137,7 @@ func (r *Registry) RoleScope(role string) *RoleScope {
 }
 
 // RoleDesk returns a role's desk key (role.json) and whether the role sets it. Only a role with desk set to false is
-// a staff role that may use a cashier PIN (contract 0057 §2, 0048 §5); an absent key counts as desk.
+// a staff role that may use a cashier PIN (contract 0058 §2, 0048 §5); an absent key counts as desk.
 func (r *Registry) RoleDesk(role string) (desk, set bool) {
 	d := r.Roles[role]
 	if d == nil {

@@ -60,7 +60,7 @@ type Server struct {
 	limiter  ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
 	verified verifiedSet       // credentials verified in this process: they take the tenant's bucket (shape_verified.go)
 	proxies  trustedProxies    // RANGKA_TRUSTED_PROXIES: whose X-Forwarded-For names the client (shape_verified.go)
-	pairs    pairTries         // device pairing tries per address (devices_api.go, contract 0057 §2)
+	pairs    pairTries         // device pairing tries per address (devices_api.go, contract 0058 §2)
 }
 
 type ctxKey struct{}
@@ -124,7 +124,7 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 var errScopeLimited = errors.New("Token ini hanya untuk API anggota (members:write).")
 
 // memberRoute matches exactly the member routes of contract 0043: PUT and DELETE /api/v1/members/{upstream}/{subject},
-// plus GET /api/v1/members/options (contract 0056 §3). DELETE /api/v1/members/{user_id}/pin (contract 0057 §2) is
+// plus GET /api/v1/members/options (contract 0056 §3). DELETE /api/v1/members/{user_id}/pin (contract 0058 §2) is
 // not one of them.
 func memberRoute(r *http.Request) bool {
 	if r.Method == http.MethodGet {
@@ -160,7 +160,7 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return
 		}
-		// a paired device alone is no person: it reads and writes nothing here (contract 0057 §2)
+		// a paired device alone is no person: it reads and writes nothing here (contract 0058 §2)
 		if p == nil || p.User == nil {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="rangka"`)
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
@@ -279,22 +279,22 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/files/meta", a(s.listFiles)) // v0 aliases
 	mux.HandleFunc("GET /api/v1/files/meta/{path...}", a(s.getFile))
 	mux.HandleFunc("POST /api/v1/tokens", a(s.createToken))
-	// paired devices (contract 0057 §2): codes, list and revoke for owner and head office; pairing is not signed in
+	// paired devices (contract 0058 §2): codes, list and revoke for owner and head office; pairing is not signed in
 	mux.HandleFunc("POST /api/v1/devices/codes", a(s.createPairingCode))
 	mux.HandleFunc("GET /api/v1/devices", a(s.listDevices))
 	mux.HandleFunc("DELETE /api/v1/devices/{id}", a(s.revokeDevice))
-	// head-office exceptions (contract 0057 §10): owner and head office
+	// head-office exceptions (contract 0058 §10): owner and head office
 	mux.HandleFunc("GET /api/v1/exceptions", a(s.listExceptions))
 	mux.HandleFunc("POST /api/v1/exceptions/{id}/resolve", a(s.resolveException))
 	mux.HandleFunc("POST /auth/device/pair", s.pairBrowser)
-	// cashier PIN and unlock (contract 0057 §2): staff list and unlock take the device cookie alone
+	// cashier PIN and unlock (contract 0058 §2): staff list and unlock take the device cookie alone
 	mux.HandleFunc("PUT /auth/pin", a(s.putPin))
 	mux.HandleFunc("GET /auth/device/staff", s.withDevice(s.deviceStaff))
 	mux.HandleFunc("POST /auth/device/unlock", s.withDevice(s.deviceUnlock))
 	mux.HandleFunc("DELETE /api/v1/members/{user_id}/pin", a(s.clearMemberPin))
 	mux.HandleFunc("POST /api/v1/edge/register", s.registerEdge)
-	mux.HandleFunc("POST /api/v1/edge/events", s.withEdge(s.edgeEvents)) // contract 0057 §4: the device or its PIN session
-	mux.HandleFunc("GET /api/v1/edge/config", s.withEdge(s.edgeConfig))  // contract 0057 §7
+	mux.HandleFunc("POST /api/v1/edge/events", s.withEdge(s.edgeEvents)) // contract 0058 §4: the device or its PIN session
+	mux.HandleFunc("GET /api/v1/edge/config", s.withEdge(s.edgeConfig))  // contract 0058 §7
 	mux.HandleFunc("GET /api/v1/edge/data/{set}", s.withEdge(s.edgeData))
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
@@ -324,7 +324,7 @@ func (s *Server) Handler() http.Handler {
 		Version: s.Version,
 		Resolve: func(r *http.Request) (*mcp.Caller, error) {
 			p, err := s.principal(r)
-			// a cashier's PIN session (contract 0057 §2) does not reach MCP: it answers like no credential
+			// a cashier's PIN session (contract 0058 §2) does not reach MCP: it answers like no credential
 			if err != nil || p == nil || p.User == nil || p.Via == "pin" || !mcp.RequireScope(p) {
 				return nil, err
 			}

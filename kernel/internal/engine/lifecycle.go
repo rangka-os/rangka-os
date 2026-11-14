@@ -144,7 +144,7 @@ func (o *op) prepare(m *meta.Model, rec store.Record, isNew bool) {
 		o.settleMoney(m, rec)
 		return
 	}
-	// a device write's own document (contract 0057 §10): the kernel's values in shadow, the device's stored
+	// a device write's own document (contract 0058 §10): the kernel's values in shadow, the device's stored
 	var shadow store.Record
 	if drift {
 		shadow = cloneRecord(rec)
@@ -200,7 +200,7 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 			}
 		}
 	}
-	errs = o.overrideRules(m, errs) // a device write's rule failures go to head office (contract 0057 §10)
+	errs = o.overrideRules(m, errs) // a device write's rule failures go to head office (contract 0058 §10)
 	more, err := o.checkValues(m, rec, "")
 	errs = append(errs, more...)
 	return append(errs, s.checkMoney("", "", "", map[string]bool{})...), warns, err
@@ -427,7 +427,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
-	// the device write's own document of a naming_on: device model (contract 0057 §10): its money is the device's
+	// the device write's own document of a naming_on: device model (contract 0058 §10): its money is the device's
 	// and its rule failures go to head office
 	paid := own && m.NamingOn == "device" && deviceWriteFor(o.ctx, m.Name) != nil
 	if dw := deviceWriteFor(o.ctx, m.Name); paid && dw.Money != nil {
@@ -486,7 +486,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.planNewRecord(m); err != nil {
 		return nil, err
 	}
-	if d := o.actor.Device; d != nil && m.NamingOn == "device" { // the device it was made on (contract 0057 §6)
+	if d := o.actor.Device; d != nil && m.NamingOn == "device" { // the device it was made on (contract 0058 §6)
 		rec["created_device"] = d.ID
 	}
 	err = store.Insert(o.ctx, o.tx, o.registry(), o.actor.Org, m, rec)
@@ -755,7 +755,7 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 }
 
 // CreateAndSubmit creates a draft of the submittable model and submits it in one unit of work: a sale paid on a
-// paired device (contract 0057 §4, §10), sent as one screen.write create with submit: true. With a device write in
+// paired device (contract 0058 §4, §10), sent as one screen.write create with submit: true. With a device write in
 // ctx the submit takes the device's name.
 func (e *Engine) CreateAndSubmit(ctx context.Context, a Actor, model string, input map[string]any, force bool) (*Result, error) {
 	var res *Result
@@ -811,7 +811,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 	stored := cloneRecord(rec) // snapshot and approval when: read the stored record (0007 §2, §3)
 	paid := own && m.NamingOn == "device" && deviceWriteFor(o.ctx, m.Name) != nil
 	if dw := deviceWriteFor(o.ctx, m.Name); paid {
-		// the device's money stays binding at submit (contract 0057 §10): what it sent with this write, checked
+		// the device's money stays binding at submit (contract 0058 §10): what it sent with this write, checked
 		// against the kernel's; else what the draft stored when this device made it. A draft made elsewhere (online,
 		// another device) is recomputed.
 		if dw.Money != nil {

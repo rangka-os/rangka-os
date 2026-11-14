@@ -8,7 +8,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
-// Edge events (contract 0057 §4, 0006 §3): every event a paired device sends is stored once per org and key, with
+// Edge events (contract 0058 §4, 0006 §3): every event a paired device sends is stored once per org and key, with
 // what the kernel answered, so a replay of the key answers the same.
 
 // EdgeEventTTL is how long a key is kept (0006 §3: at least 400 days).

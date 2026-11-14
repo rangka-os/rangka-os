@@ -2,7 +2,7 @@
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
-**Goal:** The kernel side of contract 0057:
+**Goal:** The kernel side of contract 0058:
 - paired devices with codes, pairing and PIN unlock;
 - document names made on the device;
 - `POST /api/v1/edge/events`, which replays `screen.write` under the device's rules;
@@ -19,12 +19,12 @@
 
 **Tech Stack:** Go 1.24 kernel (stdlib `net/http`, in-tree `pg`, in-tree CEL), Python reference validator, JSON Schema 0.5.
 
-**Spec:** `docs/contracts/0057-offline-outlet.md` (§2, §3, §4, §7, §10, conflict rules). Plan 2 (web app offline) and
+**Spec:** `docs/contracts/0058-offline-outlet.md` (§2, §3, §4, §7, §10, conflict rules). Plan 2 (web app offline) and
 Plan 3 (printing, after the spike) follow and consume this plan's routes.
 
 ## Global Constraints
 
-- Contract 0057 is accepted before Task 2 lands. Branch `contract/offline-outlet` (worktree `.worktrees/contract-offline-outlet`).
+- Contract 0058 is accepted before Task 2 lands. Branch `contract/offline-outlet` (worktree `.worktrees/contract-offline-outlet`).
 - Device id: `dev_` + 20 hex. Device code: `K1`, `K2`, … per outlet, in pairing order, never reused after revoke.
 - Pairing code: 8 characters from `ABCDEFGHJKMNPQRSTUVWXYZ23456789`, single use, valid 15 minutes. Errors: `400 pairing_code_invalid` (one message for unknown, used and expired), `429 too_many_attempts`.
 - Browser device cookie: `rk_device`, HttpOnly, SameSite=Strict, Secure as `rk_session`, 400 days. Edge token prefix `rke_`. Only hashes are stored.
@@ -35,7 +35,7 @@ Plan 3 (printing, after the spike) follow and consume this plan's routes.
 - `occurred_at`: at most 5 minutes ahead and 30 days back (`occurred_at_too_old`).
 - Exception kinds: `edge_price_drift`, `negative_stock`, `device_number_gap`, `rule_overridden`. Table `rk_exceptions(org_id, outlet, device, kind, ref, detail jsonb, created_at, resolved_by, resolved_at)`.
 - Data set `staff` carries name and role only: no e-mail, no PIN material.
-- UI and error text: Bahasa Indonesia, sentence case, "kamu". Code and comments in English, citing contract 0057.
+- UI and error text: Bahasa Indonesia, sentence case, "kamu". Code and comments in English, citing contract 0058.
 - `make vet test compare-python` green; run `make sync-schemas` after editing `schema/0.5`.
 
 ## Review Focus
@@ -83,7 +83,7 @@ Plan 3 (printing, after the spike) follow and consume this plan's routes.
   - Store `sha256` of secrets only.
   - The device principal alone carries no user: `Human()` is false and record routes answer 401.
 - [ ] **Step 4:** Same command → PASS; `make test` PASS.
-- [ ] **Step 5: Commit** `kernel: paired devices, codes and pairing (contract 0057 §2)`.
+- [ ] **Step 5: Commit** `kernel: paired devices, codes and pairing (contract 0058 §2)`.
 
 ### Task 2: Cashier PIN and unlock
 
@@ -115,7 +115,7 @@ Plan 3 (printing, after the spike) follow and consume this plan's routes.
   - Audit every pair, revoke, unlock, failure and lockout, with no PIN and no hash in the entry.
   - Clearing a PIN on role, outlet or member change goes in the shared `writeMember`/`removeMember` path (contract 0056) and in `auth.SetOutlets`/`RemoveMember`.
 - [ ] **Step 4:** PASS; `make test` PASS; `make compare-python` identical (role key `desk`).
-- [ ] **Step 5: Commit** `kernel: cashier PIN and device unlock (contract 0057 §2)`.
+- [ ] **Step 5: Commit** `kernel: cashier PIN and device unlock (contract 0058 §2)`.
 
 ### Task 3: Head-office exceptions
 
@@ -133,7 +133,7 @@ Plan 3 (printing, after the spike) follow and consume this plan's routes.
   - `TestExceptionsForbiddenToCashier`.
   - `TestExceptionsOrgScoped` (an exception in `pt_beta` never shows).
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS, `make test`.
-- [ ] **Step 5: Commit** `kernel: head-office exceptions (contract 0057 §10)`.
+- [ ] **Step 5: Commit** `kernel: head-office exceptions (contract 0058 §10)`.
 
 ### Task 4: Names made on the device
 
@@ -160,7 +160,7 @@ Rule: for a model with `naming_on: device`, a write in a `DeviceWrite` context m
 - [ ] **Step 2:** `go test ./internal/engine/ -run DeviceName` and `go test ./internal/meta/ -run Broken` → FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** PASS; `make test`; `make compare-python` identical.
-- [ ] **Step 5: Commit** `kernel: names made on the device (contract 0057 §3)`.
+- [ ] **Step 5: Commit** `kernel: names made on the device (contract 0058 §3)`.
 
 ### Task 5: `POST /api/v1/edge/events`
 
@@ -195,7 +195,7 @@ Each event runs in its own unit of work, in `seq` order, under the `actor` as `e
   - A refusal from the engine maps to `rejected` with its code and message.
   - `print.done`, `print.failed` and `device.read` are stored and acknowledged only (`accepted`). Their handling is later work.
 - [ ] **Step 4:** PASS; `make test`.
-- [ ] **Step 5: Commit** `kernel: edge events with screen.write (contract 0057 §4)`.
+- [ ] **Step 5: Commit** `kernel: edge events with screen.write (contract 0058 §4)`.
 
 ### Task 6: Replay rules for device writes
 
@@ -230,7 +230,7 @@ In a `DeviceWrite` context:
 - [ ] **Step 2:** `go test ./internal/engine/ -run DeviceWrite` → FAIL.
 - [ ] **Step 3:** Implement.
 - [ ] **Step 4:** PASS; `make test`.
-- [ ] **Step 5: Commit** `kernel: replay rules for device writes (contract 0057 §10)`.
+- [ ] **Step 5: Commit** `kernel: replay rules for device writes (contract 0058 §10)`.
 
 ### Task 7: Config and data sets
 
@@ -253,7 +253,7 @@ Data sets are the models named by the reference slots of the work screens whose 
   - `TestEdgeStaffNoEmail` (rows have `id`, `name` and `role`, and no `email`).
   - `TestEdgeDataNeedsDevice` (a session cookie without a device → 401).
 - [ ] **Step 2:** FAIL. **Step 3:** Implement. **Step 4:** PASS; `make test`.
-- [ ] **Step 5: Commit** `kernel: edge config and data sets (contract 0057 §7)`.
+- [ ] **Step 5: Commit** `kernel: edge config and data sets (contract 0058 §7)`.
 
 ## Not in this plan
 

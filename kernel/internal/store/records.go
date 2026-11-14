@@ -705,7 +705,7 @@ func Scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []
 }
 
 // CreatedDevice is the paired device a record of a naming_on: device model was made on ("" when it was made without
-// one, or before the column existed; contract 0057 §6). A missing record is "" too.
+// one, or before the column existed; contract 0058 §6). A missing record is "" too.
 func CreatedDevice(ctx context.Context, q pg.Querier, org string, m *meta.Model, name string) (string, error) {
 	if m.NamingOn != "device" || m.IsChild {
 		return "", nil

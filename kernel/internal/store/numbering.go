@@ -192,7 +192,7 @@ func SetNextSeries(ctx context.Context, q pg.Querier, org, orgCode string, s Sch
 	return FormatNumber(prefix, suffix, digits, next), period, nil
 }
 
-// ClaimDeviceNumber records that a paired device used number n of series in period (contract 0057 §3) inside q's
+// ClaimDeviceNumber records that a paired device used number n of series in period (contract 0058 §3) inside q's
 // transaction and returns the highest number the series had before. The counter row is locked first, so a
 // second write of the same device waits here and then sees the first one's record. The counter never goes down: a
 // late lower number fills a gap and leaves it as it is.

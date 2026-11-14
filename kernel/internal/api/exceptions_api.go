@@ -7,7 +7,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Head-office exceptions (contract 0057 §10): the list and resolve of what outlets' offline work left behind.
+// Head-office exceptions (contract 0058 §10): the list and resolve of what outlets' offline work left behind.
 
 const (
 	msgExceptionsForbidden = "Hanya pemilik atau kantor pusat yang bisa melihat pengecualian."
@@ -15,7 +15,7 @@ const (
 	msgExceptionNotFound   = "Pengecualian tidak ditemukan."
 )
 
-// mayReadExceptions: owner or head office, never a PIN session or a device (contract 0057 §10).
+// mayReadExceptions: owner or head office, never a PIN session or a device (contract 0058 §10).
 func mayReadExceptions(c *caller) bool {
 	return c.p.Via != "device" && mayPairDevices(c)
 }

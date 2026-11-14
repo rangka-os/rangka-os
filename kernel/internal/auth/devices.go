@@ -13,7 +13,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Paired devices (contract 0057 §2, adopting 0048 §5 and 0006 §2): a browser or rangka-edge paired to one outlet.
+// Paired devices (contract 0058 §2, adopting 0048 §5 and 0006 §2): a browser or rangka-edge paired to one outlet.
 // A browser holds the rk_device cookie, rangka-edge a rke_ bearer token; the kernel keeps only their sha256.
 // The device alone carries no person: it reads and writes no data.
 

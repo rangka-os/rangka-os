@@ -1,9 +1,9 @@
 ../modules/jual/models/struk_lain.rk:6:12  error  schema  naming_on  'server' is not one of ['device']
-../modules/jual/models/struk_seri.rk:6:12  error  naming_on_device  naming_on  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)
-../modules/jual/models/struk_tanpa_kode.rk:6:12  error  naming_on_device  naming_on  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)
-../modules/jual/models/struk_tanpa_naming.rk:5:12  error  naming_on_device  naming_on  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)
+../modules/jual/models/struk_seri.rk:6:12  error  naming_on_device  naming_on  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0058 §3)
+../modules/jual/models/struk_tanpa_kode.rk:6:12  error  naming_on_device  naming_on  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0058 §3)
+../modules/jual/models/struk_tanpa_naming.rk:5:12  error  naming_on_device  naming_on  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0058 §3)
 ../modules/jual/models/struk_tanpa_on.rk:5:9  error  naming_field  naming  naming token {device.code}: model struk_tanpa_on has no field "device"
 ../modules/jual/models/struk.rk:9:12  error  reserved_field  fields/1/name  "created_device" is a system column of the kernel; pick another name
-../site/config.rk:7:10  error  naming_on_device  numbering/struk  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)
+../site/config.rk:7:10  error  naming_on_device  numbering/struk  naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0058 §3)
 
 7 error(s), 0 warning(s)

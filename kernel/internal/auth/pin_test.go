@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Cashier PIN (contract 0057 §2, 0048 §5).
+// Cashier PIN (contract 0058 §2, 0048 §5).
 
 func TestPinWeak(t *testing.T) {
 	for _, pin := range []string{"1234", "0000", "98765", "12", "1234567", "12a4", "", "4321", "456789", "111111", " 1357"} {
@@ -176,7 +176,7 @@ func TestPinAuditHasNoSecret(t *testing.T) {
 	}
 }
 
-// Parallel wrong PINs for one member: the try that makes 5 locks at once, so only 5 PINs are compared (contract 0057
+// Parallel wrong PINs for one member: the try that makes 5 locks at once, so only 5 PINs are compared (contract 0058
 // §2: check before compare).
 func TestPinLockoutConcurrent(t *testing.T) {
 	s, dev, uid := pinEnv(t)

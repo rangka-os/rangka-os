@@ -23,12 +23,12 @@ fields:
     label: {id: QRIS}
     compute: "payments.map(p, p.method == 'qris' ? p.amount : 0).sum()"
   - {name: change_amount, type: currency, label: {id: Kembalian}, compute: cash_received + qris_amount - grand_total}
-  # hidden from the cashier: never taken from the device (contract 0027, 0057 §10)
+  # hidden from the cashier: never taken from the device (contract 0027, 0058 §10)
   - {name: audit_total, type: currency, label: {id: Total periksa}, compute: "items.map(l, l.amount).sum()", hidden_for: [kasir]}
 rules:
   - {name: paid, on: submit, check: "cash_received + qris_amount >= grand_total", message: {id: Pembayaran kurang}}
   - {name: same_day_void, on: cancel, check: "date == today()", message: {id: Hanya transaksi hari ini yang bisa dibatalkan kasir}}
-  # replay rules of device writes (contract 0057 §10): today() is the event's occurred_at, and a failing rule of this
+  # replay rules of device writes (contract 0058 §10): today() is the event's occurred_at, and a failing rule of this
   # naming_on: device model becomes a rule_overridden exception instead of a refusal
   - {name: shift_open, on: save, check: "shift.state == 'open'", message: {id: Sesi kasir sudah ditutup}}
   - {name: sale_today, on: submit, check: "date == today()", message: {id: Tanggal penjualan harus hari ini}}

@@ -7,7 +7,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
 
-// Head-office exceptions (contract 0057 §10).
+// Head-office exceptions (contract 0058 §10).
 
 // Exception is one thing an outlet's work left for head office: a kind (edge_price_drift, negative_stock,
 // device_number_gap, rule_overridden), the record it is about and free detail.

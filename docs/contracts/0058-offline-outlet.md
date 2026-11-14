@@ -1,6 +1,6 @@
-# 0057 Offline outlet: paired PWA devices and the kernel side of edge-sync
+# 0058 Offline outlet: paired PWA devices and the kernel side of edge-sync
 
-Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (kernel, web app) · Affects: rangka-apps
+Status: accepted (15 Nov 2026) · Owner of the change: rangka-os (kernel, web app) · Affects: rangka-apps
 (`modules/pos`), rangka-edge (later, same protocol) · Amends 0006, 0030 §7 and §8, 0048 §5 · Builds on 0003, 0009,
 0025, 0027, 0056
 

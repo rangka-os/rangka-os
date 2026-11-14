@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// Paired devices (contract 0057 §2).
+// Paired devices (contract 0058 §2).
 
 func TestDevicePairAndResolve(t *testing.T) {
 	ctx, s, _ := orgEnv(t)

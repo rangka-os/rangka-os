@@ -63,7 +63,7 @@ func (e *Engine) rowScopeIn(reg *meta.Registry, a Actor) *RowScope {
 	return s
 }
 
-// OutletScope is the row scope of one outlet (a paired device's, contract 0057 §7): the scope fields of every role
+// OutletScope is the row scope of one outlet (a paired device's, contract 0058 §7): the scope fields of every role
 // that has a row scope, plus outlet, holding that outlet. A record of a model with one of those fields is visible
 // when one holds the outlet; the outlet model itself shows only that outlet; other models are not limited.
 func (e *Engine) OutletScope(outlet string) *RowScope {

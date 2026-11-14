@@ -12,7 +12,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 )
 
-// GET /api/v1/edge/config and /api/v1/edge/data/<set> (contract 0057 §7, kernel side of 0006 §4) over
+// GET /api/v1/edge/config and /api/v1/edge/data/<set> (contract 0058 §7, kernel side of 0006 §4) over
 // testdata/device-apps: the jual counter (catalogue menu, available stok_menu per outlet) bound to kasir.
 
 func (x *edgeEnv) sys() engine.Actor {

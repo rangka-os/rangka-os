@@ -54,7 +54,7 @@ func EnsureOrgCode(ctx context.Context, q pg.Querier, id, name, code string) err
 }
 
 // SetOutlets limits a membership to the given outlet codes (empty: a scoped role sees no scoped records, an unscoped
-// role ignores outlets). A real change clears the member's PIN (contract 0057 §2).
+// role ignores outlets). A real change clears the member's PIN (contract 0058 §2).
 func SetOutlets(ctx context.Context, q pg.Querier, org string, userID int64, outlets []string) error {
 	if outlets == nil {
 		outlets = []string{}
@@ -80,7 +80,7 @@ func SetOutlets(ctx context.Context, q pg.Querier, org string, userID int64, out
 	return nil
 }
 
-// RemoveMember deletes a user's membership in an org, ending their PIN sessions there (contract 0057 §2);
+// RemoveMember deletes a user's membership in an org, ending their PIN sessions there (contract 0058 §2);
 // ErrNoMembership when there was none.
 func RemoveMember(ctx context.Context, q pg.Querier, org string, userID int64) error {
 	if err := ClearPIN(ctx, q, org, userID); err != nil {

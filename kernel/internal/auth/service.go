@@ -61,14 +61,14 @@ type Service struct {
 // Principal is an authenticated caller.
 type Principal struct {
 	User  *User
-	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken), device, pin (contract 0057 §2)
+	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken), device, pin (contract 0058 §2)
 	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write, members:write)
 	// Chat marks the token the chat relay minted for one chat (MintAssistantToken, contract 0020 §2): the kernel
 	// admitted that chat and counted its credit. An API token with the assistant scope is Via "ai" too, but not Chat.
 	Chat bool
 	// System marks a system session (contract 0055 §2): nothing it does counts as the member's activity.
 	System bool
-	// Device is the paired device the request came from (contract 0057 §2): set with Via "device" (the device
+	// Device is the paired device the request came from (contract 0058 §2): set with Via "device" (the device
 	// alone, no User) and on a person's session sent from a paired browser.
 	Device *Device
 }
@@ -91,7 +91,7 @@ func (p *Principal) Kind() string {
 const AIForbiddenMessage = "Raka tidak boleh melakukan ini; minta orang yang berwenang."
 
 // Human reports a person signed in fully with a browser session (or the dev-open demo user). A device alone is not,
-// and neither is a PIN session (contract 0057 §2): it mints no token, manages no device or PIN, approves no change
+// and neither is a PIN session (contract 0058 §2): it mints no token, manages no device or PIN, approves no change
 // set and switches no organisation.
 func (p *Principal) Human() bool { return p.Via == "session" || p.Via == "dev" }
 
@@ -149,14 +149,14 @@ func (s *Service) LoginAs(ctx context.Context, email, password, org string, syst
 const (
 	SessionPassword = "password"
 	SessionUpstream = "upstream"
-	SessionPin      = "pin" // a cashier PIN on a paired device (contract 0057 §2)
+	SessionPin      = "pin" // a cashier PIN on a paired device (contract 0058 §2)
 )
 
 // openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
 // auth.session_ttl; upstream sessions UpstreamSessionTTL; PIN sessions at most PinSessionTTL. method is SessionPassword,
 // SessionUpstream, SessionLink or SessionPin; deviceID is the paired device of a PIN session ("" otherwise). A session
 // that is not a system one counts as the member's activity (contract 0055 §1) and as the person signing in (contract
-// 0056 §2, §4); a PIN session is one too: the person unlocked with their own PIN (contract 0057 §2). A system session
+// 0056 §2, §4); a PIN session is one too: the person unlocked with their own PIN (contract 0058 §2). A system session
 // (contract 0055 §2) is Cloud acting on its own: it is not the person signing in, so it neither ends their sign-in
 // links nor marks them signed in.
 func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string, system bool, deviceID string) (string, error) {
@@ -211,7 +211,7 @@ func (s *Service) SwitchOrg(ctx context.Context, cookie, org string) (*User, err
 	if len(res.Rows) == 0 {
 		return nil, ErrUnauthenticated
 	}
-	if res.Rows[0][1].(string) == SessionPin { // a PIN session belongs to its device's organisation (contract 0057 §2)
+	if res.Rows[0][1].(string) == SessionPin { // a PIN session belongs to its device's organisation (contract 0058 §2)
 		return nil, ErrNoMembership
 	}
 	u, err := LoadUser(ctx, s.DB, res.Rows[0][0].(int64), org)
@@ -347,7 +347,7 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 			}
 			return p, nil
 		}
-		if strings.HasPrefix(tok, EdgeTokenPrefix) { // rangka-edge (contract 0057 §2, 0006 §2)
+		if strings.HasPrefix(tok, EdgeTokenPrefix) { // rangka-edge (contract 0058 §2, 0006 §2)
 			d, err := s.DeviceFromSecret(ctx, tok)
 			if err != nil {
 				return nil, err
@@ -391,7 +391,7 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 			}
 			system, _ := res.Rows[0][2].(bool)
 			p := &Principal{User: u, Via: "session", System: system}
-			if devID := res.Rows[0][3].(string); devID != "" { // a PIN session: the device's outlet only (contract 0057 §2)
+			if devID := res.Rows[0][3].(string); devID != "" { // a PIN session: the device's outlet only (contract 0058 §2)
 				d, err := s.pinSessionDevice(ctx, devID, u)
 				if err != nil {
 					return nil, err
@@ -409,7 +409,7 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 			return p, nil
 		}
 	}
-	// a paired browser alone (contract 0057 §2): the device, no person
+	// a paired browser alone (contract 0058 §2): the device, no person
 	if d, err := s.RequestDevice(r); err != nil || d != nil {
 		if err != nil {
 			return nil, err

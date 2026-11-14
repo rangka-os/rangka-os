@@ -736,7 +736,7 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	if a.Assistant { // never, not even through config.ai.auto_apply
 		return nil, &Error{403, "ai_forbidden", auth.AIForbiddenMessage, nil}
 	}
-	if a.Pin { // a cashier's PIN session applies nothing, not even through auto_apply (contract 0057 §2)
+	if a.Pin { // a cashier's PIN session applies nothing, not even through auto_apply (contract 0058 §2)
 		return nil, errHumanRequired
 	}
 	s.mu.Lock()

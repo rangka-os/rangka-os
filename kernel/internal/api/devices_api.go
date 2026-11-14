@@ -14,7 +14,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Paired devices (contract 0057 §2): pairing codes, browser pairing, rangka-edge registration (0006 §2), the
+// Paired devices (contract 0058 §2): pairing codes, browser pairing, rangka-edge registration (0006 §2), the
 // device list and revoke.
 
 const (
@@ -24,11 +24,11 @@ const (
 	msgOutletRequired   = "Pilih outlet untuk perangkat ini."
 )
 
-// devicePairRoles are the roles that create pairing codes and list and revoke devices (contract 0057 §2; the
+// devicePairRoles are the roles that create pairing codes and list and revoke devices (contract 0058 §2; the
 // author's call for 0048 §5's open permission: owner and head office).
 var devicePairRoles = map[string]bool{"owner": true, "head_office": true}
 
-// pairRate is the pairing tries one address gets: 10 per 15 minutes (contract 0057 §2, author's call). The bucket
+// pairRate is the pairing tries one address gets: 10 per 15 minutes (contract 0058 §2, author's call). The bucket
 // refills one try every 90 seconds and never waits: a try without a token is refused at once.
 var pairRate = ratelimit.Rate{RPS: 10.0 / (15 * 60), Burst: 10}
 
@@ -41,7 +41,7 @@ type pairTries struct {
 	l    ratelimit.Limiter
 }
 
-// mayPairDevices: owner or head office, never from a PIN session (contract 0057 §2).
+// mayPairDevices: owner or head office, never from a PIN session (contract 0058 §2).
 func mayPairDevices(c *caller) bool {
 	if c.p.Via == "pin" {
 		return false
@@ -197,7 +197,7 @@ func (s *Server) registerEdge(w http.ResponseWriter, r *http.Request) {
 		"outlet": dev.Outlet, "code": dev.Code, "sync": edgeSync})
 }
 
-// Cashier PIN and device unlock (contract 0057 §2, adopting 0048 §5).
+// Cashier PIN and device unlock (contract 0058 §2, adopting 0048 §5).
 
 const (
 	msgReauthRequired = "Masuk lagi dengan e-mail dan kata sandi dulu, lalu atur PIN dalam 15 menit."
@@ -206,7 +206,7 @@ const (
 )
 
 // pinRole reports whether a role may use a PIN: never the owner; only a role whose desk key is explicitly false
-// (role.json; absent counts as desk, as in the web app's work shell; contract 0057 §2, 0048 §5).
+// (role.json; absent counts as desk, as in the web app's work shell; contract 0058 §2, 0048 §5).
 func (s *Server) pinRole(role string) bool {
 	if role == "owner" || s.Engine == nil {
 		return false

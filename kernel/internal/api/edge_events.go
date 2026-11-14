@@ -18,7 +18,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Events from paired devices (contract 0057 §4, kernel side of 0006 §3).
+// Events from paired devices (contract 0058 §4, kernel side of 0006 §3).
 //
 // POST /api/v1/edge/events {events: [{key, kind, seq, occurred_at, actor, payload}]} with Rangka-Edge-Sync: v1, from
 // a paired device (rk_device cookie or rke_ token) or a PIN session on one. Each event is handled on its own, in seq
@@ -40,7 +40,7 @@ import (
 const (
 	edgeSyncHeader  = "Rangka-Edge-Sync"
 	edgeSyncVersion = "v1"
-	edgeMaxItems    = 100 // push_max_items (contract 0057 §2 register answer)
+	edgeMaxItems    = 100 // push_max_items (contract 0058 §2 register answer)
 	edgeMaxKey      = 200
 )
 
@@ -77,7 +77,7 @@ type edgeResult struct {
 	Record  any    `json:"record,omitempty"`
 }
 
-// withEdge wraps the edge routes: a paired device alone, or a cashier's PIN session on one (contract 0057 §4). A
+// withEdge wraps the edge routes: a paired device alone, or a cashier's PIN session on one (contract 0058 §4). A
 // person's full session is refused, even on a paired browser: its writes go through the record API.
 func (s *Server) withEdge(h func(w http.ResponseWriter, r *http.Request, d *auth.Device)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
@@ -287,7 +287,7 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 	var ref string
 	// Money: the computed currency fields the device sent with a create or submit body, top level and per row
 	// (DeviceMoney); a submit without them keeps what its draft stored when this device made it. The engine keeps
-	// the ones the actor may see and stores them as the device charged them (contract 0057 §10).
+	// the ones the actor may see and stores them as the device charged them (contract 0058 §10).
 	var charged map[string]any
 	if sw.Op == "create" || sw.Op == "submit" {
 		charged = s.Engine.DeviceMoney(sw.Model, sw.Body)
@@ -305,7 +305,7 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 		}}
 	wctx := engine.WithDeviceWrite(engine.WithOccurredAt(ctx, at), dw)
 	// A device write is never held for approval: the engine refuses it (approval_needed_offline) before anything is
-	// saved (contract 0057 §10, ruling R7). Submits run with force = true: warnings must not block a sale the outlet
+	// saved (contract 0058 §10, ruling R7). Submits run with force = true: warnings must not block a sale the outlet
 	// already made (§10, rules on replay); only errors that stay refusals there reject it.
 	var record any
 	switch sw.Op {
@@ -426,7 +426,7 @@ func (s *Server) edgeRecord(ctx context.Context, d *auth.Device, ev edgeEventIn,
 }
 
 // edgeActor is the engine actor of the user id an event names: a member of the device's org whose outlets include
-// the device's outlet, narrowed to it, under the device (contract 0057 §4). ok is false for anyone else.
+// the device's outlet, narrowed to it, under the device (contract 0058 §4). ok is false for anyone else.
 func (s *Server) edgeActor(ctx context.Context, d *auth.Device, raw json.RawMessage) (engine.Actor, bool, error) {
 	var v any
 	dec := json.NewDecoder(strings.NewReader(string(raw)))
@@ -445,7 +445,7 @@ func (s *Server) edgeActor(ctx context.Context, d *auth.Device, raw json.RawMess
 	if err != nil {
 		return engine.Actor{}, false, err
 	}
-	// only someone who can unlock this device with a PIN can have pressed the button on it (contract 0057 §2): never
+	// only someone who can unlock this device with a PIN can have pressed the button on it (contract 0058 §2): never
 	// the owner, never a desk role
 	if u.Org != d.Org || !slices.Contains(u.Outlets, d.Outlet) || len(u.Roles) == 0 || !auth.PinAllowedFor(u.Roles, s.pinRole) {
 		return engine.Actor{}, false, nil

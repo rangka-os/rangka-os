@@ -348,7 +348,7 @@ create table if not exists rk_sandboxes (
   created_at   timestamptz not null default now(),
   last_used_at timestamptz not null default now()
 );
--- paired devices (contract 0057 §2, 0048 §5, 0006 §2): browsers (rk_device cookie) and rangka-edge (rke_ token) of
+-- paired devices (contract 0058 §2, 0048 §5, 0006 §2): browsers (rk_device cookie) and rangka-edge (rke_ token) of
 -- one outlet. code is K1, K2, … per outlet in pairing order and never reused after revoke. Only the sha256 of the
 -- secret is kept.
 create table if not exists rk_devices (
@@ -375,7 +375,7 @@ create table if not exists rk_device_codes (
   expires_at timestamptz not null,
   used_at    timestamptz
 );
--- cashier PIN (contract 0057 §2, 0048 §5): per membership, the kernel's password hash; pin_fails counts wrong PINs in a
+-- cashier PIN (contract 0058 §2, 0048 §5): per membership, the kernel's password hash; pin_fails counts wrong PINs in a
 -- row (5 lock it for 15 minutes on every device, 10 clear it)
 alter table rk_members add column if not exists pin_hash text;
 alter table rk_members add column if not exists pin_fails int not null default 0;
@@ -393,7 +393,7 @@ create table if not exists rk_device_unlock_fails (
 );
 alter table rk_devices add column if not exists unlock_blocked_until timestamptz;
 create index if not exists rk_device_unlock_fails_device on rk_device_unlock_fails (device, at);
--- head-office exceptions (contract 0057 §10): what an outlet's offline work left for head office to look at;
+-- head-office exceptions (contract 0058 §10): what an outlet's offline work left for head office to look at;
 -- kinds edge_price_drift, negative_stock, device_number_gap, rule_overridden
 create table if not exists rk_exceptions (
   id          bigserial primary key,
@@ -408,7 +408,7 @@ create table if not exists rk_exceptions (
   resolved_at timestamptz
 );
 create index if not exists rk_exceptions_org on rk_exceptions (org_id, resolved_at, created_at);
--- edge events (contract 0057 §4, 0006 §3): one row per idempotency key and org, kept 400 days; status accepted or
+-- edge events (contract 0058 §4, 0006 §3): one row per idempotency key and org, kept 400 days; status accepted or
 -- rejected (with code); ref is the name of the record the event wrote; payload_sha256 covers {kind, payload}
 create table if not exists rk_edge_events (
   org_id         text not null,

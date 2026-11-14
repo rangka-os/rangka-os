@@ -32,7 +32,7 @@ const (
 )
 
 // credKey identifies the credential auth.Resolve reads: the bearer token if there is one, else the session cookie,
-// else the paired-device cookie (contract 0057 §2).
+// else the paired-device cookie (contract 0058 §2).
 type credKey [16]byte
 
 // credential is the key of the request's credential, ok=false when it carries none that Resolve would read.

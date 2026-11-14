@@ -12,7 +12,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-// Names made on the device (contract 0057 §3) over testdata/device-apps: penjualan (submittable) and sesi_kasir
+// Names made on the device (contract 0058 §3) over testdata/device-apps: penjualan (submittable) and sesi_kasir
 // (not submittable) are named STRK-/SESI-{outlet.code}-{device.code}-{YY}{MM}-{#…}; outlets OUT-01 (code OUT01)
 // and OUT-02 (OUT02).
 type deviceEnv struct {

@@ -384,7 +384,7 @@ func (o *op) hold(m *meta.Model, rec store.Record, snapshot, verb string, args m
 		}
 	}
 	if len(pending) > 0 && deviceWriteOf(o.ctx) != nil {
-		// a device write is never held (contract 0057 §10, ruling R7): refused, so the requests above roll back
+		// a device write is never held (contract 0058 §10, ruling R7): refused, so the requests above roll back
 		return nil, nil, approvalNeededOffline()
 	}
 	if len(pending) == 0 { // the verb runs in this transaction; a failure rolls the mark back

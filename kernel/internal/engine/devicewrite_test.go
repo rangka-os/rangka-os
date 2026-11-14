@@ -19,7 +19,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
-// Replay rules of device writes (contract 0057 §10 and its conflict rules) over testdata/device-apps: penjualan has
+// Replay rules of device writes (contract 0058 §10 and its conflict rules) over testdata/device-apps: penjualan has
 // the rules shift_open (save) and sale_today (submit, date == today()) and the approval big_sale (grand_total above
 // 1.000.000); tutup_sesi (not naming_on: device) has counted_not_negative.
 
@@ -221,7 +221,7 @@ func TestDeviceWriteApprovalRejected(t *testing.T) {
 	}
 }
 
-// A sale cannot link a shift another device opened (contract 0057 §6).
+// A sale cannot link a shift another device opened (contract 0058 §6).
 func TestDeviceWriteShiftOtherDevice(t *testing.T) {
 	d := setupDeviceApps(t)
 	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
@@ -310,7 +310,7 @@ func TestRestWriteUnchanged(t *testing.T) {
 }
 
 // A void is not a sale already paid: a device cancels only what it made (other_device), and a cancel rule still
-// refuses (contract 0057 §6: voids offline are same-day only).
+// refuses (contract 0058 §6: voids offline are same-day only).
 func TestDeviceWriteCancelOtherDevice(t *testing.T) {
 	d := setupDeviceApps(t)
 	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")

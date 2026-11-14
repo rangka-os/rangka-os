@@ -486,7 +486,7 @@ func (r *flowRun) registry() *meta.Registry {
 
 func (r *flowRun) env() *cel.Env {
 	today, now := r.e.Today, r.e.Now
-	if r.o != nil && deviceWriteOf(r.o.ctx) != nil { // a flow of a device write runs at its occurred_at (contract 0057 §10)
+	if r.o != nil && deviceWriteOf(r.o.ctx) != nil { // a flow of a device write runs at its occurred_at (contract 0058 §10)
 		ctx := r.o.ctx
 		today, now = func() string { return r.e.todayIn(ctx) }, func() time.Time { return r.e.nowIn(ctx) }
 	}

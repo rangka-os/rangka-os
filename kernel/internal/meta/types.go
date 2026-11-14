@@ -9,7 +9,7 @@ import (
 )
 
 // ReservedFields are columns the kernel keeps on records but not in expressions: a field may not take the name
-// (rangka_validate.py RESERVED_FIELDS; created_device, contract 0057 §6).
+// (rangka_validate.py RESERVED_FIELDS; created_device, contract 0058 §6).
 var ReservedFields = map[string]bool{"created_device": true}
 
 // SystemFields exist on every record (rangka_validate.py SYSTEM_FIELDS).
@@ -115,7 +115,7 @@ type Model struct {
 	// From a map naming {series, pattern?, reset?} (contract 0009); Naming is then "".
 	NamingSeries, NamingPattern, NamingReset string
 	// NamingOn is "device" when the name comes with the write from a paired device and the kernel checks it
-	// instead of making it (contract 0057 §3); "" = the kernel names.
+	// instead of making it (contract 0058 §3); "" = the kernel names.
 	NamingOn string
 }
 

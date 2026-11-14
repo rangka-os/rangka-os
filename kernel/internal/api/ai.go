@@ -200,7 +200,7 @@ func trimHistory(h []aiTurn) []aiTurn {
 // the sidecar, passing its SSE frames through unchanged. One audit entry (kind ai.chat) records the tools and
 // change sets the stream named; the message text is not stored.
 func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
-	// the assistant token minted for a chat carries the member's full outlets: not from a PIN session (contract 0057 §2)
+	// the assistant token minted for a chat carries the member's full outlets: not from a PIN session (contract 0058 §2)
 	if c.p.Via == "pin" {
 		writeError(w, http.StatusForbidden, "pin_session_limited", "Raka belum bisa dipakai dari sesi PIN kasir.")
 		return

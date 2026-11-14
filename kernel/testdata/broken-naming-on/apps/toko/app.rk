@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
-# naming_on: device without {device.code} in a string naming, and {device.code} without naming_on (contract 0057 §3).
+# naming_on: device without {device.code} in a string naming, and {device.code} without naming_on (contract 0058 §3).
 name: toko
 version: 1.0.0
 title: {id: Toko}

@@ -198,7 +198,7 @@ func TestRoleScope(t *testing.T) {
 	}
 }
 
-// Only desk: false makes a staff role (contract 0057 §2, ruling R3); an absent key is reported as not set.
+// Only desk: false makes a staff role (contract 0058 §2, ruling R3); an absent key is reported as not set.
 func TestRoleDesk(t *testing.T) {
 	const head = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json\nname: outlet_staff\nlabel: {id: Staf outlet}\n"
 	reg := writeRole(t, head+"desk: true\n")

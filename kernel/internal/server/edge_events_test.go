@@ -12,7 +12,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
-// POST /api/v1/edge/events (contract 0057 §4, 0006 §3) over testdata/device-apps: penjualan (submittable) and
+// POST /api/v1/edge/events (contract 0058 §4, 0006 §3) over testdata/device-apps: penjualan (submittable) and
 // sesi_kasir named on the device, outlets OUT-01 (code OUT01) and OUT-02 (OUT02).
 
 type edgeEnv struct {
@@ -205,7 +205,7 @@ func TestEventsActorNotInOutlet(t *testing.T) {
 	e["actor"] = other
 	unknown := x.shiftEv("k-2", 2, "SESI-OUT01-K1-2610-001")
 	unknown["actor"] = 987654
-	// a desk role (no desk: false) and the owner never unlock a device, so they never press its buttons (0057 §2)
+	// a desk role (no desk: false) and the owner never unlock a device, so they never press its buttons (0058 §2)
 	ctx := context.Background()
 	desk, err := auth.EnsureUser(ctx, x.owner.s.DB, "kantor@toko.test", "Kantor", "rahasia-123", "kopi-senja", "head_office", "")
 	if err != nil {
@@ -345,7 +345,7 @@ func TestEventsPrincipal(t *testing.T) {
 	}
 }
 
-// Replay rules (contract 0057 §10): the money the device sent with a create is stored, the kernel's own value is an
+// Replay rules (contract 0058 §10): the money the device sent with a create is stored, the kernel's own value is an
 // edge_price_drift exception; a REST create of the same body is recomputed.
 func TestEventsMoneyKept(t *testing.T) {
 	x := newEdgeEnv(t)
@@ -387,7 +387,7 @@ func TestEventsApprovalNeededOffline(t *testing.T) {
 	wantResult(t, res[0], "k-2", "rejected", "approval_needed_offline")
 }
 
-// A sale from K2 on K1's shift is rejected with shift_other_device (contract 0057 §6).
+// A sale from K2 on K1's shift is rejected with shift_other_device (contract 0058 §6).
 func TestEventsShiftOtherDevice(t *testing.T) {
 	x := newEdgeEnv(t)
 	wantResult(t, x.send(x.shiftEv("k-1", 1, "SESI-OUT01-K1-2610-001"))[0], "k-1", "accepted", "")

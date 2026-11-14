@@ -131,7 +131,7 @@ func ModelTable(m *meta.Model) Table {
 		col("idx", "integer", true, "0")
 	} else {
 		col("created_by", "text", false, "")
-		if m.NamingOn == "device" { // the paired device the record was made on (contract 0057 §6)
+		if m.NamingOn == "device" { // the paired device the record was made on (contract 0058 §6)
 			col("created_device", "text", false, "")
 		}
 		if m.IsSubmittable {

@@ -1165,7 +1165,7 @@ func (v *validator) namingFields(add func(level, path, where, code, msg string),
 		switch {
 		case loc[1] >= len(naming) || naming[loc[1]] != '-':
 			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s} must be followed by "-"`, tok))
-		case tok == "device.code" && m.Raw["naming_on"] == "device": // the paired device's code (contract 0057 §3)
+		case tok == "device.code" && m.Raw["naming_on"] == "device": // the paired device's code (contract 0058 §3)
 		case f == nil:
 			add("error", path, where, "naming_field", fmt.Sprintf(`naming token {%s}: model %s has no field "%s"`, tok, m.Name, a))
 		case len(StrList(f.Raw["hidden_for"])) > 0:
@@ -1236,5 +1236,5 @@ func (v *validator) appOverlays() {
 }
 
 // namingOnDeviceMsg is the naming_on_device error: a device name carries the device's code, so two devices of one
-// outlet never make the same name (contract 0057 §3).
-const namingOnDeviceMsg = `naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)`
+// outlet never make the same name (contract 0058 §3).
+const namingOnDeviceMsg = `naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0058 §3)`

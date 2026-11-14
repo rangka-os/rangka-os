@@ -140,7 +140,7 @@ type Actor struct {
 	Kind  string // user, ai, console, cli (author kind for proposals)
 	// Assistant is the embedded assistant acting for the person (auth Via ai): it proposes, never applies
 	Assistant bool
-	// Pin is a cashier's PIN session on a paired device (contract 0057 §2): it approves and applies nothing
+	// Pin is a cashier's PIN session on a paired device (contract 0058 §2): it approves and applies nothing
 	Pin bool
 }
 

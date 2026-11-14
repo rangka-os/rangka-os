@@ -239,7 +239,7 @@ func (s *Server) pruneIdempotency() {
 			if err := store.PruneIdempotency(ctx, s.DB); err != nil && s.Log != nil {
 				s.Log("idempotency: prune: %v", err)
 			}
-			if err := store.PruneEdgeEvents(ctx, s.DB); err != nil && s.Log != nil { // keys kept 400 days (contract 0057 §4)
+			if err := store.PruneEdgeEvents(ctx, s.DB); err != nil && s.Log != nil { // keys kept 400 days (contract 0058 §4)
 				s.Log("edge events: prune: %v", err)
 			}
 		}()

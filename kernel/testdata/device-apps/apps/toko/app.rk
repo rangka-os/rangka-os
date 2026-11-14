@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
-# Receipts and shifts named on the paired device (contract 0057 §3): module kasir of testdata/screens with
+# Receipts and shifts named on the paired device (contract 0058 §3): module kasir of testdata/screens with
 # naming_on: device and an outlet link on penjualan and sesi_kasir.
 name: toko
 version: 1.0.0

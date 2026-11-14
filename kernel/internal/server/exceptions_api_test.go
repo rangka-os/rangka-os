@@ -9,7 +9,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Head-office exceptions (contract 0057 §10).
+// Head-office exceptions (contract 0058 §10).
 
 func recordEx(t *testing.T, e *env, org, outlet, kind, ref string) {
 	t.Helper()

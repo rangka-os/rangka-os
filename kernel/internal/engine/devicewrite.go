@@ -13,7 +13,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Replay rules of device writes (contract 0057 §10 and its conflict rules). A write that runs under WithDeviceWrite
+// Replay rules of device writes (contract 0058 §10 and its conflict rules). A write that runs under WithDeviceWrite
 // already happened at the outlet, so the kernel records what it would have done differently instead of refusing:
 //   - clock: today(), now() and the business date (date defaults, stock posting dates, kernel numbering periods)
 //     are the write's occurred_at in the org's time zone (nowIn, todayIn);
@@ -27,7 +27,7 @@ import (
 //   - approvals: a write that would wait for one is refused with approval_needed_offline before anything is saved
 //     (hold); the device never offers it offline;
 //   - shifts: a record linking a naming_on: device record made on another device is refused with
-//     shift_other_device (deviceLinks, contract 0057 §6);
+//     shift_other_device (deviceLinks, contract 0058 §6);
 //   - stock: a move that leaves a balance below zero records negative_stock {item, outlet, balance} and is never
 //     refused, not even for negative: refuse.
 // Exceptions are written in the write's transaction (flushExceptions), so a write that rolls back leaves none.
@@ -165,7 +165,7 @@ func (o *op) recordDrift(pins map[string]any, rec, shadow store.Record, prefix s
 }
 
 // overrideRules turns the rule issues of errs into rule_overridden exceptions while check runs over the device
-// write's own document of a naming_on: device model at create or submit (o.override, contract 0057 §10): a sale
+// write's own document of a naming_on: device model at create or submit (o.override, contract 0058 §10): a sale
 // already paid at the outlet. Any other issue stays; a cancel, another record of the unit (one a flow writes) and
 // a model not named on the device keep their refusals.
 func (o *op) overrideRules(m *meta.Model, errs []Issue) []Issue {
@@ -217,7 +217,7 @@ func (o *op) visiblePins(m *meta.Model, pins map[string]any) map[string]any {
 	return out
 }
 
-// madeHere reports whether record name of m was made on the acting device (created_device, contract 0057 §6).
+// madeHere reports whether record name of m was made on the acting device (created_device, contract 0058 §6).
 func (o *op) madeHere(m *meta.Model, name string) (bool, error) {
 	if o.actor.Device == nil {
 		return false, nil
@@ -227,7 +227,7 @@ func (o *op) madeHere(m *meta.Model, name string) (bool, error) {
 }
 
 // cancelHere refuses a device write's cancel of a naming_on: device document another device (or head office) made
-// (other_device): a void is done on the device that sold it (contract 0057 §6).
+// (other_device): a void is done on the device that sold it (contract 0058 §6).
 func (o *op) cancelHere(m *meta.Model, name string) error {
 	if m.NamingOn != "device" || deviceWriteOf(o.ctx) == nil {
 		return nil
@@ -239,13 +239,13 @@ func (o *op) cancelHere(m *meta.Model, name string) error {
 	return &StatusError{Status: 422, Code: "other_device", Msg: m.Label.Text() + " " + name + " tidak dibuat di perangkat ini, jadi tidak bisa dibatalkan di sini"}
 }
 
-// approvalNeededOffline refuses a device write that would wait for an approval (contract 0057 §10, ruling R7).
+// approvalNeededOffline refuses a device write that would wait for an approval (contract 0058 §10, ruling R7).
 func approvalNeededOffline() error {
 	return &StatusError{Status: 422, Code: "approval_needed_offline", Msg: "Perlu persetujuan, tunggu online."}
 }
 
 // deviceLinks refuses, in a device write, a record whose link points at a naming_on: device record made on another
-// device (a sale on another cashier's shift, contract 0057 §6). A linked record made without a device (head office)
+// device (a sale on another cashier's shift, contract 0058 §6). A linked record made without a device (head office)
 // or before created_device existed passes.
 func (o *op) deviceLinks(m *meta.Model, rec store.Record) error {
 	a := o.actor

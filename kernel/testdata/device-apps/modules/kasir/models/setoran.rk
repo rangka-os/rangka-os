@@ -1,6 +1,6 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
 # The cash a closed shift hands in, made by flow tutup_sesi_on_submit: a naming_on: device record that is not the
-# device write's own document, so the kernel numbers it (contract 0057 §3).
+# device write's own document, so the kernel numbers it (contract 0058 §3).
 name: setoran
 label: {id: Setoran}
 naming: SETOR-{outlet.code}-{device.code}-{YY}{MM}-{###}

@@ -12,7 +12,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
-// Cashier PIN and device unlock (contract 0057 §2, adopting 0048 §5).
+// Cashier PIN and device unlock (contract 0058 §2, adopting 0048 §5).
 
 // roleKey appends a line to a role file of the test apps.
 func roleKey(t *testing.T, apps, role, line string) {
@@ -346,7 +346,7 @@ func TestMembersTokenCannotClearPin(t *testing.T) {
 }
 
 // A PIN session of an approver role applies no change set, uses no Raka chat and does not reach MCP (contract
-// 0057 §2); the same member signed in fully still applies.
+// 0058 §2); the same member signed in fully still applies.
 func TestPinSessionNoApplyChatMCP(t *testing.T) {
 	e := newEnv(t, false, func(apps, site string) { roleKey(t, apps, "sales_manager", "desk: false") }) // an approver in config.rk
 	id := staffMember(e, "mgr@kopisenja.id", "sales_manager", "OUT-01")

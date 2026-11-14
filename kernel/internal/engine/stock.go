@@ -128,7 +128,7 @@ func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *in
 	if err != nil {
 		return nil, err
 	}
-	if bq < 0 && deviceWriteOf(s.h.op.ctx) != nil { // stock follows sales: never refused, shown to head office (contract 0057)
+	if bq < 0 && deviceWriteOf(s.h.op.ctx) != nil { // stock follows sales: never refused, shown to head office (contract 0058)
 		s.h.op.except("negative_stock", outlet, "", map[string]any{"item": item, "outlet": outlet, "balance": bq})
 	}
 	fields := map[string]any{"qty": bq, "value": moneyOut(bv), "avg_cost": moneyOut(avg)}

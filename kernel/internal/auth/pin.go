@@ -13,7 +13,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Cashier PIN and device unlock (contract 0057 §2, adopting 0048 §5). A member sets a 4 to 6 digit PIN with a fresh
+// Cashier PIN and device unlock (contract 0058 §2, adopting 0048 §5). A member sets a 4 to 6 digit PIN with a fresh
 // full sign-in; on a paired browser of an outlet they belong to, picking their name and typing it opens a session of
 // their own (method pin, at most 12 hours) narrowed to the device's outlet. The PIN is stored per membership with the
 // kernel's password hash. Owners and desk roles sign in fully.
@@ -106,7 +106,7 @@ func (s *Service) SetPIN(ctx context.Context, org string, userID int64, pin stri
 }
 
 // ClearPIN removes a member's PIN in org and ends their PIN sessions there. It runs wherever a member's role, outlets
-// or membership change (contract 0057 §2, 0048 §5); q may be the transaction that makes the change.
+// or membership change (contract 0058 §2, 0048 §5); q may be the transaction that makes the change.
 func ClearPIN(ctx context.Context, q pg.Querier, org string, userID int64) error {
 	if _, err := q.Query(ctx, "update rk_members set pin_hash = null, pin_fails = 0, pin_locked_until = null where org_id = $1 and user_id = $2",
 		org, userID); err != nil {

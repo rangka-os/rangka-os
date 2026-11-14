@@ -33,7 +33,7 @@ type scope struct {
 	// record. Client loads are cached under their own keys so the two never share an entry.
 	client bool
 	rs     *RowScope
-	// pins are the device's values of computed currency fields of a device write's own document (contract 0057 §10):
+	// pins are the device's values of computed currency fields of a device write's own document (contract 0058 §10):
 	// compute stores them instead of evaluating; a table field holds one map per row
 	pins map[string]any
 }
@@ -73,7 +73,7 @@ func UserVar(a Actor) map[string]any {
 	return map[string]any{"name": name, "email": a.ID, "roles": roles, "outlets": outlets}
 }
 
-// DeviceVar is the CEL device global (contract 0030 §4, 0057 §2): {id, code, outlet} of the paired device, all empty
+// DeviceVar is the CEL device global (contract 0030 §4, 0058 §2): {id, code, outlet} of the paired device, all empty
 // when the request did not come from one.
 func DeviceVar(a Actor) map[string]any {
 	d := a.Device
@@ -101,7 +101,7 @@ func GlobalVar(reg *meta.Registry, a Actor, name string) (any, bool) {
 
 func (s *scope) env() *cel.Env {
 	today, now := s.e.Today, s.e.Now
-	if deviceWriteOf(s.ctx) != nil { // a device write evaluates at its occurred_at (contract 0057 §10)
+	if deviceWriteOf(s.ctx) != nil { // a device write evaluates at its occurred_at (contract 0058 §10)
 		today, now = func() string { return s.e.todayIn(s.ctx) }, func() time.Time { return s.e.nowIn(s.ctx) }
 	}
 	return &cel.Env{
@@ -384,7 +384,7 @@ func (s *scope) compute() {
 	}
 	s.settleOwn()
 	for _, f := range computeOrder(s.m) {
-		if c, ok := s.pinned(f); ok { // the device's money is binding (contract 0057 §10)
+		if c, ok := s.pinned(f); ok { // the device's money is binding (contract 0058 §10)
 			s.rec[f.Name] = c
 			s.settleOwn()
 			continue

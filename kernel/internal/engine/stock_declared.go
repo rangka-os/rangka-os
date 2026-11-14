@@ -178,7 +178,7 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 		if err != nil {
 			return 0, err
 		}
-		// a device write is never refused for stock: move records negative_stock instead (contract 0057)
+		// a device write is never refused for stock: move records negative_stock instead (contract 0058)
 		if sp.refuseNegative && mv["negative"] == true && deviceWriteOf(h.op.ctx) == nil {
 			return 0, refuse("negative_stock", fmt.Sprintf("Stok %s di %s tidak cukup: sisa %s", item, outlet, formatQty(qtyOf(mv["balance_qty"]))))
 		}

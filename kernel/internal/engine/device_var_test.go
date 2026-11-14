@@ -5,7 +5,7 @@ import (
 	"testing"
 )
 
-// The CEL device object is {id, code, outlet} (contract 0030 §4, 0057 §2); empty without a paired device.
+// The CEL device object is {id, code, outlet} (contract 0030 §4, 0058 §2); empty without a paired device.
 func TestDeviceVar(t *testing.T) {
 	a := Actor{Org: "o", ID: "kasir@x.id", Device: &DeviceRef{ID: "dev_0123456789abcdef0123", Code: "K2", Outlet: "OUT-01"}}
 	want := map[string]any{"id": "dev_0123456789abcdef0123", "code": "K2", "outlet": "OUT-01"}

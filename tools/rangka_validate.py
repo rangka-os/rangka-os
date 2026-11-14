@@ -30,7 +30,7 @@ SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
 BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 LEGACY = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
-# columns the kernel keeps on records but not in expressions: a field may not take the name (contract 0057 §6)
+# columns the kernel keeps on records but not in expressions: a field may not take the name (contract 0058 §6)
 RESERVED_FIELDS = {"created_device"}
 SET_ONCE_EMPTY_IS_VALUE = {"int", "float", "currency", "percent", "rating", "money", "check", "duration", "table", "multiselect"}
 
@@ -1225,8 +1225,8 @@ def template_exists(kind, name):
 
 NAMING_TOKEN = re.compile(r"\{([a-z][a-z0-9_]*)(?:\.([a-z][a-z0-9_]*))?\}")
 NAMING_TYPES = {"data", "link", "select", "int"}
-# a device name carries the device's code, so two devices of one outlet never make the same name (contract 0057 §3)
-NAMING_ON_DEVICE_MSG = "naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0057 §3)"
+# a device name carries the device's code, so two devices of one outlet never make the same name (contract 0058 §3)
+NAMING_ON_DEVICE_MSG = "naming_on: device needs a string naming with {device.code}, e.g. STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####} (contract 0058 §3)"
 
 
 def allmodels_of(apps):
@@ -1249,7 +1249,7 @@ def naming_fields(rep, path, where, mname, m, naming, models):
         if g.end() >= len(naming) or naming[g.end()] != "-":
             rep.add("error", path, where, "naming_field", f'naming token {{{tok}}} must be followed by "-"')
         elif tok == "device.code" and isinstance(m, dict) and m.get("naming_on") == "device":
-            pass  # the paired device's code (contract 0057 §3)
+            pass  # the paired device's code (contract 0058 §3)
         elif f is None:
             rep.add("error", path, where, "naming_field", f'naming token {{{tok}}}: model {mname} has no field "{a}"')
         elif f.get("hidden_for"):

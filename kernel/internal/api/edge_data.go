@@ -17,7 +17,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Config and reference data for paired devices (contract 0057 §7, kernel side of 0006 §4).
+// Config and reference data for paired devices (contract 0058 §7, kernel side of 0006 §4).
 //
 // GET /api/v1/edge/config answers {version, outlet, device, screens, data_sets, sync}; version is a hash of the rest
 // and the ETag, so If-None-Match with it answers 304. GET /api/v1/edge/data/<set>?cursor= answers
@@ -26,7 +26,7 @@ import (
 // when done (0006 §4), which drops rows deleted since.
 //
 // Which screens and sets. The outlet's staff roles are the roles of its members (non-owner, outlets naming it) that
-// may use a PIN: only they can work on the device (0057 §2). The screens are the work screens those roles may open
+// may use a PIN: only they can work on the device (0058 §2). The screens are the work screens those roles may open
 // (0030 §3, Engine.Work). The data sets are the models the reference slots of their counter screens name
 // (catalogue.model, catalogue.options.model and its group model per 0048 §1, catalogue.available.model per 0039,
 // customer.table.model per 0048 §2), then tax (the org's tax settings, the CEL tax global) and staff. A model a staff

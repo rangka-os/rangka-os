@@ -12,7 +12,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 )
 
-// Paired devices, device codes and pairing (contract 0057 §2).
+// Paired devices, device codes and pairing (contract 0058 §2).
 
 // device is a second browser on the same kernel: its own cookie jar, no session.
 func (e *env) device() *env {

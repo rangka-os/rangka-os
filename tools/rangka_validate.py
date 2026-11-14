@@ -1321,6 +1321,9 @@ def top_conjuncts(expr):
         elif ch in ")]}":
             depth -= 1
             cur += ch
+        elif depth == 0 and (e.startswith("||", i) or ch in "?,"):
+            # || and ?: bind looser than && (and a comma separates arguments): this is no && chain
+            return [re.sub(r"\s+", "", e).replace('"', "'")]
         elif depth == 0 and e.startswith("&&", i):
             out.append(cur)
             cur = ""
@@ -1330,7 +1333,61 @@ def top_conjuncts(expr):
             cur += ch
         i += 1
     out.append(cur)
-    return [re.sub(r"\s+", "", x) for x in out if x.strip()]
+    return [re.sub(r"\s+", "", x).replace('"', "'") for x in out if x.strip()]
+
+
+def enclosing_groups(expr, pos):
+    """The contents of the parenthesised groups of expr that hold position pos, innermost first, then expr itself."""
+    stack, groups, q, i = [], [], "", 0
+    while i < len(expr):
+        ch = expr[i]
+        if q:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == q:
+                q = ""
+        elif ch in "'\"":
+            q = ch
+        elif ch == "(":
+            stack.append(i)
+        elif ch == ")" and stack:
+            start = stack.pop()
+            # a call's parentheses (a name right before) hold arguments, not a condition
+            call = start > 0 and (expr[start - 1].isalnum() or expr[start - 1] == "_")
+            if start < pos < i and not call:
+                groups.append((start + 1, i))
+        i += 1
+    out = []
+    for s, e in sorted(groups, key=lambda g: g[1] - g[0]) + [(0, len(expr))]:
+        text = expr[s:e]
+        q = top_question(text)
+        # a check in a ternary's condition is guarded by that condition's && chain (evaluated first)
+        out.append(text[:q] if 0 <= q and pos - s < q else text)
+    return out
+
+
+def top_question(text):
+    """Index of the first ? outside quotes and brackets, -1 when there is none."""
+    depth, q, i = 0, "", 0
+    while i < len(text):
+        ch = text[i]
+        if q:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == q:
+                q = ""
+        elif ch in "'\"":
+            q = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "?" and depth == 0:
+            return i
+        i += 1
+    return -1
 
 
 def conditional_as(rep, p, steps):
@@ -1357,8 +1414,13 @@ def conditional_as(rep, p, steps):
             if t.get("as") == x and not t.get("if"):
                 break
             nc = re.sub(r"\s+", "", str(t.get("if") or ""))
-            m = re.search(r"\b" + xe + r"(!=|==)null\b|\bsize\(" + xe + r"\)|\b" + xe + r"\.size\(\)", nc)
-            if not m or all(k in nc[: m.start()] for k in cs):
+            # a null check of the name itself (not event.x or y.x): no letter, digit, _ or . just before it
+            m = next((m for m in re.finditer(r"\b" + xe + r"(!=|==)null\b|\bsize\(" + xe + r"\)|\b" + xe + r"\.size\(\)", nc)
+                      if not (m.group(0).startswith(x) and m.start() > 0 and (nc[m.start() - 1].isalnum() or nc[m.start() - 1] in "_."))), None)
+            # guarded when every top-level conjunct of the declaring condition is a conjunct of the && chain around the
+            # check: this if: or a parenthesised group holding it (CEL && absorbs an error on either side, so the
+            # order does not matter; || or a ternary does not guard)
+            if not m or any(set(cs) <= set(top_conjuncts(g)) for g in enclosing_groups(nc, m.start())):
                 continue
             rep.add("warn", p, f"steps/{j}/if", "conditional_as_unguarded",
                     f'step {j + 1} reads "{x}", which step {i + 1} declares only when {c.strip()}; a null check does not cover a skipped step: start this if: with {c.strip()} && ...')

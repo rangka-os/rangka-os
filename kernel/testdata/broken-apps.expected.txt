@@ -85,6 +85,9 @@ crm/flows/bad_flow.rk:9:17  error  unknown_field  steps/1/set/deal_ref  "deal_re
 crm/flows/bad_flow.rk:12:20  error  unknown_model  steps/2/then/0/find_all  "leadz" is not a model; did you mean "lead"?
 crm/flows/bad_flow.rk:17:49  error  cel_syntax  steps/4/where  unbalanced parentheses in `(x`
 crm/flows/lead_guarded_find.rk:13:9  warn   conditional_as_unguarded  steps/2/if  step 3 reads "deals", which step 2 declares only when app_installed('sales'); a null check does not cover a skipped step: start this if: with app_installed('sales') && ...
+crm/flows/lead_guarded_find.rk:24:9  warn   conditional_as_unguarded  steps/5/if  step 6 reads "deals", which step 2 declares only when app_installed('sales'); a null check does not cover a skipped step: start this if: with app_installed('sales') && ...
+crm/flows/lead_guarded_find.rk:32:9  warn   conditional_as_unguarded  steps/7/if  step 8 reads "deals", which step 2 declares only when app_installed('sales'); a null check does not cover a skipped step: start this if: with app_installed('sales') && ...
+crm/flows/lead_guarded_find.rk:35:9  warn   conditional_as_unguarded  steps/8/if  step 9 reads "deals", which step 2 declares only when app_installed('sales'); a null check does not cover a skipped step: start this if: with app_installed('sales') && ...
 crm/flows/no_trigger.rk:1:1  warn   never_runs  (root)  a flow needs on: (an event) or schedule: (cron)
 sales/imports/bad_import.rk:11:10  error  not_a_table  lines/field  "notes" is not a table field of sales_invoice
 sales/imports/bad_import.rk:7:9  error  unknown_field  map/nope  "nope" is not a field of sales_invoice
@@ -108,4 +111,4 @@ crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope 
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
 
-94 error(s), 15 warning(s)
+94 error(s), 18 warning(s)

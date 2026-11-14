@@ -3,6 +3,7 @@ package meta
 import (
 	"fmt"
 	"regexp"
+	"sort"
 	"strings"
 )
 
@@ -37,6 +38,9 @@ func topConjuncts(expr string) []string {
 		case ch == ')' || ch == ']' || ch == '}':
 			depth--
 			cur.WriteByte(ch)
+		case depth == 0 && (strings.HasPrefix(expr[i:], "||") || ch == '?' || ch == ','):
+			// || and ?: bind looser than && (and a comma separates arguments): this is no && chain
+			return []string{strings.ReplaceAll(spaceRe.ReplaceAllString(expr, ""), `"`, "'")}
 		case depth == 0 && strings.HasPrefix(expr[i:], "&&"):
 			out = append(out, cur.String())
 			cur.Reset()
@@ -49,10 +53,85 @@ func topConjuncts(expr string) []string {
 	var res []string
 	for _, x := range out {
 		if strings.TrimSpace(x) != "" {
-			res = append(res, spaceRe.ReplaceAllString(x, ""))
+			res = append(res, strings.ReplaceAll(spaceRe.ReplaceAllString(x, ""), `"`, "'"))
 		}
 	}
 	return res
+}
+
+// enclosingGroups are the contents of the parenthesised groups of expr that hold position pos, innermost first, then
+// expr itself; rangka_validate.py enclosing_groups.
+func enclosingGroups(expr string, pos int) []string {
+	type group struct{ start, end int }
+	var stack []int
+	var groups []group
+	var q byte
+	for i := 0; i < len(expr); i++ {
+		ch := expr[i]
+		switch {
+		case q != 0:
+			if ch == '\\' {
+				i++
+				continue
+			}
+			if ch == q {
+				q = 0
+			}
+		case ch == '\'' || ch == '"':
+			q = ch
+		case ch == '(':
+			stack = append(stack, i)
+		case ch == ')' && len(stack) > 0:
+			start := stack[len(stack)-1]
+			stack = stack[:len(stack)-1]
+			// a call's parentheses (a name right before) hold arguments, not a condition
+			call := start > 0 && (expr[start-1] == '_' || (expr[start-1] >= '0' && expr[start-1] <= '9') ||
+				(expr[start-1] >= 'a' && expr[start-1] <= 'z') || (expr[start-1] >= 'A' && expr[start-1] <= 'Z'))
+			if start < pos && pos < i && !call {
+				groups = append(groups, group{start + 1, i})
+			}
+		}
+	}
+	sort.SliceStable(groups, func(a, b int) bool { return groups[a].end-groups[a].start < groups[b].end-groups[b].start })
+	groups = append(groups, group{0, len(expr)})
+	out := make([]string, 0, len(groups))
+	for _, g := range groups {
+		text := expr[g.start:g.end]
+		// a check in a ternary's condition is guarded by that condition's && chain (evaluated first)
+		if q := topQuestion(text); q >= 0 && pos-g.start < q {
+			text = text[:q]
+		}
+		out = append(out, text)
+	}
+	return out
+}
+
+// topQuestion is the index of the first ? outside quotes and brackets, -1 when there is none.
+func topQuestion(text string) int {
+	depth := 0
+	var q byte
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		switch {
+		case q != 0:
+			if ch == '\\' {
+				i++
+				continue
+			}
+			if ch == q {
+				q = 0
+			}
+		case ch == '\'' || ch == '"':
+			q = ch
+		case ch == '(' || ch == '[' || ch == '{':
+			depth++
+		case ch == ')' || ch == ']' || ch == '}':
+			depth--
+		case ch == '?' && depth == 0:
+			return i
+		}
+	}
+	return -1
 }
 
 // conditionalAs warns when a step's `as:` is declared under `if:` and a later step's if: null-checks that name
@@ -88,15 +167,34 @@ func (v *validator) conditionalAs(p string, steps any) {
 			}
 			ts, _ := t["if"].(string)
 			nc := spaceRe.ReplaceAllString(ts, "")
-			loc := re.FindStringIndex(nc)
-			if loc == nil {
+			// a null check of the name itself (not event.x or y.x): no letter, digit, _ or . just before it
+			found, at := false, 0
+			for _, loc := range re.FindAllStringIndex(nc, -1) {
+				if strings.HasPrefix(nc[loc[0]:], name) && loc[0] > 0 {
+					c := nc[loc[0]-1]
+					if c == '_' || c == '.' || (c >= '0' && c <= '9') || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') {
+						continue
+					}
+				}
+				found, at = true, loc[0]
+				break
+			}
+			if !found {
 				continue
 			}
-			guarded := true
-			for _, k := range cs {
-				if !strings.Contains(nc[:loc[0]], k) {
-					guarded = false
+			// guarded when every top-level conjunct of the declaring condition is a top-level conjunct of this if:
+			// (CEL && absorbs an error on either side, so the order does not matter; || or a ternary does not guard)
+			guarded := false
+			for _, g := range enclosingGroups(nc, at) {
+				have := map[string]bool{}
+				for _, k := range topConjuncts(g) {
+					have[k] = true
 				}
+				all := true
+				for _, k := range cs {
+					all = all && have[k]
+				}
+				guarded = guarded || all
 			}
 			if guarded {
 				continue

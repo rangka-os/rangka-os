@@ -406,6 +406,71 @@ func TestAssessSetOnce(t *testing.T) {
 	}
 }
 
+// A field some roles may not change or see (read_only_for, hidden_for; contract 0027) is a permission: a flow step
+// writes it whatever those roles may do (0027 §6), so a company flow that writes it, or a change to who it is limited
+// for, is high and needs the owner (audit tax-fields N1, card t_2302cc49: a sales manager approved its own flow that
+// set the customer's VAT collector, which only finance may change).
+func TestAssessRoleLimitedFields(t *testing.T) {
+	customer := map[string]any{"name": "customer", "fields": []any{
+		map[string]any{"name": "vat_collector", "type": "select", "read_only_for": []any{"sales_manager", "head_office"}},
+		map[string]any{"name": "phone", "type": "phone"},
+		map[string]any{"name": "contacts", "type": "table", "of": "contact_person"},
+	}}
+	contact := map[string]any{"name": "contact_person", "fields": []any{map[string]any{"name": "nik", "type": "data", "hidden_for": []any{"outlet_staff"}}}}
+	plain := map[string]any{"name": "note_line", "fields": []any{map[string]any{"name": "text", "type": "data"}}}
+	order := map[string]any{"name": "x_order", "fields": []any{
+		map[string]any{"name": "phone", "type": "data", "hidden_for": []any{"outlet_staff"}},
+		map[string]any{"name": "lines", "type": "table", "of": "note_line"},
+		map[string]any{"name": "catatan", "type": "text"},
+	}}
+	files := map[string]map[string]any{"models/x_order.rk": order}
+	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
+	with := func(p string, m map[string]any) func(string) (map[string]any, bool) {
+		return func(q string) (map[string]any, bool) {
+			if q == p {
+				return m, true
+			}
+			return before(q)
+		}
+	}
+	model := func(n string) map[string]any {
+		return map[string]map[string]any{"customer": customer, "contact_person": contact, "note_line": plain, "x_order": order}[n]
+	}
+	flow := func(on string, steps ...any) map[string]any {
+		return map[string]any{"name": "x_f", "on": on, "steps": steps}
+	}
+	upd := func(set map[string]any) map[string]any { return map[string]any{"update": "doc", "set": set} }
+	cases := []struct {
+		name  string
+		path  string
+		after map[string]any
+		risk  string
+	}{
+		{"flow writes a read_only_for field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"vat_collector": "'other'"})), "high"},
+		{"flow creates a record with a read_only_for field", "flows/x_f.rk", flow("x_order.created", map[string]any{"create": "customer", "set": map[string]any{"vat_collector": "'government'"}}), "high"},
+		{"flow writes a hidden_for field", "flows/x_f.rk", flow("x_order.updated", upd(map[string]any{"phone": "'0812'"})), "high"},
+		{"flow fills rows whose model has a hidden_for field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"contacts": "[]"})), "high"},
+		{"flow writes an unlimited field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"phone": "'0812'"})), "medium"},
+		{"flow fills rows without limited fields", "flows/x_f.rk", flow("x_order.updated", upd(map[string]any{"lines": "[]"})), "medium"},
+		{"company model drops a hidden_for", "models/x_order.rk", map[string]any{"name": "x_order", "fields": []any{
+			map[string]any{"name": "phone", "type": "data"}, order["fields"].([]any)[1], order["fields"].([]any)[2]}}, "high"},
+		{"company model widens read_only_for", "models/x_order.rk", map[string]any{"name": "x_order", "fields": []any{
+			order["fields"].([]any)[0], order["fields"].([]any)[1], map[string]any{"name": "catatan", "type": "text", "read_only_for": []any{"cashier"}}}}, "high"},
+		{"company model changes another field", "models/x_order.rk", map[string]any{"name": "x_order", "fields": []any{
+			order["fields"].([]any)[0], order["fields"].([]any)[1], map[string]any{"name": "catatan", "type": "data"}}}, "medium"},
+	}
+	for _, c := range cases {
+		op := "replace"
+		if _, ok := files[c.path]; !ok {
+			op = "create"
+		}
+		a := AssessWith([]Op{{Op: op, Path: c.path}}, before, with(c.path, c.after), Env{Model: model})
+		if a.Risk != c.risk {
+			t.Errorf("%s: risk %s (%v), want %s", c.name, a.Risk, a.Reasons, c.risk)
+		}
+	}
+}
+
 // changeset.json takes a work screen in an app as it does in a module (the loader reads both; audit layar-kerja C2).
 func TestSchemaAllowsAppScreens(t *testing.T) {
 	for path, ok := range map[string]bool{

@@ -52,6 +52,14 @@ func sensitiveField(f map[string]any) bool {
 	return f["stock"] == true
 }
 
+// roleLimited is a field some roles may not write or see (read_only_for, hidden_for; contract 0027): the kernel drops
+// it from those roles' saves, but a flow step writes it as the flow decides (0027 §6), so a company flow that writes
+// it decides what those roles could not (audit tax-fields N1: a sales manager's own flow set the customer's VAT
+// collector, which only finance may change).
+func roleLimited(f map[string]any) bool {
+	return !isEmpty(f["read_only_for"]) || !isEmpty(f["hidden_for"])
+}
+
 func layerOf(path string) int { return Layer(path) }
 
 // CompanyPath reports whether a change-set path is a file of the site company module: models/<m>.rk or
@@ -421,6 +429,10 @@ func assessFields(a *Assessment, p string, old, nw map[string]any, submittable b
 		case !ok:
 			a.raise("medium", fmt.Sprintf("adds field %s to %s", name, p))
 		case reflect.DeepEqual(normalize(o), normalize(f)):
+		case !reflect.DeepEqual(normalize(o["read_only_for"]), normalize(f["read_only_for"])) ||
+			!reflect.DeepEqual(normalize(o["hidden_for"]), normalize(f["hidden_for"])):
+			// who may change or see the field is a permission (contract 0027), like the model's permissions
+			a.raise("high", fmt.Sprintf("changes who may change or see field %s of %s (read_only_for/hidden_for)", name, p))
 		case o["set_once"] == true && f["set_once"] != true:
 			// a value written once (clock-in time, position, a signature) becomes editable: evidence could be rewritten
 			a.raise("high", fmt.Sprintf("drops set_once from field %s of %s (a value meant to be written once becomes editable)", name, p))
@@ -691,6 +703,8 @@ func flowWrites(a *Assessment, p, model string, set any, env Env) {
 		case fd["set_once"] == true:
 			// the kernel lets a flow write a set_once field once; a company flow that writes it decides the evidence
 			a.raise("high", "company automation "+p+" writes set_once field "+f)
+		case roleLimited(fd):
+			a.raise("high", "company automation "+p+" writes field "+f+", which some roles may not change or see (read_only_for/hidden_for)")
 		case fd["type"] == "table":
 			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
 			// record's rows), so any money or stock field of the child model counts as written
@@ -720,6 +734,8 @@ func childRowsWrites(a *Assessment, p, f, child string, env Env, seen map[string
 		switch fd := fields[n]; {
 		case sensitiveField(fd):
 			a.raise("high", "company automation "+p+" writes rows of "+f+" with money/stock field "+n)
+		case roleLimited(fd):
+			a.raise("high", "company automation "+p+" writes rows of "+f+" with field "+n+", which some roles may not change or see")
 		case fd["type"] == "table":
 			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, seen)
 		}

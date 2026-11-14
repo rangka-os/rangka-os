@@ -922,6 +922,9 @@ def test_theme_default_light(page, ctx):
     ctx.allowed_failed.append(re.compile(r"/auth/providers$"))
     page.emulate_media(color_scheme="dark")
     page.goto(ctx.base + "/app/")
+    # the app's first requests (/auth/me) settle before open_route navigates again, or the navigation aborts them
+    # (net::ERR_ABORTED, a flaky failure on CI; card t_dd3cbce0)
+    page.wait_for_load_state("networkidle", timeout=15000)
     page.evaluate("() => localStorage.setItem('rk-app-theme', 'system')")
     open_route(page, ctx, ctx.home()[0])
     page.locator(".ap-shell").wait_for(timeout=15000)

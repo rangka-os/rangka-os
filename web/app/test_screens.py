@@ -12,7 +12,7 @@ A scenario fails on an exception, on a console error, or on an HTTP answer >= 40
 
 Prints SKIP and exits 0 when Go, Playwright or the PostgreSQL server binaries are missing; any other failure exits 1.
 """
-import argparse, json, os, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.parse, urllib.request
+import argparse, json, os, re, shutil, socket, subprocess, sys, tempfile, time, traceback, urllib.parse, urllib.request
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", ".."))
@@ -189,7 +189,7 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     p.wait_for_selector(".ap-counter-item")
     p.wait_for_selector(".ap-counter-left")
     badge = lambda name: p.locator(".ap-counter-item", has_text=name).locator(".ap-counter-left")
-    assert badge("Kopi susu").inner_text() == "Sisa 3" and badge("Es teh").inner_text() == "Habis", "the Pusat balances"
+    assert badge("Kopi susu").inner_text() == "sisa 3" and badge("Es teh").inner_text() == "Habis", "the Pusat balances"
     assert badge("Roti bakar").count() == 0, "stock of another outlet shows no badge"
     sales_before = total(c, "penjualan")
     # the price changes after the catalogue loaded: the receipt panel shows the server's total and change (audit M1)
@@ -233,13 +233,14 @@ def test_counter_open_sell_split_hold_close(browser, ctx):
     rec = c.request.get(f"/api/v1/r/penjualan/{second}").json()
     assert rec["change_amount"] == 13000 and sorted(x["method"] for x in rec["payments"]) == ["cash", "qris"], rec
     # the held bill comes back with its table
-    p.get_by_role("button", name="Ditahan (1)").click()
+    p.get_by_role("button", name="Ditahan · 1").click()
     p.locator(".ap-counter-held button").first.click()
     assert p.locator(".ap-counter-cust").input_value() == "Meja 3"
     assert "Es teh" in p.locator(".ap-counter-lines").inner_text()
     shot(ctx, p, "kasir-keranjang")
     # close blind: the expected cash never shows
-    p.get_by_role("button", name="Tutup sesi").click()
+    p.get_by_role("button", name="Menu pesanan").click()
+    p.get_by_role("menuitem", name="Tutup sesi").click()
     form = p.locator(".ap-counter-close")
     assert "seharusnya Rp" not in form.inner_text()
     form.locator("input").first.fill("150000")
@@ -461,7 +462,7 @@ def test_counter_fits_phone_and_tablet(browser, ctx):
         p.wait_for_timeout(400)
         states = [("katalog", None)]
         if p.locator(".ap-counter-bar").is_visible():  # phone and tablet portrait: the order opens as a sheet
-            states.append(("pesanan", lambda: p.locator(".ap-counter-bar button").last.click()))
+            states.append(("pesanan", lambda: p.locator(".ap-counter-bar").click()))
         states.append(("bayar", lambda: p.locator(".ap-counter-foot").get_by_role("button").last.click()))
         for name, go in states:
             if go:
@@ -525,6 +526,27 @@ def fits(p, ctx, where):
         return r.width && r.height && cs.visibility !== 'hidden' && el.type !== 'radio' && !el.closest('.rk-toast, [role=dialog]') && r.bottom > 0 && r.top < innerHeight && Math.min(r.width, r.height) < 43.5; })
       .map(el => (el.getAttribute('aria-label') || el.textContent || el.tagName).trim().slice(0, 24) + ' ' + Math.round(el.getBoundingClientRect().width) + 'x' + Math.round(el.getBoundingClientRect().height))""")
     assert not small, f"{where}: touch targets under 44px: {small}"
+
+def test_counter_empty_catalogue_offers_add_item(browser, ctx):
+    """A new site has no items yet: the counter says the catalogue is empty and offers "Tambah barang" instead of a
+    blank grid that leaves only the scan box."""
+    o, _ = page_for(browser, ctx, OWNER, DESK)
+    o.close()
+    c = browser.new_context(viewport=POS_SIZES["tablet"], base_url=ctx["base"], has_touch=True)
+    assert c.request.post("/auth/login", data=json.dumps({"email": KASIR[0], "password": KASIR[1]}), headers={"Content-Type": "application/json"}).status == 200
+    p = c.new_page()
+    p.route(re.compile(r".*/api/v1/r/menu\?.*"), lambda r: r.fulfill(status=200, content_type="application/json", body='{"data": [], "total": 0}'))
+    p.goto("/app/#/w/jual")
+    p.wait_for_selector(".ap-counter-open, .ap-counter-nocat")
+    if p.locator(".ap-counter-open").count():
+        p.locator(".ap-counter-open input").first.fill("50000")
+        p.get_by_role("button", name="Buka sesi").click()
+    box = p.locator(".ap-counter-nocat")
+    box.wait_for(timeout=10000)
+    assert "Katalog masih kosong" in box.inner_text()
+    shot(ctx, p, "kasir-katalog-kosong-tablet")
+    c.close()
+
 
 
 def test_clock_in_outside_with_reason_then_out(browser, ctx):

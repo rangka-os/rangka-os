@@ -870,3 +870,83 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-counter-tender .ap-counter-due.big b { font-size: 40px; line-height: 46px; }
   .ap-counter-tender .ap-counter-cash .rk-btn { min-height: 52px; }
 }
+
+/* ---- counter, the Figma "Rangka OS · POS" frames (Kasir · tablet landscape, Kasir · HP, Pesanan · HP): a search box with
+   the scan key inside it, "Ditahan · n" beside it, chips, cards with the count on the tile and "sisa" by the price,
+   "Pesanan baru · Draf", a customer field with its icon, the unit price under each line, Bayar with the amount on the
+   right, and on phones a full-width ink bar ---- */
+.ap-counter-searchbox { position: relative; flex: 1; min-width: 0; display: flex; align-items: center; }
+.ap-counter-searchbox > .rk-icon { position: absolute; left: 14px; width: 18px; height: 18px; color: var(--ink-2); pointer-events: none; }
+.ap-counter-searchbox .ap-counter-search { min-height: 48px; padding-left: 42px; padding-right: 52px; border-color: var(--line-strong); border-radius: 10px; }
+.ap-counter-searchbox .ap-counter-search::placeholder { color: var(--muted); }
+.ap-counter-scan { position: absolute; right: 4px; display: grid; place-items: center; width: var(--touch); height: 40px; padding: 0; border: 0; border-radius: 8px;
+  background: transparent; color: var(--ink-2); cursor: pointer; }
+.ap-counter-scan:hover { background: var(--neutral); color: var(--ink); }
+.ap-counter-scan .rk-icon { width: 20px; height: 20px; }
+.ap-counter-heldbtn { flex: none; display: inline-flex; align-items: center; gap: 8px; min-height: 48px; padding: 0 16px; border: 1px solid var(--line-strong); border-radius: 10px;
+  background: var(--surface); color: var(--ink); font: 600 15px/20px var(--font-sans); cursor: pointer; white-space: nowrap; }
+.ap-counter-heldbtn .rk-icon { width: 16px; height: 16px; }
+.ap-counter-scan:focus-visible, .ap-counter-heldbtn:focus-visible, .ap-counter-menu-b:focus-visible, .ap-counter-bar:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ap-counter-groups button { min-height: var(--touch); padding: 0 18px; font-size: 15px; }
+.ap-counter-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: 12px; }
+@media (min-width: 1024px) { .ap-counter-grid { grid-template-columns: repeat(4, minmax(0, 1fr)); } }
+.ap-counter-item { gap: 4px; padding-bottom: 12px; border-color: var(--line); border-radius: 10px; box-shadow: 0 1px 2px rgba(28, 25, 23, .04); }
+.ap-counter-item.picked { border-color: var(--line-strong); box-shadow: 0 1px 2px rgba(28, 25, 23, .04); }
+.ap-counter-pic { height: 96px; margin-bottom: 6px; background: #e8dccb; }
+.ap-counter-pic i { font: 600 22px/1 var(--font-sans); color: #8a7560; opacity: 1; }
+.ap-counter-pic.t0 { background: #ede2d3; } .ap-counter-pic.t1 { background: #e5d5c1; } .ap-counter-pic.t2 { background: #dce5d1; }
+.ap-counter-pic.t3 { background: #efe3cf; } .ap-counter-pic.t4 { background: #eed6c6; } .ap-counter-pic.t5 { background: #f0e4c6; }
+.ap-counter-n { top: 8px; left: 8px; right: auto; background: var(--ink); color: var(--surface); }
+.ap-counter-item-t { font: 500 15px/20px var(--font-sans); }
+.ap-counter-item-p { display: flex; align-items: center; justify-content: space-between; gap: 6px; color: var(--ink); font: 600 15px/20px var(--font-sans); }
+.ap-counter-left { position: static; padding: 1px 8px; border-radius: 6px; font: 500 12px/18px var(--font-sans); }
+.ap-counter-left.out { background: var(--bad-tint); color: var(--bad); }
+.ap-counter-item.out .ap-counter-item-p > span { opacity: .5; }
+.ap-counter-nocat { display: grid; justify-items: center; gap: 6px; margin: 48px auto; max-width: 340px; text-align: center; color: var(--muted); }
+.ap-counter-nocat-i { display: grid; place-items: center; width: 56px; height: 56px; margin-bottom: 6px; border-radius: 14px; background: var(--neutral); color: var(--ink-2); }
+.ap-counter-nocat-i .rk-icon { width: 26px; height: 26px; }
+.ap-counter-nocat b { color: var(--ink); font: 600 17px/22px var(--font-sans); }
+.ap-counter-nocat p { margin: 0 0 8px; font-size: 14px; line-height: 20px; }
+.ap-counter-nocat a.rk-btn, .ap-counter-nocat a.rk-btn:hover { text-decoration: none; color: var(--primary-ink); }
+/* order panel */
+.ap-counter-cart { gap: 12px; padding: 18px 20px; border-color: var(--line); border-radius: 12px; }
+.ap-counter-cart-h { align-items: flex-start; }
+.ap-counter-cart-t { display: grid; gap: 2px; min-width: 0; }
+.ap-counter-cart-t b { font: 600 19px/24px var(--font-sans); color: var(--ink); }
+.ap-counter-cart-t small { color: var(--muted); font-size: 13px; line-height: 18px; }
+.ap-counter-menu { position: relative; }
+.ap-counter-menu-b { display: grid; place-items: center; width: 36px; height: 36px; padding: 0; border: 0; border-radius: 8px; background: transparent; color: var(--ink-2); cursor: pointer; }
+.ap-counter-menu-b:hover, .ap-counter-menu-b[aria-expanded="true"] { background: var(--neutral); }
+.ap-counter-menu-l { position: absolute; right: 0; top: calc(100% + 4px); z-index: 30; min-width: 180px; display: grid; padding: 4px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--surface); box-shadow: var(--shadow-pop); }
+.ap-counter-menu-l button { min-height: 40px; padding: 0 12px; border: 0; border-radius: 6px; background: transparent; color: var(--ink); text-align: left; font: 500 14px/18px var(--font-sans); cursor: pointer; }
+.ap-counter-menu-l button:hover { background: var(--neutral); }
+.ap-counter-custbox { position: relative; display: flex; align-items: center; }
+.ap-counter-custbox > .rk-icon { position: absolute; left: 14px; width: 17px; height: 17px; color: var(--ink-2); pointer-events: none; }
+.ap-counter-custbox .ap-counter-cust { min-height: 48px; padding-left: 40px; }
+.ap-counter-lines > li { padding: 12px 0; }
+.ap-counter-line { grid-template-columns: minmax(0, 1fr) auto auto; gap: 14px; }
+.ap-counter-line-t { font: 500 15px/20px var(--font-sans); gap: 2px; }
+.ap-counter-line-t small { font-size: 13px; line-height: 18px; }
+.ap-counter-qty { gap: 0; border: 1px solid var(--line-strong); border-radius: 8px; overflow: hidden; }
+.ap-counter-qty button { width: 36px; height: 36px; border: 0; border-radius: 0; background: transparent; }
+.ap-counter-qty button:hover { background: var(--neutral); }
+.ap-counter-qty b { min-width: 28px; font-size: 16px; }
+.ap-counter-amt { font-weight: 600; }
+.ap-counter-sum { gap: 8px; padding-top: 14px; border-top: 1px solid var(--line); }
+.ap-counter-sum > div { color: var(--muted); }
+.ap-counter-sum > div dd { color: var(--ink); }
+.ap-counter-sum .ap-counter-sum-total { margin-top: 6px; padding-top: 12px; border-top: 1px solid var(--line); font: 600 17px/24px var(--font-sans); align-items: baseline; }
+.ap-counter-sum .ap-counter-sum-total dd { font: 700 26px/32px var(--font-sans); }
+.ap-counter-foot .ap-counter-row { display: grid; grid-template-columns: minmax(96px, 1fr) 2.6fr; gap: 10px; }
+.ap-counter-foot .ap-counter-row > .rk-btn { min-height: 52px; font-size: 16px; }
+.ap-counter-foot .ap-counter-row > .rk-btn:only-child { grid-column: 1 / -1; }
+.ap-counter-paybtn { justify-content: space-between !important; padding: 0 20px !important; }
+.ap-counter-paybtn > span:last-child { font-variant-numeric: tabular-nums; }
+/* phone: the bar is one full-width ink button above the tabs */
+.ap-counter-bar { border: 0; width: auto; padding: 0 18px; min-height: 52px; border-radius: 10px; font: 600 16px/20px var(--font-sans); text-align: left; cursor: pointer; }
+.ap-counter-bar span { font-size: 16px; }
+@media (max-width: 767px) {
+  .ap-counter-heldbtn { padding: 0 12px; }
+  .ap-counter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+}

@@ -420,3 +420,18 @@ test("accountSections: Mode only for proposers, then Aplikasi from pwaMenu keys"
   assert.deepStrictEqual(a[0].items.map((i) => i.key), ["app:update", "app:install"]);
   assert.deepStrictEqual(plain(S({ propose: false, pwa: ["ios"] }))[0].items.map((i) => i.label), ["Pasang di layar utama"]);
 });
+
+test("topNavItems: one top bar item per group (first entry), unlabelled groups give their entries, current by page", () => {
+  const groups = [
+    { label: "Penjualan", items: [{ id: "r/pos_sale", label: "Penjualan" }, { id: "r/customer", label: "Pelanggan" }] },
+    { label: null, items: [{ id: "approvals", label: "Persetujuan" }] },
+    { label: "Stok", items: [{ id: "x", label: "Gudang", items: [{ id: "r/stock_balance", label: "Saldo stok" }] }] },
+    { label: "Kosong", items: [] }
+  ];
+  const t = A.topNavItems(groups, "r/customer");
+  assert.deepStrictEqual(plain(t.items), [{ id: "r/pos_sale", label: "Penjualan" }, { id: "approvals", label: "Persetujuan" }, { id: "r/stock_balance", label: "Stok" }]);
+  assert.strictEqual(t.current, "r/pos_sale");
+  assert.strictEqual(A.topNavItems(groups, "r/stock_balance").current, "r/stock_balance");
+  assert.strictEqual(A.topNavItems(groups, "d/home").current, null);
+  assert.strictEqual(A.topNavItems(groups, "", 2).items.length, 2);
+});

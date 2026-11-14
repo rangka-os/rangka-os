@@ -319,6 +319,7 @@
     var hk = heldKey(scope, s.name);
     var hs = useState(function () { return readHeld(hk); }), held = hs[0], setHeld = hs[1];
     var hos = useState(false), heldOpen = hos[0], setHeldOpen = hos[1];
+    var mos = useState(false), menuOpen = mos[0], setMenuOpen = mos[1];
     var os = useState(function () { return Object.assign({}, sets.session || {}); }), openRec = os[0], setOpenRec = os[1]; // prefilled from session.set
     var cls = useState(null), closing = cls[0], setClosing = cls[1]; // close form record, or null
     var dns = useState(false), denomOpen = dns[0], setDenomOpen = dns[1];
@@ -585,11 +586,18 @@
     var inCart = {};
     cart.forEach(function (l) { inCart[l.item] = (inCart[l.item] || 0) + l.qty; });
 
+    var catMeta = (ctx.meta.models || {})[cat.model] || {};
+    var canAddItem = !(catMeta.can && catMeta.can.create === false);
     var catalogue = h("section", { className: "ap-counter-cat", "aria-label": "Katalog" }, offlineBar,
       h("div", { className: "ap-counter-searchrow" },
-        h("input", { ref: searchRef, className: "ap-counter-search", type: "search", placeholder: cat.barcode ? "Cari menu atau scan barcode" : "Cari",
-          "aria-label": "Cari barang", value: q, onChange: function (e) { setQ(e.target.value); }, onKeyDown: onSearchKey }),
-        cat.barcode && RA.Scanner ? h(R.Button, { className: "ap-counter-scan", onClick: function () { setScanning(true); }, "aria-label": "Pindai barcode dengan kamera" }, "Pindai") : null,
+        h("label", { className: "ap-counter-searchbox" },
+          h(R.Icon, { name: "search" }),
+          h("input", { ref: searchRef, className: "ap-counter-search", type: "search", placeholder: cat.barcode ? "Cari menu atau scan barcode" : "Cari menu",
+            "aria-label": "Cari barang", value: q, onChange: function (e) { setQ(e.target.value); }, onKeyDown: onSearchKey }),
+          cat.barcode && RA.Scanner ? h("button", { type: "button", className: "ap-counter-scan", onClick: function () { setScanning(true); },
+            "aria-label": "Pindai barcode dengan kamera", title: "Pindai barcode dengan kamera" }, h(R.Icon, { name: "scan" })) : null),
+        c.hold && held.length ? h("button", { type: "button", className: "ap-counter-heldbtn", "aria-expanded": heldOpen ? "true" : "false",
+          onClick: function () { setHeldOpen(!heldOpen); setSheet(true); } }, h(R.Icon, { name: "history" }), "Ditahan · " + held.length) : null,
         scanning ? h(RA.Scanner, { title: "Pindai barcode", keepOpen: true, onCode: onScan, onClose: function () { setScanning(false); } }) : null,
         h("span", { className: "ap-counter-sync" + (online ? "" : " off") }, online ? "Online" : "Offline")),
       groups.length > 1 ? h("div", { className: "ap-counter-groups", role: "tablist" },
@@ -604,10 +612,16 @@
             "aria-label": it.title + ", " + rp(it.price) + (out ? ", habis" : low ? ", sisa " + left : "") + (n ? ", " + n + " di pesanan" : "") },
             h("span", { className: "ap-counter-pic " + tintOf(it.title), "aria-hidden": "true" },
               it.image ? h("img", { src: imageSrc(it.image), alt: "", loading: "lazy" }) : h("i", null, initials(it.title)),
-              out ? h("em", { className: "ap-counter-left out" }, "Habis") : low ? h("em", { className: "ap-counter-left" }, "Sisa " + left) : null,
               n ? h("strong", { className: "ap-counter-n" }, n) : null),
-            h("span", { className: "ap-counter-item-t" }, it.title), h("span", { className: "ap-counter-item-p" }, rp(it.price)));
-        }), !shown.length ? h("p", { className: "ap-work-loading" }, "Tidak ada yang cocok.") : null));
+            h("span", { className: "ap-counter-item-t" }, it.title),
+            h("span", { className: "ap-counter-item-p" }, h("span", null, rp(it.price)),
+              out ? h("em", { className: "ap-counter-left out" }, "Habis") : low ? h("em", { className: "ap-counter-left" }, "sisa " + left) : null));
+        }), !shown.length && (q || group) ? h("p", { className: "ap-work-loading" }, "Tidak ada yang cocok.") : null),
+      items && !items.length && !catErr ? h("div", { className: "ap-counter-nocat", role: "status" },
+        h("span", { className: "ap-counter-nocat-i", "aria-hidden": "true" }, h(R.Icon, { name: "store" })),
+        h("b", null, "Katalog masih kosong"),
+        h("p", null, "Tambahkan barang dulu, lalu ketuk kartunya untuk menjual. Scan barcode juga mencari dari katalog ini."),
+        canAddItem ? h("a", { className: "rk-btn rk-btn-primary", href: "#/r/" + cat.model + "/new" }, h(R.Icon, { name: "add" }), "Tambah barang") : null) : null);
 
     // tablet landscape: while paying the tender fills the catalogue's place and the order panel keeps the lines, read-only
     var paying = wide && pay && !stuck;
@@ -615,7 +629,8 @@
       return h("li", { key: l.key },
         h("div", { className: "ap-counter-line" },
           h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
-            l.note ? h("small", null, l.note) : doc.line && doc.line.note ? h("small", { className: "ap-counter-addnote" }, "+ catatan") : null),
+            l.note ? h("small", null, l.note) : doc.line && doc.line.note ? h("small", { className: "ap-counter-addnote" }, "+ catatan") : null,
+            h("small", { className: "ap-counter-unit" }, rp(l.price))),
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
             h("b", null, l.qty),
@@ -674,14 +689,19 @@
 
     var side = h("section", { className: "ap-counter-cart", "aria-label": "Transaksi" },
       h("div", { className: "ap-counter-cart-h" },
-        h("b", null, "Pesanan"),
+        h("div", { className: "ap-counter-cart-t" }, h("b", null, "Pesanan baru"), h("small", null, "Draf · nomor dibuat saat bayar")),
         h("span", { className: "ap-counter-tools" },
-          c.hold && held.length ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setHeldOpen(!heldOpen); } }, "Ditahan (" + held.length + ")") : null,
-          ses && ses.close && !stuck ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi") : null,
+          ses && ses.close && !stuck ? h("span", { className: "ap-counter-menu" },
+            h("button", { type: "button", className: "ap-counter-menu-b", "aria-label": "Menu pesanan", title: "Menu pesanan", "aria-expanded": menuOpen ? "true" : "false",
+              onClick: function () { setMenuOpen(!menuOpen); } }, h(R.Icon, { name: "more" })),
+            menuOpen ? h("div", { className: "ap-counter-menu-l", role: "menu" },
+              c.hold && held.length ? h("button", { type: "button", role: "menuitem", onClick: function () { setMenuOpen(false); setHeldOpen(!heldOpen); } }, "Ditahan · " + held.length) : null,
+              h("button", { type: "button", role: "menuitem", onClick: function () { setMenuOpen(false); setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi")) : null) : null,
           h("button", { type: "button", className: "ap-counter-sheet-x", "aria-label": "Tutup pesanan", onClick: function () { setSheet(false); } }, h(R.Icon, { name: "close" })))),
       heldList,
-      c.customer && !(pay && !stuck) ? h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
-        value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } }) : null,
+      c.customer && !(pay && !stuck) ? h("label", { className: "ap-counter-custbox" }, h(R.Icon, { name: "user" }),
+        h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),
+          value: customer, readOnly: stuck, onChange: function (e) { if (!stuck) setCustomer(e.target.value); } })) : null,
       pay && !stuck ? (paying ? h("div", { className: "ap-counter-body" }, h("ul", { className: "ap-counter-lines ap-counter-paidlines", "aria-label": "Pesanan dibayar" },
         cart.map(function (l) {
           return h("li", { key: l.key }, h("div", { className: "ap-counter-line" },
@@ -691,11 +711,12 @@
       paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
         h("div", { className: "ap-counter-row" },
           c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
-          h(R.Button, { variant: "primary", size: "lg", loading: busy && !pay, onClick: openPay }, "Bayar " + rp(total)))) : null));
+          h(R.Button, { variant: "primary", size: "lg", className: "ap-counter-paybtn", loading: busy && !pay, onClick: openPay, "aria-label": "Bayar " + rp(total) },
+            h("span", null, "Bayar"), h("span", null, rp(total))))) : null));
 
-    var bar = cart.length && !sheet ? h("div", { className: "ap-counter-bar" },
-      h("span", null, cartCount(cart) + " item", customer ? " · " + customer : ""), h("b", null, rp(total)),
-      h(R.Button, { variant: "primary", onClick: function () { setSheet(true); } }, "Lihat pesanan")) : null;
+    var bar = cart.length && !sheet ? h("button", { type: "button", className: "ap-counter-bar", onClick: function () { setSheet(true); },
+      "aria-label": cartCount(cart) + " item, " + rp(total) + ". Lihat pesanan" },
+      h("span", null, cartCount(cart) + " item · Lihat pesanan", customer ? " · " + customer : ""), h("b", null, rp(total))) : null;
 
     return h("div", { className: "ap-counter" + (sheet || pay || stuck || (done && !cart.length) ? " sheet" : "") + (paying ? " paying" : "") },
       paying ? h("section", { className: "ap-counter-tender", "aria-label": "Pembayaran" }, tender) : catalogue, side, bar);

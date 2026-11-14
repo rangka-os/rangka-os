@@ -415,7 +415,11 @@ func TestAssessRoleLimitedFields(t *testing.T) {
 		map[string]any{"name": "vat_collector", "type": "select", "read_only_for": []any{"sales_manager", "head_office"}},
 		map[string]any{"name": "phone", "type": "phone"},
 		map[string]any{"name": "contacts", "type": "table", "of": "contact_person"},
+		map[string]any{"name": "npwp", "type": "data", "hidden_for": []any{"outlet_staff"}},
+		map[string]any{"name": "credit_limit", "type": "currency"},
+		map[string]any{"name": "signed_at", "type": "datetime", "set_once": true},
 	}}
+	item := map[string]any{"name": "item", "fields": []any{map[string]any{"name": "item_name", "type": "data"}}}
 	contact := map[string]any{"name": "contact_person", "fields": []any{map[string]any{"name": "nik", "type": "data", "hidden_for": []any{"outlet_staff"}}}}
 	plain := map[string]any{"name": "note_line", "fields": []any{map[string]any{"name": "text", "type": "data"}}}
 	order := map[string]any{"name": "x_order", "fields": []any{
@@ -434,12 +438,23 @@ func TestAssessRoleLimitedFields(t *testing.T) {
 		}
 	}
 	model := func(n string) map[string]any {
-		return map[string]map[string]any{"customer": customer, "contact_person": contact, "note_line": plain, "x_order": order}[n]
+		return map[string]map[string]any{"customer": customer, "contact_person": contact, "note_line": plain, "x_order": order, "item": item}[n]
 	}
 	flow := func(on string, steps ...any) map[string]any {
 		return map[string]any{"name": "x_f", "on": on, "steps": steps}
 	}
 	upd := func(set map[string]any) map[string]any { return map[string]any{"update": "doc", "set": set} }
+	// audit flow-locked F1: v is an item when the loop body first updates it, and the customer the body's last step
+	// finds from the second pass on; judged once, the update looked like a write to an item
+	rebound := func(set map[string]any) map[string]any {
+		return flow("customer.updated",
+			map[string]any{"find": "item", "as": "v"},
+			map[string]any{"find_all": "item", "limit": 2, "as": "rows"},
+			map[string]any{"for_each": "rows", "as": "r", "do": []any{
+				map[string]any{"update": "v", "if": "v.name == event.name", "set": set},
+				map[string]any{"find": "customer", "where": "name == event.name", "as": "v"},
+			}})
+	}
 	cases := []struct {
 		name  string
 		path  string
@@ -451,6 +466,11 @@ func TestAssessRoleLimitedFields(t *testing.T) {
 		{"flow writes a hidden_for field", "flows/x_f.rk", flow("x_order.updated", upd(map[string]any{"phone": "'0812'"})), "high"},
 		{"flow fills rows whose model has a hidden_for field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"contacts": "[]"})), "high"},
 		{"flow writes an unlimited field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"phone": "'0812'"})), "medium"},
+		{"loop rebinds a variable to a read_only_for field's model", "flows/x_f.rk", rebound(map[string]any{"vat_collector": "'other'"}), "high"},
+		{"loop rebinds a variable to a hidden_for field's model", "flows/x_f.rk", rebound(map[string]any{"npwp": "'0'"}), "high"},
+		{"loop rebinds a variable to a money field's model", "flows/x_f.rk", rebound(map[string]any{"credit_limit": "0"}), "high"},
+		{"loop rebinds a variable to a set_once field's model", "flows/x_f.rk", rebound(map[string]any{"signed_at": "now()"}), "high"},
+		{"loop rebinds a variable, plain field", "flows/x_f.rk", rebound(map[string]any{"phone": "'0812'"}), "medium"},
 		{"flow fills rows without limited fields", "flows/x_f.rk", flow("x_order.updated", upd(map[string]any{"lines": "[]"})), "medium"},
 		{"company model drops a hidden_for", "models/x_order.rk", map[string]any{"name": "x_order", "fields": []any{
 			map[string]any{"name": "phone", "type": "data"}, order["fields"].([]any)[1], order["fields"].([]any)[2]}}, "high"},

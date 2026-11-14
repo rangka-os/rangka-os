@@ -618,6 +618,19 @@ func assessCompanyFlow(a *Assessment, p string, flow map[string]any, env Env) {
 	walkFlowSteps(a, p, meta.AsList(flow["steps"]), vars, env)
 }
 
+// copyVars is a deep copy of a flow's variable bindings.
+func copyVars(vars map[string]map[string]bool) map[string]map[string]bool {
+	out := make(map[string]map[string]bool, len(vars))
+	for k, ms := range vars {
+		c := make(map[string]bool, len(ms))
+		for m := range ms {
+			c[m] = true
+		}
+		out[k] = c
+	}
+	return out
+}
+
 // recordEvents are the <model>.<event> suffixes flow.json names for a record's own event.
 var recordEvents = map[string]bool{"created": true, "updated": true, "submitted": true, "cancelled": true}
 
@@ -673,7 +686,18 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 					delete(vars, as)
 				}
 			}
-			walkFlowSteps(a, p, meta.AsList(st["do"]), vars, env)
+			// the body runs once per item and a variable bound late in one pass is what an update reads in the next
+			// (audit flow-locked F1: update: v before find customer as v): bind to a fixpoint first, then judge the
+			// writes against every model a variable may hold
+			body := meta.AsList(st["do"])
+			for i := 0; i < 16; i++ {
+				before := copyVars(vars)
+				walkFlowSteps(&Assessment{}, p, body, vars, env)
+				if reflect.DeepEqual(before, vars) {
+					break
+				}
+			}
+			walkFlowSteps(a, p, body, vars, env)
 		case st["if"] != nil:
 			walkFlowSteps(a, p, meta.AsList(st["then"]), vars, env)
 			walkFlowSteps(a, p, meta.AsList(st["else"]), vars, env)

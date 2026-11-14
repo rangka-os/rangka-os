@@ -676,6 +676,13 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 				flowWrites(a, p, m, st["set"], env)
 			}
 		case st["for_each"] != nil:
+			// the runtime gives the loop variable back its earlier value once the loop ends (flows.go for_each), so the
+			// binding before the loop is what a later step reads, whatever the body bound to that name (audit
+			// flow-locked F5: a loop over an unknown source as v, v rebound to an item inside, then update: v)
+			saved, had := vars[as]
+			if had {
+				saved = copyVars(map[string]map[string]bool{as: saved})[as]
+			}
 			if as != "" {
 				src, _ := st["for_each"].(string)
 				if ms := vars[strings.TrimSpace(src)]; len(ms) > 0 {
@@ -698,6 +705,13 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 				}
 			}
 			walkFlowSteps(a, p, body, vars, env)
+			if as != "" {
+				if had {
+					vars[as] = saved
+				} else {
+					delete(vars, as)
+				}
+			}
 		case st["if"] != nil:
 			walkFlowSteps(a, p, meta.AsList(st["then"]), vars, env)
 			walkFlowSteps(a, p, meta.AsList(st["else"]), vars, env)

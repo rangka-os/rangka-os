@@ -455,12 +455,30 @@ func TestAssessRoleLimitedFields(t *testing.T) {
 				map[string]any{"find": "customer", "where": "name == event.name", "as": "v"},
 			}})
 	}
+	// audit flow-locked F5: a loop over an unknown source as v (v rebound to an item inside) gives v back its earlier
+	// value, the customer, when the loop ends
+	shadowed := func(set map[string]any) []any {
+		return []any{
+			map[string]any{"find": "customer", "where": "name == event.name", "as": "v"},
+			map[string]any{"for_each": "'[1]'", "as": "v", "do": []any{map[string]any{"find": "item", "as": "v"}}},
+			map[string]any{"update": "v", "set": set},
+		}
+	}
+	inLoop := func(steps []any) map[string]any {
+		return flow("customer.updated", map[string]any{"find_all": "item", "limit": 1, "as": "rows"},
+			map[string]any{"for_each": "rows", "as": "r", "do": steps})
+	}
 	cases := []struct {
 		name  string
 		path  string
 		after map[string]any
 		risk  string
 	}{
+		{"shadowing loop, then a read_only_for field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"vat_collector": "'other'"})...), "high"},
+		{"shadowing loop, then a hidden_for field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"npwp": "'0'"})...), "high"},
+		{"shadowing loop, then a money field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"credit_limit": "0"})...), "high"},
+		{"shadowing loop inside a loop, then a read_only_for field", "flows/x_f.rk", inLoop(shadowed(map[string]any{"vat_collector": "'other'"})), "high"},
+		{"shadowing loop, then a plain field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"phone": "'0812'"})...), "medium"},
 		{"flow writes a read_only_for field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"vat_collector": "'other'"})), "high"},
 		{"flow creates a record with a read_only_for field", "flows/x_f.rk", flow("x_order.created", map[string]any{"create": "customer", "set": map[string]any{"vat_collector": "'government'"}}), "high"},
 		{"flow writes a hidden_for field", "flows/x_f.rk", flow("x_order.updated", upd(map[string]any{"phone": "'0812'"})), "high"},

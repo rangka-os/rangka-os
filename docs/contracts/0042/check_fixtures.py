@@ -19,9 +19,10 @@ ID_RE = re.compile(r"^[a-z][a-z0-9_]{0,31}$")
 MAX_CHARS = 300
 MAP_ERRORS = ["map_too_large", "field_too_long", "bad_id", "duplicate_id", "bad_shape"]
 DROP_REASONS = {"bad_shape", "unknown_id", "unconfirmed_guess", "limit"}
-COLLECTIONS = {"stage": "stages", "piece": "pieces", "open": "open", "setting": "settings"}
-LIMITS = {"stages": 30, "pieces": 60, "open": 20, "settings": 40}
+COLLECTIONS = {"stage": "stages", "piece": "pieces", "open": "open", "setting": "settings", "pain": "pains"}
+LIMITS = {"stages": 30, "pieces": 60, "open": 20, "settings": 40, "pains": 20}
 STAGE_LIST_MAX = 10
+SOLVES_MAX = 10  # contract 0050 section 1
 DESIGN_LIST_MAX = 20
 PIECE_KINDS = {"catalogue", "custom", "connector", "edge", "cloud_service", "existing"}
 REF_RULE = {"catalogue": "required", "connector": "required", "cloud_service": "required",
@@ -32,9 +33,12 @@ FIELDS = {
     "stage": {"id": (True, "id"), "label": (True, "str"), "actor": (False, "str"), "documents": (False, "strlist"),
               "systems": (False, "strlist"), "pieces": (False, "strlist"), "model": (False, "str")},
     "piece": {"id": (True, "id"), "kind": (True, "kind"), "label": (True, "str"), "why": (False, "str"),
-              "ref": (False, "str"), "design": (False, "design")},
+              "ref": (False, "str"), "design": (False, "design"), "solves": (False, "idlist")},
     "open": {"id": (True, "id"), "text": (True, "str")},
     "setting": {"id": (True, "id"), "text": (True, "str"), "from_guess": (False, "id")},
+    # contract 0050 section 1
+    "pain": {"id": (True, "id"), "text": (True, "str"), "stage": (False, "id"), "how_often": (False, "str"),
+             "cost": (False, "str")},
 }
 STAGE_LISTS = ("documents", "systems", "pieces")
 DESIGN_LISTS = ("records", "steps")
@@ -46,7 +50,8 @@ FACT_KEYS = [("business_name", "Nama usaha"), ("industry", "Jenis bisnis"), ("of
              ("current_tools", "Sistem yang dipakai sekarang"),
              ("replace_or_complement", "Ganti penuh atau pendamping"),
              ("data_to_move", "Data yang perlu dipindah"), ("pain_points", "Yang paling repot")]
-SETTING_KEYS = {"customers", "ordering", "payment", "fulfilment", "locations", "team", "data_to_move", "pain_points"}
+# pain_points is no longer a setting: it becomes the pain n_pain_points (contract 0050 section 3).
+SETTING_KEYS = {"customers", "ordering", "payment", "fulfilment", "locations", "team", "data_to_move"}
 REQUIRED_FOR_DONE = ["business_name", "offer", "current_tools", "replace_or_complement"]
 QUESTIONS = {
     "business_name": "Nama usahamu apa? (dipakai di aplikasi, tidak dibagikan)",
@@ -124,6 +129,15 @@ def item_problems(kind, v):
                         out.add("bad_shape")
                     elif units(s) > MAX_CHARS:
                         out.add("field_too_long")
+        elif typ == "idlist":
+            if not is_list(x):
+                out.add("bad_shape")
+            else:
+                if len(x) > SOLVES_MAX:
+                    out.add("list_overflow")
+                for s in x:
+                    if not is_str(s) or not ID_RE.match(s):
+                        out.add("bad_id")
         elif typ == "design":
             if not isinstance(x, dict) or any(dk not in DESIGN_LISTS for dk in x):
                 out.add("bad_shape")
@@ -165,7 +179,18 @@ def emitted(kind, v):
     if kind == "piece" and v.get("kind") == "custom":
         for k in DESIGN_LISTS:
             v["design"].setdefault(k, [])
+    if kind == "piece":
+        v.setdefault("solves", [])
     return v
+
+
+def with_defaults(m):
+    """A request map as read: `pains` absent = [], `solves` absent = [] (contract 0050 section 1)."""
+    m = copy.deepcopy(m)
+    m.setdefault("pains", [])
+    for p in m["pieces"]:
+        p.setdefault("solves", [])
+    return m
 
 
 # ---------- section 1: a whole map ----------
@@ -176,7 +201,7 @@ def map_error(m):
     if not isinstance(m, dict):
         return "bad_shape"
     for k in m:
-        if k not in ("version", "business", "stages", "pieces", "open", "settings"):
+        if k not in ("version", "business", "stages", "pieces", "open", "settings", "pains"):
             found.add("bad_shape")
     if not (is_int(m.get("version")) and m["version"] == 1):
         found.add("bad_shape")
@@ -190,7 +215,7 @@ def map_error(m):
             elif units(biz[k]) > MAX_CHARS:
                 found.add("field_too_long")
     for kind, coll in COLLECTIONS.items():
-        items = m.get(coll)
+        items = m.get(coll, [] if coll == "pains" else None)
         if not is_list(items):
             found.add("bad_shape")
             continue
@@ -280,7 +305,7 @@ def op_reason(m, op, confirmed):
 
 
 def apply_ops(m, ops, confirmed):
-    m = copy.deepcopy(m)
+    m = with_defaults(m)
     dropped = []
     for i, op in enumerate(ops):
         reason = op_reason(m, op, confirmed)
@@ -303,6 +328,9 @@ def apply_ops(m, ops, confirmed):
             if op["kind"] == "piece":
                 for s in m["stages"]:
                     s["pieces"] = [x for x in s["pieces"] if x != op["id"]]
+            if op["kind"] == "pain":
+                for p in m["pieces"]:
+                    p["solves"] = [x for x in p["solves"] if x != op["id"]]
         else:
             coll = COLLECTIONS[op["kind"]]
             v = emitted(op["kind"], op["value"])
@@ -315,6 +343,13 @@ def apply_ops(m, ops, confirmed):
     ids = {p["id"] for p in m["pieces"]}
     for s in m["stages"]:
         s["pieces"] = [x for x in s["pieces"] if x in ids]
+    stage_ids = {s["id"] for s in m["stages"]}
+    pain_ids = {n["id"] for n in m["pains"]}
+    for n in m["pains"]:
+        if "stage" in n and n["stage"] not in stage_ids:
+            del n["stage"]
+    for p in m["pieces"]:
+        p["solves"] = [x for x in p["solves"] if x in pain_ids]
     return m, dropped
 
 
@@ -358,7 +393,7 @@ def facts_to_map(facts):
     m = {"version": 1,
          "business": {"name": cut(present.get("business_name", "")), "kind": cut(present.get("industry", "")),
                       "summary": cut(present.get("offer", ""))},
-         "stages": [], "pieces": [], "open": [], "settings": []}
+         "stages": [], "pieces": [], "open": [], "settings": [], "pains": []}
     for k, label in FACT_KEYS:
         if k in SETTING_KEYS and k in present:
             m["settings"].append({"id": "t_" + k, "text": cut("%s: %s" % (label, present[k]))})
@@ -369,7 +404,10 @@ def facts_to_map(facts):
         elif n == "pendamping":
             m["settings"].append({"id": "t_replace", "text": "Juragan: pendamping"})
     if "current_tools" in present:
-        m["pieces"].append({"id": "p_current", "kind": "existing", "label": cut(present["current_tools"])})
+        m["pieces"].append({"id": "p_current", "kind": "existing", "label": cut(present["current_tools"]),
+                            "solves": []})
+    if "pain_points" in present:
+        m["pains"].append({"id": "n_pain_points", "text": cut(present["pain_points"])})
     for k in REQUIRED_FOR_DONE:
         if k not in present:
             m["open"].append({"id": "o_" + k, "text": QUESTIONS[k]})

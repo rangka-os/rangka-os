@@ -26,7 +26,8 @@
       {
         "id": "p_current",
         "kind": "existing",
-        "label": "Excel dan buku nota"
+        "label": "Excel dan buku nota",
+        "solves": []
       }
     ],
     "open": [],
@@ -56,12 +57,14 @@
         "text": "Data yang perlu dipindah: Daftar pelanggan dan jadwal sewa"
       },
       {
-        "id": "t_pain_points",
-        "text": "Yang paling repot: Stok sering tidak cocok 😀 dengan catatan dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup"
-      },
-      {
         "id": "t_replace",
         "text": "Juragan: pendamping"
+      }
+    ],
+    "pains": [
+      {
+        "id": "n_pain_points",
+        "text": "Stok sering tidak cocok 😀 dengan catatan dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang di grup WA dan nota hilang"
       }
     ]
   }

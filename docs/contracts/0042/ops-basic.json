@@ -179,7 +179,8 @@
         "kind": "catalogue",
         "label": "Kasir",
         "ref": "pos",
-        "why": "Penjualan di outlet"
+        "why": "Penjualan di outlet",
+        "solves": []
       }
     ],
     "open": [
@@ -194,7 +195,8 @@
         "text": "DP 50% dari harga sewa",
         "from_guess": "g_dp"
       }
-    ]
+    ],
+    "pains": []
   },
   "want_dropped": [
     {

@@ -123,23 +123,27 @@
         "kind": "edge",
         "label": "Printer struk",
         "ref": "edge_printer",
-        "why": "Struk dicetak di outlet"
+        "why": "Struk dicetak di outlet",
+        "solves": []
       },
       {
         "id": "p_laci",
         "kind": "edge",
         "label": "Laci kas",
-        "why": "Laci kas terbuka saat bayar tunai"
+        "why": "Laci kas terbuka saat bayar tunai",
+        "solves": []
       },
       {
         "id": "p_pg",
         "kind": "cloud_service",
         "label": "Payment gateway",
-        "ref": "payment_gateway"
+        "ref": "payment_gateway",
+        "solves": []
       }
     ],
     "open": [],
-    "settings": []
+    "settings": [],
+    "pains": []
   },
   "want_dropped": [
     {

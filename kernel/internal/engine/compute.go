@@ -17,6 +17,8 @@ type Computed struct {
 // create would; rule failures come back as issues in a 200 answer because an unfinished cart is not an error.
 // No number is taken, and no hook, flow, automation or event runs. The transaction is always rolled back.
 func (e *Engine) Compute(ctx context.Context, a Actor, model string, input map[string]any) (*Computed, error) {
+	ctx, leave := e.gate.enter(ctx) // one registry for the whole preview, as for a unit of work (reggate.go)
+	defer leave()
 	m, err := e.model(model)
 	if err != nil {
 		return nil, err
@@ -29,7 +31,7 @@ func (e *Engine) Compute(ctx context.Context, a Actor, model string, input map[s
 		return nil, err
 	}
 	defer tx.Rollback(ctx)
-	o := &op{ctx: ctx, tx: tx, e: e, actor: a, touched: map[string]bool{}, links: map[string]map[string]any{}}
+	o := &op{ctx: ctx, tx: tx, e: e, actor: a, reg: e.Reg(), touched: map[string]bool{}, links: map[string]map[string]any{}}
 	input = e.dropHidden(a, m, input)
 	rec, issues := e.normalize(m, input, nil, true)
 	if len(issues) > 0 {

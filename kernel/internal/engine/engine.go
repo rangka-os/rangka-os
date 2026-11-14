@@ -49,6 +49,7 @@ type EnqueueOpts struct {
 // Engine is the lifecycle runtime. The registry can be swapped while serving (change sets reload it).
 type Engine struct {
 	reg   atomic.Pointer[meta.Registry]
+	gate  regGate // a reload waits for running units of work (reggate.go)
 	DB    *pg.Pool
 	Now   func() time.Time
 	Hooks map[string]Hook
@@ -82,14 +83,17 @@ func New(db *pg.Pool, reg *meta.Registry) *Engine {
 // Reg returns the current registry.
 func (e *Engine) Reg() *meta.Registry { return e.reg.Load() }
 
-// SetRegistry swaps the registry (live metadata reload).
+// SetRegistry swaps the registry (live metadata reload). It waits until no unit of work is running and holds new
+// ones back while it swaps, so none sees two registries (reggate.go). It must not be called inside a unit of work.
 func (e *Engine) SetRegistry(r *meta.Registry) {
-	e.reg.Store(r)
-	e.permCache.Clear()
-	e.parentCache.Clear()
-	if e.Cache != nil {
-		e.Cache.DeletePrefix("dash:")
-	}
+	e.gate.swap(func() {
+		e.reg.Store(r)
+		e.permCache.Clear()
+		e.parentCache.Clear()
+		if e.Cache != nil {
+			e.Cache.DeletePrefix("dash:")
+		}
+	})
 }
 
 // Location is the organisation time zone (config.timezone, else scheduler.timezone, else UTC).
@@ -176,10 +180,13 @@ func badRequest(msg string) error { return &StatusError{400, "bad_request", msg}
 
 // op is one unit of work: a transaction plus the actor and the models it touched.
 type op struct {
-	ctx     context.Context
-	tx      *pg.Tx
-	e       *Engine
-	actor   Actor
+	ctx   context.Context
+	tx    *pg.Tx
+	e     *Engine
+	actor Actor
+	// reg is the registry the unit of work started on: every model, flow and rule it reads comes from it, even when a
+	// reload swaps the engine's registry meanwhile (audit 14 Nov, rangka-os#185 N3)
+	reg     *meta.Registry
 	touched map[string]bool
 	links   map[string]map[string]any
 	// approving is set while Approve runs the approved verb: earlier approved requests then satisfy hold.
@@ -303,11 +310,13 @@ var errConflict = errors.New("engine: concurrent write conflict")
 
 // runOnce is one attempt of run; retry reports a lost race (the transaction is rolled back).
 func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (retry bool, err error) {
+	ctx, leave := e.gate.enter(ctx) // per attempt: a retry after a reload runs whole on the new registry
+	defer leave()
 	tx, err := e.DB.Begin(ctx)
 	if err != nil {
 		return false, err
 	}
-	o := &op{ctx: ctx, tx: tx, e: e, actor: a, touched: map[string]bool{}, links: map[string]map[string]any{}}
+	o := &op{ctx: ctx, tx: tx, e: e, actor: a, reg: e.Reg(), touched: map[string]bool{}, links: map[string]map[string]any{}}
 	defer tx.Rollback(ctx)
 	if err := fn(o); err != nil {
 		if tx.Conflicted() {
@@ -364,7 +373,7 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 		d := toInt(rec["docstatus"])
 		ev.Docstatus = &d
 	}
-	ev.Fields = o.e.eventFields(m, rec)
+	ev.Fields = o.e.eventFieldsIn(o.registry(), m, rec)
 	if err := store.Notify(o.ctx, o.tx, ev); err != nil {
 		return err
 	}

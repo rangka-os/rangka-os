@@ -77,8 +77,13 @@ func Denied(model, action string) *PermissionError {
 
 // Deny is Denied with the model's label from the registry, for the message.
 func (e *Engine) Deny(model, action string) *PermissionError {
+	return e.denyIn(e.Reg(), model, action)
+}
+
+// denyIn is Deny against reg (a unit of work's pinned registry).
+func (e *Engine) denyIn(reg *meta.Registry, model, action string) *PermissionError {
 	pe := Denied(model, action)
-	if m := e.Reg().Model(model); m != nil {
+	if m := reg.Model(model); m != nil {
 		pe.Label = m.Label.Text()
 	}
 	return pe
@@ -135,7 +140,11 @@ func (e *Engine) PermissionsModel(name string) string {
 // permModel resolves a model name to the model whose permissions apply: a child model uses its parent's
 // (the first model with a table field of it).
 func (e *Engine) permModel(name string) *meta.Model {
-	reg := e.Reg()
+	return e.permModelIn(e.Reg(), name)
+}
+
+// permModelIn is permModel against reg (a unit of work's pinned registry).
+func (e *Engine) permModelIn(reg *meta.Registry, name string) *meta.Model {
 	m := reg.Model(name)
 	if m == nil || !m.IsChild {
 		return m
@@ -239,12 +248,17 @@ func (e *Engine) recordAllowedErr(ctx context.Context, q pg.Querier, a Actor, m 
 }
 
 func (e *Engine) authorize(ctx context.Context, q pg.Querier, links map[string]map[string]any, a Actor, model, action string, rec store.Record) error {
-	m := e.permModel(model)
+	return e.authorizeIn(e.Reg(), ctx, q, links, a, model, action, rec)
+}
+
+// authorizeIn is authorize against reg (a unit of work's pinned registry).
+func (e *Engine) authorizeIn(reg *meta.Registry, ctx context.Context, q pg.Querier, links map[string]map[string]any, a Actor, model, action string, rec store.Record) error {
+	m := e.permModelIn(reg, model)
 	if m == nil {
 		if knownAction[action] && unrestricted(a) {
 			return nil
 		}
-		return e.Deny(model, action)
+		return e.denyIn(reg, model, action)
 	}
 	d := e.decide(a, m, action)
 	if rec == nil {
@@ -254,7 +268,7 @@ func (e *Engine) authorize(ctx context.Context, q pg.Querier, links map[string]m
 	} else if e.recordAllowed(ctx, q, a, m, d, rec, links) {
 		return nil
 	}
-	return e.Deny(m.Name, action)
+	return e.denyIn(reg, m.Name, action)
 }
 
 // Authorize decides whether a may perform action on model: nil, or a *PermissionError. With a record the
@@ -278,7 +292,7 @@ func (o *op) authorize(m *meta.Model, action string, rec store.Record) error {
 	if err := o.planReadOnly(m, action, rec); err != nil {
 		return err
 	}
-	return o.e.authorize(o.ctx, o.tx, o.links, o.actor, m.Name, action, rec)
+	return o.e.authorizeIn(o.registry(), o.ctx, o.tx, o.links, o.actor, m.Name, action, rec)
 }
 
 // Can is Authorize as a bool.

@@ -27,6 +27,11 @@ var SystemKeys = map[string]bool{"name": true, "docstatus": true, "amended_from"
 // stored row of the same name (base), and a row whose name is not among the stored rows is a new row (its
 // name is dropped, so defaults apply). Hooks, automations and flows write read_only fields (client false).
 func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Record, client bool) (store.Record, []Issue) {
+	return e.normalizeIn(e.Reg(), m, input, base, client)
+}
+
+// normalizeIn is normalize against reg (a unit of work's pinned registry).
+func (e *Engine) normalizeIn(reg *meta.Registry, m *meta.Model, input map[string]any, base store.Record, client bool) (store.Record, []Issue) {
 	rec := store.Record{}
 	for k, v := range base {
 		rec[k] = v
@@ -50,7 +55,7 @@ func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Recor
 			continue // the stored value (base) or the default stays
 		}
 		if f.Type == "table" {
-			cm := e.Reg().Models[f.Of]
+			cm := reg.Models[f.Of]
 			if cm == nil {
 				continue
 			}
@@ -71,7 +76,7 @@ func (e *Engine) normalize(m *meta.Model, input map[string]any, base store.Recor
 				if row == nil {
 					continue
 				}
-				nr, is := e.normalize(cm, row, nil, client)
+				nr, is := e.normalizeIn(reg, cm, row, nil, client)
 				for j := range is { // the row's path, as checkValues reports it (a form points at the row)
 					is[j].Field = fmt.Sprintf("%s.%d.%s", k, i, is[j].Field)
 				}
@@ -118,7 +123,7 @@ func (o *op) prepare(m *meta.Model, rec store.Record, isNew bool) {
 		if f.Type != "table" {
 			continue
 		}
-		cm := o.e.Reg().Models[f.Of]
+		cm := o.registry().Models[f.Of]
 		if cm == nil {
 			continue
 		}
@@ -258,7 +263,7 @@ func (o *op) checkValues(m *meta.Model, rec store.Record, prefix string) ([]Issu
 			if v == "" {
 				continue
 			}
-			tm := o.e.Reg().Model(f.To)
+			tm := o.registry().Model(f.To)
 			if tm == nil {
 				continue
 			}
@@ -274,7 +279,7 @@ func (o *op) checkValues(m *meta.Model, rec store.Record, prefix string) ([]Issu
 				errs = append(errs, Issue{Field: prefix + f.Name, Code: "bad_option", Message: fmt.Sprintf("%s: pilihan %q tidak ada", labelOr(f), v)})
 			}
 		case "table":
-			cm := o.e.Reg().Models[f.Of]
+			cm := o.registry().Models[f.Of]
 			if cm == nil {
 				continue
 			}
@@ -383,7 +388,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 }
 
 func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Result, error) {
-	m, err := o.e.model(model)
+	m, err := o.model(model)
 	if err != nil {
 		return nil, err
 	}
@@ -394,9 +399,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 		return nil, appendOnly(m)
 	}
 	if opts.client { // contract 0027: a client (form, import) does not set a field hidden from it
-		input = o.e.dropHidden(o.actor, m, input)
+		input = o.e.dropHiddenIn(o.registry(), o.actor, m, input)
 	}
-	rec, issues := o.e.normalize(m, input, nil, opts.client)
+	rec, issues := o.e.normalizeIn(o.registry(), m, input, nil, opts.client)
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
@@ -422,7 +427,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 		return nil, validation(errs, warns)
 	}
 	if opts.Guard {
-		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "create"); err != nil {
+		if err := o.e.guardIn(o.registry(), o.ctx, o.actor, m.Name, rec, "create"); err != nil {
 			return nil, err
 		}
 	}
@@ -448,7 +453,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.planNewRecord(m); err != nil {
 		return nil, err
 	}
-	if err := store.Insert(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, rec); err != nil {
+	if err := store.Insert(o.ctx, o.tx, o.registry(), o.actor.Org, m, rec); err != nil {
 		return nil, dbIssue(m, err)
 	}
 	if err := o.event(m, rec, "created"); err != nil {
@@ -502,7 +507,7 @@ func (o *op) lockLoad(m *meta.Model, name string) (store.Record, error) {
 	if err := o.lockRecord(m.Name, name); err != nil {
 		return nil, err
 	}
-	rec, err := store.GetForUpdate(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name)
+	rec, err := store.GetForUpdate(o.ctx, o.tx, o.registry(), o.actor.Org, m, name)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, notFound(m.Name + " " + name)
 	}
@@ -510,7 +515,7 @@ func (o *op) lockLoad(m *meta.Model, name string) (store.Record, error) {
 }
 
 func (o *op) load(m *meta.Model, name string) (store.Record, error) {
-	rec, err := store.Get(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name)
+	rec, err := store.Get(o.ctx, o.tx, o.registry(), o.actor.Org, m, name)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil, notFound(m.Name + " " + name)
 	}
@@ -542,7 +547,7 @@ func (e *Engine) UpdateIf(ctx context.Context, a Actor, model, name string, patc
 // read_only fields of the patch are dropped and a table sent in the patch must keep min_rows rows.
 // Automations and hooks pass false for both.
 func (o *op) update(model, name string, patch map[string]any, authorize, guard bool) (*Result, error) {
-	m, err := o.e.model(model)
+	m, err := o.model(model)
 	if err != nil {
 		return nil, err
 	}
@@ -554,7 +559,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 		return nil, err
 	}
 	if guard { // contract 0027: a client save keeps the stored values of fields hidden from it, rows included
-		patch = o.e.keepHidden(o.actor, m, patch, cur)
+		patch = o.e.keepHiddenIn(o.registry(), o.actor, m, patch, cur)
 	}
 	if authorize {
 		if err := o.authorize(m, "write", o.e.Output(m, copyRecord(cur))); err != nil {
@@ -562,7 +567,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 		}
 	}
 	if guard {
-		if err := o.e.Guard(o.ctx, o.actor, m.Name, cur, "update"); err != nil {
+		if err := o.e.guardIn(o.registry(), o.ctx, o.actor, m.Name, cur, "update"); err != nil {
 			return nil, err
 		}
 	}
@@ -575,7 +580,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 	if m.IsSubmittable && toInt(cur["docstatus"]) != 0 {
 		return nil, conflict("immutable", "Dokumen yang sudah diajukan tidak bisa diubah; batalkan lalu ubah (amend)")
 	}
-	rec, issues := o.e.normalize(m, patch, cur, guard)
+	rec, issues := o.e.normalizeIn(o.registry(), m, patch, cur, guard)
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
@@ -602,11 +607,11 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 		return nil, validation(errs, warns)
 	}
 	if guard {
-		if err := o.e.Guard(o.ctx, o.actor, m.Name, rec, "update"); err != nil {
+		if err := o.e.guardIn(o.registry(), o.ctx, o.actor, m.Name, rec, "update"); err != nil {
 			return nil, err
 		}
 	}
-	if err := store.Update(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name, rec); err != nil {
+	if err := store.Update(o.ctx, o.tx, o.registry(), o.actor.Org, m, name, rec); err != nil {
 		return nil, dbIssue(m, err)
 	}
 	if err := o.voidApprovals(m.Name, name, ""); err != nil {
@@ -631,7 +636,7 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 // Delete removes a record (not a submitted one).
 func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error {
 	return e.run(ctx, a, func(o *op) error {
-		m, err := o.e.model(model)
+		m, err := o.model(model)
 		if err != nil {
 			return err
 		}
@@ -645,7 +650,7 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		if err := o.authorize(m, "delete", o.e.Output(m, copyRecord(cur))); err != nil {
 			return err
 		}
-		if err := e.Guard(ctx, a, m.Name, cur, "delete"); err != nil {
+		if err := e.guardIn(o.registry(), ctx, a, m.Name, cur, "delete"); err != nil {
 			return err
 		}
 		if m.IsSubmittable && toInt(cur["docstatus"]) == 1 {
@@ -654,7 +659,7 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		// A cancelled document with an amended copy is the copy's history (amended_from points at it), and apps key
 		// uniqueness on that chain; deleting it, even as owner, would orphan the copy and free its keys.
 		if m.IsSubmittable && toInt(cur["docstatus"]) == 2 {
-			copies, err := store.Find(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, map[string]any{"amended_from": name}, store.FindOpts{})
+			copies, err := store.Find(o.ctx, o.tx, o.registry(), o.actor.Org, m, map[string]any{"amended_from": name}, store.FindOpts{})
 			if err != nil {
 				return err
 			}
@@ -664,21 +669,21 @@ func (e *Engine) Delete(ctx context.Context, a Actor, model, name string) error 
 		}
 		// a live record still linking this one would point at a name that no longer exists, and its next save
 		// (or a flow creating from it) fails link_not_found far from the delete (audit moka N3)
-		if rm, rn, ok, err := store.LiveReferrer(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m.Name, name); err != nil {
+		if rm, rn, ok, err := store.LiveReferrer(o.ctx, o.tx, o.registry(), o.actor.Org, m.Name, name); err != nil {
 			return err
 		} else if ok {
 			// name the referrer only to someone who may read it (audit kernel-aman 4)
 			what := "record lain"
 			if o.authorizeRead(rm, rn) == nil {
 				label := rm
-				if x := o.e.Reg().Model(rm); x != nil && x.Label.Text() != "" {
+				if x := o.registry().Model(rm); x != nil && x.Label.Text() != "" {
 					label = x.Label.Text()
 				}
 				what = label + " " + rn
 			}
 			return conflict("linked", fmt.Sprintf("Tidak bisa dihapus: masih dipakai di %s. Lepaskan dulu tautannya, batalkan dokumen itu, atau biarkan record ini tetap ada", what))
 		}
-		if err := store.Delete(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name); err != nil {
+		if err := store.Delete(o.ctx, o.tx, o.registry(), o.actor.Org, m, name); err != nil {
 			return err
 		}
 		if err := o.voidApprovals(m.Name, name, ""); err != nil {
@@ -707,7 +712,7 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 
 func (o *op) submit(model, name string, force bool) (*Result, error) {
 	e, a := o.e, o.actor
-	m, err := e.model(model)
+	m, err := o.model(model)
 	if err != nil {
 		return nil, err
 	}
@@ -768,7 +773,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		}
 	}
 	rec["name"], rec["docstatus"] = newName, int64(1)
-	if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
+	if err := store.Update(o.ctx, o.tx, o.registry(), a.Org, m, name, rec); err != nil {
 		return nil, dbIssue(m, err)
 	}
 	if newName != name {
@@ -783,7 +788,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 			return nil, err
 		}
 		// links to the draft (fields and child rows of any model) follow it, so none is left on a name that is gone
-		if err := store.RenameRecordLinks(o.ctx, o.tx, e.Reg(), a.Org, m.Name, name, newName); err != nil {
+		if err := store.RenameRecordLinks(o.ctx, o.tx, o.registry(), a.Org, m.Name, name, newName); err != nil {
 			return nil, err
 		}
 		if err := store.RenameFlowKeyDocs(o.ctx, o.tx, a.Org, m.Name, name, newName); err != nil {
@@ -792,7 +797,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if err := o.restampReferrers(held); err != nil { // a corrected name does not void a request
 			return nil, err
 		}
-		renameSelfLinks(e.Reg(), m, rec, name, newName)
+		renameSelfLinks(o.registry(), m, rec, name, newName)
 		o.forgetLinks(m.Name, name, newName)
 	}
 	if err := o.runHooks(m, rec, m.OnSubmit); err != nil {
@@ -817,10 +822,10 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 // submitted (docstatus 1 or 2), which only chains branched before this rule can have. The original is locked
 // first, so two amends or submits at the same time see each other.
 func (o *op) oneLiveAmendment(m *meta.Model, original, self string) error {
-	if _, err := store.GetForUpdate(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, original); err != nil && !errors.Is(err, store.ErrNotFound) {
+	if _, err := store.GetForUpdate(o.ctx, o.tx, o.registry(), o.actor.Org, m, original); err != nil && !errors.Is(err, store.ErrNotFound) {
 		return err
 	}
-	copies, err := store.Find(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, map[string]any{"amended_from": original}, store.FindOpts{})
+	copies, err := store.Find(o.ctx, o.tx, o.registry(), o.actor.Org, m, map[string]any{"amended_from": original}, store.FindOpts{})
 	if err != nil {
 		return err
 	}
@@ -865,7 +870,7 @@ func (e *Engine) Cancel(ctx context.Context, a Actor, model, name string) (*Resu
 
 func (o *op) cancel(model, name string) (*Result, error) {
 	e, a := o.e, o.actor
-	m, err := e.model(model)
+	m, err := o.model(model)
 	if err != nil {
 		return nil, err
 	}
@@ -902,7 +907,7 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	}
 	before := copyRecord(rec)
 	rec["docstatus"] = int64(2)
-	if err := store.Update(o.ctx, o.tx, e.Reg(), a.Org, m, name, rec); err != nil {
+	if err := store.Update(o.ctx, o.tx, o.registry(), a.Org, m, name, rec); err != nil {
 		return nil, err
 	}
 	if err := o.runHooks(m, rec, m.OnCancel); err != nil {
@@ -934,7 +939,7 @@ func (e *Engine) Amend(ctx context.Context, a Actor, model, name string) (*Resul
 
 func (o *op) amend(model, name string) (*Result, error) {
 	e, a := o.e, o.actor
-	m, err := e.model(model)
+	m, err := o.model(model)
 	if err != nil {
 		return nil, err
 	}
@@ -951,7 +956,7 @@ func (o *op) amend(model, name string) (*Result, error) {
 	if err := o.authorize(m, "amend", e.Output(m, copyRecord(old))); err != nil {
 		return nil, err
 	}
-	if err := e.Guard(o.ctx, a, m.Name, old, "amend"); err != nil {
+	if err := e.guardIn(o.registry(), o.ctx, a, m.Name, old, "amend"); err != nil {
 		return nil, err
 	}
 	if toInt(old["docstatus"]) != 2 {
@@ -990,7 +995,7 @@ func (o *op) amend(model, name string) (*Result, error) {
 	o.prepare(m, rec, false)
 	// a unique value the cancelled original still holds (the index covers cancelled rows) is a validation error,
 	// as on create, not a database error
-	if err := store.Insert(o.ctx, o.tx, e.Reg(), a.Org, m, rec); err != nil {
+	if err := store.Insert(o.ctx, o.tx, o.registry(), a.Org, m, rec); err != nil {
 		return nil, dbIssue(m, err)
 	}
 	if err := o.event(m, rec, "created"); err != nil {

@@ -23,7 +23,7 @@ func (o *op) planNewRecord(m *meta.Model) error {
 	if m.Name != "outlet" {
 		return nil
 	}
-	if err := plan.CheckNewOutlet(o.ctx, o.tx, o.e.Reg(), o.actor.Org); err != nil {
+	if err := plan.CheckNewOutlet(o.ctx, o.tx, o.registry(), o.actor.Org); err != nil {
 		return planError(err)
 	}
 	o.e.Plan.Invalidate()
@@ -35,10 +35,15 @@ func (o *op) planNewRecord(m *meta.Model) error {
 // It reads the cached snapshot only (plan.Guard.Peek), so it never takes a database connection: before the first
 // measurement, or when measuring fails, the write goes ahead (the limit checks at creation still hold).
 func (e *Engine) planReadOnly(a Actor, m *meta.Model, action string, rec store.Record) error {
+	return e.planReadOnlyIn(e.Reg(), a, m, action, rec)
+}
+
+// planReadOnlyIn is planReadOnly against reg (a unit of work's pinned registry).
+func (e *Engine) planReadOnlyIn(reg *meta.Registry, a Actor, m *meta.Model, action string, rec store.Record) error {
 	if action == "read" || action == "print" || action == "export" || a.System || e.DB == nil { // reading never stops
 		return nil
 	}
-	snap := e.Plan.Peek(e.DB, e.Reg(), e.Now(), e.Log)
+	snap := e.Plan.Peek(e.DB, reg, e.Now(), e.Log)
 	if snap == nil || (len(snap.ExcessOutlets) == 0 && len(snap.ExcessPeople) == 0) {
 		return nil
 	}
@@ -64,7 +69,7 @@ func (e *Engine) planReadOnly(a Actor, m *meta.Model, action string, rec store.R
 }
 
 func (o *op) planReadOnly(m *meta.Model, action string, rec store.Record) error {
-	return o.e.planReadOnly(o.actor, m, action, rec)
+	return o.e.planReadOnlyIn(o.registry(), o.actor, m, action, rec)
 }
 
 // planDecide refuses an approval decision by a read-only person, or on a record of a read-only outlet.
@@ -72,7 +77,7 @@ func (o *op) planDecide(ap *store.Approval) error {
 	var m *meta.Model
 	var rec store.Record
 	if ap.Model != "" && ap.Name != "" {
-		if m = o.e.Reg().Model(ap.Model); m != nil {
+		if m = o.registry().Model(ap.Model); m != nil {
 			if r, err := o.load(m, ap.Name); err == nil {
 				rec = r
 			}

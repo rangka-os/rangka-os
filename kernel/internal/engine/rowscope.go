@@ -22,7 +22,11 @@ type RowScope struct {
 // RowScope returns the actor's row scope, or nil when none of its roles has one. A from expression that
 // fails or does not return a list gives an empty scope (fail closed). Several scoped roles add up.
 func (e *Engine) RowScope(a Actor) *RowScope {
-	reg := e.Reg()
+	return e.rowScopeIn(e.Reg(), a)
+}
+
+// rowScopeIn is RowScope against reg (a unit of work's pinned registry).
+func (e *Engine) rowScopeIn(reg *meta.Registry, a Actor) *RowScope {
 	var s *RowScope
 	for _, role := range a.Roles {
 		rs := reg.RoleScope(role)
@@ -54,16 +58,16 @@ func (e *Engine) RowScope(a Actor) *RowScope {
 		}
 	}
 	if s != nil {
-		s.targets = e.scopeTargets(s)
+		s.targets = scopeTargets(reg, s)
 	}
 	return s
 }
 
 // scopeTargets finds the models the scope fields link to on any installed model (outlet for outlet,
 // from_outlet, to_outlet). A scope field that is a link nowhere has no target.
-func (e *Engine) scopeTargets(s *RowScope) map[string]bool {
+func scopeTargets(reg *meta.Registry, s *RowScope) map[string]bool {
 	out := map[string]bool{}
-	for _, m := range e.Reg().Models {
+	for _, m := range reg.Models {
 		for _, fn := range s.Fields {
 			if f := m.Field(fn); f != nil && f.Type == "link" && f.To != "" {
 				out[f.To] = true
@@ -169,17 +173,22 @@ func (e *Engine) ScopedModels(a Actor) []string {
 // (create, update, write, delete, submit, cancel, amend, action:<name>) need every filled scope field in
 // scope; reads need any.
 func (e *Engine) Guard(ctx context.Context, a Actor, model string, rec store.Record, action string) error {
-	s := e.RowScope(a)
+	return e.guardIn(e.Reg(), ctx, a, model, rec, action)
+}
+
+// guardIn is Guard against reg (a unit of work's pinned registry).
+func (e *Engine) guardIn(reg *meta.Registry, ctx context.Context, a Actor, model string, rec store.Record, action string) error {
+	s := e.rowScopeIn(reg, a)
 	if s == nil {
 		return nil
 	}
-	m := e.Reg().Model(model)
+	m := reg.Model(model)
 	ok := s.Visible(m, rec)
 	if isWrite(action) {
 		ok = s.Writable(m, rec)
 	}
 	if !ok {
-		return e.Deny(model, action)
+		return e.denyIn(reg, model, action)
 	}
 	return nil
 }
@@ -212,7 +221,11 @@ func contains(l []string, s string) bool {
 // eventFields returns the values of every row-scope field (of any role) that exists on m, for the record's
 // event. nil when no role has a scope or none of its fields is on the model.
 func (e *Engine) eventFields(m *meta.Model, rec store.Record) map[string]string {
-	reg := e.Reg()
+	return e.eventFieldsIn(e.Reg(), m, rec)
+}
+
+// eventFieldsIn is eventFields against reg (a unit of work's pinned registry).
+func (e *Engine) eventFieldsIn(reg *meta.Registry, m *meta.Model, rec store.Record) map[string]string {
 	var out map[string]string
 	for role := range reg.Roles {
 		rs := reg.RoleScope(role)
@@ -262,5 +275,5 @@ func (o *op) guard(m *meta.Model, rec store.Record, action string) error {
 	if o.approving {
 		return nil
 	}
-	return o.e.Guard(o.ctx, o.actor, m.Name, rec, action)
+	return o.e.guardIn(o.registry(), o.ctx, o.actor, m.Name, rec, action)
 }

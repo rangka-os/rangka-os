@@ -4,6 +4,7 @@ import (
 	"context"
 	"sort"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cache"
@@ -20,19 +21,31 @@ var toneColor = map[string]string{"ok": "var(--chart-5)", "bad": "var(--bad-soli
 // Dashboard computes every widget of a dashboard over the last period days (default_period when 0).
 // The shapes follow the prototype's computeWidget(). cached reports a cache hit (dashboards with cache:).
 func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int) (out map[string]any, cached bool, err error) {
+	out, cached, _, err = e.DashboardWith(ctx, a, name, period)
+	return out, cached, err
+}
+
+// DashboardWith is Dashboard that also returns the registry it was computed with, so a caller that pairs the result
+// with the dashboard's definition (the export: widget i of the result is widget i of the definition) reads the same
+// one, also across a metadata reload (card t_0214482d A2).
+func (e *Engine) DashboardWith(ctx context.Context, a Actor, name string, period int) (out map[string]any, cached bool, reg *meta.Registry, err error) {
 	// one registry for the whole dashboard, and a result computed before a reload is cached before the reload drops
 	// the dash: entries, never after (card t_da045e65 N5)
 	ctx, leave, err := e.gate.enter(ctx)
 	if err != nil {
-		return nil, false, err
+		return nil, false, nil, err
 	}
 	defer leave()
-	d := e.Reg().Dashboard(name)
+	reg = e.Reg()
+	// the org's write generation before any row is read: a write that commits while the widgets are computed bumps
+	// it, and the result is then not left in the cache (card t_0214482d A1)
+	gen := e.dashGen(a.Org)
+	d := reg.Dashboard(name)
 	if d == nil {
-		return nil, false, notFound("dashboard " + name)
+		return nil, false, nil, notFound("dashboard " + name)
 	}
 	if !e.DashboardAllowed(a, d) { // contract 0027: roles: limits who opens it
-		return nil, false, Denied("dashboard", "read")
+		return nil, false, nil, Denied("dashboard", "read")
 	}
 	if period <= 0 {
 		period = d.DefaultPeriod
@@ -43,7 +56,7 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 	ttl := cache.ParseTTL(d.Cache)
 	if ttl > 0 && e.Cache != nil {
 		if v, ok := e.Cache.Get(key); ok {
-			return v.(map[string]any), true, nil
+			return v.(map[string]any), true, reg, nil
 		}
 	}
 	dc := &dashCtx{e: e, ctx: ctx, a: a, scope: rs, rows: map[string][]store.Record{}, links: map[string]map[string]any{}, titles: map[string]titleInfo{}}
@@ -62,7 +75,7 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 			continue
 		}
 		if err != nil {
-			return nil, false, err
+			return nil, false, nil, err
 		}
 		for k, v := range res {
 			wo[k] = v
@@ -72,8 +85,13 @@ func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int
 	out = map[string]any{"name": d.Name, "label": d.Label, "period": period, "widgets": widgets}
 	if ttl > 0 && e.Cache != nil {
 		e.Cache.Set(key, out, ttl)
+		// a write that bumped the generation after the rows were read: its DeletePrefix may have run before this Set,
+		// so drop the entry here (if it runs after, it drops it itself)
+		if e.dashGen(a.Org) != gen {
+			e.Cache.Delete(key)
+		}
 	}
-	return out, false, nil
+	return out, false, reg, nil
 }
 
 type dashCtx struct {
@@ -438,4 +456,21 @@ func (dc *dashCtx) chart(w *meta.Widget, m *meta.Model, rows []store.Record, mon
 		out[i] = pm
 	}
 	return map[string]any{"data": out, "rupiah": money}, nil
+}
+
+// dashGen is the write generation of org's dashboards: bumped (with the engine-wide one, on a reload) before the
+// org's dash: entries are dropped, so a dashboard computed across a write does not stay cached (card t_0214482d A1).
+func (e *Engine) dashGen(org string) [2]uint64 {
+	v, _ := e.dashGens.LoadOrStore(org, new(atomic.Uint64))
+	return [2]uint64{e.dashGenAll.Load(), v.(*atomic.Uint64).Load()}
+}
+
+// bumpDashGen marks a write of org (every org when org is "") before its dash: entries are dropped.
+func (e *Engine) bumpDashGen(org string) {
+	if org == "" {
+		e.dashGenAll.Add(1)
+		return
+	}
+	v, _ := e.dashGens.LoadOrStore(org, new(atomic.Uint64))
+	v.(*atomic.Uint64).Add(1)
 }

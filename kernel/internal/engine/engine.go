@@ -69,6 +69,8 @@ type Engine struct {
 	Plan plan.Guard
 
 	permCache   sync.Map // *meta.Model → *modelPerms
+	dashGens    sync.Map // org → *atomic.Uint64, the write generation of its dashboards (dashboard.go)
+	dashGenAll  atomic.Uint64
 	parentCache sync.Map // child *meta.Model → parent *meta.Model
 }
 
@@ -91,6 +93,7 @@ func (e *Engine) SetRegistry(r *meta.Registry) {
 		e.permCache.Clear()
 		e.parentCache.Clear()
 		if e.Cache != nil {
+			e.bumpDashGen("")
 			e.Cache.DeletePrefix("dash:")
 		}
 	})
@@ -354,6 +357,7 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 	}
 	for m := range o.touched {
 		if e.Cache != nil {
+			e.bumpDashGen(a.Org)
 			e.Cache.DeletePrefix("dash:" + a.Org + ":")
 		}
 		if e.OnWrite != nil {

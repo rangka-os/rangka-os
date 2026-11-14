@@ -52,7 +52,7 @@ func TestMCP(t *testing.T) {
 	if strings.Join(names, ",") != want {
 		t.Fatalf("tools: %s", strings.Join(names, ","))
 	}
-	if meta := call(m, "rangka_meta", nil); len(meta["models"].(map[string]any)) != 9 {
+	if meta := call(m, "rangka_meta", nil); len(meta["models"].(map[string]any)) != 10 { // user_outlet joined in contract 0056
 		t.Fatalf("meta models: %d", len(meta["models"].(map[string]any)))
 	}
 	if f := call(m, "rangka_get_file", map[string]any{"path": "system.rk"}); f["kind"] != "system" {

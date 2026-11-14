@@ -69,7 +69,7 @@
               "type": "integer",
               "minimum": 0
             },
-            "description": "users, outlets, records, storage_mb, ai_credits_month, api_calls_day (whole numbers); rate (traffic shaping, contract 0040 §9)",
+            "description": "users, outlets, ai_credits_month (contract 0028); apps, db_mb, files_mb, pdf_month, requests_month (contract 0057); records, storage_mb, api_calls_day (reported only); whole numbers. rate: traffic shaping (contract 0040 §9)",
             "properties": {
               "rate": {
                 "type": "object",

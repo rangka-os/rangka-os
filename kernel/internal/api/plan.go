@@ -68,7 +68,7 @@ func (s *Server) getPlan(w http.ResponseWriter, r *http.Request, c *caller) {
 	rep := snap.Report(reg, plan.Period(reg, now))
 	sort.Strings(outlets)
 	sort.Strings(users)
-	rep["read_only"] = map[string]any{"outlets": outlets, "users": users}
+	rep["read_only"] = map[string]any{"outlets": outlets, "users": users, "apps": planKeys(snap.ExcessApps)}
 	// traffic shaping (contract 0040 §9): this process's counters for today, approximate under several instances
 	usage := map[string]any{}
 	if ms, ok := rep["usage"].(map[string]plan.Meter); ok {

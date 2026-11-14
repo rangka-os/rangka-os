@@ -10,6 +10,9 @@ import (
 
 // previewImport reads an uploaded file, maps it and stores a previewed import log entry (contract 0012 §3).
 func (s *Server) previewImport(w http.ResponseWriter, r *http.Request, c *caller) {
+	if s.planStorageRefused(w, false) { // db_mb full (contract 0057 §1)
+		return
+	}
 	r.Body = http.MaxBytesReader(w, r.Body, imports.MaxBytes+1<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		uploadError(w, err)
@@ -48,6 +51,9 @@ func uploadError(w http.ResponseWriter, err error) {
 func (s *Server) commitImport(w http.ResponseWriter, r *http.Request, c *caller) {
 	if im := s.Engine.Reg().Imports[r.PathValue("import")]; im != nil && !c.p.Human() {
 		fail(w, s.Engine.Deny(im.Model, "import")) // the one 403 shape; an unknown import is 404 below
+		return
+	}
+	if s.planStorageRefused(w, false) {
 		return
 	}
 	e, err := s.Imports.Commit(r.Context(), c.actor, r.PathValue("import"), r.PathValue("id"))

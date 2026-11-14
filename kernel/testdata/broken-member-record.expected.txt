@@ -1,0 +1,6 @@
+../modules/people/models/user.rk:2:1  error  member_field_writable  user/role  kernel-owned field must be read_only
+../modules/people/models/user.rk:2:1  warn   contact_field_visible  user/phone  role "outlet_staff" is not in hidden_for
+../modules/people/models/user.rk:2:1  warn   contact_field_visible  user/email  role "cashier" is not in hidden_for
+../modules/people/models/user.rk:2:1  warn   contact_field_visible  user/email  role "outlet_staff" is not in hidden_for
+
+1 error(s), 3 warning(s)

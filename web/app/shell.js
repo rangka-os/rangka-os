@@ -50,6 +50,9 @@
     if (parts[0] === "proses" && parts.length === 1) return { kind: "processes" };
     if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
     if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
+    if (parts[0] === "pengaturan" && parts[1] === "tim" && parts.length === 2) return { kind: "team" };
+    // a sign-in link from Tim (contract 0056 §4): #/masuk/tautan?t=<token>; Root opens it before asking who you are
+    if (parts[0] === "masuk" && parts[1] === "tautan" && parts.length === 2) return { kind: "signinLink" };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
     if (parts[0] === "w" && parts.length === 2) { // #/w/<screen>?stop=<model>/<name>&doc=<name> (contract 0030 §3)
       var q = {}, qs = String(hash || "").split("?")[1] || "";
@@ -274,6 +277,8 @@
     if (features.approvals) more.push({ id: "approvals", label: "Persetujuan", icon: "check", count: counts.approvals > 0 ? counts.approvals : undefined });
     if (features.processes) more.push({ id: "proses", label: "Proses bisnis", icon: "time" });
     if (features.catalogue) more.push({ id: "pengaturan/katalog", label: "Modul dan sambungan", icon: "apps" });
+    // Tim (contract 0056 §4): the kernel answers its routes for the owner alone
+    if (((meta.user && meta.user.roles) || []).indexOf("owner") >= 0) more.push({ id: "pengaturan/tim", label: "Tim", icon: "team" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
     if (imps.length > 1) {
@@ -397,6 +402,7 @@
       case "processes": case "process": return "proses";
       case "import": return "import/" + route.import;
       case "catalogue": return "pengaturan/katalog";
+      case "team": return "pengaturan/tim";
       case "work": return home && home === "#/w/" + route.screen ? "home" : "w/" + route.screen;
       default: return null;
     }
@@ -671,7 +677,7 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", work: "WorkScreenView" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", team: "TeamPage", work: "WorkScreenView" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
@@ -683,7 +689,8 @@
     if (route.kind === "import") return !!(meta.imports || {})[route.import];
     if (route.kind === "work") return !!(meta.screens || {})[route.screen];
     if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
-    return route.kind === "approvals" || route.kind === "catalogue"; // the catalogue page itself answers "no access"
+    // the catalogue and Tim pages answer "no access" themselves
+    return route.kind === "approvals" || route.kind === "catalogue" || route.kind === "team";
   }
 
   function Page(p) {
@@ -1367,6 +1374,8 @@
     var es = useState(null), err = es[0], setErr = es[1];
 
     function start() {
+      // a sign-in link (contract 0056 §4) opens its page without asking who is signed in: the visitor has no session yet
+      if (parseRoute(global.location.hash).kind === "signinLink" && RA.SignInLinkPage) { setPhase("link"); return; }
       setPhase("boot");
       setErr(null);
       var q = hashQuery(global.location.hash), previewCs = null, previewErr = null;
@@ -1400,6 +1409,16 @@
       });
     }
     useEffect(start, []);
+    // a sign-in link pasted into a tab that already has the app open arrives as a hash change
+    useEffect(function () {
+      function onHash() { if (parseRoute(global.location.hash).kind === "signinLink" && RA.SignInLinkPage) setPhase("link"); }
+      global.addEventListener("hashchange", onHash);
+      return function () { global.removeEventListener("hashchange", onHash); };
+    }, []);
+    function leaveLink() {
+      global.history.replaceState(null, "", (global.location.pathname || "/app/") + (global.location.search || "") + "#/");
+      start();
+    }
 
     // no connection at start (the installed app opened from the home screen without signal): try again by itself
     // as soon as the phone is back online
@@ -1410,6 +1429,7 @@
       return function () { global.removeEventListener("online", start); };
     }, [noNet]);
 
+    if (phase === "link") return h(RA.SignInLinkPage, { api: api, token: RA.linkToken(global.location.hash), onDone: leaveLink, onSignIn: leaveLink });
     if (phase === "signin") return h(SignInScreen, { onDone: start });
     if (phase === "error" && noNet) {
       return h("div", { className: "ap-splash" }, h(R.Alert, { tone: "warn", title: "Belum ada koneksi", actions: h(R.Button, { onClick: start }, "Coba lagi") },

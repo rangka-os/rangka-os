@@ -62,6 +62,7 @@
     "../canvas/canvas.js",
     "process.js",
     "catalogue.js",
+    "team.js",
     "ai.js",
     "outbox.js",
     "screens.js",

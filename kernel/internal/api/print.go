@@ -15,6 +15,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/docprint"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -105,6 +106,16 @@ func (s *Server) printRecord(w http.ResponseWriter, r *http.Request, c *caller, 
 	body, contentType := page, "text/html; charset=utf-8"
 	if as == "pdf" {
 		if !head {
+			// pdf_month (contract 0057 §1): past the plan's limit PDFs are slowed, not refused
+			if perr := s.takePDF(ctx, reg); perr != nil {
+				var pe *plan.Error
+				if errors.As(perr, &pe) {
+					writePlanError(w, pe)
+				} else {
+					fail(w, perr)
+				}
+				return
+			}
 			body, err = docprint.PDF(ctx, page)
 		} else if docprint.FindChromium() == "" {
 			err = docprint.ErrNoChromium

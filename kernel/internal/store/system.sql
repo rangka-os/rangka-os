@@ -32,6 +32,7 @@ create table if not exists rk_members (
 );
 alter table rk_orgs add column if not exists code text not null default '';
 alter table rk_members add column if not exists outlets text[] not null default '{}';
+alter table rk_users add column if not exists signed_in_at timestamptz;   -- first sign-in (contract 0056 §2: pending until set)
 -- when the member last used the organisation (contract 0055 §1), written at most every 5 minutes
 alter table rk_members add column if not exists last_active_at timestamptz;
 create table if not exists rk_identities (
@@ -73,6 +74,26 @@ create table if not exists rk_tokens (
   expires_at   timestamptz
 );
 alter table rk_tokens add column if not exists scopes text[] not null default '{}'; -- secrets:write (contract 0017 §3)
+-- contract 0056 §5 upgrade: an account with a session or an API token it created has signed in before signed_in_at
+-- existed, so it is not pending. A password or an identity link is no proof (invitees get both). Runs on every start;
+-- it only fills nulls, and openSession sets the column from then on.
+update rk_users u set signed_in_at = f.first
+  from (select user_id, min(at) as first from (
+          select user_id, created_at as at from rk_sessions where not system
+          union all select user_id, created_at from rk_tokens) a group by user_id) f
+  where u.id = f.user_id and u.signed_in_at is null;
+-- sign-in links of Pengaturan → Tim (contract 0056 §4): shown once to the owner, 72 hours, one use; the person sets a
+-- password with it. Only the sha256 of the token is kept.
+create table if not exists rk_signin_links (
+  token_hash text primary key,
+  user_id    bigint not null references rk_users(id) on delete cascade,
+  org_id     text not null,
+  created_by text not null,                 -- the owner's e-mail
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at    timestamptz
+);
+create index if not exists rk_signin_links_user on rk_signin_links (user_id, org_id);
 create table if not exists rk_keys (
   kid         text primary key,
   alg         text not null,
@@ -218,6 +239,9 @@ create table if not exists rk_site_plan (
   changed_by text not null default '',
   note       text not null default ''
 );
+-- operator grants and caps on the plan's limits (contract 0057 §2)
+alter table rk_site_plan add column if not exists grants jsonb not null default '[]';
+alter table rk_site_plan add column if not exists caps jsonb not null default '{}';
 create table if not exists rk_plan_changes (
   id         bigserial primary key,
   from_plan  text not null,
@@ -225,6 +249,13 @@ create table if not exists rk_plan_changes (
   changed_at timestamptz not null default now(),
   changed_by text not null default '',
   note       text not null default ''
+);
+-- PDF renders per month, and per hour past the plan's pdf_month limit (contract 0057 §1)
+create table if not exists rk_pdf_usage (
+  period    text primary key,              -- YYYY-MM in the site timezone
+  used      bigint not null default 0,
+  hour      text not null default '',      -- YYYY-MM-DDTHH of the slowed hour
+  hour_used bigint not null default 0
 );
 create table if not exists rk_ai_usage (
   period text primary key,                 -- YYYY-MM in the site timezone

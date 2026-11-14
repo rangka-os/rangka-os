@@ -468,12 +468,28 @@ func TestAssessRoleLimitedFields(t *testing.T) {
 		return flow("customer.updated", map[string]any{"find_all": "item", "limit": 1, "as": "rows"},
 			map[string]any{"for_each": "rows", "as": "r", "do": steps})
 	}
+	// audit flow-locked F6: each pass starts with v set to the loop's item (a customer), not to the item the body's
+	// last step found in the pass before
+	lateRebind := func(source string, set map[string]any) []any {
+		return []any{
+			map[string]any{"find": "customer", "where": "name == event.name", "as": "c"},
+			map[string]any{"for_each": source, "as": "v", "do": []any{
+				map[string]any{"update": "v", "set": set},
+				map[string]any{"find": "item", "as": "v"},
+			}},
+		}
+	}
 	cases := []struct {
 		name  string
 		path  string
 		after map[string]any
 		risk  string
 	}{
+		{"loop rebinds its own variable late, read_only_for field", "flows/x_f.rk", flow("customer.updated", lateRebind("'[c]'", map[string]any{"vat_collector": "'other'"})...), "high"},
+		{"loop rebinds its own variable late, hidden_for field", "flows/x_f.rk", flow("customer.updated", lateRebind("'[c]'", map[string]any{"npwp": "'0'"})...), "high"},
+		{"loop rebinds its own variable late, money field", "flows/x_f.rk", flow("customer.updated", lateRebind("'[c]'", map[string]any{"credit_limit": "0"})...), "high"},
+		{"loop over a map literal rebinds its variable late", "flows/x_f.rk", flow("customer.updated", lateRebind("[{'_model': 'customer', 'name': event.name}]", map[string]any{"vat_collector": "'other'"})...), "high"},
+		{"late rebind inside an outer loop", "flows/x_f.rk", inLoop(lateRebind("'[c]'", map[string]any{"vat_collector": "'other'"})), "high"},
 		{"shadowing loop, then a read_only_for field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"vat_collector": "'other'"})...), "high"},
 		{"shadowing loop, then a hidden_for field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"npwp": "'0'"})...), "high"},
 		{"shadowing loop, then a money field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"credit_limit": "0"})...), "high"},

@@ -683,13 +683,18 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 			if had {
 				saved = copyVars(map[string]map[string]bool{as: saved})[as]
 			}
-			if as != "" {
-				src, _ := st["for_each"].(string)
-				if ms := vars[strings.TrimSpace(src)]; len(ms) > 0 {
-					for m := range ms {
-						bind(vars, as, m)
-					}
-				} else { // the loop variable shadows any earlier binding with something unknown
+			// every pass starts with the loop variable set to the source's item (the runtime sets it per iteration):
+			// a model the source holds, or unknown (audit flow-locked F6: v rebound to an item at the end of the body
+			// is not what the next pass's update: v reads)
+			src, _ := st["for_each"].(string)
+			items := copyVars(map[string]map[string]bool{"": vars[strings.TrimSpace(src)]})[""]
+			enter := func() {
+				if as == "" {
+					return
+				}
+				if len(items) > 0 {
+					vars[as] = copyVars(map[string]map[string]bool{"": items})[""]
+				} else {
 					delete(vars, as)
 				}
 			}
@@ -699,11 +704,16 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 			body := meta.AsList(st["do"])
 			for i := 0; i < 16; i++ {
 				before := copyVars(vars)
+				enter()
 				walkFlowSteps(&Assessment{}, p, body, vars, env)
-				if reflect.DeepEqual(before, vars) {
+				after := copyVars(vars)
+				delete(before, as)
+				delete(after, as)
+				if reflect.DeepEqual(before, after) {
 					break
 				}
 			}
+			enter()
 			walkFlowSteps(a, p, body, vars, env)
 			if as != "" {
 				if had {

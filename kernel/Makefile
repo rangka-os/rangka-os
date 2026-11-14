@@ -69,7 +69,8 @@ compare-python: build
 	            "testdata/catalogue-keys/apps --site testdata/catalogue-keys/site --connectors testdata/catalogue-keys/connectors" \
 	            "testdata/broken-catalogue-keys/apps --site testdata/broken-catalogue-keys/site --connectors testdata/broken-catalogue-keys/connectors" \
 	            "testdata/config-modules/apps --site testdata/config-modules/site" \
-	            "testdata/broken-config-modules/apps --site testdata/broken-config-modules/site"; do \
+	            "testdata/broken-config-modules/apps --site testdata/broken-config-modules/site" \
+	            "testdata/broken-member-record/apps --site testdata/broken-member-record/site"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \
 	  if diff $$D/py.txt $$D/go.txt; then echo "identical ($$(tail -1 $$D/go.txt)): $$args"; else rc=1; fi; \

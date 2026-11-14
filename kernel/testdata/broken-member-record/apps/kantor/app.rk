@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+name: kantor
+version: 1.0.0
+title: {id: Kantor}
+rangka: '>=0.5'
+modules: {people: ^1.0}
+roles: [owner, cashier, outlet_staff]
+menu:
+  - group: {id: Tim}
+    items: [user]
+summary: {id: App uji catatan anggota.}

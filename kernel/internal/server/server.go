@@ -223,6 +223,18 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Auth = &auth.Service{DB: db, Issuer: issuer, SessionTTL: ttl, DevOpen: cfg.DevOpen, DefaultOrg: cfg.Org, Now: cfg.Now,
 		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }, Upstreams: ups, UpstreamHTTP: upstreamHTTP, Log: cfg.Logf,
 		Password: func() any { return s.Engine.Reg().SystemConfig("auth.password") }}
+	s.Auth.OnFirstSignIn = func(ctx context.Context, userID int64) { // contract 0056 §2: pending → active
+		ms, err := auth.Memberships(ctx, db, userID)
+		if err != nil {
+			cfg.Logf("member records: memberships of account %d: %v", userID, err)
+			return
+		}
+		for _, m := range ms {
+			if _, err := e.SyncMemberRecord(ctx, m.ID, userID); err != nil {
+				cfg.Logf("member records: sync of account %d in %s failed (the repair retries): %v", userID, m.ID, err)
+			}
+		}
+	}
 	s.Changes = &changeset.Service{DB: db, AppsDir: cfg.AppsDir, SiteDir: cfg.SiteDir, ConnectorsDir: cfg.ConnectorsDir, ModulesDir: cfg.ModulesDir,
 		Schemas: cfg.Schemas, Reg: e.Reg, Reload: s.Reload, Now: cfg.Now,
 		ReadOnly: func(id string) string { // contract 0028 §4: a person past the people limit decides nothing
@@ -396,10 +408,11 @@ func upstreams(cfg any, lookup func(string) (string, bool)) ([]auth.Upstream, er
 
 // Start runs the realtime listener, queue workers and scheduler until ctx ends.
 func (s *Server) Start(ctx context.Context) {
-	s.wg.Add(3)
+	s.wg.Add(4)
 	go func() { defer s.wg.Done(); s.Hub.Run(ctx, s.DB) }()
 	go func() { defer s.wg.Done(); s.Sched.Run(ctx) }()
 	go func() { defer s.wg.Done(); s.expireSandboxes(ctx) }()
+	go func() { defer s.wg.Done(); s.repairMemberRecords(ctx) }()
 	s.Queue.Start(ctx)
 }
 
@@ -414,6 +427,45 @@ func (s *Server) expireSandboxes(ctx context.Context) {
 		}
 		for _, sb := range gone {
 			s.Cfg.Logf("sandbox: %s expired after %d idle days", sb, sandbox.IdleDays)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// memberRepairEvery is how often repairMemberRecords runs after its first run at start (contract 0056 §5).
+const memberRepairEvery = 10 * time.Minute
+
+// repairMemberRecords syncs the user record of every membership of every organisation (contract 0056 §5): a sync
+// that failed after a member write, a backfill after upgrade, or users installed late. At start and every 10 minutes.
+func (s *Server) repairMemberRecords(ctx context.Context) {
+	t := time.NewTicker(memberRepairEvery)
+	defer t.Stop()
+	for {
+		if s.Engine.HasMemberRecord() {
+			var orgs [][]any
+			res, err := s.DB.Query(pg.WithOrg(ctx, ""), "select id from rk_orgs order by id")
+			if err == nil {
+				orgs = res.Rows
+			} else if ctx.Err() == nil {
+				s.Cfg.Logf("member records: list organisations: %v", err)
+			}
+			for _, row := range orgs {
+				if ctx.Err() != nil {
+					return
+				}
+				org := row[0].(string)
+				n, err := s.Engine.RepairMemberRecords(ctx, org)
+				if err != nil && ctx.Err() == nil {
+					s.Cfg.Logf("member records: %v", err)
+				}
+				if n > 0 {
+					s.Cfg.Logf("member records: %s: %d synced", org, n)
+				}
+			}
 		}
 		select {
 		case <-ctx.Done():

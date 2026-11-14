@@ -137,6 +137,7 @@ func (v *validator) more() {
 			v.scopeFields(d, all)
 		}
 	}
+	v.checkMemberRecord(all)
 	for _, cn := range sortedKeysM(conns) {
 		d := conns[cn]
 		v.schemaErr("connector", d)
@@ -156,6 +157,37 @@ func (v *validator) more() {
 		v.imports(all, true)
 		v.overlays(all)
 		v.appOverlays()
+	}
+}
+
+// memberOwned are the member record's kernel-owned fields (contract 0056 §1): the kernel writes them.
+var memberOwned = []string{"email", "role", "outlets", "access", "account_id"}
+
+// checkMemberRecord applies to a model named user that has an account_id field (contract 0056 §1, §5): its
+// kernel-owned fields must be read_only, and phone and email must be hidden from every role except owner and
+// head_office.
+func (v *validator) checkMemberRecord(all map[string]vis) {
+	u, ok := all["user"]
+	if !ok || u.m.Field("account_id") == nil {
+		return
+	}
+	p := u.m.Doc.Path
+	for _, name := range memberOwned {
+		if f := u.m.Field(name); f != nil && f.Raw["read_only"] != true {
+			v.rep.extra("error", p, "user/"+name, "member_field_writable", "kernel-owned field must be read_only")
+		}
+	}
+	for _, name := range []string{"phone", "email"} {
+		f := u.m.Field(name)
+		if f == nil {
+			continue
+		}
+		hidden := StrList(f.Raw["hidden_for"])
+		for _, role := range sortedKeysM(v.reg.Roles) {
+			if role != "owner" && role != "head_office" && !contains(hidden, role) {
+				v.rep.extra("warn", p, "user/"+name, "contact_field_visible", fmt.Sprintf(`role "%s" is not in hidden_for`, role))
+			}
+		}
 	}
 }
 

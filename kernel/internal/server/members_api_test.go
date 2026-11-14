@@ -5,6 +5,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -513,5 +516,269 @@ func TestMemberAPIAccountElsewhere(t *testing.T) {
 	if r.Status != 409 || errCode(r) != "owner_protected" ||
 		countRows(e, "select 1 from rk_members where org_id = 'kopi-senja' and user_id = $1", boss) != 0 {
 		t.Fatalf("linked owner of pt_beta: %d %s", r.Status, r.Body)
+	}
+}
+
+// memberRecordOf is the user record (contract 0056) of the account with email in kopi-senja: its name from
+// rk_members.record (or the record with that account_id) and its access.
+func memberRecordOf(e *env, email string) (name, access string) {
+	e.t.Helper()
+	id := dbOne(e, "select id from rk_users where email = $1", email)
+	if id == nil {
+		return "", ""
+	}
+	n, _ := dbOne(e, "select name from r_user where org_id = 'kopi-senja' and account_id = $1", id).(string)
+	if n == "" {
+		return "", ""
+	}
+	a, _ := dbOne(e, "select access from r_user where org_id = 'kopi-senja' and name = $1", n).(string)
+	return n, a
+}
+
+// Contract 0056 §2: a member pushed by the host gets a user record, pending until the first sign-in.
+func TestMemberAPICreatesRecord(t *testing.T) {
+	e, host := memberEnv(t)
+	id := int64(host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "name": "Sari", "role": "sales_rep", "outlets": []any{"OUT-01"}}).JSON["user_id"].(float64))
+	name, access := memberRecordOf(e, "sari@example.com")
+	if name == "" || access != "pending" {
+		t.Fatalf("record %q access %q", name, access)
+	}
+	if dbOne(e, "select record from rk_members where org_id = 'kopi-senja' and user_id = $1", id) != name ||
+		dbOne(e, "select role from r_user where org_id = 'kopi-senja' and name = $1", name) != "sales_rep" ||
+		dbOne(e, "select outlet from r_user_outlet where org_id = 'kopi-senja' and parent = $1", name) != "OUT-01" {
+		t.Fatal("record not in step with the membership")
+	}
+}
+
+// Contract 0056 §2: removing a member keeps the record, marked removed with no outlets.
+func TestMemberAPIDeleteMarksRemoved(t *testing.T) {
+	e, host := memberEnv(t)
+	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep", "outlets": []any{"OUT-01"}})
+	before, _ := memberRecordOf(e, "sari@example.com")
+	host.must(204, "DELETE", memberPath("sub-sari"), nil)
+	name, access := memberRecordOf(e, "sari@example.com")
+	if name != before || access != "removed" || countRows(e, "select 1 from r_user_outlet where org_id = 'kopi-senja' and parent = $1", name) != 0 {
+		t.Fatalf("record %q (was %q) access %q", name, before, access)
+	}
+}
+
+// Contract 0056 §5: a failed sync does not fail the member write; the repair makes the record later.
+func TestMemberAPISyncFailureStillOK(t *testing.T) {
+	e, host := memberEnv(t)
+	ctx := context.Background()
+	if _, err := e.s.DB.Exec(ctx, `create function rk_test_no_user() returns trigger language plpgsql as $$ begin raise exception 'naming broken'; end $$;
+		create trigger rk_test_no_user before insert on r_user for each row execute function rk_test_no_user()`); err != nil {
+		t.Fatal(err)
+	}
+	id := int64(host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep"}).JSON["user_id"].(float64))
+	if countRows(e, "select 1 from rk_members where org_id = 'kopi-senja' and user_id = $1", id) != 1 {
+		t.Fatal("membership not stored")
+	}
+	if name, _ := memberRecordOf(e, "sari@example.com"); name != "" {
+		t.Fatalf("record %q made through a broken trigger", name)
+	}
+	if _, err := e.s.DB.Exec(ctx, "drop trigger rk_test_no_user on r_user"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.Engine.RepairMemberRecords(ctx, "kopi-senja"); err != nil {
+		t.Fatalf("repair: %v", err)
+	}
+	if name, access := memberRecordOf(e, "sari@example.com"); name == "" || access != "pending" {
+		t.Fatalf("after repair: %q %q", name, access)
+	}
+}
+
+// Contract 0056 §2: the first sign-in sets signed_in_at and makes the record active.
+func TestFirstSignInActivates(t *testing.T) {
+	e := newEnv(t, false, nil)
+	if name, access := memberRecordOf(e, "ceo@saga.co.id"); name != "USR-001" || access != "pending" {
+		t.Fatalf("seeded owner: %q %q", name, access)
+	}
+	// a system session (contract 0055 §2) is Cloud acting on its own, not the person signing in
+	e.must(200, "POST", "/auth/login", map[string]any{"email": "ceo@saga.co.id", "password": "rangka-demo", "system": true})
+	if dbOne(e, "select signed_in_at is null from rk_users where email = 'ceo@saga.co.id'") != true {
+		t.Fatal("system session set signed_in_at")
+	}
+	if _, access := memberRecordOf(e, "ceo@saga.co.id"); access != "pending" {
+		t.Fatalf("after system sign-in: %q", access)
+	}
+	e.login()
+	if dbOne(e, "select signed_in_at is not null from rk_users where email = 'ceo@saga.co.id'") != true {
+		t.Fatal("signed_in_at not set")
+	}
+	if _, access := memberRecordOf(e, "ceo@saga.co.id"); access != "active" {
+		t.Fatalf("after sign-in: %q", access)
+	}
+}
+
+// memberEnvOutlets is memberEnv with the outlet model of rangka-apps' outlets module (code, active), OUT-01 coded
+// KMG and OUT-02 inactive.
+func memberEnvOutlets(t *testing.T) (e, host *env) {
+	t.Helper()
+	e = newEnv(t, false, func(apps, _ string) {
+		p := filepath.Join(apps, "core", "models", "outlet.rk")
+		src, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		src = append(src, []byte("  - {name: code, type: data, label: {id: Kode}}\n  - {name: active, type: check, label: {id: Aktif}, default: 'true'}\n")...)
+		if err := os.WriteFile(p, src, 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	e.s.Auth.Upstreams = []auth.Upstream{{ID: "kantor", Label: "Kantor", Issuer: memberIssuer}}
+	e.login()
+	if _, err := e.s.DB.Exec(context.Background(), `update r_outlet set code = 'KMG' where name = 'OUT-01';
+		update r_outlet set active = false where name = 'OUT-02'`); err != nil {
+		t.Fatal(err)
+	}
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "cloud", "scopes": []any{"members:write"}})
+	return e, &env{t: t, ts: e.ts, token: tok.JSON["token"].(string)}
+}
+
+// Contract 0056 §3: the options the Tim page picks from: roles that can be given (no owner), active outlets, and
+// employee records without access.
+func TestMemberOptions(t *testing.T) {
+	_, host := memberEnvOutlets(t)
+	r := host.must(200, "GET", "/api/v1/members/options", nil)
+	roles := map[string]any{}
+	for _, x := range r.JSON["roles"].([]any) {
+		roles[get(x, "name").(string)] = get(x, "label")
+	}
+	if _, ok := roles["owner"]; ok || roles["sales_rep"] != "Sales" || roles["sales_manager"] == nil {
+		t.Fatalf("roles: %s", r.Body)
+	}
+	want := []any{map[string]any{"name": "OUT-01", "label": "Kopi Senja · Kemang", "code": "KMG"}}
+	if !reflect.DeepEqual(r.JSON["outlets"], want) {
+		t.Fatalf("outlets: %s", r.Body)
+	}
+	want = []any{
+		map[string]any{"name": "USR-002", "full_name": "Rina Wulandari", "access": "none"},
+		map[string]any{"name": "USR-003", "full_name": "Budi Santoso", "access": "none"},
+	}
+	if !reflect.DeepEqual(r.JSON["employees"], want) {
+		t.Fatalf("employees: %s", r.Body)
+	}
+}
+
+// A user model with account_id but without access (an older app) lists no employees instead of failing.
+func TestMemberOptionsNoAccessField(t *testing.T) {
+	e := newEnv(t, false, func(apps, _ string) {
+		p := filepath.Join(apps, "core", "models", "user.rk")
+		src, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, b := strings.Index(string(src), "  - name: access\n"), strings.Index(string(src), "  - name: account_id\n")
+		if a < 0 || b < a {
+			t.Fatal("user.rk layout changed")
+		}
+		if err := os.WriteFile(p, []byte(string(src)[:a]+string(src)[b:]), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	e.s.Auth.Upstreams = []auth.Upstream{{ID: "kantor", Label: "Kantor", Issuer: memberIssuer}}
+	e.login()
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "cloud", "scopes": []any{"members:write"}})
+	host := &env{t: t, ts: e.ts, token: tok.JSON["token"].(string)}
+	r := host.must(200, "GET", "/api/v1/members/options", nil)
+	if emp, ok := r.JSON["employees"].([]any); !ok || len(emp) != 0 {
+		t.Fatalf("employees: %s", r.Body)
+	}
+}
+
+// Contract 0056 §3: options is for a members:write token only, which reaches it.
+func TestMemberOptionsScope(t *testing.T) {
+	e, host := memberEnv(t)
+	plain := &env{t: t, ts: e.ts, token: e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "ci"}).JSON["token"].(string)}
+	for who, c := range map[string]*env{"owner session": e, "plain token": plain, "sales_rep": repEnv(t, e)} {
+		if r := c.do("GET", "/api/v1/members/options", nil); r.Status != 403 || errCode(r) != "forbidden" {
+			t.Fatalf("%s: %d %s", who, r.Status, r.Body)
+		}
+	}
+	r := host.must(200, "GET", "/api/v1/members/options", nil)
+	// the catalogue's outlet model has no code or active: every outlet, code empty
+	if len(r.JSON["outlets"].([]any)) != 2 || get(r.JSON, "outlets", 0, "code") != "" {
+		t.Fatalf("outlets: %s", r.Body)
+	}
+	// the members:write token still reaches nothing else with GET
+	if r := host.do("GET", "/api/v1/members/kantor", nil); r.Status == 200 {
+		t.Fatalf("GET /api/v1/members/kantor: %d %s", r.Status, r.Body)
+	}
+}
+
+// Contract 0056 §3: PUT with record links the member to that existing employee record instead of making a new one.
+func TestMemberAPIRecordLinks(t *testing.T) {
+	e, host := memberEnv(t)
+	before := countRows(e, "select 1 from r_user where org_id = 'kopi-senja'")
+	body := map[string]any{"email": "rina@example.com", "role": "sales_rep", "record": "USR-002"}
+	id := int64(host.must(200, "PUT", memberPath("sub-rina"), body).JSON["user_id"].(float64))
+	if dbOne(e, "select record from rk_members where org_id = 'kopi-senja' and user_id = $1", id) != "USR-002" ||
+		dbOne(e, "select account_id from r_user where org_id = 'kopi-senja' and name = 'USR-002'") != id ||
+		dbOne(e, "select access from r_user where org_id = 'kopi-senja' and name = 'USR-002'") != "pending" ||
+		dbOne(e, "select full_name from r_user where org_id = 'kopi-senja' and name = 'USR-002'") != "Rina Wulandari" {
+		t.Fatal("record not linked")
+	}
+	if after := countRows(e, "select 1 from r_user where org_id = 'kopi-senja'"); after != before {
+		t.Fatalf("user records %d → %d", before, after)
+	}
+	// the same push again (record now carries this account) is fine; the record is no longer offered
+	host.must(200, "PUT", memberPath("sub-rina"), body)
+	for _, x := range host.must(200, "GET", "/api/v1/members/options", nil).JSON["employees"].([]any) {
+		if get(x, "name") == "USR-002" {
+			t.Fatal("a linked record is still offered")
+		}
+	}
+}
+
+// Contract 0056 §3: a record that is another account's is refused (record_taken) and nothing is written.
+func TestMemberAPIRecordTaken(t *testing.T) {
+	e, host := memberEnv(t)
+	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep"})
+	sariRec, _ := memberRecordOf(e, "sari@example.com")
+	for _, rec := range []string{sariRec, "USR-001"} { // a member's record, the owner's record
+		r := host.do("PUT", memberPath("sub-rina"), map[string]any{"email": "rina@example.com", "role": "sales_rep", "record": rec})
+		if r.Status != 422 || errCode(r) != "record_taken" {
+			t.Fatalf("%s: %d %s", rec, r.Status, r.Body)
+		}
+	}
+	// an existing member asking for another's record keeps its membership as it was
+	r := host.do("PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_manager", "record": "USR-001"})
+	if r.Status != 422 || errCode(r) != "record_taken" {
+		t.Fatalf("existing member: %d %s", r.Status, r.Body)
+	}
+	if countRows(e, "select 1 from rk_users where email = 'rina@example.com'") != 0 ||
+		dbOne(e, "select role from rk_members m join rk_users u on u.id = m.user_id where u.email = 'sari@example.com'") != "sales_rep" ||
+		dbOne(e, "select record from rk_members m join rk_users u on u.id = m.user_id where u.email = 'sari@example.com'") != sariRec {
+		t.Fatal("a refused call wrote")
+	}
+	// a member who already has a record is not moved to another, free one
+	if r := host.do("PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep", "record": "USR-002"}); r.Status != 422 || errCode(r) != "record_taken" {
+		t.Fatalf("moving a member: %d %s", r.Status, r.Body)
+	}
+	if dbOne(e, "select account_id from r_user where org_id = 'kopi-senja' and name = 'USR-002'") != int64(0) {
+		t.Fatal("the refused move stamped the free record")
+	}
+	// the member's own record again is fine
+	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep", "record": sariRec})
+	// a record another membership points at, though it carries no account yet, is taken too
+	if _, err := e.s.DB.Exec(context.Background(), "update r_user set account_id = 0 where name = 'USR-003'; "+
+		"update rk_members set record = 'USR-003' where user_id = (select id from rk_users where email = 'ceo@saga.co.id')"); err != nil {
+		t.Fatal(err)
+	}
+	if r := host.do("PUT", memberPath("sub-rina"), map[string]any{"email": "rina@example.com", "role": "sales_rep", "record": "USR-003"}); r.Status != 422 || errCode(r) != "record_taken" {
+		t.Fatalf("pointed at by a membership: %d %s", r.Status, r.Body)
+	}
+}
+
+// Contract 0056 §3: a record that does not exist is refused (unknown_record) and nothing is written.
+func TestMemberAPIUnknownRecord(t *testing.T) {
+	e, host := memberEnv(t)
+	r := host.do("PUT", memberPath("sub-rina"), map[string]any{"email": "rina@example.com", "role": "sales_rep", "record": "USR-999"})
+	if r.Status != 422 || errCode(r) != "unknown_record" {
+		t.Fatalf("%d %s", r.Status, r.Body)
+	}
+	if countRows(e, "select 1 from rk_users where email = 'rina@example.com'") != 0 {
+		t.Fatal("a refused call wrote")
 	}
 }

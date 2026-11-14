@@ -10,8 +10,10 @@ import (
 	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // userOut is where `rangka user` reports what it did (tests swap it).
@@ -23,10 +25,12 @@ type usageError struct{ msg string }
 func (e usageError) Error() string { return e.msg }
 
 const userUsage = `usage: rangka user add <email> --org <id> --role <role> [--outlets a,b] [--record USR-001] [--name "..."]
-                       [--reset-password] [--create-org] [--allow-linked] [--db <url>]
-       rangka user remove <email> --org <id> [--db <url>]
+                       [--reset-password] [--create-org] [--allow-linked] [--db <url>] [--apps <dir> [--site <dir>]]
+       rangka user remove <email> --org <id> [--db <url>] [--apps <dir> [--site <dir>]]
 The email may also be given as --email <e>. The password comes from $RANGKA_USER_PASSWORD (or --password <p>)
-and is needed only for a new account or with --reset-password. --db defaults to $DATABASE_URL, --org to $RANGKA_ORG.`
+and is needed only for a new account or with --reset-password. --db defaults to $DATABASE_URL, --org to $RANGKA_ORG.
+Every outlet must be an existing outlet record of the organisation. With --apps (default $RANGKA_APPS) the member's
+employee record is synced at once (contract 0056); without it the server syncs it within 10 minutes.`
 
 // userArgs are the parsed arguments of `rangka user add|remove`.
 type userArgs struct {
@@ -43,6 +47,8 @@ type userArgs struct {
 	ResetPassword bool
 	CreateOrg     bool
 	AllowLinked   bool // add an existing account that is linked to upstream sign-in and not yet in the org
+	// metadata for the employee record sync (contract 0056 §2); no apps directory = no sync here
+	Apps, Site, Modules, Connectors string
 }
 
 // parseUserArgs reads the arguments after `rangka user`: the sub command, the email (positional, anywhere among
@@ -56,6 +62,10 @@ func parseUserArgs(args []string) (*userArgs, error) {
 	fs.SetOutput(io.Discard)
 	fs.StringVar(&ua.Org, "org", os.Getenv("RANGKA_ORG"), "organisation id (default $RANGKA_ORG)")
 	fs.StringVar(&ua.DB, "db", os.Getenv("DATABASE_URL"), "Postgres URL (default $DATABASE_URL)")
+	fs.StringVar(&ua.Apps, "apps", os.Getenv("RANGKA_APPS"), "apps directory, to sync the employee record (default $RANGKA_APPS)")
+	fs.StringVar(&ua.Site, "site", os.Getenv("RANGKA_SITE"), "site directory (default $RANGKA_SITE)")
+	fs.StringVar(&ua.Modules, "modules", os.Getenv("RANGKA_MODULES"), "modules directory (default: modules next to the apps directory)")
+	fs.StringVar(&ua.Connectors, "connectors", os.Getenv("RANGKA_CONNECTORS"), "connectors directory")
 	var email, outlets string
 	fs.StringVar(&email, "email", "", "email address (or give it as the first argument)")
 	if ua.Sub == "add" {
@@ -173,9 +183,9 @@ func runUser(args []string) error {
 	if err != nil {
 		return err
 	}
-	exists, oldRole := len(res.Rows) > 0, ""
+	exists, oldRole, userID := len(res.Rows) > 0, "", int64(0)
 	if exists {
-		oldRole = res.Rows[0][1].(string)
+		userID, oldRole = res.Rows[0][0].(int64), res.Rows[0][1].(string)
 	}
 
 	if ua.Sub == "remove" {
@@ -189,6 +199,7 @@ func runUser(args []string) error {
 			return err
 		}
 		fmt.Fprintf(userOut, "removed %s from %s\n", ua.Email, ua.Org)
+		syncUserRecord(ctx, pool, ua, res.Rows[0][0].(int64))
 		return nil
 	}
 
@@ -236,6 +247,18 @@ func runUser(args []string) error {
 		// the password of an existing account is never changed here; a throwaway value satisfies EnsureUser
 		password = auth.RandomToken("unused", 16)
 	}
+	// contract 0056 §2: every outlet must be an outlet record of the organisation, as the member API checks
+	if ua.SetOutlet {
+		if err := checkOutlets(ctx, pool, ua.Org, ua.Outlets); err != nil {
+			return err
+		}
+	}
+	// contract 0056 §3: the record must not be another account's, or the sync would hand it back and forth
+	if ua.Record != "" {
+		if err := checkRecord(ctx, pool, ua.Org, ua.Record, userID); err != nil {
+			return err
+		}
+	}
 	// contract 0028: a new person past the plan's people limit is refused (an existing member is not a new person)
 	if err := plan.CheckNewPerson(ctx, pool, ua.Org, ua.Email); err != nil {
 		return err
@@ -272,5 +295,67 @@ func runUser(args []string) error {
 		fmt.Fprintf(userOut, "role %s → %s\n", oldRole, ua.Role)
 	}
 	fmt.Fprintf(userOut, "user %s is %s in %s\n", ua.Email, ua.Role, ua.Org)
+	syncUserRecord(ctx, pool, ua, id)
 	return nil
+}
+
+// checkRecord refuses a user record that does not exist (unknown_record) or that is another account's or would move
+// the member off the record it already has (record_taken). Without a user table with account_id the record is
+// stored as given, as before contract 0056.
+func checkRecord(ctx context.Context, pool *pg.Pool, org, record string, userID int64) error {
+	err := engine.MemberRecordClaim(pg.WithOrg(ctx, org), pool, org, record, userID)
+	switch {
+	case errors.Is(err, engine.ErrUnknownRecord):
+		return fmt.Errorf("%w: employee record %q does not exist in %s", err, record, org)
+	case errors.Is(err, engine.ErrRecordTaken):
+		return fmt.Errorf("%w: employee record %q of %s belongs to another account, or the member already has another record", err, record, org)
+	}
+	return err
+}
+
+// checkOutlets refuses an outlet that is not an outlet record of org (unknown_outlet); without an outlet table
+// (outlets not installed) every outlet is unknown.
+func checkOutlets(ctx context.Context, pool *pg.Pool, org string, outlets []string) error {
+	if len(outlets) == 0 {
+		return nil
+	}
+	table := store.TableName("outlet")
+	res, err := pool.Query(ctx, "select to_regclass($1) is not null", table)
+	if err != nil {
+		return err
+	}
+	installed := res.Rows[0][0].(bool)
+	for _, o := range outlets {
+		found := false
+		if installed {
+			if found, err = store.Exists(pg.WithOrg(ctx, org), pool, org, "outlet", o); err != nil {
+				return err
+			}
+		}
+		if !found {
+			return fmt.Errorf("unknown_outlet: outlet %q does not exist in %s", o, org)
+		}
+	}
+	return nil
+}
+
+// syncUserRecord keeps the member's employee record in step (contract 0056 §2) when --apps names the metadata.
+// The membership is already written: a failure here is reported, not returned, and the server's repair catches up.
+func syncUserRecord(ctx context.Context, pool *pg.Pool, ua *userArgs, userID int64) {
+	if strings.TrimSpace(ua.Apps) == "" {
+		fmt.Fprintf(userOut, "employee record: not synced here (no --apps); the server syncs it within 10 minutes\n")
+		return
+	}
+	c := common{apps: ua.Apps, site: ua.Site, modules: ua.Modules, connectors: ua.Connectors}
+	reg, err := c.registry()
+	if err == nil {
+		var name string
+		if name, err = engine.New(pool, reg).SyncMemberRecord(ctx, ua.Org, userID); err == nil {
+			if name != "" {
+				fmt.Fprintf(userOut, "employee record %s\n", name)
+			}
+			return
+		}
+	}
+	fmt.Fprintf(os.Stderr, "rangka user: employee record not synced: %v (the server syncs it within 10 minutes)\n", err)
 }

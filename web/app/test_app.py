@@ -1467,6 +1467,97 @@ def test_catalogue_page(page, ctx):
     page.get_by_text("Kamu tidak punya akses ke Modul dan sambungan").first.wait_for(timeout=10000)
 
 
+def test_team_invite_link(page, ctx):
+    """Contract 0056 §4: the owner opens Pengaturan → Tim from the sidebar, invites a person (Undang), gets the sign-in
+    link once with Salin and Kirim lewat WhatsApp; the person opens the link signed out, sets a password with "Simpan dan
+    masuk" and lands signed in; the owner then sees "Aktif", changes the role and removes the member after a confirm.
+    sales@contoh.test has no Tim entry and the address answers no access."""
+    email = f"tim-{int(time.time() * 1000)}@contoh.test"
+    open_route(page, ctx, ctx.home()[0])
+    open_nav(page)
+    page.locator(".rk-side").get_by_role("link", name="Tim", exact=True).click()
+    page.wait_for_function("() => location.hash === '#/pengaturan/tim'", timeout=5000)
+    table = page.locator(".ap-team-table")
+    table.wait_for(timeout=10000)
+    owner_row = table.locator("tbody tr").first
+    assert "Pemilik" in owner_row.inner_text() and "Aktif" in owner_row.inner_text(), owner_row.inner_text()
+    assert owner_row.get_by_role("button", name="Hapus").count() == 0, "the owner cannot be removed"
+
+    page.get_by_role("button", name="Undang", exact=True).click()
+    dlg = page.locator(".ap-team-dialog")
+    dlg.get_by_label("Nama").fill("Tia Tim")
+    dlg.get_by_label("Email").fill(email)
+    dlg.locator("#ap-team-role").select_option(index=1)
+    assert dlg.locator("#ap-team-role option[value=owner]").count() == 0, "owner is not offered"
+    if dlg.locator(".ap-team-outlets input[type=checkbox]").count():
+        dlg.locator(".ap-team-outlets input[type=checkbox]").first.check()
+    dlg.get_by_role("button", name="Undang", exact=True).click()
+    link_input = page.locator("#ap-team-link")
+    link_input.wait_for(timeout=10000)
+    link = link_input.input_value()
+    # the shown link is on the address the owner uses, not the kernel's issuer (localhost:8080 here)
+    assert link.startswith(ctx.base + "/app/#/masuk/tautan?t="), link
+    wa = page.get_by_role("link", name="Kirim lewat WhatsApp").get_attribute("href")
+    assert wa.startswith("https://wa.me/?text=") and urllib.parse.quote(link, safe="") in wa, wa
+    assert page.get_by_role("button", name="Salin").count() == 1
+    if ctx.args.shots:
+        page.screenshot(path=os.path.join(ctx.args.shots, f"team-link-{ctx.args.width}.png"))
+    page.get_by_role("button", name="Selesai").click()
+    row = table.locator("tbody tr", has_text=email)
+    row.wait_for(timeout=5000)
+    assert "Menunggu masuk" in row.inner_text(), row.inner_text()
+
+    # the person, signed out, in a fresh browser context
+    other = page.context.browser.new_context(viewport=page.viewport_size)
+    try:
+        p2 = other.new_page()
+        p2.goto(link)
+        p2.get_by_role("heading", name="Buat kata sandi").wait_for(timeout=10000)
+        p2.get_by_label("Kata sandi baru").fill("pendek")
+        p2.get_by_role("button", name="Simpan dan masuk").click()
+        p2.get_by_text("Kata sandi minimal 8 karakter.").wait_for(timeout=5000)
+        if ctx.args.shots:
+            p2.screenshot(path=os.path.join(ctx.args.shots, f"team-signin-link-{ctx.args.width}.png"))
+        p2.get_by_label("Kata sandi baru").fill("rahasia-tim-123")
+        p2.get_by_role("button", name="Simpan dan masuk").click()
+        p2.locator(".ap-shell, .ap-work").first.wait_for(timeout=15000)
+        me = p2.evaluate("() => fetch('/auth/me', {credentials: 'include'}).then(r => r.json())")
+        assert (me.get("user") or me).get("email") == email, me
+    finally:
+        other.close()
+
+    # the owner sees the member active, changes the role, then removes them
+    page.reload()
+    row = page.locator(".ap-team-table tbody tr", has_text=email)
+    row.wait_for(timeout=10000)
+    page.wait_for_function("(e) => [...document.querySelectorAll('.ap-team-table tbody tr')].some(r => r.innerText.includes(e) && r.innerText.includes('Aktif'))",
+                           arg=email, timeout=10000)
+    row.get_by_role("button", name="Ubah").click()
+    dlg = page.locator(".ap-team-dialog")
+    sel = dlg.locator("#ap-team-edit-role")
+    if sel.locator("option").count() > 1:
+        sel.select_option(index=1 if sel.input_value() != sel.locator("option").nth(1).get_attribute("value") else 0)
+    dlg.get_by_role("button", name="Simpan").click()
+    dlg.wait_for(state="detached", timeout=10000)
+    row.get_by_role("button", name="Hapus").click()
+    page.get_by_role("alertdialog").get_by_role("button", name="Ya, hapus").click()
+    page.locator(".ap-team-table tbody tr", has_text=email).wait_for(state="detached", timeout=10000)
+    team = Http(ctx.base).login(*ctx.owner).call("GET", "/api/v1/team")[1]
+    assert not any(m["email"] == email for m in team["members"]), team
+
+    # sales_rep: no entry, and the address answers no access
+    page.context.clear_cookies()
+    ctx.allow_http(403, r"/api/v1/team$")
+    open_route(page, ctx, ctx.home()[0], who=SALES)
+    open_nav(page)
+    page.locator(".rk-side").wait_for(timeout=5000)
+    assert page.locator(".rk-side").get_by_role("link", name="Tim", exact=True).count() == 0, "sales_rep sees the Tim entry"
+    if page.locator(".ap-nav-open").count():
+        page.keyboard.press("Escape")
+    page.evaluate("() => { location.hash = '#/pengaturan/tim'; }")
+    page.get_by_text("Kamu tidak punya akses ke Tim").first.wait_for(timeout=10000)
+
+
 def test_phone_layout_tabs(page, ctx):
     """Kopi Senja's layout turns on phone tabs (responsive.phone: tabs, contract 0038): Beranda, Peluang, Faktur,
     Setujui and a last Menu tab that opens the drawer; Escape closes it. Wider screens have no tab bar."""

@@ -261,6 +261,9 @@
       }, function () { return { password: true, upstream: [] }; });
     };
     api.logout = function () { return json("POST", "/auth/logout"); };
+    /** POST /auth/link {token, password} (contract 0056 §4): sets the first password of a new member from Tim's
+     *  sign-in link and opens a session. Rejects 400 link_invalid (unknown, used or expired) or 422 weak_password. */
+    api.signinWithLink = function (token, password) { return json("POST", "/auth/link", { token: token, password: password }); };
     api.switchOrg = function (org) { return json("POST", "/auth/org", { org: org }).then(normaliseMe); };
 
     api.meta = function () {
@@ -454,11 +457,20 @@
       });
     };
 
+    /* ----- Pengaturan → Tim (contract 0056 §4): the owner's browser session only; 403 for everyone else */
+    /** GET /api/v1/team → {managed_by: "kernel" | "host", members: [{user_id, email, full_name, role, outlets, record, access}]}. */
+    api.team = function () { return json("GET", "/api/v1/team"); };
+    /** POST /api/v1/team {email, full_name, role, outlets, record?} → {user_id, record, signin_link?}. */
+    api.teamInvite = function (body) { return json("POST", "/api/v1/team", body); };
+    /** PATCH /api/v1/team/{user_id} {role?, outlets?}. */
+    api.teamUpdate = function (id, patch) { return json("PATCH", "/api/v1/team/" + enc(id), patch); };
+    /** DELETE /api/v1/team/{user_id} → 204 (409 owner_protected for the owner). */
+    api.teamRemove = function (id) { return json("DELETE", "/api/v1/team/" + enc(id)); };
     /* ----- preview mode: reads go to /preview/{id}, every write is refused */
     api.setPreview = function (id) { previewing = id || null; };
     api.previewId = function () { return previewing; };
     [ "create", "update", "remove", "submit", "submitMany", "cancel", "amend", "action", "upload", "removeAttachment", "importUpload",
-      "importCommit", "approve", "reject", "propose", "csVerb" ].forEach(function (name) {
+      "importCommit", "approve", "reject", "propose", "csVerb", "teamInvite", "teamUpdate", "teamRemove" ].forEach(function (name) {
       var inner = api[name];
       api[name] = function () {
         if (previewing) return Promise.reject(ApiError(405, "preview_read_only", "Pratinjau hanya untuk dilihat"));

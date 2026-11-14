@@ -1,6 +1,8 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/model.json
+# Mirrors rangka-apps modules/users user.rk (contract 0056): the employee record the kernel keeps in step with the
+# membership. hidden_for lists the roles this catalogue defines.
 name: user
-label: {id: Pengguna}
+label: {id: Karyawan, en: Employee}
 icon: user
 title_field: full_name
 naming: USR-{###}
@@ -10,7 +12,39 @@ fields:
     label: {id: Nama}
     required: true
     in_list: true
+  - name: employee_no
+    type: data
+    label: {id: Nomor karyawan}
+  - name: phone
+    type: phone
+    label: {id: Nomor telepon}
+    hidden_for: [sales_manager, sales_rep]
+  - name: email
+    type: data
+    label: {id: Email}
+    read_only: true
+    hidden_for: [sales_manager, sales_rep]
   - name: role
     type: data
     label: {id: Peran}
+    read_only: true
     in_list: true
+  - {name: outlets, type: table, of: user_outlet, label: {id: Outlet}, read_only: true}
+  - name: access
+    type: select
+    label: {id: Akses}
+    help: {id: Akses diatur di Tim.}
+    default: "'none'"
+    read_only: true
+    in_list: true
+    chip: true
+    options:
+      - {value: active, label: {id: Aktif}}
+      - {value: pending, label: {id: Menunggu}}
+      - {value: removed, label: {id: Dicabut}}
+      - {value: none, label: {id: Tanpa akses}}
+  - name: account_id
+    type: int
+    label: {id: ID akun}
+    read_only: true
+    hidden_for: [sales_manager, sales_rep]

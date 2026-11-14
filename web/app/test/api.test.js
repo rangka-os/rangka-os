@@ -609,3 +609,23 @@ test("providers: password policy and upstream list, defaults when unanswered", a
   assert.strictEqual(old.upstream.length, 0);
   assert.strictEqual((await RA({ fetch: stub([new Error("offline")]) }).providers()).password, true);
 });
+
+test("Tim (contract 0056 §4): team calls and the sign-in link", async () => {
+  const f = stub((url, init) => (init.method === "DELETE" ? json(204) : json(init.method === "POST" ? 201 : 200, { ok: true })));
+  const api = RA({ fetch: f });
+  await api.team();
+  await api.teamInvite({ email: "a@b.id", full_name: "A", role: "cashier", outlets: [] });
+  await api.teamUpdate(7, { role: "cashier" });
+  assert.strictEqual(await api.teamRemove(7), null);
+  await api.signinWithLink("tok", "rahasia123");
+  assert.deepStrictEqual(f.calls.map((c) => [c.init.method, c.url]), [["GET", "/api/v1/team"], ["POST", "/api/v1/team"], ["PATCH", "/api/v1/team/7"],
+    ["DELETE", "/api/v1/team/7"], ["POST", "/auth/link"]]);
+  assert.deepStrictEqual(JSON.parse(f.calls[4].init.body), { token: "tok", password: "rahasia123" });
+  // writes are refused while a change set is previewed
+  api.setPreview("cs_1");
+  assert.strictEqual((await rejected(api.teamInvite({}))).code, "preview_read_only");
+  // the kernel's message comes through
+  const g = stub([json(400, { error: { code: "link_invalid", message: "Tautan masuk tidak berlaku lagi." } })]);
+  const e = await rejected(RA({ fetch: g }).signinWithLink("x", "rahasia123"));
+  assert.deepStrictEqual([e.status, e.code, e.message], [400, "link_invalid", "Tautan masuk tidak berlaku lagi."]);
+});

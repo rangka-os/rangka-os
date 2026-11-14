@@ -988,6 +988,8 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             rep.add("error", p, "name", "name_mismatch", f'role name "{r.get("name")}" must match the file name "{st}"')
         check_scope(rep, p, r, allmodels)
 
+    check_member_record(rep, allmodels, roles)
+
     # connectors
     for cn in sorted(conns):
         p, c = conns[cn]
@@ -1009,6 +1011,33 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
     check_processes(rep, V, allmodels, only, processes)
     check_screens(rep, V, apps, allmodels, only, screens, prints)
+
+
+MEMBER_OWNED = ("email", "role", "outlets", "access", "account_id")
+
+
+def check_member_record(rep, allmodels, roles):
+    """A model named user with an account_id field is the member record (contract 0056 section 1, 5): its
+    kernel-owned fields must be read_only, and phone and email must be hidden from every role but owner and
+    head_office."""
+    entry = allmodels.get("user")
+    if not entry:
+        return
+    _, p, m = entry
+    fields = {f.get("name"): f for f in (m.get("fields") or []) if isinstance(f, dict)} if isinstance(m, dict) else {}
+    if "account_id" not in fields:
+        return
+    for name in MEMBER_OWNED:
+        if name in fields and fields[name].get("read_only") is not True:
+            rep.add("error", p, f"user/{name}", "member_field_writable", "kernel-owned field must be read_only")
+    names = sorted({st for _, st, _, _ in roles})
+    for name in ("phone", "email"):
+        if name not in fields:
+            continue
+        hidden = fields[name].get("hidden_for") or []
+        for role in names:
+            if role not in ("owner", "head_office") and role not in hidden:
+                rep.add("warn", p, f"user/{name}", "contact_field_visible", f'role "{role}" is not in hidden_for')
 
 
 def check_scope(rep, p, r, allmodels):

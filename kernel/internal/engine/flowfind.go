@@ -16,7 +16,8 @@ import (
 // literals) and evaluates now. Only conditions whose SQL keeps every row the CEL operand keeps are used: text columns
 // (data, link, select...) without compute: compared to a non-empty text, name, docstatus of a submittable model, and
 // date columns without compute: compared to a YYYY-MM-DD text (a flow scope reads a date as that text, so CEL's text
-// order is the calendar order; an empty date fails both). Anything else stays CEL only. The caller still
+// order is the calendar order; an empty date is NULL in SQL but "" in CEL, which sorts first, so < and <= also read
+// NULL rows). Anything else stays CEL only. The caller still
 // evaluates the whole where: on each row, so the SQL only narrows what is read (contract 0025 lock unchanged).
 // conds use $2.. ($1 is the org).
 func flowFindSQL(o *op, m *meta.Model, where string, vars map[string]any) ([]string, []any) {
@@ -78,7 +79,7 @@ func flowFindSQL(o *op, m *meta.Model, where string, vars map[string]any) ([]str
 			conds = append(conds, fmt.Sprintf("docstatus %s $%d", op, len(args)+1))
 		case kind == "date" && (b.Op == "==" || b.Op == "<" || b.Op == "<=" || b.Op == ">" || b.Op == ">="):
 			sv, ok := v.(string)
-			if !ok || !cel.IsDate(sv) || len(sv) != 10 {
+			if !ok || !cel.IsDate(sv) || len(sv) != 10 || sv[:4] == "0000" { // PostgreSQL has no year 0 (audit K2)
 				continue
 			}
 			op := b.Op
@@ -87,7 +88,13 @@ func flowFindSQL(o *op, m *meta.Model, where string, vars map[string]any) ([]str
 			}
 			// value == field is the only flipped form (above); an ordering keeps the field on the left
 			args = append(args, sv)
-			conds = append(conds, fmt.Sprintf("%s %s $%d::date", pg.QuoteIdent(col), op, len(args)+1))
+			if op == "<" || op == "<=" {
+				// an empty date is NULL in the table and "" in the flow scope, and "" sorts before any date in CEL:
+				// keep those rows for CEL to decide (audit t_0dba5917 K1)
+				conds = append(conds, fmt.Sprintf("(%s %s $%d::date or %s is null)", pg.QuoteIdent(col), op, len(args)+1, pg.QuoteIdent(col)))
+			} else {
+				conds = append(conds, fmt.Sprintf("%s %s $%d::date", pg.QuoteIdent(col), op, len(args)+1))
+			}
 		case kind == "text" && b.Op == "==":
 			sv, ok := v.(string)
 			if !ok || sv == "" {

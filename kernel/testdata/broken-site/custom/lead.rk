@@ -11,6 +11,8 @@ options:
     - {value: a, label: {id: A}}
   ghost:
     - {value: b, label: {id: B}}
+labels:
+  ghost_label: {id: Hantu}
 views:
   kanban:
     columns: [a]

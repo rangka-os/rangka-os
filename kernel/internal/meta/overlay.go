@@ -6,8 +6,8 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
 
-// applyOverlays merges company overlays (<site>/custom/<model>.rk) onto app models: fields, rules and approvals
-// are appended, select options are appended, form layout and list columns are replaced before view additions
+// applyOverlays merges company overlays (<site>/custom/<model>.rk) onto app models: the overlay's label and field
+// labels replace the app's (0049 §5), fields, rules and approvals are appended, select options are appended, form layout and list columns are replaced before view additions
 // are placed after the named field or column, and the kanban column order is set. App files are never changed.
 func (r *Registry) applyOverlays() {
 	for _, st := range sortedKeysM(r.Overlays) {
@@ -33,6 +33,18 @@ func (r *Registry) applyOverlays() {
 			fields = append(fields, deepCopy(fm))
 		}
 		raw["fields"] = fields
+		// the company's own words (contract 0049 §5): the model's label (page title, "Buat …", widget titles,
+		// references) and the labels of the app's fields; the app's name and field names stay
+		if l, ok := o["label"]; ok && l != nil {
+			raw["label"] = deepCopy(l)
+		}
+		for _, fn := range sortedKeys(asMap(o["labels"])) {
+			for _, f := range fields {
+				if fm := asMap(f); fm != nil && pyStr(fm["name"]) == fn {
+					fm["label"] = deepCopy(asMap(o["labels"])[fn])
+				}
+			}
+		}
 		if extra := asList(o["rules"]); len(extra) > 0 {
 			raw["rules"] = append(asList(raw["rules"]), deepCopy(extra).([]any)...)
 		}

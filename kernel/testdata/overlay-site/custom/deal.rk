@@ -1,5 +1,8 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/overlay.json
 model: deal
+label: {id: Proyek, en: Project}
+labels:
+  value: {id: Nilai proyek, en: Project value}
 views:
   form:
     layout:

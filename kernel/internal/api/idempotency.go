@@ -224,7 +224,7 @@ func (s *Server) idemReplay(w http.ResponseWriter, r *http.Request, c *caller, i
 	}
 }
 
-// pruneIdempotency deletes expired keys at most once an hour per process.
+// pruneIdempotency deletes expired idempotency keys and edge event keys at most once an hour per process.
 func (s *Server) pruneIdempotency() {
 	idemPruneMu.Lock()
 	due := time.Since(idemPruned) > idemPruneEvery
@@ -238,6 +238,9 @@ func (s *Server) pruneIdempotency() {
 			defer cancel()
 			if err := store.PruneIdempotency(ctx, s.DB); err != nil && s.Log != nil {
 				s.Log("idempotency: prune: %v", err)
+			}
+			if err := store.PruneEdgeEvents(ctx, s.DB); err != nil && s.Log != nil { // keys kept 400 days (contract 0057 §4)
+				s.Log("edge events: prune: %v", err)
 			}
 		}()
 	}

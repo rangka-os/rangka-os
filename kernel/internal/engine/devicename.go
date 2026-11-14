@@ -17,13 +17,17 @@ import (
 
 // DeviceWrite is a write that came from a paired device: the model of its own document ("" = the model the
 // Engine.Create or Engine.Submit call names), the name the device made for it (used when that model has naming_on:
-// device), when it happened on the device, the money it charged and the event it came with.
+// device), when it happened on the device, the money it charged and the event it came with. Commit, when set, runs
+// inside each unit of work's transaction just before it commits, with the unit's target (<model>/<name> of the
+// document it submitted or cancelled, else the first record it wrote): the edge event is stored with the write
+// (contract 0057 §4), so a replay never writes twice; an error rolls the write back.
 type DeviceWrite struct {
 	Model      string
 	Name       string
 	OccurredAt time.Time
 	Money      map[string]any
 	Event      string
+	Commit     func(ctx context.Context, q pg.Querier, target string) error
 }
 
 type deviceWriteKey struct{}

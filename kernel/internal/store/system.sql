@@ -377,3 +377,20 @@ create table if not exists rk_exceptions (
   resolved_at timestamptz
 );
 create index if not exists rk_exceptions_org on rk_exceptions (org_id, resolved_at, created_at);
+-- edge events (contract 0057 §4, 0006 §3): one row per idempotency key and org, kept 400 days; status accepted or
+-- rejected (with code); ref is the name of the record the event wrote; payload_sha256 covers {kind, payload}
+create table if not exists rk_edge_events (
+  org_id         text not null,
+  key            text not null,
+  device         text not null,
+  seq            bigint not null,
+  kind           text not null,
+  payload_sha256 text not null,
+  status         text not null,
+  code           text not null default '',
+  ref            text not null default '',
+  occurred_at    timestamptz,
+  received_at    timestamptz not null default now(),
+  primary key (org_id, key)
+);
+create index if not exists rk_edge_events_received on rk_edge_events (received_at);

@@ -716,6 +716,28 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 	return e.redactResult(a, model, res), err
 }
 
+// CreateAndSubmit creates a draft of the submittable model and submits it in one unit of work: a sale paid on a
+// paired device (contract 0057 §4, §10), sent as one screen.write create with submit: true. With a device write in
+// ctx the submit takes the device's name.
+func (e *Engine) CreateAndSubmit(ctx context.Context, a Actor, model string, input map[string]any, force bool) (*Result, error) {
+	var res *Result
+	err := e.run(ctx, a, func(o *op) error {
+		device := deviceWriteFor(ctx, model) != nil
+		o.deviceCreate = device
+		draft, err := o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
+		if err != nil {
+			return err
+		}
+		name := str(draft.Record["name"])
+		if device {
+			o.deviceSubmit = model + "/" + name
+		}
+		res, err = o.submit(model, name, force)
+		return err
+	})
+	return e.redactResult(a, model, res), err
+}
+
 func (o *op) submit(model, name string, force bool) (*Result, error) {
 	own := o.deviceSubmit == model+"/"+name // the device write's own document (Engine.Submit)
 	o.deviceSubmit = ""

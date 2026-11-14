@@ -74,6 +74,17 @@ Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
   - `shift.opened`, `shift.closed`: `screen.write` of `pos_shift` / `pos_shift_close` (§6), named for clarity in the
     status list only; same handling.
   - `print.done`, `print.failed`, `device.read` as 0006.
+- **`screen.write` payloads by op** (each event carries `key`, `kind`, `seq`, `occurred_at`, `actor`):
+  - `create` `{screen, model, body, name?, submit?}`: `submit: true` creates and submits in one unit of work (the paid
+    sale); `name` is the device name, taken at submit (at create for a model that is not submittable).
+  - `submit` `{model, name, draft, body?}`: `draft` is the key of an earlier `create` event of the same device (its
+    stored `ref`) or a draft name the device got online; anything else is `rejected` / `payload_invalid`.
+  - `cancel` `{model, name}`: `name` is the submitted document's (device) name.
+  - `action` `{model, name, action, args?}`.
+  - The answer per event is `{key, status, code?, message?, ref?, record?}`; `ref` is the written record's name and
+    `record` the record as REST returns it. Rejected outcomes are stored too, so a replay answers the same; a
+    transient kernel failure answers the whole request `503` and the device resends the batch (done events come back
+    `duplicate`).
 - `actor` is a member of the device's outlet; the kernel refuses an event whose actor is not (`rejected`,
   `actor_not_allowed`). The actor's roles and row scope apply as if they pressed the button online.
 - Idempotency, statuses (`accepted` / `duplicate` / `rejected`), order by `(device, seq)`, backoff, and 400-day key

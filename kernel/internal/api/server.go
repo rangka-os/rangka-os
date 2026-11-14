@@ -283,6 +283,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /auth/device/unlock", s.withDevice(s.deviceUnlock))
 	mux.HandleFunc("DELETE /api/v1/members/{user_id}/pin", a(s.clearMemberPin))
 	mux.HandleFunc("POST /api/v1/edge/register", s.registerEdge)
+	mux.HandleFunc("POST /api/v1/edge/events", s.withEdge(s.edgeEvents)) // contract 0057 §4: the device or its PIN session
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
 	// connector webhooks (contract 0002 §A.1, 0017 §7): not signed in; the org's secrets verify each request
@@ -401,7 +402,7 @@ func cors(h http.Handler) http.Handler {
 		if o := r.Header.Get("Origin"); o != "" && (strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/oauth/")) {
 			w.Header().Set("Access-Control-Allow-Origin", o)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Mcp-Session-Id, Mcp-Protocol-Version")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Mcp-Session-Id, Mcp-Protocol-Version, Rangka-Edge-Sync")
 			w.Header().Set("Access-Control-Expose-Headers", "Idempotency-Replayed, Location, Retry-After")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Vary", "Origin")

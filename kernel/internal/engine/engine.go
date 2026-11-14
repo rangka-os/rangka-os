@@ -359,6 +359,15 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 			return false, err
 		}
 	}
+	if dw := deviceWriteOf(ctx); dw != nil && dw.Commit != nil { // contract 0057 §4: the edge event with the write
+		target := o.primary
+		if target == "" {
+			target = o.first
+		}
+		if err := dw.Commit(ctx, tx, target); err != nil {
+			return false, err
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		if tx.Conflicted() {
 			return true, fmt.Errorf("%w: %v", errConflict, err)
@@ -398,6 +407,14 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 	var data any
 	if t, ok := occurredFrom(o.ctx); ok { // contract 0030 §7: when the user pressed the button (a queued write)
 		data = map[string]any{"occurred_at": t.UTC().Format(time.RFC3339)}
+	}
+	if d := o.actor.Device; d != nil && deviceWriteOf(o.ctx) != nil { // contract 0057 §10: audited "via device K1"
+		m, _ := data.(map[string]any)
+		if m == nil {
+			m = map[string]any{}
+		}
+		m["via"], m["device"] = "device", d.Code
+		data = m
 	}
 	return store.Audit(o.ctx, o.tx, o.actor.Org, o.actor.ID, "record."+opName, m.Name+"/"+fmt.Sprint(rec["name"]), summary, data)
 }

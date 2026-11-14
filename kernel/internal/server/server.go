@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"sync"
 	"time"
 
@@ -158,9 +159,16 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		}
 	} else {
 		warnIfBypassRLS(ctx, db, cfg.Logf)
-		if _, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", Before: cfg.preBackup(db, reg)}); err != nil {
+		res, err := store.MigrateWith(ctx, db, reg, store.MigrateOpts{Source: "serve", SubmittedNotes: true, Before: cfg.preBackup(db, reg)})
+		if err != nil {
 			db.Close()
 			return nil, fmt.Errorf("migrate: %w", err)
+		}
+		// once at boot: a site that removed an app with submitted documents says so in the log (audit 14 Nov N1)
+		for _, n := range res.Notes {
+			if strings.Contains(n, "submitted document") {
+				cfg.Logf("migrate: %s", n)
+			}
 		}
 		if err := SyncOrgs(ctx, db, reg); err != nil {
 			db.Close()

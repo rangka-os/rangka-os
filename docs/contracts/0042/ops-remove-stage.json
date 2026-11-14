@@ -100,11 +100,13 @@
       {
         "id": "p_x",
         "kind": "existing",
-        "label": "Excel"
+        "label": "Excel",
+        "solves": []
       }
     ],
     "open": [],
-    "settings": []
+    "settings": [],
+    "pains": []
   },
   "want_dropped": [
     {

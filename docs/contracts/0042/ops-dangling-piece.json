@@ -94,7 +94,8 @@
       {
         "id": "p_x",
         "kind": "existing",
-        "label": "Excel"
+        "label": "Excel",
+        "solves": []
       },
       {
         "id": "p_late",
@@ -103,11 +104,13 @@
         "design": {
           "records": [],
           "steps": []
-        }
+        },
+        "solves": []
       }
     ],
     "open": [],
-    "settings": []
+    "settings": [],
+    "pains": []
   },
   "want_dropped": []
 }

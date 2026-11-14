@@ -20,7 +20,8 @@
       {
         "id": "p_current",
         "kind": "existing",
-        "label": "Buku"
+        "label": "Buku",
+        "solves": []
       }
     ],
     "open": [],
@@ -37,6 +38,7 @@
         "id": "t_replace",
         "text": "Juragan: ganti penuh"
       }
-    ]
+    ],
+    "pains": []
   }
 }

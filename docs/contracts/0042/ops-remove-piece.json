@@ -104,11 +104,13 @@
       {
         "id": "p_y",
         "kind": "existing",
-        "label": "Excel"
+        "label": "Excel",
+        "solves": []
       }
     ],
     "open": [],
-    "settings": []
+    "settings": [],
+    "pains": []
   },
   "want_dropped": [
     {

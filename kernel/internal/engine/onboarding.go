@@ -28,8 +28,9 @@ func (e *Engine) HasRecords(ctx context.Context, org, model string) (bool, error
 
 // StageDone reports whether the org has a record of m matching when (every record when when is ""), and the
 // created time of the oldest one. Without when it is one query. With when, the conditions a flow's find can push to
-// SQL (status == 'paid', dates, docstatus) filter the rows in the query, and the rest is evaluated per record as
-// metadata (no actor grants, no row scope), oldest first, a chunk at a time, stopping at the first match. A record
+// SQL (flowFindSQL: text fields, dates, docstatus; not a status field) filter the rows in the query; the expression
+// is then evaluated per record as metadata (no actor grants, no row scope), oldest first in growing batches
+// (store.ScanOldest), stopping at the first match. A record
 // whose when fails to evaluate does not match; a database error while it loads a linked record is returned.
 func (e *Engine) StageDone(ctx context.Context, org string, m *meta.Model, when string) (bool, time.Time, error) {
 	ctx = pg.WithOrg(ctx, org)
@@ -47,26 +48,28 @@ func (e *Engine) StageDone(ctx context.Context, org string, m *meta.Model, when 
 	children := whenReadsTable(m, when)
 	var found bool
 	var at time.Time
-	err := store.ScanOldest(ctx, e.DB, m, org, conds, args, 200, func(r store.Record) (bool, error) {
-		if children {
-			if err := store.LoadChildren(ctx, e.DB, e.Reg(), org, m, []store.Record{r}); err != nil {
+	err := store.ScanOldest(ctx, e.DB, m, org, conds, args, func(batch []store.Record) (bool, error) {
+		if children { // one query per table field for the whole batch (audit 0053 D2)
+			if err := store.LoadChildren(ctx, e.DB, e.Reg(), org, m, batch); err != nil {
 				return true, err
 			}
 		}
-		e.Output(m, r)
-		v, err := e.newScope(ctx, e.DB, sys, m, r, o.links).eval(when)
-		if err != nil {
-			if isLoadError(err) {
-				return true, err
+		for _, r := range batch {
+			e.Output(m, r)
+			v, err := e.newScope(ctx, e.DB, sys, m, r, o.links).eval(when)
+			if err != nil {
+				if isLoadError(err) {
+					return true, err
+				}
+				continue
 			}
-			return false, nil
+			if v == true {
+				found = true
+				at, _ = time.Parse(time.RFC3339, fmt.Sprint(r["created_at"]))
+				return true, nil
+			}
 		}
-		if v != true {
-			return false, nil
-		}
-		found = true
-		at, _ = time.Parse(time.RFC3339, fmt.Sprint(r["created_at"]))
-		return true, nil
+		return false, nil
 	})
 	if err != nil {
 		return false, time.Time{}, err

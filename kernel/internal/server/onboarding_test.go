@@ -2,11 +2,15 @@ package server
 
 import (
 	"context"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // Contract 0053 §2–3: Mulai di sini over testdata/canvas (apps crm and jasa_proyek, no records seeded).
@@ -240,5 +244,28 @@ func TestOnboardingWhenPushedToSQL(t *testing.T) {
 	}
 	if at := get(stepOf(ob, "dua"), "done_at"); at != "2026-02-01T00:00:00Z" {
 		t.Fatalf("done_at of the oldest match: %v", at)
+	}
+}
+
+// A when that cannot become SQL reads the table oldest first in doubling batches (200, 400, 800 …): 3,000 rows with
+// no match take 4 queries, not 15 (audit 0053 D1), and the step stays open.
+func TestOnboardingScanOldestBatchesGrow(t *testing.T) {
+	e, _ := canvasEnv(t, onbProcess("  - {name: panjang, model: customer, when: \"customer_name.size() > 1000\"}\n"))
+	ctx := context.Background()
+	if _, err := e.s.DB.Exec(ctx, `insert into r_customer (org_id, name, customer_name, created_at)
+		select 'kopi-senja', 'C-' || g, 'PT ' || g, timestamptz '2026-01-01T00:00:00Z' + g * interval '1 second' from generate_series(1, 3000) g`); err != nil {
+		t.Fatal(err)
+	}
+	var sizes []int
+	m := e.s.Engine.Reg().Model("customer")
+	err := store.ScanOldest(pg.WithOrg(ctx, "kopi-senja"), e.s.DB, m, "kopi-senja", nil, nil, func(b []store.Record) (bool, error) {
+		sizes = append(sizes, len(b))
+		return false, nil
+	})
+	if err != nil || fmt.Sprint(sizes) != "[200 400 800 1600]" {
+		t.Fatalf("batches %v, err %v", sizes, err)
+	}
+	if got := stepStates(t, e.must(200, "GET", "/api/v1/onboarding", nil).JSON); got["panjang"] != "open" {
+		t.Fatalf("states %v", got)
 	}
 }

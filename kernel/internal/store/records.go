@@ -665,16 +665,25 @@ func toInt(v any) int64 {
 // follow from $2), newest first like All, chunk rows at a time, and hands each to fn until fn says stop. A flow's
 // find reads only the rows its where: can match and stops at its first (or limit:) match instead of the whole table.
 func Scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, fn func(Record) (bool, error)) error {
-	return scan(ctx, q, m, org, conds, args, chunk, false, fn)
+	return scan(ctx, q, m, org, conds, args, chunk, false, func(batch []Record) (bool, error) {
+		for _, r := range batch {
+			if stop, err := fn(r); err != nil || stop {
+				return true, err
+			}
+		}
+		return false, nil
+	})
 }
 
-// ScanOldest is Scan oldest first (created_at, name ascending): Mulai di sini stops at the oldest matching record
-// (contract 0053 §2 done_at) without reading the rest of the table.
-func ScanOldest(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, fn func(Record) (bool, error)) error {
-	return scan(ctx, q, m, org, conds, args, chunk, true, fn)
+// ScanOldest reads oldest first (created_at, name ascending) and hands fn a batch at a time until it says stop:
+// Mulai di sini stops at the oldest matching record (contract 0053 §2 done_at) without reading the rest. The batch
+// starts at 200 rows and doubles up to 20,000: a table without an index on created_at is sorted once per batch, so
+// a table with no match costs a few sorts, not one per 200 rows (audit 0053 D1).
+func ScanOldest(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, fn func([]Record) (bool, error)) error {
+	return scan(ctx, q, m, org, conds, args, 200, true, fn)
 }
 
-func scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, asc bool, fn func(Record) (bool, error)) error {
+func scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, asc bool, fn func([]Record) (bool, error)) error {
 	cmp, dir := "<", "desc"
 	if asc {
 		cmp, dir = ">", "asc"
@@ -698,19 +707,26 @@ func scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []
 			return err
 		}
 		rows := res.Maps()
+		batch := make([]Record, 0, len(rows))
 		for _, row := range rows {
 			lastAt, lastName = row["created_at"], str(row["name"])
 			r, err := fromRow(m, row)
 			if err != nil {
 				return err
 			}
-			stop, err := fn(r)
+			batch = append(batch, r)
+		}
+		if len(batch) > 0 {
+			stop, err := fn(batch)
 			if err != nil || stop {
 				return err
 			}
 		}
 		if len(rows) < chunk {
 			return nil
+		}
+		if asc && chunk < 20000 {
+			chunk *= 2
 		}
 	}
 }

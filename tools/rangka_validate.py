@@ -1321,6 +1321,9 @@ def top_conjuncts(expr):
         elif ch in ")]}":
             depth -= 1
             cur += ch
+        elif depth == 0 and (e.startswith("||", i) or ch in "?,"):
+            # || and ?: bind looser than && (and a comma separates arguments): this is no && chain
+            return [re.sub(r"\s+", "", e).replace('"', "'")]
         elif depth == 0 and e.startswith("&&", i):
             out.append(cur)
             cur = ""
@@ -1350,10 +1353,41 @@ def enclosing_groups(expr, pos):
             stack.append(i)
         elif ch == ")" and stack:
             start = stack.pop()
-            if start < pos < i:
-                groups.append((i - start, expr[start + 1:i]))
+            # a call's parentheses (a name right before) hold arguments, not a condition
+            call = start > 0 and (expr[start - 1].isalnum() or expr[start - 1] == "_")
+            if start < pos < i and not call:
+                groups.append((start + 1, i))
         i += 1
-    return [g for _, g in sorted(groups)] + [expr]
+    out = []
+    for s, e in sorted(groups, key=lambda g: g[1] - g[0]) + [(0, len(expr))]:
+        text = expr[s:e]
+        q = top_question(text)
+        # a check in a ternary's condition is guarded by that condition's && chain (evaluated first)
+        out.append(text[:q] if 0 <= q and pos - s < q else text)
+    return out
+
+
+def top_question(text):
+    """Index of the first ? outside quotes and brackets, -1 when there is none."""
+    depth, q, i = 0, "", 0
+    while i < len(text):
+        ch = text[i]
+        if q:
+            if ch == "\\":
+                i += 2
+                continue
+            if ch == q:
+                q = ""
+        elif ch in "'\"":
+            q = ch
+        elif ch in "([{":
+            depth += 1
+        elif ch in ")]}":
+            depth -= 1
+        elif ch == "?" and depth == 0:
+            return i
+        i += 1
+    return -1
 
 
 def conditional_as(rep, p, steps):

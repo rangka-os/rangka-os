@@ -28,3 +28,10 @@ steps:
   - if: event.deals != null
     update: me
     set: {status: "'qualified'"}
+  # flagged: || and ?: bind looser than &&, so C does not guard the right side
+  - if: app_installed('sales') && event.vip || deals != null
+    update: me
+    set: {status: "'qualified'"}
+  - if: "app_installed('sales') && event.vip ? true : deals != null"
+    update: me
+    set: {status: "'qualified'"}

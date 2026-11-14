@@ -38,6 +38,9 @@ func topConjuncts(expr string) []string {
 		case ch == ')' || ch == ']' || ch == '}':
 			depth--
 			cur.WriteByte(ch)
+		case depth == 0 && (strings.HasPrefix(expr[i:], "||") || ch == '?' || ch == ','):
+			// || and ?: bind looser than && (and a comma separates arguments): this is no && chain
+			return []string{strings.ReplaceAll(spaceRe.ReplaceAllString(expr, ""), `"`, "'")}
 		case depth == 0 && strings.HasPrefix(expr[i:], "&&"):
 			out = append(out, cur.String())
 			cur.Reset()
@@ -59,10 +62,7 @@ func topConjuncts(expr string) []string {
 // enclosingGroups are the contents of the parenthesised groups of expr that hold position pos, innermost first, then
 // expr itself; rangka_validate.py enclosing_groups.
 func enclosingGroups(expr string, pos int) []string {
-	type group struct {
-		size int
-		text string
-	}
+	type group struct{ start, end int }
 	var stack []int
 	var groups []group
 	var q byte
@@ -84,17 +84,54 @@ func enclosingGroups(expr string, pos int) []string {
 		case ch == ')' && len(stack) > 0:
 			start := stack[len(stack)-1]
 			stack = stack[:len(stack)-1]
-			if start < pos && pos < i {
-				groups = append(groups, group{i - start, expr[start+1 : i]})
+			// a call's parentheses (a name right before) hold arguments, not a condition
+			call := start > 0 && (expr[start-1] == '_' || (expr[start-1] >= '0' && expr[start-1] <= '9') ||
+				(expr[start-1] >= 'a' && expr[start-1] <= 'z') || (expr[start-1] >= 'A' && expr[start-1] <= 'Z'))
+			if start < pos && pos < i && !call {
+				groups = append(groups, group{start + 1, i})
 			}
 		}
 	}
-	sort.SliceStable(groups, func(a, b int) bool { return groups[a].size < groups[b].size })
-	out := make([]string, 0, len(groups)+1)
+	sort.SliceStable(groups, func(a, b int) bool { return groups[a].end-groups[a].start < groups[b].end-groups[b].start })
+	groups = append(groups, group{0, len(expr)})
+	out := make([]string, 0, len(groups))
 	for _, g := range groups {
-		out = append(out, g.text)
+		text := expr[g.start:g.end]
+		// a check in a ternary's condition is guarded by that condition's && chain (evaluated first)
+		if q := topQuestion(text); q >= 0 && pos-g.start < q {
+			text = text[:q]
+		}
+		out = append(out, text)
 	}
-	return append(out, expr)
+	return out
+}
+
+// topQuestion is the index of the first ? outside quotes and brackets, -1 when there is none.
+func topQuestion(text string) int {
+	depth := 0
+	var q byte
+	for i := 0; i < len(text); i++ {
+		ch := text[i]
+		switch {
+		case q != 0:
+			if ch == '\\' {
+				i++
+				continue
+			}
+			if ch == q {
+				q = 0
+			}
+		case ch == '\'' || ch == '"':
+			q = ch
+		case ch == '(' || ch == '[' || ch == '{':
+			depth++
+		case ch == ')' || ch == ']' || ch == '}':
+			depth--
+		case ch == '?' && depth == 0:
+			return i
+		}
+	}
+	return -1
 }
 
 // conditionalAs warns when a step's `as:` is declared under `if:` and a later step's if: null-checks that name

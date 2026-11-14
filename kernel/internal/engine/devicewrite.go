@@ -17,11 +17,13 @@ import (
 // already happened at the outlet, so the kernel records what it would have done differently instead of refusing:
 //   - clock: today(), now() and the business date (date defaults, stock posting dates, kernel numbering periods)
 //     are the write's occurred_at in the org's time zone (nowIn, todayIn);
-//   - money: the computed currency fields the device sent are stored; the kernel computes its own in shadow and
-//     records edge_price_drift {field, device, kernel} where they differ (DeviceMoney, prepare);
-//   - rules: a failing save, submit or cancel rule of a naming_on: device model becomes rule_overridden
-//     {rule, message} (overrideRules); permissions, the actor check, device_name_invalid and duplicate_name still
-//     refuse, and so do rules of other models;
+//   - money: the computed currency fields the device sent (and may see) for its own document of a naming_on:
+//     device model are stored; the kernel computes its own in shadow and records edge_price_drift
+//     {field, device, kernel} where they differ (DeviceMoney, visiblePins, prepare);
+//   - rules: a failing save or submit rule of the write's own document of a naming_on: device model, at create or
+//     submit, becomes rule_overridden {model, rule, message} (overrideRules); cancels, records a flow writes, other
+//     models, permissions, the actor check, device_name_invalid and duplicate_name still refuse;
+//   - voids: a cancel of a naming_on: device document made elsewhere is refused with other_device (cancelHere);
 //   - approvals: a write that would wait for one is refused with approval_needed_offline before anything is saved
 //     (hold); the device never offers it offline;
 //   - shifts: a record linking a naming_on: device record made on another device is refused with
@@ -162,10 +164,12 @@ func (o *op) recordDrift(pins map[string]any, rec, shadow store.Record, prefix s
 	}
 }
 
-// overrideRules turns the rule issues of errs into rule_overridden exceptions when the unit is a device write and m
-// is named on the device (contract 0057 §10); any other issue stays.
+// overrideRules turns the rule issues of errs into rule_overridden exceptions while check runs over the device
+// write's own document of a naming_on: device model at create or submit (o.override, contract 0057 §10): a sale
+// already paid at the outlet. Any other issue stays; a cancel, another record of the unit (one a flow writes) and
+// a model not named on the device keep their refusals.
 func (o *op) overrideRules(m *meta.Model, errs []Issue) []Issue {
-	if len(errs) == 0 || m.NamingOn != "device" || deviceWriteOf(o.ctx) == nil {
+	if len(errs) == 0 || !o.override {
 		return errs
 	}
 	var kept []Issue
@@ -174,9 +178,65 @@ func (o *op) overrideRules(m *meta.Model, errs []Issue) []Issue {
 			kept = append(kept, is)
 			continue
 		}
-		o.except("rule_overridden", "", m.Name+"\x00"+is.Rule, map[string]any{"rule": is.Rule, "message": is.Message})
+		o.except("rule_overridden", "", m.Name+"\x00"+is.Rule, map[string]any{"model": m.Name, "rule": is.Rule, "message": is.Message})
 	}
 	return kept
+}
+
+// visiblePins keeps the pins of fields the actor can see (contract 0027): a hidden figure (a blind close's
+// difference) is never taken from the device. Rows are kept by position.
+func (o *op) visiblePins(m *meta.Model, pins map[string]any) map[string]any {
+	var out map[string]any
+	for k, v := range pins {
+		f := m.Field(k)
+		if f == nil || o.e.FieldHidden(o.actor, m, f) {
+			continue
+		}
+		if f.Type == "table" {
+			cm := o.registry().Models[f.Of]
+			l, _ := v.([]any)
+			if cm == nil || l == nil {
+				continue
+			}
+			rowsOut := make([]any, len(l))
+			for i, rp := range l {
+				p, _ := rp.(map[string]any)
+				vp := o.visiblePins(cm, p)
+				if vp == nil {
+					vp = map[string]any{}
+				}
+				rowsOut[i] = vp
+			}
+			v = rowsOut
+		}
+		if out == nil {
+			out = map[string]any{}
+		}
+		out[k] = v
+	}
+	return out
+}
+
+// madeHere reports whether record name of m was made on the acting device (created_device, contract 0057 §6).
+func (o *op) madeHere(m *meta.Model, name string) (bool, error) {
+	if o.actor.Device == nil {
+		return false, nil
+	}
+	dev, err := store.CreatedDevice(o.ctx, o.tx, o.actor.Org, m, name)
+	return dev == o.actor.Device.ID, err
+}
+
+// cancelHere refuses a device write's cancel of a naming_on: device document another device (or head office) made
+// (other_device): a void is done on the device that sold it (contract 0057 §6).
+func (o *op) cancelHere(m *meta.Model, name string) error {
+	if m.NamingOn != "device" || deviceWriteOf(o.ctx) == nil {
+		return nil
+	}
+	mine, err := o.madeHere(m, name)
+	if err != nil || mine {
+		return err
+	}
+	return &StatusError{Status: 422, Code: "other_device", Msg: m.Label.Text() + " " + name + " tidak dibuat di perangkat ini, jadi tidak bisa dibatalkan di sini"}
 }
 
 // approvalNeededOffline refuses a device write that would wait for an approval (contract 0057 §10, ruling R7).

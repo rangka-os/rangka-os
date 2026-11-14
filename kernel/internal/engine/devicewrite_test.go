@@ -1,13 +1,22 @@
 package engine
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"math/big"
+	"os"
+	"os/exec"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
+	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
 // Replay rules of device writes (contract 0057 §10 and its conflict rules) over testdata/device-apps: penjualan has
@@ -161,7 +170,8 @@ func TestDeviceWriteRuleOverridden(t *testing.T) {
 	if len(xs) != 1 { // save and submit both check shift_open: one exception
 		t.Fatalf("exceptions = %v", xs)
 	}
-	if xs[0].Ref != "penjualan/STRK-OUT01-K1-2610-00001" || xs[0].Detail["rule"] != "shift_open" || xs[0].Detail["message"] != "Sesi kasir sudah ditutup" {
+	if xs[0].Ref != "penjualan/STRK-OUT01-K1-2610-00001" || xs[0].Detail["rule"] != "shift_open" || xs[0].Detail["model"] != "penjualan" ||
+		xs[0].Detail["message"] != "Sesi kasir sudah ditutup" {
 		t.Fatalf("exception = %+v", xs[0])
 	}
 }
@@ -296,5 +306,185 @@ func TestRestWriteUnchanged(t *testing.T) {
 	}
 	if xs := d.exceptions(""); len(xs) != 0 {
 		t.Fatalf("exceptions = %v", xs)
+	}
+}
+
+// A void is not a sale already paid: a device cancels only what it made (other_device), and a cancel rule still
+// refuses (contract 0057 §6: voids offline are same-day only).
+func TestDeviceWriteCancelOtherDevice(t *testing.T) {
+	d := setupDeviceApps(t)
+	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
+	k2 := d.cashier("OUT-01", "K2", "dev_00000000000000000002")
+	sh := d.shift(k1, "SESI-OUT01-K1-2610-001")
+	if _, err := d.paid(k1, sh, "STRK-OUT01-K1-2610-00001", d.octNow, d.menu, 1, nil); err != nil {
+		t.Fatal(err)
+	}
+	cancel := func(a Actor, name string, at time.Time) error {
+		_, err := d.e.Cancel(WithDeviceWrite(d.ctx, DeviceWrite{Model: "penjualan", Name: name, OccurredAt: at}), a, "penjualan", name)
+		return err
+	}
+	wantStatus(t, cancel(k2, "STRK-OUT01-K1-2610-00001", d.octNow), 422, "other_device")
+	// a receipt head office made is not the device's either
+	ho, err := d.e.CreateAndSubmit(d.ctx, d.owner, "penjualan", map[string]any{"shift": sh, "outlet": "OUT-01",
+		"items": []any{map[string]any{"menu": d.menu, "qty": 1}}}, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	wantStatus(t, cancel(k1, str(ho.Record["name"]), d.octNow), 422, "other_device")
+	// the next day the same_day_void rule refuses the device's own void: no override for a cancel
+	err = cancel(k1, "STRK-OUT01-K1-2610-00001", d.octNow.Add(24*time.Hour))
+	var ve *ValidationError
+	if !errors.As(err, &ve) || len(ve.Errors) == 0 || ve.Errors[0].Rule != "same_day_void" {
+		t.Fatalf("next-day void: %v", err)
+	}
+	if xs := d.exceptions(""); len(xs) != 0 {
+		t.Fatalf("exceptions = %v", xs)
+	}
+	if err := cancel(k1, "STRK-OUT01-K1-2610-00001", d.octNow); err != nil {
+		t.Fatalf("same-day void of its own receipt: %v", err)
+	}
+}
+
+// A rule of a record a flow writes in the device write (setoran, made by tutup_sesi's flow) still refuses.
+func TestDeviceWriteFlowRuleStays(t *testing.T) {
+	d := setupDeviceApps(t)
+	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
+	sh := d.shift(k1, "SESI-OUT01-K1-2610-001")
+	ctx := WithDeviceWrite(d.ctx, DeviceWrite{Model: "tutup_sesi", OccurredAt: d.octNow})
+	_, err := d.e.CreateAndSubmit(ctx, k1, "tutup_sesi", map[string]any{"shift": sh, "counted_cash": 20000000}, true)
+	var ve *ValidationError
+	if !errors.As(err, &ve) || len(ve.Errors) == 0 || ve.Errors[0].Rule != "setoran_limit" {
+		t.Fatalf("flow record rule: %v", err)
+	}
+	if r, _ := d.e.Get(d.ctx, d.owner, "sesi_kasir", sh); str(r["state"]) != "open" {
+		t.Fatalf("shift = %v", r["state"])
+	}
+	if xs := d.exceptions(""); len(xs) != 0 {
+		t.Fatalf("exceptions = %v", xs)
+	}
+}
+
+// Money the actor may not see is never taken from the device (contract 0027), nor money of a model that is not
+// named on the device (tutup_sesi's blind-close difference).
+func TestDeviceWriteHiddenMoney(t *testing.T) {
+	d := setupDeviceApps(t)
+	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
+	sh := d.shift(k1, "SESI-OUT01-K1-2610-001")
+	res, err := d.paid(k1, sh, "STRK-OUT01-K1-2610-00001", d.octNow, d.menu, 1, map[string]any{"audit_total": 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	stored, _ := d.e.Get(d.ctx, d.owner, "penjualan", str(res.Record["name"]))
+	wantMoney(t, stored["audit_total"], 18000)
+	body := map[string]any{"shift": sh, "counted_cash": 90000, "cash_difference": 0}
+	ctx := WithDeviceWrite(d.ctx, DeviceWrite{Model: "tutup_sesi", OccurredAt: d.octNow, Money: d.e.DeviceMoney("tutup_sesi", body)})
+	tc, err := d.e.CreateAndSubmit(ctx, k1, "tutup_sesi", body, true)
+	if err != nil {
+		t.Fatal(err)
+	}
+	close, _ := d.e.Get(d.ctx, d.owner, "tutup_sesi", str(tc.Record["name"]))
+	wantMoney(t, close["cash_difference"], 90000) // counted - expected (0): the kernel's figure
+	if xs := d.exceptions("edge_price_drift"); len(xs) != 0 {
+		t.Fatalf("drift = %v", xs)
+	}
+}
+
+// A device submit of a draft: money it sends is kept and checked; without money, a draft this device made keeps
+// its stored totals, and a draft made online is recomputed at today's prices.
+func TestDeviceWriteSubmitMoney(t *testing.T) {
+	d := setupDeviceApps(t)
+	k1 := d.cashier("OUT-01", "K1", "dev_00000000000000000001")
+	sh := d.shift(k1, "SESI-OUT01-K1-2610-001")
+	menu := d.menuAt(20000)
+	line := []any{map[string]any{"menu": menu, "qty": 1}}
+	submit := func(draft, name string, money map[string]any) store.Record {
+		t.Helper()
+		r, err := d.e.Submit(WithDeviceWrite(d.ctx, DeviceWrite{Model: "penjualan", Name: name, OccurredAt: d.octNow, Money: money}), k1, "penjualan", draft, true)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return r.Record
+	}
+	// online draft, then the price goes up: recomputed
+	kasir := Actor{Org: "toko", ID: "kasir@toko.test", Roles: []string{"kasir"}, Human: true, Outlets: []string{"OUT-01"}}
+	online, err := d.e.Create(d.ctx, kasir, "penjualan", map[string]any{"shift": sh, "outlet": "OUT-01", "items": line})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := d.e.Update(d.ctx, d.owner, "menu", menu, map[string]any{"price": 22000}); err != nil {
+		t.Fatal(err)
+	}
+	wantMoney(t, submit(str(online.Record["name"]), "STRK-OUT01-K1-2610-00001", nil)["grand_total"], 22000)
+	// a device draft submitted with money: kept, drift against the kernel
+	mk := func(money map[string]any) string {
+		t.Helper()
+		r, err := d.e.Create(WithDeviceWrite(d.ctx, DeviceWrite{Model: "penjualan", OccurredAt: d.octNow, Money: money}), k1, "penjualan",
+			map[string]any{"shift": sh, "outlet": "OUT-01", "items": line})
+		if err != nil {
+			t.Fatal(err)
+		}
+		return str(r.Record["name"])
+	}
+	wantMoney(t, submit(mk(nil), "STRK-OUT01-K1-2610-00002", map[string]any{"grand_total": 21000})["grand_total"], 21000)
+	xs := d.exceptions("edge_price_drift")
+	if len(xs) != 1 || xs[0].Ref != "penjualan/STRK-OUT01-K1-2610-00002" || fmt.Sprint(xs[0].Detail["kernel"]) != "22000" {
+		t.Fatalf("drift = %v", xs)
+	}
+	// a device draft that stored the device's money keeps it at a submit without money (no new drift)
+	wantMoney(t, submit(mk(map[string]any{"grand_total": 21500}), "STRK-OUT01-K1-2610-00003", nil)["grand_total"], 21500)
+	if xs := d.exceptions("edge_price_drift"); len(xs) != 2 {
+		t.Fatalf("drift = %v", xs)
+	}
+}
+
+// Migrating a live database adds created_device to an existing table whose model becomes naming_on: device.
+func TestMigrateAddsCreatedDevice(t *testing.T) {
+	dir := t.TempDir()
+	if out, err := exec.Command("cp", "-r", "../../testdata/device-apps/.", dir).CombinedOutput(); err != nil {
+		t.Fatalf("%v: %s", err, out)
+	}
+	file := filepath.Join(dir, "modules", "kasir", "models", "penjualan.rk")
+	orig, err := os.ReadFile(file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	older := strings.Replace(strings.Replace(string(orig), "naming_on: device\n", "", 1), "STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####}", "STRK-{#####}", 1)
+	if older == string(orig) {
+		t.Fatal("fixture not edited")
+	}
+	url := testdb.New(t)
+	ctx := context.Background()
+	db, err := pg.NewPool(ctx, url, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(db.Close)
+	migrate := func(src string) {
+		t.Helper()
+		if err := os.WriteFile(file, []byte(src), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		reg, rep := meta.Validate(filepath.Join(dir, "apps"), filepath.Join(dir, "site"), nil, schema.Embedded())
+		if rep.Errors() > 0 {
+			t.Fatalf("fixture: %v", rep.All())
+		}
+		if _, err := store.Migrate(ctx, db, reg, false, "test"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	has := func() bool {
+		res, err := db.Query(ctx, `select 1 from information_schema.columns where table_name = 'r_penjualan' and column_name = 'created_device'`)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(res.Rows) == 1
+	}
+	migrate(older)
+	if has() {
+		t.Fatal("created_device on a model not named on the device")
+	}
+	migrate(string(orig))
+	if !has() {
+		t.Fatal("created_device not added by the migration")
 	}
 }

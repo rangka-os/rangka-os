@@ -1,8 +1,9 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
-# valid; config.rk overrides its numbering without {device.code}
+# valid but for the reserved field created_device; config.rk overrides its numbering without {device.code}
 name: struk
 label: {id: Struk}
 naming: STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####}
 naming_on: device
 fields:
   - {name: outlet, type: link, to: outlet, label: {id: Outlet}}
+  - {name: created_device, type: data, label: {id: Perangkat}}

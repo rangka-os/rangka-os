@@ -385,6 +385,9 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 			v.rep.add("error", p, fmt.Sprintf("fields/%d", i), "duplicate_field", fmt.Sprintf(`"%s" is declared twice`, n))
 		}
 		seen[n] = true
+		if ReservedFields[n] {
+			v.rep.add("error", p, fmt.Sprintf("fields/%d/name", i), "reserved_field", fmt.Sprintf(`"%s" is a system column of the kernel; pick another name`, n))
+		}
 		if _, twin := f["money_of"]; twin {
 			continue // a generated IDR twin (contract 0013): nothing written to check
 		}

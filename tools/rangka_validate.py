@@ -30,6 +30,8 @@ SCHEMA_DIR = os.path.join(HERE, "..", "schema", "0.5")
 BASE = "https://rangka-os.github.io/rangka-os/schema/0.5/"
 LEGACY = "https://rangka-os.github.io/rangka-os/schema/0.4/"
 SYSTEM_FIELDS = {"name", "status", "created_by", "created_at", "modified_at", "company", "docstatus", "amended_from"}
+# columns the kernel keeps on records but not in expressions: a field may not take the name (contract 0057 §6)
+RESERVED_FIELDS = {"created_device"}
 SET_ONCE_EMPTY_IS_VALUE = {"int", "float", "currency", "percent", "rating", "money", "check", "duration", "table", "multiselect"}
 
 
@@ -426,6 +428,8 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                 if n in seen:
                     rep.add("error", p, f"fields/{i}", "duplicate_field", f'"{n}" is declared twice')
                 seen.add(n)
+                if n in RESERVED_FIELDS:
+                    rep.add("error", p, f"fields/{i}/name", "reserved_field", f'"{n}" is a system column of the kernel; pick another name')
                 if "money_of" in f:
                     continue  # a generated IDR twin (contract 0013): nothing written to check
                 for key in ("to", "of"):

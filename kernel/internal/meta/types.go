@@ -8,6 +8,10 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
 
+// ReservedFields are columns the kernel keeps on records but not in expressions: a field may not take the name
+// (rangka_validate.py RESERVED_FIELDS; created_device, contract 0057 §6).
+var ReservedFields = map[string]bool{"created_device": true}
+
 // SystemFields exist on every record (rangka_validate.py SYSTEM_FIELDS).
 var SystemFields = map[string]bool{"name": true, "status": true, "created_by": true, "created_at": true, "modified_at": true,
 	"company": true, "docstatus": true, "amended_from": true}

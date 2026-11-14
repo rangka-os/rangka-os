@@ -401,3 +401,27 @@ func TestEventsShiftOtherDevice(t *testing.T) {
 	}
 	wantResult(t, res[0], "k2-1", "rejected", "shift_other_device")
 }
+
+// K2 cannot void K1's receipt (other_device); a submit event's money is kept like a create's.
+func TestEventsCancelOtherDevice(t *testing.T) {
+	x := newEdgeEnv(t)
+	body := x.saleBody("SESI-OUT01-K1-2610-001", 1)
+	res := x.send(x.shiftEv("k-1", 1, "SESI-OUT01-K1-2610-001"),
+		x.paidSaleEv("k-2", 2, "SESI-OUT01-K1-2610-001", "STRK-OUT01-K1-2610-00001", 1),
+		x.write("k-3", 3, map[string]any{"screen": "jual", "model": "penjualan", "op": "create", "body": body}),
+		x.write("k-4", 4, map[string]any{"model": "penjualan", "op": "submit", "name": "STRK-OUT01-K1-2610-00002", "draft": "k-3",
+			"body": map[string]any{"grand_total": 17000}}))
+	wantResult(t, res[3], "k-4", "accepted", "")
+	if get(res[3], "record", "grand_total") != 17000.0 {
+		t.Fatalf("submit with money = %v", res[3])
+	}
+	k2, _ := x.owner.pair("OUT-01", "Kasir 2")
+	k2.hdr = http.Header{"Rangka-Edge-Sync": {"v1"}}
+	r := k2.must(200, "POST", "/api/v1/edge/events", map[string]any{"events": []any{
+		x.write("k2-1", 1, map[string]any{"model": "penjualan", "op": "cancel", "name": "STRK-OUT01-K1-2610-00001"})}})
+	out, _ := r.JSON["results"].([]any)
+	if len(out) != 1 {
+		t.Fatalf("results %s", r.Body)
+	}
+	wantResult(t, out[0], "k2-1", "rejected", "other_device")
+}

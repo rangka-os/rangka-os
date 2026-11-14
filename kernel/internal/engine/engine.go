@@ -221,6 +221,9 @@ type op struct {
 	// §10); drift marks that prepare to record edge_price_drift, driftDone that the unit already did
 	pins             map[string]any
 	drift, driftDone bool
+	// override is set while check runs over the device write's own paid document: its rule failures become
+	// rule_overridden exceptions (overrideRules)
+	override bool
 	// exceptions are the head-office exceptions of a device write, written when the unit commits
 	exceptions []pendingException
 }

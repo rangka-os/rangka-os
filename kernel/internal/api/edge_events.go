@@ -285,10 +285,11 @@ func (s *Server) edgeEvent(ctx context.Context, d *auth.Device, ev edgeEventIn) 
 	}
 	// the write, with the event row stored in its transaction
 	var ref string
-	// Money: the computed currency fields the device sent with a create body, top level and per row (DeviceMoney);
-	// a submit keeps what its draft stored. They are stored as the device charged them (contract 0057 §10).
+	// Money: the computed currency fields the device sent with a create or submit body, top level and per row
+	// (DeviceMoney); a submit without them keeps what its draft stored when this device made it. The engine keeps
+	// the ones the actor may see and stores them as the device charged them (contract 0057 §10).
 	var charged map[string]any
-	if sw.Op == "create" {
+	if sw.Op == "create" || sw.Op == "submit" {
 		charged = s.Engine.DeviceMoney(sw.Model, sw.Body)
 	}
 	dw := engine.DeviceWrite{Model: sw.Model, Name: sw.Name, OccurredAt: at, Money: charged, Event: key,

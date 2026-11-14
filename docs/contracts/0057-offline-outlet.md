@@ -88,6 +88,10 @@ Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
     kernel fault is that event's `rejected` / `internal_error`, so one event never blocks the queue.
 - `actor` is a member of the device's outlet; the kernel refuses an event whose actor is not (`rejected`,
   `actor_not_allowed`). The actor's roles and row scope apply as if they pressed the button online.
+- Rejected codes: `unknown_kind`, `payload_invalid`, `key_conflict`, `actor_not_allowed`, `occurred_at_too_old`,
+  `shift_other_device` (§6), `other_device` (§6, a void of a document another device or head office made),
+  `approval_needed_offline` (§10), `internal_error`, plus engine refusals that stay refusals (permission,
+  `device_name_invalid`, `duplicate_name`, a rule that is not overridden).
 - Idempotency, statuses (`accepted` / `duplicate` / `rejected`), order by `(device, seq)`, backoff, and 400-day key
   storage (`rk_edge_events`) as 0006 §3.
 - `occurred_at` is when the button was pressed (replaces 0030 §7's `_occurred_at`); the kernel stores it in the audit
@@ -116,6 +120,8 @@ Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
   another device cannot link a shift (`rejected`, `shift_other_device`).
 - **Voids offline** (author's call, open to correction): cancelling a receipt on the same day while its shift is
   open works offline, as `screen.write` op `cancel` referencing the sale's device name; the receipt prints "BATAL".
+  Only the device that made the receipt voids it (`rejected`, `other_device` otherwise), and its cancel rules (e.g.
+  `same_day_void`) still refuse: a void is not a sale already paid, so §10's override does not apply.
 - A close the kernel refuses (shift already closed by head office) is `rejected` and listed for head office; the
   counted cash is kept in the event.
 
@@ -153,10 +159,13 @@ Status: proposed (14 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
   evaluator (`engine.js`, extended to the dialect `pos_sale` uses; same results as the kernel's on a shared fixture
   set, checked in CI). For a `screen.write` from a paired device the kernel stores the computed money fields the
   device sent, recomputes in shadow, and records `edge_price_drift` when they differ. (Author's call.)
-- **Rules on replay.** For device writes `today()` and `now()` evaluate at `occurred_at`. A save, submit or cancel rule
-  that would refuse a document already paid at the outlet (e.g. `shift_open` after head office closed the shift)
-  becomes an exception for head office, and the write is accepted. Permissions, the actor check (§4) and
-  `device_name_invalid` still reject. (Author's call.)
+- **Rules on replay.** For device writes `today()` and `now()` evaluate at `occurred_at`. A save or submit rule that
+  would refuse the write's own document of a `naming_on: device` model, a document already paid at the outlet (e.g.
+  `shift_open` after head office closed the shift), becomes an exception for head office (`rule_overridden`
+  `{model, rule, message}`), and the write is accepted. Cancel rules, rules of records a flow writes and rules of
+  other models still refuse, as do permissions, the actor check (§4) and `device_name_invalid`. Only computed money
+  fields the actor may see (0027) are taken from the device. Approval `when` guards read the device's totals, which
+  are binding (sales win). (Author's call.)
 - **Approvals offline are blocked** (Dede, 14 Nov 2026). An action that needs an approval online (e.g. a discount
   above `big_discount`'s threshold) is not offered while offline; the screen says "Perlu persetujuan, tunggu online".
 - **Actor trust.** The kernel trusts the actor a paired device names (the device is paired by an owner and revocable,

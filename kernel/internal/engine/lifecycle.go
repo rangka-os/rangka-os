@@ -255,7 +255,7 @@ func (o *op) cancelRules(m *meta.Model, rec store.Record) (errs, warns []Issue) 
 			}
 		}
 	}
-	return o.overrideRules(m, errs), warns
+	return errs, warns
 }
 
 // minRows reports the table fields of rec with fewer rows than their min_rows. only limits the check to
@@ -427,8 +427,11 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
-	if dw := deviceWriteFor(o.ctx, m.Name); own && dw != nil && dw.Money != nil {
-		o.pins, o.drift = dw.Money, true
+	// the device write's own document of a naming_on: device model (contract 0057 §10): its money is the device's
+	// and its rule failures go to head office
+	paid := own && m.NamingOn == "device" && deviceWriteFor(o.ctx, m.Name) != nil
+	if dw := deviceWriteFor(o.ctx, m.Name); paid && dw.Money != nil {
+		o.pins, o.drift = o.visiblePins(m, dw.Money), true
 	}
 	o.prepare(m, rec, true)
 	if opts.authorize {
@@ -439,7 +442,9 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.deviceLinks(m, rec); err != nil {
 		return nil, err
 	}
+	o.override = paid
 	errs, warns, err := o.check(m, rec, "save")
+	o.override = false
 	if err != nil {
 		return nil, err
 	}
@@ -804,20 +809,26 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		}
 	}
 	stored := cloneRecord(rec) // snapshot and approval when: read the stored record (0007 §2, §3)
-	if dw := deviceWriteFor(o.ctx, m.Name); own && dw != nil {
-		// the device's money stays binding at submit: what it sent with this write (a create that submits), else
-		// what the draft stored (contract 0057 §10)
+	paid := own && m.NamingOn == "device" && deviceWriteFor(o.ctx, m.Name) != nil
+	if dw := deviceWriteFor(o.ctx, m.Name); paid {
+		// the device's money stays binding at submit (contract 0057 §10): what it sent with this write, checked
+		// against the kernel's; else what the draft stored when this device made it. A draft made elsewhere (online,
+		// another device) is recomputed.
 		if dw.Money != nil {
-			o.pins, o.drift = dw.Money, true
-		} else {
-			o.pins = deviceMoney(o.registry(), m, stored)
+			o.pins, o.drift = o.visiblePins(m, dw.Money), true
+		} else if mine, err := o.madeHere(m, name); err != nil {
+			return nil, err
+		} else if mine {
+			o.pins = o.visiblePins(m, deviceMoney(o.registry(), m, stored))
 		}
 	}
 	o.prepare(m, rec, false)
 	if err := o.deviceLinks(m, rec); err != nil {
 		return nil, err
 	}
+	o.override = paid
 	errs, warns, err := o.check(m, rec, "submit")
+	o.override = false
 	if err != nil {
 		return nil, err
 	}
@@ -967,6 +978,9 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	}
 	if toInt(rec["docstatus"]) != 1 {
 		return nil, conflict("not_submitted", "Hanya dokumen yang sudah diajukan yang bisa dibatalkan")
+	}
+	if err := o.cancelHere(m, name); err != nil {
+		return nil, err
 	}
 	// rules with on: cancel guard the cancel itself (same-day void, own shift); they run before an approval is
 	// asked for, so a refused cancel never waits in the inbox (contract 0030 §10)

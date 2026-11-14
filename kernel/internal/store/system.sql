@@ -70,6 +70,14 @@ create table if not exists rk_tokens (
   expires_at   timestamptz
 );
 alter table rk_tokens add column if not exists scopes text[] not null default '{}'; -- secrets:write (contract 0017 §3)
+-- contract 0055 §5 upgrade: an account with a session or an API token it created has signed in before signed_in_at
+-- existed, so it is not pending. A password or an identity link is no proof (invitees get both). Runs on every start;
+-- it only fills nulls, and openSession sets the column from then on.
+update rk_users u set signed_in_at = f.first
+  from (select user_id, min(at) as first from (
+          select user_id, created_at as at from rk_sessions
+          union all select user_id, created_at from rk_tokens) a group by user_id) f
+  where u.id = f.user_id and u.signed_in_at is null;
 create table if not exists rk_keys (
   kid         text primary key,
   alg         text not null,

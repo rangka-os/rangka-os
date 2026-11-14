@@ -10,6 +10,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
 
@@ -270,5 +271,46 @@ func TestNoMemberRecordModel(t *testing.T) {
 	}
 	if after := countUsers(t, e); after != before || memberRecordColumn(t, e, id) != "" {
 		t.Fatalf("records %d → %d, rk_members.record %q", before, after, memberRecordColumn(t, e, id))
+	}
+}
+
+// Contract 0055 §5 upgrade: an account that had a session or created an API token before signed_in_at existed has
+// signed in, so the migration backfills signed_in_at and the repair shows it active; an invitee without either stays
+// pending (a password or an identity link alone is no proof: invitees get both).
+func TestUpgradeBackfillsSignedIn(t *testing.T) {
+	e, ctx := memberRecordSetup(t)
+	withSession := addMember(t, e, "sesi@example.test", "Sesi", "cashier", nil)
+	withToken := addMember(t, e, "token@example.test", "Token", "cashier", nil)
+	invitee := addMember(t, e, "baru@example.test", "Baru", "cashier", nil)
+	if _, err := e.DB.Exec(ctx, "update rk_users set password_hash = 'x' where id = $1", invitee); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, created_at, expires_at) values ('h1', $1, $2, now() - interval '90 days', now() - interval '89 days')", withSession, mrOrg); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.DB.Query(ctx, "insert into rk_tokens (user_id, org_id, token_hash) values ($1, $2, 'h2')", withToken, mrOrg); err != nil {
+		t.Fatal(err)
+	}
+	// as before the column existed: nobody has signed_in_at, then the system migration runs (as on every start)
+	if _, err := e.DB.Exec(ctx, "update rk_users set signed_in_at = null"); err != nil {
+		t.Fatal(err)
+	}
+	for i := 0; i < 2; i++ { // idempotent: runs on every start
+		if _, err := e.DB.Exec(ctx, store.SystemSQL()); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if _, err := e.RepairMemberRecords(ctx, mrOrg); err != nil {
+		t.Fatal(err)
+	}
+	for id, want := range map[int64]string{withSession: "active", withToken: "active", invitee: "pending"} {
+		name := memberRecordColumn(t, e, id)
+		if got := str(userRecord(t, e, name)["access"]); got != want {
+			t.Fatalf("account %d: access %q, want %q", id, got, want)
+		}
+	}
+	res, err := e.DB.Query(ctx, "select signed_in_at < now() - interval '80 days' from rk_users where id = $1", withSession)
+	if err != nil || res.Rows[0][0] != true {
+		t.Fatalf("signed_in_at should be the first session's time: %v %v", res.Rows, err)
 	}
 }

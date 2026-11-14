@@ -1012,6 +1012,11 @@ func (v *validator) overlayOptionsAndViews(p, mn string, o map[string]any, own *
 			added[fn] = append(added[fn], val)
 		}
 	}
+	for _, fn := range sortedKeys(asMap(o["labels"])) {
+		if _, ok := merged[fn]; !ok {
+			v.rep.extra("error", p, "labels/"+fn, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s%s`, fn, mn, suggest(fn, keys(merged))))
+		}
+	}
 	ov := asMap(o["views"])
 	for si, sv := range asList(asMap(ov["form"])["layout"]) {
 		sm := asMap(sv)

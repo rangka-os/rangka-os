@@ -89,6 +89,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | removing a field or a select option (overlay or company model) | high |
 | making a `set_once` field editable (dropping or switching off `set_once`, changing such a field), or a company flow that writes a `set_once` field | high |
 | a company flow that writes a field limited by role (`read_only_for` or `hidden_for`, contract 0027; a child table's rows included), or changing who a field is limited for: a flow step writes such a field whatever those roles may do (0027 §6) | high |
+| a change (an upgrade of an app or module included) that newly limits a field an installed company flow writes: the flow was approved before the limit and goes on writing it for every role; the preview lists it (`preview.locked_flows` and a note; audit flow-locked F4) | at least medium |
 | changing `config.connector_auth` (who sets connector secrets and replays jobs), like `config.tax` and `config.ai` | high |
 | a key under an org's config (`orgs.<id>.config.<key>`): rated like the same site key, so an org's `tax`, `ai` and `connector_auth` are high (the org's value is merged over the site's, 0010 §2) | as the site key |
 | adding or removing an org (a legal entity), or an org entry or config that is not a map | high |

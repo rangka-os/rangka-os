@@ -2,6 +2,7 @@ package engine
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"slices"
 	"strings"
@@ -269,27 +270,60 @@ func textList(v any) []string {
 	return out
 }
 
+// Refusals of MemberRecordClaim (contract 0055 §3).
+var (
+	ErrUnknownRecord = errors.New("unknown_record")
+	ErrRecordTaken   = errors.New("record_taken")
+)
+
 // MemberRecordClaim checks whether user record `record` of org may become the record of account userID (0: an
 // account not created yet), for every path that sets rk_members.record (contract 0055 §3: the member API's record,
-// `rangka user add --record`, the seed's user record). exists reports that the record is there; taken that it is
-// another account's: it carries another account_id, or another membership in org points at it. It reads the
-// database only (the CLI may run without metadata): without a `user` table with account_id, both are false.
-func MemberRecordClaim(ctx context.Context, q pg.Querier, org, record string, userID int64) (exists, taken bool, err error) {
+// `rangka user add --record`, the seed's user record). ErrUnknownRecord: no such record. ErrRecordTaken: it is
+// another account's (it carries another account_id, or another membership in org points at it), or the account
+// already has another record in org (its membership points at one, or one carries its account_id): a member is
+// never moved to a second record, which would leave the first one stale. It reads the database only (the CLI may
+// run without metadata): without a `user` table with account_id, it checks nothing.
+func MemberRecordClaim(ctx context.Context, q pg.Querier, org, record string, userID int64) error {
 	table := store.TableName(memberRecordModel)
 	res, err := q.Query(ctx, `select exists (select 1 from pg_attribute where attrelid = to_regclass($1) and attname = 'account_id' and not attisdropped)`, table)
 	if err != nil || !res.Rows[0][0].(bool) {
-		return false, false, err
+		return err
 	}
-	res, err = q.Query(ctx, "select coalesce(account_id, 0) from "+pg.QuoteIdent(table)+" where org_id = $1 and name = $2", org, record)
-	if err != nil || len(res.Rows) == 0 {
-		return false, false, err
+	qt := pg.QuoteIdent(table)
+	res, err = q.Query(ctx, "select coalesce(account_id, 0) from "+qt+" where org_id = $1 and name = $2", org, record)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) == 0 {
+		return ErrUnknownRecord
 	}
 	if acc := toInt(res.Rows[0][0]); acc != 0 && acc != userID {
-		return true, true, nil
+		return ErrRecordTaken
 	}
 	res, err = q.Query(ctx, "select 1 from rk_members where org_id = $1 and record = $2 and user_id <> $3 limit 1", org, record, userID)
 	if err != nil {
-		return true, false, err
+		return err
 	}
-	return true, len(res.Rows) > 0, nil
+	if len(res.Rows) > 0 {
+		return ErrRecordTaken
+	}
+	if userID == 0 {
+		return nil
+	}
+	res, err = q.Query(ctx, "select 1 from "+qt+" where org_id = $1 and name <> $2 and coalesce(account_id, 0) = $3 limit 1", org, record, userID)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) > 0 {
+		return ErrRecordTaken
+	}
+	res, err = q.Query(ctx, "select 1 from rk_members m join "+qt+" r on r.org_id = m.org_id and r.name = m.record "+
+		"where m.org_id = $1 and m.user_id = $2 and m.record <> $3", org, userID, record)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) > 0 {
+		return ErrRecordTaken
+	}
+	return nil
 }

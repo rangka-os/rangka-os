@@ -718,6 +718,15 @@ func TestMemberAPIRecordTaken(t *testing.T) {
 		dbOne(e, "select record from rk_members m join rk_users u on u.id = m.user_id where u.email = 'sari@example.com'") != sariRec {
 		t.Fatal("a refused call wrote")
 	}
+	// a member who already has a record is not moved to another, free one
+	if r := host.do("PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep", "record": "USR-002"}); r.Status != 422 || errCode(r) != "record_taken" {
+		t.Fatalf("moving a member: %d %s", r.Status, r.Body)
+	}
+	if dbOne(e, "select account_id from r_user where org_id = 'kopi-senja' and name = 'USR-002'") != int64(0) {
+		t.Fatal("the refused move stamped the free record")
+	}
+	// the member's own record again is fine
+	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep", "record": sariRec})
 	// a record another membership points at, though it carries no account yet, is taken too
 	if _, err := e.s.DB.Exec(context.Background(), "update r_user set account_id = 0 where name = 'USR-003'; "+
 		"update rk_members set record = 'USR-003' where user_id = (select id from rk_users where email = 'ceo@saga.co.id')"); err != nil {

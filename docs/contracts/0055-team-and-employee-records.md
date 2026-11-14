@@ -70,6 +70,7 @@ When the registry has the member record model (`user` with `account_id`, §5):
   given (not `owner`), active outlets, and employee records with `access: none` that can be invited.
 - `PUT /api/v1/members/{upstream}/{subject}` gains optional `record` (an existing `user` record with `access: none`;
   else `422 record_taken` / `unknown_record`).
+  A member who already has a record cannot be moved to another one (`record_taken`).
 - rangka-cloud (closed, for reference): the Tim page picks outlets and roles from `options`, offers "Undang karyawan
   yang sudah ada" from `employees`, and shows the same `access` states. It needs the Member API path of the SSO plan;
   until then, `rangka user add --record` carries the link.

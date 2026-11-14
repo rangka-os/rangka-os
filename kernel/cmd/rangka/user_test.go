@@ -482,8 +482,9 @@ func TestUserAddSyncsRecord(t *testing.T) {
 	}
 }
 
-// Contract 0055 §3: `rangka user add --record` refuses a record that is another account's (record_taken) and writes
-// nothing; the record of the account itself, or one with no account, is fine.
+// Contract 0055 §3: `rangka user add --record` refuses a record that is another account's or would move the member
+// off its record (record_taken), or does not exist (unknown_record), and writes nothing; the record of the account
+// itself, or one with no account, is fine.
 func TestUserAddRecordTaken(t *testing.T) {
 	url := testdb.New(t)
 	prevIter := auth.Iterations
@@ -523,7 +524,26 @@ func TestUserAddRecordTaken(t *testing.T) {
 	if err != nil || res.Rows[0][0].(int64) != 0 {
 		t.Fatalf("a refused add wrote an account: %v", err)
 	}
-	if err := add("a@x.test", "USR-002"); err != nil {
+	// a member is never given a second record: not while another record carries its account, nor away from the one
+	// its membership points at; its own record is fine
+	if err := add("a@x.test", "USR-001"); err == nil || !strings.Contains(err.Error(), "record_taken") {
+		t.Fatalf("another record carries the account: err = %v", err)
+	}
+	if _, err := db.Query(ctx, "update r_user set account_id = 0 where name = 'USR-002'"); err != nil {
+		t.Fatal(err)
+	}
+	if err := add("a@x.test", "USR-002"); err == nil || !strings.Contains(err.Error(), "record_taken") {
+		t.Fatalf("moving a member: err = %v", err)
+	}
+	if err := add("a@x.test", "USR-001"); err != nil {
 		t.Fatalf("the account's own record: %v", err)
+	}
+	// a record that does not exist
+	if err := add("c@x.test", "USR-999"); err == nil || !strings.Contains(err.Error(), "unknown_record") {
+		t.Fatalf("unknown record: err = %v", err)
+	}
+	res, err = db.Query(ctx, "select count(*) from rk_users where email = 'c@x.test'")
+	if err != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("a refused add wrote an account: %v", err)
 	}
 }

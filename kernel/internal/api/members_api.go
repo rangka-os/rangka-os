@@ -30,7 +30,7 @@ const (
 	msgEmailTaken           = "E-mail ini sudah dipakai akun lain."
 	msgUnknownUpstream      = "Penyedia akun tidak ditemukan."
 	msgAccountElsewhere     = "Akun dengan e-mail ini juga dipakai di usaha lain, jadi tidak bisa diatur lewat API anggota usaha ini."
-	msgRecordTaken          = "Data karyawan ini sudah terhubung ke akun lain."
+	msgRecordTaken          = "Data karyawan ini sudah terhubung ke akun lain, atau anggota ini sudah punya data karyawan."
 )
 
 // memberError is a refusal of the member API: status, code and copy.
@@ -373,23 +373,20 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 }
 
 // claimMemberRecord refuses a record that is not an existing user record of org (unknown_record; also when the
-// registry has no member record model) or that is another account's (record_taken). userID 0 is an account not
-// created yet.
+// registry has no member record model), that is another account's, or that would move a member off the record it
+// already has (record_taken). userID 0 is an account not created yet.
 func (s *Server) claimMemberRecord(ctx context.Context, q pg.Querier, org, record string, userID int64) error {
-	exists, taken := false, false
+	err := engine.ErrUnknownRecord
 	if s.Engine.HasMemberRecord() {
-		var err error
-		if exists, taken, err = engine.MemberRecordClaim(ctx, q, org, record, userID); err != nil {
-			return err
-		}
+		err = engine.MemberRecordClaim(ctx, q, org, record, userID)
 	}
 	switch {
-	case !exists:
+	case errors.Is(err, engine.ErrUnknownRecord):
 		return &memberError{http.StatusUnprocessableEntity, "unknown_record", fmt.Sprintf(`Data karyawan "%s" tidak ditemukan.`, record)}
-	case taken:
+	case errors.Is(err, engine.ErrRecordTaken):
 		return &memberError{http.StatusUnprocessableEntity, "record_taken", msgRecordTaken}
 	}
-	return nil
+	return err
 }
 
 // memberOptions is GET /api/v1/members/options (contract 0055 §3): what the host's Tim page picks from. Roles that

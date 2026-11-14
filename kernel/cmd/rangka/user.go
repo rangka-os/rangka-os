@@ -299,17 +299,18 @@ func runUser(args []string) error {
 	return nil
 }
 
-// checkRecord refuses a user record that is another account's (record_taken). Without a user table with account_id
-// the record is stored as given, as before contract 0055.
+// checkRecord refuses a user record that does not exist (unknown_record) or that is another account's or would move
+// the member off the record it already has (record_taken). Without a user table with account_id the record is
+// stored as given, as before contract 0055.
 func checkRecord(ctx context.Context, pool *pg.Pool, org, record string, userID int64) error {
-	_, taken, err := engine.MemberRecordClaim(pg.WithOrg(ctx, org), pool, org, record, userID)
-	if err != nil {
-		return err
+	err := engine.MemberRecordClaim(pg.WithOrg(ctx, org), pool, org, record, userID)
+	switch {
+	case errors.Is(err, engine.ErrUnknownRecord):
+		return fmt.Errorf("%w: employee record %q does not exist in %s", err, record, org)
+	case errors.Is(err, engine.ErrRecordTaken):
+		return fmt.Errorf("%w: employee record %q of %s belongs to another account, or the member already has another record", err, record, org)
 	}
-	if taken {
-		return fmt.Errorf("record_taken: employee record %q of %s belongs to another account", record, org)
-	}
-	return nil
+	return err
 }
 
 // checkOutlets refuses an outlet that is not an outlet record of org (unknown_outlet); without an outlet table

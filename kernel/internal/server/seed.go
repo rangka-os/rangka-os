@@ -2,6 +2,7 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sort"
 	"strings"
@@ -41,24 +42,10 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 			"refusing to make it the owner (use another e-mail, or add it with `rangka user add --allow-linked`)",
 			strings.ToLower(strings.TrimSpace(o.Email)), strings.Join(linked, ", "), o.Org)
 	}
-	// contract 0055 §3: the owner's record must not be another account's, or the sync would hand it back and forth
-	if o.UserRecord != "" {
-		owner := int64(0)
-		res, err := db.Query(ctx, "select id from rk_users where email = $1", strings.ToLower(strings.TrimSpace(o.Email)))
-		if err != nil {
-			return nil, err
-		}
-		if len(res.Rows) > 0 {
-			owner = res.Rows[0][0].(int64)
-		}
-		_, taken, err := engine.MemberRecordClaim(pg.WithOrg(ctx, o.Org), db, o.Org, o.UserRecord, owner)
-		if err != nil {
-			return nil, err
-		}
-		if taken {
-			return nil, fmt.Errorf("seed: record_taken: employee record %s of %s belongs to another account; refusing to make it %s's",
-				o.UserRecord, o.Org, strings.ToLower(strings.TrimSpace(o.Email)))
-		}
+	// contract 0055 §3: the owner's record must not be another account's, or the sync would hand it back and forth.
+	// Checked before any write; the record may still come from the fixtures, so unknown_record waits for them.
+	if err := seedRecordClaim(ctx, db, o, true); err != nil {
+		return nil, err
 	}
 	if err := auth.EnsureOrg(ctx, db, o.Org, titleCase(o.Org)); err != nil {
 		return nil, err
@@ -81,6 +68,9 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 			fullName = fmt.Sprint(u["full_name"])
 		}
 	}
+	if err := seedRecordClaim(ctx, db, o, false); err != nil {
+		return nil, err
+	}
 	owner, err := auth.EnsureUser(ctx, db, o.Email, fullName, o.Password, o.Org, "owner", o.UserRecord)
 	if err != nil {
 		return nil, err
@@ -90,6 +80,36 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 		return nil, fmt.Errorf("seed: employee record of %s: %w", o.Email, err)
 	}
 	return st, nil
+}
+
+// seedRecordClaim refuses o.UserRecord when it is another account's or would move the owner off the record it already
+// has (record_taken), or, unless allowUnknown, when it does not exist (unknown_record). Without a user table with
+// account_id nothing is checked.
+func seedRecordClaim(ctx context.Context, db *pg.Pool, o SeedOptions, allowUnknown bool) error {
+	if o.UserRecord == "" {
+		return nil
+	}
+	email := strings.ToLower(strings.TrimSpace(o.Email))
+	owner := int64(0)
+	res, err := db.Query(ctx, "select id from rk_users where email = $1", email)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) > 0 {
+		owner = res.Rows[0][0].(int64)
+	}
+	err = engine.MemberRecordClaim(pg.WithOrg(ctx, o.Org), db, o.Org, o.UserRecord, owner)
+	switch {
+	case errors.Is(err, engine.ErrUnknownRecord):
+		if allowUnknown {
+			return nil
+		}
+		return fmt.Errorf("seed: %w: employee record %s does not exist in %s", err, o.UserRecord, o.Org)
+	case errors.Is(err, engine.ErrRecordTaken):
+		return fmt.Errorf("seed: %w: employee record %s of %s belongs to another account, or %s already has another record",
+			err, o.UserRecord, o.Org, email)
+	}
+	return err
 }
 
 // SyncOrgs upserts every org of config.rk's orgs: map into rk_orgs (name and code), in id order.

@@ -508,5 +508,10 @@ test("riskReasonText says the kernel's risk reasons in Bahasa Indonesia", () => 
   assert.strictEqual(RA.riskReasonText("changes config.plan"), "Mengubah config.plan");
   assert.strictEqual(RA.riskReasonText("new model x_sewa without permissions: every role has full access"),
     "Model baru x_sewa tanpa izin: semua peran bisa membuka dan mengubahnya");
+  // audit overlay label N2, N3 (a): a rename says the field or table and its old and new word
+  assert.strictEqual(RA.riskReasonText('relabels grand_total of sales_invoice: "Total" -> "Diskon"'),
+    'Mengganti nama kolom grand_total di sales_invoice: "Total" menjadi "Diskon"');
+  assert.strictEqual(RA.riskReasonText('relabels rental_item: "Alat sewa" -> "Mobil"'), 'Mengganti nama tabel rental_item: "Alat sewa" menjadi "Mobil"');
+  assert.strictEqual(RA.riskReasonText("changes menu labels of custom/app.sewa_alat.rk"), "Mengganti nama grup menu di custom/app.sewa_alat.rk");
   assert.strictEqual(RA.riskReasonText("something the kernel says later"), "something the kernel says later");
 });

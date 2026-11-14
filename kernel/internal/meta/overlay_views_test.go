@@ -344,3 +344,46 @@ func TestAppOverlayStaleGroupIsWarning(t *testing.T) {
 		t.Errorf("crm group = %v, want the app's own label", g)
 	}
 }
+
+// Audit overlay label N1: the IDR twin of a relabelled money field follows the new word, unless labels names the twin.
+func TestOverlayLabelsMoneyTwin(t *testing.T) {
+	site := t.TempDir()
+	files := map[string]string{
+		"config.rk": "locale: id-ID\ncurrency: IDR\ntimezone: Asia/Jakarta\napps: [billing]\n",
+		"custom/bill.rk": rkHint + `overlay.json
+model: bill
+labels:
+  total: {id: Tarif, en: Rate}
+  tax: {id: PPN}
+  tax_idr: {id: PPN rupiah}
+`,
+	}
+	for p, body := range files {
+		if err := os.MkdirAll(filepath.Dir(filepath.Join(site, p)), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(site, p), []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	reg, rep := ValidateOpts(Options{AppsDir: "../../testdata/money-apps", SiteDir: site}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("errors: %v", rep.All())
+	}
+	m := reg.Model("bill")
+	label := func(n string) Label {
+		if f := m.Field(n); f != nil {
+			return f.Label
+		}
+		return nil
+	}
+	if l := label("total_idr"); l["id"] != "Tarif (IDR)" || l["en"] != "Rate (IDR)" {
+		t.Errorf("total_idr label %v, want the new word with (IDR)", l)
+	}
+	if l := label("tax_idr"); l["id"] != "PPN rupiah" {
+		t.Errorf("tax_idr label %v, want its own overlay label", l)
+	}
+	if l := label("grand_total_idr"); l["id"] != "Total akhir (IDR)" {
+		t.Errorf("grand_total_idr label %v, want the app's", l)
+	}
+}

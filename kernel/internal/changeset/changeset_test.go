@@ -566,3 +566,36 @@ func TestChangesetAppOverlayPath(t *testing.T) {
 		}
 	}
 }
+
+// Audit overlay label N3 (a): a relabel names the model or field and its old and new word, so the history reads
+// what a total or a stock field is now called.
+func TestAssessRelabelReasons(t *testing.T) {
+	inv := map[string]any{"name": "sales_invoice", "is_submittable": true, "label": map[string]any{"id": "Faktur"},
+		"fields": []any{map[string]any{"name": "grand_total", "type": "currency", "label": map[string]any{"id": "Total"}},
+			map[string]any{"name": "notes", "type": "text", "label": map[string]any{"id": "Catatan"}}}}
+	files := map[string]map[string]any{"custom/sales_invoice.rk": {"model": "sales_invoice", "labels": map[string]any{"notes": map[string]any{"id": "Pesan"}}}}
+	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
+	after := func(p string) (map[string]any, bool) {
+		if p == "custom/sales_invoice.rk" {
+			return map[string]any{"model": "sales_invoice", "label": map[string]any{"id": "Nota"},
+				"labels": map[string]any{"grand_total": map[string]any{"id": "Diskon"}}}, true
+		}
+		return before(p)
+	}
+	model := func(n string) map[string]any { return map[string]map[string]any{"sales_invoice": inv}[n] }
+	a := Assess([]Op{{Op: "replace", Path: "custom/sales_invoice.rk"}}, before, after, model)
+	want := []string{
+		`low: relabels sales_invoice: "Faktur" -> "Nota"`,
+		`low: relabels grand_total of sales_invoice: "Total" -> "Diskon"`,
+		`low: relabels notes of sales_invoice: "Pesan" -> "Catatan"`,
+	}
+	got := strings.Join(a.Reasons, "\n")
+	for _, w := range want {
+		if !strings.Contains(got, w) {
+			t.Errorf("reason %q missing from:\n%s", w, got)
+		}
+	}
+	if a.Risk != "low" {
+		t.Errorf("risk %s, want low", a.Risk)
+	}
+}

@@ -293,3 +293,25 @@ labels:
 		t.Fatalf("unknown field label not reported: %v", rep.All())
 	}
 }
+
+// Contract 0049: custom/app.<app>.rk renames an app's menu group by its Indonesian text; the app file is unchanged.
+func TestAppOverlayMenuLabels(t *testing.T) {
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: "../../testdata/overlay-site"}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("metadata errors: %v", rep.All())
+	}
+	a := reg.App["crm"]
+	g := asMap(asList(a.Raw["menu"])[0])
+	if l := asMap(g["group"]); l["id"] != "Pelanggan dan peluang" || l["en"] != "Customers and deals" {
+		t.Errorf("crm menu group = %v, want the company's label", l)
+	}
+	if len(asList(g["items"])) == 0 {
+		t.Error("the group lost its items")
+	}
+	if orig := asMap(asMap(asList(asMap(a.Doc.Data)["menu"])[0])["group"]); orig["id"] != "CRM" {
+		t.Errorf("app.rk data changed: %v", orig)
+	}
+	if reg.Overlays["app.crm"] != nil || reg.AppOverlays["crm"] == nil {
+		t.Error("custom/app.crm.rk must load as an app overlay, not a model overlay")
+	}
+}

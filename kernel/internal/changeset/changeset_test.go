@@ -99,6 +99,8 @@ func TestAssess(t *testing.T) {
 		// 0049 §5: the company's words for a model and its fields are display only
 		{"overlay label", []Op{{Op: "replace", Path: "custom/sales_invoice.rk"}}, with("custom/sales_invoice.rk", map[string]any{"model": "sales_invoice", "fields": ovl["fields"], "label": map[string]any{"id": "Nota sewa"}, "labels": map[string]any{"notes": map[string]any{"id": "Catatan sewa"}}}), "low", 4},
 		{"new overlay with only a label", []Op{{Op: "create", Path: "custom/deal.rk"}}, with("custom/deal.rk", map[string]any{"model": "deal", "label": map[string]any{"id": "Mobil"}}), "low", 4},
+		// 0049: the company's words for an app's menu groups are display only
+		{"new app overlay menu labels", []Op{{Op: "create", Path: "custom/app.crm.rk"}}, with("custom/app.crm.rk", map[string]any{"app": "crm", "menu_labels": map[string]any{"CRM": map[string]any{"id": "Pelanggan"}}}), "low", 4},
 		{"theme", []Op{{Op: "replace", Path: "themes/kopi_senja.rk"}}, before, "low", 6},
 		{"new site process", []Op{{Op: "create", Path: "processes/kopi_senja.rk"}}, with("processes/kopi_senja.rk", map[string]any{"name": "kopi_senja"}), "low", 6},
 		{"replace site process", []Op{{Op: "replace", Path: "processes/kopi_senja.rk"}}, with("processes/kopi_senja.rk", map[string]any{"name": "kopi_senja"}), "low", 6},

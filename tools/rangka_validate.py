@@ -882,6 +882,7 @@ def check_auth_upstream(rep, sysdoc):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
+    app_overlays = {}  # <site>/custom/app.<app>.rk by app name (contract 0049)
     app_imports, site_imports, prints, letterheads, processes, screens = [], [], [], {}, [], []
     for name, a in apps.items():
         for st, p in rkfile.listdir(os.path.join(a["dir"], "flows")):
@@ -920,7 +921,10 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         for st, p in rkfile.listdir(os.path.join(site, "custom")):
             d = rep.load(p)
             if d is not None:
-                overlays[st] = (p, d)
+                if st.startswith("app."):  # a model name has no dot
+                    app_overlays[st[4:]] = (p, d)
+                else:
+                    overlays[st] = (p, d)
         for st, p in rkfile.listdir(os.path.join(site, "dashboards")):
             d = rep.load(p)
             if d is not None:
@@ -1001,6 +1005,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         for app, st, p, d in sorted(site_imports, key=lambda x: x[1]):
             check_import(rep, V, allmodels, st, p, d)
         check_overlays(rep, V, apps, allmodels, overlays)
+        check_app_overlays(rep, V, apps, app_overlays)
     check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
     check_processes(rep, V, allmodels, only, processes)
     check_screens(rep, V, apps, allmodels, only, screens, prints)
@@ -1846,6 +1851,45 @@ def merge_overlay(m, site, name):
     if not extra:
         return m
     return {**m, "fields": list(m.get("fields", [])) + extra}
+
+
+def menu_label_keys(man, kind=""):
+    """The keys menu_labels may use for a unit: the Indonesian text of each group and sub-menu label of its menu, and
+    for a module its title, the group a composed site's menu shows for it (contract 0049)."""
+    out = []
+    title = man.get("title") if isinstance(man.get("title"), dict) else {}
+    if kind == "module" and isinstance(title.get("id"), str) and title["id"]:
+        out.append(title["id"])
+    for g in man.get("menu", []) if isinstance(man.get("menu"), list) else []:
+        g = g if isinstance(g, dict) else {}
+        lab = g.get("group") if isinstance(g.get("group"), dict) else {}
+        if isinstance(lab.get("id"), str) and lab["id"]:
+            out.append(lab["id"])
+        for it in g.get("items", []) if isinstance(g.get("items"), list) else []:
+            lab = it.get("label") if isinstance(it, dict) and isinstance(it.get("label"), dict) else {}
+            if isinstance(lab.get("id"), str) and lab["id"]:
+                out.append(lab["id"])
+    return out
+
+
+def check_app_overlays(rep, V, apps, app_overlays):
+    """<site>/custom/app.<app>.rk (contract 0049): the company's words for an app's menu groups and sub-menus."""
+    for name in sorted(app_overlays):
+        p, o = app_overlays[name]
+        schema_errors(rep, V, "app-overlay", p, o)
+        o = o if isinstance(o, dict) else {}
+        if o.get("app") != name:
+            rep.add("error", p, "app", "name_mismatch", f'app overlay app "{pystr(o.get("app"))}" must match the file name "app.{name}"')
+        if name not in apps or apps[name]["kind"] == "site":
+            names = [n for n in apps if apps[n]["kind"] != "site"]
+            rep.add("error", p, "app", "unknown_app", f'"{name}" is not an app or module{suggest(name, names)}')
+            continue
+        man = apps[name]["manifest"] if isinstance(apps[name]["manifest"], dict) else {}
+        keys = menu_label_keys(man, apps[name]["kind"])
+        ml = o.get("menu_labels") if isinstance(o.get("menu_labels"), dict) else {}
+        for k in sorted(ml):
+            if k not in keys:
+                rep.add("error", p, f"menu_labels/{k}", "unknown_group", f'"{k}" is not a menu group or sub-menu of {name}{suggest(k, keys)}')
 
 
 def check_overlays(rep, V, apps, allmodels, overlays):

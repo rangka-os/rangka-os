@@ -474,7 +474,7 @@ func (s *Service) Preview(ctx context.Context, a Actor, id string) (*ChangeSet, 
 		p.Migrations = []string{}
 	}
 	for _, op := range cs.Ops {
-		if !strings.Contains(op.Path, "/models/") && !strings.HasPrefix(op.Path, "models/") && !strings.HasPrefix(op.Path, "custom/") {
+		if !strings.Contains(op.Path, "/models/") && !strings.HasPrefix(op.Path, "models/") && !strings.HasPrefix(op.Path, "custom/") || strings.HasPrefix(op.Path, "custom/app.") {
 			continue
 		}
 		model := strings.TrimSuffix(filepath.Base(op.Path), ".rk")

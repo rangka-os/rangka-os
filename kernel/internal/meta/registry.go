@@ -27,6 +27,7 @@ type Registry struct {
 	Roles            map[string]*rk.Doc  // by role name
 	Connectors       map[string]*rk.Doc  // by connector name (directory)
 	Overlays         map[string]*rk.Doc  // <site>/custom/<model>.rk by file stem
+	AppOverlays      map[string]*rk.Doc  // <site>/custom/app.<app>.rk by app name: the company's menu words (0049)
 	Prints           map[string]*Print   // print formats by name; a site format replaces an app's one
 	Processes        map[string]*Process // processes by name (contract 0014); a site process replaces a unit's one
 	Screens          map[string]*Screen  // work screens by name (contract 0030); the first unit that ships a name keeps it
@@ -147,7 +148,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 	}
 	r := &Registry{AppsDir: appsDir, SiteDir: siteDir, ConnectorsDir: o.ConnectorsDir, ModulesDir: o.ModulesDir, App: map[string]*App{}, Models: map[string]*Model{},
 		Dashboards: map[string]*Dashboard{}, BaseDashboards: map[string]*Dashboard{}, Flows: map[string]*Flow{}, Imports: map[string]*Import{}, Installed: map[string]bool{}, Docs: map[string]*rk.Doc{},
-		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}, Prints: map[string]*Print{}, Processes: map[string]*Process{}, Screens: map[string]*Screen{}}
+		Roles: map[string]*rk.Doc{}, Connectors: map[string]*rk.Doc{}, Overlays: map[string]*rk.Doc{}, AppOverlays: map[string]*rk.Doc{}, Prints: map[string]*Print{}, Processes: map[string]*Process{}, Screens: map[string]*Screen{}}
 	ld := &loader{rep: rep}
 	// modules first, then apps (rangka_validate.py order); a name in both is reported on the app
 	type unit struct{ name, dir, stem, prefix string }
@@ -368,7 +369,11 @@ func loadSite(dir string, ld *loader, r *Registry) *Site {
 	}
 	for _, e := range rk.ListDir(filepath.Join(dir, "custom")) {
 		if d := ld.load(e.Path); d != nil {
-			r.Overlays[e.Stem] = d
+			if app, ok := strings.CutPrefix(e.Stem, "app."); ok { // a model name has no dot (model.json#/$defs/name)
+				r.AppOverlays[app] = d
+			} else {
+				r.Overlays[e.Stem] = d
+			}
 			r.Docs["custom/"+e.Stem+".rk"] = d
 		}
 	}

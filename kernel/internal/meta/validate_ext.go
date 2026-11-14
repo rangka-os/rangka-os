@@ -155,6 +155,7 @@ func (v *validator) more() {
 		v.site(all)
 		v.imports(all, true)
 		v.overlays(all)
+		v.appOverlays()
 	}
 }
 
@@ -1161,4 +1162,39 @@ func pollWithoutAction(c map[string]any, trigger string) bool {
 		}
 	}
 	return false
+}
+
+// appOverlays checks <site>/custom/app.<app>.rk (contract 0049): the file names an app of the catalogue, and every
+// menu_labels key is the Indonesian text of a group or sub-menu label of that app's menu.
+func (v *validator) appOverlays() {
+	for _, name := range sortedKeysM(v.reg.AppOverlays) {
+		d := v.reg.AppOverlays[name]
+		p := d.Path
+		o := asMap(d.Data)
+		v.schemaErr("app-overlay", d)
+		if an, _ := o["app"].(string); an != name || o["app"] == nil {
+			v.rep.extra("error", p, "app", "name_mismatch", fmt.Sprintf(`app overlay app "%s" must match the file name "app.%s"`, pyStr(o["app"]), name))
+		}
+		a := v.reg.App[name]
+		if a == nil || a.Kind == KindSite {
+			var names []string
+			for n, x := range v.reg.App {
+				if x.Kind != KindSite {
+					names = append(names, n)
+				}
+			}
+			v.rep.extra("error", p, "app", "unknown_app", fmt.Sprintf(`"%s" is not an app or module%s`, name, suggest(name, names)))
+			continue
+		}
+		keys := menuLabelKeys(a)
+		have := map[string]bool{}
+		for _, k := range keys {
+			have[k] = true
+		}
+		for _, k := range sortedKeys(asMap(o["menu_labels"])) {
+			if !have[k] {
+				v.rep.extra("error", p, "menu_labels/"+k, "unknown_group", fmt.Sprintf(`"%s" is not a menu group or sub-menu of %s%s`, k, name, suggest(k, keys)))
+			}
+		}
+	}
 }

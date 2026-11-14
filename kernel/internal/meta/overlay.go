@@ -197,3 +197,85 @@ func deepCopy(v any) any {
 }
 
 var _ = fmt.Sprint
+
+// applyAppOverlays sets the company's words for an app's menu (<site>/custom/app.<app>.rk, contract 0049): menu_labels
+// maps a group or sub-menu label of the app's menu, by its Indonesian text as written in app.rk, to the company's
+// label. Only labels change; the groups, their order and their models stay the app's. App files are never changed.
+func (r *Registry) applyAppOverlays() {
+	for _, name := range sortedKeysM(r.AppOverlays) {
+		a := r.App[name]
+		o := asMap(r.AppOverlays[name].Data)
+		ml := asMap(o["menu_labels"])
+		if a == nil || len(ml) == 0 || pyStr(o["app"]) != name {
+			continue
+		}
+		raw := deepCopy(a.Raw).(map[string]any)
+		for _, g := range asList(raw["menu"]) {
+			gm := asMap(g)
+			if gm == nil {
+				continue
+			}
+			if l, ok := ml[menuLabelKey(gm["group"])]; ok && l != nil {
+				gm["group"] = deepCopy(l)
+			}
+			for _, it := range asList(gm["items"]) {
+				if sm := asMap(it); sm != nil {
+					if l, ok := ml[menuLabelKey(sm["label"])]; ok && l != nil {
+						sm["label"] = deepCopy(l)
+					}
+				}
+			}
+		}
+		a.Raw = raw
+	}
+}
+
+// menuLabelKey is the key menu_labels uses for a group or sub-menu label: its Indonesian text ("" when none).
+func menuLabelKey(l any) string {
+	s, _ := asMap(l)["id"].(string)
+	return s
+}
+
+// menuLabelKeys lists the keys menu_labels may use for unit a: the Indonesian text of each group and sub-menu label
+// of its menu, and for a module its title (the group a composed site's menu shows for it, composedMenu).
+func menuLabelKeys(a *App) []string {
+	var out []string
+	if a.Kind == KindModule && a.Title["id"] != "" {
+		out = append(out, a.Title["id"])
+	}
+	for _, g := range asList(a.Raw["menu"]) {
+		gm := asMap(g)
+		if k := menuLabelKey(gm["group"]); k != "" {
+			out = append(out, k)
+		}
+		for _, it := range asList(gm["items"]) {
+			if k := menuLabelKey(asMap(it)["label"]); k != "" {
+				out = append(out, k)
+			}
+		}
+	}
+	return out
+}
+
+// moduleMenuLabel is the company's label for module n's group in a composed site's menu (custom/app.<n>.rk keyed by
+// the module title), if any. The module's title stays the same elsewhere (catalogue, install, Console apps list).
+func (r *Registry) moduleMenuLabel(n string, title Label) (Label, bool) {
+	d := r.AppOverlays[n]
+	if d == nil {
+		return nil, false
+	}
+	o := asMap(d.Data)
+	if pyStr(o["app"]) != n {
+		return nil, false
+	}
+	l := asMap(asMap(o["menu_labels"])[title["id"]])
+	id, _ := l["id"].(string)
+	if id == "" {
+		return nil, false
+	}
+	out := Label{"id": id}
+	if en, ok := l["en"].(string); ok && en != "" {
+		out["en"] = en
+	}
+	return out, true
+}

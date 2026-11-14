@@ -119,6 +119,11 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			a.raise("high", "changes system capabilities (system.rk)")
 		case strings.Contains(p, "/roles/"):
 			a.raise("high", "changes roles ("+p+")")
+		case strings.HasPrefix(p, "custom/app."):
+			// the company's words for an app's menu (0049): display only, like overlay labels
+			if !reflect.DeepEqual(normalize(old["menu_labels"]), normalize(nw["menu_labels"])) || !existed {
+				a.raise("low", "changes menu labels of "+p)
+			}
 		case strings.HasPrefix(p, "custom/"):
 			name := strings.TrimSuffix(strings.TrimPrefix(p, "custom/"), ".rk")
 			var target map[string]any

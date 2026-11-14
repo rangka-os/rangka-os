@@ -1,0 +1,33 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://rangka-os.github.io/rangka-os/schema/0.5/app-overlay.json",
+  "title": "Rangka app overlay",
+  "description": "Company layer for an app's menu, in <site>/custom/app.<app>.rk (contract 0049): the company's words for the app's menu groups and sub-menus. Only labels change; the groups, their order and their models stay the app's.",
+  "type": "object",
+  "required": [
+    "app",
+    "menu_labels"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "app": {
+      "$ref": "model.json#/$defs/name",
+      "description": "The app or module whose menu this file renames; must equal the file name after app."
+    },
+    "menu_labels": {
+      "type": "object",
+      "description": "By the Indonesian text of a group or sub-menu label as written in the app's app.rk (\"Alat dan pelanggan\"), the company's label for it",
+      "minProperties": 1,
+      "propertyNames": {
+        "minLength": 1,
+        "maxLength": 140
+      },
+      "additionalProperties": {
+        "$ref": "model.json#/$defs/label"
+      }
+    }
+  }
+}

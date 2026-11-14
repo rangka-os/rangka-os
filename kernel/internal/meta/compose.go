@@ -247,6 +247,8 @@ func (r *Registry) composedMenu() []MenuGroup {
 		g := MenuGroup{Group: u.Title, Module: n, Items: []string{}, Dashboards: []string{}}
 		if g.Group == nil {
 			g.Group = Label{"id": n}
+		} else if l, ok := r.moduleMenuLabel(n, u.Title); ok { // the company's word (custom/app.<module>.rk, 0049)
+			g.Group = l
 		}
 		models := append([]string{}, u.Models...)
 		sort.Strings(models)

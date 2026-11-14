@@ -53,6 +53,13 @@ func TestConfigModules(t *testing.T) {
 	if !slices.Equal(menu[1].Items, []string{"invoice"}) || menu[1].Group["id"] != "Tagihan" {
 		t.Errorf("invoicing group = %+v (invoice_line is a child table)", menu[1])
 	}
+	// contract 0049: custom/app.contacts.rk renames the contacts group by the module title; the title stays
+	if g := menu[2].Group; g["id"] != "Pelanggan" || g["en"] != "Customers" {
+		t.Errorf("contacts group = %v, want the company's word from custom/app.contacts.rk", g)
+	}
+	if reg.App["contacts"].Title["id"] != "Kontak" {
+		t.Errorf("contacts title = %v, want the module's own", reg.App["contacts"].Title)
+	}
 }
 
 // An app-only site keeps contract 0001: no default menu, and config.apps still decides.

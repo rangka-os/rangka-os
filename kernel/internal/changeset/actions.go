@@ -903,6 +903,25 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 			risk = as.Risk
 		}
 	}
+	// a revert that restores an older config.rk removes the units the change set added: their rows are counted now, as
+	// apply does, so a unit that holds rows is the owner's to remove (apply-rows audit note 3)
+	if prev, ok := cs.previous["config.rk"]; ok && prev != nil && riskRank[risk] < riskRank["high"] {
+		back := &ChangeSet{Ops: []Op{{Op: "replace", Path: "config.rk", Content: *prev}}, Org: cs.Org, Risk: "low"}
+		v, after, _, cleanup, err := s.check(back)
+		if err != nil {
+			return nil, err
+		}
+		if len(v.Errors) == 0 {
+			err = s.removedRows(ctx, back, after)
+		}
+		cleanup()
+		if err != nil {
+			return nil, err
+		}
+		if back.Risk == "high" {
+			risk = "high"
+		}
+	}
 	if risk == "high" && !hasRole(a, "owner") {
 		return nil, &Error{403, "owner_required", "reverting a high-risk change set needs the owner", nil}
 	}

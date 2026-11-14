@@ -123,6 +123,9 @@ type ChangeSet struct {
 	UpdatedAt    string   `json:"updated_at,omitempty"`
 	previous     map[string]*string
 	applied      map[string]string // path -> store.FileHash of the text Apply wrote, "" when it deleted the file
+	// loaded is the status as read from the database: a step saves only while the row still has it, so a step that
+	// loaded the change set before another one moved it on does not write its status back (apply-rows audit note 2)
+	loaded string
 }
 
 // Actor is who acts on a change set.
@@ -467,20 +470,33 @@ func (s *Service) save(ctx context.Context, q pg.Querier, cs *ChangeSet, insert 
 		_, err := q.Query(ctx, `insert into rk_changesets (id, org_id, title, reason, author, ops, layers, risk, status, validation, preview, history, previous, source)
 			values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14)`, cs.ID, cs.Org, cs.Title, cs.Reason, pg.JSON{V: cs.Author}, pg.JSON{V: cs.Ops},
 			pg.JSON{V: cs.Layers}, cs.Risk, cs.Status, val, pre, pg.JSON{V: cs.History}, prev, cs.Source)
+		if err == nil {
+			cs.loaded = cs.Status
+		}
 		return err
 	}
 	// risk and layers are saved on every step: preview may raise the risk (a removed unit still holds rows) and apply
 	// assesses again, and approve reads the stored risk. The risk only rises in SQL: a step that loaded the change set
 	// before a parallel preview raised it does not write the lower risk back (audit changeset-followups 3)
-	_, err := q.Query(ctx, `update rk_changesets set status = $2, validation = $3, preview = $4, history = $5, previous = coalesce($6, previous),
+	// and only while the row still has the status this step loaded (apply-rows audit note 2): a preview that loaded
+	// before an approve and apply and commits after them would otherwise set applied back to previewed
+	res, err := q.Query(ctx, `update rk_changesets set status = $2, validation = $3, preview = $4, history = $5, previous = coalesce($6, previous),
 		applied = coalesce($7, applied), layers = $9, updated_at = now(),
 		risk = case when array_position(array['low','medium','high'], $8::text) > coalesce(array_position(array['low','medium','high'], risk), 0) then $8::text else risk end
-		where id = $1`, cs.ID, cs.Status, val, pre, pg.JSON{V: cs.History}, prev, applied, cs.Risk, pg.JSON{V: cs.Layers})
-	return err
+		where id = $1 and ($10::text = '' or status = $10::text) returning id`, cs.ID, cs.Status, val, pre, pg.JSON{V: cs.History}, prev, applied, cs.Risk, pg.JSON{V: cs.Layers}, cs.loaded)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) == 0 {
+		return &Error{409, "stale_status", "Change set ini sudah diproses langkah lain sejak dimuat; muat ulang lalu coba lagi.", nil}
+	}
+	cs.loaded = cs.Status
+	return nil
 }
 
 func fromRow(m map[string]any) *ChangeSet {
 	cs := &ChangeSet{ID: str(m["id"]), Org: str(m["org_id"]), Title: str(m["title"]), Reason: str(m["reason"]), Risk: str(m["risk"]), Status: str(m["status"]), Source: str(m["source"])}
+	cs.loaded = cs.Status
 	remarshal(m["author"], &cs.Author)
 	remarshal(m["ops"], &cs.Ops)
 	remarshal(m["layers"], &cs.Layers)
@@ -566,11 +582,27 @@ func (s *Service) transition(ctx context.Context, cs *ChangeSet, a Actor, status
 	// approve decides owner_required from the risk it loaded; a parallel preview may have raised it since. The row is
 	// locked and checked again in this transaction (audit changeset-followups 3)
 	if status == "approved" && !insert {
-		res, err := tx.Query(ctx, "select risk, status from rk_changesets where id = $1 for update", cs.ID)
+		res, err := tx.Query(ctx, "select risk, status, history, preview, validation from rk_changesets where id = $1 for update", cs.ID)
 		if err != nil {
 			return err
 		}
 		if len(res.Rows) == 1 {
+			// the row as it is now, not as this step loaded it: a preview that ran in between wrote its preview and
+			// history, and the approval adds to them instead of writing the older ones back (apply-rows audit note 1)
+			row := res.Rows[0]
+			ev := cs.History[len(cs.History)-1]
+			var hist []Event
+			remarshal(row[2], &hist)
+			cs.History = append(hist, ev)
+			cs.Preview, cs.Validation = nil, nil
+			if row[3] != nil {
+				cs.Preview = &Preview{}
+				remarshal(row[3], cs.Preview)
+			}
+			if row[4] != nil {
+				cs.Validation = &Validation{}
+				remarshal(row[4], cs.Validation)
+			}
 			if r := str(res.Rows[0][0]); riskRank[r] > riskRank[cs.Risk] {
 				cs.Risk = r
 				cs.ApprovableBy = s.ApprovableBy(cs)

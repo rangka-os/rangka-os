@@ -106,7 +106,12 @@ wins over an overlay field of the same name.
 The risk is assessed again at apply, against the files as they are then. When it rose (the files changed since the
 proposal, so a whole-file `replace` would now undo a later change), apply answers `409 risk_changed`, stores the
 higher risk and sends the change set back to `validated`: preview and approve again. Preview may raise the risk too
-(a removed unit still holds rows); every raised risk is stored, and approve reads the stored risk.
+(a removed unit still holds rows); every raised risk is stored, and approve reads the stored risk. Apply counts again
+the rows of every unit the change set removes from `config.rk` (rows written since the preview), and a unit that holds
+rows raises it to high. A revert that restores an older `config.rk` counts the rows of the units it removes the same
+way: while they hold rows, only the owner reverts (apply-rows audit notes 3 and 4). Every step saves the change set
+only while its status is the one the step loaded (`409 stale_status` otherwise), and an approval adds to the preview
+and history the row holds at that moment (notes 1 and 2).
 
 `revert` refuses with `409 stale_base` when a file changed since the apply (another change set, the operator): it
 would put back an older text over that change. Make a new change set instead. Change sets applied before the

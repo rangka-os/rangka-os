@@ -14,6 +14,8 @@ type Stage struct {
 	Name, Model, When string
 	Label             Label
 	Models            []string // extra models whose nodes join the stage
+	Hint              Label    // contract 0053 §1: what to do in this stage (nil when absent)
+	Answers           []Label  // contract 0053 §1: the owner's problems this stage answers
 	Index             int      // position in the file's stages list (JSON pointer /stages/<Index>)
 }
 
@@ -39,7 +41,7 @@ func parseProcess(app, stem, file string, doc *rk.Doc) *Process {
 			sm = map[string]any{}
 		}
 		p.Stages = append(p.Stages, Stage{Name: str(sm, "name"), Label: label(sm["label"]), Model: str(sm, "model"),
-			When: celText(sm["when"]), Models: strList(sm["models"]), Index: i})
+			When: celText(sm["when"]), Models: strList(sm["models"]), Index: i, Hint: label(sm["hint"]), Answers: labels(sm["answers"])})
 	}
 	return p
 }
@@ -83,6 +85,17 @@ func (r *Registry) ProcessList() []*Process {
 	for _, n := range sortedKeysM(r.Processes) {
 		if p := r.Processes[n]; r.processInstalled(p) {
 			out = append(out, p)
+		}
+	}
+	return out
+}
+
+// labels reads a list of i18n texts, skipping entries that are not one.
+func labels(v any) []Label {
+	var out []Label
+	for _, x := range asList(v) {
+		if l := label(x); l != nil {
+			out = append(out, l)
 		}
 	}
 	return out

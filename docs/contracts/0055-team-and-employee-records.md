@@ -38,6 +38,7 @@ the host decides who is a member, the kernel decides what they may do).
   | `outlets` | table of `user_outlet` (`outlet`: link to `outlet`) | new, read-only, mirrors `rk_members.outlets` |
   | `access` | select `active` \| `pending` \| `removed` \| `none` | new, read-only |
   | `employee_no` | data | new, editable |
+  | `account_id` | int | new, read-only, hidden from every role (`hidden_for` all roles): the `rk_users.id` (§5) |
 - The read-only fields are written only by the kernel (§2). A person may edit `phone` and `employee_no` through the
   normal form; nobody edits role, outlets or access there. The form shows a note "Akses diatur di Tim" with a link.
 - **Who sees contact data (UU PDP).** `phone` and `email` are visible to the owner and `head_office` only: both carry
@@ -48,16 +49,17 @@ the host decides who is a member, the kernel decides what they may do).
   out of scope.
 
 ### 2. The kernel keeps the record in step with the membership
-When the `users` module is installed in the organisation:
-- **Create or update a member** (Member API `PUT`, `rangka user add`, §4 routes): in the same transaction, find the
-  record by `rk_members.record`; if empty, create a `user` record (number from its naming) and store its name in
-  `record`. Then write `full_name` (only when empty), `email`, `role`, `outlets`, `access: active` (or `pending` while
-  the host has invited but the person has not signed in yet, when the host says so; see §3).
+When the registry has the member record model (`user` with `account_id`, §5):
+- **Create or update a member** (Member API `PUT`, `rangka user add`, §4 routes, seed): right after the membership
+  is written (order in §5), find the record (lookup in §5); if none, create a `user` record (number from its naming)
+  and store its name in `record`. Then write `full_name` (only when empty), `email`, `role`, `outlets` and `access`:
+  `pending` while the account has never signed in (`rk_users.signed_in_at` is empty), else `active`. The first
+  sign-in sets `signed_in_at` and syncs the record again.
 - **Remove a member**: the record stays (documents point at it) and gets `access: removed`, outlets cleared.
 - **Record without a member** (made by hand or by import): `access: none`. The Tim page can invite it (§3), which
   fills `record` with that existing record instead of creating a new one.
 - These writes run as the system actor, bypass the read-only guard, and are audited like other system writes.
-- When `users` is not installed, nothing above happens and `record` stays empty, as today.
+- Without the member record model, nothing above happens and `record` stays empty, as today.
 - **Outlets must be real.** Every outlet given to a member must be the name of an existing `outlet` record in the
   organisation (0043 already says so for the API); `rangka user add --outlets` gets the same check
   (`unknown_outlet`). When `outlets` is not installed, outlets must be empty.
@@ -67,8 +69,7 @@ When the `users` module is installed in the organisation:
   `{roles: [{name, label}], outlets: [{name, label, code}], employees: [{name, full_name, access}]}`: roles that can be
   given (not `owner`), active outlets, and employee records with `access: none` that can be invited.
 - `PUT /api/v1/members/{upstream}/{subject}` gains optional `record` (an existing `user` record with `access: none`;
-  else `422 record_taken` / `unknown_record`) and optional `pending: true` (sets `access: pending` until the person's
-  first sign-in, then `active`).
+  else `422 record_taken` / `unknown_record`).
 - rangka-cloud (closed, for reference): the Tim page picks outlets and roles from `options`, offers "Undang karyawan
   yang sudah ada" from `employees`, and shows the same `access` states. It needs the Member API path of the SSO plan;
   until then, `rangka user add --record` carries the link.
@@ -85,11 +86,12 @@ When the `users` module is installed in the organisation:
   that pushes members (0043). The page then shows the list read-only with "Atur tim di Rangka Cloud".
 
 ### 5. Details settled (author's calls, open to correction)
-- **The kernel names `users.user`.** No new `.rk` key: when the module `users` is installed, its `user` model is the
-  member record (as `rk_members.record` already assumes). The kernel-owned fields (`email`, `role`, `outlets`,
-  `access`, `account_id`) are a fixed list in kernel code: refused from any form, import, change set or API write by a
-  person (`422 field_kernel_owned`), written only by the sync. Not the `read_only` flag, which the kernel does not
-  enforce on system writes.
+- **The kernel names `user`.** No new `.rk` key: when the registry has a model `user` with a field `account_id`, that
+  model is the member record (as `rk_members.record` already assumes). Without `account_id` (older apps), nothing in
+  §2 runs. The kernel-owned fields (`email`, `role`, `outlets`, `access`, `account_id`) are `read_only: true` in the
+  model: the kernel already drops a client-sent value of a read_only field (REST create and update, imports) and lets
+  kernel writes through. The validator errors (`member_field_writable`) when a `user` model with `account_id` leaves
+  one of them writable.
 - **Stable link to the account.** The record gains hidden `account_id` (the `rk_users.id`), kernel-owned. Lookup in
   §2 is: `rk_members.record`, else a record with this `account_id`, else create. Removing a member deletes the
   membership row (0043), but the record keeps `account_id`, so inviting the same person again reuses their old record
@@ -107,7 +109,7 @@ When the `users` module is installed in the organisation:
 - **Hosted or self-hosted.** A new config key `auth.team: host | kernel` (default `kernel`). Rangka Cloud sets `host`
   at provisioning. With `host`, `/api/v1/team` writes answer `403 team_managed_by_host`; with `kernel`, they work even
   when an `auth.upstream` is configured (a self-hoster with their own Google or Keycloak still manages the team here).
-- **Self-hosted invites.** A new member starts `access: pending` and becomes `active` on first sign-in. If the e-mail
+- **Self-hosted invites.** A new member starts `access: pending` and becomes `active` on first sign-in (§2). If the e-mail
   already belongs to an account, the same refusals as 0043 §2 apply (`owner_protected`, `account_elsewhere`); an
   account that is a member nowhere is linked and gets no sign-in link (it already has a way in).
 
@@ -119,9 +121,9 @@ When the `users` module is installed in the organisation:
 ## Work, in order
 | # | What | Repo |
 | --- | --- | --- |
-| 1 | `user` fields and `user_outlet`, label "Karyawan", read-only guard for kernel-owned fields | rangka-apps, rangka-os (guard) |
+| 1 | `user` fields and `user_outlet`, label "Karyawan"; validator rule `member_field_writable` | rangka-apps, rangka-os (validators) |
 | 2 | Record sync (§2) in the member write path shared by CLI and Member API; outlet check in the CLI | rangka-os |
-| 3 | `GET /members/options`, `record` and `pending` on `PUT` | rangka-os |
+| 3 | `GET /members/options`, `record` on `PUT` | rangka-os |
 | 4 | Pengaturan → Tim page and `/api/v1/team` routes, sign-in link | rangka-os |
 | 5 | Tim page uses `options` and `record` | rangka-cloud |
 

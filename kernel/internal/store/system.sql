@@ -303,3 +303,13 @@ create table if not exists rk_poll_cursors (
   updated_at timestamptz not null default now(),
   primary key (org_id, connector, trigger)
 );
+-- ruang coba (contract 0052): at most one sandbox org per site, seeded with demo data and deleted whole
+alter table rk_orgs add column if not exists sandbox boolean not null default false;
+create unique index if not exists rk_orgs_one_sandbox on rk_orgs (sandbox) where sandbox;
+create table if not exists rk_sandboxes (
+  org_id       text primary key references rk_orgs(id) on delete cascade,
+  real_org     text not null,                -- the org the sandbox belongs to (audit entries go there)
+  fixtures     jsonb not null default '{}',  -- what create seeded, so reset can seed it again
+  created_at   timestamptz not null default now(),
+  last_used_at timestamptz not null default now()
+);

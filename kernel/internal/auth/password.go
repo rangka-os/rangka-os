@@ -191,8 +191,10 @@ func LoadUser(ctx context.Context, q pg.Querier, userID int64, org string) (*Use
 		return nil, ErrBadLogin
 	}
 	u := &User{ID: userID, Email: res.Rows[0][0].(string), FullName: res.Rows[0][1].(string), Roles: []string{}, Outlets: []string{}}
-	res, err = q.Query(ctx, `select org_id, role, coalesce(record, ''), outlets from rk_members
-		where user_id = $1 and ($2 = '' or org_id = $2) order by org_id limit 1`, userID, org)
+	// without an org, a real org comes before the ruang coba (contract 0052 §3): entering it is a deliberate switch
+	res, err = q.Query(ctx, `select m.org_id, m.role, coalesce(m.record, ''), m.outlets from rk_members m
+		left join rk_orgs o on o.id = m.org_id
+		where m.user_id = $1 and ($2 = '' or m.org_id = $2) order by coalesce(o.sandbox, false), m.org_id limit 1`, userID, org)
 	if err != nil {
 		return nil, err
 	}

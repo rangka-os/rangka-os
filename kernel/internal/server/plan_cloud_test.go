@@ -79,7 +79,7 @@ func TestCloudPackagePlan(t *testing.T) {
 	added := 0
 	var refused error
 	for _, m := range []string{"a@kopisenja.id", "b@kopisenja.id", "c@kopisenja.id", "d@kopisenja.id", "e@kopisenja.id"} {
-		if err := plan.CheckNewPerson(ctx, e.s.DB, m); err != nil {
+		if err := plan.CheckNewPerson(ctx, e.s.DB, "kopi-senja", m); err != nil {
 			refused = err
 			break
 		}
@@ -137,7 +137,7 @@ func TestCloudPackagePlan(t *testing.T) {
 		e.must(200, "GET", "/api/v1/meta", nil)
 	}
 	e.must(201, "POST", "/api/v1/r/outlet", map[string]any{"outlet_name": "Kopi Senja · Bogor"})
-	if err := plan.CheckNewPerson(ctx, e.s.DB, "f@kopisenja.id"); err != nil {
+	if err := plan.CheckNewPerson(ctx, e.s.DB, "kopi-senja", "f@kopisenja.id"); err != nil {
 		t.Fatalf("a person on cloud_pro: %v", err)
 	}
 

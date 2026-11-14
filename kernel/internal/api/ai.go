@@ -170,8 +170,10 @@ type aiSidecarBody struct {
 		URL   string `json:"url"`
 		Token string `json:"token"`
 	} `json:"mcp"`
-	Org  string `json:"org"`
-	User struct {
+	Org string `json:"org"`
+	// Sandbox: the person is in the ruang coba (contract 0052 §3): demo data, no change sets
+	Sandbox bool `json:"sandbox,omitempty"`
+	User    struct {
 		ID    string   `json:"id"`
 		Name  string   `json:"name"`
 		Roles []string `json:"roles"`
@@ -264,6 +266,7 @@ func (s *Server) aiChat(w http.ResponseWriter, r *http.Request, c *caller) {
 	s.verified.note(keyOf("b:" + token)) // the sidecar's MCP calls share the tenant's bucket from the first (0040 §9)
 	out := aiSidecarBody{Message: body.Message, History: trimHistory(body.History), Context: body.Context, Org: u.Org}
 	out.MCP.URL, out.MCP.Token = strings.TrimRight(s.AI.CallbackURL, "/")+"/mcp", token
+	out.Sandbox, _ = store.IsSandbox(r.Context(), s.DB, u.Org)
 	out.User.ID, out.User.Name, out.User.Roles = u.Email, u.FullName, u.Roles
 	if out.User.Name == "" {
 		out.User.Name = u.Email

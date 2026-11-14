@@ -184,6 +184,19 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/plan` | The tenant's plan, every plan of `features.rk`, usage against the limits (`ok`, `near` from 80%, `full`, `over`), notices and what is read-only after a downgrade ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)) |
 | GET | `/catalogue` | Every module, app and connector this kernel can install, with its state for the site; for people who may propose change sets. Read only for now ([contract 0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md)) |
 
+### Ruang coba (sandbox org)
+
+One sandbox org per site, `<org>-coba` (code `COBA`), with demo data. It shares the site's metadata. Connector actions there are `simulated` (audited as `connector.simulated`, nothing sent). Webhooks and polls never reach it. Change sets proposed, approved, applied or reverted from it get `409 sandbox_readonly_meta`. It is not counted in plan limits or whole-database backups. A cookie `rk_org` never signs anyone in to it, and it is deleted after 30 days without a request. `/auth/me` marks it with `sandbox: true`.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/sandbox` | The real org's sandbox: `{org, created_at, last_used_at, expires_at}`, or `{}` when there is none |
+| POST | `/sandbox` | `{fixtures: {model: [rows]}}` (the `rangka seed` format) → `201 {org, seeded, generated_skipped}`. It creates the sandbox, makes the caller its owner, and seeds the fixtures plus 8 generated rows per company model (`x_*`). Owner of the real org only (`403 owner_required`). One per site (`409 sandbox_exists`) |
+| POST | `/sandbox/reset` | `{fixtures?}`: deletes every row (members and sessions stay) and seeds again, with what `create` used when `fixtures` is left out |
+| DELETE | `/sandbox` | Deletes the sandbox org and every row of it, append-only ledgers included → `204` |
+
+From inside the sandbox these routes answer `409 sandbox_inside`. CLI: `rangka sandbox create|reset|delete --org <id> --fixtures <dir> --email <owner>`. See [contract 0052](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0052-sandbox-org-and-demo-packs.md).
+
 ### Connector secrets
 
 Write-only ([contract 0017](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0017-connector-secrets.md)): no

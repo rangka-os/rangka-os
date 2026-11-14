@@ -83,8 +83,10 @@ When the registry has the member record model (`user` with `account_id`, §5):
   revocations as 0043 §2, same record sync as §2 here.
 - A new member gets a one-time sign-in link shown once to the owner (copy or share by WhatsApp), valid 72 hours, that
   lets the person set a password. No e-mail sending is required.
-- **Hosted kernels refuse these routes** (`403 team_managed_by_host`) when the organisation has an `auth.upstream`
-  that pushes members (0043). The page then shows the list read-only with "Atur tim di Rangka Cloud".
+- A sign-in link only sets the first password of an account this organisation alone holds: it is refused
+  (`link_invalid`) once the account has a password, an identity link, or a membership in another organisation.
+- **Hosted kernels refuse these routes** (`403 team_managed_by_host`) when `auth.team` is `host` (§5). The page then
+  shows the list read-only with "Atur tim di Rangka Cloud".
 
 ### 5. Details settled (author's calls, open to correction)
 - **The kernel names `user`.** No new `.rk` key: when the registry has a model `user` with a field `account_id`, that
@@ -111,8 +113,10 @@ When the registry has the member record model (`user` with `account_id`, §5):
   at provisioning. With `host`, `/api/v1/team` writes answer `403 team_managed_by_host`; with `kernel`, they work even
   when an `auth.upstream` is configured (a self-hoster with their own Google or Keycloak still manages the team here).
 - **Self-hosted invites.** A new member starts `access: pending` and becomes `active` on first sign-in (§2). If the e-mail
-  already belongs to an account, the same refusals as 0043 §2 apply (`owner_protected`, `account_elsewhere`); an
-  account that is a member nowhere is linked and gets no sign-in link (it already has a way in).
+  already belongs to an account, the same refusals as 0043 §2 apply (`owner_protected`, `account_elsewhere`). An
+  account that is a member nowhere gets a new sign-in link when it has no password, no identity link and has never
+  signed in; otherwise it is linked without one (it already has a way in). Inviting a pending member again replaces
+  their link.
 
 ### 6. Not in this contract
 - PIN and paired devices: 0048 §5 (it relies on the real outlets from §2).

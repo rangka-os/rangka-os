@@ -253,7 +253,7 @@ func TestTeamHostModeRefusesWrites(t *testing.T) {
 }
 
 // An e-mail another organisation holds is refused (account_elsewhere, owner_protected); an account that is a member
-// nowhere is linked without a sign-in link.
+// nowhere and has a password is linked without a sign-in link.
 func TestTeamAccountElsewhere(t *testing.T) {
 	e := teamEnv(t)
 	ctx, db := context.Background(), e.s.DB
@@ -265,7 +265,11 @@ func TestTeamAccountElsewhere(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	if _, err := db.Query(ctx, "insert into rk_users (email, full_name) values ('orphan@example.test', 'Yatim')"); err != nil {
+	hash, err := auth.HashPassword("yatim-pass-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query(ctx, "insert into rk_users (email, full_name, password_hash) values ('orphan@example.test', 'Yatim', $1)", hash); err != nil {
 		t.Fatal(err)
 	}
 	for email, code := range map[string]string{"staff@beta.test": "account_elsewhere", "boss@beta.test": "owner_protected"} {
@@ -280,5 +284,81 @@ func TestTeamAccountElsewhere(t *testing.T) {
 	r := e.must(201, "POST", "/api/v1/team", map[string]any{"email": "orphan@example.test", "role": "sales_rep"})
 	if _, ok := r.JSON["signin_link"]; ok || countRows(e, "select 1 from rk_signin_links") != 0 {
 		t.Fatalf("an existing account got a sign-in link: %s", r.Body)
+	}
+}
+
+// A link only sets the first password of an account this organisation alone holds: once the account is in another
+// organisation, has a password or has an identity link, the link is link_invalid and changes nothing.
+func TestTeamLinkRefusedForAccountElsewhere(t *testing.T) {
+	e := teamEnv(t)
+	ctx, db := context.Background(), e.s.DB
+	tok := linkToken(t, invite(e, "sari@example.com", "sales_rep"))
+	if err := auth.EnsureOrgCode(ctx, db, "pt_beta", "PT Beta", "BETA"); err != nil {
+		t.Fatal(err)
+	}
+	// rangka user add into pt_beta of the existing passwordless account
+	if _, err := db.Query(ctx, "insert into rk_members (org_id, user_id, role) select 'pt_beta', id, 'owner' from rk_users where email = 'sari@example.com'"); err != nil {
+		t.Fatal(err)
+	}
+	if r := browser(e).do("POST", "/auth/link", map[string]any{"token": tok, "password": "kopi-pagi-123"}); r.Status != 400 || errCode(r) != "link_invalid" {
+		t.Fatalf("account elsewhere: %d %s", r.Status, r.Body)
+	}
+	if dbOne(e, "select password_hash from rk_users where email = 'sari@example.com'") != nil {
+		t.Fatal("a link set the password of an account another organisation holds")
+	}
+
+	// a password set some other way (rangka user --reset-password) ends the link
+	tok = linkToken(t, invite(e, "budi@example.com", "sales_rep"))
+	hash, err := auth.HashPassword("milik-budi-123")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query(ctx, "update rk_users set password_hash = $1 where email = 'budi@example.com'", hash); err != nil {
+		t.Fatal(err)
+	}
+	if r := browser(e).do("POST", "/auth/link", map[string]any{"token": tok, "password": "kopi-pagi-123"}); r.Status != 400 || errCode(r) != "link_invalid" {
+		t.Fatalf("account with a password: %d %s", r.Status, r.Body)
+	}
+	if dbOne(e, "select password_hash from rk_users where email = 'budi@example.com'") != hash {
+		t.Fatal("a link overwrote a password")
+	}
+
+	// an identity link (upstream sign-in) ends it too
+	tok = linkToken(t, invite(e, "citra@example.com", "sales_rep"))
+	id := dbOne(e, "select id from rk_users where email = 'citra@example.com'").(int64)
+	if err := auth.LinkIdentity(ctx, db, "https://id.example", "sub-citra", id); err != nil {
+		t.Fatal(err)
+	}
+	if r := browser(e).do("POST", "/auth/link", map[string]any{"token": tok, "password": "kopi-pagi-123"}); r.Status != 400 || errCode(r) != "link_invalid" {
+		t.Fatalf("account with an identity: %d %s", r.Status, r.Body)
+	}
+}
+
+// Inviting again a person with no way in (removed before using the link, or still pending) gives a new link and
+// ends the old one.
+func TestTeamReinviteReplacesLink(t *testing.T) {
+	e := teamEnv(t)
+	r := invite(e, "sari@example.com", "sales_rep")
+	old, id := linkToken(t, r), int64(r.JSON["user_id"].(float64))
+	e.must(204, "DELETE", fmt.Sprintf("/api/v1/team/%d", id), nil)
+	again := linkToken(t, invite(e, "sari@example.com", "sales_rep"))
+	if again == old {
+		t.Fatal("same link")
+	}
+	if r := browser(e).do("POST", "/auth/link", map[string]any{"token": old, "password": "kopi-pagi-123"}); r.Status != 400 || errCode(r) != "link_invalid" {
+		t.Fatalf("old link after re-invite: %d %s", r.Status, r.Body)
+	}
+	// still pending: inviting again replaces the link
+	third := linkToken(t, invite(e, "sari@example.com", "sales_rep"))
+	if countRows(e, "select 1 from rk_signin_links where user_id = $1 and used_at is null", id) != 1 {
+		t.Fatal("more than one live link")
+	}
+	if r := browser(e).do("POST", "/auth/link", map[string]any{"token": again, "password": "kopi-pagi-123"}); r.Status != 400 || errCode(r) != "link_invalid" {
+		t.Fatalf("replaced link: %d %s", r.Status, r.Body)
+	}
+	browser(e).must(200, "POST", "/auth/link", map[string]any{"token": third, "password": "kopi-pagi-123"})
+	// signed in now: inviting again gives no link
+	if r := invite(e, "sari@example.com", "sales_rep"); r.JSON["signin_link"] != nil {
+		t.Fatalf("link for an account with a way in: %s", r.Body)
 	}
 }

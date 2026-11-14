@@ -23,7 +23,8 @@ const SessionLink = "link"
 const MinPasswordLength = 8
 
 var (
-	// ErrLinkInvalid covers an unknown, used or expired link, and the link of a person no longer a member there.
+	// ErrLinkInvalid covers an unknown, used or expired link, the link of a person no longer a member there, and
+	// the link of an account that has a password, an identity link or a membership in another organisation.
 	ErrLinkInvalid = errors.New("Tautan masuk ini tidak berlaku. Minta tautan baru ke pemilik usaha.")
 	// ErrWeakPassword is a password shorter than MinPasswordLength.
 	ErrWeakPassword = errors.New("Kata sandi minimal 8 karakter.")
@@ -41,6 +42,12 @@ func (s *Service) CreateSigninLink(ctx context.Context, q pg.Querier, userID int
 // DropSigninLinks ends the unused links of userID in org (the person was removed there).
 func DropSigninLinks(ctx context.Context, q pg.Querier, userID int64, org string) error {
 	_, err := q.Query(ctx, "delete from rk_signin_links where user_id = $1 and org_id = $2 and used_at is null", userID, org)
+	return err
+}
+
+// dropUnusedLinks ends every unused link of userID, in every organisation (the account has a way in).
+func dropUnusedLinks(ctx context.Context, q pg.Querier, userID int64) error {
+	_, err := q.Query(ctx, "delete from rk_signin_links where user_id = $1 and used_at is null", userID)
 	return err
 }
 
@@ -66,7 +73,24 @@ func (s *Service) UseSigninLink(ctx context.Context, token, password string) (st
 	if len(res.Rows) == 0 {
 		return "", nil, ErrLinkInvalid
 	}
-	u, err := LoadUser(ctx, tx, res.Rows[0][0].(int64), res.Rows[0][1].(string))
+	uid, org := res.Rows[0][0].(int64), res.Rows[0][1].(string)
+	// the link sets only the first password of an account this organisation alone holds: an account that has a
+	// password or an identity link already has a way in, and one another organisation holds is not this owner's
+	// to open (the owner who saw the token would reach that organisation)
+	if res, err = tx.Query(ctx, "select password_hash is null from rk_users where id = $1 for update", uid); err != nil {
+		return "", nil, err
+	}
+	if len(res.Rows) == 0 || !res.Rows[0][0].(bool) {
+		return "", nil, ErrLinkInvalid
+	}
+	if res, err = tx.Query(ctx, `select 1 from rk_members where user_id = $1 and org_id <> $2
+		union all select 1 from rk_identities where user_id = $1 limit 1`, uid, org); err != nil {
+		return "", nil, err
+	}
+	if len(res.Rows) > 0 {
+		return "", nil, ErrLinkInvalid
+	}
+	u, err := LoadUser(ctx, tx, uid, org)
 	if errors.Is(err, ErrNoMembership) {
 		return "", nil, ErrLinkInvalid
 	}
@@ -87,6 +111,9 @@ func (s *Service) UseSigninLink(ctx context.Context, token, password string) (st
 		return "", nil, err
 	}
 	if _, err := tx.Query(ctx, "update rk_signin_links set used_at = $2 where token_hash = $1", h, s.now()); err != nil {
+		return "", nil, err
+	}
+	if err := dropUnusedLinks(ctx, tx, u.ID); err != nil { // the account has a way in now: its other links end
 		return "", nil, err
 	}
 	if err := store.Audit(ctx, tx, u.Org, u.Email, "auth.link_used", "user/"+u.Email, "password set with a sign-in link", nil); err != nil {

@@ -68,8 +68,9 @@ func (s *Server) getTeam(w http.ResponseWriter, r *http.Request, c *caller) {
 }
 
 // postTeam is POST /api/v1/team: adds a person (or changes the member with that e-mail). A new account gets no
-// password and a sign-in link, shown only in this answer; an existing account (a member nowhere else) is linked
-// without one.
+// password and a sign-in link, shown only in this answer; so does an existing account with no way in yet (no
+// password, no identity link, never signed in), and its earlier link ends. Any other existing account (a member
+// nowhere else) is linked without one.
 func (s *Server) postTeam(w http.ResponseWriter, r *http.Request, c *caller) {
 	if !s.teamGuard(w, c, true) {
 		return
@@ -101,11 +102,25 @@ func (s *Server) postTeam(w http.ResponseWriter, r *http.Request, c *caller) {
 	var link string
 	err := s.memberTx(ctx, func(tx *pg.Tx) error {
 		id, created, err := s.writeMember(ctx, tx, org, in)
-		if err != nil || !created {
-			userID = id
+		userID = id
+		if err != nil {
 			return err
 		}
-		userID = id
+		if !created {
+			// an account with no way in yet (removed before using its link, or pending with a lost link) gets a
+			// new link; writeMember already refused one another organisation holds
+			res, err := tx.Query(ctx, `select u.password_hash is null and u.signed_in_at is null
+				and not exists (select 1 from rk_identities i where i.user_id = u.id) from rk_users u where u.id = $1`, id)
+			if err != nil {
+				return err
+			}
+			if len(res.Rows) == 0 || !res.Rows[0][0].(bool) {
+				return nil
+			}
+		}
+		if err := auth.DropSigninLinks(ctx, tx, id, org); err != nil { // one live link per person
+			return err
+		}
 		link, err = s.Auth.CreateSigninLink(ctx, tx, id, org, c.p.User.Email)
 		return err
 	})

@@ -138,6 +138,10 @@ func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, m
 		HashToken(tok), u.ID, u.Org, s.now().Add(ttl), method); err != nil {
 		return "", err
 	}
+	// a session is a way in: the account's unused sign-in links end (contract 0055 §4)
+	if err := dropUnusedLinks(ctx, s.DB, u.ID); err != nil {
+		return "", err
+	}
 	// the first sign-in of the account (contract 0055 §2): pending → active on its member records
 	res, err := s.DB.Query(ctx, "update rk_users set signed_in_at = $2 where id = $1 and signed_in_at is null returning id", u.ID, s.now())
 	if err != nil {

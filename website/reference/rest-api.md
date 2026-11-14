@@ -59,6 +59,7 @@ Spreadsheet imports declared in `imports/<name>.rk` (contract 0012). `GET /meta`
 | POST | `/imports/{import}` | Multipart `file` (CSV or XLSX), form `outlet` when the import is per outlet. Checks every row in a dry run → `{id, import, rows, preview, errors, skipped, duplicate}`. 413 `too_large` over 20 MB |
 | POST | `/imports/{import}/{id}/commit` | Creates every record in one transaction. People only. 422 `import_errors` / `import_empty`, 409 `already_imported` |
 | GET | `/imports/{import}` · `/imports/{import}/{id}` | The 50 most recent entries as `{data, total}`; one entry |
+| GET | `/imports/{import}/template?format=csv\|xlsx` | A file to fill in: the columns, one example row and (XLSX) a `Petunjuk` sheet. Default format: the import's `source` |
 
 ## List aggregates
 
@@ -101,7 +102,7 @@ Model `permissions:` are enforced on every route below, for people, API tokens a
 | `GET /r/{model}/{name}/print` | `print` |
 | `GET` attachments of a record | `read` |
 | `POST` attachments of a record, `DELETE /attachments/{id}` | `write` |
-| `/imports/{import}` (upload, commit, read) | `import` on its model; each created record also needs `create` |
+| `/imports/{import}` (upload, commit, read, template) | `import` on its model; each created record also needs `create` |
 
 Child models use their parent's permissions. A flow that a person starts runs as that person, so each step is
 checked with their roles. A dashboard widget over a model the caller cannot read returns the 403 body in place of

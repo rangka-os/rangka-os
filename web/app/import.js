@@ -7,6 +7,7 @@
  *      (Baris, Kolom, Pesan; Impor stays disabled while there are errors), skipped rows, and for a duplicate the server's
  *      message with no Impor button. Impor = POST …/<id>/commit; disabled while the request is in flight.
  *   3. "N data dibuat" (records.length from the server's answer), a note that they are drafts, and a link to the list.
+ * Step 1 also offers "Unduh template" (Excel, with a Petunjuk sheet) and "Template CSV": GET …/template (0012 §7).
  * Nothing is decided here: counts, errors and names all come from the server's answers.
  *
  * Pure helpers (unit-tested in test/import.test.js): importLabel, importList, accept, importError, previewColumns,
@@ -216,6 +217,25 @@
       });
     }
 
+    function template(format) {
+      if (!begin("template:" + format)) return;
+      ctx.api.importTemplate(name, format).then(function (r) {
+        end();
+        var href = global.URL.createObjectURL(r.blob);
+        var a = global.document.createElement("a");
+        a.href = href;
+        a.download = r.filename;
+        global.document.body.appendChild(a);
+        a.click();
+        global.document.body.removeChild(a);
+        setTimeout(function () { global.URL.revokeObjectURL(href); }, 1000);
+      }, function (e) {
+        end();
+        if (e && e.status === 401) return;
+        setMsg({ title: e && e.status === 403 ? importError(e) : "Template gagal diunduh. Coba lagi." });
+      });
+    }
+
     function again() {
       if (busyRef.current) return;
       setEntry(null); setDone(false); setFile(null); setMsg(null);
@@ -241,6 +261,11 @@
             disabled: !!busy, onChange: function (e) { pick(e.target.files); } }),
           h(R.Button, { icon: "add", disabled: !!busy, onClick: function () { if (input.current) input.current.click(); } }, "Pilih file"),
           h("span", { className: "ap-muted" }, file ? file.name : "Format " + accept(def).replace(/\./g, "").toUpperCase().split(",").join(" atau ") + ", maksimal 20 MB.")),
+        h("div", { className: "ap-imp-tpl" },
+          h("span", { className: "ap-muted" }, "Belum punya file? Mulai dari template: judul kolom, satu baris contoh dan petunjuk."),
+          h("div", { className: "ap-imp-tpl-acts" },
+            h(R.Button, { icon: "download", disabled: !!busy, loading: busy === "template:xlsx", onClick: function () { template("xlsx"); } }, "Unduh template"),
+            h(R.Button, { variant: "quiet", disabled: !!busy, loading: busy === "template:csv", onClick: function () { template("csv"); } }, "Template CSV"))),
         h("div", { className: "ap-imp-acts" },
           h(R.Button, { variant: "primary", disabled: !file || !!busy || (perOutlet && !outlet), loading: busy === "upload", onClick: upload }, "Periksa file")));
     } else if (step === 1) {

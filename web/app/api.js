@@ -404,6 +404,14 @@
       return json("POST", "/api/v1/imports/" + enc(name), fd);
     };
     api.importCommit = function (name, id) { return json("POST", "/api/v1/imports/" + enc(name) + "/" + enc(id) + "/commit", {}); };
+    /** The import's template (contract 0012 §7): GET …/template?format=xlsx|csv → {blob, filename}. */
+    api.importTemplate = function (name, format) {
+      return raw("GET", "/api/v1/imports/" + enc(name) + "/template" + qs([["format", format]])).then(function (res) {
+        if (res.status < 200 || res.status >= 300) return failure(res).then(function (e) { throw e; });
+        var m = /filename="([^"]+)"/.exec(res.headers.get("Content-Disposition") || "");
+        return res.blob().then(function (b) { return { blob: b, filename: m ? m[1] : "template-" + name + "." + (format || "csv") }; });
+      });
+    };
     api.importList = function (name) { return json("GET", "/api/v1/imports/" + enc(name)); };
     api.importGet = function (name, id) { return json("GET", "/api/v1/imports/" + enc(name) + "/" + enc(id)); };
 

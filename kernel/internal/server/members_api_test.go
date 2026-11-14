@@ -594,6 +594,14 @@ func TestFirstSignInActivates(t *testing.T) {
 	if name, access := memberRecordOf(e, "ceo@saga.co.id"); name != "USR-001" || access != "pending" {
 		t.Fatalf("seeded owner: %q %q", name, access)
 	}
+	// a system session (contract 0055 last activity §2) is Cloud acting on its own, not the person signing in
+	e.must(200, "POST", "/auth/login", map[string]any{"email": "ceo@saga.co.id", "password": "rangka-demo", "system": true})
+	if dbOne(e, "select signed_in_at is null from rk_users where email = 'ceo@saga.co.id'") != true {
+		t.Fatal("system session set signed_in_at")
+	}
+	if _, access := memberRecordOf(e, "ceo@saga.co.id"); access != "pending" {
+		t.Fatalf("after system sign-in: %q", access)
+	}
 	e.login()
 	if dbOne(e, "select signed_in_at is not null from rk_users where email = 'ceo@saga.co.id'") != true {
 		t.Fatal("signed_in_at not set")

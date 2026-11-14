@@ -66,6 +66,8 @@ type Principal struct {
 	// Chat marks the token the chat relay minted for one chat (MintAssistantToken, contract 0020 §2): the kernel
 	// admitted that chat and counted its credit. An API token with the assistant scope is Via "ai" too, but not Chat.
 	Chat bool
+	// System marks a system session (contract 0055 §2): nothing it does counts as the member's activity.
+	System bool
 }
 
 // Kind names the principal for a client that must know what it was given (MCP _meta "rangka/principal"): chat
@@ -97,6 +99,12 @@ func (s *Service) now() time.Time {
 
 // Login checks credentials and opens a session; it returns the cookie value.
 func (s *Service) Login(ctx context.Context, email, password, org string) (string, *User, error) {
+	return s.LoginAs(ctx, email, password, org, false)
+}
+
+// LoginAs is Login that may open a system session (contract 0055 §2): the same session, except that nothing it does
+// counts as activity. Signing in with a person's session counts as their activity.
+func (s *Service) LoginAs(ctx context.Context, email, password, org string, system bool) (string, *User, error) {
 	id, err := Authenticate(ctx, s.DB, email, password)
 	if err != nil {
 		store.Audit(ctx, s.DB, org, strings.ToLower(email), "auth.login_failed", "user/"+strings.ToLower(email), "wrong email or password", nil)
@@ -116,11 +124,15 @@ func (s *Service) Login(ctx context.Context, email, password, org string) (strin
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	tok, err := s.openSession(ctx, u, ttl, SessionPassword)
+	tok, err := s.openSession(ctx, u, ttl, SessionPassword, system)
 	if err != nil {
 		return "", nil, err
 	}
-	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.login", "user/"+u.Email, "signed in", nil)
+	var data map[string]any
+	if system {
+		data = map[string]any{"system": true}
+	}
+	store.Audit(ctx, s.DB, u.Org, u.Email, "auth.login", "user/"+u.Email, "signed in", data)
 	return tok, u, nil
 }
 
@@ -132,12 +144,19 @@ const (
 
 // openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
 // auth.session_ttl; upstream sessions UpstreamSessionTTL. method is SessionPassword, SessionUpstream or SessionLink.
-func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string) (string, error) {
+// A session that is not a system one counts as the member's activity (contract 0055 §1) and as the person signing in
+// (contract 0055 §2, §4). A system session (contract 0055 §2) is Cloud acting on its own: it is not the person signing
+// in, so it neither ends their sign-in links nor marks them signed in.
+func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string, system bool) (string, error) {
 	tok := RandomToken("", 32)
-	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at, method) values ($1, $2, $3, $4, $5)",
-		HashToken(tok), u.ID, u.Org, s.now().Add(ttl), method); err != nil {
+	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at, method, system) values ($1, $2, $3, $4, $5, $6)",
+		HashToken(tok), u.ID, u.Org, s.now().Add(ttl), method, system); err != nil {
 		return "", err
 	}
+	if system {
+		return tok, nil
+	}
+	s.touch(ctx, u.ID, u.Org)
 	// a session is a way in: the account's unused sign-in links end (contract 0055 §4)
 	if err := dropUnusedLinks(ctx, s.DB, u.ID); err != nil {
 		return "", err
@@ -151,6 +170,20 @@ func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, m
 		s.OnFirstSignIn(ctx, u.ID)
 	}
 	return tok, nil
+}
+
+// activityEvery is how stale rk_members.last_active_at must be before a request writes it again (contract 0055 §1).
+const activityEvery = 5 * time.Minute
+
+// touch records that the member used the organisation now (contract 0055 §1). It writes only when the stored value
+// is older than activityEvery, and a failure never fails the request.
+func (s *Service) touch(ctx context.Context, userID int64, org string) {
+	if userID == 0 || org == "" {
+		return
+	}
+	now := s.now()
+	s.DB.Query(ctx, `update rk_members set last_active_at = $3 where org_id = $1 and user_id = $2
+		and (last_active_at is null or last_active_at < $4)`, org, userID, now, now.Add(-activityEvery))
 }
 
 // SwitchOrg moves a live session to another organisation the user belongs to. A session opened with a password
@@ -258,8 +291,17 @@ func (p *Principal) HasScope(scope string) bool {
 var ErrUnauthenticated = errors.New("sign in first (session cookie or Authorization: Bearer token)")
 
 // Resolve authenticates a request from the session cookie or a bearer token (API token or OIDC access
-// token). It returns nil, nil for anonymous requests.
+// token). It returns nil, nil for anonymous requests. A real principal that is not a system session counts as the
+// member's activity (contract 0055 §1).
 func (s *Service) Resolve(r *http.Request) (*Principal, error) {
+	p, err := s.resolve(r)
+	if err == nil && p != nil && !p.System && p.Via != "dev" && p.User != nil {
+		s.touch(r.Context(), p.User.ID, p.User.Org)
+	}
+	return p, err
+}
+
+func (s *Service) resolve(r *http.Request) (*Principal, error) {
 	ctx := r.Context()
 	if h := r.Header.Get("Authorization"); strings.HasPrefix(h, "Bearer ") {
 		tok := strings.TrimSpace(strings.TrimPrefix(h, "Bearer "))
@@ -309,7 +351,7 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 		return &Principal{User: u, Via: "oidc", Scope: scope}, nil
 	}
 	if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {
-		res, err := s.DB.Query(ctx, "select user_id, org_id from rk_sessions where id = $1 and expires_at > $2", HashToken(c.Value), s.now())
+		res, err := s.DB.Query(ctx, "select user_id, org_id, system from rk_sessions where id = $1 and expires_at > $2", HashToken(c.Value), s.now())
 		if err != nil {
 			return nil, err
 		}
@@ -324,7 +366,8 @@ func (s *Service) Resolve(r *http.Request) (*Principal, error) {
 			if err != nil {
 				return nil, err
 			}
-			return &Principal{User: u, Via: "session"}, nil
+			system, _ := res.Rows[0][2].(bool)
+			return &Principal{User: u, Via: "session", System: system}, nil
 		}
 	}
 	if s.DevOpen {

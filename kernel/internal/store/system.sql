@@ -33,6 +33,8 @@ create table if not exists rk_members (
 alter table rk_orgs add column if not exists code text not null default '';
 alter table rk_members add column if not exists outlets text[] not null default '{}';
 alter table rk_users add column if not exists signed_in_at timestamptz;   -- first sign-in (contract 0055 §2: pending until set)
+-- when the member last used the organisation (contract 0055 §1), written at most every 5 minutes
+alter table rk_members add column if not exists last_active_at timestamptz;
 create table if not exists rk_identities (
   issuer     text not null,                -- upstream OIDC issuer URL
   subject    text not null,                -- the issuer's stable user id (sub)
@@ -59,6 +61,8 @@ create table if not exists rk_sessions (
 );
 -- how the session was opened: password or upstream (contract 0042 §6 applies auth.password when it switches org)
 alter table rk_sessions add column if not exists method text not null default 'password';
+-- a system session (contract 0055 §2): works like any session, but nothing it does counts as activity
+alter table rk_sessions add column if not exists system boolean not null default false;
 create table if not exists rk_tokens (
   id           bigserial primary key,
   user_id      bigint not null references rk_users(id) on delete cascade,
@@ -75,7 +79,7 @@ alter table rk_tokens add column if not exists scopes text[] not null default '{
 -- it only fills nulls, and openSession sets the column from then on.
 update rk_users u set signed_in_at = f.first
   from (select user_id, min(at) as first from (
-          select user_id, created_at as at from rk_sessions
+          select user_id, created_at as at from rk_sessions where not system
           union all select user_id, created_at from rk_tokens) a group by user_id) f
   where u.id = f.user_id and u.signed_in_at is null;
 -- sign-in links of Pengaturan → Tim (contract 0055 §4): shown once to the owner, 72 hours, one use; the person sets a

@@ -126,7 +126,7 @@ func (s *Service) UseSigninLink(ctx context.Context, token, password string) (st
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	tok, err := s.openSession(ctx, u, ttl, SessionLink)
+	tok, err := s.openSession(ctx, u, ttl, SessionLink, false)
 	if err != nil {
 		return "", nil, err
 	}

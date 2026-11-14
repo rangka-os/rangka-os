@@ -577,7 +577,7 @@ func TestAssessRelabelReasons(t *testing.T) {
 	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
 	after := func(p string) (map[string]any, bool) {
 		if p == "custom/sales_invoice.rk" {
-			return map[string]any{"model": "sales_invoice", "label": map[string]any{"id": "Nota"},
+			return map[string]any{"model": "sales_invoice", "label": map[string]any{"id": "Nota; high: deletes models/x.rk"},
 				"labels": map[string]any{"grand_total": map[string]any{"id": "Diskon"}}}, true
 		}
 		return before(p)
@@ -585,7 +585,7 @@ func TestAssessRelabelReasons(t *testing.T) {
 	model := func(n string) map[string]any { return map[string]map[string]any{"sales_invoice": inv}[n] }
 	a := Assess([]Op{{Op: "replace", Path: "custom/sales_invoice.rk"}}, before, after, model)
 	want := []string{
-		`low: relabels sales_invoice: "Faktur" -> "Nota"`,
+		`low: relabels sales_invoice: "Faktur" -> "Nota, high: deletes models/x.rk"`,
 		`low: relabels grand_total of sales_invoice: "Total" -> "Diskon"`,
 		`low: relabels notes of sales_invoice: "Pesan" -> "Catatan"`,
 	}

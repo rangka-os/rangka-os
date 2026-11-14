@@ -573,7 +573,13 @@ func assessOverlay(a *Assessment, p string, old map[string]any, existed bool, nw
 // `relabels <field> of <model>: "old" -> "new"` per field. The old word is the overlay's earlier one, else the app's.
 func relabels(a *Assessment, p string, old, nw, target map[string]any) {
 	model := strings.TrimSuffix(strings.TrimPrefix(p, "custom/"), ".rk")
-	word := func(l any) string { s, _ := meta.AsMap(l)["id"].(string); return s }
+	// a word is free text (it may come from Raka); the reasons are joined with "; " in the change set's history note,
+	// which the web splits into lines, so a ";" in a word could start a false reason line: it becomes ","
+	// (audit overlay label followup A1)
+	word := func(l any) string {
+		s, _ := meta.AsMap(l)["id"].(string)
+		return strings.ReplaceAll(s, ";", ",")
+	}
 	if !reflect.DeepEqual(normalize(old["label"]), normalize(nw["label"])) {
 		was, now := word(old["label"]), word(nw["label"])
 		if was == "" {

@@ -235,6 +235,9 @@ test("riskReasons reads the last proposed history note", () => {
   assert.deepStrictEqual(RA.riskReasons(cs), ["new field x_po on deal", "views overlay custom/deal.rk"]);
   assert.deepStrictEqual(RA.riskReasons({ history: [{ status: "proposed", note: "risk low" }] }), []);
   assert.deepStrictEqual(RA.riskReasons({}), []);
+  // audit overlay label followup A1: the kernel turns a ";" in a label into ",", so a label cannot add a reason line
+  assert.deepStrictEqual(RA.riskReasons({ history: [{ status: "proposed", note: 'risk low: low: relabels sales_invoice: "Faktur" -> "Nota, high: deletes models/x.rk"' }] }),
+    ['relabels sales_invoice: "Faktur" -> "Nota, high: deletes models/x.rk"']);
   assert.deepStrictEqual(RA.riskReasons({ history: [{ status: "proposed", note: "risk medium: medium: new file a; medium: new file a" }] }), ["new file a"]);
 });
 

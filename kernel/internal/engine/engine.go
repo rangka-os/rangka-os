@@ -176,10 +176,13 @@ func badRequest(msg string) error { return &StatusError{400, "bad_request", msg}
 
 // op is one unit of work: a transaction plus the actor and the models it touched.
 type op struct {
-	ctx     context.Context
-	tx      *pg.Tx
-	e       *Engine
-	actor   Actor
+	ctx   context.Context
+	tx    *pg.Tx
+	e     *Engine
+	actor Actor
+	// reg is the registry the unit of work started on: every model, flow and rule it reads comes from it, even when a
+	// reload swaps the engine's registry meanwhile (audit 14 Nov, rangka-os#185 N3)
+	reg     *meta.Registry
 	touched map[string]bool
 	links   map[string]map[string]any
 	// approving is set while Approve runs the approved verb: earlier approved requests then satisfy hold.
@@ -307,7 +310,7 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 	if err != nil {
 		return false, err
 	}
-	o := &op{ctx: ctx, tx: tx, e: e, actor: a, touched: map[string]bool{}, links: map[string]map[string]any{}}
+	o := &op{ctx: ctx, tx: tx, e: e, actor: a, reg: e.Reg(), touched: map[string]bool{}, links: map[string]map[string]any{}}
 	defer tx.Rollback(ctx)
 	if err := fn(o); err != nil {
 		if tx.Conflicted() {
@@ -364,7 +367,7 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 		d := toInt(rec["docstatus"])
 		ev.Docstatus = &d
 	}
-	ev.Fields = o.e.eventFields(m, rec)
+	ev.Fields = o.e.eventFieldsIn(o.registry(), m, rec)
 	if err := store.Notify(o.ctx, o.tx, ev); err != nil {
 		return err
 	}

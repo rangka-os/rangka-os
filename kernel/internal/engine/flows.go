@@ -150,7 +150,12 @@ func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, even
 		for k, x := range vars {
 			v[k] = x
 		}
-		return e.flowIn(o, f, event, start, v, key, out)
+		// the flow as the unit of work's registry has it (a reload between the check above and here swaps it)
+		pf := o.registry().Flows[flowName]
+		if pf == nil || !o.registry().IsInstalled(pf.App) {
+			return notFound("flow " + flowName)
+		}
+		return e.flowIn(o, pf, event, start, v, key, out)
 	})
 	if c := flowConnector(e, f); err != nil && c != "" {
 		store.Audit(context.WithoutCancel(ctx), e.DB, a.Org, a.ID, "connector.error", "connector/"+c, "flow "+flowName+": "+err.Error(), nil)
@@ -189,7 +194,7 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	prevInFlow := o.inFlow
 	o.inFlow = true
 	defer func() { o.inFlow = prevInFlow }()
-	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out, reg: e.Reg()}
+	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out, reg: o.registry()}
 	if c := flowConnector(e, f); start == 0 && c != "" && len(event) > 0 {
 		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+c, f.On+" → flow "+f.Name, nil); err != nil {
 			return err
@@ -473,6 +478,9 @@ func (r *flowRun) registry() *meta.Registry {
 	if r.reg != nil {
 		return r.reg
 	}
+	if r.o != nil {
+		return r.o.registry()
+	}
 	return r.e.Reg()
 }
 
@@ -549,13 +557,13 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if all {
 				mn = str(st["find_all"])
 			}
-			m, err := e.model(mn)
+			m, err := r.o.model(mn)
 			if err != nil {
 				return err
 			}
-			readable := e.decide(a, e.permModel(m.Name), "read")
+			readable := e.decide(a, e.permModelIn(r.registry(), m.Name), "read")
 			if !readable.maybe() {
-				return e.Deny(e.permModel(m.Name).Name, "read")
+				return e.denyIn(r.registry(), e.permModelIn(r.registry(), m.Name).Name, "read")
 			}
 			// contract 0025: a flow that reads a model holds that model's lock (per org) until its unit of work ends, so
 			// two flows that check the same model and then write ("is this retainer month billed yet?") run one after
@@ -967,7 +975,7 @@ func (o *op) recordFlows(m *meta.Model, before, rec store.Record, event string) 
 	if o.inFlow {
 		return false, nil
 	}
-	reg := o.e.Reg()
+	reg := o.registry()
 	want := m.Name + "." + event
 	names := make([]string, 0, len(reg.Flows))
 	for n, f := range reg.Flows {

@@ -471,7 +471,7 @@ func (o *op) decide(id, action string) (*store.Approval, error) {
 		return nil, conflict("not_pending", "Permintaan persetujuan ini sudah diputuskan")
 	}
 	if !CanDecide(a, ap) { // approving is governed by the policy's approvers, not by model permissions
-		return nil, o.e.Deny(ap.Model, "approve")
+		return nil, o.e.denyIn(o.registry(), ap.Model, "approve")
 	}
 	if err := o.planDecide(ap); err != nil { // a person or outlet in read-only mode decides nothing (contract 0028 §4)
 		return nil, err
@@ -483,7 +483,7 @@ func (o *op) decide(id, action string) (*store.Approval, error) {
 		if err := o.guardApproval(ap, action); err != nil {
 			return nil, err
 		}
-	} else if err := o.e.flowScope(o.ctx, o.tx, a, ap, action); err != nil {
+	} else if err := o.e.flowScopeIn(o.registry(), o.ctx, o.tx, a, ap, action); err != nil {
 		return nil, err
 	}
 	return ap, nil
@@ -507,27 +507,32 @@ func (e *Engine) flowRecord(ap *store.Approval) (*meta.Model, string) {
 // nil without a row scope. A request that names no record is hidden from a scoped caller (404); one whose
 // record is outside the scope is Denied(model, action); a record that is gone is not checked.
 func (e *Engine) flowScope(ctx context.Context, q pg.Querier, a Actor, ap *store.Approval, action string) error {
-	if e.RowScope(a) == nil {
+	return e.flowScopeIn(e.Reg(), ctx, q, a, ap, action)
+}
+
+// flowScopeIn is flowScope against reg (a unit of work's pinned registry).
+func (e *Engine) flowScopeIn(reg *meta.Registry, ctx context.Context, q pg.Querier, a Actor, ap *store.Approval, action string) error {
+	if e.rowScopeIn(reg, a) == nil {
 		return nil
 	}
 	m, name := e.flowRecord(ap)
 	if m == nil {
 		return notFound("approval " + ap.ID)
 	}
-	rec, err := store.Get(ctx, q, e.Reg(), a.Org, m, name)
+	rec, err := store.Get(ctx, q, reg, a.Org, m, name)
 	if errors.Is(err, store.ErrNotFound) {
 		return nil
 	}
 	if err != nil {
 		return err
 	}
-	return e.Guard(ctx, a, m.Name, rec, action)
+	return e.guardIn(reg, ctx, a, m.Name, rec, action)
 }
 
 // authorizeRead checks read on a request's record as o's actor: on the stored record, or model-level when the
 // record is gone (Approve then voids the request).
 func (o *op) authorizeRead(model, name string) error {
-	m, err := o.e.model(model)
+	m, err := o.model(model)
 	if err != nil {
 		return err
 	}
@@ -544,10 +549,10 @@ func (o *op) authorizeRead(model, name string) error {
 // guardApproval refuses a request whose record is outside o's actor's row scope: Denied(record model, action).
 // A record that is gone is not checked (Approve then voids the request).
 func (o *op) guardApproval(ap *store.Approval, action string) error {
-	if o.e.RowScope(o.actor) == nil {
+	if o.e.rowScopeIn(o.registry(), o.actor) == nil {
 		return nil
 	}
-	m, err := o.e.model(ap.Model)
+	m, err := o.model(ap.Model)
 	if err != nil {
 		return err
 	}
@@ -558,7 +563,7 @@ func (o *op) guardApproval(ap *store.Approval, action string) error {
 	if err != nil {
 		return err
 	}
-	return o.e.Guard(o.ctx, o.actor, m.Name, rec, action)
+	return o.e.guardIn(o.registry(), o.ctx, o.actor, m.Name, rec, action)
 }
 
 // requesterActor rebuilds the person who asked for the verb from a request.
@@ -593,7 +598,7 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 		}
 		flow := isFlowApproval(ap)
 		if !flow {
-			m, err := e.model(ap.Model)
+			m, err := o.model(ap.Model)
 			if err != nil {
 				return err
 			}
@@ -672,7 +677,7 @@ func (e *Engine) Approve(ctx context.Context, a Actor, id string) (*Decision, er
 // runApproved runs the request's verb as its requester inside o's transaction. ran is false when the verb is
 // held again (a policy that newly matches waits).
 func (o *op) runApproved(ap *store.Approval, d *Decision) (ran bool, err error) {
-	ro := &op{ctx: o.ctx, tx: o.tx, e: o.e, actor: requesterActor(o.actor.Org, ap.Requester), touched: o.touched, links: map[string]map[string]any{},
+	ro := &op{ctx: o.ctx, tx: o.tx, e: o.e, actor: requesterActor(o.actor.Org, ap.Requester), reg: o.registry(), touched: o.touched, links: map[string]map[string]any{},
 		approving: true}
 	// the verb's v0 names count as this attempt's, so a taken one is caught up and run again (engine.run)
 	defer func() { o.counters = append(o.counters, ro.counters...) }()
@@ -722,8 +727,8 @@ func isFlowApproval(ap *store.Approval) bool { return strings.HasPrefix(ap.Verb,
 // actor), with the saved variables and the step's as: set to the decision.
 func (o *op) resumeFlow(ap *store.Approval, d *Decision) error {
 	name := strings.TrimPrefix(ap.Verb, "flow:")
-	f := o.e.Reg().Flows[name]
-	if f == nil || !o.e.Reg().IsInstalled(f.App) {
+	f := o.registry().Flows[name]
+	if f == nil || !o.registry().IsInstalled(f.App) {
 		return notFound("flow " + name)
 	}
 	vars := map[string]any{}

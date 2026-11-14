@@ -126,7 +126,7 @@ func (e *Engine) RunAction(ctx context.Context, a Actor, model, name, action str
 
 func (o *op) runAction(model, name, action string, args map[string]any, opts ActionOpts) (*ActionResult, error) {
 	e, a := o.e, o.actor
-	m, err := e.model(model)
+	m, err := o.model(model)
 	if err != nil {
 		return nil, err
 	}

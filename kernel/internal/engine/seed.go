@@ -94,8 +94,8 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 	}
 	err := e.run(ctx, a, func(o *op) error {
 		st.Created, st.Skipped = map[string]int{}, map[string]int{} // per attempt (contract 0025)
-		for _, mn := range seedOrder(e.Reg(), models) {
-			m := e.Reg().Model(mn)
+		for _, mn := range seedOrder(o.registry(), models) {
+			m := o.registry().Model(mn)
 			if m == nil {
 				st.Skipped[mn] += len(fixtures[mn])
 				continue
@@ -112,7 +112,7 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 						continue
 					}
 				}
-				rec, issues := e.normalize(m, in, nil, false)
+				rec, issues := e.normalizeIn(o.registry(), m, in, nil, false)
 				if len(issues) > 0 {
 					return fmt.Errorf("fixture %s %s: %s", mn, name, issues[0].Message)
 				}
@@ -136,7 +136,7 @@ func (e *Engine) Seed(ctx context.Context, a Actor, fixtures map[string][]map[st
 					rec["amended_from"] = str(in["amended_from"])
 				}
 				rec["created_by"] = a.ID
-				if err := store.Insert(o.ctx, o.tx, e.Reg(), a.Org, m, rec); err != nil {
+				if err := store.Insert(o.ctx, o.tx, o.registry(), a.Org, m, rec); err != nil {
 					return fmt.Errorf("fixture %s %s: %w", mn, name, err)
 				}
 				o.touched[mn] = true

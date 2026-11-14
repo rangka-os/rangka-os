@@ -90,6 +90,11 @@ func (e *Engine) redactResult(a Actor, model string, res *Result) *Result {
 // dropHidden removes from a client's input the fields of m hidden from a (and inside table rows): a person who
 // cannot see a field does not set it either.
 func (e *Engine) dropHidden(a Actor, m *meta.Model, input map[string]any) map[string]any {
+	return e.dropHiddenIn(e.Reg(), a, m, input)
+}
+
+// dropHiddenIn is dropHidden against reg (a unit of work's pinned registry).
+func (e *Engine) dropHiddenIn(reg *meta.Registry, a Actor, m *meta.Model, input map[string]any) map[string]any {
 	if input == nil || m == nil || unrestricted(a) || len(e.hiddenFields(a, m)) == 0 && !hasTable(m) {
 		return input
 	}
@@ -99,12 +104,12 @@ func (e *Engine) dropHidden(a Actor, m *meta.Model, input map[string]any) map[st
 	}
 	for _, f := range m.Fields {
 		if f.Type == "table" {
-			cm := e.Reg().Model(f.Of)
+			cm := reg.Model(f.Of)
 			if l, ok := out[f.Name].([]any); ok && cm != nil {
 				rows := make([]any, len(l))
 				for i, x := range l {
 					if row, ok := x.(map[string]any); ok {
-						rows[i] = e.dropHidden(a, cm, row)
+						rows[i] = e.dropHiddenIn(reg, a, cm, row)
 					} else {
 						rows[i] = x
 					}
@@ -151,6 +156,11 @@ func (e *Engine) DashboardAllowed(a Actor, d *meta.Dashboard) bool {
 // in the rows of table fields (matched by row name; a new row gets none), so a person who cannot see a field
 // neither sets nor clears it when they save the form (audit 2026-11-07: a child row's hidden cost became 0).
 func (e *Engine) keepHidden(a Actor, m *meta.Model, patch map[string]any, cur store.Record) map[string]any {
+	return e.keepHiddenIn(e.Reg(), a, m, patch, cur)
+}
+
+// keepHiddenIn is keepHidden against reg (a unit of work's pinned registry).
+func (e *Engine) keepHiddenIn(reg *meta.Registry, a Actor, m *meta.Model, patch map[string]any, cur store.Record) map[string]any {
 	if patch == nil || m == nil || unrestricted(a) {
 		return patch
 	}
@@ -160,7 +170,7 @@ func (e *Engine) keepHidden(a Actor, m *meta.Model, patch map[string]any, cur st
 	}
 	for _, f := range m.Fields {
 		if f.Type == "table" {
-			cm := e.Reg().Model(f.Of)
+			cm := reg.Model(f.Of)
 			l, ok := out[f.Name].([]any)
 			if !ok || cm == nil || e.hiddenFields(a, cm) == nil {
 				continue
@@ -176,7 +186,7 @@ func (e *Engine) keepHidden(a Actor, m *meta.Model, patch map[string]any, cur st
 					kept[i] = x
 					continue
 				}
-				nr := e.dropHidden(a, cm, row)
+				nr := e.dropHiddenIn(reg, a, cm, row)
 				if old := stored[str(row["name"])]; old != nil && str(row["name"]) != "" {
 					for _, cf := range cm.Fields {
 						if e.FieldHidden(a, cm, cf) {

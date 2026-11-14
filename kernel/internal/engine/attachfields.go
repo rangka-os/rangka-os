@@ -57,12 +57,12 @@ func (e *Engine) HoldsAttachment(model string, rec store.Record, id string) bool
 func (o *op) checkAttachFields(m *meta.Model, rec, cur store.Record, name string) ([]Issue, error) {
 	held := map[string]bool{}
 	if cur != nil {
-		for _, r := range attachRefs(o.e.Reg(), m, cur, "", nil) {
+		for _, r := range attachRefs(o.registry(), m, cur, "", nil) {
 			held[r.value] = true
 		}
 	}
 	var errs []Issue
-	for _, r := range attachRefs(o.e.Reg(), m, rec, "", nil) {
+	for _, r := range attachRefs(o.registry(), m, rec, "", nil) {
 		if held[r.value] {
 			continue
 		}

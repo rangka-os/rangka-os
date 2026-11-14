@@ -43,7 +43,7 @@ func linksTo(reg *meta.Registry, rm *meta.Model, model string) bool {
 // rename, so restampReferrers can carry those requests over: the rename corrects a name, it is not a change of
 // the document someone approves (audit kernel fix 1111 O1). A record that does not link the draft is left out.
 func (o *op) heldReferrers(model, from, to string) ([]heldRef, error) {
-	reg := o.e.Reg()
+	reg := o.registry()
 	// only the requests of records that link the draft now: a referrer model may hold many live requests for
 	// records that have nothing to do with this draft (card t_6e1fa9ae)
 	var live []store.Approval
@@ -100,7 +100,7 @@ func (o *op) heldReferrers(model, from, to string) ([]heldRef, error) {
 // kernel 1111b F1: an approval must never carry content the approver did not see).
 func (o *op) restampReferrers(refs []heldRef) error {
 	for _, r := range refs {
-		rec, err := store.Get(o.ctx, o.tx, o.e.Reg(), o.actor.Org, r.m, r.name)
+		rec, err := store.Get(o.ctx, o.tx, o.registry(), o.actor.Org, r.m, r.name)
 		if err != nil {
 			if errors.Is(err, store.ErrNotFound) {
 				continue
@@ -159,7 +159,7 @@ func renameLinksIn(reg *meta.Registry, rm *meta.Model, rec store.Record, model, 
 // approval policy matched" (card t_48e24a91; audit credit-race 1: dropping a whole referrer model's entries let a
 // customer with a link back to deliveries be read again).
 func (o *op) forgetLinks(model, from, to string) {
-	reg := o.e.Reg()
+	reg := o.registry()
 	for k, out := range o.links {
 		client := strings.HasPrefix(k, "client:")
 		lm, ln, _ := strings.Cut(strings.TrimPrefix(k, "client:"), "/")

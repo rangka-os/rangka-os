@@ -147,7 +147,7 @@ func (h *HookCtx) SetSubmitted(model, name string, fields map[string]any) (store
 // sets outcome and lost_reason on a submitted quotation).
 func (h *HookCtx) setSubmitted(model, name string, fields map[string]any, allow []string) (store.Record, error) {
 	o := h.op
-	m := o.e.Reg().Model(model)
+	m := o.registry().Model(model)
 	if m == nil {
 		return nil, notFound("model " + model)
 	}
@@ -185,7 +185,7 @@ func (h *HookCtx) setSubmitted(model, name string, fields map[string]any, allow 
 			return nil, fmt.Errorf("SetSubmitted %s: no field %s", model, k)
 		}
 		if f.Type == "table" {
-			cm := o.e.Reg().Models[f.Of]
+			cm := o.registry().Models[f.Of]
 			byRow, ok := v.(map[string]map[string]any)
 			if !ok {
 				return nil, fmt.Errorf("SetSubmitted %s.%s: rows are map[row name]map[field]value, got %T", model, k, v)
@@ -229,7 +229,7 @@ func (h *HookCtx) setSubmitted(model, name string, fields map[string]any, allow 
 		changed[k] = true
 	}
 	o.recomputeDependents(m, rec, changed)
-	if err := store.Update(o.ctx, o.tx, o.e.Reg(), o.actor.Org, m, name, rec); err != nil {
+	if err := store.Update(o.ctx, o.tx, o.registry(), o.actor.Org, m, name, rec); err != nil {
 		return nil, err
 	}
 	delete(o.links, model+"/"+name)

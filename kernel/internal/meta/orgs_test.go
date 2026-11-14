@@ -198,6 +198,20 @@ func TestRoleScope(t *testing.T) {
 	}
 }
 
+// desk: true roles sign in fully, never with a cashier PIN (contract 0057 §2); the key defaults to false.
+func TestRoleDesk(t *testing.T) {
+	const head = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json\nname: outlet_staff\nlabel: {id: Staf outlet}\n"
+	if reg := writeRole(t, head+"desk: true\n"); !reg.RoleDesk("outlet_staff") || reg.RoleDesk("sales_rep") || reg.RoleDesk("nobody") {
+		t.Fatal("desk: true")
+	}
+	if reg := writeRole(t, head+"desk: false\n"); reg.RoleDesk("outlet_staff") {
+		t.Fatal("desk: false")
+	}
+	if reg := writeRole(t, head); reg.RoleDesk("outlet_staff") {
+		t.Fatal("desk defaults to false")
+	}
+}
+
 func TestOrgSchema(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.CopyFS(dir, os.DirFS(overlaySite)); err != nil {

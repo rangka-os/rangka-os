@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/ratelimit"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -190,4 +191,142 @@ func (s *Server) registerEdge(w http.ResponseWriter, r *http.Request) {
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"device_id": dev.ID, "token": secret, "site": s.Site, "org": dev.Org,
 		"outlet": dev.Outlet, "code": dev.Code, "sync": edgeSync})
+}
+
+// Cashier PIN and device unlock (contract 0057 §2, adopting 0048 §5).
+
+const (
+	msgReauthRequired = "Masuk lagi dengan e-mail dan kata sandi dulu, lalu atur PIN dalam 15 menit."
+	msgPinForbidden   = "Hanya pemilik atau kantor pusat yang bisa menghapus PIN anggota."
+	msgMemberNotFound = "Anggota tidak ditemukan."
+)
+
+// pinRole reports whether a role may use a PIN: never the owner, never a desk: true role (role.json).
+func (s *Server) pinRole(role string) bool {
+	if role == "owner" {
+		return false
+	}
+	return s.Engine == nil || !s.Engine.Reg().RoleDesk(role)
+}
+
+// PUT /auth/pin {pin} → 204: the signed-in member sets their own PIN with a full sign-in made in the last 15 minutes.
+func (s *Server) putPin(w http.ResponseWriter, r *http.Request, c *caller) {
+	if !auth.PinAllowedFor(c.p.User.Roles, s.pinRole) {
+		writeError(w, http.StatusForbidden, "pin_not_allowed", auth.ErrPinNotAllowed.Error())
+		return
+	}
+	ck, err := r.Cookie(auth.CookieName)
+	recent := false
+	if err == nil && c.p.Via == "session" {
+		if recent, err = s.Auth.RecentSignIn(r.Context(), ck.Value); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+	if !recent {
+		writeError(w, http.StatusForbidden, "reauth_required", msgReauthRequired)
+		return
+	}
+	var body struct{ Pin string }
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, 400, "bad_json", err.Error())
+		return
+	}
+	switch err := s.Auth.SetPIN(r.Context(), c.actor.Org, c.p.User.ID, body.Pin); {
+	case errors.Is(err, auth.ErrPinWeak):
+		writeError(w, http.StatusUnprocessableEntity, "pin_weak", err.Error())
+	case errors.Is(err, auth.ErrNoMembership):
+		writeError(w, http.StatusForbidden, "no_membership", err.Error())
+	case err != nil:
+		fail(w, err)
+	default:
+		w.WriteHeader(http.StatusNoContent)
+	}
+}
+
+// withDevice wraps the routes a paired browser calls with its rk_device cookie alone (no person signed in).
+func (s *Server) withDevice(h func(w http.ResponseWriter, r *http.Request, d *auth.Device)) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		d, err := s.Auth.RequestDevice(r)
+		switch {
+		case errors.Is(err, auth.ErrDeviceRevoked):
+			writeError(w, http.StatusUnauthorized, "device_revoked", auth.DeviceRevokedMessage)
+		case err != nil:
+			fail(w, err)
+		case d == nil:
+			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
+		default:
+			h(w, r.WithContext(pg.WithOrg(r.Context(), d.Org)), d)
+		}
+	}
+}
+
+// GET /auth/device/staff → [{id, name, role}]: the outlet's members with a PIN whose role may use one.
+func (s *Server) deviceStaff(w http.ResponseWriter, r *http.Request, d *auth.Device) {
+	staff, err := s.Auth.PinStaff(r.Context(), d, s.pinRole)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, staff)
+}
+
+// POST /auth/device/unlock {user, pin} → 200 {user} and the rk_session cookie of a PIN session (at most 12 hours).
+func (s *Server) deviceUnlock(w http.ResponseWriter, r *http.Request, d *auth.Device) {
+	var body struct {
+		User int64  `json:"user"`
+		Pin  string `json:"pin"`
+	}
+	if err := readJSON(r, &body); err != nil {
+		writeError(w, 400, "bad_json", err.Error())
+		return
+	}
+	tok, u, err := s.Auth.UnlockDevice(r.Context(), d, body.User, body.Pin, s.pinRole)
+	switch {
+	case errors.Is(err, auth.ErrUnlockLimited):
+		writeError(w, http.StatusTooManyRequests, "too_many_attempts", err.Error())
+	case errors.Is(err, auth.ErrPinNotAllowed):
+		writeError(w, http.StatusForbidden, "pin_not_allowed", err.Error())
+	case errors.Is(err, auth.ErrPinLocked):
+		writeError(w, http.StatusLocked, "pin_locked", err.Error())
+	case errors.Is(err, auth.ErrPinNotSet):
+		writeError(w, http.StatusConflict, "pin_not_set", err.Error())
+	case errors.Is(err, auth.ErrPinWrong):
+		writeError(w, http.StatusUnauthorized, "pin_wrong", err.Error())
+	case err != nil:
+		fail(w, err)
+	default:
+		http.SetCookie(w, s.Auth.SessionCookie(tok, int(s.Auth.PinTTL().Seconds())))
+		writeJSON(w, http.StatusOK, map[string]any{"user": u})
+	}
+}
+
+// DELETE /api/v1/members/{user_id}/pin → 204: an owner or head office clears a member's PIN and ends their PIN sessions.
+func (s *Server) clearMemberPin(w http.ResponseWriter, r *http.Request, c *caller) {
+	if !mayPairDevices(c) {
+		writeError(w, http.StatusForbidden, "forbidden", msgPinForbidden)
+		return
+	}
+	id, err := strconv.ParseInt(r.PathValue("user_id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusNotFound, "not_found", msgMemberNotFound)
+		return
+	}
+	ctx := r.Context()
+	res, err := s.DB.Query(ctx, `select u.email from rk_members m join rk_users u on u.id = m.user_id where m.org_id = $1 and m.user_id = $2`,
+		c.actor.Org, id)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if len(res.Rows) == 0 {
+		writeError(w, http.StatusNotFound, "not_found", msgMemberNotFound)
+		return
+	}
+	if err := auth.ClearPIN(ctx, s.DB, c.actor.Org, id); err != nil {
+		fail(w, err)
+		return
+	}
+	store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "member.pin_cleared", "user/"+res.Rows[0][0].(string), "PIN cleared", nil)
+	w.WriteHeader(http.StatusNoContent)
 }

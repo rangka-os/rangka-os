@@ -124,7 +124,7 @@ func (s *Service) LoginAs(ctx context.Context, email, password, org string, syst
 	if ttl <= 0 {
 		ttl = 24 * time.Hour
 	}
-	tok, err := s.openSession(ctx, u, ttl, SessionPassword, system)
+	tok, err := s.openSession(ctx, u, ttl, SessionPassword, system, "")
 	if err != nil {
 		return "", nil, err
 	}
@@ -140,15 +140,18 @@ func (s *Service) LoginAs(ctx context.Context, email, password, org string, syst
 const (
 	SessionPassword = "password"
 	SessionUpstream = "upstream"
+	SessionPin      = "pin" // a cashier PIN on a paired device (contract 0057 §2)
 )
 
 // openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
-// auth.session_ttl; upstream sessions UpstreamSessionTTL. method is SessionPassword or SessionUpstream. A session
-// that is not a system one counts as the member's activity (contract 0055 §1).
-func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string, system bool) (string, error) {
+// auth.session_ttl; upstream sessions UpstreamSessionTTL; PIN sessions at most PinSessionTTL. method is SessionPassword,
+// SessionUpstream or SessionPin; deviceID is the paired device of a PIN session ("" otherwise). A session that is not
+// a system one counts as the member's activity (contract 0055 §1).
+func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string, system bool, deviceID string) (string, error) {
 	tok := RandomToken("", 32)
-	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at, method, system) values ($1, $2, $3, $4, $5, $6)",
-		HashToken(tok), u.ID, u.Org, s.now().Add(ttl), method, system); err != nil {
+	now := s.now()
+	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, created_at, expires_at, method, system, device_id) values ($1, $2, $3, $4, $5, $6, $7, $8)",
+		HashToken(tok), u.ID, u.Org, now, now.Add(ttl), method, system, nullIf(deviceID)); err != nil {
 		return "", err
 	}
 	if !system {
@@ -182,6 +185,9 @@ func (s *Service) SwitchOrg(ctx context.Context, cookie, org string) (*User, err
 	}
 	if len(res.Rows) == 0 {
 		return nil, ErrUnauthenticated
+	}
+	if res.Rows[0][1].(string) == SessionPin { // a PIN session belongs to its device's organisation (contract 0057 §2)
+		return nil, ErrNoMembership
 	}
 	u, err := LoadUser(ctx, s.DB, res.Rows[0][0].(int64), org)
 	if err != nil {
@@ -343,7 +349,7 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 		return &Principal{User: u, Via: "oidc", Scope: scope}, nil
 	}
 	if c, err := r.Cookie(CookieName); err == nil && c.Value != "" {
-		res, err := s.DB.Query(ctx, "select user_id, org_id, system from rk_sessions where id = $1 and expires_at > $2", HashToken(c.Value), s.now())
+		res, err := s.DB.Query(ctx, "select user_id, org_id, system, coalesce(device_id, '') from rk_sessions where id = $1 and expires_at > $2", HashToken(c.Value), s.now())
 		if err != nil {
 			return nil, err
 		}
@@ -360,9 +366,17 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 			}
 			system, _ := res.Rows[0][2].(bool)
 			p := &Principal{User: u, Via: "session", System: system}
+			if devID := res.Rows[0][3].(string); devID != "" { // a PIN session: the device's outlet only (contract 0057 §2)
+				d, err := s.pinSessionDevice(ctx, devID, u)
+				if err != nil {
+					return nil, err
+				}
+				p.Device = d
+				return p, nil
+			}
 			// a person on a paired browser: the device rides along when it belongs to the session's org; a
 			// revoked or stale device cookie leaves the person signed in without it
-			if d, err := s.requestDevice(r); err == nil && d != nil && d.Org == u.Org {
+			if d, err := s.RequestDevice(r); err == nil && d != nil && d.Org == u.Org {
 				p.Device = d
 			} else if err != nil && !errors.Is(err, ErrDeviceRevoked) {
 				return nil, err
@@ -371,7 +385,7 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 		}
 	}
 	// a paired browser alone (contract 0057 §2): the device, no person
-	if d, err := s.requestDevice(r); err != nil || d != nil {
+	if d, err := s.RequestDevice(r); err != nil || d != nil {
 		if err != nil {
 			return nil, err
 		}
@@ -383,8 +397,8 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 	return nil, nil
 }
 
-// requestDevice is the device of the request's rk_device cookie: nil, nil without one.
-func (s *Service) requestDevice(r *http.Request) (*Device, error) {
+// RequestDevice is the device of the request's rk_device cookie: nil, nil without one.
+func (s *Service) RequestDevice(r *http.Request) (*Device, error) {
 	c, err := r.Cookie(DeviceCookieName)
 	if err != nil || c.Value == "" {
 		return nil, nil

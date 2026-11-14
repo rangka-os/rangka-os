@@ -337,6 +337,12 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 				return err
 			}
 		}
+		// a new role or new outlets clear the cashier PIN (contract 0057 §2)
+		if m.member && (m.role != body.Role || !sameSet(m.outlets, outlets)) {
+			if err := auth.ClearPIN(ctx, tx, org, userID); err != nil {
+				return err
+			}
+		}
 		return store.Audit(ctx, tx, org, c.p.User.Email, "member.upsert", "user/"+email, "member set by API token",
 			map[string]any{"via": "token", "upstream": up.ID, "subject": subject, "role": body.Role, "outlets": outlets, "created": created, "revoked": revoked})
 	})

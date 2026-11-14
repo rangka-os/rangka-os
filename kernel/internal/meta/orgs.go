@@ -136,6 +136,17 @@ func (r *Registry) RoleScope(role string) *RoleScope {
 	return &RoleScope{Fields: scopeFields(sc["field"]), From: str(sc, "from")}
 }
 
+// RoleDesk reports a role's desk key (role.json, default false): members with a desk role use the back office and
+// sign in fully, never with a cashier PIN (contract 0057 §2, 0048 §5). An unknown role is not a desk role.
+func (r *Registry) RoleDesk(role string) bool {
+	d := r.Roles[role]
+	if d == nil {
+		return false
+	}
+	desk, _ := asMap(d.Data)["desk"].(bool)
+	return desk
+}
+
 // scopeFields turns scope.field (a name or a list of names) into a list; non-string items are dropped.
 func scopeFields(x any) []string {
 	if s, ok := x.(string); ok {

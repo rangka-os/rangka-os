@@ -53,23 +53,39 @@ func EnsureOrgCode(ctx context.Context, q pg.Querier, id, name, code string) err
 	return err
 }
 
-// SetOutlets limits a membership to the given outlet codes (empty: a scoped role sees no scoped records, an unscoped role ignores outlets).
+// SetOutlets limits a membership to the given outlet codes (empty: a scoped role sees no scoped records, an unscoped
+// role ignores outlets). A real change clears the member's PIN (contract 0057 §2).
 func SetOutlets(ctx context.Context, q pg.Querier, org string, userID int64, outlets []string) error {
 	if outlets == nil {
 		outlets = []string{}
 	}
-	res, err := q.Query(ctx, "update rk_members set outlets = $3 where org_id = $1 and user_id = $2 returning user_id", org, userID, pg.Array(outlets))
+	res, err := q.Query(ctx, "select outlets from rk_members where org_id = $1 and user_id = $2", org, userID)
 	if err != nil {
 		return err
 	}
 	if len(res.Rows) == 0 {
 		return ErrNoMembership
 	}
+	old := stringList(res.Rows[0][0])
+	res, err = q.Query(ctx, "update rk_members set outlets = $3 where org_id = $1 and user_id = $2 returning user_id", org, userID, pg.Array(outlets))
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) == 0 {
+		return ErrNoMembership
+	}
+	if !sameStrings(old, outlets) {
+		return ClearPIN(ctx, q, org, userID)
+	}
 	return nil
 }
 
-// RemoveMember deletes a user's membership in an org; ErrNoMembership when there was none.
+// RemoveMember deletes a user's membership in an org, ending their PIN sessions there (contract 0057 §2);
+// ErrNoMembership when there was none.
 func RemoveMember(ctx context.Context, q pg.Querier, org string, userID int64) error {
+	if err := ClearPIN(ctx, q, org, userID); err != nil {
+		return err
+	}
 	res, err := q.Query(ctx, "delete from rk_members where org_id = $1 and user_id = $2 returning user_id", org, userID)
 	if err != nil {
 		return err

@@ -261,6 +261,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/devices", a(s.listDevices))
 	mux.HandleFunc("DELETE /api/v1/devices/{id}", a(s.revokeDevice))
 	mux.HandleFunc("POST /auth/device/pair", s.pairBrowser)
+	// cashier PIN and unlock (contract 0057 §2): staff list and unlock take the device cookie alone
+	mux.HandleFunc("PUT /auth/pin", a(s.putPin))
+	mux.HandleFunc("GET /auth/device/staff", s.withDevice(s.deviceStaff))
+	mux.HandleFunc("POST /auth/device/unlock", s.withDevice(s.deviceUnlock))
+	mux.HandleFunc("DELETE /api/v1/members/{user_id}/pin", a(s.clearMemberPin))
 	mux.HandleFunc("POST /api/v1/edge/register", s.registerEdge)
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))

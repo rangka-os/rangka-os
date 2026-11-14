@@ -344,3 +344,17 @@ create table if not exists rk_device_codes (
   expires_at timestamptz not null,
   used_at    timestamptz
 );
+-- cashier PIN (contract 0057 §2, 0048 §5): per membership, the kernel's password hash; pin_fails counts wrong PINs in a
+-- row (5 lock it for 15 minutes on every device, 10 clear it)
+alter table rk_members add column if not exists pin_hash text;
+alter table rk_members add column if not exists pin_fails int not null default 0;
+alter table rk_members add column if not exists pin_locked_until timestamptz;
+-- a PIN session (method pin) is opened on one paired device; revoking the device ends it
+alter table rk_sessions add column if not exists device_id text;
+create index if not exists rk_sessions_device on rk_sessions (device_id) where device_id is not null;
+-- wrong PINs per device: 20 in 15 minutes stop that device's unlocks
+create table if not exists rk_device_unlock_fails (
+  device text not null,
+  at     timestamptz not null
+);
+create index if not exists rk_device_unlock_fails_device on rk_device_unlock_fails (device, at);

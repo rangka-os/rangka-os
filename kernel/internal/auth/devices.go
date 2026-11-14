@@ -167,7 +167,7 @@ func deviceID() string {
 	return "dev_" + hex.EncodeToString(b)
 }
 
-// RevokeDevice revokes a device of org: its secret stops working at once. Revoking twice is not an error.
+// RevokeDevice revokes a device of org: its secret and its PIN sessions stop working at once. Revoking twice is not an error.
 func (s *Service) RevokeDevice(ctx context.Context, org, id string) error {
 	res, err := s.DB.Query(ctx, `update rk_devices set revoked_at = coalesce(revoked_at, $3) where org_id = $1 and id = $2 returning id`,
 		org, id, s.now())
@@ -177,7 +177,9 @@ func (s *Service) RevokeDevice(ctx context.Context, org, id string) error {
 	if len(res.Rows) == 0 {
 		return ErrDeviceNotFound
 	}
-	return nil
+	// its PIN sessions end at once (0048 §5)
+	_, err = s.DB.Query(ctx, "delete from rk_sessions where device_id = $1", id)
+	return err
 }
 
 // Devices lists the devices of org, of one outlet when outlet is not empty, in pairing order.

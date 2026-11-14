@@ -52,6 +52,14 @@ func sensitiveField(f map[string]any) bool {
 	return f["stock"] == true
 }
 
+// roleLimited is a field some roles may not write or see (read_only_for, hidden_for; contract 0027): the kernel drops
+// it from those roles' saves, but a flow step writes it as the flow decides (0027 §6), so a company flow that writes
+// it decides what those roles could not (audit tax-fields N1: a sales manager's own flow set the customer's VAT
+// collector, which only finance may change).
+func roleLimited(f map[string]any) bool {
+	return !isEmpty(f["read_only_for"]) || !isEmpty(f["hidden_for"])
+}
+
 func layerOf(path string) int { return Layer(path) }
 
 // CompanyPath reports whether a change-set path is a file of the site company module: models/<m>.rk or
@@ -421,6 +429,10 @@ func assessFields(a *Assessment, p string, old, nw map[string]any, submittable b
 		case !ok:
 			a.raise("medium", fmt.Sprintf("adds field %s to %s", name, p))
 		case reflect.DeepEqual(normalize(o), normalize(f)):
+		case !reflect.DeepEqual(normalize(o["read_only_for"]), normalize(f["read_only_for"])) ||
+			!reflect.DeepEqual(normalize(o["hidden_for"]), normalize(f["hidden_for"])):
+			// who may change or see the field is a permission (contract 0027), like the model's permissions
+			a.raise("high", fmt.Sprintf("changes who may change or see field %s of %s (read_only_for/hidden_for)", name, p))
 		case o["set_once"] == true && f["set_once"] != true:
 			// a value written once (clock-in time, position, a signature) becomes editable: evidence could be rewritten
 			a.raise("high", fmt.Sprintf("drops set_once from field %s of %s (a value meant to be written once becomes editable)", name, p))
@@ -606,6 +618,19 @@ func assessCompanyFlow(a *Assessment, p string, flow map[string]any, env Env) {
 	walkFlowSteps(a, p, meta.AsList(flow["steps"]), vars, env)
 }
 
+// copyVars is a deep copy of a flow's variable bindings.
+func copyVars(vars map[string]map[string]bool) map[string]map[string]bool {
+	out := make(map[string]map[string]bool, len(vars))
+	for k, ms := range vars {
+		c := make(map[string]bool, len(ms))
+		for m := range ms {
+			c[m] = true
+		}
+		out[k] = c
+	}
+	return out
+}
+
 // recordEvents are the <model>.<event> suffixes flow.json names for a record's own event.
 var recordEvents = map[string]bool{"created": true, "updated": true, "submitted": true, "cancelled": true}
 
@@ -651,17 +676,52 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 				flowWrites(a, p, m, st["set"], env)
 			}
 		case st["for_each"] != nil:
-			if as != "" {
-				src, _ := st["for_each"].(string)
-				if ms := vars[strings.TrimSpace(src)]; len(ms) > 0 {
-					for m := range ms {
-						bind(vars, as, m)
-					}
-				} else { // the loop variable shadows any earlier binding with something unknown
+			// the runtime gives the loop variable back its earlier value once the loop ends (flows.go for_each), so the
+			// binding before the loop is what a later step reads, whatever the body bound to that name (audit
+			// flow-locked F5: a loop over an unknown source as v, v rebound to an item inside, then update: v)
+			saved, had := vars[as]
+			if had {
+				saved = copyVars(map[string]map[string]bool{as: saved})[as]
+			}
+			// every pass starts with the loop variable set to the source's item (the runtime sets it per iteration):
+			// a model the source holds, or unknown (audit flow-locked F6: v rebound to an item at the end of the body
+			// is not what the next pass's update: v reads)
+			src, _ := st["for_each"].(string)
+			items := copyVars(map[string]map[string]bool{"": vars[strings.TrimSpace(src)]})[""]
+			enter := func() {
+				if as == "" {
+					return
+				}
+				if len(items) > 0 {
+					vars[as] = copyVars(map[string]map[string]bool{"": items})[""]
+				} else {
 					delete(vars, as)
 				}
 			}
-			walkFlowSteps(a, p, meta.AsList(st["do"]), vars, env)
+			// the body runs once per item and a variable bound late in one pass is what an update reads in the next
+			// (audit flow-locked F1: update: v before find customer as v): bind to a fixpoint first, then judge the
+			// writes against every model a variable may hold
+			body := meta.AsList(st["do"])
+			for i := 0; i < 16; i++ {
+				before := copyVars(vars)
+				enter()
+				walkFlowSteps(&Assessment{}, p, body, vars, env)
+				after := copyVars(vars)
+				delete(before, as)
+				delete(after, as)
+				if reflect.DeepEqual(before, after) {
+					break
+				}
+			}
+			enter()
+			walkFlowSteps(a, p, body, vars, env)
+			if as != "" {
+				if had {
+					vars[as] = saved
+				} else {
+					delete(vars, as)
+				}
+			}
 		case st["if"] != nil:
 			walkFlowSteps(a, p, meta.AsList(st["then"]), vars, env)
 			walkFlowSteps(a, p, meta.AsList(st["else"]), vars, env)
@@ -691,6 +751,8 @@ func flowWrites(a *Assessment, p, model string, set any, env Env) {
 		case fd["set_once"] == true:
 			// the kernel lets a flow write a set_once field once; a company flow that writes it decides the evidence
 			a.raise("high", "company automation "+p+" writes set_once field "+f)
+		case roleLimited(fd):
+			a.raise("high", "company automation "+p+" writes field "+f+", which some roles may not change or see (read_only_for/hidden_for)")
 		case fd["type"] == "table":
 			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
 			// record's rows), so any money or stock field of the child model counts as written
@@ -720,6 +782,8 @@ func childRowsWrites(a *Assessment, p, f, child string, env Env, seen map[string
 		switch fd := fields[n]; {
 		case sensitiveField(fd):
 			a.raise("high", "company automation "+p+" writes rows of "+f+" with money/stock field "+n)
+		case roleLimited(fd):
+			a.raise("high", "company automation "+p+" writes rows of "+f+" with field "+n+", which some roles may not change or see")
 		case fd["type"] == "table":
 			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, seen)
 		}

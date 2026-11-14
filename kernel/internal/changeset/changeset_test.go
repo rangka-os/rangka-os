@@ -406,6 +406,125 @@ func TestAssessSetOnce(t *testing.T) {
 	}
 }
 
+// A field some roles may not change or see (read_only_for, hidden_for; contract 0027) is a permission: a flow step
+// writes it whatever those roles may do (0027 §6), so a company flow that writes it, or a change to who it is limited
+// for, is high and needs the owner (audit tax-fields N1, card t_2302cc49: a sales manager approved its own flow that
+// set the customer's VAT collector, which only finance may change).
+func TestAssessRoleLimitedFields(t *testing.T) {
+	customer := map[string]any{"name": "customer", "fields": []any{
+		map[string]any{"name": "vat_collector", "type": "select", "read_only_for": []any{"sales_manager", "head_office"}},
+		map[string]any{"name": "phone", "type": "phone"},
+		map[string]any{"name": "contacts", "type": "table", "of": "contact_person"},
+		map[string]any{"name": "npwp", "type": "data", "hidden_for": []any{"outlet_staff"}},
+		map[string]any{"name": "credit_limit", "type": "currency"},
+		map[string]any{"name": "signed_at", "type": "datetime", "set_once": true},
+	}}
+	item := map[string]any{"name": "item", "fields": []any{map[string]any{"name": "item_name", "type": "data"}}}
+	contact := map[string]any{"name": "contact_person", "fields": []any{map[string]any{"name": "nik", "type": "data", "hidden_for": []any{"outlet_staff"}}}}
+	plain := map[string]any{"name": "note_line", "fields": []any{map[string]any{"name": "text", "type": "data"}}}
+	order := map[string]any{"name": "x_order", "fields": []any{
+		map[string]any{"name": "phone", "type": "data", "hidden_for": []any{"outlet_staff"}},
+		map[string]any{"name": "lines", "type": "table", "of": "note_line"},
+		map[string]any{"name": "catatan", "type": "text"},
+	}}
+	files := map[string]map[string]any{"models/x_order.rk": order}
+	before := func(p string) (map[string]any, bool) { m, ok := files[p]; return m, ok }
+	with := func(p string, m map[string]any) func(string) (map[string]any, bool) {
+		return func(q string) (map[string]any, bool) {
+			if q == p {
+				return m, true
+			}
+			return before(q)
+		}
+	}
+	model := func(n string) map[string]any {
+		return map[string]map[string]any{"customer": customer, "contact_person": contact, "note_line": plain, "x_order": order, "item": item}[n]
+	}
+	flow := func(on string, steps ...any) map[string]any {
+		return map[string]any{"name": "x_f", "on": on, "steps": steps}
+	}
+	upd := func(set map[string]any) map[string]any { return map[string]any{"update": "doc", "set": set} }
+	// audit flow-locked F1: v is an item when the loop body first updates it, and the customer the body's last step
+	// finds from the second pass on; judged once, the update looked like a write to an item
+	rebound := func(set map[string]any) map[string]any {
+		return flow("customer.updated",
+			map[string]any{"find": "item", "as": "v"},
+			map[string]any{"find_all": "item", "limit": 2, "as": "rows"},
+			map[string]any{"for_each": "rows", "as": "r", "do": []any{
+				map[string]any{"update": "v", "if": "v.name == event.name", "set": set},
+				map[string]any{"find": "customer", "where": "name == event.name", "as": "v"},
+			}})
+	}
+	// audit flow-locked F5: a loop over an unknown source as v (v rebound to an item inside) gives v back its earlier
+	// value, the customer, when the loop ends
+	shadowed := func(set map[string]any) []any {
+		return []any{
+			map[string]any{"find": "customer", "where": "name == event.name", "as": "v"},
+			map[string]any{"for_each": "'[1]'", "as": "v", "do": []any{map[string]any{"find": "item", "as": "v"}}},
+			map[string]any{"update": "v", "set": set},
+		}
+	}
+	inLoop := func(steps []any) map[string]any {
+		return flow("customer.updated", map[string]any{"find_all": "item", "limit": 1, "as": "rows"},
+			map[string]any{"for_each": "rows", "as": "r", "do": steps})
+	}
+	// audit flow-locked F6: each pass starts with v set to the loop's item (a customer), not to the item the body's
+	// last step found in the pass before
+	lateRebind := func(source string, set map[string]any) []any {
+		return []any{
+			map[string]any{"find": "customer", "where": "name == event.name", "as": "c"},
+			map[string]any{"for_each": source, "as": "v", "do": []any{
+				map[string]any{"update": "v", "set": set},
+				map[string]any{"find": "item", "as": "v"},
+			}},
+		}
+	}
+	cases := []struct {
+		name  string
+		path  string
+		after map[string]any
+		risk  string
+	}{
+		{"loop rebinds its own variable late, read_only_for field", "flows/x_f.rk", flow("customer.updated", lateRebind("'[c]'", map[string]any{"vat_collector": "'other'"})...), "high"},
+		{"loop rebinds its own variable late, hidden_for field", "flows/x_f.rk", flow("customer.updated", lateRebind("'[c]'", map[string]any{"npwp": "'0'"})...), "high"},
+		{"loop rebinds its own variable late, money field", "flows/x_f.rk", flow("customer.updated", lateRebind("'[c]'", map[string]any{"credit_limit": "0"})...), "high"},
+		{"loop over a map literal rebinds its variable late", "flows/x_f.rk", flow("customer.updated", lateRebind("[{'_model': 'customer', 'name': event.name}]", map[string]any{"vat_collector": "'other'"})...), "high"},
+		{"late rebind inside an outer loop", "flows/x_f.rk", inLoop(lateRebind("'[c]'", map[string]any{"vat_collector": "'other'"})), "high"},
+		{"shadowing loop, then a read_only_for field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"vat_collector": "'other'"})...), "high"},
+		{"shadowing loop, then a hidden_for field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"npwp": "'0'"})...), "high"},
+		{"shadowing loop, then a money field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"credit_limit": "0"})...), "high"},
+		{"shadowing loop inside a loop, then a read_only_for field", "flows/x_f.rk", inLoop(shadowed(map[string]any{"vat_collector": "'other'"})), "high"},
+		{"shadowing loop, then a plain field", "flows/x_f.rk", flow("customer.updated", shadowed(map[string]any{"phone": "'0812'"})...), "medium"},
+		{"flow writes a read_only_for field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"vat_collector": "'other'"})), "high"},
+		{"flow creates a record with a read_only_for field", "flows/x_f.rk", flow("x_order.created", map[string]any{"create": "customer", "set": map[string]any{"vat_collector": "'government'"}}), "high"},
+		{"flow writes a hidden_for field", "flows/x_f.rk", flow("x_order.updated", upd(map[string]any{"phone": "'0812'"})), "high"},
+		{"flow fills rows whose model has a hidden_for field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"contacts": "[]"})), "high"},
+		{"flow writes an unlimited field", "flows/x_f.rk", flow("customer.updated", upd(map[string]any{"phone": "'0812'"})), "medium"},
+		{"loop rebinds a variable to a read_only_for field's model", "flows/x_f.rk", rebound(map[string]any{"vat_collector": "'other'"}), "high"},
+		{"loop rebinds a variable to a hidden_for field's model", "flows/x_f.rk", rebound(map[string]any{"npwp": "'0'"}), "high"},
+		{"loop rebinds a variable to a money field's model", "flows/x_f.rk", rebound(map[string]any{"credit_limit": "0"}), "high"},
+		{"loop rebinds a variable to a set_once field's model", "flows/x_f.rk", rebound(map[string]any{"signed_at": "now()"}), "high"},
+		{"loop rebinds a variable, plain field", "flows/x_f.rk", rebound(map[string]any{"phone": "'0812'"}), "medium"},
+		{"flow fills rows without limited fields", "flows/x_f.rk", flow("x_order.updated", upd(map[string]any{"lines": "[]"})), "medium"},
+		{"company model drops a hidden_for", "models/x_order.rk", map[string]any{"name": "x_order", "fields": []any{
+			map[string]any{"name": "phone", "type": "data"}, order["fields"].([]any)[1], order["fields"].([]any)[2]}}, "high"},
+		{"company model widens read_only_for", "models/x_order.rk", map[string]any{"name": "x_order", "fields": []any{
+			order["fields"].([]any)[0], order["fields"].([]any)[1], map[string]any{"name": "catatan", "type": "text", "read_only_for": []any{"cashier"}}}}, "high"},
+		{"company model changes another field", "models/x_order.rk", map[string]any{"name": "x_order", "fields": []any{
+			order["fields"].([]any)[0], order["fields"].([]any)[1], map[string]any{"name": "catatan", "type": "data"}}}, "medium"},
+	}
+	for _, c := range cases {
+		op := "replace"
+		if _, ok := files[c.path]; !ok {
+			op = "create"
+		}
+		a := AssessWith([]Op{{Op: op, Path: c.path}}, before, with(c.path, c.after), Env{Model: model})
+		if a.Risk != c.risk {
+			t.Errorf("%s: risk %s (%v), want %s", c.name, a.Risk, a.Reasons, c.risk)
+		}
+	}
+}
+
 // changeset.json takes a work screen in an app as it does in a module (the loader reads both; audit layar-kerja C2).
 func TestSchemaAllowsAppScreens(t *testing.T) {
 	for path, ok := range map[string]bool{

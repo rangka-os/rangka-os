@@ -20,6 +20,13 @@ var toneColor = map[string]string{"ok": "var(--chart-5)", "bad": "var(--bad-soli
 // Dashboard computes every widget of a dashboard over the last period days (default_period when 0).
 // The shapes follow the prototype's computeWidget(). cached reports a cache hit (dashboards with cache:).
 func (e *Engine) Dashboard(ctx context.Context, a Actor, name string, period int) (out map[string]any, cached bool, err error) {
+	// one registry for the whole dashboard, and a result computed before a reload is cached before the reload drops
+	// the dash: entries, never after (card t_da045e65 N5)
+	ctx, leave, err := e.gate.enter(ctx)
+	if err != nil {
+		return nil, false, err
+	}
+	defer leave()
 	d := e.Reg().Dashboard(name)
 	if d == nil {
 		return nil, false, notFound("dashboard " + name)

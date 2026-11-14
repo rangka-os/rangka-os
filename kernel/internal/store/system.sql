@@ -218,6 +218,9 @@ create table if not exists rk_site_plan (
   changed_by text not null default '',
   note       text not null default ''
 );
+-- operator grants and caps on the plan's limits (contract 0057 §2)
+alter table rk_site_plan add column if not exists grants jsonb not null default '[]';
+alter table rk_site_plan add column if not exists caps jsonb not null default '{}';
 create table if not exists rk_plan_changes (
   id         bigserial primary key,
   from_plan  text not null,
@@ -225,6 +228,13 @@ create table if not exists rk_plan_changes (
   changed_at timestamptz not null default now(),
   changed_by text not null default '',
   note       text not null default ''
+);
+-- PDF renders per month, and per hour past the plan's pdf_month limit (contract 0057 §1)
+create table if not exists rk_pdf_usage (
+  period    text primary key,              -- YYYY-MM in the site timezone
+  used      bigint not null default 0,
+  hour      text not null default '',      -- YYYY-MM-DDTHH of the slowed hour
+  hour_used bigint not null default 0
 );
 create table if not exists rk_ai_usage (
   period text primary key,                 -- YYYY-MM in the site timezone

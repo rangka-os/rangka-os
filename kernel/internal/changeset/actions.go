@@ -388,6 +388,9 @@ func (s *Service) Validate(ctx context.Context, a Actor, id string) (*ChangeSet,
 		return nil, err
 	}
 	err = s.blockDestructive(ctx, v, reg)
+	if err == nil {
+		err = s.planApps(ctx, v, reg)
+	}
 	cleanup()
 	if err != nil {
 		return nil, err
@@ -612,6 +615,22 @@ func (s *Service) planReadOnly(a Actor) error {
 	}
 	if msg := s.ReadOnly(a.ID); msg != "" {
 		return &Error{403, "plan_read_only", msg, nil}
+	}
+	return nil
+}
+
+// planApps adds a blocking error when the change installs apps past the plan's apps limit (contract 0057 §1).
+// Removing apps, or keeping as many, is always allowed.
+func (s *Service) planApps(ctx context.Context, v *Validation, reg *meta.Registry) error {
+	if s.DB == nil || reg == nil || s.Reg == nil || len(v.Errors) > 0 {
+		return nil
+	}
+	cur, err := plan.Resolve(ctx, s.DB, reg)
+	if err != nil {
+		return err
+	}
+	if pe := plan.CheckAppsChange(reg, cur, len(plan.InstalledApps(s.Reg())), len(plan.InstalledApps(reg))); pe != nil {
+		v.Errors = append(v.Errors, meta.Item{Level: "error", Pos: "1:1", Where: "config.rk apps", Code: pe.Code, Message: pe.Msg})
 	}
 	return nil
 }

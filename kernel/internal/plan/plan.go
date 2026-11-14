@@ -22,7 +22,24 @@ const (
 	Outlets   = "outlets"
 	Users     = "users"
 	AICredits = "ai_credits_month"
+	// contract 0057 §1
+	Apps          = "apps"
+	DBMB          = "db_mb"
+	FilesMB       = "files_mb"
+	PDFMonth      = "pdf_month"
+	RequestsMonth = "requests_month" // reported only
 )
+
+// mb writes a size in megabytes the way an owner reads it: "500 MB", "2 GB".
+func mb(v int64) string {
+	if v >= 1024 && v%1024 == 0 {
+		return fmt.Sprintf("%d GB", v/1024)
+	}
+	return fmt.Sprintf("%d MB", v)
+}
+
+// ReportOrder is the order limits are reported and shown in.
+var ReportOrder = []string{Outlets, Users, AICredits, Apps, DBMB, FilesMB, PDFMonth}
 
 // WarnAt is the share of a limit from which the plan endpoint reports "near" (an owner banner).
 const WarnAt = 0.8
@@ -185,11 +202,13 @@ type Stored struct {
 	ChangedAt time.Time        `json:"changed_at"`
 	ChangedBy string           `json:"changed_by"`
 	Note      string           `json:"note"`
+	Grants    []Grant          `json:"grants"` // contract 0057 §2
+	Caps      map[string]Cap   `json:"caps"`
 }
 
 // LoadStored reads rk_site_plan; nil when no row.
 func LoadStored(ctx context.Context, q pg.Querier) (*Stored, error) {
-	res, err := q.Query(ctx, "select plan, source, limits::text, changed_at, changed_by, note from rk_site_plan where id = 1")
+	res, err := q.Query(ctx, "select plan, source, limits::text, changed_at, changed_by, note, grants::text, caps::text from rk_site_plan where id = 1")
 	if err != nil {
 		return nil, err
 	}
@@ -197,11 +216,14 @@ func LoadStored(ctx context.Context, q pg.Querier) (*Stored, error) {
 		return nil, nil
 	}
 	r := res.Rows[0]
-	s := &Stored{Plan: r[0].(string), Source: r[1].(string), Limits: map[string]int64{}, ChangedBy: r[4].(string), Note: r[5].(string)}
+	s := &Stored{Plan: r[0].(string), Source: r[1].(string), Limits: map[string]int64{}, ChangedBy: r[4].(string), Note: r[5].(string),
+		Grants: []Grant{}, Caps: map[string]Cap{}}
 	if t, ok := r[3].(time.Time); ok {
 		s.ChangedAt = t
 	}
 	_ = json.Unmarshal([]byte(fmt.Sprint(r[2])), &s.Limits)
+	_ = json.Unmarshal([]byte(fmt.Sprint(r[6])), &s.Grants)
+	_ = json.Unmarshal([]byte(fmt.Sprint(r[7])), &s.Caps)
 	return s, nil
 }
 
@@ -212,6 +234,7 @@ type Current struct {
 	Source string // operator, config or "" (no plan)
 	Def    *Def
 	Stored *Stored
+	At     time.Time // when grants are judged (contract 0057 §2); zero = now
 }
 
 // Resolve returns the tenant's plan.
@@ -232,13 +255,34 @@ func Resolve(ctx context.Context, q pg.Querier, reg *meta.Registry) (*Current, e
 	return c, nil
 }
 
-// Limit returns the limit of key and whether there is one.
+// Limit returns the effective limit of key and whether there is one: the plan's limit plus the operator's active
+// grants, under the operator's cap (contract 0057 §2).
 func (c *Current) Limit(key string) (int64, bool) {
+	if c == nil {
+		return 0, false
+	}
+	var v int64
+	var ok bool
+	if c.Def != nil {
+		v, ok = c.Def.Limits[key]
+	}
+	return c.Stored.Effective(key, v, ok, c.now())
+}
+
+// PlanLimit is the plan's own limit of key, without grants or caps.
+func (c *Current) PlanLimit(key string) (int64, bool) {
 	if c == nil || c.Def == nil {
 		return 0, false
 	}
 	v, ok := c.Def.Limits[key]
 	return v, ok
+}
+
+func (c *Current) now() time.Time {
+	if c.At.IsZero() {
+		return time.Now()
+	}
+	return c.At
 }
 
 // Rate is the tenant's traffic shaping, or nil.
@@ -334,6 +378,12 @@ type Usage struct {
 	Outlets   int64 `json:"outlets"`
 	Users     int64 `json:"users"`
 	AICredits int64 `json:"ai_credits_month"`
+	// contract 0057 §1
+	Apps          int64 `json:"apps"`
+	DBMB          int64 `json:"db_mb"`
+	FilesMB       int64 `json:"files_mb"`
+	PDFMonth      int64 `json:"pdf_month"`
+	RequestsMonth int64 `json:"requests_month"`
 }
 
 func orgs(ctx context.Context, db *pg.Pool) ([]string, error) {
@@ -445,25 +495,50 @@ func Measure(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time
 
 // Error is a refusal: plan_limit (adding past a limit) or plan_read_only (a record or person past a lower limit).
 type Error struct {
-	Code     string
-	Resource string
-	Msg      string
+	Code       string
+	Resource   string
+	Msg        string
+	RetryAfter int // seconds; set for pdf_slowed (contract 0057 §1)
 }
 
 func (e *Error) Error() string { return e.Msg }
 
+// AddOnLimits can be raised on the highest plan by buying capacity in the Konsol (contract 0057 §3).
+var AddOnLimits = map[string]bool{Apps: true, DBMB: true, FilesMB: true}
+
 func upgradeHint(reg *meta.Registry, c *Current, key string) string {
-	lim, _ := c.Limit(key)
+	lim, _ := c.PlanLimit(key)
 	for _, d := range Defs(reg) {
 		if v, ok := d.Limits[key]; d.Name != c.Name && (!ok || v > lim) {
 			return " Naik ke paket " + d.Label + " untuk menambah."
 		}
 	}
+	if AddOnLimits[key] {
+		return " Tambah kapasitas di Konsol."
+	}
 	return " Hubungi tim Juragan untuk menambah."
 }
 
+// poolFull reports whether key is held by a pool cap (contract 0057 §2): the cap, not the plan, is the limit.
+func (c *Current) poolFull(key string) bool {
+	if c == nil || c.Stored == nil {
+		return false
+	}
+	cp, ok := c.Stored.Caps[key]
+	if !ok || cp.Reason != "pool" {
+		return false
+	}
+	lim, _ := c.Limit(key)
+	return lim == cp.Value
+}
+
+const poolFullMsg = "Kolam Juragan Grup sudah penuh. Tambah kapasitas atau kurangi pemakaian di bisnis lain."
+
 // LimitError is the refusal of one more of key under c.
 func LimitError(reg *meta.Registry, c *Current, key string) *Error {
+	if c.poolFull(key) {
+		return &Error{Code: "plan_limit", Resource: key, Msg: poolFullMsg}
+	}
 	lim, _ := c.Limit(key)
 	var what string
 	switch key {
@@ -473,6 +548,12 @@ func LimitError(reg *meta.Registry, c *Current, key string) *Error {
 		what = fmt.Sprintf("Paket %s berlaku untuk %d pengguna, dan semuanya sudah terpakai.", c.Label(), lim)
 	case AICredits:
 		what = fmt.Sprintf("Kredit Raka bulan ini sudah habis (%d dari %d di paket %s). Kredit terisi lagi awal bulan depan.", lim, lim, c.Label())
+	case Apps:
+		what = fmt.Sprintf("Paket %s berlaku untuk %d app, dan semuanya sudah terpasang.", c.Label(), lim)
+	case DBMB:
+		what = fmt.Sprintf("Database usaha ini sudah mencapai batas paket %s (%s).", c.Label(), mb(lim))
+	case FilesMB:
+		what = fmt.Sprintf("Penyimpanan file usaha ini sudah mencapai batas paket %s (%s).", c.Label(), mb(lim))
 	default:
 		what = fmt.Sprintf("Batas %s paket %s (%d) sudah tercapai.", key, c.Label(), lim)
 	}
@@ -553,7 +634,7 @@ func CheckNewPerson(ctx context.Context, q pg.Querier, org, email string) error 
 	if err != nil || st == nil {
 		return err
 	}
-	lim, ok := st.Limits[Users]
+	lim, ok := st.Effective(Users, st.Limits[Users], hasKey(st.Limits, Users), time.Now())
 	if !ok {
 		return nil
 	}
@@ -615,6 +696,8 @@ type Snapshot struct {
 	Usage         Usage
 	ExcessOutlets map[string]bool // org + "/" + outlet name: the newest outlets past the limit
 	ExcessPeople  map[string]bool // emails: the newest non-owner members past the limit
+	ExcessApps    map[string]bool // the newest installed apps past the apps limit (contract 0057 §1)
+	ExcessUnits   map[string]bool // the units only those apps use: their records are read-only
 	At            time.Time
 }
 
@@ -624,7 +707,13 @@ func Take(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) (
 	if err != nil {
 		return nil, err
 	}
-	s := &Snapshot{Current: c, ExcessOutlets: map[string]bool{}, ExcessPeople: map[string]bool{}, At: now}
+	c.At = now
+	s := &Snapshot{Current: c, ExcessOutlets: map[string]bool{}, ExcessPeople: map[string]bool{}, ExcessApps: map[string]bool{},
+		ExcessUnits: map[string]bool{}, At: now}
+	s.Usage.Apps = int64(len(InstalledApps(reg)))
+	if lim, ok := c.Limit(Apps); ok {
+		s.ExcessApps, s.ExcessUnits = excessApps(reg, lim)
+	}
 	ol, err := outletRows(ctx, db, reg)
 	if err != nil {
 		return nil, err
@@ -649,7 +738,16 @@ func Take(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) (
 			}
 		}
 	}
-	s.Usage.AICredits, err = AIUsed(ctx, db, Period(reg, now))
+	if s.Usage.AICredits, err = AIUsed(ctx, db, Period(reg, now)); err != nil {
+		return nil, err
+	}
+	if s.Usage.DBMB, err = DBUsedMB(ctx, db); err != nil {
+		return nil, err
+	}
+	if s.Usage.FilesMB, err = FilesUsedMB(ctx, db); err != nil {
+		return nil, err
+	}
+	s.Usage.PDFMonth, err = PDFUsed(ctx, db, Period(reg, now))
 	return s, err
 }
 
@@ -747,6 +845,10 @@ type Meter struct {
 	Limit   *int64 `json:"limit"` // null: not limited
 	State   string `json:"state"` // ok, near (≥ 80%), full (= limit), over (past it: some records read-only)
 	Message string `json:"message,omitempty"`
+	// contract 0057 §3: the plan's own limit and what the operator changed (Limit above is the effective one)
+	PlanLimit *int64  `json:"plan_limit,omitempty"`
+	Grants    []Grant `json:"grants,omitempty"`
+	Cap       *Cap    `json:"cap,omitempty"`
 }
 
 func meter(c *Current, key string, used int64, what string) Meter {
@@ -756,6 +858,15 @@ func meter(c *Current, key string, used int64, what string) Meter {
 		return m
 	}
 	m.Limit = &lim
+	if pl, ok := c.PlanLimit(key); ok {
+		m.PlanLimit = &pl
+	}
+	if c.Stored != nil {
+		m.Grants = c.Stored.activeGrants(key, c.now())
+		if cp, ok := c.Stored.Caps[key]; ok {
+			m.Cap = &cp
+		}
+	}
 	switch {
 	case used > lim:
 		m.State = "over"
@@ -781,18 +892,30 @@ func (s *Snapshot) Report(reg *meta.Registry, period string) map[string]any {
 		Outlets:   meter(c, Outlets, s.Usage.Outlets, "outlet"),
 		Users:     meter(c, Users, s.Usage.Users, "pengguna"),
 		AICredits: meter(c, AICredits, s.Usage.AICredits, "kredit Raka bulan ini"),
+		Apps:      meter(c, Apps, s.Usage.Apps, "app"),
+		DBMB:      meter(c, DBMB, s.Usage.DBMB, "MB database"),
+		FilesMB:   meter(c, FilesMB, s.Usage.FilesMB, "MB file"),
+		PDFMonth:  meter(c, PDFMonth, s.Usage.PDFMonth, "PDF bulan ini"),
 	}
-	if m := meters[AICredits]; m.State == "over" {
-		m.State = "full"
-		meters[AICredits] = m
+	for _, k := range []string{AICredits, DBMB, FilesMB, PDFMonth} { // nothing becomes read-only past these
+		if m := meters[k]; m.State == "over" {
+			m.State = "full"
+			meters[k] = m
+		}
+	}
+	for k, m := range meters { // a pool cap speaks for the pool (contract 0057 §3)
+		if (m.State == "full" || m.State == "over") && c.poolFull(k) {
+			m.Message = poolFullMsg
+			meters[k] = m
+		}
 	}
 	notices := []map[string]any{}
-	for _, k := range []string{Outlets, Users, AICredits} {
+	for _, k := range ReportOrder {
 		if m := meters[k]; m.Message != "" {
 			notices = append(notices, map[string]any{"resource": k, "state": m.State, "message": m.Message})
 		}
 	}
-	ro := map[string]any{"outlets": keys(s.ExcessOutlets), "users": keys(s.ExcessPeople)}
+	ro := map[string]any{"outlets": keys(s.ExcessOutlets), "users": keys(s.ExcessPeople), "apps": keys(s.ExcessApps)}
 	plans := Defs(reg)
 	if plans == nil {
 		plans = []Def{}
@@ -807,4 +930,9 @@ func keys(m map[string]bool) []string {
 	}
 	sort.Strings(out)
 	return out
+}
+
+func hasKey(m map[string]int64, k string) bool {
+	_, ok := m[k]
+	return ok
 }

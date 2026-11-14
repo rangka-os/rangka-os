@@ -139,14 +139,17 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 				target = model(name)
 			}
 			assessOverlay(a, p, old, existed, nw, target)
+			assessCopies(a, p, name, old, nw, env)
 		case strings.HasPrefix(p, "models/") && existed: // the company's own table: judged like an overlay
 			assessModel(a, p, old, nw)
+			assessCopies(a, p, strings.TrimSuffix(strings.TrimPrefix(p, "models/"), ".rk"), old, nw, env)
 		case strings.HasPrefix(p, "flows/"):
 			a.raise("medium", "company automation "+p)
 			assessCompanyFlow(a, p, nw, env)
 		case unitPath(p) && existed:
 			if unitKind(p) == "models" {
 				assessModel(a, p, old, nw)
+				assessCopies(a, p, strings.TrimSuffix(pathBase(p), ".rk"), old, nw, env)
 			}
 			what := "app"
 			if strings.HasPrefix(p, "modules/") {
@@ -178,7 +181,8 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 					}
 				}
 				a.raise("medium", "new model "+p)
-				if nw["permissions"] == nil { // absent (or null): the engine grants everything (engine.perms)
+				assessCopies(a, p, strings.TrimSuffix(pathBase(p), ".rk"), nil, nw, env) // company, app or module model (G4)
+				if nw["permissions"] == nil {                                            // absent (or null): the engine grants everything (engine.perms)
 					a.raise("medium", "new model "+p+" without permissions: every role has full access")
 				}
 			default:
@@ -663,6 +667,9 @@ func assessCompanyFlow(a *Assessment, p string, flow map[string]any, env Env) {
 		// other event (a connector trigger, an unknown suffix) leaves it unbound, so update: doc rates high
 		if m, ev, ok := strings.Cut(on, "."); ok && recordEvents[ev] && companyModelFields(env, m) != nil {
 			vars["doc"] = map[string]bool{m: true}
+			// the runtime's event carries the record's fields at its top level, plus event.record and event.before
+			// (flows.go): reading event.npwp reads the record (audit copy-hidden G1)
+			vars["event"] = map[string]bool{m: true}
 		}
 	}
 	walkFlowSteps(a, p, meta.AsList(flow["steps"]), vars, env)
@@ -714,7 +721,7 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 					a.raise("high", "company automation "+p+" creates a draft in "+mod)
 				}
 			}
-			flowWrites(a, p, m, st["set"], env)
+			flowWrites(a, p, m, st["set"], env, vars)
 			bind(vars, as, m)
 		case st["update"] != nil:
 			v, _ := st["update"].(string)
@@ -723,7 +730,7 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 				continue
 			}
 			for _, m := range sortedSet(vars[v]) {
-				flowWrites(a, p, m, st["set"], env)
+				flowWrites(a, p, m, st["set"], env, vars)
 			}
 		case st["for_each"] != nil:
 			// the runtime gives the loop variable back its earlier value once the loop ends (flows.go for_each), so the
@@ -738,6 +745,9 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 			// is not what the next pass's update: v reads)
 			src, _ := st["for_each"].(string)
 			items := copyVars(map[string]map[string]bool{"": vars[strings.TrimSpace(src)]})[""]
+			if len(items) == 0 { // a child table or an expression over a variable (audit copy-hidden G3: c.contact_persons)
+				items = modelsOf(src, vars, env)
+			}
 			enter := func() {
 				if as == "" {
 					return
@@ -780,7 +790,7 @@ func walkFlowSteps(a *Assessment, p string, steps []any, vars map[string]map[str
 }
 
 // flowWrites raises high for each money or stock field of model that set names, and when model is unknown.
-func flowWrites(a *Assessment, p, model string, set any, env Env) {
+func flowWrites(a *Assessment, p, model string, set any, env Env, vars map[string]map[string]bool) {
 	fields := companyModelFields(env, model)
 	if fields == nil {
 		a.raise("high", "company automation "+p+" writes to a model it cannot resolve")
@@ -807,6 +817,62 @@ func flowWrites(a *Assessment, p, model string, set any, env Env) {
 			// a set value is a CEL expression and may fill the child table with whole rows (a list of maps, or another
 			// record's rows), so any money or stock field of the child model counts as written
 			childRowsWrites(a, p, f, meta.Str(fd, "of"), env, map[string]bool{})
+		}
+		if ok {
+			if expr, isStr := sm[f].(string); isStr {
+				for _, src := range hiddenReads(expr, vars, "", env) {
+					if !coversHidden(fd, src.hidden) {
+						a.raise("high", fmt.Sprintf("company automation %s copies %s (hidden from some roles) into field %s, which those roles see", p, src.path, f))
+					}
+				}
+			}
+		}
+	}
+}
+
+// hiddenRef is a field an expression reads that some roles may not see (hidden_for), with the roles.
+type hiddenRef struct {
+	path   string
+	hidden []string
+}
+
+// coversHidden reports whether field fd is hidden from every role in roles (a copy into it leaks nothing).
+func coversHidden(fd map[string]any, roles []string) bool {
+	in := map[string]bool{}
+	for _, r := range meta.StrList(fd["hidden_for"]) {
+		in[r] = true
+	}
+	for _, r := range roles {
+		if !in[r] {
+			return false
+		}
+	}
+	return true
+}
+
+// assessCopies rates a company model's or overlay's computed and default values (audit flow-locked F2): a field whose
+// compute or default reads a field hidden from some roles, while those roles may see the new field, is high.
+func assessCopies(a *Assessment, p, model string, old, nw map[string]any, env Env) {
+	if model == "" {
+		return
+	}
+	of, _ := fieldsByName(old)
+	nf, order := fieldsByName(nw)
+	for _, name := range order {
+		f := nf[name]
+		if reflect.DeepEqual(normalize(of[name]), normalize(f)) {
+			continue
+		}
+		for _, key := range []string{"compute", "default"} {
+			expr, ok := f[key].(string)
+			if !ok {
+				continue
+			}
+			for _, src := range hiddenReadsIn(expr, nil, model, nf, env) {
+				if src.path != name && !coversHidden(f, src.hidden) {
+					a.raise("high", fmt.Sprintf("field %s of %s copies %s (hidden from some roles) through its %s", name, p, src.path, key))
+				}
+			}
 		}
 	}
 }
@@ -903,3 +969,6 @@ func isAppOverlay(p string) bool {
 	_, ok := appOverlayPath(p)
 	return ok
 }
+
+// pathBase is the last segment of a change-set path.
+func pathBase(p string) string { return p[strings.LastIndex(p, "/")+1:] }

@@ -96,6 +96,7 @@ rule) · Builds on: 0016, 0017, 0020, 0028
 | an org's `name` or `code` | medium |
 | model (new, or a company model changed) that starts calling a kernel hook: `on_submit`, `on_cancel`, an automation's `do`, an action's `hook` (`stock.post_moves`, `ledger.post_receivable`, `crm.mark_won`, ...) | high |
 | changing `stock:`, `is_submittable`, `on_submit`, `on_cancel`, `automations` or `actions` of a model that calls a kernel hook | high |
+| a company flow's `set`, or an overlay's or company model's `compute`/`default`, that reads a field with `hidden_for` (directly or through a link) into a field those roles see | high |
 | 0033 §2's company connector table | as written there |
 
 A new flow file in an app or a module (`apps/<a>/flows/`, `modules/<m>/flows/`) is rated as a company flow. High is owner only (`owner_required`): approving it, and reverting it once applied.

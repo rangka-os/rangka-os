@@ -45,6 +45,9 @@ type Service struct {
 	UpstreamHTTP *http.Client
 	// Log receives operator messages; it never gets a token, code, secret or claim value.
 	Log func(format string, args ...any)
+	// OnFirstSignIn runs after the account's first session set rk_users.signed_in_at (contract 0055 §2: the member
+	// record turns active). nil = nothing to do.
+	OnFirstSignIn func(ctx context.Context, userID int64)
 
 	upMu    sync.Mutex
 	upCache map[string]*issuerCache // discovery and JWKS per issuer (upstream.go)
@@ -134,6 +137,14 @@ func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, m
 	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at, method) values ($1, $2, $3, $4, $5)",
 		HashToken(tok), u.ID, u.Org, s.now().Add(ttl), method); err != nil {
 		return "", err
+	}
+	// the first sign-in of the account (contract 0055 §2): pending → active on its member records
+	res, err := s.DB.Query(ctx, "update rk_users set signed_in_at = $2 where id = $1 and signed_in_at is null returning id", u.ID, s.now())
+	if err != nil {
+		return "", err
+	}
+	if len(res.Rows) > 0 && s.OnFirstSignIn != nil {
+		s.OnFirstSignIn(ctx, u.ID)
 	}
 	return tok, nil
 }

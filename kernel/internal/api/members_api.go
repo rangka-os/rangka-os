@@ -344,7 +344,19 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		memberFail(w, err)
 		return
 	}
+	s.syncMemberRecord(ctx, org, userID)
 	writeJSON(w, http.StatusOK, map[string]any{"user_id": userID, "created": created})
+}
+
+// syncMemberRecord keeps the member's user record in step after the membership committed (contract 0055 §2, §5).
+// The member write stands either way: a failure is logged and the repair loop syncs the record later.
+func (s *Server) syncMemberRecord(ctx context.Context, org string, userID int64) {
+	if s.Engine == nil || userID == 0 {
+		return
+	}
+	if _, err := s.Engine.SyncMemberRecord(ctx, org, userID); err != nil && s.Log != nil {
+		s.Log("member record: sync of account %d in %s failed (the repair retries): %v", userID, org, err)
+	}
 }
 
 // deleteMember is DELETE /api/v1/members/{upstream}/{subject} (contract 0043 §2): removes the membership in the
@@ -355,6 +367,7 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request, c *caller)
 		return
 	}
 	subject, org, ctx := r.PathValue("subject"), c.actor.Org, r.Context()
+	var removed int64
 	err := s.memberTx(ctx, func(tx *pg.Tx) error {
 		uid, err := auth.UserByIdentity(ctx, tx, up.Issuer, subject)
 		if errors.Is(err, store.ErrNotFound) {
@@ -373,6 +386,7 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request, c *caller)
 		if err := auth.RemoveMember(ctx, tx, org, uid); err != nil {
 			return err
 		}
+		removed = uid
 		if err := s.Auth.RevokeMember(ctx, tx, uid, org); err != nil {
 			return err
 		}
@@ -388,5 +402,6 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request, c *caller)
 		memberFail(w, err)
 		return
 	}
+	s.syncMemberRecord(ctx, org, removed) // the record stays, marked removed
 	w.WriteHeader(http.StatusNoContent)
 }

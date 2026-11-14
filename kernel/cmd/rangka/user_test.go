@@ -9,7 +9,9 @@ import (
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 	"github.com/rangka-os/rangka-os/kernel/internal/testdb"
 )
@@ -64,6 +66,7 @@ func TestUserAddRemove(t *testing.T) {
 	t.Setenv("DATABASE_URL", url)
 	t.Setenv("RANGKA_ORG", "")
 	t.Setenv("RANGKA_USER_PASSWORD", "")
+	outletTable(t, db, "pt-baru", "OUT-01", "OUT-02", "OUT-03") // contract 0055 §2: outlets must exist
 
 	add := []string{"add", "staff@example.test", "--org", "pt-baru", "--role", "outlet_staff", "--outlets", "OUT-01,OUT-02", "--name", "Staf", "--create-org"}
 	if code := cmdUser(add); code != 2 {
@@ -371,5 +374,110 @@ func TestUserAddMixedForms(t *testing.T) {
 	}
 	if code := cmdUser([]string{"remove", "--email", "x@y.test", "--org", "baru"}); code != 0 {
 		t.Fatalf("remove --email: exit %d", code)
+	}
+}
+
+// outletTable stands in for the outlet model's table (r_outlet) with the given outlet names in org.
+func outletTable(t *testing.T, db *pg.Pool, org string, names ...string) {
+	t.Helper()
+	ctx := context.Background()
+	if _, err := db.Exec(ctx, "create table if not exists r_outlet (org_id text not null, name text not null)"); err != nil {
+		t.Fatal(err)
+	}
+	for _, n := range names {
+		if _, err := db.Query(ctx, "insert into r_outlet (org_id, name) values ($1, $2)", org, n); err != nil {
+			t.Fatal(err)
+		}
+	}
+}
+
+// Contract 0055 §2: `rangka user add --outlets` refuses an outlet that is not an outlet record of the org, as the
+// member API does, and writes nothing.
+func TestUserAddUnknownOutlet(t *testing.T) {
+	url := testdb.New(t)
+	prevIter := auth.Iterations
+	auth.Iterations = 1000
+	t.Cleanup(func() { auth.Iterations = prevIter })
+	ctx := context.Background()
+	db, err := pg.NewPool(ctx, url, 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := db.Exec(ctx, store.SystemSQL()); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RANGKA_APPS", "")
+	add := func(outlets string) error {
+		_, err := runUserOut(t, "add", "--db", url, "--org", "t", "--create-org", "--email", "k@x.test", "--password", "pw-123456",
+			"--role", "cashier", "--outlets", outlets)
+		return err
+	}
+	// no outlet table: outlets are not installed, so every outlet is unknown
+	if err := add("OUT-01"); err == nil || !strings.Contains(err.Error(), "unknown_outlet") {
+		t.Fatalf("no outlets installed: err = %v", err)
+	}
+	outletTable(t, db, "t", "OUT-01")
+	outletTable(t, db, "other", "OUT-09")
+	if err := add("OUT-01,OUT-09"); err == nil || !strings.Contains(err.Error(), "unknown_outlet") || !strings.Contains(err.Error(), "OUT-09") {
+		t.Fatalf("outlet of another org: err = %v", err)
+	}
+	res, err := db.Query(ctx, "select count(*) from rk_users where email = 'k@x.test'")
+	if err != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("a refused add wrote an account: %v", err)
+	}
+	if err := add("OUT-01"); err != nil {
+		t.Fatalf("known outlet: %v", err)
+	}
+}
+
+// Contract 0055 §2: with --apps, `rangka user add` and `remove` keep the member's employee record in step.
+func TestUserAddSyncsRecord(t *testing.T) {
+	url := testdb.New(t)
+	prevIter := auth.Iterations
+	auth.Iterations = 1000
+	t.Cleanup(func() { auth.Iterations = prevIter })
+	ctx := context.Background()
+	apps, site := testdb.Catalogue("apps"), testdb.Catalogue("sites/kopi-senja")
+	reg, rep := meta.Validate(apps, site, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("metadata errors: %v", rep.All())
+	}
+	db, err := pg.NewPool(ctx, url, 4)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer db.Close()
+	if _, err := store.Migrate(ctx, db, reg, false, "test"); err != nil {
+		t.Fatal(err)
+	}
+	if err := auth.EnsureOrg(ctx, db, "kopi-senja", "Kopi Senja"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := db.Query(ctx, "insert into r_outlet (org_id, name, outlet_name) values ('kopi-senja', 'OUT-01', 'Kemang')"); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("RANGKA_CONNECTORS", "")
+	out, err := runUserOut(t, "add", "--db", url, "--org", "kopi-senja", "--email", "k@x.test", "--password", "pw-123456", "--name", "Kasir",
+		"--role", "sales_rep", "--outlets", "OUT-01", "--apps", apps, "--site", site)
+	if err != nil || !strings.Contains(out, "employee record USR-") {
+		t.Fatalf("add: %v %q", err, out)
+	}
+	access := func() string {
+		t.Helper()
+		res, err := db.Query(ctx, "select u.access from r_user u join rk_users a on a.id = u.account_id where a.email = 'k@x.test'")
+		if err != nil || len(res.Rows) != 1 {
+			t.Fatalf("record: %v %v", res, err)
+		}
+		return res.Rows[0][0].(string)
+	}
+	if got := access(); got != "pending" {
+		t.Fatalf("after add: %q", got)
+	}
+	if _, err := runUserOut(t, "remove", "--db", url, "--org", "kopi-senja", "--email", "k@x.test", "--apps", apps, "--site", site); err != nil {
+		t.Fatal(err)
+	}
+	if got := access(); got != "removed" {
+		t.Fatalf("after remove: %q", got)
 	}
 }

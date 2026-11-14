@@ -515,3 +515,87 @@ func TestMemberAPIAccountElsewhere(t *testing.T) {
 		t.Fatalf("linked owner of pt_beta: %d %s", r.Status, r.Body)
 	}
 }
+
+// memberRecordOf is the user record (contract 0055) of the account with email in kopi-senja: its name from
+// rk_members.record (or the record with that account_id) and its access.
+func memberRecordOf(e *env, email string) (name, access string) {
+	e.t.Helper()
+	id := dbOne(e, "select id from rk_users where email = $1", email)
+	if id == nil {
+		return "", ""
+	}
+	n, _ := dbOne(e, "select name from r_user where org_id = 'kopi-senja' and account_id = $1", id).(string)
+	if n == "" {
+		return "", ""
+	}
+	a, _ := dbOne(e, "select access from r_user where org_id = 'kopi-senja' and name = $1", n).(string)
+	return n, a
+}
+
+// Contract 0055 §2: a member pushed by the host gets a user record, pending until the first sign-in.
+func TestMemberAPICreatesRecord(t *testing.T) {
+	e, host := memberEnv(t)
+	id := int64(host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "name": "Sari", "role": "sales_rep", "outlets": []any{"OUT-01"}}).JSON["user_id"].(float64))
+	name, access := memberRecordOf(e, "sari@example.com")
+	if name == "" || access != "pending" {
+		t.Fatalf("record %q access %q", name, access)
+	}
+	if dbOne(e, "select record from rk_members where org_id = 'kopi-senja' and user_id = $1", id) != name ||
+		dbOne(e, "select role from r_user where org_id = 'kopi-senja' and name = $1", name) != "sales_rep" ||
+		dbOne(e, "select outlet from r_user_outlet where org_id = 'kopi-senja' and parent = $1", name) != "OUT-01" {
+		t.Fatal("record not in step with the membership")
+	}
+}
+
+// Contract 0055 §2: removing a member keeps the record, marked removed with no outlets.
+func TestMemberAPIDeleteMarksRemoved(t *testing.T) {
+	e, host := memberEnv(t)
+	host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep", "outlets": []any{"OUT-01"}})
+	before, _ := memberRecordOf(e, "sari@example.com")
+	host.must(204, "DELETE", memberPath("sub-sari"), nil)
+	name, access := memberRecordOf(e, "sari@example.com")
+	if name != before || access != "removed" || countRows(e, "select 1 from r_user_outlet where org_id = 'kopi-senja' and parent = $1", name) != 0 {
+		t.Fatalf("record %q (was %q) access %q", name, before, access)
+	}
+}
+
+// Contract 0055 §5: a failed sync does not fail the member write; the repair makes the record later.
+func TestMemberAPISyncFailureStillOK(t *testing.T) {
+	e, host := memberEnv(t)
+	ctx := context.Background()
+	if _, err := e.s.DB.Exec(ctx, `create function rk_test_no_user() returns trigger language plpgsql as $$ begin raise exception 'naming broken'; end $$;
+		create trigger rk_test_no_user before insert on r_user for each row execute function rk_test_no_user()`); err != nil {
+		t.Fatal(err)
+	}
+	id := int64(host.must(200, "PUT", memberPath("sub-sari"), map[string]any{"email": "sari@example.com", "role": "sales_rep"}).JSON["user_id"].(float64))
+	if countRows(e, "select 1 from rk_members where org_id = 'kopi-senja' and user_id = $1", id) != 1 {
+		t.Fatal("membership not stored")
+	}
+	if name, _ := memberRecordOf(e, "sari@example.com"); name != "" {
+		t.Fatalf("record %q made through a broken trigger", name)
+	}
+	if _, err := e.s.DB.Exec(ctx, "drop trigger rk_test_no_user on r_user"); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.Engine.RepairMemberRecords(ctx, "kopi-senja"); err != nil {
+		t.Fatalf("repair: %v", err)
+	}
+	if name, access := memberRecordOf(e, "sari@example.com"); name == "" || access != "pending" {
+		t.Fatalf("after repair: %q %q", name, access)
+	}
+}
+
+// Contract 0055 §2: the first sign-in sets signed_in_at and makes the record active.
+func TestFirstSignInActivates(t *testing.T) {
+	e := newEnv(t, false, nil)
+	if name, access := memberRecordOf(e, "ceo@saga.co.id"); name != "USR-001" || access != "pending" {
+		t.Fatalf("seeded owner: %q %q", name, access)
+	}
+	e.login()
+	if dbOne(e, "select signed_in_at is not null from rk_users where email = 'ceo@saga.co.id'") != true {
+		t.Fatal("signed_in_at not set")
+	}
+	if _, access := memberRecordOf(e, "ceo@saga.co.id"); access != "active" {
+		t.Fatalf("after sign-in: %q", access)
+	}
+}

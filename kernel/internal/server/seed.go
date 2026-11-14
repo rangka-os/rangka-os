@@ -62,8 +62,13 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 			fullName = fmt.Sprint(u["full_name"])
 		}
 	}
-	if _, err := auth.EnsureUser(ctx, db, o.Email, fullName, o.Password, o.Org, "owner", o.UserRecord); err != nil {
+	owner, err := auth.EnsureUser(ctx, db, o.Email, fullName, o.Password, o.Org, "owner", o.UserRecord)
+	if err != nil {
 		return nil, err
+	}
+	// owners have an employee record too (contract 0055 §5)
+	if _, err := e.SyncMemberRecord(ctx, o.Org, owner); err != nil {
+		return nil, fmt.Errorf("seed: employee record of %s: %w", o.Email, err)
 	}
 	return st, nil
 }

@@ -32,6 +32,7 @@ create table if not exists rk_members (
 );
 alter table rk_orgs add column if not exists code text not null default '';
 alter table rk_members add column if not exists outlets text[] not null default '{}';
+alter table rk_users add column if not exists signed_in_at timestamptz;   -- first sign-in (contract 0055 §2: pending until set)
 create table if not exists rk_identities (
   issuer     text not null,                -- upstream OIDC issuer URL
   subject    text not null,                -- the issuer's stable user id (sub)

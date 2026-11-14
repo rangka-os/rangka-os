@@ -45,7 +45,7 @@ func TestMigrateIdempotentAndAddsColumns(t *testing.T) {
 			creates++
 		}
 	}
-	if creates != 9 || res.Files != 18 {
+	if creates != 10 || res.Files != 19 { // user_outlet (contract 0055) adds a table and a file
 		t.Fatalf("first migrate: %d tables, %d files", creates, res.Files)
 	}
 	if !strings.Contains(strings.Join(res.Statements, "\n"), `create unique index if not exists "r_lead_phone_uniq"`) ||

@@ -131,7 +131,7 @@ const (
 )
 
 // openSession stores a session for u in its organisation and returns the cookie value. Password sessions last
-// auth.session_ttl; upstream sessions UpstreamSessionTTL. method is SessionPassword or SessionUpstream.
+// auth.session_ttl; upstream sessions UpstreamSessionTTL. method is SessionPassword, SessionUpstream or SessionLink.
 func (s *Service) openSession(ctx context.Context, u *User, ttl time.Duration, method string) (string, error) {
 	tok := RandomToken("", 32)
 	if _, err := s.DB.Query(ctx, "insert into rk_sessions (id, user_id, org_id, expires_at, method) values ($1, $2, $3, $4, $5)",

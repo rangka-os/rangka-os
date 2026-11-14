@@ -364,6 +364,11 @@
           "default": true,
           "description": "true: everyone signs in with a password. false: nobody does. \"owners\": only members with role owner (contract 0042 §6)."
         },
+        "team": {
+          "enum": ["host", "kernel"],
+          "default": "kernel",
+          "description": "Who manages the team. kernel: owners manage members in Pengaturan → Tim (/api/v1/team). host: the hosting side (Rangka Cloud) does, and /api/v1/team writes answer 403 team_managed_by_host (contract 0055 §5)."
+        },
         "passkeys": {
           "type": "boolean",
           "default": true

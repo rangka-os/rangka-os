@@ -238,6 +238,11 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/members/options", a(s.memberOptions)) // contract 0055 §3
 	mux.HandleFunc("PUT /api/v1/members/{upstream}/{subject}", a(s.putMember))
 	mux.HandleFunc("DELETE /api/v1/members/{upstream}/{subject}", a(s.deleteMember))
+	// Pengaturan → Tim (contract 0055 §4): the owner's browser session only
+	mux.HandleFunc("GET /api/v1/team", a(s.getTeam))
+	mux.HandleFunc("POST /api/v1/team", a(s.postTeam))
+	mux.HandleFunc("PATCH /api/v1/team/{user_id}", a(s.patchTeam))
+	mux.HandleFunc("DELETE /api/v1/team/{user_id}", a(s.deleteTeam))
 	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)
 	mux.HandleFunc("GET /api/v1/orgs", a(s.listOrgs))
 	mux.HandleFunc("GET /api/v1/sandbox", a(s.getSandbox)) // ruang coba (contract 0052)
@@ -259,6 +264,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /hooks/{connector}/{trigger}", s.hook)
 	// auth and Rangka ID
 	mux.HandleFunc("POST /auth/login", s.login)
+	mux.HandleFunc("POST /auth/link", s.useSigninLink) // sign-in link of Tim (contract 0055 §4)
 	mux.HandleFunc("POST /auth/logout", s.logout)
 	mux.HandleFunc("POST /auth/org", a(s.switchOrg))
 	mux.HandleFunc("GET /auth/me", a(s.me))

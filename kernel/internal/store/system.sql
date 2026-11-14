@@ -78,6 +78,18 @@ update rk_users u set signed_in_at = f.first
           select user_id, created_at as at from rk_sessions
           union all select user_id, created_at from rk_tokens) a group by user_id) f
   where u.id = f.user_id and u.signed_in_at is null;
+-- sign-in links of Pengaturan → Tim (contract 0055 §4): shown once to the owner, 72 hours, one use; the person sets a
+-- password with it. Only the sha256 of the token is kept.
+create table if not exists rk_signin_links (
+  token_hash text primary key,
+  user_id    bigint not null references rk_users(id) on delete cascade,
+  org_id     text not null,
+  created_by text not null,                 -- the owner's e-mail
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at    timestamptz
+);
+create index if not exists rk_signin_links_user on rk_signin_links (user_id, org_id);
 create table if not exists rk_keys (
   kid         text primary key,
   alg         text not null,

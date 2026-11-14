@@ -220,7 +220,8 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		writeError(w, http.StatusUnprocessableEntity, "bad_request", "E-mail wajib diisi dengan alamat yang valid.")
 		return
 	}
-	if !s.knownRole(w, body.Role) {
+	if err := s.checkRole(body.Role); err != nil {
+		memberFail(w, err)
 		return
 	}
 	org, ctx := c.actor.Org, r.Context()
@@ -242,14 +243,13 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, http.StatusOK, map[string]any{"user_id": userID, "created": created})
 }
 
-// knownRole answers 422 unknown_role unless role exists in the registry and is not owner: owner is never given,
-// changed or removed through the member routes.
-func (s *Server) knownRole(w http.ResponseWriter, role string) bool {
+// checkRole refuses (422 unknown_role) a role missing from the registry, and owner: owner is never given, changed or
+// removed through the member routes.
+func (s *Server) checkRole(role string) error {
 	if role == "" || role == "owner" || s.Engine.Reg().Roles[role] == nil {
-		writeError(w, http.StatusUnprocessableEntity, "unknown_role", fmt.Sprintf(`Peran "%s" tidak ada di usaha ini.`, role))
-		return false
+		return &memberError{http.StatusUnprocessableEntity, "unknown_role", fmt.Sprintf(`Peran "%s" tidak ada di usaha ini.`, role)}
 	}
-	return true
+	return nil
 }
 
 // memberInput is one member write: the Member API's PUT (by upstream subject) and the Tim routes (by e-mail, or by
@@ -541,27 +541,12 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request, c *caller)
 		if err != nil {
 			return err
 		}
-		m, err := loadMembership(ctx, tx, org, uid)
-		if err != nil || !m.member {
-			return err
+		ok, err := s.removeMember(ctx, tx, org, uid, c.p.User.Email, "member removed by API token",
+			map[string]any{"via": "token", "upstream": up.ID, "subject": subject})
+		if ok {
+			removed = uid
 		}
-		if m.role == "owner" {
-			return &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
-		}
-		if err := auth.RemoveMember(ctx, tx, org, uid); err != nil {
-			return err
-		}
-		removed = uid
-		if err := s.Auth.RevokeMember(ctx, tx, uid, org); err != nil {
-			return err
-		}
-		res, err := tx.Query(ctx, "select email from rk_users where id = $1", uid)
-		if err != nil {
-			return err
-		}
-		email := res.Rows[0][0].(string)
-		return store.Audit(ctx, tx, org, c.p.User.Email, "member.remove", "user/"+email, "member removed by API token",
-			map[string]any{"via": "token", "upstream": up.ID, "subject": subject, "role": m.role, "outlets": m.outlets})
+		return err
 	})
 	if err != nil {
 		memberFail(w, err)
@@ -569,4 +554,32 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request, c *caller)
 	}
 	s.syncMemberRecord(ctx, org, removed) // the record stays, marked removed
 	w.WriteHeader(http.StatusNoContent)
+}
+
+// removeMember ends userID's membership in org inside the caller's transaction (contract 0043 §2, §4): an owner is
+// refused (owner_protected), the person's sessions and tokens there are revoked, unused sign-in links there end, and
+// the removal is audited with data plus the old role and outlets. removed is false when there was no membership.
+func (s *Server) removeMember(ctx context.Context, tx *pg.Tx, org string, userID int64, actor, note string, data map[string]any) (removed bool, err error) {
+	m, err := loadMembership(ctx, tx, org, userID)
+	if err != nil || !m.member {
+		return false, err
+	}
+	if m.role == "owner" {
+		return false, &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
+	}
+	if err := auth.RemoveMember(ctx, tx, org, userID); err != nil {
+		return false, err
+	}
+	if err := s.Auth.RevokeMember(ctx, tx, userID, org); err != nil {
+		return false, err
+	}
+	if err := auth.DropSigninLinks(ctx, tx, userID, org); err != nil {
+		return false, err
+	}
+	res, err := tx.Query(ctx, "select email from rk_users where id = $1", userID)
+	if err != nil {
+		return false, err
+	}
+	data["role"], data["outlets"] = m.role, m.outlets
+	return true, store.Audit(ctx, tx, org, actor, "member.remove", "user/"+res.Rows[0][0].(string), note, data)
 }

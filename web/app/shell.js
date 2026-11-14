@@ -301,6 +301,22 @@
     return groups;
   }
 
+  /** The desktop top bar's items in the top-nav shell: one per sidebar group (its label; a group without a label gives
+   *  its own entries), at most `max` (6). Each opens the group's first entry; `current` is the item whose group holds
+   *  the page (here: navId of the route). Below 1024px the bar hides them and the sidebar or tabs carry the menu. */
+  function topNavItems(groups, here, max) {
+    var out = [];
+    (groups || []).forEach(function (g) {
+      var leaves = flatNav(g.items).filter(function (x) { return x && x.id; });
+      if (!leaves.length) return;
+      if (g.label) out.push({ id: leaves[0].id, label: g.label, ids: leaves.map(function (x) { return x.id; }) });
+      else leaves.forEach(function (x) { out.push({ id: x.id, label: x.label, ids: [x.id] }); });
+    });
+    out = out.slice(0, max || 6);
+    var cur = out.filter(function (x) { return x.ids.indexOf(here) >= 0; })[0];
+    return { items: out.map(function (x) { return { id: x.id, label: x.label }; }), current: cur ? cur.id : null };
+  }
+
   /** The side-only sidebar: Beranda and the feature entries pinned on top, the layout's or the apps' groups below. */
   function sideNav(meta, features, counts) {
     meta = meta || {};
@@ -460,6 +476,7 @@
   RA.workShell = workShell;
   RA.workBar = workBar;
   RA.navGroups = navGroups;
+  RA.topNavItems = topNavItems;
   RA.sideNav = sideNav;
   RA.shellKind = shellKind;
   RA.densityOf = densityOf;
@@ -1236,8 +1253,10 @@
       });
     }
 
+    var topNav = kind === "top-nav" ? topNavItems(navGroups(openApp ? Object.assign({}, meta, { apps: [openApp] }) : meta, features, { approvals: approvalCount }), navId(route)) : null;
     var top = kind !== "top-nav" ? null : h(R.TopNav, {
-      product: { name: name, icon: "store", color: "var(--brand)" }, items: [], createLabel: false, theme: theme,
+      product: { name: name, icon: "store", color: "var(--brand)" }, items: topNav.items, current: topNav.current, onNavigate: onNavigate,
+      createLabel: false, theme: theme,
       searchPlaceholder: "Cari", currentApp: openApp ? openApp.name : null,
       apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: appIcon(a), color: "var(--primary)" }; }),
       user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },

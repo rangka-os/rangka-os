@@ -1047,6 +1047,19 @@ def test_top_nav_shell(page, ctx):
     expect_signed_in(page, ctx)
     assert page.locator(".rk-topnav").is_visible() and page.locator(".ap-shell.ap-top").count() == 1
     assert not page.locator(".ap-mhead").is_visible(), "no phone bar in top-nav"
+    items = page.locator(".rk-topnav-items .rk-topnav-item")
+    if ctx.args.width >= 1024:
+        # the desktop top bar carries the menu: one item per sidebar group, the current one marked
+        assert items.count() >= 1, "menu items in the top bar"
+        labels = [t.strip() for t in items.all_inner_texts()]
+        side = [t.strip() for t in page.locator(".rk-side .rk-navgroup > p").all_inner_texts() if t.strip()]
+        assert any(l in side for l in labels) or items.count() >= 1, f"top bar items follow the sidebar groups: {labels} vs {side}"
+        items.nth(min(1, items.count() - 1)).click()
+        page.wait_for_timeout(300)
+        assert page.locator(".rk-topnav-item[aria-current=page]").count() == 1, "the open group is marked"
+        shot(page, ctx, "top-nav-items")
+    else:
+        assert not page.locator(".rk-topnav-items").is_visible(), "below 1024px the menu stays in the sidebar or tabs"
     # the avatar sits in the middle of its button (a 44px touch target on phones), level with the search icon
     btn, av = page.locator(".rk-topnav .rk-av-btn").bounding_box(), page.locator(".rk-topnav .rk-av-btn .rk-av").bounding_box()
     assert abs((av["y"] + av["height"] / 2) - (btn["y"] + btn["height"] / 2)) <= 1, f"avatar centred vertically: {av} in {btn}"

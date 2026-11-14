@@ -3,6 +3,7 @@ package auth
 import (
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 )
@@ -89,8 +90,8 @@ func TestUnlockSessionOnDevice(t *testing.T) {
 	if !errors.Is(e1, ErrPinWrong) || !errors.Is(e2, ErrPinWrong) {
 		t.Fatalf("wrong %v, unknown %v", e1, e2)
 	}
-	// a role that may not use a PIN
-	if _, _, err := s.UnlockDevice(ctx, dev, uid, "1357", func(string) bool { return false }); !errors.Is(err, ErrPinNotAllowed) {
+	// a role that may not use a PIN reads like a wrong PIN too
+	if _, _, err := s.UnlockDevice(ctx, dev, uid, "1357", func(string) bool { return false }); !errors.Is(err, ErrPinWrong) {
 		t.Fatalf("not allowed: %v", err)
 	}
 }
@@ -112,7 +113,7 @@ func TestClearPinOnOutletChange(t *testing.T) {
 	if err := SetOutlets(ctx, s.DB, "pt_alpha", uid, []string{"OUT-01"}); err != nil {
 		t.Fatal(err)
 	}
-	if _, _, err := s.UnlockDevice(ctx, dev, uid, "1357", allowAll); !errors.Is(err, ErrPinNotSet) {
+	if _, _, err := s.UnlockDevice(ctx, dev, uid, "1357", allowAll); !errors.Is(err, ErrPinWrong) { // PIN-less: the uniform answer
 		t.Fatalf("after outlet change: %v", err)
 	}
 	if res, _ := s.DB.Query(ctx, "select 1 from rk_sessions where id = $1", HashToken(tok)); len(res.Rows) != 0 {
@@ -172,5 +173,79 @@ func TestPinAuditHasNoSecret(t *testing.T) {
 		if !seen[a] {
 			t.Errorf("no %s audit entry (have %v)", a, seen)
 		}
+	}
+}
+
+// Parallel wrong PINs for one member: the try that makes 5 locks at once, so only 5 PINs are compared (contract 0057
+// §2: check before compare).
+func TestPinLockoutConcurrent(t *testing.T) {
+	s, dev, uid := pinEnv(t)
+	ctx := t.Context()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	got := map[error]int{}
+	for i := 0; i < 30; i++ {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			_, _, err := s.UnlockDevice(ctx, dev, uid, "2468", allowAll)
+			mu.Lock()
+			got[err]++
+			mu.Unlock()
+		}()
+	}
+	wg.Wait()
+	// tries past the device's 20 places in flight answer the device limit; the rest are locked
+	if got[ErrPinWrong]+got[ErrPinLocked]+got[ErrUnlockLimited] != 30 || got[ErrPinWrong] != 4 || got[ErrPinLocked] == 0 {
+		t.Fatalf("answers %v", got)
+	}
+	res, err := s.DB.Query(ctx, "select pin_fails, pin_locked_until > $2 from rk_members where org_id = 'pt_alpha' and user_id = $1", uid, s.now())
+	if err != nil || toInt64(res.Rows[0][0]) != 5 || res.Rows[0][1] != true {
+		t.Fatalf("member after 30 parallel tries: %v %v", res.Rows, err)
+	}
+	res, _ = s.DB.Query(ctx, "select count(*) from rk_audit where kind = 'auth.pin_failed'")
+	if n := toInt64(res.Rows[0][0]); n != 5 {
+		t.Fatalf("compared %d PINs, want 5", n)
+	}
+	// the right PIN is locked too
+	if _, _, err := s.UnlockDevice(ctx, dev, uid, "1357", allowAll); !errors.Is(err, ErrPinLocked) {
+		t.Fatalf("right PIN while locked: %v", err)
+	}
+}
+
+// Parallel wrong tries across members on one device: at most 20 are compared, then the device is blocked for 15
+// minutes from the 20th failure.
+func TestDeviceLimitConcurrent(t *testing.T) {
+	s, dev, _ := pinEnv(t)
+	ctx := t.Context()
+	var wg sync.WaitGroup
+	var mu sync.Mutex
+	got := map[error]int{}
+	for i := 0; i < 25; i++ {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			_, _, err := s.UnlockDevice(ctx, dev, int64(900000+i), "2468", allowAll) // unknown members: counted on the device
+			mu.Lock()
+			got[err]++
+			mu.Unlock()
+		}(i)
+	}
+	wg.Wait()
+	if got[ErrPinWrong] != 20 || got[ErrUnlockLimited] != 5 {
+		t.Fatalf("answers %v", got)
+	}
+	res, err := s.DB.Query(ctx, "select unlock_blocked_until from rk_devices where id = $1", dev.ID)
+	if err != nil || timePtr(res.Rows[0][0]) == nil || !timePtr(res.Rows[0][0]).Equal(s.now().Add(15*time.Minute)) {
+		t.Fatalf("blocked until %v %v", res.Rows, err)
+	}
+	base := s.now()
+	s.Now = func() time.Time { return base.Add(14 * time.Minute) }
+	if _, _, err := s.UnlockDevice(ctx, dev, 900000, "2468", allowAll); !errors.Is(err, ErrUnlockLimited) {
+		t.Fatalf("within the block: %v", err)
+	}
+	s.Now = func() time.Time { return base.Add(15*time.Minute + time.Second) }
+	if _, _, err := s.UnlockDevice(ctx, dev, 900000, "2468", allowAll); !errors.Is(err, ErrPinWrong) {
+		t.Fatalf("after the block: %v", err)
 	}
 }

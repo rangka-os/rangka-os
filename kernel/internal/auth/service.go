@@ -58,7 +58,7 @@ type Service struct {
 // Principal is an authenticated caller.
 type Principal struct {
 	User  *User
-	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken), device (contract 0057 §2)
+	Via   string // session, token, oidc, dev, ai (assistant token minted by MintAssistantToken), device, pin (contract 0057 §2)
 	Scope string // OAuth scopes for oidc and ai tokens; for API tokens the scopes they were minted with (secrets:write, members:write)
 	// Chat marks the token the chat relay minted for one chat (MintAssistantToken, contract 0020 §2): the kernel
 	// admitted that chat and counted its credit. An API token with the assistant scope is Via "ai" too, but not Chat.
@@ -87,8 +87,14 @@ func (p *Principal) Kind() string {
 // person may do (approve, apply, revert, write records).
 const AIForbiddenMessage = "Raka tidak boleh melakukan ini; minta orang yang berwenang."
 
-// Human reports a person signed in with a browser session (or the dev-open demo user). A device alone is not.
+// Human reports a person signed in fully with a browser session (or the dev-open demo user). A device alone is not,
+// and neither is a PIN session (contract 0057 §2): it mints no token, manages no device or PIN, approves no change
+// set and switches no organisation.
 func (p *Principal) Human() bool { return p.Via == "session" || p.Via == "dev" }
+
+// Person reports a person at the keyboard: a full session or a PIN session on a paired device. Record work (create,
+// submit, actions, document approvals) treats both as that person.
+func (p *Principal) Person() bool { return p.Human() || p.Via == "pin" }
 
 func (s *Service) now() time.Time {
 	if s.Now != nil {
@@ -371,7 +377,7 @@ func (s *Service) resolve(r *http.Request) (*Principal, error) {
 				if err != nil {
 					return nil, err
 				}
-				p.Device = d
+				p.Device, p.Via = d, "pin"
 				return p, nil
 			}
 			// a person on a paired browser: the device rides along when it belongs to the session's org; a

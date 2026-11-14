@@ -198,17 +198,21 @@ func TestRoleScope(t *testing.T) {
 	}
 }
 
-// desk: true roles sign in fully, never with a cashier PIN (contract 0057 §2); the key defaults to false.
+// Only desk: false makes a staff role (contract 0057 §2, ruling R3); an absent key is reported as not set.
 func TestRoleDesk(t *testing.T) {
 	const head = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json\nname: outlet_staff\nlabel: {id: Staf outlet}\n"
-	if reg := writeRole(t, head+"desk: true\n"); !reg.RoleDesk("outlet_staff") || reg.RoleDesk("sales_rep") || reg.RoleDesk("nobody") {
+	reg := writeRole(t, head+"desk: true\n")
+	if desk, set := reg.RoleDesk("outlet_staff"); !desk || !set {
 		t.Fatal("desk: true")
 	}
-	if reg := writeRole(t, head+"desk: false\n"); reg.RoleDesk("outlet_staff") {
+	if _, set := reg.RoleDesk("nobody"); set {
+		t.Fatal("unknown role")
+	}
+	if desk, set := writeRole(t, head+"desk: false\n").RoleDesk("outlet_staff"); desk || !set {
 		t.Fatal("desk: false")
 	}
-	if reg := writeRole(t, head); reg.RoleDesk("outlet_staff") {
-		t.Fatal("desk defaults to false")
+	if _, set := writeRole(t, head).RoleDesk("outlet_staff"); set {
+		t.Fatal("absent desk is not set")
 	}
 }
 

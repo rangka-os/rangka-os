@@ -77,7 +77,7 @@ func Actor(p *auth.Principal) engine.Actor {
 	if name == "" {
 		name = u.Email
 	}
-	a := engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human(), Outlets: u.Outlets}
+	a := engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Person(), Outlets: u.Outlets}
 	if d := p.Device; d != nil {
 		a.Device = &engine.DeviceRef{ID: d.ID, Code: d.Code, Outlet: d.Outlet}
 	}
@@ -123,8 +123,21 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 // errScopeLimited refuses a scoped API token outside the routes its scope is for.
 var errScopeLimited = errors.New("Token ini hanya untuk API anggota (members:write).")
 
+// memberRoute matches exactly the member routes of contract 0043: PUT and DELETE /api/v1/members/{upstream}/{subject}.
+// DELETE /api/v1/members/{user_id}/pin (contract 0057 §2) is not one of them.
 func memberRoute(r *http.Request) bool {
-	return (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/api/v1/members/")
+	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
+		return false
+	}
+	rest, ok := strings.CutPrefix(r.URL.Path, "/api/v1/members/")
+	if !ok {
+		return false
+	}
+	seg := strings.Split(rest, "/")
+	if len(seg) != 2 || seg[0] == "" || seg[1] == "" {
+		return false
+	}
+	return !(r.Method == http.MethodDelete && seg[1] == "pin")
 }
 
 // authed wraps handlers that need a signed-in caller.

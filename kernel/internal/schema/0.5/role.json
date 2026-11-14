@@ -31,8 +31,7 @@
     },
     "desk": {
       "type": "boolean",
-      "default": false,
-      "description": "Members with this role use the back office and sign in fully: they cannot use a cashier PIN on a paired device (contract 0057 §2, 0048 §5). Default false"
+      "description": "Members with this role use the back office (false: portal only)"
     },
     "scope": {
       "type": "object",

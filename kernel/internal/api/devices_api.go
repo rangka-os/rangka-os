@@ -41,7 +41,11 @@ type pairTries struct {
 	l    ratelimit.Limiter
 }
 
+// mayPairDevices: owner or head office, never from a PIN session (contract 0057 §2).
 func mayPairDevices(c *caller) bool {
+	if c.p.Via == "pin" {
+		return false
+	}
 	for _, r := range c.actor.Roles {
 		if devicePairRoles[r] {
 			return true
@@ -201,12 +205,14 @@ const (
 	msgMemberNotFound = "Anggota tidak ditemukan."
 )
 
-// pinRole reports whether a role may use a PIN: never the owner, never a desk: true role (role.json).
+// pinRole reports whether a role may use a PIN: never the owner; only a role whose desk key is explicitly false
+// (role.json; absent counts as desk, as in the web app's work shell; contract 0057 §2, 0048 §5).
 func (s *Server) pinRole(role string) bool {
-	if role == "owner" {
+	if role == "owner" || s.Engine == nil {
 		return false
 	}
-	return s.Engine == nil || !s.Engine.Reg().RoleDesk(role)
+	desk, set := s.Engine.Reg().RoleDesk(role)
+	return set && !desk
 }
 
 // PUT /auth/pin {pin} → 204: the signed-in member sets their own PIN with a full sign-in made in the last 15 minutes.
@@ -303,7 +309,7 @@ func (s *Server) deviceUnlock(w http.ResponseWriter, r *http.Request, d *auth.De
 
 // DELETE /api/v1/members/{user_id}/pin → 204: an owner or head office clears a member's PIN and ends their PIN sessions.
 func (s *Server) clearMemberPin(w http.ResponseWriter, r *http.Request, c *caller) {
-	if !mayPairDevices(c) {
+	if !c.p.Human() || !mayPairDevices(c) { // a person signed in fully: no token, no PIN session
 		writeError(w, http.StatusForbidden, "forbidden", msgPinForbidden)
 		return
 	}

@@ -175,43 +175,59 @@ func pinDummy(pin string) {
 
 // UnlockDevice checks userID's PIN on a paired device and opens their PIN session there: method pin, the device id,
 // at most PinTTL, outlets narrowed to the device's outlet. It returns the cookie value and the narrowed member.
-// Errors: ErrUnlockLimited (the device's wrong tries), ErrPinNotAllowed, ErrPinLocked, ErrPinNotSet, ErrPinWrong (a
-// wrong PIN and an unknown member alike).
+//
+// Every try first takes a place on the device (ErrUnlockLimited when the device is blocked or 20 tries are already
+// counted in the window) and, for an eligible member, a place in the member's count (ErrPinLocked when locked), both
+// before the PIN is compared, so parallel tries cannot pass the limits. A member who cannot unlock here (unknown, not
+// on the outlet, owner, a role not allowed, no PIN) gets the same ErrPinWrong as a wrong PIN, after a compare of the
+// same cost, counted on the device. ErrPinNotSet answers only the 10th wrong PIN in a row, which clears the PIN.
 func (s *Service) UnlockDevice(ctx context.Context, dev *Device, userID int64, pin string, allowed func(role string) bool) (string, *User, error) {
-	now := s.now()
-	res, err := s.DB.Query(ctx, "select count(*) from rk_device_unlock_fails where device = $1 and at > $2", dev.ID, now.Add(-deviceUnlockWindow))
+	slot, err := s.reserveDeviceTry(ctx, dev)
 	if err != nil {
 		return "", nil, err
 	}
-	if toInt64(res.Rows[0][0]) >= deviceUnlockMax {
-		return "", nil, ErrUnlockLimited
-	}
-	res, err = s.DB.Query(ctx, `select m.role, m.outlets, coalesce(m.pin_hash, ''), m.pin_locked_until, u.email from rk_members m
+	res, err := s.DB.Query(ctx, `select m.role, m.outlets, coalesce(m.pin_hash, ''), u.email from rk_members m
 		join rk_users u on u.id = m.user_id where m.org_id = $1 and m.user_id = $2`, dev.Org, userID)
 	if err != nil {
 		return "", nil, err
 	}
 	if len(res.Rows) == 0 {
-		return "", nil, s.unknownStaff(ctx, dev, userID, pin)
+		return "", nil, s.notEligible(ctx, dev, userID, pin)
 	}
 	r := res.Rows[0]
-	role, hash, email := r[0].(string), r[2].(string), r[4].(string)
-	if !pinAllowed(role, allowed) {
-		return "", nil, ErrPinNotAllowed
+	role, email := r[0].(string), r[3].(string)
+	if !contains(stringList(r[1]), dev.Outlet) || !pinAllowed(role, allowed) || r[2].(string) == "" {
+		return "", nil, s.notEligible(ctx, dev, userID, pin)
 	}
-	if !contains(stringList(r[1]), dev.Outlet) {
-		return "", nil, s.unknownStaff(ctx, dev, userID, pin)
+	now := s.now()
+	// take the member's place: the try that makes 5, 10, … sets the lock at once, so later parallel tries stop here
+	res, err = s.DB.Query(ctx, `update rk_members set pin_fails = pin_fails + 1,
+		pin_locked_until = case when (pin_fails + 1) % $4 = 0 then $5::timestamptz else pin_locked_until end
+		where org_id = $1 and user_id = $2 and pin_hash is not null and (pin_locked_until is null or pin_locked_until <= $3)
+		returning pin_fails, pin_hash`, dev.Org, userID, now, pinLockAfter, now.Add(pinLockFor))
+	if err != nil {
+		return "", nil, err
 	}
-	if until := timePtr(r[3]); until != nil && until.After(now) {
-		return "", nil, ErrPinLocked
+	if len(res.Rows) == 0 {
+		locked, err := s.DB.Query(ctx, "select 1 from rk_members where org_id = $1 and user_id = $2 and pin_locked_until > $3", dev.Org, userID, now)
+		if err != nil {
+			return "", nil, err
+		}
+		if len(locked.Rows) > 0 {
+			return "", nil, s.releaseDeviceTry(ctx, slot, ErrPinLocked)
+		}
+		return "", nil, s.notEligible(ctx, dev, userID, pin) // the PIN was cleared meanwhile
 	}
-	if hash == "" {
-		return "", nil, ErrPinNotSet
-	}
+	n, hash := toInt64(res.Rows[0][0]), res.Rows[0][1].(string)
 	if !CheckPassword(hash, pin) {
-		return "", nil, s.wrongPin(ctx, dev, userID, email, hash)
+		return "", nil, s.wrongPin(ctx, dev, userID, email, n)
 	}
-	if _, err := s.DB.Query(ctx, "update rk_members set pin_fails = 0, pin_locked_until = null where org_id = $1 and user_id = $2", dev.Org, userID); err != nil {
+	if err := s.releaseDeviceTry(ctx, slot, nil); err != nil {
+		return "", nil, err
+	}
+	// reset only when no try came after this one (a later wrong try keeps its count and any lock it set)
+	if _, err := s.DB.Query(ctx, "update rk_members set pin_fails = 0, pin_locked_until = null where org_id = $1 and user_id = $2 and pin_fails = $3",
+		dev.Org, userID, n); err != nil {
 		return "", nil, err
 	}
 	u, err := LoadUser(ctx, s.DB, userID, dev.Org)
@@ -228,10 +244,11 @@ func (s *Service) UnlockDevice(ctx context.Context, dev *Device, userID int64, p
 	return tok, u, nil
 }
 
-// unknownStaff answers a member who is not on the device's outlet like a wrong PIN, and counts it on the device.
-func (s *Service) unknownStaff(ctx context.Context, dev *Device, userID int64, pin string) error {
+// notEligible answers a member who cannot unlock on this device like a wrong PIN: same compare cost, counted on the
+// device, audited.
+func (s *Service) notEligible(ctx context.Context, dev *Device, userID int64, pin string) error {
 	pinDummy(pin)
-	if err := s.deviceFail(ctx, dev); err != nil {
+	if err := s.deviceFailed(ctx, dev); err != nil {
 		return err
 	}
 	store.Audit(ctx, s.DB, dev.Org, "device:"+dev.ID, "auth.pin_failed", "device/"+dev.ID, "wrong PIN on device "+dev.Code,
@@ -239,23 +256,15 @@ func (s *Service) unknownStaff(ctx context.Context, dev *Device, userID int64, p
 	return ErrPinWrong
 }
 
-// wrongPin counts a wrong PIN for the member and the device: the 5th in a row locks the PIN, the 10th clears it.
-func (s *Service) wrongPin(ctx context.Context, dev *Device, userID int64, email, hash string) error {
-	if err := s.deviceFail(ctx, dev); err != nil {
+// wrongPin settles the n-th wrong PIN in a row: the 5th (and every 5th) answers locked (the lock was set when the try
+// took its place), the 10th clears the PIN.
+func (s *Service) wrongPin(ctx context.Context, dev *Device, userID int64, email string, n int64) error {
+	if err := s.deviceFailed(ctx, dev); err != nil {
 		return err
 	}
 	data := map[string]any{"device": dev.ID, "code": dev.Code, "user_id": userID}
 	store.Audit(ctx, s.DB, dev.Org, "device:"+dev.ID, "auth.pin_failed", "user/"+email, "wrong PIN on device "+dev.Code, data)
-	// counted only while the PIN is the one checked: a PIN set or cleared meanwhile starts afresh
-	res, err := s.DB.Query(ctx, `update rk_members set pin_fails = pin_fails + 1 where org_id = $1 and user_id = $2 and pin_hash = $3
-		returning pin_fails`, dev.Org, userID, hash)
-	if err != nil {
-		return err
-	}
-	if len(res.Rows) == 0 {
-		return ErrPinWrong
-	}
-	switch n := toInt64(res.Rows[0][0]); {
+	switch {
 	case n >= pinClearAfter:
 		if err := ClearPIN(ctx, s.DB, dev.Org, userID); err != nil {
 			return err
@@ -263,35 +272,90 @@ func (s *Service) wrongPin(ctx context.Context, dev *Device, userID int64, email
 		store.Audit(ctx, s.DB, dev.Org, "device:"+dev.ID, "auth.pin_cleared", "user/"+email, strconv.Itoa(pinClearAfter)+" wrong PINs in a row: PIN cleared", data)
 		return ErrPinNotSet
 	case n%pinLockAfter == 0:
-		if _, err := s.DB.Query(ctx, "update rk_members set pin_locked_until = $3 where org_id = $1 and user_id = $2",
-			dev.Org, userID, s.now().Add(pinLockFor)); err != nil {
-			return err
-		}
 		store.Audit(ctx, s.DB, dev.Org, "device:"+dev.ID, "auth.pin_locked", "user/"+email, strconv.Itoa(pinLockAfter)+" wrong PINs in a row: PIN locked for 15 minutes", data)
 		return ErrPinLocked
 	}
 	return ErrPinWrong
 }
 
-// deviceFail records a wrong try on the device and forgets tries older than the window; the try that reaches the
-// limit is audited.
-func (s *Service) deviceFail(ctx context.Context, dev *Device) error {
+// reserveDeviceTry takes a place for one try on the device, serialised per device: refused while the device is
+// blocked or when deviceUnlockMax tries (failures and tries in flight) are already counted in the window. The place
+// stays as a failure unless releaseDeviceTry drops it.
+func (s *Service) reserveDeviceTry(ctx context.Context, dev *Device) (int64, error) {
+	tx, err := s.DB.Begin(ctx)
+	if err != nil {
+		return 0, err
+	}
+	defer tx.Rollback(ctx)
+	if err := store.LockKey(ctx, tx, "unlock:"+dev.ID); err != nil {
+		return 0, err
+	}
 	now := s.now()
-	if _, err := s.DB.Query(ctx, "insert into rk_device_unlock_fails (device, at) values ($1, $2)", dev.ID, now); err != nil {
+	res, err := tx.Query(ctx, "select 1 from rk_devices where id = $1 and unlock_blocked_until > $2", dev.ID, now)
+	if err != nil {
+		return 0, err
+	}
+	if len(res.Rows) > 0 {
+		return 0, ErrUnlockLimited
+	}
+	if _, err := tx.Query(ctx, "delete from rk_device_unlock_fails where device = $1 and at <= $2", dev.ID, now.Add(-deviceUnlockWindow)); err != nil {
+		return 0, err
+	}
+	res, err = tx.Query(ctx, "select count(*) from rk_device_unlock_fails where device = $1", dev.ID)
+	if err != nil {
+		return 0, err
+	}
+	if toInt64(res.Rows[0][0]) >= deviceUnlockMax {
+		return 0, ErrUnlockLimited
+	}
+	res, err = tx.Query(ctx, "insert into rk_device_unlock_fails (device, at) values ($1, $2) returning id", dev.ID, now)
+	if err != nil {
+		return 0, err
+	}
+	id := res.Rows[0][0].(int64)
+	return id, tx.Commit(ctx)
+}
+
+// releaseDeviceTry drops a try's place (a right PIN, or an answer that compared nothing) and returns ret.
+func (s *Service) releaseDeviceTry(ctx context.Context, id int64, ret error) error {
+	if _, err := s.DB.Query(ctx, "delete from rk_device_unlock_fails where id = $1", id); err != nil {
 		return err
 	}
-	if _, err := s.DB.Query(ctx, "delete from rk_device_unlock_fails where device = $1 and at <= $2", dev.ID, now.Add(-deviceUnlockWindow)); err != nil {
-		return err
-	}
-	res, err := s.DB.Query(ctx, "select count(*) from rk_device_unlock_fails where device = $1 and at > $2", dev.ID, now.Add(-deviceUnlockWindow))
+	return ret
+}
+
+// deviceFailed settles a failed try already counted by reserveDeviceTry: the failure that makes deviceUnlockMax in
+// the window blocks the device's unlocks for deviceUnlockWindow from now, audited once.
+func (s *Service) deviceFailed(ctx context.Context, dev *Device) error {
+	tx, err := s.DB.Begin(ctx)
 	if err != nil {
 		return err
 	}
-	if toInt64(res.Rows[0][0]) == deviceUnlockMax {
-		store.Audit(ctx, s.DB, dev.Org, "device:"+dev.ID, "device.unlock_limited", "device/"+dev.ID,
-			"device "+dev.Code+": "+strconv.Itoa(deviceUnlockMax)+" wrong PINs in 15 minutes, unlocks stopped", map[string]any{"device": dev.ID, "code": dev.Code})
+	defer tx.Rollback(ctx)
+	if err := store.LockKey(ctx, tx, "unlock:"+dev.ID); err != nil {
+		return err
 	}
-	return nil
+	now := s.now()
+	res, err := tx.Query(ctx, "select count(*) from rk_device_unlock_fails where device = $1 and at > $2", dev.ID, now.Add(-deviceUnlockWindow))
+	if err != nil {
+		return err
+	}
+	if toInt64(res.Rows[0][0]) < deviceUnlockMax {
+		return tx.Commit(ctx)
+	}
+	res, err = tx.Query(ctx, `update rk_devices set unlock_blocked_until = $2 where id = $1 and (unlock_blocked_until is null or unlock_blocked_until <= $3)
+		returning id`, dev.ID, now.Add(deviceUnlockWindow), now)
+	if err != nil {
+		return err
+	}
+	if len(res.Rows) > 0 {
+		if err := store.Audit(ctx, tx, dev.Org, "device:"+dev.ID, "device.unlock_limited", "device/"+dev.ID,
+			"device "+dev.Code+": "+strconv.Itoa(deviceUnlockMax)+" wrong PINs in 15 minutes, unlocks stopped for 15 minutes",
+			map[string]any{"device": dev.ID, "code": dev.Code}); err != nil {
+			return err
+		}
+	}
+	return tx.Commit(ctx)
 }
 
 // pinSessionDevice is the device of a PIN session, with u's outlets narrowed to its outlet. A revoked or unknown

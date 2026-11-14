@@ -220,149 +220,19 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 		writeError(w, http.StatusUnprocessableEntity, "bad_request", "E-mail wajib diisi dengan alamat yang valid.")
 		return
 	}
-	reg := s.Engine.Reg()
-	if body.Role == "" || body.Role == "owner" || reg.Roles[body.Role] == nil {
-		writeError(w, http.StatusUnprocessableEntity, "unknown_role", fmt.Sprintf(`Peran "%s" tidak ada di usaha ini.`, body.Role))
+	if !s.knownRole(w, body.Role) {
 		return
 	}
-	org := c.actor.Org
-	ctx := r.Context()
+	org, ctx := c.actor.Org, r.Context()
+	in := memberInput{Email: email, Name: body.Name, Role: body.Role, Outlets: body.Outlets, Record: body.Record,
+		actor: c.p.User.Email, via: "token", note: "member set by API token",
+		link: &memberLink{issuer: up.Issuer, upstream: up.ID, subject: subject}}
 	var userID int64
 	var created bool
 	err := s.memberTx(ctx, func(tx *pg.Tx) error {
-		if body.Outlets != nil {
-			for _, o := range *body.Outlets {
-				found := false
-				if reg.Model("outlet") != nil {
-					var err error
-					if found, err = store.Exists(ctx, tx, org, "outlet", o); err != nil {
-						return err
-					}
-				}
-				if !found {
-					return &memberError{http.StatusUnprocessableEntity, "unknown_outlet", fmt.Sprintf(`Outlet "%s" tidak ditemukan.`, o)}
-				}
-			}
-		}
-
-		// resolve the target, writing nothing yet
-		target, linked := int64(0), false
-		uid, err := auth.UserByIdentity(ctx, tx, up.Issuer, subject)
-		switch {
-		case err == nil:
-			target, linked = uid, true
-		case errors.Is(err, store.ErrNotFound):
-			res, err := tx.Query(ctx, "select id from rk_users where email = $1", email)
-			if err != nil {
-				return err
-			}
-			if len(res.Rows) > 0 {
-				target = res.Rows[0][0].(int64)
-				res, err = tx.Query(ctx, "select 1 from rk_identities where issuer = $1 and user_id = $2 and subject <> $3 limit 1", up.Issuer, target, subject)
-				if err != nil {
-					return err
-				}
-				if len(res.Rows) > 0 {
-					return &memberError{http.StatusConflict, "identity_conflict", msgIdentityConflict}
-				}
-				// an account found by e-mail is linked only when no other organisation holds it: linking a subject to
-				// another organisation's person would hand that person's access there to whoever holds the subject
-				if err := ownerAnywhere(ctx, tx, target); err != nil {
-					return err
-				}
-				if err := s.accountOnlyHere(ctx, tx, target, org); err != nil {
-					return err
-				}
-			}
-		default:
-			return err
-		}
-		targetEmail, m := email, membership{}
-		if target != 0 {
-			res, err := tx.Query(ctx, "select email from rk_users where id = $1", target)
-			if err != nil {
-				return err
-			}
-			targetEmail = res.Rows[0][0].(string)
-			if m, err = loadMembership(ctx, tx, org, target); err != nil {
-				return err
-			}
-		}
-
-		// refuse before writing: an owner here or in any organisation (a linked subject included)
-		if target != 0 {
-			if err := ownerAnywhere(ctx, tx, target); err != nil {
-				return err
-			}
-		}
-		if linked && targetEmail != email {
-			// the e-mail is the account's, not this membership's: changed only for a person no other organisation holds
-			if err := s.accountOnlyHere(ctx, tx, target, org); err != nil {
-				return err
-			}
-			res, err := tx.Query(ctx, "select 1 from rk_users where email = $1 and id <> $2", email, target)
-			if err != nil {
-				return err
-			}
-			if len(res.Rows) > 0 {
-				return &memberError{http.StatusConflict, "email_taken", msgEmailTaken}
-			}
-		}
-		if err := plan.CheckNewPerson(ctx, tx, org, targetEmail); err != nil { // an existing member is not a new person
-			return err
-		}
-		if body.Record != "" {
-			if err := s.claimMemberRecord(ctx, tx, org, body.Record, target); err != nil {
-				return err
-			}
-		}
-
-		// write
-		if linked && targetEmail != email {
-			if _, err := tx.Query(ctx, "update rk_users set email = $1 where id = $2", email, target); err != nil {
-				return err
-			}
-		}
-		outlets := []string{}
-		switch {
-		case body.Outlets != nil:
-			outlets = dedupe(*body.Outlets)
-		case m.member:
-			outlets = m.outlets
-		}
-		userID, created, err = auth.UpsertMember(ctx, tx, email, strings.TrimSpace(body.Name), org, body.Role, outlets)
-		if errors.Is(err, auth.ErrOwnerProtected) {
-			return &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
-		}
-		if err != nil {
-			return err
-		}
-		if target != 0 && userID != target {
-			return fmt.Errorf("member api: upsert wrote user %d, resolved %d", userID, target)
-		}
-		if body.Record != "" {
-			// the sync looks rk_members.record up first, so it links this record instead of making one
-			if _, err := tx.Query(ctx, "update rk_members set record = $3 where org_id = $1 and user_id = $2", org, userID, body.Record); err != nil {
-				return err
-			}
-		}
-		if !linked {
-			if err := auth.LinkIdentity(ctx, tx, up.Issuer, subject, userID); errors.Is(err, auth.ErrConflict) {
-				return &memberError{http.StatusConflict, "identity_conflict", msgIdentityConflict}
-			} else if err != nil {
-				return err
-			}
-		}
-		// a real change revokes; so does joining again, since a session or token left from an earlier membership
-		// (ended without revocation, e.g. rangka user remove) must not come back to life with the new one
-		revoked := (m.member && (m.role != body.Role || !sameSet(m.outlets, outlets))) || (!m.member && target != 0)
-		if revoked {
-			if err := s.Auth.RevokeMember(ctx, tx, userID, org); err != nil {
-				return err
-			}
-		}
-		return store.Audit(ctx, tx, org, c.p.User.Email, "member.upsert", "user/"+email, "member set by API token",
-			map[string]any{"via": "token", "upstream": up.ID, "subject": subject, "role": body.Role, "outlets": outlets, "record": body.Record, "created": created, "revoked": revoked})
+		var err error
+		userID, created, err = s.writeMember(ctx, tx, org, in)
+		return err
 	})
 	if err != nil {
 		memberFail(w, err)
@@ -370,6 +240,192 @@ func (s *Server) putMember(w http.ResponseWriter, r *http.Request, c *caller) {
 	}
 	s.syncMemberRecord(ctx, org, userID)
 	writeJSON(w, http.StatusOK, map[string]any{"user_id": userID, "created": created})
+}
+
+// knownRole answers 422 unknown_role unless role exists in the registry and is not owner: owner is never given,
+// changed or removed through the member routes.
+func (s *Server) knownRole(w http.ResponseWriter, role string) bool {
+	if role == "" || role == "owner" || s.Engine.Reg().Roles[role] == nil {
+		writeError(w, http.StatusUnprocessableEntity, "unknown_role", fmt.Sprintf(`Peran "%s" tidak ada di usaha ini.`, role))
+		return false
+	}
+	return true
+}
+
+// memberInput is one member write: the Member API's PUT (by upstream subject) and the Tim routes (by e-mail, or by
+// account for a change) share it.
+type memberInput struct {
+	Email, Name, Role string    // Email valid and lowercase; Role known and not owner (checked by the caller)
+	Outlets           *[]string // nil keeps an existing member's outlets (none for a new one)
+	Record            string    // an existing user record to link (contract 0055 §3)
+
+	userID int64       // the account, resolved by the caller (Tim PATCH); 0 resolves by link or e-mail
+	link   *memberLink // the upstream subject (Member API): resolve by it, and link it to the account
+	actor  string      // audit actor (the owner's e-mail)
+	via    string      // audit via: token or team
+	note   string      // audit message
+}
+
+// memberLink is the upstream subject a Member API call is keyed by.
+type memberLink struct{ issuer, upstream, subject string }
+
+// writeMember is the checked member write of contract 0043 §2 inside the caller's transaction: it validates the
+// outlets, resolves the target writing nothing yet, refuses an owner (here or anywhere), an account another
+// organisation holds, an e-mail collision and a new person past the plan's limit, claims the record, upserts the
+// membership, links the subject, revokes on a real change and audits. The record sync runs after the commit
+// (syncMemberRecord). created reports a new account.
+func (s *Server) writeMember(ctx context.Context, tx *pg.Tx, org string, in memberInput) (userID int64, created bool, err error) {
+	reg := s.Engine.Reg()
+	if in.Outlets != nil {
+		for _, o := range *in.Outlets {
+			found := false
+			if reg.Model("outlet") != nil {
+				if found, err = store.Exists(ctx, tx, org, "outlet", o); err != nil {
+					return 0, false, err
+				}
+			}
+			if !found {
+				return 0, false, &memberError{http.StatusUnprocessableEntity, "unknown_outlet", fmt.Sprintf(`Outlet "%s" tidak ditemukan.`, o)}
+			}
+		}
+	}
+
+	// resolve the target, writing nothing yet
+	email := in.Email
+	target, linked := in.userID, in.userID != 0
+	byEmail := func() error {
+		res, err := tx.Query(ctx, "select id from rk_users where email = $1", email)
+		if err != nil || len(res.Rows) == 0 {
+			return err
+		}
+		target = res.Rows[0][0].(int64)
+		if in.link != nil {
+			res, err = tx.Query(ctx, "select 1 from rk_identities where issuer = $1 and user_id = $2 and subject <> $3 limit 1", in.link.issuer, target, in.link.subject)
+			if err != nil {
+				return err
+			}
+			if len(res.Rows) > 0 {
+				return &memberError{http.StatusConflict, "identity_conflict", msgIdentityConflict}
+			}
+		}
+		// an account found by e-mail is taken only when no other organisation holds it: linking a subject (or
+		// handing a sign-in) to another organisation's person would hand that person's access there over
+		if err := ownerAnywhere(ctx, tx, target); err != nil {
+			return err
+		}
+		return s.accountOnlyHere(ctx, tx, target, org)
+	}
+	switch {
+	case linked:
+	case in.link != nil:
+		uid, err := auth.UserByIdentity(ctx, tx, in.link.issuer, in.link.subject)
+		switch {
+		case err == nil:
+			target, linked = uid, true
+		case errors.Is(err, store.ErrNotFound):
+			if err := byEmail(); err != nil {
+				return 0, false, err
+			}
+		default:
+			return 0, false, err
+		}
+	default:
+		if err := byEmail(); err != nil {
+			return 0, false, err
+		}
+	}
+	targetEmail, m := email, membership{}
+	if target != 0 {
+		res, err := tx.Query(ctx, "select email from rk_users where id = $1", target)
+		if err != nil {
+			return 0, false, err
+		}
+		if len(res.Rows) == 0 {
+			return 0, false, store.ErrNotFound
+		}
+		targetEmail = res.Rows[0][0].(string)
+		if m, err = loadMembership(ctx, tx, org, target); err != nil {
+			return 0, false, err
+		}
+	}
+
+	// refuse before writing: an owner here or in any organisation (a linked subject included)
+	if target != 0 {
+		if err := ownerAnywhere(ctx, tx, target); err != nil {
+			return 0, false, err
+		}
+	}
+	if linked && targetEmail != email {
+		// the e-mail is the account's, not this membership's: changed only for a person no other organisation holds
+		if err := s.accountOnlyHere(ctx, tx, target, org); err != nil {
+			return 0, false, err
+		}
+		res, err := tx.Query(ctx, "select 1 from rk_users where email = $1 and id <> $2", email, target)
+		if err != nil {
+			return 0, false, err
+		}
+		if len(res.Rows) > 0 {
+			return 0, false, &memberError{http.StatusConflict, "email_taken", msgEmailTaken}
+		}
+	}
+	if err := plan.CheckNewPerson(ctx, tx, org, targetEmail); err != nil { // an existing member is not a new person
+		return 0, false, err
+	}
+	if in.Record != "" {
+		if err := s.claimMemberRecord(ctx, tx, org, in.Record, target); err != nil {
+			return 0, false, err
+		}
+	}
+
+	// write
+	if linked && targetEmail != email {
+		if _, err := tx.Query(ctx, "update rk_users set email = $1 where id = $2", email, target); err != nil {
+			return 0, false, err
+		}
+	}
+	outlets := []string{}
+	switch {
+	case in.Outlets != nil:
+		outlets = dedupe(*in.Outlets)
+	case m.member:
+		outlets = m.outlets
+	}
+	userID, created, err = auth.UpsertMember(ctx, tx, email, strings.TrimSpace(in.Name), org, in.Role, outlets)
+	if errors.Is(err, auth.ErrOwnerProtected) {
+		return 0, false, &memberError{http.StatusConflict, "owner_protected", msgOwnerProtected}
+	}
+	if err != nil {
+		return 0, false, err
+	}
+	if target != 0 && userID != target {
+		return 0, false, fmt.Errorf("member write: upsert wrote user %d, resolved %d", userID, target)
+	}
+	if in.Record != "" {
+		// the sync looks rk_members.record up first, so it links this record instead of making one
+		if _, err := tx.Query(ctx, "update rk_members set record = $3 where org_id = $1 and user_id = $2", org, userID, in.Record); err != nil {
+			return 0, false, err
+		}
+	}
+	if in.link != nil && !linked {
+		if err := auth.LinkIdentity(ctx, tx, in.link.issuer, in.link.subject, userID); errors.Is(err, auth.ErrConflict) {
+			return 0, false, &memberError{http.StatusConflict, "identity_conflict", msgIdentityConflict}
+		} else if err != nil {
+			return 0, false, err
+		}
+	}
+	// a real change revokes; so does joining again, since a session or token left from an earlier membership
+	// (ended without revocation, e.g. rangka user remove) must not come back to life with the new one
+	revoked := (m.member && (m.role != in.Role || !sameSet(m.outlets, outlets))) || (!m.member && target != 0)
+	if revoked {
+		if err := s.Auth.RevokeMember(ctx, tx, userID, org); err != nil {
+			return 0, false, err
+		}
+	}
+	data := map[string]any{"via": in.via, "role": in.Role, "outlets": outlets, "record": in.Record, "created": created, "revoked": revoked}
+	if in.link != nil {
+		data["upstream"], data["subject"] = in.link.upstream, in.link.subject
+	}
+	return userID, created, store.Audit(ctx, tx, org, in.actor, "member.upsert", "user/"+email, in.note, data)
 }
 
 // claimMemberRecord refuses a record that is not an existing user record of org (unknown_record; also when the

@@ -62,7 +62,10 @@ in the v0.1 notes to overlays that add fields, rules, approvals or options).
   text of a group or sub-menu label as written in the app's `app.rk` (groups have no other name). Each replaces that
   label wherever the app menu is drawn (side menu, menu search, Console); the groups, their order and their models
   stay the app's, and a site layout is not needed. Low risk, like `label`. Validator codes: `name_mismatch` (`app` is
-  not the file name), `unknown_app`, `unknown_group` (a key that is not a group or sub-menu of that app's menu).
+  not the file name), `unknown_app`, and the warning `unknown_group` (a key that is not a group or sub-menu of that
+  app's menu: an app upgrade may change its group words, so the site still loads and that label is not applied).
+  A change set writes it at `custom/app.<app>.rk` only (`<app>` snake_case); `custom/app.rk` stays the overlay of a
+  model named `app`.
 
 Validator codes: `unknown_field` (a layout, column, `options` or `labels` key that is not a field of the merged model),
 `not_select` (`options` on a field that is not `type: select`), `bad_option` (a kanban column that is not an option

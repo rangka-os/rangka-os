@@ -195,10 +195,10 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/custom/sales_invoice.rk:33:21  error  unknown_field  views/list/columns/1  "nope_col" is not a field of sales_invoice
 ../broken-site/custom/sales_invoice.rk:31:14  error  no_kanban  views/kanban/columns  sales_invoice has no kanban view
 ../broken-site/custom/sales_invoice.rk:4:3  error  compute_cycle  fields/x_a/compute  x_a → x_b → x_a
-../broken-site/custom/app.crm.rk:5:9  error  unknown_group  menu_labels/CRMM  "CRMM" is not a menu group or sub-menu of crm; did you mean "CRM"?
+../broken-site/custom/app.crm.rk:5:9  warn   unknown_group  menu_labels/CRMM  "CRMM" is not a menu group or sub-menu of crm; did you mean "CRM"?
 ../broken-site/custom/app.gudang.rk:3:6  error  name_mismatch  app  app overlay app "sales" must match the file name "app.gudang"
 ../broken-site/custom/app.gudang.rk:3:6  error  unknown_app  app  "gudang" is not an app or module
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-174 error(s), 28 warning(s)
+173 error(s), 29 warning(s)

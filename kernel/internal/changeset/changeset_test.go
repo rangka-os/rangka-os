@@ -101,6 +101,8 @@ func TestAssess(t *testing.T) {
 		{"new overlay with only a label", []Op{{Op: "create", Path: "custom/deal.rk"}}, with("custom/deal.rk", map[string]any{"model": "deal", "label": map[string]any{"id": "Mobil"}}), "low", 4},
 		// 0049: the company's words for an app's menu groups are display only
 		{"new app overlay menu labels", []Op{{Op: "create", Path: "custom/app.crm.rk"}}, with("custom/app.crm.rk", map[string]any{"app": "crm", "menu_labels": map[string]any{"CRM": map[string]any{"id": "Pelanggan"}}}), "low", 4},
+		// audit menu-labels F1: custom/app.rk is the overlay of a model named app, judged like any overlay
+		{"overlay of a model named app with money", []Op{{Op: "create", Path: "custom/app.rk"}}, with("custom/app.rk", map[string]any{"model": "app", "fields": []any{map[string]any{"name": "x_fee", "type": "currency"}}}), "high", 4},
 		{"theme", []Op{{Op: "replace", Path: "themes/kopi_senja.rk"}}, before, "low", 6},
 		{"new site process", []Op{{Op: "create", Path: "processes/kopi_senja.rk"}}, with("processes/kopi_senja.rk", map[string]any{"name": "kopi_senja"}), "low", 6},
 		{"replace site process", []Op{{Op: "replace", Path: "processes/kopi_senja.rk"}}, with("processes/kopi_senja.rk", map[string]any{"name": "kopi_senja"}), "low", 6},
@@ -418,6 +420,30 @@ func TestSchemaAllowsAppScreens(t *testing.T) {
 		errs := schema.Embedded().Validate("changeset", schema.FromData(normalize(doc)))
 		if (len(errs) == 0) != ok {
 			t.Errorf("%s: accepted=%v, want %v (%v)", path, len(errs) == 0, ok, errs)
+		}
+	}
+}
+
+// Audit menu-labels F2: a change set may write custom/app.<app>.rk (contract 0049), and only that shape.
+func TestChangesetAppOverlayPath(t *testing.T) {
+	for path, ok := range map[string]bool{
+		"custom/app.crm.rk":              true,
+		"custom/app.sewa_alat.rk":        true,
+		"custom/app.rk":                  true, // the overlay of a model named app
+		"custom/app..rk":                 false,
+		"custom/app.x.y.rk":              false,
+		"custom/app.1x.rk":               false,
+		"custom/app./../system.rk":       false,
+		"custom/app.crm/../../system.rk": false,
+	} {
+		doc := map[string]any{"id": newID(), "status": "proposed", "title": "Menu", "author": map[string]any{"kind": "user", "id": "o@contoh.test"},
+			"ops": []any{map[string]any{"op": "create", "path": path, "content": "app: crm\n"}}}
+		errs := schema.Embedded().Validate("changeset", schema.FromData(normalize(doc)))
+		if (len(errs) == 0) != ok {
+			t.Errorf("%s: accepted=%v, want %v (%v)", path, len(errs) == 0, ok, errs)
+		}
+		if _, app := appOverlayPath(path); app != (ok && path != "custom/app.rk") {
+			t.Errorf("appOverlayPath(%s) = %v", path, app)
 		}
 	}
 }

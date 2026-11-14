@@ -119,7 +119,7 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			a.raise("high", "changes system capabilities (system.rk)")
 		case strings.Contains(p, "/roles/"):
 			a.raise("high", "changes roles ("+p+")")
-		case strings.HasPrefix(p, "custom/app."):
+		case isAppOverlay(p):
 			// the company's words for an app's menu (0049): display only, like overlay labels
 			if !reflect.DeepEqual(normalize(old["menu_labels"]), normalize(nw["menu_labels"])) || !existed {
 				a.raise("low", "changes menu labels of "+p)
@@ -762,4 +762,30 @@ func companyModelFields(env Env, model string) map[string]map[string]any {
 		}
 	}
 	return out
+}
+
+// appOverlayPath reports whether p is a company app menu file custom/app.<app>.rk (contract 0049), and its app. A
+// model overlay custom/<model>.rk never has a dot in its stem (model.json#/$defs/name), so custom/app.rk is the
+// overlay of a model named app, not an app menu file.
+func appOverlayPath(p string) (string, bool) {
+	stem, ok := strings.CutPrefix(p, "custom/app.")
+	if !ok {
+		return "", false
+	}
+	name, ok := strings.CutSuffix(stem, ".rk")
+	if !ok || name == "" || name[0] < 'a' || name[0] > 'z' {
+		return "", false
+	}
+	for _, c := range name {
+		if !(c >= 'a' && c <= 'z' || c >= '0' && c <= '9' || c == '_') {
+			return "", false
+		}
+	}
+	return name, true
+}
+
+// isAppOverlay reports whether p is custom/app.<app>.rk (appOverlayPath).
+func isAppOverlay(p string) bool {
+	_, ok := appOverlayPath(p)
+	return ok
 }

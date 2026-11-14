@@ -315,3 +315,32 @@ func TestAppOverlayMenuLabels(t *testing.T) {
 		t.Error("custom/app.crm.rk must load as an app overlay, not a model overlay")
 	}
 }
+
+// Audit menu-labels F3: an app upgrade that changes a group's words leaves a stale key; the site still loads (warning
+// unknown_group) and the menu keeps the app's label.
+func TestAppOverlayStaleGroupIsWarning(t *testing.T) {
+	site := t.TempDir()
+	if err := os.CopyFS(site, os.DirFS("../../testdata/overlay-site")); err != nil {
+		t.Fatal(err)
+	}
+	stale := "app: crm\nmenu_labels:\n  CRM lama: {id: Pelanggan}\n"
+	if err := os.WriteFile(filepath.Join(site, "custom", "app.crm.rk"), []byte(stale), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	reg, rep := ValidateOpts(Options{AppsDir: testdb.Catalogue("apps"), SiteDir: site}, nil, schema.Embedded())
+	if rep.Errors() > 0 {
+		t.Fatalf("a stale menu label must not stop the site: %v", rep.All())
+	}
+	warned := false
+	for _, x := range rep.All() {
+		if x.Code == "unknown_group" && x.Level != "error" {
+			warned = true
+		}
+	}
+	if !warned {
+		t.Error("no unknown_group warning for a stale key")
+	}
+	if g := asMap(asMap(asList(reg.App["crm"].Raw["menu"])[0])["group"]); g["id"] != "CRM" {
+		t.Errorf("crm group = %v, want the app's own label", g)
+	}
+}

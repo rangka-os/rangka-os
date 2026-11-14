@@ -1193,7 +1193,7 @@ func (v *validator) appOverlays() {
 		}
 		for _, k := range sortedKeys(asMap(o["menu_labels"])) {
 			if !have[k] {
-				v.rep.extra("error", p, "menu_labels/"+k, "unknown_group", fmt.Sprintf(`"%s" is not a menu group or sub-menu of %s%s`, k, name, suggest(k, keys)))
+				v.rep.extra("warning", p, "menu_labels/"+k, "unknown_group", fmt.Sprintf(`"%s" is not a menu group or sub-menu of %s%s`, k, name, suggest(k, keys)))
 			}
 		}
 	}

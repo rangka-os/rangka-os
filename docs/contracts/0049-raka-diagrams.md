@@ -2,7 +2,7 @@
 
 Status: proposed (13 Nov 2026) · Owner of the change: rangka-os (this contract, design system) · Affects: rangka-ai
 (offer, agent and consult replies), rangka-cloud (studio, konsol) · Amends: 0046 §2 (option `flow`), 0046 §3 (options
-shown side by side) · Builds on: 0035 §5, 0044
+shown side by side), 0046 §1 (at least two options when two paths exist, §5) · Builds on: 0035 §5, 0044
 
 ## Context
 
@@ -19,6 +19,13 @@ shown side by side) · Builds on: 0035 §5, 0044
 - Approach picked by Dede: Mermaid everywhere. Offer diagrams are made by code from the map; answer diagrams are
   written by Raka and checked and repaired in rangka-ai with a flowchart subset checker; the browser falls back if
   anything still slips through. Design: `rangka-cloud/docs/specs/2026-11-13-raka-diagram-offer-design.md`.
+- **One flow is no comparison (Dede, 14 Nov 2026).** After 0049 shipped, offers mostly showed one option, so the
+  side-by-side row never appeared. Three causes: 0046 §1 merges `custom` into `modules` when no custom piece is needed
+  and asks for alternatives "only when they differ"; `clean_offer` (rangka-ai `raka/interview/offer.py`) silently drops
+  an option that is relabelled to a path already taken; and `rangka-consult` still says alternatives "sit behind
+  'Lihat pilihan lain'". Dede: Raka always prepares a second option to compare, whenever a second path honestly exists.
+  Approach picked: the rule in the skill plus a check in rangka-ai that asks Raka once for the missing alternative
+  (§5).
 
 ## Decision
 
@@ -179,6 +186,55 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
   
   In both cases the diagrams still open, and the options keep their lists.
 
+### 5. At least two options when two paths exist (amends 0046 §1)
+
+The recommendation rule of 0046 §1 stays: the most exact option is recommended, shown first and marked, and Raka
+never pushes the others in the reply. What changes is that an alternative is no longer optional.
+
+- **The rule.** Raka offers at least two options whenever a second path honestly exists:
+
+  | Recommended | Required alternative | When it exists |
+  | --- | --- | --- |
+  | `custom` | `modules` | the custom option uses at least one piece that is not `custom`; the stages only custom pieces serve go in the alternative's `not_covered` |
+  | `modules` | `bundle` | a set of apps in `rangka_catalogue` covers the stages; what the apps bring beyond the owner's flow goes in `adds` |
+  | `bundle` | `modules` | always (the bundle's modules as plain modules, without the apps) |
+
+  When no second path exists (an all-custom `custom` option, or `modules` recommended and no app fits), the offer has
+  one option. A third option is still allowed (at most one per path, 0046 §2).
+- **Never invented.** An alternative follows the same rules as any option (0046 §2): names from `rangka_catalogue`,
+  `pieces` on the map, owner's-words lists that are true for that option, gaps in `not_covered`. A thin honest
+  alternative beats a padded one.
+- **The check in rangka-ai** (`raka/interview/consult.py`, after the offer is checked):
+  1. When the cleaned offer has one option, Raka is asked once more (once per turn, apart from `OFFER_ASKS`) with
+     `ALT_REQUIRED`: the offer as cleaned, the path of the required alternative from the table, the map's pieces, and
+     the reason. For `bundle` required the ask says that when no app fits, Raka answers with `offer` and empty
+     `options` (a cheap "no"; code keeps the single option). **No ask when code can already see no second path:** a
+     `custom` option whose pieces are all `custom`.
+  2. The answer's ops are not applied: the map, its hash and every option's `flow` stay those of the first offer.
+  3. From the answer's offer, options are cleaned with `clean_offer` rules against the same map; options whose path is
+     already in the offer are ignored; the rest are appended after the first offer's options. The recommended option
+     is the first offer's, then 0050 §4 (more pains answered) runs over all options exactly as in `clean_offer`, so an
+     appended option that covers every stage and answers more pains may become the recommendation. That is 0050's
+     rule, not a side effect.
+  4. **Gaps are enforced for every non-`custom` alternative of a `custom` offer.** Code adds to the alternative's
+     `not_covered` every stage that lists a piece of the custom option whose kind is `custom` and none of the
+     alternative's pieces (the table's "stages only custom pieces serve"; text: "Butuh kepingan khusus yang tidak ada
+     di modul katalog."), before `flow` is computed, so the diagram never shows such a stage as covered. Stages served
+     only by catalogue pieces the alternative omits get nothing from code.
+  5. A broken answer, no new path, or no time (`OFFER_ASK_MIN_LEFT_S`, the same deadline check as the offer ask)
+     keeps the single-option offer. So does a timeout or a provider error in the ask itself: it runs under the turn's
+     deadline (less a few seconds of margin) and never loses a valid offer. The reply text is always the first answer's.
+  6. "Budget" here means only that: the deadline check, and the ask's tokens are reported to Cloud as usage like
+     every other call. No new token counting in rangka-ai. The ask also runs under `budget.final_offer` (the offer is
+     that turn's job).
+- **Relabelled duplicates are no longer silent.** `clean_offer` still keeps the first option of a path, but returns the
+  dropped duplicates, and the ask's reason names them ("dua opsimu ternyata sama-sama `modules` setelah dicek").
+- **One option on the card stays as it is.** No "Hanya satu cara yang pas" line: the card cannot tell whether the ask
+  ran and found nothing, was skipped for time, or the offer predates this change, so the line could be false. A marker
+  for it would need a new field through rangka-ai and Cloud; not worth it now (Open).
+- Offers stored before this change render as they are. The agent path (0046 §5, `make_offer`) follows the same rule
+  when it is built.
+
 ## Contract changes
 
 **rangka-os**
@@ -186,6 +242,8 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
 - Design system: vendored Mermaid (`web/app/vendor/mermaid.min.js`, pinned in `web/app/vendor/README.md`), `flowToMermaid`, `Diagram`,
   `DiagramViewer`, RichText fence, `OfferCompare`; Figma designs in "Agent chat" first.
 - The Raka chat in the rangka-os app renders answers through RichText, with diagrams.
+- §5: `skills/rangka-consult/SKILL.md` "The order and the recommendation" says at least two options when two paths
+  exist (the table in §5) and drops "Lihat pilihan lain". No design-system change.
 
 **rangka-ai**
 - `flow` on every option, computed in code in `raka/interview/offer.py` (§1).
@@ -194,6 +252,13 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
   lives in rangka-ai's prompts (§2).
 - Tests: valid subset, each refused construct, limits, line numbers; fixed on the first repair, dropped after two, a
   note dropped without repair, claim and diagram repairs together; `flow` from map and option for every `state`.
+- §5: the alternative ask in the consult path; `clean_offer` returns dropped duplicates; `ConsultResult.alt_added` and
+  the log field `altAdded` (next to `altAsks`) say whether the ask added an option. Tests: a single `custom`
+  option gets a `modules` alternative appended; the map hash and `flow` do not change and ops in the answer are not
+  applied; the recommendation stays unless 0050 §4 moves it; stages served only by custom pieces land in the
+  alternative's `not_covered` (also for a `bundle` alternative); a broken answer, a same-path answer, a timeout or a
+  provider error in the ask keeps one option; a relabelled duplicate triggers
+  the ask with its reason; no ask with two options, with an all-custom option, or without time left.
 
 **rangka-cloud**
 - `OfferOption.flow` stored with the offer (§1).
@@ -204,9 +269,12 @@ Raka: Ini masih tawaran, belum aku bangun apa-apa.
 - e2e with a fake Raka: three options side by side with diagrams; phone scroll; zoom, then "Pilih ini" from the popup
   accepts that option; an answered or superseded offer has no accept in the popup; an answer with a `mermaid` fence
   renders; a broken fence never reaches the page.
+- §5: nothing (the card already draws any number of options).
 
 ## Open
 
 - Diagram types beyond `flowchart` (sequence, state, gantt, pie), each with its own check.
 - Offers in a running business (0046 §5, `make_offer`) are not built yet; they get this card when they are.
+- A marker that the alternative ask ran and found no second path, so a single-option card could say "Hanya satu cara
+  yang pas dengan alurmu." (§5).
 - The exact Mermaid 11.x version and the token to `themeVariables` mapping, left to the builder within the rules in §3.

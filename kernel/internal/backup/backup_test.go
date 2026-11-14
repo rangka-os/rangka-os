@@ -556,7 +556,7 @@ func TestOrgBackup(t *testing.T) {
 	}
 	// the tenant's plan and AI credits (contract 0028) belong to the installation, not to one org, and so do
 	// upstream sign-ins in flight (contract 0042, ten-minute rows)
-	if want := []string{"rk_ai_usage", "rk_keys", "rk_plan_changes", "rk_site_plan", "rk_upstream_states"}; !reflect.DeepEqual(m.Excluded, want) {
+	if want := []string{"rk_ai_usage", "rk_keys", "rk_pdf_usage", "rk_plan_changes", "rk_site_plan", "rk_upstream_states"}; !reflect.DeepEqual(m.Excluded, want) {
 		t.Errorf("excluded = %v, want %v", m.Excluded, want)
 	}
 	for _, ts := range m.Tables {

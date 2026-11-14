@@ -44,10 +44,13 @@ func (e *Engine) planReadOnlyIn(reg *meta.Registry, a Actor, m *meta.Model, acti
 		return nil
 	}
 	snap := e.Plan.Peek(e.DB, reg, e.Now(), e.Log)
-	if snap == nil || (len(snap.ExcessOutlets) == 0 && len(snap.ExcessPeople) == 0) {
+	if snap == nil || (len(snap.ExcessOutlets) == 0 && len(snap.ExcessPeople) == 0 && len(snap.ExcessUnits) == 0) {
 		return nil
 	}
 	if pe := snap.ReadOnlyPerson(a.ID); pe != nil {
+		return planError(pe)
+	}
+	if pe := snap.ReadOnlyModel(m); pe != nil { // an app past the apps limit (contract 0057 §1)
 		return planError(pe)
 	}
 	if m == nil || rec == nil || len(snap.ExcessOutlets) == 0 {

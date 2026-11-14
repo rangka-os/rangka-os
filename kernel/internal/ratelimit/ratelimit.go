@@ -120,6 +120,27 @@ func (l *Limiter) Wait(ctx context.Context, key string, rate Rate) (time.Duratio
 	return wait, nil
 }
 
+// Free reports whether key has a whole token under rate without taking it; when not, it returns how long until
+// one is. Callers that charge only some requests (failed pairing tries, contract 0058 §2) check Free first and
+// take the token with Wait afterwards.
+func (l *Limiter) Free(key string, rate Rate) (bool, time.Duration) {
+	if rate.RPS <= 0 {
+		return true, 0
+	}
+	burst := math.Max(1, float64(rate.Burst))
+	l.mu.Lock()
+	defer l.mu.Unlock()
+	b, ok := l.buckets[key]
+	if !ok || b.rate != rate {
+		return true, 0
+	}
+	tokens := math.Min(burst, b.tokens+l.now().Sub(b.last).Seconds()*rate.RPS)
+	if tokens >= 1 {
+		return true, 0
+	}
+	return false, time.Duration((1 - tokens) / rate.RPS * float64(time.Second))
+}
+
 // prune drops buckets that are full again and have nobody waiting once there are MaxKeys of them. l.mu is held.
 func (l *Limiter) prune(now time.Time) {
 	max := l.MaxKeys

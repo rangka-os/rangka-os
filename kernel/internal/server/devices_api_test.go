@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/cookiejar"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
@@ -148,8 +149,11 @@ func TestPairingCodeSingleUse(t *testing.T) {
 	}
 }
 
+// Only failed pairing tries count against an address: 10 per 15 minutes (contract 0058 §2).
 func TestPairingRateLimit(t *testing.T) {
 	e := newEnv(t, false, nil)
+	e.login()
+	e.pair("OUT-01", "Kasir 0") // a success costs nothing
 	d := e.device()
 	for i := 0; i < 10; i++ {
 		d.must(400, "POST", "/auth/device/pair", map[string]any{"code": "ZZZZ2222", "name": "Kasir"})
@@ -163,6 +167,34 @@ func TestPairingRateLimit(t *testing.T) {
 	if get(r.JSON, "error", "code") != "too_many_attempts" {
 		t.Fatalf("edge register = %s", r.Body)
 	}
+	// a valid code is refused too while the address is out of tries
+	code := e.pairingCode("OUT-01")
+	d.must(429, "POST", "/auth/device/pair", map[string]any{"code": code, "name": "Kasir"})
+}
+
+// Successful pairings never lock out an address (tenants behind one proxy share it).
+func TestPairingSuccessesNotLimited(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	for i := 0; i < 12; i++ {
+		e.pair("OUT-01", "Kasir "+strconv.Itoa(i))
+	}
+}
+
+// Creating pairing codes and revoking devices take a full sign-in; an owner's API token may only list devices.
+func TestDeviceCodesNeedFullSession(t *testing.T) {
+	e := newEnv(t, false, nil)
+	e.login()
+	tok := personToken(e, "ceo@saga.co.id", "kopi-senja")
+	if r := tok.must(403, "POST", "/api/v1/devices/codes", map[string]any{"outlet": "OUT-01"}); get(r.JSON, "error", "code") != "forbidden" {
+		t.Fatalf("token creates a code: %s", r.Body)
+	}
+	tok.must(200, "GET", "/api/v1/devices", nil)
+	_, pr := e.pair("OUT-01", "Kasir")
+	id, _ := pr.JSON["device_id"].(string)
+	tok.must(403, "DELETE", "/api/v1/devices/"+id, nil)
+	e.must(201, "POST", "/api/v1/devices/codes", map[string]any{"outlet": "OUT-01"})
+	e.must(204, "DELETE", "/api/v1/devices/"+id, nil)
 }
 
 func TestDeviceAloneReadsNothing(t *testing.T) {

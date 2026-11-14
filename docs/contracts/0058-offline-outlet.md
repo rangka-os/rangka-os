@@ -121,7 +121,8 @@ Status: accepted (15 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
 - **Voids offline** (author's call, open to correction): cancelling a receipt on the same day while its shift is
   open works offline, as `screen.write` op `cancel` referencing the sale's device name; the receipt prints "BATAL".
   Only the device that made the receipt voids it (`rejected`, `other_device` otherwise), and its cancel rules (e.g.
-  `same_day_void`) still refuse: a void is not a sale already paid, so §10's override does not apply.
+  `same_day_void`) still refuse: a void is not a sale already paid, so §10's override does not apply. A receipt
+  without `created_device` (made before this change, or by head office) cannot be voided from a device.
 - A close the kernel refuses (shift already closed by head office) is `rejected` and listed for head office; the
   counted cash is kept in the event.
 
@@ -165,11 +166,13 @@ Status: accepted (15 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
   `{model, rule, message}`), and the write is accepted. Cancel rules, rules of records a flow writes and rules of
   other models still refuse, as do permissions, the actor check (§4) and `device_name_invalid`. Only computed money
   fields the actor may see (0027) are taken from the device. Approval `when` guards read the device's totals, which
-  are binding (sales win). (Author's call.)
+  are binding (sales win). (Author's call.) On a device submit that carries money, the approval guard reads the
+  draft's stored totals; the device normally sends create and submit together, so the totals are pinned at create.
 - **Approvals offline are blocked** (Dede, 14 Nov 2026). An action that needs an approval online (e.g. a discount
   above `big_discount`'s threshold) is not offered while offline; the screen says "Perlu persetujuan, tunggu online".
 - **Actor trust.** The kernel trusts the actor a paired device names (the device is paired by an owner and revocable,
-  and the PIN gate is on the device); every write is audited "via device K1". (Author's call.)
+  and the PIN gate is on the device); every write is audited "via device K1". (Author's call.) A stolen device
+  cookie or token can therefore act as any PIN-eligible member of that outlet until the device is revoked.
 - **Exceptions.** A kernel table `rk_exceptions` (`org`, `outlet`, `device`, `kind`, `ref`, `detail`, `created_at`,
   `resolved_by`, `resolved_at`) with `GET /api/v1/exceptions` for head office and owners, and a list under the sync
   panel for them. Kinds here: `edge_price_drift`, `negative_stock`, `device_number_gap`, `rule_overridden`. (Author's
@@ -185,8 +188,9 @@ Status: accepted (15 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
    list is an exception (`edge_price_drift`), not a correction.
 2. Stock follows sales: stock may go negative; exception for head office. Never refuse a sale for stock.
 3. Kernel wins for reference data.
-4. A void references the sale by its device name; a void that arrives before its sale is held (order by `seq` makes
-   this rare).
+4. A void references the sale by its device name; a void whose sale the kernel has not received is `rejected`
+   (`not_found`). The device keeps events in `seq` order and sends a void only after its sale was accepted (Plan 2),
+   so this is rare.
 5. Numbers: §3. No LLM decides any of it.
 
 ## Not in this contract
@@ -198,7 +202,7 @@ Status: accepted (15 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
 | # | What | Repo |
 | --- | --- | --- |
 | 0 | Printer spike: pilot printer models × (Web Bluetooth, Web Serial, WebUSB) on Android and Windows | rangka-os (throwaway) |
-| 1 | `rk_devices`, device codes, pairing, PIN and unlock incl. offline verifiers (§2) | rangka-os |
+| 1 | `rk_devices`, device codes, pairing, PIN and unlock (§2); partial: the offline verifiers are in Plan 2 | rangka-os |
 | 2 | `{device.code}` token, `naming_on: device`, name checks, gap exception; both validators and schema (§3) | rangka-os |
 | 3 | `POST /edge/events` with `screen.write`, dedup, actor checks, `occurred_at`; `rk_edge_events` (§4) | rangka-os |
 | 4 | `GET /edge/config`, `/edge/data/<set>` incl. `staff` (§7) | rangka-os |

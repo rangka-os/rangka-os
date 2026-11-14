@@ -28,20 +28,23 @@ const (
 // author's call for 0048 §5's open permission: owner and head office).
 var devicePairRoles = map[string]bool{"owner": true, "head_office": true}
 
-// pairRate is the pairing tries one address gets: 10 per 15 minutes (contract 0058 §2, author's call). The bucket
-// refills one try every 90 seconds and never waits: a try without a token is refused at once.
+// pairRate is the failed pairing tries one address gets: 10 per 15 minutes (contract 0058 §2, author's call). Only
+// a wrong, used or expired code costs a try, so pairings that succeed never lock out an address (many tenants
+// behind one proxy without RANGKA_TRUSTED_PROXIES share it). The bucket refills one try every 90 seconds and never
+// waits: once it is empty every try is refused at once.
 var pairRate = ratelimit.Rate{RPS: 10.0 / (15 * 60), Burst: 10}
 
 // edgeSync is the sync block of an edge registration (0006 §2).
 var edgeSync = map[string]any{"push_max_items": 100, "pull_interval_s": 60}
 
-// pairTries counts pairing tries per client address (one process; a backstop like shaping, contract 0040 §9).
+// pairTries counts failed pairing tries per client address (one process; a backstop like shaping, contract 0040 §9).
 type pairTries struct {
 	once sync.Once
 	l    ratelimit.Limiter
 }
 
-// mayPairDevices: owner or head office, never from a PIN session (contract 0058 §2).
+// mayPairDevices: owner or head office, never from a PIN session (contract 0058 §2). It is enough to list devices;
+// creating codes and revoking also need mayManageDevices.
 func mayPairDevices(c *caller) bool {
 	if c.p.Via == "pin" {
 		return false
@@ -54,8 +57,13 @@ func mayPairDevices(c *caller) bool {
 	return false
 }
 
-// pairAllowed takes one pairing try for the request's address; on false it has answered 429 too_many_attempts.
-func (s *Server) pairAllowed(w http.ResponseWriter, r *http.Request) bool {
+// mayManageDevices: creating pairing codes and revoking devices take a person fully signed in (no API token, OIDC
+// client, assistant or PIN session) with an owner or head office role, as clearMemberPin does.
+func mayManageDevices(c *caller) bool {
+	return c.p.Human() && mayPairDevices(c)
+}
+
+func (s *Server) pairLimiter() *ratelimit.Limiter {
 	s.pairs.once.Do(func() {
 		s.pairs.l.Now = func() time.Time {
 			if s.Auth != nil && s.Auth.Now != nil {
@@ -64,11 +72,14 @@ func (s *Server) pairAllowed(w http.ResponseWriter, r *http.Request) bool {
 			return time.Now()
 		}
 	})
-	if _, err := s.pairs.l.Wait(r.Context(), "pair:"+s.clientKey(r), pairRate); err != nil {
-		var refused *ratelimit.Refused
-		if errors.As(err, &refused) {
-			w.Header().Set("Retry-After", strconv.Itoa(refused.RetrySeconds()))
-		}
+	return &s.pairs.l
+}
+
+// pairAllowed reports whether the request's address has a failed try left, without taking one; on false it has
+// answered 429 too_many_attempts.
+func (s *Server) pairAllowed(w http.ResponseWriter, r *http.Request) bool {
+	if ok, retry := s.pairLimiter().Free("pair:"+s.clientKey(r), pairRate); !ok {
+		w.Header().Set("Retry-After", strconv.Itoa((&ratelimit.Refused{RetryAfter: retry}).RetrySeconds()))
 		writeError(w, http.StatusTooManyRequests, "too_many_attempts", msgTooManyPairs)
 		return false
 	}
@@ -77,7 +88,7 @@ func (s *Server) pairAllowed(w http.ResponseWriter, r *http.Request) bool {
 
 // POST /api/v1/devices/codes {outlet} → 201 {code, expires_at}
 func (s *Server) createPairingCode(w http.ResponseWriter, r *http.Request, c *caller) {
-	if !mayPairDevices(c) {
+	if !mayManageDevices(c) {
 		writeError(w, http.StatusForbidden, "forbidden", msgDevicesForbidden)
 		return
 	}
@@ -126,7 +137,7 @@ func (s *Server) listDevices(w http.ResponseWriter, r *http.Request, c *caller) 
 
 // DELETE /api/v1/devices/{id} → 204
 func (s *Server) revokeDevice(w http.ResponseWriter, r *http.Request, c *caller) {
-	if !mayPairDevices(c) {
+	if !mayManageDevices(c) {
 		writeError(w, http.StatusForbidden, "forbidden", msgDevicesForbidden)
 		return
 	}
@@ -144,9 +155,10 @@ func (s *Server) revokeDevice(w http.ResponseWriter, r *http.Request, c *caller)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// pairErr answers a failed pairing.
-func pairErr(w http.ResponseWriter, err error) {
+// pairErr answers a failed pairing; a wrong, used or expired code costs the address one try.
+func (s *Server) pairErr(w http.ResponseWriter, r *http.Request, err error) {
 	if errors.Is(err, auth.ErrPairingCodeInvalid) {
+		_, _ = s.pairLimiter().Wait(r.Context(), "pair:"+s.clientKey(r), pairRate) // charge only; Free gated the try
 		writeError(w, http.StatusBadRequest, "pairing_code_invalid", err.Error())
 		return
 	}
@@ -165,7 +177,7 @@ func (s *Server) pairBrowser(w http.ResponseWriter, r *http.Request) {
 	}
 	dev, secret, err := s.Auth.PairDevice(r.Context(), body.Code, body.Name, auth.DeviceBrowser)
 	if err != nil {
-		pairErr(w, err)
+		s.pairErr(w, r, err)
 		return
 	}
 	http.SetCookie(w, s.Auth.DeviceCookie(secret, 0))
@@ -190,7 +202,7 @@ func (s *Server) registerEdge(w http.ResponseWriter, r *http.Request) {
 	}
 	dev, secret, err := s.Auth.PairDevice(r.Context(), body.PairingCode, body.Device.Name, auth.DeviceEdge)
 	if err != nil {
-		pairErr(w, err)
+		s.pairErr(w, r, err)
 		return
 	}
 	writeJSON(w, http.StatusCreated, map[string]any{"device_id": dev.ID, "token": secret, "site": s.Site, "org": dev.Org,
@@ -309,7 +321,7 @@ func (s *Server) deviceUnlock(w http.ResponseWriter, r *http.Request, d *auth.De
 
 // DELETE /api/v1/members/{user_id}/pin → 204: an owner or head office clears a member's PIN and ends their PIN sessions.
 func (s *Server) clearMemberPin(w http.ResponseWriter, r *http.Request, c *caller) {
-	if !c.p.Human() || !mayPairDevices(c) { // a person signed in fully: no token, no PIN session
+	if !mayManageDevices(c) { // a person signed in fully: no token, no PIN session
 		writeError(w, http.StatusForbidden, "forbidden", msgPinForbidden)
 		return
 	}

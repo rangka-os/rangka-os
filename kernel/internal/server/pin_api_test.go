@@ -386,6 +386,17 @@ func TestPinSessionNoApplyChatMCP(t *testing.T) {
 	if r := d.must(403, "POST", "/api/v1/ai/chat", map[string]any{"message": "Halo"}); errCodeOf(r) != "pin_session_limited" {
 		t.Fatalf("chat from a PIN session = %s", r.Body)
 	}
+	// /meta offers a PIN session no propose or approve, and the catalogue stays closed (contract 0058 §2)
+	pm := d.must(200, "GET", "/api/v1/meta", nil)
+	for _, k := range []string{"propose", "approve", "approve_high"} {
+		if get(pm.JSON, "changesets", k) != false {
+			t.Fatalf("PIN session meta.changesets.%s: %s", k, pm.Body)
+		}
+	}
+	d.must(403, "GET", "/api/v1/catalogue", nil)
+	if fm := full.must(200, "GET", "/api/v1/meta", nil); get(fm.JSON, "changesets", "propose") != true || get(fm.JSON, "changesets", "approve") != true {
+		t.Fatalf("full session meta.changesets = %v", fm.JSON["changesets"])
+	}
 	rpc := map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
 	d.must(401, "POST", "/mcp", rpc)
 	full.must(200, "POST", "/mcp", rpc)

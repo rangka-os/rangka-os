@@ -220,6 +220,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/processes/{name}", a(s.getProcess))
 	mux.HandleFunc("POST /api/v1/processes/{name}/ops", a(s.processOps))
 	mux.HandleFunc("PUT /api/v1/processes/{name}/layout", a(s.putProcessLayout))
+	// Mulai di sini (contract 0053 §2–3)
+	mux.HandleFunc("GET /api/v1/onboarding", a(s.getOnboarding))
+	mux.HandleFunc("POST /api/v1/onboarding/hide", a(s.postOnboardingHide))
 	// system, orgs, files
 	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		writeJSON(w, 200, s.Status(r.Context(), c.actor.Org))
@@ -295,6 +298,9 @@ func (s *Server) Handler() http.Handler {
 		Status:    func(ctx context.Context, org string) any { return s.Status(ctx, org) },
 		Catalogue: func() any { return s.Engine.Reg().Catalogue() },
 		Skills:    s.skillLibrary,
+		Onboarding: func(ctx context.Context, a engine.Actor) (any, error) {
+			return s.Onboarding(pg.WithOrg(ctx, a.Org), a)
+		},
 	}
 	for _, m := range []string{"POST", "GET", "DELETE"} {
 		mux.Handle(m+" /mcp", mcpHandler)

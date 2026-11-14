@@ -21,7 +21,12 @@
           "label": {"type": "object", "additionalProperties": {"type": "string"}},
           "model": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"},
           "when": {"type": "string"},
-          "models": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}}
+          "models": {"type": "array", "items": {"type": "string", "pattern": "^[a-z][a-z0-9_]*$"}},
+          "hint": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 300},
+                   "description": "One sentence on what to do in this stage, shown in Mulai di sini (contract 0053 §1)"},
+          "answers": {"type": "array", "maxItems": 5,
+                      "items": {"type": "object", "additionalProperties": {"type": "string", "maxLength": 300}},
+                      "description": "The owner's problems this stage answers, in their words (contract 0053 §1)"}
         }
       }
     }

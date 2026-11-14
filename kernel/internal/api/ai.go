@@ -90,6 +90,21 @@ func (s *Server) aiFeature(ctx context.Context, siteEnabled bool) bool {
 	return ok
 }
 
+// aiFeatures is meta.features: {ai: true}, or {ai: false, ai_off: reason} (contract 0053 §4). The reason is
+// not_configured (no sidecar), disabled (config.ai.enabled false) or unreachable (no 200 on /healthz); it carries
+// no URL and no host.
+func (s *Server) aiFeatures(ctx context.Context, siteEnabled bool) map[string]any {
+	switch {
+	case !s.AI.on():
+		return map[string]any{"ai": false, "ai_off": "not_configured"}
+	case !siteEnabled:
+		return map[string]any{"ai": false, "ai_off": "disabled"}
+	case !s.aiFeature(ctx, siteEnabled):
+		return map[string]any{"ai": false, "ai_off": "unreachable"}
+	}
+	return map[string]any{"ai": true}
+}
+
 func durOr(d, def time.Duration) time.Duration {
 	if d > 0 {
 		return d

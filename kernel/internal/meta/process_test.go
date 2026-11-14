@@ -103,8 +103,20 @@ func TestValidateProcess(t *testing.T) {
 			t.Errorf("%s x%d: %q\nwant %q", code, count[code], got[code], w)
 		}
 	}
-	if count["schema"] != 1 {
-		t.Errorf("schema errors = %d (bad_schema.rk has empty stages)", count["schema"])
+	// bad_schema.rk has empty stages; bad_hint.rk has a hint over 300 characters and six answers (contract 0053 §1)
+	if count["schema"] != 3 {
+		t.Errorf("schema errors = %d, want 3", count["schema"])
+	}
+	wheres := map[string]bool{}
+	for _, it := range rep.All() {
+		if it.Code == "schema" {
+			wheres[it.Where] = true
+		}
+	}
+	for _, w := range []string{"stages", "stages/0/hint/id", "stages/1/answers"} {
+		if !wheres[w] {
+			t.Errorf("no schema error at %s: %v", w, wheres)
+		}
 	}
 }
 

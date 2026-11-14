@@ -196,6 +196,9 @@ func TestAIChatSidecarDown(t *testing.T) {
 	if v := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai"); v != false {
 		t.Fatalf("features.ai with the sidecar down: %v", v)
 	}
+	if v := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai_off"); v != "unreachable" {
+		t.Fatalf("features.ai_off with the sidecar down: %v", v) // contract 0053 §4
+	}
 }
 
 func TestAIChatTimeout(t *testing.T) {
@@ -337,6 +340,9 @@ func TestAIChatNotConfigured(t *testing.T) {
 	if v := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai"); v == true {
 		t.Fatalf("features.ai without a sidecar: %v", v)
 	}
+	if v := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai_off"); v != "not_configured" {
+		t.Fatalf("features.ai_off without a sidecar: %v", v)
+	}
 	// a healthy sidecar without a callback URL could not reach /mcp: the assistant stays off
 	side := fakeSidecar(t, func(w http.ResponseWriter, r *http.Request, body map[string]any) {
 		t.Error("sidecar called without a callback URL")
@@ -380,6 +386,9 @@ func TestFeaturesAI(t *testing.T) {
 	if v := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai"); v != true {
 		t.Fatalf("features.ai with a healthy sidecar: %v", v)
 	}
+	if f, _ := get(e.must(200, "GET", "/api/v1/meta", nil).JSON, "features").(map[string]any); len(f) != 1 {
+		t.Fatalf("features with a healthy sidecar carry only ai: %v", f)
+	}
 	off := newEnv(t, false, func(apps, site string) {
 		p := filepath.Join(site, "config.rk")
 		b, _ := os.ReadFile(p)
@@ -389,6 +398,9 @@ func TestFeaturesAI(t *testing.T) {
 	withAI(off, side.URL, nil)
 	if v := get(off.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai"); v != false {
 		t.Fatalf("features.ai with config.ai.enabled false: %v", v)
+	}
+	if v := get(off.must(200, "GET", "/api/v1/meta", nil).JSON, "features", "ai_off"); v != "disabled" {
+		t.Fatalf("features.ai_off with config.ai.enabled false: %v", v)
 	}
 	if r := off.must(403, "POST", "/api/v1/ai/chat", ask("Halo")); get(r.JSON, "error", "code") != "ai_disabled" {
 		t.Fatalf("chat when disabled: %s", r.Body)

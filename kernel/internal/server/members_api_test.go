@@ -653,6 +653,32 @@ func TestMemberOptions(t *testing.T) {
 	}
 }
 
+// A user model with account_id but without access (an older app) lists no employees instead of failing.
+func TestMemberOptionsNoAccessField(t *testing.T) {
+	e := newEnv(t, false, func(apps, _ string) {
+		p := filepath.Join(apps, "core", "models", "user.rk")
+		src, err := os.ReadFile(p)
+		if err != nil {
+			t.Fatal(err)
+		}
+		a, b := strings.Index(string(src), "  - name: access\n"), strings.Index(string(src), "  - name: account_id\n")
+		if a < 0 || b < a {
+			t.Fatal("user.rk layout changed")
+		}
+		if err := os.WriteFile(p, []byte(string(src)[:a]+string(src)[b:]), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	e.s.Auth.Upstreams = []auth.Upstream{{ID: "kantor", Label: "Kantor", Issuer: memberIssuer}}
+	e.login()
+	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "cloud", "scopes": []any{"members:write"}})
+	host := &env{t: t, ts: e.ts, token: tok.JSON["token"].(string)}
+	r := host.must(200, "GET", "/api/v1/members/options", nil)
+	if emp, ok := r.JSON["employees"].([]any); !ok || len(emp) != 0 {
+		t.Fatalf("employees: %s", r.Body)
+	}
+}
+
 // Contract 0055 §3: options is for a members:write token only, which reaches it.
 func TestMemberOptionsScope(t *testing.T) {
 	e, host := memberEnv(t)

@@ -40,7 +40,7 @@ the host decides who is a member, the kernel decides what they may do).
   | `employee_no` | data | new, editable |
   | `account_id` | int | new, read-only, hidden from every role (`hidden_for` all roles): the `rk_users.id` (§5) |
 - The read-only fields are written only by the kernel (§2). A person may edit `phone` and `employee_no` through the
-  normal form; nobody edits role, outlets or access there. The form shows a note "Akses diatur di Tim" with a link.
+  normal form; nobody edits role, outlets or access there. The `access` field carries the help text "Akses diatur di Tim." (no link).
 - **Who sees contact data (UU PDP).** `phone` and `email` are visible to the owner and `head_office` only: both carry
   `hidden_for` (0027) listing every other role an app defines. The validator gains a warning
   (`contact_field_visible`) when a role installed with `users` is missing from that list, so a new role does not

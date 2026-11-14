@@ -179,6 +179,46 @@ func TestTeamPatchRevokes(t *testing.T) {
 	}
 }
 
+// The owner of one organisation cannot change or remove a member of another: PATCH is 404, DELETE a no-op, and the
+// other organisation's membership and sessions stay as they were.
+func TestTeamOtherOrgMemberUntouched(t *testing.T) {
+	e := teamEnv(t)
+	ctx, db := context.Background(), e.s.DB
+	if err := auth.EnsureOrgCode(ctx, db, "pt_beta", "PT Beta", "BETA"); err != nil {
+		t.Fatal(err)
+	}
+	for _, u := range [][3]string{{"boss@beta.test", "pt_beta", "owner"}, {"staff@beta.test", "pt_beta", "sales_rep"}} {
+		if _, err := auth.EnsureUser(ctx, db, u[0], "", "rangka-demo", u[1], u[2], ""); err != nil {
+			t.Fatal(err)
+		}
+	}
+	id := dbOne(e, "select id from rk_users where email = 'staff@beta.test'").(int64)
+	if _, err := db.Query(ctx, "update rk_members set outlets = array['OUT-09'] where org_id = 'pt_beta' and user_id = $1", id); err != nil {
+		t.Fatal(err)
+	}
+	sess := personSession(e, "staff@beta.test", "pt_beta")
+	path := fmt.Sprintf("/api/v1/team/%d", id)
+	state := func() string {
+		return fmt.Sprintf("%v|%v|%d", dbOne(e, "select role from rk_members where org_id = 'pt_beta' and user_id = $1", id),
+			dbOne(e, "select array_to_string(outlets, ',') from rk_members where org_id = 'pt_beta' and user_id = $1", id),
+			countRows(e, "select 1 from rk_sessions where user_id = $1 and org_id = 'pt_beta'", id))
+	}
+	before := state()
+	if before != "sales_rep|OUT-09|1" {
+		t.Fatalf("setup: %s", before)
+	}
+	if r := e.do("PATCH", path, map[string]any{"role": "sales_manager", "outlets": []any{"OUT-01"}}); r.Status != 404 {
+		t.Fatalf("PATCH other org member: %d %s", r.Status, r.Body)
+	}
+	if r := e.do("DELETE", path, nil); r.Status != 204 {
+		t.Fatalf("DELETE other org member: %d %s", r.Status, r.Body)
+	}
+	if after := state(); after != before {
+		t.Fatalf("other org member changed: %s -> %s", before, after)
+	}
+	sess.must(200, "GET", "/auth/me", nil)
+}
+
 // The owner cannot be removed or changed; removing a member keeps the record (removed) and ends an unused link.
 func TestTeamDeleteOwnerRefused(t *testing.T) {
 	e := teamEnv(t)

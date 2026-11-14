@@ -499,7 +499,8 @@ func (s *Server) memberOptions(w http.ResponseWriter, r *http.Request, c *caller
 	}
 
 	employees := []map[string]any{}
-	if s.Engine.HasMemberRecord() {
+	// apps from before the access field have a user model that cannot list employees without access
+	if um := s.Engine.Reg().Model("user"); s.Engine.HasMemberRecord() && um.Field("access") != nil && um.Field("full_name") != nil {
 		res, err := s.DB.Query(ctx, fmt.Sprintf("select name, coalesce(full_name, ''), access from %s where org_id = $1 and access = 'none' order by name",
 			pg.QuoteIdent(store.TableName("user"))), org)
 		if err != nil {

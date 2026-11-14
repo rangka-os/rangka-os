@@ -282,3 +282,42 @@ func TestApplyLosingToAnotherProcessRestoresFiles(t *testing.T) {
 		t.Fatalf("status %v, want the other process's rejected", g["status"])
 	}
 }
+
+// Audit flow-locked F4: a change set that locks a field an installed company flow writes says so in its preview
+// (locked_flows and a note), and needs at least an approver.
+func TestPreviewReportsFlowWritingNewlyLockedField(t *testing.T) {
+	e := newEnvFrom(t, func(dir string) (apps, site string) {
+		if err := exec.Command("cp", "-r", "../../testdata/config-modules/.", dir).Run(); err != nil {
+			t.Fatal(err)
+		}
+		flow := "name: isi_kota\nlabel: {id: Isi kota}\non: customer.created\nsteps:\n  - update: doc\n    set: {city: \"'Bandung'\"}\n"
+		if err := os.MkdirAll(filepath.Join(dir, "site", "flows"), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(filepath.Join(dir, "site", "flows", "isi_kota.rk"), []byte(flow), 0o644); err != nil {
+			t.Fatal(err)
+		}
+		return filepath.Join(dir, "apps"), filepath.Join(dir, "site")
+	})
+	e.login()
+	b, err := os.ReadFile(filepath.Join(filepath.Dir(e.s.Changes.AppsDir), "modules", "contacts", "models", "customer.rk"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	locked := strings.Replace(string(b), "    label: {id: Kota}\n", "    label: {id: Kota}\n    read_only_for: [sales_rep]\n", 1)
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Kunci kota", "ops": []any{
+		map[string]any{"op": "replace", "path": "modules/contacts/models/customer.rk", "content": locked}}}).JSON
+	id := cs["id"].(string)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+	p := e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil).JSON
+	if get(p, "preview", "locked_flows", 0, "flow") != "flows/isi_kota.rk" || get(p, "preview", "locked_flows", 0, "field") != "city" {
+		t.Fatalf("locked_flows = %v", get(p, "preview", "locked_flows"))
+	}
+	if p["risk"] == "low" {
+		t.Fatalf("risk %v, want at least medium", p["risk"])
+	}
+	notes := strings.Join(toStrings(get(p, "preview", "notes")), " | ")
+	if !strings.Contains(notes, "flows/isi_kota.rk menulis city") {
+		t.Fatalf("notes: %s", notes)
+	}
+}

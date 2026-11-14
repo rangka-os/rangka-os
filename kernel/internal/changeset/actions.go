@@ -515,6 +515,17 @@ func (s *Service) preview(ctx context.Context, a Actor, id string) (cs *ChangeSe
 	if err := s.modulesDiff(ctx, cs, live, reg, p); err != nil {
 		return nil, false, err
 	}
+	// an upgrade that locks a field an installed company flow writes: the flow was approved before the lock and goes on
+	// writing it for every role (audit flow-locked F4); the approver sees it, and the change set needs an approver
+	if s.Reg != nil {
+		if ws := newlyLockedFlowWrites(s.Reg(), reg); len(ws) > 0 {
+			p.LockedFlows = ws
+			p.Notes = append(p.Notes, lockedFlowNote(ws))
+			if riskRank[cs.Risk] < riskRank["medium"] {
+				cs.Risk = "medium"
+			}
+		}
+	}
 	if s.Requires != nil && s.Reg != nil {
 		p.Requires = s.Requires(ctx, cs.Org, s.Reg(), reg)
 	}

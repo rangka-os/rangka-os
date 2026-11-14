@@ -67,6 +67,9 @@ type Preview struct {
 	// Requires lists the auth fields still unset for the connectors this change installs (contract 0017 §4). The
 	// change can be applied; each connector stays needs_auth until a person sets them. Never a value.
 	Requires []Requirement `json:"requires,omitempty"`
+	// LockedFlows lists installed company flows that write a field this change newly locks for some roles
+	// (read_only_for/hidden_for; audit flow-locked F4). The change is at least medium.
+	LockedFlows []LockedFlowWrite `json:"locked_flows,omitempty"`
 }
 
 // Requirement is one auth field a newly installed connector still needs.

@@ -665,6 +665,20 @@ func toInt(v any) int64 {
 // follow from $2), newest first like All, chunk rows at a time, and hands each to fn until fn says stop. A flow's
 // find reads only the rows its where: can match and stops at its first (or limit:) match instead of the whole table.
 func Scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, fn func(Record) (bool, error)) error {
+	return scan(ctx, q, m, org, conds, args, chunk, false, fn)
+}
+
+// ScanOldest is Scan oldest first (created_at, name ascending): Mulai di sini stops at the oldest matching record
+// (contract 0053 §2 done_at) without reading the rest of the table.
+func ScanOldest(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, fn func(Record) (bool, error)) error {
+	return scan(ctx, q, m, org, conds, args, chunk, true, fn)
+}
+
+func scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []string, args []any, chunk int, asc bool, fn func(Record) (bool, error)) error {
+	cmp, dir := "<", "desc"
+	if asc {
+		cmp, dir = ">", "asc"
+	}
 	if chunk <= 0 {
 		chunk = 200
 	}
@@ -676,10 +690,10 @@ func Scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []
 		w, a := where, base
 		if lastAt != nil {
 			a = append(append([]any{}, base...), lastAt, lastName)
-			w = append(append([]string{}, where...), fmt.Sprintf("(created_at, name) < ($%d, $%d)", len(a)-1, len(a)))
+			w = append(append([]string{}, where...), fmt.Sprintf("(created_at, name) %s ($%d, $%d)", cmp, len(a)-1, len(a)))
 		}
-		res, err := q.Query(ctx, fmt.Sprintf("select %s from %s where %s order by created_at desc, name desc limit %d",
-			selectList(m), pg.QuoteIdent(TableName(m.Name)), strings.Join(w, " and "), chunk), a...)
+		res, err := q.Query(ctx, fmt.Sprintf("select %s from %s where %s order by created_at %s, name %s limit %d",
+			selectList(m), pg.QuoteIdent(TableName(m.Name)), strings.Join(w, " and "), dir, dir, chunk), a...)
 		if err != nil {
 			return err
 		}
@@ -699,4 +713,9 @@ func Scan(ctx context.Context, q pg.Querier, m *meta.Model, org string, conds []
 			return nil
 		}
 	}
+}
+
+// LoadChildren fills the table fields of recs with their child rows (one query per table field).
+func LoadChildren(ctx context.Context, q pg.Querier, reg *meta.Registry, org string, m *meta.Model, recs []Record) error {
+	return loadChildren(ctx, q, reg, org, m, recs)
 }

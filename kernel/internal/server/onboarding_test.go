@@ -1,6 +1,7 @@
 package server
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"strings"
@@ -185,5 +186,59 @@ func TestOnboardingMCPAndAssistant(t *testing.T) {
 	res = rpc(ai, 22, "tools/call", map[string]any{"name": "rangka_onboarding", "arguments": map[string]any{}})
 	if get(res, "structuredContent", "current") != "lead_in" {
 		t.Fatalf("assistant MCP rangka_onboarding: %v", res)
+	}
+}
+
+// onbProcess writes a site process with the given stages (audit 0053 S5, S6).
+func onbProcess(stages string) func(root string) {
+	return func(root string) {
+		dir := filepath.Join(root, "site", "processes")
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "mulai.rk"), []byte("name: mulai\nstages:\n"+stages), 0o644)
+	}
+}
+
+// A when that reads child rows without a dot (size(items)) loads them too (audit 0053 S5).
+func TestOnboardingWhenReadsChildRows(t *testing.T) {
+	e, _ := canvasEnv(t, onbProcess("  - {name: fn, model: customer_order, when: \"size(items) > 0\"}\n  - {name: me, model: customer_order, when: \"items.size() > 0\"}\n  - {name: none, model: customer_order, when: \"size(items) > 1\"}\n"))
+	ctx := context.Background()
+	for _, q := range []string{
+		`insert into r_customer (org_id, name, customer_name) values ('kopi-senja','CUST-1','C1')`,
+		`insert into r_customer_order (org_id, name, customer, po_number, po_date, subtotal) values ('kopi-senja','SO-1','CUST-1','PO1','2026-11-01', 100)`,
+		`insert into r_customer_order_item (org_id, name, parent, parent_field, idx, item, qty, rate, amount) values ('kopi-senja','SOI-1','SO-1','items',1,'X',1,100,100)`,
+	} {
+		if _, err := e.s.DB.Exec(ctx, q); err != nil {
+			t.Fatal(q, err)
+		}
+	}
+	got := stepStates(t, e.must(200, "GET", "/api/v1/onboarding", nil).JSON)
+	if got["fn"] != "done" || got["me"] != "done" || got["none"] != "open" {
+		t.Fatalf("states %v", got)
+	}
+}
+
+// A when the flow find can push to SQL (status == 'x') filters in the query and stops at the oldest match: a big table
+// with no match answers fast and done_at is the oldest matching record's (audit 0053 S6).
+func TestOnboardingWhenPushedToSQL(t *testing.T) {
+	e, _ := canvasEnv(t, onbProcess("  - {name: dua, model: customer, when: \"customer_name == 'PT Dua'\"}\n  - {name: tiga, model: customer, when: \"customer_name == 'PT Tiga'\"}\n"))
+	ctx := context.Background()
+	if _, err := e.s.DB.Exec(ctx, `insert into r_customer (org_id, name, customer_name, created_at)
+		select 'kopi-senja', 'C-' || g, 'PT ' || g, timestamptz '2026-01-01' + g * interval '1 second' from generate_series(1, 20000) g`); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := e.s.DB.Exec(ctx, `insert into r_customer (org_id, name, customer_name, created_at) values
+		('kopi-senja','C-DUA-B','PT Dua', timestamptz '2026-03-01T00:00:00Z'), ('kopi-senja','C-DUA-A','PT Dua', timestamptz '2026-02-01T00:00:00Z')`); err != nil {
+		t.Fatal(err)
+	}
+	start := time.Now()
+	ob := e.must(200, "GET", "/api/v1/onboarding", nil).JSON
+	if d := time.Since(start); d > 2*time.Second {
+		t.Fatalf("onboarding took %v over 20,000 customers", d)
+	}
+	if got := stepStates(t, ob); got["dua"] != "done" || got["tiga"] != "open" {
+		t.Fatalf("states %v", got)
+	}
+	if at := get(stepOf(ob, "dua"), "done_at"); at != "2026-02-01T00:00:00Z" {
+		t.Fatalf("done_at of the oldest match: %v", at)
 	}
 }

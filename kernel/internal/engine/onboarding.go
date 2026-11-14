@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -26,9 +27,10 @@ func (e *Engine) HasRecords(ctx context.Context, org, model string) (bool, error
 }
 
 // StageDone reports whether the org has a record of m matching when (every record when when is ""), and the
-// created time of the oldest one. Without when it is one query; with when it is one query plus the expression
-// evaluated per record as metadata (no actor grants, no row scope), oldest first, stopping at the first match.
-// A record whose when fails to evaluate does not match.
+// created time of the oldest one. Without when it is one query. With when, the conditions a flow's find can push to
+// SQL (status == 'paid', dates, docstatus) filter the rows in the query, and the rest is evaluated per record as
+// metadata (no actor grants, no row scope), oldest first, a chunk at a time, stopping at the first match. A record
+// whose when fails to evaluate does not match; a database error while it loads a linked record is returned.
 func (e *Engine) StageDone(ctx context.Context, org string, m *meta.Model, when string) (bool, time.Time, error) {
 	ctx = pg.WithOrg(ctx, org)
 	if strings.TrimSpace(when) == "" {
@@ -39,23 +41,53 @@ func (e *Engine) StageDone(ctx context.Context, org string, m *meta.Model, when 
 		t, ok := res.Rows[0][0].(time.Time)
 		return ok, t, nil
 	}
-	all, err := store.All(ctx, e.DB, e.Reg(), org, m, strings.Contains(when, "."))
+	sys := Actor{Org: org, ID: "system", System: true}
+	o := &op{ctx: ctx, e: e, actor: sys, reg: e.Reg(), links: map[string]map[string]any{}}
+	conds, args := flowFindSQL(o, m, when, nil)
+	children := whenReadsTable(m, when)
+	var found bool
+	var at time.Time
+	err := store.ScanOldest(ctx, e.DB, m, org, conds, args, 200, func(r store.Record) (bool, error) {
+		if children {
+			if err := store.LoadChildren(ctx, e.DB, e.Reg(), org, m, []store.Record{r}); err != nil {
+				return true, err
+			}
+		}
+		e.Output(m, r)
+		v, err := e.newScope(ctx, e.DB, sys, m, r, o.links).eval(when)
+		if err != nil {
+			if isLoadError(err) {
+				return true, err
+			}
+			return false, nil
+		}
+		if v != true {
+			return false, nil
+		}
+		found = true
+		at, _ = time.Parse(time.RFC3339, fmt.Sprint(r["created_at"]))
+		return true, nil
+	})
 	if err != nil {
 		return false, time.Time{}, err
 	}
-	sys := Actor{Org: org, ID: "system", System: true}
-	links := map[string]map[string]any{}
-	for i := len(all) - 1; i >= 0; i-- { // store.All is newest first
-		r := all[i]
-		e.Output(m, r)
-		v, err := e.newScope(ctx, e.DB, sys, m, r, links).eval(when)
-		if err != nil || v != true {
-			continue
+	return found, at, nil
+}
+
+// whenReadsTable reports whether when names a table (child rows) field of m: size(items) as well as items.map(…).
+func whenReadsTable(m *meta.Model, when string) bool {
+	tables := map[string]bool{}
+	for _, f := range m.Fields {
+		if f.Type == "table" {
+			tables[f.Name] = true
 		}
-		t, _ := time.Parse(time.RFC3339, fmt.Sprint(r["created_at"]))
-		return true, t, nil
 	}
-	return false, time.Time{}, nil
+	for _, r := range cel.Idents(when) {
+		if r.Kind == "ref" && tables[r.Head] {
+			return true
+		}
+	}
+	return false
 }
 
 // LinkNeeds is the models named by a required link field of m, other than m itself, without duplicates, in

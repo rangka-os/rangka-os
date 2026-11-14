@@ -392,6 +392,10 @@
     [/^changes select options of a submittable model \((.+)\)$/, "Mengubah pilihan di model yang bisa diajukan ($1)"],
     [/^changes select options of (.+)$/, "Mengubah pilihan $1"],
     [/^changes views of (.+)$/, "Mengubah tampilan $1"],
+    // the company's words (contract 0049): a field or a table renamed, an app's menu groups renamed
+    [/^relabels (\S+) of (\S+): "(.*)" -> "(.*)"$/, 'Mengganti nama kolom $1 di $2: "$3" menjadi "$4"'],
+    [/^relabels (\S+): "(.*)" -> "(.*)"$/, 'Mengganti nama tabel $1: "$2" menjadi "$3"'],
+    [/^changes menu labels of (.+)$/, "Mengganti nama grup menu di $1"],
     [/^changes (.+)$/, "Mengubah $1"]
   ];
   RA.riskReasonText = function (r) {

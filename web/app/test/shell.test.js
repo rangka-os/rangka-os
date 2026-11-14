@@ -45,6 +45,19 @@ test("parseRoute covers every hash form", () => {
   assert.deepStrictEqual(plain(p("#/proses")), { kind: "processes" });
   assert.deepStrictEqual(plain(p("#/proses/lead_to_cash")), { kind: "process", process: "lead_to_cash" });
   assert.strictEqual(p("#/nope/x").kind, "notfound");
+  assert.deepStrictEqual(plain(p("#/pengaturan/tim")), { kind: "team" });
+  assert.deepStrictEqual(plain(p("#/masuk/tautan?t=abc")), { kind: "signinLink" });
+});
+
+test("Tim (contract 0055 §4): only an owner gets the entry, after Modul dan sambungan", () => {
+  const owner = { ...META, user: { roles: ["owner"] } };
+  const n = plain(A.sideNav(owner, { catalogue: true }));
+  assert.deepStrictEqual(n.pinned.map((i) => [i.id, i.label]).slice(-2), [["pengaturan/katalog", "Modul dan sambungan"], ["pengaturan/tim", "Tim"]]);
+  assert.ok(plain(A.navGroups(owner, {})).some((g) => g.items.some((i) => i.id === "pengaturan/tim")));
+  for (const m of [META, { ...META, user: { roles: ["sales_manager"] } }]) {
+    assert.ok(!plain(A.sideNav(m, { catalogue: true })).pinned.some((i) => i.id === "pengaturan/tim"));
+  }
+  assert.strictEqual(A.navId({ kind: "team" }), "pengaturan/tim");
 });
 
 test("homeHash is the first dashboard of the first app with dashboards, else the first menu list", () => {

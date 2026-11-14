@@ -355,6 +355,22 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-cat-text .ap-muted { overflow-wrap: anywhere; }
 .ap-cat-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .ap-cat-tech { margin: 0; font: 400 12px/16px var(--font-mono, monospace); color: var(--faint, var(--muted)); }
+/* Pengaturan → Tim (team.js, contract 0055 §4) */
+.ap-team-who { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ap-team-who .ap-muted { overflow-wrap: anywhere; }
+.ap-team-acts { white-space: nowrap; text-align: right; }
+.ap-team-acts .rk-btn + .rk-btn { margin-left: 4px; }
+.ap-team-form { display: flex; flex-direction: column; gap: 16px; }
+.ap-team-outlets { display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; border: 0; min-width: 0; }
+.ap-team-outlets > legend, .ap-team-link .rk-label { padding: 0; margin-bottom: 4px; font: 400 var(--font-size-sm)/16px var(--font-sans); color: var(--muted); }
+.ap-team-outlets > .ap-muted { margin: 0; }
+.ap-team-link { display: flex; flex-direction: column; gap: 12px; }
+.ap-team-link > p { margin: 0; }
+.ap-team-link-input { box-sizing: border-box; width: 100%; min-width: 0; min-height: 44px; padding: 0 12px; border: 1px solid var(--border); border-radius: var(--r-md); background: var(--soft); color: var(--ink);
+  font: 400 13px/20px var(--font-mono, monospace); }
+.ap-team-link-input:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ap-team-link-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-team-link-acts a.rk-btn { text-decoration: none; }
 
 /* ---- Ubah bars: the pen's change banner (warm yellow) for previews ---- */
 .ap-ubah-preview { background: #fff9ec; color: #7a3e00; border-bottom-color: #f3e1bc; }

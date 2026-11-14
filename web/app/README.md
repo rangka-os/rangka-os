@@ -5,7 +5,7 @@ attachments and CSV imports. It is plain React (UMD) plus the design system, wit
 a Rangka kernel over `/api/v1`. The kernel serves this folder at `/app/` (`/` redirects there). Routes are hash routes,
 so deep links survive a reload and the kernel needs no SPA fallback:
 
-`#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>` · `#/proses` · `#/proses/<process>` · `#/w/<screen>`
+`#/d/<dashboard>` · `#/r/<model>` · `#/r/<model>/new` · `#/r/<model>/<name>` · `#/approvals` · `#/import/<import>` · `#/proses` · `#/proses/<process>` · `#/w/<screen>` · `#/pengaturan/katalog` · `#/pengaturan/tim` · `#/masuk/tautan?t=<token>`
 
 The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 
@@ -124,6 +124,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |
 | `import.js` | Import wizard: upload, preview or row errors, commit |
 | `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |
+| `team.js` | Pengaturan → Tim (contract 0055 §4): the owner's team list, Undang (with the one-time sign-in link: Salin, Kirim lewat WhatsApp), Ubah, Hapus; read only with "Atur tim di Rangka Cloud." when `managed_by` is `host`. Also the sign-in link page (`#/masuk/tautan`), which the shell opens before asking who is signed in |
 | `process.js` | "Proses bisnis": the process list and the read-only canvas (`../canvas`, `RangkaCanvas.Mounted` with `readOnly: true`) |
 | `test/*.test.js` | `node --test` units for the pure parts of each file |
 | `test_app.py` | Live Playwright suite against a real kernel |
@@ -143,6 +144,7 @@ absent meta key turns it off and its buttons disappear.
 | Processes | `GET /api/v1/processes` answers 200 with at least one process; 404, 403 or any failure turns the "Proses bisnis" entry and `#/proses` off. The canvas is read only: no edit form, no layout save |
 | Buttons per action | `meta.models[m].can[action]` when present |
 | Ubah | `meta.changesets.propose`; "Setujui & terapkan" needs `approve` (and `approve_high` for high risk) |
+| Tim | `meta.user.roles` includes `owner` (the kernel answers `/api/v1/team` to the owner's browser session alone) |
 | Raka (⌘J, sidebar "Tanya Raka", ⌘K) | `meta.features.ai` is `true`: the kernel runs with `--ai-url`, the sidecar answered `GET /healthz` within 30 s and `config.ai.enabled` is not `false` (contract 0020). Answers stream from `POST /api/v1/ai/chat`; a change set card opens `?preview=<id>` or Ubah. Raka never approves or applies. History stays in the tab under `rk.ai.<org>.<email>` and is removed on sign-out |
 
 ## Run

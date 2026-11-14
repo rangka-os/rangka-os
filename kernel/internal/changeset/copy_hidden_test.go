@@ -30,7 +30,9 @@ func TestAssessCopiesHiddenFields(t *testing.T) {
 			return nil, false
 		}
 	}
-	flow := func(on string, steps ...any) map[string]any { return map[string]any{"name": "x_f", "on": on, "steps": steps} }
+	flow := func(on string, steps ...any) map[string]any {
+		return map[string]any{"name": "x_f", "on": on, "steps": steps}
+	}
 	field := func(name string, extra map[string]any) map[string]any {
 		f := map[string]any{"name": name, "type": "data"}
 		for k, v := range extra {

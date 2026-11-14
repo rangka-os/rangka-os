@@ -21,6 +21,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/ratelimit"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
+	"github.com/rangka-os/rangka-os/kernel/internal/sandbox"
 	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
 )
 
@@ -144,6 +145,11 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 			return
 		}
 		c := &caller{p: p, actor: Actor(p)}
+		if strings.HasSuffix(c.actor.Org, sandbox.Suffix) { // a request in the ruang coba keeps it alive (contract 0052 §1)
+			if err := sandbox.Touch(r.Context(), s.DB, c.actor.Org, time.Now()); err != nil && s.Log != nil {
+				s.Log("sandbox: touch %s: %v", c.actor.Org, err)
+			}
+		}
 		// queries made while serving this request run with rangka.org set (row-level security backstop)
 		h(w, r.WithContext(pg.WithOrg(r.Context(), c.actor.Org)), c)
 	}
@@ -230,6 +236,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/members/{upstream}/{subject}", a(s.deleteMember))
 	mux.HandleFunc("GET /api/v1/plan", a(s.getPlan)) // plan limits and usage (contract 0028)
 	mux.HandleFunc("GET /api/v1/orgs", a(s.listOrgs))
+	mux.HandleFunc("GET /api/v1/sandbox", a(s.getSandbox)) // ruang coba (contract 0052)
+	mux.HandleFunc("POST /api/v1/sandbox", a(s.createSandbox))
+	mux.HandleFunc("POST /api/v1/sandbox/reset", a(s.resetSandbox))
+	mux.HandleFunc("DELETE /api/v1/sandbox", a(s.deleteSandbox))
 	mux.HandleFunc("GET /api/v1/orgs/{id}/members", a(s.listMembers))
 	mux.HandleFunc("GET /api/v1/files", a(s.listFiles))
 	mux.HandleFunc("GET /api/v1/files/{path...}", a(s.getFile))

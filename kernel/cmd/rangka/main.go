@@ -27,6 +27,8 @@ Usage:
     (once at go-live: continue the client's own numbering; never lowers a counter or reissues a name)
   rangka plan show|set <plan>|clear [--note "..."] [--apps <dir>] [--site <dir>] [--db <url>]
     (the tenant's plan, contract 0028: an operator's upgrade or downgrade; a downgrade deletes nothing)
+  rangka sandbox create|reset|delete [--org <id>] [--fixtures <dir>] [--email <owner>] [--apps <dir>] [--site <dir>] [--db <url>]
+    (the ruang coba, contract 0052: a sandbox org <org>-coba with demo data that sends nothing outside)
   rangka catalogue [--json] [--apps <dir>] [--site <dir>]
     (apps, modules and connectors with their state for the site; per app what it shares and adds, contract 0035)
   rangka skills list|install|pack|check [--to <dir> | --harness claude|agents] [--out <file.zip>] [dir ...]
@@ -72,6 +74,8 @@ func main() {
 		code = cmdBackup(os.Args[2:])
 	case "restore":
 		code = cmdRestore(os.Args[2:])
+	case "sandbox":
+		code = cmdSandbox(os.Args[2:])
 	case "catalogue":
 		code = cmdCatalogue(os.Args[2:])
 	case "skills":

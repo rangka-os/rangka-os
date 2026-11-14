@@ -47,7 +47,7 @@ func TestMemberships(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := []Membership{{"pt_alpha", "PT Alpha", "ALP", []string{"owner"}}, {"pt_beta", "PT Beta", "PT_BETA", []string{"sales_rep"}}}
+	want := []Membership{{"pt_alpha", "PT Alpha", "ALP", []string{"owner"}, false}, {"pt_beta", "PT Beta", "PT_BETA", []string{"sales_rep"}, false}}
 	if !reflect.DeepEqual(ms, want) {
 		t.Fatalf("got %+v", ms)
 	}

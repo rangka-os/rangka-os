@@ -284,6 +284,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("DELETE /api/v1/members/{user_id}/pin", a(s.clearMemberPin))
 	mux.HandleFunc("POST /api/v1/edge/register", s.registerEdge)
 	mux.HandleFunc("POST /api/v1/edge/events", s.withEdge(s.edgeEvents)) // contract 0057 §4: the device or its PIN session
+	mux.HandleFunc("GET /api/v1/edge/config", s.withEdge(s.edgeConfig))  // contract 0057 §7
+	mux.HandleFunc("GET /api/v1/edge/data/{set}", s.withEdge(s.edgeData))
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
 	// connector webhooks (contract 0002 §A.1, 0017 §7): not signed in; the org's secrets verify each request

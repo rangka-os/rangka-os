@@ -344,3 +344,35 @@ func TestMembersTokenCannotClearPin(t *testing.T) {
 	}
 	e.must(204, "DELETE", "/api/v1/members/"+strconv.FormatInt(id, 10)+"/pin", nil)
 }
+
+// A PIN session of an approver role applies no change set, uses no Raka chat and does not reach MCP (contract
+// 0057 §2); the same member signed in fully still applies.
+func TestPinSessionNoApplyChatMCP(t *testing.T) {
+	e := newEnv(t, false, func(apps, site string) { roleKey(t, apps, "sales_manager", "desk: false") }) // an approver in config.rk
+	id := staffMember(e, "mgr@kopisenja.id", "sales_manager", "OUT-01")
+	full := withPin(e, "mgr@kopisenja.id", "1357")
+	e.login()
+	cs := proposeApproved(e, "Warna merek", map[string]any{"op": "patch", "path": "themes/kopi_senja.rk",
+		"patch": []any{map[string]any{"op": "replace", "path": "/color/brand", "value": "#7a4520"}}})
+	d, _ := e.pair("OUT-01", "Kasir 1")
+	d.must(200, "POST", "/auth/device/unlock", unlockBody(id, "1357"))
+	if r := d.must(403, "POST", "/api/v1/changesets/"+cs+"/apply", nil); errCodeOf(r) != "human_required" {
+		t.Fatalf("apply from a PIN session = %s", r.Body)
+	}
+	if r := d.must(403, "POST", "/api/v1/ai/chat", map[string]any{"message": "Halo"}); errCodeOf(r) != "pin_session_limited" {
+		t.Fatalf("chat from a PIN session = %s", r.Body)
+	}
+	rpc := map[string]any{"jsonrpc": "2.0", "id": 1, "method": "tools/list"}
+	d.must(401, "POST", "/mcp", rpc)
+	full.must(200, "POST", "/mcp", rpc)
+	if ap := full.must(200, "POST", "/api/v1/changesets/"+cs+"/apply", nil).JSON; ap["status"] != "applied" {
+		t.Fatalf("apply from a full session: %v", ap)
+	}
+}
+
+// A subject holding "/" (escaped) is still a member route for a members:write token.
+func TestMembersTokenSubjectWithSlash(t *testing.T) {
+	_, host := memberEnvWith(t, staffRoles(t))
+	host.must(200, "PUT", memberPath("org/sari"), map[string]any{"email": "sari@example.com", "name": "Sari", "role": "sales_rep", "outlets": []any{"OUT-01"}})
+	host.must(204, "DELETE", memberPath("org/sari"), nil)
+}

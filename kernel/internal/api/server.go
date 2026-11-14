@@ -93,7 +93,7 @@ func ChangeActor(p *auth.Principal) changeset.Actor {
 	case "oidc", "ai":
 		kind = "ai"
 	}
-	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind, Assistant: p.Via == "ai"}
+	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind, Assistant: p.Via == "ai", Pin: p.Via == "pin"}
 }
 
 func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
@@ -129,7 +129,7 @@ func memberRoute(r *http.Request) bool {
 	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
 		return false
 	}
-	rest, ok := strings.CutPrefix(r.URL.Path, "/api/v1/members/")
+	rest, ok := strings.CutPrefix(r.URL.EscapedPath(), "/api/v1/members/") // a subject may hold an escaped "/"
 	if !ok {
 		return false
 	}
@@ -307,7 +307,8 @@ func (s *Server) Handler() http.Handler {
 		Version: s.Version,
 		Resolve: func(r *http.Request) (*mcp.Caller, error) {
 			p, err := s.principal(r)
-			if err != nil || p == nil || p.User == nil || !mcp.RequireScope(p) {
+			// a cashier's PIN session (contract 0057 §2) does not reach MCP: it answers like no credential
+			if err != nil || p == nil || p.User == nil || p.Via == "pin" || !mcp.RequireScope(p) {
 				return nil, err
 			}
 			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p), Principal: p.Kind()}, nil

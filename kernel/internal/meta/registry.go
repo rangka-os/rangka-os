@@ -33,6 +33,7 @@ type Registry struct {
 	Screens          map[string]*Screen  // work screens by name (contract 0030); the first unit that ships a name keeps it
 	Orgs             map[string]*OrgDoc  // config.rk orgs: by org id
 	ConnectorsDir    string
+	connectorFiles   map[string]string // connector name -> absolute path of the loaded file
 	order            []string
 	printFiles       []*Print   // every loaded print file, apps first (validation)
 	processFiles     []*Process // every loaded process file, units first (validation)
@@ -274,8 +275,25 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		for _, n := range names {
 			if p := rk.Find(filepath.Join(o.ConnectorsDir, n), "connector"); p != "" {
 				if d := ld.load(p); d != nil {
-					r.Connectors[n] = d
-					r.Docs["connectors/"+n+".rk"] = d
+					r.addConnector(n, p, d)
+				}
+			}
+		}
+	}
+	// Company connectors (contract 0033 §2): <site>/connectors/<x_name>/connector.rk, after the shared directory.
+	if siteDir != "" {
+		ents, _ := os.ReadDir(filepath.Join(siteDir, "connectors"))
+		var names []string
+		for _, e := range ents {
+			if e.IsDir() {
+				names = append(names, e.Name())
+			}
+		}
+		sort.Strings(names)
+		for _, n := range names {
+			if p := rk.Find(filepath.Join(siteDir, "connectors", n), "connector"); p != "" {
+				if d := ld.load(p); d != nil {
+					r.addConnector(n, p, d)
 				}
 			}
 		}
@@ -285,6 +303,25 @@ func LoadOpts(o Options, rep *Report) *Registry {
 	r.resolveProcesses()
 	return r
 }
+
+func (r *Registry) addConnector(name, path string, d *rk.Doc) {
+	if r.connectorFiles == nil {
+		r.connectorFiles = map[string]string{}
+	}
+	abs, err := filepath.Abs(path)
+	if err != nil {
+		abs = path
+	}
+	r.Connectors[name] = d
+	r.Docs["connectors/"+name+".rk"] = d
+	r.connectorFiles[name] = abs
+}
+
+// ConnectorPath is the absolute path of the file a connector was loaded from, or "" when it is not loaded.
+func (r *Registry) ConnectorPath(name string) string { return r.connectorFiles[name] }
+
+// IsCompanyConnector reports whether a connector name belongs to the company (prefix x_), not the catalogue.
+func IsCompanyConnector(name string) bool { return strings.HasPrefix(name, "x_") }
 
 // loadSiteUnit adds the site company module (contract 0016): <site>/models/<m>.rk and <site>/flows/<f>.rk as the
 // unit "site", when either folder holds a file. A model named like a unit's model is duplicate_model and not loaded.

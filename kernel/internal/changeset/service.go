@@ -215,6 +215,12 @@ func (r roots) file(p string) (string, error) {
 			return "", fmt.Errorf("no modules directory configured for %s", p)
 		}
 		return filepath.Join(r.modules, filepath.FromSlash(strings.TrimPrefix(p, "modules/"))), nil
+	case strings.HasPrefix(p, "connectors/x_"): // a company connector lives in the site (contract 0033 §2)
+		if r.site == "" {
+			return "", fmt.Errorf("no site directory configured for %s", p)
+		}
+		stem := strings.TrimSuffix(strings.TrimPrefix(p, "connectors/"), ".rk")
+		return filepath.Join(r.site, "connectors", stem, "connector.rk"), nil
 	case strings.HasPrefix(p, "connectors/"):
 		if r.connectors == "" {
 			return "", fmt.Errorf("no connectors directory configured for %s", p)

@@ -1,0 +1,27 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: x_demo
+label: {id: Demo perusahaan}
+summary:
+  id: Contoh connector milik perusahaan untuk uji muat dari situs.
+  en: Example company-owned connector for site loading tests.
+category: other
+icon: plug-line
+version: 0.1.0
+vendor: Demo
+auth:
+  type: token
+  fields:
+    - name: access_token
+      label: {id: Access token}
+      secret: true
+actions:
+  - name: ping
+    label: {id: Kirim ping}
+    request:
+      method: POST
+      url: https://api.example.com/ping
+      headers: {Authorization: 'Bearer {auth.access_token}'}
+      body:
+        message: '{input.message}'
+    input:
+      - {name: message, type: data, required: true}

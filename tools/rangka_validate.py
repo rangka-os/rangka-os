@@ -950,6 +950,17 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                 d = rep.load(p)
                 if d is not None:
                     conns[cn] = (p, d)
+    # company connectors (contract 0033 §2): <site>/connectors/<x_name>/connector.rk, after the shared directory
+    if site and os.path.isdir(os.path.join(site, "connectors")):
+        sc = os.path.join(site, "connectors")
+        for cn in sorted(os.listdir(sc)):
+            if not os.path.isdir(os.path.join(sc, cn)):
+                continue
+            p = rkfile.find(os.path.join(sc, cn), "connector")
+            if p:
+                d = rep.load(p)
+                if d is not None:
+                    conns[cn] = (p, d)
 
     # flows
     for fname in sorted(flows):

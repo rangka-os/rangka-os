@@ -599,3 +599,16 @@ func TestAssessRelabelReasons(t *testing.T) {
 		t.Errorf("risk %s, want low", a.Risk)
 	}
 }
+
+func TestRootsFileCompanyConnector(t *testing.T) {
+	r := roots{connectors: "/c", site: "/s"}
+	if got, err := r.file("connectors/x_omilo.rk"); err != nil || got != "/s/connectors/x_omilo/connector.rk" {
+		t.Errorf("x_omilo: %q %v", got, err)
+	}
+	if got, err := r.file("connectors/moka.rk"); err != nil || got != "/c/moka.rk" {
+		t.Errorf("moka: %q %v", got, err)
+	}
+	if _, err := (roots{connectors: "/c"}).file("connectors/x_omilo.rk"); err == nil {
+		t.Error("x_ connector without a site accepted")
+	}
+}

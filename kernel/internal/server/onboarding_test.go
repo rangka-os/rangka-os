@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -267,5 +269,80 @@ func TestOnboardingScanOldestBatchesGrow(t *testing.T) {
 	}
 	if got := stepStates(t, e.must(200, "GET", "/api/v1/onboarding", nil).JSON); got["panjang"] != "open" {
 		t.Fatalf("states %v", got)
+	}
+}
+
+// Tur sorotan (contract 0053 §7): each person keeps their own tour states; "" forgets one; Raka writes none.
+func TestOnboardingToursPerPerson(t *testing.T) {
+	e, _ := canvasEnv(t, nil)
+	rep := canvasRep(t, e)
+	if r := e.must(200, "GET", "/api/v1/onboarding/tours", nil); len(get(r.JSON, "tours").(map[string]any)) != 0 {
+		t.Fatalf("fresh tours: %s", r.Body)
+	}
+	e.must(200, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "seen"})
+	e.must(200, "PUT", "/api/v1/onboarding/tours/langkah:s_barang", map[string]any{"state": "skipped"})
+	e.must(200, "PUT", "/api/v1/onboarding/tours/halaman:r/item", map[string]any{"state": "seen"})
+	got := get(e.must(200, "GET", "/api/v1/onboarding/tours", nil).JSON, "tours")
+	if get(got, "kenalan", "state") != "seen" || get(got, "langkah:s_barang", "state") != "skipped" || get(got, "halaman:r/item", "state") != "seen" {
+		t.Fatalf("owner tours: %v", got)
+	}
+	if r := rep.must(200, "GET", "/api/v1/onboarding/tours", nil); len(get(r.JSON, "tours").(map[string]any)) != 0 {
+		t.Fatalf("another person sees the owner's tours: %s", r.Body)
+	}
+	e.must(200, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": ""})
+	if got := get(e.must(200, "GET", "/api/v1/onboarding/tours", nil).JSON, "tours"); get(got, "kenalan") != nil {
+		t.Fatalf("forget: %v", got)
+	}
+	e.must(400, "PUT", "/api/v1/onboarding/tours/Kenalan!", map[string]any{"state": "seen"})
+	e.must(400, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "done"})
+	e.must(400, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{})
+	ai := assistantEnv(t, e, 10*time.Minute)
+	if r := ai.must(403, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "seen"}); get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("assistant tour: %s", r.Body)
+	}
+	for i := 0; i < 98; i++ { // two kept above (langkah:s_barang, halaman:r/item): 100 in all
+		e.must(200, "PUT", fmt.Sprintf("/api/v1/onboarding/tours/t%d", i), map[string]any{"state": "seen"})
+	}
+	if r := e.must(409, "PUT", "/api/v1/onboarding/tours/satu-lagi", map[string]any{"state": "seen"}); get(r.JSON, "error", "code") != "too_many_tours" {
+		t.Fatalf("cap: %s", r.Body)
+	}
+	e.must(200, "PUT", "/api/v1/onboarding/tours/t0", map[string]any{"state": "skipped"}) // changing a kept one is fine
+
+	// parallel PUTs at 99 kept tours: exactly one passes the cap (audit F1)
+	e.must(200, "PUT", "/api/v1/onboarding/tours/t0", map[string]any{"state": ""})
+	var wg sync.WaitGroup
+	codes := make([]int, 20)
+	for i := range codes {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = e.do("PUT", fmt.Sprintf("/api/v1/onboarding/tours/par%d", i), map[string]any{"state": "seen"}).Status
+		}(i)
+	}
+	wg.Wait()
+	ok := 0
+	for _, c := range codes {
+		if c == 200 {
+			ok++
+		} else if c != 409 {
+			t.Fatalf("parallel PUT answered %d", c)
+		}
+	}
+	if n := len(get(e.must(200, "GET", "/api/v1/onboarding/tours", nil).JSON, "tours").(map[string]any)); ok != 1 || n != 100 {
+		t.Fatalf("parallel cap: %d passed, %d kept", ok, n)
+	}
+
+	// a removed member leaves no tour states behind (audit F2)
+	rep.must(200, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "seen"})
+	ctx := context.Background()
+	res, err := e.s.DB.Query(ctx, "select id from rk_users where email = 'rep@example.test'")
+	if err != nil || len(res.Rows) != 1 {
+		t.Fatalf("rep user: %v %v", err, res)
+	}
+	if err := auth.RemoveMember(ctx, e.s.DB, "kopi-senja", res.Rows[0][0].(int64)); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := e.s.DB.Query(ctx, "select count(*) from rk_tours where email = 'rep@example.test'"); err != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("removed member tours: %v %v", err, res)
 	}
 }

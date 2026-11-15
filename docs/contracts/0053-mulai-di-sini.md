@@ -164,12 +164,39 @@ stages:
   owner's action.
 - Raka never calls §3.
 
+### 7. Tour state per person (added 15 Nov 2026)
+
+The web app shows coach marks (tur sorotan): the screen dims, one real element is lit, a short card says Lanjut,
+Lewati and "x dari y". A first tour shows once per person, so its state is kept per person, not per browser.
+
+- Table `rk_tours (org_id, email, tour, state, at)`, primary key `(org_id, email, tour)`. Kernel state like
+  `rk_onboarding`: not metadata, not a change set. `email` is the actor id; it is not named `user_id`, which backup reads
+  as `rk_members.user_id` (a number).
+- `GET /api/v1/onboarding/tours` → `{tours: {<tour>: {state, at}}}`, the caller's own only.
+- `PUT /api/v1/onboarding/tours/{tour}` body `{state: "seen" | "skipped" | ""}` → `{tour, state}`.
+  - `""` deletes the row, so the tour may start again ("Ulangi tur").
+  - `tour` matches `^[a-z0-9][a-z0-9_.:/-]{0,63}$` (`kenalan`, `halaman:mulai`, `langkah:<stage>`), else `400 bad_tour`.
+  - Any other state, or no state: `400 bad_json`.
+  - At most 100 tours per person per org; one more answers `409 too_many_tours`. Changing a kept one is fine. Writes
+    of one person are serialised, so parallel PUTs cannot pass the cap together.
+  - Raka cannot write it: the assistant guard refuses every non-GET (`403 ai_forbidden`).
+- Every signed-in member reads and writes their own; nobody reads another person's.
+- Removing a member deletes their tour states in that org; changing a member's email moves their states to it.
+- With an older kernel the web app keeps tour states in localStorage.
+
+### 8. `meta.apps[].roles` (added 15 Nov 2026)
+
+- Each app entry in `GET /api/v1/meta` carries `roles`: the app's `roles:` from `app.rk` (`[]` when none).
+- Web app use: the role that usually does a step is the most specific of these roles that may create the step's model
+  (`meta.models[m].permissions`); the owner when none may.
+
 ## Consequences
 
 - **rangka-os.**
   - `process.json` and both validators gain `hint` and `answers`.
   - New endpoints §2–3, the meta key §4, and MCP tool `rangka_onboarding`.
   - Web app changes in §5. `features.catalogue` and `features.imports` move into the settings routes.
+  - Table `rk_tours`, two routes and the meta key `apps[].roles` (§7–8), test `TestOnboardingToursPerPerson`.
 - **rangka-cloud.**
   - `/v1/plan` (through rangka-ai) writes `hint` and `answers`.
   - Hosted businesses get Raka once the central Raka service exists. That is infrastructure, tracked in rangka-cloud,
@@ -181,4 +208,5 @@ stages:
 - Badges with their own names ("Tim lengkap"). A done step shows its own label with a ★.
 - Points, streaks and leaderboards.
 - Steps beyond the process stages, such as inviting staff or connecting WhatsApp.
-- Per-user onboarding. The flag and the steps are per org.
+- Per-user onboarding. The flag and the steps are per org; only tour states (§7) are per person.
+- Tour content in metadata (`.rk`). The tours name the shell's own places.

@@ -130,3 +130,51 @@ func (e *Engine) SetOnboardingHidden(ctx context.Context, org string, hidden boo
 		on conflict (org_id) do update set hidden = excluded.hidden, by_user = excluded.by_user, at = now()`, org, hidden, by)
 	return err
 }
+
+// MaxTours caps the tours remembered per person in an org (contract 0053 §7): a client cannot grow the table without
+// bound; the web app has a handful of tours.
+const MaxTours = 100
+
+// Tours is what the person did with each tour of the web app (contract 0053 §7): tour name → {state, at}.
+func (e *Engine) Tours(ctx context.Context, org, user string) (map[string]any, error) {
+	res, err := e.DB.Query(ctx, "select tour, state, at from rk_tours where org_id = $1 and email = $2 order by tour", org, user)
+	if err != nil {
+		return nil, err
+	}
+	out := map[string]any{}
+	for _, r := range res.Rows {
+		at, _ := r[2].(time.Time)
+		out[fmt.Sprint(r[0])] = map[string]any{"state": r[1], "at": at.UTC().Format(time.RFC3339)}
+	}
+	return out, nil
+}
+
+// SetTour stores the person's state of one tour; state "" forgets it (the tour may start again). It answers false
+// when the person already has MaxTours other tours.
+func (e *Engine) SetTour(ctx context.Context, org, user, tour, state string) (bool, error) {
+	if state == "" {
+		_, err := e.DB.Exec(ctx, "delete from rk_tours where org_id = $1 and email = $2 and tour = $3", org, user, tour)
+		return true, err
+	}
+	tx, err := e.DB.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	// one writer per person at a time, so parallel PUTs cannot pass the cap together
+	if _, err := tx.Exec(ctx, "select pg_advisory_xact_lock(hashtextextended($1, 53))", org+"|"+user); err != nil {
+		return false, err
+	}
+	res, err := tx.Query(ctx, "select count(*) from rk_tours where org_id = $1 and email = $2 and tour <> $3", org, user, tour)
+	if err != nil {
+		return false, err
+	}
+	if n, _ := res.Rows[0][0].(int64); n >= MaxTours {
+		return false, nil
+	}
+	if _, err := tx.Exec(ctx, `insert into rk_tours (org_id, email, tour, state, at) values ($1, $2, $3, $4, now())
+		on conflict (org_id, email, tour) do update set state = excluded.state, at = now()`, org, user, tour, state); err != nil {
+		return false, err
+	}
+	return true, tx.Commit(ctx)
+}

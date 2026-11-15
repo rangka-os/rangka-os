@@ -2,7 +2,9 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"net/http"
+	"regexp"
 	"sort"
 	"time"
 
@@ -195,4 +197,44 @@ func (s *Server) postOnboardingHide(w http.ResponseWriter, r *http.Request, c *c
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"hidden": *body.Hidden})
+}
+
+// tourName is a tour of the web app: "kenalan", "langkah:s_barang", "halaman:r/item" (contract 0053 §7).
+var tourName = regexp.MustCompile(`^[a-z0-9][a-z0-9_.:/-]{0,63}$`)
+
+// getTours is GET /api/v1/onboarding/tours: the caller's own tour states, {tours: {name: {state, at}}}.
+func (s *Server) getTours(w http.ResponseWriter, r *http.Request, c *caller) {
+	out, err := s.Engine.Tours(r.Context(), c.actor.Org, c.actor.ID)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tours": out})
+}
+
+// putTour is PUT /api/v1/onboarding/tours/{tour} {state: "seen" | "skipped" | ""}: the caller's own state of one
+// tour; "" forgets it so the tour can start again. Raka never calls it (the assistant writes nothing here).
+func (s *Server) putTour(w http.ResponseWriter, r *http.Request, c *caller) {
+	tour := r.PathValue("tour")
+	if !tourName.MatchString(tour) {
+		writeError(w, http.StatusBadRequest, "bad_tour", "tour must match "+tourName.String())
+		return
+	}
+	var body struct {
+		State *string `json:"state"`
+	}
+	if err := readJSON(r, &body); err != nil || body.State == nil || (*body.State != "seen" && *body.State != "skipped" && *body.State != "") {
+		writeError(w, http.StatusBadRequest, "bad_json", `body must be {"state": "seen" | "skipped" | ""}`)
+		return
+	}
+	ok, err := s.Engine.SetTour(r.Context(), c.actor.Org, c.actor.ID, tour, *body.State)
+	if err != nil {
+		fail(w, err)
+		return
+	}
+	if !ok {
+		writeError(w, http.StatusConflict, "too_many_tours", fmt.Sprintf("at most %d tours per person", engine.MaxTours))
+		return
+	}
+	writeJSON(w, http.StatusOK, map[string]any{"tour": tour, "state": *body.State})
 }

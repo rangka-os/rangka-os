@@ -247,6 +247,8 @@ func (s *Server) Handler() http.Handler {
 	// Mulai di sini (contract 0053 §2–3)
 	mux.HandleFunc("GET /api/v1/onboarding", a(s.getOnboarding))
 	mux.HandleFunc("POST /api/v1/onboarding/hide", a(s.postOnboardingHide))
+	mux.HandleFunc("GET /api/v1/onboarding/tours", a(s.getTours)) // tur sorotan (contract 0053 §7)
+	mux.HandleFunc("PUT /api/v1/onboarding/tours/{tour...}", a(s.putTour))
 	// system, orgs, files
 	mux.HandleFunc("GET /api/v1/system/status", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		writeJSON(w, 200, s.Status(r.Context(), c.actor.Org))

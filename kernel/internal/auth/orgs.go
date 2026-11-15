@@ -86,6 +86,10 @@ func RemoveMember(ctx context.Context, q pg.Querier, org string, userID int64) e
 	if err := ClearPIN(ctx, q, org, userID); err != nil {
 		return err
 	}
+	// the person's tour states in this org go with the membership (contract 0053 §7)
+	if _, err := q.Exec(ctx, "delete from rk_tours where org_id = $1 and email = (select email from rk_users where id = $2)", org, userID); err != nil {
+		return err
+	}
 	res, err := q.Query(ctx, "delete from rk_members where org_id = $1 and user_id = $2 returning user_id", org, userID)
 	if err != nil {
 		return err

@@ -49,6 +49,7 @@
     if (parts[0] === "approvals" && parts.length === 1) return { kind: "approvals" };
     if (parts[0] === "proses" && parts.length === 1) return { kind: "processes" };
     if (parts[0] === "proses" && parts.length === 2) return { kind: "process", process: parts[1] };
+    if (parts[0] === "mulai" && parts.length === 1) return { kind: "mulai" }; // Mulai di sini (contract 0053 §5)
     if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
     if (parts[0] === "pengaturan" && parts[1] === "tim" && parts.length === 2) return { kind: "team" };
     // a sign-in link from Tim (contract 0056 §4): #/masuk/tautan?t=<token>; Root opens it before asking who you are
@@ -322,12 +323,22 @@
     return { items: out.map(function (x) { return { id: x.id, label: x.label }; }), current: cur ? cur.id : null };
   }
 
-  /** The side-only sidebar: Beranda and the feature entries pinned on top, the layout's or the apps' groups below. */
-  function sideNav(meta, features, counts) {
+  /** The "Mulai di sini" entry with "<done>/<total>" (contract 0053 §5), or null while the org has no steps, hid them
+   *  or has not answered yet. ob is GET /api/v1/onboarding. */
+  function mulaiEntry(ob) {
+    var steps = (ob && ob.steps) || [], done = steps.filter(function (x) { return x.state === "done"; }).length;
+    if (!steps.length || ob.hidden) return null;
+    return { id: "mulai", label: "Mulai di sini", icon: "star", count: done + "/" + steps.length };
+  }
+
+  /** The side-only sidebar: Beranda, Mulai di sini and the feature entries pinned on top, the layout's or the apps'
+   *  groups below. */
+  function sideNav(meta, features, counts, ob) {
     meta = meta || {};
     var groups = withWork(meta, navFromLayout(meta) || appGroups(meta)), f = featureNav(meta, features || {}, counts || {});
     if (f.imports) groups.push(f.imports);
-    return { pinned: [{ id: "home", label: "Beranda", icon: "home" }].concat(f.more), groups: groups };
+    var mulai = mulaiEntry(ob);
+    return { pinned: [{ id: "home", label: "Beranda", icon: "home" }].concat(mulai ? [mulai] : [], f.more), groups: groups };
   }
 
   /** layout.shell → the shell drawn: top-nav when named, side-only otherwise (side, pos and portal until they exist). */
@@ -403,6 +414,7 @@
       case "import": return "import/" + route.import;
       case "catalogue": return "pengaturan/katalog";
       case "team": return "pengaturan/tim";
+      case "mulai": return "mulai";
       case "work": return home && home === "#/w/" + route.screen ? "home" : "w/" + route.screen;
       default: return null;
     }
@@ -484,6 +496,7 @@
   RA.navGroups = navGroups;
   RA.topNavItems = topNavItems;
   RA.sideNav = sideNav;
+  RA.mulaiEntry = mulaiEntry;
   RA.shellKind = shellKind;
   RA.densityOf = densityOf;
   RA.themeOf = themeOf;
@@ -677,7 +690,7 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", team: "TeamPage", work: "WorkScreenView" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", team: "TeamPage", work: "WorkScreenView", mulai: "MulaiPage" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
@@ -690,7 +703,7 @@
     if (route.kind === "work") return !!(meta.screens || {})[route.screen];
     if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
     // the catalogue and Tim pages answer "no access" themselves
-    return route.kind === "approvals" || route.kind === "catalogue" || route.kind === "team";
+    return route.kind === "approvals" || route.kind === "catalogue" || route.kind === "team" || route.kind === "mulai";
   }
 
   function Page(p) {
@@ -883,6 +896,12 @@
     var cacheRef = useRef(boot.cache);
     var featRef = useRef(features);
     featRef.current = features;
+    // Mulai di sini (contract 0053 §5): GET /api/v1/onboarding, read again on every navigation
+    var obs = useState(null), ob = obs[0], setOb = obs[1];
+    var obPrev = useRef(null);
+    // tur sorotan (contract 0053 §7): the person's tour states, loaded once per org
+    var tours = useRef(null);
+    var ctxRef = useRef(null); // the newest ctx, for a tour started from an older render's handler
 
     /** opts (optional): {action, onAction} adds a button to the toast (it then stays 10 s). */
     function toast(tone, title, body, opts) {
@@ -940,9 +959,11 @@
         // Keep roles and org fresh; with an expired session this is the call that opens the sign-in dialog.
         api.me().then(setMe, function () {});
         refreshApprovals();
+        loadOnboarding();
+        tourForRoute(r);
       }
       global.addEventListener("hashchange", onHash);
-      if (route.kind === "home") onHash();
+      if (route.kind === "home") onHash(); else loadOnboarding();
       return function () { global.removeEventListener("hashchange", onHash); };
     }, [meta]);
 
@@ -986,6 +1007,69 @@
       global.addEventListener("keydown", key);
       return function () { global.removeEventListener("keydown", key); };
     }, []);
+
+    function loadOnboarding() {
+      if (!api.onboarding) return Promise.resolve(null);
+      return api.onboarding().then(function (d) {
+        var before = obPrev.current;
+        obPrev.current = d;
+        setOb(d);
+        // a step turned done since the last look: say so once, with the next one (no confetti, no points)
+        var was = {};
+        ((before && before.steps) || []).forEach(function (x) { if (x.state === "done") was[x.stage] = true; });
+        var fresh = before ? (d.steps || []).filter(function (x) { return x.state === "done" && !was[x.stage]; })[0] : null;
+        if (fresh && !d.hidden) {
+          var done = (d.steps || []).filter(function (x) { return x.state === "done"; }).length, next = (d.steps || []).filter(function (x) { return x.stage === d.current; })[0];
+          toast("ok", "Langkah beres: " + L(fresh.label), done + " dari " + d.steps.length + " langkah beres." + (next ? " Berikutnya: " + L(next.label) + "." : " Tahap ini beres."),
+            { action: "Lihat langkah", onAction: function () { RA.navigate("#/mulai"); } });
+        }
+        return d;
+      }, function () { return null; }); // an older kernel without the route: no Mulai di sini, nothing else changes
+    }
+    function hideOnboarding(v) { return api.onboardingHide(v).then(function () { return loadOnboarding(); }); }
+
+    /* tur sorotan (tur.js): auto-start a tour once per person; the states come from the kernel */
+    function tourStates() {
+      if (!RA.tour) return Promise.resolve({});
+      if (!tours.current) tours.current = RA.tour.states(api, me);
+      return tours.current;
+    }
+    function startTour(def, auto) {
+      if (!RA.tour || !def) return;
+      RA.tour.start(def, { onEnd: function (state) {
+        setNavOpen(false); // a tour that opened the phone drawer leaves it closed
+        tours.current = tourStates().then(function (all) { var x = Object.assign({}, all); x[def.id] = { state: state }; return x; });
+        RA.tour.mark(api, me, def.id, state);
+      } });
+    }
+    /** Start def when the person has never seen or skipped it (a tour on a phone waits for a free screen). */
+    RA.tourAuto = function (id, def) {
+      if (!RA.tour || RA.tour.active() || previewCs || ubahOn) return;
+      tourStates().then(function (all) { if (!all[id] && !RA.tour.active()) startTour(def, true); });
+    };
+    function kenalanDef() {
+      return { id: "kenalan", eyebrow: "Kenalan", steps: RA.kenalanSteps({ company: companyName, mulai: !!(RA.mulaiEntry && RA.mulaiEntry(obPrev.current)),
+        drawer: drawerNav ? function (open) { setNavOpen(open); return new Promise(function (r) { global.setTimeout(r, 220); }); } : null }) };
+    }
+    function replayTour() {
+      setSwitchAt(null);
+      RA.tour.mark(api, me, "kenalan", "");
+      tours.current = null;
+      global.setTimeout(function () { startTour(kenalanDef()); }, 150);
+    }
+    /** A page's own tour: Kerjakan in Mulai di sini left a pending step tour for the form it opened. */
+    function tourForRoute(r) {
+      var pend = RA.pendingTour;
+      if (!pend || !RA.stepTour) return;
+      if (r.kind !== "form" || !r.isNew || r.model !== pend.stage.model || Date.now() - pend.at > 10000) { if (r.kind !== "mulai") RA.pendingTour = null; return; }
+      RA.pendingTour = null;
+      // contextual: every time Kerjakan is pressed, once the form has its fields (at most 4 s)
+      var t0 = Date.now();
+      (function ready() {
+        if (global.document.querySelector(".ap-main .rk-field") || Date.now() - t0 > 4000) return startTour(RA.stepTour(ctxRef.current, pend.stage));
+        global.setTimeout(ready, 100);
+      })();
+    }
 
     function reloadMeta(who) {
       return api.meta().then(function (m) {
@@ -1140,7 +1224,9 @@
     var ctx = { api: api, meta: meta, eng: eng, me: me, features: features, cache: cacheRef.current, reloadMeta: reloadMeta,
       refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs || offline, offline: offline,
       // a change set built elsewhere (the catalogue's Pasang / Lepas) opens in the same card as Ubah's
-      showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); } };
+      showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); },
+      onboarding: { data: ob, hide: hideOnboarding, reload: loadOnboarding }, askRaka: function (q) { askRaka(q); } };
+    ctxRef.current = ctx;
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 
     var kind = shellKind(meta);
@@ -1225,14 +1311,21 @@
         return [{ heading: g.heading }].concat(g.items.map(function (it) {
           return { label: it.label, icon: it.icon, checked: it.on, onSelect: function () { account(it.key); } };
         }), ["-"]);
-      })), [{ label: "Bantuan", icon: "help", onSelect: help }, "-", { heading: (me && (me.name || me.email)) || "Akun" },
+      })), [{ label: "Bantuan", icon: "help", onSelect: help }].concat(RA.tour ? [{ label: "Ulangi tur", icon: "map", onSelect: replayTour }] : [], ["-"]), [ { heading: (me && (me.name || me.email)) || "Akun" },
         { label: "Profil", icon: "user", onSelect: function () { account("profile"); } },
         { label: "Ganti akun", icon: "switch", onSelect: function () { account("switch"); } },
         { label: "Keluar", icon: "logout", onSelect: function () { account("logout"); } }]);
       return items;
     }
 
-    var sideNavItems = sideNav(meta, features, { approvals: approvalCount });
+    var sideNavItems = sideNav(meta, features, { approvals: approvalCount }, ob);
+    // the welcome tour: once per person, on the desk, after Mulai di sini has answered (it names that entry)
+    var deskReady = !!ob && kind !== "top-nav";
+    useEffect(function () {
+      if (!deskReady || !RA.kenalanSteps) return;
+      var t = global.setTimeout(function () { RA.tourAuto("kenalan", kenalanDef()); }, 700);
+      return function () { global.clearTimeout(t); };
+    }, [deskReady]);
     var switcher = { title: companyName, subtitle: roleText || undefined,
       onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.left, bottom: r.bottom }); } };
     var narrow = !drawerNav && (rail ? !railOpen : collapsed), floating = rail && railOpen;
@@ -1361,6 +1454,7 @@
         card && RA.ChangeSetCard ? h(RA.ChangeSetCard, { key: card.list ? "list" : card.cs.id, list: !!card.list, cs: card.cs, meta: meta, api: api, caps: caps,
           onClose: function () { setCard(null); }, onOpen: openCs, onPreview: enterPreview, onApprove: approveCs, onApply: applyCs, onReject: rejectCs, onReload: reloadCs }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
+        RA.TourRoot ? h(RA.TourRoot) : null,
         toaster);
     var inner = RA.UbahCtx ? h(RA.UbahCtx.Provider, { value: uctx }, shell) : shell;
     return h(RA.Ctx.Provider, { value: ctx }, inner);

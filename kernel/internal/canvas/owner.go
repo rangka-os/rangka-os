@@ -6,8 +6,9 @@ import "strings"
 //
 //   - placement: a flow joins the stage whose model fires its trigger (on: <model>.<event>), when the process has
 //     a stage for that model; otherwise it stays where Build put it (the first stage it touches, 0014 §7);
-//   - cuts: no CEL of conditions, no detail of plumbing steps (find, find_all, for_each), no source paths, no
-//     editable values (the owner view is read-only) and no "inferred".
+//   - handoffs between stages are drawn again after the move;
+//   - cuts: no CEL (conditions, rule checks, approval and stage when), no detail of plumbing steps (find, find_all,
+//     for_each), no source paths, no editable values (the owner view is read-only) and no "inferred".
 //
 // Node ids, labels, kinds, descriptions and summaries are unchanged, so a client can still join nodes and edges.
 func Owner(g *Graph) {
@@ -30,6 +31,20 @@ func Owner(g *Graph) {
 		}
 	}
 	if len(move) > 0 {
+		// where each handoff left its stage before the move, with its label
+		before := map[string]string{}
+		for _, n := range g.Nodes {
+			before[n.ID] = n.Group
+		}
+		leave := map[string]Edge{}
+		edges := g.Edges[:0:0]
+		for _, e := range g.Edges {
+			if e.Kind == EdgeHandoff {
+				leave[before[e.From]] = e
+				continue
+			}
+			edges = append(edges, e)
+		}
 		moved := map[string][]string{}
 		byID := map[string]*Node{}
 		for i := range g.Nodes {
@@ -69,17 +84,40 @@ func Owner(g *Graph) {
 			}
 		}
 		g.Nodes = nodes
+		// handoffs again between consecutive stages that have nodes: from the step it left before (when that step
+		// is still in its stage), else the stage's last step, else its last node; into the next stage's first node
+		var prev *Group
+		for i := range g.Groups {
+			gr := &g.Groups[i]
+			if len(gr.Nodes) == 0 {
+				continue
+			}
+			if prev != nil {
+				e := Edge{Kind: EdgeHandoff, To: gr.Nodes[0]}
+				old, ok := leave[prev.ID]
+				if ok && byID[old.From] != nil && byID[old.From].Group == prev.ID {
+					e.From, e.Label = old.From, old.Label
+				} else {
+					e.From, e.Label = lastOf(prev, byID), old.Label
+				}
+				edges = append(edges, e)
+			}
+			prev = gr
+		}
+		g.Edges = edges
 	}
 	g.Source, g.Inferred = Source{}, false
 	for i := range g.Groups {
-		g.Groups[i].Source = Source{}
+		g.Groups[i].Source, g.Groups[i].When = Source{}, ""
 	}
 	for i := range g.Nodes {
 		n := &g.Nodes[i]
 		n.Source, n.Editable = Source{}, map[string]any{}
 		switch {
-		case n.Kind == KindCondition:
-			n.Detail = ""
+		case n.Kind == KindCondition, n.Kind == KindRule, n.Kind == KindApproval:
+			n.Detail = "" // CEL: a rule's check, an approval's when
+		case n.Kind == KindStep && strings.HasSuffix(n.ID, "/when"):
+			n.Detail = "" // a stage's when
 		case n.Kind == KindAction && plumbing(n.Detail):
 			n.Detail = ""
 		}
@@ -97,4 +135,14 @@ func fileOf(id string) string {
 func plumbing(detail string) bool {
 	verb, _, _ := strings.Cut(detail, " ")
 	return verb == "find" || verb == "find_all" || verb == "for_each"
+}
+
+// lastOf is a stage's last lifecycle step, else its last node.
+func lastOf(gr *Group, byID map[string]*Node) string {
+	for i := len(gr.Nodes) - 1; i >= 0; i-- {
+		if n := byID[gr.Nodes[i]]; n != nil && n.Kind == KindStep && !strings.HasSuffix(n.ID, "/when") {
+			return n.ID
+		}
+	}
+	return gr.Nodes[len(gr.Nodes)-1]
 }

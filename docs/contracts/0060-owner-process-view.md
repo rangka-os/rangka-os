@@ -33,6 +33,8 @@ rangka-ai (the Raka skill writes `description` when it writes site flows) · Bui
 - `GET /processes/{name}` returns it as `description` on:
   - the trigger node of a flow or automation;
   - an action node.
+- It is shown to everyone who can see the node, like a label or a rule message (0014). It is not filtered by the
+  reader's permissions, so the author never names in it a document that some readers of the process may not open.
 - Who writes it:
   - rangka-apps, for shipped flows;
   - the Raka skill, when it writes site flows (rangka-ai `process_from_peta`).
@@ -53,7 +55,8 @@ The parts of the sentence:
     dihapus);
   - an event of a connector becomes "Saat ada kabar baru dari <connector label>";
   - a cron becomes "Tiap 5 menit", "Tiap jam", "Tiap hari jam 08.00", "Tiap minggu jam 09.30" or "Tiap bulan
-    tanggal 1 jam 07.00";
+    tanggal 1 jam 07.00", and "Tiap hari kerja jam 08.00" for Monday to Friday; `@hourly` to `@yearly` read "Tiap jam"
+    to "Tiap tahun";
   - a model automation becomes "Saat <model label> berubah".
 - **Effects**, once each, in step order, with `then`, `else` and `do` branches included:
   - `create <m>` becomes "<m label> baru dibuat";
@@ -65,17 +68,22 @@ The parts of the sentence:
 - **Conditions:** a guarded flow or step adds "(kalau syaratnya cocok)".
 - **Built-in hooks** carry fixed kernel copy: `stock.post_moves` → "stok bergerak sesuai dokumen",
   `stock.reverse_moves` → "gerakan stoknya dibalik", `procurement.receive` → "barang bisa diterima dari dokumen ini".
+- **Unknown sources:** an event that is neither a model nor a known connector becomes "Saat ada kabar baru dari luar".
+  A cron limited to some months becomes "Terjadwal".
 - **Hidden models:** a model the caller cannot read is never named. It becomes "dokumen terkait" or "data baru
-  dibuat", under the same read filter as 0014 ruling 4.
+  dibuat", under the same read filter as 0014 ruling 4. This holds for the fixed phrases too ("jurnal tercatat",
+  "dokumennya ditahan").
 
 ### 3. `?view=owner`
 
 `GET /api/v1/processes/{name}?view=owner` returns the same graph with three changes:
 
 - **Placement.** A flow moves, with all of its nodes, to the stage whose model fires its trigger, when the process
-  has a stage for that model. Otherwise it stays where 0014 §7 puts it.
+  has a stage for that model. Otherwise it stays where 0014 §7 puts it. Handoffs between stages are drawn again after
+  the move.
 - **Cuts.** The owner view leaves out:
-  - the `detail` of condition nodes (CEL);
+  - every CEL: the `detail` of conditions, rule checks, approval `when` and a stage's `when` node, and the group
+    `when`;
   - the `detail` of `find`, `find_all` and `for_each` steps;
   - every `source` (graph, group and node);
   - `editable` (the owner view is read-only);

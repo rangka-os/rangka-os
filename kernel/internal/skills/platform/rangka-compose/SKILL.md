@@ -40,7 +40,8 @@ Match by the app's title and summary and by the owner's words (see `rangka-conce
 When you draft a company flow (`flows/x.rk`) or a model automation or action, give it `description: {id: ...}`: one
 or two sentences in the owner's words of what it does and when, conditions included (contract 0060 section 1). For example,
 "Kalau stok sebuah barang di outlet jadi minus, kantor pusat langsung dikabari." Proses bisnis shows that sentence to the
-owner; without it the owner reads the kernel's generic one.
+owner; without it the owner reads the kernel's generic one. Everyone who sees the flow reads the description, so never
+name in it a document some of those people may not open.
 
 The real gaps are listed in `rangka-consult` section 5 (0045 section 5). Never
 draft a fake module or model, and never name an app that is neither in the catalogue nor created in the same change

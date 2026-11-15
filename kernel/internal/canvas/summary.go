@@ -24,7 +24,7 @@ var hookText = map[string]string{
 }
 
 var (
-	eventRe = regexp.MustCompile(`^([a-z0-9_]+)\.([a-z_]+)$`)
+	eventRe = regexp.MustCompile(`^([a-z0-9_]+)\.([a-z0-9_]+)$`)
 	cronRe  = regexp.MustCompile(`^[\d*/,\-]+(\s+[\d*/,\-]+){4}$`)
 	numRe   = regexp.MustCompile(`^\d+$`)
 	everyRe = regexp.MustCompile(`^\*/(\d+)$`)
@@ -55,6 +55,10 @@ func cronText(c string) string {
 	if numRe.MatchString(mi) && numRe.MatchString(hr) {
 		t := pad2(hr) + "." + pad2(mi)
 		switch {
+		case p[3] != "*":
+			return "Terjadwal" // only some months: not worth a sentence that may mislead
+		case p[4] == "1-5" && p[2] == "*":
+			return "Tiap hari kerja jam " + t
 		case p[4] != "*":
 			return "Tiap minggu jam " + t
 		case p[2] != "*":
@@ -83,6 +87,8 @@ func (b *builder) triggerText(on, schedule string) string {
 		return "Tiap minggu"
 	case on == "" && sch == "@monthly":
 		return "Tiap bulan"
+	case on == "" && (sch == "@yearly" || sch == "@annually"):
+		return "Tiap tahun"
 	case on == "" && cronRe.MatchString(sch):
 		return cronText(sch)
 	}
@@ -100,15 +106,19 @@ func (b *builder) triggerText(on, schedule string) string {
 		}
 		return "Saat dokumen terkait " + verb
 	}
-	words := strings.Fields(strings.ReplaceAll(m[1], "_", " "))
-	for i, w := range words {
-		words[i] = ucFirst(w)
+	d := b.reg.Connectors[m[1]]
+	if d == nil {
+		return "Saat ada kabar baru dari luar" // neither a model nor a known connector: no name that may be wrong
 	}
-	name := strings.Join(words, " ")
-	if d := b.reg.Connectors[m[1]]; d != nil {
-		if l := meta.LabelOf(meta.AsMap(d.Data)["label"]); l["id"] != "" {
-			name = l["id"]
+	name := m[1]
+	if l := meta.LabelOf(meta.AsMap(d.Data)["label"]); l["id"] != "" {
+		name = l["id"]
+	} else {
+		words := strings.Fields(strings.ReplaceAll(name, "_", " "))
+		for i, w := range words {
+			words[i] = ucFirst(w)
 		}
+		name = strings.Join(words, " ")
 	}
 	return "Saat ada kabar baru dari " + name
 }
@@ -139,6 +149,8 @@ func (b *builder) effects(steps []any, vars map[string]string, out *[]string, co
 		switch {
 		case meta.Str(st, "create") != "":
 			switch c := meta.Str(st, "create"); {
+			case !b.canRead(c):
+				add("data baru dibuat") // a hidden model is never named, not even by its built-in phrase
 			case strings.HasSuffix(c, "_guard"):
 				add("dokumennya ditahan dengan alasan")
 			case c == "gl_entry":

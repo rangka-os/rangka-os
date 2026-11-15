@@ -213,7 +213,7 @@ func Build(reg *meta.Registry, p *meta.Process, canRead func(model string) bool)
 		}
 		for _, id := range gr.Nodes {
 			gr.Counts[b.nodes[id].Kind]++
-			if b.nodes[id].Kind == KindStep {
+			if b.nodes[id].Kind == KindStep && !strings.HasSuffix(id, "/when") { // a stage's when is no lifecycle
 				gr.Kind = "document"
 			}
 			g.Nodes = append(g.Nodes, *b.nodes[id])

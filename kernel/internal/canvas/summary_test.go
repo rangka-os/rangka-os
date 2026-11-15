@@ -8,7 +8,8 @@ import (
 func TestCronText(t *testing.T) {
 	for in, want := range map[string]string{
 		"*/5 * * * *": "Tiap 5 menit", "7 * * * *": "Tiap jam", "0 8 * * *": "Tiap hari jam 08.00",
-		"30 9 * * 1-5": "Tiap minggu jam 09.30", "0 7 1 * *": "Tiap bulan tanggal 1 jam 07.00", "bad": "Terjadwal",
+		"30 9 * * 1-5": "Tiap hari kerja jam 09.30", "30 9 * * 1": "Tiap minggu jam 09.30", "0 8 * 1 *": "Terjadwal",
+		"0 7 1 * *": "Tiap bulan tanggal 1 jam 07.00", "bad": "Terjadwal",
 	} {
 		if got := cronText(in); got != want {
 			t.Errorf("cronText(%q) = %q, want %q", in, got, want)
@@ -20,7 +21,8 @@ func TestSummaries(t *testing.T) {
 	reg := loadReg(t)
 	g := build(t, reg, "lead_to_cash", all)
 	wa := nodeByID(g, "modules/pipeline/flows/whatsapp_to_lead.rk#/")
-	want := "Saat ada kabar baru dari Whatsapp Business, lead baru dibuat, aktivitas baru dibuat (kalau syaratnya cocok)."
+	// the test site has no connectors: an event of an unknown source names no source
+	want := "Saat ada kabar baru dari luar, lead baru dibuat, aktivitas baru dibuat (kalau syaratnya cocok)."
 	if wa == nil || wa.Summary["id"] != want {
 		t.Fatalf("whatsapp_to_lead summary = %+v", wa)
 	}
@@ -131,5 +133,75 @@ func TestOwnerMovesFlowToTriggerStage(t *testing.T) {
 	}
 	if g.Inferred || g.Source != (Source{}) {
 		t.Error("graph source or inferred left in")
+	}
+}
+
+func TestTriggerAndHiddenEffects(t *testing.T) {
+	reg := loadReg(t)
+	b := &builder{reg: reg, canRead: func(m string) bool { return m != "gl_entry" && m != "credit_guard" }}
+	for _, c := range []struct{ on, sch, want string }{
+		{"", "@yearly", "Tiap tahun"}, {"", "0 8 * * 1-5", "Tiap hari kerja jam 08.00"},
+		{"doku.payment_v2", "", "Saat ada kabar baru dari luar"}, {"ghost.thing", "", "Saat ada kabar baru dari luar"},
+	} {
+		if got := b.triggerText(c.on, c.sch); got != c.want {
+			t.Errorf("triggerText(%q, %q) = %q, want %q", c.on, c.sch, got, c.want)
+		}
+	}
+	var eff []string
+	cond := false
+	b.effects([]any{map[string]any{"create": "gl_entry"}, map[string]any{"create": "credit_guard"}}, map[string]string{}, &eff, &cond)
+	if len(eff) != 1 || eff[0] != "data baru dibuat" {
+		t.Errorf("hidden gl_entry or guard named: %v", eff)
+	}
+}
+
+func TestOwnerCutsAllCEL(t *testing.T) {
+	g := &Graph{Groups: []Group{{ID: "a", Model: "a", When: "status == 'paid'", Nodes: []string{"m/a.rk#/rules/0", "m/a.rk#/approvals/0", "p.rk#/stages/0/when"}, Counts: map[string]int{}}},
+		Nodes: []Node{
+			{ID: "m/a.rk#/rules/0", Group: "a", Kind: KindRule, Detail: "amount <= limit"},
+			{ID: "m/a.rk#/approvals/0", Group: "a", Kind: KindApproval, Detail: "submit: total > 100"},
+			{ID: "p.rk#/stages/0/when", Group: "a", Kind: KindStep, Detail: "status == 'paid'"},
+		}}
+	Owner(g)
+	if g.Groups[0].When != "" {
+		t.Errorf("stage when left: %q", g.Groups[0].When)
+	}
+	for _, n := range g.Nodes {
+		if n.Detail != "" {
+			t.Errorf("%s keeps CEL %q", n.ID, n.Detail)
+		}
+	}
+}
+
+// The audit case: a flow fired by the first stage's model sits first in the next stage; once it moves, the handoff
+// must leave the first stage and enter what is left of the next one, never loop on one stage.
+func TestOwnerRedrawsHandoffs(t *testing.T) {
+	cnt := func() map[string]int { return map[string]int{} }
+	g := &Graph{
+		Groups: []Group{
+			{ID: "inv", Model: "invoice", Nodes: []string{"m/invoice.rk#status/submitted"}, Counts: cnt()},
+			{ID: "cust", Model: "customer", Nodes: []string{"m/flows/f.rk#/", "m/flows/f.rk#/steps/0", "m/customer.rk#/rules/0"}, Counts: cnt()},
+		},
+		Nodes: []Node{
+			{ID: "m/invoice.rk#status/submitted", Group: "inv", Kind: KindStep},
+			{ID: "m/flows/f.rk#/", Group: "cust", Kind: KindTrigger, Detail: "invoice.submitted"},
+			{ID: "m/flows/f.rk#/steps/0", Group: "cust", Kind: KindAction, Detail: "find customer"},
+			{ID: "m/customer.rk#/rules/0", Group: "cust", Kind: KindRule},
+		},
+		Edges: []Edge{
+			{From: "m/invoice.rk#status/submitted", To: "m/flows/f.rk#/", Kind: EdgeHandoff},
+			{From: "m/flows/f.rk#/", To: "m/flows/f.rk#/steps/0", Kind: EdgeFlow},
+		},
+	}
+	Owner(g)
+	checkGroupsConsistent(t, g)
+	var hand []Edge
+	for _, e := range g.Edges {
+		if e.Kind == EdgeHandoff {
+			hand = append(hand, e)
+		}
+	}
+	if len(hand) != 1 || hand[0].From != "m/invoice.rk#status/submitted" || hand[0].To != "m/customer.rk#/rules/0" {
+		t.Errorf("handoffs after the move: %+v", hand)
 	}
 }

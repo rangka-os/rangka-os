@@ -217,7 +217,7 @@
         "on": "whatsapp_business.message_received"
       },
       "summary": {
-        "id": "Saat ada kabar baru dari Whatsapp Business, lead baru dibuat, aktivitas baru dibuat (kalau syaratnya cocok)."
+        "id": "Saat ada kabar baru dari luar, lead baru dibuat, aktivitas baru dibuat (kalau syaratnya cocok)."
       }
     },
     {

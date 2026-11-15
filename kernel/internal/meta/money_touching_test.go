@@ -90,3 +90,24 @@ func TestWriteActions(t *testing.T) {
 		t.Errorf("no actions: got %#v", got)
 	}
 }
+
+// An update whose target the flow cannot resolve fails closed (a flow that triggers on or calls the connector).
+func TestMoneyTouchingUnresolvedUpdate(t *testing.T) {
+	conn := map[string]map[string]any{"x_omilo": {"name": "x_omilo"}}
+	upd := []any{map[string]any{"update": "ghost", "set": map[string]any{"a": "1"}}}
+	for name, f := range map[string]map[string]any{"trigger": {"on": "x_omilo.paid", "steps": upd},
+		"call": {"on": "deal.updated", "steps": append([]any{map[string]any{"call": "x_omilo.pay"}}, upd...)}} {
+		if !moneyReg(conn, map[string]map[string]any{"f": f}, payModels).MoneyTouching("x_omilo") {
+			t.Errorf("%s: unresolved update must count", name)
+		}
+	}
+	// the same flow not tied to the connector does not count
+	if moneyReg(conn, map[string]map[string]any{"f": {"on": "deal.updated", "steps": upd}}, payModels).MoneyTouching("x_omilo") {
+		t.Error("unrelated flow must not count")
+	}
+	// a resolved update to a plain model still does not count
+	ok := map[string]any{"on": "x_omilo.paid", "steps": []any{map[string]any{"find": "deal", "where": "true", "as": "d"}, map[string]any{"update": "d"}}}
+	if moneyReg(conn, map[string]map[string]any{"f": ok}, payModels).MoneyTouching("x_omilo") {
+		t.Error("resolved plain update must not count")
+	}
+}

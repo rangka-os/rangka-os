@@ -795,12 +795,12 @@ def money_declared(c):
 def money_by_flow(connector, flows, sensitive):
     """A flow with on: <connector>.<trigger> or a call: <connector>.<action> step that creates or updates a model
     for which sensitive(model) holds. An update counts when its variable was bound (find, find_all, create) to such
-    a model earlier in the flow; the doc of a record event is the on model. Twin of meta.MoneyByFlow."""
+    a model earlier in the flow (an update of an unbound variable fails closed and counts); the doc of a record event is the on model. Twin of meta.MoneyByFlow."""
     prefix = connector + "."
     for f in flows:
         on = f.get("on") if isinstance(f.get("on"), str) else ""
         touches = on.startswith(prefix)
-        st = {"calls": False, "written": [], "vars": {}}
+        st = {"calls": False, "written": [], "vars": {}, "unresolved": False}
 
         def bind(v, m):
             if v and m:
@@ -820,6 +820,8 @@ def money_by_flow(connector, flows, sensitive):
                     st["written"].append(s["create"])
                     bind(as_, s["create"])
                 if isinstance(s.get("update"), str) and s["update"]:
+                    if not st["vars"].get(s["update"]):
+                        st["unresolved"] = True
                     st["written"].extend(sorted(st["vars"].get(s["update"], ())))
                 for k in ("then", "else", "do"):
                     walk(s.get(k))
@@ -827,7 +829,7 @@ def money_by_flow(connector, flows, sensitive):
         if "." in on and not touches:
             bind("doc", on.split(".", 1)[0])
         walk(f.get("steps"))
-        if (touches or st["calls"]) and any(sensitive(m) for m in st["written"]):
+        if (touches or st["calls"]) and (st["unresolved"] or any(sensitive(m) for m in st["written"])):
             return True
     return False
 

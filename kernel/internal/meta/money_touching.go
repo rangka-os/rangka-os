@@ -59,7 +59,7 @@ func MoneyDeclared(c map[string]any) bool {
 // MoneyByFlow is the flow part of the rule: a flow with `on: <connector>.<trigger>` or a `call: <connector>.<action>`
 // step that creates or updates a model for which sensitive returns true. An update names a variable; it counts when
 // the variable was bound (find, find_all, create) to such a model earlier in the same flow. An update of a variable
-// the flow does not bind to a model counts as no write here (the risk table rates it high on its own).
+// the flow does not bind to a model fails closed: it counts (a draft cannot lose the label, contract 0033 §4).
 func MoneyByFlow(connector string, flows []map[string]any, sensitive func(model string) bool) bool {
 	prefix := connector + "."
 	for _, f := range flows {
@@ -72,6 +72,9 @@ func MoneyByFlow(connector string, flows []map[string]any, sensitive func(model 
 		w.walk(AsList(f["steps"]))
 		if !touches && !w.calls {
 			continue
+		}
+		if w.unresolved { // fails closed: a write to a record the flow cannot resolve may hit a money or stock model
+			return true
 		}
 		for _, m := range w.written {
 			if sensitive(m) {
@@ -87,6 +90,8 @@ type flowMoney struct {
 	calls   bool
 	vars    map[string]map[string]bool
 	written []string
+	// unresolved: an update: whose variable the flow never bound to a model
+	unresolved bool
 }
 
 func (w *flowMoney) bind(v, model string) {
@@ -116,6 +121,9 @@ func (w *flowMoney) walk(steps []any) {
 			w.bind(as, m)
 		}
 		if v, _ := st["update"].(string); v != "" {
+			if len(w.vars[v]) == 0 {
+				w.unresolved = true
+			}
 			ms := make([]string, 0, len(w.vars[v]))
 			for m := range w.vars[v] {
 				ms = append(ms, m)

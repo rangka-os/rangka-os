@@ -26,8 +26,10 @@ type Runtime struct {
 	// Egress is the platform's egress policy (RANGKA_CONNECTOR_EGRESS); the zero value allows every address
 	Egress     Egress
 	transports transportCache
-	Now        func() time.Time
-	Log        func(format string, args ...any)
+	// companyTransports is the guarded pool of company connectors, kept apart from transports: its policy differs
+	companyTransports transportCache
+	Now               func() time.Time
+	Log               func(format string, args ...any)
 	// StartFlow queues a flow with an event in qr (the transaction that records the event key; the server wires the
 	// queue); nil = events are only audited.
 	StartFlow func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, uniqueKey string) error
@@ -48,12 +50,19 @@ type CallError struct {
 
 func (e *CallError) Error() string { return e.Message }
 
-func (rt *Runtime) client(secret bool, host string) *http.Client {
+// client picks the transport: a company connector (contract 0033 §2) always dials through the public policy,
+// a catalogue connector follows the platform's policy.
+func (rt *Runtime) client(company, secret bool, host string) *http.Client {
 	base := rt.HTTP
 	if base == nil {
 		base = &http.Client{Timeout: 30 * time.Second}
 	}
-	c := *rt.Egress.guard(base, &rt.transports)
+	var c http.Client
+	if company {
+		c = *rt.Egress.forCompany().guard(base, &rt.companyTransports)
+	} else {
+		c = *rt.Egress.guard(base, &rt.transports)
+	}
 	// a request that carries a secret follows redirects only to the same host (§5)
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
@@ -101,8 +110,11 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 		hr.Header.Set("Content-Type", "application/json")
 	}
 	hr.Header.Set("Accept", "application/json")
-	resp, err := rt.client(req.Secret, req.Host).Do(hr)
+	resp, err := rt.client(meta.IsCompanyConnector(connector), req.Secret, req.Host).Do(hr)
 	if err != nil {
+		if errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector) {
+			return nil, rt.fail(ctx, org, connector, action, req, err) // connector_host_private, not retried
+		}
 		return nil, rt.fail(ctx, org, connector, action, req, &CallError{Message: req.scrub.String(err.Error()), Retryable: !errors.Is(err, ErrHostRefused) && !errors.Is(err, ErrEgressRefused)})
 	}
 	defer resp.Body.Close()
@@ -261,6 +273,8 @@ func (rt *Runtime) fail(ctx context.Context, org, connector, action string, req 
 		code = "connector_needs_auth"
 	case errors.Is(err, ErrHostRefused):
 		code = "secret_host_refused"
+	case errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector):
+		code = "connector_host_private"
 	case errors.Is(err, ErrUntested):
 		code = "connector_untested"
 	case errors.Is(err, ErrWritesUnconfirmed):

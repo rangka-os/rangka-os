@@ -19,6 +19,11 @@ import (
 // stateRT builds a Runtime over a temp copy of the x_demo site connector, with a database holding rk_connector_checks.
 // tokens maps org -> access_token literal bound through system.rk connector_auth (env driver).
 func stateRT(t *testing.T, tokens map[string]string) (*Runtime, string) {
+	return stateRTEdit(t, tokens, nil)
+}
+
+// stateRTEdit is stateRT with edit applied to the copied connector.rk before the registry loads it.
+func stateRTEdit(t *testing.T, tokens map[string]string, edit func(string) string) (*Runtime, string) {
 	t.Helper()
 	ctx := context.Background()
 	db, err := pg.NewPool(ctx, testdb.New(t), 2)
@@ -35,6 +40,9 @@ func stateRT(t *testing.T, tokens map[string]string) (*Runtime, string) {
 		b, err := os.ReadFile(filepath.Join(src, f))
 		if err != nil {
 			t.Fatal(err)
+		}
+		if edit != nil && strings.HasSuffix(f, "connector.rk") {
+			b = []byte(edit(string(b)))
 		}
 		dst := filepath.Join(site, f)
 		os.MkdirAll(filepath.Dir(dst), 0o755)

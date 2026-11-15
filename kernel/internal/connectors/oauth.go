@@ -65,6 +65,9 @@ func (rt *Runtime) refreshIfDue(ctx context.Context, org, connector string) erro
 		return err
 	}
 	if err := rt.refresh(ctx, org, connector, c); err != nil {
+		if errors.Is(err, ErrEgressRefused) {
+			return err // the address is the problem, not the token: keep it, the call fails as connector_host_private
+		}
 		// the owner reconnects: drop the stale access token so the connector shows needs_auth
 		rt.Secrets.Delete(context.WithoutCancel(ctx), org, connector, "access_token", "system:oauth2")
 		store.Audit(context.WithoutCancel(ctx), rt.DB, org, "connector:"+connector, "connector.needs_auth", "connector/"+connector,
@@ -130,9 +133,12 @@ func (rt *Runtime) refresh(ctx context.Context, org, connector string, c map[str
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	resp, err := rt.client(true, strings.ToLower(u.Hostname())).Do(req)
+	resp, err := rt.client(meta.IsCompanyConnector(connector), true, strings.ToLower(u.Hostname())).Do(req)
 	scrub, _ := rt.Scrubber(ctx, org, connector)
 	if err != nil {
+		if errors.Is(err, ErrEgressRefused) {
+			return &scrubbedErr{msg: scrub.String(err.Error()), err: err}
+		}
 		return errors.New(scrub.String(err.Error()))
 	}
 	defer resp.Body.Close()
@@ -165,3 +171,12 @@ func (rt *Runtime) refresh(ctx context.Context, org, connector string, c map[str
 	}
 	return nil
 }
+
+// scrubbedErr keeps err in the chain (errors.Is) while showing only the scrubbed text.
+type scrubbedErr struct {
+	msg string
+	err error
+}
+
+func (e *scrubbedErr) Error() string { return e.msg }
+func (e *scrubbedErr) Unwrap() error { return e.err }

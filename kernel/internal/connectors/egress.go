@@ -1,6 +1,7 @@
 package connectors
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"net"
@@ -29,6 +30,8 @@ var ErrEgressRefused = errors.New("egress_refused")
 type Egress struct {
 	Public bool
 	Allow  []*net.IPNet
+	// lookup replaces DNS for names (tests); the resolved address is still checked on the connection
+	lookup func(ctx context.Context, host string) ([]string, error)
 }
 
 // EgressFromEnv reads RANGKA_CONNECTOR_EGRESS and RANGKA_CONNECTOR_EGRESS_ALLOW. An unknown policy or a bad CIDR is
@@ -133,6 +136,22 @@ func (e Egress) guard(c *http.Client, cache *transportCache) *http.Client {
 		t = base.Clone()
 		d := &net.Dialer{Timeout: 30 * time.Second, KeepAlive: 30 * time.Second, Control: e.control}
 		t.DialContext = d.DialContext
+		if e.lookup != nil {
+			t.DialContext = func(ctx context.Context, network, addr string) (net.Conn, error) {
+				host, port, err := net.SplitHostPort(addr)
+				if err != nil {
+					return nil, err
+				}
+				if net.ParseIP(host) == nil {
+					addrs, err := e.lookup(ctx, host)
+					if err != nil || len(addrs) == 0 {
+						return nil, fmt.Errorf("lookup %s: %v", host, err)
+					}
+					addr = net.JoinHostPort(addrs[0], port)
+				}
+				return d.DialContext(ctx, network, addr)
+			}
+		}
 		t.DialTLSContext = nil
 		t.Proxy = nil // a proxy would dial the internal address for us
 		cache.m[key] = t
@@ -154,4 +173,10 @@ func (e Egress) Transport() http.RoundTripper {
 		return nil
 	}
 	return e.guard(&http.Client{}, &transportCache{}).Transport
+}
+
+// forCompany is the policy for a company connector (contract 0033 §2): always public addresses only, whatever the
+// platform's RANGKA_CONNECTOR_EGRESS says, with the platform's allow-list (RANGKA_CONNECTOR_EGRESS_ALLOW) still honoured.
+func (e Egress) forCompany() Egress {
+	return Egress{Public: true, Allow: e.Allow, lookup: e.lookup}
 }

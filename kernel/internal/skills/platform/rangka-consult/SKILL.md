@@ -156,7 +156,7 @@ offer manual now and the connection in `later`. Research order, stopping at the 
 5. Ask the owner one question: where the docs are, or whether their developer can share the spec. For the owner's own
    product, ask whether its `/openapi.json` is reachable.
 
-Never ask for a token or key at any step; say which kind it is and that the owner enters it later. Drafting, states and
+Ask for a token or key only where the owner enters it (the connector setup form), not in chat: it would sit in the conversation history, and a turn with a pasted key is stopped (code `secrets`). Say which kind it is and where it goes. Drafting, states and
 what to tell the owner are in `rangka-connectors`.
 
 ## 6. Making the offer (contract 0046)

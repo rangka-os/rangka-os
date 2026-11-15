@@ -28,8 +28,9 @@ section 5a: spec, docs, the owner's material); this skill is the drafting and wh
 - OAuth2 (client credentials or authorization code) cannot be drafted: the kernel cannot obtain a token
   (`auth_unsupported` in the spec summary). Tell the owner in plain words that this system needs a sign-in method
   Rangka does not support yet, keep it in `later`, and offer manual entry meanwhile.
-- List `requires: [x_<slug>.<field>]` in the change set so the owner sees what to fill in. Never ask for a key in
-  chat; say which kind of key it is and where the owner enters it.
+- List `requires: [x_<slug>.<field>]` in the change set so the owner sees what to fill in. Ask for the key where the
+  owner enters it (the connector setup form), not in chat: it would sit in the conversation history, and a turn with a
+  pasted key is stopped (code `secrets`). Say which kind of key it is and where it goes.
 
 ## 2. Bringing data in: poll, then upsert
 
@@ -76,7 +77,7 @@ Per business, a company connector is in one of these states. The kernel checks t
 - A person runs the test (`POST /api/v1/connectors/{c}/test`, `GET` actions only, answer scrubbed and cut to 20 rows or
   4 KB). It is not an AI action: an `ai: true` token gets `ai_forbidden`. You may read the result with
   `GET /api/v1/connectors/{c}/test` and explain it: what came back, whether it looks like what the owner expected, what
-  to fix when it failed. Describe; never claim the test passed unless the result says so.
+  to fix when it failed. Say "passed" only when the result says so.
 - Money-touching connectors: after a successful test the owner confirms writes
   (`POST /api/v1/connectors/{c}/confirm-writes`, within 24 hours of the test, owner only, also refused for AI tokens).
   Until then a write fails with `connector_writes_unconfirmed`.
@@ -93,6 +94,6 @@ Per business, a company connector is in one of these states. The kernel checks t
 - Hosts: name the address it will talk to. Reads or also writes. Money-touching or not. Which keys the owner sets and
   where. These go in the change-set summary and in the offer's `planned_connectors`.
 - After apply, point to the connection settings screen: set keys, run the test, confirm writes when it applies. Name
-  the step the owner is on; never say "tersambung" before the state is `tested`.
-- Never use the platform's words with owners (`x_`, hosts, poll, upsert): say "sambungan ke Omilo", "diperiksa tiap
+  the step the owner is on; say "tersambung" once the state is `tested`; until then name the step the owner is on.
+- Prefer the owner's words to the platform's (`x_`, hosts, poll, upsert): say "sambungan ke Omilo", "diperiksa tiap
   beberapa menit", "data yang sama tidak dobel".

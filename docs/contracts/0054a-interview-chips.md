@@ -32,8 +32,9 @@ covers the question in Raka's reply.
   still ends with the same question.
 - Raka writes them in the owner's voice, as realistic values or common choices for the business type, never "Lainnya":
   the composer is always there.
-- Cloud reads them leniently: a broken field is no chips, never a failed turn. It applies the same rules and stores
-  them as message actions `say:<n>` (`n` = 0..3) with the text as the label, after the file-guess chips. A reply
+- Cloud reads them leniently: a broken field is no chips, never a failed turn. It applies the count, length and
+  repeat rules (whitespace, line breaks included, folds to one space; the question and name rules stay with
+  rangka-ai, which sees the reply) and stores them as message actions `say:<n>` (`n` = 0..3) with the text as the label, after the file-guess chips. A reply
   that carries file guesses gets no answer chips.
 - The studio shows the chips under Raka's newest question until the owner answers, also when a card Raka added
   after the question (the profile card) is the newest message. A click sends the label as the owner's text,

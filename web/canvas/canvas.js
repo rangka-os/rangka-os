@@ -309,6 +309,24 @@
       return function () { document.removeEventListener("keydown", onKey); };
     }, [selNode]);
 
+    /* Panning: the stages run wider than the screen. A mouse wheel only scrolls vertically and macOS hides the
+     * horizontal scrollbar, so a vertical wheel moves the canvas sideways when there is nothing to scroll down,
+     * and dragging the empty background pans it (cards and buttons keep their clicks). */
+    function wheelPan(e) {
+      var el = e.currentTarget;
+      if (e.shiftKey || Math.abs(e.deltaX) > Math.abs(e.deltaY)) return;
+      if (el.scrollWidth <= el.clientWidth || el.scrollHeight > el.clientHeight + 1) return;
+      el.scrollLeft += e.deltaY;
+    }
+    function dragPan(e) {
+      if (e.button !== 0 || e.pointerType === "touch" || (e.target.closest && e.target.closest("button, a, input, textarea, select, [data-node]"))) return;
+      var el = e.currentTarget, x0 = e.clientX, y0 = e.clientY, l0 = el.scrollLeft, t0 = el.scrollTop;
+      el.classList.add("is-panning");
+      function move(ev) { el.scrollLeft = l0 - (ev.clientX - x0); el.scrollTop = t0 - (ev.clientY - y0); }
+      function up() { el.classList.remove("is-panning"); window.removeEventListener("pointermove", move); window.removeEventListener("pointerup", up); }
+      window.addEventListener("pointermove", move); window.addEventListener("pointerup", up);
+    }
+
     var groups = graph.groups || [];
     var total = (graph.nodes || []).length;
     return h("div", { className: "rc-root" },
@@ -321,7 +339,7 @@
           graph.source && graph.source.file ? h("code", { className: "rc-mono" }, graph.source.file) : null,
           props.notice ? h("span", { className: "rc-notice" }, props.notice) : null)),
       h("div", { className: "rc-body" },
-        h("div", { className: "rc-scroll", tabIndex: -1 },
+        h("div", { className: "rc-scroll", tabIndex: -1, onWheel: wheelPan, onPointerDown: dragPan },
           groups.length ? h("div", { className: "rc-content", ref: contentRef },
             h("svg", { className: "rc-edges", "aria-hidden": "true", width: "100%", height: "100%" },
               h("defs", null,

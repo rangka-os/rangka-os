@@ -156,14 +156,25 @@ func (e *Engine) SetTour(ctx context.Context, org, user, tour, state string) (bo
 		_, err := e.DB.Exec(ctx, "delete from rk_tours where org_id = $1 and email = $2 and tour = $3", org, user, tour)
 		return true, err
 	}
-	res, err := e.DB.Query(ctx, "select count(*) from rk_tours where org_id = $1 and email = $2 and tour <> $3", org, user, tour)
+	tx, err := e.DB.Begin(ctx)
+	if err != nil {
+		return false, err
+	}
+	defer tx.Rollback(ctx)
+	// one writer per person at a time, so parallel PUTs cannot pass the cap together
+	if _, err := tx.Exec(ctx, "select pg_advisory_xact_lock(hashtextextended($1, 53))", org+"|"+user); err != nil {
+		return false, err
+	}
+	res, err := tx.Query(ctx, "select count(*) from rk_tours where org_id = $1 and email = $2 and tour <> $3", org, user, tour)
 	if err != nil {
 		return false, err
 	}
 	if n, _ := res.Rows[0][0].(int64); n >= MaxTours {
 		return false, nil
 	}
-	_, err = e.DB.Exec(ctx, `insert into rk_tours (org_id, email, tour, state, at) values ($1, $2, $3, $4, now())
-		on conflict (org_id, email, tour) do update set state = excluded.state, at = now()`, org, user, tour, state)
-	return true, err
+	if _, err := tx.Exec(ctx, `insert into rk_tours (org_id, email, tour, state, at) values ($1, $2, $3, $4, now())
+		on conflict (org_id, email, tour) do update set state = excluded.state, at = now()`, org, user, tour, state); err != nil {
+		return false, err
+	}
+	return true, tx.Commit(ctx)
 }

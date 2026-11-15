@@ -177,9 +177,11 @@ Lewati and "x dari y". A first tour shows once per person, so its state is kept 
   - `""` deletes the row, so the tour may start again ("Ulangi tur").
   - `tour` matches `^[a-z0-9][a-z0-9_.:/-]{0,63}$` (`kenalan`, `halaman:mulai`, `langkah:<stage>`), else `400 bad_tour`.
   - Any other state, or no state: `400 bad_json`.
-  - At most 100 tours per person per org; one more answers `409 too_many_tours`. Changing a kept one is fine.
+  - At most 100 tours per person per org; one more answers `409 too_many_tours`. Changing a kept one is fine. Writes
+    of one person are serialised, so parallel PUTs cannot pass the cap together.
   - Raka cannot write it: the assistant guard refuses every non-GET (`403 ai_forbidden`).
 - Every signed-in member reads and writes their own; nobody reads another person's.
+- Removing a member deletes their tour states in that org; changing a member's email moves their states to it.
 - With an older kernel the web app keeps tour states in localStorage.
 
 ### 8. `meta.apps[].roles` (added 15 Nov 2026)

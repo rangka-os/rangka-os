@@ -6,9 +6,11 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/auth"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -305,4 +307,42 @@ func TestOnboardingToursPerPerson(t *testing.T) {
 		t.Fatalf("cap: %s", r.Body)
 	}
 	e.must(200, "PUT", "/api/v1/onboarding/tours/t0", map[string]any{"state": "skipped"}) // changing a kept one is fine
+
+	// parallel PUTs at 99 kept tours: exactly one passes the cap (audit F1)
+	e.must(200, "PUT", "/api/v1/onboarding/tours/t0", map[string]any{"state": ""})
+	var wg sync.WaitGroup
+	codes := make([]int, 20)
+	for i := range codes {
+		wg.Add(1)
+		go func(i int) {
+			defer wg.Done()
+			codes[i] = e.do("PUT", fmt.Sprintf("/api/v1/onboarding/tours/par%d", i), map[string]any{"state": "seen"}).Status
+		}(i)
+	}
+	wg.Wait()
+	ok := 0
+	for _, c := range codes {
+		if c == 200 {
+			ok++
+		} else if c != 409 {
+			t.Fatalf("parallel PUT answered %d", c)
+		}
+	}
+	if n := len(get(e.must(200, "GET", "/api/v1/onboarding/tours", nil).JSON, "tours").(map[string]any)); ok != 1 || n != 100 {
+		t.Fatalf("parallel cap: %d passed, %d kept", ok, n)
+	}
+
+	// a removed member leaves no tour states behind (audit F2)
+	rep.must(200, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "seen"})
+	ctx := context.Background()
+	res, err := e.s.DB.Query(ctx, "select id from rk_users where email = 'rep@example.test'")
+	if err != nil || len(res.Rows) != 1 {
+		t.Fatalf("rep user: %v %v", err, res)
+	}
+	if err := auth.RemoveMember(ctx, e.s.DB, "kopi-senja", res.Rows[0][0].(int64)); err != nil {
+		t.Fatal(err)
+	}
+	if res, err := e.s.DB.Query(ctx, "select count(*) from rk_tours where email = 'rep@example.test'"); err != nil || res.Rows[0][0].(int64) != 0 {
+		t.Fatalf("removed member tours: %v %v", err, res)
+	}
 }

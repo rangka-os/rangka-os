@@ -382,6 +382,13 @@ func (s *Server) writeMember(ctx context.Context, tx *pg.Tx, org string, in memb
 		if _, err := tx.Query(ctx, "update rk_users set email = $1 where id = $2", email, target); err != nil {
 			return 0, false, err
 		}
+		// tour states follow the person to the new email (contract 0053 §7)
+		if _, err := tx.Exec(ctx, "delete from rk_tours where email = $1", email); err != nil {
+			return 0, false, err
+		}
+		if _, err := tx.Exec(ctx, "update rk_tours set email = $1 where email = $2", email, targetEmail); err != nil {
+			return 0, false, err
+		}
 	}
 	outlets := []string{}
 	switch {

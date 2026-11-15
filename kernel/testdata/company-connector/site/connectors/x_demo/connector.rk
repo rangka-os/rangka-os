@@ -8,6 +8,10 @@ category: other
 icon: plug-line
 version: 0.1.0
 vendor: Demo
+hosts: [api.example.com]
+experimental:
+  source:
+    kind: owner_file
 auth:
   type: token
   fields:

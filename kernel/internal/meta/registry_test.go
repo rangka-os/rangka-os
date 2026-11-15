@@ -34,3 +34,20 @@ func writeConnector(t *testing.T, dir, name string) {
 		t.Fatal(err)
 	}
 }
+
+// A symlink to a directory under <site>/connectors loads, like Python's os.path.isdir (the two validators agree).
+func TestRegistryFollowsSiteConnectorSymlink(t *testing.T) {
+	tmp := t.TempDir()
+	site := filepath.Join(tmp, "site")
+	writeConnector(t, filepath.Join(tmp, "real", "x_linked"), "x_linked")
+	if err := os.MkdirAll(filepath.Join(site, "connectors"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(tmp, "real", "x_linked"), filepath.Join(site, "connectors", "x_linked")); err != nil {
+		t.Skip("symlinks not available:", err)
+	}
+	reg := LoadOpts(Options{AppsDir: "../../testdata/modules-apps/apps", SiteDir: site}, nil)
+	if reg.Connectors["x_linked"] == nil {
+		t.Fatalf("symlinked site connector not loaded: %v", reg.Connectors)
+	}
+}

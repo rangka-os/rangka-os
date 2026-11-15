@@ -19,7 +19,7 @@ still read with a deprecation warning.
 Usage: rangka_validate.py <apps dir> [--site <dir>] [--connectors <dir>] [--modules <dir>] [app ...]
 Prints one line per problem: file:line:col  level  code  path  message. Exit 1 when any error is found.
 """
-import json, os, re, sys, difflib
+import json, os, re, sys, difflib, ipaddress
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rkfile
 from jsonschema import Draft202012Validator
@@ -755,6 +755,40 @@ def url_host(url):
     return rest.lower()
 
 
+def host_private(host):
+    """kernel meta.HostPrivate: an IP literal, localhost, *.localhost, *.local, *.internal, or a name without a dot."""
+    h = host.strip().lower().removesuffix(".")
+    h = h.removeprefix("[").removesuffix("]")
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        pass
+    return h == "localhost" or h.endswith((".localhost", ".local", ".internal")) or "." not in h
+
+
+def check_company_connector(rep, p, cn, c, origin, dup):
+    """Contracts 0033 section 2 and 0062 section 5: where a connector lives, public hosts, provenance."""
+    company = cn.startswith("x_")
+    if origin == "site" and not company:
+        rep.add("error", p, "name", "company_connector_name", f'connector "{cn}" lives in the site, so its name must start with x_ (x_{cn}), contract 0033 §2')
+    if origin == "shared" and company and not dup:
+        rep.add("error", p, "name", "company_connector_name", f'connector "{cn}" starts with x_, so it belongs to the company and lives in the site, not in the shared connectors directory (contract 0033 §2)')
+    if dup:
+        rep.add("error", p, "name", "duplicate_connector", f'connector "{cn}" is in the shared connectors directory and in the site: keep one (contract 0033 §2)')
+    if not company:
+        return
+    hosts = c.get("hosts") if isinstance(c.get("hosts"), list) else []
+    if not hosts:
+        rep.add("error", p, "(root)", "hosts_required", f'company connector "{cn}" must declare hosts: the domains it may call (contract 0033 §2)')
+    for i, h in enumerate(hosts):
+        if isinstance(h, str) and host_private(h):
+            rep.add("error", p, f"hosts/{i}", "connector_host_private", f'host "{h}" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)')
+    exp = c.get("experimental")
+    if not (isinstance(exp, dict) and isinstance(exp.get("source"), dict)):
+        rep.add("warn", p, "(root)", "connector_source_missing", f'company connector "{cn}" has no experimental.source: say where the draft came from (contract 0062 §5)')
+
+
 def check_secret_hosts(rep, p, c):
     """Contract 0017 §1, §5: a secret field has no default; an action carries a secret only in headers (the query
     string with allow_secret_in: [query], as a warning), uses https and, when the connector declares hosts:, sends it
@@ -888,6 +922,7 @@ def check_auth_upstream(rep, sysdoc):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
+    conn_origin, conn_dup = {}, set()  # where each connector came from: "shared" directory or "site"
     app_overlays = {}  # <site>/custom/app.<app>.rk by app name (contract 0049)
     app_imports, site_imports, prints, letterheads, processes, screens = [], [], [], {}, [], []
     for name, a in apps.items():
@@ -950,6 +985,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                 d = rep.load(p)
                 if d is not None:
                     conns[cn] = (p, d)
+                    conn_origin[cn] = "shared"
     # company connectors (contract 0033 §2): <site>/connectors/<x_name>/connector.rk, after the shared directory
     if site and os.path.isdir(os.path.join(site, "connectors")):
         sc = os.path.join(site, "connectors")
@@ -960,7 +996,10 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             if p:
                 d = rep.load(p)
                 if d is not None:
+                    if cn in conns and conn_origin.get(cn) == "shared":
+                        conn_dup.add(cn)
                     conns[cn] = (p, d)
+                    conn_origin[cn] = "site"
 
     # flows
     for fname in sorted(flows):
@@ -1016,6 +1055,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         if not cn.startswith("x_") and isinstance(c, dict) and not c.get("summary"):
             rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
         if isinstance(c, dict):
+            check_company_connector(rep, p, cn, c, conn_origin.get(cn), cn in conn_dup)
             check_secret_hosts(rep, p, c)
             check_poll_triggers(rep, p, c)
 

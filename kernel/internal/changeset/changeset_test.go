@@ -612,3 +612,22 @@ func TestRootsFileCompanyConnector(t *testing.T) {
 		t.Error("x_ connector without a site accepted")
 	}
 }
+
+// An existing <connectors>/moka/connector.rk wins over /c/moka.rk.
+func TestRootsFileConnectorDirWins(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "moka"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "moka", "connector.rk")
+	if err := os.WriteFile(want, []byte("name: moka\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := roots{connectors: dir}
+	if got, err := r.file("connectors/moka.rk"); err != nil || got != want {
+		t.Errorf("moka with a directory: %q %v, want %q", got, err, want)
+	}
+	if got, err := r.file("connectors/other.rk"); err != nil || got != filepath.Join(dir, "other.rk") {
+		t.Errorf("other without a directory: %q %v", got, err)
+	}
+}

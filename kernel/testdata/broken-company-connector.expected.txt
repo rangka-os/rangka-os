@@ -1,0 +1,11 @@
+../../broken-company-connector/site/connectors/badname/connector.rk:2:7  error  company_connector_name  name  connector "badname" lives in the site, so its name must start with x_ (x_badname), contract 0033 §2
+../../broken-company-connector/site/connectors/x_demo/connector.rk:2:7  error  duplicate_connector  name  connector "x_demo" is in the shared connectors directory and in the site: keep one (contract 0033 §2)
+../../broken-company-connector/site/connectors/x_local/connector.rk:6:9  error  connector_host_private  hosts/0  host "localhost" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)
+../../broken-company-connector/site/connectors/x_nohosts/connector.rk:1:1  error  hosts_required  (root)  company connector "x_nohosts" must declare hosts: the domains it may call (contract 0033 §2)
+../../broken-company-connector/site/connectors/x_nosrc/connector.rk:1:1  warn   connector_source_missing  (root)  company connector "x_nosrc" has no experimental.source: say where the draft came from (contract 0062 §5)
+../../broken-company-connector/site/connectors/x_private/connector.rk:6:9  error  connector_host_private  hosts/0  host "10.0.0.5" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)
+../../broken-company-connector/site/connectors/x_private/connector.rk:6:36  error  connector_host_private  hosts/2  host "printer.internal" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)
+../../broken-company-connector/site/connectors/x_private/connector.rk:6:54  error  connector_host_private  hosts/3  host "db" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)
+../../broken-company-connector/connectors/x_shared/connector.rk:2:7  error  company_connector_name  name  connector "x_shared" starts with x_, so it belongs to the company and lives in the site, not in the shared connectors directory (contract 0033 §2)
+
+8 error(s), 1 warning(s)

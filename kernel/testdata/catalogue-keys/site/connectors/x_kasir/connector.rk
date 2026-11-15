@@ -2,7 +2,11 @@
 name: x_kasir
 label: {id: Kasir lama}
 version: 1.0.0
+hosts: [kasir.example.com]
+experimental:
+  source:
+    kind: owner_file
 auth: {type: none}
 actions:
   - name: list
-    request: {method: GET, url: https://kasir.example.test/items}
+    request: {method: GET, url: https://kasir.example.com/items}

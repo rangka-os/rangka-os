@@ -148,6 +148,7 @@ func (v *validator) more() {
 			v.rep.extra("warn", d.Path, "(root)", "catalogue_summary_missing", fmt.Sprintf(`connector "%s" has no summary: add one sentence in plain words for the catalogue (contract 0036)`, cn))
 		}
 		if c := asMap(d.Data); c != nil {
+			v.companyConnector(cn, d, c)
 			v.secretHosts(d, c)
 			v.pollTriggers(d, c)
 		}

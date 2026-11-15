@@ -34,6 +34,9 @@ type Registry struct {
 	Orgs             map[string]*OrgDoc  // config.rk orgs: by org id
 	ConnectorsDir    string
 	connectorFiles   map[string]string // connector name -> absolute path of the loaded file
+	connectorShared  map[string]bool   // connector names found in the shared connectors directory
+	connectorSite    map[string]bool   // connector names found in <site>/connectors (the site copy wins)
+	connectorDup     map[string]bool   // names found in both places: duplicate_connector
 	order            []string
 	printFiles       []*Print   // every loaded print file, apps first (validation)
 	processFiles     []*Process // every loaded process file, units first (validation)
@@ -276,6 +279,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 			if p := rk.Find(filepath.Join(o.ConnectorsDir, n), "connector"); p != "" {
 				if d := ld.load(p); d != nil {
 					r.addConnector(n, p, d)
+					r.connectorShared = markName(r.connectorShared, n)
 				}
 			}
 		}
@@ -285,7 +289,8 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		ents, _ := os.ReadDir(filepath.Join(siteDir, "connectors"))
 		var names []string
 		for _, e := range ents {
-			if e.IsDir() {
+			// os.Stat follows a symlink to a directory, like Python's os.path.isdir
+			if st, err := os.Stat(filepath.Join(siteDir, "connectors", e.Name())); err == nil && st.IsDir() {
 				names = append(names, e.Name())
 			}
 		}
@@ -293,7 +298,11 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		for _, n := range names {
 			if p := rk.Find(filepath.Join(siteDir, "connectors", n), "connector"); p != "" {
 				if d := ld.load(p); d != nil {
+					if r.Connectors[n] != nil && r.connectorShared[n] {
+						r.connectorDup = markName(r.connectorDup, n)
+					}
 					r.addConnector(n, p, d)
+					r.connectorSite = markName(r.connectorSite, n)
 				}
 			}
 		}
@@ -315,6 +324,14 @@ func (r *Registry) addConnector(name, path string, d *rk.Doc) {
 	r.Connectors[name] = d
 	r.Docs["connectors/"+name+".rk"] = d
 	r.connectorFiles[name] = abs
+}
+
+func markName(m map[string]bool, n string) map[string]bool {
+	if m == nil {
+		m = map[string]bool{}
+	}
+	m[n] = true
+	return m
 }
 
 // ConnectorPath is the absolute path of the file a connector was loaded from, or "" when it is not loaded.

@@ -301,8 +301,8 @@ func TestOAuthRefreshDeclaredHostOnly(t *testing.T) {
 	}
 }
 
-// Review fix 3: a change set that edits a company connector and adds a flow using it is refused at apply, though
-// the live content is tested: the apply resets the test.
+// Review fix 3 and the fix wave (item 1): a change set that edits a company connector and adds a flow using it is
+// reported at validate (connector_untested), not only at apply: the apply resets the test, so it could never apply.
 func TestApplyRefusesEditedConnectorFlow(t *testing.T) {
 	e, _ := companyEnvWith(t, true, gatedConnector, nil)
 	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
@@ -313,16 +313,68 @@ on: deal.updated
 steps:
   - {call: x_test.list_items}
 `
-	id := proposeApproved(e, "Ubah penghubung dan alur",
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Ubah penghubung dan alur", "ops": []any{
 		map[string]any{"op": "replace", "path": "connectors/x_test.rk", "content": gatedConnector + "# diubah\n"},
-		flowOp("flows/x_omilo_pull.rk", flow))
-	r := e.do("POST", "/api/v1/changesets/"+id+"/apply", nil)
-	if r.Status != 409 || errCode(r) != "connector_untested" {
-		t.Fatalf("apply edited connector + flow: %d %s", r.Status, r.Body)
+		flowOp("flows/x_omilo_pull.rk", flow)}}).JSON
+	v := e.must(200, "POST", "/api/v1/changesets/"+cs["id"].(string)+"/validate", nil).JSON
+	if v["status"] != "invalid" || get(v, "validation", "errors", 0, "code") != "connector_untested" ||
+		get(v, "validation", "errors", 0, "file") != "flows/x_omilo_pull.rk" {
+		t.Fatalf("validate edited connector + flow: %v", v)
 	}
 	// the edit alone applies
 	only := proposeApproved(e, "Ubah penghubung", map[string]any{"op": "replace", "path": "connectors/x_test.rk", "content": gatedConnector + "# diubah\n"})
 	if ap := e.must(200, "POST", "/api/v1/changesets/"+only+"/apply", nil).JSON; ap["status"] != "applied" {
 		t.Fatalf("connector edit alone: %v", ap)
+	}
+}
+
+// Fix wave item 1: the 0062 §8 flow, a new company connector and the flows that use it in one change set, is invalid
+// at validate with a message that asks for two change sets; split, the connector applies and the flows wait for the
+// owner's test.
+func TestValidateRefusesNewConnectorWithFlows(t *testing.T) {
+	e, _ := companyEnvWith(t, true, gatedConnector, nil)
+	omilo := strings.Replace(gatedConnector, "name: x_test", "name: x_omilo", 1)
+	flow := `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_omilo_sync
+label: {id: Barang baru}
+on: x_omilo.new_items
+steps:
+  - {create: activity, set: {subject: "'barang baru'", activity_type: "'note'"}}
+`
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Omilo sekaligus", "ops": []any{
+		flowOp("connectors/x_omilo.rk", omilo), flowOp("flows/x_omilo_sync.rk", flow)}}).JSON
+	id := cs["id"].(string)
+	v := e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil).JSON
+	errs, _ := get(v, "validation", "errors").([]any)
+	if v["status"] != "invalid" || len(errs) != 1 || get(v, "validation", "errors", 0, "code") != "connector_untested" {
+		t.Fatalf("validate connector + flow: %v", v)
+	}
+	msg, _ := get(v, "validation", "errors", 0, "message").(string)
+	if !strings.Contains(msg, "x_omilo") || !strings.Contains(msg, "dua change set") {
+		t.Fatalf("message: %q", msg)
+	}
+	// preview refuses it too
+	if r := e.do("POST", "/api/v1/changesets/"+id+"/preview", nil); r.Status != 409 {
+		t.Fatalf("preview: %d %s", r.Status, r.Body)
+	}
+	// split: (1) the connector applies; (2) the flows validate and approve, and apply once the test passed
+	c := proposeApproved(e, "Penghubung Omilo", flowOp("connectors/x_omilo.rk", omilo))
+	e.must(200, "POST", "/api/v1/changesets/"+c+"/apply", nil)
+	f := proposeApproved(e, "Alur Omilo", flowOp("flows/x_omilo_sync.rk", flow))
+	// fix wave item 4: the refusal follows the state. No keys yet: connector_needs_auth, saying the keys are missing.
+	r := e.do("POST", "/api/v1/changesets/"+f+"/apply", nil)
+	if msg, _ := get(r.JSON, "error", "message").(string); r.Status != 409 || errCode(r) != "connector_needs_auth" || !strings.Contains(msg, "belum diisi") {
+		t.Fatalf("flows before the keys: %d %s", r.Status, r.Body)
+	}
+	e.must(204, "PUT", "/api/v1/connectors/x_omilo/auth/access_token", map[string]any{"value": companyTestSecret})
+	// keys set, never tested: "belum diuji", not "sejak terakhir diubah"
+	r = e.do("POST", "/api/v1/changesets/"+f+"/apply", nil)
+	if msg, _ := get(r.JSON, "error", "message").(string); r.Status != 409 || errCode(r) != "connector_untested" ||
+		!strings.Contains(msg, "belum diuji") || strings.Contains(msg, "sejak terakhir diubah") {
+		t.Fatalf("flows before the test: %d %s", r.Status, r.Body)
+	}
+	e.must(200, "POST", "/api/v1/connectors/x_omilo/test", map[string]any{"action": "list_items"})
+	if ap := e.must(200, "POST", "/api/v1/changesets/"+f+"/apply", nil).JSON; ap["status"] != "applied" {
+		t.Fatalf("flows after the test: %v", ap)
 	}
 }

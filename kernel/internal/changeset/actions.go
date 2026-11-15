@@ -367,7 +367,7 @@ func relItems(items []meta.Item, r roots) []meta.Item {
 
 // check validates the change set's result on a sandbox copy.
 func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func(), error) {
-	r, cleanup, _, err := s.sandbox(cs.Ops)
+	r, cleanup, files, err := s.sandbox(cs.Ops)
 	if err != nil {
 		if e, ok := err.(*Error); ok && e.Code == "stale_base" {
 			return nil, nil, roots{}, nil, e
@@ -387,6 +387,7 @@ func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func
 			v.Warnings = append(v.Warnings, it)
 		}
 	}
+	v.Errors = append(v.Errors, splitConnectorFlows(files)...)
 	return v, reg, r, cleanup, nil
 }
 
@@ -901,36 +902,74 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	return cs, nil
 }
 
-// connectorsTested refuses (409 connector_untested) a change set whose flows, as the change leaves them, start from
-// (on: x_c.trigger) or call (call: x_c.action) a company connector that is not tested in org (contract 0033 §3). Only
-// the flow files the change set writes are read: installed, unchanged flows were checked when they were applied. A
-// connector whose file the change set also writes counts as untested, since the apply resets its test.
-func (s *Service) connectorsTested(ctx context.Context, org string, files map[string]*string) error {
-	if s.ConnectorState == nil {
-		return nil
-	}
-	used, edited := map[string]bool{}, map[string]bool{}
+// connectorFlowUse reads the files a change set writes: the company connectors its flows start from or call, each with
+// the flow paths that use it, and the connectors whose file it writes (written: content set; deleted: nil content).
+func connectorFlowUse(files map[string]*string) (used map[string][]string, written, deleted map[string]bool) {
+	used, written, deleted = map[string][]string{}, map[string]bool{}, map[string]bool{}
 	for p, c := range files {
 		if strings.HasPrefix(p, "connectors/") {
-			edited[strings.TrimSuffix(strings.TrimPrefix(p, "connectors/"), ".rk")] = true
+			n := strings.TrimSuffix(strings.TrimPrefix(p, "connectors/"), ".rk")
+			if c == nil {
+				deleted[n] = true
+			} else {
+				written[n] = true
+			}
 		}
 		if c == nil || !(strings.HasPrefix(p, "flows/") || strings.Contains(p, "/flows/")) {
 			continue
 		}
 		d, err := rk.LoadBytes(p, []byte(*c))
 		if err != nil {
-			continue // the validator has passed the result; an unreadable file is no flow
+			continue // the validator reports an unreadable file; it is no flow
 		}
+		seen := map[string]bool{}
 		for _, n := range flowConnectors(meta.AsMap(d.Data)) {
-			if meta.IsCompanyConnector(n) {
-				used[n] = true
+			if meta.IsCompanyConnector(n) && !seen[n] {
+				seen[n] = true
+				used[n] = append(used[n], p)
 			}
 		}
 	}
-	var untested []string
-	for _, n := range sortedSet(used) {
+	for n := range used {
+		sort.Strings(used[n])
+	}
+	return used, written, deleted
+}
+
+// splitConnectorFlows reports (connector_untested, one error per flow file) a change set that writes a company
+// connector and also adds or changes flows that use it. The apply resets the connector's test, so such a change set
+// could never apply (connectorsTested): it is found at validate, where Raka's self-repair reads it, and is split in
+// two (contract 0062 §7): (1) the connector with its models and dashboards, (2) the flows, which may be approved
+// before the owner's test and apply after it.
+func splitConnectorFlows(files map[string]*string) []meta.Item {
+	used, written, _ := connectorFlowUse(files)
+	var out []meta.Item
+	for _, n := range sortedSet(written) {
+		for _, p := range used[n] {
+			out = append(out, meta.Item{Level: "error", File: p, Pos: "1:1", Where: "(change set)", Code: "connector_untested",
+				Message: "Alur ini memakai penghubung " + n + " yang diubah di change set yang sama. Penghubung baru atau yang diubah " +
+					"belum diuji, jadi alurnya tidak bisa diterapkan bersamanya. Pecah jadi dua change set: (1) penghubung " + n +
+					" beserta model dan dasbornya; (2) alur yang memakainya. Change set kedua boleh disetujui sekarang dan " +
+					"diterapkan setelah pemilik menguji penghubungnya."})
+		}
+	}
+	return out
+}
+
+// connectorsTested refuses (409 connector_untested, or connector_needs_auth when every such connector only lacks
+// keys) a change set whose flows, as the change leaves them, start from (on: x_c.trigger) or call (call: x_c.action)
+// a company connector that is not tested in org (contract 0033 §3). Only the flow files the change set writes are
+// read: installed, unchanged flows were checked when they were applied. A connector whose file the change set also
+// writes counts as untested, since the apply resets its test (validate reports that case first: splitConnectorFlows).
+func (s *Service) connectorsTested(ctx context.Context, org string, files map[string]*string) error {
+	if s.ConnectorState == nil {
+		return nil
+	}
+	used, written, deleted := connectorFlowUse(files)
+	var untested, noKeys []string
+	for _, n := range sortedSet(keysSet(used)) {
 		// a connector file the change set writes resets its test when applied: its live state says nothing
-		if edited[n] {
+		if written[n] || deleted[n] {
 			untested = append(untested, n)
 			continue
 		}
@@ -938,15 +977,51 @@ func (s *Service) connectorsTested(ctx context.Context, org string, files map[st
 		if err != nil {
 			return err
 		}
-		if st != "tested" {
+		switch st {
+		case "tested":
+		case "needs_auth":
+			noKeys = append(noKeys, n)
+		default:
 			untested = append(untested, n)
 		}
 	}
-	if len(untested) == 0 {
+	return connectorStateError(untested, noKeys)
+}
+
+// connectorStateError is the apply refusal for connectors that are not ready: untested ones answer connector_untested
+// ("belum diuji"); when every one only lacks keys, connector_needs_auth.
+func connectorStateError(untested, noKeys []string) error {
+	if len(untested) == 0 && len(noKeys) == 0 {
 		return nil
 	}
-	return &Error{409, "connector_untested", "Penghubung " + strings.Join(untested, ", ") + " belum diuji sejak terakhir diubah. " +
-		"Uji dulu di Pengaturan → Penghubung, lalu terapkan perubahan ini lagi.", map[string]any{"connectors": untested}}
+	all := append(append([]string{}, untested...), noKeys...)
+	sort.Strings(all)
+	if len(untested) == 0 {
+		return &Error{409, "connector_needs_auth", "Kunci penghubung " + strings.Join(noKeys, ", ") + " belum diisi. " +
+			"Isi kuncinya di Pengaturan → Penghubung, uji penghubungnya, lalu terapkan perubahan ini lagi.",
+			map[string]any{"connectors": all, "needs_auth": noKeys}}
+	}
+	msg := "Penghubung " + strings.Join(untested, ", ") + " belum diuji. "
+	if len(noKeys) > 0 {
+		msg += "Kunci penghubung " + strings.Join(noKeys, ", ") + " juga belum diisi. "
+	}
+	msg += "Uji dulu di Pengaturan → Penghubung, lalu terapkan perubahan ini lagi."
+	return &Error{409, "connector_untested", msg, map[string]any{"connectors": all, "needs_auth": nonNil(noKeys)}}
+}
+
+func keysSet[V any](m map[string]V) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for k := range m {
+		out[k] = true
+	}
+	return out
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
 }
 
 // flowConnectors lists the connector heads a flow starts from (on:) or calls (call: steps, nested in then, else and

@@ -29,7 +29,7 @@ var (
 	ErrUnknown      = errors.New("unknown_connector_action")
 	ErrNotInstalled = errors.New("connector_not_installed")
 	// ErrUntested and ErrWritesUnconfirmed are the send-time refusals of contract 0033 §3, §4 (never retried)
-	ErrUntested          = errors.New("Penghubung ini belum diuji sejak terakhir diubah. Uji dulu di Pengaturan → Penghubung.")
+	ErrUntested          = errors.New("Penghubung ini belum diuji untuk isinya yang sekarang. Uji dulu di Pengaturan → Penghubung.")
 	ErrWritesUnconfirmed = errors.New("Penghubung ini menyentuh uang dan pemilik usaha belum mengonfirmasi pengirimannya. Konfirmasi dulu di Pengaturan → Penghubung.")
 )
 

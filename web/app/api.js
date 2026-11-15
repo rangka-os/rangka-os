@@ -490,6 +490,8 @@
      *  "skipped" | "") stores one ("" forgets it). */
     api.tours = function () { return json("GET", "/api/v1/onboarding/tours"); };
     api.tourMark = function (name, state) { return json("PUT", "/api/v1/onboarding/tours/" + String(name).split("/").map(enc).join("/"), { state: state || "" }); };
+    /** One process graph (GET /api/v1/processes/<name>): groups carry each stage's id, model and when. */
+    api.process = function (name) { return json("GET", "/api/v1/processes/" + enc(name)); };
     api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };
 
     /* ----- Raka (contract 0020) */

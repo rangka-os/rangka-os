@@ -109,8 +109,8 @@ A new section "Jawaban kosong, ragu, atau di luar topik":
 ### §5 rangka-cloud
 
 - Chips (§1). A tap on `answer:unknown` or `answer:skip` sends "Belum tahu" or "Lewati", which §2 classifies.
-- `final_offer` (forced at the token cap) is not sent while the map has fewer than two stages. Raka instead
-  summarises what it knows and the studio shows the usual limit message.
+- `final_offer` (forced at the token cap) is not sent while the map has fewer than two stages. Raka is not called;
+  the studio shows the usual limit message.
 - Budget accounting is unchanged (empty turns still count). Open below.
 
 ## Compatibility

@@ -1,6 +1,6 @@
 # 0054 Business profile in onboarding: the plan comes from the profile
 
-Status: proposed (14 Nov 2026; amended 15 Nov 2026 by 0054a: answer chips, one question per fact, Raka answers the saved profile, scale and outlets as one question on the card) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (`/v1/interview`
+Status: proposed (14 Nov 2026; amended 15 Nov 2026 by 0054a: one question per fact, Raka answers the saved profile, scale and outlets as one question on the card) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (`/v1/interview`
 request and reply, consult prompt), rangka-cloud (profile storage, studio profile card, plan and offer-kind
 suggestion, offer card, build gate, Kendali "Calon pelanggan"; private) · Builds on: 0042 (consultant interview),
 0046 (offer), 0050 (pains), 0041 (prices from Cloud docs) · Implemented together with: 0050

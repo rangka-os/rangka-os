@@ -1,6 +1,6 @@
-# 0054a Interview: answer chips, one question per fact, Raka's turn after the profile is saved, scale and outlets as one question
+# 0054a Interview: one question per fact, Raka's turn after the profile is saved, scale and outlets as one question
 
-Status: proposed (15 Nov 2026) · Amends: 0054 Decision 5, §1, §3 and §4 (business profile in onboarding) · Affects: rangka-ai
+Status: proposed (15 Nov 2026) · Amends: 0054 Decision 5, §1, §3 and §4 (business profile in onboarding) · Builds on: 0059 (answer chips) · Affects: rangka-ai
 (`/v1/interview` request and reply, consult prompt), rangka-cloud (studio chat action, message actions, studio) ·
 Owner of the change: rangka-os (this contract) · Asked by: Zein, 15 Nov 2026 (studio trial)
 
@@ -15,30 +15,19 @@ Zein tried the studio on 15 Nov 2026 and found three problems.
 3. Raka's questions came without answer suggestions. The owner had to type every answer, even when the likely
    answers are a short list ("1 hari", "2-3 hari", "Seminggu lebih").
 
-0042 §3 already has chips for file guesses (`guesses[].options`), and 0053 has `hint`/`answers` for plan stages. Neither
-covers the question in Raka's reply.
+Contract 0059 (Dede, accepted 15 Nov 2026) answers problem 3: `answers` in the reply, chips `answer:<n>` plus
+"Belum tahu" and "Lewati". This amendment builds on it.
 
 ## Decision
 
-### 1. `suggestions` in the reply (amends 0042 §3, 0054 §3)
+### 1. Answer chips are contract 0059 §1, with two additions
 
-| Field | Rule |
-| --- | --- |
-| `suggestions` | array of 0 to 4 strings, each 1 to 40 characters on one line: short answers the owner can tap for the one question in `reply`; always emitted, `[]` when none |
+An earlier draft of this amendment had its own field (`suggestions`, `say:<n>`); it is withdrawn in favour of 0059.
+On top of 0059 §1:
 
-- rangka-ai drops all of them when the reply's prose asks no question, or when its last question asks for a name
-  (business, outlet, branch, person, brand). Names are the owner's own words. Longer strings and repeats
-  (case-insensitive) are dropped, never cut. When a repair rewrites the reply, the chips stay only when the rewrite
-  still ends with the same question.
-- Raka writes them in the owner's voice, as realistic values or common choices for the business type, never "Lainnya":
-  the composer is always there.
-- Cloud reads them leniently: a broken field is no chips, never a failed turn. It applies the count, length and
-  repeat rules (whitespace, line breaks included, folds to one space; the question and name rules stay with
-  rangka-ai, which sees the reply) and stores them as message actions `say:<n>` (`n` = 0..3) with the text as the label, after the file-guess chips. A reply
-  that carries file guesses gets no answer chips.
-- The studio shows the chips under Raka's newest question until the owner answers, also when a card Raka added
-  after the question (the profile card) is the newest message. A click sends the label as the owner's text,
-  exactly as typed: the server has no special path for it. Chips are 44 px high on a phone.
+- rangka-ai drops the `answers` when the reply's last question asks for a name (business, outlet, branch, person,
+  brand). Names are the owner's own words; the fixed chips stay.
+- Answer chips are 44 px high on a phone, and a chosen chip keeps the selection colour.
 
 ### 2. One question per fact (amends 0054 §3 "Raka's agenda")
 
@@ -47,7 +36,7 @@ covers the question in Raka's reply.
   `profile_dig`.
 - A fact already in the story, the map or the profile (confirmed or guessed) is not asked again.
 - rangka-ai checks the reply's questions against these topics. A reply that asks one of them is asked once more
-  (text and chips only; the first answer's map ops stand), and the rewrite is kept only when it no longer asks one.
+  (text and its own `answers` only; the first answer's map ops stand), and the rewrite is kept only when it no longer asks one.
   `interview.done` logs `profileRepairs`.
 
 ### 3. Raka answers the saved profile (amends 0054 §3 request, §4 "Saving")
@@ -61,7 +50,7 @@ covers the question in Raka's reply.
 - With `profile_saved`, Raka opens with one or two sentences that acknowledge the profile, naming only what matters
   for the flow or the problems, in the owner's words and numbers from the story when they gave them ("15
   karyawan", "GoFood"), never the card's ranges. It names no package or price. Then it asks the next most useful
-  question (not a profile question) with suggestions; its own question from before the card comes back when it was
+  question (not a profile question) with `answers`; its own question from before the card comes back when it was
   not answered. When the project already holds an offer, Raka says once that the owner decides from the offer card.
 - **Studio.** After a successful `PUT .../business-profile` in the interview, the studio posts the chat action
   `profile_saved`. Cloud accepts it only in the interview, with rangka-ai, after the profile card was shown, and
@@ -106,15 +95,13 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
 
 ## Consequences
 
-- **rangka-ai.** `raka/interview/suggest.py` (`clean_suggestions`, `profile_asks`), `suggestions` in the
-  consult_reply tool and the response, `profile_saved` in the request, the prompt rules. Tests in
-  `tests/test_suggest.py`.
-- **rangka-cloud.** `ConsultRequest.ProfileSaved`, `ConsultReply.Suggestions` with `cleanSuggestions`, `say:` actions,
-  chat action `profile_saved`, the studio chips, receipt line and save turn, the profile card's scale row with the outlet stepper. Tests in
-  `internal/cloud/wawancara_chips_test.go` and `tests/e2e/test_studio_consult.py`.
-- **Skills.** `skills/rangka-consult` (rangka-os) can carry the same chip rule in its §2; the engine prompt holds it
-  meanwhile.
-- Older Clouds ignore `suggestions`; an older rangka-ai ignores `profile_saved` and answers an ordinary turn.
+- **rangka-ai.** `raka/interview/suggest.py` (`profile_asks`, `no_name_answers`), `profile_saved` in the request, the
+  prompt rules. Tests in `tests/test_suggest.py` and `tests/test_serve_consult.py`.
+- **rangka-cloud.** `ConsultRequest.ProfileSaved`, chat action `profile_saved` (`profileSavedFresh`), the receipt line
+  and save turn, the script reply on save only without rangka-ai, the profile card's scale row with the outlet
+  stepper. Tests in `internal/cloud/wawancara_chips_test.go`, `business_profile_test.go` and
+  `tests/e2e/test_studio_consult.py`.
+- An older rangka-ai ignores `profile_saved` and answers an ordinary turn.
 
 ## Out of scope
 

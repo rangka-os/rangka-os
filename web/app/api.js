@@ -483,6 +483,13 @@
     api.catalogue = function () { return json("GET", "/api/v1/catalogue"); };
     /** POST /api/v1/catalogue/propose {add, remove} → the change set, validated and previewed (contract 0036 §4). */
     api.catalogueChange = function (body) { return json("POST", "/api/v1/catalogue/propose", body); };
+    /** Mulai di sini (contract 0053 §2–3): GET /api/v1/onboarding; hide(true|false) is the owner's. */
+    api.onboarding = function () { return json("GET", "/api/v1/onboarding"); };
+    api.onboardingHide = function (hidden) { return json("POST", "/api/v1/onboarding/hide", { hidden: !!hidden }); };
+    /** Tur sorotan (contract 0053 §7): the caller's own tour states {tours: {name: {state, at}}}; mark(name, "seen" |
+     *  "skipped" | "") stores one ("" forgets it). */
+    api.tours = function () { return json("GET", "/api/v1/onboarding/tours"); };
+    api.tourMark = function (name, state) { return json("PUT", "/api/v1/onboarding/tours/" + String(name).split("/").map(enc).join("/"), { state: state || "" }); };
     api.processes = function () { return json("GET", "/api/v1/processes").then(function (r) { return (r && r.data) || []; }); };
 
     /* ----- Raka (contract 0020) */

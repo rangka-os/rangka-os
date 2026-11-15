@@ -63,6 +63,8 @@
     "process.js",
     "catalogue.js",
     "team.js",
+    "tur.js",
+    "mulai.js",
     "ai.js",
     "outbox.js",
     "screens.js",

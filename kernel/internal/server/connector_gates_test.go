@@ -447,3 +447,21 @@ func TestWebhookRefusesUntested(t *testing.T) {
 		t.Fatalf("hook after an edit: %d", r.StatusCode)
 	}
 }
+
+// Fix wave item 7: the ruang coba simulates calls, so a test there would pass on fake data. POST test is refused
+// (409 sandbox_no_test) and nothing is saved.
+func TestConnectorTestRefusedInSandbox(t *testing.T) {
+	e, v := companyEnv(t, true)
+	e.must(201, "POST", "/api/v1/sandbox", map[string]any{"fixtures": demoFixtures(t)})
+	e.must(200, "POST", "/auth/org", map[string]any{"org": sb})
+	r := e.do("POST", testPath, map[string]any{"action": "list_items"})
+	if msg, _ := get(r.JSON, "error", "message").(string); r.Status != 409 || errCode(r) != "sandbox_no_test" || !strings.Contains(msg, "ruang coba") {
+		t.Fatalf("test in the sandbox: %d %s", r.Status, r.Body)
+	}
+	if n := dump(t, e, "select count(*) from rk_connector_checks where org_id = '"+sb+"'"); strings.TrimSpace(n) != "0" {
+		t.Fatalf("a check row was saved: %s", n)
+	}
+	if len(v.sent()) != 0 {
+		t.Fatal("the sandbox test sent a request")
+	}
+}

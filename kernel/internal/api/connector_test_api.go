@@ -60,6 +60,15 @@ func (s *Server) postConnectorTest(w http.ResponseWriter, r *http.Request, c *ca
 	if !s.connectorTestGuard(w, c, name, true) {
 		return
 	}
+	// the ruang coba simulates every call (contract 0052 §2): a test there would pass on fake data
+	if sb, err := store.IsSandbox(r.Context(), s.DB, c.actor.Org); err != nil {
+		fail(w, err)
+		return
+	} else if sb {
+		writeError(w, 409, "sandbox_no_test", "Penghubung tidak bisa diuji di ruang coba: di sini panggilannya hanya simulasi. "+
+			"Pindah ke usaha kamu yang asli, lalu uji di Pengaturan → Penghubung.")
+		return
+	}
 	var body struct {
 		Action string         `json:"action"`
 		Input  map[string]any `json:"input"`

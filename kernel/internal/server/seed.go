@@ -19,8 +19,12 @@ import (
 type SeedOptions struct {
 	Org, FixturesDir string
 	Email, Password  string
-	UserRecord       string           // the core user record the seed user is (USR-001)
-	Now              func() time.Time // clock for defaults (today()); time.Now when nil
+	UserRecord       string // the core user record the seed user is (USR-001)
+	// RecordOptional: UserRecord is only a default (`rangka seed` without --user-record). When no such record exists
+	// after the fixtures (a business seeded without sample data), the owner gets no named record and the employee
+	// record sync creates one, instead of failing with unknown_record.
+	RecordOptional bool
+	Now            func() time.Time // clock for defaults (today()); time.Now when nil
 }
 
 // Seed migrates, creates the org, loads fixtures and creates the seed user (owner).
@@ -69,7 +73,10 @@ func Seed(ctx context.Context, db *pg.Pool, reg *meta.Registry, o SeedOptions) (
 		}
 	}
 	if err := seedRecordClaim(ctx, db, o, false); err != nil {
-		return nil, err
+		if !o.RecordOptional || !errors.Is(err, engine.ErrUnknownRecord) {
+			return nil, err
+		}
+		o.UserRecord = ""
 	}
 	owner, err := auth.EnsureUser(ctx, db, o.Email, fullName, o.Password, o.Org, "owner", o.UserRecord)
 	if err != nil {

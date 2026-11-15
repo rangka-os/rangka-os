@@ -87,3 +87,33 @@ func TestSeedRefusesTakenRecord(t *testing.T) {
 		t.Fatalf("re-seed: %v", err)
 	}
 }
+
+// A business seeded without sample data has no USR-001: `rangka seed` without --user-record (RecordOptional) still
+// makes the owner, and the employee record sync creates the owner's record; an explicit record still must exist.
+func TestSeedDefaultRecordWithoutFixtures(t *testing.T) {
+	e := newEnv(t, false, nil)
+	ctx := context.Background()
+	db := e.s.DB
+	reg, err := LoadRegistry(e.s.Cfg)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts := SeedOptions{Org: "usaha-baru", FixturesDir: t.TempDir(), Email: "owner@x.test", Password: "rangka-demo",
+		UserRecord: "USR-001", Now: fixedNow}
+	if _, err := Seed(ctx, db, reg, opts); err == nil || !strings.Contains(err.Error(), "unknown_record") {
+		t.Fatalf("explicit missing record: err = %v, want unknown_record", err)
+	}
+	opts.RecordOptional = true
+	for i := 0; i < 2; i++ { // and seeding again (a provision retry) is fine
+		if _, err := Seed(ctx, db, reg, opts); err != nil {
+			t.Fatalf("seed %d with the default record and no fixtures: %v", i+1, err)
+		}
+	}
+	res, err := db.Query(ctx, "select m.role, m.record from rk_members m join rk_users u on u.id = m.user_id where u.email = 'owner@x.test' and m.org_id = 'usaha-baru'")
+	if err != nil || len(res.Rows) != 1 || res.Rows[0][0] != "owner" {
+		t.Fatalf("owner membership: %v %v", res, err)
+	}
+	if rec, _ := res.Rows[0][1].(string); rec == "" {
+		t.Fatalf("owner record = %q, want the record the sync created", rec)
+	}
+}

@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# naming_on: device needs a string naming, not a series
+name: struk_seri
+label: {id: Struk seri}
+naming: {series: struk, pattern: 'STRK-{YY}{MM}-{#####}'}
+naming_on: device
+fields:
+  - {name: note, type: data, label: {id: Catatan}}

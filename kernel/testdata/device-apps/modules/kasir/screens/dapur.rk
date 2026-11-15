@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: dapur
+type: queue
+label: {id: Dapur}
+icon: list
+roles: [dapur]
+device: tablet
+queue:
+  source: {model: tiket_dapur, filter: "status != 'served' && date == today()", sort: created_at}
+  card: {title: table_no, lines: items, line: [menu, qty, note], age_from: created_at}
+  columns: {by: status, values: [new, cooking, ready]}
+  steps:
+    - {when: "status == 'new'", set: {status: cooking}, label: {id: Masak}}
+    - {when: "status == 'cooking'", set: {status: ready}, label: {id: Siap}}
+    - {when: "status == 'ready'", set: {status: served}, label: {id: Diantar}}
+  refresh: 5

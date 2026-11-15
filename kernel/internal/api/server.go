@@ -60,6 +60,7 @@ type Server struct {
 	limiter  ratelimit.Limiter // traffic shaping by the plan's rate (shape.go, contract 0040 §9)
 	verified verifiedSet       // credentials verified in this process: they take the tenant's bucket (shape_verified.go)
 	proxies  trustedProxies    // RANGKA_TRUSTED_PROXIES: whose X-Forwarded-For names the client (shape_verified.go)
+	pairs    pairTries         // device pairing tries per address (devices_api.go, contract 0058 §2)
 }
 
 type ctxKey struct{}
@@ -76,7 +77,11 @@ func Actor(p *auth.Principal) engine.Actor {
 	if name == "" {
 		name = u.Email
 	}
-	return engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Human(), Outlets: u.Outlets}
+	a := engine.Actor{Org: u.Org, ID: u.Email, UserName: name, Roles: u.Roles, Human: p.Person(), Outlets: u.Outlets}
+	if d := p.Device; d != nil {
+		a.Device = &engine.DeviceRef{ID: d.ID, Code: d.Code, Outlet: d.Outlet}
+	}
+	return a
 }
 
 // ChangeActor converts a principal into a change-set actor.
@@ -88,7 +93,7 @@ func ChangeActor(p *auth.Principal) changeset.Actor {
 	case "oidc", "ai":
 		kind = "ai"
 	}
-	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind, Assistant: p.Via == "ai"}
+	return changeset.Actor{ID: p.User.Email, Org: p.User.Org, Roles: p.User.Roles, Human: p.Human(), Kind: kind, Assistant: p.Via == "ai", Pin: p.Via == "pin"}
 }
 
 func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
@@ -105,7 +110,7 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 	if err != nil {
 		return nil, err
 	}
-	if p != nil && p.User.Org == "" && p.Via == "dev" {
+	if p != nil && p.Via == "dev" && p.User.Org == "" {
 		p.User.Org = s.Org
 	}
 	// a members:write token reaches the member API and nothing else (contract 0043 §1)
@@ -118,11 +123,25 @@ func (s *Server) principal(r *http.Request) (*auth.Principal, error) {
 // errScopeLimited refuses a scoped API token outside the routes its scope is for.
 var errScopeLimited = errors.New("Token ini hanya untuk API anggota (members:write).")
 
+// memberRoute matches exactly the member routes of contract 0043: PUT and DELETE /api/v1/members/{upstream}/{subject},
+// plus GET /api/v1/members/options (contract 0056 §3). DELETE /api/v1/members/{user_id}/pin (contract 0058 §2) is
+// not one of them.
 func memberRoute(r *http.Request) bool {
 	if r.Method == http.MethodGet {
-		return r.URL.Path == "/api/v1/members/options" // contract 0056 §3
+		return r.URL.EscapedPath() == "/api/v1/members/options" // contract 0056 §3
 	}
-	return (r.Method == http.MethodPut || r.Method == http.MethodDelete) && strings.HasPrefix(r.URL.Path, "/api/v1/members/")
+	if r.Method != http.MethodPut && r.Method != http.MethodDelete {
+		return false
+	}
+	rest, ok := strings.CutPrefix(r.URL.EscapedPath(), "/api/v1/members/") // a subject may hold an escaped "/"
+	if !ok {
+		return false
+	}
+	seg := strings.Split(rest, "/")
+	if len(seg) != 2 || seg[0] == "" || seg[1] == "" {
+		return false
+	}
+	return !(r.Method == http.MethodDelete && seg[1] == "pin")
 }
 
 // authed wraps handlers that need a signed-in caller.
@@ -133,11 +152,16 @@ func (s *Server) authed(h func(w http.ResponseWriter, r *http.Request, c *caller
 			writeError(w, http.StatusForbidden, "scope_limited", err.Error())
 			return
 		}
+		if errors.Is(err, auth.ErrDeviceRevoked) {
+			writeError(w, http.StatusUnauthorized, "device_revoked", auth.DeviceRevokedMessage)
+			return
+		}
 		if err != nil && !errors.Is(err, auth.ErrUnauthenticated) {
 			writeError(w, http.StatusInternalServerError, "internal", err.Error())
 			return
 		}
-		if p == nil {
+		// a paired device alone is no person: it reads and writes nothing here (contract 0058 §2)
+		if p == nil || p.User == nil {
 			w.Header().Set("WWW-Authenticate", `Bearer realm="rangka"`)
 			writeError(w, http.StatusUnauthorized, "unauthenticated", auth.ErrUnauthenticated.Error())
 			return
@@ -258,6 +282,23 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/files/meta", a(s.listFiles)) // v0 aliases
 	mux.HandleFunc("GET /api/v1/files/meta/{path...}", a(s.getFile))
 	mux.HandleFunc("POST /api/v1/tokens", a(s.createToken))
+	// paired devices (contract 0058 §2): codes, list and revoke for owner and head office; pairing is not signed in
+	mux.HandleFunc("POST /api/v1/devices/codes", a(s.createPairingCode))
+	mux.HandleFunc("GET /api/v1/devices", a(s.listDevices))
+	mux.HandleFunc("DELETE /api/v1/devices/{id}", a(s.revokeDevice))
+	// head-office exceptions (contract 0058 §10): owner and head office
+	mux.HandleFunc("GET /api/v1/exceptions", a(s.listExceptions))
+	mux.HandleFunc("POST /api/v1/exceptions/{id}/resolve", a(s.resolveException))
+	mux.HandleFunc("POST /auth/device/pair", s.pairBrowser)
+	// cashier PIN and unlock (contract 0058 §2): staff list and unlock take the device cookie alone
+	mux.HandleFunc("PUT /auth/pin", a(s.putPin))
+	mux.HandleFunc("GET /auth/device/staff", s.withDevice(s.deviceStaff))
+	mux.HandleFunc("POST /auth/device/unlock", s.withDevice(s.deviceUnlock))
+	mux.HandleFunc("DELETE /api/v1/members/{user_id}/pin", a(s.clearMemberPin))
+	mux.HandleFunc("POST /api/v1/edge/register", s.registerEdge)
+	mux.HandleFunc("POST /api/v1/edge/events", s.withEdge(s.edgeEvents)) // contract 0058 §4: the device or its PIN session
+	mux.HandleFunc("GET /api/v1/edge/config", s.withEdge(s.edgeConfig))  // contract 0058 §7
+	mux.HandleFunc("GET /api/v1/edge/data/{set}", s.withEdge(s.edgeData))
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
 	// connector webhooks (contract 0002 §A.1, 0017 §7): not signed in; the org's secrets verify each request
@@ -286,7 +327,8 @@ func (s *Server) Handler() http.Handler {
 		Version: s.Version,
 		Resolve: func(r *http.Request) (*mcp.Caller, error) {
 			p, err := s.principal(r)
-			if err != nil || p == nil || !mcp.RequireScope(p) {
+			// a cashier's PIN session (contract 0058 §2) does not reach MCP: it answers like no credential
+			if err != nil || p == nil || p.User == nil || p.Via == "pin" || !mcp.RequireScope(p) {
 				return nil, err
 			}
 			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p), Principal: p.Kind()}, nil
@@ -379,7 +421,7 @@ func cors(h http.Handler) http.Handler {
 		if o := r.Header.Get("Origin"); o != "" && (strings.HasPrefix(r.URL.Path, "/api/") || r.URL.Path == "/mcp" || strings.HasPrefix(r.URL.Path, "/auth/") || strings.HasPrefix(r.URL.Path, "/oauth/")) {
 			w.Header().Set("Access-Control-Allow-Origin", o)
 			w.Header().Set("Access-Control-Allow-Credentials", "true")
-			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Mcp-Session-Id, Mcp-Protocol-Version")
+			w.Header().Set("Access-Control-Allow-Headers", "Authorization, Content-Type, Idempotency-Key, Mcp-Session-Id, Mcp-Protocol-Version, Rangka-Edge-Sync")
 			w.Header().Set("Access-Control-Expose-Headers", "Idempotency-Replayed, Location, Retry-After")
 			w.Header().Set("Access-Control-Allow-Methods", "GET, POST, PUT, PATCH, DELETE, OPTIONS")
 			w.Header().Set("Vary", "Origin")

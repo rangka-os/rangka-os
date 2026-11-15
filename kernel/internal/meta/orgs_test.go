@@ -198,6 +198,24 @@ func TestRoleScope(t *testing.T) {
 	}
 }
 
+// Only desk: false makes a staff role (contract 0058 §2, ruling R3); an absent key is reported as not set.
+func TestRoleDesk(t *testing.T) {
+	const head = "# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json\nname: outlet_staff\nlabel: {id: Staf outlet}\n"
+	reg := writeRole(t, head+"desk: true\n")
+	if desk, set := reg.RoleDesk("outlet_staff"); !desk || !set {
+		t.Fatal("desk: true")
+	}
+	if _, set := reg.RoleDesk("nobody"); set {
+		t.Fatal("unknown role")
+	}
+	if desk, set := writeRole(t, head+"desk: false\n").RoleDesk("outlet_staff"); desk || !set {
+		t.Fatal("desk: false")
+	}
+	if _, set := writeRole(t, head).RoleDesk("outlet_staff"); set {
+		t.Fatal("absent desk is not set")
+	}
+}
+
 func TestOrgSchema(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.CopyFS(dir, os.DirFS(overlaySite)); err != nil {

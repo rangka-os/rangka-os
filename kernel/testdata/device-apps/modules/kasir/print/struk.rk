@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/print.json
+name: struk
+model: penjualan
+label: {id: Struk 80 mm}
+paper: 80mm
+default: true
+template: struk.html

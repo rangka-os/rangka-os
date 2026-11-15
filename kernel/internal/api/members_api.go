@@ -421,6 +421,12 @@ func (s *Server) writeMember(ctx context.Context, tx *pg.Tx, org string, in memb
 			return 0, false, err
 		}
 	}
+	// a new role or new outlets clear the cashier PIN (contract 0058 §2), from the Member API and Tim alike
+	if m.member && (m.role != in.Role || !sameSet(m.outlets, outlets)) {
+		if err := auth.ClearPIN(ctx, tx, org, userID); err != nil {
+			return 0, false, err
+		}
+	}
 	data := map[string]any{"via": in.via, "role": in.Role, "outlets": outlets, "record": in.Record, "created": created, "revoked": revoked}
 	if in.link != nil {
 		data["upstream"], data["subject"] = in.link.upstream, in.link.subject
@@ -558,7 +564,8 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request, c *caller)
 }
 
 // removeMember ends userID's membership in org inside the caller's transaction (contract 0043 §2, §4): an owner is
-// refused (owner_protected), the person's sessions and tokens there are revoked, unused sign-in links there end, and
+// refused (owner_protected), the cashier PIN is cleared (auth.RemoveMember, contract 0058 §2), the person's sessions
+// and tokens there are revoked, unused sign-in links there end, and
 // the removal is audited with data plus the old role and outlets. removed is false when there was no membership.
 func (s *Server) removeMember(ctx context.Context, tx *pg.Tx, org string, userID int64, actor, note string, data map[string]any) (removed bool, err error) {
 	m, err := loadMembership(ctx, tx, org, userID)

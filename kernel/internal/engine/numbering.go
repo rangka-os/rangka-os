@@ -85,10 +85,14 @@ func wholeNumber(v any) int64 {
 
 // nextName takes the next document name for m inside the op's transaction: a series number, or the v0
 // prefix counter for legacy schemes.
+// A naming_on: device model is numbered with {device.code} left out of the pattern (head office, contract 0058 §3).
 func (o *op) nextName(m *meta.Model, rec store.Record) (string, error) {
 	e := o.e
-	now := e.Now().In(e.Location())
+	now := e.nowIn(o.ctx).In(e.Location()) // a device write's period is its occurred_at (contract 0058 §10)
 	s := e.scheme(m, o.actor.Org)
+	if m.NamingOn == "device" {
+		s.Pattern = withoutDeviceCode(s.Pattern)
+	}
 	if s.Series == "" {
 		pattern, err := o.fieldTokens(m, rec, s.Pattern)
 		if err != nil {

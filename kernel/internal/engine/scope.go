@@ -5,6 +5,7 @@ import (
 	"errors"
 	"math/big"
 	"sort"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -32,6 +33,9 @@ type scope struct {
 	// record. Client loads are cached under their own keys so the two never share an entry.
 	client bool
 	rs     *RowScope
+	// pins are the device's values of computed currency fields of a device write's own document (contract 0058 §10):
+	// compute stores them instead of evaluating; a table field holds one map per row
+	pins map[string]any
 }
 
 func (e *Engine) newScope(ctx context.Context, q pg.Querier, a Actor, m *meta.Model, rec store.Record, links map[string]map[string]any) *scope {
@@ -69,12 +73,24 @@ func UserVar(a Actor) map[string]any {
 	return map[string]any{"name": name, "email": a.ID, "roles": roles, "outlets": outlets}
 }
 
-// GlobalVar resolves the read-only globals user, org and tax for a (contract 0010 §8): org and tax come
+// DeviceVar is the CEL device global (contract 0030 §4, 0058 §2): {id, code, outlet} of the paired device, all empty
+// when the request did not come from one.
+func DeviceVar(a Actor) map[string]any {
+	d := a.Device
+	if d == nil {
+		d = &DeviceRef{}
+	}
+	return map[string]any{"id": d.ID, "code": d.Code, "outlet": d.Outlet}
+}
+
+// GlobalVar resolves the read-only globals user, device, org and tax for a (contract 0010 §8): org and tax come
 // from the actor's org settings. ok is false for any other name.
 func GlobalVar(reg *meta.Registry, a Actor, name string) (any, bool) {
 	switch name {
 	case "user":
 		return UserVar(a), true
+	case "device":
+		return DeviceVar(a), true
 	case "org":
 		return reg.OrgVar(a.Org), true
 	case "tax":
@@ -84,10 +100,14 @@ func GlobalVar(reg *meta.Registry, a Actor, name string) (any, bool) {
 }
 
 func (s *scope) env() *cel.Env {
+	today, now := s.e.Today, s.e.Now
+	if deviceWriteOf(s.ctx) != nil { // a device write evaluates at its occurred_at (contract 0058 §10)
+		today, now = func() string { return s.e.todayIn(s.ctx) }, func() time.Time { return s.e.nowIn(s.ctx) }
+	}
 	return &cel.Env{
 		Vars:  s.lookup,
-		Today: s.e.Today,
-		Now:   s.e.Now,
+		Today: today,
+		Now:   now,
 		Option: func(field, attr string) (any, error) {
 			f := s.m.Field(field)
 			if f == nil || s.client && s.e.FieldHidden(s.actor, s.m, f) {
@@ -136,6 +156,8 @@ func (s *scope) lookup(name string) (any, bool) {
 	switch name {
 	case "user":
 		return UserVar(s.actor), true
+	case "device":
+		return DeviceVar(s.actor), true
 	case "org", "tax":
 		return GlobalVar(s.e.Reg(), s.actor, name)
 	case "name", "created_by", "created_at", "modified_at", "amended_from":
@@ -143,7 +165,7 @@ func (s *scope) lookup(name string) (any, bool) {
 	case "docstatus":
 		return toInt(s.rec["docstatus"]), true
 	case "status":
-		if st := Status(s.m, s.rec, s.e.Today()); st != "" {
+		if st := Status(s.m, s.rec, s.e.todayIn(s.ctx)); st != "" {
 			return st, true
 		}
 		return "", true
@@ -353,14 +375,20 @@ func (s *scope) compute() {
 		if cm == nil {
 			continue
 		}
-		for _, row := range rows(s.rec[f.Name]) {
+		for i, row := range rows(s.rec[f.Name]) {
 			child := s.e.newScope(s.ctx, s.q, s.actor, cm, row, s.links)
 			child.parent = s
+			child.pins = rowPins(s.pins, f.Name, i)
 			child.compute()
 		}
 	}
 	s.settleOwn()
 	for _, f := range computeOrder(s.m) {
+		if c, ok := s.pinned(f); ok { // the device's money is binding (contract 0058 §10)
+			s.rec[f.Name] = c
+			s.settleOwn()
+			continue
+		}
 		v, err := s.eval(f.Compute)
 		if err != nil || v == nil {
 			s.rec[f.Name] = store.Zero(f)

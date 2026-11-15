@@ -22,7 +22,7 @@ type catalogueRefusal struct {
 }
 
 func (s *Server) proposeCatalogue(w http.ResponseWriter, r *http.Request, c *caller) {
-	if !s.mayReadCatalogue(c.actor, false) {
+	if !s.mayReadCatalogue(c.actor, c.p.Human()) {
 		writeError(w, 403, "forbidden", "Memasang atau melepas modul hanya untuk yang boleh mengusulkan perubahan")
 		return
 	}

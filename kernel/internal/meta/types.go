@@ -8,6 +8,10 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 )
 
+// ReservedFields are columns the kernel keeps on records but not in expressions: a field may not take the name
+// (rangka_validate.py RESERVED_FIELDS; created_device, contract 0058 §6).
+var ReservedFields = map[string]bool{"created_device": true}
+
 // SystemFields exist on every record (rangka_validate.py SYSTEM_FIELDS).
 var SystemFields = map[string]bool{"name": true, "status": true, "created_by": true, "created_at": true, "modified_at": true,
 	"company": true, "docstatus": true, "amended_from": true}
@@ -110,6 +114,9 @@ type Model struct {
 
 	// From a map naming {series, pattern?, reset?} (contract 0009); Naming is then "".
 	NamingSeries, NamingPattern, NamingReset string
+	// NamingOn is "device" when the name comes with the write from a paired device and the kernel checks it
+	// instead of making it (contract 0058 §3); "" = the kernel names.
+	NamingOn string
 }
 
 // ApprovalsFor returns the policies whose verb is verb, in declaration order.
@@ -324,7 +331,7 @@ func celText(v any) string {
 
 func parseModel(app string, doc *rk.Doc) *Model {
 	raw := withTwinsRaw(asMap(doc.Data)) // the IDR twins of money fields are fields too (contract 0013)
-	m := &Model{Name: str(raw, "name"), App: app, Naming: str(raw, "naming"), TitleField: str(raw, "title_field"),
+	m := &Model{Name: str(raw, "name"), App: app, Naming: str(raw, "naming"), NamingOn: str(raw, "naming_on"), TitleField: str(raw, "title_field"),
 		Label: label(raw["label"]), IsSubmittable: boolean(raw, "is_submittable"), IsChild: boolean(raw, "is_child"),
 		Realtime: boolean(raw, "realtime"), AppendOnly: boolean(raw, "append_only"), Raw: raw, Doc: doc,
 		OnSubmit: strList(raw["on_submit"]), OnCancel: strList(raw["on_cancel"])}

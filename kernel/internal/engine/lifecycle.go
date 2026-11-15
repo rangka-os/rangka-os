@@ -137,8 +137,26 @@ func (o *op) prepare(m *meta.Model, rec store.Record, isNew bool) {
 		}
 	}
 	fill(m, rec)
+	pins, drift := o.pins, o.drift && !o.driftDone
+	o.pins, o.drift = nil, false
+	if pins == nil {
+		s.compute()
+		o.settleMoney(m, rec)
+		return
+	}
+	// a device write's own document (contract 0058 §10): the kernel's values in shadow, the device's stored
+	var shadow store.Record
+	if drift {
+		shadow = cloneRecord(rec)
+		o.scope(m, shadow).compute()
+	}
+	s.pins = pins
 	s.compute()
 	o.settleMoney(m, rec)
+	if drift {
+		o.driftDone = true
+		o.recordDrift(pins, rec, shadow, "")
+	}
 }
 
 // check runs rules (on save, or on submit = submit + save rules), required fields, min_rows (submit; a
@@ -182,6 +200,7 @@ func (o *op) check(m *meta.Model, rec store.Record, on string) (errs, warns []Is
 			}
 		}
 	}
+	errs = o.overrideRules(m, errs) // a device write's rule failures go to head office (contract 0058 §10)
 	more, err := o.checkValues(m, rec, "")
 	errs = append(errs, more...)
 	return append(errs, s.checkMoney("", "", "", map[string]bool{})...), warns, err
@@ -381,6 +400,7 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
+		o.deviceCreate = deviceWriteFor(ctx, model) != nil
 		res, err = o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
 		return err
 	})
@@ -388,6 +408,8 @@ func (e *Engine) Create(ctx context.Context, a Actor, model string, input map[st
 }
 
 func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Result, error) {
+	own := o.deviceCreate // the device write's own record: the first create of the unit (Engine.Create)
+	o.deviceCreate = false
 	m, err := o.model(model)
 	if err != nil {
 		return nil, err
@@ -405,13 +427,24 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if len(issues) > 0 {
 		return nil, validation(issues, nil)
 	}
+	// the device write's own document of a naming_on: device model (contract 0058 §10): its money is the device's
+	// and its rule failures go to head office
+	paid := own && m.NamingOn == "device" && deviceWriteFor(o.ctx, m.Name) != nil
+	if dw := deviceWriteFor(o.ctx, m.Name); paid && dw.Money != nil {
+		o.pins, o.drift = o.visiblePins(m, dw.Money), true
+	}
 	o.prepare(m, rec, true)
 	if opts.authorize {
 		if err := o.authorize(m, "create", rec); err != nil {
 			return nil, err
 		}
 	}
+	if err := o.deviceLinks(m, rec); err != nil {
+		return nil, err
+	}
+	o.override = paid
 	errs, warns, err := o.check(m, rec, "save")
+	o.override = false
 	if err != nil {
 		return nil, err
 	}
@@ -438,7 +471,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	case m.IsSubmittable:
 		rec["name"] = "DRAFT-" + store.RandomName(5)
 	default:
-		n, err := o.nextName(m, rec)
+		n, err := o.docName(m, rec, own)
 		if err != nil {
 			return nil, err
 		}
@@ -453,7 +486,12 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 	if err := o.planNewRecord(m); err != nil {
 		return nil, err
 	}
-	if err := store.Insert(o.ctx, o.tx, o.registry(), o.actor.Org, m, rec); err != nil {
+	if d := o.actor.Device; d != nil && m.NamingOn == "device" { // the device it was made on (contract 0058 §6)
+		rec["created_device"] = d.ID
+	}
+	err = store.Insert(o.ctx, o.tx, o.registry(), o.actor.Org, m, rec)
+	delete(rec, "created_device")
+	if err != nil {
 		return nil, dbIssue(m, err)
 	}
 	if err := o.event(m, rec, "created"); err != nil {
@@ -590,6 +628,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 			return nil, err
 		}
 	}
+	if err := o.deviceLinks(m, rec); err != nil {
+		return nil, err
+	}
 	errs, warns, err := o.check(m, rec, "save")
 	if err != nil {
 		return nil, err
@@ -704,6 +745,31 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 	var res *Result
 	err := e.run(ctx, a, func(o *op) error {
 		var err error
+		if deviceWriteFor(ctx, model) != nil {
+			o.deviceSubmit = model + "/" + name
+		}
+		res, err = o.submit(model, name, force)
+		return err
+	})
+	return e.redactResult(a, model, res), err
+}
+
+// CreateAndSubmit creates a draft of the submittable model and submits it in one unit of work: a sale paid on a
+// paired device (contract 0058 §4, §10), sent as one screen.write create with submit: true. With a device write in
+// ctx the submit takes the device's name.
+func (e *Engine) CreateAndSubmit(ctx context.Context, a Actor, model string, input map[string]any, force bool) (*Result, error) {
+	var res *Result
+	err := e.run(ctx, a, func(o *op) error {
+		device := deviceWriteFor(ctx, model) != nil
+		o.deviceCreate = device
+		draft, err := o.create(model, input, CreateOpts{authorize: true, Guard: true, client: true})
+		if err != nil {
+			return err
+		}
+		name := str(draft.Record["name"])
+		if device {
+			o.deviceSubmit = model + "/" + name
+		}
 		res, err = o.submit(model, name, force)
 		return err
 	})
@@ -711,6 +777,8 @@ func (e *Engine) Submit(ctx context.Context, a Actor, model, name string, force 
 }
 
 func (o *op) submit(model, name string, force bool) (*Result, error) {
+	own := o.deviceSubmit == model+"/"+name // the device write's own document (Engine.Submit)
+	o.deviceSubmit = ""
 	e, a := o.e, o.actor
 	m, err := o.model(model)
 	if err != nil {
@@ -741,8 +809,26 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		}
 	}
 	stored := cloneRecord(rec) // snapshot and approval when: read the stored record (0007 §2, §3)
+	paid := own && m.NamingOn == "device" && deviceWriteFor(o.ctx, m.Name) != nil
+	if dw := deviceWriteFor(o.ctx, m.Name); paid {
+		// the device's money stays binding at submit (contract 0058 §10): what it sent with this write, checked
+		// against the kernel's; else what the draft stored when this device made it. A draft made elsewhere (online,
+		// another device) is recomputed.
+		if dw.Money != nil {
+			o.pins, o.drift = o.visiblePins(m, dw.Money), true
+		} else if mine, err := o.madeHere(m, name); err != nil {
+			return nil, err
+		} else if mine {
+			o.pins = o.visiblePins(m, deviceMoney(o.registry(), m, stored))
+		}
+	}
 	o.prepare(m, rec, false)
+	if err := o.deviceLinks(m, rec); err != nil {
+		return nil, err
+	}
+	o.override = paid
 	errs, warns, err := o.check(m, rec, "submit")
+	o.override = false
 	if err != nil {
 		return nil, err
 	}
@@ -766,7 +852,7 @@ func (o *op) submit(model, name string, force bool) (*Result, error) {
 		if af := str(rec["amended_from"]); af != "" {
 			newName, err = o.amendName(m, af)
 		} else {
-			newName, err = o.nextName(m, rec)
+			newName, err = o.docName(m, rec, own)
 		}
 		if err != nil {
 			return nil, err
@@ -892,6 +978,9 @@ func (o *op) cancel(model, name string) (*Result, error) {
 	}
 	if toInt(rec["docstatus"]) != 1 {
 		return nil, conflict("not_submitted", "Hanya dokumen yang sudah diajukan yang bisa dibatalkan")
+	}
+	if err := o.cancelHere(m, name); err != nil {
+		return nil, err
 	}
 	// rules with on: cancel guard the cancel itself (same-day void, own shift); they run before an approval is
 	// asked for, so a refused cancel never waits in the inbox (contract 0030 §10)

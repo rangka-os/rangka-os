@@ -74,8 +74,9 @@ func permissionsChanged(liveEng, prevEng *engine.Engine) bool {
 	return false
 }
 
-// changesetsMeta is meta.changesets (contract 0015 §1).
-func (s *Server) changesetsMeta(a engine.Actor) map[string]any {
+// changesetsMeta is meta.changesets (contract 0015 §1). human is a person fully signed in (Principal.Human): a
+// PIN session (contract 0058 §2) is a person to the engine but never proposes or approves.
+func (s *Server) changesetsMeta(a engine.Actor, human bool) map[string]any {
 	reg := s.Engine.Reg()
 	isApprover := false
 	ap := s.Changes.Approvers()
@@ -102,7 +103,7 @@ func (s *Server) changesetsMeta(a engine.Actor) map[string]any {
 	if v, ok := reg.SiteConfig("ai.auto_apply").(string); ok && v != "" {
 		auto = v
 	}
-	return map[string]any{"propose": a.Human && proposer, "approve": a.Human && isApprover, "approve_high": a.Human && owner, "auto_apply": auto}
+	return map[string]any{"propose": human && proposer, "approve": human && isApprover, "approve_high": human && owner, "auto_apply": auto}
 }
 
 // previewEngine returns the engine over the change set's registry, built once per id and updated_at.
@@ -171,7 +172,7 @@ func (s *Server) previewGuard(h previewHandler) func(w http.ResponseWriter, r *h
 
 func (s *Server) previewResolve(w http.ResponseWriter, r *http.Request, c *caller, id string, h previewHandler) {
 	w.Header().Set("X-Rangka-Preview", id)
-	if c.actor.Org == "" || s.changesetsMeta(c.actor)["propose"] != true {
+	if c.actor.Org == "" || s.changesetsMeta(c.actor, c.p.Human())["propose"] != true {
 		writeError(w, 403, "permission_denied", "Pratinjau perubahan hanya untuk yang boleh mengusulkan perubahan")
 		return
 	}
@@ -197,7 +198,7 @@ func (s *Server) previewRoot(w http.ResponseWriter, r *http.Request, c *caller) 
 		return
 	}
 	s.previewResolve(w, r, c, id, func(w http.ResponseWriter, r *http.Request, c *caller, e *engine.Engine, cs *changeset.ChangeSet) {
-		m, err := s.metaFor(r.Context(), e, c.actor)
+		m, err := s.metaFor(r.Context(), e, c.actor, c.p.Human())
 		if err != nil {
 			fail(w, err)
 			return
@@ -209,7 +210,7 @@ func (s *Server) previewRoot(w http.ResponseWriter, r *http.Request, c *caller) 
 }
 
 func (s *Server) previewMeta(w http.ResponseWriter, r *http.Request, c *caller, e *engine.Engine, cs *changeset.ChangeSet) {
-	m, err := s.metaFor(r.Context(), e, c.actor)
+	m, err := s.metaFor(r.Context(), e, c.actor, c.p.Human())
 	if err != nil {
 		fail(w, err)
 		return

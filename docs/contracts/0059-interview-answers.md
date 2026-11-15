@@ -66,6 +66,9 @@ Before the model runs, the owner's last message is classified against Raka's mes
   atau buku" are answers.
 - **A guess chip is always an answer.** The owner's message is the label of an option of a guess Raka offered in its
   previous message (or a guess confirmed this turn): "Iya" from a guess chip confirms that guess, it is not `empty`.
+  - Cloud sends the guesses of Raka's previous reply in the `/v1/interview` request as `previous_guesses`:
+    `[{id, options: [label, …]}]`, `[]` when none. Optional, default `[]`. An older Cloud sends none, so a chip reads
+    by its words.
 - Off-topic, hostile and contradictory answers cannot be told apart by word lists. They are left to the skill (§4).
 - The streak is the number of non-`answer` owner messages in a row at the end of the transcript (a guess or answer
   chip that is not `unknown`/`skip` counts as an answer).

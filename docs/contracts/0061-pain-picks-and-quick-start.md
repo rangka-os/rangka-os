@@ -1,6 +1,6 @@
 # 0061 Pain picks in onboarding, and "Langsung mulai"
 
-Status: proposed (16 Nov 2026) · Owner of the change: rangka-os (this contract, skill `rangka-consult`) · Affects:
+Status: proposed (16 Nov 2026; decisions by Dede the same day, see "Decisions by Dede") · Owner of the change: rangka-os (this contract, skill `rangka-consult`) · Affects:
 rangka-ai (`/v1/interview` request, map ops, consult prompt), rangka-cloud (pick storage, studio card, quick start
 build; private) · Amends: 0050 §4 (Raka's agenda for pains the owner picked), 0054 §4 (what follows a saved profile) ·
 Builds on: 0042, 0046, 0050, 0053, 0054, 0054a, 0059 · Asked by: Dede, 16 Nov 2026
@@ -23,6 +23,18 @@ Builds on: 0042, 0046, 0050, 0053, 0054, 0054a, 0059 · Asked by: Dede, 16 Nov 2
 - **The problem.** An open question about problems costs turns and gets "ok" (0059). Owners who already know what
   hurts have no way to say it in one tap, and no way to start without the whole interview.
 
+## Decisions by Dede (16 Nov 2026)
+
+1. **Picks are for the system, not the price.** They give Raka the owner's problem context to design the system, and
+   the card comes after the business profile is filled (§5).
+2. **"Langsung mulai" builds the preview only.** It lands in "Pratinjau usahamu"; hosting stays the owner's separate
+   step (§6).
+3. **No module is no dead end.** Raka builds its own piece for a need the catalogue lacks (0033), and when the piece is
+   generic Raka proposes it to rangka-apps or rangka-connectors as a pull request (0051). Rekrutmen therefore gets a
+   custom piece (§1, §6).
+4. **Build the demo data** (0052 §4, the pack pool in rangka-cloud). Tracked as its own task; "Isi data contoh" uses it
+   once it lands (§6).
+
 ## Decision
 
 ### 1. The options
@@ -34,7 +46,7 @@ text is what goes on the map, written as the owner would say it. Every option na
 | Group (`module`) | Code | Chip label | Pain text on the map | Answered by |
 | --- | --- | --- | --- | --- |
 | `karyawan` Karyawan | `staff_records` | Data karyawan | Data karyawan tercatat di banyak tempat | `users` |
-| | `staff_hiring` | Rekrutmen karyawan | Rekrutmen karyawan baru masih lewat chat dan berkas | none yet |
+| | `staff_hiring` | Rekrutmen karyawan | Rekrutmen karyawan baru masih lewat chat dan berkas | custom piece (records Lowongan, Pelamar) |
 | | `staff_pay` | Gaji | Hitung gaji dan slip gaji masih manual | `payroll` |
 | | `staff_advance` | Kasbon | Kasbon karyawan susah dilacak | `payroll` |
 | `penjualan` Penjualan | `sales_orders` | Pesanan pelanggan | Pesanan dari WA atau telepon sering terlewat | `orders` |
@@ -53,8 +65,11 @@ text is what goes on the map, written as the owner would say it. Every option na
   (Kasbon); `orders` has customer orders; `outlet_sales` has daily sales and takings per outlet; `invoicing` has
   invoices and `invoice_reminder`; `catalogue` has items and price lists; `stock` has balances, counts, transfers and
   recipes; `contacts` has customers with `credit_guard`; `pipeline` has leads, deals and follow-up activities.
-- **Rekrutmen has no module.** It is kept because Dede named it. On the map it stays "belum terjawab" until Raka
-  answers it with a custom piece (0033) or a module exists. The build files it as a gap (the same filer as today).
+- **Rekrutmen has no module.** Its option carries a fixed custom design instead: records "Lowongan" and "Pelamar",
+  steps "Catat lamaran yang masuk", "Jadwalkan wawancara", "Terima pelamar jadi karyawan". In the interview Raka
+  designs the piece from the owner's flow; in "Langsung mulai" Cloud places this design (§6) and `/v1/plan` builds it as
+  a company table (0033, 0042 §8). When such pieces recur across businesses, Raka proposes a catalogue module as a pull
+  request (0051).
 - The module requirements (`payroll` needs `workforce`, `projects`, `invoicing`; `outlet_sales` needs `outlets` and
   `stock`) are added by the build's composition check, as for any map.
 - The list lives in rangka-cloud code (`internal/painpicks`) and is served to the studio with the project
@@ -128,14 +143,14 @@ text is what goes on the map, written as the owner would say it. Every option na
     - primary "Langsung mulai" (§6);
     - secondary "Lanjut ngobrol dengan Raka".
   - Both buttons save first and are disabled until at least one chip or one "Lainnya" is filled. "Langsung mulai"
-    also needs at least one pick answered by a module; otherwise it is disabled with "Pilih minimal satu yang bisa
-    langsung dijawab sistem."
+    also needs at least one pick answered by a module or a custom design (a "Lainnya" text alone is not); otherwise it
+    is disabled with "Pilih minimal satu yang bisa langsung dijawab sistem."
   - Under 600 px the groups stack; chips wrap; buttons at least 44 px high.
 - **Saving.** `PUT /api/projects/{id}/pain-picks` with the §2 shape. 200 `{pain_picks, peta}`; 400 `bad_pains` for a
   broken §2 rule; 404 `not_found`. "Lanjut ngobrol" then posts the 0054a chat action `profile_saved` when the profile
   save has not been answered yet, so Raka answers the profile and the picks in one turn. A later edit posts nothing.
-- The picks are optional for the offer path in this contract: an owner who skips the card can still talk with Raka,
-  get an offer and build (open for Dede below).
+- The build gate stays the profile (0054 §4). An owner who skips the card can still talk with Raka, who draws the
+  problems out in chat as before (0050).
 
 ### 6. "Langsung mulai" (quick start)
 
@@ -145,21 +160,23 @@ text is what goes on the map, written as the owner would say it. Every option na
 - **When it is refused.**
   - Outside the interview: 400 `bad_request`.
   - With rangka-ai and a profile that is not complete: 409 `profile_incomplete` with the profile card (0054 §4).
-  - Picks not saved, or no pick answered by a module: 409 `pains_missing` with the pains card and "Pilih dulu
+  - Picks not saved, or no pick answered by a module or a custom design: 409 `pains_missing` with the pains card and "Pilih dulu
     kesulitan yang mau dijawab."
 - **The map it builds** (Cloud code, deterministic, no LLM):
   - the §3 pains;
   - for each module that answers a pick, one `catalogue` piece (`p_pick_<module>`, `ref` the module, label from the
     catalogue, `solves` its picks). A catalogue piece already on the map with the same `ref` gets the `solves` instead;
-  - for each group with a mapped pick, one stage `s_pick_<module>` labelled with the group ("Karyawan", …) listing its
+  - for each pick with a custom design (Rekrutmen) that no piece solves yet, one `custom` piece
+    (`p_pick_<code>`, the option label, the §1 design, `solves` the pick); `/v1/plan` builds it as a company table;
+  - for each group with such a piece, one stage `s_pick_<module>` labelled with the group ("Karyawan", …) listing its
     pieces, unless the map already has a stage that lists them;
   - the business kind from the profile's industry label when the map has none.
   - The result is validated like any map (0042 §1). A pending accepted offer is cleared: the picks decide.
 - **The build.** The same build as "Setuju, susun": the composition from the map, `/v1/plan` with rangka-ai (so stage
   `hint` and `answers` exist for Mulai di sini), then the onboarding frame "Pratinjau usahamu", never the full studio.
 - **Isi data contoh.** Stored on the project (`sample_data: true` in the project view). Today it pre-ticks "Pakai data
-  contoh" in the hosting form, so `POST …/host` sends `sample_data: true`. When 0052 ships, the same flag fills the
-  Ruang coba with the matching demo pack right after the build instead.
+  contoh" in the hosting form, so `POST …/host` sends `sample_data: true`. Once the 0052 demo pack pool lands (Dede's
+  decision 4), the same flag fills the Ruang coba with the matching demo pack right after the build.
 - **Price.** Unchanged: the plan card and hosting still use the 0054 §5 suggestion.
 
 ## Consequences
@@ -174,19 +191,8 @@ text is what goes on the map, written as the owner would say it. Every option na
 - **Board.** Figma "Rangka OS" › "Rangka Cloud" needs a board "Kesulitan usaha di onboarding · usulan" (card, narrow
   view, quick start). Not drawn yet.
 
-## Open for Dede
-
-1. Should the picks be required before any build, like the profile? This contract keeps them optional for the offer
-   path and required only for "Langsung mulai".
-2. Should "Langsung mulai" also host right away for a signed-in owner (subdomain from the business name, the suggested
-   package), instead of landing in "Pratinjau usahamu"? Hosting creates a business and takes a seat, so this contract
-   stops at the preview.
-3. Rekrutmen has no module. Keep it as an honest "belum terjawab", or drop it until a module exists?
-4. Sample data is thin until 0052 ships (one outlet and the owner). Build 0052's demo packs next, or copy rangka-apps
-   `examples/fixtures/demo-*` into the build as a stopgap?
-
 ## Out of scope
 
 - Weighing picks (most painful first) and per-pick frequency or cost.
 - Showing picks to sales in Kendali.
-- New modules for recruitment.
+- A catalogue module for recruitment (it comes through 0051 when the custom pieces recur).

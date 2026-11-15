@@ -70,7 +70,9 @@ covers the question in Raka's reply.
   `profile_saved` and runs one consult turn with `profile_saved: true`. The studio draws that line as a receipt
   ("✓ Profil usaha disimpan"), not as a bubble. The turn counts against the interview budget like any other.
 - The held build click of rangka-cloud#105 is still released after a complete save; the code-written message it
-  showed is gone, Raka's turn replaces it.
+  showed is gone, Raka's turn replaces it. The script reply that `PUT .../business-profile` stores mid-interview
+  ("Profil usahamu tersimpan … pertanyaanku tadi: …") is kept only for a Cloud without rangka-ai; with rangka-ai the
+  save stores no message and Raka's turn asks the open question again.
 
 ### 4. Scale and outlets are one question on the card (amends 0054 Decision 5, §1 and §4)
 

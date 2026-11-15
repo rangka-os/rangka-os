@@ -139,6 +139,8 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 			assessCopies(a, p, strings.TrimSuffix(strings.TrimPrefix(p, "models/"), ".rk"), old, nw, env)
 		case strings.HasPrefix(p, "connectors/x_"):
 			assessCompanyConnector(a, p, existed, nw, ops, env)
+		case strings.HasPrefix(p, "connectors/") && existed: // contract 0033 §2: an edit of any connector is high
+			a.raise("high", "edits connector "+p)
 		case strings.HasPrefix(p, "flows/"):
 			a.raise("medium", "company automation "+p)
 			assessCompanyFlow(a, p, nw, env)

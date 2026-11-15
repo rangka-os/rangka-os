@@ -109,7 +109,7 @@ func TestAssess(t *testing.T) {
 		{"system", []Op{{Op: "patch", Path: "system.rk"}}, before, "high", 2},
 		{"delete", []Op{{Op: "delete", Path: "custom/sales_invoice.rk"}}, before, "high", 4},
 		{"role", []Op{{Op: "create", Path: "apps/crm/roles/viewer.rk"}}, before, "high", 5},
-		{"connector", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, before, "medium", 3},
+		{"connector", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, before, "high", 3},
 		{"config apps", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": []any{"core", "crm"}, "tax": cfg["tax"], "theme": "a"}), "medium", 4},
 		{"config tax", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": map[string]any{"ppn_rate": 11}, "theme": "a"}), "high", 4},
 		{"config connector_auth", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": cfg["tax"], "theme": "a", "connector_auth": []any{"kasir"}}), "high", 4},
@@ -641,7 +641,7 @@ func TestAssessCompanyConnector(t *testing.T) {
 	port := map[string]any{"name": "x_a", "actions": get["actions"], "provides": map[string]any{"bank.statement.list": "list"}}
 	payment := map[string]any{"name": "x_payment", "fields": []any{map[string]any{"name": "amount", "type": "money"}}}
 	payFlow := map[string]any{"name": "x_a_in", "on": "x_a.changed", "steps": []any{map[string]any{"create": "x_payment"}}}
-	live := map[string]map[string]any{"connectors/x_old.rk": get, "models/x_payment.rk": payment}
+	live := map[string]map[string]any{"connectors/x_old.rk": get, "connectors/whatsapp_business.rk": get, "models/x_payment.rk": payment}
 	before := func(p string) (map[string]any, bool) { m, ok := live[p]; return m, ok }
 	after := func(extra map[string]map[string]any) func(string) (map[string]any, bool) {
 		return func(p string) (map[string]any, bool) {
@@ -669,7 +669,8 @@ func TestAssessCompanyConnector(t *testing.T) {
 			map[string]map[string]any{"connectors/x_a.rk": get, "flows/x_a_in.rk": payFlow}, Env{}, "high"},
 		{"money by an installed flow", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": get},
 			Env{Flows: func() map[string]map[string]any { return existingFlow }}, "high"},
-		{"catalogue connector keeps medium", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, map[string]map[string]any{"connectors/whatsapp_business.rk": post}, Env{}, "medium"},
+		{"catalogue connector edit is high", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, map[string]map[string]any{"connectors/whatsapp_business.rk": post}, Env{}, "high"},
+		{"new catalogue connector stays medium", []Op{{Op: "create", Path: "connectors/kurir.rk"}}, map[string]map[string]any{"connectors/kurir.rk": post}, Env{}, "medium"},
 	}
 	for _, tc := range tests {
 		env := tc.env

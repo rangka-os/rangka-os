@@ -139,7 +139,7 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
   `tests/e2e/test_studio_consult.py`.
 - An older rangka-ai ignores `profile_saved` and answers an ordinary turn.
 - §5: rangka-ai `profile_card` in the request, `_business_name_block` and `_profile_card_block`, `asks_business_name`,
-  `owner_business_name`, the card-turn rewrite; rangka-cloud `ProfileCard`, `asksName`, `hasQuestion` and the
+  `has_question`, the card-turn rewrite; rangka-cloud `ProfileCard`, `asksName`, `hasQuestion` and the
   deferred card in `consultTurn`, tests `name_question_test.go`, `consult_test.go`, `business_profile_test.go`.
 
 ## Out of scope

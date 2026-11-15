@@ -3437,8 +3437,9 @@ def check_fits(page, ctx, label):
 
 
 def test_process_canvas(page, ctx):
-    """S10: "Proses bisnis" in the sidebar only when the kernel lists processes; #/proses/<name> is the read-only canvas:
-    stages open in place, a node opens a panel with no edit form, and no layout PUT or ops POST is ever sent."""
+    """S10: "Proses bisnis" in the sidebar only when the kernel lists processes; #/proses/<name> is the read-only owner
+    diagram: a big picture of stages first, tapping a stage opens its detail diagram (breadcrumb back), tapping the
+    focused stage opens a panel with no edit form, and no layout PUT or ops POST is ever sent."""
     mocked = mock_feature(page, "processes")
     seen = watch_requests(page)
     open_route(page, ctx, ctx.home()[0])
@@ -3447,25 +3448,21 @@ def test_process_canvas(page, ctx):
     entry.first.wait_for(timeout=10000)
     entry.first.click()
     page.wait_for_function("() => location.hash === '#/proses'", timeout=5000)
-    item = page.locator(".ap-proc-item").first
+    item = page.locator(".pv-pcard").first
     item.wait_for(timeout=10000)
     name = item.get_attribute("href").split("/")[-1]
     item.click()
     page.wait_for_function("(n) => location.hash === '#/proses/' + n", arg=name, timeout=5000)
-    page.wait_for_selector("[data-group]", timeout=10000)
-    groups = page.locator("[data-group]")
-    assert groups.count() >= 1 and (not mocked or groups.count() == 4), f"stage cards: {groups.count()}"
-    toggle = groups.first.locator("button[aria-expanded]").first
-    assert toggle.get_attribute("aria-expanded") == "false", "stage cards start collapsed"
-    toggle.click()
-    page.wait_for_timeout(200)
-    assert toggle.get_attribute("aria-expanded") == "true", "stage did not open in place"
-    nodes = page.locator("[data-node]")
-    if nodes.count():
-        nodes.first.click()
-        panel = page.locator("[data-panel]")
-        panel.wait_for(timeout=3000)
-        assert panel.get_by_role("button", name="Usulkan perubahan").count() == 0, "read-only canvas offers an edit button"
+    page.wait_for_selector("[data-pd]", timeout=10000)
+    stages = page.locator(".pd-stage, .pd-data")
+    assert stages.count() >= 1, f"stage boxes: {stages.count()}"
+    assert page.locator(".pd-crumb").count() == 0, "the page opens on the big picture, not a detail diagram"
+    stages.first.click()
+    page.locator(".pd-crumb").first.wait_for(timeout=3000)
+    page.locator(".pd-node.is-main").first.click()
+    panel = page.locator(".pd-detail")
+    panel.wait_for(timeout=3000)
+    assert panel.get_by_role("button", name="Usulkan perubahan").count() == 0, "read-only canvas offers an edit button"
     page.wait_for_timeout(900)  # a layout save would be debounced 600 ms
     writes = [u for m, u in seen if m in ("PUT", "POST") and "/api/v1/processes" in u]
     assert not writes, f"read-only canvas wrote: {writes}"

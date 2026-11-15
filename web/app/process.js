@@ -675,7 +675,7 @@
           : h(React.Fragment, null,
             tech ? h("p", { className: "pv-lede pd-tech-lede" }, h("span", null, "Tampilan teknis untuk penulis: nama model, pemicu, syarat, dan aksi apa adanya."),
                 G.g.source && G.g.source.file ? h("code", { className: "pd-file" }, G.g.source.file) : null)
-              : h("p", { className: "pv-lede" }, flowN + " langkah kerja dan " + nAuto + " hal yang berjalan sendiri. Ketuk satu kotak untuk masuk ke diagram rincinya."),
+              : h("p", { className: "pv-lede" }, (flowN ? flowN + " langkah kerja dan " : "") + nAuto + " hal yang berjalan sendiri. Ketuk satu kotak untuk masuk ke diagram rincinya."),
             h(Diagram, { S: S, meta: meta, live: live, tech: tech }))));
   };
 })(window);

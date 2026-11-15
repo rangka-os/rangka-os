@@ -118,7 +118,7 @@ Eight questions. Each has fixed options plus "Lainnya", except `outlets`, which 
 ### 4. The profile card (studio)
 
 - **When.** Cloud adds a message with card kind `profile` after the first consult turn of a project (0054a §5: the
-  first turn that asks no name and shows no guess or offer buttons), and again whenever the owner opens "Ubah" on
+  first reply without a question and without guess or offer buttons), and again whenever the owner opens "Ubah" on
   the profile in the peta panel. Raka's text above it: "Biar paket dan harganya pas, aku isi dulu profil usahamu dari
   cerita tadi. Cek ya: yang bergaris putus-putus itu tebakanku. Simpan dulu ya, habis itu kita lanjut ngobrol."
 - **Layout** (board A and B).

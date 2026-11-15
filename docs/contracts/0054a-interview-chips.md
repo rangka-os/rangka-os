@@ -96,20 +96,37 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
 
 ### 5. Business name first, one ask per turn, "cabang" (Zein, 16 Nov 2026)
 
-- **Business name first.** When the map has no business name on the owner's first turn (not a `profile_saved`
-  turn), Raka reacts to the story, puts its map ops as usual, and asks one question: "Apa nama usahamu? Kalau sudah
-  ada PT, tulis nama PT-nya." with no `answers`. A story that names the business already is recorded with a
-  `business` op and the name is not asked. The owner's answer goes on the map with a `business` op (`name`, as
-  written); a skipped name is not asked again. A reply that asks for the name the map already holds is asked once
-  more, like the profile questions of §2.
-- **Name questions get only "Lewati".** Cloud gives a reply whose last question asks for a name the chip
-  `answer:skip` only (the same name words rangka-ai checks in §1).
-- **The card turn asks nothing else.** Cloud does not add the profile card (0054 §4) to a turn whose last question
-  asks for a name, or that shows guess or offer buttons; the card waits for the next turn. The turn that brings the
-  card keeps Raka's reply without its question sentences and without answer chips ("Oke, aku catat." when nothing is
-  left), so the card is that turn's one ask. Raka's next question comes with the `profile_saved` turn (§3).
-- **"Cabang" in owner copy.** The studio, the profile labels and Raka say "cabang", not "outlet" (labels in 0054 §1
-  updated). Field names and codes (`outlets`, `offline_outlet`) do not change.
+**Request**
+
+| Field | Rule |
+| --- | --- |
+| `profile_card` | boolean, absent = `false`: Cloud shows the profile card after this reply when the reply asks nothing |
+
+- **Business name first.** While the map has no business name and no Raka message in the conversation has asked
+  for it (not on a `profile_saved` turn), Raka reacts to the owner's message, puts its map ops as usual, and asks
+  one question: "Apa nama usahamu? Kalau sudah ada PT, tulis nama PT-nya." with no `answers`. A story that names the
+  business is recorded with a `business` op and the name is not asked. After it was asked once, a missing name is
+  not asked again (a reply that asks it is asked once more, like the profile questions of §2), and it is not made an
+  `open` item.
+- **The name answer.** Raka records the owner's answer with a `business` op (`name`, as written). When its ops leave
+  the name empty and the owner's message answers the name question (not a non-answer of 0059 §2), rangka-ai puts the
+  owner's short typed answer on the map itself (at most 80 characters and 8 words, without a lead such as
+  "Namanya").
+- **Name questions get only "Lewati".** Cloud gives a reply whose last question asks for a name (outside fenced
+  blocks; "atas nama" is a flow question) the chip `answer:skip` only.
+- **The card turn asks nothing else.** Cloud sends `profile_card: true` while the project has no profile card and
+  an incomplete profile. Unless it asks the business name first, rangka-ai then replies without a question and
+  without `answers`: it reacts to what the owner said (map ops stand). A reply that asks anyway is asked once more
+  (`interview.done` logs `cardRepairs`); a rewrite that still asks is dropped. Cloud adds the card only after a reply
+  without a question (outside fenced blocks; a "?" inside a URL does not count) and without guess or offer
+  buttons; otherwise the reply keeps its chips and the card waits for a later turn. Cloud never edits Raka's text.
+  Raka's next question comes with the `profile_saved` turn (§3). The build gate of 0054 §4 still shows the card
+  when the owner asks to build before it appeared.
+- **"Cabang" in owner copy.** The studio, the profile labels, the plan card and Raka say "cabang", not "outlet"
+  (labels in 0054 §1 updated). Field names and codes (`outlets`, `offline_outlet`) do not change.
+- **Compatibility.** An older rangka-ai ignores `profile_card` and may ask a question on the card turn; Cloud then
+  shows the card a turn later. An older Cloud does not send `profile_card` and shows the card after the name question
+  in the same turn.
 
 ## Consequences
 
@@ -120,8 +137,9 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
   stepper. Tests in `internal/cloud/wawancara_chips_test.go`, `business_profile_test.go` and
   `tests/e2e/test_studio_consult.py`.
 - An older rangka-ai ignores `profile_saved` and answers an ordinary turn.
-- §5: rangka-ai `_business_name_block` (first turn) and `profile_asks(..., name_known)`; rangka-cloud `asksName`,
-  `withoutQuestions` and the deferred card in `consultTurn`, tests `name_question_test.go` and `consult_test.go`.
+- §5: rangka-ai `profile_card` in the request, `_business_name_block` and `_profile_card_block`, `asks_business_name`,
+  `owner_business_name`, the card-turn rewrite; rangka-cloud `ProfileCard`, `asksName`, `hasQuestion` and the
+  deferred card in `consultTurn`, tests `name_question_test.go`, `consult_test.go`, `business_profile_test.go`.
 
 ## Out of scope
 

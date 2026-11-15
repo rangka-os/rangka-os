@@ -1020,7 +1020,7 @@
         var fresh = before ? (d.steps || []).filter(function (x) { return x.state === "done" && !was[x.stage]; })[0] : null;
         if (fresh && !d.hidden) {
           var done = (d.steps || []).filter(function (x) { return x.state === "done"; }).length, next = (d.steps || []).filter(function (x) { return x.stage === d.current; })[0];
-          toast("ok", "Langkah beres: " + L(fresh.label), done + " dari " + d.steps.length + " langkah beres." + (next ? " Berikutnya: " + L(next.label) + "." : " Bab ini tamat."),
+          toast("ok", "Langkah beres: " + L(fresh.label), done + " dari " + d.steps.length + " langkah beres." + (next ? " Berikutnya: " + L(next.label) + "." : " Tahap ini beres."),
             { action: "Lihat langkah", onAction: function () { RA.navigate("#/mulai"); } });
         }
         return d;

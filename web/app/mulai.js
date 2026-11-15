@@ -186,7 +186,7 @@
   /* ---------------------------------------------------------------- the path */
   function Path(p) {
     var ctx = p.ctx, ob = p.ob, meta = ctx.meta, team = p.team, who = p.who, steps = ob.steps, asked = {};
-    return h("ol", { className: "ap-mu-path", "aria-label": "Langkah bab ini" }, steps.map(function (s, k) {
+    return h("ol", { className: "ap-mu-path", "aria-label": "Langkah tahap ini" }, steps.map(function (s, k) {
       var cur = s.stage === ob.current, role = stepRole(meta, s.model), mem = membersOf(team, role);
       var mark = s.state === "done" ? h("span", { className: "ap-mu-dot done" }, h(R.Icon, { name: "check" }))
         : cur ? h("span", { className: "ap-mu-dot now" }, h(R.Icon, { name: (meta.models[s.model] || {}).icon && R.ICONS[(meta.models[s.model] || {}).icon] ? meta.models[s.model].icon : "right" }))
@@ -230,7 +230,7 @@
     var r = rewardOf(p.ctx), s = p.sum;
     return h("section", { className: "ap-mu-gift", "data-tour": "mulai-hadiah", "aria-labelledby": "mu-gift-t" },
       h("div", { className: "ap-mu-gift-h" }, h("span", { className: "ap-mu-gift-i" }, h(Gift, { size: 20 })),
-        h("div", null, h("p", { className: "ap-mu-eye warn" }, "Hadiah bab 1"), h("h3", { id: "mu-gift-t" }, r.title))),
+        h("div", null, h("p", { className: "ap-mu-eye warn" }, "Hadiah saat tahap beres"), h("h3", { id: "mu-gift-t" }, r.title))),
       h("div", { className: "ap-mu-bars", "aria-hidden": "true" }, [34, 52, 40, 66, 58, 78, 70].map(function (v, i) { return h("i", { key: i, style: { height: v + "%" } }); })),
       h("p", { className: "ap-mu-p" }, s.left > 0 ? "Terbuka begitu " + s.total + " langkah beres. Tinggal " + s.left + " lagi, lalu Beranda menghitung dari catatanmu sendiri, tanpa hitung manual."
         : "Sudah terbuka. Beranda sekarang menghitung dari catatanmu sendiri."));
@@ -242,7 +242,7 @@
     if (roles.indexOf("owner") < 0) roles.unshift("owner");
     var count = function (r) { return steps.filter(function (s) { return stepRole(meta, s.model) === r; }).length; };
     return h("section", { className: "ap-mu-team", "data-tour": "mulai-tim", "aria-labelledby": "mu-team-t" },
-      h("h3", { id: "mu-team-t" }, "Tim di bab ini"),
+      h("h3", { id: "mu-team-t" }, "Tim di tahap ini"),
       h("ul", null, roles.map(function (r) {
         var mem = r === "owner" ? [{ full_name: "Kamu" }] : membersOf(team, r), n = count(r);
         var name = mem[0] ? (mem[0].full_name || mem[0].email) : null;
@@ -264,7 +264,7 @@
     var r = rewardOf(ctx), proc = L(((p.processLabel) || "")) || "Usahamu";
     return h("div", { className: "ap-mu-tamat" },
       h("span", { className: "ap-mu-tamat-i" }, h(Gift, { size: 32 })),
-      h("p", { className: "ap-mu-eye warn" }, "Bab 1 tamat"),
+      h("p", { className: "ap-mu-eye warn" }, "Tahap 1 beres"),
       h("h1", { className: "ap-mu-tamat-t" }, proc + " siap jalan."),
       h("p", { className: "ap-mu-p" }, "Dikerjakan " + (names.length ? "bersama " + names.join(", ") + " " : "") + "dalam " + days + " hari."),
       h("p", { className: "ap-mu-eye" }, "Yang sekarang terbuka"),
@@ -300,7 +300,7 @@
     if (sum.all) return h("div", { className: "rk-shell-content ap-mu" }, h(Tamat, { ctx: ctx, ob: ob, who: who, team: team, processLabel: proc }));
     return h("div", { className: "rk-shell-content ap-mu" },
       h("header", { className: "ap-mu-head" },
-        h("p", { className: "ap-mu-eye" }, "Bab 1 · " + (L(proc) ? L(proc) + " siap jalan" : "Usaha siap jalan")),
+        h("p", { className: "ap-mu-eye" }, "Tahap 1 · " + (L(proc) ? L(proc) + " siap jalan" : "Usaha siap jalan")),
         h("h1", { className: "ap-mu-title" }, greet() + (name ? ", " + name : "") + ". " + (sum.done ? "Tinggal " + sum.left + " langkah lagi." : "Ada " + sum.total + " langkah untuk mulai.")),
         h("div", { className: "ap-mu-prog", "data-tour": "mulai-bar" }, h(Bar, { steps: ob.steps, current: ob.current, done: sum.done, total: sum.total }),
           h("span", null, sum.done + " dari " + sum.total))),
@@ -351,7 +351,7 @@
       { target: "[data-tour=mulai-bar]", title: "Satu bar per langkah", body: "Hijau berarti sudah beres, hitam langkah sekarang, abu belum. Bar hanya bergerak kalau catatannya benar-benar tersimpan." },
       cur ? { target: "[data-tour=mulai-sekarang]", title: "Langkah sekarang", body: "Kerjakan sendiri, atau minta Raka menyiapkan draf kalau Raka aktif. Setelah tersimpan, langkah ini tercentang dengan nama dan harinya." } : null,
       { target: "[data-tour=mulai-tim]", optional: true, title: "Bagi tugas ke tim", body: "Tiap langkah punya pemilik sesuai peran. Undang staf supaya mereka mengerjakan bagiannya dari HP mereka sendiri." },
-      { target: "[data-tour=mulai-hadiah]", optional: true, title: "Hadiah bab ini", body: "Begitu semua langkah beres, Beranda menghitung angka usahamu dari catatanmu sendiri." }
+      { target: "[data-tour=mulai-hadiah]", optional: true, title: "Hadiah saat tahap beres", body: "Begitu semua langkah beres, Beranda menghitung angka usahamu dari catatanmu sendiri." }
     ].filter(Boolean) };
   }
   /** Kerjakan: the form of the step, its required empty fields (at most two), then Simpan (riset 26 K-TS4: at most

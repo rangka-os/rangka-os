@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -693,5 +694,26 @@ func TestFlowConnectors(t *testing.T) {
 	}
 	if got := flowConnectors(map[string]any{"on": "deal.updated"}); len(got) != 1 || got[0] != "deal" {
 		t.Fatalf("record event: %v", got)
+	}
+}
+
+// Fix wave item 5: validator items name the change-set op path, so Raka's self-repair finds the file it wrote: a
+// connector directory (site or shared) maps to connectors/<n>.rk.
+func TestRelItemsConnectorPaths(t *testing.T) {
+	in := []meta.Item{
+		{File: "../site/kopi-senja/connectors/x_omilo/connector.rk"},
+		{File: "../site/kopi-senja/flows/x_omilo_sync.rk"},
+		{File: "../connectors/moka/connector.rk"},
+		{File: "../connectors/moka.rk"},
+		{File: "crm/models/lead.rk"},
+		{File: "../modules/crm/module.rk"},
+	}
+	want := []string{"connectors/x_omilo.rk", "flows/x_omilo_sync.rk", "connectors/moka.rk", "connectors/moka.rk",
+		"apps/crm/models/lead.rk", "modules/crm/module.rk"}
+	got := relItems(in, roots{})
+	for i, it := range got {
+		if it.File != want[i] {
+			t.Errorf("%s → %s, want %s", in[i].File, it.File, want[i])
+		}
 	}
 }

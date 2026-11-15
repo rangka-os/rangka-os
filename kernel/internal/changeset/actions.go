@@ -354,10 +354,16 @@ func relItems(items []meta.Item, r roots) []meta.Item {
 			if len(parts) == 2 {
 				f = parts[1]
 			}
-		case strings.HasPrefix(f, "../modules/"):
+		case strings.HasPrefix(f, "../modules/"), strings.HasPrefix(f, "../connectors/"):
 			f = strings.TrimPrefix(f, "../")
 		case !strings.HasPrefix(f, "../"):
 			f = "apps/" + f
+		}
+		// a connector directory is written by the op path connectors/<n>.rk (roots.file)
+		if rest, ok := strings.CutPrefix(f, "connectors/"); ok {
+			if n, ok := strings.CutSuffix(rest, "/connector.rk"); ok && !strings.Contains(n, "/") {
+				f = "connectors/" + n + ".rk"
+			}
 		}
 		it.File = f
 		out = append(out, it)

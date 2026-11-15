@@ -631,3 +631,52 @@ func TestRootsFileConnectorDirWins(t *testing.T) {
 		t.Errorf("other without a directory: %q %v", got, err)
 	}
 }
+
+// Company connector risk (contract 0033 §2 table, §4 money-touching): computed on the files after the change set.
+func TestAssessCompanyConnector(t *testing.T) {
+	get := map[string]any{"name": "x_a", "actions": []any{map[string]any{"name": "list", "request": map[string]any{"method": "GET"}}}}
+	post := map[string]any{"name": "x_a", "actions": []any{map[string]any{"name": "send", "request": map[string]any{"method": "POST"}}}}
+	trig := map[string]any{"name": "x_a", "actions": get["actions"], "triggers": []any{map[string]any{"name": "changed", "via": "webhook"}}}
+	money := map[string]any{"name": "x_a", "actions": get["actions"], "money": true}
+	port := map[string]any{"name": "x_a", "actions": get["actions"], "provides": map[string]any{"bank.statement.list": "list"}}
+	payment := map[string]any{"name": "x_payment", "fields": []any{map[string]any{"name": "amount", "type": "money"}}}
+	payFlow := map[string]any{"name": "x_a_in", "on": "x_a.changed", "steps": []any{map[string]any{"create": "x_payment"}}}
+	live := map[string]map[string]any{"connectors/x_old.rk": get, "models/x_payment.rk": payment}
+	before := func(p string) (map[string]any, bool) { m, ok := live[p]; return m, ok }
+	after := func(extra map[string]map[string]any) func(string) (map[string]any, bool) {
+		return func(p string) (map[string]any, bool) {
+			if m, ok := extra[p]; ok {
+				return m, true
+			}
+			return before(p)
+		}
+	}
+	existingFlow := map[string]map[string]any{"payin": payFlow}
+	tests := []struct {
+		name  string
+		ops   []Op
+		files map[string]map[string]any
+		env   Env
+		want  string
+	}{
+		{"GET only", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": get}, Env{}, "medium"},
+		{"POST action", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": post}, Env{}, "high"},
+		{"trigger", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": trig}, Env{}, "high"},
+		{"money flag", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": money}, Env{}, "high"},
+		{"money port", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": port}, Env{}, "high"},
+		{"replace existing", []Op{{Op: "replace", Path: "connectors/x_old.rk"}}, map[string]map[string]any{"connectors/x_old.rk": get}, Env{}, "high"},
+		{"money by a flow in the same change set", []Op{{Op: "create", Path: "connectors/x_a.rk"}, {Op: "create", Path: "flows/x_a_in.rk"}},
+			map[string]map[string]any{"connectors/x_a.rk": get, "flows/x_a_in.rk": payFlow}, Env{}, "high"},
+		{"money by an installed flow", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": get},
+			Env{Flows: func() map[string]map[string]any { return existingFlow }}, "high"},
+		{"catalogue connector keeps medium", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, map[string]map[string]any{"connectors/whatsapp_business.rk": post}, Env{}, "medium"},
+	}
+	for _, tc := range tests {
+		env := tc.env
+		env.Model = func(n string) map[string]any { return map[string]map[string]any{"x_payment": payment}[n] }
+		got := AssessWith(tc.ops, before, after(tc.files), env)
+		if got.Risk != tc.want || got.Layers[0] != 3 && tc.ops[0].Path[:10] == "connectors" {
+			t.Errorf("%s: risk %s (want %s), layers %v, reasons %v", tc.name, got.Risk, tc.want, got.Layers, got.Reasons)
+		}
+	}
+}

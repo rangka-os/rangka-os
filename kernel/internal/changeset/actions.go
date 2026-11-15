@@ -135,7 +135,7 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 				". Bagian ini diubah lewat Console oleh admin atau pemilik.", map[string]any{"paths": paths}}
 		}
 	}
-	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), s.assessEnv())
 	cs.Layers, cs.Risk = as.Layers, as.Risk
 	if cs.Layers == nil {
 		cs.Layers = []int{}
@@ -312,6 +312,24 @@ func (s *Service) moduleOf(name string) string {
 		return m.App
 	}
 	return ""
+}
+
+// assessEnv is what AssessWith may look up besides the files.
+func (s *Service) assessEnv() Env {
+	return Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf, Flows: s.installedFlows}
+}
+
+// installedFlows are the installed flows' files by name (contract 0033 §4: the flows a company connector's
+// money-touching rule reads).
+func (s *Service) installedFlows() map[string]map[string]any {
+	out := map[string]map[string]any{}
+	if s.Reg == nil {
+		return out
+	}
+	for n, f := range s.Reg().Flows {
+		out[n] = f.Raw
+	}
+	return out
 }
 
 // appModel returns the app's own model file (without overlays) by name.
@@ -807,7 +825,7 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	}
 	// the files may have changed since the proposal (another change set, the operator): assess the change set again
 	// against them, and send it back for approval when its risk rose (audit changeset-set-once, note 2)
-	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), s.assessEnv())
 	if rows != nil && riskRank[rows.Risk] > riskRank[as.Risk] {
 		as.Risk = rows.Risk
 		as.Reasons = append(as.Reasons, "high: a unit the change set removes still holds rows")
@@ -962,7 +980,7 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 			ops = append(ops, Op{Op: op, Path: p})
 		}
 		sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
-		as := AssessWith(ops, parsed(live, nil), parsed(live, cs.previous), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+		as := AssessWith(ops, parsed(live, nil), parsed(live, cs.previous), s.assessEnv())
 		if riskRank[as.Risk] > riskRank[risk] {
 			risk = as.Risk
 		}

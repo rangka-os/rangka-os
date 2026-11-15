@@ -41,16 +41,7 @@ func (a *Assessment) raise(level, why string) {
 }
 
 // sensitiveField is a money field (money: true; currency and money typed fields unless money: false) or a stock field (stock: true).
-func sensitiveField(f map[string]any) bool {
-	if b, ok := f["money"].(bool); ok {
-		if b {
-			return true
-		}
-	} else if t, _ := f["type"].(string); t == "currency" || t == "money" {
-		return true
-	}
-	return f["stock"] == true
-}
+func sensitiveField(f map[string]any) bool { return meta.SensitiveField(f) }
 
 // roleLimited is a field some roles may not write or see (read_only_for, hidden_for; contract 0027): the kernel drops
 // it from those roles' saves, but a flow step writes it as the flow decides (0027 §6), so a company flow that writes
@@ -99,6 +90,9 @@ type Env struct {
 	Model     func(name string) map[string]any
 	Installed func(cfg map[string]any) map[string]bool
 	ModuleOf  func(model string) string
+	// Flows are the installed flows' files by name (the file's stem), for the money-touching rule of a company
+	// connector (contract 0033 §4); flows in the change set replace or remove them by the same name. May be nil.
+	Flows func() map[string]map[string]any
 
 	after func(path string) (map[string]any, bool) // the files after the change set, set by AssessWith
 }
@@ -143,6 +137,8 @@ func AssessWith(ops []Op, before, after func(path string) (map[string]any, bool)
 		case strings.HasPrefix(p, "models/") && existed: // the company's own table: judged like an overlay
 			assessModel(a, p, old, nw)
 			assessCopies(a, p, strings.TrimSuffix(strings.TrimPrefix(p, "models/"), ".rk"), old, nw, env)
+		case strings.HasPrefix(p, "connectors/x_"):
+			assessCompanyConnector(a, p, existed, nw, ops, env)
 		case strings.HasPrefix(p, "flows/"):
 			a.raise("medium", "company automation "+p)
 			assessCompanyFlow(a, p, nw, env)
@@ -972,3 +968,71 @@ func isAppOverlay(p string) bool {
 
 // pathBase is the last segment of a change-set path.
 func pathBase(p string) string { return p[strings.LastIndex(p, "/")+1:] }
+
+// assessCompanyConnector rates a company connector (contract 0033 §2 table). A new connector with only GET actions, no
+// triggers and no money is medium; any other method, any trigger, or money-touching (§4) is high, and so is an edit of
+// an existing one. Money-touching is judged on the files after the change set, so a flow added in the same change set
+// counts (contract 0033 §4).
+func assessCompanyConnector(a *Assessment, p string, existed bool, c map[string]any, ops []Op, env Env) {
+	if existed {
+		a.raise("high", "edits company connector "+p)
+		return
+	}
+	reason := ""
+	switch {
+	case len(meta.AsList(c["triggers"])) > 0:
+		reason = "has triggers"
+	case len(meta.WriteActions(c)) > 0:
+		reason = "has write actions " + strings.Join(meta.WriteActions(c), ", ")
+	case meta.MoneyTouchingOf(strings.TrimSuffix(pathBase(p), ".rk"), c, flowsAfter(ops, env), func(model string) bool { return sensitiveModel(env, model) }):
+		reason = "touches money or stock (contract 0033 §4)"
+	}
+	if reason != "" {
+		a.raise("high", "new company connector "+p+" "+reason)
+		return
+	}
+	a.raise("medium", "new company connector "+p+" (read-only)")
+}
+
+// flowsAfter are the flow files once the change set is applied: the installed ones (Env.Flows), with the change set's
+// own created, replaced or deleted flows (company flows and flows of apps and modules) laid over them by name.
+func flowsAfter(ops []Op, env Env) []map[string]any {
+	byName := map[string]map[string]any{}
+	if env.Flows != nil {
+		for n, f := range env.Flows() {
+			byName[n] = f
+		}
+	}
+	for _, op := range ops {
+		p := op.Path
+		if !(strings.HasPrefix(p, "flows/") || unitPath(p) && unitKind(p) == "flows") {
+			continue
+		}
+		name := strings.TrimSuffix(pathBase(p), ".rk")
+		if f, ok := env.after(p); ok && op.Op != "delete" {
+			byName[name] = f
+		} else {
+			delete(byName, name)
+		}
+	}
+	names := make([]string, 0, len(byName))
+	for n := range byName {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	out := make([]map[string]any, 0, len(names))
+	for _, n := range names {
+		out = append(out, byName[n])
+	}
+	return out
+}
+
+// sensitiveModel reports whether model, as it is after the change set, has a money or stock field.
+func sensitiveModel(env Env, model string) bool {
+	for _, f := range companyModelFields(env, model) {
+		if sensitiveField(f) {
+			return true
+		}
+	}
+	return false
+}

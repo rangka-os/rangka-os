@@ -26,7 +26,7 @@ func HostPrivate(host string) bool {
 
 // companyConnector is contract 0033 §2 and contract 0062 §5 (check_company_connector in rangka_validate.py): where
 // a connector may live, that a company connector declares public hosts, and where its draft came from.
-func (v *validator) companyConnector(cn string, d *rk.Doc, c map[string]any) {
+func (v *validator) companyConnector(cn string, d *rk.Doc, c map[string]any, all map[string]vis) {
 	company := IsCompanyConnector(cn)
 	if v.reg.connectorSite[cn] && !company {
 		v.rep.extra("error", d.Path, "name", "company_connector_name", fmt.Sprintf(`connector "%s" lives in the site, so its name must start with x_ (x_%s), contract 0033 §2`, cn, cn))
@@ -51,5 +51,9 @@ func (v *validator) companyConnector(cn string, d *rk.Doc, c map[string]any) {
 	}
 	if asMap(asMap(c["experimental"])["source"]) == nil {
 		v.rep.extra("warn", d.Path, "(root)", "connector_source_missing", fmt.Sprintf(`company connector "%s" has no experimental.source: say where the draft came from (contract 0062 §5)`, cn))
+	}
+	// money_unflagged (contract 0033 §4): a flow ties the connector to a model with money or stock fields, but money: true is missing
+	if c["money"] != true && MoneyByFlow(cn, v.reg.flowRaws(), func(m string) bool { x, ok := all[m]; return ok && SensitiveModel(x.m.Raw["fields"]) }) {
+		v.rep.extra("warn", d.Path, "(root)", "money_unflagged", fmt.Sprintf(`company connector "%s" is called or triggered by a flow that creates or updates a model with money or stock fields: add money: true so writes need the owner's confirmation (contract 0033 §4)`, cn))
 	}
 }

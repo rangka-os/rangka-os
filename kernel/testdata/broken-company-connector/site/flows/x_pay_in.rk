@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_pay_in
+label: {id: Catat pembayaran masuk}
+on: x_pay.paid
+steps:
+  - {create: x_payment, set: {reference: "event.reference"}}

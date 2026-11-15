@@ -156,9 +156,14 @@ owner will enter it (§6).
 - The offer card (Cloud) shows a planned company connector as "Disambungkan ke <system> (perlu token dan tes)".
 - `plan.py` today hands every catalogue connector piece to Cloud as `switch_on`. A planned company connector becomes a
   new piece kind `draft_connector`, which the build step turns into a change set.
-- The build step drafts the connector, models and flows as one change set with `requires:`; the flows that `call` or
-  trigger on it apply only after the test (0033 §3 `connector_untested`). If the owner skips the test, the models and
-  dashboards still exist and fill once the connector is tested.
+- The build step always proposes two change sets (amended 16 Nov 2026, found while building 0033):
+  1. the connector, its models and dashboards. Its preview lists the missing keys under `preview.requires` (0017 §4);
+     the summary names them;
+  2. the flows that `call` or trigger on it. They may be approved right away and apply only after the owner's test
+     (0033 §3 `connector_untested`).
+  One change set holding both never applies: applying resets the connector's test. The kernel reports it at validate
+  (`connector_untested` on each such flow file), so Raka's self-repair splits it. If the owner skips the test, the
+  models and dashboards still exist and fill once the connector is tested and the flows are applied.
 
 ### 8. Worked example: Omilo (read only)
 
@@ -170,20 +175,22 @@ Owner: "Aku punya Omilo, ada user dan langganan. Mau kelola di Rangka dan pantau
 1. §2 step 5: Raka asks for the Omilo address; `integration_fetch {url, discover: true}` finds `/openapi.json`.
 2. `integration_spec` lists `GET /users`, `GET /subscriptions`, `GET /payments` (list, `updated_since`), auth
    `http bearer`.
-3. Draft change set:
+3. Draft change set 1 (connector, models, dashboards):
    - `connectors/x_omilo.rk`: `hosts: [api.omilo.app]`, `api_token` secret, three `GET` actions, `poll` triggers on
      `users`, `subscriptions` and `payments` with an `updated_at` cursor and `updated_at` in each `emit`,
      `experimental.source.kind: openapi`.
    - `models/x_omilo_user.rk`, `models/x_omilo_subscription.rk` (plan, status, amount as money, period), and
      `models/x_omilo_payment.rk` (amount as money, paid_at), each with `omilo_id` unique.
-   - `flows/omilo_sync_users.rk`, `flows/omilo_sync_subscriptions.rk`, `flows/omilo_sync_payments.rk`: a flow's `on`
-     names one event, so one flow per poll trigger. Each item: `find` by `omilo_id`, then `update` if found, else
-     `create`.
    - `dashboards/x_omilo_income.rk`: MRR, active subscriptions, payments per month, churned this month.
-   - `requires: [x_omilo.api_token]`.
-4. Risk: the connector is read only, but the flow writes money fields from a `call`, so it is money-touching (0033 §4)
-   and the change set is high (owner only).
-5. Owner approves, sets a read-only Omilo token, runs the test (sample of 20 rows), then the sync flow applies.
+   - Its preview lists `x_omilo.api_token` under `preview.requires`; the summary asks the owner to set it.
+4. Draft change set 2 (flows): `flows/omilo_sync_users.rk`, `flows/omilo_sync_subscriptions.rk`,
+   `flows/omilo_sync_payments.rk`. A flow's `on` names one event, so one flow per poll trigger. Each item: `find` by
+   `omilo_id`, then `update` if found, else `create`.
+5. Risk: the connector has poll triggers, so change set 1 is high (owner only, 0033 §2). The connector is read only,
+   but the payments flow writes money fields on its trigger, so it is money-touching (0033 §4) and change set 2 is
+   high too.
+6. Owner approves both and applies change set 1, sets a read-only Omilo token, runs the test (sample of 20 rows), then
+   applies change set 2; before the test its apply answers `connector_needs_auth` or `connector_untested`.
 
 **Later, use case B** (Rangka bills): the same connector gains write actions (a new change set by a person or a new
 `x_` connector, 0033 §5), the owner confirms writes (0033 §4), and invoices and payments are records of the core

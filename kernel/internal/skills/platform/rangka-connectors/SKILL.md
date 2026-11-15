@@ -28,9 +28,13 @@ section 5a: spec, docs, the owner's material); this skill is the drafting and wh
 - OAuth2 (client credentials or authorization code) cannot be drafted: the kernel cannot obtain a token
   (`auth_unsupported` in the spec summary). Tell the owner in plain words that this system needs a sign-in method
   Rangka does not support yet, keep it in `later`, and offer manual entry meanwhile.
-- List `requires: [x_<slug>.<field>]` in the change set so the owner sees what to fill in. Ask for the key where the
-  owner enters it (the connector setup form), not in chat: it would sit in the conversation history, and a turn with a
-  pasted key is stopped (code `secrets`). Say which kind of key it is and where it goes.
+- Do not put `requires:` in the change set (the schema has no such key: 422). The kernel lists the missing keys under
+  `preview.requires` once you preview it; name them in the change-set summary so the owner sees what to fill in. Ask
+  for the key where the owner enters it (the connector setup form), not in chat: it would sit in the conversation
+  history, and a turn with a pasted key is stopped (code `secrets`). Say which kind of key it is and where it goes.
+- Always two change sets: (1) the connector with its models and dashboards; (2) the flows that use it, which may be
+  approved now and apply once the owner's test passes. A change set that writes an `x_` connector and also adds or
+  changes flows using it fails validation with `connector_untested` on each such flow file: split it, do not retry.
 
 ## 2. Bringing data in: poll, then upsert
 
@@ -81,19 +85,21 @@ Per business, a company connector is in one of these states. The kernel checks t
 - Money-touching connectors: after a successful test the owner confirms writes
   (`POST /api/v1/connectors/{c}/confirm-writes`, within 24 hours of the test, owner only, also refused for AI tokens).
   Until then a write fails with `connector_writes_unconfirmed`.
-- Applying a change set whose flows call or trigger on an `x_` connector that is not `tested`, or that the same change
-  set edits, is refused with `409 connector_untested`. Say it plainly, and either propose the connector alone first, or
-  tell the owner to apply it, set the keys, test, then apply the flows.
+- Applying a change set whose flows call or trigger on an `x_` connector that is not `tested` is refused with
+  `409 connector_untested` (`409 connector_needs_auth` while its keys are missing). The second change set waits there:
+  tell the owner to apply the first, set the keys, run the test, then apply the flows.
+- The ruang coba only simulates calls, so a test there is refused (`409 sandbox_no_test`): the owner tests in the
+  real business.
 - At send time the kernel answers `connector_needs_auth`, `connector_untested`, `connector_writes_unconfirmed` and
   `connector_host_private` (company connectors reach public addresses only). Polls of an untested or `needs_auth`
-  connector are skipped quietly, so "nothing arrives" can simply mean the owner has not finished the steps above:
-  read the state before looking for another cause.
+  connector are skipped quietly and its webhooks are refused without starting a flow, so "nothing arrives" can simply
+  mean the owner has not finished the steps above: read the state before looking for another cause.
 
 ## 6. Telling the owner
 
 - Hosts: name the address it will talk to. Reads or also writes. Money-touching or not. Which keys the owner sets and
   where. These go in the change-set summary and in the offer's `planned_connectors`.
-- After apply, point to the connection settings screen: set keys, run the test, confirm writes when it applies. Name
-  the step the owner is on; say "tersambung" once the state is `tested`; until then name the step the owner is on.
+- After apply, point to the connection settings screen: set keys, run the test, confirm writes when it applies. Until
+  the state is `tested`, name the step the owner is on; say "tersambung" once it is.
 - Prefer the owner's words to the platform's (`x_`, hosts, poll, upsert): say "sambungan ke Omilo", "diperiksa tiap
   beberapa menit", "data yang sama tidak dobel".

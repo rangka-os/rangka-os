@@ -4,9 +4,10 @@
 ../../broken-company-connector/site/connectors/x_nohosts/connector.rk:1:1  error  hosts_required  (root)  company connector "x_nohosts" must declare hosts: the domains it may call (contract 0033 §2)
 ../../broken-company-connector/site/connectors/x_nosrc/connector.rk:1:1  warn   connector_source_missing  (root)  company connector "x_nosrc" has no experimental.source: say where the draft came from (contract 0062 §5)
 ../../broken-company-connector/site/connectors/x_pay/connector.rk:1:1  warn   money_unflagged  (root)  company connector "x_pay" is called or triggered by a flow that creates or updates a model with money or stock fields: add money: true so writes need the owner's confirmation (contract 0033 §4)
+../../broken-company-connector/site/connectors/x_payloop/connector.rk:1:1  warn   money_unflagged  (root)  company connector "x_payloop" is called or triggered by a flow that creates or updates a model with money or stock fields: add money: true so writes need the owner's confirmation (contract 0033 §4)
 ../../broken-company-connector/site/connectors/x_private/connector.rk:6:9  error  connector_host_private  hosts/0  host "10.0.0.5" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)
 ../../broken-company-connector/site/connectors/x_private/connector.rk:6:36  error  connector_host_private  hosts/2  host "printer.internal" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)
 ../../broken-company-connector/site/connectors/x_private/connector.rk:6:54  error  connector_host_private  hosts/3  host "db" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)
 ../../broken-company-connector/connectors/x_shared/connector.rk:2:7  error  company_connector_name  name  connector "x_shared" starts with x_, so it belongs to the company and lives in the site, not in the shared connectors directory (contract 0033 §2)
 
-8 error(s), 2 warning(s)
+8 error(s), 3 warning(s)

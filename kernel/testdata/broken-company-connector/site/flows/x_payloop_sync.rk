@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_payloop_sync
+label: {id: Perbarui pembayaran}
+on: x_payloop.changed
+steps:
+  - {find_all: x_payment, where: "true", as: rows}
+  - for_each: rows
+    as: p
+    do:
+      - {update: p, set: {rate: "1.0"}}

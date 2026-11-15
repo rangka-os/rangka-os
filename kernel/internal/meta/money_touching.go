@@ -58,7 +58,8 @@ func MoneyDeclared(c map[string]any) bool {
 
 // MoneyByFlow is the flow part of the rule: a flow with `on: <connector>.<trigger>` or a `call: <connector>.<action>`
 // step that creates or updates a model for which sensitive returns true. An update names a variable; it counts when
-// the variable was bound (find, find_all, create) to such a model earlier in the same flow. An update of a variable
+// the variable was bound (find, find_all, create, or for_each over such a variable) to such a model earlier in the same
+// flow. An update of a variable
 // the flow does not bind to a model fails closed: it counts (a draft cannot lose the label, contract 0033 §4).
 func MoneyByFlow(connector string, flows []map[string]any, sensitive func(model string) bool) bool {
 	prefix := connector + "."
@@ -116,6 +117,13 @@ func (w *flowMoney) walk(steps []any) {
 				w.bind(as, m)
 			}
 		}
+		// for_each over a bare variable bound to models: as: holds records of those models. Any other list
+		// expression leaves as: unbound, so an update of it fails closed.
+		if src, _ := st["for_each"].(string); bareIdent(src) {
+			for m := range w.vars[src] {
+				w.bind(as, m)
+			}
+		}
 		if m, _ := st["create"].(string); m != "" {
 			w.written = append(w.written, m)
 			w.bind(as, m)
@@ -135,6 +143,20 @@ func (w *flowMoney) walk(steps []any) {
 			w.walk(AsList(st[k]))
 		}
 	}
+}
+
+// bareIdent reports a plain variable name (letters, digits, underscore; not starting with a digit).
+func bareIdent(s string) bool {
+	if s == "" {
+		return false
+	}
+	for i, r := range s {
+		if r == '_' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z' || i > 0 && r >= '0' && r <= '9' {
+			continue
+		}
+		return false
+	}
+	return true
 }
 
 // MoneyTouchingOf is the whole rule over plain maps: connector name, its file, the flows (raw files) and a

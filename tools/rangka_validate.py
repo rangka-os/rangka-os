@@ -794,8 +794,9 @@ def money_declared(c):
 
 def money_by_flow(connector, flows, sensitive):
     """A flow with on: <connector>.<trigger> or a call: <connector>.<action> step that creates or updates a model
-    for which sensitive(model) holds. An update counts when its variable was bound (find, find_all, create) to such
-    a model earlier in the flow (an update of an unbound variable fails closed and counts); the doc of a record event is the on model. Twin of meta.MoneyByFlow."""
+    for which sensitive(model) holds. An update counts when its variable was bound (find, find_all, create, for_each
+    over such a variable) to such a model earlier in the flow (an update of an unbound variable fails closed and
+    counts); the doc of a record event is the on model. Twin of meta.MoneyByFlow."""
     prefix = connector + "."
     for f in flows:
         on = f.get("on") if isinstance(f.get("on"), str) else ""
@@ -816,6 +817,12 @@ def money_by_flow(connector, flows, sensitive):
                 for k in ("find", "find_all"):
                     if isinstance(s.get(k), str) and s[k]:
                         bind(as_, s[k])
+                # for_each over a bare variable bound to models: as: holds records of those models; any other list
+                # expression leaves as: unbound, so an update of it fails closed
+                src = s.get("for_each") if isinstance(s.get("for_each"), str) else ""
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", src):
+                    for m in sorted(st["vars"].get(src, ())):
+                        bind(as_, m)
                 if isinstance(s.get("create"), str) and s["create"]:
                     st["written"].append(s["create"])
                     bind(as_, s["create"])

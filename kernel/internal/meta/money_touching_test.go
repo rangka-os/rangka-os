@@ -111,3 +111,28 @@ func TestMoneyTouchingUnresolvedUpdate(t *testing.T) {
 		t.Error("resolved plain update must not count")
 	}
 }
+
+// Fix wave item 3: for_each over a find_all variable binds as: to that variable's models, so a loop that updates a
+// plain model is not money-touching and one over a money model is; any other list expression still fails closed.
+func TestMoneyTouchingForEach(t *testing.T) {
+	conn := map[string]map[string]any{"x_omilo": {"name": "x_omilo"}}
+	loop := func(model, over string) map[string]any {
+		return map[string]any{"on": "x_omilo.changed", "steps": []any{
+			map[string]any{"find_all": model, "where": "true", "as": "rows"},
+			map[string]any{"for_each": over, "as": "d", "do": []any{map[string]any{"update": "d", "set": map[string]any{"a": "1"}}}}}}
+	}
+	for name, c := range map[string]struct {
+		f    map[string]any
+		want bool
+	}{
+		"plain model loop": {loop("deal", "rows"), false},
+		"money model loop": {loop("x_omilo_payment", "rows"), true},
+		"expression":       {loop("deal", "rows.filter(r, true)"), true},
+		"unbound list":     {loop("deal", "others"), true},
+		"event list":       {loop("deal", "event.items"), true},
+	} {
+		if got := moneyReg(conn, map[string]map[string]any{"f": c.f}, payModels).MoneyTouching("x_omilo"); got != c.want {
+			t.Errorf("%s: got %v want %v", name, got, c.want)
+		}
+	}
+}

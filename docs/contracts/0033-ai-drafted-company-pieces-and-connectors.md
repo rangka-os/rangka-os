@@ -1,6 +1,6 @@
 # 0033 AI-drafted company pieces and connectors
 
-Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel) and rangka-ai
+Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel) and rangka-ai
 (guardrails) · Affects: rangka-cloud (`ApprovableOp`, test and confirm screens), rangka-connectors (nothing existing)
 · Depends on: 0016 accepted · Builds on: 0002, 0017, 0020, 0032
 

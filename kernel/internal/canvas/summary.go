@@ -172,7 +172,7 @@ func (b *builder) roleWord(v any) string {
 	}
 	if d := b.reg.Roles[name]; d != nil {
 		if l := meta.LabelOf(meta.AsMap(d.Data)["label"]); l["id"] != "" {
-			return l["id"]
+			return lcFirst(l["id"])
 		}
 	}
 	return "tim"

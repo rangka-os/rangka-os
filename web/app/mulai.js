@@ -80,11 +80,52 @@
     var locks = (ob && ob.locks) || {};
     return Object.keys(locks).filter(function (m) { return (locks[m].needs || []).indexOf(model) >= 0; }).sort();
   }
-  function mulaiSummary(ob) {
+  /** The step to do first when no step is open: the first step not done is locked because a model it links to has
+   *  no record yet (0053 §2 `needs`), so the owner adds that first. A step of its own (not one of ob.steps, which
+   *  the kernel counts): {stage: "perlu:<model>", model, label "Isi dulu <label>", hint, prereq: true, before: the
+   *  locked step, at: its index}. null when a step is open, every step is done, or the first one waiting has no needs. */
+  function stepPrereq(ob, meta) {
+    var steps = (ob && ob.steps) || [], k = -1;
+    for (var i = 0; i < steps.length; i++) if (steps[i].state !== "done") { k = i; break; }
+    var s = steps[k];
+    if (!s || s.state !== "locked" || !(s.needs || []).length) return null;
+    var m = s.needs[0], lab = lower(modelLabel(meta, m)), more = s.needs.slice(1).map(function (x) { return lower(modelLabel(meta, x)); });
+    return { stage: "perlu:" + m, model: m, prereq: true, before: s, at: k, state: "open", needs: [], answers: [],
+      label: "Isi dulu " + lab,
+      rest: more.length,
+      hint: "Langkah \"" + L(s.label) + "\" butuh " + [lab].concat(more).join(" dan ") + " dulu. Tambah satu " + lab + (more.length ? " lebih dulu, sisanya menyusul." : ", lalu langkah itu terbuka.") };
+  }
+  /** meta (optional) lets a locked first step name its prerequisite as the current step (stepPrereq). */
+  function mulaiSummary(ob, meta) {
     var steps = (ob && ob.steps) || [], done = steps.filter(function (s) { return s.state === "done"; }).length;
     var cur = steps.filter(function (s) { return s.stage === (ob && ob.current); })[0] || null;
-    return { done: done, total: steps.length, left: steps.length - done, current: cur, all: steps.length > 0 && done === steps.length,
+    var all = steps.length > 0 && done === steps.length;
+    if (!cur && !all) cur = stepPrereq(ob, meta);
+    return { done: done, total: steps.length, left: steps.length - done, current: cur, all: all,
       show: steps.length > 0 && !(ob && ob.hidden) };
+  }
+  /** What a stage's `when` asks of a record (0053 §2: done = a record matching when): "any" without when (a draft
+   *  counts), "submitted" when it asks for docstatus 1, "other" for any other condition, "" when unknown. */
+  function whenKind(when) {
+    if (when == null) return "";
+    var w = String(when).replace(/\s+/g, " ").trim();
+    if (!w) return "any";
+    if (/docstatus ?== ?1\b|docstatus ?!= ?0\b|docstatus ?> ?0\b|docstatus ?>= ?1\b/.test(w)) return "submitted";
+    return "other";
+  }
+  /** The tour's last step: the form's primary button (Ajukan on a draft of a submittable document, else Simpan), and
+   *  what pressing it does to the step, by the stage's when (whenKind). */
+  function saveCopy(step, btn, kind) {
+    var b = String(btn || "Simpan").trim() || "Simpan", label = L(step.label);
+    var after = step.prereq ? (step.rest ? "Mulai di sini menunjukkan yang perlu diisi berikutnya." : "langkah \"" + L(step.before.label) + "\" terbuka di Mulai di sini.")
+      : "langkah \"" + label + "\" tercentang di Mulai di sini dan langkah berikutnya terbuka.";
+    var body;
+    if (!/^Ajukan/i.test(b)) body = "Begitu tersimpan, " + after;
+    else if (step.prereq || kind === "any") body = "Ajukan kalau isinya sudah benar. Simpan draf juga sudah dihitung: begitu tersimpan, " + after;
+    else if (kind === "submitted") body = "Langkah ini dihitung setelah diajukan, draf saja belum. Begitu diajukan, " + after;
+    else if (kind === "other") body = "Ajukan kalau isinya sudah benar. Langkah ini dihitung kalau catatannya memenuhi syarat langkah; begitu memenuhi, " + after;
+    else body = "Ajukan kalau isinya sudah benar. Begitu tercatat, " + after;
+    return { title: "Lalu tekan " + b, body: body };
   }
   function greet(now) {
     var hr = (now || new Date()).getHours();
@@ -148,7 +189,15 @@
 
   /** Kerjakan: open the step's form and light the first field to fill, then Simpan (tour "langkah:<stage>"). */
   function work(ctx, step) {
-    RA.pendingTour = { id: "langkah:" + step.stage, stage: step, at: Date.now() };
+    var pend = RA.pendingTour = { id: "langkah:" + step.stage, stage: step, at: Date.now() };
+    // the stage's when says whether a draft already counts (saveCopy); read before the form stands, quiet on failure
+    var ob = ctx.onboarding && ctx.onboarding.data;
+    if (!step.prereq && ob && ob.process && ctx.api.process) {
+      ctx.api.process(ob.process).then(function (g) {
+        var gr = ((g && g.groups) || []).filter(function (x) { return x.id === step.stage; })[0];
+        if (gr) pend.when = gr.when || "";
+      }, function () {});
+    }
     ctx.navigate("#/r/" + step.model + "/new");
   }
   function askDraft(ctx, step) {
@@ -165,9 +214,10 @@
     var who = owner ? owner : { name: "Kamu", role: "owner" };
     return h("article", { className: "ap-mu-card", "data-tour": "mulai-sekarang", "aria-labelledby": "mu-cur-t" },
       h("div", { className: "ap-mu-chips" },
-        h("span", { className: "ap-mu-chip" }, "Langkah " + p.n + " dari " + p.total),
+        h("span", { className: "ap-mu-chip" }, s.prereq ? "Sebelum langkah " + p.n : "Langkah " + p.n + " dari " + p.total),
         h("span", { className: "ap-mu-chip" }, h(Who, { name: who.name, tone: roleTone(meta, who.role), size: 16 }), who.name,
-          role !== "owner" && !owner ? h("span", { className: "ap-mu-faint" }, " · biasanya " + lower(roleLabel(meta, role))) : null)),
+          // the hint written for the stage may already say who usually does it: then say it once, there
+          role !== "owner" && !owner && !/biasanya/i.test(L(s.hint)) ? h("span", { className: "ap-mu-faint" }, " · biasanya " + lower(roleLabel(meta, role))) : null)),
       h("h2", { id: "mu-cur-t", className: "ap-mu-cur-t" }, L(s.label)),
       s.hint ? h("p", { className: "ap-mu-p" }, L(s.hint)) : null,
       (s.answers || []).length ? h("p", { className: "ap-mu-ans" }, "Menjawab keluhanmu: ", (s.answers || []).map(L).join("; ")) : null,
@@ -186,7 +236,17 @@
   /* ---------------------------------------------------------------- the path */
   function Path(p) {
     var ctx = p.ctx, ob = p.ob, meta = ctx.meta, team = p.team, who = p.who, steps = ob.steps, asked = {};
-    return h("ol", { className: "ap-mu-path", "aria-label": "Langkah tahap ini" }, steps.map(function (s, k) {
+    var pre = mulaiSummary(ob, meta).current;
+    pre = pre && pre.prereq ? pre : null;
+    function preItem() {
+      var role = stepRole(meta, pre.model), mem = membersOf(team, role);
+      var owner = role === "owner" ? null : mem[0] ? { name: mem[0].full_name || mem[0].email, role: role } : null;
+      return h("li", { key: pre.stage, className: "ap-mu-step open now", "aria-current": "step" },
+        h("span", { className: "ap-mu-dot now" }, h(R.Icon, { name: (meta.models[pre.model] || {}).icon && R.ICONS[(meta.models[pre.model] || {}).icon] ? meta.models[pre.model].icon : "right" })),
+        h("span", { className: "rk-sr" }, "Langkah sekarang, sebelum langkah " + (pre.at + 1) + ". "),
+        h(CurrentCard, { ctx: ctx, ob: ob, step: pre, n: pre.at + 1, total: steps.length, role: role, owner: owner }));
+    }
+    var items = steps.map(function (s, k) {
       var cur = s.stage === ob.current, role = stepRole(meta, s.model), mem = membersOf(team, role);
       var mark = s.state === "done" ? h("span", { className: "ap-mu-dot done" }, h(R.Icon, { name: "check" }))
         : cur ? h("span", { className: "ap-mu-dot now" }, h(R.Icon, { name: (meta.models[s.model] || {}).icon && R.ICONS[(meta.models[s.model] || {}).icon] ? meta.models[s.model].icon : "right" }))
@@ -217,7 +277,9 @@
       }
       return h("li", { key: s.stage, className: "ap-mu-step " + s.state + (cur ? " now" : ""), "aria-current": cur ? "step" : undefined },
         mark, h("span", { className: "rk-sr" }, "Langkah " + (k + 1) + ", " + state + ". "), body);
-    }));
+    });
+    if (pre) items.splice(pre.at, 0, preItem());
+    return h("ol", { className: "ap-mu-path", "aria-label": "Langkah tahap ini" }, items);
   }
 
   /* ---------------------------------------------------------------- reward and team */
@@ -290,11 +352,11 @@
     // first visit: tour "halaman:mulai" once the page stands
     useEffect(function () {
       if (!ob || !(ob.steps || []).length || !RA.tour || !RA.tourAuto) return;
-      var t = global.setTimeout(function () { RA.tourAuto("halaman:mulai", mulaiTour(ob)); }, 500);
+      var t = global.setTimeout(function () { RA.tourAuto("halaman:mulai", mulaiTour(ob, ctx.meta)); }, 500);
       return function () { global.clearTimeout(t); };
     }, [!!ob]);
     if (!ob) return h("div", { className: "rk-shell-content" }, h(R.Skeleton, { lines: 6 }));
-    var sum = mulaiSummary(ob);
+    var sum = mulaiSummary(ob, ctx.meta);
     if (!sum.total) return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: "Belum ada langkah" }, "Usaha ini belum punya urutan kerja yang bisa dipandu."));
     var name = firstName(ctx.me);
     if (sum.all) return h("div", { className: "rk-shell-content ap-mu" }, h(Tamat, { ctx: ctx, ob: ob, who: who, team: team, processLabel: proc }));
@@ -311,13 +373,14 @@
 
   /* ---------------------------------------------------------------- Beranda: the current step, small */
   function MulaiBanner(p) {
-    var ctx = p.ctx, ob = ctx.onboarding && ctx.onboarding.data, sum = mulaiSummary(ob);
+    var ctx = p.ctx, ob = ctx.onboarding && ctx.onboarding.data, sum = mulaiSummary(ob, ctx.meta);
     if (!sum.show || sum.all || !sum.current) return null;
     var s = sum.current;
     return h("section", { className: "ap-mu-banner", "data-tour": "beranda-langkah", "aria-labelledby": "mu-ban-t" },
       h("div", { className: "g" },
         h("p", { className: "ap-mu-eye" }, "Mulai di sini · " + sum.done + " dari " + sum.total + " beres"),
         h("h2", { id: "mu-ban-t" }, L(s.label)),
+        s.prereq ? h("p", { className: "ap-mu-p" }, L(s.hint)) : null,
         h(Bar, { steps: ob.steps, current: ob.current, done: sum.done, total: sum.total })),
       h("div", { className: "ap-mu-acts" },
         h(R.Button, { variant: "primary", onClick: function () { work(ctx, s); } }, "Kerjakan"),
@@ -345,11 +408,12 @@
     ].filter(Boolean);
     return steps;
   }
-  function mulaiTour(ob) {
-    var cur = (ob.steps || []).filter(function (s) { return s.stage === ob.current; })[0];
+  function mulaiTour(ob, meta) {
+    var cur = mulaiSummary(ob, meta).current;
     return { id: "halaman:mulai", eyebrow: "Mulai di sini", steps: [
       { target: "[data-tour=mulai-bar]", title: "Satu bar per langkah", body: "Hijau berarti sudah beres, hitam langkah sekarang, abu belum. Bar hanya bergerak kalau catatannya benar-benar tersimpan." },
-      cur ? { target: "[data-tour=mulai-sekarang]", title: "Langkah sekarang", body: "Kerjakan sendiri, atau minta Raka menyiapkan draf kalau Raka aktif. Setelah tersimpan, langkah ini tercentang dengan nama dan harinya." } : null,
+      cur && cur.prereq ? { target: "[data-tour=mulai-sekarang]", title: "Mulai dari sini", body: "Langkah pertama masih menunggu data lain. " + L(cur.hint) + " Tekan Kerjakan untuk membuka formulirnya." } : null,
+      cur && !cur.prereq ? { target: "[data-tour=mulai-sekarang]", title: "Langkah sekarang", body: "Kerjakan sendiri, atau minta Raka menyiapkan draf kalau Raka aktif. Setelah tersimpan, langkah ini tercentang dengan nama dan harinya." } : null,
       { target: "[data-tour=mulai-tim]", optional: true, title: "Bagi tugas ke tim", body: "Tiap langkah punya pemilik sesuai peran. Undang staf supaya mereka mengerjakan bagiannya dari HP mereka sendiri." },
       { target: "[data-tour=mulai-hadiah]", optional: true, title: "Hadiah saat tahap beres", body: "Begitu semua langkah beres, Beranda menghitung angka usahamu dari catatanmu sendiri." }
     ].filter(Boolean) };
@@ -364,17 +428,20 @@
     });
     if (!req.length) req = [].slice.call(global.document.querySelectorAll(".ap-main .rk-field")).slice(0, 1);
     function nameOf(f) { return (((f.querySelector("label") || {}).textContent) || "").replace(/\*$/, "").trim(); }
-    function save() {
-      var b = [].slice.call(global.document.querySelectorAll(".ap-main .rk-btn-primary")).filter(function (x) { return /Simpan/.test(x.textContent || ""); });
-      return b[0] || null;
+    // the form's primary action: Ajukan on a draft of a submittable document (Simpan draf is the plain button), else Simpan
+    function primary() {
+      var all = [].slice.call(global.document.querySelectorAll(".ap-main .rk-btn-primary"));
+      return all.filter(function (x) { return /Ajukan/.test(x.textContent || ""); })[0] || all.filter(function (x) { return /Simpan/.test(x.textContent || ""); })[0] || null;
     }
+    function save() { return primary(); }
+    var pb = primary(), last = saveCopy(step, pb ? (pb.textContent || "").trim() : "Simpan", whenKind(step.when));
     var steps = req.slice(0, 2).map(function (f, k) {
       var n = nameOf(f), rest = req.slice(1).map(nameOf).filter(Boolean);
       return { target: f, use: true, title: n ? "Isi " + lower(n) : "Isi formulir ini",
         body: k === 0 ? (step.hint ? L(step.hint) + " " : "") + (rest.length ? "Kolom bertanda bintang wajib diisi: " + [n].concat(rest).map(lower).join(", ") + "." : "Kolom bertanda bintang wajib diisi, sisanya boleh menyusul.")
           : "Kolom ini juga wajib. Pilih dari daftar, atau ketik untuk mencari." };
     });
-    steps.push({ target: save, use: true, title: "Lalu tekan Simpan", body: "Begitu tersimpan, langkah \"" + label + "\" tercentang di Mulai di sini dan langkah berikutnya terbuka." });
+    steps.push({ target: save, use: true, title: last.title, body: last.body });
     return { id: "langkah:" + step.stage, eyebrow: label, doneLabel: "Mengerti", steps: steps };
   }
 
@@ -386,6 +453,9 @@
   RA.dayWord = dayWord;
   RA.unlocks = unlocks;
   RA.mulaiSummary = mulaiSummary;
+  RA.stepPrereq = stepPrereq;
+  RA.whenKind = whenKind;
+  RA.saveCopy = saveCopy;
   RA.kenalanSteps = kenalanSteps;
   RA.mulaiTour = mulaiTour;
   RA.stepTour = stepTour;

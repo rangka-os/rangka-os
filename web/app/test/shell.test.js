@@ -448,3 +448,11 @@ test("topNavItems: one top bar item per group (first entry), unlabelled groups g
   assert.strictEqual(A.topNavItems(groups, "d/home").current, null);
   assert.strictEqual(A.topNavItems(groups, "", 2).items.length, 2);
 });
+
+test("bootErrorText: a server error says the records are safe; a kernel refusal keeps its message", () => {
+  const five = A.bootErrorText({ status: 500, message: "internal: too many clients already" });
+  assert.match(five.body, /Catatanmu aman/);
+  assert.doesNotMatch(five.body + five.title, /internal|clients|—/);
+  assert.match(A.bootErrorText(null).body, /^Sistem sedang sibuk.*coba lagi/);
+  assert.strictEqual(A.bootErrorText({ status: 403, message: "Akunmu tidak terdaftar di usaha ini" }).body, "Akunmu tidak terdaftar di usaha ini");
+});

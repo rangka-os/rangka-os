@@ -398,3 +398,52 @@ func TestPreviewRequiresDraftedConnectorKeys(t *testing.T) {
 		t.Fatalf("a live connector is listed: %s", pv.Body)
 	}
 }
+
+// hookConnector is x_test with an unsigned webhook trigger.
+const hookConnector = companyConnector + `triggers:
+  - name: changed
+    via: webhook
+    emit: {item_id: body.id}
+`
+
+const hookFlow = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_test_hook
+label: {id: Barang berubah}
+on: x_test.changed
+steps:
+  - {create: activity, set: {subject: "'barang berubah'", activity_type: "'note'"}}
+`
+
+// Fix wave item 6: a webhook for a company connector whose current content is not tested starts no flow: it is
+// audited with connector_untested and answered 401, as the needs_auth refusals are. Tested, it dispatches; an edit
+// stops it again.
+func TestWebhookRefusesUntested(t *testing.T) {
+	e, _ := companyEnvWith(t, true, hookConnector, map[string]string{"flows/x_test_hook.rk": hookFlow})
+	const path = "/hooks/kopi-senja/x_test/changed"
+	events := func() string {
+		return dump(t, e, "select count(*) from rk_audit where kind = 'connector.event'")
+	}
+	before := events()
+	if r := hook(t, e, path, []byte(`{"id": 1}`), ""); r.StatusCode != 401 {
+		t.Fatalf("untested hook: %d", r.StatusCode)
+	}
+	if events() != before {
+		t.Fatal("an untested connector recorded an event")
+	}
+	if !strings.Contains(dump(t, e, "select coalesce(data::text, '') from rk_audit where kind = 'connector.error'"), "connector_untested") {
+		t.Fatal("no connector.error audit with connector_untested")
+	}
+	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	if r := hook(t, e, path, []byte(`{"id": 2}`), ""); r.StatusCode != 200 {
+		t.Fatalf("tested hook: %d", r.StatusCode)
+	}
+	if events() == before {
+		t.Fatal("the tested hook recorded no event")
+	}
+	after := events()
+	rel := filepath.Join("connectors", "x_test", "connector.rk")
+	writeSite(e, rel, readSite(e, rel)+"\n# diubah\n")
+	if r := hook(t, e, path, []byte(`{"id": 3}`), ""); r.StatusCode != 401 || events() != after {
+		t.Fatalf("hook after an edit: %d", r.StatusCode)
+	}
+}

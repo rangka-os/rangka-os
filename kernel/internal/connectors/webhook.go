@@ -66,7 +66,9 @@ func (rt *Runtime) authAccepted(ctx context.Context, org, connector, ref string)
 // HandleHook serves POST (and the GET challenge) /hooks/<org>/<connector>/<trigger>. The org's secrets verify the
 // request; the signature is computed over the raw body bytes and compared in constant time. A declared check that
 // fails or a missing signature is 401. Each emitted event starts the flows with on: <connector>.<trigger> once:
-// a duplicate (same event body) creates nothing.
+// a duplicate (same event body) creates nothing. A company connector whose current content is not tested starts
+// nothing (401 connector_untested); the GET challenge is answered regardless, so the vendor subscription can be set
+// up before the test.
 func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger string, r *http.Request) HookResult {
 	c, t, ok := rt.trigger(connector, trigger)
 	if !ok {
@@ -88,6 +90,19 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 		store.Audit(context.WithoutCancel(ctx), rt.DB, org, "connector:"+connector, "connector.error", "connector/"+connector,
 			trigger+": webhook refused ("+res.Body+")", map[string]any{"trigger": trigger, "code": "webhook_refused"})
 		return res
+	}
+	// a company connector starts flows only while its current content is tested (contract 0033 §3), as Call and Poll:
+	// the event is audited and answered like the needs_auth refusals, and no flow starts
+	if meta.IsCompanyConnector(connector) {
+		_, tested, _, err := rt.checked(ctx, org, connector)
+		if err != nil {
+			return HookResult{Status: 500, Body: err.Error()}
+		}
+		if !tested {
+			store.Audit(context.WithoutCancel(ctx), rt.DB, org, "connector:"+connector, "connector.error", "connector/"+connector,
+				trigger+": webhook skipped (connector_untested)", map[string]any{"trigger": trigger, "code": "connector_untested"})
+			return HookResult{Status: 401, Body: "connector_untested"}
+		}
 	}
 	var body any
 	if err := json.Unmarshal(raw, &body); err != nil {

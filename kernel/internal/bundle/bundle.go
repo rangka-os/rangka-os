@@ -53,39 +53,126 @@ func Dir(name string) string {
 	return ""
 }
 
-// extract writes the bundled `name` to root/name once (marked by root/.name.ok); "" when it cannot.
-func extract(root, name string) string {
+// extract writes the bundled `name` to root/name and returns it; "" when it cannot.
+func extract(root, name string) string { return extractFrom(files, root, name) }
+
+// extractFrom extracts src's files/<name> to root/name. The marker root/.name.ok is trusted only when the
+// directory still holds every bundled file, so a cache left incomplete (an interrupted run, or several
+// kernels starting at once on the same cache) is extracted again instead of served half empty. Each run
+// extracts into its own temp directory, verifies it, and only then renames it into place and writes the
+// marker, so concurrent runs never write into or delete each other's copy.
+func extractFrom(src fs.FS, root, name string) string {
 	dst := filepath.Join(root, name)
-	if st, err := os.Stat(filepath.Join(root, "."+name+".ok")); err == nil && !st.IsDir() {
+	marker := filepath.Join(root, "."+name+".ok")
+	if st, err := os.Stat(marker); err == nil && !st.IsDir() && complete(src, name, dst) {
 		return dst
 	}
-	tmp := dst + ".tmp"
-	os.RemoveAll(tmp)
-	err := fs.WalkDir(files, path.Join("files", name), func(p string, d fs.DirEntry, err error) error {
+	if err := os.MkdirAll(root, 0o755); err != nil {
+		return ""
+	}
+	done := func() string {
+		if writeMarker(root, marker) != nil {
+			return ""
+		}
+		return dst
+	}
+	for attempt := 0; attempt < 5; attempt++ {
+		if complete(src, name, dst) { // another run finished first, or only the marker was missing
+			return done()
+		}
+		tmp, err := os.MkdirTemp(root, "."+name+".tmp-")
+		if err != nil {
+			return ""
+		}
+		if err := copyTree(src, name, tmp); err != nil || !complete(src, name, tmp) {
+			os.RemoveAll(tmp)
+			return ""
+		}
+		// rename fails while dst is a non-empty directory, so a copy another run just put in place stays
+		if os.Rename(tmp, dst) == nil {
+			if complete(src, name, dst) {
+				return done()
+			}
+			continue
+		}
+		if complete(src, name, dst) {
+			os.RemoveAll(tmp)
+			return done()
+		}
+		// dst is broken (the t_981624a8 cache without app/): move it aside and put the verified copy in
+		old := tmp + ".old"
+		os.Remove(marker)
+		os.Rename(dst, old)
+		err = os.Rename(tmp, dst)
+		os.RemoveAll(old)
+		os.RemoveAll(tmp)
+		if err == nil && complete(src, name, dst) {
+			return done()
+		}
+	}
+	return ""
+}
+
+// copyTree writes src's files/<name> into dir.
+func copyTree(src fs.FS, name, dir string) error {
+	base := path.Join("files", name)
+	return fs.WalkDir(src, base, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		rel := filepath.FromSlash(p[len("files/"+name):])
-		out := filepath.Join(tmp, rel)
+		out := filepath.Join(dir, filepath.FromSlash(p[len(base):]))
 		if d.IsDir() {
 			return os.MkdirAll(out, 0o755)
 		}
-		b, err := files.ReadFile(p)
+		b, err := fs.ReadFile(src, p)
 		if err != nil {
 			return err
 		}
 		return os.WriteFile(out, b, 0o644)
 	})
+}
+
+// complete reports whether dir holds every directory and file of src's files/<name>, each file with the
+// bundled size.
+func complete(src fs.FS, name, dir string) bool {
+	base := path.Join("files", name)
+	err := fs.WalkDir(src, base, func(p string, d fs.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		st, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p[len(base):])))
+		if err != nil {
+			return err
+		}
+		if d.IsDir() != st.IsDir() {
+			return fs.ErrInvalid
+		}
+		if !d.IsDir() {
+			info, err := d.Info()
+			if err != nil {
+				return err
+			}
+			if info.Size() != st.Size() {
+				return fs.ErrInvalid
+			}
+		}
+		return nil
+	})
+	return err == nil
+}
+
+// writeMarker writes the marker through a temp file and a rename, so it never exists half written.
+func writeMarker(root, marker string) error {
+	f, err := os.CreateTemp(root, ".marker-")
 	if err != nil {
-		os.RemoveAll(tmp)
-		return ""
+		return err
 	}
-	os.RemoveAll(dst)
-	if err := os.Rename(tmp, dst); err != nil {
-		return ""
+	f.Close()
+	if err := os.Rename(f.Name(), marker); err != nil {
+		os.Remove(f.Name())
+		return err
 	}
-	os.WriteFile(filepath.Join(root, "."+name+".ok"), nil, 0o644)
-	return dst
+	return nil
 }
 
 func hash() string {

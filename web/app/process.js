@@ -1,14 +1,15 @@
-/* Rangka end-user app: business process, owner view (contract 0014; owner view per proposal 0050 amendment, PROTOTYPE).
+/* Rangka end-user app: Proses bisnis (contract 0014; owner view contract 0060).
  *
  * RangkaApp.ProcessList()        #/proses: the processes the signed-in user may see, as cards with their stage chain.
- * RangkaApp.ProcessView({route}) #/proses/<name>: the process as a story read top to bottom:
- *   - "Siapkan dulu": stages whose model has no lifecycle (data the business keeps: barang, pemasok);
- *   - "Jalannya usaha": stages with a lifecycle, on a vertical line, each with its live status (records per status);
- *   - opening a stage shows three plain lists: what runs by itself (one sentence per automation), what is guarded
- *     (rule messages), and who must approve. No CEL, no model or event names, no file paths.
- *   - "Tampilan teknis" (authors) mounts the shared canvas (web/canvas) unchanged.
- * Sentences: a node's `description` (proposed `.rk` key, written by the app author or the Raka skill) wins; the
- * prototype simulates it with DESC below. Without one, owner text is generated from structure (trigger + effects).
+ * RangkaApp.ProcessView({route}) #/proses/<name>: the process as a diagram of the business, never code.
+ *   - Big picture first: the stages (data the business keeps beside the work stages on one line), each with how
+ *     many things run by themselves; tap a stage to open its detail diagram (feeders, neighbours, every automation
+ *     branch as one sentence), tap it again for a read-only panel; a breadcrumb leads back.
+ *   - Many items: branches with the same effect fold into one stack, zooming out drops text, search dims the rest.
+ *   - The owner view reads GET /processes/{name}?view=owner (placed by trigger, no CEL, paths or editable values);
+ *     "Tampilan teknis" reads the full graph and shows CEL, steps and source files for authors.
+ * Sentences: a node's authored `description`, else the kernel's `summary`; the text built here from structure is
+ * only the fallback for an older kernel.
  */
 (function (global) {
   "use strict";
@@ -27,22 +28,8 @@
     });
   }
 
-  /* PROTOTYPE: stands in for the proposed `description:` key on a flow, automation or action in `.rk`.
-   * Keyed by `<file stem>` (a flow) or `<file stem>#<pointer>` (an item in a model file). */
-  var DESC = {
-    moka_daily_sales: "Tiap jam, rekap penjualan Moka per outlet ditarik ulang supaya angka harian tetap cocok.",
-    moka_transaction_staged: "Tiap transaksi dari Moka dicatat jadi penjualan di outletnya. Kalau outletnya belum dikenal, kantor pusat dikabari. Kalau transaksinya direfund di Moka, catatannya ikut ditandai refund.",
-    stock_negative_alert: "Kalau stok sebuah barang di outlet jadi minus, kantor pusat langsung dikabari.",
-    gl_goods_receipt_post: "Saat penerimaan barang diajukan, nilainya otomatis masuk pembukuan: persediaan bertambah, utang ke pemasok tercatat.",
-    "purchase_order#/actions/0": "Tombol Terima barang muncul di pesanan yang sudah diajukan dan belum diterima semua.",
-    "goods_receipt#/on_submit/0": "Saat penerimaan diajukan, stok di outlet bertambah.",
-    "goods_receipt#/on_cancel/0": "Kalau penerimaan dibatalkan, stok dikurangi lagi.",
-    sales_invoice_credit_recheck: "Saat faktur diajukan, utang penyewa dicek lagi. Kalau melewati batas kredit, faktur ditahan dan alasannya dicatat.",
-    rental_booking_on_submit: "Saat pesanan sewa diajukan, unit di tanggal itu dicek. Kalau cukup, jadwal sewa dibuat dan faktur sewa disiapkan. Kalau bentrok, pesanan ditahan.",
-    rental_checkout_on_submit: "Saat alat diserahkan, jadwalnya ditandai keluar. Kalau pesanan belum terjadwal atau unitnya kurang, penyerahan ditahan.",
-    rental_return_on_submit: "Saat alat kembali, jadwalnya ditandai selesai. Kalau ada denda telat atau biaya kerusakan, faktur tambahan dibuat. Kalau jumlah unit tidak cocok, pengembalian ditahan.",
-    rental_invoice_once: "Satu pesanan sewa atau satu pengembalian hanya punya satu faktur. Faktur kedua ditahan."
-  };
+  /* Owner sentences come from the kernel (contract 0060): a node's authored `description`, else its `summary`.
+   * The text built below from structure is only the fallback for an older kernel. */
   /* Built-in kernel actions with a fixed meaning (kernel-owned copy, not per app). */
   var DO_TEXT = {
     "stock.post_moves": "stok bergerak sesuai dokumen", "stock.reverse_moves": "gerakan stoknya dibalik",
@@ -129,16 +116,18 @@
       }
       var k = itemKey(n.id); if (!k) return;
       var it = items[k.key];
-      if (!it) { it = items[k.key] = { key: k.key, desc: k.desc, group: n.group, trigger: null, title: "", effects: [], checks: 0, nodes: [] }; order.push(it); }
+      if (!it) { it = items[k.key] = { key: k.key, desc: k.desc, group: n.group, trigger: null, title: "", effects: [], checks: 0, nodes: [], said: "", sum: "" }; order.push(it); }
       it.nodes.push(n);
+      if (!it.said && n.description && L(n.description)) it.said = L(n.description);
+      if (!it.sum && n.summary && L(n.summary)) it.sum = L(n.summary);
       if (n.kind === "trigger") { it.trigger = triggerInfo(meta, n.detail); it.title = L(n.label); }
       else if (n.kind === "condition") it.checks++;
       else if (n.kind === "action") { var e = effectText(meta, n); if (e && it.effects.indexOf(e) < 0) it.effects.push(e); if (!it.title) it.title = L(n.label); }
     });
     var extra = [];
     order.forEach(function (it) {
-      var authored = DESC[it.desc];
-      var sentence = authored;
+      var authored = it.said;
+      var sentence = authored || it.sum;
       if (!sentence) {
         var when = it.trigger ? it.trigger.text : "", eff = it.effects.join(", ");
         sentence = when && eff ? when + ", " + eff + (it.checks ? " (kalau syaratnya cocok)" : "") + "."
@@ -657,9 +646,10 @@
     var ts = useState(false), tech = ts[0], setTech = ts[1];
     useEffect(function () {
       var live = true; setG({ g: null, err: null });
-      json("/api/v1/processes/" + encodeURIComponent(name)).then(function (g) { if (live) setG({ g: g, err: null }); }, function (e) { if (live) setG({ g: null, err: e }); });
+      // the owner view (contract 0060 §3) is placed by trigger and carries no code; "Tampilan teknis" reads the full graph
+      json("/api/v1/processes/" + encodeURIComponent(name) + (tech ? "" : "?view=owner")).then(function (g) { if (live) setG({ g: g, err: null }); }, function (e) { if (live) setG({ g: null, err: e }); });
       return function () { live = false; };
-    }, [name]);
+    }, [name, tech]);
     var S = useMemo(function () { return G.g ? story(G.g, meta) : null; }, [G.g, meta]);
     var models = S ? S.groups.map(function (x) { return x.model; }).filter(function (m, i, a) { return a.indexOf(m) === i; }) : [];
     var live = useLive(models);

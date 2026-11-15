@@ -1,6 +1,6 @@
 # 0054a Interview: one question per fact, Raka's turn after the profile is saved, scale and outlets as one question
 
-Status: proposed (15 Nov 2026) · Amends: 0054 Decision 5, §1, §3 and §4 (business profile in onboarding) · Builds on: 0059 (answer chips) · Affects: rangka-ai
+Status: proposed (15 Nov 2026; §5 added 16 Nov 2026) · Amends: 0054 Decision 5, §1, §3 and §4 (business profile in onboarding) · Builds on: 0059 (answer chips) · Affects: rangka-ai
 (`/v1/interview` request and reply, consult prompt), rangka-cloud (studio chat action, message actions, studio) ·
 Owner of the change: rangka-os (this contract) · Asked by: Zein, 15 Nov 2026 (studio trial)
 
@@ -26,7 +26,8 @@ An earlier draft of this amendment had its own field (`suggestions`, `say:<n>`);
 On top of 0059 §1:
 
 - rangka-ai drops the `answers` when the reply's last question asks for a name (business, outlet, branch, person,
-  brand). Names are the owner's own words; the fixed chips stay.
+  brand). Names are the owner's own words. Cloud gives such a question only the fixed chip "Lewati"
+  (`answer:skip`): "Belum tahu" makes no sense for a name (§5; an exception to 0059 §1).
 - Answer chips are 44 px high on a phone, and a chosen chip keeps the selection colour.
 
 ### 2. One question per fact (amends 0054 §3 "Raka's agenda")
@@ -69,7 +70,7 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
 "Jumlah outlet" its own question next to scale; this replaces that on the card, not in the stored profile.
 
 - The card asks seven questions. "Skala usaha" keeps its chips. The outlet number is a small follow-up stepper under it,
-  "Berapa outlet atau lokasi?", shown only when the scale has more than one place:
+  "Berapa cabang?", shown only when the scale has more than one place:
 
   | `scale` | `outlets` |
   | --- | --- |
@@ -90,8 +91,25 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
   saving the card confirms the derived outlet number together with the scale.
 - The status line counts card rows: the scale row is answered when its stepper (if shown) is answered, and is a
   guess while either is a guess.
-- The peta panel shows one line, "Skala usaha: 2–5 cabang · 3 outlet", and no "Jumlah outlet" line.
+- The peta panel shows one line, "Skala usaha: 2–5 cabang · 3 cabang", and no "Jumlah cabang" line.
 - Under 600 px the card has seven screens.
+
+### 5. Business name first, one ask per turn, "cabang" (Zein, 16 Nov 2026)
+
+- **Business name first.** When the map has no business name on the owner's first turn (not a `profile_saved`
+  turn), Raka reacts to the story, puts its map ops as usual, and asks one question: "Apa nama usahamu? Kalau sudah
+  ada PT, tulis nama PT-nya." with no `answers`. A story that names the business already is recorded with a
+  `business` op and the name is not asked. The owner's answer goes on the map with a `business` op (`name`, as
+  written); a skipped name is not asked again. A reply that asks for the name the map already holds is asked once
+  more, like the profile questions of §2.
+- **Name questions get only "Lewati".** Cloud gives a reply whose last question asks for a name the chip
+  `answer:skip` only (the same name words rangka-ai checks in §1).
+- **The card turn asks nothing else.** Cloud does not add the profile card (0054 §4) to a turn whose last question
+  asks for a name, or that shows guess or offer buttons; the card waits for the next turn. The turn that brings the
+  card keeps Raka's reply without its question sentences and without answer chips ("Oke, aku catat." when nothing is
+  left), so the card is that turn's one ask. Raka's next question comes with the `profile_saved` turn (§3).
+- **"Cabang" in owner copy.** The studio, the profile labels and Raka say "cabang", not "outlet" (labels in 0054 §1
+  updated). Field names and codes (`outlets`, `offline_outlet`) do not change.
 
 ## Consequences
 
@@ -102,6 +120,8 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
   stepper. Tests in `internal/cloud/wawancara_chips_test.go`, `business_profile_test.go` and
   `tests/e2e/test_studio_consult.py`.
 - An older rangka-ai ignores `profile_saved` and answers an ordinary turn.
+- §5: rangka-ai `_business_name_block` (first turn) and `profile_asks(..., name_known)`; rangka-cloud `asksName`,
+  `withoutQuestions` and the deferred card in `consultTurn`, tests `name_question_test.go` and `consult_test.go`.
 
 ## Out of scope
 

@@ -374,3 +374,46 @@ func TestLayoutBroken(t *testing.T) {
 		t.Error("layout not stored over a broken file")
 	}
 }
+
+// Contract 0060 §3: ?view=owner keeps the caller's permission filter, carries the kernel's sentences and leaves out
+// code, paths, editable values and the author layout.
+func TestProcessOwnerView(t *testing.T) {
+	e, _ := canvasEnv(t, noDealForReps)
+	e.must(200, "PUT", "/api/v1/processes/lead_to_cash/layout", map[string]any{"groups": map[string]any{"lead_in": map[string]any{"x": 3, "y": 4}}})
+	g := e.must(200, "GET", "/api/v1/processes/lead_to_cash?view=owner", nil).JSON
+	if g["layout"] != nil || g["inferred"] != false || get(g["source"], "file") != "" {
+		t.Errorf("owner view keeps layout, inferred or source: %v %v %v", g["layout"], g["inferred"], g["source"])
+	}
+	sentences := 0
+	for _, n := range g["nodes"].([]any) {
+		if get(n, "source", "file") != "" || len(get(n, "editable").(map[string]any)) != 0 {
+			t.Errorf("node %v keeps source or editable", get(n, "id"))
+		}
+		if get(n, "kind") == "condition" && get(n, "detail") != "" {
+			t.Errorf("condition %v keeps CEL %v", get(n, "id"), get(n, "detail"))
+		}
+		if sm, ok := n.(map[string]any)["summary"].(map[string]any); ok && sm["id"] != "" {
+			sentences++
+		}
+	}
+	if sentences == 0 {
+		t.Error("no node carries a summary sentence")
+	}
+	for _, gr := range g["groups"].([]any) {
+		if k := get(gr, "kind"); k != "data" && k != "document" {
+			t.Errorf("group %v kind %v", get(gr, "id"), k)
+		}
+	}
+	// the author view is unchanged: source paths and the stored layout are still there
+	a := e.must(200, "GET", "/api/v1/processes/lead_to_cash", nil).JSON
+	if a["layout"] == nil || get(a["source"], "file") == "" {
+		t.Errorf("author view lost layout or source")
+	}
+	// a rep without read on deal sees no deal stage in the owner view either
+	rep := canvasRep(t, e)
+	for _, id := range groupIDs(rep.must(200, "GET", "/api/v1/processes/lead_to_cash?view=owner", nil).JSON) {
+		if id == "deal" {
+			t.Error("owner view shows a stage the caller cannot read")
+		}
+	}
+}

@@ -145,6 +145,10 @@
           "name": {
             "$ref": "#/$defs/name"
           },
+          "description": {
+            "$ref": "#/$defs/description",
+            "description": "Owner sentence of what this does, conditions included (contract 0060 §1). Changes no behaviour."
+          },
           "label": {
             "$ref": "#/$defs/label"
           },
@@ -197,6 +201,10 @@
         "properties": {
           "name": {
             "$ref": "#/$defs/name"
+          },
+          "description": {
+            "$ref": "#/$defs/description",
+            "description": "Owner sentence of what this does, conditions included (contract 0060 §1). Changes no behaviour."
           },
           "when": {
             "type": "string"
@@ -351,6 +359,25 @@
         "en": {
           "type": "string",
           "maxLength": 140
+        }
+      },
+      "additionalProperties": false
+    },
+    "description": {
+      "type": "object",
+      "description": "An owner sentence or two in Bahasa Indonesia (required) and optionally English (contract 0060 §1).",
+      "required": [
+        "id"
+      ],
+      "properties": {
+        "id": {
+          "type": "string",
+          "minLength": 1,
+          "maxLength": 280
+        },
+        "en": {
+          "type": "string",
+          "maxLength": 280
         }
       },
       "additionalProperties": false

@@ -107,26 +107,27 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
   one question: "Apa nama usahamu? Kalau sudah ada PT, tulis nama PT-nya." with no `answers`. A story that names the
   business is recorded with a `business` op and the name is not asked. After it was asked once, a missing name is
   not asked again (a reply that asks it is asked once more, like the profile questions of §2), and it is not made an
-  `open` item.
-- **The name answer.** Raka records the owner's answer with a `business` op (`name`, as written). When its ops leave
-  the name empty and the owner's message answers the name question (not a non-answer of 0059 §2), rangka-ai puts the
-  owner's short typed answer on the map itself (at most 80 characters and 8 words, without a lead such as
-  "Namanya").
-- **Name questions get only "Lewati".** Cloud gives a reply whose last question asks for a name (outside fenced
-  blocks; "atas nama" is a flow question) the chip `answer:skip` only.
+  `open` item. (Cloud sends at most the last 39 messages, so in a very long interview a skipped name may be asked
+  once more.)
+- **The name answer.** Raka records the owner's answer with a `business` op (`name`, as written). Code never takes
+  the owner's message as the name: "Belum ada nama" is no name.
+- **A question** is a "?" or "？" not followed by a letter, digit, "=" or "&" (so not one inside a URL), outside
+  fenced blocks. Cloud and rangka-ai use this same rule.
+- **Name questions get only "Lewati".** Cloud gives a reply whose last question asks for a name ("atas nama" is a
+  flow question) the chip `answer:skip` only.
 - **The card turn asks nothing else.** Cloud sends `profile_card: true` while the project has no profile card and
-  an incomplete profile. Unless it asks the business name first, rangka-ai then replies without a question and
+  an incomplete profile, except on the forced final offer and on an answer to an offer. Unless it asks the business
+  name first, or the owner asked to put it together, rangka-ai then replies without a question and
   without `answers`: it reacts to what the owner said (map ops stand). A reply that asks anyway is asked once more
-  (`interview.done` logs `cardRepairs`); a rewrite that still asks is dropped. Cloud adds the card only after a reply
-  without a question (outside fenced blocks; a "?" inside a URL does not count) and without guess or offer
-  buttons; otherwise the reply keeps its chips and the card waits for a later turn. Cloud never edits Raka's text.
+  (`interview.done` logs `cardRepairs`), not when it carries file guesses; a rewrite that still asks is dropped.
+  Cloud adds the card only after a reply without a question and without guess or offer buttons; otherwise the reply keeps its chips and the card waits for a later turn. Cloud never edits Raka's text.
   Raka's next question comes with the `profile_saved` turn (§3). The build gate of 0054 §4 still shows the card
   when the owner asks to build before it appeared.
 - **"Cabang" in owner copy.** The studio, the profile labels, the plan card and Raka say "cabang", not "outlet"
   (labels in 0054 §1 updated). Field names and codes (`outlets`, `offline_outlet`) do not change.
-- **Compatibility.** An older rangka-ai ignores `profile_card` and may ask a question on the card turn; Cloud then
-  shows the card a turn later. An older Cloud does not send `profile_card` and shows the card after the name question
-  in the same turn.
+- **Compatibility and order.** rangka-ai goes first: an older Cloud does not send `profile_card` and shows the card
+  after Raka's reply as before (with its question). Cloud must not run before rangka-ai: an older rangka-ai ignores
+  `profile_card` and nearly always asks, so the card would wait until the build gate.
 
 ## Consequences
 

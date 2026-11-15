@@ -3972,6 +3972,9 @@ def test_tour_kenalan(page, ctx):
     """Tur sorotan (contract 0053 §7): the first desk visit dims the screen and lights one real place at a time with
     "x dari y"; Lanjut moves on, Escape skips and the kernel keeps it per person, a reload does not start it again, and
     the account menu's "Ulangi tur" plays it once more."""
+    # a tour PUT still in flight when the page reloads or the scenario closes it is cut off (net::ERR_ABORTED, red on
+    # CI main since 15 Nov); what the kernel kept is checked through kept_tour below, not through the browser
+    ctx.allowed_failed.append(re.compile(r"/api/v1/onboarding/tours(/|$)"))
     owner = Http(ctx.base).login(*ctx.owner)
     owner.call("PUT", "/api/v1/onboarding/tours/kenalan", {"state": ""})
     page.goto(ctx.base + "/app/")

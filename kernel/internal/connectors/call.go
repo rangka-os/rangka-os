@@ -78,9 +78,12 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
 		return nil, rt.fail(ctx, org, connector, action, nil, err)
 	}
-	_, a, err := rt.Action(connector, action)
+	c, a, err := rt.Action(connector, action)
 	if err != nil {
 		return nil, &jobs.Permanent{Err: err}
+	}
+	if err := rt.gate(ctx, org, connector, action, c); err != nil {
+		return nil, rt.fail(ctx, org, connector, action, nil, err)
 	}
 	req, err := rt.Render(ctx, org, connector, action, input)
 	if err != nil {
@@ -118,11 +121,38 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	}
 	out := mapOutput(a, parsed)
 	out = req.scrub.Value(out).(map[string]any)
+	data := map[string]any{"action": action, "status": resp.StatusCode, "output": out}
+	if isTesting(ctx) { // the test endpoint audits connector.test; the answer stays out of the audit (contract 0033 §3)
+		delete(data, "output")
+	}
 	if err := store.Audit(ctx, rt.DB, org, "connector:"+connector, "connector.call", "connector/"+connector,
-		fmt.Sprintf("%s → HTTP %d", action, resp.StatusCode), map[string]any{"action": action, "status": resp.StatusCode, "output": out}); err != nil {
+		fmt.Sprintf("%s → HTTP %d", action, resp.StatusCode), data); err != nil {
 		rt.logf("connectors: audit: %v", err)
 	}
 	return out, nil
+}
+
+// gate is the send-time rule of contract 0033 §3 and §4, read once per call: a company connector runs only while its
+// current content is tested (the owner's test run excepted), and a write action (method not GET) of a money-touching
+// connector is sent only after the owner confirmed the writes of that content. A connector without its keys is left
+// to Render (connector_needs_auth). Catalogue connectors are always tested with writes allowed.
+func (rt *Runtime) gate(ctx context.Context, org, connector, action string, c map[string]any) error {
+	state, _, writesOK, err := rt.State(ctx, org, connector)
+	if err != nil {
+		return err
+	}
+	if state == "untested" && !isTesting(ctx) {
+		return ErrUntested
+	}
+	if writesOK || state != "tested" {
+		return nil
+	}
+	for _, w := range meta.WriteActions(c) {
+		if w == action && rt.Reg().MoneyTouching(connector) {
+			return ErrWritesUnconfirmed
+		}
+	}
+	return nil
 }
 
 // retryable follows the action's retry.on; without it, 429 and 5xx are retried.
@@ -204,6 +234,10 @@ func (rt *Runtime) fail(ctx context.Context, org, connector, action string, req 
 		code = "connector_needs_auth"
 	case errors.Is(err, ErrHostRefused):
 		code = "secret_host_refused"
+	case errors.Is(err, ErrUntested):
+		code = "connector_untested"
+	case errors.Is(err, ErrWritesUnconfirmed):
+		code = "connector_writes_unconfirmed"
 	case errors.As(err, &ce):
 		permanent = !ce.Retryable
 	}

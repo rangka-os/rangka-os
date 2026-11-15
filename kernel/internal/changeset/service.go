@@ -169,7 +169,10 @@ type Service struct {
 	// ReadOnly says why a person may not decide (contract 0028 §4: past the plan's people limit a person is
 	// read-only and decides nothing); "" when they may. Nil = no plan check.
 	ReadOnly func(personID string) string
-	mu       sync.Mutex
+	// ConnectorState is a connector's effective state in an org (contract 0033 §3: needs_auth, untested or
+	// tested); Apply refuses flows that use a company connector that is not tested. Nil = no check.
+	ConnectorState func(ctx context.Context, org, connector string) (string, error)
+	mu             sync.Mutex
 }
 
 func (s *Service) now() string {

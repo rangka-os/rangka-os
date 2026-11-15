@@ -52,6 +52,12 @@ actions:
 // when withAuth.
 func companyEnv(t *testing.T, withAuth bool) (*env, *vendor) {
 	t.Helper()
+	return companyEnvWith(t, withAuth, companyConnector, nil)
+}
+
+// companyEnvWith is companyEnv with the x_test file given and extra site files (path relative to the site → text).
+func companyEnvWith(t *testing.T, withAuth bool, connector string, siteFiles map[string]string) (*env, *vendor) {
+	t.Helper()
 	t.Setenv("RANGKA_MASTER_KEY", testKEK(t))
 	t.Setenv("RANGKA_MASTER_KEY_FILE", "")
 	e := newEnv(t, false, func(apps, site string) {
@@ -60,8 +66,14 @@ func companyEnv(t *testing.T, withAuth bool) (*env, *vendor) {
 		os.WriteFile(p, []byte(strings.Replace(string(b), "secrets: {driver: env}", "secrets: {driver: db}", 1)), 0o644)
 		dir := filepath.Join(site, "connectors", "x_test")
 		os.MkdirAll(dir, 0o755)
-		if err := os.WriteFile(filepath.Join(dir, "connector.rk"), []byte(companyConnector), 0o644); err != nil {
+		if err := os.WriteFile(filepath.Join(dir, "connector.rk"), []byte(connector), 0o644); err != nil {
 			t.Fatal(err)
+		}
+		for rel, text := range siteFiles {
+			os.MkdirAll(filepath.Dir(filepath.Join(site, rel)), 0o755)
+			if err := os.WriteFile(filepath.Join(site, rel), []byte(text), 0o644); err != nil {
+				t.Fatal(err)
+			}
 		}
 	})
 	items := make([]string, 30)

@@ -681,3 +681,17 @@ func TestAssessCompanyConnector(t *testing.T) {
 		}
 	}
 }
+
+func TestFlowConnectors(t *testing.T) {
+	f := map[string]any{"on": "x_a.new", "steps": []any{
+		map[string]any{"call": "x_b.list"},
+		map[string]any{"if": "true", "then": []any{map[string]any{"call": "moka.sales"}}, "else": []any{map[string]any{"for_each": "x", "do": []any{map[string]any{"call": "x_c.send"}}}}},
+	}}
+	got := strings.Join(flowConnectors(f), ",")
+	if got != "x_a,x_b,moka,x_c" {
+		t.Fatalf("got %s", got)
+	}
+	if got := flowConnectors(map[string]any{"on": "deal.updated"}); len(got) != 1 || got[0] != "deal" {
+		t.Fatalf("record event: %v", got)
+	}
+}

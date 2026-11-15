@@ -2,10 +2,13 @@ package connectors
 
 import (
 	"context"
+	"errors"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
@@ -113,5 +116,15 @@ func TestCheckIsPerOrg(t *testing.T) {
 	}
 	if st, _, _, _ := rt.State(ctx, "o2", "x_demo"); st != "untested" {
 		t.Errorf("o2 = %q", st)
+	}
+}
+
+// Call refuses an untested company connector before rendering anything: permanent, coded connector_untested.
+func TestCallRefusesUntested(t *testing.T) {
+	rt, _ := stateRT(t, map[string]string{"o1": "tok"})
+	_, err := rt.Call(context.Background(), "o1", "x_demo", "ping", map[string]any{"message": "halo"})
+	var p *jobs.Permanent
+	if !errors.As(err, &p) || !strings.Contains(err.Error(), "connector_untested") {
+		t.Fatalf("got %v", err)
 	}
 }

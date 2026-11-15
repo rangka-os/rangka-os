@@ -42,7 +42,7 @@ func PollEvery(t map[string]any) time.Duration {
 
 // PollResult is what a poll job stores.
 type PollResult struct {
-	Skipped string `json:"skipped,omitempty"` // needs_auth: the connector has no keys yet; sandbox: the ruang coba polls nothing
+	Skipped string `json:"skipped,omitempty"` // needs_auth: no keys yet; untested: a company connector not tested since its last edit; sandbox: the ruang coba polls nothing
 	Events  int    `json:"events"`
 	Dupes   int    `json:"dupes"`
 	Cursor  bool   `json:"cursor_moved"`
@@ -71,6 +71,12 @@ func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*P
 		if err := rt.refreshIfDue(ctx, org, connector); errors.Is(err, ErrNeedsAuth) {
 			return &PollResult{Skipped: "needs_auth"}, nil
 		}
+	}
+	// a company connector not tested since its last edit is skipped quietly too (contract 0033 §3)
+	if st, _, _, err := rt.State(ctx, org, connector); err != nil {
+		return nil, err
+	} else if st == "untested" {
+		return &PollResult{Skipped: "untested"}, nil
 	}
 	targets := []pollTarget{{key: trigger}}
 	if each := meta.AsMap(t["each"]); each != nil {

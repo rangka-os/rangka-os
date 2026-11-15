@@ -378,7 +378,7 @@ func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func
 		}
 		return nil, nil, roots{}, nil, err
 	}
-	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: r.apps, SiteDir: r.site, ModulesDir: r.modules}, nil, s.Schemas)
+	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: r.apps, SiteDir: r.site, ModulesDir: r.modules, ConnectorsDir: r.connectors}, nil, s.Schemas)
 	v := &Validation{Errors: []meta.Item{}, Warnings: []meta.Item{}}
 	for _, it := range relItems(rep.All(), r) {
 		if it.Level == "error" {
@@ -845,6 +845,9 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 		}
 		return cs, &Error{409, "risk_changed", "Risiko perubahan ini naik dari " + was + " ke " + as.Risk + " karena berkasnya berubah sejak diusulkan. Lihat pratinjau dan setujui lagi.", cs}
 	}
+	if err := s.connectorsTested(ctx, cs.Org, files); err != nil {
+		return nil, err
+	}
 	prev := map[string]*string{}
 	for p := range files {
 		f, _ := live.file(p)
@@ -896,6 +899,70 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 		return cs, err
 	}
 	return cs, nil
+}
+
+// connectorsTested refuses (409 connector_untested) a change set whose flows, as the change leaves them, start from
+// (on: x_c.trigger) or call (call: x_c.action) a company connector that is not tested in org (contract 0033 §3). Only
+// the flow files the change set writes are read: installed, unchanged flows were checked when they were applied.
+func (s *Service) connectorsTested(ctx context.Context, org string, files map[string]*string) error {
+	if s.ConnectorState == nil {
+		return nil
+	}
+	used := map[string]bool{}
+	for p, c := range files {
+		if c == nil || !(strings.HasPrefix(p, "flows/") || strings.Contains(p, "/flows/")) {
+			continue
+		}
+		d, err := rk.LoadBytes(p, []byte(*c))
+		if err != nil {
+			continue // the validator has passed the result; an unreadable file is no flow
+		}
+		for _, n := range flowConnectors(meta.AsMap(d.Data)) {
+			if meta.IsCompanyConnector(n) {
+				used[n] = true
+			}
+		}
+	}
+	var untested []string
+	for _, n := range sortedSet(used) {
+		st, err := s.ConnectorState(ctx, org, n)
+		if err != nil {
+			return err
+		}
+		if st != "tested" {
+			untested = append(untested, n)
+		}
+	}
+	if len(untested) == 0 {
+		return nil
+	}
+	return &Error{409, "connector_untested", "Penghubung " + strings.Join(untested, ", ") + " belum diuji sejak terakhir diubah. " +
+		"Uji dulu di Pengaturan → Penghubung, lalu terapkan perubahan ini lagi.", map[string]any{"connectors": untested}}
+}
+
+// flowConnectors lists the connector heads a flow starts from (on:) or calls (call: steps, nested in then, else and
+// do included).
+func flowConnectors(f map[string]any) []string {
+	var out []string
+	if on, _ := f["on"].(string); strings.Contains(on, ".") {
+		head, _, _ := strings.Cut(on, ".")
+		out = append(out, head)
+	}
+	var walk func(steps []any)
+	walk = func(steps []any) {
+		for _, x := range steps {
+			st := meta.AsMap(x)
+			if call, _ := st["call"].(string); strings.Contains(call, ".") {
+				head, _, _ := strings.Cut(call, ".")
+				out = append(out, head)
+			}
+			for _, k := range []string{"then", "else", "do"} {
+				walk(meta.AsList(st[k]))
+			}
+		}
+	}
+	walk(meta.AsList(f["steps"]))
+	return out
 }
 
 func (s *Service) write(r roots, files map[string]*string) error {

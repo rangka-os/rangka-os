@@ -287,6 +287,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			return err
 		}}
 	s.API.Connectors = s.Connectors
+	s.Changes.ConnectorState = func(ctx context.Context, org, connector string) (string, error) {
+		if e.Reg().Connectors[connector] == nil { // added by the same change set: never tested
+			return "untested", nil
+		}
+		st, _, _, err := s.Connectors.State(ctx, org, connector)
+		return st, err
+	}
 	s.Queue.Handlers["call"] = s.runCallJob
 	s.Queue.Handlers["poll"] = s.runPollJob
 	s.Sched.SetPolls(cfg.Org, pollSpecs(reg))

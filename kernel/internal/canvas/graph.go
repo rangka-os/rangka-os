@@ -44,6 +44,7 @@ type Group struct {
 	Label  meta.Label     `json:"label"`
 	Model  string         `json:"model"`
 	Models []string       `json:"models"`
+	Kind   string         `json:"kind"` // document: the main model has lifecycle steps; data otherwise (contract 0060 §3)
 	When   string         `json:"when"`
 	Source Source         `json:"source"`
 	Nodes  []string       `json:"nodes"`
@@ -61,6 +62,10 @@ type Node struct {
 	Model    string         `json:"model"`
 	Source   Source         `json:"source"`
 	Editable map[string]any `json:"editable"`
+	// Description is the authored owner sentence of a flow, automation or action (contract 0060 §1); Summary is the
+	// kernel's sentence from structure (§2), set on flow and automation triggers and on actions with built-in copy.
+	Description meta.Label `json:"description,omitempty"`
+	Summary     meta.Label `json:"summary,omitempty"`
 }
 
 // Edge joins two nodes.
@@ -201,12 +206,16 @@ func Build(reg *meta.Registry, p *meta.Process, canRead func(model string) bool)
 	}
 	for _, gr := range groups {
 		gr.Nodes = append([]string{}, b.order[gr.ID]...)
+		gr.Kind = "data"
 		gr.Counts = map[string]int{}
 		for _, k := range Kinds {
 			gr.Counts[k] = 0
 		}
 		for _, id := range gr.Nodes {
 			gr.Counts[b.nodes[id].Kind]++
+			if b.nodes[id].Kind == KindStep {
+				gr.Kind = "document"
+			}
 			g.Nodes = append(g.Nodes, *b.nodes[id])
 		}
 		g.Groups = append(g.Groups, *gr)
@@ -338,6 +347,7 @@ func (b *builder) model(m *meta.Model, main bool) {
 		p := fmt.Sprintf("/automations/%d", i)
 		c := b.guard(app, p, am, "if") // the condition node owns if
 		id := b.node(KindTrigger, app, p, p, labelOr(am["label"], nil, meta.Str(am, "name")), text(am["when"]), editable(am, "when", "do"))
+		b.say(id, am["description"], b.automationSummary(m, am))
 		b.edge(c, id, EdgeFlow)
 	}
 	for _, name := range sortedFlows(b.reg) {
@@ -358,14 +368,17 @@ func (b *builder) model(m *meta.Model, main bool) {
 		if am := meta.AsMap(av); am != nil {
 			p := fmt.Sprintf("/actions/%d", i)
 			c := b.guard(app, p, am, "if")
-			id := b.node(KindAction, app, p, p, labelOr(am["label"], nil, meta.Str(am, "name")), meta.Str(am, "hook"), editable(am, "label.id", "if"))
+			label := labelOr(am["label"], nil, meta.Str(am, "name"))
+			id := b.node(KindAction, app, p, p, label, meta.Str(am, "hook"), editable(am, "label.id", "if"))
+			b.say(id, am["description"], hookSummary(meta.Str(am, "hook"), "", nil))
 			b.edge(c, id, EdgeFlow)
 		}
 	}
-	for _, hk := range []struct{ key, label string }{{"on_submit", "Saat diajukan"}, {"on_cancel", "Saat dibatalkan"}} {
+	for _, hk := range []struct{ key, label, verb string }{{"on_submit", "Saat diajukan", "diajukan"}, {"on_cancel", "Saat dibatalkan", "dibatalkan"}} {
 		for i, h := range meta.AsList(app.data[hk.key]) {
 			p := fmt.Sprintf("/%s/%d", hk.key, i)
-			b.node(KindAction, app, p, p, meta.Label{"id": hk.label}, text(h), nil)
+			id := b.node(KindAction, app, p, p, meta.Label{"id": hk.label}, text(h), nil)
+			b.say(id, nil, hookSummary(text(h), "Saat "+nonEmpty(b.modelWord(m.Name), "dokumen ini")+" "+hk.verb, nil))
 		}
 	}
 	for _, s := range srcs {
@@ -383,6 +396,15 @@ func (b *builder) model(m *meta.Model, main bool) {
 	if main {
 		b.lifecycle(m, srcs)
 	}
+}
+
+// say sets a node's authored description and the kernel's summary.
+func (b *builder) say(id string, description any, summary meta.Label) {
+	n := b.nodes[id]
+	if l := meta.LabelOf(description); len(l) > 0 {
+		n.Description = l
+	}
+	n.Summary = summary
 }
 
 // lifecycleField is the kanban group_by field, else a select field status, else stage (with options).
@@ -456,6 +478,7 @@ func (b *builder) flow(f *meta.Flow) {
 		detail = f.Schedule
 	}
 	prev := b.node(KindTrigger, s, "/", "/", labelOr(f.Raw["label"], nil, f.Name), detail, editable(f.Raw, "on", "schedule"))
+	b.say(prev, f.Raw["description"], b.flowSummary(f))
 	b.edge(c, prev, EdgeFlow)
 	vars := map[string]string{}
 	for j, sv := range meta.AsList(f.Raw["steps"]) {

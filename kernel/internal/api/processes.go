@@ -82,6 +82,12 @@ func (s *Server) getProcess(w http.ResponseWriter, r *http.Request, c *caller) {
 		noProcess(w, name)
 		return
 	}
+	if r.URL.Query().Get("view") == "owner" {
+		// the owner view (contract 0060 §3): placed by trigger, cut of code and paths; no author layout
+		canvas.Owner(g)
+		writeJSON(w, http.StatusOK, g)
+		return
+	}
 	g.Layout = visibleLayout(readLayout(reg, name), g)
 	writeJSON(w, http.StatusOK, g)
 }

@@ -19,6 +19,7 @@
       "models": [
         "lead"
       ],
+      "kind": "document",
       "when": "",
       "source": {
         "file": "apps/crm/processes/lead_to_cash.rk",
@@ -60,6 +61,7 @@
       "models": [
         "deal"
       ],
+      "kind": "document",
       "when": "",
       "source": {
         "file": "apps/crm/processes/lead_to_cash.rk",
@@ -98,6 +100,7 @@
       "models": [
         "sales_invoice"
       ],
+      "kind": "document",
       "when": "",
       "source": {
         "file": "apps/crm/processes/lead_to_cash.rk",
@@ -159,6 +162,7 @@
         "sales_invoice",
         "payment"
       ],
+      "kind": "document",
       "when": "status == 'paid'",
       "source": {
         "file": "apps/crm/processes/lead_to_cash.rk",
@@ -211,6 +215,9 @@
       },
       "editable": {
         "on": "whatsapp_business.message_received"
+      },
+      "summary": {
+        "id": "Saat ada kabar baru dari Whatsapp Business, lead baru dibuat, aktivitas baru dibuat (kalau syaratnya cocok)."
       }
     },
     {
@@ -496,6 +503,9 @@
       "editable": {
         "do": "crm.mark_won",
         "when": "stage changes to 'won'"
+      },
+      "summary": {
+        "id": "Saat peluang berubah, langkah lanjutannya berjalan otomatis (kalau syaratnya cocok)."
       }
     },
     {

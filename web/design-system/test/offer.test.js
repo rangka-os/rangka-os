@@ -88,7 +88,8 @@ test("recommended first, actions per option, details for the rest", () => {
   assert.equal(det.length, 1);
   assert.ok(texts(det[0]).includes("Lihat rincian") && texts(det[0]).includes("Yang Raka bantu") && texts(det[0]).includes("Butuh persetujuanmu"));
   assert.ok(!texts(det[0]).includes("Yang dicatat"));
-  assert.equal(texts(t).filter((x) => x === "1 / 3").length, 1);
+  assert.equal(texts(t).filter((x) => /^\d+ \/ \d+$/.test(x)).length, 0, "stacked or side by side: no carousel count");
+  assert.equal(nodes(t, ".rk-offer-nav").length, 0);
   assert.ok(!root.props.className.includes("is-closed"));
 });
 test("the inline diagram is top-down in a row; the viewer gets the LR source", () => {
@@ -125,7 +126,7 @@ test("later shows a Menyusul line and string or object items both work", () => {
   const all = texts(t).join("|");
   assert.ok(texts(t).join("").includes("Menyusul: catatan kondisi alat"), all);
   assert.ok(all.includes("Ikut terpasang") && all.includes("Kasir"));
-  assert.ok(all.includes("1 / 2"));
+  assert.ok(!all.includes("1 / 2"), "no carousel count");
 });
 test("offerSideBySide: each column gets at least 260 px (gap 12)", () => {
   assert.equal(R.offerSideBySide(2, 531), false);

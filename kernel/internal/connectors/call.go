@@ -75,9 +75,6 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	} else if sb {
 		return rt.simulate(ctx, org, connector, action, input)
 	}
-	if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
-		return nil, rt.fail(ctx, org, connector, action, nil, err)
-	}
 	c, a, err := rt.Action(connector, action)
 	if err != nil {
 		return nil, &jobs.Permanent{Err: err}
@@ -132,25 +129,55 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	return out, nil
 }
 
-// gate is the send-time rule of contract 0033 §3 and §4, read once per call: a company connector runs only while its
-// current content is tested (the owner's test run excepted), and a write action (method not GET) of a money-touching
-// connector is sent only after the owner confirmed the writes of that content. A connector without its keys is left
-// to Render (connector_needs_auth). Catalogue connectors are always tested with writes allowed.
+// gate runs before anything is sent, once per call. A catalogue connector only refreshes its OAuth2 token when due.
+// A company connector (contract 0033 §3, §4) runs only while its current content is tested (the owner's test run
+// excepted), so an edited file sends nothing, not even an OAuth2 refresh; it then needs every required key
+// (connector_needs_auth even when the action uses none of the missing ones), and a write action (method not GET) of a
+// money-touching connector is sent only after the owner confirmed the writes of that content. Content that is not
+// tested and lacks keys answers connector_needs_auth: the keys come first, then the test.
 func (rt *Runtime) gate(ctx context.Context, org, connector, action string, c map[string]any) error {
-	state, _, writesOK, err := rt.State(ctx, org, connector)
+	if !meta.IsCompanyConnector(connector) {
+		if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
+			return err
+		}
+		return nil
+	}
+	_, tested, writesOK, err := rt.checked(ctx, org, connector)
 	if err != nil {
 		return err
 	}
-	if state == "untested" && !isTesting(ctx) {
+	if !tested && !isTesting(ctx) {
+		if err := rt.needsAuth(ctx, org, connector, c); err != nil {
+			return err
+		}
 		return ErrUntested
 	}
-	if writesOK || state != "tested" {
+	// tested content (or the owner's test) may refresh an expired OAuth2 token: a missing access token is obtained here
+	if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
+		return err
+	}
+	if err := rt.needsAuth(ctx, org, connector, c); err != nil {
+		return err
+	}
+	if writesOK {
 		return nil
 	}
 	for _, w := range meta.WriteActions(c) {
 		if w == action && rt.Reg().MoneyTouching(connector) {
 			return ErrWritesUnconfirmed
 		}
+	}
+	return nil
+}
+
+// needsAuth is ErrNeedsAuth when a required key of the connector is not set for org.
+func (rt *Runtime) needsAuth(ctx context.Context, org, connector string, c map[string]any) error {
+	missing, err := rt.missingAuth(ctx, org, connector, c)
+	if err != nil {
+		return err
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: %s.%s is not set", ErrNeedsAuth, connector, strings.Join(missing, ", "))
 	}
 	return nil
 }

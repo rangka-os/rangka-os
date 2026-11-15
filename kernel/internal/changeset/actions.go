@@ -903,13 +903,17 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 
 // connectorsTested refuses (409 connector_untested) a change set whose flows, as the change leaves them, start from
 // (on: x_c.trigger) or call (call: x_c.action) a company connector that is not tested in org (contract 0033 §3). Only
-// the flow files the change set writes are read: installed, unchanged flows were checked when they were applied.
+// the flow files the change set writes are read: installed, unchanged flows were checked when they were applied. A
+// connector whose file the change set also writes counts as untested, since the apply resets its test.
 func (s *Service) connectorsTested(ctx context.Context, org string, files map[string]*string) error {
 	if s.ConnectorState == nil {
 		return nil
 	}
-	used := map[string]bool{}
+	used, edited := map[string]bool{}, map[string]bool{}
 	for p, c := range files {
+		if strings.HasPrefix(p, "connectors/") {
+			edited[strings.TrimSuffix(strings.TrimPrefix(p, "connectors/"), ".rk")] = true
+		}
 		if c == nil || !(strings.HasPrefix(p, "flows/") || strings.Contains(p, "/flows/")) {
 			continue
 		}
@@ -925,6 +929,11 @@ func (s *Service) connectorsTested(ctx context.Context, org string, files map[st
 	}
 	var untested []string
 	for _, n := range sortedSet(used) {
+		// a connector file the change set writes resets its test when applied: its live state says nothing
+		if edited[n] {
+			untested = append(untested, n)
+			continue
+		}
 		st, err := s.ConnectorState(ctx, org, n)
 		if err != nil {
 			return err

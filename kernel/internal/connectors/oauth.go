@@ -64,7 +64,7 @@ func (rt *Runtime) refreshIfDue(ctx context.Context, org, connector string) erro
 	if d, err := due(); err != nil || !d {
 		return err
 	}
-	if err := rt.refresh(ctx, org, connector, auth); err != nil {
+	if err := rt.refresh(ctx, org, connector, c); err != nil {
 		// the owner reconnects: drop the stale access token so the connector shows needs_auth
 		rt.Secrets.Delete(context.WithoutCancel(ctx), org, connector, "access_token", "system:oauth2")
 		store.Audit(context.WithoutCancel(ctx), rt.DB, org, "connector:"+connector, "connector.needs_auth", "connector/"+connector,
@@ -84,11 +84,22 @@ func parseExpiry(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (rt *Runtime) refresh(ctx context.Context, org, connector string, auth map[string]any) error {
-	tokenURL := meta.Str(auth, "token_url")
+func (rt *Runtime) refresh(ctx context.Context, org, connector string, c map[string]any) error {
+	tokenURL := meta.Str(meta.AsMap(c["auth"]), "token_url")
 	u, err := url.Parse(tokenURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return fmt.Errorf("auth.token_url must be an https URL")
+	}
+	// the refresh carries the client secret and refresh token: like any secret it goes only to a declared host
+	// (contract 0017 §5). A company connector always declares hosts:; a catalogue one is held to them when it does.
+	_, declared := c["hosts"]
+	if _, exp := meta.AsMap(c["experimental"])["hosts"]; exp {
+		declared = true
+	}
+	if declared || meta.IsCompanyConnector(connector) {
+		if h := strings.ToLower(u.Hostname()); !allowedHosts(c)[h] {
+			return fmt.Errorf("%w: auth.token_url host %s is not in hosts", ErrHostRefused, h)
+		}
 	}
 	get := func(f string) (string, error) {
 		v, ok, err := rt.Secrets.Value(ctx, org, connector, f)

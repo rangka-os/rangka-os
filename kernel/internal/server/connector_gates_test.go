@@ -203,3 +203,126 @@ func TestConnectorTestCallAuditHasNoBody(t *testing.T) {
 		t.Fatalf("the test answer reached the audit: %s", a)
 	}
 }
+
+// Review fix 1: a company connector lacking any required key sends nothing, even an action that uses none of the
+// missing keys; an edit that adds a required key does not let the new content run.
+func TestCallNeedsEveryRequiredKey(t *testing.T) {
+	e, v := companyEnvWith(t, true, gatedConnector, nil)
+	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	sent := len(v.sent())
+	rel := filepath.Join("connectors", "x_test", "connector.rk")
+	edited := strings.Replace(readSite(e, rel), "    - {name: access_token, label: {id: Access token}, secret: true}\n",
+		"    - {name: access_token, label: {id: Access token}, secret: true}\n    - {name: signing_key, label: {id: Kunci tanda tangan}, secret: true}\n", 1)
+	writeSite(e, rel, edited)
+	if g := e.must(200, "GET", testPath, nil); g.JSON["state"] != "needs_auth" {
+		t.Fatalf("setup: state %s", g.Body)
+	}
+	for _, act := range []string{"list_items", "create_item"} {
+		st, errs := waitJob(t, e, gatedCall(t, e, act, map[string]any{"name": "Kopi"}))
+		if st != "discarded" || !strings.Contains(errs, "connector_needs_auth") || strings.Count(errs, `"attempt"`) != 1 {
+			t.Fatalf("%s with a key missing: %s %s", act, st, errs)
+		}
+	}
+	if res, err := e.s.Connectors.Poll(context.Background(), "kopi-senja", "x_test", "new_items"); err != nil || res.Skipped != "needs_auth" {
+		t.Fatalf("poll with a key missing: %+v %v", res, err)
+	}
+	// tested content whose second key is removed afterwards: refused too
+	e.must(204, "PUT", "/api/v1/connectors/x_test/auth/signing_key", map[string]any{"value": "kunci-0033-zzzz"})
+	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	e.must(204, "DELETE", "/api/v1/connectors/x_test/auth/signing_key", nil)
+	st, errs := waitJob(t, e, gatedCall(t, e, "list_items", nil))
+	if st != "discarded" || !strings.Contains(errs, "connector_needs_auth") {
+		t.Fatalf("tested content without a key: %s %s", st, errs)
+	}
+	if n := len(v.sent()) - sent; n != 1 { // only the second test went out
+		t.Fatalf("%d requests sent, want 1 (the test)", n)
+	}
+}
+
+const oauthCompany = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: x_test
+label: {id: Uji OAuth perusahaan}
+summary: {id: Penghubung perusahaan dengan OAuth2.}
+version: 0.1.0
+hosts: [api.example.com, auth.example.com]
+experimental:
+  source: {kind: owner_file}
+auth:
+  type: oauth2
+  token_url: https://TOKEN_HOST/token
+  fields:
+    - {name: client_id, label: {id: Client ID}}
+    - {name: client_secret, label: {id: Client secret}, secret: true}
+    - {name: refresh_token, label: {id: Refresh token}, secret: true}
+    - {name: access_token, label: {id: Access token}, secret: true, required: false}
+    - {name: expires_at, label: {id: Expires at}, required: false}
+actions:
+  - name: list_items
+    label: {id: Daftar barang}
+    request:
+      method: GET
+      url: https://api.example.com/items
+      headers: {Authorization: 'Bearer {auth.access_token}'}
+`
+
+func oauthCompanyEnv(t *testing.T, tokenHost string) (*env, *vendor) {
+	t.Helper()
+	e, v := companyEnvWith(t, false, strings.Replace(oauthCompany, "TOKEN_HOST", tokenHost, 1), nil)
+	for k, val := range map[string]string{"client_id": "cid", "client_secret": "csecret-0033-zzzz", "refresh_token": "rtok-0033-zzzz",
+		"access_token": "atok-0033-zzzz", "expires_at": "2000-01-01T00:00:00Z"} {
+		e.must(204, "PUT", "/api/v1/connectors/x_test/auth/"+k, map[string]any{"value": val})
+	}
+	return e, v
+}
+
+// Review fix 2: an untested company connector does not refresh its OAuth2 token (the refresh posts the client secret
+// to the file's token_url), and a refresh goes only to a declared host.
+func TestOAuthRefreshWaitsForTest(t *testing.T) {
+	e, v := oauthCompanyEnv(t, "auth.example.com")
+	st, errs := waitJob(t, e, gatedCall(t, e, "list_items", nil))
+	if st != "discarded" || !strings.Contains(errs, "connector_untested") || len(v.sent()) != 0 {
+		t.Fatalf("untested oauth call: %s %s, %d requests", st, errs, len(v.sent()))
+	}
+}
+
+func TestOAuthRefreshDeclaredHostOnly(t *testing.T) {
+	e, v := oauthCompanyEnv(t, "collect.evil.example")
+	r := e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	if r.JSON["ok"] != false || !strings.Contains(string(r.Body), "not in hosts") {
+		t.Fatalf("test with a foreign token_url: %s", r.Body)
+	}
+	for _, q := range v.sent() {
+		if q.URL.Hostname() == "collect.evil.example" {
+			t.Fatal("the refresh went to an undeclared host")
+		}
+	}
+	if len(v.sent()) != 0 {
+		t.Fatalf("%d requests sent", len(v.sent()))
+	}
+}
+
+// Review fix 3: a change set that edits a company connector and adds a flow using it is refused at apply, though
+// the live content is tested: the apply resets the test.
+func TestApplyRefusesEditedConnectorFlow(t *testing.T) {
+	e, _ := companyEnvWith(t, true, gatedConnector, nil)
+	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	flow := `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: x_omilo_pull
+label: {id: Ambil barang}
+on: deal.updated
+steps:
+  - {call: x_test.list_items}
+`
+	id := proposeApproved(e, "Ubah penghubung dan alur",
+		map[string]any{"op": "replace", "path": "connectors/x_test.rk", "content": gatedConnector + "# diubah\n"},
+		flowOp("flows/x_omilo_pull.rk", flow))
+	r := e.do("POST", "/api/v1/changesets/"+id+"/apply", nil)
+	if r.Status != 409 || errCode(r) != "connector_untested" {
+		t.Fatalf("apply edited connector + flow: %d %s", r.Status, r.Body)
+	}
+	// the edit alone applies
+	only := proposeApproved(e, "Ubah penghubung", map[string]any{"op": "replace", "path": "connectors/x_test.rk", "content": gatedConnector + "# diubah\n"})
+	if ap := e.must(200, "POST", "/api/v1/changesets/"+only+"/apply", nil).JSON; ap["status"] != "applied" {
+		t.Fatalf("connector edit alone: %v", ap)
+	}
+}

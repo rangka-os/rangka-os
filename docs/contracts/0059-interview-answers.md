@@ -58,7 +58,8 @@ Before the model runs, the owner's last message is classified against Raka's mes
 | `answer` | Anything else |
 
 - **Confirmation exception:** `empty` counts as `answer` (a confirmation) when Raka's previous message
-  - holds no question and is a summary or invitation (the existing `_INVITES` words, or "rangkum"/"ringkas"), and
+  - is an invitation to put it together (its question matches the existing `_INVITES` words, e.g. "Mau aku
+    susunkan sekarang?"), or holds no question and is a summary ("rangkum"/"ringkas", or `_INVITES` words), and
   - the map has at least two stages.
 - A bare "susun/cukup" stays with `unanswered_question` (that check runs first, unchanged).
 - Off-topic, hostile and contradictory answers cannot be told apart by word lists. They are left to the skill (§4).

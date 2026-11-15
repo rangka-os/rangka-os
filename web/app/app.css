@@ -966,3 +966,141 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-counter-heldbtn { padding: 0 12px; }
   .ap-counter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
 }
+
+/* ---------------------------------------------------------------- Mulai di sini, arah A1 "Jalan cerita" (mulai.js)
+ * Riset desain 24 D1-D9: system sans, sentence case, 1px line and 8px corners without shadow
+ * (shadows only on what floats: the tour card), Raka's offer in discovery, status with words, 44px taps on a phone.
+ * Roles keep one tint everywhere (field-*, mulai.js roleTone); gold (warn) is only for the chapter's reward. */
+.ap-mu { max-width: 1120px; }
+.ap-mu-eye { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.ap-mu-eye.warn { color: var(--warn); }
+.ap-mu-head { display: grid; gap: 8px; margin-bottom: 24px; }
+.ap-mu-title { margin: 0; font-size: 22px; line-height: 28px; font-weight: 600; color: var(--ink); text-wrap: balance; }
+.ap-mu-prog { display: flex; align-items: center; gap: 12px; max-width: 520px; font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.ap-mu-bar { flex: 1; display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 4px; }
+.ap-mu-bar i { height: 6px; border-radius: 3px; background: var(--line-strong); }
+.ap-mu-bar i.done { background: var(--ok-solid); }
+.ap-mu-bar i.now { background: var(--ink); }
+.ap-mu-grid { display: grid; grid-template-columns: minmax(0, 1fr) 320px; gap: 32px; align-items: start; }
+.ap-mu-side { display: grid; gap: 16px; position: sticky; top: 16px; }
+.ap-mu-p { margin: 0; color: var(--ink-2); }
+.ap-mu-faint { margin: 0; color: var(--muted); font-size: 12px; line-height: 16px; }
+
+/* the path: a line through the dots, each step beside its dot */
+.ap-mu-path { list-style: none; margin: 0; padding: 0; position: relative; }
+.ap-mu-step { position: relative; display: grid; grid-template-columns: 40px minmax(0, 1fr); gap: 16px; padding-bottom: 24px; }
+.ap-mu-step::before { content: ""; position: absolute; left: 19px; top: 40px; bottom: 0; width: 2px; background: var(--line-strong); }
+.ap-mu-step.done::before { background: var(--ok-solid); }
+.ap-mu-step:last-child::before { display: none; }
+.ap-mu-dot { width: 40px; height: 40px; border-radius: 50%; display: grid; place-items: center; background: var(--surface); border: 2px solid var(--line-strong);
+  color: var(--muted); font-weight: 600; font-variant-numeric: tabular-nums; position: relative; z-index: 1; }
+.ap-mu-dot.done { background: var(--ok-solid); border-color: var(--ok-solid); color: #fff; }
+.ap-mu-dot.now { background: var(--ink); border-color: var(--ink); color: var(--primary-ink); }
+.ap-mu-dot .rk-icon { width: 18px; height: 18px; }
+.ap-mu-row { padding-top: 8px; display: grid; gap: 4px; min-width: 0; }
+.ap-mu-line { display: flex; align-items: center; gap: 12px; justify-content: space-between; }
+.ap-mu-label { font-weight: 600; color: var(--ink); }
+.ap-mu-step.locked .ap-mu-label, .ap-mu-step.open:not(.now) .ap-mu-label { color: var(--ink-2); }
+.ap-mu-meta { margin: 0; display: flex; align-items: flex-start; gap: 8px; color: var(--muted); }
+.ap-mu-av { flex: none; display: inline-grid; place-items: center; border-radius: 50%; color: var(--ink); font-size: 10px; font-weight: 600; line-height: 1; }
+.ap-mu-meta .ap-mu-av, .ap-mu-meta .ap-mu-nobody { margin-top: 1px; }
+.ap-mu-nobody { flex: none; width: 18px; height: 18px; border-radius: 50%; border: 1px dashed var(--faint); color: var(--muted); display: inline-grid; place-items: center; }
+.ap-mu-nobody .rk-icon { width: 10px; height: 10px; }
+.ap-mu-team .ap-mu-nobody { width: 28px; height: 28px; }
+.ap-mu-team .ap-mu-nobody .rk-icon { width: 14px; height: 14px; }
+
+/* the current step: the widest card on the page, flat like every card (D4) */
+.ap-mu-card { border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); padding: 20px; display: grid; gap: 12px; }
+.ap-mu-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-mu-chip { display: inline-flex; align-items: center; gap: 6px; height: 24px; padding: 0 8px; border-radius: var(--r-pill); background: var(--soft); color: var(--ink-2); font-size: 12px; }
+.ap-mu-chip .ap-mu-faint { display: inline; }
+.ap-mu-cur-t { margin: 0; font-size: 18px; line-height: 24px; font-weight: 600; color: var(--ink); }
+.ap-mu-ans { margin: 0; font-size: 12px; line-height: 16px; color: var(--muted); }
+.ap-mu-raka { border-radius: var(--r-lg); background: var(--discovery-tint); padding: 12px; display: grid; gap: 8px; }
+.ap-mu-raka-h { display: flex; align-items: center; gap: 8px; color: var(--discovery); font-size: 12px; }
+.ap-mu-raka p { margin: 0; color: var(--ink); }
+.ap-mu-acts { display: flex; flex-wrap: wrap; gap: 8px; }
+.ap-mu-acts.col { flex-direction: column; }
+.ap-mu-opens { margin: 0; display: flex; align-items: center; gap: 6px; color: var(--warn); font-size: 12px; line-height: 16px; }
+
+/* reward and team */
+.ap-mu-gift { border: 1px solid var(--warn-line); background: var(--warn-tint); border-radius: var(--r-lg); padding: 16px; display: grid; gap: 12px; }
+.ap-mu-gift-h { display: flex; gap: 12px; align-items: center; }
+.ap-mu-gift-h h3 { margin: 2px 0 0; font-size: 14px; line-height: 20px; font-weight: 600; color: var(--ink); }
+.ap-mu-gift-i { width: 40px; height: 40px; border-radius: var(--r-lg); background: var(--surface); color: var(--warn); display: grid; place-items: center; flex: none; }
+.ap-mu-bars { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 6px; align-items: end; height: 48px; }
+.ap-mu-bars i { display: block; border-radius: 3px 3px 0 0; background: var(--warn-line); }
+.ap-mu-team { border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; display: grid; gap: 12px; background: var(--surface); }
+.ap-mu-team h3 { margin: 0; font-size: 14px; line-height: 20px; font-weight: 600; }
+.ap-mu-team ul { list-style: none; margin: 0; padding: 0; display: grid; gap: 12px; }
+.ap-mu-team li { display: flex; align-items: center; gap: 12px; }
+.ap-mu-team li .g { flex: 1; min-width: 0; }
+.ap-mu-team li b { display: block; font-weight: 500; }
+.ap-mu-team li small { display: block; color: var(--muted); font-size: 12px; line-height: 16px; }
+.ap-mu-team .ap-mu-av { font-size: 12px; }
+
+/* chapter done */
+.ap-mu-tamat { max-width: 480px; margin: 24px auto; display: grid; gap: 12px; justify-items: center; text-align: center; }
+.ap-mu-tamat-i { width: 72px; height: 72px; border-radius: var(--r-dialog); background: var(--warn-tint); color: var(--warn); display: grid; place-items: center; }
+.ap-mu-tamat-t { margin: 0; font-family: var(--font-display, var(--font-sans)); font-size: 32px; line-height: 40px; font-weight: 600; text-wrap: balance; }
+.ap-mu-open { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; width: 100%; text-align: left; }
+.ap-mu-open li { display: flex; gap: 8px; align-items: center; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 12px; }
+.ap-mu-tamat .ap-mu-acts { width: 100%; }
+
+/* Beranda: the current step, small */
+.ap-mu-banner { display: flex; align-items: center; gap: 16px; justify-content: space-between; border: 1px solid var(--line); border-radius: var(--r-lg); padding: 16px; margin-bottom: 16px; background: var(--surface); }
+.ap-mu-banner .g { display: grid; gap: 6px; min-width: 0; flex: 1; max-width: 520px; }
+.ap-mu-banner h2 { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+
+@media (max-width: 900px) {
+  .ap-mu-grid { grid-template-columns: minmax(0, 1fr); }
+  .ap-mu-side { position: static; }
+}
+@media (max-width: 600px) {
+  .ap-mu-step { grid-template-columns: 32px minmax(0, 1fr); gap: 12px; }
+  .ap-mu-step::before { left: 15px; top: 32px; }
+  .ap-mu-dot { width: 32px; height: 32px; }
+  .ap-mu-dot .rk-icon { width: 16px; height: 16px; }
+  .ap-mu-row { padding-top: 4px; }
+  .ap-mu-card { padding: 16px; }
+  .ap-mu-acts .rk-btn, .ap-mu-invite { min-height: 44px; }
+  .ap-mu-acts:not(.col) .rk-btn { flex: 1 1 auto; }
+  .ap-mu-banner { flex-direction: column; align-items: stretch; }
+}
+
+/* ---------------------------------------------------------------- tur sorotan (tur.js, riset desain 26)
+ * The page dims (scrim) except the lit element, which keeps a 2px ring; the card is a dialog (12px, shadow-overlay)
+ * and a bottom sheet at 600px and below. No motion with prefers-reduced-motion. */
+.ap-tur { position: fixed; inset: 0; z-index: 1200; pointer-events: none; }
+.ap-tur-dim { position: fixed; background: var(--scrim); pointer-events: auto; opacity: 0; transition: opacity .18s ease; }
+.ap-tur.on .ap-tur-dim { opacity: 1; }
+.ap-tur-hole { position: fixed; border-radius: var(--r-lg); box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); pointer-events: none; opacity: 0;
+  transition: opacity .18s ease, top .22s ease, left .22s ease, width .22s ease, height .22s ease; }
+.ap-tur.on .ap-tur-hole { opacity: 1; }
+.ap-tur-card { position: fixed; width: 340px; max-width: calc(100vw - 24px); pointer-events: auto; background: var(--surface); color: var(--ink);
+  border-radius: var(--r-dialog); box-shadow: var(--shadow-overlay); padding: 16px; display: grid; gap: 8px; opacity: 0; transform: translateY(4px);
+  transition: opacity .18s ease, transform .18s ease; }
+.ap-tur.on .ap-tur-card { opacity: 1; transform: none; }
+.ap-tur-card.mid { left: 50% !important; top: 50% !important; transform: translate(-50%, -50%); width: 380px; }
+.ap-tur.on .ap-tur-card.mid { transform: translate(-50%, -50%); }
+.ap-tur-card.sheet { left: 0 !important; right: 0; bottom: 0; top: auto !important; width: auto; max-width: none; border-radius: var(--r-dialog) var(--r-dialog) 0 0;
+  padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+.ap-tur-n { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
+.ap-tur-title { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
+.ap-tur-body { margin: 0; color: var(--ink-2); }
+.ap-tur-dots { display: flex; gap: 4px; margin-top: 4px; }
+.ap-tur-dots i { width: 16px; height: 4px; border-radius: 2px; background: var(--line-strong); }
+.ap-tur-dots i.done { background: var(--ok-solid); }
+.ap-tur-dots i.now { background: var(--ink); }
+.ap-tur-acts { display: flex; align-items: center; gap: 8px; margin-top: 4px; }
+.ap-tur-sp { flex: 1; }
+@media (max-width: 600px) { .ap-tur-acts .rk-btn { min-height: 44px; } }
+@media (prefers-reduced-motion: reduce) {
+  .ap-tur-dim, .ap-tur-hole, .ap-tur-card { transition: none; }
+}
+/* the owner works inside the lit element: no dim, nothing held; the phone sheet becomes a bar with the title and Lanjut */
+.ap-tur.using .ap-tur-dim { opacity: 0 !important; pointer-events: none; }
+.ap-tur.using .ap-tur-card.sheet { padding-top: 12px; grid-template-columns: minmax(0, 1fr) auto; align-items: center; }
+.ap-tur.using .ap-tur-card.sheet .ap-tur-body, .ap-tur.using .ap-tur-card.sheet .ap-tur-dots, .ap-tur.using .ap-tur-card.sheet .ap-tur-n { display: none; }
+.ap-tur.using .ap-tur-card.sheet .ap-tur-acts { margin: 0; }
+.ap-tur.using .ap-tur-card.sheet .ap-tur-acts > :not([data-tur-primary]) { display: none; }

@@ -205,7 +205,7 @@
     if (!u.on) cards = tileStrips(cards);
     var attention = !u.on && isHome ? h(AttentionPanel, { ctx: ctx, defs: defs, results: results, loading: loading || !data, approvals: approvals }) : null;
     return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" },
-      attention, cards.length ? h(R.DashGrid, null, cards) : null));
+      isHome && !u.on && RA.MulaiBanner ? h(RA.MulaiBanner, { ctx: ctx }) : null, attention, cards.length ? h(R.DashGrid, null, cards) : null));
   }
 
   /* ---------------------------------------------------------------- Perlu diurus (riset desain P2, K-A2)

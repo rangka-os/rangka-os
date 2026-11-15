@@ -20,7 +20,13 @@ const memberIssuer = "https://id.example"
 // minted by that owner (host).
 func memberEnv(t *testing.T) (e, host *env) {
 	t.Helper()
-	e = newEnv(t, false, nil)
+	return memberEnvWith(t, nil)
+}
+
+// memberEnvWith is memberEnv with the apps and site changed by mutate first.
+func memberEnvWith(t *testing.T, mutate func(apps, site string)) (e, host *env) {
+	t.Helper()
+	e = newEnv(t, false, mutate)
 	e.s.Auth.Upstreams = []auth.Upstream{{ID: "kantor", Label: "Kantor", Issuer: memberIssuer}}
 	e.login()
 	tok := e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "cloud", "scopes": []any{"members:write"}})

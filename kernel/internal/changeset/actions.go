@@ -591,12 +591,14 @@ func (s *Service) isApprover(a Actor) bool {
 	return false
 }
 
+var errHumanRequired = &Error{403, "human_required", "a person signed in to the Console or the app must approve change sets (API and MCP tokens cannot)", nil}
+
 func (s *Service) mayApprove(a Actor) error {
 	if err := s.planReadOnly(a); err != nil {
 		return err
 	}
 	if !a.Human {
-		return &Error{403, "human_required", "a person signed in to the Console or the app must approve change sets (API and MCP tokens cannot)", nil}
+		return errHumanRequired
 	}
 	ap := s.Approvers()
 	for _, r := range a.Roles {
@@ -733,6 +735,9 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	}
 	if a.Assistant { // never, not even through config.ai.auto_apply
 		return nil, &Error{403, "ai_forbidden", auth.AIForbiddenMessage, nil}
+	}
+	if a.Pin { // a cashier's PIN session applies nothing, not even through auto_apply (contract 0058 §2)
+		return nil, errHumanRequired
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()

@@ -128,6 +128,9 @@ func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *in
 	if err != nil {
 		return nil, err
 	}
+	if bq < 0 && deviceWriteOf(s.h.op.ctx) != nil { // stock follows sales: never refused, shown to head office (contract 0058)
+		s.h.op.except("negative_stock", outlet, "", map[string]any{"item": item, "outlet": outlet, "balance": bq})
+	}
 	fields := map[string]any{"qty": bq, "value": moneyOut(bv), "avg_cost": moneyOut(avg)}
 	if has(s.h.op.e.Reg().Model("stock_balance"), "last_move") {
 		fields["last_move"] = mv["name"]
@@ -455,7 +458,7 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
-	s := newStockPost(h, h.op.e.Today())
+	s := newStockPost(h, h.op.e.todayIn(h.op.ctx))
 	var keys [][2]string
 	for _, mv := range moves {
 		keys = append(keys, [2]string{str(mv["outlet"]), str(mv["item"])})

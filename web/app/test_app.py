@@ -2336,7 +2336,8 @@ def test_invoice_needs_manager_approval(page, ctx):
     page.unroute(re.compile(r".*/api/v1/approvals/[^/?]+/approve$"))
     held[0].fallback()
     inbox_row(page, name).wait_for(state="detached", timeout=10000)
-    page.wait_for_function("() => !document.querySelector('.rk-side .rk-navlink .rk-count')", timeout=10000)
+    page.wait_for_function("() => { const a = [...document.querySelectorAll('.rk-side .rk-navlink')].find(x => x.textContent.startsWith('Persetujuan'));"
+                           " return a && !a.querySelector('.rk-count'); }", timeout=10000)
     page.get_by_role("tab", name=re.compile("^Disetujui")).click()
     wait_inbox(page)
     done = main_area(page).locator(".ap-inbox-row", has_text="Disetujui oleh manajer@contoh.test").first
@@ -3487,6 +3488,10 @@ def test_content_full_width(page, ctx):
 
 
 SW_SCENARIOS = {"test_pwa_installable_and_offline", "test_pwa_reads_last_seen_offline"}
+# The welcome tour (contract 0053 §7) dims the desk on a person's first visit; every scenario is a fresh browser, so
+# the others see the tours as already seen and only these play them.
+TOUR_SCENARIOS = {"test_tour_kenalan"}
+TOURS_SEEN = {"tours": {t: {"state": "seen", "at": "2026-01-01T00:00:00Z"} for t in ("kenalan", "halaman:mulai")}}
 
 
 def read_cache_count(page):
@@ -3966,6 +3971,52 @@ def test_ai_ask_and_drawer(page, ctx):
         Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{cs['id']}/reject")
 
 
+def test_tour_kenalan(page, ctx):
+    """Tur sorotan (contract 0053 §7): the first desk visit dims the screen and lights one real place at a time with
+    "x dari y"; Lanjut moves on, Escape skips and the kernel keeps it per person, a reload does not start it again, and
+    the account menu's "Ulangi tur" plays it once more."""
+    owner = Http(ctx.base).login(*ctx.owner)
+    owner.call("PUT", "/api/v1/onboarding/tours/kenalan", {"state": ""})
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    card = page.locator(".ap-tur-card")
+    card.wait_for(timeout=10000)
+    assert card.get_attribute("role") == "dialog", "the tour card is a dialog"
+    first = card.locator(".ap-tur-n").inner_text()
+    assert re.search(r"1 dari \d+", first), first
+    card.locator("[data-tur-primary]").click()
+    page.wait_for_function("() => /2 dari/.test((document.querySelector('.ap-tur-n') || {}).textContent || '')", timeout=5000)
+    page.keyboard.press("Escape")
+    page.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+    assert kept_tour(owner) == "skipped", "Escape skips the tour and the kernel keeps it"
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=10000)
+    page.wait_for_timeout(1500)
+    assert page.locator(".ap-tur").count() == 0, "a skipped tour does not start again"
+    open_nav(page)
+    page.locator(".rk-side-switch").click()
+    page.get_by_text("Ulangi tur", exact=True).click()
+    card.wait_for(timeout=5000)
+    assert re.search(r"1 dari \d+", card.locator(".ap-tur-n").inner_text()), "Ulangi tur starts at the first place"
+    assert kept_tour(owner, gone=True) is None, "Ulangi tur forgets the kept state"
+    page.keyboard.press("Escape")
+    page.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+    assert kept_tour(owner) == "skipped", "the replay is kept too"  # and its PUT is done before the page closes
+
+
+def kept_tour(owner, tour="kenalan", gone=False):
+    """The kernel's state of one tour once the web app's PUT has landed (gone: once it was forgotten)."""
+    state = None
+    for _ in range(25):
+        _, b = owner.call("GET", "/api/v1/onboarding/tours")
+        state = (((b or {}).get("tours") or {}).get(tour) or {}).get("state")
+        if bool(state) != gone:
+            return state
+        time.sleep(0.2)
+    return state
+
+
 def test_ai_launcher(page, ctx):
     """The floating Raka button (rangka.pen OS / Raka · *): shown when meta.features.ai is on; hover widens it to
     "Tanya Raka"; a click opens the panel above it and turns the button into the close chevron; tucking it to the
@@ -4267,6 +4318,8 @@ def main():
                 bctx = br.new_context(viewport={"width": args.width, "height": height}, is_mobile=phone, has_touch=args.width < 1280,
                                       service_workers=sw)
                 page = bctx.new_page()
+                if name not in TOUR_SCENARIOS:
+                    page.route("**/api/v1/onboarding/tours", lambda r: _json(r, 200, TOURS_SEEN) if r.request.method == "GET" else r.continue_())
                 errs, responses = [], []
                 # React is vendored (web/app/vendor): a request to a script CDN would be a regression
                 page.route("https://cdnjs.cloudflare.com/**", lambda r, errs=errs: (errs.append("CDN request: " + r.request.url), r.abort()))

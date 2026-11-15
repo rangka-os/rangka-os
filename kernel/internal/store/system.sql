@@ -348,6 +348,85 @@ create table if not exists rk_sandboxes (
   created_at   timestamptz not null default now(),
   last_used_at timestamptz not null default now()
 );
+-- paired devices (contract 0058 §2, 0048 §5, 0006 §2): browsers (rk_device cookie) and rangka-edge (rke_ token) of
+-- one outlet. code is K1, K2, … per outlet in pairing order and never reused after revoke. Only the sha256 of the
+-- secret is kept.
+create table if not exists rk_devices (
+  id           text primary key,             -- dev_ + 20 hex
+  org_id       text not null,
+  outlet       text not null,
+  code         text not null,
+  name         text not null default '',
+  kind         text not null,                -- browser | edge
+  token_hash   text not null unique,
+  created_by   text not null default '',
+  created_at   timestamptz not null default now(),
+  last_seen_at timestamptz,
+  revoked_at   timestamptz
+);
+create unique index if not exists rk_devices_code on rk_devices (org_id, outlet, code);
+-- pairing codes: 8 characters, single use, 15 minutes; stored as sha256
+create table if not exists rk_device_codes (
+  code_hash  text primary key,
+  org_id     text not null,
+  outlet     text not null,
+  created_by text not null default '',
+  created_at timestamptz not null default now(),
+  expires_at timestamptz not null,
+  used_at    timestamptz
+);
+-- cashier PIN (contract 0058 §2, 0048 §5): per membership, the kernel's password hash; pin_fails counts wrong PINs in a
+-- row (5 lock it for 15 minutes on every device, 10 clear it)
+alter table rk_members add column if not exists pin_hash text;
+alter table rk_members add column if not exists pin_fails int not null default 0;
+alter table rk_members add column if not exists pin_locked_until timestamptz;
+-- a PIN session (method pin) is opened on one paired device; revoking the device ends it
+alter table rk_sessions add column if not exists device_id text;
+create index if not exists rk_sessions_device on rk_sessions (device_id) where device_id is not null;
+-- wrong PINs per device: 20 in 15 minutes stop that device's unlocks
+-- (a row is taken before the PIN is compared and dropped when it was right, so parallel tries cannot pass the limit);
+-- the 20th failure blocks the device until rk_devices.unlock_blocked_until
+create table if not exists rk_device_unlock_fails (
+  id     bigserial primary key,
+  device text not null,
+  at     timestamptz not null
+);
+alter table rk_devices add column if not exists unlock_blocked_until timestamptz;
+create index if not exists rk_device_unlock_fails_device on rk_device_unlock_fails (device, at);
+-- head-office exceptions (contract 0058 §10): what an outlet's offline work left for head office to look at;
+-- kinds edge_price_drift, negative_stock, device_number_gap, rule_overridden
+create table if not exists rk_exceptions (
+  id          bigserial primary key,
+  org_id      text not null,
+  outlet      text not null default '',
+  device      text not null default '',
+  kind        text not null,
+  ref         text not null default '',
+  detail      jsonb not null default '{}',
+  created_at  timestamptz not null default now(),
+  resolved_by text,
+  resolved_at timestamptz
+);
+create index if not exists rk_exceptions_org on rk_exceptions (org_id, resolved_at, created_at);
+-- edge events (contract 0058 §4, 0006 §3): one row per idempotency key and org, kept 400 days; status accepted or
+-- rejected (with code); ref is the name of the record the event wrote; payload_sha256 covers {kind, payload}
+create table if not exists rk_edge_events (
+  org_id         text not null,
+  key            text not null,
+  device         text not null,
+  seq            bigint not null,
+  kind           text not null,
+  payload_sha256 text not null,
+  status         text not null,
+  code           text not null default '',
+  message        text not null default '',
+  ref            text not null default '',
+  occurred_at    timestamptz,
+  received_at    timestamptz not null default now(),
+  primary key (org_id, key)
+);
+alter table rk_edge_events add column if not exists message text not null default '';
+create index if not exists rk_edge_events_received on rk_edge_events (received_at);
 -- Mulai di sini (contract 0053 §3): the org's hide flag; kernel state, not metadata and not a change set. No foreign
 -- key, like rk_poll_cursors: a dev-open org has no rk_orgs row.
 create table if not exists rk_onboarding (
@@ -355,4 +434,17 @@ create table if not exists rk_onboarding (
   hidden  boolean not null default false,
   by_user text not null default '',
   at      timestamptz not null default now()
+);
+
+-- Tur sorotan (contract 0053 §7): what each person did with each guided tour of the web app (seen or skipped), so a
+-- tour starts once per person and not once per browser. Kernel state like rk_onboarding, keyed by the member's
+-- e-mail (the actor id), not user_id: backup reads user_id as rk_members.user_id; no foreign key, a dev-open org has no
+-- rk_orgs row.
+create table if not exists rk_tours (
+  org_id  text not null,
+  email   text not null,
+  tour    text not null,
+  state   text not null,
+  at      timestamptz not null default now(),
+  primary key (org_id, email, tour)
 );

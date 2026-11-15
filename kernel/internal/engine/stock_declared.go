@@ -100,7 +100,7 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 		date = localDate(h.op.e, rec[sp.date])
 	}
 	if date == "" {
-		date = h.op.e.Today()
+		date = h.op.e.todayIn(h.op.ctx)
 	}
 	s := newStockPost(h, date)
 	sc := h.op.scope(h.Model, rec)
@@ -178,7 +178,8 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 		if err != nil {
 			return 0, err
 		}
-		if sp.refuseNegative && mv["negative"] == true {
+		// a device write is never refused for stock: move records negative_stock instead (contract 0058)
+		if sp.refuseNegative && mv["negative"] == true && deviceWriteOf(h.op.ctx) == nil {
 			return 0, refuse("negative_stock", fmt.Sprintf("Stok %s di %s tidak cukup: sisa %s", item, outlet, formatQty(qtyOf(mv["balance_qty"]))))
 		}
 		return -moneyIn(mv["value"]), nil

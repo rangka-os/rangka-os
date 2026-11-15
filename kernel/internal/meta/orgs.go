@@ -136,6 +136,17 @@ func (r *Registry) RoleScope(role string) *RoleScope {
 	return &RoleScope{Fields: scopeFields(sc["field"]), From: str(sc, "from")}
 }
 
+// RoleDesk returns a role's desk key (role.json) and whether the role sets it. Only a role with desk set to false is
+// a staff role that may use a cashier PIN (contract 0058 §2, 0048 §5); an absent key counts as desk.
+func (r *Registry) RoleDesk(role string) (desk, set bool) {
+	d := r.Roles[role]
+	if d == nil {
+		return false, false
+	}
+	desk, set = asMap(d.Data)["desk"].(bool)
+	return desk, set
+}
+
 // scopeFields turns scope.field (a name or a list of names) into a list; non-string items are dropped.
 func scopeFields(x any) []string {
 	if s, ok := x.(string); ok {

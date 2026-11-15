@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+# A config.numbering override of a naming_on: device model: devices and head office both follow it (contract 0058 §3).
+locale: id-ID
+currency: IDR
+timezone: Asia/Jakarta
+apps: [toko]
+plan: dasar
+numbering:
+  penjualan: 'NOTA-{outlet.code}-{device.code}-{YY}{MM}-{####}'

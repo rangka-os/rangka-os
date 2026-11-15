@@ -1,0 +1,4 @@
+<div>{{.Doc.name}}</div>
+{{range $row := .Doc.items}}<div>{{$row.menu}} x{{$row.qty}} {{$row.amount}}</div>{{end}}
+<div>Total {{.Doc.grand_total}}</div>
+<div>Kembali {{.Doc.change_amount}}</div>

@@ -32,7 +32,13 @@ type Actor struct {
 	// System marks kernel-internal actors (seed, flows and automations the kernel starts): they bypass
 	// permission checks. Queue jobs replaying a person's action keep that person's roles and System=false.
 	System bool
+	// Device is the paired device the request came from (contract 0058 §2); nil otherwise. CEL reads it as device.
+	Device *DeviceRef
 }
+
+// DeviceRef is a paired device as the engine sees it: the CEL device object {id, code, outlet} (contract 0030 §4,
+// 0058 §2).
+type DeviceRef struct{ ID, Code, Outlet string }
 
 // Enqueuer puts background jobs on the queue (implemented by package jobs).
 type Enqueuer interface {
@@ -207,6 +213,19 @@ type op struct {
 	// counters are the v0 counters this attempt took a name from (nextName): if a write then finds that name
 	// taken, run moves them past the existing names and starts again (staleCounter)
 	counters []counterRef
+	// deviceCreate and deviceSubmit mark the device write's own document (contract 0058 §3): the record the unit's
+	// Engine.Create makes, or <model>/<draft> that its Engine.Submit submits; only it takes the device's name
+	deviceCreate bool
+	deviceSubmit string
+	// pins are the device's computed money for the next prepare of the device write's own document (contract 0058
+	// §10); drift marks that prepare to record edge_price_drift, driftDone that the unit already did
+	pins             map[string]any
+	drift, driftDone bool
+	// override is set while check runs over the device write's own paid document: its rule failures become
+	// rule_overridden exceptions (overrideRules)
+	override bool
+	// exceptions are the head-office exceptions of a device write, written when the unit commits
+	exceptions []pendingException
 }
 
 // counterRef is one v0 counter (rk_naming) and the model whose names it numbers.
@@ -349,6 +368,20 @@ func (e *Engine) runOnce(ctx context.Context, a Actor, fn func(o *op) error) (re
 			return false, err
 		}
 	}
+	if dw := deviceWriteOf(ctx); dw != nil { // contract 0058 §4, §10: the exceptions and the edge event with the write
+		target := o.primary
+		if target == "" {
+			target = o.first
+		}
+		if err := o.flushExceptions(target); err != nil {
+			return false, err
+		}
+		if dw.Commit != nil {
+			if err := dw.Commit(ctx, tx, target); err != nil {
+				return false, err
+			}
+		}
+	}
 	if err := tx.Commit(ctx); err != nil {
 		if tx.Conflicted() {
 			return true, fmt.Errorf("%w: %v", errConflict, err)
@@ -388,6 +421,14 @@ func (o *op) event(m *meta.Model, rec store.Record, opName string) error {
 	var data any
 	if t, ok := occurredFrom(o.ctx); ok { // contract 0030 §7: when the user pressed the button (a queued write)
 		data = map[string]any{"occurred_at": t.UTC().Format(time.RFC3339)}
+	}
+	if d := o.actor.Device; d != nil && deviceWriteOf(o.ctx) != nil { // contract 0058 §10: audited "via device K1"
+		m, _ := data.(map[string]any)
+		if m == nil {
+			m = map[string]any{}
+		}
+		m["via"], m["device"] = "device", d.Code
+		data = m
 	}
 	return store.Audit(o.ctx, o.tx, o.actor.Org, o.actor.ID, "record."+opName, m.Name+"/"+fmt.Sprint(rec["name"]), summary, data)
 }

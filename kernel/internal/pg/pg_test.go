@@ -3,10 +3,16 @@ package pg
 import (
 	"bytes"
 	"context"
+	"errors"
+	"fmt"
+	"io"
+	"net"
 	"os"
 	"reflect"
 	"testing"
 	"time"
+
+	"github.com/jackc/pgx/v5/pgconn"
 )
 
 func testURL(t *testing.T) string {
@@ -290,5 +296,31 @@ func TestSchemaChange(t *testing.T) {
 	res, err := p.Query(ctx, "select * from sc where a = $1", 1)
 	if err != nil || len(res.Columns) != 2 {
 		t.Fatalf("after alter: %v, %v", res, err)
+	}
+}
+
+func TestTransient(t *testing.T) {
+	for _, c := range []struct {
+		err  error
+		want bool
+	}{
+		{nil, false},
+		{context.DeadlineExceeded, true},
+		{fmt.Errorf("wrapped: %w", context.Canceled), true},
+		{&Error{Code: "40001"}, true},
+		{&Error{Code: "40P01"}, true},
+		{&Error{Code: "08006"}, true},
+		{&Error{Code: "57P01"}, true},
+		{&Error{Code: "53300"}, true},
+		{&pgconn.PgError{Code: "40001"}, true},
+		{io.ErrUnexpectedEOF, true},
+		{&net.OpError{Op: "read", Err: errors.New("connection reset")}, true},
+		{&Error{Code: "23505"}, false},
+		{&Error{Code: "42P01"}, false},
+		{errors.New("engine bug"), false},
+	} {
+		if got := Transient(c.err); got != c.want {
+			t.Errorf("Transient(%v) = %v, want %v", c.err, got, c.want)
+		}
 	}
 }

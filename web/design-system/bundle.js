@@ -906,7 +906,7 @@
     function link(it) {
       if (it.items && it.items.length) return parent(it);
       var id = it.id || it.label;
-      return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined,
+      return h("a", { key: id, href: it.href || "#", className: "rk-navlink", title: col ? it.label : undefined, "data-nav": id,
         "aria-current": id === p.current || it.label === p.current ? "page" : undefined,
         onClick: function (e) { e.preventDefault(); if (p.onNavigate) p.onNavigate(id, it); } },
         col && !ICONS[it.icon] ? h("span", { className: "rk-navinit", "aria-hidden": "true" }, String(it.label || "?").charAt(0)) : h(Icon, { name: ICONS[it.icon] ? it.icon : "list" }),

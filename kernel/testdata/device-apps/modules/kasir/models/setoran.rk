@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# The cash a closed shift hands in, made by flow tutup_sesi_on_submit: a naming_on: device record that is not the
+# device write's own document, so the kernel numbers it (contract 0058 §3).
+name: setoran
+label: {id: Setoran}
+naming: SETOR-{outlet.code}-{device.code}-{YY}{MM}-{###}
+naming_on: device
+fields:
+  - {name: outlet, type: link, to: outlet, label: {id: Outlet}, required: true, in_list: true}
+  - {name: shift, type: link, to: sesi_kasir, label: {id: Sesi}, required: true}
+  - {name: amount, type: currency, label: {id: Jumlah}, in_list: true}
+rules:
+  - {name: setoran_limit, on: save, check: "amount <= 10000000", message: {id: Setoran di atas Rp 10.000.000 perlu dicek}}
+permissions:
+  - {role: kasir, read: true, create: true}

@@ -18,7 +18,7 @@ import (
 )
 
 func (s *Server) getMeta(w http.ResponseWriter, r *http.Request, c *caller) {
-	m, err := s.Meta(r.Context(), c.actor)
+	m, err := s.metaFor(r.Context(), s.Engine, c.actor, c.p.Human())
 	if err != nil {
 		fail(w, err)
 		return
@@ -29,12 +29,14 @@ func (s *Server) getMeta(w http.ResponseWriter, r *http.Request, c *caller) {
 // Meta is GET /api/v1/meta: installed apps and modules, models, dashboards, theme (with design tokens) and
 // layout. apps lists apps and 0.4 units, modules lists modules and 0.4 units (a 0.4 unit is both), every
 // model names its module (contract 0001).
+// MCP calls it with the caller's actor: a PIN session never reaches MCP, so a.Human is a full sign-in there.
 func (s *Server) Meta(ctx context.Context, a engine.Actor) (map[string]any, error) {
-	return s.metaFor(ctx, s.Engine, a)
+	return s.metaFor(ctx, s.Engine, a, a.Human)
 }
 
-// metaFor builds the /meta body from engine e's registry (the live engine, or a preview engine).
-func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) (map[string]any, error) {
+// metaFor builds the /meta body from engine e's registry (the live engine, or a preview engine). human is
+// Principal.Human (a full sign-in), which gates meta.changesets.
+func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor, human bool) (map[string]any, error) {
 	reg := e.Reg()
 	apps, modules := []any{}, []any{}
 	for _, name := range reg.AppOrder() {
@@ -54,7 +56,8 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 				}
 			}
 			apps = append(apps, map[string]any{"name": ap.Name, "kind": ap.Kind, "version": ap.Version, "title": ap.Title, "menu": orEmpty(ap.Raw["menu"]),
-				"dashboards": dash, "requires": ap.Requires, "optional": ap.Optional, "modules": mods})
+				// the roles the app works with (its app.rk roles:), for who usually does a step in Mulai di sini (0053 §7)
+				"roles": orEmpty(ap.Raw["roles"]), "dashboards": dash, "requires": ap.Requires, "optional": ap.Optional, "modules": mods})
 		}
 		if ap.IsModule() || ap.Kind == meta.KindSite {
 			req := ap.Requires
@@ -165,7 +168,7 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor) 
 		"installed": reg.AppOrder(), "org": a.Org,
 		"config": siteConfig(reg), "capabilities": capabilityList(reg),
 		"user":       map[string]any{"email": a.ID, "name": a.UserName, "roles": a.Roles},
-		"changesets": s.changesetsMeta(a),
+		"changesets": s.changesetsMeta(a, human),
 		"today":      e.Today(),
 		"features":   s.aiFeatures(ctx, reg.SiteConfig("ai.enabled") != false),
 	}

@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# naming_on: device, but the naming has no {device.code}
+name: struk_tanpa_kode
+label: {id: Struk tanpa kode}
+naming: STRK-{outlet.code}-{YY}{MM}-{#####}
+naming_on: device
+fields:
+  - {name: outlet, type: link, to: outlet, label: {id: Outlet}}

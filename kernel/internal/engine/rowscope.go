@@ -63,6 +63,30 @@ func (e *Engine) rowScopeIn(reg *meta.Registry, a Actor) *RowScope {
 	return s
 }
 
+// OutletScope is the row scope of one outlet (a paired device's, contract 0058 §7): the scope fields of every role
+// that has a row scope, plus outlet, holding that outlet. A record of a model with one of those fields is visible
+// when one holds the outlet; the outlet model itself shows only that outlet; other models are not limited.
+func (e *Engine) OutletScope(outlet string) *RowScope {
+	reg := e.Reg()
+	s := &RowScope{Fields: []string{"outlet"}, Values: map[string]bool{outlet: true}}
+	names := make([]string, 0, len(reg.Roles))
+	for r := range reg.Roles {
+		names = append(names, r)
+	}
+	sort.Strings(names)
+	for _, r := range names {
+		if rs := reg.RoleScope(r); rs != nil {
+			for _, f := range rs.Fields {
+				if !contains(s.Fields, f) {
+					s.Fields = append(s.Fields, f)
+				}
+			}
+		}
+	}
+	s.targets = scopeTargets(reg, s)
+	return s
+}
+
 // scopeTargets finds the models the scope fields link to on any installed model (outlet for outlet,
 // from_outlet, to_outlet). A scope field that is a link nowhere has no target.
 func scopeTargets(reg *meta.Registry, s *RowScope) map[string]bool {

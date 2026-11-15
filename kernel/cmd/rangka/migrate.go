@@ -124,6 +124,8 @@ func cmdSeed(args []string) int {
 	password := fs.String("password", envOr("RANGKA_OWNER_PASSWORD", "rangka-demo"), "seed user password (default $RANGKA_OWNER_PASSWORD)")
 	record := fs.String("user-record", "USR-001", "core user record of the seed user")
 	fs.Parse(args)
+	recordGiven := false
+	fs.Visit(func(f *flag.Flag) { recordGiven = recordGiven || f.Name == "user-record" })
 	ctx := context.Background()
 	reg, err := c.registry()
 	if err != nil {
@@ -139,7 +141,8 @@ func cmdSeed(args []string) int {
 	if dir == "" {
 		dir = engine.FixturesDir(c.apps)
 	}
-	st, err := server.Seed(ctx, db, reg, server.SeedOptions{Org: orgID, FixturesDir: dir, Email: *email, Password: *password, UserRecord: *record})
+	st, err := server.Seed(ctx, db, reg, server.SeedOptions{Org: orgID, FixturesDir: dir, Email: *email, Password: *password, UserRecord: *record,
+		RecordOptional: !recordGiven})
 	if err != nil {
 		return fail(err)
 	}

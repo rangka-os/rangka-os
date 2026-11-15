@@ -96,6 +96,12 @@ func TestBrokenModulesAppsMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-modules-apps.expected.txt", Options{AppsDir: "testdata/broken-modules-apps/apps", SiteDir: "testdata/broken-modules-apps/site"})
 }
 
+// naming_on: device (contract 0058 §3): needs a string naming with {device.code}; {device.code} without it is an
+// unknown field token; naming_on takes device only.
+func TestBrokenNamingOnMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-naming-on.expected.txt", Options{AppsDir: "testdata/broken-naming-on/apps", SiteDir: "testdata/broken-naming-on/site"})
+}
+
 // Sub-menus in app menus and nav.side, and responsive in layouts (contracts 0037, 0038): broken links, a sub-menu
 // nested too deep, an unknown tablet mode and phone tabs without tabs.
 func TestBrokenNavMatchPython(t *testing.T) {

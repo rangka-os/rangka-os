@@ -382,6 +382,13 @@ func (s *Server) writeMember(ctx context.Context, tx *pg.Tx, org string, in memb
 		if _, err := tx.Query(ctx, "update rk_users set email = $1 where id = $2", email, target); err != nil {
 			return 0, false, err
 		}
+		// tour states follow the person to the new email (contract 0053 §7)
+		if _, err := tx.Exec(ctx, "delete from rk_tours where email = $1", email); err != nil {
+			return 0, false, err
+		}
+		if _, err := tx.Exec(ctx, "update rk_tours set email = $1 where email = $2", email, targetEmail); err != nil {
+			return 0, false, err
+		}
 	}
 	outlets := []string{}
 	switch {
@@ -418,6 +425,12 @@ func (s *Server) writeMember(ctx context.Context, tx *pg.Tx, org string, in memb
 	revoked := (m.member && (m.role != in.Role || !sameSet(m.outlets, outlets))) || (!m.member && target != 0)
 	if revoked {
 		if err := s.Auth.RevokeMember(ctx, tx, userID, org); err != nil {
+			return 0, false, err
+		}
+	}
+	// a new role or new outlets clear the cashier PIN (contract 0058 §2), from the Member API and Tim alike
+	if m.member && (m.role != in.Role || !sameSet(m.outlets, outlets)) {
+		if err := auth.ClearPIN(ctx, tx, org, userID); err != nil {
 			return 0, false, err
 		}
 	}
@@ -558,7 +571,8 @@ func (s *Server) deleteMember(w http.ResponseWriter, r *http.Request, c *caller)
 }
 
 // removeMember ends userID's membership in org inside the caller's transaction (contract 0043 §2, §4): an owner is
-// refused (owner_protected), the person's sessions and tokens there are revoked, unused sign-in links there end, and
+// refused (owner_protected), the cashier PIN is cleared (auth.RemoveMember, contract 0058 §2), the person's sessions
+// and tokens there are revoked, unused sign-in links there end, and
 // the removal is audited with data plus the old role and outlets. removed is false when there was no membership.
 func (s *Server) removeMember(ctx context.Context, tx *pg.Tx, org string, userID int64, actor, note string, data map[string]any) (removed bool, err error) {
 	m, err := loadMembership(ctx, tx, org, userID)

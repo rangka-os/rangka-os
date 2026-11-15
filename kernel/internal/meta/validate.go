@@ -128,6 +128,11 @@ func (v *validator) shape() {
 			if naming, ok := m.Raw["naming"].(string); ok {
 				v.namingFields(v.rep.add, m.Doc.Path, "naming", m, naming)
 			}
+			if m.Raw["naming_on"] == "device" {
+				if naming, _ := m.Raw["naming"].(string); !strings.Contains(naming, "{device.code}") {
+					v.rep.add("error", m.Doc.Path, "naming_on", "naming_on_device", namingOnDeviceMsg)
+				}
+			}
 		}
 		for _, dn := range v.appDashboards(a) {
 			d := v.reg.BaseDashboards[dn]
@@ -380,6 +385,9 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 			v.rep.add("error", p, fmt.Sprintf("fields/%d", i), "duplicate_field", fmt.Sprintf(`"%s" is declared twice`, n))
 		}
 		seen[n] = true
+		if ReservedFields[n] {
+			v.rep.add("error", p, fmt.Sprintf("fields/%d/name", i), "reserved_field", fmt.Sprintf(`"%s" is a system column of the kernel; pick another name`, n))
+		}
 		if _, twin := f["money_of"]; twin {
 			continue // a generated IDR twin (contract 0013): nothing written to check
 		}

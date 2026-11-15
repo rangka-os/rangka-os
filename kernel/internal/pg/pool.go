@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"io"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
@@ -383,3 +384,30 @@ func (l *Listener) Broken() bool { return l.c.IsClosed() }
 
 // Close closes the listener connection.
 func (l *Listener) Close() error { return l.c.Close(context.Background()) }
+
+// Transient reports a failure worth trying again unchanged: the request ended or timed out, the transaction lost a
+// race (40001, 40P01), the connection broke (class 08, a network error, an unexpected EOF), or the server is short of
+// resources or shutting down (class 53, 57P). Anything else is a fault of the request or the code.
+func Transient(err error) bool {
+	if err == nil {
+		return false
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return true
+	}
+	code := ""
+	var e *Error
+	var pe *pgconn.PgError
+	switch {
+	case errors.As(err, &e):
+		code = e.Code
+	case errors.As(err, &pe):
+		code = pe.Code
+	}
+	if code != "" {
+		c := code
+		return c == "40001" || c == "40P01" || strings.HasPrefix(c, "08") || strings.HasPrefix(c, "53") || strings.HasPrefix(c, "57P")
+	}
+	var ne net.Error
+	return pgconn.SafeToRetry(err) || pgconn.Timeout(err) || errors.As(err, &ne)
+}

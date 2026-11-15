@@ -267,6 +267,11 @@ func runUser(args []string) error {
 	if err != nil {
 		return err
 	}
+	if oldRole != "" && oldRole != ua.Role { // a new role clears the cashier PIN (contract 0058 §2)
+		if err := auth.ClearPIN(ctx, pool, ua.Org, id); err != nil {
+			return err
+		}
+	}
 	if exists {
 		if ua.ResetPassword {
 			hash, err := auth.HashPassword(ua.Password)

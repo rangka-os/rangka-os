@@ -22,19 +22,17 @@ import (
 var ErrCatalogueForbidden = errors.New("Katalog hanya untuk yang boleh mengusulkan perubahan")
 
 // mayReadCatalogue is the read rule of §3: /meta.changesets.propose, or a delegated assistant token (auth Via ai)
-// whose person may propose. Plain API tokens and OIDC clients are not people and get 403.
-func (s *Server) mayReadCatalogue(a engine.Actor, assistant bool) bool {
+// whose person may propose. Plain API tokens, OIDC clients and PIN sessions get 403. human is a full sign-in, or
+// the person a delegated assistant acts for.
+func (s *Server) mayReadCatalogue(a engine.Actor, human bool) bool {
 	if a.Org == "" {
 		return false
 	}
-	if assistant {
-		a.Human = true // the person the assistant acts for
-	}
-	return s.changesetsMeta(a)["propose"] == true
+	return s.changesetsMeta(a, human)["propose"] == true
 }
 
 func (s *Server) getCatalogue(w http.ResponseWriter, r *http.Request, c *caller) {
-	if !s.mayReadCatalogue(c.actor, c.p.Via == "ai") {
+	if !s.mayReadCatalogue(c.actor, c.p.Human() || c.p.Via == "ai") {
 		writeError(w, 403, "forbidden", ErrCatalogueForbidden.Error())
 		return
 	}

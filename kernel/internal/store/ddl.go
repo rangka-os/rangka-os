@@ -105,7 +105,7 @@ func IsColumn(f *meta.Field) bool {
 }
 
 // reserved are base columns a model field may not redefine.
-var reserved = map[string]bool{"org_id": true, "name": true, "created_by": true, "created_at": true, "modified_at": true, "x": true,
+var reserved = map[string]bool{"org_id": true, "name": true, "created_by": true, "created_device": true, "created_at": true, "modified_at": true, "x": true,
 	"docstatus": true, "amended_from": true, "parent": true, "parent_field": true, "idx": true}
 
 // Tables compiles installed models into tables.
@@ -131,6 +131,9 @@ func ModelTable(m *meta.Model) Table {
 		col("idx", "integer", true, "0")
 	} else {
 		col("created_by", "text", false, "")
+		if m.NamingOn == "device" { // the paired device the record was made on (contract 0058 §6)
+			col("created_device", "text", false, "")
+		}
 		if m.IsSubmittable {
 			col("docstatus", "smallint", true, "0")
 			col("amended_from", "text", false, "")

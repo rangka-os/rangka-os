@@ -295,7 +295,8 @@ func (s *Service) sessionPrincipal(r *http.Request) (*Principal, error) {
 	if err != nil || c.Value == "" {
 		return nil, nil
 	}
-	res, err := s.DB.Query(r.Context(), "select user_id, org_id from rk_sessions where id = $1 and expires_at > $2", HashToken(c.Value), s.now())
+	// a PIN session (contract 0058 §2) never authorizes an OAuth client: the person signs in fully
+	res, err := s.DB.Query(r.Context(), "select user_id, org_id from rk_sessions where id = $1 and expires_at > $2 and method <> 'pin'", HashToken(c.Value), s.now())
 	if err != nil || len(res.Rows) == 0 {
 		return nil, err
 	}

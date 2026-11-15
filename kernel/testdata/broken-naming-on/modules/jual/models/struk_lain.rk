@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# naming_on takes device only
+name: struk_lain
+label: {id: Struk lain}
+naming: STRK-{#####}
+naming_on: server
+fields:
+  - {name: note, type: data, label: {id: Catatan}}

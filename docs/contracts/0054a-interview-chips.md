@@ -63,8 +63,9 @@ covers the question in Raka's reply.
   question (not a profile question) with suggestions; its own question from before the card comes back when it was
   not answered. When the project already holds an offer, Raka says once that the owner decides from the offer card.
 - **Studio.** After a successful `PUT .../business-profile` in the interview, the studio posts the chat action
-  `profile_saved`. Cloud accepts it only in the interview, with rangka-ai, and after the profile card was shown
-  (else 400 `bad_request`). It stores the owner's line "Profil usaha sudah aku simpan." with source
+  `profile_saved`. Cloud accepts it only in the interview, with rangka-ai, after the profile card was shown, and
+  after a real save: the profile changed after the last `profile_saved` line, and the owner's newest line is not
+  already one (else 400 `bad_request`; the studio does not post it then). It stores the owner's line "Profil usaha sudah aku simpan." with source
   `profile_saved` and runs one consult turn with `profile_saved: true`. The studio draws that line as a receipt
   ("✓ Profil usaha disimpan"), not as a bubble. The turn counts against the interview budget like any other.
 - The held build click of rangka-cloud#105 is still released after a complete save; the code-written message it
@@ -83,9 +84,14 @@ Zein, 15 Nov 2026: "Skala usaha" and "Jumlah outlet" ask the same thing twice. 0
   | `starting`, `one_location` | 1, never asked |
   | `branches_2_5` | stepper 2 to 5, starts at 2 |
   | `branches_over_5` | stepper 6 to 999, starts at 6 |
-  | `multi_business`, `other` | stepper 1 to 999 (assumption: the total over all businesses) |
+  | `multi_business`, `other` | stepper 1 to 999, starts empty: the owner gives the number (assumption: the total over all businesses) |
 
-  A number outside the new scale's range moves to the range's low end when the scale changes.
+  When the owner changes the scale, a number outside the new range moves to the range's low end (2 or 6), shown as a
+  guess; moving away from one place drops the automatic 1. The range applies when the field loses focus, not on every
+  keystroke ("25" stays 25).
+- A stored number that does not fit the stored scale (older data, a Raka guess) is never changed silently. For one
+  place with more than 1 outlet, the scale row shows as a guess for the owner to confirm or change. For a range, the
+  number stays visible with a note ("isi 2 sampai 5, atau ganti skalanya") and "Simpan profil" waits.
 - The stored profile (§2), the `/v1/interview` fields (§3) and the plan rules (§5) are unchanged: `outlets` stays a
   field, because the package limits in `config/tiers.yaml` read it, and `scale` carries what a number cannot ("Baru
   mulai", "Beberapa usaha"). "Simpan profil" still sends all eight fields. "Complete" stays "all eight confirmed";

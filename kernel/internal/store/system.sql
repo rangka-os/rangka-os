@@ -448,3 +448,19 @@ create table if not exists rk_tours (
   at      timestamptz not null default now(),
   primary key (org_id, email, tour)
 );
+
+-- Company connectors (contract 0033 §3): the test state of each x_ connector per org, tied to the content hash of the
+-- connector file that was tested. Kernel state, not metadata. No foreign key, like rk_onboarding: a dev-open org has
+-- no rk_orgs row. last_result is the scrubbed, cut answer of the last test (or {"error", "message"}), never a secret.
+create table if not exists rk_connector_checks (
+  org_id              text not null,
+  connector           text not null,
+  hash                text not null,
+  state               text not null,        -- untested | tested (needs_auth is derived by the caller, never stored)
+  tested_at           timestamptz,
+  tested_by           text not null default '',
+  last_result         jsonb,
+  writes_confirmed_at timestamptz,
+  writes_confirmed_by text not null default '',
+  primary key (org_id, connector)
+);

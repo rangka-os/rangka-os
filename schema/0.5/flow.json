@@ -20,7 +20,7 @@
       "$ref": "model.json#/$defs/label"
     },
     "description": {
-      "$ref": "model.json#/$defs/label",
+      "$ref": "model.json#/$defs/description",
       "description": "Owner sentence of what this flow does, conditions included (contract 0060 §1). Changes no behaviour."
     },
     "on": {

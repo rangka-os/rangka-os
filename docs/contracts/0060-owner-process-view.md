@@ -26,9 +26,10 @@ rangka-ai (the Raka skill writes `description` when it writes site flows) · Bui
 
 ### 1. `description` on flows, automations and actions
 
-- A flow (top level), a model automation and a model action may carry `description: {id, en}`. It holds one or two
-  owner sentences about what the item does, including its conditions.
-- It is optional and changes no behaviour. Schema 0.5 accepts it as a label; nothing else checks it.
+- A flow (top level), a model automation and a model action may carry `description: {id, en}` (each up to 280
+  characters). It holds one or two owner sentences about what the item does, including its conditions.
+- It is optional and changes no behaviour. Schema 0.5 checks its shape (`$defs/description`: a label with room for
+  two sentences); nothing else checks it.
 - `GET /processes/{name}` returns it as `description` on:
   - the trigger node of a flow or automation;
   - an action node.

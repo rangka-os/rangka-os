@@ -129,7 +129,14 @@
     var mm = model(m);
     mm.fields.forEach(function (f) { if (f.type === "table") (rec[f.name] || []).forEach(function (row) { compute(f.of, row); }); });
     var prev = CURRENT; CURRENT = { m: m, rec: rec };
-    mm.fields.forEach(function (f) { if (f.compute) { try { var v = evaluate(f.compute, scopeFor(m, rec)); rec[f.name] = v == null ? 0 : v; } catch (e) { rec[f.name] = 0; } } });
+    // a date that cannot be computed yet (start_date + duration(days) before the start is filled) stays empty, not 0
+    mm.fields.forEach(function (f) {
+      if (!f.compute) return;
+      var dated = f.type === "date", v;
+      try { v = evaluate(f.compute, scopeFor(m, rec)); } catch (e) { v = null; }
+      if (dated && !isDate(v)) v = null;
+      rec[f.name] = v == null ? (dated ? null : 0) : v;
+    });
     CURRENT = prev;
     return rec;
   }

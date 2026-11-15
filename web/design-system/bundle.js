@@ -1918,32 +1918,18 @@
     var all = Array.isArray(offer.options) ? offer.options : [];
     var opts = all.filter(function (o) { return o.id === offer.recommended; }).concat(all.filter(function (o) { return o.id !== offer.recommended; }));
     var single = opts.length === 1;
-    var root = useRef(null), row = useRef(null), back = useRef(null);
+    var root = useRef(null), back = useRef(null);
     var ws = useState(function () { return typeof window !== "undefined" && offerSideBySide(opts.length, window.innerWidth); }), wide = ws[0], setWide = ws[1];
-    var is = useState(0), idx = is[0], setIdx = is[1];
     var vs = useState(null), viewing = vs[0], setViewing = vs[1];
     useEffect(function () {
       var el = root.current;
       if (!el || typeof ResizeObserver === "undefined") return;
-      /* a width change can move the row without a scroll event (grid and back): read the visible card again */
-      var ro = new ResizeObserver(function () { setWide(offerSideBySide(opts.length, el.getBoundingClientRect().width)); onScroll(); });
+      /* side by side or stacked follows the card's width (the CSS container query does the layout; this picks the
+         diagram direction of a single option) */
+      var ro = new ResizeObserver(function () { setWide(offerSideBySide(opts.length, el.getBoundingClientRect().width)); });
       ro.observe(el);
       return function () { ro.disconnect(); };
     }, [opts.length]);
-    function cards() { return row.current ? Array.prototype.slice.call(row.current.children) : []; }
-    function onScroll() {
-      var r = row.current, cs = cards();
-      if (!r || !cs.length) return;
-      var best = 0;
-      cs.forEach(function (c, i) { if (Math.abs(c.offsetLeft - r.scrollLeft) < Math.abs(cs[best].offsetLeft - r.scrollLeft)) best = i; });
-      setIdx(best);
-    }
-    function go(d) {
-      var r = row.current, cs = cards(), i = Math.max(0, Math.min(cs.length - 1, idx + d));
-      if (!r || !cs[i]) return;
-      if (r.scrollTo) r.scrollTo({ left: cs[i].offsetLeft, behavior: "smooth" }); else r.scrollLeft = cs[i].offsetLeft;
-      setIdx(i);
-    }
     function open(id, e) { back.current = e && e.currentTarget ? e.currentTarget : null; setViewing(id); }
     function close() {
       setViewing(null);
@@ -1976,12 +1962,8 @@
       h("div", { className: "rk-offer-head" },
         h(Icon, { name: "spark" }), h("span", { className: "rk-offer-name" }, "Tawaran Raka"), h("span", { className: "rk-offer-sub" }, "belum dibangun"),
         h("span", { className: "rk-offer-end" },
-          closed ? h(Lozenge, null, p.closedLabel) : null,
-          !closed && !single && !wide ? h("span", { className: "rk-offer-count", "aria-live": "polite" }, (idx + 1) + " / " + opts.length) : null,
-          !closed && !single && !wide ? h("span", { className: "rk-offer-nav" },
-            h(IconButton, { icon: "left", label: "Pilihan sebelumnya", disabled: idx <= 0, onClick: function () { go(-1); } }),
-            h(IconButton, { icon: "right", label: "Pilihan berikutnya", disabled: idx >= opts.length - 1, onClick: function () { go(1); } })) : null)),
-      h("div", { ref: row, className: "rk-offer-row", role: "group", "aria-label": "Pilihan tawaran", onScroll: onScroll }, sections),
+          closed ? h(Lozenge, null, p.closedLabel) : null)),
+      h("div", { className: "rk-offer-row", role: "group", "aria-label": "Pilihan tawaran" }, sections),
       !closed && p.footer ? h("div", { className: "rk-offer-foot" }, p.footer) : null,
       vo ? h(DiagramViewer, { open: true, source: flowToMermaid(vo.flow, "LR"), title: vo.title, onClose: close,
         actions: closed ? null : (p.renderActions ? p.renderActions(vo, vo.id === offer.recommended) : null) }) : null);

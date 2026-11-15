@@ -240,7 +240,7 @@ export interface OfferOption { id: string; path: "custom" | "modules" | "bundle"
   not_covered?: Array<{ stage: string; text: string }>; later?: Array<{ piece: string; text: string; reason?: { code: string; message: string } }> }
 export interface Offer { id: string; recommended: string; options: OfferOption[] }
 /** Chat / OfferCompare (0049 §4): root `[data-card=offer][data-offer=<id>]`, one `section[data-option=<id>]` per option, recommended first
- * with "Disarankan". Equal columns once each gets 260 px (2 from 532 px of card width, 3 from 804 px; `offerSideBySide`), a scroll-snap carousel with "1 / 3" below. "Perbesar" opens a DiagramViewer
+ * with "Disarankan". Equal columns once each gets 260 px (2 from 532 px of card width, 3 from 804 px; `offerSideBySide`), stacked full width below (no carousel). "Perbesar" opens a DiagramViewer
  * (LR source) whose head carries `renderActions(option, isRecommended)`. `closedLabel` ("Sudah dijawab", "Peta sudah berubah") mutes the
  * card and drops every action, also in the viewer. `footer` (Ubah sesuatu, Tidak dulu) sits under the row and is not rendered
  * when `closedLabel` is set (it holds actions too). */

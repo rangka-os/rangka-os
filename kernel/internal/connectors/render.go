@@ -321,6 +321,31 @@ func (r *Resolver) Render(ctx context.Context, org, connector, action string, in
 	return out, nil
 }
 
+// missingAuth lists the auth fields the connector needs that are not set for the org: every required field, and the
+// access token of an oauth2 connector. Render treats the same fields as ErrNeedsAuth when a request uses them.
+func (r *Resolver) missingAuth(ctx context.Context, org, connector string, c map[string]any) ([]string, error) {
+	var out []string
+	for _, x := range meta.AsList(meta.AsMap(c["auth"])["fields"]) {
+		n := meta.Str(meta.AsMap(x), "name")
+		if n == "" || !fieldRequired(c, n) {
+			continue
+		}
+		if _, have, err := r.authValue(ctx, org, connector, n); err != nil {
+			return nil, err
+		} else if !have {
+			out = append(out, n)
+		}
+	}
+	if meta.Str(meta.AsMap(c["auth"]), "type") == "oauth2" {
+		if _, have, err := r.authValue(ctx, org, connector, "access_token"); err != nil {
+			return nil, err
+		} else if !have {
+			out = append(out, "access_token")
+		}
+	}
+	return out, nil
+}
+
 func fieldRequired(c map[string]any, field string) bool {
 	for _, x := range meta.AsList(meta.AsMap(c["auth"])["fields"]) {
 		f := meta.AsMap(x)

@@ -53,8 +53,8 @@ Before the model runs, the owner's last message is classified against Raka's mes
 | Kind | When (case-insensitive, punctuation and emoji ignored) |
 | --- | --- |
 | `empty` | Every word is filler: ok, oke, okay, okey, iya, iyaa, ya, yaa, yup, sip, siap, baik, mantap, noted, hmm, hm, lanjut, next, gas, betul, bener, benar, setuju, boleh |
-| `unknown` | The message is short (at most 6 words) and contains "belum tahu", "ga/gak/nggak/enggak/tidak/ndak tau/tahu", "kurang tau/tahu", "entah", "bingung", "lupa" |
-| `skip` | The message is short (at most 6 words) and contains "terserah", "bebas", "skip", "lewati", "lewat", "nanti aja/saja", "serah kamu", "apa aja/saja" |
+| `unknown` | Every word is part of "belum tahu/tau", "ga/gak/nggak/enggak/tidak/ndak tau/tahu", "kurang tau/tahu", "entah", "bingung", "lupa", or a filler word (the `empty` list plus aja, saja, deh, dong, sih, kak, mas, mbak, dulu, nih) |
+| `skip` | Every word is part of "terserah", "skip", "lewati", "lewatin", "nanti aja/saja", "serah kamu", or a filler word (as above) |
 | `answer` | Anything else |
 
 - **Confirmation exception:** `empty` counts as `answer` (a confirmation) when Raka's previous message
@@ -62,6 +62,10 @@ Before the model runs, the owner's last message is classified against Raka's mes
     susunkan sekarang?"), or holds no question and is a summary ("rangkum"/"ringkas", or `_INVITES` words), and
   - the map has at least two stages.
 - A bare "susun/cukup" stays with `unanswered_question` (that check runs first, unchanged).
+- Any other word makes it an `answer`: "lewat WA", "gak tau, mungkin 10", "lupa bilang, 5 orang" and "bingung milih Excel
+  atau buku" are answers.
+- **A guess chip is always an answer.** The owner's message is the label of an option of a guess Raka offered in its
+  previous message (or a guess confirmed this turn): "Iya" from a guess chip confirms that guess, it is not `empty`.
 - Off-topic, hostile and contradictory answers cannot be told apart by word lists. They are left to the skill (§4).
 - The streak is the number of non-`answer` owner messages in a row at the end of the transcript (a guess or answer
   chip that is not `unknown`/`skip` counts as an answer).

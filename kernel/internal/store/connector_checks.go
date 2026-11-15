@@ -52,9 +52,11 @@ func timePtr(v any) *time.Time {
 	return nil
 }
 
-// SaveConnectorTest records a test run of the connector file with the given hash: state tested when ok, else
-// untested. The result is kept either way. A new test replaces the row and clears any write confirmation, which is
-// only valid for the hash and test it was given on.
+// SaveConnectorTest records a test run of the connector file with the given hash. The result is kept either way.
+// State and write confirmation follow the content hash, not the run: with a different hash (or no row) the row is
+// replaced, state is tested when ok and the confirmation is cleared. With the same hash a good run refreshes tested_at
+// and keeps the confirmation; a failed run on a row that is already tested keeps state, tested_at, tested_by and the
+// confirmation and only records the failure in last_result, so a transient vendor error never stops live flows.
 func SaveConnectorTest(ctx context.Context, q pg.Querier, org, connector, hash, by string, ok bool, result json.RawMessage) error {
 	state := "untested"
 	if ok {
@@ -64,10 +66,17 @@ func SaveConnectorTest(ctx context.Context, q pg.Querier, org, connector, hash, 
 	if len(result) > 0 {
 		r = string(result)
 	}
+	const t = "rk_connector_checks"
+	keep := t + ".hash = excluded.hash and " + t + ".state = 'tested' and excluded.state = 'untested'"
 	_, err := q.Query(ctx, `insert into rk_connector_checks (org_id, connector, hash, state, tested_at, tested_by, last_result)
 		values ($1, $2, $3, $4, now(), $5, $6::jsonb)
-		on conflict (org_id, connector) do update set hash = excluded.hash, state = excluded.state, tested_at = excluded.tested_at,
-			tested_by = excluded.tested_by, last_result = excluded.last_result, writes_confirmed_at = null, writes_confirmed_by = ''`,
+		on conflict (org_id, connector) do update set hash = excluded.hash,
+			state = case when `+keep+` then `+t+`.state else excluded.state end,
+			tested_at = case when `+keep+` then `+t+`.tested_at else excluded.tested_at end,
+			tested_by = case when `+keep+` then `+t+`.tested_by else excluded.tested_by end,
+			last_result = excluded.last_result,
+			writes_confirmed_at = case when `+t+`.hash = excluded.hash then `+t+`.writes_confirmed_at else null end,
+			writes_confirmed_by = case when `+t+`.hash = excluded.hash then `+t+`.writes_confirmed_by else '' end`,
 		org, connector, hash, state, by, r)
 	return err
 }

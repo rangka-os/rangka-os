@@ -204,10 +204,10 @@ func TestConfirmWritesOwnerOnly(t *testing.T) {
 	if !strings.Contains(string(a.Body), "create_item") {
 		t.Fatalf("audit: %s", a.Body)
 	}
-	// a new test clears the confirmation
+	// a new test of the same content keeps the confirmation (only a changed file clears it)
 	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
-	if g := e.must(200, "GET", testPath, nil); g.JSON["writes_confirmed_at"] != nil {
-		t.Fatalf("confirmation survived a new test: %s", g.Body)
+	if g := e.must(200, "GET", testPath, nil); g.JSON["writes_confirmed_at"] == nil {
+		t.Fatalf("confirmation lost on a re-test of the same file: %s", g.Body)
 	}
 }
 
@@ -228,5 +228,38 @@ func TestConfirmWritesRefusesAI(t *testing.T) {
 	ai := assistantEnv(t, e, 10*time.Minute)
 	if r := ai.do("POST", "/api/v1/connectors/x_test/confirm-writes", nil); r.Status != 403 || errCode(r) != "ai_forbidden" {
 		t.Fatalf("assistant confirm: %d %s", r.Status, r.Body)
+	}
+}
+
+// A token carries its owner's roles, but testing and confirming are a person's act (contract 0033 §3, §4).
+func TestConnectorTestAndConfirmRefuseAPIToken(t *testing.T) {
+	e, v := companyEnv(t, true)
+	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	sent := len(v.sent())
+	api := &env{t: t, s: e.s, ts: e.ts, token: e.must(201, "POST", "/api/v1/tokens", map[string]any{"name": "cli"}).JSON["token"].(string)}
+	if r := api.do("POST", testPath, map[string]any{"action": "list_items"}); r.Status != 403 || errCode(r) != "forbidden" || len(v.sent()) != sent {
+		t.Fatalf("token test: %d %s", r.Status, r.Body)
+	}
+	if r := api.do("POST", "/api/v1/connectors/x_test/confirm-writes", nil); r.Status != 403 || errCode(r) != "forbidden" {
+		t.Fatalf("token confirm: %d %s", r.Status, r.Body)
+	}
+	api.must(200, "GET", testPath, nil)
+}
+
+// A failed re-test of unchanged content records the failure but keeps a tested connector tested and confirmed.
+func TestConnectorTestFailedRetestKeepsState(t *testing.T) {
+	e, v := companyEnv(t, true)
+	e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	e.must(200, "POST", "/api/v1/connectors/x_test/confirm-writes", nil)
+	v.mu.Lock()
+	v.status, v.answer = 503, `{"error":"down"}`
+	v.mu.Unlock()
+	r := e.must(200, "POST", testPath, map[string]any{"action": "list_items"})
+	if r.JSON["ok"] != false || r.JSON["state"] != "tested" {
+		t.Fatalf("failed re-test: %s", r.Body)
+	}
+	g := e.must(200, "GET", testPath, nil)
+	if g.JSON["state"] != "tested" || g.JSON["writes_confirmed_at"] == nil || get(g.JSON, "result", "error") != "call_failed" {
+		t.Fatalf("GET after failed re-test: %s", g.Body)
 	}
 }

@@ -16,6 +16,8 @@ import (
 // the real vendor; a good answer makes it tested, and an owner may then confirm its write actions within 24 hours.
 // The answer is scrubbed and cut before it is stored or returned; the audit entry never holds the body.
 
+const msgConnectorTestPerson = "Uji dan konfirmasi penghubung hanya bisa dilakukan orang yang masuk lewat Console, bukan token API."
+
 const (
 	maxTestRows  = 20
 	maxTestBytes = 4096
@@ -32,6 +34,10 @@ func (s *Server) connectorTestGuard(w http.ResponseWriter, c *caller, name strin
 		}
 	case "oidc":
 		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
+		return false
+	}
+	if write && !c.p.Human() { // a token carries its minter's roles, but a test and a confirmation are a person's act
+		writeError(w, 403, "forbidden", msgConnectorTestPerson)
 		return false
 	}
 	if !s.mayManageSecrets(c) {
@@ -107,9 +113,10 @@ func (s *Server) postConnectorTest(w http.ResponseWriter, r *http.Request, c *ca
 	}
 	store.Audit(ctx, s.DB, c.actor.Org, c.actor.ID, "connector.test", "connector/"+name, body.Action,
 		map[string]any{"action": body.Action, "ok": ok, "status": status})
-	st := "untested"
-	if ok {
-		st = "tested"
+	st, _, _, err := s.Connectors.State(ctx, c.actor.Org, name) // a failed re-test keeps a tested connector tested
+	if err != nil {
+		fail(w, err)
+		return
 	}
 	writeJSON(w, 200, map[string]any{"state": st, "ok": ok, "result": json.RawMessage(raw)})
 }
@@ -196,6 +203,10 @@ func (s *Server) postConnectorConfirmWrites(w http.ResponseWriter, r *http.Reque
 	// the assistant is refused first: it acts with the roles of the owner who minted its token
 	if c.p.Via == "ai" || c.p.Via == "oidc" {
 		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa menguji atau mengonfirmasi penghubung; minta pemilik usaha.")
+		return
+	}
+	if !c.p.Human() {
+		writeError(w, 403, "forbidden", msgConnectorTestPerson)
 		return
 	}
 	if !isOwner(c) {

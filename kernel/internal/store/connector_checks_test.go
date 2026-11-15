@@ -3,6 +3,7 @@ package store
 import (
 	"context"
 	"encoding/json"
+	"strings"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -61,6 +62,43 @@ func TestSaveConnectorTestFail(t *testing.T) {
 	var got map[string]string
 	if err := json.Unmarshal(c.LastResult, &got); err != nil || got["error"] != "connector_http" {
 		t.Errorf("result kept? %s", c.LastResult)
+	}
+}
+
+func TestSaveConnectorTestKeepsConfirmationOnSameHash(t *testing.T) {
+	ctx, db := connectorCheckDB(t)
+	_ = SaveConnectorTest(ctx, db, "o1", "x_a", "h1", "u", true, json.RawMessage(`{}`))
+	_ = ConfirmConnectorWrites(ctx, db, "o1", "x_a", "h1", "owner")
+	_ = SaveConnectorTest(ctx, db, "o1", "x_a", "h1", "u2", true, json.RawMessage(`{"again":1}`))
+	c, _ := GetConnectorCheck(ctx, db, "o1", "x_a")
+	if c.State != "tested" || c.WritesConfirmedAt == nil || c.WritesConfirmedBy != "owner" || c.TestedBy != "u2" {
+		t.Errorf("good re-test with the same hash: %+v", c)
+	}
+}
+
+func TestSaveConnectorTestFailKeepsTested(t *testing.T) {
+	ctx, db := connectorCheckDB(t)
+	_ = SaveConnectorTest(ctx, db, "o1", "x_a", "h1", "u", true, json.RawMessage(`{}`))
+	_ = ConfirmConnectorWrites(ctx, db, "o1", "x_a", "h1", "owner")
+	before, _ := GetConnectorCheck(ctx, db, "o1", "x_a")
+	_ = SaveConnectorTest(ctx, db, "o1", "x_a", "h1", "u2", false, json.RawMessage(`{"error":"call_failed","message":"HTTP 503"}`))
+	c, _ := GetConnectorCheck(ctx, db, "o1", "x_a")
+	if c.State != "tested" || c.WritesConfirmedAt == nil || c.TestedBy != "u" || !c.TestedAt.Equal(*before.TestedAt) {
+		t.Errorf("failed re-test downgraded the connector: %+v", c)
+	}
+	if !strings.Contains(string(c.LastResult), "call_failed") {
+		t.Errorf("failure not recorded: %s", c.LastResult)
+	}
+}
+
+func TestSaveConnectorTestFailOnNewHash(t *testing.T) {
+	ctx, db := connectorCheckDB(t)
+	_ = SaveConnectorTest(ctx, db, "o1", "x_a", "h1", "u", true, json.RawMessage(`{}`))
+	_ = ConfirmConnectorWrites(ctx, db, "o1", "x_a", "h1", "owner")
+	_ = SaveConnectorTest(ctx, db, "o1", "x_a", "h2", "u", false, json.RawMessage(`{"error":"e","message":"m"}`))
+	c, _ := GetConnectorCheck(ctx, db, "o1", "x_a")
+	if c.Hash != "h2" || c.State != "untested" || c.WritesConfirmedAt != nil {
+		t.Errorf("failed test of new content: %+v", c)
 	}
 }
 

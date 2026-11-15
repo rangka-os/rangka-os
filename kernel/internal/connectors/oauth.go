@@ -65,7 +65,7 @@ func (rt *Runtime) refreshIfDue(ctx context.Context, org, connector string) erro
 		return err
 	}
 	if err := rt.refresh(ctx, org, connector, c); err != nil {
-		if errors.Is(err, ErrEgressRefused) {
+		if errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector) {
 			return err // the address is the problem, not the token: keep it, the call fails as connector_host_private
 		}
 		// the owner reconnects: drop the stale access token so the connector shows needs_auth
@@ -136,7 +136,7 @@ func (rt *Runtime) refresh(ctx context.Context, org, connector string, c map[str
 	resp, err := rt.client(meta.IsCompanyConnector(connector), true, strings.ToLower(u.Hostname())).Do(req)
 	scrub, _ := rt.Scrubber(ctx, org, connector)
 	if err != nil {
-		if errors.Is(err, ErrEgressRefused) {
+		if errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector) {
 			return &scrubbedErr{msg: scrub.String(err.Error()), err: err}
 		}
 		return errors.New(scrub.String(err.Error()))

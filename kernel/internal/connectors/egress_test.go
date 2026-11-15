@@ -8,9 +8,11 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
+	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -166,20 +168,31 @@ func TestCompanyConnectorPrivateResolved(t *testing.T) {
 	}
 }
 
-// A numeric shorthand host (127.1 is 127.0.0.1) is refused on the connection, not by looking at the text of the URL.
+// A numeric shorthand host (127.1 is 127.0.0.1) never reaches a loopback service. How 127.1 resolves depends on the
+// platform resolver (cgo: 127.0.0.1; pure Go: no such host), so the direct half accepts a refusal or a DNS error and
+// asserts the server saw nothing; the call path uses a stub that answers what 127.1 means.
 func TestCompanyConnectorNumericShorthandHost(t *testing.T) {
-	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { w.Write([]byte(`{}`)) }))
+	var hits atomic.Int32
+	srv := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) { hits.Add(1); w.Write([]byte(`{}`)) }))
 	defer srv.Close()
 	_, port, _ := net.SplitHostPort(strings.TrimPrefix(srv.URL, "https://"))
 	rt := &Runtime{HTTP: &http.Client{Transport: &http.Transport{TLSClientConfig: &tls.Config{InsecureSkipVerify: true}}}}
 	c := rt.client(true, false, "127.1")
-	if _, err := c.Get("https://127.1:" + port + "/"); !errors.Is(err, ErrEgressRefused) {
-		t.Fatalf("127.1: %v, want egress_refused", err)
+	_, err := c.Get("https://127.1:" + port + "/")
+	var dnsErr *net.DNSError
+	if !errors.Is(err, ErrEgressRefused) && !errors.As(err, &dnsErr) {
+		t.Fatalf("127.1: %v, want egress_refused or a DNS error", err)
 	}
-	// and through the call path, with a resolver that maps the shorthand name to loopback
-	rt = testedCompany(t, srv, Egress{lookup: stubLookup(map[string]string{"api.example.com": "127.1"})})
-	_, err := rt.Call(context.Background(), "o1", "x_demo", "ping", map[string]any{"message": "halo"})
+	if hits.Load() != 0 {
+		t.Fatalf("the server got %d requests", hits.Load())
+	}
+	// through the call path, with a resolver that maps the vendor name to what 127.1 means
+	rt = testedCompany(t, srv, Egress{lookup: stubLookup(map[string]string{"api.example.com": "127.0.0.1"})})
+	_, err = rt.Call(context.Background(), "o1", "x_demo", "ping", map[string]any{"message": "halo"})
 	wantHostPrivate(t, err)
+	if hits.Load() != 0 {
+		t.Fatalf("the server got %d requests", hits.Load())
+	}
 }
 
 func TestCompanyConnectorAllowList(t *testing.T) {
@@ -220,5 +233,27 @@ func TestCompanyOAuthRefreshPrivate(t *testing.T) {
 	_, err := c.Post("https://auth.example.com/token", "application/x-www-form-urlencoded", strings.NewReader("a=b"))
 	if !errors.Is(err, ErrEgressRefused) {
 		t.Fatalf("got %v", err)
+	}
+}
+
+// A catalogue OAuth2 connector keeps its old refresh failure behaviour under RANGKA_CONNECTOR_EGRESS=public: a refused
+// token_url address is a failed refresh (needs_auth, audited), not connector_host_private.
+func TestCatalogueOAuthRefreshEgressRefusedStaysNeedsAuth(t *testing.T) {
+	ctx := context.Background()
+	rt, _ := stateRT(t, nil)
+	rt.Reg().Connectors["oacat"] = &rk.Doc{Data: map[string]any{
+		"name": "oacat",
+		"auth": map[string]any{"type": "oauth2", "token_url": "https://auth.example.com/token"},
+	}}
+	rt.Reg().Site.System["connector_auth"] = map[string]any{"oacat": map[string]any{"refresh_token": "r", "client_id": "c"}}
+	rt.Egress = Egress{Public: true, lookup: stubLookup(map[string]string{"auth.example.com": "10.0.0.5"})}
+	rt.HTTP = &http.Client{Transport: &http.Transport{}}
+	err := rt.refreshIfDue(ctx, "o1", "oacat")
+	if !errors.Is(err, ErrNeedsAuth) || errors.Is(err, ErrEgressRefused) {
+		t.Fatalf("got %v, want needs_auth only", err)
+	}
+	res, qerr := rt.DB.Query(ctx, `select 1 from rk_audit where kind = 'connector.needs_auth' and target = 'connector/oacat'`)
+	if qerr != nil || len(res.Maps()) != 1 {
+		t.Fatalf("needs_auth audits: %v %v", res, qerr)
 	}
 }

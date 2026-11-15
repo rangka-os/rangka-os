@@ -435,3 +435,16 @@ create table if not exists rk_onboarding (
   by_user text not null default '',
   at      timestamptz not null default now()
 );
+
+-- Tur sorotan (contract 0053 §7): what each person did with each guided tour of the web app (seen or skipped), so a
+-- tour starts once per person and not once per browser. Kernel state like rk_onboarding, keyed by the member's
+-- e-mail (the actor id), not user_id: backup reads user_id as rk_members.user_id; no foreign key, a dev-open org has no
+-- rk_orgs row.
+create table if not exists rk_tours (
+  org_id  text not null,
+  email   text not null,
+  tour    text not null,
+  state   text not null,
+  at      timestamptz not null default now(),
+  primary key (org_id, email, tour)
+);

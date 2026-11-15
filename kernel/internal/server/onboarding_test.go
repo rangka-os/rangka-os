@@ -269,3 +269,40 @@ func TestOnboardingScanOldestBatchesGrow(t *testing.T) {
 		t.Fatalf("states %v", got)
 	}
 }
+
+// Tur sorotan (contract 0053 §7): each person keeps their own tour states; "" forgets one; Raka writes none.
+func TestOnboardingToursPerPerson(t *testing.T) {
+	e, _ := canvasEnv(t, nil)
+	rep := canvasRep(t, e)
+	if r := e.must(200, "GET", "/api/v1/onboarding/tours", nil); len(get(r.JSON, "tours").(map[string]any)) != 0 {
+		t.Fatalf("fresh tours: %s", r.Body)
+	}
+	e.must(200, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "seen"})
+	e.must(200, "PUT", "/api/v1/onboarding/tours/langkah:s_barang", map[string]any{"state": "skipped"})
+	e.must(200, "PUT", "/api/v1/onboarding/tours/halaman:r/item", map[string]any{"state": "seen"})
+	got := get(e.must(200, "GET", "/api/v1/onboarding/tours", nil).JSON, "tours")
+	if get(got, "kenalan", "state") != "seen" || get(got, "langkah:s_barang", "state") != "skipped" || get(got, "halaman:r/item", "state") != "seen" {
+		t.Fatalf("owner tours: %v", got)
+	}
+	if r := rep.must(200, "GET", "/api/v1/onboarding/tours", nil); len(get(r.JSON, "tours").(map[string]any)) != 0 {
+		t.Fatalf("another person sees the owner's tours: %s", r.Body)
+	}
+	e.must(200, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": ""})
+	if got := get(e.must(200, "GET", "/api/v1/onboarding/tours", nil).JSON, "tours"); get(got, "kenalan") != nil {
+		t.Fatalf("forget: %v", got)
+	}
+	e.must(400, "PUT", "/api/v1/onboarding/tours/Kenalan!", map[string]any{"state": "seen"})
+	e.must(400, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "done"})
+	e.must(400, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{})
+	ai := assistantEnv(t, e, 10*time.Minute)
+	if r := ai.must(403, "PUT", "/api/v1/onboarding/tours/kenalan", map[string]any{"state": "seen"}); get(r.JSON, "error", "code") != "ai_forbidden" {
+		t.Fatalf("assistant tour: %s", r.Body)
+	}
+	for i := 0; i < 98; i++ { // two kept above (langkah:s_barang, halaman:r/item): 100 in all
+		e.must(200, "PUT", fmt.Sprintf("/api/v1/onboarding/tours/t%d", i), map[string]any{"state": "seen"})
+	}
+	if r := e.must(409, "PUT", "/api/v1/onboarding/tours/satu-lagi", map[string]any{"state": "seen"}); get(r.JSON, "error", "code") != "too_many_tours" {
+		t.Fatalf("cap: %s", r.Body)
+	}
+	e.must(200, "PUT", "/api/v1/onboarding/tours/t0", map[string]any{"state": "skipped"}) // changing a kept one is fine
+}

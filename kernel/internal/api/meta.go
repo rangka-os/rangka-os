@@ -56,7 +56,8 @@ func (s *Server) metaFor(ctx context.Context, e *engine.Engine, a engine.Actor, 
 				}
 			}
 			apps = append(apps, map[string]any{"name": ap.Name, "kind": ap.Kind, "version": ap.Version, "title": ap.Title, "menu": orEmpty(ap.Raw["menu"]),
-				"dashboards": dash, "requires": ap.Requires, "optional": ap.Optional, "modules": mods})
+				// the roles the app works with (its app.rk roles:), for who usually does a step in Mulai di sini (0053 §7)
+				"roles": orEmpty(ap.Raw["roles"]), "dashboards": dash, "requires": ap.Requires, "optional": ap.Optional, "modules": mods})
 		}
 		if ap.IsModule() || ap.Kind == meta.KindSite {
 			req := ap.Requires

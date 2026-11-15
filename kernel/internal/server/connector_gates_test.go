@@ -378,3 +378,23 @@ steps:
 		t.Fatalf("flows after the test: %v", ap)
 	}
 }
+
+// Fix wave item 2: the preview of a change set that drafts a company connector lists its unset keys under
+// preview.requires, though no flow uses it yet (the first of the two change sets).
+func TestPreviewRequiresDraftedConnectorKeys(t *testing.T) {
+	e, _ := companyEnv(t, true)
+	omilo := strings.Replace(companyConnector, "name: x_test", "name: x_omilo", 1)
+	cs := e.must(201, "POST", "/api/v1/changesets", map[string]any{"title": "Penghubung Omilo", "ops": []any{flowOp("connectors/x_omilo.rk", omilo)}}).JSON
+	id := cs["id"].(string)
+	e.must(200, "POST", "/api/v1/changesets/"+id+"/validate", nil)
+	pv := e.must(200, "POST", "/api/v1/changesets/"+id+"/preview", nil)
+	reqs, _ := get(pv.JSON, "preview", "requires").([]any)
+	if len(reqs) != 1 || get(pv.JSON, "preview", "requires", 0, "connector") != "x_omilo" ||
+		get(pv.JSON, "preview", "requires", 0, "field") != "access_token" || get(pv.JSON, "preview", "requires", 0, "secret") != true {
+		t.Fatalf("requires: %s", pv.Body)
+	}
+	// x_test is live and its key is set: not listed
+	if strings.Contains(string(pv.Body), `"connector":"x_test"`) {
+		t.Fatalf("a live connector is listed: %s", pv.Body)
+	}
+}

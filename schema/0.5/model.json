@@ -145,6 +145,10 @@
           "name": {
             "$ref": "#/$defs/name"
           },
+          "description": {
+            "$ref": "#/$defs/label",
+            "description": "Owner sentence of what this does, conditions included (contract 0060 §1). Changes no behaviour."
+          },
           "label": {
             "$ref": "#/$defs/label"
           },
@@ -197,6 +201,10 @@
         "properties": {
           "name": {
             "$ref": "#/$defs/name"
+          },
+          "description": {
+            "$ref": "#/$defs/label",
+            "description": "Owner sentence of what this does, conditions included (contract 0060 §1). Changes no behaviour."
           },
           "when": {
             "type": "string"

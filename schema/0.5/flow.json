@@ -19,6 +19,10 @@
     "label": {
       "$ref": "model.json#/$defs/label"
     },
+    "description": {
+      "$ref": "model.json#/$defs/label",
+      "description": "Owner sentence of what this flow does, conditions included (contract 0060 §1). Changes no behaviour."
+    },
     "on": {
       "type": "string",
       "description": "Event: <connector>.<trigger>, <model>.created|updated|submitted|cancelled, or omitted with schedule"

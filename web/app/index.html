@@ -72,8 +72,7 @@
   /* before the scripts draw anything (or when one of them never arrives): a quiet note, then after a while a way out */
   .ap-boot-late { visibility: hidden; animation: ap-boot-late 0s 12s forwards; max-width: 420px; text-align: center; color: var(--text, #1c1b19); }
   .ap-boot-late p { margin: 0 0 12px; }
-  .ap-boot-late a { display: inline-block; padding: 8px 16px; border-radius: 8px; background: var(--text, #1c1b19); color: var(--bg, #fff); text-decoration: none; font-weight: 600; }
-  .ap-boot-late a:focus-visible { outline: 2px solid var(--focus, #2563eb); outline-offset: 2px; }
+  .ap-boot-late a.rk-btn { text-decoration: none; }
   @keyframes ap-boot-late { to { visibility: visible; } }
   .ap-boot-wait { animation: ap-boot-wait 0s 12s forwards; }
   @keyframes ap-boot-wait { to { font-size: 0; opacity: 0; } }
@@ -358,7 +357,7 @@
 <link rel="stylesheet" href="app.css">
 <!-- Tampilan Juragan (arah E); hapus baris ini dan data-brand di <html> untuk kembali ke tampilan Rangka -->
 <link rel="stylesheet" href="brand-juragan.css">
-<div id="rk-app"><div class="ap-splash"><span class="ap-boot-wait">Memuat…</span><div class="ap-boot-late" role="status"><p><b>Usahamu belum terbuka.</b><br>Server sedang sibuk atau sambungan terputus. Catatanmu aman.</p><a href="">Coba lagi</a></div></div></div>
+<div id="rk-app"><div class="ap-splash"><span class="ap-boot-wait">Memuat…</span><div class="ap-boot-late" role="status"><p><b>Usahamu belum terbuka.</b><br>Sistem sedang sibuk atau sambungan terputus. Catatanmu aman.</p><a class="rk-btn rk-btn-primary" href="">Coba lagi</a></div></div></div>
 <script src="vendor/react.production.min.js"></script>
 <script src="vendor/react-dom.production.min.js"></script>
 <script src="../design-system/bundle.js"></script>

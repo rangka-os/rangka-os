@@ -516,7 +516,7 @@
   function bootErrorText(err) {
     var st = err && err.status;
     if (st && st < 500 && err.message) return { title: "Usahamu belum bisa dibuka", body: err.message };
-    return { title: "Usahamu belum bisa dibuka", body: "Server sedang sibuk atau ada gangguan sebentar. Catatanmu aman. Tunggu sebentar, lalu coba lagi." };
+    return { title: "Usahamu belum bisa dibuka", body: "Sistem sedang sibuk atau ada gangguan sebentar. Catatanmu aman. Tunggu sebentar, lalu coba lagi." };
   }
   RA.bootErrorText = bootErrorText;
 
@@ -1473,7 +1473,9 @@
   /* ---------------------------------------------------------------- root: boot, sign-in screen, app */
   function BootError(p) {
     var t = bootErrorText(p.err);
-    return h("div", { className: "ap-splash", role: "alert" }, h(R.Alert, { tone: "bad", title: t.title, actions: h(R.Button, { variant: "primary", onClick: p.onRetry }, "Coba lagi") }, t.body));
+    // the button stands below the alert as a normal design-system button (Alert actions are link-styled)
+    return h("div", { className: "ap-splash", role: "alert" }, h(R.Alert, { tone: "bad", title: t.title }, t.body),
+      h(R.Button, { variant: "primary", onClick: p.onRetry }, "Coba lagi"));
   }
   /** Whatever breaks while drawing the app shows BootError instead of an empty page (React unmounts everything on
    *  an uncaught render error). Coba lagi reloads the page. */
@@ -1552,8 +1554,8 @@
     if (phase === "link") return h(RA.SignInLinkPage, { api: api, token: RA.linkToken(global.location.hash), onDone: leaveLink, onSignIn: leaveLink });
     if (phase === "signin") return h(SignInScreen, { onDone: start });
     if (phase === "error" && noNet) {
-      return h("div", { className: "ap-splash" }, h(R.Alert, { tone: "warn", title: "Belum ada koneksi", actions: h(R.Button, { onClick: start }, "Coba lagi") },
-        "Rangka terbuka lagi begitu HP-mu tersambung ke internet atau server bisnismu."));
+      return h("div", { className: "ap-splash" }, h(R.Alert, { tone: "warn", title: "Belum ada koneksi" },
+        "Rangka terbuka lagi begitu HP-mu tersambung ke internet atau server bisnismu."), h(R.Button, { variant: "primary", onClick: start }, "Coba lagi"));
     }
     if (phase === "error") return h(BootError, { err: err, onRetry: start });
     if (phase !== "ready") return h("div", { className: "ap-splash" }, h(R.Spinner, { size: "lg", label: "Memuat" }), h("span", null, "Memuat…"));

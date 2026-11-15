@@ -453,6 +453,6 @@ test("bootErrorText: a server error says the records are safe; a kernel refusal 
   const five = A.bootErrorText({ status: 500, message: "internal: too many clients already" });
   assert.match(five.body, /Catatanmu aman/);
   assert.doesNotMatch(five.body + five.title, /internal|clients|—/);
-  assert.match(A.bootErrorText(null).body, /coba lagi/);
+  assert.match(A.bootErrorText(null).body, /^Sistem sedang sibuk.*coba lagi/);
   assert.strictEqual(A.bootErrorText({ status: 403, message: "Akunmu tidak terdaftar di usaha ini" }).body, "Akunmu tidak terdaftar di usaha ini");
 });

@@ -257,3 +257,43 @@ func TestCatalogueOAuthRefreshEgressRefusedStaysNeedsAuth(t *testing.T) {
 		t.Fatalf("needs_auth audits: %v %v", res, qerr)
 	}
 }
+
+// countingTransport is a RoundTripper the guard cannot see inside (a wrapper such as a tracing transport).
+type countingTransport struct{ n atomic.Int32 }
+
+func (c *countingTransport) RoundTrip(*http.Request) (*http.Response, error) {
+	c.n.Add(1)
+	return &http.Response{StatusCode: 200, Body: http.NoBody, Header: http.Header{}}, nil
+}
+
+// exemptTransport is an in-process fake that never dials and says so.
+type exemptTransport struct{ countingTransport }
+
+func (*exemptTransport) EgressExempt() {}
+
+// Under the public policy a transport the guard cannot route through its dialer is refused, not passed through:
+// otherwise wrapping the kernel's transport would silently switch the policy off. An in-process fake that declares
+// EgressExempt still runs.
+func TestEgressGuardRefusesUnknownTransport(t *testing.T) {
+	e := Egress{Public: true}
+	ct := &countingTransport{}
+	c := e.guard(&http.Client{Transport: ct}, &transportCache{})
+	req, _ := http.NewRequest("GET", "https://api.example.com/x", nil)
+	if _, err := c.Do(req); !errors.Is(err, ErrEgressRefused) {
+		t.Fatalf("unknown transport: err %v, want egress_refused", err)
+	}
+	if ct.n.Load() != 0 {
+		t.Fatal("the unknown transport was called")
+	}
+	ex := &exemptTransport{}
+	c = e.guard(&http.Client{Transport: ex}, &transportCache{})
+	resp, err := c.Do(req)
+	if err != nil || resp.StatusCode != 200 || ex.n.Load() != 1 {
+		t.Fatalf("exempt transport: %v %v", resp, err)
+	}
+	// the open policy leaves any transport alone
+	c = Egress{}.guard(&http.Client{Transport: ct}, &transportCache{})
+	if _, err := c.Do(req); err != nil || ct.n.Load() != 1 {
+		t.Fatalf("open policy: %v", err)
+	}
+}

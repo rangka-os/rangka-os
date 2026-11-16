@@ -174,9 +174,19 @@ text is what goes on the map, written as the owner would say it. Every option na
   - The result is validated like any map (0042 §1). A pending accepted offer is cleared: the picks decide.
 - **The build.** The same build as "Setuju, susun": the composition from the map, `/v1/plan` with rangka-ai (so stage
   `hint` and `answers` exist for Mulai di sini), then the onboarding frame "Pratinjau usahamu", never the full studio.
-- **Isi data contoh.** Stored on the project (`sample_data: true` in the project view). Today it pre-ticks "Pakai data
-  contoh" in the hosting form, so `POST …/host` sends `sample_data: true`. Once the 0052 demo pack pool lands (Dede's
-  decision 4), the same flag fills the Ruang coba with the matching demo pack right after the build.
+- **Isi data contoh.** Stored on the project (`sample_data: true` in the project view). The build fills the preview's
+  Ruang coba (0052 §1) from the demo pack pool (0052 §4) right after the kernel starts, never the real org:
+  - the pack is chosen by the profile's industry, then by how many of the site's modules it covers; with no pack for
+    the industry ("Lainnya"), the pack covering most of the site's modules;
+  - the owner's own product names on the map (the summary or a "Yang dijual:" setting, when it is a list) replace
+    the pack's first product names; rows and fields of models the site lacks are left out;
+  - it runs once per project (a rebuild does not seed again, an existing Ruang coba is left alone); a failure is
+    logged and never fails the build;
+  - after the built message Raka adds one scripted line: "Data contoh ada di Ruang coba. Di aplikasinya, klik logo di
+    kiri atas lalu pilih Ruang coba. Data usahamu sendiri tetap kosong."
+
+  The flag still pre-ticks "Pakai data contoh" in the hosting form, which copies only `fixtures/start.rk` into the
+  hosted business, until 0052 §5 removes that checkbox.
 - **Price.** Unchanged: the plan card and hosting still use the 0054 §5 suggestion.
 
 ## Consequences
@@ -187,6 +197,7 @@ text is what goes on the map, written as the owner would say it. Every option na
   `pain_options` on the project view; `PUT …/pain-picks`, `POST …/pain-picks/card`; chat actions `quick_start` and
   `quick_start:sample`; the pains card after a complete profile save; the restore after each consult turn; the studio
   card, the receipt and the pre-ticked hosting checkbox; e2e in `tests/e2e/test_studio_consult.py`.
+  The Ruang coba seed of §6 is `internal/demo` (the 0052 §4 pack pool, picker and drift guard).
 - **rangka-os.** This contract; skill `rangka-consult` §2 gains the picked-pain rule.
 - **Board.** Figma "Rangka OS" › "Rangka Cloud" needs a board "Kesulitan usaha di onboarding · usulan" (card, narrow
   view, quick start). Not drawn yet.

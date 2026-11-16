@@ -6,7 +6,7 @@
 #   docker build --build-arg RANGKA_TAG=v0.5.0-alpha.8 --target slim -t juragan-tenant-kernel:v0.5.0-alpha.8-slim .
 ARG RANGKA_TAG
 
-FROM alpine:3.20 AS fetch
+FROM alpine:3.24 AS fetch
 ARG RANGKA_TAG
 ARG TARGETARCH
 RUN set -eu; \

@@ -109,9 +109,25 @@ func (e Egress) control(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+// EgressExempt is implemented by an in-process RoundTripper that never dials (a test's fake vendor). The guard
+// passes such a transport through; any other transport that is not an *http.Transport is refused under the public
+// policy, since the guard cannot put its dialer under it (a wrapping transport would otherwise switch the policy off).
+type EgressExempt interface {
+	http.RoundTripper
+	EgressExempt()
+}
+
+// refuseTransport answers every request with ErrEgressRefused.
+type refuseTransport struct{}
+
+func (refuseTransport) RoundTrip(r *http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("%w: %s: the transport cannot be checked", ErrEgressRefused, r.URL.Hostname())
+}
+
 // guard returns c with a transport that dials through the policy; c is returned as it is when the policy is open
-// or its transport is not an *http.Transport (a test's). cache keeps one guarded transport per base transport, so
-// connections are reused across calls instead of a new pool per call.
+// or its transport declares EgressExempt, and gets a refusing transport when its transport is of another kind.
+// cache keeps one guarded transport per base transport, so connections are reused across calls instead of a new pool
+// per call.
 func (e Egress) guard(c *http.Client, cache *transportCache) *http.Client {
 	if !e.Public {
 		return c
@@ -123,8 +139,12 @@ func (e Egress) guard(c *http.Client, cache *transportCache) *http.Client {
 		base = http.DefaultTransport.(*http.Transport)
 	case *http.Transport:
 		base = b
-	default:
+	case EgressExempt:
 		return c
+	default:
+		out := *c
+		out.Transport = refuseTransport{}
+		return &out
 	}
 	cache.Lock()
 	defer cache.Unlock()

@@ -27,6 +27,9 @@ import (
 // Contract 0002 §A and 0017 §5–§7: the connector runtime. The vendor is a fake transport, so the kernel's own host
 // checks run on the real URLs (graph.facebook.com) without a network.
 
+// EgressExempt: an in-process fake, it never dials (connectors.EgressExempt).
+func (*vendor) EgressExempt() {}
+
 type vendor struct {
 	mu     sync.Mutex
 	reqs   []*http.Request
@@ -403,6 +406,9 @@ actions:
       url: https://api.example.com/v1/me
 `
 
+// EgressExempt: an in-process fake, it never dials (connectors.EgressExempt).
+func (*oauthVendor) EgressExempt() {}
+
 type oauthVendor struct {
 	mu        sync.Mutex
 	refreshes int
@@ -693,6 +699,9 @@ idempotency: event.order_id
 `
 
 // outletVendor answers by path: two outlets, and per outlet the sales after since.
+// EgressExempt: an in-process fake, it never dials (connectors.EgressExempt).
+func (*outletVendor) EgressExempt() {}
+
 type outletVendor struct {
 	mu   sync.Mutex
 	reqs []*http.Request
@@ -855,6 +864,9 @@ idempotency: event.order_id
 
 // pagerVendor answers Moka-like pages: next_url links the next page (http://, which the kernel keeps on https), and a
 // numbered API answers has_more.
+// EgressExempt: an in-process fake, it never dials (connectors.EgressExempt).
+func (*pagerVendor) EgressExempt() {}
+
 type pagerVendor struct {
 	mu      sync.Mutex
 	reqs    []*http.Request

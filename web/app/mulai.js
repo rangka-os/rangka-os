@@ -46,9 +46,8 @@
     return (out.length ? out : Object.keys((meta && meta.roles) || {})).filter(function (r) { return r !== "owner"; }).sort();
   }
   function stepRole(meta, model) {
-    // the role that does this module's work: of the roles that may create the model, the one that creates the most
-    // models of the same module (sewa: Unit perlengkapan is the sales manager's, not finance's, t_4e93e013), then the
-    // narrowest overall, then by name
+    // the most specific role that may create the model: the one that creates the fewest models (a field role before
+    // head office, audit 16 Nov), then on a tie the one that does more of this module's work, then by name
     var models = (meta && meta.models) || {}, perms = ((models[model] || {}).permissions) || [], width = {}, local = {}, mine = bizRoles(meta);
     var mod = (models[model] || {}).module;
     Object.keys(models).forEach(function (m) {
@@ -60,9 +59,9 @@
     });
     var best = null;
     function better(r, b) {
+      if (width[r] !== width[b]) return width[r] < width[b];
       var lr = local[r] || 0, lb = local[b] || 0;
       if (lr !== lb) return lr > lb;
-      if (width[r] !== width[b]) return width[r] < width[b];
       return r < b;
     }
     perms.forEach(function (p) {
@@ -365,7 +364,7 @@
       // name instead (no platform words, rangka-os#177, t_4e93e013); a site process carries the owner's own label
       var biz = (ctx.me && ctx.me.orgName && ctx.me.orgName !== ctx.me.org) ? ctx.me.orgName : null;
       ctx.api.processes().then(function (list) { var x = (list || []).filter(function (q) { return q.name === ob.process; })[0]; setProc(x ? (x.app ? biz : x.label) : null); }, function () {});
-    }, [ob && ob.process]);
+    }, [ob && ob.process, ctx.me && ctx.me.orgName]);
     // first visit: tour "halaman:mulai" once the page stands
     useEffect(function () {
       if (!ob || !(ob.steps || []).length || !RA.tour || !RA.tourAuto) return;

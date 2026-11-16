@@ -372,4 +372,10 @@ stages:
 	if get(ob, "current") != "prospek" {
 		t.Fatalf("current %v", get(ob, "current"))
 	}
+	// GET /processes: a site process has app "" (the web app names it by its own label, an app's by the business)
+	for _, p := range e.must(200, "GET", "/api/v1/processes", nil).JSON["data"].([]any) {
+		if get(p, "name") == "mulai" && get(p, "app") != "" {
+			t.Fatalf("site process app %v", get(p, "app"))
+		}
+	}
 }

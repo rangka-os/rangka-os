@@ -42,7 +42,7 @@ func PollEvery(t map[string]any) time.Duration {
 
 // PollResult is what a poll job stores.
 type PollResult struct {
-	Skipped string `json:"skipped,omitempty"` // needs_auth: the connector has no keys yet; sandbox: the ruang coba polls nothing
+	Skipped string `json:"skipped,omitempty"` // needs_auth: no keys yet; untested: a company connector not tested since its last edit; sandbox: the ruang coba polls nothing
 	Events  int    `json:"events"`
 	Dupes   int    `json:"dupes"`
 	Cursor  bool   `json:"cursor_moved"`
@@ -66,10 +66,34 @@ func (rt *Runtime) Poll(ctx context.Context, org, connector, trigger string) (*P
 		return &PollResult{Skipped: "sandbox"}, nil
 	}
 	// a connector still waiting for its keys is skipped quietly: polling it every few minutes would only fill the
-	// dead-letter queue and the audit trail. OAuth2 connectors refresh first, as Call does.
+	// dead-letter queue and the audit trail. A company connector not tested since its last edit is skipped the same
+	// way before anything is sent, an OAuth2 refresh included (contract 0033 §3); one lacking any required key is
+	// needs_auth even when the poll action uses none of them. OAuth2 connectors refresh first, as Call does.
+	company := meta.IsCompanyConnector(connector)
+	if company {
+		_, tested, _, err := rt.checked(ctx, org, connector)
+		if err != nil {
+			return nil, err
+		}
+		if !tested {
+			if err := rt.needsAuth(ctx, org, connector, c); errors.Is(err, ErrNeedsAuth) {
+				return &PollResult{Skipped: "needs_auth"}, nil
+			} else if err != nil {
+				return nil, err
+			}
+			return &PollResult{Skipped: "untested"}, nil
+		}
+	}
 	if meta.Str(meta.AsMap(c["auth"]), "type") == "oauth2" {
 		if err := rt.refreshIfDue(ctx, org, connector); errors.Is(err, ErrNeedsAuth) {
 			return &PollResult{Skipped: "needs_auth"}, nil
+		}
+	}
+	if company {
+		if err := rt.needsAuth(ctx, org, connector, c); errors.Is(err, ErrNeedsAuth) {
+			return &PollResult{Skipped: "needs_auth"}, nil
+		} else if err != nil {
+			return nil, err
 		}
 	}
 	targets := []pollTarget{{key: trigger}}

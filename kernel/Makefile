@@ -41,7 +41,8 @@ validate: build
 	$(BIN) validate --apps $(APPS) --site $(SITE) --connectors $(CONN)
 
 # The Go validator and rangka_validate.py must print the same reports: the real apps + site + connectors, the overlay and numbering sites,
-# the broken apps copy, the broken apps + broken site (overlays, theme contrast) + broken connectors, and the
+# the company connector sites (contract 0033: valid, and broken with every connector code), the broken apps copy,
+# the broken apps + broken site (overlays, theme contrast) + broken connectors, and the
 # contract 0001 layout (modules/ + apps/), valid and broken, print formats + letterheads, valid and broken, and
 # processes (contract 0014: the canvas snapshot and a broken set), declared stock moves (contract 0021), valid and broken, work screens (contract 0030), valid and broken, the catalogue keys (contract 0036), valid and broken, and config.modules (contract 0032), valid and broken.
 # template_error (a template Go's html/template cannot parse) is kernel only: Python has no Go template parser,
@@ -50,6 +51,8 @@ compare-python: build
 	@D=$$(mktemp -d); rc=0; \
 	for args in "$(APPS) --site $(SITE) --connectors $(CONN)" "$(APPS) --site testdata/overlay-site --connectors $(CONN)" \
 	            "$(APPS) --site testdata/numbering-site --connectors $(CONN)" "testdata/broken-apps" \
+	            "$(APPS) --site testdata/company-connector/site --connectors $(CONN)" \
+	            "testdata/modules-apps/apps --site testdata/broken-company-connector/site --connectors testdata/broken-company-connector/connectors" \
 	            "$(APPS) --site testdata/rate-site --connectors $(CONN)" "$(APPS) --site testdata/broken-rate-site --connectors $(CONN)" \
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors" \
 	            "testdata/modules-apps/apps --site testdata/modules-apps/site" \

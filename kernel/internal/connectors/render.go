@@ -28,6 +28,9 @@ var (
 	ErrHostRefused  = errors.New("secret_host_refused")
 	ErrUnknown      = errors.New("unknown_connector_action")
 	ErrNotInstalled = errors.New("connector_not_installed")
+	// ErrUntested and ErrWritesUnconfirmed are the send-time refusals of contract 0033 §3, §4 (never retried)
+	ErrUntested          = errors.New("Penghubung ini belum diuji untuk isinya yang sekarang. Uji dulu di Pengaturan → Penghubung.")
+	ErrWritesUnconfirmed = errors.New("Penghubung ini menyentuh uang dan pemilik usaha belum mengonfirmasi pengirimannya. Konfirmasi dulu di Pengaturan → Penghubung.")
 )
 
 // Rendered is one request, in memory only. It is dropped after the call.
@@ -316,6 +319,31 @@ func (r *Resolver) Render(ctx context.Context, org, connector, action string, in
 		}
 		if !allowedHosts(c)[out.Host] {
 			return nil, fmt.Errorf("%w: %s.%s may not send a secret to %s", ErrHostRefused, connector, action, out.Host)
+		}
+	}
+	return out, nil
+}
+
+// missingAuth lists the auth fields the connector needs that are not set for the org: every required field, and the
+// access token of an oauth2 connector. Render treats the same fields as ErrNeedsAuth when a request uses them.
+func (r *Resolver) missingAuth(ctx context.Context, org, connector string, c map[string]any) ([]string, error) {
+	var out []string
+	for _, x := range meta.AsList(meta.AsMap(c["auth"])["fields"]) {
+		n := meta.Str(meta.AsMap(x), "name")
+		if n == "" || !fieldRequired(c, n) {
+			continue
+		}
+		if _, have, err := r.authValue(ctx, org, connector, n); err != nil {
+			return nil, err
+		} else if !have {
+			out = append(out, n)
+		}
+	}
+	if meta.Str(meta.AsMap(c["auth"]), "type") == "oauth2" {
+		if _, have, err := r.authValue(ctx, org, connector, "access_token"); err != nil {
+			return nil, err
+		} else if !have {
+			out = append(out, "access_token")
 		}
 	}
 	return out, nil

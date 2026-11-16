@@ -19,7 +19,7 @@ still read with a deprecation warning.
 Usage: rangka_validate.py <apps dir> [--site <dir>] [--connectors <dir>] [--modules <dir>] [app ...]
 Prints one line per problem: file:line:col  level  code  path  message. Exit 1 when any error is found.
 """
-import json, os, re, sys, difflib
+import json, os, re, sys, difflib, ipaddress
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import rkfile
 from jsonschema import Draft202012Validator
@@ -755,6 +755,123 @@ def url_host(url):
     return rest.lower()
 
 
+def host_private(host):
+    """kernel meta.HostPrivate: an IP literal, localhost, *.localhost, *.local, *.internal, or a name without a dot."""
+    h = host.strip().lower().removesuffix(".")
+    h = h.removeprefix("[").removesuffix("]")
+    try:
+        ipaddress.ip_address(h)
+        return True
+    except ValueError:
+        pass
+    return h == "localhost" or h.endswith((".localhost", ".local", ".internal")) or "." not in h
+
+
+def sensitive_field(f):
+    """A money field (money: true; currency and money typed fields unless money: false) or a stock field (stock: true)."""
+    if not isinstance(f, dict):
+        return False
+    if isinstance(f.get("money"), bool):
+        if f["money"]:
+            return True
+    elif f.get("type") in ("currency", "money"):
+        return True
+    return f.get("stock") is True
+
+
+def sensitive_model(fields):
+    return any(sensitive_field(f) for f in (fields if isinstance(fields, list) else []))
+
+
+MONEY_PORTS = ("payment.", "bank.", "tax.")
+
+
+def money_declared(c):
+    """Contract 0033 section 4: money: true, or a provided port under payment., bank. or tax."""
+    prov = c.get("provides")
+    return c.get("money") is True or (isinstance(prov, dict) and any(str(k).startswith(MONEY_PORTS) for k in prov))
+
+
+def money_by_flow(connector, flows, sensitive):
+    """A flow with on: <connector>.<trigger> or a call: <connector>.<action> step that creates or updates a model
+    for which sensitive(model) holds. An update counts when its variable was bound (find, find_all, create, for_each
+    over such a variable) to such a model earlier in the flow (an update of an unbound variable fails closed and
+    counts); the doc of a record event is the on model. Twin of meta.MoneyByFlow."""
+    prefix = connector + "."
+    for f in flows:
+        on = f.get("on") if isinstance(f.get("on"), str) else ""
+        touches = on.startswith(prefix)
+        st = {"calls": False, "written": [], "vars": {}, "unresolved": False}
+
+        def bind(v, m):
+            if v and m:
+                st["vars"].setdefault(v, set()).add(m)
+
+        def walk(steps):
+            for s in steps if isinstance(steps, list) else []:
+                if not isinstance(s, dict):
+                    continue
+                as_ = s.get("as") if isinstance(s.get("as"), str) else ""
+                if isinstance(s.get("call"), str) and s["call"].startswith(prefix):
+                    st["calls"] = True
+                for k in ("find", "find_all"):
+                    if isinstance(s.get(k), str) and s[k]:
+                        bind(as_, s[k])
+                # for_each over a bare variable bound to models: as: holds records of those models; any other list
+                # expression leaves as: unbound, so an update of it fails closed
+                src = s.get("for_each") if isinstance(s.get("for_each"), str) else ""
+                if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", src):
+                    for m in sorted(st["vars"].get(src, ())):
+                        bind(as_, m)
+                if isinstance(s.get("create"), str) and s["create"]:
+                    st["written"].append(s["create"])
+                    bind(as_, s["create"])
+                if isinstance(s.get("update"), str) and s["update"]:
+                    if not st["vars"].get(s["update"]):
+                        st["unresolved"] = True
+                    st["written"].extend(sorted(st["vars"].get(s["update"], ())))
+                for k in ("then", "else", "do"):
+                    walk(s.get(k))
+
+        if "." in on and not touches:
+            bind("doc", on.split(".", 1)[0])
+        walk(f.get("steps"))
+        if (touches or st["calls"]) and (st["unresolved"] or any(sensitive(m) for m in st["written"])):
+            return True
+    return False
+
+
+def money_touching(connector, c, flows, sensitive):
+    """Contract 0033 section 4; twin of Registry.MoneyTouching."""
+    return money_declared(c) or money_by_flow(connector, flows, sensitive)
+
+
+def check_company_connector(rep, p, cn, c, origin, dup, flows=None, allmodels=None):
+    """Contracts 0033 section 2 and 0062 section 5: where a connector lives, public hosts, provenance."""
+    company = cn.startswith("x_")
+    if origin == "site" and not company:
+        rep.add("error", p, "name", "company_connector_name", f'connector "{cn}" lives in the site, so its name must start with x_ (x_{cn}), contract 0033 §2')
+    if origin == "shared" and company and not dup:
+        rep.add("error", p, "name", "company_connector_name", f'connector "{cn}" starts with x_, so it belongs to the company and lives in the site, not in the shared connectors directory (contract 0033 §2)')
+    if dup:
+        rep.add("error", p, "name", "duplicate_connector", f'connector "{cn}" is in the shared connectors directory and in the site: keep one (contract 0033 §2)')
+    if not company:
+        return
+    hosts = c.get("hosts") if isinstance(c.get("hosts"), list) else []
+    if not hosts:
+        rep.add("error", p, "(root)", "hosts_required", f'company connector "{cn}" must declare hosts: the domains it may call (contract 0033 §2)')
+    for i, h in enumerate(hosts):
+        if isinstance(h, str) and host_private(h):
+            rep.add("error", p, f"hosts/{i}", "connector_host_private", f'host "{h}" is an IP address, localhost or a private name: a connector may only call public domains (contract 0033 §2)')
+    exp = c.get("experimental")
+    if not (isinstance(exp, dict) and isinstance(exp.get("source"), dict)):
+        rep.add("warn", p, "(root)", "connector_source_missing", f'company connector "{cn}" has no experimental.source: say where the draft came from (contract 0062 §5)')
+    # money_unflagged (contract 0033 section 4): a flow ties the connector to a model with money or stock fields, but money: true is missing
+    if c.get("money") is not True and money_by_flow(cn, [flows[n][2] for n in sorted(flows or {})],
+                                                    lambda m: m in (allmodels or {}) and sensitive_model(allmodels[m][2].get("fields"))):
+        rep.add("warn", p, "(root)", "money_unflagged", f'company connector "{cn}" is called or triggered by a flow that creates or updates a model with money or stock fields: add money: true so writes need the owner\'s confirmation (contract 0033 §4)')
+
+
 def check_secret_hosts(rep, p, c):
     """Contract 0017 §1, §5: a secret field has no default; an action carries a secret only in headers (the query
     string with allow_secret_in: [query], as a warning), uses https and, when the connector declares hosts:, sends it
@@ -888,6 +1005,7 @@ def check_auth_upstream(rep, sysdoc):
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
+    conn_origin, conn_dup = {}, set()  # where each connector came from: "shared" directory or "site"
     app_overlays = {}  # <site>/custom/app.<app>.rk by app name (contract 0049)
     app_imports, site_imports, prints, letterheads, processes, screens = [], [], [], {}, [], []
     for name, a in apps.items():
@@ -950,6 +1068,21 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                 d = rep.load(p)
                 if d is not None:
                     conns[cn] = (p, d)
+                    conn_origin[cn] = "shared"
+    # company connectors (contract 0033 §2): <site>/connectors/<x_name>/connector.rk, after the shared directory
+    if site and os.path.isdir(os.path.join(site, "connectors")):
+        sc = os.path.join(site, "connectors")
+        for cn in sorted(os.listdir(sc)):
+            if not os.path.isdir(os.path.join(sc, cn)):
+                continue
+            p = rkfile.find(os.path.join(sc, cn), "connector")
+            if p:
+                d = rep.load(p)
+                if d is not None:
+                    if cn in conns and conn_origin.get(cn) == "shared":
+                        conn_dup.add(cn)
+                    conns[cn] = (p, d)
+                    conn_origin[cn] = "site"
 
     # flows
     for fname in sorted(flows):
@@ -1005,6 +1138,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         if not cn.startswith("x_") and isinstance(c, dict) and not c.get("summary"):
             rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
         if isinstance(c, dict):
+            check_company_connector(rep, p, cn, c, conn_origin.get(cn), cn in conn_dup, flows, allmodels)
             check_secret_hosts(rep, p, c)
             check_poll_triggers(rep, p, c)
 

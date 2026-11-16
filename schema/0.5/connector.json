@@ -325,6 +325,45 @@
       "uniqueItems": true,
       "description": "Hosts the connector talks to, e.g. [graph.facebook.com]. An action that carries a secret may only send it to these hosts (contract 0017 §5)."
     },
+    "money": {
+      "type": "boolean",
+      "description": "Marks a payment, bank or tax service: a company connector that touches money is flagged and gets a higher risk (contract 0033 §4)."
+    },
+    "experimental": {
+      "type": "object",
+      "description": "Keys that may change before they settle (contract 0000 §4).",
+      "properties": {
+        "source": {
+          "type": "object",
+          "required": [
+            "kind"
+          ],
+          "additionalProperties": false,
+          "description": "Where a drafted connector came from (contract 0062 §5). Not a security boundary.",
+          "properties": {
+            "kind": {
+              "enum": [
+                "openapi",
+                "docs",
+                "owner_file"
+              ]
+            },
+            "url": {
+              "type": "string",
+              "format": "uri"
+            },
+            "sha256": {
+              "type": "string",
+              "pattern": "^[0-9a-f]{64}$",
+              "description": "Of the fetched spec or page"
+            },
+            "fetched_at": {
+              "type": "string"
+            }
+          }
+        }
+      }
+    },
     "limits": {
       "type": "object",
       "additionalProperties": false,

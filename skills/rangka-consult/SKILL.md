@@ -83,7 +83,8 @@ The request may tell you the owner's last message was `empty` ("ok", "iya"), `un
 
 ## 4. The six piece kinds
 
-Always call `rangka_catalogue` first; never name a module, connector or service from memory.
+Always call `rangka_catalogue` first; never name a module or service from memory, and name a catalogue connector only
+from it. A system the catalogue does not list gets a drafted company connector (`x_`, section 5a), not a made-up name.
 
 | Kind | Fits when | `ref` |
 | --- | --- | --- |
@@ -133,6 +134,30 @@ one becomes its own change set, so the owner approves or rejects each one.
   `edge` piece without `ref` ("belum tersedia"). Never invent a connector or a module.
 - For a real gap, say it plainly, in the owner's words, with no date: "Bagian ini belum bisa aku susun sekarang karena
   Rangka belum mendukungnya. Tim kami akan secepatnya menambah dukungannya, dan aku kabari begitu bisa."
+
+### 5a. Integrate before manual (contract 0062)
+
+When the owner names a system they use (an app, website or service), "connect it" is the default answer: research
+before you offer anything, and offer manual entry only when one of these holds.
+
+- The owner chooses manual after hearing what the connection needs (a docs link, a key, a test).
+- The research ended with no usable API: no spec, no docs, and the owner cannot supply them.
+- The platform refused the draft and you could not repair it (for example an OAuth2 sign-in, `auth_unsupported`).
+
+In the second and third case say why in the owner's words and keep the connection in `later`, not `not_covered`.
+For a system a stage cannot run without, ask for the docs before accepting manual entry; for a nice-to-have one you may
+offer manual now and the connection in `later`. Research order, stopping at the first step that gives a usable answer:
+
+1. The catalogue: a connector exists, use it.
+2. The owner's material: a docs link or spec in chat, or an `owner_files` entry.
+3. Spec discovery on a host the owner named or a docs page found (`/openapi.json` and the other well-known paths,
+   including under `/api/`), when the deployment has the research tools.
+4. Web search for "<system> API documentation" or "<system> OpenAPI", when a search provider exists.
+5. Ask the owner one question: where the docs are, or whether their developer can share the spec. For the owner's own
+   product, ask whether its `/openapi.json` is reachable.
+
+Ask for a token or key only where the owner enters it (the connector setup form), not in chat: it would sit in the conversation history, and a turn with a pasted key is stopped (code `secrets`). Say which kind it is and where it goes. Drafting, states and
+what to tell the owner are in `rangka-connectors`.
 
 ## 6. Making the offer (contract 0046)
 
@@ -194,7 +219,7 @@ missing instead of offering.
 ### Filling the card
 
 - `title`: what the owner gets, in their words ("Sewa alat, tagihan dan WhatsApp, plus catatan kondisi alat").
-- `pieces`: the map piece ids this option uses; `apps`, `modules`, `connectors`: names from `rangka_catalogue` only.
+- `pieces`: the map piece ids this option uses; `apps`, `modules`, `connectors`: names from `rangka_catalogue` only; a company connector you would draft is a `custom` piece (section 5a).
 - `records` (what gets recorded), `screens` (the work screens staff use), `raka_does` (only automations the option's
   flows and connectors really contain), `needs_approval` (money and stock, in the owner's words): at most 8 items of
   at most 120 characters each. Take them from the app or module skill's "Offer" section; until it has one, from the

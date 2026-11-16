@@ -92,6 +92,23 @@ func TestBrokenSiteMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-site.expected.txt", Options{AppsDir: "testdata/broken-apps", SiteDir: "testdata/broken-site", ConnectorsDir: "testdata/broken-connectors"})
 }
 
+// Company connectors (contract 0033 §2, 0062 §5): every connector code once.
+func TestBrokenCompanyConnectorMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-company-connector.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-company-connector/site", ConnectorsDir: "testdata/broken-company-connector/connectors"})
+}
+
+func TestHostPrivate(t *testing.T) {
+	for h, want := range map[string]bool{
+		"10.0.0.5": true, "127.0.0.1": true, "::1": true, "[::1]": true, "localhost": true, "app.localhost": true,
+		"printer.local": true, "db.internal": true, "db": true, "Localhost.": true,
+		"api.example.com": false, "graph.facebook.com": false, "internal.example.com": false, "localhost.example.com": false,
+	} {
+		if got := HostPrivate(h); got != want {
+			t.Errorf("HostPrivate(%q) = %v, want %v", h, got, want)
+		}
+	}
+}
+
 func TestBrokenModulesAppsMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-modules-apps.expected.txt", Options{AppsDir: "testdata/broken-modules-apps/apps", SiteDir: "testdata/broken-modules-apps/site"})
 }

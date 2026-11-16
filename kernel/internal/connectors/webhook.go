@@ -32,7 +32,13 @@ type HookResult struct {
 	Body   string // the challenge echo, or a short message
 	Events int    // events emitted
 	Dupes  int    // events dropped as duplicates
+	// RetryAfter, in seconds, is sent as the Retry-After header when set (an untested company connector).
+	RetryAfter int
 }
+
+// untestedRetryAfter is the Retry-After hint for a webhook of an untested company connector: long enough for the
+// owner to set keys and run the test, short enough that most vendors still deliver the event.
+const untestedRetryAfter = 3600
 
 // trigger returns a webhook trigger's definition.
 func (rt *Runtime) trigger(connector, name string) (map[string]any, map[string]any, bool) {
@@ -67,7 +73,8 @@ func (rt *Runtime) authAccepted(ctx context.Context, org, connector, ref string)
 // request; the signature is computed over the raw body bytes and compared in constant time. A declared check that
 // fails or a missing signature is 401. Each emitted event starts the flows with on: <connector>.<trigger> once:
 // a duplicate (same event body) creates nothing. A company connector whose current content is not tested starts
-// nothing (401 connector_untested); the GET challenge is answered regardless, so the vendor subscription can be set
+// nothing (503 connector_untested with Retry-After, so the vendor retries and the event arrives after the test);
+// the GET challenge is answered regardless, so the vendor subscription can be set
 // up before the test.
 func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger string, r *http.Request) HookResult {
 	c, t, ok := rt.trigger(connector, trigger)
@@ -101,7 +108,7 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 		if !tested {
 			store.Audit(context.WithoutCancel(ctx), rt.DB, org, "connector:"+connector, "connector.error", "connector/"+connector,
 				trigger+": webhook skipped (connector_untested)", map[string]any{"trigger": trigger, "code": "connector_untested"})
-			return HookResult{Status: 401, Body: "connector_untested"}
+			return HookResult{Status: 503, Body: "connector_untested", RetryAfter: untestedRetryAfter}
 		}
 	}
 	var body any

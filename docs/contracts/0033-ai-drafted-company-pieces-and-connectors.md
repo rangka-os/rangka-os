@@ -150,9 +150,9 @@ Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-o
 Found while building the kernel part; they refine the sections above.
 
 - §3: the send-time check is not only `Call`: polls of an untested or `needs_auth` company connector are skipped, and
-  its webhooks start no flow (audited `connector.error` with `connector_untested`, answered 401 like the `needs_auth`
-  refusals; the GET challenge is still answered). A test in a ruang coba org is refused (`409 sandbox_no_test`),
-  since calls there are simulated.
+  its webhooks start no flow (audited `connector.error` with `connector_untested`, answered 503 with
+  `Retry-After: 3600`, so the vendor retries and the event arrives after the test; the GET challenge is still
+  answered). A test in a ruang coba org is refused (`409 sandbox_no_test`), since calls there are simulated.
 - §3: state and write confirmation change only when the content hash changes. A re-test of the same file never
   downgrades `tested`: a failed re-test only records the failure in the last result.
 - §3: the apply check also runs at validate for one case: a change set that writes an `x_` connector and adds or

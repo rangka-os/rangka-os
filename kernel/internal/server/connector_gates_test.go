@@ -415,8 +415,8 @@ steps:
 `
 
 // Fix wave item 6: a webhook for a company connector whose current content is not tested starts no flow: it is
-// audited with connector_untested and answered 401, as the needs_auth refusals are. Tested, it dispatches; an edit
-// stops it again.
+// audited with connector_untested and answered 503 with Retry-After, so the vendor retries and the event arrives once
+// the owner has tested the connector. Tested, it dispatches; an edit stops it again.
 func TestWebhookRefusesUntested(t *testing.T) {
 	e, _ := companyEnvWith(t, true, hookConnector, map[string]string{"flows/x_test_hook.rk": hookFlow})
 	const path = "/hooks/kopi-senja/x_test/changed"
@@ -424,8 +424,8 @@ func TestWebhookRefusesUntested(t *testing.T) {
 		return dump(t, e, "select count(*) from rk_audit where kind = 'connector.event'")
 	}
 	before := events()
-	if r := hook(t, e, path, []byte(`{"id": 1}`), ""); r.StatusCode != 401 {
-		t.Fatalf("untested hook: %d", r.StatusCode)
+	if r := hook(t, e, path, []byte(`{"id": 1}`), ""); r.StatusCode != 503 || r.Header.Get("Retry-After") != "3600" {
+		t.Fatalf("untested hook: %d, Retry-After %q", r.StatusCode, r.Header.Get("Retry-After"))
 	}
 	if events() != before {
 		t.Fatal("an untested connector recorded an event")
@@ -443,7 +443,7 @@ func TestWebhookRefusesUntested(t *testing.T) {
 	after := events()
 	rel := filepath.Join("connectors", "x_test", "connector.rk")
 	writeSite(e, rel, readSite(e, rel)+"\n# diubah\n")
-	if r := hook(t, e, path, []byte(`{"id": 3}`), ""); r.StatusCode != 401 || events() != after {
+	if r := hook(t, e, path, []byte(`{"id": 3}`), ""); r.StatusCode != 503 || events() != after {
 		t.Fatalf("hook after an edit: %d", r.StatusCode)
 	}
 }

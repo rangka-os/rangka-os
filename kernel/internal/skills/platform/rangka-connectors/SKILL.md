@@ -93,7 +93,7 @@ Per business, a company connector is in one of these states. The kernel checks t
   real business.
 - At send time the kernel answers `connector_needs_auth`, `connector_untested`, `connector_writes_unconfirmed` and
   `connector_host_private` (company connectors reach public addresses only). Polls of an untested or `needs_auth`
-  connector are skipped quietly and its webhooks are refused without starting a flow, so "nothing arrives" can simply
+  connector are skipped quietly and its webhooks are answered 503 (the vendor retries later) without starting a flow, so "nothing arrives" can simply
   mean the owner has not finished the steps above: read the state before looking for another cause.
 
 ## 6. Telling the owner

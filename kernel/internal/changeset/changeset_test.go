@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -109,7 +110,7 @@ func TestAssess(t *testing.T) {
 		{"system", []Op{{Op: "patch", Path: "system.rk"}}, before, "high", 2},
 		{"delete", []Op{{Op: "delete", Path: "custom/sales_invoice.rk"}}, before, "high", 4},
 		{"role", []Op{{Op: "create", Path: "apps/crm/roles/viewer.rk"}}, before, "high", 5},
-		{"connector", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, before, "medium", 3},
+		{"connector", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, before, "high", 3},
 		{"config apps", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": []any{"core", "crm"}, "tax": cfg["tax"], "theme": "a"}), "medium", 4},
 		{"config tax", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": map[string]any{"ppn_rate": 11}, "theme": "a"}), "high", 4},
 		{"config connector_auth", []Op{{Op: "patch", Path: "config.rk"}}, with("config.rk", map[string]any{"apps": cfg["apps"], "tax": cfg["tax"], "theme": "a", "connector_auth": []any{"kasir"}}), "high", 4},
@@ -597,5 +598,122 @@ func TestAssessRelabelReasons(t *testing.T) {
 	}
 	if a.Risk != "low" {
 		t.Errorf("risk %s, want low", a.Risk)
+	}
+}
+
+func TestRootsFileCompanyConnector(t *testing.T) {
+	r := roots{connectors: "/c", site: "/s"}
+	if got, err := r.file("connectors/x_omilo.rk"); err != nil || got != "/s/connectors/x_omilo/connector.rk" {
+		t.Errorf("x_omilo: %q %v", got, err)
+	}
+	if got, err := r.file("connectors/moka.rk"); err != nil || got != "/c/moka.rk" {
+		t.Errorf("moka: %q %v", got, err)
+	}
+	if _, err := (roots{connectors: "/c"}).file("connectors/x_omilo.rk"); err == nil {
+		t.Error("x_ connector without a site accepted")
+	}
+}
+
+// An existing <connectors>/moka/connector.rk wins over /c/moka.rk.
+func TestRootsFileConnectorDirWins(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.MkdirAll(filepath.Join(dir, "moka"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	want := filepath.Join(dir, "moka", "connector.rk")
+	if err := os.WriteFile(want, []byte("name: moka\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r := roots{connectors: dir}
+	if got, err := r.file("connectors/moka.rk"); err != nil || got != want {
+		t.Errorf("moka with a directory: %q %v, want %q", got, err, want)
+	}
+	if got, err := r.file("connectors/other.rk"); err != nil || got != filepath.Join(dir, "other.rk") {
+		t.Errorf("other without a directory: %q %v", got, err)
+	}
+}
+
+// Company connector risk (contract 0033 §2 table, §4 money-touching): computed on the files after the change set.
+func TestAssessCompanyConnector(t *testing.T) {
+	get := map[string]any{"name": "x_a", "actions": []any{map[string]any{"name": "list", "request": map[string]any{"method": "GET"}}}}
+	post := map[string]any{"name": "x_a", "actions": []any{map[string]any{"name": "send", "request": map[string]any{"method": "POST"}}}}
+	trig := map[string]any{"name": "x_a", "actions": get["actions"], "triggers": []any{map[string]any{"name": "changed", "via": "webhook"}}}
+	money := map[string]any{"name": "x_a", "actions": get["actions"], "money": true}
+	port := map[string]any{"name": "x_a", "actions": get["actions"], "provides": map[string]any{"bank.statement.list": "list"}}
+	payment := map[string]any{"name": "x_payment", "fields": []any{map[string]any{"name": "amount", "type": "money"}}}
+	payFlow := map[string]any{"name": "x_a_in", "on": "x_a.changed", "steps": []any{map[string]any{"create": "x_payment"}}}
+	live := map[string]map[string]any{"connectors/x_old.rk": get, "connectors/whatsapp_business.rk": get, "models/x_payment.rk": payment}
+	before := func(p string) (map[string]any, bool) { m, ok := live[p]; return m, ok }
+	after := func(extra map[string]map[string]any) func(string) (map[string]any, bool) {
+		return func(p string) (map[string]any, bool) {
+			if m, ok := extra[p]; ok {
+				return m, true
+			}
+			return before(p)
+		}
+	}
+	existingFlow := map[string]map[string]any{"payin": payFlow}
+	tests := []struct {
+		name  string
+		ops   []Op
+		files map[string]map[string]any
+		env   Env
+		want  string
+	}{
+		{"GET only", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": get}, Env{}, "medium"},
+		{"POST action", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": post}, Env{}, "high"},
+		{"trigger", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": trig}, Env{}, "high"},
+		{"money flag", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": money}, Env{}, "high"},
+		{"money port", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": port}, Env{}, "high"},
+		{"replace existing", []Op{{Op: "replace", Path: "connectors/x_old.rk"}}, map[string]map[string]any{"connectors/x_old.rk": get}, Env{}, "high"},
+		{"money by a flow in the same change set", []Op{{Op: "create", Path: "connectors/x_a.rk"}, {Op: "create", Path: "flows/x_a_in.rk"}},
+			map[string]map[string]any{"connectors/x_a.rk": get, "flows/x_a_in.rk": payFlow}, Env{}, "high"},
+		{"money by an installed flow", []Op{{Op: "create", Path: "connectors/x_a.rk"}}, map[string]map[string]any{"connectors/x_a.rk": get},
+			Env{Flows: func() map[string]map[string]any { return existingFlow }}, "high"},
+		{"catalogue connector edit is high", []Op{{Op: "replace", Path: "connectors/whatsapp_business.rk"}}, map[string]map[string]any{"connectors/whatsapp_business.rk": post}, Env{}, "high"},
+		{"new catalogue connector stays medium", []Op{{Op: "create", Path: "connectors/kurir.rk"}}, map[string]map[string]any{"connectors/kurir.rk": post}, Env{}, "medium"},
+	}
+	for _, tc := range tests {
+		env := tc.env
+		env.Model = func(n string) map[string]any { return map[string]map[string]any{"x_payment": payment}[n] }
+		got := AssessWith(tc.ops, before, after(tc.files), env)
+		if got.Risk != tc.want || got.Layers[0] != 3 && tc.ops[0].Path[:10] == "connectors" {
+			t.Errorf("%s: risk %s (want %s), layers %v, reasons %v", tc.name, got.Risk, tc.want, got.Layers, got.Reasons)
+		}
+	}
+}
+
+func TestFlowConnectors(t *testing.T) {
+	f := map[string]any{"on": "x_a.new", "steps": []any{
+		map[string]any{"call": "x_b.list"},
+		map[string]any{"if": "true", "then": []any{map[string]any{"call": "moka.sales"}}, "else": []any{map[string]any{"for_each": "x", "do": []any{map[string]any{"call": "x_c.send"}}}}},
+	}}
+	got := strings.Join(flowConnectors(f), ",")
+	if got != "x_a,x_b,moka,x_c" {
+		t.Fatalf("got %s", got)
+	}
+	if got := flowConnectors(map[string]any{"on": "deal.updated"}); len(got) != 1 || got[0] != "deal" {
+		t.Fatalf("record event: %v", got)
+	}
+}
+
+// Fix wave item 5: validator items name the change-set op path, so Raka's self-repair finds the file it wrote: a
+// connector directory (site or shared) maps to connectors/<n>.rk.
+func TestRelItemsConnectorPaths(t *testing.T) {
+	in := []meta.Item{
+		{File: "../site/kopi-senja/connectors/x_omilo/connector.rk"},
+		{File: "../site/kopi-senja/flows/x_omilo_sync.rk"},
+		{File: "../connectors/moka/connector.rk"},
+		{File: "../connectors/moka.rk"},
+		{File: "crm/models/lead.rk"},
+		{File: "../modules/crm/module.rk"},
+	}
+	want := []string{"connectors/x_omilo.rk", "flows/x_omilo_sync.rk", "connectors/moka.rk", "connectors/moka.rk",
+		"apps/crm/models/lead.rk", "modules/crm/module.rk"}
+	got := relItems(in, roots{})
+	for i, it := range got {
+		if it.File != want[i] {
+			t.Errorf("%s → %s, want %s", in[i].File, it.File, want[i])
+		}
 	}
 }

@@ -64,7 +64,10 @@ func (rt *Runtime) refreshIfDue(ctx context.Context, org, connector string) erro
 	if d, err := due(); err != nil || !d {
 		return err
 	}
-	if err := rt.refresh(ctx, org, connector, auth); err != nil {
+	if err := rt.refresh(ctx, org, connector, c); err != nil {
+		if errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector) {
+			return err // the address is the problem, not the token: keep it, the call fails as connector_host_private
+		}
 		// the owner reconnects: drop the stale access token so the connector shows needs_auth
 		rt.Secrets.Delete(context.WithoutCancel(ctx), org, connector, "access_token", "system:oauth2")
 		store.Audit(context.WithoutCancel(ctx), rt.DB, org, "connector:"+connector, "connector.needs_auth", "connector/"+connector,
@@ -84,11 +87,22 @@ func parseExpiry(s string) (time.Time, bool) {
 	return time.Time{}, false
 }
 
-func (rt *Runtime) refresh(ctx context.Context, org, connector string, auth map[string]any) error {
-	tokenURL := meta.Str(auth, "token_url")
+func (rt *Runtime) refresh(ctx context.Context, org, connector string, c map[string]any) error {
+	tokenURL := meta.Str(meta.AsMap(c["auth"]), "token_url")
 	u, err := url.Parse(tokenURL)
 	if err != nil || u.Scheme != "https" || u.Host == "" {
 		return fmt.Errorf("auth.token_url must be an https URL")
+	}
+	// the refresh carries the client secret and refresh token: like any secret it goes only to a declared host
+	// (contract 0017 §5). A company connector always declares hosts:; a catalogue one is held to them when it does.
+	_, declared := c["hosts"]
+	if _, exp := meta.AsMap(c["experimental"])["hosts"]; exp {
+		declared = true
+	}
+	if declared || meta.IsCompanyConnector(connector) {
+		if h := strings.ToLower(u.Hostname()); !allowedHosts(c)[h] {
+			return fmt.Errorf("%w: auth.token_url host %s is not in hosts", ErrHostRefused, h)
+		}
 	}
 	get := func(f string) (string, error) {
 		v, ok, err := rt.Secrets.Value(ctx, org, connector, f)
@@ -119,9 +133,12 @@ func (rt *Runtime) refresh(ctx context.Context, org, connector string, auth map[
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
-	resp, err := rt.client(true, strings.ToLower(u.Hostname())).Do(req)
+	resp, err := rt.client(meta.IsCompanyConnector(connector), true, strings.ToLower(u.Hostname())).Do(req)
 	scrub, _ := rt.Scrubber(ctx, org, connector)
 	if err != nil {
+		if errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector) {
+			return &scrubbedErr{msg: scrub.String(err.Error()), err: err}
+		}
 		return errors.New(scrub.String(err.Error()))
 	}
 	defer resp.Body.Close()
@@ -154,3 +171,12 @@ func (rt *Runtime) refresh(ctx context.Context, org, connector string, auth map[
 	}
 	return nil
 }
+
+// scrubbedErr keeps err in the chain (errors.Is) while showing only the scrubbed text.
+type scrubbedErr struct {
+	msg string
+	err error
+}
+
+func (e *scrubbedErr) Error() string { return e.msg }
+func (e *scrubbedErr) Unwrap() error { return e.err }

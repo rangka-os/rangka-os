@@ -26,8 +26,10 @@ type Runtime struct {
 	// Egress is the platform's egress policy (RANGKA_CONNECTOR_EGRESS); the zero value allows every address
 	Egress     Egress
 	transports transportCache
-	Now        func() time.Time
-	Log        func(format string, args ...any)
+	// companyTransports is the guarded pool of company connectors, kept apart from transports: its policy differs
+	companyTransports transportCache
+	Now               func() time.Time
+	Log               func(format string, args ...any)
 	// StartFlow queues a flow with an event in qr (the transaction that records the event key; the server wires the
 	// queue); nil = events are only audited.
 	StartFlow func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, uniqueKey string) error
@@ -48,12 +50,19 @@ type CallError struct {
 
 func (e *CallError) Error() string { return e.Message }
 
-func (rt *Runtime) client(secret bool, host string) *http.Client {
+// client picks the transport: a company connector (contract 0033 §2) always dials through the public policy,
+// a catalogue connector follows the platform's policy.
+func (rt *Runtime) client(company, secret bool, host string) *http.Client {
 	base := rt.HTTP
 	if base == nil {
 		base = &http.Client{Timeout: 30 * time.Second}
 	}
-	c := *rt.Egress.guard(base, &rt.transports)
+	var c http.Client
+	if company {
+		c = *rt.Egress.forCompany().guard(base, &rt.companyTransports)
+	} else {
+		c = *rt.Egress.guard(base, &rt.transports)
+	}
 	// a request that carries a secret follows redirects only to the same host (§5)
 	c.CheckRedirect = func(req *http.Request, via []*http.Request) error {
 		if len(via) >= 5 {
@@ -75,12 +84,12 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	} else if sb {
 		return rt.simulate(ctx, org, connector, action, input)
 	}
-	if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
-		return nil, rt.fail(ctx, org, connector, action, nil, err)
-	}
-	_, a, err := rt.Action(connector, action)
+	c, a, err := rt.Action(connector, action)
 	if err != nil {
 		return nil, &jobs.Permanent{Err: err}
+	}
+	if err := rt.gate(ctx, org, connector, action, c); err != nil {
+		return nil, rt.fail(ctx, org, connector, action, nil, err)
 	}
 	req, err := rt.Render(ctx, org, connector, action, input)
 	if err != nil {
@@ -101,8 +110,11 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 		hr.Header.Set("Content-Type", "application/json")
 	}
 	hr.Header.Set("Accept", "application/json")
-	resp, err := rt.client(req.Secret, req.Host).Do(hr)
+	resp, err := rt.client(meta.IsCompanyConnector(connector), req.Secret, req.Host).Do(hr)
 	if err != nil {
+		if errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector) {
+			return nil, rt.fail(ctx, org, connector, action, req, err) // connector_host_private, not retried
+		}
 		return nil, rt.fail(ctx, org, connector, action, req, &CallError{Message: req.scrub.String(err.Error()), Retryable: !errors.Is(err, ErrHostRefused) && !errors.Is(err, ErrEgressRefused)})
 	}
 	defer resp.Body.Close()
@@ -118,11 +130,68 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	}
 	out := mapOutput(a, parsed)
 	out = req.scrub.Value(out).(map[string]any)
+	data := map[string]any{"action": action, "status": resp.StatusCode, "output": out}
+	if isTesting(ctx) { // the test endpoint audits connector.test; the answer stays out of the audit (contract 0033 §3)
+		delete(data, "output")
+	}
 	if err := store.Audit(ctx, rt.DB, org, "connector:"+connector, "connector.call", "connector/"+connector,
-		fmt.Sprintf("%s → HTTP %d", action, resp.StatusCode), map[string]any{"action": action, "status": resp.StatusCode, "output": out}); err != nil {
+		fmt.Sprintf("%s → HTTP %d", action, resp.StatusCode), data); err != nil {
 		rt.logf("connectors: audit: %v", err)
 	}
 	return out, nil
+}
+
+// gate runs before anything is sent, once per call. A catalogue connector only refreshes its OAuth2 token when due.
+// A company connector (contract 0033 §3, §4) runs only while its current content is tested (the owner's test run
+// excepted), so an edited file sends nothing, not even an OAuth2 refresh; it then needs every required key
+// (connector_needs_auth even when the action uses none of the missing ones), and a write action (method not GET) of a
+// money-touching connector is sent only after the owner confirmed the writes of that content. Content that is not
+// tested and lacks keys answers connector_needs_auth: the keys come first, then the test.
+func (rt *Runtime) gate(ctx context.Context, org, connector, action string, c map[string]any) error {
+	if !meta.IsCompanyConnector(connector) {
+		if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
+			return err
+		}
+		return nil
+	}
+	_, tested, writesOK, err := rt.checked(ctx, org, connector)
+	if err != nil {
+		return err
+	}
+	if !tested && !isTesting(ctx) {
+		if err := rt.needsAuth(ctx, org, connector, c); err != nil {
+			return err
+		}
+		return ErrUntested
+	}
+	// tested content (or the owner's test) may refresh an expired OAuth2 token: a missing access token is obtained here
+	if err := rt.refreshIfDue(ctx, org, connector); err != nil && !errors.Is(err, errNoOAuth) {
+		return err
+	}
+	if err := rt.needsAuth(ctx, org, connector, c); err != nil {
+		return err
+	}
+	if writesOK {
+		return nil
+	}
+	for _, w := range meta.WriteActions(c) {
+		if w == action && rt.Reg().MoneyTouching(connector) {
+			return ErrWritesUnconfirmed
+		}
+	}
+	return nil
+}
+
+// needsAuth is ErrNeedsAuth when a required key of the connector is not set for org.
+func (rt *Runtime) needsAuth(ctx context.Context, org, connector string, c map[string]any) error {
+	missing, err := rt.missingAuth(ctx, org, connector, c)
+	if err != nil {
+		return err
+	}
+	if len(missing) > 0 {
+		return fmt.Errorf("%w: %s.%s is not set", ErrNeedsAuth, connector, strings.Join(missing, ", "))
+	}
+	return nil
 }
 
 // retryable follows the action's retry.on; without it, 429 and 5xx are retried.
@@ -204,6 +273,12 @@ func (rt *Runtime) fail(ctx context.Context, org, connector, action string, req 
 		code = "connector_needs_auth"
 	case errors.Is(err, ErrHostRefused):
 		code = "secret_host_refused"
+	case errors.Is(err, ErrEgressRefused) && meta.IsCompanyConnector(connector):
+		code = "connector_host_private"
+	case errors.Is(err, ErrUntested):
+		code = "connector_untested"
+	case errors.Is(err, ErrWritesUnconfirmed):
+		code = "connector_writes_unconfirmed"
 	case errors.As(err, &ce):
 		permanent = !ce.Retryable
 	}

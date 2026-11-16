@@ -1,6 +1,6 @@
 # 0033 AI-drafted company pieces and connectors
 
-Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel) and rangka-ai
+Status: implemented (kernel parts, 16 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel) and rangka-ai
 (guardrails) · Affects: rangka-cloud (`ApprovableOp`, test and confirm screens), rangka-connectors (nothing existing)
 · Depends on: 0016 accepted · Builds on: 0002, 0017, 0020, 0032
 
@@ -58,7 +58,7 @@ Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema, validat
   | Edit or delete of any connector, a catalogue connector, a non-`x_` name | escalated (Raka); high (kernel) |
 
 - **Secrets never pass.** The draft declares fields only (`secret: true`, no `default:`). 0017 §4 applies unchanged:
-  - the change set lists the missing fields under `requires:`;
+  - the change set's preview lists the missing fields under `preview.requires`, a connector it creates included;
   - the connector stays `needs_auth` until a person sets them (Console or Cloud form, 0017 §3);
   - Raka never asks for a value and never calls the secrets API.
 
@@ -144,3 +144,22 @@ Status: proposed (8 Nov 2026) · Owner of the change: rangka-os (schema, validat
 - Promoting a company connector that recurs across tenants into rangka-connectors (drop `x_`, review, release).
 - Whether Raka may propose edits to a company connector it drafted while the state is still `untested`, before
   anything uses it.
+
+## Implementation notes (16 Nov 2026)
+
+Found while building the kernel part; they refine the sections above.
+
+- §3: the send-time check is not only `Call`: polls of an untested or `needs_auth` company connector are skipped, and
+  its webhooks start no flow (audited `connector.error` with `connector_untested`, answered 503 with
+  `Retry-After: 3600`, so the vendor retries and the event arrives after the test; the GET challenge is still
+  answered). A test in a ruang coba org is refused (`409 sandbox_no_test`), since calls there are simulated.
+- §3: state and write confirmation change only when the content hash changes. A re-test of the same file never
+  downgrades `tested`: a failed re-test only records the failure in the last result.
+- §3: the apply check also runs at validate for one case: a change set that writes an `x_` connector and adds or
+  changes flows that use it is invalid (`connector_untested` on each flow file), since its apply would reset the
+  test. Such work is always two change sets (0062 §7). Applying flows whose connector only lacks keys answers
+  `connector_needs_auth`; otherwise `connector_untested` ("belum diuji").
+- §2: a catalogue connector that declares `hosts:` must also list its OAuth2 `token_url` host, or the token refresh
+  is refused.
+- Change-set error bodies carry their detail map (for example `connectors`) for every status.
+- `Revert` and calls routed through a port are not checked at apply; they are gated at send time only.

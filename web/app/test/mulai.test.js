@@ -35,6 +35,27 @@ test("stepRole: the most specific role of the business that may create the model
   assert.strictEqual(A.stepRole(old, "uom"), "project_admin"); // two models against three
 });
 
+test("stepRole: a field role before a broad one; this module's work only breaks a tie (audit 16 Nov)", () => {
+  const SEWA = {
+    apps: [{ name: "sewa_alat", roles: ["sales_manager", "finance_manager", "rental_staff"] }],
+    roles: { sales_manager: {}, finance_manager: {}, rental_staff: {} },
+    models: {
+      rental_booking: { module: "rental", permissions: [p("sales_manager", 1)] },
+      rental_checkout: { module: "rental", permissions: [p("sales_manager", 1), p("rental_staff", 1)] },
+      rental_return: { module: "rental", permissions: [p("sales_manager", 1), p("rental_staff", 1)] },
+      rental_item: { module: "rental", permissions: [p("finance_manager", 1)] },
+      customer: { module: "contacts", permissions: [p("sales_manager", 1), p("finance_manager", 1)] },
+      vendor: { module: "contacts", permissions: [p("finance_manager", 1)] },
+      tie: { module: "rental", permissions: [p("finance_manager", 1), p("sales_manager", 1)] },
+      other: { module: "x", permissions: [p("finance_manager", 1)] },
+    },
+  };
+  assert.strictEqual(A.stepRole(SEWA, "rental_checkout"), "rental_staff"); // the staff who hands equipment out
+  assert.strictEqual(A.stepRole(SEWA, "rental_item"), "finance_manager"); // the only one that may
+  // finance creates 5 models, sales 5: a tie, and sales does more rental work
+  assert.strictEqual(A.stepRole(SEWA, "tie"), "sales_manager");
+});
+
 test("roleTone: the owner neutral, one tint per role, the same everywhere", () => {
   assert.strictEqual(A.roleTone(META, "owner"), "--field-base");
   assert.notStrictEqual(A.roleTone(META, "head_office"), A.roleTone(META, "outlet_staff"));
@@ -76,4 +97,51 @@ test("tur.js: the card goes beside a narrow element, below a wide one", () => {
   assert.strictEqual(place({ top: 120, left: 2, right: 222, bottom: 162, width: 220, height: 42 }, 340, 180).side, "right");
   assert.strictEqual(place({ top: 120, left: 300, right: 1300, bottom: 340, width: 1000, height: 220 }, 340, 180).side, "bottom");
   assert.strictEqual(place({ top: 700, left: 300, right: 1300, bottom: 860, width: 1000, height: 160 }, 340, 180).side, "top");
+});
+
+const LOCKED = { process: "sewa", current: null, hidden: false, locks: { rental_booking: { reason: "needs_data", needs: ["customer"] } },
+  steps: [{ stage: "pesan", label: { id: "Pelanggan pesan lewat WA" }, model: "rental_booking", state: "locked", needs: ["customer", "rental_item"] },
+    { stage: "antar", label: { id: "Antar dan pasang" }, model: "rental_handover", state: "locked", needs: ["customer"] }] };
+const LMETA = { models: { customer: { label: { id: "Pelanggan" } }, rental_item: { label: { id: "Perlengkapan" } } } };
+
+test("stepPrereq: every step locked by needs, the first need becomes the current step", () => {
+  const s = A.mulaiSummary(LOCKED, LMETA);
+  assert.ok(s.current && s.current.prereq);
+  assert.strictEqual(s.current.model, "customer");
+  assert.strictEqual(s.current.stage, "perlu:customer");
+  assert.strictEqual(s.current.label, "Isi dulu pelanggan");
+  assert.match(s.current.hint, /Pelanggan pesan lewat WA/);
+  assert.match(s.current.hint, /pelanggan dan perlengkapan dulu. Tambah satu pelanggan lebih dulu/);
+  assert.strictEqual(s.current.at, 0);
+  assert.strictEqual(s.total, 2); assert.strictEqual(s.done, 0); // the prerequisite is not counted as a step
+  // a current id the steps do not have (an older answer) is treated the same
+  assert.ok(A.mulaiSummary(Object.assign({}, LOCKED, { current: "customer" }), LMETA).current.prereq);
+  // an open step wins; a first waiting step without needs gives no prerequisite
+  const open = Object.assign({}, LOCKED, { current: "antar", steps: [LOCKED.steps[0], Object.assign({}, LOCKED.steps[1], { state: "open", needs: [] })] });
+  assert.strictEqual(A.mulaiSummary(open, LMETA).current.stage, "antar");
+  assert.strictEqual(A.stepPrereq({ steps: [{ stage: "x", state: "open", needs: [] }] }, LMETA), null);
+  // without meta the label falls back to the model name
+  assert.strictEqual(A.mulaiSummary(LOCKED).current.label, "Isi dulu customer");
+  // the page tour points at it
+  const tour = A.mulaiTour(LOCKED, LMETA);
+  assert.ok(tour.steps.some((x) => x.title === "Mulai dari sini" && /Kerjakan/.test(x.body)));
+});
+
+test("whenKind and saveCopy: the last tour step follows the form's primary button and what counts", () => {
+  assert.strictEqual(A.whenKind(undefined), "");
+  assert.strictEqual(A.whenKind(""), "any");
+  assert.strictEqual(A.whenKind("docstatus == 1"), "submitted");
+  assert.strictEqual(A.whenKind("status == 'paid'"), "other");
+  const step = { stage: "pesan", label: { id: "Pesanan sewa" } };
+  const simpan = A.saveCopy(step, "Simpan", "any");
+  assert.strictEqual(simpan.title, "Lalu tekan Simpan");
+  const any = A.saveCopy(step, "Ajukan", "any");
+  assert.strictEqual(any.title, "Lalu tekan Ajukan");
+  assert.match(any.body, /Simpan draf juga sudah dihitung/);
+  const sub = A.saveCopy(step, "Ajukan", "submitted");
+  assert.match(sub.body, /setelah diajukan, draf saja belum/);
+  assert.match(A.saveCopy(step, "Ajukan", "other").body, /syarat langkah/);
+  const pre = A.saveCopy({ prereq: true, label: "Isi dulu pelanggan", before: { label: { id: "Pesanan sewa" } } }, "Simpan", "");
+  assert.match(pre.body, /langkah "Pesanan sewa" terbuka/);
+  [simpan, any, sub, pre].forEach((c) => assert.doesNotMatch(c.title + c.body, /—/));
 });

@@ -9,6 +9,7 @@ skill, a `SKILL.md` with `name` and `description` frontmatter, optional `referen
 | [rangka-concepts](rangka-concepts/SKILL.md) | how apps, modules, the company layer and change sets fit together; what an agent never does |
 | [rangka-changesets](rangka-changesets/SKILL.md) | proposing, validating and previewing a change, and telling the owner without claiming it is done |
 | [rangka-compose](rangka-compose/SKILL.md) | finding what exists (`rangka catalogue`), explaining what a new app shares, adding or removing apps |
+| [rangka-connectors](rangka-connectors/SKILL.md) | drafting a company connector (`x_`) for a system the catalogue lacks, the poll + upsert pattern, its test states and what to tell the owner |
 | [rangka-consult](rangka-consult/SKILL.md) | the studio interview as a consultant: peta alur, files as guesses, composing from every piece kind |
 
 Apps and modules in rangka-apps ship their own skills in `<unit>/skills/` (for example `rangka-app-kasir`).

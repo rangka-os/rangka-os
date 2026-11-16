@@ -17,6 +17,7 @@ import (
 	"io"
 	"os"
 	"regexp"
+	"sort"
 	"strings"
 	"sync"
 	"syscall"
@@ -545,22 +546,39 @@ func toInt(v any) int64 {
 }
 
 // Requires builds the change-set hook of contract 0017 §4: for each connector the change installs (installed after,
-// not before), the required auth fields still unset for the org. installed lists a registry's installed connectors.
+// not before) or creates (a company connector drafted before any flow uses it, contract 0033 §2), the required auth
+// fields still unset for the org. installed lists a registry's installed connectors. The definitions are the
+// change's own: the sandbox loads the site's connectors, a drafted one included.
 func (s *Service) Requires(installed func(*meta.Registry) []string) func(ctx context.Context, org string, before, after *meta.Registry) []changeset.Requirement {
 	return func(ctx context.Context, org string, before, after *meta.Registry) []changeset.Requirement {
 		was := map[string]bool{}
 		for _, n := range installed(before) {
 			was[n] = true
 		}
-		// the change's copy has no connector files: the definitions are the live ones
-		after.Connectors = before.Connectors
-		out := []changeset.Requirement{}
+		names := map[string]bool{}
 		for _, n := range installed(after) {
-			if was[n] {
-				continue
+			if !was[n] {
+				names[n] = true
 			}
+		}
+		for n := range after.Connectors {
+			if before.Connectors[n] == nil {
+				names[n] = true
+			}
+		}
+		sorted := make([]string, 0, len(names))
+		for n := range names {
+			sorted = append(sorted, n)
+		}
+		sort.Strings(sorted)
+		out := []changeset.Requirement{}
+		for _, n := range sorted {
 			set := s.SetMap(ctx, org, n)
-			for _, f := range Fields(before, n) {
+			fields := Fields(after, n)
+			if fields == nil { // a kernel without a connectors dir: the sandbox has no catalogue copy
+				fields = Fields(before, n)
+			}
+			for _, f := range fields {
 				if f.Required && !set[f.Name] {
 					out = append(out, changeset.Requirement{Connector: n, Field: f.Name, Label: f.Label, Secret: f.Secret})
 				}

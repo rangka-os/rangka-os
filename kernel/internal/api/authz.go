@@ -209,7 +209,7 @@ func csFail(w http.ResponseWriter, err error) {
 			}
 		}
 		errBody := map[string]any{"code": ce.Code, "message": ce.Msg}
-		if d, ok := ce.Detail.(map[string]any); ok && ce.Status == 403 { // e.g. ai_forbidden_path's paths
+		if d, ok := ce.Detail.(map[string]any); ok { // e.g. ai_forbidden_path's paths, connector_untested's connectors
 			for k, v := range d {
 				if k != "code" && k != "message" {
 					errBody[k] = v

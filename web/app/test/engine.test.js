@@ -102,3 +102,14 @@ test("== null and != null match a missing or empty value, like the kernel (cel_t
   ];
   for (const [src, want] of cases) assert.strictEqual(E.evaluate(src, scope), want, src);
 });
+
+test("compute: a date that cannot be computed yet stays empty, not 0", () => {
+  const meta = { today: "2026-11-16", installed: [], dashboards: {}, models: { booking: { name: "booking", fields: [
+    { name: "start_date", type: "date" }, { name: "days", type: "int" },
+    { name: "end_date", type: "date", compute: "start_date + duration(days)" }, { name: "total", type: "currency", compute: "days * 2" }] } } };
+  const E = load({}).create(meta, () => null);
+  const r = E.compute("booking", { days: 3 });
+  assert.strictEqual(r.end_date, null);
+  assert.strictEqual(r.total, 6);
+  assert.strictEqual(E.compute("booking", { start_date: "2026-11-20", days: 3 }).end_date, "2026-11-23");
+});

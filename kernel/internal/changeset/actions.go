@@ -135,7 +135,7 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 				". Bagian ini diubah lewat Console oleh admin atau pemilik.", map[string]any{"paths": paths}}
 		}
 	}
-	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), s.assessEnv())
 	cs.Layers, cs.Risk = as.Layers, as.Risk
 	if cs.Layers == nil {
 		cs.Layers = []int{}
@@ -314,6 +314,24 @@ func (s *Service) moduleOf(name string) string {
 	return ""
 }
 
+// assessEnv is what AssessWith may look up besides the files.
+func (s *Service) assessEnv() Env {
+	return Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf, Flows: s.installedFlows}
+}
+
+// installedFlows are the installed flows' files by name (contract 0033 §4: the flows a company connector's
+// money-touching rule reads).
+func (s *Service) installedFlows() map[string]map[string]any {
+	out := map[string]map[string]any{}
+	if s.Reg == nil {
+		return out
+	}
+	for n, f := range s.Reg().Flows {
+		out[n] = f.Raw
+	}
+	return out
+}
+
 // appModel returns the app's own model file (without overlays) by name.
 func (s *Service) appModel(name string) map[string]any {
 	if s.Reg == nil {
@@ -336,10 +354,16 @@ func relItems(items []meta.Item, r roots) []meta.Item {
 			if len(parts) == 2 {
 				f = parts[1]
 			}
-		case strings.HasPrefix(f, "../modules/"):
+		case strings.HasPrefix(f, "../modules/"), strings.HasPrefix(f, "../connectors/"):
 			f = strings.TrimPrefix(f, "../")
 		case !strings.HasPrefix(f, "../"):
 			f = "apps/" + f
+		}
+		// a connector directory is written by the op path connectors/<n>.rk (roots.file)
+		if rest, ok := strings.CutPrefix(f, "connectors/"); ok {
+			if n, ok := strings.CutSuffix(rest, "/connector.rk"); ok && !strings.Contains(n, "/") {
+				f = "connectors/" + n + ".rk"
+			}
 		}
 		it.File = f
 		out = append(out, it)
@@ -349,7 +373,7 @@ func relItems(items []meta.Item, r roots) []meta.Item {
 
 // check validates the change set's result on a sandbox copy.
 func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func(), error) {
-	r, cleanup, _, err := s.sandbox(cs.Ops)
+	r, cleanup, files, err := s.sandbox(cs.Ops)
 	if err != nil {
 		if e, ok := err.(*Error); ok && e.Code == "stale_base" {
 			return nil, nil, roots{}, nil, e
@@ -360,7 +384,7 @@ func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func
 		}
 		return nil, nil, roots{}, nil, err
 	}
-	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: r.apps, SiteDir: r.site, ModulesDir: r.modules}, nil, s.Schemas)
+	reg, rep := meta.ValidateOpts(meta.Options{AppsDir: r.apps, SiteDir: r.site, ModulesDir: r.modules, ConnectorsDir: r.connectors}, nil, s.Schemas)
 	v := &Validation{Errors: []meta.Item{}, Warnings: []meta.Item{}}
 	for _, it := range relItems(rep.All(), r) {
 		if it.Level == "error" {
@@ -369,6 +393,7 @@ func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func
 			v.Warnings = append(v.Warnings, it)
 		}
 	}
+	v.Errors = append(v.Errors, splitConnectorFlows(files)...)
 	return v, reg, r, cleanup, nil
 }
 
@@ -807,7 +832,7 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	}
 	// the files may have changed since the proposal (another change set, the operator): assess the change set again
 	// against them, and send it back for approval when its risk rose (audit changeset-set-once, note 2)
-	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), s.assessEnv())
 	if rows != nil && riskRank[rows.Risk] > riskRank[as.Risk] {
 		as.Risk = rows.Risk
 		as.Reasons = append(as.Reasons, "high: a unit the change set removes still holds rows")
@@ -826,6 +851,9 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 			return nil, err
 		}
 		return cs, &Error{409, "risk_changed", "Risiko perubahan ini naik dari " + was + " ke " + as.Risk + " karena berkasnya berubah sejak diusulkan. Lihat pratinjau dan setujui lagi.", cs}
+	}
+	if err := s.connectorsTested(ctx, cs.Org, files); err != nil {
+		return nil, err
 	}
 	prev := map[string]*string{}
 	for p := range files {
@@ -878,6 +906,153 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 		return cs, err
 	}
 	return cs, nil
+}
+
+// connectorFlowUse reads the files a change set writes: the company connectors its flows start from or call, each with
+// the flow paths that use it, and the connectors whose file it writes (written: content set; deleted: nil content).
+func connectorFlowUse(files map[string]*string) (used map[string][]string, written, deleted map[string]bool) {
+	used, written, deleted = map[string][]string{}, map[string]bool{}, map[string]bool{}
+	for p, c := range files {
+		if strings.HasPrefix(p, "connectors/") {
+			n := strings.TrimSuffix(strings.TrimPrefix(p, "connectors/"), ".rk")
+			if c == nil {
+				deleted[n] = true
+			} else {
+				written[n] = true
+			}
+		}
+		if c == nil || !(strings.HasPrefix(p, "flows/") || strings.Contains(p, "/flows/")) {
+			continue
+		}
+		d, err := rk.LoadBytes(p, []byte(*c))
+		if err != nil {
+			continue // the validator reports an unreadable file; it is no flow
+		}
+		seen := map[string]bool{}
+		for _, n := range flowConnectors(meta.AsMap(d.Data)) {
+			if meta.IsCompanyConnector(n) && !seen[n] {
+				seen[n] = true
+				used[n] = append(used[n], p)
+			}
+		}
+	}
+	for n := range used {
+		sort.Strings(used[n])
+	}
+	return used, written, deleted
+}
+
+// splitConnectorFlows reports (connector_untested, one error per flow file) a change set that writes a company
+// connector and also adds or changes flows that use it. The apply resets the connector's test, so such a change set
+// could never apply (connectorsTested): it is found at validate, where Raka's self-repair reads it, and is split in
+// two (contract 0062 §7): (1) the connector with its models and dashboards, (2) the flows, which may be approved
+// before the owner's test and apply after it.
+func splitConnectorFlows(files map[string]*string) []meta.Item {
+	used, written, _ := connectorFlowUse(files)
+	var out []meta.Item
+	for _, n := range sortedSet(written) {
+		for _, p := range used[n] {
+			out = append(out, meta.Item{Level: "error", File: p, Pos: "1:1", Where: "(change set)", Code: "connector_untested",
+				Message: "Alur ini memakai penghubung " + n + " yang diubah di change set yang sama. Penghubung baru atau yang diubah " +
+					"belum diuji, jadi alurnya tidak bisa diterapkan bersamanya. Pecah jadi dua change set: (1) penghubung " + n +
+					" beserta model dan dasbornya; (2) alur yang memakainya. Ajukan change set kedua setelah yang pertama diterapkan; " +
+					"alurnya baru bisa diterapkan setelah pemilik menguji penghubungnya."})
+		}
+	}
+	return out
+}
+
+// connectorsTested refuses (409 connector_untested, or connector_needs_auth when every such connector only lacks
+// keys) a change set whose flows, as the change leaves them, start from (on: x_c.trigger) or call (call: x_c.action)
+// a company connector that is not tested in org (contract 0033 §3). Only the flow files the change set writes are
+// read: installed, unchanged flows were checked when they were applied. A connector whose file the change set also
+// writes counts as untested, since the apply resets its test (validate reports that case first: splitConnectorFlows).
+func (s *Service) connectorsTested(ctx context.Context, org string, files map[string]*string) error {
+	if s.ConnectorState == nil {
+		return nil
+	}
+	used, written, deleted := connectorFlowUse(files)
+	var untested, noKeys []string
+	for _, n := range sortedSet(keysSet(used)) {
+		// a connector file the change set writes resets its test when applied: its live state says nothing
+		if written[n] || deleted[n] {
+			untested = append(untested, n)
+			continue
+		}
+		st, err := s.ConnectorState(ctx, org, n)
+		if err != nil {
+			return err
+		}
+		switch st {
+		case "tested":
+		case "needs_auth":
+			noKeys = append(noKeys, n)
+		default:
+			untested = append(untested, n)
+		}
+	}
+	return connectorStateError(untested, noKeys)
+}
+
+// connectorStateError is the apply refusal for connectors that are not ready: untested ones answer connector_untested
+// ("belum diuji"); when every one only lacks keys, connector_needs_auth.
+func connectorStateError(untested, noKeys []string) error {
+	if len(untested) == 0 && len(noKeys) == 0 {
+		return nil
+	}
+	all := append(append([]string{}, untested...), noKeys...)
+	sort.Strings(all)
+	if len(untested) == 0 {
+		return &Error{409, "connector_needs_auth", "Kunci penghubung " + strings.Join(noKeys, ", ") + " belum diisi. " +
+			"Isi kuncinya di Pengaturan → Penghubung, uji penghubungnya, lalu terapkan perubahan ini lagi.",
+			map[string]any{"connectors": all, "needs_auth": noKeys}}
+	}
+	msg := "Penghubung " + strings.Join(untested, ", ") + " belum diuji. "
+	if len(noKeys) > 0 {
+		msg += "Kunci penghubung " + strings.Join(noKeys, ", ") + " juga belum diisi. "
+	}
+	msg += "Uji dulu di Pengaturan → Penghubung, lalu terapkan perubahan ini lagi."
+	return &Error{409, "connector_untested", msg, map[string]any{"connectors": all, "needs_auth": nonNil(noKeys)}}
+}
+
+func keysSet[V any](m map[string]V) map[string]bool {
+	out := make(map[string]bool, len(m))
+	for k := range m {
+		out[k] = true
+	}
+	return out
+}
+
+func nonNil(s []string) []string {
+	if s == nil {
+		return []string{}
+	}
+	return s
+}
+
+// flowConnectors lists the connector heads a flow starts from (on:) or calls (call: steps, nested in then, else and
+// do included).
+func flowConnectors(f map[string]any) []string {
+	var out []string
+	if on, _ := f["on"].(string); strings.Contains(on, ".") {
+		head, _, _ := strings.Cut(on, ".")
+		out = append(out, head)
+	}
+	var walk func(steps []any)
+	walk = func(steps []any) {
+		for _, x := range steps {
+			st := meta.AsMap(x)
+			if call, _ := st["call"].(string); strings.Contains(call, ".") {
+				head, _, _ := strings.Cut(call, ".")
+				out = append(out, head)
+			}
+			for _, k := range []string{"then", "else", "do"} {
+				walk(meta.AsList(st[k]))
+			}
+		}
+	}
+	walk(meta.AsList(f["steps"]))
+	return out
 }
 
 func (s *Service) write(r roots, files map[string]*string) error {
@@ -962,7 +1137,7 @@ func (s *Service) Revert(ctx context.Context, a Actor, id string) (*ChangeSet, e
 			ops = append(ops, Op{Op: op, Path: p})
 		}
 		sort.Slice(ops, func(i, j int) bool { return ops[i].Path < ops[j].Path })
-		as := AssessWith(ops, parsed(live, nil), parsed(live, cs.previous), Env{Model: s.appModel, Installed: s.installedFor, ModuleOf: s.moduleOf})
+		as := AssessWith(ops, parsed(live, nil), parsed(live, cs.previous), s.assessEnv())
 		if riskRank[as.Risk] > riskRank[risk] {
 			risk = as.Risk
 		}

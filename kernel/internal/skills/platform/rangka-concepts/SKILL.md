@@ -27,7 +27,7 @@ installation serves one business (a **site**). Juragan is the product name owner
 | Layer | What | Who may change it |
 | --- | --- | --- |
 | 2 | `system.rk`: database, queue, mail, secrets | an operator |
-| 3 | `connectors/`: integrations with outside services | proposed by an agent only through the connector skills |
+| 3 | `connectors/`: integrations with outside services | an agent may propose a new company connector (`x_`, see `rangka-connectors`); a person tests it |
 | 4 | the company: `config.rk`, `features.rk`, `custom/<model>.rk` overlays (`x_` fields), the site's own `models/` and `flows/` | proposed by an agent, approved by a person |
 | 5 | apps and modules (the catalogue) | their maintainers, never an agent on a site |
 | 6 | themes and layouts | proposed by an agent, approved by a person |

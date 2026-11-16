@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: x_demo
+label: {id: Contoh}
+summary: {id: Contoh connector untuk uji kode validator.}
+version: 0.1.0
+hosts: [api.example.com]
+experimental:
+  source:
+    kind: docs
+    url: https://api.example.com/docs
+auth:
+  type: token
+  fields:
+    - name: access_token
+      label: {id: Access token}
+      secret: true
+actions:
+  - name: ping
+    label: {id: Kirim ping}
+    request:
+      method: POST
+      url: https://api.example.com/ping
+      headers: {Authorization: 'Bearer {auth.access_token}'}

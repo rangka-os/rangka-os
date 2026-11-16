@@ -263,6 +263,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/connectors/{connector}/auth", a(s.getConnectorAuth))
 	mux.HandleFunc("PUT /api/v1/connectors/{connector}/auth/{field}", a(s.putConnectorAuth))
 	mux.HandleFunc("DELETE /api/v1/connectors/{connector}/auth/{field}", a(s.deleteConnectorAuth))
+	// test and confirm a company connector (contract 0033 §3, §4)
+	mux.HandleFunc("GET /api/v1/connectors/{connector}/test", a(s.getConnectorTest))
+	mux.HandleFunc("POST /api/v1/connectors/{connector}/test", a(s.postConnectorTest))
+	mux.HandleFunc("POST /api/v1/connectors/{connector}/confirm-writes", a(s.postConnectorConfirmWrites))
 	// member API (contract 0043): API tokens with members:write only
 	mux.HandleFunc("GET /api/v1/members/options", a(s.memberOptions)) // contract 0056 §3
 	mux.HandleFunc("PUT /api/v1/members/{upstream}/{subject}", a(s.putMember))

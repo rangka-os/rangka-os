@@ -37,8 +37,8 @@ func TestSkillsCheckPlatform(t *testing.T) {
 	if code := cmdSkills([]string{"check"}); code != 0 {
 		t.Fatalf("exit %d: %s", code, buf.String())
 	}
-	want := []string{"rangka-changesets", "rangka-compose", "rangka-concepts", "rangka-consult"}
-	if !strings.Contains(buf.String(), "4 skill(s) checked") {
+	want := []string{"rangka-changesets", "rangka-compose", "rangka-concepts", "rangka-connectors", "rangka-consult"}
+	if !strings.Contains(buf.String(), "5 skill(s) checked") {
 		t.Errorf("output: %s", buf.String())
 	}
 	for _, n := range want {

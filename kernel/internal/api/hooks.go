@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 )
@@ -30,6 +31,9 @@ func (s *Server) hook(w http.ResponseWriter, r *http.Request) {
 	ctx := pg.WithOrg(r.Context(), org)
 	out := s.Connectors.HandleHook(ctx, org, r.PathValue("connector"), r.PathValue("trigger"), r)
 	w.Header().Set("Content-Type", "text/plain; charset=utf-8")
+	if out.RetryAfter > 0 {
+		w.Header().Set("Retry-After", strconv.Itoa(out.RetryAfter))
+	}
 	w.WriteHeader(out.Status)
 	w.Write([]byte(out.Body))
 }

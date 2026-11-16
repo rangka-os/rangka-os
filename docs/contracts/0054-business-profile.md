@@ -1,6 +1,6 @@
 # 0054 Business profile in onboarding: the plan comes from the profile
 
-Status: proposed (14 Nov 2026; amended 15 Nov 2026 by 0054a: one question per fact, Raka answers the saved profile, scale and outlets as one question on the card) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (`/v1/interview`
+Status: proposed (14 Nov 2026; amended 15 Nov 2026 by 0054a: one question per fact, Raka answers the saved profile, scale and outlets as one question on the card; 16 Nov 2026 by 0054a §5: business name first, the card turn asks nothing else, "cabang" in owner copy) · Owner of the change: rangka-os (this contract) · Affects: rangka-ai (`/v1/interview`
 request and reply, consult prompt), rangka-cloud (profile storage, studio profile card, plan and offer-kind
 suggestion, offer card, build gate, Kendali "Calon pelanggan"; private) · Builds on: 0042 (consultant interview),
 0046 (offer), 0050 (pains), 0041 (prices from Cloud docs) · Implemented together with: 0050
@@ -44,8 +44,8 @@ Eight questions. Each has fixed options plus "Lainnya", except `outlets`, which 
 | --- | --- | --- | --- | --- |
 | `industry` | Jenis usaha | | `outsourcing` Outsourcing · `rental` Rental alat · `training` Kursus & pelatihan · `subscription` Layanan langganan · `fnb` F&B · `retail` Toko ritel · `wholesale` Grosir · `production` Produksi | one |
 | `scale` | Skala usaha | | `starting` Baru mulai · `one_location` 1 lokasi · `branches_2_5` 2–5 cabang · `branches_over_5` Lebih dari 5 cabang · `multi_business` Beberapa usaha | one |
-| `outlets` | Jumlah outlet | cabang atau lokasi tempat kamu melayani | integer 1–999 | number |
-| `sales_channels` | Cara jualan | boleh lebih dari satu | `offline_outlet` Offline · toko/outlet · `offline_visit` Offline · datang ke klien · `offline_sales` Offline · tim sales · `online_social` Online · WhatsApp/medsos · `online_marketplace` Online · marketplace · `online_website` Online · website | many |
+| `outlets` | Jumlah cabang | termasuk toko atau kantor utama | integer 1–999 | number |
+| `sales_channels` | Cara jualan | boleh lebih dari satu | `offline_outlet` Offline · toko/cabang · `offline_visit` Offline · datang ke klien · `offline_sales` Offline · tim sales · `online_social` Online · WhatsApp/medsos · `online_marketplace` Online · marketplace · `online_website` Online · website | many |
 | `customers` | Pelanggan | aktif per bulan | `under_50` Kurang dari 50 · `to_200` 50–200 · `to_1000` 200–1.000 · `over_1000` Lebih dari 1.000 | one |
 | `staff` | Staf | termasuk petugas lapangan | `solo` Sendiri · `to_5` 2–5 · `to_20` 6–20 · `to_100` 21–100 · `over_100` Lebih dari 100 | one |
 | `products` | Produk/layanan | yang kamu jual | `to_10` 1–10 · `to_50` 11–50 · `to_500` 51–500 · `over_500` Lebih dari 500 | one |
@@ -117,9 +117,10 @@ Eight questions. Each has fixed options plus "Lainnya", except `outlets`, which 
 
 ### 4. The profile card (studio)
 
-- **When.** Cloud adds a message with card kind `profile` after the first consult turn of a project, and again
-  whenever the owner opens "Ubah" on the profile in the peta panel. Raka's text above it: "Biar paket dan harganya
-  pas, aku isi dulu profil usahamu dari cerita tadi. Cek ya: yang bergaris putus-putus itu tebakanku."
+- **When.** Cloud adds a message with card kind `profile` after the first consult turn of a project (0054a §5: the
+  first reply without a question and without guess or offer buttons), and again whenever the owner opens "Ubah" on
+  the profile in the peta panel. Raka's text above it: "Biar paket dan harganya pas, aku isi dulu profil usahamu dari
+  cerita tadi. Cek ya: yang bergaris putus-putus itu tebakanku. Simpan dulu ya, habis itu kita lanjut ngobrol."
 - **Layout** (board A and B).
   - Title "Profil usaha", status line, and "Pilih yang paling dekat. Tidak ada yang pas? Pilih Lainnya dan
     ceritakan."

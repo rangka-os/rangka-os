@@ -169,7 +169,10 @@ type Service struct {
 	// ReadOnly says why a person may not decide (contract 0028 §4: past the plan's people limit a person is
 	// read-only and decides nothing); "" when they may. Nil = no plan check.
 	ReadOnly func(personID string) string
-	mu       sync.Mutex
+	// ConnectorState is a connector's effective state in an org (contract 0033 §3: needs_auth, untested or
+	// tested); Apply refuses flows that use a company connector that is not tested. Nil = no check.
+	ConnectorState func(ctx context.Context, org, connector string) (string, error)
+	mu             sync.Mutex
 }
 
 func (s *Service) now() string {
@@ -215,6 +218,12 @@ func (r roots) file(p string) (string, error) {
 			return "", fmt.Errorf("no modules directory configured for %s", p)
 		}
 		return filepath.Join(r.modules, filepath.FromSlash(strings.TrimPrefix(p, "modules/"))), nil
+	case strings.HasPrefix(p, "connectors/x_"): // a company connector lives in the site (contract 0033 §2)
+		if r.site == "" {
+			return "", fmt.Errorf("no site directory configured for %s", p)
+		}
+		stem := strings.TrimSuffix(strings.TrimPrefix(p, "connectors/"), ".rk")
+		return filepath.Join(r.site, "connectors", stem, "connector.rk"), nil
 	case strings.HasPrefix(p, "connectors/"):
 		if r.connectors == "" {
 			return "", fmt.Errorf("no connectors directory configured for %s", p)

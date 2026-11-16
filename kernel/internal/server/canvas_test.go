@@ -106,6 +106,12 @@ func TestProcessesList(t *testing.T) {
 	if inferred["lead_to_cash"] || !inferred["crm"] || !inferred["jasa_proyek"] {
 		t.Errorf("inferred = %v", inferred)
 	}
+	// app: the unit that brings the process (declared or inferred)
+	for _, p := range e.must(200, "GET", "/api/v1/processes", nil).JSON["data"].([]any) {
+		if app, _ := get(p, "app").(string); app == "" {
+			t.Errorf("%v has no app", get(p, "name"))
+		}
+	}
 }
 
 func TestProcessGraph(t *testing.T) {

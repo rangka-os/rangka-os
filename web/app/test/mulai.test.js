@@ -35,6 +35,27 @@ test("stepRole: the most specific role of the business that may create the model
   assert.strictEqual(A.stepRole(old, "uom"), "project_admin"); // two models against three
 });
 
+test("stepRole: a field role before a broad one; this module's work only breaks a tie (audit 16 Nov)", () => {
+  const SEWA = {
+    apps: [{ name: "sewa_alat", roles: ["sales_manager", "finance_manager", "rental_staff"] }],
+    roles: { sales_manager: {}, finance_manager: {}, rental_staff: {} },
+    models: {
+      rental_booking: { module: "rental", permissions: [p("sales_manager", 1)] },
+      rental_checkout: { module: "rental", permissions: [p("sales_manager", 1), p("rental_staff", 1)] },
+      rental_return: { module: "rental", permissions: [p("sales_manager", 1), p("rental_staff", 1)] },
+      rental_item: { module: "rental", permissions: [p("finance_manager", 1)] },
+      customer: { module: "contacts", permissions: [p("sales_manager", 1), p("finance_manager", 1)] },
+      vendor: { module: "contacts", permissions: [p("finance_manager", 1)] },
+      tie: { module: "rental", permissions: [p("finance_manager", 1), p("sales_manager", 1)] },
+      other: { module: "x", permissions: [p("finance_manager", 1)] },
+    },
+  };
+  assert.strictEqual(A.stepRole(SEWA, "rental_checkout"), "rental_staff"); // the staff who hands equipment out
+  assert.strictEqual(A.stepRole(SEWA, "rental_item"), "finance_manager"); // the only one that may
+  // finance creates 5 models, sales 5: a tie, and sales does more rental work
+  assert.strictEqual(A.stepRole(SEWA, "tie"), "sales_manager");
+});
+
 test("roleTone: the owner neutral, one tint per role, the same everywhere", () => {
   assert.strictEqual(A.roleTone(META, "owner"), "--field-base");
   assert.notStrictEqual(A.roleTone(META, "head_office"), A.roleTone(META, "outlet_staff"));

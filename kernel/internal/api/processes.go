@@ -70,7 +70,10 @@ func (s *Server) listProcesses(w http.ResponseWriter, r *http.Request, c *caller
 		if len(g.Groups) == 0 {
 			continue
 		}
-		out = append(out, map[string]any{"name": g.Name, "label": g.Label, "inferred": g.Inferred, "stages": len(g.Groups), "source": g.Source})
+		// app: the unit that brings the process ("" for a site process), so a client can tell the owner's own process
+		// from an app's, whose label is the app's product name (t_4e93e013)
+		out = append(out, map[string]any{"name": g.Name, "label": g.Label, "inferred": g.Inferred, "stages": len(g.Groups), "source": g.Source,
+			"app": p.App})
 	}
 	writeJSON(w, http.StatusOK, map[string]any{"data": out})
 }

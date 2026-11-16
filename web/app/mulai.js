@@ -46,14 +46,27 @@
     return (out.length ? out : Object.keys((meta && meta.roles) || {})).filter(function (r) { return r !== "owner"; }).sort();
   }
   function stepRole(meta, model) {
-    var models = (meta && meta.models) || {}, perms = ((models[model] || {}).permissions) || [], width = {}, mine = bizRoles(meta);
+    // the most specific role that may create the model: the one that creates the fewest models (a field role before
+    // head office, audit 16 Nov), then on a tie the one that does more of this module's work, then by name
+    var models = (meta && meta.models) || {}, perms = ((models[model] || {}).permissions) || [], width = {}, local = {}, mine = bizRoles(meta);
+    var mod = (models[model] || {}).module;
     Object.keys(models).forEach(function (m) {
-      ((models[m] || {}).permissions || []).forEach(function (p) { if (p && p.create) width[p.role] = (width[p.role] || 0) + 1; });
+      ((models[m] || {}).permissions || []).forEach(function (p) {
+        if (!p || !p.create) return;
+        width[p.role] = (width[p.role] || 0) + 1;
+        if (mod && (models[m] || {}).module === mod) local[p.role] = (local[p.role] || 0) + 1;
+      });
     });
     var best = null;
+    function better(r, b) {
+      if (width[r] !== width[b]) return width[r] < width[b];
+      var lr = local[r] || 0, lb = local[b] || 0;
+      if (lr !== lb) return lr > lb;
+      return r < b;
+    }
     perms.forEach(function (p) {
       if (!p || !p.create || !p.role || p.role === "owner" || mine.indexOf(p.role) < 0) return;
-      if (!best || width[p.role] < width[best] || (width[p.role] === width[best] && p.role < best)) best = p.role;
+      if (!best || better(p.role, best)) best = p.role;
     });
     return best || "owner";
   }
@@ -347,8 +360,11 @@
     useEffect(function () { if (ctx.onboarding && ctx.onboarding.reload) ctx.onboarding.reload(); }, []);
     useEffect(function () {
       if (!ob || !ob.process || !ctx.api.processes) return;
-      ctx.api.processes().then(function (list) { var x = (list || []).filter(function (q) { return q.name === ob.process; })[0]; setProc(x ? x.label : null); }, function () {});
-    }, [ob && ob.process]);
+      // an app's process is labelled with the app's product name ("Rangka Sewa Alat"): the owner reads their business
+      // name instead (no platform words, rangka-os#177, t_4e93e013); a site process carries the owner's own label
+      var biz = (ctx.me && ctx.me.orgName && ctx.me.orgName !== ctx.me.org) ? ctx.me.orgName : null;
+      ctx.api.processes().then(function (list) { var x = (list || []).filter(function (q) { return q.name === ob.process; })[0]; setProc(x ? (x.app ? biz : x.label) : null); }, function () {});
+    }, [ob && ob.process, ctx.me && ctx.me.orgName]);
     // first visit: tour "halaman:mulai" once the page stands
     useEffect(function () {
       if (!ob || !(ob.steps || []).length || !RA.tour || !RA.tourAuto) return;

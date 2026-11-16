@@ -55,8 +55,11 @@ pages:
 
 The default shell is `side-only`, a Frappe-style sidebar; a site without a layout gets it too
 ([contract 0019](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0019-frappe-shell-default.md)).
-`top-nav` puts the app switcher and search in a bar above the sidebar. `pos` and `portal` show the sidebar until those
-shells are built.
+`top-nav` puts the app switcher and search in a bar above the sidebar. From 1024px wide the bar also carries the menu:
+the layout's `nav.top` links in file order (up to 6; a `model:` or `dashboard:` target the site lacks is left out), or,
+without `nav.top`, one item per sidebar group. A layout with `nav.top` and no `shell` gets `top-nav`; say
+`shell: side-only` to keep only the sidebar. The `nav.top` links are also in ⌘K. `pos` and `portal` show the sidebar
+until those shells are built.
 
 A page is a tree of **UI blocks** — `page_header`, `list`, `board`, `form`, `dashboard`, `number`, `chart`, `table`,
 `markdown`, `filter_bar`, `tabs`, `columns`, `empty_state`, `embed` — on a 12-column grid. Each block is a design-system

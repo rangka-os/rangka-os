@@ -160,16 +160,33 @@
   /** Sidebar groups from the site layout's nav.side ([{group, items: [{to: "model:m" | "dashboard:d", label?, icon?}]}]);
    *  links to models or dashboards that are not installed are left out, and so are empty groups. Null when the layout
    *  has no nav.side (the app menus are used then). */
+  /** A layout link {to: model:<m>|dashboard:<d>, label, icon} → a menu entry {id, label, icon}, or null for a target
+   *  this site does not have (or a kind the app does not open yet: page, settings, url). */
+  function layoutLink(meta, it) {
+    var models = (meta && meta.models) || {}, dashes = (meta && meta.dashboards) || {};
+    var to = String((it && it.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1);
+    if (k === "model" && models[n]) return { id: "r/" + n, label: L(it.label) || L(models[n].label) || n, icon: it.icon || models[n].icon || "invoice" };
+    if (k === "dashboard" && dashes[n]) return { id: "d/" + n, label: L(it.label) || L(dashes[n].label) || n, icon: it.icon || "dashboard" };
+    return null;
+  }
+
+  /** layout.nav.top: the links the top bar shows, in file order (at most 6, the schema's limit), or null when the
+   *  layout names none (the top bar then follows the sidebar groups). */
+  function navTop(meta) {
+    var top = meta && meta.layout && meta.layout.nav && meta.layout.nav.top;
+    if (!Array.isArray(top) || !top.length) return null;
+    var seen = {}, out = top.map(function (it) { return layoutLink(meta, it); }).filter(function (x) {
+      if (!x || seen[x.id]) return false;
+      seen[x.id] = true;
+      return true;
+    });
+    return out.length ? out.slice(0, 6) : null;
+  }
+
   function navFromLayout(meta) {
     var side = meta && meta.layout && meta.layout.nav && meta.layout.nav.side;
     if (!Array.isArray(side) || !side.length) return null;
-    var models = meta.models || {}, dashes = meta.dashboards || {};
-    function linkItem(it) {
-      var to = String((it && it.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1);
-      if (k === "model" && models[n]) return { id: "r/" + n, label: L(it.label) || L(models[n].label) || n, icon: it.icon || models[n].icon || "invoice" };
-      if (k === "dashboard" && dashes[n]) return { id: "d/" + n, label: L(it.label) || L(dashes[n].label) || n, icon: it.icon || "dashboard" };
-      return null;
-    }
+    function linkItem(it) { return layoutLink(meta, it); }
     return side.map(function (g) {
       var items = ((g && g.items) || []).map(function (it) {
         if (it && Array.isArray(it.items)) { // a sub-menu (contract 0037); empty once its links are left out
@@ -310,7 +327,11 @@
   /** The desktop top bar's items in the top-nav shell: one per sidebar group (its label; a group without a label gives
    *  its own entries), at most `max` (6). Each opens the group's first entry; `current` is the item whose group holds
    *  the page (here: navId of the route). Below 1024px the bar hides them and the sidebar or tabs carry the menu. */
-  function topNavItems(groups, here, max) {
+  function topNavItems(groups, here, max, top) {
+    if (top && top.length) { // the layout's own top menu (nav.top): its links as they are, the open one marked
+      var hit = top.filter(function (x) { return x.id === here; })[0];
+      return { items: top.map(function (x) { return { id: x.id, label: x.label }; }), current: hit ? hit.id : null };
+    }
     var out = [];
     (groups || []).forEach(function (g) {
       var leaves = flatNav(g.items).filter(function (x) { return x && x.id; });
@@ -341,10 +362,12 @@
     return { pinned: [{ id: "home", label: "Beranda", icon: "home" }].concat(mulai ? [mulai] : [], f.more), groups: groups };
   }
 
-  /** layout.shell → the shell drawn: top-nav when named, side-only otherwise (side, pos and portal until they exist). */
+  /** layout.shell → the shell drawn: top-nav when named, side-only otherwise (side, pos and portal until they exist).
+   *  A layout that names no shell but has a top menu (nav.top) gets the top bar: it asked for one. */
   function shellKind(meta) {
     var l = meta && meta.layout;
-    return l && l.shell === "top-nav" ? "top-nav" : "side-only";
+    if (l && l.shell === "top-nav") return "top-nav";
+    return l && !l.shell && navTop(meta) ? "top-nav" : "side-only";
   }
 
   var DENSITIES = { compact: 1, standard: 1, comfortable: 1 };
@@ -380,6 +403,7 @@
       pages.push({ id: it.id, label: it.label, sub: sub || undefined, icon: it.icon, hash: it.id === "home" ? homeHash(meta) || "#/" : "#/" + it.id });
     }
     (nav.pinned || []).forEach(function (it) { add(it, ""); });
+    (navTop(meta) || []).forEach(function (it) { add(it, "Menu atas"); });
     (nav.groups || []).forEach(function (g) { flatNav(g.items).forEach(function (it) { add(it, it.parent ? g.label + " · " + it.parent : g.label); }); });
     if (pages.length) out.push({ label: "Halaman", items: pages });
     var create = ((meta.layout && meta.layout.nav && meta.layout.nav.create) || []).filter(function (m) {
@@ -1363,7 +1387,7 @@
       });
     }
 
-    var topNav = kind === "top-nav" ? topNavItems(navGroups(openApp ? Object.assign({}, meta, { apps: [openApp] }) : meta, features, { approvals: approvalCount }), navId(route)) : null;
+    var topNav = kind === "top-nav" ? topNavItems(navGroups(openApp ? Object.assign({}, meta, { apps: [openApp] }) : meta, features, { approvals: approvalCount }), navId(route), 6, navTop(meta)) : null;
     var top = kind !== "top-nav" ? null : h(R.TopNav, {
       product: { name: name, icon: "store", color: "var(--brand)" }, items: topNav.items, current: topNav.current, onNavigate: onNavigate,
       createLabel: false, theme: theme,

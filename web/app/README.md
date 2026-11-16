@@ -22,7 +22,9 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   With `layout.responsive.phone: tabs` (contract 0038) a phone gets bottom tabs from `responsive.tabs` plus a last Menu
   tab that opens the drawer; the top-nav shell then drops its own menu button, and toasts sit above the tabs. Escape
   closes the drawer.
-- **`top-nav`**: the TopNav (app switcher, search, account menu) with the sidebar below it.
+- **`top-nav`**: the TopNav (app switcher, search, account menu) with the sidebar below it. From 1024px the bar shows
+  the layout's `nav.top` links (`model:` and `dashboard:` targets the site has, at most 6), else one item per sidebar
+  group. A layout with `nav.top` and no `shell` gets this shell.
 
 ⌘K or Ctrl+K opens the command menu in both: Halaman (every sidebar entry), Buat baru (`layout.nav.create`) and Data
 (the first 5 matches per model in the sidebar, from `GET /api/v1/r/<model>?q=`). `theme.density` sets

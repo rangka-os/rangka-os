@@ -1071,6 +1071,59 @@ def test_top_nav_shell(page, ctx):
     assert page.locator(".rk-account").get_by_role("menuitem", name="Keluar").count() == 1
 
 
+def test_layout_nav_top(page, ctx):
+    """layout.nav.top (mocked meta): a layout that names no shell but has a top menu gets the top bar, and the bar shows
+    the layout's own links in file order (unknown targets left out), not the sidebar groups; they are in ⌘K too. A layout
+    that says shell: side-only keeps its sidebar."""
+    seen = {}
+
+    def meta(shell):
+        def handler(route):
+            body = route.fetch().json()
+            model = next(iter(body.get("models") or {}))
+            dash = next(iter(body.get("dashboards") or {}), None)
+            top = [{"to": "model:" + model, "label": {"id": "Data utamaku"}}, {"to": "model:tidak_ada"}]
+            if dash:
+                top.append({"to": "dashboard:" + dash})
+            layout = {"name": "main", "label": {"id": "Utama"}, "nav": {"top": top}}
+            if shell:
+                layout["shell"] = shell
+            body["layout"] = layout
+            seen.update(model=model, dash=dash, dash_label=L((body["dashboards"].get(dash) or {}).get("label")) if dash else None)
+            _json(route, 200, body)
+        return handler
+
+    page.route(re.compile(r".*/api/v1/meta$"), meta(None))
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    assert page.locator(".ap-shell.ap-top").count() == 1, "nav.top without a shell draws the top bar"
+    items = page.locator(".rk-topnav-items .rk-topnav-item")
+    if ctx.args.width >= 1024:
+        labels = [t.strip() for t in items.all_inner_texts()]
+        want = ["Data utamaku"] + ([seen["dash_label"] or seen["dash"]] if seen["dash"] else [])
+        assert labels == want, f"the layout's top links, in order, unknown ones left out: {labels} vs {want}"
+        items.first.click()
+        page.wait_for_function("m => location.hash.startsWith('#/r/' + m)", arg=seen["model"], timeout=5000)
+        page.wait_for_function("""() => { const c = document.querySelectorAll('.rk-topnav-item[aria-current=page]');
+            return c.length === 1 && c[0].textContent.trim() === 'Data utamaku'; }""", timeout=5000)  # the open link is marked
+        shot(page, ctx, "layout-nav-top")
+    else:
+        assert not page.locator(".rk-topnav-items").is_visible(), "below 1024px the menu stays in the sidebar or tabs"
+    page.keyboard.press("ControlOrMeta+k")
+    dlg = page.get_by_role("dialog", name="Menu perintah")
+    dlg.wait_for(timeout=5000)
+    assert dlg.get_by_role("group", name="Halaman").get_by_text("Data utamaku").count() >= 1, "top links in ⌘K Halaman"
+    page.keyboard.press("Escape")
+
+    page.unroute(re.compile(r".*/api/v1/meta$"))
+    page.route(re.compile(r".*/api/v1/meta$"), meta("side-only"))
+    page.goto("about:blank")  # a fresh load, so the app asks for /meta again (a hash change would not)
+    page.goto(ctx.base + "/app/")
+    page.locator(".ap-shell").wait_for(timeout=10000)
+    assert page.locator(".ap-shell.ap-top").count() == 0, "shell: side-only keeps the sidebar even with nav.top"
+
+
 # ---------------------------------------------------------------------------------------------- lists and kanban (Task 5)
 def open_route(page, ctx, hash_, who=None):
     """Sign in (owner by default) and go to a hash route without reloading the app."""

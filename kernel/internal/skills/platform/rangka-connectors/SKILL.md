@@ -32,8 +32,9 @@ section 5a: spec, docs, the owner's material); this skill is the drafting and wh
   `preview.requires` once you preview it; name them in the change-set summary so the owner sees what to fill in. Ask
   for the key where the owner enters it (the connector setup form), not in chat: it would sit in the conversation
   history, and a turn with a pasted key is stopped (code `secrets`). Say which kind of key it is and where it goes.
-- Always two change sets: (1) the connector with its models and dashboards; (2) the flows that use it, which may be
-  approved now and apply once the owner's test passes. A change set that writes an `x_` connector and also adds or
+- Always two change sets: (1) the connector with its models and dashboards; (2) the flows that use it. Propose the
+  second only after the first is applied: until then a new connector does not exist for validation and the flows fail
+  with `unknown_connector`. The flows apply once the owner's test passes. A change set that writes an `x_` connector and also adds or
   changes flows using it fails validation with `connector_untested` on each such flow file: split it, do not retry.
 
 ## 2. Bringing data in: poll, then upsert
@@ -86,8 +87,8 @@ Per business, a company connector is in one of these states. The kernel checks t
   (`POST /api/v1/connectors/{c}/confirm-writes`, within 24 hours of the test, owner only, also refused for AI tokens).
   Until then a write fails with `connector_writes_unconfirmed`.
 - Applying a change set whose flows call or trigger on an `x_` connector that is not `tested` is refused with
-  `409 connector_untested` (`409 connector_needs_auth` while its keys are missing). The second change set waits there:
-  tell the owner to apply the first, set the keys, run the test, then apply the flows.
+  `409 connector_untested` (`409 connector_needs_auth` while its keys are missing). Order for a new connector: the owner
+  applies the first change set, you propose the flows, the owner sets the keys and runs the test, then applies the flows.
 - The ruang coba only simulates calls, so a test there is refused (`409 sandbox_no_test`): the owner tests in the
   real business.
 - At send time the kernel answers `connector_needs_auth`, `connector_untested`, `connector_writes_unconfirmed` and

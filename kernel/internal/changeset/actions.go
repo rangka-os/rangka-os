@@ -955,8 +955,8 @@ func splitConnectorFlows(files map[string]*string) []meta.Item {
 			out = append(out, meta.Item{Level: "error", File: p, Pos: "1:1", Where: "(change set)", Code: "connector_untested",
 				Message: "Alur ini memakai penghubung " + n + " yang diubah di change set yang sama. Penghubung baru atau yang diubah " +
 					"belum diuji, jadi alurnya tidak bisa diterapkan bersamanya. Pecah jadi dua change set: (1) penghubung " + n +
-					" beserta model dan dasbornya; (2) alur yang memakainya. Change set kedua boleh disetujui sekarang dan " +
-					"diterapkan setelah pemilik menguji penghubungnya."})
+					" beserta model dan dasbornya; (2) alur yang memakainya. Ajukan change set kedua setelah yang pertama diterapkan; " +
+					"alurnya baru bisa diterapkan setelah pemilik menguji penghubungnya."})
 		}
 	}
 	return out

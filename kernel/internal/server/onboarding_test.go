@@ -346,3 +346,30 @@ func TestOnboardingToursPerPerson(t *testing.T) {
 		t.Fatalf("removed member tours: %v %v", err, res)
 	}
 }
+
+// 0053 §2 amended (t_4e93e013): a step whose model needs another step's model comes after it, whatever the process
+// order (an inferred app process follows the app's menu: sewa_alat lists Pesanan sewa first and Pelanggan last); a
+// step with no prerequisite among the steps keeps its place.
+func TestOnboardingPrerequisitesFirst(t *testing.T) {
+	e, _ := canvasEnv(t, func(root string) {
+		dir := filepath.Join(root, "site", "processes")
+		os.MkdirAll(dir, 0o755)
+		os.WriteFile(filepath.Join(dir, "mulai.rk"), []byte(`name: mulai
+stages:
+  - {name: peluang, model: deal}
+  - {name: prospek, model: lead}
+  - {name: pelanggan, model: customer}
+`), 0o644)
+	})
+	ob := e.must(200, "GET", "/api/v1/onboarding", nil).JSON
+	var order []string
+	for _, s := range get(ob, "steps").([]any) {
+		order = append(order, get(s, "stage").(string))
+	}
+	if strings.Join(order, ",") != "prospek,pelanggan,peluang" {
+		t.Fatalf("order %v", order)
+	}
+	if get(ob, "current") != "prospek" {
+		t.Fatalf("current %v", get(ob, "current"))
+	}
+}

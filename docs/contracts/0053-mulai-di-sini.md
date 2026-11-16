@@ -68,8 +68,12 @@ stages:
   4. the inferred process of the first installed app in `config.apps` order (0014 §3).
 
   With none, `steps` is `[]` and the web app shows no Mulai di sini.
-- **Steps.** One step per stage the caller may read (0014 §7), in stage order. `label` is the stage label, `hint` and
-  `answers` come from §1, and both are omitted or empty when the stage has none.
+- **Steps.** One step per stage the caller may read (0014 §7), in stage order, except that a stage whose model needs
+  another step's model (a required `link`, as in `needs` below) comes after that step: a stable topological order,
+  so a process that already respects its prerequisites keeps its order; on a cycle the rest follow in stage order
+  (amended 16 Nov: an inferred app process follows the app's menu, which may list Pelanggan after Pesanan sewa).
+  `label` is the stage label, `hint` and `answers` come from §1, and both are omitted or empty when the stage has
+  none.
 - **State.**
   - `done`: at least one record of the stage `model` matching the stage `when` exists in the caller's org. The count
     uses the org's data, not the caller's row scope, and only the boolean leaves the kernel. `done_at` is the

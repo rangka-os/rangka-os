@@ -38,7 +38,7 @@ stages:
 Every installed app (kind app or legacy) with a `menu:` and no declared process named like the app also gets an inferred process `<app>`: one stage per non-child menu model, in menu order, named after the model and labelled by the model's label. `GET /processes` marks it `inferred: true`. So any bundle has a canvas without authoring. A declared process of the same name wins.
 
 ### 4. Graph REST (`/api/v1`)
-`GET /processes` → `{data: [{name, label, inferred, stages, source}]}`, only processes with at least one stage the caller may read.
+`GET /processes` → `{data: [{name, label, inferred, stages, source, app}]}`, only processes with at least one stage the caller may read. `app` is the installed unit that brings the process (declared or inferred), `""` for a site process (added 16 Nov: a client names an app's process by the business, not by the app's product label).
 
 `GET /processes/{name}`:
 ```json

@@ -96,6 +96,59 @@ func labelsOrEmpty(ls []meta.Label) []meta.Label {
 	return ls
 }
 
+// prerequisitesFirst orders the stages so that a stage whose model needs another stage's model (a required link,
+// engine.LinkNeeds) comes after it (0053 §2 amended, t_4e93e013): an inferred app process follows the app's menu,
+// where sewa_alat lists Pesanan sewa first and Pelanggan last, and every step before Pelanggan is locked. A stable
+// topological order: the earliest stage whose prerequisites among the steps are placed goes next, so a process that
+// already respects them keeps its order; on a cycle the rest follow in process order.
+func prerequisitesFirst(reg *meta.Registry, stages []meta.Stage) []meta.Stage {
+	at := map[string]bool{}
+	for _, st := range stages {
+		at[st.Model] = true
+	}
+	deps := make([][]string, len(stages))
+	for i, st := range stages {
+		for _, n := range engine.LinkNeeds(reg, reg.Model(st.Model)) {
+			if at[n] && n != st.Model {
+				deps[i] = append(deps[i], n)
+			}
+		}
+	}
+	out := make([]meta.Stage, 0, len(stages))
+	placed, used := map[string]bool{}, make([]bool, len(stages))
+	for len(out) < len(stages) {
+		next := -1
+		for i := range stages {
+			if used[i] {
+				continue
+			}
+			ready := true
+			for _, d := range deps[i] {
+				if !placed[d] {
+					ready = false
+					break
+				}
+			}
+			if ready {
+				next = i
+				break
+			}
+		}
+		if next < 0 { // a cycle: the rest in process order
+			for i := range stages {
+				if !used[i] {
+					used[i] = true
+					out = append(out, stages[i])
+				}
+			}
+			break
+		}
+		used[next], placed[stages[next].Model] = true, true
+		out = append(out, stages[next])
+	}
+	return out
+}
+
 // Onboarding is the answer of GET /api/v1/onboarding for the caller (also read by the MCP tool rangka_onboarding).
 func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any, error) {
 	reg := s.Engine.Reg()
@@ -109,11 +162,16 @@ func (s *Server) Onboarding(ctx context.Context, a engine.Actor) (map[string]any
 	var current any
 	procName := any(nil)
 	if p := onboardingProcess(reg); p != nil {
+		var stages []meta.Stage
 		for _, st := range p.Stages {
 			m := reg.Model(st.Model)
 			if m == nil || m.IsChild || !canRead(st.Model) {
 				continue
 			}
+			stages = append(stages, st)
+		}
+		for _, st := range prerequisitesFirst(reg, stages) {
+			m := reg.Model(st.Model)
 			procName = p.Name
 			step := map[string]any{"stage": st.Name, "label": st.Label, "model": st.Model, "answers": labelsOrEmpty(st.Answers)}
 			if st.Label == nil {

@@ -508,6 +508,12 @@ with sync_playwright() as pw:
             cb = page.locator(".cn-shell").bounding_box()
             if cb["x"] + cb["width"] > 1440 - 400 + 1:
                 fail(f"raka 1440: the console runs under the dock, right edge {cb['x'] + cb['width']}")
+            ov = page.evaluate("() => [document.scrollingElement.scrollHeight, innerHeight]")
+            if ov[0] > ov[1]:
+                fail(f"raka 1440: the console scrolls vertically under the dock, scrollHeight {ov[0]} > {ov[1]}")
+            sb = page.locator(".cn-shell > .rk-side").bounding_box()
+            if sb["y"] < 0 or sb["y"] + sb["height"] > 900 + 1:
+                fail(f"raka 1440: the console sidebar leaves the window under the dock, {sb}")
             drawer.get_by_role("button", name="Perbesar").click()
             page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=3000)
             page.keyboard.press("Escape")

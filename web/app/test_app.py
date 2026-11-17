@@ -4069,6 +4069,8 @@ def test_ai_dock(page, ctx):
     assert page.locator(".rk-fab").count() == 0, "no floating Raka button while docked"
     assert drawer.get_by_role("button", name="Kecilkan").count() == 0 and drawer.get_by_role("button", name="Perbesar").count() == 1
     check_fits(page, ctx, "Raka dock")
+    over = page.evaluate("() => [document.scrollingElement.scrollHeight, innerHeight]")
+    assert over[0] <= over[1], f"Raka dock on a short page: the document scrolls vertically, scrollHeight {over[0]} > {over[1]}"
     shot(page, ctx, "ai-dock")
     page.evaluate("() => document.documentElement.setAttribute('data-theme', 'dark')")
     shot(page, ctx, "ai-dock-dark")
@@ -4114,6 +4116,19 @@ def test_ai_dock(page, ctx):
     bulk.wait_for(timeout=5000)
     bb, db = bulk.bounding_box(), ai_drawer(page).bounding_box()
     assert bb["x"] + bb["width"] <= db["x"] + 1, f"bulk bar {bb} lies left of the panel {db}"
+    # a long page: with the bar's natural place far below the fold, the sidebar and the bulk bar still stick to the
+    # window edges while docked, and a long page scrolls inside the card, never the document
+    page.evaluate("() => { const b = document.querySelector('.rk-bulkbar'), f = document.createElement('div'); f.style.height = '3000px'; b.parentElement.insertBefore(f, b); }")
+    page.wait_for_timeout(150)
+    st = page.evaluate("() => ({side: document.querySelector('.ap-shell > .rk-side').getBoundingClientRect(), bulk: document.querySelector('.rk-bulkbar').getBoundingClientRect(), h: innerHeight, doc: document.scrollingElement.scrollHeight})")
+    assert -0.5 <= st["side"]["top"] <= 9 and st["side"]["bottom"] <= st["h"] + 0.5, f"docked: the sidebar stays in the window, {st['side']}"
+    assert 0 <= st["bulk"]["top"] and st["bulk"]["bottom"] <= st["h"] + 0.5, f"docked: the bulk bar sticks to the window bottom on a long page, {st['bulk']}"
+    assert st["doc"] <= st["h"], f"docked: a long page scrolls inside the card, not the document ({st['doc']} > {st['h']})"
+    page.evaluate("() => { document.querySelector('.ap-main').scrollTop = 600; }")
+    page.wait_for_timeout(150)
+    st = page.evaluate("() => ({side: document.querySelector('.ap-shell > .rk-side').getBoundingClientRect(), bulk: document.querySelector('.rk-bulkbar').getBoundingClientRect(), h: innerHeight})")
+    assert -0.5 <= st["side"]["top"] <= 9, f"docked: after scrolling the page the sidebar still sticks, top {st['side']['top']}"
+    assert 0 <= st["bulk"]["top"] and st["bulk"]["bottom"] <= st["h"] + 0.5, f"docked: after scrolling, the bulk bar is still in the window, {st['bulk']}"
     ai_drawer(page).get_by_role("button", name="Tutup").click()
 
     # Perbesar covers the window; Escape brings the dock back; a close mid-stream loses nothing
@@ -4121,7 +4136,12 @@ def test_ai_dock(page, ctx):
     drawer = ai_drawer(page)
     drawer.get_by_role("button", name="Perbesar").click()
     page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=5000)
-    assert not page.locator(".ap-shell").is_visible(), "Full hides the app behind it"
+    assert not page.locator(".ap-shell > .rk-shell-main").is_visible() and not page.locator(".ap-shell > .rk-side").is_visible(), "Full hides the app behind it"
+    page.mouse.click(2, 2)  # the backdrop: focus leaves the panel, Escape must still come back to the dock
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
+    drawer.get_by_role("button", name="Perbesar").click()
+    page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=5000)
     assert page.locator(".rk-chat-card").is_visible(), "Full shows the conversation as a card"
     assert drawer.get_by_role("button", name="Perbesar").count() == 0 and drawer.get_by_role("button", name="Kecilkan").count() == 1
     shot(page, ctx, "ai-full")
@@ -4131,13 +4151,12 @@ def test_ai_dock(page, ctx):
     check_fits(page, ctx, "Raka full")
     page.keyboard.press("Escape")
     page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
-    assert page.locator(".ap-shell").is_visible(), "Escape in Full: the page is back beside the dock"
+    assert page.locator(".ap-shell > .rk-shell-main").is_visible(), "Escape in Full: the page is back beside the dock"
     drawer.get_by_role("button", name="Perbesar").click()
     page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=5000)
     box = drawer.get_by_role("textbox").last
     box.fill("pertanyaan lambat")
     box.press("Enter")
-    page.wait_for_function("() => true")
     for _ in range(50):
         if slow:
             break
@@ -4145,7 +4164,7 @@ def test_ai_dock(page, ctx):
     assert slow, "the slow question reached the chat endpoint"
     drawer.get_by_role("button", name="Tutup").click()
     page.wait_for_function("() => !document.documentElement.dataset.raka", timeout=5000)
-    assert page.locator(".ap-shell").is_visible() and page.locator(".rk-fab").is_visible(), "closed: page and launcher are back"
+    assert page.locator(".ap-shell > .rk-shell-main").is_visible() and page.locator(".rk-fab").is_visible(), "closed: page and launcher are back"
     slow.pop().fulfill(status=200, content_type="text/event-stream", body=sse([("text", {"delta": "Jawaban yang lambat."}), ("done", {})]))
     page.wait_for_timeout(300)
     page.keyboard.press("ControlOrMeta+j")
@@ -4162,6 +4181,68 @@ def test_ai_dock(page, ctx):
     page.set_viewport_size({"width": w, "height": 900})
     page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
     assert "Raka hanya mengusulkan" not in page.locator("body").inner_text(), "the old footer line is gone"
+
+
+def test_ai_dock_overlays(page, ctx):
+    """Host overlays and the card actions around the Raka dock (contract 0063 §1): "Buka di Ubah" opens the change set card
+    and a toast shows over the page, left of the docked panel; in Full a toast still shows, and "Lihat pratinjau" returns
+    to the dock with the preview banner visible."""
+    if ctx.args.width < 1280:
+        return
+    ctx.allow_http(404, r"/api/v1/files/custom/")
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    cs = page.evaluate("""async () => {
+      const RA = window.RangkaApp, ex = await RA.api.file("custom/lead.rk");
+      const ch = RA.opsAddField("lead", {label: "Nomor PO Dock", type: "data", modelLabel: "Lead"}, ex);
+      return (await RA.api.runChange(ch, {canApprove: False})).cs;
+    }""".replace("False", "false"))
+    assert cs["status"] == "previewed", cs
+    try:
+        mock_ai(page, ctx, [[
+            ("text", {"delta": "Aku menyusun usulan field Nomor PO."}),
+            ("changeset", {"id": cs["id"], "title": cs["title"], "risk": cs.get("risk") or "unknown", "status": "previewed"}),
+            ("done", {}),
+        ]])
+        page.reload()
+        page.locator(".ap-shell").wait_for(timeout=15000)
+        page.locator("[data-loading=false]").first.wait_for(timeout=15000)
+        page.keyboard.press("ControlOrMeta+j")
+        bar = page.get_by_role("dialog", name="Tanya Raka")
+        bar.wait_for(timeout=5000)
+        box = bar.get_by_role("textbox", name="Tanya Raka")
+        box.fill("susun field")
+        box.press("Enter")
+        drawer = ai_drawer(page)
+        drawer.get_by_text(cs["title"]).wait_for(timeout=10000)
+        assert page.locator("html").get_attribute("data-raka") == "dock"
+        # a toast lies over the page, not over the panel
+        page.evaluate("() => window.RangkaApp.toast('ok', 'Uji toast dock')")
+        toast = page.locator(".rk-toasts.float")
+        toast.wait_for(timeout=5000)
+        tb, db = toast.bounding_box(), drawer.bounding_box()
+        assert tb["x"] + tb["width"] <= db["x"] + 1, f"docked: the toast {tb} lies left of the panel {db}"
+        # "Buka di Ubah": the change set card lies left of the panel too
+        drawer.get_by_role("button", name="Buka di Ubah").click()
+        card = page.locator(".ap-ubah-card")
+        card.wait_for(timeout=10000)
+        cb = card.bounding_box()
+        assert cb["x"] + cb["width"] <= db["x"] + 1, f"docked: the change set card {cb} lies left of the panel {db}"
+        page.get_by_role("region", name="Mode ubah").get_by_role("button", name="Selesai").click()
+        page.get_by_role("region", name="Mode ubah").wait_for(state="detached", timeout=5000)
+        # Full: overlays still show; the card actions come back to the dock
+        drawer.get_by_role("button", name="Perbesar").click()
+        page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=5000)
+        page.evaluate("() => window.RangkaApp.toast('ok', 'Uji toast penuh')")
+        page.get_by_text("Uji toast penuh").wait_for(state="visible", timeout=5000)
+        drawer.get_by_role("button", name="Lihat pratinjau").click()
+        page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
+        page.get_by_role("status").filter(has_text="Pratinjau: ").wait_for(state="visible", timeout=15000)
+        assert page.locator("html").get_attribute("data-raka") == "dock", "Lihat pratinjau from Full returns to the dock"
+        shot(page, ctx, "ai-dock-preview")
+    finally:
+        Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{cs['id']}/reject")
 
 
 def test_tour_kenalan(page, ctx):

@@ -913,10 +913,23 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   background: var(--surface); border-left: 1px solid var(--line); box-shadow: var(--shadow-pop); font: 13.5px/1.55 var(--font-sans); }
 .rk-chat-float { top: auto; bottom: 88px; right: 24px; height: min(680px, calc(100dvh - 112px)); border: 1px solid var(--line-strong); border-radius: 12px; overflow: hidden;
   box-shadow: 0 16px 40px rgba(28, 25, 23, .15), 0 2px 6px rgba(28, 25, 23, .06); }
+/* Dock: the page becomes a card with an 8px gutter on the stone background, Raka fills the right edge. Full covers the window. */
+html[data-raka="dock"], html[data-raka="full"] { background: var(--app); }
+html[data-raka="dock"] .rk-shell { margin: 8px var(--raka-dock-w, 400px) 8px 8px; border-radius: 12px; overflow: hidden; min-height: calc(100dvh - 16px);
+  box-shadow: 0 1px 3px rgba(28, 25, 23, .06); }
+html[data-raka="full"] .rk-shell { visibility: hidden; }
+.rk-chat-dock { width: var(--raka-dock-w, 400px); background: var(--app); border-left: 0; box-shadow: none; }
+.rk-chat-dock .rk-chat-head { border-bottom: 0; }
+.rk-chat-grip { position: absolute; z-index: 1; left: 0; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; outline: none; }
+.rk-chat-grip::after { content: ""; position: absolute; left: 2px; top: 50%; width: 6px; height: 48px; margin-top: -24px; border-radius: 3px; background: var(--line-strong); opacity: 0; transition: opacity .12s; }
+.rk-chat-dock:hover .rk-chat-grip::after, .rk-chat-grip:hover::after, .rk-chat-grip:focus-visible::after { opacity: 1; }
+.rk-chat-grip:focus-visible::after { outline: 2px solid var(--focus); outline-offset: 2px; }
+.rk-chat-full { inset: 0; width: auto; padding: 8px; background: var(--app); border: 0; box-shadow: none; }
+.rk-chat-card { flex: 1; min-height: 0; display: flex; flex-direction: column; height: 100%; background: var(--surface); border-radius: 12px; overflow: hidden; }
+.rk-chat-full .rk-chat-log > *, .rk-chat-full .rk-chat-foot > * { max-width: 720px; margin-inline: auto; width: 100%; box-sizing: border-box; }
 .rk-chat-head { display: flex; align-items: center; gap: 10px; min-height: 56px; padding: 0 10px 0 16px; border-bottom: 1px solid var(--line); flex-shrink: 0; }
 .rk-chat-title { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 1px; }
-.rk-chat-title b { font: 600 13.5px/16px var(--font-sans); color: var(--ink); }
-.rk-chat-title small { font: 11.5px/14px var(--font-sans); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rk-chat-title b { font: 600 13.5px/16px var(--font-sans); color: var(--ink); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .rk-chat-head > .rk-iconbtn { color: var(--muted); width: 28px; height: 28px; border-radius: 7px; }
 .rk-chat-av { flex: none; display: inline-flex; width: 22px; height: 22px; border-radius: 6px; overflow: hidden; box-shadow: inset 0 0 0 1px rgba(15, 118, 110, .2); }
 .rk-chat-av .rk-mascot { width: 100%; height: 100%; }
@@ -1001,8 +1014,6 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-chat-comp .rk-send { width: 26px; height: 26px; border-radius: 7px; }
 .rk-chat-comp .rk-send .rk-icon { width: 14px; height: 14px; }
 .rk-chat-comp .rk-send.busy:disabled { background: var(--soft); box-shadow: inset 0 0 0 1px var(--line-strong); }
-.rk-chat-note { margin: 0 0 0 2px; display: flex; align-items: center; gap: 5px; font: 11.5px/14px var(--font-sans); color: var(--muted); }
-.rk-chat-note .rk-icon { width: 12px; height: 12px; }
 /* OS / Raka · Diam | Hover | Tersembunyi | Tersembunyi hover | Terbuka */
 .rk-fab { position: fixed; z-index: 44; right: 24px; bottom: 24px; display: flex; align-items: center; }
 .rk-fab-btn { position: relative; display: flex; align-items: center; gap: 12px; height: 52px; padding: 0; border: 2px solid var(--surface); border-radius: 16px; background: var(--surface);
@@ -1045,7 +1056,7 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   .rk-askbar-chip { height: auto; }
   .rk-askbar-input { min-height: 40px; padding: 10px 2px; }
   .rk-askbar-chip button { width: 40px; height: 40px; }
-  .rk-chat, .rk-chat-float { top: 0; bottom: 0; right: 0; left: 0; width: auto; height: auto; border: 0; border-radius: 0; box-shadow: none; z-index: 46; }
+  .rk-chat, .rk-chat-float, .rk-chat-dock { top: 0; bottom: 0; right: 0; left: 0; width: auto; height: auto; border: 0; border-radius: 0; box-shadow: none; z-index: 46; }
   .rk-fab { right: 16px; bottom: calc(16px + env(safe-area-inset-bottom)); }
   .rk-fab[data-state=open] { display: none; }
   .rk-chat-comp textarea { min-height: var(--touch); padding: 10px 4px; }

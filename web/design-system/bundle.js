@@ -74,6 +74,7 @@
     mic: "M11.9998 3C10.3429 3 8.99976 4.34315 8.99976 6V10C8.99976 11.6569 10.3429 13 11.9998 13C13.6566 13 14.9998 11.6569 14.9998 10V6C14.9998 4.34315 13.6566 3 11.9998 3ZM11.9998 1C14.7612 1 16.9998 3.23858 16.9998 6V10C16.9998 12.7614 14.7612 15 11.9998 15C9.23833 15 6.99976 12.7614 6.99976 10V6C6.99976 3.23858 9.23833 1 11.9998 1ZM3.05469 11H5.07065C5.55588 14.3923 8.47329 17 11.9998 17C15.5262 17 18.4436 14.3923 18.9289 11H20.9448C20.4837 15.1716 17.1714 18.4839 12.9998 18.9451V23H10.9998V18.9451C6.82814 18.4839 3.51584 15.1716 3.05469 11Z",
     updown: "M18.2072 9.0428 12.0001 2.83569 5.793 9.0428 7.20721 10.457 12.0001 5.66412 16.793 10.457 18.2072 9.0428ZM5.79285 14.9572 12 21.1643 18.2071 14.9572 16.7928 13.543 12 18.3359 7.20706 13.543 5.79285 14.9572Z",
     calendar: "M9 1V3H15V1H17V3H21C21.5523 3 22 3.44772 22 4V20C22 20.5523 21.5523 21 21 21H3C2.44772 21 2 20.5523 2 20V4C2 3.44772 2.44772 3 3 3H7V1H9ZM20 11H4V19H20V11ZM7 5H4V9H20V5H17V7H15V5H9V7H7V5Z",
+    collapse: "M7.9963 14.5858L16.6029 5.9792L18.0171 7.3934L9.4105 16H16.9963V18H5.9963V7H7.9963V14.5858Z",
     open: "M16.0037 9.41421L7.39712 18.0208L5.98291 16.6066L14.5895 8H7.00373V6H18.0037V17H16.0037V9.41421Z",
     drag: "M8.5 7C9.32843 7 10 6.32843 10 5.5C10 4.67157 9.32843 4 8.5 4C7.67157 4 7 4.67157 7 5.5C7 6.32843 7.67157 7 8.5 7ZM8.5 13.5C9.32843 13.5 10 12.8284 10 12C10 11.1716 9.32843 10.5 8.5 10.5C7.67157 10.5 7 11.1716 7 12C7 12.8284 7.67157 13.5 8.5 13.5ZM10 18.5C10 19.3284 9.32843 20 8.5 20C7.67157 20 7 19.3284 7 18.5C7 17.6716 7.67157 17 8.5 17C9.32843 17 10 17.6716 10 18.5ZM15.5 7C16.3284 7 17 6.32843 17 5.5C17 4.67157 16.3284 4 15.5 4C14.6716 4 14 4.67157 14 5.5C14 6.32843 14.6716 7 15.5 7ZM17 12C17 12.8284 16.3284 13.5 15.5 13.5C14.6716 13.5 14 12.8284 14 12C14 11.1716 14.6716 10.5 15.5 10.5C16.3284 10.5 17 11.1716 17 12ZM15.5 20C16.3284 20 17 19.3284 17 18.5C17 17.6716 16.3284 17 15.5 17C14.6716 17 14 17.6716 14 18.5C14 19.3284 14.6716 20 15.5 20Z",
     time: "M12 22C6.47715 22 2 17.5228 2 12C2 6.47715 6.47715 2 12 2C17.5228 2 22 6.47715 22 12C22 17.5228 17.5228 22 12 22ZM12 20C16.4183 20 20 16.4183 20 12C20 7.58172 16.4183 4 12 4C7.58172 4 4 7.58172 4 12C4 16.4183 7.58172 20 12 20ZM13 12H17V14H11V7H13V12Z",
@@ -2080,6 +2081,22 @@
   }
   /* The Raka panel: Chat / Kepala, the log, Chat / Composer (Siap, Bekerja) and Chat / Catatan. Floats above the
      launcher on wide screens (p.floating), fills the screen on a phone. */
+  /* Dock width: 360 to 640, 400 by default; with a viewport, the page keeps at least 640px. */
+  function clampDockWidth(w, viewport) {
+    var n = typeof w === "number" && isFinite(w) ? w : 400;
+    var max = 640;
+    if (typeof viewport === "number" && isFinite(viewport)) max = Math.min(max, Math.max(360, viewport - 640));
+    return Math.max(360, Math.min(max, n));
+  }
+  /* Conversation title for the Full head: the first message, at most 60 characters, cut on a word. */
+  function conversationTitle(turns) {
+    var first = (turns || []).filter(function (t) { return t.role === "user"; })[0];
+    var s = first ? String(first.text || "").replace(/\s+/g, " ").trim() : "";
+    if (!s) return "Raka";
+    if (s.length <= 60) return s;
+    var cut = s.slice(0, 60), sp = cut.lastIndexOf(" ");
+    return (sp > 0 ? cut.slice(0, sp).trim() : cut) + "…";
+  }
   function ChatDrawer(p) {
     var st = useState(""), text = st[0], setText = st[1], log = useRef(null), ta = useRef(null);
     var started = useRef(0);
@@ -2098,14 +2115,33 @@
     var canSend = !p.busy && !!text.trim();
     function send() { if (!canSend) return; if (p.onSend) p.onSend(text); setText(""); }
     var waiting = p.busy && (!last || last.role === "user");
-    return h("aside", { className: cx("rk-chat", p.floating && "rk-chat-float"), "aria-label": "Percakapan dengan Raka",
-      onKeyDown: function (e) { if (composing(e)) return; if (e.key === "Escape" && p.onClose) p.onClose(); } },
-      h("div", { className: "rk-chat-head" },
+    var mode = p.mode || (p.floating ? "float" : "drawer"), full = mode === "full", dock = mode === "dock";
+    var width = clampDockWidth(p.width);
+    function resize(w) { if (p.onResize) p.onResize(w); }
+    function onGripKey(e) {
+      if (e.key === "ArrowLeft") { e.preventDefault(); resize(clampDockWidth(width + 16)); }
+      else if (e.key === "ArrowRight") { e.preventDefault(); resize(clampDockWidth(width - 16)); }
+    }
+    function onGripDown(e) {
+      if (e.target.setPointerCapture) e.target.setPointerCapture(e.pointerId);
+      e.preventDefault();
+    }
+    function onGripMove(e) {
+      if (!(e.buttons & 1) || typeof window === "undefined") return;
+      resize(clampDockWidth(window.innerWidth - e.clientX, window.innerWidth));
+    }
+    var grip = dock ? h("div", { className: "rk-chat-grip", role: "separator", "aria-orientation": "vertical", "aria-label": "Ubah lebar panel Raka",
+      "aria-valuenow": width, "aria-valuemin": 360, "aria-valuemax": 640, tabIndex: 0,
+      onKeyDown: onGripKey, onPointerDown: onGripDown, onPointerMove: onGripMove }) : null;
+    var body = [
+      h("div", { key: "head", className: "rk-chat-head" },
         h("span", { className: "rk-chat-av rk-chat-av-lg" }, h(Raka, { size: 28, title: "" })),
-        h("span", { className: "rk-chat-title" }, h("b", null, "Raka"), p.subtitle ? h("small", null, p.subtitle) : null),
+        h("span", { className: "rk-chat-title" }, h("b", null, full ? conversationTitle(turns) : "Raka")),
         h(IconButton, { icon: "edit", label: "Percakapan baru", onClick: p.onNew }),
+        dock && p.onExpand ? h(IconButton, { icon: "open", label: "Perbesar", onClick: p.onExpand }) : null,
+        full && p.onCollapse ? h(IconButton, { icon: "collapse", label: "Kecilkan", onClick: p.onCollapse }) : null,
         h(IconButton, { icon: "close", label: "Tutup", onClick: p.onClose })),
-      h("div", { className: "rk-chat-log", ref: log, role: "log", "aria-live": "polite" },
+      h("div", { key: "log", className: "rk-chat-log", ref: log, role: "log", "aria-live": "polite" },
         turns.length ? turns.map(function (t, i) {
           var isLast = i === turns.length - 1;
           return h(ChatTurnView, { key: i, turn: t, p: p, last: isLast, running: isLast && p.busy, start: started.current });
@@ -2116,7 +2152,7 @@
           h("div", { className: "body" }, h("div", { className: "rk-chat-who" }, h("b", null, "Raka")),
             h("div", { className: "rk-chat-steps", "data-running": "true" }, h("span", { className: "rk-chat-sum", role: "status" },
               h("span", { className: "i", "aria-hidden": "true" }, h("span", { className: "rk-chat-spin" })), h("span", { className: "l" }, "Raka sedang berpikir…"))))) : null),
-      h("div", { className: "rk-chat-foot" },
+      h("div", { key: "foot", className: "rk-chat-foot" },
         h("div", { className: "rk-chat-comp", onClick: function (e) { if (e.target === e.currentTarget && ta.current) ta.current.focus(); } },
           h("textarea", { ref: ta, rows: 1, value: text, placeholder: p.busy ? "Raka sedang bekerja. Kamu tetap bisa mengetik." : "Tanya atau minta Raka…", "aria-label": "Pesan untuk Raka",
             onChange: function (e) { setText(e.target.value); },
@@ -2126,8 +2162,14 @@
             h("span", { className: "rk-sp" }),
             h("button", { type: "button", className: cx("rk-send", p.busy && "busy"), disabled: !canSend, "aria-busy": p.busy ? "true" : undefined,
               "aria-label": p.busy ? "Raka sedang bekerja" : "Kirim", title: p.busy ? "Raka sedang bekerja" : "Kirim", onClick: send },
-              p.busy ? h("span", { className: "rk-chat-spin" }) : h(Icon, { name: "send" })))),
-        h("p", { className: "rk-chat-note" }, h(Icon, { name: "shield" }), "Raka hanya mengusulkan. Kamu yang menyetujui.")));
+              p.busy ? h("span", { className: "rk-chat-spin" }) : h(Icon, { name: "send" })))))
+    ];
+    return h("aside", { className: cx("rk-chat", mode === "float" && "rk-chat-float", dock && "rk-chat-dock", full && "rk-chat-full"), "aria-label": "Percakapan dengan Raka",
+      onKeyDown: function (e) {
+        if (composing(e) || e.key !== "Escape") return;
+        if (full && p.onCollapse) p.onCollapse(); else if (p.onClose) p.onClose();
+      } },
+      grip, full ? h("div", { className: "rk-chat-card" }, body) : body);
   }
   /* OS / Raka · Diam | Hover | Tersembunyi | Tersembunyi hover | Terbuka: the floating Raka button, bottom right. Hover or
      focus widens it to "Tanya Raka ⌘J" with what waits (p.pending: change sets waiting for the person); its small
@@ -2173,7 +2215,7 @@
   api.Lozenge = Lozenge; api.Badge = Badge; api.TopNav = TopNav; api.AppSwitcher = AppSwitcher; api.AccountMenu = AccountMenu; api.Spinner = Spinner; api.Skeleton = Skeleton; api.FilterBar = FilterBar; api.FilterBuilder = FilterBuilder; api.SettingsLayout = SettingsLayout; api.SettingsSection = SettingsSection; api.SettingsRow = SettingsRow; api.NumberCard = NumberCard; api.Chart = Chart; api.ChartCard = ChartCard; api.ListCard = ListCard; api.DashGrid = DashGrid; api.Sparkline = Sparkline; api.filterCel = filterCel; api.compactNumber = compact;
   api.ViewSwitcher = ViewSwitcher; api.BulkBar = BulkBar; api.GroupList = GroupList; api.ReportTable = ReportTable; api.DocPanel = DocPanel;
   api.Logo = Logo; api.AuthLayout = AuthLayout;
-  api.AskBar = AskBar; api.ChatDrawer = ChatDrawer; api.RakaLauncher = RakaLauncher;
+  api.AskBar = AskBar; api.ChatDrawer = ChatDrawer; api.clampDockWidth = clampDockWidth; api.conversationTitle = conversationTitle; api.RakaLauncher = RakaLauncher;
   api.Diagram = Diagram; api.DiagramViewer = DiagramViewer; api.diagramTopDown = diagramTopDown; api.configureDiagrams = configureDiagrams; api.loadMermaid = loadMermaid;
   api.OfferCompare = OfferCompare; api.flowToMermaid = flowToMermaid; api.offerSideBySide = offerSideBySide;
   api.RichText = RichText; api.markdownBlocks = mdBlocks; api.safeHref = mdSafeHref;

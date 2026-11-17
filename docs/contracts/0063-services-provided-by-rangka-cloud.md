@@ -115,7 +115,7 @@ docs: <url>                  # the service's page in the host's docs
 
 **Who serves it.**
 - The host serves entries over the 0041 gateway as two read tools (amends 0041 §3):
-  - `cloud_services {}` → `{data: [entry]}`, every entry with status `beta` or `available`, plus `planned` entries
+  - `cloud_services {}` → `{services: [entry]}` (the same body as the Konsol's `GET /api/konsol/services`), every entry with status `beta` or `available`, plus `planned` entries
     marked as such.
   - `cloud_service {id}` → one entry plus its docs page as text.
 - The kernel's 0036 catalogue does not carry entries. Its connector entry gains `provided_by` (`host` or null), so

@@ -1,6 +1,7 @@
 # 0063 Services provided by Rangka Cloud (◆)
 
-Status: proposed (17 Nov 2026; product decisions by Dede the same day, see "Decisions") · Owner of the change: rangka-os (schema, validators, kernel, web app) · Affects:
+Status: proposed (17 Nov 2026; product decisions by Dede the same day, see "Decisions") · Owner of the change:
+rangka-os (schema, validators, kernel, web app) · Affects:
 rangka-connectors (host connectors), rangka-apps (the ◆ modules and the gateway ledger), rangka-ai (catalogue reads,
 offer rules), rangka-cloud (catalogue entries, provisioning, settlement; private) · Builds on: 0002, 0017, 0026, 0032,
 0033, 0036, 0041, 0058 · Amends: 0036 §8 (one exception), 0041 §3–§4 (two read tools, two reserved names)
@@ -76,10 +77,11 @@ offer rules), rangka-cloud (catalogue entries, provisioning, settlement; private
 - Host connectors need the `db` driver (0017 §2). A hosted kernel sets `RANGKA_SECRETS_DRIVER=db`.
 
 **What the values may be.**
-- A host-provided value acts for **this tenant only**: a credential scoped to the owner's DOKU sub-merchant (D1), or a
-  per-tenant token for the host's own service API when DOKU offers no such credential (Open 2). The host's
-  account-wide provider key never enters a tenant kernel: a company controls its own `system.rk`, flows and company
-  connectors, so anything in its kernel must be safe to lose to that company.
+- A host-provided value acts for **this tenant only**. For payments that is the business's own DOKU Brand ID and
+  `shared_key` (D9), or a per-tenant token for the host's own service API for anything DOKU does not offer per brand
+  (Open 2). The host's account-wide credentials (Rangka's DOKU partner credentials) never enter a tenant kernel: a
+  company controls its own `system.rk`, flows and company connectors, so anything in its kernel must be safe to lose
+  to that company.
 - The host revokes a tenant's values on switch-off (§4) and can rotate them at any time (0017 §8 versions apply).
 
 **States** (0036 §3 connector `state`, extended): `host_unavailable`; `needs_auth` with `source: host` (installed,
@@ -184,7 +186,10 @@ explicitly opted in to that offset.
 - **The kernel holds the owner's record.** Every movement the host makes for this tenant arrives as an event and
   becomes a row in an append-only ledger (0026). The owner can read and export it without the host.
 
-**Connector shape** (host connector, money-touching under 0033 §4, `money: true`):
+**Connector shape** (host connector, money-touching under 0033 §4, `money: true`). Per D9 its payment actions call
+DOKU directly, signed like the `doku` connector (`auth.sign`, 0002 refinement of 11 Nov 2026) with the business's
+Brand ID as `Client-Id` and its `shared_key` as the key, so the host does not relay payment calls. An action DOKU does
+not offer per brand goes to the host's service API with a per-tenant token instead (Open 2).
 
 | Action | Method | Purpose |
 | --- | --- | --- |
@@ -221,14 +226,19 @@ explicitly opted in to that offset.
   ledger up to that date. A difference creates a `gateway_mismatch` record and notifies the owner. Nothing corrects
   itself.
 
-**Webhooks.** Provider callbacks go to the host, never to a tenant kernel. The host verifies the provider's signature,
-then sends the event to `POST /hooks/<org>/<connector>/entry_posted` (0017 §7), signed over the raw body with the
-tenant's host-provided key. The kernel verifies that key as it does any webhook. Dedupe: the event (0002) and
-`entry_key`.
+**Webhooks.** DOKU payment notifications for a brand are verified with that brand's `shared_key`, the way the `doku`
+connector verifies them today (`verify.signature.lines`). Whether DOKU sends them straight to the tenant's kernel (a
+notification URL per brand) or to the host is part of Open 2. In the second case, and for settlement-side entries
+(fees, settlements), the host sends the event to `POST /hooks/<org>/<connector>/entry_posted` (0017 §7), signed over
+the raw body with a host-provided per-tenant key, and the kernel verifies it as it does any webhook. Never a key that
+works for another business. Dedupe: the event (0002) and `entry_key`.
 
-**Refunds.**
-- A person submits a refund document in the kernel (role grant; `ai: true` tokens are refused record writes, 0020).
-  Its flow calls `refund` with `refund_key` = the document name.
+**Refunds** (D8).
+- A person submits a refund document in the kernel. Only the owner and the `supervisor` role may submit it (the
+  module's permissions). `ai: true` tokens are refused record writes (0020), so Raka never refunds. Its flow calls
+  `refund` with `refund_key` = the document name.
+- The refund is allowed up to 30 days after the payment, and may be partial. A rule on the refund document refuses a
+  payment older than 30 days, and the host refuses it again.
 - The host refuses with an owner-facing reason when the amount exceeds captured minus already refunded for that
   `gateway_ref`, or the balance cannot cover it. The refund's ledger row arrives as an event. The document never
   writes the ledger itself.
@@ -258,7 +268,7 @@ reconcile or change a payout.
 
 Same seam (§2), same switch-on (§4); each gets its own entry and host connector:
 - **WhatsApp sending.** A host connector filling `messaging.whatsapp`. One number per business, registered under
-  Rangka's WhatsApp Business setup (D7). Rangka's status with Meta is Open 8.
+  Rangka's WhatsApp Business setup (D7). Rangka's status with Meta is Open 7.
 - **Shipping.** A host connector for rates, orders and tracking, shaped like `biteship`. Shipping charges move money,
   so `money: true`, and charges arrive as §5-style ledger entries.
 
@@ -310,8 +320,9 @@ account screen, wind-down. Not described here.
    `ready`.
 2. Host payment connector and mock (rangka-connectors). Ledger and flows (rangka-apps). End to end against the mock:
    capture, fee, refund, payout, a dropped webhook recovered by the statement poll, a forged mismatch reported.
-3. Catalogue tools on the gateway and Raka's offer rules (§3). The payment entry stays `planned` until Open 1
-   (registration) is confirmed and the DOKU agreement sets the fee amounts and settlement days.
+3. Catalogue tools on the gateway and Raka's offer rules (§3). The payment entry stays `planned` until Rangka is a
+   DOKU partner (D9), Open 1 (registration) and Open 2 are confirmed, and the DOKU agreement sets the fee amounts and
+   settlement days.
 4. Switch-on and switch-off proposals (§4) in the host.
 5. Later: ports, then WhatsApp and shipping (§7), then device connectors (§6).
 
@@ -324,7 +335,7 @@ account screen, wind-down. Not described here.
 
 ## Decisions (17 Nov 2026, decided by Dede)
 
-- **D1. Provider for phase 1: DOKU**, with its sub-merchant (sub-account) model. The self-hosted option stays the
+- **D1. Provider for phase 1: DOKU**, with its sub-merchant model (the Partner API, D9). The self-hosted option stays the
   existing `doku` connector flows with the owner's own keys.
 - **D2. One sub-merchant per business.** Each business is its own DOKU sub-merchant, with its own balance and its own
   QRIS merchant ID (NMID). There is no pooled Rangka account. Rangka is the platform that onboards the sub-merchants.
@@ -343,18 +354,43 @@ account screen, wind-down. Not described here.
   - Suspension of the Rangka Cloud subscription stops new payment requests. It never withholds the owner's collected
     money, and Rangka invoices are never offset against settlements unless the owner explicitly opts in.
 - **D7. WhatsApp: one number per business**, registered under Rangka's WhatsApp Business setup.
+- **D8. Refund policy.** Refunds are allowed up to 30 days after the payment, and partial refunds are allowed. Only the
+  owner and the supervisor role may refund. Raka never refunds (§5).
+- **D9. DOKU Partner API, not Sub Account V2** (recommended to Dede, consistent with D1–D3). Source: DOKU developer
+  docs, Partner API (https://developers.doku.com/partnership/partner-api.md), retrieved 17 Nov 2026.
+  - **Prerequisite:** Rangka becomes a DOKU partner. A partner is a DOKU merchant upgraded through DOKU sales.
+  - **Registration.** The host registers each business through the Partner API: Check Requirements → Upload File →
+    Business Registration (`POST /adv-core-api/partner/v1.0/business`) → Get Business Data.
+    - Each business gets a Business ID, and each of its brands a Brand ID and a `shared_key` ("Shared Key to generate
+      signature on behalf of merchant"). Requests on behalf of the merchant use the Brand ID as `Client-Id`.
+    - KYB results arrive by webhook callback within a 2×24 h SLA. Payment-method activation arrives as a
+      `BRAND_PRODUCT` callback (5×24 h).
+    - A business moves from `UPDATING` (on review) to `ACTIVE`. Its settlement bank account is registered per business
+      (`banks[]`).
+  - **What the kernel holds.** Each business's kernel holds only its own Brand ID (not secret) and `shared_key`
+    (secret), written by the host through `secrets:host` (§2). The host does not relay payment calls. Rangka's
+    partner credentials stay in the host and are used only for registration, KYB and configuration.
+  - **Rejected: DOKU Sub Account V2** (wallet-as-a-service).
+    - It has one merchant (Rangka) with ledger sub-accounts per business, and payments are routed with
+      `additionalInfo.account.id`.
+    - Funds are pending, then withdrawable, and Rangka pays out through the Transfer API.
+    - One B2B token covers all calls, so a tenant-scoped credential (§2) is impossible.
+    - The docs state neither KYC per sub-account nor QRIS support.
+    - Rangka would in effect hold every business's funds, against D2.
 
 ## Open
 
 1. **Rangka's own registration.** Whether onboarding sub-merchants as a platform requires Rangka to register or be
    licensed itself (for example with Bank Indonesia). This must be checked with DOKU and a legal adviser before
    `beta`. Not assumed here.
-2. **Credential shape with DOKU.** Whether DOKU issues credentials scoped to one sub-merchant (§2 "this tenant
-   only"), or the host relays every call through its own service API.
+2. **What a brand's credentials cover** (D9). Confirm with DOKU that a brand's Brand ID and `shared_key` cover QRIS
+   issuance, refunds, and statements or settlement reports for that brand. Also confirm whether notifications can be
+   sent to a URL per brand. Whatever they do not cover goes through the host's service API with a per-tenant token.
 3. **Fee amounts.** Per payment method, and PPN on fees and how fees are invoiced.
-4. **KYC document list** per entity type (perorangan vs PT/CV), following DOKU's requirements, and how long
-   verification takes.
-5. **Refund policy.** Window, partial refunds, which roles may refund by default.
-6. **Plans.** Which plans include which ◆ services.
-7. **Shipping charges.** Deducted from the payment balance, billed with the plan, or prepaid by the owner.
-8. **Rangka's status with Meta** (tech provider or BSP) for WhatsApp numbers, and who owns the templates.
+4. **KYC document list** per entity type, to confirm in the DOKU agreement. The Partner API docs list, for PERSONAL:
+   KTP (16-digit NIK), the owner's liveness check, and a photo proof of the brand. For CORPORATE (PT, CV, UD,
+   Koperasi, …): NPWP badan, SK Kemenkumham, NIB, izin usaha, akta, the contact person's KTP, and a photo proof of the
+   brand. The host's onboarding screens follow that list.
+5. **Plans.** Which plans include which ◆ services.
+6. **Shipping charges.** Deducted from the payment balance, billed with the plan, or prepaid by the owner.
+7. **Rangka's status with Meta** (tech provider or BSP) for WhatsApp numbers, and who owns the templates.

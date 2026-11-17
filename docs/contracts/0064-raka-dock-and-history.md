@@ -1,4 +1,4 @@
-# 0063 Raka docked beside the page, and conversation history on the server
+# 0064 Raka docked beside the page, and conversation history on the server
 
 Status: proposed (17 Nov 2026) · Owner of the change: rangka-os (web `ai.js`, design system `ChatDrawer`, app shell
 and Console CSS; kernel tables and `/api/v1/ai/conversations`) · Not affected: rangka-ai (the sidecar's `/v1/chat`

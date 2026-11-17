@@ -483,3 +483,18 @@ test("ChatDrawer Esc: Full collapses to Dock, Dock closes; the grip resizes by 1
   assert.deepStrictEqual(calls.splice(0), [416, 384], "left widens the panel, right narrows it");
   assert.strictEqual(nodes(render(R.ChatDrawer(props("full"))), (n) => n.props && n.props.role === "separator").length, 0, "no grip in Full");
 });
+
+test("ChatDrawer keeps the same wrapper chain to the log and composer in Dock and Full", () => {
+  const path = (tree, pred) => { const out = []; (function f(n, trail) {
+    if (!n || typeof n !== "object") return;
+    if (Array.isArray(n)) return n.forEach((x) => f(x, trail));
+    if (pred(n)) out.push(trail.concat(n.type + "." + (n.props.className || "")).join(">"));
+    f(n.children, trail.concat(n.type + "." + (n.props.className || "")));
+  })(tree, []); return out; };
+  const mk = (mode) => render(R.ChatDrawer({ open: true, turns: TURNS, mode, width: 400, onSend() {}, onClose() {} }));
+  for (const pred of [(n) => hasClass(n, "rk-chat-log"), (n) => n.type === "textarea"]) {
+    const d = path(mk("dock"), pred), f = path(mk("full"), pred);
+    assert.strictEqual(d.length, 1);
+    assert.deepStrictEqual(f, d.map((x) => x.replace("aside.rk-chat rk-chat-dock", "aside.rk-chat rk-chat-full")));
+  }
+});

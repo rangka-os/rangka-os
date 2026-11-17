@@ -2169,7 +2169,7 @@
         if (composing(e) || e.key !== "Escape") return;
         if (full && p.onCollapse) p.onCollapse(); else if (p.onClose) p.onClose();
       } },
-      grip, full ? h("div", { className: "rk-chat-card" }, body) : body);
+      grip, h("div", { className: "rk-chat-card" }, body));
   }
   /* OS / Raka · Diam | Hover | Tersembunyi | Tersembunyi hover | Terbuka: the floating Raka button, bottom right. Hover or
      focus widens it to "Tanya Raka ⌘J" with what waits (p.pending: change sets waiting for the person); its small

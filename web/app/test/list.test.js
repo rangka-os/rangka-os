@@ -88,8 +88,8 @@ test("loadListPrefs drops unknown fields", () => {
   assert.strictEqual(p.sort, "-posting_date", "an unknown sort falls back to views.list.sort");
   assert.strictEqual(p.group, null, "an unknown group is dropped");
   const ok = memStorage({ "rk.list.kopi.sales_invoice": JSON.stringify({ view: "group", sort: "grand_total", columns: ["customer"], group: "status" }) });
-  assert.deepStrictEqual(plain(A.loadListPrefs(ok, "kopi", "sales_invoice", META)), { view: "group", sort: "grand_total", columns: ["customer"], group: "status" });
-  // kanban is not a view of a model without views.kanban
+  assert.deepStrictEqual(plain(A.loadListPrefs(ok, "kopi", "sales_invoice", META)), { view: "group", sort: "grand_total", columns: ["customer"], group: "status", board: null });
+  // kanban is not a view of a model without views.kanban and without a select field
   const kb = memStorage({ "rk.list.kopi.lead": JSON.stringify({ view: "kanban" }) });
   assert.strictEqual(A.loadListPrefs(kb, "kopi", "lead", META).view, "list");
 });
@@ -97,7 +97,7 @@ test("loadListPrefs drops unknown fields", () => {
 test("loadListPrefs falls back to views.default", () => {
   const A = load();
   const empty = memStorage();
-  assert.deepStrictEqual(plain(A.loadListPrefs(empty, "kopi", "deal", META)), { view: "kanban", sort: null, columns: ["name", "stage", "value"], group: null });
+  assert.deepStrictEqual(plain(A.loadListPrefs(empty, "kopi", "deal", META)), { view: "kanban", sort: null, columns: ["name", "stage", "value"], group: null, board: null });
   assert.strictEqual(A.loadListPrefs(empty, "kopi", "sales_invoice", META).view, "list");
   assert.deepStrictEqual(plain(A.loadListPrefs(empty, "kopi", "lead", META).columns), ["name", "lead_name"]);
   // broken JSON, a throwing storage and no storage at all give the defaults too
@@ -113,8 +113,8 @@ test("saveListPrefs writes rk.list.<org>.<model> and loadListPrefs reads it back
   const A = load();
   const st = memStorage();
   A.saveListPrefs(st, "kopi", "deal", { view: "report", sort: "-value", columns: ["name", "value"], group: "stage" });
-  assert.deepStrictEqual(JSON.parse(st.data["rk.list.kopi.deal"]), { view: "report", sort: "-value", columns: ["name", "value"], group: "stage" });
-  assert.deepStrictEqual(plain(A.loadListPrefs(st, "kopi", "deal", META)), { view: "report", sort: "-value", columns: ["name", "value"], group: "stage" });
+  assert.deepStrictEqual(JSON.parse(st.data["rk.list.kopi.deal"]), { view: "report", sort: "-value", columns: ["name", "value"], group: "stage", board: null });
+  assert.deepStrictEqual(plain(A.loadListPrefs(st, "kopi", "deal", META)), { view: "report", sort: "-value", columns: ["name", "value"], group: "stage", board: null });
   assert.strictEqual(A.loadListPrefs(st, "other-org", "deal", META).view, "kanban", "another org has its own settings");
 });
 
@@ -131,10 +131,63 @@ test("groupFilter null", () => {
   assert.strictEqual(A.groupFilter("status", null), "status == null");
 });
 
-test("availableViews without kanban", () => {
+test("availableViews: Papan with views.kanban or a writable select field with options", () => {
   const A = load();
-  assert.deepStrictEqual(plain(A.availableViews(META, "sales_invoice")), ["list", "group", "report"]);
+  assert.deepStrictEqual(plain(A.availableViews(META, "sales_invoice")), ["list", "kanban", "group", "report"], "channel is a select with options");
   assert.deepStrictEqual(plain(A.availableViews(META, "deal")), ["list", "kanban", "group", "report"]);
+  assert.deepStrictEqual(plain(A.availableViews(META, "lead")), ["list", "group", "report"], "no select field: no board");
+});
+
+/* ---------------------------------------------------------------- Papan without views.kanban */
+const BOARD_META = {
+  models: {
+    task: {
+      title_field: "subject",
+      fields: [
+        { name: "subject", type: "data" }, { name: "owner", type: "link", to: "user" }, { name: "due", type: "date" },
+        { name: "state", type: "select", options: [{ value: "todo" }, { value: "doing" }, { value: "done" }] },
+        { name: "priority", type: "select", options: [{ value: "low" }, { value: "high" }] },
+        { name: "empty_sel", type: "select", options: [] },
+        { name: "locked", type: "select", read_only: true, options: [{ value: "x" }] },
+        { name: "secret", type: "select", hidden: true, options: [{ value: "x" }] },
+        { name: "derived", type: "select", compute: "a", options: [{ value: "x" }] }],
+      views: { list: { columns: ["name", "subject", "state", "owner", "due"] } }
+    },
+    deal: {
+      fields: [{ name: "stage", type: "select", options: [{ value: "new" }] }, { name: "source", type: "select", options: [{ value: "web" }] }],
+      views: { kanban: { group_by: "stage", title: "name", card: ["source"], columns: ["new"] } }
+    }
+  }
+};
+
+test("boardFields: views.kanban.group_by first, then writable visible selects with options", () => {
+  const A = load();
+  assert.deepStrictEqual(plain(A.boardFields(BOARD_META, "task")), ["state", "priority"]);
+  assert.deepStrictEqual(plain(A.boardFields(BOARD_META, "deal")), ["stage", "source"]);
+  assert.deepStrictEqual(plain(A.boardFields(BOARD_META, "nope")), []);
+});
+
+test("boardSpec: views.kanban as written, else a board on the chosen or first select field", () => {
+  const A = load();
+  assert.deepStrictEqual(plain(A.boardSpec(BOARD_META, "deal")), { group_by: "stage", title: "name", card: ["source"], columns: ["new"], fromView: true });
+  assert.deepStrictEqual(plain(A.boardSpec(BOARD_META, "deal", "stage")).fromView, true);
+  assert.deepStrictEqual(plain(A.boardSpec(BOARD_META, "deal", "source")), { group_by: "source", card: [], fromView: false });
+  // no views.kanban: the first select, cards from the list columns past name, the title field and the group field
+  assert.deepStrictEqual(plain(A.boardSpec(BOARD_META, "task")), { group_by: "state", card: ["owner", "due"], fromView: false });
+  assert.deepStrictEqual(plain(A.boardSpec(BOARD_META, "task", "priority")).group_by, "priority");
+  assert.deepStrictEqual(plain(A.boardSpec(BOARD_META, "task", "locked")).group_by, "state", "a read-only field is not offered");
+  assert.strictEqual(A.boardSpec(META, "lead"), null);
+});
+
+test("loadListPrefs keeps a board field the model still has, drops others", () => {
+  const A = load();
+  const st = memStorage({ "rk.list.kopi.task": JSON.stringify({ view: "kanban", board: "priority" }) });
+  const p = plain(A.loadListPrefs(st, "kopi", "task", BOARD_META));
+  assert.strictEqual(p.view, "kanban", "a model without views.kanban keeps the person's Papan");
+  assert.strictEqual(p.board, "priority");
+  const gone = memStorage({ "rk.list.kopi.task": JSON.stringify({ view: "kanban", board: "locked" }) });
+  assert.strictEqual(A.loadListPrefs(gone, "kopi", "task", BOARD_META).board, null);
+  assert.strictEqual(A.loadListPrefs(memStorage(), "kopi", "task", BOARD_META).view, "list", "the default view stays Daftar without views.kanban");
 });
 
 test("sumFields picks currency columns only", () => {

@@ -94,6 +94,10 @@ views:
         columns: [[deal_name, customer], [stage, value, expected_close]]
 ```
 
+The web app offers the board (Papan) on any model with a writable, visible `select` field that has options, even
+without `views.kanban`: its columns are that field's options, and people pick the field per person when there is more
+than one. `views.kanban` sets the default field, the card, the sum and the column order.
+
 ## System fields
 
 Every record has `name` (its id, from `naming`), `created_by`, `created_at` and `modified_at`, and is stored per

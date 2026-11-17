@@ -3,9 +3,11 @@
  * RangkaApp.ListView({model | route.model}) pages through GET /api/v1/r/<model> (q, filter, sort, limit, offset). Search is
  * debounced 300 ms, the quick filters become one CEL clause per filter (`field in ['a','b']`, joined with ` && `), and
  * the page size is 20. The toolbar has search and quick filters, Urutkan, Kolom and the view switcher (Daftar, Papan
- * when the model has views.kanban, Kelompok, Laporan). The view, sort, columns and group field are kept per person in
- * localStorage (rk.list.<org>.<model>); in Ubah, Kolom also offers "Jadikan bawaan untuk semua" (a change set on
- * views.list.columns).
+ * when the model has views.kanban or a writable select field with options, Kelompok, Laporan). The view, sort, columns,
+ * group field and board field are kept per person in localStorage (rk.list.<org>.<model>); in Ubah, Kolom also offers
+ * "Jadikan bawaan untuk semua" (a change set on views.list.columns).
+ * - Papan: views.kanban as written; without it (or when the person picks another field in "Papan: …", shown when there
+ *   is more than one) a board on that select field, cards with the record title and two list columns.
  * - Daftar: a checkbox column; selected rows show the bulk bar (count and "Hapus pilihan").
  * - Kelompok: group headers (count and the sums of the views.list number columns) from GET /api/v1/aggregate; opening
  *   a group lists its rows (`field == 'v'` added to the filter), 20 at a time with "Muat lagi". The "Lainnya" bucket
@@ -21,7 +23,7 @@
  * every view shows on a 403 permission_denied.
  *
  * Pure helpers (unit-tested in test/list.test.js): celQuote, inClause, buildFilter, sortParam, nextSort, parseSort,
- * listColumns, kanbanColumns, availableViews, groupFields, sumFields, mergeCheckGroups, groupFilter, loadListPrefs,
+ * listColumns, kanbanColumns, availableViews, boardFields, boardSpec, groupFields, sumFields, mergeCheckGroups, groupFilter, loadListPrefs,
  * saveListPrefs, cardSlots.
  */
 (function (global) {
@@ -85,10 +87,39 @@
     return !!fd && fd.type !== "table";
   }
 
-  /** list, group and report always; kanban only when the model has views.kanban. */
+  /** Fields a board can have columns for: views.kanban.group_by first, then every writable, visible select field with
+   *  options (moving a card PATCHes the field, so the derived status, compute, read_only and hidden fields are out). */
+  function boardFields(meta, model) {
+    var mm = modelOf(meta, model), kb = (mm.views || {}).kanban, out = [];
+    if (kb && kb.group_by) out.push(kb.group_by);
+    (mm.fields || []).forEach(function (f) {
+      if (f.type !== "select" || f.compute || f.read_only || f.hidden || !(f.options || []).length) return;
+      if (out.indexOf(f.name) < 0) out.push(f.name);
+    });
+    return out;
+  }
+
+  /** The board the person sees: views.kanban as written when it groups on `field` (or no field is asked for), else a
+   *  board on `field` (default: the first of boardFields) with the record title and the first two other list columns
+   *  on the card. fromView says whether the board is views.kanban itself: only then can Ubah reorder its columns
+   *  (views.kanban.columns). null when the model has no field a board can use. */
+  function boardSpec(meta, model, field) {
+    var mm = modelOf(meta, model), kb = (mm.views || {}).kanban, bf = boardFields(meta, model);
+    if (kb && kb.group_by && (!field || field === kb.group_by)) return Object.assign({}, kb, { fromView: true });
+    var g = bf.indexOf(field) >= 0 ? field : bf[0];
+    if (!g) return null;
+    if (kb && g === kb.group_by) return Object.assign({}, kb, { fromView: true });
+    var card = listColumns(mm).map(colName).filter(function (c) {
+      var fd = fieldOf(mm, c);
+      return c !== "name" && c !== g && c !== mm.title_field && !!fd && fd.type !== "table";
+    }).slice(0, 2);
+    return { group_by: g, card: card, fromView: false };
+  }
+
+  /** list, group and report always; kanban when the model has views.kanban or a select field a board can use. */
   function availableViews(meta, model) {
-    var v = modelOf(meta, model).views || {};
-    return VIEWS.filter(function (x) { return x !== "kanban" || !!v.kanban; });
+    var has = boardFields(meta, model).length > 0;
+    return VIEWS.filter(function (x) { return x !== "kanban" || has; });
   }
 
   /** Fields the group-by view can group on: the derived status of a submittable model, then select, link and check fields. */
@@ -150,13 +181,14 @@
       view: availableViews(meta, model).indexOf(saved.view) >= 0 ? saved.view : defaultView(mm),
       sort: sort,
       columns: cols.length ? cols : listColumns(mm).map(colName),
-      group: groupFields(meta, model).indexOf(saved.group) >= 0 ? saved.group : null
+      group: groupFields(meta, model).indexOf(saved.group) >= 0 ? saved.group : null,
+      board: boardFields(meta, model).indexOf(saved.board) >= 0 ? saved.board : null
     };
   }
 
   function saveListPrefs(storage, org, model, prefs) {
     try {
-      if (storage) storage.setItem(prefsKey(org, model), JSON.stringify({ view: prefs.view, sort: prefs.sort || null, columns: prefs.columns || [], group: prefs.group || null }));
+      if (storage) storage.setItem(prefsKey(org, model), JSON.stringify({ view: prefs.view, sort: prefs.sort || null, columns: prefs.columns || [], group: prefs.group || null, board: prefs.board || null }));
     } catch (e) { /* private window or full storage: the settings last for this visit only */ }
   }
 
@@ -222,6 +254,8 @@
   RA.listColumns = listColumns;
   RA.kanbanColumns = kanbanColumns;
   RA.availableViews = availableViews;
+  RA.boardFields = boardFields;
+  RA.boardSpec = boardSpec;
   RA.groupFields = groupFields;
   RA.sumFields = sumFields;
   RA.groupFilter = groupFilter;
@@ -327,7 +361,7 @@
   function Kanban(p) {
     var ctx = useContext(RA.Ctx);
     live = ctx;
-    var m = p.model, mm = ctx.meta.models[m], kb = (mm.views || {}).kanban, eng = ctx.eng;
+    var m = p.model, mm = ctx.meta.models[m], kb = p.spec || boardSpec(ctx.meta, m), eng = ctx.eng;
     var gf = eng.field(m, kb.group_by), sumF = kb.sum && eng.field(m, kb.sum);
     var ds = useState(null), drag = ds[0], setDrag = ds[1];
     var os = useState(null), over = os[0], setOver = os[1];
@@ -342,6 +376,7 @@
       var order = RA.moveItem(cols.map(function (o) { return o.value; }), i, i + d);
       u.quiet(u.edit("custom/" + m + ".rk", function (ex) { return RA.opsKanbanColumns(m, order, ex); }));
     }
+    function cardTitle(r) { return (kb.title ? r[kb.title] : eng.title(m, r)) || r.name; }
     function groupOf(r) { return Object.prototype.hasOwnProperty.call(moved, r.name) ? moved[r.name] : r[kb.group_by]; }
     function setOne(name, val) { setMoved(function (cur) { var n = Object.assign({}, cur); if (val === undefined) delete n[name]; else n[name] = val; return n; }); }
 
@@ -376,7 +411,8 @@
             onDrop: function (e) { e.preventDefault(); setOver(null); var n = drag || (e.dataTransfer && e.dataTransfer.getData("text/plain")); if (n && !ro) move(n, o.value); setDrag(null); } },
           h("header", null, h("b", null, L(o.label)), h("span", { className: "n" }, items.length),
             o.probability != null ? h("span", { className: "pv-prob" }, o.probability + "%") : null,
-            u.on ? h("span", { className: "ap-ubah-tools ap-ubah-coltools" },
+            // the order is views.kanban.columns: a board the person picked on another field has none to save
+            u.on && kb.fromView ? h("span", { className: "ap-ubah-tools ap-ubah-coltools" },
               h(R.Button, { size: "sm", "aria-label": "Geser " + L(o.label) + " ke kiri", title: "Geser ke kiri", disabled: u.busy || ci === 0, onClick: function () { moveCol(ci, -1); } }, "←"),
               h(R.Button, { size: "sm", "aria-label": "Geser " + L(o.label) + " ke kanan", title: "Geser ke kanan", disabled: u.busy || ci === cols.length - 1, onClick: function () { moveCol(ci, 1); } }, "→")) : null),
           total != null ? h("div", { className: "pv-sum" }, R.formatRupiah(total)) : null,
@@ -386,14 +422,14 @@
                 onDragStart: function (e) { setDrag(r.name); try { e.dataTransfer.setData("text/plain", r.name); } catch (x) { /* some browsers refuse */ } },
                 onDragEnd: function () { setDrag(null); setOver(null); },
                 onClick: open, onKeyDown: function (e) { if (e.key === "Enter") open(); } },
-              h("b", null, r[kb.title] || r.name),
+              h("b", null, cardTitle(r)),
               (kb.card || []).map(function (c) {
                 var v = r[c]; if (v == null || v === "") return null;
                 var fd = eng.field(m, c);
                 return h("div", { key: c, className: "pv-card-row" }, fd && fd.type === "currency" ? h("span", { className: "rk-amount" }, R.formatRupiah(v)) : cellFor(m, c, r, ctx));
               }),
               // Touch screens and keyboards cannot drag: the same move as a drop, from a select on the card.
-              ro ? null : h("select", { className: "pv-card-move", value: "", "aria-label": "Pindah " + (r[kb.title] || r.name) + " ke",
+              ro ? null : h("select", { className: "pv-card-move", value: "", "aria-label": "Pindah " + cardTitle(r) + " ke",
                   onClick: stop, onKeyDown: stop, onChange: function (e) { var to = e.target.value; if (to) move(r.name, to); } },
                 h("option", { value: "" }, "Pindah ke…"),
                 cols.filter(function (x) { return x.value !== o.value; }).map(function (x) { return h("option", { key: x.value, value: x.value }, L(x.label)); })));
@@ -612,6 +648,8 @@
     var viewIds = availableViews(ctx.meta, m).filter(function (v) { return v !== "group" || !ctx.readOnly; });
     var view = viewIds.indexOf(prefs.view) >= 0 ? prefs.view : "list";
     var gfields = groupFields(ctx.meta, m), gfield = prefs.group || gfields[0] || null;
+    var bfields = boardFields(ctx.meta, m), spec = boardSpec(ctx.meta, m, prefs.board);
+    if (view === "kanban" && !spec) view = "list";
     if (view === "group" && !gfield) view = "list";
     var sort = parseSort(prefs.sort), columns = prefs.columns;
     var qs = useState(""), query = qs[0], setQuery = qs[1];
@@ -748,6 +786,11 @@
       }
       return items;
     }
+    function boardItems() {
+      return [{ heading: "Kolom papan menurut" }].concat(bfields.map(function (f) {
+        return { label: colLabel(eng, m, f), checked: f === spec.group_by, onSelect: function () { setPrefs({ board: f }); } };
+      }));
+    }
     function groupItems() {
       return [{ heading: "Kelompokkan menurut" }].concat(gfields.map(function (f) {
         return { label: colLabel(eng, m, f), checked: f === gfield, onSelect: function () { setPrefs({ group: f }); } };
@@ -758,6 +801,7 @@
       h("input", { placeholder: "Cari " + lower(label) + "…", value: query, onChange: function (e) { setQuery(e.target.value); }, "aria-label": "Cari" }));
     var tools = h("div", { className: "ap-list-tools" },
       view === "group" && gfields.length ? h(ToolMenu, { key: "g", icon: "group", label: "Kelompok: " + colLabel(eng, m, gfield), items: groupItems }) : null,
+      board && bfields.length > 1 ? h(ToolMenu, { key: "b", icon: "group", label: "Papan: " + colLabel(eng, m, spec.group_by), items: boardItems }) : null,
       board ? null : h(ToolMenu, { key: "s", icon: "sort", label: "Urutkan", title: sort ? "Diurutkan menurut " + colLabel(eng, m, sort.key) : undefined, items: sortItems }),
       board ? null : h(ToolMenu, { key: "c", icon: "table", label: "Kolom", items: columnItems }));
     var viewTabs = h(R.ViewSwitcher, { value: view, label: "Tampilan", options: viewIds.map(function (v) { return { id: v, label: VIEW_LABEL[v] }; }),
@@ -824,7 +868,7 @@
     var body;
     if (board) {
       body = loading ? h("div", { className: "pv-board" }, [0, 1, 2, 3].map(function (i) { return h(R.Skeleton, { key: i, variant: "card", height: 180 }); }))
-        : h(Kanban, { model: m, rows: data.rows, onMoved: function (rec) {
+        : h(Kanban, { key: spec.group_by, model: m, spec: spec, rows: data.rows, onMoved: function (rec) {
           setData(function (cur) { return { rows: cur.rows.map(function (r) { return r.name === rec.name ? rec : r; }), total: cur.total }; });
         } });
     } else if (view === "group") {

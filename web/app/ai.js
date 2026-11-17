@@ -30,7 +30,7 @@
  * On sign-out the host calls clearAiStorage(), which drops every stored conversation (keys rk.ai.* and rk.console.ai*).
  *
  * Pure helpers (unit-tested in test/ai.test.js): parseSSE (from api.js), aiContext, aiErrorText, pushTurn, trimHistory, aiReduce,
- * rakaMode, aiStorageKey, consoleAiStorageKey, clearAiStorage.
+ * rakaMode, rememberOpener, aiStorageKey, consoleAiStorageKey, clearAiStorage.
  */
 (function (global) {
   "use strict";
@@ -174,6 +174,10 @@
     return o.launcher ? "float" : "drawer";
   }
   RA.rakaMode = rakaMode;
+  /** The element to give focus back to when Raka closes: the one focused before the ask bar or the panel opened.
+   *  While either is already open the kept element stays; the ask bar handing over to the panel must not replace it. */
+  function rememberOpener(kept, active, askOpen, drawerOpen) { return askOpen || drawerOpen ? kept : active; }
+  RA.rememberOpener = rememberOpener;
   RA.DOCK_WIDTH_KEY = DOCK_WIDTH_KEY;
 
   /* ================================================================ diagrams
@@ -271,7 +275,8 @@
         if (o && o.focus && global.document.contains(o)) o.focus();
       }
       wasOpen.current = drawerOpen;
-    }, [drawerOpen]);
+      if (!drawerOpen && !askOpen) opener.current = null; // the ask bar closed alone: keep nothing
+    }, [drawerOpen, askOpen]);
     function resize(w) { setWidth(w); writeDockWidth(w); }
     live.current = { s: s, askOpen: askOpen, drawerOpen: drawerOpen, p: p };
 
@@ -279,12 +284,13 @@
     useEffect(function () { return function () { seq.current++; if (abort.current) abort.current.abort(); }; }, []);
 
     function openAsk(query) {
+      opener.current = rememberOpener(opener.current, global.document.activeElement, live.current.askOpen, live.current.drawerOpen);
       setAskCtx(p.getContext ? p.getContext() : null);
       if (query != null) setValue(String(query));
       setAskOpen(true);
     }
     function showDrawer() {
-      if (!live.current.drawerOpen) opener.current = global.document.activeElement;
+      opener.current = rememberOpener(opener.current, global.document.activeElement, live.current.askOpen, live.current.drawerOpen);
       setDrawerOpen(true);
     }
     function closeDrawer() { setFull(false); setDrawerOpen(false); }

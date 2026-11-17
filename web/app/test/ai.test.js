@@ -161,3 +161,14 @@ test("ai.js tells the design system where Mermaid lives, once, and a failed rend
   try { diagramCalls[0].onRenderError("graph TD", "Parse error"); } finally { console.warn = warn; }
   assert.deepStrictEqual(seen, [["raka diagram", "Parse error"]]);
 });
+
+test("rakaMode: dock or full on desktop, today's panel below 1280", () => {
+  const m = (o) => RA.rakaMode(Object.assign({ open: true, full: false, bp: "desktop", launcher: true }, o));
+  assert.strictEqual(m({ open: false }), "closed");
+  assert.strictEqual(m({}), "dock");
+  assert.strictEqual(m({ full: true }), "full");
+  assert.strictEqual(m({ bp: "tablet" }), "float");
+  assert.strictEqual(m({ bp: "tablet", full: true }), "float", "Full only exists on desktop");
+  assert.strictEqual(m({ bp: "phone", launcher: false }), "drawer");
+  assert.strictEqual(RA.DOCK_WIDTH_KEY, "rk.raka.dock.w");
+});

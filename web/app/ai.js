@@ -11,9 +11,8 @@
  *   onPreview, onOpenUbah   (id) → void, optional: replace those defaults
  *   blocked      () → boolean, optional: ⌘J does nothing while it is true (the expired-session dialog)
  *   control      a ref, optional: gets {ask(query), open()} so ⌘K and the sidebar can open the ask bar or the drawer
- *   subtitle     optional: the line under "Raka" in the panel head (the company, the Console's site)
  *   launcher     false to leave out the floating Raka button (R.RakaLauncher, rangka.pen "OS / Raka · *"); with it
- *                the panel floats above the button on wide screens. Shown only where AssistantRoot is mounted, which
+ *                the panel floats above the button below 1280px. The button is hidden while Raka is docked or Full. Shown only where AssistantRoot is mounted, which
  *                the hosts do only when meta.features.ai === true (Rangka Cloud), never on a plain self-hosted kernel.
  *   tuckFor      optional CSS selector: while an element matches (a screen with its own button at the bottom right),
  *                the launcher sits tucked against the right edge
@@ -21,10 +20,17 @@
  * focuses the drawer's composer. The ask bar is not rendered while the drawer is open. Mount it only when
  * meta.features.ai === true.
  *
+ * Panel mode (contract 0063 §1), picked by rakaMode: from 1280px (breakpoint "desktop") Raka docks beside the page
+ * ("dock", default width 400, 360–640, dragged by the panel's edge and kept in localStorage "rk.raka.dock.w") or covers
+ * the window ("full", the Perbesar button; Esc goes back to the dock). Below 1280px it is today's panel: "float" above
+ * the launcher, else the fixed "drawer". While docked or Full, <html data-raka="dock|full"> and --raka-dock-w are set so
+ * the design-system CSS makes room for the panel; both are removed on close and unmount. Opening focuses the composer;
+ * closing returns focus to the element focused before.
+ *
  * On sign-out the host calls clearAiStorage(), which drops every stored conversation (keys rk.ai.* and rk.console.ai*).
  *
  * Pure helpers (unit-tested in test/ai.test.js): parseSSE (from api.js), aiContext, aiErrorText, pushTurn, trimHistory, aiReduce,
- * aiStorageKey, consoleAiStorageKey, clearAiStorage.
+ * rakaMode, aiStorageKey, consoleAiStorageKey, clearAiStorage.
  */
 (function (global) {
   "use strict";
@@ -160,6 +166,16 @@
   RA.trimHistory = trimHistory;
   RA.aiReduce = aiReduce;
 
+  var DOCK_WIDTH_KEY = "rk.raka.dock.w";
+  /** The panel's mode: "closed"; on a desktop "full" or "dock"; below it "float" (with the launcher) or "drawer". */
+  function rakaMode(o) {
+    if (!o.open) return "closed";
+    if (o.bp === "desktop") return o.full ? "full" : "dock";
+    return o.launcher ? "float" : "drawer";
+  }
+  RA.rakaMode = rakaMode;
+  RA.DOCK_WIDTH_KEY = DOCK_WIDTH_KEY;
+
   /* ================================================================ diagrams
    * Raka's answers may hold ```mermaid fences; RichText draws them with the vendored Mermaid. The URL is resolved from
    * this script's own address so the Console (which loads ../app/ai.js) finds app/vendor/ too. Not precached by sw.js:
@@ -192,6 +208,12 @@
   var TUCK_KEY = "rk.raka.tucked";
   function readTuck() { try { return global.localStorage.getItem(TUCK_KEY) === "1"; } catch (e) { return false; } }
   function writeTuck(v) { try { if (v) global.localStorage.setItem(TUCK_KEY, "1"); else global.localStorage.removeItem(TUCK_KEY); } catch (e) { /* no storage */ } }
+  function readDockWidth() {
+    var raw = null;
+    try { raw = global.localStorage.getItem(DOCK_WIDTH_KEY); } catch (e) { /* no storage */ }
+    return R.clampDockWidth(raw == null ? NaN : Number(raw), global.innerWidth);
+  }
+  function writeDockWidth(w) { try { global.localStorage.setItem(DOCK_WIDTH_KEY, String(w)); } catch (e) { /* no storage */ } }
   function withQuery(hash, kv) { return (String(hash || "#/").split("?")[0] || "#/") + "?" + kv; }
 
   RA.AssistantRoot = function (p) {
@@ -199,6 +221,11 @@
     var s = st[0], dispatch = st[1];
     var as = useState(false), askOpen = as[0], setAskOpen = as[1];
     var ds = useState(false), drawerOpen = ds[0], setDrawerOpen = ds[1];
+    var fs = useState(false), full = fs[0], setFull = fs[1];
+    var ws = useState(readDockWidth), width = ws[0], setWidth = ws[1];
+    var bp = R.useBreakpoint();
+    var mode = rakaMode({ open: drawerOpen, full: full, bp: bp, launcher: !!R.RakaLauncher && p.launcher !== false });
+    var opener = useRef(null); // the element that had focus before Raka opened
     var vs = useState(""), value = vs[0], setValue = vs[1];
     var cs = useState(null), askCtx = cs[0], setAskCtx = cs[1];
     var seq = useRef(0), abort = useRef(null), live = useRef({});
@@ -216,6 +243,36 @@
       check();
       return function () { mo.disconnect(); if (raf) global.cancelAnimationFrame(raf); };
     }, [p.tuckFor]);
+    // make room for the panel: the design-system CSS reads data-raka and --raka-dock-w on <html>
+    useEffect(function () {
+      var root = global.document.documentElement;
+      if (mode === "dock" || mode === "full") {
+        root.dataset.raka = mode;
+        root.style.setProperty("--raka-dock-w", width + "px");
+      } else {
+        delete root.dataset.raka;
+        root.style.removeProperty("--raka-dock-w");
+      }
+    }, [mode, width]);
+    useEffect(function () {
+      return function () {
+        var root = global.document.documentElement;
+        delete root.dataset.raka;
+        root.style.removeProperty("--raka-dock-w");
+      };
+    }, []);
+    // focus: into the composer on open, back to where it was on close
+    var wasOpen = useRef(false);
+    useEffect(function () {
+      if (drawerOpen && !wasOpen.current) focusComposer();
+      else if (!drawerOpen && wasOpen.current) {
+        var o = opener.current;
+        opener.current = null;
+        if (o && o.focus && global.document.contains(o)) o.focus();
+      }
+      wasOpen.current = drawerOpen;
+    }, [drawerOpen]);
+    function resize(w) { setWidth(w); writeDockWidth(w); }
     live.current = { s: s, askOpen: askOpen, drawerOpen: drawerOpen, p: p };
 
     useEffect(function () { writeTurns(p.storageKey, s.turns); }, [s.turns, p.storageKey]);
@@ -226,7 +283,12 @@
       if (query != null) setValue(String(query));
       setAskOpen(true);
     }
-    function openDrawer() { setAskOpen(false); setDrawerOpen(true); }
+    function showDrawer() {
+      if (!live.current.drawerOpen) opener.current = global.document.activeElement;
+      setDrawerOpen(true);
+    }
+    function closeDrawer() { setFull(false); setDrawerOpen(false); }
+    function openDrawer() { setAskOpen(false); showDrawer(); }
     function focusComposer() {
       var c = global.document.querySelector(".rk-chat textarea");
       if (c) c.focus();
@@ -257,7 +319,7 @@
       inflight.current = true;
       var history = trimHistory(cur.turns, 20);
       dispatch({ type: "send", text: text });
-      setDrawerOpen(true);
+      showDrawer();
       var my = ++seq.current, ctrl = global.AbortController ? new global.AbortController() : null;
       abort.current = ctrl;
       var body = { message: text, history: history };
@@ -300,11 +362,12 @@
     s.turns.forEach(function (t) { (t.changesets || []).forEach(function (c) { if (WAITING[c.status]) pending++; }); });
     var here = drawerOpen && p.getContext ? p.getContext() : null;
     return h(React.Fragment, null,
-      h(R.ChatDrawer, { open: drawerOpen, turns: s.turns, busy: s.busy, onNew: fresh, onClose: function () { setDrawerOpen(false); },
-        floating: !!R.RakaLauncher && p.launcher !== false, subtitle: p.subtitle, context: here ? here.title : null,
+      h(R.ChatDrawer, { open: drawerOpen, turns: s.turns, busy: s.busy, onNew: fresh, onClose: closeDrawer,
+        mode: mode === "closed" ? "drawer" : mode, width: width, onResize: resize,
+        onExpand: function () { setFull(true); }, onCollapse: function () { setFull(false); }, context: here ? here.title : null,
         onSend: function (t) { send(t, p.getContext ? p.getContext() : null); }, onPreview: preview, onOpenUbah: openUbah }),
-      R.RakaLauncher && p.launcher !== false ? h(R.RakaLauncher, { open: drawerOpen, pending: pending, tucked: tucked || autoTuck,
-        onToggle: function () { if (drawerOpen) setDrawerOpen(false); else { setTuck(false); openDrawer(); } }, onTuck: setTuck }) : null,
+      R.RakaLauncher && p.launcher !== false && mode !== "dock" && mode !== "full" ? h(R.RakaLauncher, { open: drawerOpen, pending: pending, tucked: tucked || autoTuck,
+        onToggle: function () { if (drawerOpen) closeDrawer(); else { setTuck(false); openDrawer(); } }, onTuck: setTuck }) : null,
       drawerOpen ? null : h(R.AskBar, { open: askOpen, context: askCtx ? { label: askCtx.title } : null, onRemoveContext: function () { setAskCtx(null); },
         value: value, onChange: setValue, onSend: sendAsk, onOpenChat: openDrawer, onClose: function () { setAskOpen(false); }, busy: s.busy }));
   };

@@ -915,11 +915,24 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
   box-shadow: 0 16px 40px rgba(28, 25, 23, .15), 0 2px 6px rgba(28, 25, 23, .06); }
 /* Dock: the page becomes a card with an 8px gutter on the sunken --soft background, Raka fills the right edge. Full covers the window. */
 html[data-raka="dock"], html[data-raka="full"] { background: var(--soft); }
-html[data-raka="dock"] .rk-shell { margin: 8px var(--raka-dock-w, 400px) 8px 8px; border-radius: 12px; overflow: hidden; min-height: calc(100dvh - 16px);
+html[data-raka] body { background: transparent; }
+/* the shell's 8px margins stay inside the app root (no margin collapse through it), so the page is exactly one window tall */
+html[data-raka="dock"] #rk-app { display: flow-root; }
+/* overflow: clip rounds the corners without making .rk-shell a scroll container, so the page's sticky bars keep sticking to the window. */
+html[data-raka="dock"] .rk-shell { margin: 8px var(--raka-dock-w, 400px) 8px 8px; border-radius: 12px; overflow: clip; height: calc(100% - 16px); min-height: calc(100dvh - 16px);
   border: 1px solid var(--line); box-sizing: border-box; box-shadow: 0 1px 3px rgba(28, 25, 23, .06); }
-/* Full hides the page (not focusable) but Raka lives inside .rk-shell, so the panel opts back in. */
-html[data-raka="full"] .rk-shell { visibility: hidden; }
+/* Full hides the shell's layout regions (not focusable); Raka and the overlays the hosts render inside .rk-shell stay visible. */
+html[data-raka="full"] .rk-shell > :is(.rk-side, .rk-topnav, .rk-shell-main) { visibility: hidden; }
 html[data-raka="full"] .rk-chat-full { visibility: visible; }
+/* Dock: the sticky page bars sit inside the card's gutter; bottom-right overlays stay over the page, not over the panel. */
+html[data-raka="dock"] .rk-shell.top > .rk-topnav { top: 8px; }
+html[data-raka="dock"] .rk-toasts.float { right: calc(var(--raka-dock-w, 400px) + 16px); }
+@media print {
+  html[data-raka] { background: transparent; }
+  html[data-raka] .rk-shell { margin: 0; border: 0; border-radius: 0; box-shadow: none; overflow: visible; min-height: 0; }
+  html[data-raka] .rk-shell > :is(.rk-side, .rk-topnav, .rk-shell-main) { visibility: visible; }
+  html[data-raka] .rk-chat, html[data-raka] .rk-askbar, html[data-raka] .rk-fab { display: none; }
+}
 .rk-chat-dock { width: var(--raka-dock-w, 400px); background: var(--soft); border-left: 0; box-shadow: none; }
 .rk-chat-dock .rk-chat-head { border-bottom: 0; }
 .rk-chat-grip { position: absolute; z-index: 1; left: 0; top: 0; bottom: 0; width: 10px; cursor: col-resize; touch-action: none; outline: none; }

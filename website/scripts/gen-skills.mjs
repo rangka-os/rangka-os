@@ -71,7 +71,7 @@ for (const s of skills) {
     '',
     `# ${s.front.name}`,
     '',
-    `> ${s.front.description}`,
+    `> ${String(s.front.description ?? '').replace(/</g, '&lt;').replace(/>/g, '&gt;')}`, // outside v-pre: `<name>` would be a Vue tag
     '',
     `Source: \`${s.source}\` · [Folder on GitHub](${s.url}) · Install: [all harnesses](./install)`,
     '',

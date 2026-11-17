@@ -4070,6 +4070,9 @@ def test_ai_dock(page, ctx):
     assert drawer.get_by_role("button", name="Kecilkan").count() == 0 and drawer.get_by_role("button", name="Perbesar").count() == 1
     check_fits(page, ctx, "Raka dock")
     shot(page, ctx, "ai-dock")
+    page.evaluate("() => document.documentElement.setAttribute('data-theme', 'dark')")
+    shot(page, ctx, "ai-dock-dark")
+    page.evaluate("() => document.documentElement.setAttribute('data-theme', 'light')")
 
     # the grip: ArrowLeft widens by 16px, kept in localStorage; a drag past the cap stops at it
     grip = drawer.get_by_role("separator", name="Ubah lebar panel Raka")
@@ -4103,15 +4106,15 @@ def test_ai_dock(page, ctx):
     page.locator(".ap-shell").wait_for(timeout=15000)
     wait_rows(page)
     boxes = page.locator(".ap-shell .rk-table tbody tr input[type=checkbox]")
-    if boxes.count() >= 2:
-        open_dock()
-        boxes.nth(0).check()
-        boxes.nth(1).check()
-        bulk = page.get_by_role("region", name="Aksi untuk baris terpilih")
-        bulk.wait_for(timeout=5000)
-        bb, db = bulk.bounding_box(), ai_drawer(page).bounding_box()
-        assert bb["x"] + bb["width"] <= db["x"] + 1, f"bulk bar {bb} lies left of the panel {db}"
-        ai_drawer(page).get_by_role("button", name="Tutup").click()
+    assert boxes.count() >= 2, f"the invoice list has rows to select, got {boxes.count()} checkboxes"
+    open_dock()
+    boxes.nth(0).check()
+    boxes.nth(1).check()
+    bulk = page.get_by_role("region", name="Aksi untuk baris terpilih")
+    bulk.wait_for(timeout=5000)
+    bb, db = bulk.bounding_box(), ai_drawer(page).bounding_box()
+    assert bb["x"] + bb["width"] <= db["x"] + 1, f"bulk bar {bb} lies left of the panel {db}"
+    ai_drawer(page).get_by_role("button", name="Tutup").click()
 
     # Perbesar covers the window; Escape brings the dock back; a close mid-stream loses nothing
     open_dock()
@@ -4122,6 +4125,9 @@ def test_ai_dock(page, ctx):
     assert page.locator(".rk-chat-card").is_visible(), "Full shows the conversation as a card"
     assert drawer.get_by_role("button", name="Perbesar").count() == 0 and drawer.get_by_role("button", name="Kecilkan").count() == 1
     shot(page, ctx, "ai-full")
+    page.evaluate("() => document.documentElement.setAttribute('data-theme', 'dark')")
+    shot(page, ctx, "ai-full-dark")
+    page.evaluate("() => document.documentElement.setAttribute('data-theme', 'light')")
     check_fits(page, ctx, "Raka full")
     page.keyboard.press("Escape")
     page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)

@@ -161,3 +161,24 @@ test("ai.js tells the design system where Mermaid lives, once, and a failed rend
   try { diagramCalls[0].onRenderError("graph TD", "Parse error"); } finally { console.warn = warn; }
   assert.deepStrictEqual(seen, [["raka diagram", "Parse error"]]);
 });
+
+test("rakaMode: dock or full on desktop, today's panel below 1280", () => {
+  const m = (o) => RA.rakaMode(Object.assign({ open: true, full: false, bp: "desktop", launcher: true }, o));
+  assert.strictEqual(m({ open: false }), "closed");
+  assert.strictEqual(m({}), "dock");
+  assert.strictEqual(m({ full: true }), "full");
+  assert.strictEqual(m({ bp: "tablet" }), "float");
+  assert.strictEqual(m({ bp: "tablet", full: true }), "float", "Full only exists on desktop");
+  assert.strictEqual(m({ bp: "phone", launcher: false }), "drawer");
+  assert.strictEqual(RA.DOCK_WIDTH_KEY, "rk.raka.dock.w");
+});
+
+test("rememberOpener: the element before the ask bar survives the hand-over to the panel", () => {
+  const before = { id: "before" }, askInput = { id: "ask-input" };
+  let kept = RA.rememberOpener(null, before, false, false);
+  assert.strictEqual(kept, before, "ask bar opens from the page");
+  kept = RA.rememberOpener(kept, askInput, true, false);
+  assert.strictEqual(kept, before, "panel opens from the ask bar");
+  assert.strictEqual(RA.rememberOpener(kept, askInput, false, true), before, "already open");
+  assert.strictEqual(RA.rememberOpener(null, before, false, false), before, "a fresh open captures again");
+});

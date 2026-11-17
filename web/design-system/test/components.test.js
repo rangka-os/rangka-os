@@ -425,3 +425,76 @@ test("ChatDrawer draws Raka's answer with RichText and keeps the owner's text pl
   assert.deepStrictEqual(texts(nodes(tree, (n) => hasClass(n, "rk-chat-me"))[0]), ["**tebal?**"]);
   assert.deepStrictEqual(texts(tags(nodes(tree, (n) => hasClass(n, "rk-chat-raka"))[0], "strong")[0]), ["3 faktur"]);
 });
+
+test("clampDockWidth keeps the dock between 360 and 640 and leaves the page 640px", () => {
+  assert.strictEqual(R.clampDockWidth(452), 452);
+  assert.strictEqual(R.clampDockWidth(100), 360);
+  assert.strictEqual(R.clampDockWidth(9999), 640);
+  assert.strictEqual(R.clampDockWidth("abc"), 400);
+  assert.strictEqual(R.clampDockWidth(undefined), 400);
+  assert.strictEqual(R.clampDockWidth(640, 1280), 640);
+  assert.strictEqual(R.clampDockWidth(640, 1100), 460);
+  assert.strictEqual(R.clampDockWidth(500, 900), 360);
+});
+
+test("conversationTitle is the first message, cut at 60 on a word", () => {
+  assert.strictEqual(R.conversationTitle([]), "Raka");
+  assert.strictEqual(R.conversationTitle([{ role: "user", text: "  Halo   Raka " }]), "Halo Raka");
+  assert.strictEqual(R.conversationTitle([{ role: "assistant", text: "x" }, { role: "user", text:
+    "Berapa faktur jatuh tempo minggu ini dan siapa saja pelanggan yang paling sering telat bayar?" }]),
+    "Berapa faktur jatuh tempo minggu ini dan siapa saja…");
+  assert.strictEqual(R.conversationTitle([{ role: "user", text: "a".repeat(70) }]), "a".repeat(60) + "…");
+});
+
+test("ChatDrawer head per mode, and no approval note or subtitle in any mode", () => {
+  const base = { open: true, turns: TURNS, onSend() {}, onNew() {}, onClose() {}, onExpand() {}, onCollapse() {}, subtitle: "Kopi Senja" };
+  const labels = (mode) => [...new Set(nodes(render(R.ChatDrawer(Object.assign({}, base, { mode }))),
+    (n) => n.props && (n.props["aria-label"] || n.props.label)).map((n) => n.props["aria-label"] || n.props.label))];
+  assert.deepStrictEqual(labels("dock").filter((l) => /Percakapan baru|Perbesar|Kecilkan|Tutup/.test(l)), ["Percakapan baru", "Perbesar", "Tutup"]);
+  assert.deepStrictEqual(labels("full").filter((l) => /Percakapan baru|Perbesar|Kecilkan|Tutup/.test(l)), ["Percakapan baru", "Kecilkan", "Tutup"]);
+  assert.deepStrictEqual(labels("drawer").filter((l) => /Percakapan baru|Perbesar|Kecilkan|Tutup/.test(l)), ["Percakapan baru", "Tutup"]);
+  for (const mode of ["drawer", "float", "dock", "full"]) {
+    const t = texts(render(R.ChatDrawer(Object.assign({}, base, { mode })))).join(" ");
+    assert.ok(t.indexOf("Raka hanya mengusulkan") < 0, mode + ": no approval note");
+    assert.ok(t.indexOf("Kopi Senja") < 0, mode + ": no subtitle");
+  }
+  const full = render(R.ChatDrawer(Object.assign({}, base, { mode: "full", turns: [{ role: "user", text: "Berapa faktur jatuh tempo?" }] })));
+  const title = nodes(full, (n) => hasClass(n, "rk-chat-title"))[0];
+  assert.ok(title && texts(title).indexOf("Berapa faktur jatuh tempo?") >= 0, "Full head shows the conversation title");
+  assert.ok(String(full.props.className).indexOf("rk-chat-full") >= 0);
+  assert.ok(String(render(R.ChatDrawer(Object.assign({}, base, { floating: true }))).props.className).indexOf("rk-chat-float") >= 0, "floating still floats");
+});
+
+test("ChatDrawer Esc: Full collapses to Dock, Dock closes; the grip resizes by 16px", () => {
+  const calls = [];
+  const props = (mode) => ({ open: true, turns: [], mode, width: 400, onSend() {}, onClose: () => calls.push("close"),
+    onCollapse: () => calls.push("collapse"), onResize: (w) => calls.push(w) });
+  const esc = { key: "Escape", preventDefault() {}, nativeEvent: {} };
+  render(R.ChatDrawer(props("full"))).props.onKeyDown(esc);
+  render(R.ChatDrawer(props("dock"))).props.onKeyDown(esc);
+  assert.deepStrictEqual(calls.splice(0), ["collapse", "close"]);
+  const grip = nodes(render(R.ChatDrawer(props("dock"))), (n) => n.props && n.props.role === "separator")[0];
+  assert.strictEqual(grip.props["aria-label"], "Ubah lebar panel Raka");
+  assert.strictEqual(grip.props["aria-valuenow"], 400);
+  assert.strictEqual(grip.props["aria-valuemin"], 360);
+  assert.strictEqual(grip.props["aria-valuemax"], 640);
+  grip.props.onKeyDown({ key: "ArrowLeft", preventDefault() {} });
+  grip.props.onKeyDown({ key: "ArrowRight", preventDefault() {} });
+  assert.deepStrictEqual(calls.splice(0), [416, 384], "left widens the panel, right narrows it");
+  assert.strictEqual(nodes(render(R.ChatDrawer(props("full"))), (n) => n.props && n.props.role === "separator").length, 0, "no grip in Full");
+});
+
+test("ChatDrawer keeps the same wrapper chain to the log and composer in Dock and Full", () => {
+  const path = (tree, pred) => { const out = []; (function f(n, trail) {
+    if (!n || typeof n !== "object") return;
+    if (Array.isArray(n)) return n.forEach((x) => f(x, trail));
+    if (pred(n)) out.push(trail.concat(n.type + "." + (n.props.className || "")).join(">"));
+    f(n.children, trail.concat(n.type + "." + (n.props.className || "")));
+  })(tree, []); return out; };
+  const mk = (mode) => render(R.ChatDrawer({ open: true, turns: TURNS, mode, width: 400, onSend() {}, onClose() {} }));
+  for (const pred of [(n) => hasClass(n, "rk-chat-log"), (n) => n.type === "textarea"]) {
+    const d = path(mk("dock"), pred), f = path(mk("full"), pred);
+    assert.strictEqual(d.length, 1);
+    assert.deepStrictEqual(f, d.map((x) => x.replace("aside.rk-chat rk-chat-dock", "aside.rk-chat rk-chat-full")));
+  }
+});

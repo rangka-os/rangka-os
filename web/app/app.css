@@ -443,7 +443,11 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-shell > .rk-side { position: sticky; top: 48px; height: calc(100vh - 48px); height: calc(100dvh - 48px); display: flex; flex-direction: column; }
   .ap-shell:not(.ap-top) > .rk-side { top: 0; height: 100vh; height: 100dvh; }
   .ap-shell > .rk-side > nav { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+  /* Raka docked: the page is a card with an 8px gutter, so the sticky sidebar sits inside it */
+  html[data-raka="dock"] .ap-shell:not(.ap-top) > .rk-side { top: 8px; height: calc(100vh - 18px); height: calc(100dvh - 18px); }
+  html[data-raka="dock"] .ap-shell.ap-top > .rk-side { top: 56px; height: calc(100vh - 66px); height: calc(100dvh - 66px); }
 }
+html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 16px); }
 
 /* ==== Juragan look (riset desain gelombang 2, K-DS1 revisi): app conventions from Frappe UI (Inter 14px, neutral
    surface/ink/outline, dark primary, status always with words). Bata accents and the warm stone palette are gone;

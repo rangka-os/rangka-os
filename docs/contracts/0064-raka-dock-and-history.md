@@ -30,7 +30,7 @@ On `desktop` (≥ 1280px, `Rangka.breakpoint`) Raka has three states:
 | State | What the person sees |
 | --- | --- |
 | Closed | Today's launcher and ⌘J ask bar. |
-| Dock | The page shrinks to a card with 12px corners on the stone background (`--app` behind, 8px gutter top, bottom and left). Raka sits to its right, full height, without border or shadow, on the same stone background. The page stays fully usable. |
+| Dock | The page shrinks to a card with 12px corners on the stone background (`--soft` behind, 8px gutter top, bottom and left). Raka sits to its right, full height, without border or shadow, on the same stone background. The page stays fully usable. |
 | Full | Raka covers the whole window, the host's sidebar and top bar included. History is a fixed 288px column on the left; the conversation is a white card to its right, its content centred at most 720px wide. |
 
 - **Dock width:** default 400px. The person drags the panel's left edge (a 6×48px handle, visible on hover and focus,

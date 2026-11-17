@@ -502,6 +502,25 @@ with sync_playwright() as pw:
             fail(f"raka {width}: no change set card")
         if not sent or sent[0]["message"] != "berapa faktur jatuh tempo?" or sent[0].get("context", {}).get("route") != "#/changesets":
             fail(f"raka {width}: request body {sent[:1]}")
+        if width == 1440:
+            if page.locator("html").get_attribute("data-raka") != "dock":
+                fail("raka 1440: not docked")
+            cb = page.locator(".cn-shell").bounding_box()
+            if cb["x"] + cb["width"] > 1440 - 400 + 1:
+                fail(f"raka 1440: the console runs under the dock, right edge {cb['x'] + cb['width']}")
+            ov = page.evaluate("() => [document.scrollingElement.scrollHeight, innerHeight]")
+            if ov[0] > ov[1]:
+                fail(f"raka 1440: the console scrolls vertically under the dock, scrollHeight {ov[0]} > {ov[1]}")
+            sb = page.locator(".cn-shell > .rk-side").bounding_box()
+            if sb["y"] < 0 or sb["y"] + sb["height"] > 900 + 1:
+                fail(f"raka 1440: the console sidebar leaves the window under the dock, {sb}")
+            drawer.get_by_role("button", name="Perbesar").click()
+            page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=3000)
+            page.keyboard.press("Escape")
+            page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=3000)
+        else:
+            if drawer.get_by_role("button", name="Perbesar").count() or page.locator("html").get_attribute("data-raka"):
+                fail("raka 390: Perbesar or data-raka on a phone")
         ov = page.evaluate("() => document.documentElement.scrollWidth <= window.innerWidth + 1")
         if not ov:
             fail(f"raka {width}: horizontal page scroll with the drawer open")

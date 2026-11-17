@@ -4022,7 +4022,7 @@ def test_ai_ask_and_drawer(page, ctx):
 
 
 def test_ai_dock(page, ctx):
-    """Raka docks beside the page from 1280px (contract 0063 §1): <html data-raka="dock"> and the shell's right edge at the
+    """Raka docks beside the page from 1280px (contract 0064 §1): <html data-raka="dock"> and the shell's right edge at the
     panel's left, no floating button, a keyboard and pointer resizable grip (360-640, never past innerWidth - 640, kept in
     localStorage), the bulk bar clear of the panel, "Perbesar" covering the window and Escape bringing the dock back, a
     close mid-stream that loses nothing, focus returning to where it was, and below 1280 the floating panel again."""
@@ -4184,7 +4184,7 @@ def test_ai_dock(page, ctx):
 
 
 def test_ai_dock_overlays(page, ctx):
-    """Host overlays and the card actions around the Raka dock (contract 0063 §1): "Buka di Ubah" opens the change set card
+    """Host overlays and the card actions around the Raka dock (contract 0064 §1): "Buka di Ubah" opens the change set card
     and a toast shows over the page, left of the docked panel; in Full a toast still shows, and "Lihat pratinjau" returns
     to the dock with the preview banner visible."""
     if ctx.args.width < 1280:

@@ -20,7 +20,7 @@
  * focuses the drawer's composer. The ask bar is not rendered while the drawer is open. Mount it only when
  * meta.features.ai === true.
  *
- * Panel mode (contract 0063 §1), picked by rakaMode: from 1280px (breakpoint "desktop") Raka docks beside the page
+ * Panel mode (contract 0064 §1), picked by rakaMode: from 1280px (breakpoint "desktop") Raka docks beside the page
  * ("dock", default width 400, 360–640, dragged by the panel's edge and kept in localStorage "rk.raka.dock.w") or covers
  * the window ("full", the Perbesar button; Esc goes back to the dock). Below 1280px it is today's panel: "float" above
  * the launcher, else the fixed "drawer". While docked or Full, <html data-raka="dock|full"> and --raka-dock-w are set so

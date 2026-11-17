@@ -1,4 +1,4 @@
-# Raka Dock and Full (contract 0063 phase 1) Implementation Plan
+# Raka Dock and Full (contract 0064 phase 1) Implementation Plan
 
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
@@ -8,7 +8,7 @@
 
 **Tech Stack:** Vanilla JS with `React.createElement` (no JSX, no build), CSS in `web/design-system/bundle.css`, node:test for units, Playwright (Python) for browser scenarios.
 
-**Spec:** `docs/contracts/0063-raka-dock-and-history.md` §1 and §6.1 (this plan); design `Rangka OS.figcraft` › Design system › "Raka dock · usulan".
+**Spec:** `docs/contracts/0064-raka-dock-and-history.md` §1 and §6.1 (this plan); design `Rangka OS.figcraft` › Design system › "Raka dock · usulan".
 
 ## Global Constraints
 

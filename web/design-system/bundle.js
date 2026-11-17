@@ -2111,6 +2111,15 @@
       el.style.height = "auto";
       el.style.height = Math.min(160, el.scrollHeight) + "px";
     }, [text, p.open]);
+    /* Perbesar and Kecilkan unmount the button that was clicked: focus falls to <body> and Escape (heard on the panel) would
+       go deaf, so the composer takes it back when the mode changes under a lost focus. */
+    var modeKey = p.mode || "", prevMode = useRef(modeKey);
+    useEffect(function () {
+      if (prevMode.current === modeKey) return;
+      prevMode.current = modeKey;
+      var a = typeof document !== "undefined" ? document.activeElement : null;
+      if (p.open && ta.current && (!a || a === document.body)) ta.current.focus();
+    }, [modeKey]);
     if (!p.open) return null;
     var canSend = !p.busy && !!text.trim();
     function send() { if (!canSend) return; if (p.onSend) p.onSend(text); setText(""); }

@@ -4021,6 +4021,143 @@ def test_ai_ask_and_drawer(page, ctx):
         Http(ctx.base).login(*ctx.owner).call("POST", f"/api/v1/changesets/{cs['id']}/reject")
 
 
+def test_ai_dock(page, ctx):
+    """Raka docks beside the page from 1280px (contract 0063 §1): <html data-raka="dock"> and the shell's right edge at the
+    panel's left, no floating button, a keyboard and pointer resizable grip (360-640, never past innerWidth - 640, kept in
+    localStorage), the bulk bar clear of the panel, "Perbesar" covering the window and Escape bringing the dock back, a
+    close mid-stream that loses nothing, focus returning to where it was, and below 1280 the floating panel again."""
+    if ctx.args.width < 1280:
+        return
+    w = ctx.args.width
+    ensure_records(ctx, "sales_invoice", 3)
+    slow = []
+    sent = mock_ai(page, ctx, [
+        [("text", {"delta": "Ada 3 faktur jatuh tempo."}), ("done", {})],
+    ])
+    page.route(re.compile(r".*/api/v1/ai/chat$"), lambda route: slow.append(route) if "lambat" in (route.request.post_data or "") else route.fallback())
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    html = page.locator("html")
+
+    def dock_w():
+        return page.evaluate("() => Math.round(document.querySelector('.rk-chat-dock').getBoundingClientRect().width)")
+
+    def open_dock():
+        page.keyboard.press("ControlOrMeta+j")
+        page.get_by_role("dialog", name="Tanya Raka").wait_for(timeout=5000)
+        page.keyboard.press("ControlOrMeta+j")
+        ai_drawer(page).wait_for(timeout=5000)
+
+    # focus goes back to where it was after open -> close
+    page.evaluate("() => localStorage.removeItem('rk.raka.dock.w')")
+    keep = page.get_by_role("textbox", name="Cari", exact=True)
+    keep.focus()
+    mark = page.evaluate("() => { const e = document.activeElement; e.setAttribute('data-keep', '1'); return e.tagName; }")
+    open_dock()
+    drawer = ai_drawer(page)
+    assert html.get_attribute("data-raka") == "dock", "⌘J twice docks Raka"
+    drawer.get_by_role("button", name="Tutup").click()
+    drawer.wait_for(state="detached", timeout=5000)
+    assert page.evaluate("() => !!document.activeElement && document.activeElement.getAttribute('data-keep') === '1'"), f"focus returns to the {mark} that had it"
+    assert html.get_attribute("data-raka") is None, "closed: no data-raka"
+
+    open_dock()
+    drawer = ai_drawer(page)
+    shell = page.locator(".ap-shell")
+    assert shell.bounding_box()["x"] + shell.bounding_box()["width"] <= w - 400 + 1, f"the page ends where the dock starts: {shell.bounding_box()}"
+    assert drawer.bounding_box()["width"] == 400 or dock_w() == 400, f"default dock width 400, got {dock_w()}"
+    assert page.locator(".rk-fab").count() == 0, "no floating Raka button while docked"
+    assert drawer.get_by_role("button", name="Kecilkan").count() == 0 and drawer.get_by_role("button", name="Perbesar").count() == 1
+    check_fits(page, ctx, "Raka dock")
+    shot(page, ctx, "ai-dock")
+
+    # the grip: ArrowLeft widens by 16px, kept in localStorage; a drag past the cap stops at it
+    grip = drawer.get_by_role("separator", name="Ubah lebar panel Raka")
+    grip.focus()
+    for _ in range(6):
+        page.keyboard.press("ArrowLeft")
+    assert dock_w() == 496, f"6 x ArrowLeft: 400 -> 496, got {dock_w()}"
+    assert page.evaluate("() => localStorage.getItem('rk.raka.dock.w')") == "496"
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    open_dock()
+    assert dock_w() == 496, f"the width is restored after a reload, got {dock_w()}"
+    box = ai_drawer(page).get_by_role("separator", name="Ubah lebar panel Raka").bounding_box()
+    x, y = box["x"] + box["width"] / 2, box["y"] + box["height"] / 2
+    page.mouse.move(x, y)
+    page.mouse.down()
+    page.mouse.move(x - 150, y, steps=6)
+    page.mouse.move(x - 300, y, steps=6)
+    page.mouse.up()
+    cap = min(640, w - 640)
+    assert dock_w() == cap, f"a drag 300px left stops at {cap}, got {dock_w()}"
+    assert int(page.evaluate("() => localStorage.getItem('rk.raka.dock.w')")) == cap
+    kept = page.evaluate("() => document.querySelector('.ap-shell').getBoundingClientRect().width")
+    assert kept >= 640 - 8 - 1, f"the page keeps its 640px less the shell's 8px inset, got {kept}"
+    check_fits(page, ctx, "Raka dock at its widest")
+
+    # the bulk bar stays left of the panel
+    ai_drawer(page).get_by_role("button", name="Tutup").click()
+    page.evaluate("() => localStorage.setItem('rk.raka.dock.w', '400')")
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    wait_rows(page)
+    boxes = page.locator(".ap-shell .rk-table tbody tr input[type=checkbox]")
+    if boxes.count() >= 2:
+        open_dock()
+        boxes.nth(0).check()
+        boxes.nth(1).check()
+        bulk = page.get_by_role("region", name="Aksi untuk baris terpilih")
+        bulk.wait_for(timeout=5000)
+        bb, db = bulk.bounding_box(), ai_drawer(page).bounding_box()
+        assert bb["x"] + bb["width"] <= db["x"] + 1, f"bulk bar {bb} lies left of the panel {db}"
+        ai_drawer(page).get_by_role("button", name="Tutup").click()
+
+    # Perbesar covers the window; Escape brings the dock back; a close mid-stream loses nothing
+    open_dock()
+    drawer = ai_drawer(page)
+    drawer.get_by_role("button", name="Perbesar").click()
+    page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=5000)
+    assert not page.locator(".ap-shell").is_visible(), "Full hides the app behind it"
+    assert page.locator(".rk-chat-card").is_visible(), "Full shows the conversation as a card"
+    assert drawer.get_by_role("button", name="Perbesar").count() == 0 and drawer.get_by_role("button", name="Kecilkan").count() == 1
+    shot(page, ctx, "ai-full")
+    check_fits(page, ctx, "Raka full")
+    page.keyboard.press("Escape")
+    page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
+    assert page.locator(".ap-shell").is_visible(), "Escape in Full: the page is back beside the dock"
+    drawer.get_by_role("button", name="Perbesar").click()
+    page.wait_for_function("() => document.documentElement.dataset.raka === 'full'", timeout=5000)
+    box = drawer.get_by_role("textbox").last
+    box.fill("pertanyaan lambat")
+    box.press("Enter")
+    page.wait_for_function("() => true")
+    for _ in range(50):
+        if slow:
+            break
+        page.wait_for_timeout(100)
+    assert slow, "the slow question reached the chat endpoint"
+    drawer.get_by_role("button", name="Tutup").click()
+    page.wait_for_function("() => !document.documentElement.dataset.raka", timeout=5000)
+    assert page.locator(".ap-shell").is_visible() and page.locator(".rk-fab").is_visible(), "closed: page and launcher are back"
+    slow.pop().fulfill(status=200, content_type="text/event-stream", body=sse([("text", {"delta": "Jawaban yang lambat."}), ("done", {})]))
+    page.wait_for_timeout(300)
+    page.keyboard.press("ControlOrMeta+j")
+    page.get_by_role("dialog", name="Tanya Raka").wait_for(timeout=5000)
+    page.get_by_role("dialog", name="Tanya Raka").get_by_role("button", name="Buka chat").click()
+    ai_drawer(page).get_by_text("Jawaban yang lambat.").wait_for(timeout=5000)
+    assert html.get_attribute("data-raka") == "dock"
+
+    # under 1280 the floating panel shows the same turns; back above, the dock
+    page.set_viewport_size({"width": 1100, "height": 900})
+    page.wait_for_function("() => !document.documentElement.dataset.raka", timeout=5000)
+    assert ai_drawer(page).get_by_text("Jawaban yang lambat.").count() == 1, "same turns in the floating panel"
+    assert ai_drawer(page).get_by_role("button", name="Perbesar").count() == 0, "no Perbesar below 1280"
+    page.set_viewport_size({"width": w, "height": 900})
+    page.wait_for_function("() => document.documentElement.dataset.raka === 'dock'", timeout=5000)
+    assert "Raka hanya mengusulkan" not in page.locator("body").inner_text(), "the old footer line is gone"
+
+
 def test_tour_kenalan(page, ctx):
     """Tur sorotan (contract 0053 §7): the first desk visit dims the screen and lights one real place at a time with
     "x dari y"; Lanjut moves on, Escape skips and the kernel keeps it per person, a reload does not start it again, and
@@ -4091,7 +4228,12 @@ def test_ai_launcher(page, ctx):
     btn.click()
     drawer = ai_drawer(page)
     drawer.wait_for(timeout=5000)
-    if ctx.args.width >= 768:
+    if ctx.args.width >= 1280:  # docked beside the page: the button gives way and comes back with the panel closed
+        assert page.locator("html").get_attribute("data-raka") == "dock" and fab.count() == 0, "docked, no floating button"
+        drawer.get_by_role("button", name="Tutup").click()
+        drawer.wait_for(state="detached", timeout=5000)
+        fab.wait_for(timeout=5000)
+    elif ctx.args.width >= 768:
         assert fab.get_attribute("data-state") == "open" and btn.get_attribute("aria-expanded") == "true"
         box, fb = drawer.bounding_box(), btn.bounding_box()
         assert box["y"] + box["height"] <= fb["y"] - 8, f"the panel floats above the button: {box} {fb}"

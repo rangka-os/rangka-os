@@ -1,6 +1,6 @@
 # 0063 Services provided by Rangka Cloud (◆)
 
-Status: proposed (17 Nov 2026; product decisions by Dede the same day, see "Decisions") · Owner of the change:
+Status: accepted (17 Nov 2026, merged by Dede; product decisions the same day, see "Decisions") · Owner of the change:
 rangka-os (schema, validators, kernel, web app) · Affects:
 rangka-connectors (host connectors), rangka-apps (the ◆ modules and the gateway ledger), rangka-ai (catalogue reads,
 offer rules), rangka-cloud (catalogue entries, provisioning, settlement; private) · Builds on: 0002, 0017, 0026, 0032,

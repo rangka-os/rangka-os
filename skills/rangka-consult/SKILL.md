@@ -156,7 +156,7 @@ offer manual now and the connection in `later`. Research order, stopping at the 
 2. The owner's material: a docs link or spec in chat, or an `owner_files` entry.
 3. Spec discovery on a host the owner named or a docs page found (`/openapi.json` and the other well-known paths,
    including under `/api/`), when the deployment has the research tools.
-4. Web search for "<system> API documentation" or "<system> OpenAPI", when a search provider exists.
+4. Web search for "`<system>` API documentation" or "`<system>` OpenAPI", when a search provider exists.
 5. Ask the owner one question: where the docs are, or whether their developer can share the spec. For the owner's own
    product, ask whether its `/openapi.json` is reachable.
 

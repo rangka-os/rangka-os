@@ -354,11 +354,14 @@
       dispatch({ type: "new" });
     }
     function hereHash() { return p.currentHash ? p.currentHash() : global.location.hash; }
+    // the page is hidden in Full: the card actions leave it first, so they act on a page the person can see
     function preview(id) {
+      setFull(false);
       if (p.onPreview) p.onPreview(id);
       else if (p.navigate) p.navigate(withQuery(hereHash(), "preview=" + encodeURIComponent(id)));
     }
     function openUbah(id) {
+      setFull(false);
       if (p.onOpenUbah) p.onOpenUbah(id);
       else if (p.navigate) p.navigate(withQuery(hereHash(), "ubah=1"));
     }

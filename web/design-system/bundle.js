@@ -1399,6 +1399,25 @@
   function AskBar(p) {
     var ref = useRef(null);
     useEffect(function () { if (p.open && ref.current) ref.current.focus(); }, [p.open]);
+    /* In Full the page behind is hidden, so Escape is heard anywhere unless another dialog is open (it handles its own Esc). */
+    var fullRef = useRef(false);
+    var inFull = p.mode === "full";
+    fullRef.current = inFull && p.open && !!p.onCollapse;
+    var collapseRef = useRef(null);
+    collapseRef.current = p.onCollapse;
+    useEffect(function () {
+      if (!inFull || typeof document === "undefined") return;
+      function onKey(e) {
+        if (e.key !== "Escape" || e.defaultPrevented || composing(e) || !fullRef.current) return;
+        var a = document.activeElement;
+        if (a && a !== document.body && a.closest && a.closest("[role=dialog],[role=alertdialog],[role=menu],[role=listbox]")) return;
+        if (a && a.closest && a.closest(".rk-chat")) return; // the panel's own handler already took it
+        if (document.querySelector("[role=dialog][aria-modal=true],[role=alertdialog]")) return;
+        if (collapseRef.current) collapseRef.current();
+      }
+      document.addEventListener("keydown", onKey);
+      return function () { document.removeEventListener("keydown", onKey); };
+    }, [inFull]);
     if (!p.open) return null;
     var canSend = !p.busy && !!(p.value || "").trim();
     return h("div", { className: "rk-askbar", role: "dialog", "aria-label": "Tanya Raka",
@@ -2079,8 +2098,6 @@
         t.error ? h(Alert, { tone: "bad" }, t.error) : null,
         t.text && !running ? h("div", { className: "rk-chat-acts" }, h(CopyReply, { text: t.text })) : null));
   }
-  /* The Raka panel: Chat / Kepala, the log, Chat / Composer (Siap, Bekerja) and Chat / Catatan. Floats above the
-     launcher on wide screens (p.floating), fills the screen on a phone. */
   /* Dock width: 360 to 640, 400 by default; with a viewport, the page keeps at least 640px. */
   function clampDockWidth(w, viewport) {
     var n = typeof w === "number" && isFinite(w) ? w : 400;
@@ -2097,6 +2114,8 @@
     var cut = s.slice(0, 60), sp = cut.lastIndexOf(" ");
     return (sp > 0 ? cut.slice(0, sp).trim() : cut) + "…";
   }
+  /* The Raka panel: Chat / Kepala, the log and Chat / Composer. mode "dock" sits beside the page (resizable, 360 to 640),
+     "full" covers the window, "float" hovers above the launcher below 1280px, "drawer" fills a phone screen. */
   function ChatDrawer(p) {
     var st = useState(""), text = st[0], setText = st[1], log = useRef(null), ta = useRef(null);
     var started = useRef(0);
@@ -2120,6 +2139,25 @@
       var a = typeof document !== "undefined" ? document.activeElement : null;
       if (p.open && ta.current && (!a || a === document.body)) ta.current.focus();
     }, [modeKey]);
+    /* In Full the page behind is hidden, so Escape is heard anywhere unless another dialog is open (it handles its own Esc). */
+    var fullRef = useRef(false);
+    var inFull = p.mode === "full";
+    fullRef.current = inFull && p.open && !!p.onCollapse;
+    var collapseRef = useRef(null);
+    collapseRef.current = p.onCollapse;
+    useEffect(function () {
+      if (!inFull || typeof document === "undefined") return;
+      function onKey(e) {
+        if (e.key !== "Escape" || e.defaultPrevented || composing(e) || !fullRef.current) return;
+        var a = document.activeElement;
+        if (a && a !== document.body && a.closest && a.closest("[role=dialog],[role=alertdialog],[role=menu],[role=listbox]")) return;
+        if (a && a.closest && a.closest(".rk-chat")) return; // the panel's own handler already took it
+        if (document.querySelector("[role=dialog][aria-modal=true],[role=alertdialog]")) return;
+        if (collapseRef.current) collapseRef.current();
+      }
+      document.addEventListener("keydown", onKey);
+      return function () { document.removeEventListener("keydown", onKey); };
+    }, [inFull]);
     if (!p.open) return null;
     var canSend = !p.busy && !!text.trim();
     function send() { if (!canSend) return; if (p.onSend) p.onSend(text); setText(""); }

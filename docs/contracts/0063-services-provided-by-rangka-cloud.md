@@ -78,8 +78,8 @@ offer rules), rangka-cloud (catalogue entries, provisioning, settlement; private
 **What the values may be.**
 - A host-provided value acts for **this tenant only**: a credential scoped to the owner's DOKU sub-merchant (D1), or a
   per-tenant token for the host's own service API when DOKU offers no such credential (Open 2). The host's
-  account-wide provider key never enters a tenant kernel: a company controls its own `system.rk`, flows and company connectors, so anything in its kernel must be
-  safe to lose to that company.
+  account-wide provider key never enters a tenant kernel: a company controls its own `system.rk`, flows and company
+  connectors, so anything in its kernel must be safe to lose to that company.
 - The host revokes a tenant's values on switch-off (§4) and can rotate them at any time (0017 §8 versions apply).
 
 **States** (0036 §3 connector `state`, extended): `host_unavailable`; `needs_auth` with `source: host` (installed,

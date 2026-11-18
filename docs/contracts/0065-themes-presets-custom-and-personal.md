@@ -92,15 +92,17 @@ Every theme has a light and a dark version.
 - **Person.** Each member may pick, for themselves only, a theme from the list (§6: bundled + the site's saved themes)
   or "follow the business" (default), and a mode (`system`, `light`, `dark`). No approval, no change set.
   Stored in the kernel per user: table `rk_user_appearance (user_id pk, theme text null, mode text not null default
-  'system', updated_at)`. The app caches it in `localStorage` for the first paint and drops `rk.app.theme` after
+  'system', updated_at)`. `/meta.theme.personal.mode` is null until the person saves one, so the device's own pick
+  and the business default still apply. The app caches it in `localStorage` for the first paint and drops `rk.app.theme` after
   reading it once (migration).
 - A person cannot create or edit a theme; that stays the owner's business theme work.
 
 ### 5. Fonts
 
-A fixed list, bundled as WOFF2 under `web/app/fonts/` (works offline, no CDN): `system` (default, today's stack),
-`inter`, `plus-jakarta-sans`, `nunito-sans`, `ibm-plex-sans`, `source-serif-4` (display only). `font.sans` /
-`font.display` outside the list: validator error `unknown_font`. Only the families a theme uses are loaded.
+A fixed list: `system` (default, today's stack), `inter`, `plus-jakarta-sans`, `nunito-sans`, `ibm-plex-sans`,
+`source-serif-4` (display only). The app loads a theme's font the way it loads its own fonts today (Google Fonts,
+cached for offline use by `sw.js`); only the families a theme uses are loaded. `font.sans` / `font.display` outside
+the list: validator error `unknown_font`.
 
 ### 6. API
 
@@ -160,7 +162,7 @@ lacks `custom_theme` it offers the bundled themes and says why.
 - The colours an owner picks finally reach the screen; every page and Raka's panel follow one set of tokens.
 - Owners on any plan get six readable themes and a personal pick; Juragan Pro and up can match their own brand
   without knowing token names, and contrast stays guaranteed by code.
-- New kernel table and endpoints; Go/Python parity for `Derive`; about 300 KB of WOFF2 fonts in the bundle.
+- New kernel table and endpoints; Go/Python parity for `Derive`.
 - rangka-apps renames two template references (aliases keep old sites loading meanwhile).
 
 ## Implementation order

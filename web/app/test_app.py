@@ -4687,9 +4687,12 @@ def main():
                 page.on("response", lambda r: responses.append(r) if r.status >= 400 else None)
                 # Chrome aborts some error answers without a response event (a 404 stylesheet served as text/plain);
                 # a failed request to the kernel is a failure too. Font/CDN requests aborted on purpose are elsewhere.
+                # The SSE stream (/api/v1/events, the notifications of contract 0066) stays open for the page's life: a
+                # navigation or reload cuts it (net::ERR_ABORTED) by design.
                 failed = []
                 page.on("requestfailed", lambda r: failed.append(f"{r.url} ({r.failure})")
-                        if r.url.startswith(ctx.base + "/") and not any(rx.search(r.url) for rx in ctx.allowed_failed) else None)
+                        if r.url.startswith(ctx.base + "/") and not any(rx.search(r.url) for rx in ctx.allowed_failed)
+                        and not r.url.startswith(ctx.base + "/api/v1/events") else None)
                 t0 = time.time()
                 try:
                     fn(page, ctx)

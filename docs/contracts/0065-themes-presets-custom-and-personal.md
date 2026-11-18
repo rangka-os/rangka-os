@@ -1,0 +1,169 @@
+# 0065 Themes: presets, custom colours, font, and a personal pick
+
+Status: proposed (18 Nov 2026) · Owner of the change: rangka-os (theme schema, `theme` package, templates, `/meta`,
+new theme endpoints, web app and Console) · Affects: rangka-cloud (Konsol › Tampilan, account appearance, plan
+flag), rangka-ai (a `propose_theme` tool), rangka-apps (sites that name `rangka/clinic` or `rangka/retail`) ·
+Builds on: contracts.md decisions 12 (dark derivation) and 13 (`themes/<t>.rk` paths), the `low_contrast` check,
+0045 §2 (`features.rk` is not proposable by an assistant), 0057 (plans in `features.rk`)
+
+Design: FigCraft `design/figcraft/Rangka OS.figcraft` › page "Rangka Cloud" › board "Tema & warna · usulan"
+(sections A–F). Decisions by Dede on 18 Nov 2026 are in section F of the board and below.
+
+## Context
+
+- **The kernel already computes themes.** `site/themes/<t>.rk` extends a template (`rangka/standard`, `rangka/retail`,
+  `rangka/clinic`), overrides tokens by name, gets dark values derived (decision 12) and is contrast-checked.
+  `GET /api/v1/meta` returns `theme: {name, mode, tokens: {light, dark}, overrides, radius, density, font, logo}`.
+  A theme change is a low-risk change set and Cloud may approve overlay paths (`themes/*.rk`) for the owner.
+- **The web app ignores the colours.** `web/app/shell.js` reads only `theme.mode` and `theme.density`. Colours come
+  from the static `tokens.css` plus `brand-juragan.css` (`<html data-brand="juragan">`). A site theme changes the
+  Console swatches but not what people see.
+- **Overriding a theme means knowing token names.** There is no way to say "my colour is #7a4520" and get a
+  consistent, readable set, and no gallery to pick from.
+- **Light/dark is a personal pick, colours are not.** The app keeps the mode in `localStorage` (`rk.app.theme`);
+  Cloud keeps it in `users.theme` (`PUT /api/akun/tampilan`). Neither knows a colour theme.
+- **`theme.font` exists in the schema** but nothing loads a font, and arbitrary family names would need fonts that are
+  not installed (and the PWA must work offline).
+- **Plans have `flags`** (schema 0.5 `features.json`), unused so far.
+
+## Decision
+
+Theme (the colours, font, corners, density) and mode (light, dark, follow the system) are two separate choices.
+Every theme has a light and a dark version.
+
+### 1. Theme schema 0.5: one colour is enough
+
+`theme.json` gains three optional keys:
+
+| Key | Values | Meaning |
+| --- | --- | --- |
+| `accent` | `#rrggbb` | The business colour. Derives `brand`, `selected`, `row-selected`, `selected-ink`, `link`, `focus`, `chart-1` (§2) |
+| `button` | `ink` (default) \| `accent` | Primary buttons stay ink, or take the accent (derived `primary`, `primary-hover`, `primary-ink`) |
+| `neutral` | `stone` (default) \| `slate` \| `gray` | The neutral family: `app`, `surface`, `soft`, `ink`, `ink-2`, `muted`, `faint`, `line`, `line-strong`, `border`, `hover`, `neutral*`, `disabled-bg` |
+
+- Order of application: template (`extends`) → `neutral` → `accent`/`button` → `color` (per token, as today). So
+  `color` still wins for the designer who wants one token different.
+- `font.sans` and `font.display` take a name from the bundled list (§5); `font.mono` stays as is.
+- **Locked tokens.** `color` may not set `ok*`, `warn*`, `bad*`, `on-bad`, `on-warn`, `info*`, `discovery*`, `raka*`,
+  `spark`, `helmet`, `scrim`, `mascot-ink`: status colours keep their meaning and Raka keeps the look its base gives it.
+  The validator reports `locked_token` (error). Danger buttons stay `bad-solid`.
+
+### 2. Derivation (code, not an LLM)
+
+`theme.Derive(accent, neutral, button) → (light, dark map[string]string)` in Go, with the same arithmetic in
+`tools/rangka_validate.py` (`make compare-python` must stay identical):
+
+- Light: `brand` = accent; `selected` = HLS(h, 94 %, min(s, 60 %)); `row-selected` = HLS(h, 97.5 %, min(s, 50 %));
+  `selected-ink` = accent darkened in 1 % lightness steps until 4.5:1 on `selected`; `link` likewise on `surface`;
+  `focus` and `chart-1` until 3:1 on `surface`; `primary` = `ink` or accent darkened until `primary-ink` (white)
+  reaches 4.5:1.
+- Dark: `brand` = lightness + 15 %; `selected` = HLS(h, 18 %, min(s, 45 %)); `row-selected` = HLS(h, 14 %,
+  min(s, 35 %)); `selected-ink`, `link` start at 60 % lightness and lighten until 4.5:1 on their background; `focus`,
+  `chart-1` start at 55 % until 3:1; `primary` = dark `ink`, or the accent lightened until 3:1 on `surface`, with
+  `primary-ink` = dark `app`.
+- Derived values always pass the contrast floors. Hand-set `color` values that fail stay `low_contrast` errors
+  (unless `contrast_check: false`, as today).
+
+### 3. Bundled themes
+
+`templates/themes/` ships six, all passing every floor in light and dark:
+
+| Name | Label | accent | button | neutral |
+| --- | --- | --- | --- | --- |
+| `standard` | Standar | (today's tokens, unchanged) | ink | stone |
+| `laut` | Laut | `#0c66e4` | accent | slate |
+| `daun` | Daun | `#1f845a` | accent | gray |
+| `senja` | Senja | `#e56910` | accent | stone |
+| `anggur` | Anggur | `#6e5dc6` | ink | gray |
+| `arang` | Arang | `#44403c` | ink | gray |
+
+`rangka/clinic` and `rangka/retail` stay loadable as aliases of `rangka/daun` and `rangka/senja` (validator warning
+`renamed_template`); rangka-apps moves its sites over in its own PR.
+
+### 4. One business theme, plus a personal pick
+
+- **Business.** `config.theme` names the business theme, as today. One per business (per kernel); outlets have none.
+  It changes through a change set on `themes/<t>.rk` and/or `config.rk` (`theme:` key): low risk (contracts.md
+  decision 3), approved from previewed by `config.ai.approvers` (default the owner). Cloud Konsol › Tampilan is for the
+  owner. Raka may propose, never approve or apply.
+- **Saved themes.** A business may keep several `themes/*.rk` (e.g. its own "Kopi Senja" next to the presets); only
+  `config.theme` is the default.
+- **Person.** Each member may pick, for themselves only, a theme from the list (§6: bundled + the site's saved themes)
+  or "follow the business" (default), and a mode (`system`, `light`, `dark`). No approval, no change set.
+  Stored in the kernel per user: table `rk_user_appearance (user_id pk, theme text null, mode text not null default
+  'system', updated_at)`. The app caches it in `localStorage` for the first paint and drops `rk.app.theme` after
+  reading it once (migration).
+- A person cannot create or edit a theme; that stays the owner's business theme work.
+
+### 5. Fonts
+
+A fixed list, bundled as WOFF2 under `web/app/fonts/` (works offline, no CDN): `system` (default, today's stack),
+`inter`, `plus-jakarta-sans`, `nunito-sans`, `ibm-plex-sans`, `source-serif-4` (display only). `font.sans` /
+`font.display` outside the list: validator error `unknown_font`. Only the families a theme uses are loaded.
+
+### 6. API
+
+| Method | Path | Body / result |
+| --- | --- | --- |
+| GET | `/api/v1/themes` | `{themes: [{name, label, source: bundled\|site, accent, button, neutral, swatches: {light: {...}, dark: {...}}, custom: bool}], current, fonts: [names], allowed: {custom: bool}}`. `swatches` holds `brand primary selected selected-ink link chart-1 app soft surface ink line-strong` |
+| POST | `/api/v1/themes/derive` | `{accent, button?, neutral?, color?}` → `{light, dark, checks: [{pair, light, dark, floor, ok}]}`. Nothing is stored. Used by the editor and by Raka |
+| POST | `/api/v1/themes/from-image` | multipart image (logo, ≤ 2 MB) → `{colours: [#rrggbb × up to 5], suggested}`: k-means in Lab space on opaque pixels, near-white/near-black dropped unless they are all there is |
+| GET | `/api/v1/me/appearance` | `{theme: name\|null, mode}` |
+| PUT | `/api/v1/me/appearance` | same shape; `theme` must be in `/themes` or null. 400 `unknown_theme` |
+
+- `/api/v1/meta.theme` adds `personal: {theme, mode}` for the signed-in user and `effective` = the theme actually
+  shown (personal pick, else business), with its `tokens` and `overrides`. Existing keys keep their meaning
+  (the business theme).
+- Open apps already get `event: changeset {id, status}` on `/api/v1/events`. On `applied` or `reverted` they reload
+  `/meta` and repaint the theme without a page reload; the same on `PUT /me/appearance` in another tab
+  (`event: appearance {user_id}`, new, sent to that user's connections only).
+
+### 7. Plan flag
+
+`features.rk` plan `flags.custom_theme: true` allows **creating or changing** a site theme with `accent`, `color`,
+or a non-system `font` (the "Buat tema sendiri" editor, logo colours, per-token edits). Without it (or `false`) a
+change set may only point `config.theme` at a bundled theme or set `mode`, `radius`, `density`; anything else is
+invalid at validate (`plan_limit`, detail `custom_theme`). No `features.rk` = self-host = allowed. Downgrade never
+deletes: an existing custom theme keeps working and can be switched away from, not edited. Personal picks are
+never gated. Cloud sets the flag on `cloud_pro` and up ("Juragan Pro", Grup).
+
+### 8. Web app and Console
+
+- The app applies `meta.theme.effective` on top of the base look: each overridden token becomes an inline custom
+  property on `<html>` for the current mode (inline beats `:root[data-brand=…]`), so tokens a theme leaves alone keep
+  the Juragan or Rangka base. Font, `radius` (`data-radius`) and `density` follow.
+- Account menu › Tampilan: "Tema" (follow the business + list) and "Mode" (system, light, dark), saved through
+  `/me/appearance`.
+- ⚙ Pengaturan sistem › Tampilan (owner): the gallery, try-before-apply preview, the custom editor (gated),
+  mode default, corners, density, font, logo. The same screen as Cloud Konsol › Tampilan.
+
+### 9. Rangka Cloud
+
+- Konsol › Sistem › Tampilan calls the business kernel (`/themes`, `/themes/derive`, `/themes/from-image`,
+  change sets) through the existing kernel client. Cloud stores no copy of a theme.
+- The account appearance (`users.theme`) keeps the mode for Cloud's own screens and gains `theme_color`
+  (a bundled name or null) for Cloud chrome accents only; business screens follow the business kernel.
+- Business tiles in Bisnismu use the business `brand` from `/meta`.
+
+### 10. Rangka AI
+
+A tool `propose_theme({base?, accent?, button?, neutral?, font?, from_image?})` → calls `/themes/derive` (and
+`/themes/from-image`), then creates a change set. Guardrails: no locked tokens, no approve/apply, and if the plan
+lacks `custom_theme` it offers the bundled themes and says why.
+
+## Consequences
+
+- The colours an owner picks finally reach the screen; every page and Raka's panel follow one set of tokens.
+- Owners on any plan get six readable themes and a personal pick; Juragan Pro and up can match their own brand
+  without knowing token names, and contrast stays guaranteed by code.
+- New kernel table and endpoints; Go/Python parity for `Derive`; about 300 KB of WOFF2 fonts in the bundle.
+- rangka-apps renames two template references (aliases keep old sites loading meanwhile).
+
+## Implementation order
+
+1. rangka-os: schema + `Derive` + Python parity + templates + validator codes (`locked_token`, `unknown_font`,
+   `renamed_template`, `plan_limit/custom_theme`).
+2. rangka-os: endpoints, `rk_user_appearance`, `/meta` additions, SSE repaint.
+3. rangka-os: web app applies tokens, account Tampilan, ⚙ Pengaturan sistem › Tampilan; fonts.
+4. rangka-cloud: Konsol › Tampilan, flag in `cloud_pro` plans, Bisnismu tiles, `theme_color`.
+5. rangka-ai: `propose_theme`.

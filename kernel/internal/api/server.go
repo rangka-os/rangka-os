@@ -50,6 +50,10 @@ type Server struct {
 	Internal     *Internal           // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0040 §1)
 	Log          func(format string, args ...any)
 
+	// HostConnectors are the host connectors this kernel serves (RANGKA_HOST_CONNECTORS, contract 0063 §2); nil or
+	// empty = none, as on a self-hosted kernel
+	HostConnectors map[string]bool
+
 	previewMu sync.Mutex // guards previews (preview.go)
 	previews  []*previewEntry
 

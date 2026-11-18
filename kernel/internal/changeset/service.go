@@ -78,6 +78,8 @@ type Requirement struct {
 	Field     string `json:"field"`
 	Label     any    `json:"label,omitempty"`
 	Secret    bool   `json:"secret"`
+	// Source is "host" for a host connector's field (contract 0063 §2): the host sets it, never the owner
+	Source string `json:"source,omitempty"`
 }
 
 // ModulesDiff lists the units a change installs (the whole closure) and removes, the rows each removed model holds
@@ -172,7 +174,11 @@ type Service struct {
 	// ConnectorState is a connector's effective state in an org (contract 0033 §3: needs_auth, untested or
 	// tested); Apply refuses flows that use a company connector that is not tested. Nil = no check.
 	ConnectorState func(ctx context.Context, org, connector string) (string, error)
-	mu             sync.Mutex
+	// HostUnavailable lists the host connectors (contract 0063 §2) the change installs (installed in after, not in
+	// before) that this kernel does not serve (RANGKA_HOST_CONNECTORS does not name them); validate refuses each
+	// with connector_host_unavailable. Nil = no check.
+	HostUnavailable func(before, after *meta.Registry) []string
+	mu              sync.Mutex
 }
 
 func (s *Service) now() string {

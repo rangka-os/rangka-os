@@ -74,7 +74,10 @@ the same API, never stores state) · Builds on: 0001, 0002, 0004, 0015, 0017, 00
     - `needs_auth`: installed, a required field is unset for this org;
     - `untested`: a company connector, 0033 §3;
     - `ready`: installed and authenticated;
-    - `error`: errors in the last 24 h, from `/system/status`.
+    - `error`: errors in the last 24 h, from `/system/status`;
+    - `host_unavailable`: a host connector (0063 §2) this kernel does not serve (`RANGKA_HOST_CONNECTORS`).
+  - `provided_by`: `host` for a host connector (0063 §2, the ◆ marker), else null. Each of its `auth` fields says
+    `source: host`.
   - `errors_24h` and `last_event_at`.
 - **Who may read:** members for whom `/meta.changesets.propose` is true, the same rule that shows the Ubah toggle
   (0015).

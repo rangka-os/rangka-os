@@ -180,7 +180,7 @@ A process is a declared `processes/<name>.rk` file or one inferred from an app's
 | GET | `/system/audit?kind=&actor=&org=&limit=` | Audit log |
 | GET | `/orgs` · `/orgs/{id}/members` | Organisations (with plan and usage) and members |
 | GET | `/files` · `/files/{path}` | Every metadata file with kind and layer; one file's text and parsed form (`/files/meta/…` is an older alias) |
-| POST | `/tokens` | Create an API token: `{name, expires_in_days, scopes}` → `201`, the token shown once; scopes are `secrets:write` and `members:write`. Browser sessions only: a token caller gets `403 forbidden` |
+| POST | `/tokens` | Create an API token: `{name, expires_in_days, scopes}` → `201`, the token shown once; scopes are `secrets:write`, `secrets:host` (an owner only) and `members:write`. Browser sessions only: a token caller gets `403 forbidden` |
 | GET | `/plan` | The tenant's plan, every plan of `features.rk`, usage against the limits (`ok`, `near` from 80%, `full`, `over`), notices and what is read-only after a downgrade ([contract 0028](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0028-plan-limits.md)) |
 | GET | `/catalogue` | Every module, app and connector this kernel can install, with its state for the site; for people who may propose change sets. Read only for now ([contract 0036](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0036-catalogue-in-the-platform.md)) |
 
@@ -223,6 +223,20 @@ connector shows `state: ready` in `/catalogue` once every required field is set.
 A change set that installs a connector lists its unset required fields in `preview.requires`
 (`[{connector, field, label, secret}]`). It can still be applied; the connector stays `needs_auth` until a person sets
 them.
+
+**Host connectors** ([contract 0063](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0063-services-provided-by-rangka-cloud.md) §2).
+A catalogue connector with `experimental.provided_by: host` gets every auth field from the platform that runs the
+kernel (Rangka Cloud), never from the owner:
+- The platform names the ones it serves in `RANGKA_HOST_CONNECTORS` (comma separated). Any other host connector is
+  `state: host_unavailable` in `/catalogue`, and a change set that installs it is invalid with
+  `connector_host_unavailable`. With the variable set, connector secrets use the `db` driver
+  (`RANGKA_SECRETS_DRIVER` unset or `db`).
+- Only a token with the `secrets:host` scope (minted by an owner with a browser session) may `PUT` or `DELETE` their
+  fields. Everyone else who may manage secrets, the owner included, gets `409 secret_host_provided`. A `secrets:host`
+  token on any other connector gets `403 forbidden`.
+- `GET …/auth` answers `provided_by: "host"`, and each field `source: "host"` without `hint` or `set_by`. Audit
+  entries carry `by: host`. `/catalogue` connectors carry `provided_by` (`host` or null), and `preview.requires`
+  entries `source: host`.
 
 ### Members
 

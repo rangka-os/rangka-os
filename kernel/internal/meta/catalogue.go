@@ -50,6 +50,9 @@ type CatalogueConnect struct {
 	Vendor string `json:"vendor,omitempty"`
 	Docs   string `json:"docs,omitempty"`
 	Runs   bool   `json:"runs"`
+	// ProvidedBy is "host" for a host connector (contract 0063 §2): the platform that runs the kernel provides its
+	// keys and switches it on; an agent never proposes installing it
+	ProvidedBy string `json:"provided_by,omitempty"`
 }
 
 // Catalogue lists the apps, modules and connectors, sorted by name. With no site (the Cloud's interview, before a
@@ -120,7 +123,11 @@ func (r *Registry) Catalogue() Catalogue {
 			continue
 		}
 		m := asMap(d.Data)
-		c.Connectors = append(c.Connectors, CatalogueConnect{Name: name, Label: label(m["label"]), Vendor: str(m, "vendor"), Docs: str(m, "docs"), Runs: ConnectorsRun})
+		cc := CatalogueConnect{Name: name, Label: label(m["label"]), Vendor: str(m, "vendor"), Docs: str(m, "docs"), Runs: ConnectorsRun}
+		if ProvidedBy(m) == "host" {
+			cc.ProvidedBy = "host"
+		}
+		c.Connectors = append(c.Connectors, cc)
 	}
 	return c
 }

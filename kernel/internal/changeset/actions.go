@@ -396,7 +396,26 @@ func (s *Service) check(cs *ChangeSet) (*Validation, *meta.Registry, roots, func
 		}
 	}
 	v.Errors = append(v.Errors, splitConnectorFlows(files)...)
+	v.Errors = append(v.Errors, s.hostUnavailable(reg)...)
 	return v, reg, r, cleanup, nil
+}
+
+// hostUnavailable reports (connector_host_unavailable) each host connector the change installs that this kernel
+// does not serve (contract 0063 §2): whoever runs the kernel names the host connectors it serves in
+// RANGKA_HOST_CONNECTORS, so a self-hosted kernel can never switch one on by mistake. It depends on the
+// environment, so the static validators do not report it.
+func (s *Service) hostUnavailable(after *meta.Registry) []meta.Item {
+	if s.HostUnavailable == nil || s.Reg == nil || after == nil {
+		return nil
+	}
+	var out []meta.Item
+	for _, n := range s.HostUnavailable(s.Reg(), after) {
+		out = append(out, meta.Item{Level: "error", File: "config.rk", Pos: "1:1", Where: "(change set)", Code: "connector_host_unavailable",
+			Message: "Penghubung " + n + " disediakan oleh Rangka Cloud (provided_by: host) dan tidak tersedia di kernel ini. " +
+				"Penghubung seperti ini hanya bisa dipasang di kernel yang dijalankan Rangka Cloud, setelah layanannya diaktifkan " +
+				"dari Rangka Cloud. Di kernel sendiri, pakai penghubung yang kuncinya kamu isi sendiri."})
+	}
+	return out
 }
 
 // Validate runs the validator on a copy with the change applied → validated or invalid.

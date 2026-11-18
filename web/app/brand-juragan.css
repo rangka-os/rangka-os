@@ -603,3 +603,43 @@
 /* paragraf di halaman: tidak ada satu kata tertinggal sendirian di baris terakhir */
 [data-brand="juragan"] .ap-main p, [data-brand="juragan"] .ap-main .ap-muted, [data-brand="juragan"] .ap-main .ap-attn-empty,
 [data-brand="juragan"] .ap-main .rk-empty, [data-brand="juragan"] .ap-main .rk-empty span { text-wrap: pretty; }
+
+/* ============================================================================================================
+ * PENGATURAN › TAMPILAN (tampilan.js, kontrak 0067): halaman dan mesin tema milik main dipakai apa adanya; di sini
+ * hanya rupa v3.1-nya. Tidak ada bagian, tombol atau isian yang ditambah atau dibuang.
+ * ============================================================================================================ */
+[data-brand="juragan"] .rk-shell-content.ap-tp { gap: 16px; }
+[data-brand="juragan"] .rk-card .ap-tp { gap: 20px; }
+[data-brand="juragan"] .ap-tp p { margin: 0; text-wrap: pretty; }
+/* judul isian: rupa yang sama dengan label isian lain di halaman ini (Nama tema, Hex, Huruf) */
+[data-brand="juragan"] .ap-tp p.ap-tp-label { margin: 0 0 6px; font: 500 12px/16px var(--font-sans); color: var(--ink-2); }
+[data-brand="juragan"] .ap-tp-desc { font: 400 12px/16px var(--font-sans); color: var(--muted); }
+[data-brand="juragan"] .ap-tp-grid { grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 12px; }
+[data-brand="juragan"] .ap-tp-grid + .ap-tp-desc { margin-top: 12px; }
+[data-brand="juragan"] .ap-tp-card { gap: 8px; padding: 10px; border: 1px solid var(--line); transition: border-color var(--dur-1, .1s) linear; }
+[data-brand="juragan"] .ap-tp-card:hover { border-color: var(--line-strong); }
+/* ubin terpilih: garis warna tema, sama dengan kartu terpilih di Persetujuan */
+[data-brand="juragan"] .ap-tp-card[aria-pressed="true"] { padding: 10px; border: 1px solid var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+[data-brand="juragan"] .ap-tp-card:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; box-shadow: none; }
+[data-brand="juragan"] .ap-tp-card[aria-pressed="true"]:focus-visible { box-shadow: 0 0 0 1px var(--brand); }
+[data-brand="juragan"] .ap-tp-mini { height: 72px; border-radius: var(--r-md); }
+[data-brand="juragan"] .ap-tp-name { font: 600 14px/20px var(--font-sans); min-height: 20px; }
+[data-brand="juragan"] .ap-tp-row { gap: 16px 24px; }
+[data-brand="juragan"] .ap-tp-colour { align-items: flex-end; }
+[data-brand="juragan"] .ap-tp-colour input[type="color"] { width: 44px; height: var(--control, 36px); border: 1px solid var(--line-strong); border-radius: var(--r-md); }
+[data-brand="juragan"] .ap-tp-chip { border-radius: var(--r-md); border: 1px solid var(--line-strong); }
+/* unggah logo: tombol bawaan browser diberi rupa tombol netral */
+[data-brand="juragan"] .ap-tp input[type="file"] { max-width: 100%; font: 400 14px/20px var(--font-sans); color: var(--ink-2); }
+[data-brand="juragan"] .ap-tp input[type="file"]::file-selector-button { height: var(--control, 36px); margin-right: 12px; padding: 0 12px; border: 0; border-radius: var(--r-md);
+  background: var(--neutral); color: var(--ink); font: 500 14px/20px var(--font-sans); cursor: pointer; }
+[data-brand="juragan"] .ap-tp input[type="file"]::file-selector-button:hover { background: var(--neutral-hover); }
+@media (max-width: 767px), (max-width: 1279px) and (pointer: coarse) {
+  [data-brand="juragan"] .ap-tp input[type="file"]::file-selector-button, [data-brand="juragan"] .ap-tp-colour input[type="color"] { height: var(--touch, 44px); }
+  [data-brand="juragan"] .ap-tp-chip { width: 44px; height: 44px; }
+}
+@media (max-width: 767px) {
+  [data-brand="juragan"] .ap-tp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  [data-brand="juragan"] .ap-tp-mini { height: 64px; }
+  [data-brand="juragan"] .ap-tp-row > * { flex: 1 1 100%; }
+  [data-brand="juragan"] .ap-tp-row > .rk-btn { flex: 1 1 100%; }
+}

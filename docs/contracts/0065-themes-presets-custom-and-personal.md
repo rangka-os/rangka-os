@@ -2,7 +2,7 @@
 
 Status: proposed (18 Nov 2026) · Owner of the change: rangka-os (theme schema, `theme` package, templates, `/meta`,
 new theme endpoints, web app and Console) · Affects: rangka-cloud (Konsol › Tampilan, account appearance, plan
-flag), rangka-ai (a `propose_theme` tool), rangka-apps (sites that name `rangka/clinic` or `rangka/retail`) ·
+flag), rangka-ai (none: a platform skill), rangka-apps (sites that name `rangka/clinic` or `rangka/retail`) ·
 Builds on: contracts.md decisions 12 (dark derivation) and 13 (`themes/<t>.rk` paths), the `low_contrast` check,
 0045 §2 (`features.rk` is not proposable by an assistant), 0057 (plans in `features.rk`)
 
@@ -113,6 +113,7 @@ the list: validator error `unknown_font`.
 | POST | `/api/v1/themes/from-image` | multipart image (logo, ≤ 2 MB) → `{colours: [#rrggbb × up to 5], suggested}`: k-means in Lab space on opaque pixels, near-white/near-black dropped unless they are all there is |
 | GET | `/api/v1/me/appearance` | `{theme: name\|null, mode}` |
 | PUT | `/api/v1/me/appearance` | same shape; `theme` must be in `/themes` or null. 400 `unknown_theme` |
+| DELETE | `/api/v1/me/appearance` | forget the person's pick (204) |
 
 - `/api/v1/meta.theme` adds `personal: {theme, mode}` for the signed-in user and `effective` = the theme actually
   shown (personal pick, else business), with its `tokens` and `overrides`. Existing keys keep their meaning
@@ -153,9 +154,10 @@ not edited. Personal picks are never gated. Cloud writes `custom_theme: false` o
 
 ### 10. Rangka AI
 
-A tool `propose_theme({base?, accent?, button?, neutral?, font?, from_image?})` → calls `/themes/derive` (and
-`/themes/from-image`), then creates a change set. Guardrails: no locked tokens, no approve/apply, and if the plan
-lacks `custom_theme` it offers the bundled themes and says why.
+No new tool. Raka changes a theme with `draft_changeset` like any other layer-6 change, guided by the platform skill
+`rangka-themes` (bundled themes, `accent`/`button`/`neutral`/`font`, locked tokens, the plan note). The kernel does the
+colour work and the checks: `locked_token`, `unknown_font`, `low_contrast` and `plan_limit` come back as validator
+errors Raka already repairs from or explains. Raka never approves or applies.
 
 ## Consequences
 
@@ -172,4 +174,4 @@ lacks `custom_theme` it offers the bundled themes and says why.
 2. rangka-os: endpoints, `rk_user_appearance`, `/meta` additions, SSE repaint.
 3. rangka-os: web app applies tokens, account Tampilan, ⚙ Pengaturan sistem › Tampilan; fonts.
 4. rangka-cloud: Konsol › Tampilan, flag in `cloud_pro` plans, Bisnismu tiles, `theme_color`.
-5. rangka-ai: `propose_theme`.
+5. rangka-os: the `rangka-themes` platform skill.

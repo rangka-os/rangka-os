@@ -93,6 +93,11 @@ func TestBodySignedWebhook(t *testing.T) {
 			status, statusCode, sig, orderID, gross)
 	}
 	good := midtransSig("INV-2026-00001", "200", "750000.00", bodySigKey)
+	// the vector was computed outside Go (shasum -a 512) and is the one rangka-connectors pins for its Midtrans mock
+	// (midtrans/fixtures/signature_vector.txt)
+	if good != "4c2b157a97326e6e42210b9583b0325e80af105c63a7c29634ea9208c829ee2c294c4606d7ca7b3063752886108f162fb18dc2bcb83e758b9ef4319a2ce1a33d" {
+		t.Fatalf("signature vector: %s", good)
+	}
 
 	// before the key is set nothing verifies
 	if st := send(path, note("INV-2026-00001", "200", "750000.00", "settlement", good)); st != 401 {

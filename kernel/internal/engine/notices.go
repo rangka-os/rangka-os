@@ -5,6 +5,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"regexp"
 	"sort"
 	"strings"
@@ -12,6 +13,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -366,15 +368,24 @@ func (o *op) approvalNotices(ap *store.Approval, kind string) error {
 	return nil
 }
 
-// flowNotice is the implicit notice of a notify step without notice: (§1.3): a role target (or owner) tells that
-// role, a target that resolved to field values tells the members those values name (their email or their user
-// record); other values are dropped and counted (dropped).
+// flowNotice is the notice of a notify step (§1.2, §1.3). With notice: it is the module's declaration (kind
+// app.<module>.<notice>, its severity, roles, can: and label) plus the step's own target; without, the implicit kind
+// of the flow. A role target (or owner) tells that role; a target that resolved to field values tells the members
+// those values name (their email or their user record), and other values are dropped and counted (dropped). The
+// step's title, record, outlet and id keys apply to both.
 func (r *flowRun) flowNotice(st map[string]any, index, target string, values []string, text string) (dropped int, err error) {
+	reg := r.registry()
 	kind := r.noticeKind()
+	decl := r.noticeDecl(str(st["notice"]))
+	if decl != nil {
+		kind = "app." + r.f.App + "." + str(decl["name"])
+		if !ValidNoticeKind(kind) {
+			kind = ""
+		}
+	}
 	if kind == "" {
 		return 0, nil
 	}
-	reg := r.registry()
 	to := NoticeTo{}
 	resolved := !(len(values) == 1 && values[0] == target) // recipients() found a variable or field values
 	_, isVar := r.vars[target]
@@ -400,23 +411,123 @@ func (r *flowRun) flowNotice(st map[string]any, index, target string, values []s
 				dropped++
 			}
 		}
-		if len(to.Emails) == 0 {
-			return dropped, nil
+	}
+	severity, title := "info", ""
+	if decl != nil {
+		if NoticeSeverities[str(decl["severity"])] {
+			severity = str(decl["severity"])
+		}
+		declTo := meta.StrList(decl["to"])
+		for _, rl := range declTo {
+			if rl == "owner" {
+				to.Owner = true
+			} else {
+				to.Roles = append(to.Roles, rl)
+			}
+		}
+		if can := meta.AsMap(decl["can"]); can != nil { // roles that hold that permission (§1.1)
+			cands := to.Roles
+			if len(declTo) == 0 {
+				cands = append(append([]string{}, to.Roles...), sortedRoleNames(reg)...)
+			}
+			to.Roles = r.e.rolesThatCan(reg, cands, str(can["model"]), str(can["action"]))
+		}
+		title = meta.LabelOf(decl["label"]).Text()
+	}
+	if !to.Owner && len(to.Roles) == 0 && len(to.Emails) == 0 {
+		return dropped, nil
+	}
+	switch t := st["title"].(type) {
+	case string:
+		title = cel.Interpolate(t, r.env())
+	case map[string]any:
+		title = cel.Interpolate(meta.LabelOf(t).Text(), r.env())
+	}
+	if strings.TrimSpace(title) == "" {
+		if title = r.f.Label.Text(); title == "" {
+			title = r.f.Name
 		}
 	}
-	title := r.f.Label.Text()
-	if title == "" {
-		title = r.f.Name
+	ev := NoticeEvent{Kind: kind, Severity: severity, To: to, Title: title, Text: text}
+	opt := noticeOpts{}
+	if v := str(st["record"]); v != "" { // the record the notice is about: its link and who may read it
+		rec := meta.AsMap(r.vars[v])
+		if mn, name := str(rec["_model"]), str(rec["name"]); mn != "" && name != "" {
+			opt.record = &noticeRecord{model: mn, name: name}
+			ev.Data = map[string]any{"model": mn, "name": name}
+			ev.Link = "/app/#/r/" + mn + "/" + name
+		}
 	}
-	if r.noticeSeen == nil {
-		r.noticeSeen = map[string]int{}
+	if decl != nil {
+		switch str(decl["link"]) {
+		case "approvals":
+			ev.Link = "/app/#/approvals"
+		case "none":
+			ev.Link = ""
+		}
 	}
-	r.noticeSeen[index]++
-	id := kind + ":" + r.runID + ":" + index
-	if n := r.noticeSeen[index]; n > 1 { // a step under for_each runs once per item
-		id += ":" + itoa(int64(n))
+	if src := str(st["outlet"]); src != "" {
+		v, err := cel.Eval(src, r.env())
+		if err != nil {
+			return dropped, fmt.Errorf("outlet: %w", err)
+		}
+		ev.To.Outlet = str(cel.Unwrap(v))
 	}
-	return dropped, r.o.notice(NoticeEvent{ID: id, Kind: kind, Severity: "info", To: to, Title: title, Text: text}, noticeOpts{})
+	if src := str(st["id"]); src != "" {
+		v, err := cel.Eval(src, r.env())
+		if err != nil {
+			return dropped, fmt.Errorf("id: %w", err)
+		}
+		ev.ID = kind + ":" + fmt.Sprint(cel.Unwrap(v))
+	} else {
+		if r.noticeSeen == nil {
+			r.noticeSeen = map[string]int{}
+		}
+		r.noticeSeen[index]++
+		ev.ID = kind + ":" + r.runID + ":" + index
+		if n := r.noticeSeen[index]; n > 1 { // a step under for_each runs once per item
+			ev.ID += ":" + itoa(int64(n))
+		}
+	}
+	return dropped, r.o.notice(ev, opt)
+}
+
+// noticeDecl is the notices: entry name of the run's module (nil when the flow is not a module's or names none).
+func (r *flowRun) noticeDecl(name string) map[string]any {
+	if name == "" {
+		return nil
+	}
+	a := r.registry().App[r.f.App]
+	if a == nil || a.Kind != meta.KindModule {
+		return nil
+	}
+	for _, x := range meta.AsList(a.Raw["notices"]) {
+		if n := meta.AsMap(x); n != nil && str(n["name"]) == name {
+			return n
+		}
+	}
+	return nil
+}
+
+func sortedRoleNames(reg *meta.Registry) []string {
+	out := make([]string, 0, len(reg.Roles))
+	for n := range reg.Roles {
+		out = append(out, n)
+	}
+	sort.Strings(out)
+	return out
+}
+
+// rolesThatCan keeps the roles of cands that hold action on model (a conditional grant counts).
+func (e *Engine) rolesThatCan(reg *meta.Registry, cands []string, model, action string) []string {
+	m := e.permModelIn(reg, model)
+	out := []string{}
+	for _, rl := range uniqueStrings(cands, "owner") {
+		if m != nil && e.decide(Actor{Roles: []string{rl}}, m, action).maybe() {
+			out = append(out, rl)
+		}
+	}
+	return out
 }
 
 // noticeKind is the kind of the implicit notices of the run's flow: site.<flow> for a site flow, else

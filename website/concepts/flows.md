@@ -41,6 +41,39 @@ idempotency: event.message_id
 `on:` takes a connector trigger (`whatsapp_business.message_received`) or a model event (`deal.updated`);
 `schedule:` takes a cron. A scheduled flow runs once per due time even with several kernel nodes.
 
+## Notices
+
+A `notify` step puts a notice in the notifications of the people it names (the bell in the app's top bar), and on
+a hosted kernel the host also mails them ([contract 0066](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0066-kernel-notices.md)).
+A module declares the notices it raises in `module.rk`, so their roles, severity and label live in one place:
+
+```yaml
+# modules/payments/module.rk
+notices:
+  - name: gateway_mismatch
+    label: {id: Selisih saldo pembayaran, en: Payment balance mismatch}
+    severity: high                 # info | warn | high; default info
+    to: [owner, finance]           # roles; owner is always allowed
+    can: {model: gateway_mismatch, action: read}   # optional: only roles that hold this permission
+    link: record                   # record | approvals | none
+```
+
+```yaml
+- notify: owner                    # added to the declaration's to:
+  notice: gateway_mismatch         # app.payments.gateway_mismatch
+  title: {id: 'Selisih saldo {m.date}'}        # at most 80 characters
+  template: {id: 'Laporan DOKU {m.closing}, catatan {m.ledger}.'}   # at most 300
+  record: m                        # the link, and only people who can read it are told
+  outlet: m.outlet                 # CEL: members of other outlets are left out
+  id: "'gm:' + m.name"             # CEL: the same id is one notice
+```
+
+Without `notice:` a step to a role tells that role with kind `app.<module>.<flow>` (`site.<flow>` for a company
+flow). Keep the text to what every recipient may read in the app: numbers, amounts, names; never a customer's phone,
+address or bank account (`notice_personal_field`). The validator also reports `unknown_notice`, `duplicate_notice`,
+`notice_role_cannot_read` and `notice_too_long`; a change set from Raka whose flow tells someone by email address is
+raised to high (`notice_literal_email`).
+
 ## Record-event flows
 
 A flow with `on: <model>.created`, `.updated`, `.submitted` or `.cancelled` runs inside the write that raised the

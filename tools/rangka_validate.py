@@ -1134,6 +1134,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                     conns[cn] = (p, d)
                     conn_origin[cn] = "site"
 
+    check_module_notices(rep, apps, allmodels, only)  # contract 0066 §1.1
     # flows
     for fname in sorted(flows):
         app, p, f = flows[fname]
@@ -1161,6 +1162,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                     rep.add("warn", p, "on", "poll_action_missing", f'poll trigger {on} names no action to send: the kernel does not poll it, so this flow never runs (contract 0002 §A.1)')
         parens(rep, p, "if", f.get("if"))
         check_steps(rep, p, "steps", f.get("steps", []), allmodels, conns)
+        check_flow_notices(rep, p, app, f, apps, allmodels)  # contract 0066 §1.2, §6
 
     # imports
     for app, st, p, d in sorted(app_imports, key=lambda x: (x[0], x[1])):
@@ -1354,6 +1356,146 @@ def check_steps(rep, p, at, steps, allmodels, conns):
             check_steps(rep, p, f"{w}/{k}", st.get(k), allmodels, conns)
         if isinstance(st.get("do"), list):
             no_pause(rep, p, f"{w}/do", st["do"])
+
+
+
+# ---------- kernel notices (contract 0066 §1, §6); mirrors kernel/internal/meta/validate_notices.go
+NOTICE_TITLE_MAX, NOTICE_TEXT_MAX = 80, 300
+NOTICE_EXPR_PART = re.compile(r"\{[^{}]*\}")
+NOTICE_FIELD_REF = re.compile(r"\b([a-z_][a-z0-9_]*)\.([a-z_][a-z0-9_]*)\b", re.ASCII)
+NOTICE_VAR_NAME = re.compile(r"^[a-z_][a-z0-9_]*$")
+NOTICE_PERSONAL = {"email", "phone", "mobile", "whatsapp", "address", "nik", "bank_account", "npwp"}
+
+
+def notice_texts(x):
+    if isinstance(x, str):
+        return [x]
+    if isinstance(x, dict):
+        return [x[k] for k in sorted(x) if isinstance(x[k], str)]
+    return []
+
+
+def notice_literal(x):
+    return max([len(NOTICE_EXPR_PART.sub("", t)) for t in notice_texts(x)] or [0])
+
+
+def all_role_names(apps):
+    return {"owner"}.union(*[a["roles"] for a in apps.values()])
+
+
+def check_module_notices(rep, apps, allmodels, only):
+    """notices: of every module (contract 0066 §1.1): unique names, a label a title long at most, roles that exist."""
+    roles = all_role_names(apps)
+    for name in sorted(n for n, a in apps.items() if a["kind"] == "module"):
+        a = apps[name]
+        if (only and name not in only) or not a["app_path"] or not isinstance(a["manifest"], dict):
+            continue
+        p, seen = a["app_path"], set()
+        notices = a["manifest"].get("notices")
+        for i, n in enumerate(notices if isinstance(notices, list) else []):
+            if not isinstance(n, dict):
+                continue
+            w = f"notices/{i}"
+            nm = n.get("name")
+            if nm in seen:
+                rep.add("error", p, f"{w}/name", "duplicate_notice", f'notice "{nm}" is declared twice')
+            seen.add(nm)
+            if notice_literal(n.get("label")) > NOTICE_TITLE_MAX:
+                rep.add("error", p, f"{w}/label", "notice_too_long", f"the label is {notice_literal(n.get('label'))} characters; a notice title is at most {NOTICE_TITLE_MAX}")
+            for j, r in enumerate(n.get("to") if isinstance(n.get("to"), list) else []):
+                if r not in roles:
+                    rep.add("warn", p, f"{w}/to/{j}", "unknown_role", f'role "{r}" has no file in roles/ (it must exist at install)')
+            c = n.get("can")
+            if isinstance(c, dict) and isinstance(c.get("model"), str) and c["model"] not in allmodels:
+                rep.add("error", p, f"{w}/can/model", "unknown_model", f'"{c["model"]}" is not a model{suggest(c["model"], allmodels)}')
+
+
+def flow_var_models(f, allmodels):
+    out = {}
+    on = f.get("on")
+    if isinstance(on, str) and "." in on and on.split(".", 1)[0] in allmodels:
+        out["event"] = on.split(".", 1)[0]
+
+    def walk(steps):
+        for st in steps if isinstance(steps, list) else []:
+            if not isinstance(st, dict):
+                continue
+            as_ = st.get("as") if isinstance(st.get("as"), str) else ""
+            for k in ("find", "find_all", "create"):
+                if isinstance(st.get(k), str) and as_ and st[k] in allmodels:
+                    out[as_] = st[k]
+            src = st.get("for_each")
+            if isinstance(src, str) and as_ and out.get(src):
+                out[as_] = out[src]
+            for k in ("then", "else", "do"):
+                walk(st.get(k))
+    walk(f.get("steps"))
+    return out
+
+
+def role_can_read(m, role):
+    if role == "owner" or "permissions" not in m or m["permissions"] is None:
+        return True
+    return any(isinstance(g, dict) and g.get("role") == role and g.get("read") is True for g in (m["permissions"] if isinstance(m["permissions"], list) else []))
+
+
+def check_flow_notices(rep, p, app, f, apps, allmodels):
+    """notify steps (contract 0066 §1.2, §1.4, §6)."""
+    roles = all_role_names(apps)
+    decls, names = {}, []
+    a = apps.get(app)
+    if a and a["kind"] == "module" and isinstance(a["manifest"], dict):
+        for n in a["manifest"].get("notices") if isinstance(a["manifest"].get("notices"), list) else []:
+            if isinstance(n, dict) and isinstance(n.get("name"), str) and n["name"] not in decls:
+                decls[n["name"]] = n
+                names.append(n["name"])
+    vars_ = flow_var_models(f, allmodels)
+
+    def step(w, st, target):
+        decl = None
+        if isinstance(st.get("notice"), str):
+            decl = decls.get(st["notice"])
+            if decl is None:
+                rep.add("error", p, f"{w}/notice", "unknown_notice", f'"{st["notice"]}" is not a notice of {app}{suggest(st["notice"], names)}')
+        if notice_literal(st.get("title")) > NOTICE_TITLE_MAX:
+            rep.add("error", p, f"{w}/title", "notice_too_long", f"the title is {notice_literal(st.get('title'))} characters; a notice title is at most {NOTICE_TITLE_MAX}")
+        if notice_literal(st.get("template")) > NOTICE_TEXT_MAX:
+            rep.add("error", p, f"{w}/template", "notice_too_long", f"the text is {notice_literal(st.get('template'))} characters; a notice text is at most {NOTICE_TEXT_MAX}")
+        rv = st.get("record")
+        if isinstance(rv, str) and NOTICE_VAR_NAME.match(rv) and vars_.get(rv):
+            mn = vars_[rv]
+            told = [target] if target != "owner" and target in roles else []
+            for r in (decl or {}).get("to") if isinstance((decl or {}).get("to"), list) else []:
+                if r != "owner" and r not in told:
+                    told.append(r)
+            for r in told:
+                if not role_can_read(allmodels[mn][2], r):
+                    rep.add("error", p, f"{w}/record", "notice_role_cannot_read", f'role "{r}" cannot read {mn}, so it may not be told about {rv} (contract 0066 §6)')
+        for k in ("title", "template"):
+            seen = set()
+            for text in notice_texts(st.get(k)):
+                for part in NOTICE_EXPR_PART.findall(text):
+                    for v, fld in NOTICE_FIELD_REF.findall(part):
+                        mn = vars_.get(v)
+                        if not mn or f"{v}.{fld}" in seen or allmodels[mn][0] not in ("users", "contacts"):
+                            continue
+                        fd = next((x for x in allmodels[mn][2].get("fields", []) if isinstance(x, dict) and x.get("name") == fld), None)
+                        if fd is None:
+                            continue
+                        if fld in NOTICE_PERSONAL or fd.get("type") in ("phone", "npwp"):
+                            seen.add(f"{v}.{fld}")
+                            rep.add("warn", p, f"{w}/{k}", "notice_personal_field", f"{v}.{fld} is contact data of {mn}: keep it behind the link, not in the notice (contract 0066 §6)")
+
+    def walk(at, steps):
+        for i, st in enumerate(steps if isinstance(steps, list) else []):
+            if not isinstance(st, dict):
+                continue
+            w = f"{at}/{i}"
+            if isinstance(st.get("notify"), str):
+                step(w, st, st["notify"])
+            for k in ("then", "else", "do"):
+                walk(f"{w}/{k}", st.get(k))
+    walk("steps", f.get("steps"))
 
 
 def no_pause(rep, p, at, steps):

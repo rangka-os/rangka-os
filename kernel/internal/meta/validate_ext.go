@@ -87,6 +87,7 @@ func (v *validator) withOverlayFields(m *Model, name string) *Model {
 func (v *validator) more() {
 	all := v.allModels()
 	conns := v.reg.Connectors
+	v.moduleNotices(all) // contract 0066 §1.1
 	for _, fn := range sortedKeysM(v.reg.Flows) {
 		f := v.reg.Flows[fn]
 		if v.skip(f.App) {
@@ -119,6 +120,7 @@ func (v *validator) more() {
 		}
 		v.parens(p, "if", f.Raw["if"])
 		v.steps(p, "steps", f.Raw["steps"], all)
+		v.flowNotices(p, f, all) // contract 0066 §1.2, §6
 	}
 	v.imports(all, false)
 	for _, a := range v.reg.Apps {

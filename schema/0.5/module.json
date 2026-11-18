@@ -52,6 +52,83 @@
         "type": "string",
         "pattern": "^[a-z_]+\\.[a-z_]+$"
       }
+    },
+    "notices": {
+      "type": "array",
+      "description": "Notices this module raises (contract 0066 §1.1): kind app.<module>.<name>. A notify step names one with notice:.",
+      "items": {
+        "type": "object",
+        "required": [
+          "name",
+          "label"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "name": {
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9_]{0,39}$"
+          },
+          "label": {
+            "$ref": "model.json#/$defs/label",
+            "description": "What the notice is called (its title when a step gives none); at most 80 characters"
+          },
+          "description": {
+            "$ref": "model.json#/$defs/description"
+          },
+          "severity": {
+            "enum": [
+              "info",
+              "warn",
+              "high"
+            ],
+            "default": "info"
+          },
+          "to": {
+            "type": "array",
+            "items": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]*$"
+            },
+            "description": "Roles told; owner is always a valid role"
+          },
+          "can": {
+            "type": "object",
+            "required": [
+              "model",
+              "action"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "model": {
+                "type": "string"
+              },
+              "action": {
+                "enum": [
+                  "read",
+                  "create",
+                  "write",
+                  "delete",
+                  "submit",
+                  "cancel",
+                  "amend",
+                  "export",
+                  "import",
+                  "print"
+                ]
+              }
+            },
+            "description": "Only roles that hold this permission (with to: of those roles, without to: every role that holds it)"
+          },
+          "link": {
+            "enum": [
+              "record",
+              "approvals",
+              "none"
+            ],
+            "description": "Where the notice leads: the step's record (default when the step names one), the approvals inbox, or nowhere"
+          }
+        }
+      }
     }
   },
   "additionalProperties": false

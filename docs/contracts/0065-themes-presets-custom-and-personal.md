@@ -53,15 +53,16 @@ Every theme has a light and a dark version.
 `theme.Derive(accent, neutral, button) → (light, dark map[string]string)` in Go, with the same arithmetic in
 `tools/rangka_validate.py` (`make compare-python` must stay identical):
 
-- Light: `brand` = accent; `selected` = HLS(h, 94 %, min(s, 60 %)); `row-selected` = HLS(h, 97.5 %, min(s, 50 %));
+- Light: `brand` = accent darkened until 3:1 on `surface` (so a very light logo colour still reads; the logo image
+  itself is untouched); `selected` = HLS(h, 94 %, min(s, 60 %)); `row-selected` = HLS(h, 97.5 %, min(s, 50 %));
   `selected-ink` = accent darkened in 1 % lightness steps until 4.5:1 on `selected`; `link` likewise on `surface`;
   `focus` and `chart-1` until 3:1 on `surface`; `primary` = `ink` or accent darkened until `primary-ink` (white)
   reaches 4.5:1.
-- Dark: `brand` = lightness + 15 %; `selected` = HLS(h, 18 %, min(s, 45 %)); `row-selected` = HLS(h, 14 %,
+- Dark: `brand` = lightness + 15 %, lightened until 3:1 on `surface`; `selected` = HLS(h, 18 %, min(s, 45 %)); `row-selected` = HLS(h, 14 %,
   min(s, 35 %)); `selected-ink`, `link` start at 60 % lightness and lighten until 4.5:1 on their background; `focus`,
   `chart-1` start at 55 % until 3:1; `primary` = dark `ink`, or the accent lightened until 3:1 on `surface`, with
   `primary-ink` = dark `app`.
-- Derived values always pass the contrast floors. Hand-set `color` values that fail stay `low_contrast` errors
+- Derived values always pass the contrast floors (kernel test: 300 random accents × both buttons × three neutrals). Hand-set `color` values that fail stay `low_contrast` errors
   (unless `contrast_check: false`, as today).
 
 ### 3. Bundled themes

@@ -66,7 +66,7 @@ func approvalEnv(t *testing.T, mutate func(apps, site string)) (e, owner, mgr, r
 		e.userEnv("rep@kopisenja.id", "rahasia-123"), e.userEnv("rep2@kopisenja.id", "rahasia-123")
 }
 
-func notices(t *testing.T, u *env, q string) (items []any, unread float64) {
+func inbox(t *testing.T, u *env, q string) (items []any, unread float64) {
 	t.Helper()
 	r := u.must(200, "GET", "/api/v1/notices"+q, nil).JSON
 	items, _ = r["data"].([]any)
@@ -103,24 +103,24 @@ func TestNoticesApprovals(t *testing.T) {
 		ev["severity"] != "warn" || ev["read"] != false {
 		t.Fatalf("approver's SSE notice: %v", ev)
 	}
-	items, unread := notices(t, mgr, "")
+	items, unread := inbox(t, mgr, "")
 	if len(items) != 1 || unread != 1 || get(items[0].(map[string]any), "id") != ev["id"] || get(items[0].(map[string]any), "kind") != "kernel.approval.requested" {
 		t.Fatalf("approver's inbox: %v (unread %v)", items, unread)
 	}
 	if _, has := items[0].(map[string]any)["data"]; has {
 		t.Fatalf("data is not part of an inbox item: %v", items[0])
 	}
-	if items, _ := notices(t, owner, ""); len(items) != 1 {
+	if items, _ := inbox(t, owner, ""); len(items) != 1 {
 		t.Fatalf("the owner hears of every request: %v", items)
 	}
 	for _, u := range []*env{rep, rep2} {
-		if items, unread := notices(t, u, ""); len(items) != 0 || unread != 0 {
+		if items, unread := inbox(t, u, ""); len(items) != 0 || unread != 0 {
 			t.Fatalf("the requester and other reps get nothing: %v", items)
 		}
 	}
 	// a second submit of the same draft reuses the request: no second notice
 	rep.must(202, "POST", "/api/v1/r/sales_invoice/"+draft+"/submit", map[string]any{"force": true})
-	if items, _ := notices(t, mgr, ""); len(items) != 1 {
+	if items, _ := inbox(t, mgr, ""); len(items) != 1 {
 		t.Fatalf("one notice per request: %v", items)
 	}
 
@@ -129,14 +129,14 @@ func TestNoticesApprovals(t *testing.T) {
 	if r["marked"] != 1.0 || r["unread"] != 0.0 {
 		t.Fatalf("read: %v", r)
 	}
-	if items, unread := notices(t, mgr, "?unread=1"); len(items) != 0 || unread != 0 {
+	if items, unread := inbox(t, mgr, "?unread=1"); len(items) != 0 || unread != 0 {
 		t.Fatalf("unread after read: %v", items)
 	}
-	if _, unread := notices(t, owner, ""); unread != 1 {
+	if _, unread := inbox(t, owner, ""); unread != 1 {
 		t.Fatalf("the owner's copy stays unread: %v", unread)
 	}
 	owner.must(200, "POST", "/api/v1/notices/read", nil)
-	if _, unread := notices(t, owner, ""); unread != 0 {
+	if _, unread := inbox(t, owner, ""); unread != 0 {
 		t.Fatalf("read all: %v", unread)
 	}
 
@@ -147,7 +147,7 @@ func TestNoticesApprovals(t *testing.T) {
 		dec["text"] != "Persetujuan manajer · oleh Manajer" {
 		t.Fatalf("decided: %v", dec)
 	}
-	if items, _ := notices(t, mgr, ""); len(items) != 1 {
+	if items, _ := inbox(t, mgr, ""); len(items) != 1 {
 		t.Fatalf("the approver is not told of their own decision: %v", items)
 	}
 
@@ -196,7 +196,7 @@ steps:
 `), 0o644)
 	})
 	owner.must(200, "POST", "/api/v1/flows/tell_managers/run", map[string]any{})
-	items, unread := notices(t, mgr, "")
+	items, unread := inbox(t, mgr, "")
 	if len(items) != 4 || unread != 4 || items[0].(map[string]any)["text"] != "Untuk USR-002" {
 		t.Fatalf("the role hears each step, once per for_each item: %v", items)
 	}
@@ -205,18 +205,18 @@ steps:
 		t.Fatalf("implicit notice: %v", first)
 	}
 	for _, u := range []*env{owner, rep, rep2} {
-		if items, _ := notices(t, u, ""); len(items) != 0 {
+		if items, _ := inbox(t, u, ""); len(items) != 0 {
 			t.Fatalf("only the role is told: %v", items)
 		}
 	}
 
 	// morning_follow_up: notify: owner names the activities' owner field (user records USR-002, USR-003, …)
 	owner.must(200, "POST", "/api/v1/flows/morning_follow_up/run", map[string]any{})
-	if items, _ := notices(t, mgr, ""); len(items) != 5 || items[0].(map[string]any)["kind"] != "app.crm.morning_follow_up" {
+	if items, _ := inbox(t, mgr, ""); len(items) != 5 || items[0].(map[string]any)["kind"] != "app.crm.morning_follow_up" {
 		t.Fatalf("USR-002 is told: %v", items)
 	}
 	for _, u := range []*env{owner, rep} { // their activities are done or not due yet
-		if items, _ := notices(t, u, ""); len(items) != 0 {
+		if items, _ := inbox(t, u, ""); len(items) != 0 {
 			t.Fatalf("owner: is a field here, not the owner role: %v", items)
 		}
 	}

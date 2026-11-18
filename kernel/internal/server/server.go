@@ -27,6 +27,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/notices"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
@@ -73,6 +74,9 @@ type Server struct {
 	API      *api.Server
 	// Connectors runs connector actions and webhooks (contract 0002 §A).
 	Connectors *connectors.Runtime
+	// NoticeHost posts notices to the host that runs this kernel (contract 0066 §3); nil without
+	// RANGKA_HOST_NOTICES_URL and RANGKA_HOST_NOTICES_SECRET.
+	NoticeHost *notices.Host
 	reload     sync.Mutex
 	wg         sync.WaitGroup
 }
@@ -195,6 +199,14 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Queue = jobs.New(db, intCfg(reg, "queue.workers", 2), intCfg(reg, "queue.retries", 3))
 	s.Queue.Log = cfg.Logf
 	e.Queue = s.Queue
+	// notices leave the kernel for the host only when the deployment names one (contract 0066 §3)
+	if h, err := notices.HostFromEnv(os.Getenv); err != nil {
+		cfg.Logf("notices: %v; notices stay in the kernel's inbox", err)
+	} else if h != nil {
+		s.NoticeHost = h
+		e.Notices.Host = true
+	}
+	s.Queue.Handlers["notice_host"] = s.runNoticeHostJob
 	s.Queue.Handlers["action"] = s.runActionJob
 	s.Queue.Handlers["flow"] = s.runFlowJob
 	loc := time.UTC

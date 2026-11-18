@@ -77,6 +77,7 @@ func (s *Server) Status(ctx context.Context, org string) map[string]any {
 		}
 		notify[ch] = n
 	}
+	notify["notices"] = s.noticeStatus(ctx, reg, org) // contract 0066 §4.2
 	caps["notify"] = notify
 	clients := []any{}
 	if s.Auth.Clients != nil {

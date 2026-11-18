@@ -1,10 +1,12 @@
 package api
 
 import (
+	"context"
 	"net/http"
 	"strconv"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -77,4 +79,24 @@ func (s *Server) readNotices(w http.ResponseWriter, r *http.Request, c *caller) 
 		return
 	}
 	writeJSON(w, 200, map[string]any{"marked": n, "unread": unread})
+}
+
+// noticeStatus is /system/status capabilities.notify.notices (contract 0066 §4.2): whether a host is told, the host
+// posts waiting or retrying, those that failed for good in the last 24 hours, and who mails notices.
+func (s *Server) noticeStatus(ctx context.Context, reg *meta.Registry, org string) map[string]any {
+	host := s.Engine.Notices.Host
+	out := map[string]any{"host": host, "pending": 0, "failed_24h": 0, "mail": "log"}
+	if host {
+		out["mail"] = "host"
+	}
+	if s.DB == nil {
+		return out
+	}
+	res, err := s.DB.Query(ctx, `select count(*) filter (where state in ('available', 'retryable', 'running')),
+		count(*) filter (where state = 'discarded' and finalized_at > now() - interval '24 hours')
+		from rk_jobs where kind = 'notice_host' and ($1 = '' or org_id = $1)`, org)
+	if err == nil && len(res.Rows) == 1 {
+		out["pending"], out["failed_24h"] = res.Rows[0][0], res.Rows[0][1]
+	}
+	return out
 }

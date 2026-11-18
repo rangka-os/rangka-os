@@ -39,6 +39,16 @@ type Permanent struct{ Err error }
 func (p *Permanent) Error() string { return p.Err.Error() }
 func (p *Permanent) Unwrap() error { return p.Err }
 
+// RetryAfter is an error whose job runs again after After instead of the queue's backoff (a 429's Retry-After, or a
+// job kind's own schedule, contract 0066 §3). On the last attempt the job is discarded as usual.
+type RetryAfter struct {
+	Err   error
+	After time.Duration
+}
+
+func (r *RetryAfter) Error() string { return r.Err.Error() }
+func (r *RetryAfter) Unwrap() error { return r.Err }
+
 // Handler runs a job; its result is stored.
 type Handler func(ctx context.Context, j *Job) (any, error)
 
@@ -190,10 +200,19 @@ func (q *Queue) RunOne(ctx context.Context) (bool, error) {
 	_, uerr := q.DB.Query(ctx, `update rk_jobs set state = $2, errors = errors || $3::jsonb,
 		scheduled_at = case when $2 = 'retryable' then now() + make_interval(secs => $4) else scheduled_at end,
 		finalized_at = case when $2 = 'discarded' then now() else null end where id = $1`,
-		j.ID, state, pg.JSON{V: []any{entry}}, q.Backoff(j.Attempt).Seconds())
+		j.ID, state, pg.JSON{V: []any{entry}}, q.retryDelay(j, err).Seconds())
 	q.event(ctx, j, state)
 	q.Log("jobs: job %d (%s) attempt %d failed: %v", j.ID, j.Kind, j.Attempt, err)
 	return true, uerr
+}
+
+// retryDelay is the wait before a failed job's next attempt: a RetryAfter's own, else the queue's backoff.
+func (q *Queue) retryDelay(j *Job, err error) time.Duration {
+	var ra *RetryAfter
+	if errors.As(err, &ra) && ra.After > 0 {
+		return ra.After
+	}
+	return q.Backoff(j.Attempt)
 }
 
 func safeRun(ctx context.Context, h Handler, j *Job) (out any, err error) {

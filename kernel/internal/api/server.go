@@ -234,6 +234,8 @@ func (s *Server) Handler() http.Handler {
 	// the person's inbox of kernel notices (contract 0066 §4.1)
 	mux.HandleFunc("GET /api/v1/notices", a(s.listNotices))
 	mux.HandleFunc("POST /api/v1/notices/read", a(s.readNotices))
+	mux.HandleFunc("GET /api/v1/notices/prefs", a(s.getNoticePrefs))
+	mux.HandleFunc("PUT /api/v1/notices/prefs", a(s.putNoticePrefs))
 	// approvals
 	mux.HandleFunc("GET /api/v1/approvals", a(s.listApprovals))
 	mux.HandleFunc("GET /api/v1/approvals/{id}", a(s.getApproval))

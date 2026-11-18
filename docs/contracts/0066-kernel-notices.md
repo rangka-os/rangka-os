@@ -1,6 +1,6 @@
 # 0066 Kernel notices: the inbox, the host, and what apps declare
 
-Status: proposed (18 Nov 2026) · Owner of the change: rangka-os (schema, validators, kernel, web app) · Affects:
+Status: implemented in rangka-os (18 Nov 2026, steps 1–4 of the order of work; step 5 is rangka-apps and Rangka Cloud) · Owner of the change: rangka-os (schema, validators, kernel, web app) · Affects:
 rangka-apps (`notices:` in modules, `notify` steps), rangka-cloud (private: the host side, its spec
 `docs/specs/2026-11-18-notifikasi-design.md` §8), rangka-ai (Raka writes `notify` steps in site flows) · Builds on: 0007,
 0010, 0016, 0017, 0020, 0033, 0040, 0043, 0056, 0063, 0065
@@ -318,6 +318,32 @@ recipients (its spec §3 and §8).
 3. Declarations, step keys and validators (§1, §1.2, §1.4). Release.
 4. SMTP driver and prefs (§4.2).
 5. rangka-apps adds `notices:`; Rangka Cloud provisions the two variables for kernels from that release.
+
+## As built (rangka-os)
+
+- **Keys.** `notices:` (module.json) and the notify step's `notice`, `title`, `record`, `outlet`, `id` are plain keys of
+  schema 0.5, not `experimental:` (as 0021 §4: the validators never implemented that block). An app that uses them
+  needs the release that ships them.
+- **Implicit notices (§1.3).** A field value names a member by email or by their user record (`USR-002`).
+- **`notice_literal_email` (§1.4)** raises a change set Raka proposed to high (the owner decides), at propose and again
+  at apply. **`notice_personal_field` (§6)** warns on `{var.field}` of a `users` or `contacts` model when the field is
+  `phone`/`npwp` typed or named email, phone, mobile, whatsapp, address, nik, bank_account or npwp. Schema 0.5 has no
+  `secret` field, so its error case has nothing to check yet. `notice_too_long` is an error; it counts the literal text
+  with `{expr}` parts left out, and also checks a declaration's label.
+- **Host (§3).** The URL must be https, or http on localhost or a name or IP that is only loopback or private; one
+  variable without the other, or a bad URL, is logged and the host is not told. The call adds `Accept:
+  application/json` and `User-Agent: rangka-kernel`; redirects are not followed. A 429's `Retry-After` is capped at
+  6 h. Any status other than 200/202/429/5xx stops the job with `notice.host_refused`.
+- **Rate (§3).** The 60 per minute cap is counted per organisation and minute in `rk_notice_rate`, outside the emitting
+  transaction; `notice.dropped` is written once per past minute with the kinds and counts.
+- **Inbox (§4.1).** `rk_notices` has a `seq` column for the sort and the cursor. The notice event is SSE only:
+  `rk_event_log` and the poll endpoint of 0040 §4 are not built in the kernel yet; the web app also polls
+  `GET /notices` every 60 s while visible.
+- **Mail (§4.2).** The absolute link is built from `system.rk` `auth.issuer`. A mail that fails for good is audited as
+  `notice.mail_failed`. `/system/status` `pending` and `failed_24h` count `notice_host` and `notice_mail` jobs.
+- **Prefs.** With a host the panel's settings link and Pengaturan › Notifikasi say the host manages mail; the kernel has
+  no URL of the host's settings page to link to.
+- Not built: the change-set preview sentence of §1.4.
 
 ## Not in this contract
 

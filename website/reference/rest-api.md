@@ -61,6 +61,8 @@ can read its record and who work at its outlet. Session or token of the person; 
 | --- | --- | --- |
 | GET | `/notices` | `?limit=50&before=<cursor>&unread=1` → `{data: [{id, kind, severity, title, text, link, at, read}], unread, next}`; newest first, `next` is the cursor of the next page (null at the end) |
 | POST | `/notices/read` | `{ids}` marks those read; no ids marks all. → `{marked, unread}` |
+| GET | `/notices/prefs` | `{mail: {available, managed_by: kernel\|host}, kinds: [{kind, label, severity, mail}]}`: whether a kind also goes to the person's email |
+| PUT | `/notices/prefs` | `{kinds: {<kind>: true\|false}}` (`*` for every kind) → the prefs. 409 `managed_by_host` when a host runs the kernel (it keeps the choices) |
 
 `kind` is `kernel.approval.requested`, `kernel.approval.decided`, `app.<module>.<notice or flow>` or `site.<flow>`;
 `severity` is `info`, `warn` or `high`; `link` is a path of the web app (`/app/#/approvals`). SSE sends `event: notice`

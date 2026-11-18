@@ -6,6 +6,7 @@ import (
 	"strconv"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/auth"
+	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -86,17 +87,86 @@ func (s *Server) readNotices(w http.ResponseWriter, r *http.Request, c *caller) 
 func (s *Server) noticeStatus(ctx context.Context, reg *meta.Registry, org string) map[string]any {
 	host := s.Engine.Notices.Host
 	out := map[string]any{"host": host, "pending": 0, "failed_24h": 0, "mail": "log"}
-	if host {
+	switch {
+	case host:
 		out["mail"] = "host"
+	case s.Engine.Notices.Mail:
+		out["mail"] = "smtp"
 	}
 	if s.DB == nil {
 		return out
 	}
 	res, err := s.DB.Query(ctx, `select count(*) filter (where state in ('available', 'retryable', 'running')),
 		count(*) filter (where state = 'discarded' and finalized_at > now() - interval '24 hours')
-		from rk_jobs where kind = 'notice_host' and ($1 = '' or org_id = $1)`, org)
+		from rk_jobs where kind in ('notice_host', 'notice_mail') and ($1 = '' or org_id = $1)`, org)
 	if err == nil && len(res.Rows) == 1 {
 		out["pending"], out["failed_24h"] = res.Rows[0][0], res.Rows[0][1]
 	}
 	return out
+}
+
+// getNoticePrefs is GET /api/v1/notices/prefs → {mail: {available, managed_by}, kinds: [{kind, label, mail}]}: whether
+// notices can reach this person by mail, who keeps their choices (the kernel, or the host when one is configured),
+// and per kind their choice (else the kind's default).
+func (s *Server) getNoticePrefs(w http.ResponseWriter, r *http.Request, c *caller) {
+	if noticeScopeLimited(w, c) {
+		return
+	}
+	n := s.Engine.Notices
+	managed := "kernel"
+	if n.Host {
+		managed = "host"
+	}
+	kinds := []map[string]any{}
+	for _, k := range s.Engine.NoticeKinds() {
+		on := k.Mail
+		if c.p.User.ID != 0 && !n.Host {
+			def := k.Mail
+			v, err := engine.NoticeMailOn(r.Context(), s.DB, c.actor.Org, c.p.User.ID, k.Kind, k.Severity, &def)
+			if err != nil {
+				fail(w, err)
+				return
+			}
+			on = v
+		}
+		kinds = append(kinds, map[string]any{"kind": k.Kind, "label": k.Label, "severity": k.Severity, "mail": on})
+	}
+	writeJSON(w, 200, map[string]any{"mail": map[string]any{"available": n.Host || n.Mail, "managed_by": managed}, "kinds": kinds})
+}
+
+// putNoticePrefs is PUT /api/v1/notices/prefs {kinds: {<kind>: bool}} ("*" for every kind). With a host the host keeps
+// the choices: 409 managed_by_host.
+func (s *Server) putNoticePrefs(w http.ResponseWriter, r *http.Request, c *caller) {
+	if noticeScopeLimited(w, c) {
+		return
+	}
+	if s.Engine.Notices.Host {
+		writeError(w, http.StatusConflict, "managed_by_host", "Notifikasi email diatur di tempat usaha ini dikelola (host).")
+		return
+	}
+	var in struct {
+		Kinds map[string]bool `json:"kinds"`
+	}
+	if err := readJSON(r, &in); err != nil || in.Kinds == nil {
+		writeError(w, http.StatusBadRequest, "bad_json", "body must be {kinds: {<kind>: true|false}}")
+		return
+	}
+	if c.p.User.ID == 0 {
+		writeError(w, http.StatusConflict, "no_user", "this session has no user to keep the choices for")
+		return
+	}
+	for k := range in.Kinds {
+		if k != "*" && !engine.ValidNoticeKind(k) {
+			writeError(w, http.StatusBadRequest, "bad_kind", "unknown notice kind "+k)
+			return
+		}
+	}
+	for k, on := range in.Kinds {
+		if _, err := s.DB.Exec(r.Context(), `insert into rk_notice_prefs (org_id, user_id, kind, mail) values ($1, $2, $3, $4)
+			on conflict (org_id, user_id, kind) do update set mail = excluded.mail`, c.actor.Org, c.p.User.ID, k, on); err != nil {
+			fail(w, err)
+			return
+		}
+	}
+	s.getNoticePrefs(w, r, c)
 }

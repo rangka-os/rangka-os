@@ -948,6 +948,15 @@ def test_theme_default_light(page, ctx):
     page.emulate_media(color_scheme="light")
 
 
+def test_notice_prefs_page(page, ctx):
+    """Pengaturan › Notifikasi (contract 0066 §4.1, §4.2): reached from the account menu; the demo site mails with the log
+    driver and no host, so the page says notices stay in the app's bell."""
+    open_route(page, ctx, "#/pengaturan/notifikasi")
+    page.get_by_role("heading", name="Notifikasi").first.wait_for(timeout=15000)
+    page.get_by_text("Email belum disiapkan untuk usaha ini").wait_for(timeout=10000)
+    shot(page, ctx, "notice-prefs")
+
+
 def test_tampilan_try_and_apply(page, ctx):
     """Pengaturan › Tampilan (contract 0067): the owner tries Laut on the page only, applies it as a change set, and the
     whole app repaints with Laut's tokens; the change set is reverted afterwards so later scenarios keep the base look."""

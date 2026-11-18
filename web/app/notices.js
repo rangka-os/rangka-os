@@ -188,6 +188,40 @@
         h("a", { href: p.settingsHref, target: /^https?:/.test(p.settingsHref) ? "_blank" : undefined, rel: "noopener", onClick: function () { p.onClose(); } }, p.settingsLabel || "Atur notifikasi")) : null);
   }
 
+  /* ================================================================ Pengaturan › Notifikasi */
+
+  /** #/pengaturan/notifikasi: per kind, whether the person gets it by email (GET/PUT /api/v1/notices/prefs). With a host
+   *  (managed_by host) the host keeps the choices and the page says so; without any mail the page says notices stay in
+   *  the app. Every notice always reaches the inbox. */
+  function NoticePrefsPage() {
+    var ctx = React.useContext(RA.Ctx), api = ctx.api;
+    var ls = useState({ loading: true, data: null, error: null }), s = ls[0], set = ls[1];
+    useEffect(function () {
+      var live = true;
+      api.noticePrefs().then(function (d) { if (live) set({ loading: false, data: d, error: null }); }, function (e) { if (live) set({ loading: false, data: null, error: e }); });
+      return function () { live = false; };
+    }, []);
+    function save(kind, on) {
+      var body = {};
+      body[kind] = on;
+      api.setNoticePrefs(body).then(function (d) { set({ loading: false, data: d, error: null }); ctx.toast("ok", "Pilihan notifikasi disimpan"); },
+        function (e) { ctx.toast("bad", "Tidak bisa menyimpan", (e && e.message) || ""); });
+    }
+    var d = s.data || { mail: {}, kinds: [] }, mail = d.mail || {};
+    var note = mail.managed_by === "host" ? "Email notifikasi dikirim dan diatur oleh layanan yang menjalankan usaha ini. Semua notifikasi tetap muncul di lonceng aplikasi."
+      : !mail.available ? "Email belum disiapkan untuk usaha ini, jadi notifikasi hanya muncul di lonceng aplikasi."
+      : "Pilih notifikasi yang juga dikirim ke emailmu. Semua notifikasi tetap muncul di lonceng aplikasi.";
+    return h("div", { className: "ap-page ap-notice-prefs" },
+      h(R.PageHeader, { title: "Notifikasi", subTitle: "Pilihan notifikasimu sendiri" }),
+      s.loading ? h(R.Spinner, null) : s.error ? h(R.Alert, { tone: "bad", title: "Tidak bisa memuat pilihan notifikasi" }, (s.error && s.error.message) || "") :
+      h("section", { className: "ap-card" },
+        h("p", { className: "ap-notice-prefs-note" }, note),
+        mail.available && mail.managed_by !== "host" ? d.kinds.map(function (k) {
+          return h(R.Switch, { key: k.kind, label: k.label || k.kind, description: "Kirim ke email", checked: !!k.mail, onChange: function (on) { save(k.kind, on); } });
+        }) : null));
+  }
+
+  RA.NoticePrefsPage = NoticePrefsPage;
   RA.useNotices = useNotices;
   RA.NoticePanel = NoticePanel;
 })(typeof window !== "undefined" ? window : this);

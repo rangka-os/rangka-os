@@ -54,6 +54,7 @@
     if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
     if (parts[0] === "pengaturan" && parts[1] === "tim" && parts.length === 2) return { kind: "team" };
     if (parts[0] === "pengaturan" && parts[1] === "tampilan" && parts.length === 2) return { kind: "appearance" };
+    if (parts[0] === "pengaturan" && parts[1] === "notifikasi" && parts.length === 2) return { kind: "noticePrefs" }; // contract 0066 §4.1
     // a sign-in link from Tim (contract 0056 §4): #/masuk/tautan?t=<token>; Root opens it before asking who you are
     if (parts[0] === "masuk" && parts[1] === "tautan" && parts.length === 2) return { kind: "signinLink" };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
@@ -498,6 +499,7 @@
       case "catalogue": return "pengaturan/katalog";
       case "team": return "pengaturan/tim";
       case "appearance": return "pengaturan/tampilan";
+      case "noticePrefs": return "pengaturan/notifikasi";
       case "mulai": return "mulai";
       case "work": return home && home === "#/w/" + route.screen ? "home" : "w/" + route.screen;
       default: return null;
@@ -786,7 +788,7 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", team: "TeamPage", appearance: "AppearancePage", work: "WorkScreenView", mulai: "MulaiPage" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", team: "TeamPage", appearance: "AppearancePage", noticePrefs: "NoticePrefsPage", work: "WorkScreenView", mulai: "MulaiPage" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
@@ -799,7 +801,7 @@
     if (route.kind === "work") return !!(meta.screens || {})[route.screen];
     if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
     // the catalogue and Tim pages answer "no access" themselves
-    return route.kind === "approvals" || route.kind === "catalogue" || route.kind === "team" || route.kind === "appearance" || route.kind === "mulai";
+    return route.kind === "approvals" || route.kind === "catalogue" || route.kind === "team" || route.kind === "appearance" || route.kind === "noticePrefs" || route.kind === "mulai";
   }
 
   function Page(p) {
@@ -1364,6 +1366,7 @@
         if (api.setAppearance) api.setAppearance({ theme: mine && mine.theme, mode: mode }).then(null, function () {});
       }
       else if (k === "appearance") { setNavOpen(false); setSwitchAt(null); RA.navigate("#/pengaturan/tampilan"); }
+      else if (k === "noticePrefs") { setNavOpen(false); setSwitchAt(null); RA.navigate("#/pengaturan/notifikasi"); }
       else if (k === "logout" || k === "switch") logout();
       else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
       else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
@@ -1421,7 +1424,8 @@
         return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
       }), ["-", { heading: "Mode" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "settings", "Ikuti sistem"]].map(function (t) {
         return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
-      }), [{ label: "Tema dan tampilan", icon: "palette", onSelect: function () { account("appearance"); } }], ["-"], [].concat.apply([], accountExtra().map(function (g) {
+      }), [{ label: "Tema dan tampilan", icon: "palette", onSelect: function () { account("appearance"); } },
+        { label: "Notifikasi", icon: "bell", onSelect: function () { account("noticePrefs"); } }], ["-"], [].concat.apply([], accountExtra().map(function (g) {
         return [{ heading: g.heading }].concat(g.items.map(function (it) {
           return { label: it.label, icon: it.icon, checked: it.on, onSelect: function () { account(it.key); } };
         }), ["-"]);
@@ -1504,7 +1508,7 @@
       h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }),
       notices ? h(R.IconButton, { icon: "bell", label: "Notifikasi", className: "ap-bell", dot: notices.unread, "aria-expanded": notices.open,
         onClick: function () { notices.toggle(); } }) : null);
-    var noticePanel = notices && notices.open ? h(RA.NoticePanel, { state: notices, onClose: function () { notices.setOpen(false); } }) : null;
+    var noticePanel = notices && notices.open ? h(RA.NoticePanel, { state: notices, settingsHref: "#/pengaturan/notifikasi", settingsLabel: "Atur notifikasi", onClose: function () { notices.setOpen(false); } }) : null;
 
     // phone (desain arah E, P7): a bottom tab bar for the three things an owner does most; Menu opens the drawer
     var onHome = route.kind === "dash" && home && ("#/d/" + route.dash) === home;

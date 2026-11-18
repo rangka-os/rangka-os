@@ -15,6 +15,8 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
+	"github.com/rangka-os/rangka-os/kernel/internal/notices"
+	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -49,7 +51,18 @@ type NoticeConfig struct {
 	// Host is true when RANGKA_HOST_NOTICES_URL and RANGKA_HOST_NOTICES_SECRET are both set: every event is posted
 	// to the host by a notice_host job (§3).
 	Host bool
+	// Mail is true when system.rk notify.email is smtp and no host is configured: the kernel mails notices itself
+	// (§4.2), one notice_mail job per recipient whose choice for the kind is on.
+	Mail bool
+	// BaseURL is the kernel's public address (system.rk auth.issuer): mails link to BaseURL + the notice's link.
+	BaseURL string
 }
+
+// NoticeMailAttempts is how often the kernel tries to mail one notice (§4.2: the backoff of §3).
+const NoticeMailAttempts = 8
+
+// NoticePrefsPath is the web app's page of a person's notice choices (Pengaturan › Notifikasi).
+const NoticePrefsPath = "/app/#/pengaturan/notifikasi"
 
 // noticeRecord is the record a notice is about: recipients must be able to read it (§4.1, §6).
 type noticeRecord struct{ model, name string }
@@ -58,6 +71,8 @@ type noticeRecord struct{ model, name string }
 type noticeOpts struct {
 	record *noticeRecord
 	except []string // emails that never get it (the requester of an approval)
+	// mail is the kind's mail default from the step's channel (email on, in_app off); nil = by severity (§4.2)
+	mail *bool
 }
 
 const (
@@ -298,6 +313,9 @@ func (o *op) notice(ev NoticeEvent, opt noticeOpts) error {
 		if err := store.Notify(o.ctx, o.tx, store.Event{Type: "notice", Org: ev.Org, ID: m.email, Notice: item}); err != nil {
 			return err
 		}
+		if err := o.noticeMail(ev, m, opt.mail); err != nil {
+			return err
+		}
 	}
 	return o.noticeDeliver(ev)
 }
@@ -312,6 +330,55 @@ func (o *op) noticeDeliver(ev NoticeEvent) error {
 	_ = json.Unmarshal(b, &args)
 	_, err := o.e.Queue.Enqueue(o.ctx, o.tx, "notice_host", ev.Org, map[string]any{"event": args},
 		EnqueueOpts{MaxAttempts: NoticeHostAttempts, UniqueKey: "notice_host:" + ev.Org + ":" + ev.ID})
+	return err
+}
+
+// NoticeMailOn decides whether a person gets a kind by mail (§4.2): their choice for the kind, else their choice for
+// every kind ('*'), else the kind's default (def, else off for info and on for warn and high).
+func NoticeMailOn(ctx context.Context, q pg.Querier, org string, user int64, kind, severity string, def *bool) (bool, error) {
+	on := severity != "info"
+	if def != nil {
+		on = *def
+	}
+	res, err := q.Query(ctx, "select kind, mail from rk_notice_prefs where org_id = $1 and user_id = $2 and kind in ($3, '*')", org, user, kind)
+	if err != nil {
+		return on, err
+	}
+	for _, r := range res.Rows {
+		if str(r[0]) == "*" {
+			on, _ = r[1].(bool)
+		}
+	}
+	for _, r := range res.Rows {
+		if str(r[0]) == kind {
+			on, _ = r[1].(bool)
+		}
+	}
+	return on, nil
+}
+
+// noticeMail queues the mail of one recipient when the kernel mails notices itself (never with a host: it mails).
+func (o *op) noticeMail(ev NoticeEvent, m noticeMember, def *bool) error {
+	e := o.e
+	if !e.Notices.Mail || e.Notices.Host || e.Queue == nil || !strings.Contains(m.email, "@") {
+		return nil
+	}
+	on, err := NoticeMailOn(o.ctx, o.tx, ev.Org, m.user, ev.Kind, ev.Severity, def)
+	if err != nil || !on {
+		return err
+	}
+	base := strings.TrimRight(e.Notices.BaseURL, "/")
+	link := ""
+	if ev.Link != "" && base != "" {
+		link = base + ev.Link
+	}
+	prefs := ""
+	if base != "" {
+		prefs = base + NoticePrefsPath
+	}
+	_, err = e.Queue.Enqueue(o.ctx, o.tx, "notice_mail", ev.Org, map[string]any{"to": m.email, "user": m.user, "id": ev.ID, "kind": ev.Kind,
+		"subject": ev.Title, "body": notices.MailBody(ev.Title, ev.Text, link, prefs)},
+		EnqueueOpts{MaxAttempts: NoticeMailAttempts, UniqueKey: "notice_mail:" + ev.Org + ":" + ev.ID + ":" + itoa(m.user)})
 	return err
 }
 
@@ -449,7 +516,7 @@ func (r *flowRun) flowNotice(st map[string]any, index, target string, values []s
 		}
 	}
 	ev := NoticeEvent{Kind: kind, Severity: severity, To: to, Title: title, Text: text}
-	opt := noticeOpts{}
+	opt := noticeOpts{mail: channelMail(str(st["channel"]))}
 	if v := str(st["record"]); v != "" { // the record the notice is about: its link and who may read it
 		rec := meta.AsMap(r.vars[v])
 		if mn, name := str(rec["_model"]), str(rec["name"]); mn != "" && name != "" {
@@ -490,6 +557,15 @@ func (r *flowRun) flowNotice(st map[string]any, index, target string, values []s
 		}
 	}
 	return dropped, r.o.notice(ev, opt)
+}
+
+// channelMail is the mail default a step's channel sets (§1.2): email on, in_app off, others none.
+func channelMail(ch string) *bool {
+	on := ch == "email"
+	if ch == "email" || ch == "in_app" {
+		return &on
+	}
+	return nil
 }
 
 // noticeDecl is the notices: entry name of the run's module (nil when the flow is not a module's or names none).
@@ -543,29 +619,80 @@ func (r *flowRun) noticeKind() string {
 	return kind
 }
 
-// NoticeKinds lists the kinds this installation can raise, with a label: the built-in ones (§5) and the implicit
-// kinds of installed flows with a notify step (§1.3). Sorted by kind.
-func (e *Engine) NoticeKinds() []map[string]any {
+// NoticeKind is a kind this installation can raise, for Pengaturan › Notifikasi.
+type NoticeKind struct {
+	Kind     string `json:"kind"`
+	Label    string `json:"label"`
+	Severity string `json:"severity"`
+	Mail     bool   `json:"mail"` // the default before a person's choice (§4.2)
+}
+
+// NoticeKinds lists the kinds this installation can raise: the built-in ones (§5), the notices: of installed modules
+// (§1.1) and the implicit kinds of installed flows with a notify step to no declaration (§1.3). A step's channel
+// sets its kind's mail default (email on, in_app off). Sorted by kind.
+func (e *Engine) NoticeKinds() []NoticeKind {
 	reg := e.Reg()
-	out := []map[string]any{
-		{"kind": "kernel.approval.requested", "label": "Permintaan persetujuan"},
-		{"kind": "kernel.approval.decided", "label": "Keputusan persetujuan"},
+	byKind := map[string]*NoticeKind{
+		"kernel.approval.requested": {Kind: "kernel.approval.requested", Label: "Permintaan persetujuan", Severity: "warn", Mail: true},
+		"kernel.approval.decided":   {Kind: "kernel.approval.decided", Label: "Keputusan persetujuan", Severity: "info"},
 	}
+	for _, a := range reg.Apps {
+		if a.Kind != meta.KindModule || !reg.IsInstalled(a.Name) {
+			continue
+		}
+		for _, x := range meta.AsList(a.Raw["notices"]) {
+			n := meta.AsMap(x)
+			k := "app." + a.Name + "." + str(n["name"])
+			if n == nil || !ValidNoticeKind(k) {
+				continue
+			}
+			sev := str(n["severity"])
+			if !NoticeSeverities[sev] {
+				sev = "info"
+			}
+			byKind[k] = &NoticeKind{Kind: k, Label: meta.LabelOf(n["label"]).Text(), Severity: sev, Mail: sev != "info"}
+		}
+	}
+	mailed := map[string]bool{}
 	for _, name := range sortedKeysF(reg.Flows) {
 		f := reg.Flows[name]
-		if !reg.IsInstalled(f.App) || !flowHasNotify(f.Steps) {
+		if !reg.IsInstalled(f.App) {
 			continue
 		}
 		r := &flowRun{f: f, reg: reg}
-		if k := r.noticeKind(); k != "" {
-			label := f.Label.Text()
-			if label == "" {
-				label = f.Name
+		implicit := r.noticeKind()
+		walkNotify(f.Steps, func(st map[string]any) {
+			k := implicit
+			if d := r.noticeDecl(str(st["notice"])); d != nil {
+				k = "app." + f.App + "." + str(d["name"])
 			}
-			out = append(out, map[string]any{"kind": k, "label": label})
-		}
+			if k == "" || !ValidNoticeKind(k) {
+				return
+			}
+			nk := byKind[k]
+			if nk == nil {
+				label := f.Label.Text()
+				if label == "" {
+					label = f.Name
+				}
+				nk = &NoticeKind{Kind: k, Label: label, Severity: "info"}
+				byKind[k] = nk
+			}
+			switch st["channel"] { // a step's channel sets its kind's default (§1.2): email on, in_app off
+			case "email":
+				nk.Mail, mailed[k] = true, true
+			case "in_app":
+				if !mailed[k] {
+					nk.Mail = false
+				}
+			}
+		})
 	}
-	sort.SliceStable(out, func(i, j int) bool { return str(out[i]["kind"]) < str(out[j]["kind"]) })
+	out := make([]NoticeKind, 0, len(byKind))
+	for _, k := range byKind {
+		out = append(out, *k)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Kind < out[j].Kind })
 	return out
 }
 
@@ -578,34 +705,27 @@ func sortedKeysF(m map[string]*meta.Flow) []string {
 	return out
 }
 
-// flowHasNotify reports whether steps (or the steps nested under them) hold a notify step.
-func flowHasNotify(steps []map[string]any) bool {
-	var walk func(v any) bool
-	walk = func(v any) bool {
+// walkNotify calls fn for every notify step of steps, nested steps included.
+func walkNotify(steps []map[string]any, fn func(st map[string]any)) {
+	var walk func(v any)
+	walk = func(v any) {
 		switch x := v.(type) {
 		case map[string]any:
 			if x["notify"] != nil {
-				return true
+				fn(x)
 			}
-			for _, k := range []string{"do", "then", "else", "steps"} {
-				if walk(x[k]) {
-					return true
-				}
+			for _, k := range []string{"do", "then", "else"} {
+				walk(x[k])
 			}
 		case []any:
 			for _, s := range x {
-				if walk(s) {
-					return true
-				}
+				walk(s)
 			}
 		case []map[string]any:
 			for _, s := range x {
-				if walk(s) {
-					return true
-				}
+				walk(s)
 			}
 		}
-		return false
 	}
-	return walk(steps)
+	walk(steps)
 }

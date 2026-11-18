@@ -353,6 +353,10 @@
     };
     /** POST /api/v1/notices/read {ids}: those read; no ids marks all. → {marked, unread}. */
     api.readNotices = function (ids) { return json("POST", "/api/v1/notices/read", { ids: ids || [] }); };
+    /** GET /api/v1/notices/prefs → {mail: {available, managed_by: kernel|host}, kinds: [{kind, label, severity, mail}]}. */
+    api.noticePrefs = function () { return json("GET", "/api/v1/notices/prefs"); };
+    /** PUT /api/v1/notices/prefs {kinds: {<kind>: bool}} → the prefs again; 409 managed_by_host with a host. */
+    api.setNoticePrefs = function (kinds) { return json("PUT", "/api/v1/notices/prefs", { kinds: kinds }); };
 
     /* ----- print */
     api.printUrl = function (model, name, o) {

@@ -121,6 +121,18 @@ func (r *Resolver) Render(ctx context.Context, org, connector, action string, in
 	if err != nil {
 		return nil, err
 	}
+	if op := mailOp(a); op != "" {
+		// a mail action (contract 0067): the servers and the password, checked as Call will use them
+		setup, err := r.renderMail(ctx, org, connector, c)
+		if err != nil {
+			return nil, err
+		}
+		srv, err := setup.server(c, connector, op)
+		if err != nil {
+			return nil, err
+		}
+		return &Rendered{Method: "MAIL", URL: srv.Addr(), Headers: map[string]string{}, Secret: true, Host: srv.Host, scrub: setup.scrub}, nil
+	}
 	req := meta.AsMap(a["request"])
 	set := settings(c)
 	in := map[string]any{}

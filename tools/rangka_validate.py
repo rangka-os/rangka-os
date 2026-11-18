@@ -940,6 +940,34 @@ def platform_env(name):
     return name == "DATABASE_URL" or name.startswith(PLATFORM_ENV_PREFIXES)
 
 
+def check_mail(rep, p, c):
+    """Contract 0067 §1: a mail: action needs the connector's mail: block; mail.password is exactly {auth.<secret
+    field>}, and no other value in mail: names a secret field."""
+    block = c.get("mail") if isinstance(c.get("mail"), dict) else None
+    for i, a in enumerate(c.get("actions") if isinstance(c.get("actions"), list) else []):
+        if isinstance(a, dict) and isinstance(a.get("mail"), str) and block is None:
+            rep.add("error", p, f"actions/{i}/mail", "mail_missing", f'action "{a.get("name")}" is a mail action but connector {c.get("name")} has no mail: block (contract 0067)')
+    if block is None:
+        return
+    fields = (c.get("auth") or {}).get("fields") if isinstance(c.get("auth"), dict) else None
+    secret = [f.get("name") for f in fields or [] if isinstance(f, dict) and f.get("secret") is True and isinstance(f.get("name"), str)]
+    pw = block.get("password")
+    m = re.fullmatch(r"\{auth\.([a-z_][a-z0-9_]*)\}", pw) if isinstance(pw, str) else None
+    if "password" in block and not (m and m.group(1) in secret):
+        rep.add("error", p, "mail/password", "mail_password_not_secret", f'mail.password must be {{auth.<field>}} of a secret auth field, not "{pw}" (contract 0067)')
+
+    def walk(x, path):
+        for k in sorted(x):
+            v = x[k]
+            if isinstance(v, dict):
+                walk(v, path + [k])
+            elif path + [k] != ["password"]:
+                used = [n for n in secret if any("{auth." + n + "}" in t for t in _strings(v))]
+                if used:
+                    rep.add("error", p, "mail/" + "/".join(path + [k]), "secret_misplaced", f'mail.{".".join(path + [k])} names secret {", ".join(used)}: only mail.password may carry it (contract 0067)')
+    walk(block, [])
+
+
 def check_poll_triggers(rep, p, c):
     """Contract 0002 §A.1: a trigger with via: poll names one of the connector's actions."""
     actions = [a.get("name") for a in c.get("actions") or [] if isinstance(a, dict)]
@@ -1141,6 +1169,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             check_company_connector(rep, p, cn, c, conn_origin.get(cn), cn in conn_dup, flows, allmodels)
             check_secret_hosts(rep, p, c)
             check_poll_triggers(rep, p, c)
+            check_mail(rep, p, c)
 
     if site:
         check_site(rep, V, root, apps, allmodels, sdocs, conns, overlays, flows)

@@ -12,6 +12,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/rangka-os/rangka-os/kernel/internal/connectors"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -84,6 +85,14 @@ func (s *Server) attachmentRecord(w http.ResponseWriter, r *http.Request, c *cal
 	if err != nil {
 		fail(w, err)
 		return nil, nil, false
+	}
+	if row.Model == connectors.ConnectorAttachmentModel {
+		// a file a mail connector received belongs to no record yet: the owner's, like connector keys (contract 0067 §2)
+		if !isOwner(c) {
+			attachmentNotFound(w)
+			return nil, nil, false
+		}
+		return row, store.Record{}, true
 	}
 	rec, err := s.Engine.Get(ctx, c.actor, row.Model, row.Record)
 	if err != nil {
@@ -291,9 +300,12 @@ func (s *Server) deleteAttachment(w http.ResponseWriter, r *http.Request, c *cal
 	if !ok {
 		return
 	}
-	if err := s.Engine.Authorize(ctx, c.actor, row.Model, "write", rec); err != nil {
-		fail(w, err)
-		return
+	// a file a mail connector received: attachmentRecord admitted the owner only, who may delete it
+	if row.Model != connectors.ConnectorAttachmentModel {
+		if err := s.Engine.Authorize(ctx, c.actor, row.Model, "write", rec); err != nil {
+			fail(w, err)
+			return
+		}
 	}
 	if m := s.Engine.Reg().Model(row.Model); m != nil && m.IsSubmittable && docstatus(rec) != 0 {
 		writeError(w, http.StatusConflict, "submitted", "Lampiran dokumen yang sudah diajukan tidak bisa dihapus")

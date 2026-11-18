@@ -219,8 +219,19 @@
       "items": {
         "type": "object",
         "required": [
-          "name",
-          "request"
+          "name"
+        ],
+        "oneOf": [
+          {
+            "required": [
+              "request"
+            ]
+          },
+          {
+            "required": [
+              "mail"
+            ]
+          }
         ],
         "additionalProperties": false,
         "properties": {
@@ -229,6 +240,13 @@
           },
           "label": {
             "$ref": "model.json#/$defs/label"
+          },
+          "mail": {
+            "enum": [
+              "fetch",
+              "send"
+            ],
+            "description": "A mail action instead of request: (contract 0067): fetch reads new messages from the receive server (a poll trigger's action), send sends one over SMTP. Needs the connector's mail: block"
           },
           "request": {
             "type": "object",
@@ -314,6 +332,76 @@
       "type": "array",
       "items": {
         "$ref": "#/$defs/setting"
+      }
+    },
+    "mail": {
+      "type": "object",
+      "additionalProperties": false,
+      "required": [
+        "password"
+      ],
+      "description": "The mail servers of a mail connector (contract 0067): every value a template over {auth.x} and {settings.x}, or a literal. Its actions say mail: fetch or mail: send",
+      "properties": {
+        "receive": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "protocol": {
+              "type": "string",
+              "description": "imap (default) or pop3"
+            },
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "string",
+              "description": "993 (IMAP) or 995 (POP3) with tls, 143 or 110 with starttls, when empty"
+            },
+            "tls": {
+              "type": "string",
+              "description": "tls (implicit, default) or starttls; there is no plain-text mode"
+            },
+            "folder": {
+              "type": "string",
+              "description": "IMAP folder, INBOX by default"
+            },
+            "mark_seen": {
+              "type": "string",
+              "description": "IMAP: true marks fetched messages \\Seen; nothing is ever deleted"
+            }
+          }
+        },
+        "send": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "host": {
+              "type": "string"
+            },
+            "port": {
+              "type": "string",
+              "description": "465 with tls, 587 with starttls, when empty"
+            },
+            "tls": {
+              "type": "string",
+              "description": "tls (implicit, default) or starttls"
+            }
+          }
+        },
+        "username": {
+          "type": "string"
+        },
+        "password": {
+          "type": "string",
+          "description": "exactly {auth.<field>} of a secret auth field (validator mail_password_not_secret)"
+        },
+        "from": {
+          "type": "string",
+          "description": "the sender address of mail: send"
+        },
+        "from_name": {
+          "type": "string"
+        }
       }
     },
     "hosts": {

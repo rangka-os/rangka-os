@@ -286,6 +286,13 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			_, err := s.Queue.Enqueue(ctx, qr, "flow", org, map[string]any{"flow": flow, "event": event}, engine.EnqueueOpts{UniqueKey: key})
 			return err
 		}}
+	if fstore != nil {
+		s.Connectors.Files = fstore // a mail connector keeps the attachments it receives (contract 0067 §2)
+	}
+	s.Connectors.FilesFull = func() bool {
+		r := e.Reg()
+		return e.Plan.Peek(db, r, e.Now(), cfg.Logf).CheckUpload(r, true) != nil
+	}
 	s.API.Connectors = s.Connectors
 	s.Changes.ConnectorState = func(ctx context.Context, org, connector string) (string, error) {
 		if e.Reg().Connectors[connector] == nil { // added by the same change set: never tested

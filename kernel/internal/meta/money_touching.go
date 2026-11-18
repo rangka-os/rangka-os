@@ -193,10 +193,17 @@ func (r *Registry) sensitiveModel(name string) bool {
 }
 
 // WriteActions are the names of a connector's actions whose request method is not GET, in file order (contract 0033 §4).
+// A mail action is a write when it sends (mail: send) and a read when it fetches (contract 0067 §1).
 func WriteActions(c map[string]any) []string {
 	out := []string{}
 	for _, a := range AsList(c["actions"]) {
 		am := AsMap(a)
+		if op, ok := am["mail"].(string); ok {
+			if n, _ := am["name"].(string); n != "" && op != "fetch" {
+				out = append(out, n)
+			}
+			continue
+		}
 		if m, _ := AsMap(am["request"])["method"].(string); strings.ToUpper(m) != "GET" {
 			if n, _ := am["name"].(string); n != "" {
 				out = append(out, n)

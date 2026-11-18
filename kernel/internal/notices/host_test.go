@@ -24,7 +24,11 @@ func TestHostFromEnv(t *testing.T) {
 		}
 		return nil, errors.New("no such host")
 	}
-	t.Cleanup(func() { lookupIP = func(ctx context.Context, h string) ([]net.IP, error) { return net.DefaultResolver.LookupIP(ctx, "ip", h) } })
+	t.Cleanup(func() {
+		lookupIP = func(ctx context.Context, h string) ([]net.IP, error) {
+			return net.DefaultResolver.LookupIP(ctx, "ip", h)
+		}
+	})
 	if h, err := HostFromEnv(env(nil)); h != nil || err != nil {
 		t.Fatalf("unset: %v %v", h, err)
 	}

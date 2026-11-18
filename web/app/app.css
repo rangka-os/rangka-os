@@ -1111,6 +1111,145 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts { margin: 0; }
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts > :not([data-tur-primary]) { display: none; }
 
+/* ---------------------------------------------------------------- Beranda (desain v3)
+ * While Mulai di sini guides the owner: the steps lead (a short list around the current step), Perlu diurus and Tim
+ * sit beside them, and the dashboard's numbers and charts fold under "<n> hari ini". */
+.ap-home { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; align-items: start; }
+.ap-home-main, .ap-home-side { display: flex; flex-direction: column; gap: 16px; min-width: 0; }
+.ap-home .ap-attn, .ap-home .ap-mu-banner { margin: 0; }
+.ap-bd-card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; }
+.ap-bd-card.ap-mu-banner { display: block; padding: 0; }
+.ap-bd-card.ap-mu-banner .g { display: block; max-width: none; }
+.ap-bd-pad { padding: 16px 20px; }
+.ap-bd-card h2 { margin: 0; font: 600 16px/20px var(--font-sans); color: var(--ink); }
+.ap-bd-headrow { display: flex; align-items: center; gap: 12px; }
+.ap-bd-headrow h2 { flex: 1; min-width: 0; }
+.ap-bd-meta { flex: none; font: 400 12px/16px var(--font-sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ap-bd-head { display: flex; flex-direction: column; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.ap-bd-head .ap-mu-bar i { height: 4px; border-radius: 2px; }
+.ap-bd-head .ap-mu-bar i.now { background: var(--brand); }
+.ap-bd-steps { list-style: none; margin: 0; padding: 0; }
+.ap-bd-step { display: flex; gap: 12px; align-items: flex-start; padding: 14px 20px; }
+.ap-bd-step + .ap-bd-step { border-top: 1px solid var(--line); }
+.ap-bd-step > .g { flex: 1; min-width: 0; }
+.ap-bd-step > .rk-btn { flex: none; }
+.ap-bd-n { width: 24px; height: 24px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--faint); display: grid; place-items: center;
+  font: 600 12px/1 var(--font-sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
+.ap-bd-n .rk-icon { width: 12px; height: 12px; }
+/* the current step: the theme colour at the strength a theme guarantees for text (link is 4.5:1 on the surface in every
+   theme of contract 0067; brand is only 3:1, too weak under the 12px number in a light orange theme) */
+.ap-bd-n.on { border-color: var(--link); background: var(--link); color: var(--on-brand, #ffffff); }
+.ap-bd-n.done { border-color: transparent; background: var(--ok-tint); color: var(--ok); }
+.ap-bd-t { margin: 0; font: 600 14px/20px var(--font-sans); color: var(--ink); }
+.ap-bd-l { margin: 0; font: 500 14px/20px var(--font-sans); color: var(--ink-2); }
+.ap-bd-p { margin: 2px 0 0; font: 400 14px/20px var(--font-sans); color: var(--ink-2); }
+.ap-bd-sub { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--muted); }
+.ap-bd-step.now .ap-bd-sub { margin-top: 4px; }
+.ap-bd-step .ap-mu-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.ap-bd-team ul { list-style: none; margin: 8px 0 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.ap-bd-team li { display: flex; align-items: center; gap: 10px; min-height: 32px; }
+.ap-bd-team li > .g { flex: 1; min-width: 0; overflow-wrap: anywhere; } /* a long name or role wraps; it is never cut */
+.ap-bd-team li > .ap-bd-wait { display: grid; } /* an open role: its name, and "Belum diundang" under it */
+.ap-bd-team li > .ap-bd-wait small { font: 400 12px/16px var(--font-sans); color: var(--muted); }
+/* below 1280px the side column is too narrow for its rows: the side cards sit under the main column, two abreast */
+@media (min-width: 768px) and (max-width: 1279px) {
+  .ap-home { grid-template-columns: minmax(0, 1fr); }
+  .ap-home-side { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); align-items: start; }
+  .ap-home-side > :only-child { grid-column: 1 / -1; }
+}
+.ap-bd-team .ap-mu-av { flex: none; border-radius: 999px; display: grid; place-items: center; font: 600 11px/1 var(--font-sans); color: var(--ink); }
+.ap-bd-wait { color: var(--ink-2); }
+.ap-bd-foldhead { display: flex; align-items: center; gap: 12px; padding: 14px 20px; flex-wrap: wrap; }
+.ap-bd-foldhead > .g { flex: 1; min-width: 200px; }
+.ap-bd-foldbody { padding: 4px 20px 20px; }
+.ap-bd-foldbody.open { animation: ap-bd-in var(--dur-2, .15s) linear both; }
+@keyframes ap-bd-in { from { opacity: 0; } to { opacity: 1; } }
+@media (prefers-reduced-motion: reduce) { .ap-bd-foldbody.open { animation: none; } }
+@media (max-width: 1023px) {
+  .ap-home { grid-template-columns: minmax(0, 1fr); }
+  .ap-bd-step { padding: 12px 16px; }
+  .ap-bd-head, .ap-bd-foldhead { padding-left: 16px; padding-right: 16px; }
+  .ap-bd-pad { padding: 16px; }
+  .ap-bd-foldbody { padding: 4px 16px 16px; }
+  .ap-bd-foldhead > .rk-btn { flex: 1 1 100%; }
+}
+
+/* ---------------------------------------------------------------- laci Kerjakan (desain v3)
+ * The step's form over the page: step line and close on the first row (the line wraps under the X when it is long),
+ * title and "Buka halaman penuh" on the second; the form scrolls under the head. */
+.rk-drawer.ap-kj { width: min(760px, 100vw); display: flex; flex-direction: column; }
+.ap-kj-head { flex: none; display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; align-items: center; padding: 12px 12px 12px 20px; border-bottom: 1px solid var(--line); }
+.ap-kj-kick { grid-column: 1; grid-row: 1; margin: 0; font: 400 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-kj-x { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; display: inline-flex; outline: 0; }
+.ap-kj-title { grid-column: 1; grid-row: 2; margin: 0; font: 600 16px/20px var(--font-sans); color: var(--ink); }
+.ap-kj-full { grid-column: 2; grid-row: 2; justify-self: end; }
+.ap-kj-body { flex: 1; min-height: 0; overflow-y: auto; }
+/* inside the drawer the form is as wide as a tablet: one column with the document panel under it (the page rules for
+   wide windows key on the viewport, so they are set back here; 0,4,0 beats the page's 0,3,0) */
+.rk-drawer.ap-kj .ap-kj-body .rk-pagehead { padding: 16px 24px 0; }
+.rk-drawer.ap-kj .ap-kj-body .rk-shell-content { padding: 16px 24px 24px; }
+.rk-drawer.ap-kj .ap-kj-body .rk-docpage { flex-direction: column; align-items: stretch; }
+.rk-drawer.ap-kj .ap-kj-body .rk-docpanel { width: auto; flex: none; border-left: 0; border-top: 1px solid var(--line); padding: 0; }
+@media (max-width: 767px) {
+  .rk-drawer.ap-kj { width: 100vw; }
+  .ap-kj-head { padding: 12px 12px 12px 16px; }
+  .rk-drawer.ap-kj .ap-kj-body .rk-pagehead { padding: 12px 16px 0; }
+  .rk-drawer.ap-kj .ap-kj-body .rk-shell-content { padding: 12px 16px 24px; }
+}
+
+/* ---------------------------------------------------------------- form (desain v3): folded optional sections, the
+ * total at the top of the side panel, the foreign-currency column toggle */
+.ap-docsec-fold { display: flex; align-items: center; gap: 12px; min-height: var(--control); }
+.ap-docsec-fold .ap-docsec-t { margin: 0; flex: none; }
+.ap-docsec-sum { flex: 1; min-width: 0; font: 400 12px/16px var(--font-sans); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-docsec.folded { padding-bottom: 16px; }
+@media (max-width: 767px) { /* phone: the summary of a folded section gets its own lines under the title, not an ellipsis */
+  .ap-docsec-fold { flex-wrap: wrap; row-gap: 4px; }
+  .ap-docsec-fold .ap-docsec-t { flex: 1; }
+  .ap-docsec-sum { order: 3; flex: 1 0 100%; white-space: normal; overflow: visible; }
+  .ap-docsec-sum:empty { display: none; }
+}
+.ap-docsec-fold + .ap-docgrid { margin-top: 12px; }
+.ap-doctotal { display: flex; flex-direction: column; gap: 2px; }
+.ap-doctotal b { font: 600 24px/28px var(--font-sans); letter-spacing: -0.01em; color: var(--ink); font-variant-numeric: tabular-nums; }
+.ap-doctotal small { font: 400 12px/16px var(--font-sans); color: var(--muted); }
+.rk-grid-foot .ap-grid-fx { margin-left: auto; color: var(--ink-2); }
+.rk-grid-foot .ap-grid-fx + .rk-totals { margin-left: 0; }
+.rk-grid .act { width: 56px; }
+
+/* ---------------------------------------------------------------- Persetujuan (desain v3)
+ * From 1024px: the requests as a list of cards to pick from, and the detail of the picked one beside it, with the
+ * decision at the bottom right (Tolak, then Setujui). Below that the list keeps its own buttons. */
+.ap-apv { display: grid; grid-template-columns: minmax(0, 7fr) minmax(0, 5fr); gap: 16px; align-items: start; }
+.ap-main .ap-inbox.pick { background: none; border: 0; border-radius: 0; overflow: visible; display: flex; flex-direction: column; gap: 8px; margin: 0; padding: 0; list-style: none; }
+.ap-main .ap-inbox.pick .ap-inbox-row { position: relative; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); padding: 14px 20px; }
+.ap-main .ap-inbox.pick .ap-inbox-row.on { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+.ap-inbox-pick { position: absolute; inset: 0; border: 0; padding: 0; background: none; border-radius: var(--r-lg); cursor: pointer; }
+.ap-inbox-pick:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ap-inbox.pick .ap-inbox-main a { position: relative; z-index: 1; }
+.ap-apv-panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg); overflow: hidden; display: flex; flex-direction: column; }
+.ap-apv-head { padding: 14px 20px; border-bottom: 1px solid var(--line); }
+.ap-apv-kick { margin: 0; font: 400 12px/16px var(--font-sans); color: var(--muted); }
+.ap-apv-head h2 { margin: 0; font: 600 16px/20px var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
+.ap-apv-sub { margin: 2px 0 0; font: 400 14px/20px var(--font-sans); color: var(--ink-2); }
+.ap-apv-lines { width: 100%; border-collapse: collapse; }
+div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
+.ap-apv-lines td { padding: 10px 0; border-bottom: 1px solid var(--line); font: 400 14px/20px var(--font-sans); color: var(--ink); vertical-align: top; }
+.ap-apv-lines td:first-child { padding-left: 20px; }
+.ap-apv-lines td:last-child { padding-right: 20px; }
+.ap-apv-lines td.q { color: var(--ink-2); text-align: right; white-space: nowrap; padding-left: 12px; }
+.ap-apv-lines td.n { text-align: right; white-space: nowrap; padding-left: 16px; font-variant-numeric: tabular-nums; }
+.ap-apv-lines tfoot td { font-weight: 500; }
+.ap-apv-miss { margin: 0; padding: 12px 20px; border-bottom: 1px solid var(--line); font: 400 14px/20px var(--font-sans); color: var(--ink-2); }
+.ap-apv-why { padding: 12px 20px; display: flex; flex-direction: column; gap: 4px; font: 400 12px/16px var(--font-sans); color: var(--ink-2); }
+.ap-apv-why p { margin: 0; }
+.ap-apv-open { align-self: flex-start; margin-top: 4px; font: 500 14px/20px var(--font-sans); color: var(--link); text-decoration: none; }
+.ap-apv-open:hover { text-decoration: underline; }
+.ap-apv-foot { padding: 12px 20px; border-top: 1px solid var(--line); }
+.ap-decide.end { display: flex; justify-content: flex-end; gap: 8px; }
+.ap-decide-ask { display: flex; flex-direction: column; gap: 10px; }
+.ap-decide-ask h3 { margin: 0; font: 600 14px/20px var(--font-sans); color: var(--ink); }
+
 /* Contract 0067 §5: a theme's bundled font replaces the UI font everywhere (the Juragan look names Inter directly),
    code and numbers in mono keep theirs. */
 :root[data-font="theme"] body, :root[data-font="theme"] body :not(code):not(pre):not(kbd):not(samp):not(.rk-mono) { font-family: var(--font-sans); }

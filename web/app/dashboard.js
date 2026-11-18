@@ -20,6 +20,8 @@
     return ps.map(function (d) { return { value: String(d), label: d + " hari" }; });
   }
   RA.periodOptions = periodOptions;
+  RA.foldCounts = foldCounts; // pure, declared below (hoisted): the home fold's counts and label
+  RA.foldParts = foldParts;
 
   /** What to show for a widget the kernel answered with `error`: null when there is none, {hide: true} for a widget
    *  over a model the person may not read (permission_denied: the kernel's way of saying "not for you", hidden like
@@ -204,8 +206,59 @@
     }).filter(Boolean);
     if (!u.on) cards = tileStrips(cards);
     var attention = !u.on && isHome ? h(AttentionPanel, { ctx: ctx, defs: defs, results: results, loading: loading || !data, approvals: approvals }) : null;
-    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" },
-      isHome && !u.on && RA.MulaiBanner ? h(RA.MulaiBanner, { ctx: ctx }) : null, attention, cards.length ? h(R.DashGrid, null, cards) : null));
+    var grid = cards.length ? h(R.DashGrid, null, cards) : null;
+    // While Mulai di sini guides the owner (desain v3): the steps lead, Perlu diurus and Tim sit beside them, and the
+    // numbers and charts fold under "<n> hari ini" (open by default once there is something to read).
+    var ms = isHome && !u.on && RA.mulaiSummary ? RA.mulaiSummary(ctx.onboarding && ctx.onboarding.data, ctx.meta) : null;
+    var guided = !!(ms && ms.show && !ms.all && ms.current && RA.MulaiBanner);
+    var body = guided
+      ? h("div", { className: "ap-home" },
+          h("div", { className: "ap-home-main" }, h(RA.MulaiBanner, { ctx: ctx }),
+            grid ? h(PeriodFold, { days: days, defs: defs, results: results, loading: loading || !data }, grid) : null),
+          h("aside", { className: "ap-home-side", "aria-label": "Yang perlu perhatian dan tim" }, attention, RA.HomeTeam ? h(RA.HomeTeam, { ctx: ctx }) : null))
+      : h(React.Fragment, null, attention, grid);
+    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" }, body));
+  }
+
+  /* ---------------------------------------------------------------- "<n> hari ini" (desain v3)
+   * The dashboard's numbers and charts behind one fold while Mulai di sini leads the home page. Closed while every
+   * widget is still empty (a new business has nothing to read yet), open otherwise; the person's own choice is kept. */
+  function widgetEmpty(w, r) {
+    r = r || {};
+    if (w.type === "number") return !(Number(r.value) || 0) && !(Number(r.count) || 0);
+    if (w.type === "chart") return !(r.data || []).length;
+    if (w.type === "list") return !((r.rows || r.data || []).length);
+    return true;
+  }
+  function foldCounts(defs, results) {
+    var n = 0, c = 0, l = 0, empty = true;
+    defs.forEach(function (w, i) {
+      var r = results[i];
+      if ((r && r.hidden) || isAttention(w)) return;
+      if (w.type === "number") n++; else if (w.type === "list") l++; else c++;
+      if (!widgetEmpty(w, r)) empty = false;
+    });
+    return { numbers: n, charts: c, lists: l, empty: empty };
+  }
+  /** "4 angka, 2 grafik dan 1 daftar"; "ringkasan" when the dashboard has nothing countable. */
+  function foldParts(k) {
+    var p = [k.numbers ? k.numbers + " angka" : null, k.charts ? k.charts + " grafik" : null, k.lists ? k.lists + " daftar" : null].filter(Boolean);
+    if (!p.length) return "ringkasan";
+    return p.length > 1 ? p.slice(0, -1).join(", ") + " dan " + p[p.length - 1] : p[0];
+  }
+  var FOLD_KEY = "rk.home.fold";
+  function PeriodFold(p) {
+    var k = foldCounts(p.defs, p.results);
+    var ps = useState(function () { try { return global.localStorage.getItem(FOLD_KEY); } catch (e) { return null; } }), pick = ps[0], setPick = ps[1];
+    var open = pick === "open" || (pick !== "shut" && !p.loading && !k.empty);
+    function toggle() { var v = open ? "shut" : "open"; setPick(v); try { global.localStorage.setItem(FOLD_KEY, v); } catch (e) {} }
+    var parts = foldParts(k);
+    return h("section", { className: "ap-bd-card ap-bd-fold", "aria-labelledby": "bd-fold-h" },
+      h("div", { className: "ap-bd-foldhead" },
+        h("div", { className: "g" }, h("h2", { id: "bd-fold-h" }, p.days + " hari ini"),
+          h("p", { className: "ap-bd-p" }, p.loading ? "Memuat angka periode ini." : k.empty ? "Belum ada angka di periode ini. Angka dan grafik terisi setelah transaksi pertama." : "Ringkasan " + parts + " untuk periode ini.")),
+        h(R.Button, { "aria-expanded": open ? "true" : "false", "aria-controls": "bd-fold-b", onClick: toggle }, open ? "Sembunyikan " + parts : "Lihat " + parts)),
+      h("div", { id: "bd-fold-b", className: "ap-bd-foldbody" + (open ? " open" : ""), hidden: !open }, h("div", null, p.children)));
   }
 
   /* ---------------------------------------------------------------- Perlu diurus (riset desain P2, K-A2)

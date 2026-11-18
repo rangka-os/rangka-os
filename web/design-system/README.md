@@ -63,10 +63,10 @@ Open `gallery.html` (served over http from `web/`) to see every component in lig
 ### Type
 
 - **The system font stack** (`ui-sans-serif, -apple-system, Segoe UI, …`) for everything in the product. **Bricolage Grotesque** only for the brand name and marketing display. **Mono** only for code and CEL.
-- `font-size`/`line-height` 13/20 for text, inputs, menus and cells; `font-size-sm` 12/16 for labels, help text, column headers and captions.
+- `font-size`/`line-height` 14/20 for text, inputs, menus and cells (foundation v3.1; 13/20 before); `font-size-sm` 12/16 for labels, help text, column headers and captions.
 - **Headings:** the header title 15px semibold; page and dialog titles 16/24 semibold; card, form-section, settings-section and drawer-section titles 14/20 semibold.
 - **No uppercase.** Pills, nav group labels, menu headings, command-menu groups and calendar weekdays are sentence case, 12px `muted` where they are labels.
-- **Figures:** 22/28 semibold on number cards; 13px tabular figures in tables and totals, right aligned.
+- **Figures:** 22/28 semibold on number cards; 14px tabular figures in tables and totals, right aligned.
 
 ### Spacing, radius, size
 

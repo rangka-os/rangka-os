@@ -65,3 +65,37 @@ test("summaryAmount: rupiah for IDR or no currency, the code otherwise, empty wi
   assert.strictEqual(A.summaryAmount({ title: "Toko" }), "");
   assert.strictEqual(A.summaryAmount(undefined), "");
 });
+
+test("lineAmountText: the line's own amount in the currency the document bills, decided by the currency code", () => {
+  const rp = (n) => "Rp " + Number(n).toLocaleString("id-ID");
+  const T = (f) => A.lineAmountText(f.fields, f.row, f.rec || {}, rp, f.base);
+  // plain Rupiah lines
+  const idr = [{ name: "qty", type: "float" }, { name: "price", type: "currency" }, { name: "amount", type: "currency", compute: "qty * price" }];
+  assert.strictEqual(T({ fields: idr, row: { qty: 2, price: 5000, amount: 10000 } }), "Rp 10.000");
+  assert.strictEqual(T({ fields: idr, row: { qty: 2, amount: 0 } }), "Rp 0", "a zero line is a real amount");
+  assert.strictEqual(T({ fields: idr, row: { qty: 2 } }), "", "no amount, no text");
+  // the kernel's shape for a model whose price and amount are money fields: twins *_idr come last (WithTwins)
+  const bill = [{ name: "qty", type: "float" }, { name: "price", type: "money", currency_field: "currency" }, { name: "amount", type: "money", currency_field: "currency" },
+    { name: "price_idr", type: "currency", money_of: "price" }, { name: "amount_idr", type: "currency", money_of: "amount" }];
+  assert.strictEqual(T({ fields: bill, row: { qty: 2, price: 5000, amount: 10000, price_idr: 5000, amount_idr: 10000 }, rec: { currency: "IDR" } }), "Rp 10.000", "qty 2 x 5000 is 10.000, not the unit price");
+  assert.strictEqual(T({ fields: bill, row: { qty: 2, price: 5000, amount: 10000 }, rec: {} }), "Rp 10.000", "older data without a currency is the base currency");
+  assert.strictEqual(T({ fields: bill, row: { qty: 2, price: 50, amount: 100, price_idr: 800000, amount_idr: 1600000 }, rec: { currency: "USD" } }), "USD 100,00");
+  assert.strictEqual(T({ fields: bill, row: { qty: 2, price: 50, amount: 90, amount_idr: 1440000 }, rec: { currency: "usd" } }), "USD 90,00");
+  // the pilot's invoice lines: a Rupiah rate copied from the catalogue, *_fx money fields and their twins
+  const pilot = [{ name: "qty", type: "float" }, { name: "rate", type: "currency" }, { name: "amount", type: "currency", compute: "qty * rate" },
+    { name: "rate_fx", type: "money", currency_field: "currency" }, { name: "amount_fx", type: "money", currency_field: "currency" },
+    { name: "rate_fx_idr", type: "currency", money_of: "rate_fx" }, { name: "amount_fx_idr", type: "currency", money_of: "amount_fx" }];
+  assert.strictEqual(T({ fields: pilot, row: { qty: 1, rate: 1500000, amount: 1500000, rate_fx: 0, amount_fx: 0 }, rec: { currency: "IDR" } }), "Rp 1.500.000");
+  assert.strictEqual(T({ fields: pilot, row: { qty: 1, rate: 1500000, amount: 1500000, rate_fx: 100, amount_fx: 100, amount_fx_idr: 1600000 }, rec: { currency: "USD" } }), "USD 100,00",
+    "a foreign invoice bills the foreign amount; the catalogue's Rupiah rate is not the line's value");
+  // audit N1: a foreign invoice's free line, or one whose foreign rate is not filled yet, bills 0 and must not show the catalogue's Rupiah
+  assert.strictEqual(T({ fields: pilot, row: { qty: 1, rate: 1500000, amount: 1500000, rate_fx: 0, amount_fx: 0 }, rec: { currency: "USD" } }), "USD 0,00");
+  assert.strictEqual(T({ fields: pilot, row: { qty: 1, rate: 1500000, amount: 1500000 }, rec: { currency: "USD" } }), "USD 0,00");
+  // audit N2: the currency was changed back to Rupiah after a foreign rate was typed; the leftover is not the amount
+  assert.strictEqual(T({ fields: pilot, row: { qty: 1, rate: 1500000, amount: 1500000, rate_fx: 100, amount_fx: 100 }, rec: { currency: "IDR" } }), "Rp 1.500.000");
+  // the currency on the line wins over the document's; the site's base currency need not be IDR
+  assert.strictEqual(T({ fields: bill, row: { amount: 100, currency: "EUR" }, rec: { currency: "IDR" } }), "EUR 100,00");
+  assert.strictEqual(T({ fields: pilot, row: { amount: 250, amount_fx: 100 }, rec: { currency: "IDR" }, base: "USD" }), "Rp 100", "the foreign-amount field, written the way Rupiah is written");
+  // only a unit price: nothing, rather than a price posing as the line's value
+  assert.strictEqual(T({ fields: [{ name: "price", type: "money", currency_field: "currency" }, { name: "price_idr", type: "currency", money_of: "price" }], row: { price: 50, price_idr: 800000 }, rec: { currency: "USD" } }), "");
+});

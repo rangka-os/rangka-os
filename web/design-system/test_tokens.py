@@ -23,8 +23,8 @@ def check(ok, msg):
 
 def flat(tokens):
     out = {}
-    for group in ("color", "spacing", "radius", "size", "shadow"):
-        for t in tokens[group]["tokens"]:
+    for group in ("color", "spacing", "radius", "size", "shadow", "motion"):
+        for t in tokens.get(group, {}).get("tokens", []):
             out[t["name"]] = t["value"]
     return out
 
@@ -41,7 +41,8 @@ expect = {
     "r-btn": "6px", "r": "6px", "r-md": "6px", "r-lg": "8px", "r-dialog": "12px",
     "topbar": "48px", "header": "48px",
     "sidebar": "216px", "sidebar-collapsed": "48px", "row": "36px", "row-head": "32px",
-    "font-size": "13px", "line-height": "20px", "font-size-sm": "12px",
+    "font-size": "14px", "line-height": "20px", "font-size-sm": "12px",  # fondasi v3.1: 14px base, no half pixels
+    "dur-1": "100ms", "dur-2": "150ms", "dur-3": "200ms", "dur-4": "300ms",
 }
 for k, v in expect.items():
     check(cur.get(k) == v, f"{k}: expected {v!r}, got {cur.get(k)!r}")

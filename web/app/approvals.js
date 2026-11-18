@@ -103,6 +103,32 @@
   RA.countDecidable = countDecidable;
   RA.summaryAmount = summaryAmount;
 
+  /** The amount a request's line shows. fields: the line model's fields as the kernel serves them (every `money` field
+   *  has a Rupiah twin `<name>_idr` with money_of); row: the line; rec: the document; rupiah: the Rupiah formatter;
+   *  baseCur: the site's base currency. The currency code decides, not whether a number happens to be there:
+   *  1. A document (or line) in a foreign currency reads its foreign-amount field (a `money` field named amount or
+   *     amount_*) in that currency, also when it is 0 or not filled yet: that is what the document bills. The Rupiah
+   *     price a line copies from the catalogue is not its value there.
+   *  2. A document in the base currency reads the line's Rupiah amount: the `currency` field named amount, else the
+   *     twin of the amount money field, else a computed Rupiah field that is not a twin, else the money amount itself.
+   *     A foreign price left over from before the currency was changed is ignored.
+   *  Never a unit price, never "Rp" on a foreign number. */
+  function lineAmountText(fields, row, rec, rupiah, baseCur) {
+    function first(test) { return (fields || []).filter(test)[0]; }
+    function isAmount(f) { return f.name === "amount" || /^amount_|_amount$/.test(f.name); }
+    function num(f) { return f && row[f.name] != null && row[f.name] !== "" ? Number(row[f.name]) || 0 : null; }
+    baseCur = String(baseCur || "IDR").toUpperCase();
+    var fx = first(function (f) { return f.type === "money" && f.name === "amount"; }) || first(function (f) { return f.type === "money" && isAmount(f); });
+    var code = fx && fx.currency_field ? String(row[fx.currency_field] || (rec || {})[fx.currency_field] || "").toUpperCase() : "";
+    if (fx && code && code !== baseCur) return summaryAmount({ amount: num(fx) || 0, currency: code });
+    var cands = [first(function (f) { return f.type === "currency" && f.name === "amount"; }),
+      fx ? first(function (f) { return f.type === "currency" && f.money_of === fx.name; }) : null,
+      first(function (f) { return f.type === "currency" && !!f.compute && !f.money_of; }), fx];
+    for (var k = 0; k < cands.length; k++) { var v = num(cands[k]); if (v !== null) return rupiah(v); }
+    return "";
+  }
+  RA.lineAmountText = lineAmountText;
+
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
@@ -154,21 +180,26 @@
     }
     var why = can ? undefined : "Hanya " + approverText(item.approvers, ctx.meta) + " yang bisa memutuskan";
     var id = "ap-reason-" + item.id;
+    var reasonForm = h("div", { className: "ap-reason" },
+      h("p", { className: "ap-muted" }, "Dokumen tetap draf. Yang mengajukan bisa memperbaikinya lalu mengajukan lagi."),
+      h(R.Textarea, { id: id, label: "Alasan", rows: 3, value: reason, autoFocus: true, required: true, "aria-required": "true",
+        "aria-invalid": reasonErr ? "true" : undefined, className: reasonErr ? "rk-field-error" : undefined, hint: reasonErr || undefined,
+        onChange: function (e) { setReason(e.target.value); if (e.target.value.trim()) setReasonErr(null); } }));
+    var cancelBtn = h(R.Button, { key: "c", variant: "quiet", disabled: !!busy, onClick: function () { setAsking(false); } }, "Batal");
+    var rejectBtn = h(R.Button, { key: "o", variant: "danger", disabled: !!busy, loading: busy === "reject", onClick: reject }, "Tolak");
+    var approveBtn = h(R.Button, { key: "a", variant: "primary", icon: "check", className: "ap-approve", disabled: !can || !!busy, loading: busy === "approve", title: why, onClick: approve }, "Setujui");
+    var askBtn = h(R.Button, { key: "r", disabled: !can || !!busy, loading: busy === "reject", title: why,
+      onClick: function () { if (can && !busyRef.current) { setReasonErr(null); setAsking(true); } } }, "Tolak");
+    // In the detail panel (desain v3) the reason is asked in place and the actions sit on the right, the main one last
+    if (p.panel) {
+      return asking
+        ? h("div", { className: "ap-decide-ask", role: "group", "aria-labelledby": id + "-t" },
+            h("h3", { id: id + "-t" }, "Tolak permintaan?"), reasonForm, h("div", { className: "ap-decide end" }, cancelBtn, rejectBtn))
+        : h("div", { className: "ap-decide end" }, askBtn, approveBtn);
+    }
     return h(React.Fragment, null,
-      h("div", { className: "ap-decide" },
-        h(R.Button, { variant: "primary", icon: "check", className: "ap-approve", disabled: !can || !!busy, loading: busy === "approve", title: why, onClick: approve }, "Setujui"),
-        h(R.Button, { disabled: !can || !!busy, loading: busy === "reject", title: why,
-          onClick: function () { if (can && !busyRef.current) { setReasonErr(null); setAsking(true); } } }, "Tolak")),
-      asking ? h(R.Dialog, { title: "Tolak permintaan?", onClose: function () { if (!busyRef.current) setAsking(false); },
-        footer: [
-          h(R.Button, { key: "c", variant: "quiet", disabled: !!busy, onClick: function () { setAsking(false); } }, "Batal"),
-          h(R.Button, { key: "o", variant: "danger", disabled: !!busy, loading: busy === "reject", onClick: reject }, "Tolak")
-        ] },
-        h("div", { className: "ap-reason" },
-          h("p", { className: "ap-muted" }, "Dokumen tetap draf. Yang mengajukan bisa memperbaikinya lalu mengajukan lagi."),
-          h(R.Textarea, { id: id, label: "Alasan", rows: 3, value: reason, autoFocus: true, required: true, "aria-required": "true",
-            "aria-invalid": reasonErr ? "true" : undefined, className: reasonErr ? "rk-field-error" : undefined, hint: reasonErr || undefined,
-            onChange: function (e) { setReason(e.target.value); if (e.target.value.trim()) setReasonErr(null); } }))) : null);
+      h("div", { className: "ap-decide" }, approveBtn, askBtn),
+      asking ? h(R.Dialog, { title: "Tolak permintaan?", onClose: function () { if (!busyRef.current) setAsking(false); }, footer: [cancelBtn, rejectBtn] }, reasonForm) : null);
   }
 
   function decidedToast(ctx, item, res, kind) {
@@ -252,6 +283,70 @@
   /* ---------------------------------------------------------------- the inbox */
   var TABS = [{ value: "pending", label: "Menunggu" }, { value: "approved", label: "Disetujui" }, { value: "rejected", label: "Ditolak" }];
 
+  /** True from 1024px (the detail panel sits beside the list); follows the window. */
+  function useWide() {
+    var q = "(min-width: 1024px)", mm = global.matchMedia ? global.matchMedia(q) : null;
+    var ws = useState(mm ? mm.matches : true), wide = ws[0], setWide = ws[1];
+    useEffect(function () {
+      if (!mm) return undefined;
+      function on() { setWide(mm.matches); }
+      if (mm.addEventListener) mm.addEventListener("change", on); else mm.addListener(on);
+      return function () { if (mm.removeEventListener) mm.removeEventListener("change", on); else mm.removeListener(on); };
+    }, []);
+    return wide;
+  }
+
+  /** The lines of a document for the detail panel: the first child table's rows as {title, qty, amount}. */
+  function docLines(ctx, model, rec) {
+    var mm = (ctx.meta.models || {})[model] || {}, tf = (mm.fields || []).filter(function (f) { return f.type === "table"; })[0];
+    if (!tf || !rec) return [];
+    var cm = (ctx.meta.models || {})[tf.of] || {}, cf = cm.fields || [];
+    function first(test) { return cf.filter(test)[0]; }
+    // the line's name: its description when the table has one, else the title of the first link (the item)
+    var link = first(function (f) { return f.type === "link" && f.name !== "uom"; }), text = first(function (f) { return f.name === "description" || f.name === "item_name"; });
+    var qty = first(function (f) { return f.name === "qty"; }) || first(function (f) { return f.type === "float" || f.type === "int"; });
+    var uom = first(function (f) { return f.name === "uom"; });
+    var API = global.RangkaAppAPI;
+    return (rec[tf.name] || []).map(function (r) {
+      var t = (text && r[text.name]) || (link && r[link.name] ? (ctx.cache && ctx.cache.title ? ctx.cache.title(link.to, r[link.name]) : null) || r[link.name] : "") || "";
+      var q = qty && r[qty.name] != null ? String(r[qty.name]).replace(".", ",") + (uom && r[uom.name] ? " " + ((uom.type === "link" && uom.to && ctx.cache && ctx.cache.title ? ctx.cache.title(uom.to, r[uom.name]) : null) || r[uom.name]) : "") : "";
+      return { title: String(t), qty: q, amount: API ? lineAmountText(cf, r, rec, API.rupiah, (ctx.meta.config || {}).currency) : "" };
+    });
+  }
+
+  /** The detail panel of one request (desain v3): what the document holds, why it waits, and the decision. */
+  function ApprovalDetail(p) {
+    var ctx = p.ctx, it = p.item, n = docName(it), sum = it.summary || {}, amount = summaryAmount(sum);
+    var rs = useState(null), rec = rs[0], setRec = rs[1];
+    useEffect(function () {
+      var dead = false;
+      if (!n) return undefined;
+      ctx.api.get(it.model, n).then(function (r) { if (!dead) setRec(r); }, function () { if (!dead) setRec(false); });
+      return function () { dead = true; };
+    }, [it.id, n]);
+    var lines = rec ? docLines(ctx, it.model, rec) : [];
+    var who = it.state === "approved" ? "Disetujui oleh " : it.state === "rejected" ? "Ditolak oleh " : null;
+    return h("aside", { className: "ap-apv-panel", "aria-label": "Rincian permintaan" },
+      h("header", { className: "ap-apv-head" },
+        h("p", { className: "ap-apv-kick" }, "Rincian"),
+        h("h2", null, modelLabel(ctx, it.model) + (n ? " " + n : "")),
+        sum.title ? h("p", { className: "ap-apv-sub" }, sum.title) : null),
+      rec === null && n ? h("div", { className: "ap-apv-lines" }, h(R.Skeleton, { lines: 3 })) : null,
+      rec === false ? h("p", { className: "ap-apv-miss", role: "status" }, "Isi dokumen tidak bisa dimuat. Buka dokumennya untuk melihat rinciannya.") : null,
+      lines.length || amount ? h("table", { className: "ap-apv-lines" },
+        h("tbody", null, lines.map(function (l, i) {
+          return h("tr", { key: i }, h("td", null, l.title), h("td", { className: "q" }, l.qty), h("td", { className: "n" }, l.amount));
+        })),
+        amount ? h("tfoot", null, h("tr", null, h("td", null, sum.amount_label || "Total"), h("td"), h("td", { className: "n" }, amount))) : null) : null,
+      h("div", { className: "ap-apv-why" },
+        it.state === "pending" ? h("p", null, "Ditahan karena: " + policyLabel(it).charAt(0).toLowerCase() + policyLabel(it).slice(1) + ". " + waitingTitle(it, ctx.meta) + ".") : null,
+        h("p", null, "Diajukan oleh " + (it.requested_by || "-") + (it.requested_at ? " · " + tanggal(it.requested_at) : "")),
+        who ? h("p", null, who + (it.decided_by || "-") + (it.decided_at ? " · " + tanggal(it.decided_at) : "")) : null,
+        it.reason ? h("p", null, "Alasan: " + it.reason) : null,
+        n ? h("a", { className: "ap-apv-open", href: "#/r/" + it.model + "/" + enc(n) }, "Buka dokumen") : null),
+      it.state === "pending" ? h("footer", { className: "ap-apv-foot" }, h(Decide, { item: it, ctx: ctx, panel: true, onDecided: p.onDecided, onFailed: p.onFailed })) : null);
+  }
+
   function ApprovalInbox() {
     var ctx = useContext(RA.Ctx);
     var ts = useState("pending"), tab = ts[0], setTab = ts[1];
@@ -259,6 +354,8 @@
     var es = useState(null), err = es[0], setErr = es[1];
     var ks = useState(0), tick = ks[0], setTick = ks[1];
     var ms = useState(null), msg = ms[0], setMsg = ms[1];
+    var ss = useState(null), sel = ss[0], setSel = ss[1]; // the request on show in the detail panel (wide screens)
+    var wide = useWide();
 
     useEffect(function () {
       var dead = false;
@@ -295,13 +392,16 @@
       body = h(R.EmptyState, { title: tab === "pending" ? "Tidak ada yang menunggu persetujuan" : tab === "approved" ? "Belum ada yang disetujui" : "Belum ada yang ditolak" },
         tab === "pending" ? "Dokumen yang perlu disetujui muncul di sini." : null);
     } else {
-      body = h("ul", { className: "ap-inbox", "aria-label": "Daftar permintaan" }, data.map(function (it) {
+      var cur = wide ? (data.filter(function (x) { return x.id === sel; })[0] || data[0]) : null;
+      body = h("ul", { className: "ap-inbox" + (wide ? " pick" : ""), "aria-label": "Daftar permintaan" }, data.map(function (it) {
         var n = docName(it), sum = it.summary || {}, party = sum.title || "", amount = summaryAmount(sum);
         var who = it.state === "approved" ? "Disetujui oleh " : it.state === "rejected" ? "Ditolak oleh " : null;
         var tone = it.state === "approved" ? "ok" : it.state === "rejected" ? "bad" : "warn";
         var doc = h("span", { className: "ap-inbox-doc" }, h("span", null, modelLabel(ctx, it.model)), " ",
           n ? h("a", { href: "#/r/" + it.model + "/" + enc(n) }, n) : null);
-        return h("li", { key: it.id, className: "ap-inbox-row" },
+        return h("li", { key: it.id, className: "ap-inbox-row" + (cur && cur.id === it.id ? " on" : ""), "aria-current": cur && cur.id === it.id ? "true" : undefined },
+          wide ? h("button", { type: "button", className: "ap-inbox-pick", "aria-label": "Lihat rincian " + (party || modelLabel(ctx, it.model) + " " + (n || "")),
+            "aria-pressed": cur && cur.id === it.id ? "true" : "false", onClick: function () { setSel(it.id); } }) : null,
           h("div", { className: "ap-inbox-main" },
             // who and how much first (P8): the counterparty and the rupiah decide the request; the document is the detail
             h("div", { className: "ap-inbox-head" },
@@ -313,8 +413,12 @@
               + (it.state === "pending" ? ". " + waitingTitle(it, ctx.meta) : "")),
             who ? h("span", { className: "ap-muted" }, who + (it.decided_by || "-") + (it.decided_at ? " · " + tanggal(it.decided_at) : "")) : null,
             it.reason ? h("span", { className: "ap-inbox-reason" }, "Alasan: " + it.reason) : null),
-          it.state === "pending" ? h(Decide, { item: it, ctx: ctx, onDecided: decided(it), onFailed: failed }) : null);
+          it.state === "pending" && !wide ? h(Decide, { item: it, ctx: ctx, onDecided: decided(it), onFailed: failed }) : null);
       }));
+      if (wide && cur) {
+        body = h("div", { className: "ap-apv" }, body,
+          h(ApprovalDetail, { key: cur.id, ctx: ctx, item: cur, onDecided: decided(cur), onFailed: failed }));
+      }
     }
 
     var tabs = TABS.map(function (t) { return t.value === tab && data ? Object.assign({ count: data.length }, t) : t; });

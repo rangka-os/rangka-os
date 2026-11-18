@@ -272,6 +272,7 @@
     var u = RA.useUbah ? RA.useUbah() : { on: false };
     var dls = useState(null), ubahDialog = dls[0], setUbahDialog = dls[1]; // "field" | "approval" | "automation"
     var tbs = useState(null), tab = tbs[0], setTab = tbs[1]; // the form layout's tab on show (null: the first)
+    var sos = useState({}), secOpen = sos[0], setSecOpen = sos[1]; // sections the person opened (true) or folded (false) by hand
     var fos = useState(false), filesOff = fos[0], setFilesOff = fos[1]; // Attachments found files off: drop "Lampiran"
     var ses2 = useState(false), showEmpty = ses2[0], setShowEmpty = ses2[1]; // read only: empty and zero fields shown too
 
@@ -536,6 +537,7 @@
     var activeTab = tabs.filter(function (t) { return t.value === tab; })[0] || tabs[0] || null;
     function onTab(i) { return !activeTab || activeTab.sections.indexOf(i) >= 0; }
     function namesOf(s) { return s.columns ? [].concat.apply([], s.columns) : s.fields || []; }
+    function srvErrIn(i) { return namesOf(layout[i]).some(function (n) { return srvErr.fields[n]; }); }
 
     // Fields the user can see and fix now: an error on a field elsewhere (another tab, read only) goes to the summary.
     var shown = {};
@@ -563,8 +565,34 @@
     }
 
     var hiddenBlank = 0;
+    /* A long form (more than three sections) keeps its optional sections folded while they are empty (desain v3): the
+     * title, what the section holds in a few words, and "Tampilkan". A section stays open when it is one of the first
+     * two, holds a required field or a child table, has a value the person typed, or carries an error. */
+    function foldInfo(i) {
+      var fs = namesOf(layout[i]).map(function (n) { return eng.field(m, n); }).filter(function (f) { return f && visible(f); });
+      if (!fs.length) return null;
+      var must = fs.some(function (f) { return f.required || f.type === "table"; });
+      var err = fs.some(function (f) { return srvErr.fields[f.name]; });
+      var typed = fs.some(function (f) { return !f.compute && !f.read_only && !blankValue(f, rec[f.name]) && (touched[f.name] || !isNew); });
+      var filled = fs.filter(function (f) { return f.type !== "table" && !blankValue(f, rec[f.name]); });
+      var text = filled.length ? filled.slice(0, 2).map(function (f) { return L(f.label) + " " + RA.fieldText(ctx, f, rec[f.name]); }).join(", ") : "Belum diisi";
+      return { foldable: !ro && layout.length > 3 && i > 1 && !must, keepOpen: err || typed, text: text };
+    }
     function section(i) {
       var s = layout[i], title = L(s.section) || "Rincian", body;
+      var fi = foldInfo(i);
+      if (fi && fi.foldable) {
+        // the person's own choice first; without one, folded while the section is empty (an error always opens it)
+        var folded = secOpen[i] === true ? false : secOpen[i] === false ? !srvErrIn(i) : !fi.keepOpen;
+        var head = h("div", { className: "ap-docsec-fold" }, h("h2", { className: "ap-docsec-t" }, title),
+          h("span", { className: "ap-docsec-sum" }, folded ? fi.text : ""),
+          h(R.Button, { "aria-expanded": folded ? "false" : "true", "aria-label": (folded ? "Tampilkan " : "Sembunyikan ") + lower(title),
+            onClick: function () { var n = Object.assign({}, secOpen); n[i] = folded; setSecOpen(n); } }, folded ? "Tampilkan" : "Sembunyikan"));
+        if (folded) return h("section", { key: i, className: "ap-docsec folded" }, head);
+        return h("section", { key: i, className: "ap-docsec" }, head, h("div", { className: "ap-docgrid" }, s.columns
+          ? s.columns.map(function (col, j) { return h("div", { key: j, className: "pv-col" }, col.map(fieldEl)); })
+          : (s.fields || []).map(cell)));
+      }
       if (ro) {
         var fs = namesOf(s).map(function (n) { return eng.field(m, n); }).filter(function (f) { return f && visible(f); });
         // a read-only document says what it holds: empty and zero fields wait behind "Tampilkan kolom kosong"
@@ -666,6 +694,17 @@
         : h("div", { className: "ap-docprint" }, h(RA.DocTools, { model: m, name: rec.name, record: rec }));
       return { id: s.id, title: s.title, content: content };
     });
+    // While the document is being filled (desain v3): its total leads the side panel, with how many lines it counts
+    if (!ro) {
+      var totalF = ["grand_total", "net_total"].map(function (n) { return eng.field(m, n); }).filter(function (f) { return f && f.compute && f.type === "currency" && visible(f); })[0];
+      var linesF = totalF ? mm.fields.filter(function (f) { return f.type === "table" && visible(f); })[0] : null;
+      if (totalF) {
+        var nRows = linesF ? (rec[linesF.name] || []).length : 0;
+        panel.unshift({ id: "total", title: L(totalF.label), content: h("div", { className: "ap-doctotal" },
+          h("b", null, API ? API.rupiah(Number(rec[totalF.name]) || 0) : String(rec[totalF.name] || 0)),
+          linesF ? h("small", null, nRows ? nRows + " baris " + lower(L(linesF.label)) : "Belum ada " + lower(L(linesF.label))) : null) });
+      }
+    }
     var sectionEls = layout.map(function (s, i) { return onTab(i) ? section(i) : null; });
 
     /* the summary on top of a saved document: the amount that matters first, the state in words, print at hand */

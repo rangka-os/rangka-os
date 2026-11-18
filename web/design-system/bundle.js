@@ -958,7 +958,7 @@
         : p.footer || (p.user ? h("div", { className: "rk-side-foot" }, h(Avatar, { name: p.user, size: 28, presence: "online" }),
         h("span", { className: "g" }, h("b", null, p.user), p.role ? h("small", null, p.role) : null), h(IconButton, { icon: "settings", label: "Pengaturan" })) : null),
       p.onToggleCollapse ? h("div", { className: "rk-side-collapse" },
-        h(IconButton, { icon: col ? "unfold" : "fold", label: col ? "Bentangkan navigasi" : "Ciutkan navigasi", onClick: p.onToggleCollapse })) : null);
+        h(IconButton, { icon: col ? "unfold" : "fold", label: col ? "Tampilkan menu" : "Sembunyikan menu", onClick: p.onToggleCollapse })) : null);
   }
 
   /* ---- List views: switcher, bulk bar, group-by list, report table */

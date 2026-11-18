@@ -194,7 +194,7 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	prevInFlow := o.inFlow
 	o.inFlow = true
 	defer func() { o.inFlow = prevInFlow }()
-	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out, reg: o.registry()}
+	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out, reg: o.registry(), runID: newFlowToken()}
 	if c := flowConnector(e, f); start == 0 && c != "" && len(event) > 0 {
 		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+c, f.On+" → flow "+f.Name, nil); err != nil {
 			return err
@@ -471,6 +471,10 @@ type flowRun struct {
 	// token names this run in the key's pending marker (flowKeyPending + ":" + token), so releasing a run that will
 	// never finish frees the key only from that run, and a replay of its job sees it was released
 	token string
+	// runID names this run in the ids of its implicit notices (contract 0066 §2); noticeSeen counts the notices of
+	// each step index, so a notify step under for_each makes one event per item
+	runID      string
+	noticeSeen map[string]int
 }
 
 // registry is the run's pinned registry (the engine's current one for a run built without it, as tests do).
@@ -708,7 +712,15 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			}
 			n := Notification{Channel: ch, To: to, Recipients: recipients(to, r.vars), Text: cel.Interpolate(tmpl, r.env())}
 			r.out.Notifications = append(r.out.Notifications, n)
-			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "notify."+ch, "flow/"+r.f.Name, n.Text, n); err != nil {
+			dropped, err := r.flowNotice(st, i, to, n.Recipients, n.Text) // contract 0066 §1.3
+			if err != nil {
+				return fmt.Errorf("step %s notify: %w", i, err)
+			}
+			var data any = n
+			if dropped > 0 { // values that name no member of the organisation (§1.3)
+				data = map[string]any{"channel": n.Channel, "to": n.To, "recipients": n.Recipients, "text": n.Text, "dropped": dropped}
+			}
+			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "notify."+ch, "flow/"+r.f.Name, n.Text, data); err != nil {
 				return err
 			}
 			o.tx.AfterCommit(func() { e.Log("notify[%s] %s %v: %s", ch, to, n.Recipients, n.Text) }) // once, not per retried attempt

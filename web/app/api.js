@@ -345,6 +345,15 @@
     api.approve = function (id) { return json("POST", "/api/v1/approvals/" + enc(id) + "/approve", {}); };
     api.reject = function (id, reason) { return json("POST", "/api/v1/approvals/" + enc(id) + "/reject", { reason: reason }); };
 
+    /* ----- notices (contract 0066 §4.1): the person's own inbox */
+    /** GET /api/v1/notices → {data: [{id, kind, severity, title, text, link, at, read}], unread, next}. */
+    api.notices = function (o) {
+      o = o || {};
+      return json("GET", "/api/v1/notices" + qs([["limit", o.limit], ["before", o.before], ["unread", o.unread ? 1 : ""]]));
+    };
+    /** POST /api/v1/notices/read {ids}: those read; no ids marks all. → {marked, unread}. */
+    api.readNotices = function (ids) { return json("POST", "/api/v1/notices/read", { ids: ids || [] }); };
+
     /* ----- print */
     api.printUrl = function (model, name, o) {
       o = o || {};

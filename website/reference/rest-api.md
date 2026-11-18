@@ -50,6 +50,22 @@ answers 202 and creates a request. When the last pending request is approved, th
 
 SSE sends `event: approval` with `{id, model, name, state}` on every change.
 
+## Notices
+
+The person's own inbox of kernel notices (contract 0066): an approval waiting for them, a flow's `notify` step, a
+module's declared notice. Every notice reaches the people it names by role (`owner` always may), narrowed to those who
+can read its record and who work at its outlet. Session or token of the person; a `members:write` token gets 403
+`scope_limited`.
+
+| Method | Path | Notes |
+| --- | --- | --- |
+| GET | `/notices` | `?limit=50&before=<cursor>&unread=1` → `{data: [{id, kind, severity, title, text, link, at, read}], unread, next}`; newest first, `next` is the cursor of the next page (null at the end) |
+| POST | `/notices/read` | `{ids}` marks those read; no ids marks all. → `{marked, unread}` |
+
+`kind` is `kernel.approval.requested`, `kernel.approval.decided`, `app.<module>.<notice or flow>` or `site.<flow>`;
+`severity` is `info`, `warn` or `high`; `link` is a path of the web app (`/app/#/approvals`). SSE sends `event: notice`
+with the item to its recipient only. Notices are kept 90 days.
+
 ## Imports
 
 Spreadsheet imports declared in `imports/<name>.rk` (contract 0012). `GET /meta` lists them under `imports`.
@@ -135,6 +151,9 @@ data: {"model":"deal","name":"DEAL-00012","op":"updated","docstatus":0}
 
 event: changeset
 data: {"id":"cs_rzlzncahuf","status":"applied"}
+
+event: notice
+data: {"id":"ntc_9f2c…","kind":"kernel.approval.requested","severity":"warn","title":"PO-0012 menunggu persetujuanmu","text":"Persetujuan manajer · diajukan oleh Sari","link":"/app/#/approvals","at":"2026-11-18T03:04:05Z","read":false}
 ```
 
 ## Change sets

@@ -422,7 +422,10 @@ func (o *op) approvalEvent(ap *store.Approval, kind string, extra map[string]any
 	if ap.Model == "" {
 		target = ap.Verb
 	}
-	return store.Audit(o.ctx, o.tx, ap.Org, o.actor.ID, kind, target, ap.Policy+" ("+ap.Verb+") "+ap.State, data)
+	if err := store.Audit(o.ctx, o.tx, ap.Org, o.actor.ID, kind, target, ap.Policy+" ("+ap.Verb+") "+ap.State, data); err != nil {
+		return err
+	}
+	return o.approvalNotices(ap, kind) // contract 0066 §5
 }
 
 // voidApprovals voids the pending requests of a record (one verb, or all when verb is empty).

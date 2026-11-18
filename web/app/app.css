@@ -1142,3 +1142,27 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tp-checks ul { margin: 0; padding: 0; }
 .ap-tp-label { font-weight: 500; color: var(--ink-2); font-size: var(--font-size-sm); }
 @media (max-width: 767px) { .ap-tp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* notifications panel under the top bar's bell (contract 0066 §4.1) */
+.ap-notices { position: fixed; top: 52px; right: 12px; z-index: 60; width: min(380px, calc(100vw - 24px)); max-height: min(560px, calc(100vh - 72px));
+  display: flex; flex-direction: column; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg);
+  box-shadow: var(--shadow-pop, 0 8px 24px rgba(0, 0, 0, .16)); font-family: var(--font-sans); color: var(--ink); }
+.ap-notices-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 12px 16px; border-bottom: 1px solid var(--line); }
+.ap-notices-all { background: none; border: 0; padding: 4px 0; min-height: var(--touch); color: var(--primary-ink); font: inherit; font-size: var(--font-size-sm); cursor: pointer; }
+.ap-notices-body { overflow-y: auto; flex: 1; }
+.ap-notices-empty { margin: 0; padding: 32px 16px; text-align: center; color: var(--muted); }
+.ap-notices-dl { margin: 0; padding: 10px 16px 4px; font-size: var(--font-size-sm); color: var(--muted); font-weight: 600; }
+.ap-notices-day ul { list-style: none; margin: 0; padding: 0; }
+.ap-notice { display: flex; align-items: flex-start; gap: 10px; padding: 10px 16px; min-height: var(--touch); box-sizing: border-box; color: var(--ink); text-decoration: none; }
+.ap-notice:hover, .ap-notice:focus-visible { background: var(--soft); }
+.ap-notice > .rk-icon, .ap-notice > svg { flex-shrink: 0; margin-top: 2px; color: var(--muted); }
+.ap-notice.sev-high > .rk-icon, .ap-notice.sev-high > svg { color: var(--bad); }
+.ap-notice.sev-warn > .rk-icon, .ap-notice.sev-warn > svg { color: var(--warn); }
+.ap-notice-t { display: flex; flex-direction: column; gap: 2px; flex: 1; min-width: 0; }
+.ap-notice-t b { font-weight: 600; }
+.ap-notice.is-read .ap-notice-t b { font-weight: 400; }
+.ap-notice-t span { color: var(--ink-2); font-size: var(--font-size-sm); }
+.ap-notice-dot { width: 8px; height: 8px; margin-top: 6px; border-radius: 50%; background: var(--primary, var(--brand)); flex-shrink: 0; }
+.ap-notices-foot { padding: 8px 16px; border-top: 1px solid var(--line); font-size: var(--font-size-sm); }
+.ap-notices-foot a { color: var(--primary-ink); display: inline-flex; align-items: center; min-height: var(--touch); }
+.ap-mhead .ap-bell { position: relative; }

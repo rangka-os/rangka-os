@@ -108,7 +108,7 @@ export declare function ImageViewer(props: { images: PreviewImage[]; index?: num
 export interface EmptyStateProps { title: string; children?: Node; actions?: Node }
 export declare function EmptyState(props: EmptyStateProps): React.ReactElement;
 export declare function Kbd(props: { children: Node }): React.ReactElement;
-export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> { icon: IconName; label: string; dot?: boolean }
+export interface IconButtonProps extends React.ButtonHTMLAttributes<HTMLButtonElement> { icon: IconName; label: string; dot?: boolean | number }
 export declare function IconButton(props: IconButtonProps): React.ReactElement;
 export interface LinkRecord { id: string; title: string; sub?: string; fields?: [string, Node][] }
 export interface LinkFieldProps { doctype: string; records: LinkRecord[]; label?: string; value?: string; placeholder?: string; required?: boolean; avatar?: boolean; error?: string; hint?: string; defaultOpen?: boolean; query?: string; onChange?: (record: LinkRecord) => void; onCreate?: () => void; onOpenRecord?: () => void }

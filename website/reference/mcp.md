@@ -21,6 +21,7 @@ an OIDC access token with the `rangka.mcp` scope. Claude, Omilo, Rangka AI or an
 | `rangka_skill` | `name` | One skill: `{name, description, metadata, source, instructions, files}` |
 | `rangka_skill_file` | `name`, `path` | One file of a skill: `{name, path, text}` |
 | `rangka_approvals_list` | `state?` (`pending`, `approved`, `rejected`, `void`), `model?`, `name?` | Document approval requests, newest first, each with `can_decide` |
+| `rangka_notices` | `unread?` | The caller's own inbox of kernel notices (contract 0066), newest 50, and the unread count. No tool creates a notice |
 | `rangka_approve` | `id`, `decision` (`approve` or `reject`), `reason?` (needed to reject) | Decides a document approval. A person's browser session only: agent and API-token callers get `human_required` |
 
 Results come as `content: [{type: "text", text: <json>}]` plus `structuredContent`; errors set `isError: true` with
@@ -30,7 +31,7 @@ Tools follow the caller's model permissions, like REST.
 
 There is deliberately **no tool to approve or apply a change set**: a person does that in the Console or the app.
 `rangka_approve` is for document approvals only (contract 0007). The embedded assistant Raka gets a narrower set:
-the read tools, the change-set tools up to preview, `rangka_approvals_list`, the catalogue and the skills; any other
+the read tools, the change-set tools up to preview, `rangka_approvals_list`, `rangka_notices`, the catalogue and the skills; any other
 tool is refused with `ai_forbidden`.
 
 The skills are the folders under [`skills/`](https://github.com/rangka-os/rangka-os/tree/main/skills) plus each app's

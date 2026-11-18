@@ -1088,6 +1088,12 @@ def test_side_shell_top_bar(page, ctx):
     bar.locator(".rk-ask").click()
     page.get_by_role("dialog").wait_for(timeout=5000)
     page.keyboard.press("Escape")
+    # the bell opens the notifications panel (contract 0066 §4.1), not a toast
+    bar.locator(".rk-topnav-bell").click()
+    panel = page.get_by_role("dialog", name="Notifikasi")
+    panel.wait_for(timeout=5000)
+    page.keyboard.press("Escape")
+    assert panel.count() == 0, "Escape closes the panel"
 
 
 def test_top_nav_shell(page, ctx):
@@ -2420,6 +2426,19 @@ def test_invoice_needs_manager_approval(page, ctx):
     # the manager: badge 1, Setujui, the invoice is submitted
     sign_out(page)
     sign_in_as(page, ctx, MANAGER)
+    if not mocked:
+        # the request also reached the manager's notifications in the top bar or the phone bar (contract 0066 §5)
+        page.wait_for_function("() => [...document.querySelectorAll('.rk-topnav-bell .rk-dot-n, .ap-bell .rk-dot-n')].some(x => x.offsetParent)",
+                               timeout=10000)
+        page.locator(".rk-topnav-bell, .ap-mhead .ap-bell").locator("visible=true").first.click()
+        panel = page.get_by_role("dialog", name="Notifikasi")
+        item = panel.locator(".ap-notice", has_text=name + " menunggu persetujuanmu")
+        item.wait_for(timeout=5000)
+        assert "Persetujuan manajer" in item.inner_text(), item.inner_text()
+        shot(page, ctx, "notices-panel")
+        item.click()
+        page.wait_for_function("() => location.hash === '#/approvals'", timeout=5000)
+        assert page.get_by_role("dialog", name="Notifikasi").count() == 0, "the panel closes on a click"
     open_nav(page)
     unfold = page.get_by_role("button", name="Bentangkan navigasi")  # the tablet rail shows a dot, the full sidebar the count
     if unfold.count() and unfold.first.is_visible():

@@ -8,6 +8,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // unwritableCache points the user cache at a path under a regular file, so bases() falls back to the temp
@@ -158,5 +159,43 @@ func TestExtractReplacesSymlinkedFile(t *testing.T) {
 	}
 	if b, _ := os.ReadFile(f); string(b) != "console.log('app')" {
 		t.Fatalf("app.js = %q", b)
+	}
+}
+
+// t_c850700e: lockRoot serializes extracts on one root; a second taker waits until the first releases.
+func TestLockRootSerializes(t *testing.T) {
+	root := t.TempDir()
+	unlock := lockRoot(root)
+	got := make(chan struct{})
+	go func() {
+		release := lockRoot(root)
+		close(got)
+		release()
+	}()
+	select {
+	case <-got:
+		t.Fatal("second lock taken while the first is held")
+	case <-time.After(100 * time.Millisecond):
+	}
+	unlock()
+	select {
+	case <-got:
+	case <-time.After(5 * time.Second):
+		t.Fatal("second lock not taken after release")
+	}
+}
+
+// lockRoot gives up after lockWait instead of blocking startup forever behind a stopped holder.
+func TestLockRootTimesOut(t *testing.T) {
+	root := t.TempDir()
+	unlock := lockRoot(root)
+	defer unlock()
+	old := lockWait
+	lockWait = 50 * time.Millisecond
+	defer func() { lockWait = old }()
+	start := time.Now()
+	lockRoot(root)()
+	if d := time.Since(start); d > 5*time.Second {
+		t.Fatalf("lockRoot waited %v", d)
 	}
 }

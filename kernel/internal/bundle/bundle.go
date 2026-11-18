@@ -16,7 +16,9 @@ import (
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
+	"time"
 )
 
 //go:embed all:files
@@ -92,15 +94,23 @@ func extract(root, name string) string { return extractFrom(files, root, name) }
 // kernels starting at once on the same cache) is extracted again instead of served half empty. Each run
 // extracts into its own temp directory, verifies it, and only then renames it into place and writes the
 // marker, so concurrent runs never write into or delete each other's copy.
+//
+// The slow path holds an exclusive lock on root/.lock (where the OS has one), so two runs that both see a
+// broken cache repair it one after the other: the second re-checks under the lock and keeps the first
+// one's copy instead of moving it aside while it is being served (t_c850700e). Leftovers of a run that
+// died mid-extract are swept once they are older than staleAfter.
 func extractFrom(src fs.FS, root, name string) string {
 	dst := filepath.Join(root, name)
 	marker := filepath.Join(root, "."+name+".ok")
+	sweep(root, name)
 	if st, err := os.Lstat(marker); err == nil && st.Mode().IsRegular() && complete(src, name, dst) {
 		return dst
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return ""
 	}
+	unlock := lockRoot(root)
+	defer unlock()
 	done := func() string {
 		if writeMarker(root, marker) != nil {
 			return ""
@@ -205,6 +215,30 @@ func writeMarker(root, marker string) error {
 		return err
 	}
 	return nil
+}
+
+// staleAfter is how old a temp entry must be before sweep removes it. No healthy extract takes this long,
+// so a younger entry may belong to a run still in progress and is left alone.
+var staleAfter = time.Hour
+
+// sweep removes what runs that died mid-extract (SIGKILL, OOM) left in root: .<name>.tmp-* copies (and
+// their .old twins) and .marker-* temp files older than staleAfter. Errors are ignored; a leftover only
+// costs disk space.
+func sweep(root, name string) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleAfter)
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasPrefix(n, "."+name+".tmp-") && !strings.HasPrefix(n, ".marker-") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			os.RemoveAll(filepath.Join(root, n)) // removes a symlink itself, never its target
+		}
+	}
 }
 
 func hash() string {

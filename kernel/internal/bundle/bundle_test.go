@@ -8,6 +8,7 @@ import (
 	"sync"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func TestDirExtracts(t *testing.T) {
@@ -176,4 +177,42 @@ func TestExtractConcurrent(t *testing.T) {
 		t.Fatal("cache incomplete after concurrent extracts")
 	}
 	mustExist(t, root, ".web.ok")
+}
+
+// t_c850700e: leftovers of runs that died mid-extract (SIGKILL, OOM) are swept once stale; younger temp
+// entries may belong to a run in progress and stay.
+func TestExtractSweepsStaleTemps(t *testing.T) {
+	src := fakeWeb()
+	root := t.TempDir()
+	if extractFrom(src, root, "web") == "" {
+		t.Fatal("first extract failed")
+	}
+	old := time.Now().Add(-2 * staleAfter)
+	stale := []string{".web.tmp-111", ".web.tmp-222.old", ".marker-333"}
+	for _, n := range stale {
+		p := filepath.Join(root, n)
+		if strings.HasPrefix(n, ".web") {
+			if err := os.MkdirAll(filepath.Join(p, "app"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fresh := filepath.Join(root, ".web.tmp-444")
+	if err := os.Mkdir(fresh, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if extractFrom(src, root, "web") == "" { // the fast path sweeps too
+		t.Fatal("extract failed")
+	}
+	for _, n := range stale {
+		if _, err := os.Lstat(filepath.Join(root, n)); !os.IsNotExist(err) {
+			t.Fatalf("stale %s not swept (err %v)", n, err)
+		}
+	}
+	mustExist(t, root, ".web.tmp-444", ".web.ok", "web/app/index.html")
 }

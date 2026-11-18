@@ -20,3 +20,7 @@ func checkPrivate(dir string) error {
 	}
 	return nil
 }
+
+// lockRoot is a no-op here: extract stays correct without it (every copy is verified before it is served),
+// only two concurrent repairs of a broken cache can briefly race.
+func lockRoot(string) func() { return func() {} }

@@ -575,6 +575,8 @@ body { margin: 0; background: var(--surface); color: var(--ink); font: var(--fon
 .rk-company small { display: block; font-size: var(--font-size-sm); line-height: 16px; color: var(--muted); font-weight: 400; }
 .rk-company .rk-icon { color: var(--muted); }
 .rk-side nav { flex: 1; overflow-y: auto; padding: 4px 8px 12px; display: flex; flex-direction: column; gap: 1px; }
+/* only the nav list scrolls and shrinks: the head, switcher, company, search, footer and collapse keep their height on a short window */
+.rk-side > :not(nav) { flex-shrink: 0; }
 .rk-navgroup { display: flex; flex-direction: column; gap: 1px; }
 .rk-navgroup > p { margin: 10px 0 2px; padding: 0 8px; height: 20px; display: flex; align-items: center; font: 500 var(--font-size-sm)/16px var(--font-sans); color: var(--muted); }
 /* a foldable group's label is a button with the label's look; folded it shows the count and a right chevron */

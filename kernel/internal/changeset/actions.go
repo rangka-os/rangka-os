@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"path/filepath"
+	"reflect"
 	"sort"
 	"strings"
 	"time"
@@ -15,6 +16,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 	"github.com/rangka-os/rangka-os/kernel/internal/schema"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
+	"github.com/rangka-os/rangka-os/kernel/internal/theme"
 )
 
 func remarshal(in, out any) {
@@ -415,6 +417,9 @@ func (s *Service) Validate(ctx context.Context, a Actor, id string) (*ChangeSet,
 	err = s.blockDestructive(ctx, v, reg)
 	if err == nil {
 		err = s.planApps(ctx, v, reg)
+		if err == nil {
+			err = s.planTheme(ctx, v, reg)
+		}
 	}
 	cleanup()
 	if err != nil {
@@ -660,6 +665,44 @@ func (s *Service) planApps(ctx context.Context, v *Validation, reg *meta.Registr
 		v.Errors = append(v.Errors, meta.Item{Level: "error", Pos: "1:1", Where: "config.rk apps", Code: pe.Code, Message: pe.Msg})
 	}
 	return nil
+}
+
+// planTheme adds a blocking error when the change creates or edits a theme of the business's own (accent, colours
+// or a bundled font other than system) on a plan whose custom_theme flag is false (contract 0067 §7). Pointing
+// config.theme at a theme, or changing mode, radius and density, is always allowed; nothing already there is
+// touched.
+func (s *Service) planTheme(ctx context.Context, v *Validation, reg *meta.Registry) error {
+	if s.DB == nil || reg == nil || reg.Site == nil || s.Reg == nil || len(v.Errors) > 0 {
+		return nil
+	}
+	cur, err := plan.Resolve(ctx, s.DB, reg)
+	if err != nil || cur.Allows(plan.CustomTheme) {
+		return err
+	}
+	var old map[string]*rk.Doc
+	if r := s.Reg(); r != nil && r.Site != nil {
+		old = r.Site.Themes
+	}
+	for _, n := range keysOfDocs(reg.Site.Themes) {
+		d := reg.Site.Themes[n]
+		if o := old[n]; o != nil && reflect.DeepEqual(o.Data, d.Data) {
+			continue
+		}
+		if theme.Custom(meta.AsMap(d.Data)) {
+			v.Errors = append(v.Errors, meta.Item{Level: "error", Pos: "1:1", Where: d.Path, Code: "plan_limit",
+				Message: "Tema buatan sendiri (warna, warna logo, atau font) tersedia mulai paket Juragan Pro. Pilih salah satu tema bawaan, atau naikkan paket."})
+		}
+	}
+	return nil
+}
+
+func keysOfDocs(m map[string]*rk.Doc) []string {
+	out := make([]string, 0, len(m))
+	for k := range m {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
 }
 
 // operatorPlan refuses a change to features.rk while an operator set the tenant's plan (`rangka plan set`,

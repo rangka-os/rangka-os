@@ -8,9 +8,13 @@ organisation starts from a tested standard. Light and dark are always both produ
 ```yaml
 # themes/kopi_senja.rk
 name: kopi_senja
-extends: rangka/standard     # rangka/retail, rangka/clinic
+extends: rangka/standard     # rangka/laut, rangka/daun, rangka/senja, rangka/anggur, rangka/arang
 mode: system                 # light | dark | system
-color:
+accent: '#7a4520'            # one colour is enough: the kernel derives the rest
+button: accent               # ink (default) | accent
+neutral: stone               # stone (default) | slate | gray
+font: {sans: plus-jakarta-sans}
+color:                       # optional, per token, applied last
   brand: '#9a5b2e'           # a string sets light and derives dark
   chart-1: {light: '#0c66e4', dark: '#579dff'}   # or set both modes yourself
 radius: standard             # sharp | standard | round
@@ -20,6 +24,15 @@ density: standard            # compact | standard | comfortable
 - **`rangka/standard`** is the Rangka base: Ink (#1C1917) primary buttons, deep Bata (#A33B23) links and selection on a
   Kapur (#F6EDE6) tint, a Bata Terang (#E0623F) focus ring, warm stone neutrals; danger stays red. A company theme
   overrides only what it needs, like the coffee `brand` and the first chart colour above.
+- **One colour is enough** (contract 0067): `accent` derives `brand`, `selected`, `row-selected`, `selected-ink`,
+  `link`, `focus` and `chart-1`, light and dark, each moved in 1 % lightness steps until it passes the contrast floors.
+  `button: accent` also derives the primary button; `neutral` picks warm stone, cool slate or plain gray.
+- **Bundled themes**: `standard` (Standar), `laut`, `daun` (was `clinic`), `senja` (was `retail`), `anggur`, `arang`.
+  The old names still load with a `renamed_template` warning.
+- **Locked tokens**: status colours (`ok`, `warn`, `bad`, `info`, `discovery` and their variants), `raka*`, `spark`,
+  `helmet`, `scrim` and `mascot-ink` keep their meaning in every theme (`locked_token`).
+- **Fonts**: `font.sans` and `font.display` take a bundled font: `system`, `inter`, `plus-jakarta-sans`,
+  `nunito-sans`, `ibm-plex-sans`, `source-serif-4` (`unknown_font`).
 - **Tokens** are the design system's names: `primary`, `selected`, `selected-ink`, `brand`, `link`, `chart-1` … `chart-6`.
 - **Dark derivation**: a colour given once keeps its hue; backgrounds and tints go to lightness 100 − L·0.6, accents
   gain 15 lightness, then contrast floors apply.

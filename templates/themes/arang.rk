@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/theme.json
+# Black and white, highest contrast (contract 0067 §3). Tokens are derived from accent, button and neutral by the kernel.
+name: arang
+label: {id: Arang, en: Charcoal}
+extends: rangka/standard
+accent: '#44403c'
+button: ink
+neutral: gray

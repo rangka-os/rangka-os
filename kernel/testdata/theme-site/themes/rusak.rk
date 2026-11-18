@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/theme.json
+name: rusak
+label: {id: Rusak}
+extends: rangka/clinic
+accent: '#0c66e4'
+font: {sans: Comic Sans}
+color: {ok: '#00ff00', raka: '#123456', link: '#eeeeee'}

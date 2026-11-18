@@ -46,13 +46,14 @@ test("parseRoute covers every hash form", () => {
   assert.deepStrictEqual(plain(p("#/proses/lead_to_cash")), { kind: "process", process: "lead_to_cash" });
   assert.strictEqual(p("#/nope/x").kind, "notfound");
   assert.deepStrictEqual(plain(p("#/pengaturan/tim")), { kind: "team" });
+  assert.deepStrictEqual(plain(p("#/pengaturan/tampilan")), { kind: "appearance" });
   assert.deepStrictEqual(plain(p("#/masuk/tautan?t=abc")), { kind: "signinLink" });
 });
 
 test("Tim (contract 0056 §4): only an owner gets the entry, after Modul dan sambungan", () => {
   const owner = { ...META, user: { roles: ["owner"] } };
   const n = plain(A.sideNav(owner, { catalogue: true }));
-  assert.deepStrictEqual(n.pinned.map((i) => [i.id, i.label]).slice(-2), [["pengaturan/katalog", "Modul dan sambungan"], ["pengaturan/tim", "Tim"]]);
+  assert.deepStrictEqual(n.pinned.map((i) => [i.id, i.label]).slice(-3), [["pengaturan/katalog", "Modul dan sambungan"], ["pengaturan/tim", "Tim"], ["pengaturan/tampilan", "Tampilan"]]);
   assert.ok(plain(A.navGroups(owner, {})).some((g) => g.items.some((i) => i.id === "pengaturan/tim")));
   for (const m of [META, { ...META, user: { roles: ["sales_manager"] } }]) {
     assert.ok(!plain(A.sideNav(m, { catalogue: true })).pinned.some((i) => i.id === "pengaturan/tim"));

@@ -23,17 +23,17 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Mail connectors (contract 0067): a connector with a top-level mail: block names its receive (IMAP or POP3) and
+// Mail connectors (contract 0068): a connector with a top-level mail: block names its receive (IMAP or POP3) and
 // send (SMTP) servers, and its actions say mail: fetch or mail: send instead of request:. A fetch action is what a
 // poll trigger calls: its answer {messages, cursor} goes through for_each, emit, dedupe and cursor: like an HTTP
 // answer. A send action is a call job like any other, with retry and dead-letter. The password is resolved at send
 // time, every connection dials through the egress policy, and errors are scrubbed before they are written.
 
-// ConnectorAttachmentModel is the rk_attachments model of files a connector received (contract 0067 §2): they belong
+// ConnectorAttachmentModel is the rk_attachments model of files a connector received (contract 0068 §2): they belong
 // to no record yet, and only the owner may download them.
 const ConnectorAttachmentModel = "_connector"
 
-// Limits of contract 0067.
+// Limits of contract 0068.
 const (
 	mailFetchLimit    = 25
 	mailMaxMessage    = 25 << 20
@@ -43,7 +43,7 @@ const (
 	mailMaxRecipients = 50
 )
 
-// Mail error codes (contract 0067 §5); mail.ErrTLSRequired, mail.ErrAuth and mail.ErrConfig are the protocol's own.
+// Mail error codes (contract 0068 §5); mail.ErrTLSRequired, mail.ErrAuth and mail.ErrConfig are the protocol's own.
 var (
 	ErrMailInput = errors.New("mail_input")
 )
@@ -223,7 +223,7 @@ func (rt *Runtime) mailOptions(connector, hello string) mail.Options {
 	return mail.Options{Dial: dial, TLS: rt.MailTLS, Hello: hello}
 }
 
-// callMail runs a mail action after Call's gate (contract 0067 §2, §3).
+// callMail runs a mail action after Call's gate (contract 0068 §2, §3).
 func (rt *Runtime) callMail(ctx context.Context, org, connector, action string, c, a map[string]any, input map[string]any) (map[string]any, error) {
 	setup, err := rt.renderMail(ctx, org, connector, c)
 	if err != nil {
@@ -327,7 +327,7 @@ func (rt *Runtime) failMail(ctx context.Context, org, connector, action string, 
 	return out
 }
 
-// mailFetch reads new messages (contract 0067 §2). The cursor is imap:<uidvalidity>:<last uid>:<folder> or
+// mailFetch reads new messages (contract 0068 §2). The cursor is imap:<uidvalidity>:<last uid>:<folder> or
 // pop3:<hashes of the UIDLs seen>; a missing or foreign cursor makes a baseline that emits nothing.
 func (rt *Runtime) mailFetch(ctx context.Context, org, connector string, s *mailSetup, srv mail.Server, in map[string]any) (map[string]any, map[string]any, error) {
 	cursor, _ := in["cursor"].(string)
@@ -435,7 +435,7 @@ func addrList(l []mail.Address) []any {
 	return out
 }
 
-// mailMessage parses one fetched message into the fields of contract 0067 §2 and stores its attachments.
+// mailMessage parses one fetched message into the fields of contract 0068 §2 and stores its attachments.
 func (rt *Runtime) mailMessage(ctx context.Context, org, connector string, f mail.Fetched) (map[string]any, error) {
 	r, err := mail.Parse(f.Raw, mail.ParseLimits{Text: mailMaxText, Attachment: mailMaxAttachment}, mail.HeaderOnly(f.HeaderOnly))
 	if err != nil {
@@ -522,7 +522,7 @@ func (rt *Runtime) storeMailAttachments(ctx context.Context, org, connector stri
 	return out, nil
 }
 
-// mailSend builds and sends one message (contract 0067 §3).
+// mailSend builds and sends one message (contract 0068 §3).
 func (rt *Runtime) mailSend(ctx context.Context, org, connector string, s *mailSetup, srv mail.Server, in map[string]any) (map[string]any, map[string]any, error) {
 	bad := func(format string, args ...any) error {
 		return &jobs.Permanent{Err: fmt.Errorf("%w: "+format, append([]any{ErrMailInput}, args...)...)}

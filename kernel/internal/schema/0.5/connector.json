@@ -246,7 +246,7 @@
               "fetch",
               "send"
             ],
-            "description": "A mail action instead of request: (contract 0067): fetch reads new messages from the receive server (a poll trigger's action), send sends one over SMTP. Needs the connector's mail: block"
+            "description": "A mail action instead of request: (contract 0068): fetch reads new messages from the receive server (a poll trigger's action), send sends one over SMTP. Needs the connector's mail: block"
           },
           "request": {
             "type": "object",
@@ -340,7 +340,7 @@
       "required": [
         "password"
       ],
-      "description": "The mail servers of a mail connector (contract 0067): every value a template over {auth.x} and {settings.x}, or a literal. Its actions say mail: fetch or mail: send",
+      "description": "The mail servers of a mail connector (contract 0068): every value a template over {auth.x} and {settings.x}, or a literal. Its actions say mail: fetch or mail: send",
       "properties": {
         "receive": {
           "type": "object",

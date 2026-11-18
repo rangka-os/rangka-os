@@ -35,7 +35,7 @@ type Runtime struct {
 	// StartFlow queues a flow with an event in qr (the transaction that records the event key; the server wires the
 	// queue); nil = events are only audited.
 	StartFlow func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, uniqueKey string) error
-	// Files stores the attachments a mail connector receives (contract 0067 §2); nil = files capability off.
+	// Files stores the attachments a mail connector receives (contract 0068 §2); nil = files capability off.
 	Files files.Store
 	// FilesFull says the plan's file storage is full (contract 0057 §1): received attachments are then listed, not kept.
 	FilesFull func() bool
@@ -99,7 +99,7 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	if err := rt.gate(ctx, org, connector, action, c); err != nil {
 		return nil, rt.fail(ctx, org, connector, action, nil, err)
 	}
-	if mailOp(a) != "" { // a mail action (contract 0067)
+	if mailOp(a) != "" { // a mail action (contract 0068)
 		return rt.callMail(ctx, org, connector, action, c, a, input)
 	}
 	req, err := rt.Render(ctx, org, connector, action, input)

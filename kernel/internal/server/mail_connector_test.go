@@ -15,7 +15,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/mail/mailtest"
 )
 
-// mailConnector is the shape of rangka-connectors/email (contract 0067), kept here so the kernel's tests do not
+// mailConnector is the shape of rangka-connectors/email (contract 0068), kept here so the kernel's tests do not
 // depend on the catalogue's copy.
 const mailConnector = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
 name: mail_test
@@ -112,7 +112,7 @@ func leadsByEmail(t *testing.T, e *env, email string) int {
 	return n
 }
 
-// Contract 0067 gate: a mail connector reads new mail over IMAP (and POP3), starts a flow once per message with its
+// Contract 0068 gate: a mail connector reads new mail over IMAP (and POP3), starts a flow once per message with its
 // fields and attachments, replays nothing old, sends over SMTP with retries for 4xx only, never leaks the password
 // and dials through the egress policy.
 func TestMailConnector(t *testing.T) {
@@ -134,7 +134,7 @@ func TestMailConnector(t *testing.T) {
 	e.login()
 	stopScheduledPolls(t, e)
 	ctx := context.Background()
-	const pass = "app-pass-0067-zzzz"
+	const pass = "app-pass-0068-zzzz"
 	certs := mailtest.NewTLS(t)
 	e.s.Connectors.MailTLS = certs.Client
 	box := mailtest.StartIMAP(t, certs, false, "toko@kopisenja.id", pass)
@@ -244,7 +244,7 @@ func TestMailConnector(t *testing.T) {
 		t.Fatalf("bad address: %v", err)
 	}
 	// a server that echoes a wrong password: mail_auth, not retried, and the value is scrubbed everywhere
-	const wrong = "wrong-pass-0067-yyyy"
+	const wrong = "wrong-pass-0068-yyyy"
 	set("password", wrong)
 	if err := send("budi@pelanggan.id"); !errors.As(err, &perm) || !strings.Contains(err.Error(), "mail_auth") || strings.Contains(err.Error(), wrong) {
 		t.Fatalf("wrong password: %v", err)

@@ -299,7 +299,7 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 			return err
 		}}
 	if fstore != nil {
-		s.Connectors.Files = fstore // a mail connector keeps the attachments it receives (contract 0067 §2)
+		s.Connectors.Files = fstore // a mail connector keeps the attachments it receives (contract 0068 §2)
 	}
 	s.Connectors.FilesFull = func() bool {
 		r := e.Reg()

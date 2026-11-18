@@ -122,7 +122,7 @@ func (r *Resolver) Render(ctx context.Context, org, connector, action string, in
 		return nil, err
 	}
 	if op := mailOp(a); op != "" {
-		// a mail action (contract 0067): the servers and the password, checked as Call will use them
+		// a mail action (contract 0068): the servers and the password, checked as Call will use them
 		setup, err := r.renderMail(ctx, org, connector, c)
 		if err != nil {
 			return nil, err

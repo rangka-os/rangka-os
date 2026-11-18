@@ -126,9 +126,9 @@ crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must ma
 ../broken-connectors/leaky/connector.rk:23:44  error  unknown_action  triggers/2/action  connector leaky has no action "templated_okk"; did you mean "templated_ok"?
 ../broken-connectors/leaky/connector.rk:27:20  error  unknown_action  triggers/3/each/action  connector leaky has no action "list_outletz"
 ../broken-connectors/mail_bad/connector.rk:21:5  error  schema  actions/1  {'name': 'both', 'mail': 'send', 'request': {'method': 'GET', 'url': 'https://api.example.com/ping'}} is valid under each of {'required': ['mail']}, {'requir…
-../broken-connectors/mail_bad/connector.rk:18:13  error  mail_password_not_secret  mail/password  mail.password must be {auth.<field>} of a secret auth field, not "{auth.password}" (contract 0067)
-../broken-connectors/mail_bad/connector.rk:17:13  error  secret_misplaced  mail/username  mail.username names secret token: only mail.password may carry it (contract 0067)
-../broken-connectors/mail_orphan/connector.rk:8:30  error  mail_missing  actions/0/mail  action "send_email" is a mail action but connector mail_orphan has no mail: block (contract 0067)
+../broken-connectors/mail_bad/connector.rk:18:13  error  mail_password_not_secret  mail/password  mail.password must be {auth.<field>} of a secret auth field, not "{auth.password}" (contract 0068)
+../broken-connectors/mail_bad/connector.rk:17:13  error  secret_misplaced  mail/username  mail.username names secret token: only mail.password may carry it (contract 0068)
+../broken-connectors/mail_orphan/connector.rk:8:30  error  mail_missing  actions/0/mail  action "send_email" is a mail action but connector mail_orphan has no mail: block (contract 0068)
 ../broken-connectors/signed_bad/connector.rk:14:10  error  sign_key_not_secret  auth/sign/key  auth.sign.key "secret_key" must name a secret auth field (contract 0002)
 ../broken-connectors/signed_bad/connector.rk:21:43  error  sign_key_not_secret  triggers/0/verify/signature/key  verify.signature.key "auth.client_id" must name a secret auth field (contract 0002)
 ../broken-connectors/whatsapp_business/connector.rk:4:10  error  schema  version  '1.0' does not match '^[0-9]+\\.[0-9]+\\.[0-9]+$'

@@ -87,7 +87,7 @@ func (s *Server) attachmentRecord(w http.ResponseWriter, r *http.Request, c *cal
 		return nil, nil, false
 	}
 	if row.Model == connectors.ConnectorAttachmentModel {
-		// a file a mail connector received belongs to no record yet: the owner's, like connector keys (contract 0067 §2)
+		// a file a mail connector received belongs to no record yet: the owner's, like connector keys (contract 0068 §2)
 		if !isOwner(c) {
 			attachmentNotFound(w)
 			return nil, nil, false

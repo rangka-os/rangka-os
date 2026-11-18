@@ -83,7 +83,7 @@ func TestWriteActions(t *testing.T) {
 		map[string]any{"name": "list", "request": map[string]any{"method": "GET"}},
 		map[string]any{"name": "pay", "request": map[string]any{"method": "POST"}},
 		map[string]any{"name": "drop", "request": map[string]any{"method": "delete"}},
-		map[string]any{"name": "fetch_email", "mail": "fetch"}, // contract 0067: a fetch reads, a send writes
+		map[string]any{"name": "fetch_email", "mail": "fetch"}, // contract 0068: a fetch reads, a send writes
 		map[string]any{"name": "send_email", "mail": "send"}}}
 	if got, want := WriteActions(c), []string{"pay", "drop", "send_email"}; !reflect.DeepEqual(got, want) {
 		t.Errorf("got %v want %v", got, want)

@@ -1,4 +1,4 @@
-# 0067: Mail connectors (IMAP/POP3 receive, SMTP send)
+# 0068: Mail connectors (IMAP/POP3 receive, SMTP send)
 
 Status: proposed (18 Nov 2026) · Owner: rangka-os (schema, validators, kernel) · Affects: rangka-connectors (`email`),
 rangka-cloud (Integrasi card), rangka-apps (flows on `email.email_received`) · Builds on: 0002, 0011, 0017, 0033

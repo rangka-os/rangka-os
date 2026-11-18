@@ -1,4 +1,4 @@
-// Package mail speaks the mail protocols the kernel uses (contract 0067): SMTP to send, IMAP and POP3 to read a
+// Package mail speaks the mail protocols the kernel uses (contract 0068): SMTP to send, IMAP and POP3 to read a
 // mailbox, and MIME to build and parse messages. It knows nothing of connectors, orgs or secrets: callers pass the
 // server, the credentials and a dialer (the connector runtime passes one that enforces the egress policy), so
 // notify.email can share the SMTP sender.

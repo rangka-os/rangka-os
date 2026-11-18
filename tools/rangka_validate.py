@@ -872,6 +872,28 @@ def check_company_connector(rep, p, cn, c, origin, dup, flows=None, allmodels=No
         rep.add("warn", p, "(root)", "money_unflagged", f'company connector "{cn}" is called or triggered by a flow that creates or updates a model with money or stock fields: add money: true so writes need the owner\'s confirmation (contract 0033 §4)')
 
 
+def provided_by(c):
+    """Contract 0063 section 2; twin of meta.ProvidedBy: experimental.provided_by until the key is released."""
+    exp = c.get("experimental")
+    return "host" if isinstance(exp, dict) and exp.get("provided_by") == "host" else "owner"
+
+
+def check_host_connector(rep, p, cn, c):
+    """Contract 0063 section 2: a host connector is a catalogue connector, and the host provides every auth field."""
+    if provided_by(c) != "host":
+        return
+    if cn.startswith("x_"):
+        rep.add("error", p, "experimental/provided_by", "host_connector_company", f'company connector "{cn}" cannot be provided_by: host: only a catalogue connector is served by the host (contract 0063 §2)')
+    fields = (c.get("auth") or {}).get("fields") if isinstance(c.get("auth"), dict) else None
+    for i, f in enumerate(fields if isinstance(fields, list) else []):
+        if not isinstance(f, dict):
+            continue
+        if "default" in f:
+            rep.add("error", p, f"auth/fields/{i}/default", "host_connector_fields", f'auth field "{pystr(f.get("name"))}" of host connector "{cn}" has a default: its value comes from the host only (contract 0063 §2)')
+        if f.get("generate") is True:
+            rep.add("error", p, f"auth/fields/{i}/generate", "host_connector_fields", f'auth field "{pystr(f.get("name"))}" of host connector "{cn}" is generated: its value comes from the host only (contract 0063 §2)')
+
+
 def check_secret_hosts(rep, p, c):
     """Contract 0017 §1, §5: a secret field has no default; an action carries a secret only in headers (the query
     string with allow_secret_in: [query], as a warning), uses https and, when the connector declares hosts:, sends it
@@ -1139,6 +1161,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
         if isinstance(c, dict):
             check_company_connector(rep, p, cn, c, conn_origin.get(cn), cn in conn_dup, flows, allmodels)
+            check_host_connector(rep, p, cn, c)
             check_secret_hosts(rep, p, c)
             check_poll_triggers(rep, p, c)
 

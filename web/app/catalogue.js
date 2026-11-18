@@ -8,11 +8,38 @@
  * card (Ubah, contract 0015) shows its preview, risk word and approve/apply. Connecting a connector comes later (0017).
  * The sidebar entry only exists when features.catalogue is on (api.js: the route answers 200). Anyone else who
  * opens the address sees "no access".
+ *
+ * Host connectors (contract 0063 §2, provided_by: host) carry the ◆ "Disediakan Rangka Cloud" marker. Rangka Cloud
+ * sets their keys, so one that is installed without keys says "Menunggu Rangka Cloud", never "Perlu kunci" or
+ * "Atur kunci". One this kernel does not serve (host_unavailable) shows only under the filter Semua.
  */
 (function (global) {
   "use strict";
 
   var RA = global.RangkaApp = global.RangkaApp || {};
+
+  var CONN_STATE = { available: ["default", "Belum dipasang"], needs_auth: ["warn", "Perlu kunci"], untested: ["new", "Belum diuji"],
+    ready: ["ok", "Siap"], error: ["bad", "Gangguan"], host_unavailable: ["default", "Tidak tersedia di sini"] };
+  var HOST_MARK = "◆ Disediakan Rangka Cloud";
+
+  /** A host connector (contract 0063 §2): Rangka Cloud provides its keys. */
+  function isHost(c) { return !!c && c.provided_by === "host"; }
+  /** The status word of a connector; a host connector waiting for its keys says "Menunggu Rangka Cloud". */
+  function connStatus(c) {
+    if (isHost(c) && c.state === "needs_auth") return ["warn", "Menunggu Rangka Cloud"];
+    return CONN_STATE[c.state] || ["default", c.state];
+  }
+  /** Whether a card shows under the filter (all, on, off): a host connector this kernel does not serve only under Semua. */
+  function shownBy(x, filter) {
+    if (filter === "all") return true;
+    if (x.state === "host_unavailable") return false;
+    return (filter === "on") === !!x.installed;
+  }
+  RA.catalogueConnStatus = connStatus;
+  RA.catalogueShownBy = shownBy;
+  RA.catalogueIsHost = isHost;
+  RA.CATALOGUE_HOST_MARK = HOST_MARK;
+
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
   var h = React.createElement, useState = React.useState, useEffect = React.useEffect, useContext = React.useContext;
@@ -21,16 +48,12 @@
 
   var CATEGORIES = [["sales", "Penjualan"], ["purchasing", "Pembelian"], ["stock", "Stok"], ["finance", "Keuangan"], ["tax", "Pajak"],
     ["people", "Orang"], ["operations", "Operasional"], ["messaging", "Pesan"], ["payments", "Pembayaran"], ["marketplace", "Marketplace"], ["other", "Lainnya"]];
-  var CONN_STATE = { available: ["default", "Belum dipasang"], needs_auth: ["warn", "Perlu kunci"], untested: ["new", "Belum diuji"],
-    ready: ["ok", "Siap"], error: ["bad", "Gangguan"] };
-
   /** The status word of a module or app (§6): Terpasang, Belum dipasang, Tidak termasuk paket. */
   function unitStatus(u) {
     if (u.installed) return ["ok", "Terpasang"];
     if (u.in_plan === false) return ["warn", "Tidak termasuk paket"];
     return ["default", "Belum dipasang"];
   }
-  function connStatus(c) { return CONN_STATE[c.state] || ["default", c.state]; }
 
   /** One line in plain words: the summary, else the model labels a module adds ("Menambah: Pelanggan, Pemasok"). */
   function summaryOf(x) {
@@ -50,7 +73,8 @@
     var x = p.item, st = p.status;
     return h("li", null, h("button", { type: "button", className: "ap-cat-card", onClick: p.onOpen, "data-name": x.name },
       h("span", { className: "ap-cat-icon", "aria-hidden": "true" }, h(R.Icon, { name: p.icon })),
-      h("span", { className: "ap-cat-text" }, h("b", null, titleOf(x)), summaryOf(x) ? h("span", { className: "ap-muted" }, summaryOf(x)) : null),
+      h("span", { className: "ap-cat-text" }, h("b", null, titleOf(x)), summaryOf(x) ? h("span", { className: "ap-muted" }, summaryOf(x)) : null,
+        isHost(x) ? h("span", { className: "ap-cat-host" }, HOST_MARK) : null),
       h(R.Lozenge, { tone: st[0] }, st[1])));
   }
 
@@ -60,13 +84,16 @@
 
   function Detail(p) {
     var x = p.item, conn = p.tab === "sambungan", st = conn ? connStatus(x) : unitStatus(x), rows = [];
+    var host = conn && isHost(x);
     if (conn) {
+      if (host) rows.push(["Layanan", HOST_MARK]);
       if (x.vendor) rows.push(["Penyedia", x.vendor]);
       rows.push(["Mengirim data ke", (x.hosts || []).length ? x.hosts.join(", ") : "Belum tercatat"]);
       rows.push(["Dipakai oleh", (x.used_by || []).length ? x.used_by.length + " alur kerja" : "Belum dipakai"]);
       if (x.money) rows.push(["Uang", "Menyentuh pembayaran atau saldo"]);
       var keys = (x.auth || []).map(function (f) { return (L(f.label) || f.name) + (f.set ? " (terisi)" : " (belum)"); });
-      rows.push(["Kunci", keys.length ? keys.join(", ") : "Tidak perlu kunci"]);
+      if (host) rows.push(["Kunci", "Diisi oleh Rangka Cloud"]);
+      else rows.push(["Kunci", keys.length ? keys.join(", ") : "Tidak perlu kunci"]);
     } else {
       var models = (x.models || []).map(function (m) { return L(m.label) || m.name; });
       rows.push(["Menambah", models.length ? models.join(", ") : "Tidak menambah data baru"]);
@@ -101,7 +128,11 @@
       actions ? h(R.DrawerSection, null, err ? h(R.Alert, { tone: "bad", title: err }) : null,
         h("div", { className: "ap-cat-acts" }, actions),
         !x.installed || removable ? h("p", { className: "ap-muted" }, "Perubahan ini jadi usulan yang perlu disetujui dulu sebelum berlaku.") : null) : null,
-      conn && x.state === "needs_auth" ? h(R.DrawerSection, null, h("p", { className: "ap-muted" }, "Kunci diatur oleh pemilik usaha. Mengisi kunci dari sini menyusul.")) : null,
+      conn && x.state === "needs_auth" ? h(R.DrawerSection, null, h("p", { className: "ap-muted" }, host
+        ? "Menunggu Rangka Cloud mengisi kuncinya. Kamu tidak perlu mengisi apa pun."
+        : "Kunci diatur oleh pemilik usaha. Mengisi kunci dari sini menyusul.")) : null,
+      conn && x.state === "host_unavailable" ? h(R.DrawerSection, null, h("p", { className: "ap-muted" },
+        "Layanan ini disediakan Rangka Cloud dan hanya bisa dipakai di usaha yang berjalan di Rangka Cloud.")) : null,
       h(R.DrawerSection, null, h("p", { className: "ap-cat-tech" }, (conn ? "Konektor " : x.kind === "module" ? "Modul " : "App ") + x.name + (x.version ? " · versi " + x.version : ""))));
   }
 
@@ -124,7 +155,7 @@
     var byName = {};
     units.forEach(function (u) { byName[u.name] = u; });
     var items = tab === "modul" ? units : conns;
-    var shown = items.filter(function (x) { return matches(x, q) && (filter === "all" || (filter === "on") === !!x.installed); });
+    var shown = items.filter(function (x) { return matches(x, q) && shownBy(x, filter); });
     var tabs = [{ value: "modul", label: "Modul", count: s.data ? units.length : undefined }, { value: "sambungan", label: "Sambungan", count: s.data ? conns.length : undefined }];
     var cur = open && items.filter(function (x) { return x.name === open; })[0];
 

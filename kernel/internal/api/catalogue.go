@@ -169,6 +169,13 @@ func (s *Server) catalogueConnectors(ctx context.Context, reg *meta.Registry) []
 		summary, category, icon := catalogueKeys(c)
 		// auth fields: name, label, secret and set, from the same answer as GET /connectors/{c}/auth (contract 0017
 		// §3). No value is ever included. A connector needs auth while a required field is unset.
+		// a host connector (contract 0063 §2) gets its fields from the host: each says source: host, and the entry
+		// says provided_by: host so the web app marks it ◆ "Disediakan Rangka Cloud"
+		host := meta.ProvidedBy(c) == "host"
+		var providedBy, source any
+		if host {
+			providedBy, source = "host", "host"
+		}
 		auth, needsAuth := []any{}, false
 		set := map[string]bool{}
 		if s.Secrets != nil {
@@ -178,8 +185,12 @@ func (s *Server) catalogueConnectors(ctx context.Context, reg *meta.Registry) []
 			f := meta.AsMap(x)
 			fn := meta.Str(f, "name")
 			required := f["required"] != false // an auth field is needed unless it says required: false
-			auth = append(auth, map[string]any{"name": fn, "label": f["label"], "secret": f["secret"] == true,
-				"required": required, "set": set[fn]})
+			field := map[string]any{"name": fn, "label": f["label"], "secret": f["secret"] == true,
+				"required": required, "set": set[fn]}
+			if host {
+				field["source"] = source
+			}
+			auth = append(auth, field)
 			needsAuth = needsAuth || (required && !set[fn])
 		}
 		provides := []string{}
@@ -217,7 +228,11 @@ func (s *Server) catalogueConnectors(ctx context.Context, reg *meta.Registry) []
 			errs, last = h["errors_24h"], h["last_event_at"]
 		}
 		state := "available"
-		if installed[name] {
+		if host && !s.HostConnectors[name] {
+			// not served by this kernel (RANGKA_HOST_CONNECTORS): it cannot be installed, and an installed one is
+			// left without its host
+			state = "host_unavailable"
+		} else if installed[name] {
 			switch {
 			case h != nil && h["ok"] == false:
 				state = "error"
@@ -232,6 +247,7 @@ func (s *Server) catalogueConnectors(ctx context.Context, reg *meta.Registry) []
 			"vendor": c["vendor"], "docs": c["docs"], "version": c["version"], "company": strings.HasPrefix(name, "x_"),
 			"money": money, "hosts": hosts, "provides": provides, "ports_selected": selected, "used_by": usedBy,
 			"auth": auth, "installed": installed[name], "state": state, "errors_24h": errs, "last_event_at": last,
+			"provided_by": providedBy,
 		})
 	}
 	return out

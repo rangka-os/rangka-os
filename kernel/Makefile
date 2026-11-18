@@ -41,7 +41,8 @@ validate: build
 	$(BIN) validate --apps $(APPS) --site $(SITE) --connectors $(CONN)
 
 # The Go validator and rangka_validate.py must print the same reports: the real apps + site + connectors, the overlay and numbering sites,
-# the company connector sites (contract 0033: valid, and broken with every connector code), the broken apps copy,
+# the company connector sites (contract 0033: valid, and broken with every connector code), the host connector
+# sites (contract 0063: valid, and broken with both host connector codes), the broken apps copy,
 # the broken apps + broken site (overlays, theme contrast) + broken connectors, and the
 # contract 0001 layout (modules/ + apps/), valid and broken, print formats + letterheads, valid and broken, and
 # processes (contract 0014: the canvas snapshot and a broken set), declared stock moves (contract 0021), valid and broken, work screens (contract 0030), valid and broken, the catalogue keys (contract 0036), valid and broken, and config.modules (contract 0032), valid and broken.
@@ -53,6 +54,8 @@ compare-python: build
 	            "$(APPS) --site testdata/numbering-site --connectors $(CONN)" "testdata/broken-apps" \
 	            "$(APPS) --site testdata/company-connector/site --connectors $(CONN)" \
 	            "testdata/modules-apps/apps --site testdata/broken-company-connector/site --connectors testdata/broken-company-connector/connectors" \
+	            "testdata/modules-apps/apps --site testdata/host-connector/site --connectors testdata/host-connector/connectors" \
+	            "testdata/modules-apps/apps --site testdata/broken-host-connector/site --connectors testdata/broken-host-connector/connectors" \
 	            "$(APPS) --site testdata/rate-site --connectors $(CONN)" "$(APPS) --site testdata/theme-site --connectors $(CONN)" "$(APPS) --site testdata/broken-rate-site --connectors $(CONN)" \
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors" \
 	            "testdata/modules-apps/apps --site testdata/modules-apps/site" \

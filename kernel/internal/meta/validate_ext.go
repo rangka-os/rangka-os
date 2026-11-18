@@ -149,6 +149,7 @@ func (v *validator) more() {
 		}
 		if c := asMap(d.Data); c != nil {
 			v.companyConnector(cn, d, c, all)
+			v.hostConnector(cn, d, c)
 			v.secretHosts(d, c)
 			v.pollTriggers(d, c)
 		}

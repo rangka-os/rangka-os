@@ -17,7 +17,7 @@ import (
 )
 
 // runNotifyEmailJob sends the mail a notify step queued (engine.NotifyEmailJob) with mail.Send, the same SMTP client
-// mail connectors use (contract 0067), and the notify.email settings and secrets of now: a password rotated after the
+// mail connectors use (contract 0068), and the notify.email settings and secrets of now: a password rotated after the
 // step is used, and nothing secret sits in the job's args. A send writes the audit entry notify.email.sent; a failure
 // is in the job's errors on every attempt and, once the job gives up (its last attempt, or an error a retry cannot fix:
 // a 5xx reply, failed authentication, a bad setting), in notify.email.failed. When the site switched notify.email back

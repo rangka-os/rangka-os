@@ -4,7 +4,7 @@
  * Rules of colour roles:
  *   brand  : the theme's brand colour; the business tile is ink (or the business logo)
  *   UI     : neutral grey (v3.1), primary button = ink; selection, links and focus = the business theme's accent
- *            (default Bata; themes Biru, Hijau, Oranye in templates/themes)
+ *            (default Bata; the bundled themes of contract 0067 in templates/themes)
  *   kind   : module colours (sales blue, money teal, work purple, stock gold) for charts and kind tiles
  *   status : ok/warn/bad/info only for real states, always with words
  *   Raka   : the green Raka character, everywhere Raka appears
@@ -234,7 +234,11 @@
 :root[data-brand="juragan"][data-theme="dark"] { --on-brand: #161412; }
 :root[data-brand="juragan"] { --k-auto: #6d4ad6; --k-auto-text: #5b3cc4; --k-auto-subtle: #f1ecfd; --k-auto-line: #c4b5f0; }
 :root[data-brand="juragan"][data-theme="dark"] { --k-auto: #b8a5f3; --k-auto-text: #c9b9f7; --k-auto-subtle: #2b2238; --k-auto-line: #4a3a78; }
-[data-brand="juragan"] .pd { --lane-data: var(--ink-2); --lane-data-s: var(--soft); --lane-work: var(--brand); --lane-work-s: var(--selected); --lane-auto: var(--k-auto); --lane-auto-s: var(--k-auto-subtle); }
+[data-brand="juragan"] .pd { --lane-data: var(--ink-2); --lane-data-s: var(--soft); --lane-work: var(--link); --lane-work-s: var(--selected); --lane-auto: var(--k-auto); --lane-auto-s: var(--k-auto-subtle); }
+/* teks di atas warna langkah kerja: link dijamin 4,5:1 di tiap tema (brand hanya 3:1); nomor memakai warna teks-di-atas-merek,
+   label panah memakai pasangan selected-ink di atas selected */
+[data-brand="juragan"] .pd-num { color: var(--on-brand, #ffffff); }
+[data-brand="juragan"] .pd-elabel { color: var(--selected-ink); }
 :root[data-brand="juragan"]:not([data-theme="dark"]) .pd-vp, :root[data-brand="juragan"]:not([data-theme="dark"]) .pd:not(.is-narrow), :root[data-brand="juragan"]:not([data-theme="dark"]) .pd.is-narrow {
   background-image: radial-gradient(circle, var(--line-strong) 1px, transparent 1.2px); }
 [data-brand="juragan"] .pd-detail .pd-d-list.is-auto .pd-ic { background: var(--k-auto-subtle); color: var(--k-auto-text); }

@@ -109,6 +109,15 @@ func (e Egress) control(_, address string, _ syscall.RawConn) error {
 	return nil
 }
 
+// Control is the dialer hook that enforces the policy on connections that are not HTTP (SMTP for notify.email):
+// nil when the policy is open, else a net.Dialer.Control that refuses an address the policy does not allow.
+func (e Egress) Control() func(network, address string, c syscall.RawConn) error {
+	if !e.Public {
+		return nil
+	}
+	return e.control
+}
+
 // EgressExempt is implemented by an in-process RoundTripper that never dials (a test's fake vendor). The guard
 // passes such a transport through; any other transport that is not an *http.Transport is refused under the public
 // policy, since the guard cannot put its dialer under it (a wrapping transport would otherwise switch the policy off).

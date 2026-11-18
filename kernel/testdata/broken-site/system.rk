@@ -8,7 +8,7 @@ realtime: {driver: postgres, transports: [sse]}
 files: {driver: local, path: ./data/files, max_upload_mb: 25}
 search: {driver: postgres, vectors: false}
 notify:
-  email: {driver: log, from: Kopi Senja <halo@kopisenja.id>}
+  email: {driver: smtp, host: smtp.kopisenja.id, username: '${RANGKA_SMTP_USER}', password: hunter2, from: Kopi Senja <halo@kopisenja.id>}
   push: {enabled: false, driver: log}
   whatsapp: {enabled: true, connector: whatsapp_business}
 auth:

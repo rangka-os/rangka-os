@@ -86,6 +86,7 @@ internal/auth (Rangka ID: sessions, rk_ tokens, OIDC)   internal/mcp (JSON-RPC t
 | `internal/mcp` | MCP over Streamable HTTP (JSON responses), tools fixed by CONTRACTS. |
 | `internal/api` | HTTP handlers. |
 | `internal/backup` | `rangka backup` and `rangka restore`: native `COPY` of every table plus site, apps, modules, connectors and files, with checksums. |
+| `internal/mail` (notify) | `mail.NotifyDriver` / `mail.NotifyConfig` read `system.rk notify.email` for `mail.Send`; `notify_email` jobs send flow notifications with it. |
 | `internal/files` | Blob store for attachments: content-addressed files on local disk, per org. |
 | `internal/imports` | CSV/XLSX imports: read, map, preview, commit (contract 0012). |
 | `internal/docprint` | Print formats to HTML, and to PDF through headless Chromium (contract 0008). |
@@ -158,7 +159,8 @@ table, site, apps, uploads) and `restore` rebuilds it into an empty database and
 * Dashboards compute the prototype's `computeWidget()` shapes; the tests compare every widget with the
   prototype's numbers for the seed data (`testdata/prototype-dashboards.json`, `make proto-expected`).
   Dashboards with `cache:` are cached per org and period and dropped on any write.
-* Flows: `find`, `find_all`, `create`/`update` (with `set:`), `notify` (log driver), `call` (recorded; no
+* Flows: `find`, `find_all`, `create`/`update` (with `set:`), `notify` (log driver; `channel: email` queues
+  one `notify_email` job per member address when `system.rk` `notify.email` sets `driver: smtp`, `internal/mail`), `call` (recorded; no
   connector runtime yet), `if`/`then`/`else`, `wait` (queues the rest), `approve` (the rest waits for a decision),
   each with `if:`/`as:`.
 * Document approvals (contract 0007): a `submit`, `cancel` or action that matches a model's approval policy answers

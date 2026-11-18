@@ -31,7 +31,7 @@ idempotency: event.message_id
 | --- | --- |
 | `find`, `find_all` | Load one / many records with a CEL `where`, newest first (or `sort:`, `limit:`). Plain conditions joined by `&&` (`field == value`, `field in list` on text fields and `name`, `docstatus == n`/`!= n`, the value read from `event` or flow variables) are read in SQL; the whole `where` is still checked on every row, and a `find` without `sort:` stops at its first match |
 | `create`, `update` | Write a record with `set:` values (CEL) |
-| `notify` | Send through a `system.rk` notify channel (logged only in v0, and written to the audit log) |
+| `notify` | Send through a `system.rk` notify channel, written to the audit log. Email goes out over SMTP when `notify.email` sets `driver: smtp` (queued, with retries); other channels are logged only in v0 |
 | `call` | Call a connector action (recorded in the audit log in v0; the connector runtime is not built yet) |
 | `if` / `then` / `else` | Branch; every step may also carry an `if:` guard |
 | `for_each` / `as` / `do` | Run the steps under `do` once per item of a list (a `find_all` variable), at most 2000 items, no `wait` or `approve` inside ([contract 0031](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0031-recurring-documents.md)) |

@@ -10,6 +10,7 @@ import (
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
+	"github.com/rangka-os/rangka-os/kernel/internal/mail"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -62,7 +63,21 @@ func (s *Server) Status(ctx context.Context, org string) map[string]any {
 	for _, ch := range []string{"email", "push", "whatsapp"} {
 		cfg := meta.AsMap(reg.SystemConfig("notify." + ch))
 		n := map[string]any{"driver": cfg["driver"]}
-		if n["driver"] == nil {
+		if ch == "email" {
+			// the driver mail is actually sent with: smtp only when it is configured enough to send (mail.Driver)
+			d, why := mail.NotifyDriver(cfg)
+			n["driver"], n["ok"] = d, why == ""
+			if why != "" {
+				n["error"] = why
+			}
+			if d == "smtp" {
+				n["host"] = cfg["host"]
+				if res, err := s.DB.Query(ctx, `select count(*) filter (where kind = 'notify.email.sent'), count(*) filter (where kind = 'notify.email.failed')
+					from rk_audit where org_id = $1 and kind in ('notify.email.sent', 'notify.email.failed') and at > now() - interval '24 hours'`, org); err == nil && len(res.Rows) > 0 {
+					n["sent_24h"], n["failed_24h"] = res.Rows[0][0], res.Rows[0][1] // the Console warns on failed_24h
+				}
+			}
+		} else if n["driver"] == nil {
 			if c, ok := cfg["connector"]; ok {
 				n["driver"] = "connector:" + meta.Str(cfg, "connector")
 				_ = c

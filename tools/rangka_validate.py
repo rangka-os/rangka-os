@@ -1052,6 +1052,21 @@ def check_auth_upstream(rep, sysdoc):
                 rep.add("error", p, f"auth/upstream/{i}/{key}", "platform_env", f'auth.upstream {key} reads ${{{ref.group(1)}}}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)')
 
 
+def check_notify_email(rep, sysdoc):
+    """notify.email: the password is a ${VAR} reference, and no setting reads a platform variable (contract 0017 §2)."""
+    if not sysdoc or not isinstance(sysdoc[1], dict) or not isinstance(sysdoc[1].get("notify"), dict):
+        return
+    p, em = sysdoc[0], sysdoc[1]["notify"].get("email")
+    if not isinstance(em, dict):
+        return
+    for key in ("host", "username", "password", "from"):
+        ref = SECRET_REF.match(em[key]) if isinstance(em.get(key), str) else None
+        if ref and platform_env(ref.group(1)):
+            rep.add("error", p, f"notify/email/{key}", "platform_env", f'notify.email.{key} reads ${{{ref.group(1)}}}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)')
+        elif key == "password" and key in em and not ref:
+            rep.add("error", p, "notify/email/password", "secret_literal", 'notify.email.password is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)')
+
+
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
@@ -1683,6 +1698,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
                 rep.add("error", p, "name", "name_mismatch", f'{kind} name "{d.get("name")}" must match the file name "{stem}"')
     check_connector_auth(rep, sdocs.get("system.rk"), conns)
     check_auth_upstream(rep, sdocs.get("system.rk"))
+    check_notify_email(rep, sdocs.get("system.rk"))
     themes = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("themes/")}
     layouts = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("layouts/")}
     config = sdocs.get("config.rk", (None, {}))

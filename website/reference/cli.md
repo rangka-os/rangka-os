@@ -182,6 +182,7 @@ made by `npm create @rangka-os` needs no flags:
 | `RANGKA_WEB`, `RANGKA_TEMPLATES` | `--web`, `--templates` |
 | `RANGKA_AI_URL`, `RANGKA_AI_CALLBACK_URL` | `--ai-url` (the rangka-ai sidecar; unset turns the assistant off), `--ai-callback-url` (default `http://127.0.0.1` + the listen port) |
 | `RANGKA_AI_SECRET` | none: sent to the sidecar as `Authorization: Bearer`; the same value as the sidecar's `RAKA_SERVE_TOKEN` |
+| `RANGKA_HOST_NOTICES_URL`, `RANGKA_HOST_NOTICES_SECRET` | none: the host that runs this kernel and its bearer ([contract 0066](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0066-kernel-notices.md) §3). With both set every notice is also posted to the URL (`POST`, `Authorization: Bearer <secret>`, the event as JSON) as a `notice_host` job: 30 s, 2 min, 10 min, 1 h, 6 h, then every 6 h, 8 attempts; `Retry-After` on 429; a 4xx stops with `notice.host_refused`. https, or http on a loopback or private address. The host then mails notices, so the kernel does not |
 | `RANGKA_MASTER_KEY`, `RANGKA_MASTER_KEY_FILE` | none: the key-encryption key of the `db` secrets driver (base64 of 32 bytes, from `rangka keygen`), or a file that holds it. Unset: the kernel starts and refuses to store secrets |
 | `RANGKA_MASTER_KEY_VAULT` | none: the name of a Vault transit key that wraps the `db` driver's data keys instead (the key stays in Vault) |
 | `VAULT_ADDR`, `VAULT_TOKEN`, `VAULT_NAMESPACE` | none: the Vault server of the `vault` secrets driver and of `RANGKA_MASTER_KEY_VAULT` |

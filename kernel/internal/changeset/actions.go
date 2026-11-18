@@ -138,6 +138,9 @@ func (s *Service) ProposeFrom(ctx context.Context, a Actor, body map[string]any,
 		}
 	}
 	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), s.assessEnv())
+	if cs.Source == "ai" {
+		literalEmails(as, cs.Ops, parsed(live, files)) // contract 0066 §1.4
+	}
 	cs.Layers, cs.Risk = as.Layers, as.Risk
 	if cs.Layers == nil {
 		cs.Layers = []int{}
@@ -895,6 +898,9 @@ func (s *Service) Apply(ctx context.Context, a Actor, id string) (*ChangeSet, er
 	// the files may have changed since the proposal (another change set, the operator): assess the change set again
 	// against them, and send it back for approval when its risk rose (audit changeset-set-once, note 2)
 	as := AssessWith(cs.Ops, parsed(live, nil), parsed(live, files), s.assessEnv())
+	if cs.Source == "ai" {
+		literalEmails(as, cs.Ops, parsed(live, files)) // contract 0066 §1.4
+	}
 	if rows != nil && riskRank[rows.Risk] > riskRank[as.Risk] {
 		as.Risk = rows.Risk
 		as.Reasons = append(as.Reasons, "high: a unit the change set removes still holds rows")

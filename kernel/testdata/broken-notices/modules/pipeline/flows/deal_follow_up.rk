@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: deal_follow_up
+label: {id: Pengingat peluang}
+schedule: 0 8 * * 1-5
+steps:
+  - {find_all: deal, where: "stage == 'prospect'", as: open}
+  - for_each: open
+    as: d
+    do:
+      - notify: cashier
+        notice: deal_stuck
+        record: d
+        title: {id: 'Peluang {d.deal_name} belum bergerak dan perlu ditindaklanjuti oleh tim penjualan hari ini juga ya'}
+      - {find: customer, where: name == d.customer, as: c}
+      - notify: sales_rep
+        notice: deal_lost
+        template: {id: 'Hubungi {c.customer_name} di {c.phone} atau {c.email}; telepon {c.phone} lagi besok.'}
+  - notify: owner
+    template: 'Ringkasan: ini adalah teks yang sangat panjang sekali untuk sebuah kabar, lebih panjang dari tiga ratus huruf, karena menceritakan semua peluang yang ada di tahap prospek beserta nilainya, pelanggannya, penanggung jawabnya, tanggal terakhir dihubungi, catatan dari pertemuan terakhir, rencana tindak lanjut, dan berbagai hal lain yang seharusnya tetap berada di balik tautan ke aplikasi {size(open)}.'

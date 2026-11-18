@@ -216,6 +216,35 @@
             },
             "to": {
               "type": "string"
+            },
+            "notice": {
+              "type": "string",
+              "pattern": "^[a-z][a-z0-9_]{0,39}$",
+              "description": "A notices: entry of this flow's module (contract 0066 §1.2)"
+            },
+            "title": {
+              "oneOf": [
+                {
+                  "type": "string"
+                },
+                {
+                  "$ref": "model.json#/$defs/label"
+                }
+              ],
+              "description": "The notice's title, with {expr} parts; at most 80 characters"
+            },
+            "record": {
+              "type": "string",
+              "pattern": "^[a-z_][a-z0-9_]*$",
+              "description": "The variable holding the record the notice is about: its link and who may read it"
+            },
+            "outlet": {
+              "type": "string",
+              "description": "CEL: the outlet the notice is about"
+            },
+            "id": {
+              "type": "string",
+              "description": "CEL: the notice's dedupe id (prefixed with its kind); default <run>:<step>"
             }
           }
         },

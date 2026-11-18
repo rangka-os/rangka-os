@@ -1,0 +1,24 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/module.json
+name: pipeline
+version: 1.0.0
+title: {id: Pipeline penjualan, en: Sales pipeline}
+requires: {rangka: '>=0.5', contacts: ^1.0}
+hooks: [crm.mark_won]
+summary: {id: Modul uji pipeline.}
+# kernel notices (contract 0066 §1.1)
+notices:
+  - name: deal_stuck
+    label: {id: Peluang macet, en: Deal stuck}
+    description: {id: Peluang yang lama tidak bergerak.}
+    severity: warn
+    to: [sales_manager]
+    can: {model: deal, action: read}
+    link: record
+  - name: deal_digest
+    label: {id: Ringkasan peluang}
+  - name: deal_stuck
+    label: {id: Peluang macet lagi}
+  - name: deal_lost_report
+    label: {id: 'Laporan peluang yang kalah bulan ini beserta alasan, nilai, pelanggan dan penanggung jawabnya'}
+    to: [kepala_gudang, sales_rep]
+    can: {model: gudang, action: read}

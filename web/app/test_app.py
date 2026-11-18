@@ -1180,6 +1180,8 @@ def test_layout_nav_top(page, ctx):
 
     page.unroute(re.compile(r".*/api/v1/meta$"))
     page.route(re.compile(r".*/api/v1/meta$"), meta("side-only"))
+    # leaving the page cuts the first screen's reads still in flight (net::ERR_ABORTED): the next load asks again
+    ctx.allowed_failed.append(re.compile(r"/api/v1/(onboarding|approvals|notices|r/)"))
     page.goto("about:blank")  # a fresh load, so the app asks for /meta again (a hash change would not)
     page.goto(ctx.base + "/app/")
     page.locator(".ap-shell").wait_for(timeout=10000)

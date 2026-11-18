@@ -274,6 +274,19 @@ func (s *Server) putAppearance(w http.ResponseWriter, r *http.Request, c *caller
 	writeJSON(w, 200, in)
 }
 
+// deleteAppearance is DELETE /api/v1/me/appearance: forget the person's pick, so the business theme and the
+// device's mode apply again. 204.
+func (s *Server) deleteAppearance(w http.ResponseWriter, r *http.Request, c *caller) {
+	if c.p.User.ID != 0 {
+		if _, err := s.DB.Query(r.Context(), "delete from rk_user_appearance where user_id = $1", c.p.User.ID); err != nil {
+			fail(w, err)
+			return
+		}
+		_ = store.Notify(r.Context(), s.DB, store.Event{Type: "appearance", Org: c.actor.Org, ID: c.actor.ID})
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
 // metaTheme adds personal and effective to /meta.theme for the signed-in person (contract 0065 §6).
 func (s *Server) metaTheme(ctx context.Context, reg *meta.Registry, th map[string]any, userID int64) {
 	// mode is null until the person saves one, so the device's own pick and the business default still apply

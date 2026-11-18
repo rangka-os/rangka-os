@@ -194,6 +194,7 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("POST /api/v1/themes/from-image", a(s.themeFromImage))
 	mux.HandleFunc("GET /api/v1/me/appearance", a(s.getAppearance))
 	mux.HandleFunc("PUT /api/v1/me/appearance", a(s.putAppearance))
+	mux.HandleFunc("DELETE /api/v1/me/appearance", a(s.deleteAppearance))
 	mux.HandleFunc("GET /api/v1/r/{model}", a(s.listRecords))
 	mux.HandleFunc("GET /api/v1/aggregate/{model}", a(s.aggregateRecords))
 	mux.HandleFunc("POST /api/v1/r/{model}", a(s.idempotent(s.createRecord)))

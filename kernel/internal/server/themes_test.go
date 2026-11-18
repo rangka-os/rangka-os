@@ -85,6 +85,10 @@ func TestThemesAPI(t *testing.T) {
 	if m := e.must(200, "GET", "/api/v1/meta", nil).JSON; get(m, "theme", "effective", "name") != "kopi_senja" {
 		t.Fatalf("follow business: %v", get(m, "theme", "effective", "name"))
 	}
+	e.must(204, "DELETE", "/api/v1/me/appearance", nil)
+	if m := e.must(200, "GET", "/api/v1/meta", nil).JSON; get(m, "theme", "personal", "mode") != nil {
+		t.Fatalf("forgotten mode: %v", get(m, "theme", "personal"))
+	}
 }
 
 // Contract 0065 §7: a plan with custom_theme false may switch to a bundled theme, not make one of its own.

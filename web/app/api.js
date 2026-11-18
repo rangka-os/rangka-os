@@ -466,6 +466,8 @@
     api.themeFromImage = function (file) { var fd = new FormData(); fd.append("file", file); return json("POST", "/api/v1/themes/from-image", fd); };
     /** GET / PUT /api/v1/me/appearance {theme: name|null, mode}: the person's own pick, no approval. */
     api.appearance = function () { return json("GET", "/api/v1/me/appearance"); };
+    /** DELETE /api/v1/me/appearance: forget the person's pick (back to the business theme and the device's mode). */
+    api.clearAppearance = function () { return json("DELETE", "/api/v1/me/appearance"); };
     api.setAppearance = function (a) { return json("PUT", "/api/v1/me/appearance", { theme: a.theme || null, mode: a.mode || "system" }); };
 
     /* ----- Pengaturan → Tim (contract 0056 §4): the owner's browser session only; 403 for everyone else */

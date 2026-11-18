@@ -1357,7 +1357,8 @@
       else if (k.indexOf("theme:") === 0) {
         var mode = k.slice(6), mine = meta && meta.theme && meta.theme.personal;
         setThemePick(mode); writeThemePick(mode);
-        if (api.setAppearance) api.setAppearance({ theme: mine && mine.theme, mode: mode }).then(function () { return reloadMeta(); }, function () {});
+        // saved for the person's other devices; this page already shows it, so /meta is not reloaded
+        if (api.setAppearance) api.setAppearance({ theme: mine && mine.theme, mode: mode }).then(null, function () {});
       }
       else if (k === "appearance") { setNavOpen(false); setSwitchAt(null); RA.navigate("#/pengaturan/tampilan"); }
       else if (k === "logout" || k === "switch") logout();

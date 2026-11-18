@@ -934,13 +934,44 @@ def test_theme_default_light(page, ctx):
     light_bg = "#faf9f7" if page.evaluate("document.documentElement.getAttribute('data-brand')") == "juragan" else "#fafaf9"
     assert mode() == "light" and app_bg() == light_bg, f"light by default, got data-theme={mode()} --app={app_bg()}"
     assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
-    account_menu(page).get_by_role("menuitem", name="Gelap").click()
+    # the pick is saved with the person's appearance too (PUT /me/appearance, contract 0065 §4): wait for it before
+    # reloading, or the reload aborts it
+    with page.expect_response(lambda r: "/api/v1/me/appearance" in r.url and r.request.method == "PUT"):
+        account_menu(page).get_by_role("menuitem", name="Gelap").click()
     assert mode() == "dark", "picking Gelap applies dark"
     page.reload()
     page.locator(".ap-shell").wait_for(timeout=15000)
     assert mode() == "dark", "the pick survives a reload"
+    # the pick is also saved with the person's appearance (contract 0065 §4); forget it for the next scenarios
+    page.request.delete(ctx.base + "/api/v1/me/appearance")
     page.evaluate("() => localStorage.removeItem('rk.app.theme')")
     page.emulate_media(color_scheme="light")
+
+
+def test_tampilan_try_and_apply(page, ctx):
+    """Pengaturan › Tampilan (contract 0065): the owner tries Laut on the page only, applies it as a change set, and the
+    whole app repaints with Laut's tokens; the change set is reverted afterwards so later scenarios keep the base look."""
+    open_route(page, ctx, "#/pengaturan/tampilan")
+    page.get_by_role("heading", name="Tema usaha").wait_for(timeout=15000)
+    primary = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--primary').trim()")
+    before = primary()
+    business = page.locator(".rk-card", has=page.get_by_role("heading", name="Tema usaha"))
+    business.locator(".ap-tp-card", has_text="Laut").click()
+    page.get_by_text("Kamu sedang mencoba tema Laut").wait_for(timeout=10000)
+    assert primary() == "#0c66e4", f"trying Laut paints its primary, got {primary()}"
+    with page.expect_response(lambda r: r.url.endswith("/apply") and r.request.method == "POST"):
+        page.get_by_role("button", name="Terapkan").click()
+    page.get_by_text("Tema Laut dipakai").wait_for(timeout=10000)
+    meta = page.request.get(ctx.base + "/api/v1/meta").json()
+    assert meta["theme"]["name"] == "laut", meta["theme"]["name"]
+    assert primary() == "#0c66e4", "applied: the effective theme is Laut"
+    cs = [c for c in page.request.get(ctx.base + "/api/v1/changesets").json()["data"] if c["title"] == "Ganti tema usaha ke Laut"]
+    assert cs and cs[0]["status"] == "applied", cs
+    r = page.request.post(ctx.base + "/api/v1/changesets/" + cs[0]["id"] + "/revert", data={})
+    assert r.ok, r.text()
+    page.reload()
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    assert primary() == before, f"reverted: back to {before}, got {primary()}"
 
 
 def test_sidebar_collapse(page, ctx):

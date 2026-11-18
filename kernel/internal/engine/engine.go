@@ -61,6 +61,8 @@ type Engine struct {
 	Hooks map[string]Hook
 	Cache cache.Cache
 	Queue Enqueuer
+	// Notices is how notices leave the kernel beyond its inbox (contract 0066 §3, §4.2).
+	Notices NoticeConfig
 	// CallTarget resolves a flow's call: (connector.action or a port) to the connector, the action and the job
 	// options (retry.max, idempotency); nil = calls are only recorded (no connector runtime).
 	CallTarget func(reg *meta.Registry, call string, input map[string]any) (connector, action string, opts EnqueueOpts, err error)

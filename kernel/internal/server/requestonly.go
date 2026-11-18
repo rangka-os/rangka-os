@@ -134,6 +134,7 @@ func (s *Server) Tick(ctx context.Context, budget time.Duration) (TickReport, er
 		}
 		rep.Ran++
 	}
+	s.noticeChores(ctx)
 	if left, err := s.DB.Query(ctx, "select count(*) from rk_jobs where state in ('available', 'retryable') and scheduled_at <= now()"); err == nil && len(left.Rows) == 1 {
 		rep.Left, _ = left.Rows[0][0].(int64)
 	}

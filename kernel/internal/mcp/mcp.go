@@ -32,6 +32,8 @@ type Caller struct {
 	// reported as _meta "rangka/principal" on initialize and tools/list, so the assistant can refuse a token
 	// that is not a chat the kernel admitted and counted.
 	Principal string
+	// UserID is the person's rk_users id (0 for dev-open): rangka_notices reads their own inbox.
+	UserID int64
 }
 
 // Handler serves /mcp.
@@ -48,6 +50,8 @@ type Handler struct {
 	Skills    func() *skills.Library
 	// Onboarding serves rangka_onboarding (contract 0053 §6): GET /api/v1/onboarding for the caller.
 	Onboarding func(ctx context.Context, a engine.Actor) (any, error)
+	// Notices serves rangka_notices (contract 0066 §4.1): the caller's own inbox, newest 50.
+	Notices func(ctx context.Context, a engine.Actor, userID int64, unread bool) (any, error)
 }
 
 type request struct {
@@ -261,7 +265,7 @@ var assistantTools = map[string]bool{
 	"rangka_system_status": true, "rangka_changeset_propose": true, "rangka_changeset_validate": true,
 	"rangka_changeset_preview": true, "rangka_changeset_status": true, "rangka_approvals_list": true,
 	"rangka_catalogue": true, "rangka_skills": true, "rangka_skill": true, "rangka_skill_file": true,
-	"rangka_onboarding": true,
+	"rangka_onboarding": true, "rangka_notices": true,
 }
 
 // ToolNames returns the names of every tool this server lists (rangka skills check rejects others).
@@ -301,6 +305,8 @@ func tools() []any {
 		map[string]any{"name": "rangka_changeset_status", "title": "Change set status", "description": "The change set with its status and history.", "inputSchema": obj(map[string]any{"id": strp("change set id")}, "id"), "annotations": ro},
 		map[string]any{"name": "rangka_approvals_list", "title": "List approvals", "description": "Document approval requests of this organisation, newest first, each with can_decide for the caller. Filter by state (pending, approved, rejected, void), model and record name.",
 			"inputSchema": obj(map[string]any{"state": map[string]any{"enum": []string{"pending", "approved", "rejected", "void"}}, "model": strp("model name"), "name": strp("record name")}), "annotations": ro},
+		map[string]any{"name": "rangka_notices", "title": "My notices", "description": "The caller's own inbox of kernel notices (contract 0066): newest 50 with kind, severity, title, text, link and read, plus the unread count. Read only; no tool can create a notice.",
+			"inputSchema": obj(map[string]any{"unread": map[string]any{"type": "boolean", "description": "only unread notices"}}), "annotations": ro},
 		map[string]any{"name": "rangka_catalogue", "title": "Catalogue", "description": "Every app, module and connector this site can use, with state (installed, available, not_in_plan); per app the installed modules it shares and the modules it adds. Read it before naming an app (contract 0035).", "inputSchema": obj(map[string]any{}), "annotations": ro},
 		map[string]any{"name": "rangka_onboarding", "title": "Mulai di sini", "description": "The owner's first steps (contract 0053): the business process stages with state done, open or locked, what each locked one needs, the current step and the locked menus (GET /api/v1/onboarding). Read only: suggest the current step and prepare a draft or an import preview; saving stays the owner's action.", "inputSchema": obj(map[string]any{}), "annotations": ro},
 		map[string]any{"name": "rangka_skills", "title": "List skills", "description": "Rangka skills (Agent Skills): name, description and source of each. Load one with rangka_skill before working in its area.", "inputSchema": obj(map[string]any{}), "annotations": ro},
@@ -428,6 +434,12 @@ func (h *Handler) call(ctx context.Context, c *Caller, name string, args map[str
 			items = append(items, approvalItem(c.Actor, &rows[i]))
 		}
 		return map[string]any{"data": items, "total": total}, nil
+	case "rangka_notices":
+		if h.Notices == nil {
+			return map[string]any{"data": []any{}, "unread": 0}, nil
+		}
+		unread, _ := args["unread"].(bool)
+		return h.Notices(ctx, c.Actor, c.UserID, unread)
 	case "rangka_approve":
 		var d *engine.Decision
 		var err error

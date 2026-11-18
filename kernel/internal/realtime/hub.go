@@ -139,7 +139,7 @@ func (h *Hub) Run(ctx context.Context, db *pg.Pool) {
 	}
 }
 
-// ServeSSE streams events: `event: record|changeset|job|approval` with JSON data; `?models=deal,lead` filters
+// ServeSSE streams events: `event: record|changeset|job|approval|notice` with JSON data; `?models=deal,lead` filters
 // record events; allow (nil = all) filters per event as in Subscribe; a comment line every Heartbeat keeps
 // proxies from closing the stream.
 func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string, allow func(store.Event) bool) {
@@ -183,6 +183,8 @@ func (h *Hub) ServeSSE(w http.ResponseWriter, r *http.Request, org string, allow
 				data = map[string]any{"id": ev.ID, "kind": ev.Kind, "state": ev.State}
 			case "approval":
 				data = map[string]any{"id": ev.ID, "model": ev.Model, "name": ev.Name, "state": ev.State}
+			case "notice": // the inbox item, to its recipient only (contract 0066 §4.1)
+				data = ev.Notice
 			default:
 				data = ev
 			}

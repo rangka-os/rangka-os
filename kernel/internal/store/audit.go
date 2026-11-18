@@ -12,7 +12,7 @@ const EventsChannel = "rk_events"
 
 // Event is published with NOTIFY (inside the writing transaction, so it is delivered on commit).
 type Event struct {
-	Type      string `json:"type"` // record, changeset, job, approval, appearance
+	Type      string `json:"type"` // record, changeset, job, approval, appearance, notice
 	Org       string `json:"org,omitempty"`
 	Model     string `json:"model,omitempty"`
 	Name      string `json:"name,omitempty"`
@@ -25,6 +25,8 @@ type Event struct {
 	// Fields carries the values of the row-scope fields of a record event (outlet), so subscribers can be
 	// filtered without reading the record. Never sent to clients.
 	Fields map[string]string `json:"fields,omitempty"`
+	// Notice is the inbox item of a notice event (contract 0066 §4.1); ID is then the recipient's email.
+	Notice map[string]any `json:"notice,omitempty"`
 }
 
 // Notify publishes an event.

@@ -462,7 +462,8 @@ func upstreams(cfg any, lookup func(string) (string, bool)) ([]auth.Upstream, er
 
 // Start runs the realtime listener, queue workers and scheduler until ctx ends.
 func (s *Server) Start(ctx context.Context) {
-	s.wg.Add(4)
+	s.wg.Add(5)
+	go func() { defer s.wg.Done(); s.noticeChoresLoop(ctx) }()
 	go func() { defer s.wg.Done(); s.Hub.Run(ctx, s.DB) }()
 	go func() { defer s.wg.Done(); s.Sched.Run(ctx) }()
 	go func() { defer s.wg.Done(); s.expireSandboxes(ctx) }()
@@ -486,6 +487,32 @@ func (s *Server) expireSandboxes(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
+		}
+	}
+}
+
+// noticeChores audits the notices the per-minute cap dropped (once per minute, contract 0066 §3) and prunes the
+// inbox past 90 days (§4.1). rangka serve runs it every minute; request-only kernels in tick.
+func (s *Server) noticeChores(ctx context.Context) {
+	ctx = pg.WithOrg(ctx, "")
+	now := s.Engine.Now()
+	if err := store.FlushDroppedNotices(ctx, s.DB, now); err != nil && ctx.Err() == nil {
+		s.Cfg.Logf("notices: %v", err)
+	}
+	if err := store.PruneNotices(ctx, s.DB, now); err != nil && ctx.Err() == nil {
+		s.Cfg.Logf("notices: prune: %v", err)
+	}
+}
+
+func (s *Server) noticeChoresLoop(ctx context.Context) {
+	t := time.NewTicker(time.Minute)
+	defer t.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+			s.noticeChores(ctx)
 		}
 	}
 }

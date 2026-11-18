@@ -251,7 +251,10 @@
   function IconButton(p) {
     var rest = omit(p, ["icon", "label", "dot", "className"]);
     rest.className = cx("rk-iconbtn", p.className); rest.type = "button"; rest["aria-label"] = p.label; rest.title = p.label;
-    return h("button", rest, h(Icon, { name: p.icon }), p.dot ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : null);
+    // dot: true for a plain dot, a number for a count (99+ past 99)
+    if (typeof p.dot === "number" && p.dot > 0) rest["aria-label"] = rest.title = p.label + " (" + p.dot + " belum dibaca)";
+    return h("button", rest, h(Icon, { name: p.icon }), typeof p.dot === "number" ? (p.dot > 0 ? h("span", { className: "rk-dot rk-dot-n", "aria-hidden": "true" }, p.dot > 99 ? "99+" : String(p.dot)) : null)
+      : p.dot ? h("span", { className: "rk-dot", "aria-hidden": "true" }) : null);
   }
   function useOutside(ref, on, fn) {
     useEffect(function () {
@@ -1123,7 +1126,7 @@
       p.createLabel !== false ? h(Button, { variant: "primary", icon: "add", className: "rk-topnav-create", onClick: p.onCreate }, h("span", { className: "lbl" }, p.createLabel || "Buat")) : null,
       h("div", { className: "rk-topnav-end" },
         h("button", { type: "button", className: "rk-ask", onClick: p.onSearch }, h(Icon, { name: "search" }), h("span", { className: "ph" }, p.searchPlaceholder || "Cari atau tanya Raka"), h(Kbd, null, "⌘K")),
-        h(IconButton, { icon: "bell", label: "Notifikasi", dot: p.unread, onClick: p.onNotifications }),
+        h(IconButton, { icon: "bell", label: "Notifikasi", className: "rk-topnav-bell", dot: p.unread, onClick: p.onNotifications }),
         h(IconButton, { icon: "help", label: "Bantuan", onClick: p.onHelp }),
         p.actions || null,
         h("button", { type: "button", className: "rk-av-btn", "aria-label": "Akun " + (p.user ? p.user.name : ""), "aria-expanded": open === "account", onClick: function () { tog("account"); } },

@@ -56,6 +56,7 @@
     "fields.js",
     "form.js",
     "approvals.js",
+    "notices.js",
     "ubah.js",
     "dashboard.js",
     "docs.js",

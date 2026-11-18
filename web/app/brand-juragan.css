@@ -241,6 +241,11 @@
 [data-brand="juragan"] .pd-elabel { color: var(--selected-ink); }
 :root[data-brand="juragan"]:not([data-theme="dark"]) .pd-vp, :root[data-brand="juragan"]:not([data-theme="dark"]) .pd:not(.is-narrow), :root[data-brand="juragan"]:not([data-theme="dark"]) .pd.is-narrow {
   background-image: radial-gradient(circle, var(--line-strong) 1px, transparent 1.2px); }
+/* gelap: kanvas diagram mengikuti latar tema (di process.css kanvasnya putih di kedua mode), supaya garis alur dan panah yang
+   terang di mode gelap tetap terbaca (>= 3:1) */
+:root[data-brand="juragan"][data-theme="dark"] :is(.pd-vp, .pd:not(.is-narrow), .pd.is-narrow) { background-color: var(--app); }
+:root[data-brand="juragan"][data-theme="dark"] :is(.pd-vp:not(.is-tech), .pd:not(.is-narrow), .pd.is-narrow) { background-image: radial-gradient(circle, var(--line-strong) 1px, transparent 1.2px); }
+:root[data-brand="juragan"][data-theme="dark"] .pd-hint { background: color-mix(in srgb, var(--surface) 85%, transparent); }
 [data-brand="juragan"] .pd-detail .pd-d-list.is-auto .pd-ic { background: var(--k-auto-subtle); color: var(--k-auto-text); }
 [data-brand="juragan"] .pd-step-trigger .pd-step-k, [data-brand="juragan"] .pd-step-action .pd-step-k { color: var(--k-auto-text); }
 [data-brand="juragan"] .pv-track-step b { color: var(--selected-ink); }

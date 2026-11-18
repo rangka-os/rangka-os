@@ -1034,6 +1034,31 @@ def test_command_menu(page, ctx):
     main_area(page).get_by_text(label).first.wait_for(timeout=10000)
 
 
+def test_side_shell_top_bar(page, ctx):
+    """Default side-only shell (contract 0065): from tablet up a TopNav sits above the page beside the full sidebar (the
+    sidebar keeps its switcher); search opens ⌘K. A phone keeps the 48px bar instead."""
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    assert page.locator(".ap-shell.ap-side").count() == 1, "the default shell is side-only"
+    bar = page.locator(".ap-shell .rk-shell-main > .ap-dtop .rk-topnav")
+    if ctx.args.width < 768:
+        assert bar.count() == 0 and page.locator(".ap-mhead").is_visible(), "a phone keeps the 48px bar"
+        return
+    assert bar.is_visible(), "the top bar above the page"
+    assert bar.bounding_box()["height"] == 48
+    shot(page, ctx, "shell-side-top-bar")
+    if ctx.args.width >= 1024:
+        assert page.locator(".rk-side .rk-side-switch").is_visible(), "the sidebar keeps the business switcher"
+        items = bar.locator(".rk-topnav-items .rk-topnav-item")
+        assert items.count() >= 1, "menu items in the top bar"
+        items.first.click()
+        page.wait_for_function("() => document.querySelectorAll('.ap-dtop .rk-topnav-item[aria-current=page]').length === 1", timeout=5000)
+    bar.locator(".rk-ask").click()
+    page.get_by_role("dialog").wait_for(timeout=5000)
+    page.keyboard.press("Escape")
+
+
 def test_top_nav_shell(page, ctx):
     """layout.shell top-nav keeps the TopNav (mocked meta): account menu, search opens ⌘K, no phone bar."""
     def meta(route):

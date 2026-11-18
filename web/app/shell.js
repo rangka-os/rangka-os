@@ -1,7 +1,8 @@
 /* Rangka end-user app: the shell. Loads last and mounts #rk-app.
  *
  * Boot: api.me() (401 → sign-in screen) → api.meta() → RangkaEngine.create(meta, cache.lookup) → api.features().
- * Then the shell layout.shell names (shellKind: the Frappe Sidebar for side-only, the default; TopNav + Sidebar for
+ * Then the shell layout.shell names (shellKind: the Frappe Sidebar for side-only, the default, with the TopNav above the
+ * page from 768px up (contract 0065); TopNav + Sidebar for
  * top-nav), ⌘K (CommandPalette over commandGroups), Raka (ai.js RA.AssistantRoot: ⌘J, the ⌘K "Tanya Raka" item and the
  * sidebar footer's "Tanya Raka", only when meta.features.ai === true), data-density from the theme, and a hash
  * router (#/d/<dashboard>, #/r/<model>, #/r/<model>/new, #/r/<model>/<name>, #/approvals, #/import/<name>, #/proses, #/proses/<name>).
@@ -1402,6 +1403,21 @@
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
       onNotifications: function () { toast("info", "Belum ada notifikasi"); }
     });
+    // side-only from tablet up (contract 0065): the TopNav above the page, beside the full sidebar. The sidebar keeps
+    // the business switcher, Mulai di sini and the tour's targets; the bar adds the menu (one item per sidebar group,
+    // or the layout's nav.top), search, notifications, help and the account. Hidden where the 48px phone bar shows.
+    var deskNav = kind === "top-nav" || phone ? null : topNavItems(sideNavItems.groups, navId(route), 6, navTop(meta));
+    var deskTop = !deskNav ? null : h("div", { className: cx("ap-dtop", !installed.length && "ap-dtop-noapps") }, h(R.TopNav, {
+      product: { name: companyName, icon: "store", color: "var(--brand)" },
+      items: deskNav.items, current: deskNav.current, onNavigate: onNavigate,
+      createLabel: false, theme: theme, searchPlaceholder: "Cari", currentApp: openApp ? openApp.name : null,
+      apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: appIcon(a), color: "var(--primary)" }; }),
+      user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },
+      accountExtra: accountExtra(),
+      onHome: function () { if (home) RA.navigate(home); },
+      onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
+      onNotifications: function () { toast("info", "Belum ada notifikasi"); }
+    }));
     // side-only on a phone: a 48px bar with the menu button; the sidebar opens as a drawer
     var phoneBar = kind === "top-nav" ? null : h("header", { className: "ap-mhead" },
       h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
@@ -1473,7 +1489,7 @@
         navOpen ? h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }) : null,
         floating && !ubahOn ? h("div", { className: "ap-rail-scrim", onClick: function () { setRailOpen(false); } }) : null,
         h("div", { className: "rk-shell-main" },
-          phoneBar,
+          deskTop, phoneBar,
           offline ? h("div", { className: "ap-offline", role: "status" }, h(R.Icon, { name: "offline" }),
             h("span", null, h("b", null, "Kamu sedang offline. "), staleAt
               ? "Menampilkan data terakhir dilihat " + lastSeen(staleAt, new Date()) + ". Menyimpan menunggu koneksi."

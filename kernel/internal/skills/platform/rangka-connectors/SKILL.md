@@ -95,6 +95,11 @@ Per business, a company connector is in one of these states. The kernel checks t
   `connector_host_private` (company connectors reach public addresses only). Polls of an untested or `needs_auth`
   connector are skipped quietly and its webhooks are answered 503 (the vendor retries later) without starting a flow, so "nothing arrives" can simply
   mean the owner has not finished the steps above: read the state before looking for another cause.
+- Host connectors (◆, contract 0063 §2): a catalogue connector with `provided_by: host` in `/catalogue` gets its keys
+  from Rangka Cloud, never from the owner. Never draft an `x_` connector with `experimental.provided_by: host`
+  (`host_connector_company`) and never ask the owner for its keys: while they are missing say "Menunggu Rangka Cloud".
+  Never propose installing one yourself. A kernel that does not serve it shows `state: host_unavailable`, and a
+  change set that installs it is invalid with `connector_host_unavailable`.
 
 ## 6. Telling the owner
 

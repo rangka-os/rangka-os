@@ -21,7 +21,7 @@
     "extends": {
       "type": "string",
       "pattern": "^[a-z0-9_-]+/[a-z0-9_-]+$",
-      "description": "Template, e.g. rangka/standard, rangka/retail, rangka/clinic",
+      "description": "Template, e.g. rangka/standard, rangka/laut, rangka/daun, rangka/senja, rangka/anggur, rangka/arang (rangka/clinic and rangka/retail are old names of daun and senja)",
       "default": "rangka/standard"
     },
     "mode": {
@@ -32,9 +32,30 @@
       ],
       "default": "system"
     },
+    "accent": {
+      "$ref": "#/$defs/hex",
+      "description": "One business colour; the kernel derives brand, selection, link, focus, chart-1 and their dark values, always passing the contrast floors (contract 0067 §1-2)"
+    },
+    "button": {
+      "enum": [
+        "ink",
+        "accent"
+      ],
+      "default": "ink",
+      "description": "Primary buttons stay ink, or take the accent (contract 0067 §1)"
+    },
+    "neutral": {
+      "enum": [
+        "stone",
+        "slate",
+        "gray"
+      ],
+      "default": "stone",
+      "description": "Neutral family: warm stone (tokens.json), cool slate, or plain gray (contract 0067 §1)"
+    },
     "color": {
       "type": "object",
-      "description": "Token overrides by token name (primary, selected, brand, chart-1…). A string sets light and derives dark; an object sets both.",
+      "description": "Token overrides by token name (primary, selected, brand, chart-1…). A string sets light and derives dark; an object sets both. Applied after neutral and accent. Status colours (ok, warn, bad, info, discovery and their variants), raka*, spark, helmet, scrim and mascot-ink are locked (contract 0067 §1).",
       "additionalProperties": {
         "oneOf": [
           {
@@ -74,7 +95,8 @@
         "mono": {
           "type": "string"
         }
-      }
+      },
+      "description": "font.sans and font.display: one of the bundled fonts system, inter, plus-jakarta-sans, nunito-sans, ibm-plex-sans, source-serif-4 (contract 0067 §5)"
     },
     "radius": {
       "enum": [

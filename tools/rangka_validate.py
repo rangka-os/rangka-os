@@ -872,6 +872,28 @@ def check_company_connector(rep, p, cn, c, origin, dup, flows=None, allmodels=No
         rep.add("warn", p, "(root)", "money_unflagged", f'company connector "{cn}" is called or triggered by a flow that creates or updates a model with money or stock fields: add money: true so writes need the owner\'s confirmation (contract 0033 §4)')
 
 
+def provided_by(c):
+    """Contract 0063 section 2; twin of meta.ProvidedBy: experimental.provided_by until the key is released."""
+    exp = c.get("experimental")
+    return "host" if isinstance(exp, dict) and exp.get("provided_by") == "host" else "owner"
+
+
+def check_host_connector(rep, p, cn, c):
+    """Contract 0063 section 2: a host connector is a catalogue connector, and the host provides every auth field."""
+    if provided_by(c) != "host":
+        return
+    if cn.startswith("x_"):
+        rep.add("error", p, "experimental/provided_by", "host_connector_company", f'company connector "{cn}" cannot be provided_by: host: only a catalogue connector is served by the host (contract 0063 §2)')
+    fields = (c.get("auth") or {}).get("fields") if isinstance(c.get("auth"), dict) else None
+    for i, f in enumerate(fields if isinstance(fields, list) else []):
+        if not isinstance(f, dict):
+            continue
+        if "default" in f:
+            rep.add("error", p, f"auth/fields/{i}/default", "host_connector_fields", f'auth field "{pystr(f.get("name"))}" of host connector "{cn}" has a default: its value comes from the host only (contract 0063 §2)')
+        if f.get("generate") is True:
+            rep.add("error", p, f"auth/fields/{i}/generate", "host_connector_fields", f'auth field "{pystr(f.get("name"))}" of host connector "{cn}" is generated: its value comes from the host only (contract 0063 §2)')
+
+
 def check_secret_hosts(rep, p, c):
     """Contract 0017 §1, §5: a secret field has no default; an action carries a secret only in headers (the query
     string with allow_secret_in: [query], as a warning), uses https and, when the connector declares hosts:, sends it
@@ -941,12 +963,12 @@ def platform_env(name):
 
 
 def check_mail(rep, p, c):
-    """Contract 0067 §1: a mail: action needs the connector's mail: block; mail.password is exactly {auth.<secret
+    """Contract 0068 §1: a mail: action needs the connector's mail: block; mail.password is exactly {auth.<secret
     field>}, and no other value in mail: names a secret field."""
     block = c.get("mail") if isinstance(c.get("mail"), dict) else None
     for i, a in enumerate(c.get("actions") if isinstance(c.get("actions"), list) else []):
         if isinstance(a, dict) and isinstance(a.get("mail"), str) and block is None:
-            rep.add("error", p, f"actions/{i}/mail", "mail_missing", f'action "{a.get("name")}" is a mail action but connector {c.get("name")} has no mail: block (contract 0067)')
+            rep.add("error", p, f"actions/{i}/mail", "mail_missing", f'action "{a.get("name")}" is a mail action but connector {c.get("name")} has no mail: block (contract 0068)')
     if block is None:
         return
     fields = (c.get("auth") or {}).get("fields") if isinstance(c.get("auth"), dict) else None
@@ -954,7 +976,7 @@ def check_mail(rep, p, c):
     pw = block.get("password")
     m = re.fullmatch(r"\{auth\.([a-z_][a-z0-9_]*)\}", pw) if isinstance(pw, str) else None
     if "password" in block and not (m and m.group(1) in secret):
-        rep.add("error", p, "mail/password", "mail_password_not_secret", f'mail.password must be {{auth.<field>}} of a secret auth field, not "{pw}" (contract 0067)')
+        rep.add("error", p, "mail/password", "mail_password_not_secret", f'mail.password must be {{auth.<field>}} of a secret auth field, not "{pw}" (contract 0068)')
 
     def walk(x, path):
         for k in sorted(x):
@@ -964,7 +986,7 @@ def check_mail(rep, p, c):
             elif path + [k] != ["password"]:
                 used = [n for n in secret if any("{auth." + n + "}" in t for t in _strings(v))]
                 if used:
-                    rep.add("error", p, "mail/" + "/".join(path + [k]), "secret_misplaced", f'mail.{".".join(path + [k])} names secret {", ".join(used)}: only mail.password may carry it (contract 0067)')
+                    rep.add("error", p, "mail/" + "/".join(path + [k]), "secret_misplaced", f'mail.{".".join(path + [k])} names secret {", ".join(used)}: only mail.password may carry it (contract 0068)')
     walk(block, [])
 
 
@@ -1182,6 +1204,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
             rep.add("warn", p, "(root)", "catalogue_summary_missing", f'connector "{cn}" has no summary: add one sentence in plain words for the catalogue (contract 0036)')
         if isinstance(c, dict):
             check_company_connector(rep, p, cn, c, conn_origin.get(cn), cn in conn_dup, flows, allmodels)
+            check_host_connector(rep, p, cn, c)
             check_secret_hosts(rep, p, c)
             check_poll_triggers(rep, p, c)
             check_mail(rep, p, c)
@@ -1790,8 +1813,21 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
     for tn in sorted(themes):
         p, d = themes[tn]
         ext = d.get("extends") or ""
-        if ext.startswith("rangka/") and not template_exists("themes", ext[7:]):
-            rep.add("warn", p, "extends", "unknown_template", f'no theme template "{ext}" in rangka-os/templates/themes')
+        if ext.startswith("rangka/"):
+            tn = ext[7:]
+            if tn in RENAMED_THEMES:
+                rep.add("warn", p, "extends", "renamed_template", f'theme template "{ext}" is now "rangka/{RENAMED_THEMES[tn]}" (contract 0067 §3)')
+                tn = RENAMED_THEMES[tn]
+            if not template_exists("themes", tn):
+                rep.add("warn", p, "extends", "unknown_template", f'no theme template "{ext}" in rangka-os/templates/themes')
+        for k in sorted((d.get("color") or {}) if isinstance(d.get("color"), dict) else {}):
+            if locked_token(k):
+                rep.add("error", p, f"color/{k}", "locked_token", f'"{k}" keeps its meaning in every theme and cannot be set (contract 0067 §1)')
+        font = d.get("font") if isinstance(d.get("font"), dict) else {}
+        for k in ("sans", "display"):
+            f = font.get(k)
+            if isinstance(f, str) and f not in FONTS:
+                rep.add("error", p, f"font/{k}", "unknown_font", f'font "{f}" is not bundled; use one of {", ".join(FONTS)} (contract 0067 §5)')
         if d.get("contrast_check", True) is not False:
             check_contrast(rep, p, d)
     dashboards, dash_app = {}, {}
@@ -2009,21 +2045,157 @@ def base_tokens():
     return _BASE
 
 
+# ---- contract 0067: neutral families, one accent, button style, locked tokens, bundled fonts (mirrors kernel theme/derive.go)
+
+RENAMED_THEMES = {"clinic": "daun", "retail": "senja"}
+FONTS = ["system", "inter", "plus-jakarta-sans", "nunito-sans", "ibm-plex-sans", "source-serif-4"]
+BUTTON_TOKENS = {"primary", "primary-hover", "primary-ink"}
+NEUTRALS = {
+    "slate": (
+        {"app": "#ffffff", "surface": "#ffffff", "soft": "#f4f5f7", "ink": "#172b4d", "ink-2": "#44546f", "muted": "#5e6c84",
+         "faint": "#8993a4", "line": "#ebecf0", "line-strong": "#dcdfe4", "border": "#8590a2",
+         "hover": "rgba(23, 43, 77, .05)", "neutral": "rgba(23, 43, 77, .06)", "neutral-hover": "rgba(23, 43, 77, .13)",
+         "disabled-bg": "rgba(23, 43, 77, .03)", "primary": "#172b4d", "primary-hover": "#2c3e5d", "primary-ink": "#ffffff"},
+        {"app": "#1d2125", "surface": "#22272b", "soft": "#161a1d", "ink": "#dee4ea", "ink-2": "#b6c2cf", "muted": "#9fadbc",
+         "faint": "#738496", "line": "#2c333a", "line-strong": "#38414a", "border": "#738496",
+         "hover": "rgba(222, 228, 234, .07)", "neutral": "rgba(222, 228, 234, .08)", "neutral-hover": "rgba(222, 228, 234, .15)",
+         "disabled-bg": "rgba(222, 228, 234, .04)", "primary": "#dee4ea", "primary-hover": "#ffffff", "primary-ink": "#1d2125"}),
+    "gray": (
+        {"app": "#ffffff", "surface": "#ffffff", "soft": "#f5f5f5", "ink": "#171717", "ink-2": "#404040", "muted": "#636363",
+         "faint": "#a3a3a3", "line": "#ececec", "line-strong": "#dcdcdc", "border": "#8a8a8a",
+         "hover": "rgba(23, 23, 23, .05)", "neutral": "rgba(23, 23, 23, .06)", "neutral-hover": "rgba(23, 23, 23, .13)",
+         "disabled-bg": "rgba(23, 23, 23, .03)", "primary": "#171717", "primary-hover": "#333333", "primary-ink": "#ffffff"},
+        {"app": "#171717", "surface": "#1f1f1f", "soft": "#111111", "ink": "#ededed", "ink-2": "#d4d4d4", "muted": "#a3a3a3",
+         "faint": "#737373", "line": "#2a2a2a", "line-strong": "#383838", "border": "#737373",
+         "hover": "rgba(237, 237, 237, .07)", "neutral": "rgba(237, 237, 237, .08)", "neutral-hover": "rgba(237, 237, 237, .15)",
+         "disabled-bg": "rgba(237, 237, 237, .04)", "primary": "#ededed", "primary-hover": "#ffffff", "primary-ink": "#171717"}),
+}
+
+
+def locked_token(name):
+    for p in ("ok", "warn", "bad", "info", "discovery", "raka"):
+        if name == p or name.startswith(p + "-"):
+            return True
+    return name in ("on-bad", "on-warn", "spark", "helmet", "scrim", "mascot-ink")
+
+
+def _mk(h, l, s):
+    return to_hex(hls_to_rgb(h, min(max(l, 0.0), 1.0), s))
+
+
+def _towards(c, direction, floor, *bgs):
+    h, l, s = rgb_to_hls(*to_rgb(c))
+
+    def ok(x):
+        return all(not is_hex(b) or contrast(x, b) >= floor for b in bgs)
+    out = _mk(h, l, s)
+    k = 1
+    while not ok(out) and k <= 100:
+        out = _mk(h, l + direction * k / 100.0, s)
+        k += 1
+    return out
+
+
+def derive_accent(accent, button, light, dark):
+    h, l, s = rgb_to_hls(*to_rgb(accent))
+    L, D = {}, {}
+    L["brand"] = _towards(accent, -1, 3, light.get("surface"))
+    L["selected"] = _mk(h, 0.94, min(s, 0.6))
+    L["row-selected"] = _mk(h, 0.975, min(s, 0.5))
+    L["selected-ink"] = _towards(accent, -1, 4.5, L["selected"])
+    L["link"] = _towards(accent, -1, 4.5, light.get("surface"))
+    L["focus"] = _towards(accent, -1, 3, light.get("surface"))
+    L["chart-1"] = _towards(accent, -1, 3, light.get("surface"))
+    D["brand"] = _towards(_mk(h, l + 0.15, s), 1, 3, dark.get("surface"))
+    D["selected"] = _mk(h, 0.18, min(s, 0.45))
+    D["row-selected"] = _mk(h, 0.14, min(s, 0.35))
+    D["selected-ink"] = _towards(_mk(h, 0.6, s), 1, 4.5, D["selected"])
+    D["link"] = _towards(_mk(h, 0.6, s), 1, 4.5, dark.get("surface"))
+    D["focus"] = _towards(_mk(h, 0.55, s), 1, 3, dark.get("surface"))
+    D["chart-1"] = _towards(_mk(h, 0.55, s), 1, 3, dark.get("surface"))
+    if button == "accent":
+        L["primary-ink"] = "#ffffff"
+        L["primary"] = _towards(accent, -1, 4.5, L["primary-ink"])
+        ph, pl, ps = rgb_to_hls(*to_rgb(L["primary"]))
+        L["primary-hover"] = _mk(ph, pl - 0.08, ps)
+        D["primary-ink"] = dark.get("app")
+        D["primary"] = _towards(_mk(h, 0.6, s), 1, 4.5, D["primary-ink"])
+        if is_hex(dark.get("surface")) and contrast(D["primary"], dark["surface"]) < 3:
+            D["primary"] = _towards(D["primary"], 1, 3, dark["surface"])
+        dh, dl, ds = rgb_to_hls(*to_rgb(D["primary"]))
+        D["primary-hover"] = _mk(dh, dl + 0.08, ds)
+    return L, D
+
+
+def load_template(kind, name):
+    if kind == "themes":
+        name = RENAMED_THEMES.get(name, name)
+    for n in (name, name.replace("_", "-"), name.replace("-", "_")):
+        f = os.path.join(TEMPLATES_DIR, kind, n + ".rk")
+        if os.path.isfile(f):
+            try:
+                return rkfile.load(f)[0]
+            except Exception:
+                return None
+    return None
+
+
+def theme_spec(theme):
+    """The theme merged with the template it extends (one level) and its colour keys in order (template's, then own)."""
+    spec, keys, color = {}, [], {}
+    ext = theme.get("extends") or ""
+    if isinstance(ext, str) and ext.startswith("rangka/"):
+        base = load_template("themes", ext[7:])
+        if isinstance(base, dict):
+            spec.update(base)
+            bc = base.get("color") if isinstance(base.get("color"), dict) else {}
+            keys = sorted(bc)
+            color.update(bc)
+    for k, v in theme.items():
+        if k != "color":
+            spec[k] = v
+    own = theme.get("color") if isinstance(theme.get("color"), dict) else {}
+    for k in own:
+        color[k] = own[k]
+        if k not in keys:
+            keys.append(k)
+    spec["color"] = color
+    return spec, keys
+
+
 def theme_colours(theme):
-    """(light, dark, overrides) for a theme: base tokens with the theme's colours, dark derived when not given."""
+    """(light, dark, overrides) for a theme: base tokens, neutral family, accent and button, then colours (dark derived
+    when not given) — contract 0067 and decision 12."""
+    spec, keys = theme_spec(theme)
     bl, bd = base_tokens()
     light, dark, over = dict(bl), dict(bd), {}
-    colors = theme.get("color") or {}
-    for k in colors:
-        v = colors[k]
+
+    def put(k, lv, dv, src):
+        light[k], dark[k] = lv, dv
+        over[k] = {"light": lv, "dark": dv, "dark_derived": False, "from": src}
+    button = spec.get("button") if isinstance(spec.get("button"), str) else ""
+    fam = NEUTRALS.get(spec.get("neutral")) if isinstance(spec.get("neutral"), str) else None
+    if fam:
+        for k in sorted(fam[0]):
+            if k in BUTTON_TOKENS and button == "accent":
+                continue
+            put(k, fam[0][k], fam[1][k], "neutral")
+    acc = spec.get("accent")
+    if is_hex(acc):
+        L, D = derive_accent(acc.lower(), button, light, dark)
+        for k in sorted(L):
+            put(k, L[k], D[k], "accent")
+    colors = spec["color"]
+    for k in keys:
+        v = colors.get(k)
         if isinstance(v, str):
             light[k] = v
         elif isinstance(v, dict) and v.get("light"):
             light[k] = v["light"]
             if v.get("dark"):
                 dark[k] = v["dark"]
-    for k in colors:
-        v = colors[k]
+    for k in keys:
+        v = colors.get(k)
         lv = v if isinstance(v, str) else (v or {}).get("light") if isinstance(v, dict) else None
         dv = v.get("dark") if isinstance(v, dict) else None
         if not is_hex(lv):

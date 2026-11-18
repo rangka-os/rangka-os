@@ -58,6 +58,19 @@ type Status struct {
 	SetBy    string `json:"set_by,omitempty"`
 	SetAt    string `json:"set_at,omitempty"`
 	Value    any    `json:"value,omitempty"`
+	// Source is "host" for every field of a host connector (contract 0063 §2): the host provides the value, so the
+	// field carries no hint and no set_by person.
+	Source string `json:"source,omitempty"`
+}
+
+// ByHost is the source of a value the host wrote with a secrets:host token (contract 0063 §2): rk_secrets.set_by
+// holds it instead of a person, and the secret.set and secret.delete audit rows carry by: host.
+const ByHost = "host"
+
+// HostProvided reports whether a connector's auth fields come from the host (provided_by: host, contract 0063 §2).
+func HostProvided(reg *meta.Registry, connector string) bool {
+	c := reg.Connectors[connector]
+	return c != nil && meta.ProvidedBy(meta.AsMap(c.Data)) == "host"
 }
 
 // Service resolves and stores connector secrets.
@@ -216,6 +229,7 @@ func Fields(reg *meta.Registry, connector string) []Field {
 func (s *Service) Status(ctx context.Context, org, connector string) ([]Status, error) {
 	reg := s.Reg()
 	fields := Fields(reg, connector)
+	host := HostProvided(reg, connector)
 	out := make([]Status, 0, len(fields))
 	stored := map[string]Status{}
 	if s.Driver() == "db" {
@@ -257,6 +271,9 @@ func (s *Service) Status(ctx context.Context, org, connector string) ([]Status, 
 		}
 		if f.Secret {
 			st.Value = nil
+		}
+		if host {
+			st.Source, st.Hint, st.SetBy = ByHost, "", ""
 		}
 		out = append(out, st)
 	}
@@ -362,6 +379,12 @@ func Hint(v string) string {
 // Set stores a new version of a field for one org (db driver only) and audits secret.set without the value.
 // The previous version stays valid for inbound verification until its retire_at.
 func (s *Service) Set(ctx context.Context, org, connector, field, value, actor string) (Status, error) {
+	return s.SetFrom(ctx, org, connector, field, value, actor, "")
+}
+
+// SetFrom is Set with the value's source: ByHost for the host's secrets:host write (contract 0063 §2), which stores
+// no hint, records set_by host and audits by: host; "" for a person or a secrets:write token.
+func (s *Service) SetFrom(ctx context.Context, org, connector, field, value, actor, source string) (Status, error) {
 	if !s.Writable() {
 		return Status{}, ErrReadOnlyDriver
 	}
@@ -402,12 +425,15 @@ func (s *Service) Set(ctx context.Context, org, connector, field, value, actor s
 		org, connector, field, now.Add(s.grace())); err != nil {
 		return Status{}, err
 	}
-	hint := ""
-	if f.Secret {
+	hint, setBy := "", actor
+	if f.Secret && source != ByHost {
 		hint = Hint(value)
 	}
+	if source == ByHost {
+		setBy = ByHost
+	}
 	if _, err := tx.Exec(ctx, `insert into rk_secrets (org_id, connector, field, version, ciphertext, nonce, dek_id, hint, set_by, set_at)
-		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, org, connector, field, version, ct, nonce, dekID, hint, actor, now); err != nil {
+		values ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`, org, connector, field, version, ct, nonce, dekID, hint, setBy, now); err != nil {
 		return Status{}, err
 	}
 	// drop versions whose grace period is over
@@ -419,6 +445,9 @@ func (s *Service) Set(ctx context.Context, org, connector, field, value, actor s
 	if hint != "" {
 		data["hint"] = hint
 	}
+	if source == ByHost {
+		data["by"] = ByHost
+	}
 	if err := store.Audit(ctx, tx, org, actor, "secret.set", "connector/"+connector, "secret "+field+" set (version "+fmt.Sprint(version)+")", data); err != nil {
 		return Status{}, err
 	}
@@ -426,12 +455,21 @@ func (s *Service) Set(ctx context.Context, org, connector, field, value, actor s
 		return Status{}, err
 	}
 	s.forget(org, connector)
-	return Status{Field: field, Secret: f.Secret, Required: f.Required, Set: true, Version: version, Hint: hint, SetBy: actor,
-		SetAt: now.UTC().Format(time.RFC3339)}, nil
+	st := Status{Field: field, Secret: f.Secret, Required: f.Required, Set: true, Version: version, Hint: hint, SetBy: actor,
+		SetAt: now.UTC().Format(time.RFC3339)}
+	if source == ByHost {
+		st.Source, st.SetBy = ByHost, ""
+	}
+	return st, nil
 }
 
 // Delete removes every version of a field for one org (db driver only) and audits secret.delete.
 func (s *Service) Delete(ctx context.Context, org, connector, field, actor string) error {
+	return s.DeleteFrom(ctx, org, connector, field, actor, "")
+}
+
+// DeleteFrom is Delete with the caller's source: ByHost audits by: host (contract 0063 §2).
+func (s *Service) DeleteFrom(ctx context.Context, org, connector, field, actor, source string) error {
 	if !s.Writable() {
 		return ErrReadOnlyDriver
 	}
@@ -454,6 +492,9 @@ func (s *Service) Delete(ctx context.Context, org, connector, field, actor strin
 		}
 	}
 	data := map[string]any{"connector": connector, "field": field, "version": version}
+	if source == ByHost {
+		data["by"] = ByHost
+	}
 	if err := store.Audit(ctx, tx, org, actor, "secret.delete", "connector/"+connector, "secret "+field+" deleted", data); err != nil {
 		return err
 	}
@@ -597,7 +638,11 @@ func (s *Service) Requires(installed func(*meta.Registry) []string) func(ctx con
 			}
 			for _, f := range fields {
 				if f.Required && !set[f.Name] {
-					out = append(out, changeset.Requirement{Connector: n, Field: f.Name, Label: f.Label, Secret: f.Secret})
+					r := changeset.Requirement{Connector: n, Field: f.Name, Label: f.Label, Secret: f.Secret}
+					if HostProvided(after, n) || (after.Connectors[n] == nil && HostProvided(before, n)) {
+						r.Source = ByHost
+					}
+					out = append(out, r)
 				}
 			}
 		}

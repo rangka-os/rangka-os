@@ -1,0 +1,29 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+# host_connector_fields (contract 0063 §2): a host connector's fields come from the host only.
+name: rangka_pay_bad
+label: {id: Pembayaran rusak}
+summary: {id: Penghubung host untuk uji kode validator.}
+version: 0.1.0
+hosts: [api.example.com]
+experimental:
+  provided_by: host
+auth:
+  type: token
+  fields:
+    - name: brand_id
+      label: {id: Brand ID}
+      default: "'BRN-001'"
+    - name: webhook_key
+      label: {id: Kunci webhook}
+      secret: true
+      generate: true
+    - name: access_token
+      label: {id: Access token}
+      secret: true
+actions:
+  - name: ping
+    label: {id: Kirim ping}
+    request:
+      method: GET
+      url: https://api.example.com/ping
+      headers: {Authorization: 'Bearer {auth.access_token}'}

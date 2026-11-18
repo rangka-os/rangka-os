@@ -63,7 +63,7 @@
     "../canvas/canvas.js",
     "process.js",
     "catalogue.js",
-    "team.js",
+    "team.js", "tampilan.js",
     "tur.js",
     "mulai.js",
     "ai.js",

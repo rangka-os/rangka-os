@@ -149,6 +149,8 @@ func (s *Server) switchOrg(w http.ResponseWriter, r *http.Request, c *caller) {
 	writeJSON(w, 200, s.meBody(r.Context(), nc, s.isApprover(u)))
 }
 
+const msgSecretsHostMintForbidden = "Token secrets:host hanya bisa dibuat oleh pemilik usaha yang masuk lewat browser."
+
 const msgTokenMintForbidden = "Token API hanya bisa dibuat oleh orang yang masuk lewat browser, bukan oleh token."
 
 func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -175,12 +177,18 @@ func (s *Server) createToken(w http.ResponseWriter, r *http.Request, c *caller) 
 	}
 	for _, sc := range body.Scopes {
 		if !auth.TokenScopes[sc] {
-			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write, members:write, assistant)")
+			writeError(w, 400, "unknown_scope", "unknown token scope "+sc+" (known: secrets:write, secrets:host, members:write, assistant)")
 			return
 		}
 		// members:write (contract 0043 §1): minted only by an owner of the organisation with their own session
 		if sc == auth.ScopeMembersWrite && !isOwner(c) {
 			writeError(w, 403, "forbidden", msgMembersMintForbidden)
+			return
+		}
+		// secrets:host (contract 0063 §2): minted only by an owner of the organisation with their own session, as the
+		// host does at provisioning
+		if sc == auth.ScopeSecretsHost && !isOwner(c) {
+			writeError(w, 403, "forbidden", msgSecretsHostMintForbidden)
 			return
 		}
 		// secrets:write (contract 0017 §3): minted only by a person who may manage connector secrets

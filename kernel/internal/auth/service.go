@@ -272,6 +272,12 @@ func (s *Service) CreateToken(ctx context.Context, u *User, name string, ttl tim
 // provisioning. Only a person who may manage secrets can mint it; Omilo helper and Rangka AI tokens never carry it.
 const ScopeSecretsWrite = "secrets:write"
 
+// ScopeSecretsHost lets an API token set and remove the auth fields of a host connector (contract 0063 §2,
+// provided_by: host) and nothing else under the secrets API: the host (Rangka Cloud) provisions each tenant's values
+// with it. Every other caller gets 409 secret_host_provided on such a connector; this scope on any other connector
+// gets 403. Only an owner with a browser session can mint it.
+const ScopeSecretsHost = "secrets:host"
+
 // ScopeMembersWrite lets an API token create, change and remove the non-owner members of its organisation through
 // the member API (contract 0043), for Rangka Cloud. Only an owner with a browser session can mint it.
 const ScopeMembersWrite = "members:write"
@@ -281,7 +287,7 @@ const ScopeMembersWrite = "members:write"
 const ScopeAssistant = "assistant"
 
 // TokenScopes are the scopes an API token may carry.
-var TokenScopes = map[string]bool{ScopeSecretsWrite: true, ScopeMembersWrite: true, ScopeAssistant: true}
+var TokenScopes = map[string]bool{ScopeSecretsWrite: true, ScopeSecretsHost: true, ScopeMembersWrite: true, ScopeAssistant: true}
 
 // RevokeMember deletes a person's sessions and API tokens in one organisation (contract 0043 §4); their sessions and
 // tokens for other organisations stay. q may be the transaction that changes the membership.

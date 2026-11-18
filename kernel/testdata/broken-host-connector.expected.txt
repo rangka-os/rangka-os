@@ -1,0 +1,5 @@
+../../broken-host-connector/connectors/rangka_pay_bad/connector.rk:15:16  error  host_connector_fields  auth/fields/0/default  auth field "brand_id" of host connector "rangka_pay_bad" has a default: its value comes from the host only (contract 0063 §2)
+../../broken-host-connector/connectors/rangka_pay_bad/connector.rk:19:17  error  host_connector_fields  auth/fields/1/generate  auth field "webhook_key" of host connector "rangka_pay_bad" is generated: its value comes from the host only (contract 0063 §2)
+../../broken-host-connector/site/connectors/x_hosted/connector.rk:8:16  error  host_connector_company  experimental/provided_by  company connector "x_hosted" cannot be provided_by: host: only a catalogue connector is served by the host (contract 0063 §2)
+
+3 error(s), 0 warning(s)

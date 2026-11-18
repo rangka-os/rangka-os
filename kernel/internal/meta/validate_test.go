@@ -97,6 +97,26 @@ func TestBrokenCompanyConnectorMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-company-connector.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-company-connector/site", ConnectorsDir: "testdata/broken-company-connector/connectors"})
 }
 
+// Host connectors (contract 0063 §2): host_connector_company and host_connector_fields.
+func TestBrokenHostConnectorMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-host-connector.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-host-connector/site", ConnectorsDir: "testdata/broken-host-connector/connectors"})
+}
+
+// The valid host connector fixture has no problems, and its manifest says provided_by: host.
+func TestHostConnectorValid(t *testing.T) {
+	reg, rep := ValidateOpts(Options{AppsDir: "../../testdata/modules-apps/apps", SiteDir: "../../testdata/host-connector/site", ConnectorsDir: "../../testdata/host-connector/connectors"}, nil, schema.Embedded())
+	var buf bytes.Buffer
+	if rep.Print(&buf); len(rep.All()) != 0 {
+		t.Fatalf("expected no problems:\n%s", buf.String())
+	}
+	if got := ProvidedBy(AsMap(reg.Connectors["rangka_pay"].Data)); got != "host" {
+		t.Fatalf("ProvidedBy(rangka_pay) = %q, want host", got)
+	}
+	if got := ProvidedBy(map[string]any{"name": "x"}); got != "owner" {
+		t.Fatalf("ProvidedBy without the key = %q, want owner", got)
+	}
+}
+
 func TestHostPrivate(t *testing.T) {
 	for h, want := range map[string]bool{
 		"10.0.0.5": true, "127.0.0.1": true, "::1": true, "[::1]": true, "localhost": true, "app.localhost": true,

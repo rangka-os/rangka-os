@@ -13,8 +13,16 @@ import (
 // PUT and DELETE change one field for the caller's org. Only a person who is the org's owner, or holds a role named in
 // config.rk connector_auth:, reaches these routes. The assistant and OIDC helpers never do; API tokens may read, and
 // write only with the secrets:write scope (Rangka Cloud provisioning).
+//
+// Host connectors (contract 0063 §2, provided_by: host): only a token with secrets:host writes or deletes their
+// fields; every other caller, the owner included, gets 409 secret_host_provided. A secrets:host token on any other
+// connector gets 403. GET reports their fields with source: host and no hint or set_by person.
 
 const msgConnectorAuthForbidden = "Kunci penghubung hanya bisa diatur oleh pemilik atau peran yang diberi izin connector_auth"
+
+const msgSecretHostProvided = "Kunci penghubung ini disediakan oleh Rangka Cloud, jadi tidak bisa diisi atau dihapus dari sini. Tunggu Rangka Cloud mengisinya."
+
+const msgSecretsHostOnly = "Token secrets:host hanya mengatur kunci penghubung yang disediakan host (provided_by: host)."
 
 // mayManageSecrets is the role rule: owner, or a role listed in config.rk connector_auth.
 func (s *Server) mayManageSecrets(c *caller) bool {
@@ -40,7 +48,7 @@ func (s *Server) connectorAuthGuard(w http.ResponseWriter, c *caller, write bool
 		writeError(w, 403, "ai_forbidden", "Raka dan helper tidak bisa membaca atau mengatur kunci penghubung; minta pemilik usaha.")
 		return false
 	}
-	if write && !c.p.Human() && !(c.p.Via == "token" && c.p.HasScope(auth.ScopeSecretsWrite)) { // an API token needs secrets:write
+	if write && !c.p.Human() && !(c.p.Via == "token" && (c.p.HasScope(auth.ScopeSecretsWrite) || c.p.HasScope(auth.ScopeSecretsHost))) { // an API token needs secrets:write or secrets:host
 		writeError(w, 403, "forbidden", msgConnectorAuthForbidden)
 		return false
 	}
@@ -63,6 +71,29 @@ func (s *Server) connectorExists(w http.ResponseWriter, name string) bool {
 	return true
 }
 
+// hostTokenCaller reports whether the caller is an API token with secrets:host (contract 0063 §2).
+func hostTokenCaller(c *caller) bool {
+	return c.p.Via == "token" && c.p.HasScope(auth.ScopeSecretsHost)
+}
+
+// hostWriteGuard is contract 0063 §2 for PUT and DELETE, after the caller and the connector are known: a host
+// connector takes writes only from a secrets:host token (409 secret_host_provided for everyone else), and a
+// secrets:host token writes only host connectors (403). source is secrets.ByHost for the host's write.
+func (s *Server) hostWriteGuard(w http.ResponseWriter, c *caller, name string) (source string, ok bool) {
+	host, hostTok := s.isHostConnector(name), hostTokenCaller(c)
+	switch {
+	case host && !hostTok:
+		writeError(w, 409, "secret_host_provided", msgSecretHostProvided)
+		return "", false
+	case !host && hostTok:
+		writeError(w, 403, "forbidden", msgSecretsHostOnly)
+		return "", false
+	case host:
+		return secrets.ByHost, true
+	}
+	return "", true
+}
+
 func (s *Server) getConnectorAuth(w http.ResponseWriter, r *http.Request, c *caller) {
 	if !s.connectorAuthGuard(w, c, false) {
 		return
@@ -76,8 +107,12 @@ func (s *Server) getConnectorAuth(w http.ResponseWriter, r *http.Request, c *cal
 		fail(w, err)
 		return
 	}
+	var providedBy any
+	if s.isHostConnector(name) {
+		providedBy = secrets.ByHost
+	}
 	writeJSON(w, 200, map[string]any{"connector": name, "org": c.actor.Org, "driver": s.Secrets.Driver(),
-		"writable": s.Secrets.Writable(), "fields": list})
+		"writable": s.Secrets.Writable(), "provided_by": providedBy, "fields": list})
 }
 
 func (s *Server) putConnectorAuth(w http.ResponseWriter, r *http.Request, c *caller) {
@@ -88,6 +123,10 @@ func (s *Server) putConnectorAuth(w http.ResponseWriter, r *http.Request, c *cal
 	if !s.connectorExists(w, name) {
 		return
 	}
+	source, ok := s.hostWriteGuard(w, c, name)
+	if !ok {
+		return
+	}
 	var body struct {
 		Value *string `json:"value"`
 	}
@@ -95,7 +134,7 @@ func (s *Server) putConnectorAuth(w http.ResponseWriter, r *http.Request, c *cal
 		writeError(w, 400, "bad_json", `send {"value": "…"}`)
 		return
 	}
-	_, err := s.Secrets.Set(r.Context(), c.actor.Org, name, field, *body.Value, c.actor.ID)
+	_, err := s.Secrets.SetFrom(r.Context(), c.actor.Org, name, field, *body.Value, c.actor.ID, source)
 	if secretsFail(w, err) {
 		return
 	}
@@ -110,7 +149,11 @@ func (s *Server) deleteConnectorAuth(w http.ResponseWriter, r *http.Request, c *
 	if !s.connectorExists(w, name) {
 		return
 	}
-	if secretsFail(w, s.Secrets.Delete(r.Context(), c.actor.Org, name, field, c.actor.ID)) {
+	source, ok := s.hostWriteGuard(w, c, name)
+	if !ok {
+		return
+	}
+	if secretsFail(w, s.Secrets.DeleteFrom(r.Context(), c.actor.Org, name, field, c.actor.ID, source)) {
 		return
 	}
 	w.WriteHeader(http.StatusNoContent)

@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+# host_connector_company (contract 0063 §2): a company connector is never served by the host.
+name: x_hosted
+label: {id: Host milik perusahaan}
+version: 0.1.0
+hosts: [api.example.com]
+experimental:
+  provided_by: host
+  source: {kind: owner_file}
+auth:
+  type: token
+  fields:
+    - name: access_token
+      label: {id: Access token}
+      secret: true
+actions:
+  - name: ping
+    label: {id: Kirim ping}
+    request:
+      method: GET
+      url: https://api.example.com/ping
+      headers: {Authorization: 'Bearer {auth.access_token}'}

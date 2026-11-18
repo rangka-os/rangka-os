@@ -50,6 +50,10 @@ type Server struct {
 	Internal     *Internal           // /_rangka/ endpoints for the hosting side; nil = they do not exist (contract 0040 §1)
 	Log          func(format string, args ...any)
 
+	// HostConnectors are the host connectors this kernel serves (RANGKA_HOST_CONNECTORS, contract 0063 §2); nil or
+	// empty = none, as on a self-hosted kernel
+	HostConnectors map[string]bool
+
 	previewMu sync.Mutex // guards previews (preview.go)
 	previews  []*previewEntry
 
@@ -188,6 +192,13 @@ func (s *Server) Handler() http.Handler {
 	a := s.authed
 	// records
 	mux.HandleFunc("GET /api/v1/meta", a(s.getMeta))
+	// themes (contract 0067 §6)
+	mux.HandleFunc("GET /api/v1/themes", a(s.listThemes))
+	mux.HandleFunc("POST /api/v1/themes/derive", a(s.deriveTheme))
+	mux.HandleFunc("POST /api/v1/themes/from-image", a(s.themeFromImage))
+	mux.HandleFunc("GET /api/v1/me/appearance", a(s.getAppearance))
+	mux.HandleFunc("PUT /api/v1/me/appearance", a(s.putAppearance))
+	mux.HandleFunc("DELETE /api/v1/me/appearance", a(s.deleteAppearance))
 	mux.HandleFunc("GET /api/v1/r/{model}", a(s.listRecords))
 	mux.HandleFunc("GET /api/v1/aggregate/{model}", a(s.aggregateRecords))
 	mux.HandleFunc("POST /api/v1/r/{model}", a(s.idempotent(s.createRecord)))

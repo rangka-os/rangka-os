@@ -353,6 +353,8 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
 .ap-cat-text { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
 .ap-cat-text b { font-weight: 600; }
 .ap-cat-text .ap-muted { overflow-wrap: anywhere; }
+/* ◆ "Disediakan Rangka Cloud" on a host connector (contract 0063 §2) */
+.ap-cat-host { font: 600 12px/16px var(--font-sans); color: var(--ink-2); }
 .ap-cat-acts { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 8px; }
 .ap-cat-tech { margin: 0; font: 400 12px/16px var(--font-mono, monospace); color: var(--faint, var(--muted)); }
 /* Pengaturan → Tim (team.js, contract 0056 §4) */
@@ -1108,3 +1110,35 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur.using .ap-tur-card.sheet .ap-tur-body, .ap-tur.using .ap-tur-card.sheet .ap-tur-dots, .ap-tur.using .ap-tur-card.sheet .ap-tur-n { display: none; }
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts { margin: 0; }
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts > :not([data-tur-primary]) { display: none; }
+
+/* Contract 0067 §5: a theme's bundled font replaces the UI font everywhere (the Juragan look names Inter directly),
+   code and numbers in mono keep theirs. */
+:root[data-font="theme"] body, :root[data-font="theme"] body :not(code):not(pre):not(kbd):not(samp):not(.rk-mono) { font-family: var(--font-sans); }
+
+/* Pengaturan › Tampilan (tampilan.js) */
+.ap-tp { display: grid; gap: var(--space-6); max-width: 1040px; }
+.ap-tp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(176px, 1fr)); gap: var(--space-3); }
+.ap-tp-card { display: flex; flex-direction: column; gap: 6px; padding: 8px; border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); text-align: left; cursor: pointer; font: inherit; color: var(--ink); min-height: var(--touch); }
+.ap-tp-card:hover { border-color: var(--border); }
+.ap-tp-card[aria-pressed="true"] { border: 2px solid var(--ink); padding: 7px; }
+.ap-tp-card:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ap-tp-name { display: flex; align-items: center; gap: 6px; font-weight: 600; }
+.ap-tp-name .rk-pill { margin-left: auto; }
+.ap-tp-desc { color: var(--muted); font-size: var(--font-size-sm); }
+.ap-tp-mini { display: flex; height: 64px; border-radius: 5px; overflow: hidden; border: 1px solid; }
+.ap-tp-mini-side { width: 30%; padding: 6px; display: flex; flex-direction: column; gap: 4px; }
+.ap-tp-mini-main { flex: 1; padding: 6px; display: flex; flex-direction: column; gap: 5px; }
+.ap-tp-bar { height: 4px; border-radius: 2px; }
+.ap-tp-bars { display: flex; align-items: flex-end; gap: 3px; height: 22px; }
+.ap-tp-bars span { width: 6px; border-radius: 1px; }
+.ap-tp-row { display: flex; flex-wrap: wrap; align-items: flex-end; gap: var(--space-4); }
+.ap-tp-colour { display: flex; align-items: center; gap: 8px; }
+.ap-tp-colour input[type="color"] { width: 44px; height: 32px; padding: 0; border: 1px solid var(--border); border-radius: var(--r); background: none; cursor: pointer; }
+.ap-tp-chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.ap-tp-chip { width: 32px; height: 32px; border-radius: 6px; border: 1px solid rgba(0, 0, 0, .15); cursor: pointer; }
+.ap-tp-chip[aria-pressed="true"] { box-shadow: 0 0 0 2px var(--surface), 0 0 0 4px var(--ink); }
+.ap-tp-checks { display: grid; gap: 4px; font-size: var(--font-size-sm); }
+.ap-tp-checks li { display: flex; gap: 8px; list-style: none; }
+.ap-tp-checks ul { margin: 0; padding: 0; }
+.ap-tp-label { font-weight: 500; color: var(--ink-2); font-size: var(--font-size-sm); }
+@media (max-width: 767px) { .ap-tp-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }

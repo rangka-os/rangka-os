@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
-# mail_missing: a mail action in a connector without the mail: block (contract 0067)
+# mail_missing: a mail action in a connector without the mail: block (contract 0068)
 name: mail_orphan
 label: {id: Mail orphan}
 summary: {id: Aksi email tanpa blok mail.}

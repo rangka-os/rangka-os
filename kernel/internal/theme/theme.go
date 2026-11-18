@@ -239,12 +239,19 @@ type Override struct {
 	Light       string `json:"light"`
 	Dark        string `json:"dark"`
 	DarkDerived bool   `json:"dark_derived"`
+	From        string `json:"from,omitempty"` // contract 0067: neutral, accent; empty for color
 }
 
 // Colours applies a theme's color map (in key order) to the base tokens.
 func Colours(color map[string]any, keys []string) (light, dark map[string]string, over map[string]Override) {
 	light, dark = Base()
 	over = map[string]Override{}
+	colours(light, dark, over, color, keys)
+	return
+}
+
+// colours applies a color map (in key order) onto light and dark, recording overrides.
+func colours(light, dark map[string]string, over map[string]Override, color map[string]any, keys []string) {
 	for _, k := range keys {
 		switch x := color[k].(type) {
 		case string:
@@ -275,9 +282,8 @@ func Colours(color map[string]any, keys []string) (light, dark map[string]string
 			dv = DeriveDark(k, lv, dark)
 			dark[k] = dv
 		}
-		over[k] = Override{lv, dv, derived}
+		over[k] = Override{Light: lv, Dark: dv, DarkDerived: derived}
 	}
-	return
 }
 
 // Problem is a failed contrast floor.

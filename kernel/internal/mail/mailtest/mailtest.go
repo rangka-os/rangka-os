@@ -1,4 +1,4 @@
-// Package mailtest runs in-process IMAP, POP3 and SMTP servers for tests (contract 0067). Each listens on
+// Package mailtest runs in-process IMAP, POP3 and SMTP servers for tests (contract 0068). Each listens on
 // 127.0.0.1 with a certificate made for the test; ClientTLS trusts it.
 package mailtest
 

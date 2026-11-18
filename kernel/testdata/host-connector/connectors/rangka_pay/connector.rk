@@ -1,0 +1,46 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+# A host connector (contract 0063 §2): the platform that runs the kernel writes every auth field with a
+# secrets:host token; the owner sets none of them. A kernel serves it only when RANGKA_HOST_CONNECTORS names it.
+name: rangka_pay
+label: {id: Pembayaran Rangka, en: Rangka payments}
+summary:
+  id: Terima QRIS lewat Rangka Cloud tanpa mengisi kunci sendiri.
+  en: Take QRIS through Rangka Cloud without entering keys yourself.
+category: payments
+icon: wallet-line
+version: 0.1.0
+vendor: Rangka Cloud
+hosts: [api.example.com]
+money: true
+experimental:
+  provided_by: host
+auth:
+  type: hmac
+  fields:
+    - name: brand_id
+      label: {id: Brand ID}
+    - name: shared_key
+      label: {id: Shared key}
+      secret: true
+  sign:
+    header: Signature
+    key: shared_key
+    prefix: HMACSHA256=
+    lines:
+      - 'Client-Id:{auth.brand_id}'
+      - 'Request-Id:{request.id}'
+      - 'Request-Timestamp:{request.timestamp}'
+      - 'Request-Target:{request.target}'
+      - 'Digest:{request.digest}'
+    headers:
+      Client-Id: '{auth.brand_id}'
+      Request-Id: '{request.id}'
+      Request-Timestamp: '{request.timestamp}'
+actions:
+  - name: get_payment
+    label: {id: Status pembayaran}
+    request:
+      method: GET
+      url: https://api.example.com/payments/{input.gateway_ref}
+    input:
+      - {name: gateway_ref, type: data, required: true}

@@ -34,6 +34,11 @@
   .ap-main { flex: 1; min-height: 0; overflow-y: auto; overflow-x: hidden; }
   .ap-main > .rk-shell-content, .ap-main > .rk-pagehead { box-sizing: border-box; width: 100%; }
   .ap-menu-btn, .ap-nav-scrim, .ap-mhead { display: none; }
+  /* side-only from tablet up: the top bar above the page (contract 0065); the sidebar's switcher already names the business */
+  .ap-dtop { flex: none; position: sticky; top: 0; z-index: 20; }
+  .ap-dtop .rk-topnav-product { display: none; }
+  .ap-dtop .rk-topnav-items { margin-left: 0; }
+  .ap-dtop-noapps .rk-topnav > .rk-iconbtn:first-child { display: none; } /* no apps: nothing to switch to */
   .ap-rail-scrim { display: none; }
   /* layout.responsive.tablet (contract 0038): sidebar keeps the full sidebar on a portrait tablet; drawer opens it
      from the menu button as on phones */
@@ -43,6 +48,7 @@
     .ap-shell.ap-tablet-drawer > .rk-side { display: none; }
     .ap-shell.ap-tablet-drawer .ap-main { overflow: visible; }
     .ap-shell.ap-tablet-drawer .ap-menu-btn { display: inline-flex; }
+    .ap-side.ap-tablet-drawer .ap-dtop { display: none; }
     .ap-side.ap-tablet-drawer .ap-mhead { display: flex; align-items: center; gap: 4px; height: 48px; padding: 0 8px; box-sizing: border-box; position: sticky; top: 0; z-index: 20; background: var(--surface); border-bottom: 1px solid var(--line); }
     .ap-shell.ap-tablet-drawer.ap-nav-open > .rk-side { display: flex; position: fixed; z-index: 40; top: 0; left: 0; bottom: 0; width: min(300px, 86vw); box-shadow: var(--shadow-overlay); overflow-y: auto; }
     .ap-top.ap-tablet-drawer.ap-nav-open > .rk-side { top: var(--topbar); }

@@ -18,6 +18,9 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   more than one org), theme, help, profile and sign-out. Then search (⌘K), the pinned entries (Beranda, Persetujuan with
   its count, Proses bisnis, Impor data) and the layout's `nav.side` groups (else each app's menu). The footer holds the
   collapse button; collapsed state is kept in `localStorage["rk.sidebar.collapsed"]`.
+  From 768px up a top bar sits above the page, beside the sidebar (contract 0065). It is the TopNav without the product
+  tile: the app switcher when apps are installed, the menu (`nav.top`, else one item per sidebar group, from 1024px),
+  search, notifications, help and the account menu.
   At 600px and below the sidebar is a drawer opened from a 48px bar (menu, company, search).
   With `layout.responsive.phone: tabs` (contract 0038) a phone gets bottom tabs from `responsive.tabs` plus a last Menu
   tab that opens the drawer; the top-nav shell then drops its own menu button, and toasts sit above the tabs. Escape

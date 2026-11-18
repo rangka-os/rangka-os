@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/theme.json
+# Orange for shops and retail; was rangka/retail (contract 0065 §3). Tokens are derived from accent, button and neutral by the kernel.
+name: senja
+label: {id: Senja, en: Dusk}
+extends: rangka/standard
+accent: '#e56910'
+button: accent
+neutral: stone

@@ -53,7 +53,7 @@ compare-python: build
 	            "$(APPS) --site testdata/numbering-site --connectors $(CONN)" "testdata/broken-apps" \
 	            "$(APPS) --site testdata/company-connector/site --connectors $(CONN)" \
 	            "testdata/modules-apps/apps --site testdata/broken-company-connector/site --connectors testdata/broken-company-connector/connectors" \
-	            "$(APPS) --site testdata/rate-site --connectors $(CONN)" "$(APPS) --site testdata/broken-rate-site --connectors $(CONN)" \
+	            "$(APPS) --site testdata/rate-site --connectors $(CONN)" "$(APPS) --site testdata/theme-site --connectors $(CONN)" "$(APPS) --site testdata/broken-rate-site --connectors $(CONN)" \
 	            "testdata/broken-apps --site testdata/broken-site --connectors testdata/broken-connectors" \
 	            "testdata/modules-apps/apps --site testdata/modules-apps/site" \
 	            "testdata/broken-modules-apps/apps --site testdata/broken-modules-apps/site" \

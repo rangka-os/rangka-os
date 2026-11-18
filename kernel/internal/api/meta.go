@@ -4,7 +4,6 @@ import (
 	"context"
 	"errors"
 	"net/http"
-	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
@@ -12,7 +11,6 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/changeset"
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
-	"github.com/rangka-os/rangka-os/kernel/internal/rk"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 	"github.com/rangka-os/rangka-os/kernel/internal/theme"
 )
@@ -438,15 +436,7 @@ func siteConfig(reg *meta.Registry) map[string]any {
 
 // template loads rangka-os/templates/<kind>/<name>.rk.
 func (s *Server) template(kind, name string) map[string]any {
-	if s.TemplatesDir == "" {
-		return nil
-	}
-	for _, n := range []string{name, strings.ReplaceAll(name, "_", "-"), strings.ReplaceAll(name, "-", "_")} {
-		if d, err := rk.Load(filepath.Join(s.TemplatesDir, kind, n+".rk")); err == nil {
-			return meta.AsMap(d.Data)
-		}
-	}
-	return nil
+	return meta.LoadTemplate(kind, name, s.TemplatesDir)
 }
 
 func merge(base, over map[string]any) map[string]any {
@@ -506,15 +496,10 @@ func (s *Server) theme(reg *meta.Registry) map[string]any {
 	var light, dark map[string]string
 	var over map[string]theme.Override
 	if reg.Site != nil && reg.Site.Themes[name] != nil {
-		light, dark, over = meta.ThemeColours(reg.Site.Themes[name])
+		light, dark, over = meta.ThemeColours(reg.Site.Themes[name], s.TemplatesDir)
 	} else {
-		color := meta.AsMap(th["color"])
-		var keys []string
-		for k := range color {
-			keys = append(keys, k)
-		}
-		sort.Strings(keys)
-		light, dark, over = theme.Colours(color, keys)
+		spec, keys := meta.ThemeSpec(th, nil, "")
+		light, dark, over = theme.Apply(spec, keys)
 	}
 	out := map[string]any{"name": name, "mode": th["mode"], "tokens": map[string]any{"light": light, "dark": dark}, "overrides": over}
 	if reg.Site != nil && reg.Site.Themes[name] != nil {

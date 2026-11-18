@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/theme.json
+# Green for clinics, pharmacies and care; was rangka/clinic (contract 0065 §3). Tokens are derived from accent, button and neutral by the kernel.
+name: daun
+label: {id: Daun, en: Leaf}
+extends: rangka/standard
+accent: '#1f845a'
+button: accent
+neutral: gray

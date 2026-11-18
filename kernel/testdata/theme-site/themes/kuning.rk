@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/theme.json
+name: kuning
+label: {id: Kuning}
+extends: rangka/standard
+accent: '#f5cd47'
+button: accent
+neutral: gray

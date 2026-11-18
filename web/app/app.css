@@ -1109,7 +1109,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts { margin: 0; }
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts > :not([data-tur-primary]) { display: none; }
 
-/* Contract 0065 §5: a theme's bundled font replaces the UI font everywhere (the Juragan look names Inter directly),
+/* Contract 0067 §5: a theme's bundled font replaces the UI font everywhere (the Juragan look names Inter directly),
    code and numbers in mono keep theirs. */
 :root[data-font="theme"] body, :root[data-font="theme"] body :not(code):not(pre):not(kbd):not(samp):not(.rk-mono) { font-family: var(--font-sans); }
 

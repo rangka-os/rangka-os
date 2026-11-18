@@ -24,7 +24,7 @@ density: standard            # compact | standard | comfortable
 - **`rangka/standard`** is the Rangka base: Ink (#1C1917) primary buttons, deep Bata (#A33B23) links and selection on a
   Kapur (#F6EDE6) tint, a Bata Terang (#E0623F) focus ring, warm stone neutrals; danger stays red. A company theme
   overrides only what it needs, like the coffee `brand` and the first chart colour above.
-- **One colour is enough** (contract 0065): `accent` derives `brand`, `selected`, `row-selected`, `selected-ink`,
+- **One colour is enough** (contract 0067): `accent` derives `brand`, `selected`, `row-selected`, `selected-ink`,
   `link`, `focus` and `chart-1`, light and dark, each moved in 1 % lightness steps until it passes the contrast floors.
   `button: accent` also derives the primary button; `neutral` picks warm stone, cool slate or plain gray.
 - **Bundled themes**: `standard` (Standar), `laut`, `daun` (was `clinic`), `senja` (was `retail`), `anggur`, `arang`.

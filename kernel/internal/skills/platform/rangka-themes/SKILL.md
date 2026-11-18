@@ -1,6 +1,6 @@
 ---
 name: rangka-themes
-description: "How to change how a Rangka business looks: pick a bundled theme, make one from the owner's colour or logo, choose the button style, neutral family and font, and what a theme may never change. Use whenever the owner asks about colours, theme, logo colours, font, dark mode or 'tampilan' (contract 0065)."
+description: "How to change how a Rangka business looks: pick a bundled theme, make one from the owner's colour or logo, choose the button style, neutral family and font, and what a theme may never change. Use whenever the owner asks about colours, theme, logo colours, font, dark mode or 'tampilan' (contract 0067)."
 metadata: {rangka: {version: 0.5.0, writes: [config, themes]}}
 ---
 

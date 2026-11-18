@@ -188,7 +188,7 @@ func (s *Server) Handler() http.Handler {
 	a := s.authed
 	// records
 	mux.HandleFunc("GET /api/v1/meta", a(s.getMeta))
-	// themes (contract 0065 §6)
+	// themes (contract 0067 §6)
 	mux.HandleFunc("GET /api/v1/themes", a(s.listThemes))
 	mux.HandleFunc("POST /api/v1/themes/derive", a(s.deriveTheme))
 	mux.HandleFunc("POST /api/v1/themes/from-image", a(s.themeFromImage))

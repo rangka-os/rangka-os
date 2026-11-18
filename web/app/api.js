@@ -457,7 +457,7 @@
       });
     };
 
-    /* ----- themes (contract 0065 §6) */
+    /* ----- themes (contract 0067 §6) */
     /** GET /api/v1/themes → {themes: [{name, label, source, accent, button, neutral, custom, swatches}], current, fonts, allowed}. */
     api.themes = function () { return json("GET", "/api/v1/themes"); };
     /** POST /api/v1/themes/derive {accent, button, neutral, color?, extends?} → {light, dark, overrides, checks}. Stores nothing. */

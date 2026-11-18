@@ -299,7 +299,7 @@
     if (features.catalogue) more.push({ id: "pengaturan/katalog", label: "Modul dan sambungan", icon: "apps" });
     // Tim (contract 0056 §4): the kernel answers its routes for the owner alone
     if (((meta.user && meta.user.roles) || []).indexOf("owner") >= 0) more.push({ id: "pengaturan/tim", label: "Tim", icon: "team" });
-    // Tampilan (contract 0065 §8): the owner's business theme; everyone else reaches their own part from the account menu
+    // Tampilan (contract 0067 §8): the owner's business theme; everyone else reaches their own part from the account menu
     if (((meta.user && meta.user.roles) || []).indexOf("owner") >= 0) more.push({ id: "pengaturan/tampilan", label: "Tampilan", icon: "palette" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
@@ -381,7 +381,7 @@
     return DENSITIES[d] ? d : "standard";
   }
 
-  /* Contract 0065: the theme the person sees (meta.theme.effective: their own pick, else the business theme) is
+  /* Contract 0067: the theme the person sees (meta.theme.effective: their own pick, else the business theme) is
    * applied on top of the base look as inline custom properties on <html>, one per overridden token, for the mode in
    * use. Tokens a theme leaves alone keep the stylesheet's (Rangka or Juragan) values. */
   var FONT_FAMILIES = { inter: "Inter", "plus-jakarta-sans": "Plus Jakarta Sans", "nunito-sans": "Nunito Sans", "ibm-plex-sans": "IBM Plex Sans", "source-serif-4": "Source Serif 4" };
@@ -440,7 +440,7 @@
   function themeOf(pick, meta) {
     if (THEMES[pick]) return pick;
     var pm = meta && meta.theme && meta.theme.personal && meta.theme.personal.mode;
-    if (THEMES[pm]) return pm; // saved with the person's appearance (contract 0065 §4)
+    if (THEMES[pm]) return pm; // saved with the person's appearance (contract 0067 §4)
     var m = meta && meta.theme && meta.theme.mode;
     return m === "light" || m === "dark" ? m : "light";
   }

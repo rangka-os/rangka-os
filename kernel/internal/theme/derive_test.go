@@ -18,7 +18,7 @@ func floors(t *testing.T, name string, light, dark map[string]string) {
 	}
 }
 
-// The six bundled themes (contract 0065 §3) pass every floor in light and dark.
+// The six bundled themes (contract 0067 §3) pass every floor in light and dark.
 func TestPresetsPass(t *testing.T) {
 	for _, pr := range []struct{ name, accent, button, neutral string }{
 		{"standard", "", "", ""}, {"laut", "#0c66e4", "accent", "slate"}, {"daun", "#1f845a", "accent", "gray"},

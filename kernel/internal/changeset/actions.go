@@ -668,7 +668,7 @@ func (s *Service) planApps(ctx context.Context, v *Validation, reg *meta.Registr
 }
 
 // planTheme adds a blocking error when the change creates or edits a theme of the business's own (accent, colours
-// or a bundled font other than system) on a plan whose custom_theme flag is false (contract 0065 §7). Pointing
+// or a bundled font other than system) on a plan whose custom_theme flag is false (contract 0067 §7). Pointing
 // config.theme at a theme, or changing mode, radius and density, is always allowed; nothing already there is
 // touched.
 func (s *Service) planTheme(ctx context.Context, v *Validation, reg *meta.Registry) error {

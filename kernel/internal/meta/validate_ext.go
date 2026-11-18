@@ -633,7 +633,7 @@ func (v *validator) site(all map[string]vis) {
 		if ext, _ := data["extends"].(string); strings.HasPrefix(ext, "rangka/") {
 			tn := strings.TrimPrefix(ext, "rangka/")
 			if nn := theme.Renamed[tn]; nn != "" {
-				v.rep.extra("warn", d.Path, "extends", "renamed_template", fmt.Sprintf(`theme template "%s" is now "rangka/%s" (contract 0065 §3)`, ext, nn))
+				v.rep.extra("warn", d.Path, "extends", "renamed_template", fmt.Sprintf(`theme template "%s" is now "rangka/%s" (contract 0067 §3)`, ext, nn))
 				tn = nn
 			}
 			if !templateExists("themes", tn, tdir) {
@@ -642,12 +642,12 @@ func (v *validator) site(all map[string]vis) {
 		}
 		for _, k := range sortedKeys(asMap(data["color"])) {
 			if theme.Locked(k) {
-				v.rep.extra("error", d.Path, "color/"+k, "locked_token", fmt.Sprintf(`"%s" keeps its meaning in every theme and cannot be set (contract 0065 §1)`, k))
+				v.rep.extra("error", d.Path, "color/"+k, "locked_token", fmt.Sprintf(`"%s" keeps its meaning in every theme and cannot be set (contract 0067 §1)`, k))
 			}
 		}
 		for _, k := range []string{"sans", "display"} {
 			if f, ok := asMap(data["font"])[k].(string); ok && !theme.KnownFont(f) {
-				v.rep.extra("error", d.Path, "font/"+k, "unknown_font", fmt.Sprintf(`font "%s" is not bundled; use one of %s (contract 0065 §5)`, f, strings.Join(theme.Fonts, ", ")))
+				v.rep.extra("error", d.Path, "font/"+k, "unknown_font", fmt.Sprintf(`font "%s" is not bundled; use one of %s (contract 0067 §5)`, f, strings.Join(theme.Fonts, ", ")))
 			}
 		}
 		if cc, ok := data["contrast_check"].(bool); !ok || cc {
@@ -687,7 +687,7 @@ func orderedKeys(a *App, key string) []string {
 	return out
 }
 
-// ThemeColours applies a theme document (merged with its template from tdir, contract 0065) to the base tokens:
+// ThemeColours applies a theme document (merged with its template from tdir, contract 0067) to the base tokens:
 // neutral family, accent and button, then its colours in file order.
 func ThemeColours(d *rk.Doc, tdir string) (map[string]string, map[string]string, map[string]theme.Override) {
 	spec, keys := ThemeSpec(asMap(d.Data), docColorOrder(d), tdir)

@@ -10,7 +10,7 @@ import (
 	"sort"
 )
 
-// Contract 0065 §6 POST /themes/from-image: the main colours of a logo, computed (not guessed by an LLM):
+// Contract 0067 §6 POST /themes/from-image: the main colours of a logo, computed (not guessed by an LLM):
 // opaque pixels on a grid of at most 64×64 samples, k-means (k ≤ 5) in CIE Lab with a deterministic start,
 // near-white and near-black clusters dropped unless they are all there is, largest first.
 

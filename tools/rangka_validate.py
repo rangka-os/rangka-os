@@ -1748,18 +1748,18 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
         if ext.startswith("rangka/"):
             tn = ext[7:]
             if tn in RENAMED_THEMES:
-                rep.add("warn", p, "extends", "renamed_template", f'theme template "{ext}" is now "rangka/{RENAMED_THEMES[tn]}" (contract 0065 §3)')
+                rep.add("warn", p, "extends", "renamed_template", f'theme template "{ext}" is now "rangka/{RENAMED_THEMES[tn]}" (contract 0067 §3)')
                 tn = RENAMED_THEMES[tn]
             if not template_exists("themes", tn):
                 rep.add("warn", p, "extends", "unknown_template", f'no theme template "{ext}" in rangka-os/templates/themes')
         for k in sorted((d.get("color") or {}) if isinstance(d.get("color"), dict) else {}):
             if locked_token(k):
-                rep.add("error", p, f"color/{k}", "locked_token", f'"{k}" keeps its meaning in every theme and cannot be set (contract 0065 §1)')
+                rep.add("error", p, f"color/{k}", "locked_token", f'"{k}" keeps its meaning in every theme and cannot be set (contract 0067 §1)')
         font = d.get("font") if isinstance(d.get("font"), dict) else {}
         for k in ("sans", "display"):
             f = font.get(k)
             if isinstance(f, str) and f not in FONTS:
-                rep.add("error", p, f"font/{k}", "unknown_font", f'font "{f}" is not bundled; use one of {", ".join(FONTS)} (contract 0065 §5)')
+                rep.add("error", p, f"font/{k}", "unknown_font", f'font "{f}" is not bundled; use one of {", ".join(FONTS)} (contract 0067 §5)')
         if d.get("contrast_check", True) is not False:
             check_contrast(rep, p, d)
     dashboards, dash_app = {}, {}
@@ -1977,7 +1977,7 @@ def base_tokens():
     return _BASE
 
 
-# ---- contract 0065: neutral families, one accent, button style, locked tokens, bundled fonts (mirrors kernel theme/derive.go)
+# ---- contract 0067: neutral families, one accent, button style, locked tokens, bundled fonts (mirrors kernel theme/derive.go)
 
 RENAMED_THEMES = {"clinic": "daun", "retail": "senja"}
 FONTS = ["system", "inter", "plus-jakarta-sans", "nunito-sans", "ibm-plex-sans", "source-serif-4"]
@@ -2097,7 +2097,7 @@ def theme_spec(theme):
 
 def theme_colours(theme):
     """(light, dark, overrides) for a theme: base tokens, neutral family, accent and button, then colours (dark derived
-    when not given) — contract 0065 and decision 12."""
+    when not given) — contract 0067 and decision 12."""
     spec, keys = theme_spec(theme)
     bl, bd = base_tokens()
     light, dark, over = dict(bl), dict(bd), {}

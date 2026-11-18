@@ -6,10 +6,10 @@ import (
 	"strings"
 )
 
-// Contract 0065: a theme may name a neutral family, one accent colour and the primary button style; the kernel
+// Contract 0067: a theme may name a neutral family, one accent colour and the primary button style; the kernel
 // derives the tokens (light and dark) so every floor in Pairs holds. rangka_validate.py mirrors this file.
 
-// Neutrals are the neutral families of contract 0065 §1. stone is the base tokens (tokens.json) and is not listed.
+// Neutrals are the neutral families of contract 0067 §1. stone is the base tokens (tokens.json) and is not listed.
 var Neutrals = map[string][2]map[string]string{
 	"slate": {
 		{"app": "#ffffff", "surface": "#ffffff", "soft": "#f4f5f7", "ink": "#172b4d", "ink-2": "#44546f", "muted": "#5e6c84",
@@ -36,7 +36,7 @@ var Neutrals = map[string][2]map[string]string{
 // buttonTokens are the tokens a family sets only when primary buttons stay ink.
 var buttonTokens = map[string]bool{"primary": true, "primary-hover": true, "primary-ink": true}
 
-// Locked are tokens a theme may not set (contract 0065 §1): status colours and Raka.
+// Locked are tokens a theme may not set (contract 0067 §1): status colours and Raka.
 func Locked(name string) bool {
 	for _, p := range []string{"ok", "warn", "bad", "info", "discovery", "raka"} {
 		if name == p || strings.HasPrefix(name, p+"-") {
@@ -50,10 +50,10 @@ func Locked(name string) bool {
 	return false
 }
 
-// Renamed maps old theme template names to the new ones (contract 0065 §3).
+// Renamed maps old theme template names to the new ones (contract 0067 §3).
 var Renamed = map[string]string{"clinic": "daun", "retail": "senja"}
 
-// Fonts are the bundled font names for font.sans / font.display (contract 0065 §5).
+// Fonts are the bundled font names for font.sans / font.display (contract 0067 §5).
 var Fonts = []string{"system", "inter", "plus-jakarta-sans", "nunito-sans", "ibm-plex-sans", "source-serif-4"}
 
 // KnownFont reports whether name is a bundled font.
@@ -87,7 +87,7 @@ func towards(c string, dir float64, floor float64, bgs ...string) string {
 	return out
 }
 
-// Derive returns the light and dark tokens one accent sets, against the neutrals in light and dark (contract 0065 §2).
+// Derive returns the light and dark tokens one accent sets, against the neutrals in light and dark (contract 0067 §2).
 // button "accent" also sets primary, primary-hover and primary-ink.
 func Derive(accent, button string, light, dark map[string]string) (map[string]string, map[string]string) {
 	h, l, s := hls(accent)
@@ -125,7 +125,7 @@ func Derive(accent, button string, light, dark map[string]string) (map[string]st
 }
 
 // Apply resolves a theme (already merged with its template): base tokens, then the neutral family, then the accent
-// and button, then color overrides in key order (contract 0065 §1). Every token that differs from the base is an
+// and button, then color overrides in key order (contract 0067 §1). Every token that differs from the base is an
 // override, with From naming the step that set it.
 func Apply(spec map[string]any, keys []string) (light, dark map[string]string, over map[string]Override) {
 	light, dark = Base()
@@ -153,7 +153,7 @@ func Apply(spec map[string]any, keys []string) (light, dark map[string]string, o
 	return
 }
 
-// Custom reports whether a theme document is one of the business's own (contract 0065 §7): an accent, colours,
+// Custom reports whether a theme document is one of the business's own (contract 0067 §7): an accent, colours,
 // or a bundled font other than system. neutral, button, mode, radius, density and logo alone are not.
 func Custom(data map[string]any) bool {
 	if a, _ := data["accent"].(string); a != "" {

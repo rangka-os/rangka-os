@@ -11,7 +11,7 @@ import (
 	"testing"
 )
 
-// Contract 0065 §6: gallery, derive, colours from a logo, the person's own appearance and /meta.theme.
+// Contract 0067 §6: gallery, derive, colours from a logo, the person's own appearance and /meta.theme.
 func TestThemesAPI(t *testing.T) {
 	e := newEnv(t, false, nil)
 	e.login()
@@ -91,7 +91,7 @@ func TestThemesAPI(t *testing.T) {
 	}
 }
 
-// Contract 0065 §7: a plan with custom_theme false may switch to a bundled theme, not make one of its own.
+// Contract 0067 §7: a plan with custom_theme false may switch to a bundled theme, not make one of its own.
 func TestCustomThemePlanFlag(t *testing.T) {
 	e := newEnv(t, false, func(apps, site string) {
 		f := filepath.Join(site, "features.rk")

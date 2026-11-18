@@ -934,7 +934,7 @@ def test_theme_default_light(page, ctx):
     light_bg = "#faf9f7" if page.evaluate("document.documentElement.getAttribute('data-brand')") == "juragan" else "#fafaf9"
     assert mode() == "light" and app_bg() == light_bg, f"light by default, got data-theme={mode()} --app={app_bg()}"
     assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
-    # the pick is saved with the person's appearance too (PUT /me/appearance, contract 0065 §4): wait for it before
+    # the pick is saved with the person's appearance too (PUT /me/appearance, contract 0067 §4): wait for it before
     # reloading, or the reload aborts it
     with page.expect_response(lambda r: "/api/v1/me/appearance" in r.url and r.request.method == "PUT"):
         account_menu(page).get_by_role("menuitem", name="Gelap").click()
@@ -942,14 +942,14 @@ def test_theme_default_light(page, ctx):
     page.reload()
     page.locator(".ap-shell").wait_for(timeout=15000)
     assert mode() == "dark", "the pick survives a reload"
-    # the pick is also saved with the person's appearance (contract 0065 §4); forget it for the next scenarios
+    # the pick is also saved with the person's appearance (contract 0067 §4); forget it for the next scenarios
     page.request.delete(ctx.base + "/api/v1/me/appearance")
     page.evaluate("() => localStorage.removeItem('rk.app.theme')")
     page.emulate_media(color_scheme="light")
 
 
 def test_tampilan_try_and_apply(page, ctx):
-    """Pengaturan › Tampilan (contract 0065): the owner tries Laut on the page only, applies it as a change set, and the
+    """Pengaturan › Tampilan (contract 0067): the owner tries Laut on the page only, applies it as a change set, and the
     whole app repaints with Laut's tokens; the change set is reverted afterwards so later scenarios keep the base look."""
     open_route(page, ctx, "#/pengaturan/tampilan")
     page.get_by_role("heading", name="Tema usaha").wait_for(timeout=15000)

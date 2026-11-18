@@ -1,4 +1,4 @@
-# 0065 Themes: presets, custom colours, font, and a personal pick
+# 0067 Themes: presets, custom colours, font, and a personal pick
 
 Status: proposed (18 Nov 2026) · Owner of the change: rangka-os (theme schema, `theme` package, templates, `/meta`,
 new theme endpoints, web app and Console) · Affects: rangka-cloud (Konsol › Tampilan, account appearance, plan

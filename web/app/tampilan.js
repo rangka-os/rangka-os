@@ -1,4 +1,4 @@
-/* Rangka end-user app: Pengaturan › Tampilan (contract 0065 §4, §8).
+/* Rangka end-user app: Pengaturan › Tampilan (contract 0067 §4, §8).
  *
  * RangkaApp.AppearancePage #/pengaturan/tampilan:
  * - "Untukmu", for everyone: the person's own mode (Ikuti sistem, Terang, Gelap) and theme ("Ikuti tema usaha" or any
@@ -41,7 +41,7 @@
 
   /** The .rk text of a theme of one's own (strict YAML: hex quoted). spec: {label, accent, button, neutral, font}. */
   function themeYaml(name, spec) {
-    var out = SCHEMA + "# Dibuat di Pengaturan › Tampilan (contract 0065).\nname: " + name + "\nlabel: {id: " + q(spec.label || name) + "}\nextends: rangka/standard\n";
+    var out = SCHEMA + "# Dibuat di Pengaturan › Tampilan (contract 0067).\nname: " + name + "\nlabel: {id: " + q(spec.label || name) + "}\nextends: rangka/standard\n";
     out += "accent: " + q(String(spec.accent).toLowerCase()) + "\nbutton: " + (spec.button === "accent" ? "accent" : "ink") + "\nneutral: " + (spec.neutral || "stone") + "\n";
     if (spec.font && spec.font !== "system") out += "font: {sans: " + spec.font + "}\n";
     return out;

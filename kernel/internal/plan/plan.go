@@ -264,11 +264,11 @@ func Resolve(ctx context.Context, q pg.Querier, reg *meta.Registry) (*Current, e
 	return c, nil
 }
 
-// CustomTheme is the plan flag for themes of one's own (contract 0065 §7).
+// CustomTheme is the plan flag for themes of one's own (contract 0067 §7).
 const CustomTheme = "custom_theme"
 
 // Allows reports whether the current plan allows a feature flag: only a plan that sets it false refuses it, so
-// a site without plans, without a chosen plan, or whose plans never name the flag allows it (contract 0065 §7).
+// a site without plans, without a chosen plan, or whose plans never name the flag allows it (contract 0067 §7).
 func (c *Current) Allows(flag string) bool {
 	if c == nil || c.Def == nil {
 		return true

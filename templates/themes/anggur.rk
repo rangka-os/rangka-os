@@ -1,5 +1,5 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/theme.json
-# Purple selection, ink buttons (contract 0065 §3). Tokens are derived from accent, button and neutral by the kernel.
+# Purple selection, ink buttons (contract 0067 §3). Tokens are derived from accent, button and neutral by the kernel.
 name: anggur
 label: {id: Anggur, en: Grape}
 extends: rangka/standard

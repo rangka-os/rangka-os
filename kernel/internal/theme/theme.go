@@ -239,7 +239,7 @@ type Override struct {
 	Light       string `json:"light"`
 	Dark        string `json:"dark"`
 	DarkDerived bool   `json:"dark_derived"`
-	From        string `json:"from,omitempty"` // contract 0065: neutral, accent; empty for color
+	From        string `json:"from,omitempty"` // contract 0067: neutral, accent; empty for color
 }
 
 // Colours applies a theme's color map (in key order) to the base tokens.

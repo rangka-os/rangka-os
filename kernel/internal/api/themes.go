@@ -14,7 +14,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/theme"
 )
 
-// Contract 0065 §6: the theme gallery, derivation without saving, colours from a logo, and the person's own
+// Contract 0067 §6: the theme gallery, derivation without saving, colours from a logo, and the person's own
 // appearance (theme + mode).
 
 // swatchTokens are the tokens a gallery card shows.
@@ -287,7 +287,7 @@ func (s *Server) deleteAppearance(w http.ResponseWriter, r *http.Request, c *cal
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// metaTheme adds personal and effective to /meta.theme for the signed-in person (contract 0065 §6).
+// metaTheme adds personal and effective to /meta.theme for the signed-in person (contract 0067 §6).
 func (s *Server) metaTheme(ctx context.Context, reg *meta.Registry, th map[string]any, userID int64) {
 	// mode is null until the person saves one, so the device's own pick and the business default still apply
 	ap, saved := s.loadAppearance(ctx, userID)

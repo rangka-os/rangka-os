@@ -1136,7 +1136,9 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-bd-n { width: 24px; height: 24px; flex: none; box-sizing: border-box; border-radius: 999px; border: 1.5px solid var(--faint); display: grid; place-items: center;
   font: 600 12px/1 var(--font-sans); color: var(--ink-2); font-variant-numeric: tabular-nums; }
 .ap-bd-n .rk-icon { width: 12px; height: 12px; }
-.ap-bd-n.on { border-color: var(--brand); background: var(--brand); color: var(--on-brand, #ffffff); }
+/* the current step: the theme colour at the strength a theme guarantees for text (link is 4.5:1 on the surface in every
+   theme of contract 0067; brand is only 3:1, too weak under the 12px number in a light orange theme) */
+.ap-bd-n.on { border-color: var(--link); background: var(--link); color: var(--on-brand, #ffffff); }
 .ap-bd-n.done { border-color: transparent; background: var(--ok-tint); color: var(--ok); }
 .ap-bd-t { margin: 0; font: 600 14px/20px var(--font-sans); color: var(--ink); }
 .ap-bd-l { margin: 0; font: 500 14px/20px var(--font-sans); color: var(--ink-2); }

@@ -276,6 +276,32 @@ func (v *validator) authUpstream() {
 	}
 }
 
+// notifyEmail is contract 0017 §2 for system.rk notify.email (check_notify_email in rangka_validate.py): the password
+// is a ${VAR} reference, and no setting reads a platform variable.
+func (v *validator) notifyEmail() {
+	d := v.reg.Site.Docs["system.rk"]
+	if d == nil {
+		return
+	}
+	em, ok := asMap(asMap(d.Data)["notify"])["email"].(map[string]any)
+	if !ok {
+		return
+	}
+	for _, key := range []string{"host", "username", "password", "from"} {
+		raw, has := em[key]
+		var m []string
+		if s, isStr := raw.(string); isStr {
+			m = secretRef.FindStringSubmatch(s)
+		}
+		switch {
+		case m != nil && PlatformEnv(m[1]):
+			v.rep.extra("error", d.Path, "notify/email/"+key, "platform_env", fmt.Sprintf(`notify.email.%s reads ${%s}, a variable of the platform (RANGKA_*, RAKA_*, DATABASE_URL, PG*, VAULT_*, AWS_*, ...): bind a variable of your own (contract 0017 §2)`, key, m[1]))
+		case key == "password" && has && m == nil:
+			v.rep.extra("error", d.Path, "notify/email/password", "secret_literal", `notify.email.password is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)`)
+		}
+	}
+}
+
 // pollTriggers is contract 0002 §A.1 (check_poll_triggers in rangka_validate.py): a trigger with via: poll names one
 // of the connector's actions, which the kernel sends on every poll. A trigger without one is only described (a spec
 // connector): the kernel does not poll it, and a flow listening to it gets poll_action_missing (validate_ext.go).

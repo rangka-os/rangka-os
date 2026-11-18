@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/api"
@@ -73,8 +74,10 @@ type Server struct {
 	API      *api.Server
 	// Connectors runs connector actions and webhooks (contract 0002 §A).
 	Connectors *connectors.Runtime
-	reload     sync.Mutex
-	wg         sync.WaitGroup
+	// mailControl is the egress policy's dial hook for notify.email SMTP connections (nil: open).
+	mailControl func(network, address string, c syscall.RawConn) error
+	reload      sync.Mutex
+	wg          sync.WaitGroup
 }
 
 // LoadRegistry validates the metadata directories and refuses to continue on errors.
@@ -302,6 +305,8 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		return st, err
 	}
 	s.Queue.Handlers["call"] = s.runCallJob
+	s.Queue.Handlers[engine.NotifyEmailJob] = s.runNotifyEmailJob
+	s.mailControl = egress.Control()
 	s.Queue.Handlers["poll"] = s.runPollJob
 	s.Sched.SetPolls(cfg.Org, pollSpecs(reg))
 	e.CallTarget = callTarget

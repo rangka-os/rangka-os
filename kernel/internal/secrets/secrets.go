@@ -128,6 +128,9 @@ func (s *Service) path(reg *meta.Registry) string {
 	if s.Platform.Path != "" || s.Platform.Driver != "" {
 		return s.Platform.Path
 	}
+	if reg == nil {
+		return ""
+	}
 	p, _ := reg.SystemConfig("secrets.path").(string)
 	return p
 }
@@ -286,13 +289,27 @@ func (s *Service) bound(ctx context.Context, reg *meta.Registry, org, connector,
 	if !ok || raw == nil {
 		return "", false
 	}
-	text := fmt.Sprint(raw)
+	return s.resolve(ctx, reg, fmt.Sprint(raw), "connector_auth "+connector+"."+field)
+}
+
+// Resolve reads a system.rk value outside connector_auth that may be a ${VAR} reference (notify.email host, username,
+// password): a literal comes back as it is, a reference is read with the site's driver like a connector_auth binding,
+// and a platform variable reads as unset. where names the key in the log line.
+func (s *Service) Resolve(ctx context.Context, text, where string) (string, bool) {
+	var reg *meta.Registry
+	if s.Reg != nil {
+		reg = s.Reg()
+	}
+	return s.resolve(ctx, reg, text, where)
+}
+
+func (s *Service) resolve(ctx context.Context, reg *meta.Registry, text, where string) (string, bool) {
 	m := varRef.FindStringSubmatch(text)
 	if m == nil {
 		return text, text != ""
 	}
 	if meta.PlatformEnv(m[1]) { // the validator refuses it too; never resolve the platform's own variables (audit business-raka F1)
-		s.logf("secrets: connector_auth %s.%s reads ${%s}, a platform variable: left unset", connector, field, m[1])
+		s.logf("secrets: %s reads ${%s}, a platform variable: left unset", where, m[1])
 		return "", false
 	}
 	switch s.Driver() {

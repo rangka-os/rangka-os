@@ -219,7 +219,7 @@ releases on npm, GitHub and ghcr.io.
 Still open: the CEL engine, YAML reader, JSON Schema validator, HTTP router and job queue are small in-tree packages
 to be swapped for the upstream libraries ([contract 0005 §1](docs/contracts/0005-pilot-readiness.md)); the connector
 runtime ([0002](docs/contracts/0002-connector-runtime-and-ports.md)) and connector secrets
-([0017](docs/contracts/0017-connector-secrets.md)); sending email, push and WhatsApp (logged only); Valkey and S3
+([0017](docs/contracts/0017-connector-secrets.md)); sending push and WhatsApp (logged only; email goes out over SMTP when `notify.email` sets `driver: smtp`); Valkey and S3
 drivers; edge sync ([0006](docs/contracts/0006-edge-sync.md)). The [roadmap](https://rangka-os.github.io/rangka-os/roadmap)
 has the full list.
 

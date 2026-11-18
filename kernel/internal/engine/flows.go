@@ -19,13 +19,17 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Notification is what a notify step produced. v0 delivers through the "log" driver: the audit log and
-// the kernel log.
+// Notification is what a notify step produced. Every step writes the audit entry notify.<channel> and a kernel log
+// line. With system.rk notify.email driver smtp, an email step also queues one notify_email job per member address
+// (notify.go); every other channel, and email without smtp, stays on the "log" driver.
 type Notification struct {
 	Channel    string   `json:"channel"`
 	To         string   `json:"to"`
 	Recipients []string `json:"recipients"`
 	Text       string   `json:"text"`
+	Driver     string   `json:"driver"`            // log or smtp
+	Jobs       []int64  `json:"jobs,omitempty"`    // smtp: the queued notify_email jobs, one per address
+	Dropped    int      `json:"dropped,omitempty"` // smtp: targets that matched no member of the organisation
 }
 
 // FlowResult summarises a flow run.
@@ -111,7 +115,7 @@ func (e *Engine) manualRecordEvent(ctx context.Context, a Actor, model, op strin
 }
 
 // RunFlowFrom runs a flow (never manual, contract 0026) in one transaction from top-level step start with vars (the
-// scheduler and record events; a queued job resumes through RunFlowResume). Steps: find, find_all, create, update, for_each (the steps under do: once per item of a list), notify (log driver), call (connector action, queued as a
+// scheduler and record events; a queued job resumes through RunFlowResume). Steps: find, find_all, create, update, for_each (the steps under do: once per item of a list), notify (log driver, or queued mail with notify.email smtp), call (connector action, queued as a
 // call job when the runtime is wired, else only recorded), if/then/else, wait (the remaining steps are
 // queued for later) and approve (the remaining steps wait for a decision). Every step may have if: and as:.
 //
@@ -706,12 +710,17 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			case map[string]any:
 				tmpl = meta.LabelOf(t).Text()
 			}
-			n := Notification{Channel: ch, To: to, Recipients: recipients(to, r.vars), Text: cel.Interpolate(tmpl, r.env())}
+			n := Notification{Channel: ch, To: to, Recipients: recipients(to, r.vars), Text: cel.Interpolate(tmpl, r.env()), Driver: "log"}
+			if ch == "email" {
+				if err := r.notifyEmail(&n); err != nil {
+					return fmt.Errorf("step %s notify: %w", i, err)
+				}
+			}
 			r.out.Notifications = append(r.out.Notifications, n)
-			if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "notify."+ch, "flow/"+r.f.Name, n.Text, n); err != nil {
+			if err := r.notifyAudit(n); err != nil {
 				return err
 			}
-			o.tx.AfterCommit(func() { e.Log("notify[%s] %s %v: %s", ch, to, n.Recipients, n.Text) }) // once, not per retried attempt
+			o.tx.AfterCommit(func() { e.Log("notify[%s/%s] %s %v: %s", ch, n.Driver, to, n.Recipients, n.Text) }) // once, not per retried attempt
 			r.out.Steps = append(r.out.Steps, fmt.Sprintf("%s: notify %s via %s", i, to, ch))
 		case st["call"] != nil:
 			call := str(st["call"])

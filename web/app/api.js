@@ -457,6 +457,17 @@
       });
     };
 
+    /* ----- themes (contract 0065 §6) */
+    /** GET /api/v1/themes → {themes: [{name, label, source, accent, button, neutral, custom, swatches}], current, fonts, allowed}. */
+    api.themes = function () { return json("GET", "/api/v1/themes"); };
+    /** POST /api/v1/themes/derive {accent, button, neutral, color?, extends?} → {light, dark, overrides, checks}. Stores nothing. */
+    api.themeDerive = function (spec) { return json("POST", "/api/v1/themes/derive", spec); };
+    /** POST /api/v1/themes/from-image (a logo) → {colours, suggested}. */
+    api.themeFromImage = function (file) { var fd = new FormData(); fd.append("file", file); return json("POST", "/api/v1/themes/from-image", fd); };
+    /** GET / PUT /api/v1/me/appearance {theme: name|null, mode}: the person's own pick, no approval. */
+    api.appearance = function () { return json("GET", "/api/v1/me/appearance"); };
+    api.setAppearance = function (a) { return json("PUT", "/api/v1/me/appearance", { theme: a.theme || null, mode: a.mode || "system" }); };
+
     /* ----- Pengaturan → Tim (contract 0056 §4): the owner's browser session only; 403 for everyone else */
     /** GET /api/v1/team → {managed_by: "kernel" | "host", members: [{user_id, email, full_name, role, outlets, record, access}]}. */
     api.team = function () { return json("GET", "/api/v1/team"); };

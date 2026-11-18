@@ -204,14 +204,15 @@ type appearance struct {
 	Mode  string  `json:"mode"`
 }
 
-func (s *Server) loadAppearance(ctx context.Context, userID int64) appearance {
+// loadAppearance returns the person's saved appearance and whether they ever saved one.
+func (s *Server) loadAppearance(ctx context.Context, userID int64) (appearance, bool) {
 	out := appearance{Mode: "system"}
 	if userID == 0 || s.DB == nil {
-		return out
+		return out, false
 	}
 	res, err := s.DB.Query(ctx, "select theme, mode from rk_user_appearance where user_id = $1", userID)
 	if err != nil || len(res.Rows) == 0 {
-		return out
+		return out, false
 	}
 	if t, ok := res.Rows[0][0].(string); ok && t != "" {
 		out.Theme = &t
@@ -219,12 +220,13 @@ func (s *Server) loadAppearance(ctx context.Context, userID int64) appearance {
 	if m, ok := res.Rows[0][1].(string); ok && modes[m] {
 		out.Mode = m
 	}
-	return out
+	return out, true
 }
 
 // getAppearance is GET /api/v1/me/appearance.
 func (s *Server) getAppearance(w http.ResponseWriter, r *http.Request, c *caller) {
-	writeJSON(w, 200, s.loadAppearance(r.Context(), c.p.User.ID))
+	ap, _ := s.loadAppearance(r.Context(), c.p.User.ID)
+	writeJSON(w, 200, ap)
 }
 
 // putAppearance is PUT /api/v1/me/appearance: {theme: name|null, mode}. No approval: it changes only what this
@@ -274,12 +276,16 @@ func (s *Server) putAppearance(w http.ResponseWriter, r *http.Request, c *caller
 
 // metaTheme adds personal and effective to /meta.theme for the signed-in person (contract 0065 §6).
 func (s *Server) metaTheme(ctx context.Context, reg *meta.Registry, th map[string]any, userID int64) {
-	ap := s.loadAppearance(ctx, userID)
-	var pt any
+	// mode is null until the person saves one, so the device's own pick and the business default still apply
+	ap, saved := s.loadAppearance(ctx, userID)
+	var pt, pm any
 	if ap.Theme != nil {
 		pt = *ap.Theme
 	}
-	th["personal"] = map[string]any{"theme": pt, "mode": ap.Mode}
+	if saved {
+		pm = ap.Mode
+	}
+	th["personal"] = map[string]any{"theme": pt, "mode": pm}
 	eff := map[string]any{"name": th["name"], "tokens": th["tokens"], "overrides": th["overrides"]}
 	for _, k := range []string{"font", "radius", "density"} {
 		if v, ok := th[k]; ok {

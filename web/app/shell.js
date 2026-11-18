@@ -53,6 +53,7 @@
     if (parts[0] === "mulai" && parts.length === 1) return { kind: "mulai" }; // Mulai di sini (contract 0053 §5)
     if (parts[0] === "pengaturan" && parts[1] === "katalog" && parts.length === 2) return { kind: "catalogue" };
     if (parts[0] === "pengaturan" && parts[1] === "tim" && parts.length === 2) return { kind: "team" };
+    if (parts[0] === "pengaturan" && parts[1] === "tampilan" && parts.length === 2) return { kind: "appearance" };
     // a sign-in link from Tim (contract 0056 §4): #/masuk/tautan?t=<token>; Root opens it before asking who you are
     if (parts[0] === "masuk" && parts[1] === "tautan" && parts.length === 2) return { kind: "signinLink" };
     if (parts[0] === "import" && parts.length === 2) return { kind: "import", import: parts[1] };
@@ -298,6 +299,8 @@
     if (features.catalogue) more.push({ id: "pengaturan/katalog", label: "Modul dan sambungan", icon: "apps" });
     // Tim (contract 0056 §4): the kernel answers its routes for the owner alone
     if (((meta.user && meta.user.roles) || []).indexOf("owner") >= 0) more.push({ id: "pengaturan/tim", label: "Tim", icon: "team" });
+    // Tampilan (contract 0065 §8): the owner's business theme; everyone else reaches their own part from the account menu
+    if (((meta.user && meta.user.roles) || []).indexOf("owner") >= 0) more.push({ id: "pengaturan/tampilan", label: "Tampilan", icon: "palette" });
     var imps = features.imports ? Object.keys(meta.imports || {}) : [];
     if (imps.length === 1) more.push({ id: "import/" + imps[0], label: "Impor data", icon: "download" });
     if (imps.length > 1) {
@@ -378,11 +381,66 @@
     return DENSITIES[d] ? d : "standard";
   }
 
+  /* Contract 0065: the theme the person sees (meta.theme.effective: their own pick, else the business theme) is
+   * applied on top of the base look as inline custom properties on <html>, one per overridden token, for the mode in
+   * use. Tokens a theme leaves alone keep the stylesheet's (Rangka or Juragan) values. */
+  var FONT_FAMILIES = { inter: "Inter", "plus-jakarta-sans": "Plus Jakarta Sans", "nunito-sans": "Nunito Sans", "ibm-plex-sans": "IBM Plex Sans", "source-serif-4": "Source Serif 4" };
+  function effectiveTheme(meta) { var t = meta && meta.theme; return (t && t.effective) || t || {}; }
+  /** {"--token": value} for the effective theme in light or dark: overridden tokens, the focus rings built from focus,
+   *  and the font stacks of bundled fonts. overrides (optional) replaces the theme's own, e.g. a theme being tried. */
+  function themeVars(meta, dark, overrides, font) {
+    var eff = effectiveTheme(meta), over = overrides || eff.overrides || {}, out = {};
+    Object.keys(over).sort().forEach(function (k) {
+      var o = over[k], v = o && (dark ? o.dark : o.light);
+      if (typeof v === "string" && v) out["--" + k] = v;
+    });
+    if (out["--focus"]) { out["--focus-ring"] = "0 0 0 2px " + out["--focus"]; out["--focus-soft"] = "inset 0 0 0 1px " + out["--focus"]; }
+    var f = font || eff.font || {};
+    if (FONT_FAMILIES[f.sans]) out["--font-sans"] = '"' + FONT_FAMILIES[f.sans] + '", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    if (FONT_FAMILIES[f.display]) out["--font-display"] = '"' + FONT_FAMILIES[f.display] + '", ui-sans-serif, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif';
+    return out;
+  }
+  /** The Google Fonts stylesheet for the bundled fonts a theme uses (cached offline by sw.js), or "". */
+  function fontHref(font) {
+    var fams = [];
+    ["sans", "display"].forEach(function (k) { var n = font && FONT_FAMILIES[font[k]]; if (n && fams.indexOf(n) < 0) fams.push(n); });
+    if (!fams.length) return "";
+    return "https://fonts.googleapis.com/css2?" + fams.map(function (n) { return "family=" + n.replace(/ /g, "+") + ":wght@400..700"; }).join("&") + "&display=swap";
+  }
+  /** Puts vars on <html>, removing the ones a previous call set; sets data-font while a theme font is in use. */
+  function paintTheme(root, vars, font) {
+    (root.__rkThemeVars || []).forEach(function (k) { if (!(k in vars)) root.style.removeProperty(k); });
+    Object.keys(vars).forEach(function (k) { root.style.setProperty(k, vars[k]); });
+    root.__rkThemeVars = Object.keys(vars);
+    var href = fontHref(font), doc = root.ownerDocument;
+    if (href && doc) {
+      var link = doc.getElementById("rk-theme-font");
+      if (!link) { link = doc.createElement("link"); link.id = "rk-theme-font"; link.rel = "stylesheet"; doc.head.appendChild(link); }
+      if (link.getAttribute("href") !== href) link.setAttribute("href", href);
+    }
+    if (vars["--font-sans"]) root.setAttribute("data-font", "theme"); else root.removeAttribute("data-font");
+  }
+  /** Whether <html> shows the dark set now (data-theme, else the OS preference). */
+  function isDark(root, global) {
+    var t = root.getAttribute("data-theme");
+    if (t) return t === "dark";
+    return !!(global.matchMedia && global.matchMedia("(prefers-color-scheme: dark)").matches);
+  }
+  /** Repaints the effective theme of meta (or a theme being tried: {overrides, font}) for the current mode. */
+  RA.paintTheme = function (meta, trying) {
+    var root = global.document && global.document.documentElement;
+    if (!root) return;
+    var eff = effectiveTheme(meta);
+    paintTheme(root, themeVars(meta, isDark(root, global), trying && trying.overrides, trying ? trying.font || {} : null), trying ? trying.font || {} : eff.font);
+  };
+
   var THEMES = { light: 1, dark: 1, system: 1 };
   /** The colour mode: the person's own pick (light, dark or system), else the company theme's mode when it names one
    * (light or dark; its "system" is no preference), else light. */
   function themeOf(pick, meta) {
     if (THEMES[pick]) return pick;
+    var pm = meta && meta.theme && meta.theme.personal && meta.theme.personal.mode;
+    if (THEMES[pm]) return pm; // saved with the person's appearance (contract 0065 §4)
     var m = meta && meta.theme && meta.theme.mode;
     return m === "light" || m === "dark" ? m : "light";
   }
@@ -439,6 +497,7 @@
       case "import": return "import/" + route.import;
       case "catalogue": return "pengaturan/katalog";
       case "team": return "pengaturan/tim";
+      case "appearance": return "pengaturan/tampilan";
       case "mulai": return "mulai";
       case "work": return home && home === "#/w/" + route.screen ? "home" : "w/" + route.screen;
       default: return null;
@@ -525,6 +584,8 @@
   RA.shellKind = shellKind;
   RA.densityOf = densityOf;
   RA.themeOf = themeOf;
+  RA.themeVars = themeVars;
+  RA.fontHref = fontHref;
   RA.commandGroups = commandGroups;
   RA.navFromLayout = navFromLayout;
   RA.hashQuery = hashQuery;
@@ -725,7 +786,7 @@
   }
 
   /* ---------------------------------------------------------------- views */
-  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", team: "TeamPage", work: "WorkScreenView", mulai: "MulaiPage" };
+  var VIEWS = { list: "ListView", form: "FormView", dash: "DashboardView", approvals: "ApprovalInbox", import: "ImportWizard", processes: "ProcessList", process: "ProcessView", catalogue: "CataloguePage", team: "TeamPage", appearance: "AppearancePage", work: "WorkScreenView", mulai: "MulaiPage" };
 
   function Placeholder(p) {
     return h("div", { className: "rk-shell-content" }, h(R.EmptyState, { title: p.title, actions: p.home ? h(R.Button, { onClick: function () { RA.navigate(p.home); } }, "Ke beranda") : null }, p.children));
@@ -738,7 +799,7 @@
     if (route.kind === "work") return !!(meta.screens || {})[route.screen];
     if (route.kind === "processes" || route.kind === "process") return !!(features && features.processes);
     // the catalogue and Tim pages answer "no access" themselves
-    return route.kind === "approvals" || route.kind === "catalogue" || route.kind === "team" || route.kind === "mulai";
+    return route.kind === "approvals" || route.kind === "catalogue" || route.kind === "team" || route.kind === "appearance" || route.kind === "mulai";
   }
 
   function Page(p) {
@@ -1007,18 +1068,27 @@
       // The Juragan look has one light and one dark set: "system" is resolved to one of them (and follows the OS), so
       // the Rangka media-query tokens never mix with the Juragan ones under an OS dark mode.
       var mq = root.getAttribute("data-brand") === "juragan" && global.matchMedia ? global.matchMedia("(prefers-color-scheme: dark)") : null;
+      var osDark = global.matchMedia ? global.matchMedia("(prefers-color-scheme: dark)") : null;
       function apply() {
         if (theme !== "system") root.setAttribute("data-theme", theme);
         else if (mq) root.setAttribute("data-theme", mq.matches ? "dark" : "light");
         else root.removeAttribute("data-theme");
+        RA.paintTheme(meta);
         // the installed app's status bar takes the top bar's colour (--surface), light or dark
         if (RA.pwa && global.getComputedStyle) RA.pwa.themeColor(global.getComputedStyle(root).getPropertyValue("--surface").trim());
       }
       apply();
-      if (!mq || theme !== "system") return undefined;
-      if (mq.addEventListener) mq.addEventListener("change", apply); else mq.addListener(apply);
-      return function () { if (mq.removeEventListener) mq.removeEventListener("change", apply); else mq.removeListener(apply); };
-    }, [theme]);
+      var q = mq || osDark;
+      if (!q || theme !== "system") return undefined;
+      if (q.addEventListener) q.addEventListener("change", apply); else q.addListener(apply);
+      return function () { if (q.removeEventListener) q.removeEventListener("change", apply); else q.removeListener(apply); };
+    }, [theme, meta]);
+
+    // the mode saved with the person's appearance wins over this device's last pick once /meta has it
+    useEffect(function () {
+      var pm = meta && meta.theme && meta.theme.personal && meta.theme.personal.mode;
+      if (THEMES[pm] && pm !== themePick) { setThemePick(pm); writeThemePick(pm); }
+    }, [meta]);
 
     useEffect(function () { global.document.documentElement.dataset.density = densityOf(meta); }, [meta]);
 
@@ -1284,7 +1354,12 @@
       else if (k === "app:update") RA.pwa.applyUpdate();
       else if (k === "app:install") RA.pwa.install().then(function (r) { if (r === "accepted") toast("ok", "Rangka terpasang", "Buka dari layar utama HP-mu."); });
       else if (k === "app:ios") toast("info", "Pasang di iPhone atau iPad", "Di Safari, ketuk Bagikan lalu Tambahkan ke Layar Utama.");
-      else if (k.indexOf("theme:") === 0) { setThemePick(k.slice(6)); writeThemePick(k.slice(6)); }
+      else if (k.indexOf("theme:") === 0) {
+        var mode = k.slice(6), mine = meta && meta.theme && meta.theme.personal;
+        setThemePick(mode); writeThemePick(mode);
+        if (api.setAppearance) api.setAppearance({ theme: mine && mine.theme, mode: mode }).then(function () { return reloadMeta(); }, function () {});
+      }
+      else if (k === "appearance") { setNavOpen(false); setSwitchAt(null); RA.navigate("#/pengaturan/tampilan"); }
       else if (k === "logout" || k === "switch") logout();
       else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
       else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
@@ -1340,9 +1415,9 @@
       }), ["-"]);
       items = items.concat([{ heading: "Perusahaan" }], companies.map(function (c) {
         return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
-      }), ["-", { heading: "Tema" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "palette", "Ikuti sistem"]].map(function (t) {
+      }), ["-", { heading: "Mode" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "settings", "Ikuti sistem"]].map(function (t) {
         return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
-      }), ["-"], [].concat.apply([], accountExtra().map(function (g) {
+      }), [{ label: "Tema dan tampilan", icon: "palette", onSelect: function () { account("appearance"); } }], ["-"], [].concat.apply([], accountExtra().map(function (g) {
         return [{ heading: g.heading }].concat(g.items.map(function (it) {
           return { label: it.label, icon: it.icon, checked: it.on, onSelect: function () { account(it.key); } };
         }), ["-"]);

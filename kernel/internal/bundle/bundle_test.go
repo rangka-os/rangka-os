@@ -1,13 +1,17 @@
 package bundle
 
 import (
+	"fmt"
 	"io/fs"
 	"os"
+	"os/exec"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"testing"
 	"testing/fstest"
+	"time"
 )
 
 func TestDirExtracts(t *testing.T) {
@@ -176,4 +180,164 @@ func TestExtractConcurrent(t *testing.T) {
 		t.Fatal("cache incomplete after concurrent extracts")
 	}
 	mustExist(t, root, ".web.ok")
+}
+
+// t_c850700e: leftovers of runs that died mid-extract (SIGKILL, OOM) are swept once stale; younger temp
+// entries may belong to a run in progress and stay.
+func TestExtractSweepsStaleTemps(t *testing.T) {
+	src := fakeWeb()
+	root := t.TempDir()
+	if extractFrom(src, root, "web") == "" {
+		t.Fatal("first extract failed")
+	}
+	old := time.Now().Add(-2 * staleAfter)
+	stale := []string{".web.tmp-111", ".web.tmp-222.old", ".marker-333"}
+	for _, n := range stale {
+		p := filepath.Join(root, n)
+		if strings.HasPrefix(n, ".web") {
+			if err := os.MkdirAll(filepath.Join(p, "app"), 0o755); err != nil {
+				t.Fatal(err)
+			}
+		} else if err := os.WriteFile(p, nil, 0o600); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.Chtimes(p, old, old); err != nil {
+			t.Fatal(err)
+		}
+	}
+	fresh := filepath.Join(root, ".web.tmp-444")
+	if err := os.Mkdir(fresh, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if extractFrom(src, root, "web") == "" { // the fast path sweeps too
+		t.Fatal("extract failed")
+	}
+	for _, n := range stale {
+		if _, err := os.Lstat(filepath.Join(root, n)); !os.IsNotExist(err) {
+			t.Fatalf("stale %s not swept (err %v)", n, err)
+		}
+	}
+	mustExist(t, root, ".web.tmp-444", ".web.ok", "web/app/index.html")
+}
+
+// bigWeb is fakeWeb with many files under app (which sorts first), so a racing copy has a wide window.
+func bigWeb() fstest.MapFS {
+	src := fakeWeb()
+	pad := []byte(strings.Repeat("x", 2048))
+	for i := 0; i < 160; i++ {
+		src[fmt.Sprintf("files/web/app/gen/f%03d.js", i)] = &fstest.MapFile{Data: pad}
+	}
+	return src
+}
+
+// Helper-process mode for TestExtractMultiProcess: when BUNDLE_MP_ROOT is set this test binary is one of
+// the kernels starting at once. It signals ready, waits for the start file, extracts, then re-checks the
+// returned directory while its siblings are still running: a sibling's repair must never move it away.
+func runMultiProcessHelper(t *testing.T, root string) {
+	ready, start := os.Getenv("BUNDLE_MP_READY"), os.Getenv("BUNDLE_MP_START")
+	if err := os.WriteFile(ready, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(30 * time.Second)
+	for {
+		if _, err := os.Stat(start); err == nil {
+			break
+		}
+		if time.Now().After(deadline) {
+			t.Fatal("start file never appeared")
+		}
+		time.Sleep(time.Millisecond)
+	}
+	src := bigWeb()
+	d := extractFrom(src, root, "web")
+	if d != filepath.Join(root, "web") {
+		t.Fatalf("extract = %q", d)
+	}
+	for i := 0; i < 50; i++ {
+		if !complete(src, "web", d) {
+			t.Fatalf("check %d: %s incomplete after extract returned", i, d)
+		}
+		time.Sleep(time.Millisecond)
+	}
+	fmt.Println("MP-OK")
+}
+
+// t_d55c15ee: several kernels (separate OS processes, as on the 16 Nov host) starting at once on one
+// cache, empty or broken (marker present, app missing), all get a complete directory, and the root ends
+// with no temp leftovers. The test re-executes its own binary as the processes.
+func TestExtractMultiProcess(t *testing.T) {
+	if root := os.Getenv("BUNDLE_MP_ROOT"); root != "" {
+		runMultiProcessHelper(t, root)
+		return
+	}
+	if testing.Short() {
+		t.Skip("spawns processes")
+	}
+	const procs, rounds = 8, 4
+	src := bigWeb()
+	for _, broken := range []bool{false, true} {
+		for r := 0; r < rounds; r++ {
+			name := fmt.Sprintf("broken=%v/round=%d", broken, r)
+			root := filepath.Join(t.TempDir(), "root")
+			if broken {
+				d := extractFrom(src, root, "web")
+				if err := os.RemoveAll(filepath.Join(d, "app")); err != nil {
+					t.Fatal(err)
+				}
+				mustExist(t, root, ".web.ok")
+			}
+			syncDir := t.TempDir()
+			start := filepath.Join(syncDir, "start")
+			cmds := make([]*exec.Cmd, procs)
+			outs := make([]strings.Builder, procs)
+			for i := range cmds {
+				c := exec.Command(os.Args[0], "-test.run=^TestExtractMultiProcess$", "-test.count=1", "-test.v")
+				c.Env = append(os.Environ(),
+					"BUNDLE_MP_ROOT="+root,
+					"BUNDLE_MP_READY="+filepath.Join(syncDir, "ready-"+strconv.Itoa(i)),
+					"BUNDLE_MP_START="+start)
+				c.Stdout, c.Stderr = &outs[i], &outs[i]
+				if err := c.Start(); err != nil {
+					t.Fatal(err)
+				}
+				cmds[i] = c
+			}
+			waitReady(t, syncDir, procs)
+			if err := os.WriteFile(start, nil, 0o600); err != nil {
+				t.Fatal(err)
+			}
+			for i, c := range cmds {
+				if err := c.Wait(); err != nil || !strings.Contains(outs[i].String(), "MP-OK") {
+					t.Fatalf("%s: process %d: %v\n%s", name, i, err, outs[i].String())
+				}
+			}
+			if !complete(src, "web", filepath.Join(root, "web")) {
+				t.Fatalf("%s: cache incomplete at the end", name)
+			}
+			entries, _ := os.ReadDir(root)
+			for _, e := range entries {
+				switch e.Name() {
+				case ".web.ok", "web", ".lock":
+				default:
+					t.Fatalf("%s: leftover %s in root", name, e.Name())
+				}
+			}
+		}
+	}
+}
+
+// waitReady waits until n helper processes have written their ready file.
+func waitReady(t *testing.T, dir string, n int) {
+	t.Helper()
+	deadline := time.Now().Add(60 * time.Second)
+	for {
+		entries, _ := os.ReadDir(dir)
+		if len(entries) >= n {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("only %d of %d helper processes started", len(entries), n)
+		}
+		time.Sleep(5 * time.Millisecond)
+	}
 }

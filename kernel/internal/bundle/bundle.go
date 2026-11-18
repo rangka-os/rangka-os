@@ -10,12 +10,15 @@ import (
 	"crypto/sha256"
 	"embed"
 	"encoding/hex"
+	"errors"
 	"io/fs"
 	"os"
 	"path"
 	"path/filepath"
 	"sort"
+	"strings"
 	"sync"
+	"time"
 )
 
 //go:embed all:files
@@ -33,24 +36,54 @@ func Has(name string) bool {
 }
 
 // Dir returns a directory holding the bundled `name`, extracting it on first use; "" when not bundled
-// or when it cannot be written. It extracts into the user cache, or into the temp directory when the cache
-// cannot be written (a container user whose HOME is "/" has an unwritable ~/.cache).
+// or when it cannot be written. It extracts into the user cache, or into a per-user directory under the
+// temp directory when the cache cannot be written (a container user whose HOME is "/" has an unwritable
+// ~/.cache).
 func Dir(name string) string {
 	if !Has(name) {
 		return ""
 	}
 	once.Do(func() { key = hash() })
-	var bases []string
-	if base, err := os.UserCacheDir(); err == nil && base != "" {
-		bases = append(bases, base)
-	}
-	bases = append(bases, os.TempDir())
-	for _, base := range bases {
-		if dst := extract(filepath.Join(base, "rangka", key), name); dst != "" {
+	for _, base := range bases() {
+		if dst := extract(filepath.Join(base, key), name); dst != "" {
 			return dst
 		}
 	}
 	return ""
+}
+
+// bases returns the parent directories a bundle may be extracted under, best first. Each one exists, is
+// a real directory (not a symlink), belongs to the current user and cannot be written by anyone else, so
+// another local user cannot plant files the kernel would then serve as the owner app (t_28fae571). The
+// temp fallback is per user (rangka-<uid>, created 0700): a shared /tmp/rangka is guessable, and the key
+// below it is a hash of the public binary. A base that fails the check is skipped, never repaired.
+func bases() []string {
+	var dirs []string
+	if c, err := os.UserCacheDir(); err == nil && c != "" {
+		dirs = append(dirs, filepath.Join(c, "rangka"))
+	}
+	dirs = append(dirs, filepath.Join(os.TempDir(), tempName()))
+	var out []string
+	for _, d := range dirs {
+		if ensurePrivate(d) == nil {
+			out = append(out, d)
+		}
+	}
+	return out
+}
+
+// errNotPrivate marks a base directory another user could write into or swap.
+var errNotPrivate = errors.New("bundle: directory is not private to the current user")
+
+// ensurePrivate creates dir (0700) when missing and checks it with checkPrivate.
+func ensurePrivate(dir string) error {
+	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
+		return err
+	}
+	if err := os.Mkdir(dir, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+		return err
+	}
+	return checkPrivate(dir)
 }
 
 // extract writes the bundled `name` to root/name and returns it; "" when it cannot.
@@ -61,15 +94,23 @@ func extract(root, name string) string { return extractFrom(files, root, name) }
 // kernels starting at once on the same cache) is extracted again instead of served half empty. Each run
 // extracts into its own temp directory, verifies it, and only then renames it into place and writes the
 // marker, so concurrent runs never write into or delete each other's copy.
+//
+// The slow path holds an exclusive lock on root/.lock (where the OS has one), so two runs that both see a
+// broken cache repair it one after the other: the second re-checks under the lock and keeps the first
+// one's copy instead of moving it aside while it is being served (t_c850700e). Leftovers of a run that
+// died mid-extract are swept once they are older than staleAfter.
 func extractFrom(src fs.FS, root, name string) string {
 	dst := filepath.Join(root, name)
 	marker := filepath.Join(root, "."+name+".ok")
-	if st, err := os.Stat(marker); err == nil && !st.IsDir() && complete(src, name, dst) {
+	sweep(root, name)
+	if st, err := os.Lstat(marker); err == nil && st.Mode().IsRegular() && complete(src, name, dst) {
 		return dst
 	}
 	if err := os.MkdirAll(root, 0o755); err != nil {
 		return ""
 	}
+	unlock := lockRoot(root)
+	defer unlock()
 	done := func() string {
 		if writeMarker(root, marker) != nil {
 			return ""
@@ -133,18 +174,19 @@ func copyTree(src fs.FS, name, dir string) error {
 }
 
 // complete reports whether dir holds every directory and file of src's files/<name>, each file with the
-// bundled size.
+// bundled size. It uses Lstat, so a symlink (to the directory itself or to any entry) never counts: a
+// planted link could point anywhere.
 func complete(src fs.FS, name, dir string) bool {
 	base := path.Join("files", name)
 	err := fs.WalkDir(src, base, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
 			return err
 		}
-		st, err := os.Stat(filepath.Join(dir, filepath.FromSlash(p[len(base):])))
+		st, err := os.Lstat(filepath.Join(dir, filepath.FromSlash(p[len(base):])))
 		if err != nil {
 			return err
 		}
-		if d.IsDir() != st.IsDir() {
+		if d.IsDir() != st.IsDir() || (!d.IsDir() && !st.Mode().IsRegular()) {
 			return fs.ErrInvalid
 		}
 		if !d.IsDir() {
@@ -173,6 +215,30 @@ func writeMarker(root, marker string) error {
 		return err
 	}
 	return nil
+}
+
+// staleAfter is how old a temp entry must be before sweep removes it. No healthy extract takes this long,
+// so a younger entry may belong to a run still in progress and is left alone.
+var staleAfter = time.Hour
+
+// sweep removes what runs that died mid-extract (SIGKILL, OOM) left in root: .<name>.tmp-* copies (and
+// their .old twins) and .marker-* temp files older than staleAfter. Errors are ignored; a leftover only
+// costs disk space.
+func sweep(root, name string) {
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		return
+	}
+	cutoff := time.Now().Add(-staleAfter)
+	for _, e := range entries {
+		n := e.Name()
+		if !strings.HasPrefix(n, "."+name+".tmp-") && !strings.HasPrefix(n, ".marker-") {
+			continue
+		}
+		if info, err := e.Info(); err == nil && info.ModTime().Before(cutoff) {
+			os.RemoveAll(filepath.Join(root, n)) // removes a symlink itself, never its target
+		}
+	}
 }
 
 func hash() string {

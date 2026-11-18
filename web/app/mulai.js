@@ -200,18 +200,86 @@
     return h(R.Button, { size: "sm", className: "ap-mu-invite", onClick: function () { ctx.navigate("#/pengaturan/tim"); RA.mulaiInvite = role; } }, "Undang");
   }
 
-  /** Kerjakan: open the step's form and light the first field to fill, then Simpan (tour "langkah:<stage>"). */
-  function work(ctx, step) {
-    var pend = RA.pendingTour = { id: "langkah:" + step.stage, stage: step, at: Date.now() };
-    // the stage's when says whether a draft already counts (saveCopy); read before the form stands, quiet on failure
+  /** The stage's `when` says whether a draft already counts (saveCopy): read from the process, quiet on failure. */
+  function stageWhen(ctx, step) {
     var ob = ctx.onboarding && ctx.onboarding.data;
-    if (!step.prereq && ob && ob.process && ctx.api.process) {
-      ctx.api.process(ob.process).then(function (g) {
-        var gr = ((g && g.groups) || []).filter(function (x) { return x.id === step.stage; })[0];
-        if (gr) pend.when = gr.when || "";
-      }, function () {});
-    }
+    if (step.prereq || !ob || !ob.process || !ctx.api.process) return Promise.resolve(undefined);
+    return ctx.api.process(ob.process).then(function (g) {
+      var gr = ((g && g.groups) || []).filter(function (x) { return x.id === step.stage; })[0];
+      return gr ? gr.when || "" : undefined;
+    }, function () { return undefined; });
+  }
+  /** Open the step's form as its own page and light the first field to fill, then Simpan (tour "langkah:<stage>"). */
+  function workPage(ctx, step) {
+    var pend = RA.pendingTour = { id: "langkah:" + step.stage, stage: step, at: Date.now() };
+    // read before the form stands
+    stageWhen(ctx, step).then(function (w) { if (w !== undefined) pend.when = w; });
     ctx.navigate("#/r/" + step.model + "/new");
+  }
+  /** Kerjakan (desain v3): the step's form opens in a drawer over the page the owner is on, so the list of steps stays
+   *  in view, with the same step tour as on the form's page (first field to fill, then Simpan); "Buka halaman penuh"
+   *  goes to the form's own page (workPage). Without a mounted drawer host (KerjakanDrawer) it opens the page. */
+  var kjStep = null, kjHosts = [];
+  function work(ctx, step) {
+    if (!kjHosts.length || !RA.FormView) { workPage(ctx, step); return; }
+    kjStep = step;
+    kjHosts.forEach(function (f) { f(step); });
+  }
+  function KerjakanDrawer(p) {
+    var ctx = p.ctx, meta = ctx.meta, ob = ctx.onboarding && ctx.onboarding.data;
+    var ss = useState(null), step = ss[0], setStep = ss[1];
+    var qs = useState(false), asking = qs[0], setAsking = qs[1]; // "Tutup tanpa menyimpan?" is on show
+    var xRef = useRef(null), backRef = useRef(null), dirtyRef = useRef(false), bodyRef = useRef(null);
+    useEffect(function () {
+      kjHosts.push(setStep);
+      return function () { kjHosts = kjHosts.filter(function (f) { return f !== setStep; }); kjStep = null; };
+    }, []);
+    function shut() { kjStep = null; dirtyRef.current = false; setAsking(false); setStep(null); if (RA.tour && RA.tour.active && RA.tour.active() && RA.tour.stop) RA.tour.stop(); }
+    // closing a form the person has typed in asks first: nothing is saved until Simpan
+    function close() { if (dirtyRef.current) setAsking(true); else shut(); }
+    useEffect(function () {
+      if (!step) return undefined;
+      backRef.current = global.document.activeElement;
+      var btn = xRef.current && xRef.current.querySelector("button");
+      if (btn) btn.focus();
+      function onKey(e) {
+        // Escape closes the drawer unless a menu, popover or dialog above it is open (those handle Escape themselves)
+        if (e.key === "Escape" && !e.defaultPrevented && !global.document.querySelector(".rk-pop, .rk-dialog, .rk-cmd, .ap-tur")) close();
+      }
+      global.document.addEventListener("keydown", onKey);
+      // the step tour, once the form has its fields (at most 4 s), as on the form's own page
+      var live = true, t0 = Date.now();
+      stageWhen(ctx, step).then(function (w) {
+        (function ready() {
+          if (!live) return;
+          var has = bodyRef.current && bodyRef.current.querySelector(".rk-field");
+          if (has || Date.now() - t0 > 4000) { if (has && ctx.startTour) ctx.startTour(stepTour(ctx, w === undefined ? step : Object.assign({}, step, { when: w }))); return; }
+          global.setTimeout(ready, 100);
+        })();
+      });
+      return function () {
+        live = false;
+        global.document.removeEventListener("keydown", onKey);
+        if (backRef.current && backRef.current.focus) backRef.current.focus();
+      };
+    }, [step]);
+    if (!step) return null;
+    var steps = (ob && ob.steps) || [], at = step.prereq ? step.at : steps.indexOf(step);
+    var kick = (step.prereq ? "Sebelum langkah " + (at + 1) : "Langkah " + (at + 1) + " dari " + steps.length) + " · " + L(step.label);
+    var title = "Tambah " + lower(modelLabel(meta, step.model)) + " pertama";
+    return h(React.Fragment, null,
+      h("div", { className: "rk-scrim", onClick: close }),
+      h("aside", { className: "rk-drawer ap-kj", role: "dialog", "aria-modal": "true", "aria-labelledby": "kj-t" },
+        h("header", { className: "ap-kj-head" },
+          h("p", { className: "ap-kj-kick" }, kick),
+          h("span", { className: "ap-kj-x", ref: xRef }, h(R.IconButton, { icon: "close", label: "Tutup", onClick: close })),
+          h("h2", { id: "kj-t", className: "ap-kj-title" }, title),
+          h(R.Button, { variant: "quiet", className: "ap-kj-full", onClick: function () { shut(); workPage(ctx, step); } }, "Buka halaman penuh")),
+        h("div", { className: "ap-kj-body ap-main", ref: bodyRef, onChangeCapture: function () { dirtyRef.current = true; } }, h(RA.FormView, { model: step.model, name: null }))),
+      asking ? h(R.Dialog, { title: "Isian belum disimpan", onClose: function () { setAsking(false); },
+        footer: [h(R.Button, { key: "c", variant: "quiet", onClick: function () { setAsking(false); } }, "Lanjut mengisi"),
+          h(R.Button, { key: "o", variant: "primary", onClick: shut }, "Tutup tanpa menyimpan")] },
+        h("p", { className: "ap-muted" }, "Isian di form ini belum disimpan dan akan hilang.")) : null);
   }
   function askDraft(ctx, step) {
     var q = "Siapkan draf untuk langkah \"" + L(step.label) + "\"" + (step.hint ? ": " + L(step.hint) : ".") + " Aku periksa dulu sebelum disimpan.";
@@ -262,7 +330,7 @@
     var items = steps.map(function (s, k) {
       var cur = s.stage === ob.current, role = stepRole(meta, s.model), mem = membersOf(team, role);
       var mark = s.state === "done" ? h("span", { className: "ap-mu-dot done" }, h(R.Icon, { name: "check" }))
-        : cur ? h("span", { className: "ap-mu-dot now" }, h(R.Icon, { name: (meta.models[s.model] || {}).icon && R.ICONS[(meta.models[s.model] || {}).icon] ? meta.models[s.model].icon : "right" }))
+        : cur ? h("span", { className: "ap-mu-dot now" }, String(k + 1))
         : s.state === "locked" ? h("span", { className: "ap-mu-dot" }, h(R.Icon, { name: "lock" }))
         : h("span", { className: "ap-mu-dot" }, String(k + 1));
       var state = s.state === "done" ? "beres" : cur ? "langkah sekarang" : s.state === "locked" ? "menunggu langkah sebelumnya" : "belum";
@@ -384,23 +452,80 @@
           h("span", null, sum.done + " dari " + sum.total))),
       h("div", { className: "ap-mu-grid" },
         h(Path, { ctx: ctx, ob: ob, team: team, who: who }),
-        h("aside", { className: "ap-mu-side" }, h(Reward, { ctx: ctx, sum: sum }), h(TeamCard, { ctx: ctx, ob: ob, team: team }))));
+        h("aside", { className: "ap-mu-side" }, h(Reward, { ctx: ctx, sum: sum }), h(TeamCard, { ctx: ctx, ob: ob, team: team }))),
+      h(KerjakanDrawer, { ctx: ctx }));
   }
 
-  /* ---------------------------------------------------------------- Beranda: the current step, small */
+  /* ---------------------------------------------------------------- Beranda: Mulai di sini as a short step list
+   * (desain v3): the head with the count and the bar, then at most three steps around the current one. The current
+   * step is open with its hint, the complaint it answers, Kerjakan and "Lihat semua langkah"; the others are one line
+   * with who does them, and Undang when nobody holds that role yet. */
+  function whoText(meta, team, role) {
+    var mem = membersOf(team, role);
+    return role === "owner" ? "Untuk kamu." : mem.length ? "Untuk " + (mem[0].full_name || mem[0].email) + ", " + lower(roleLabel(meta, role)) + "."
+      : "Untuk " + lower(roleLabel(meta, role)) + ". Belum ada yang bergabung.";
+  }
   function MulaiBanner(p) {
-    var ctx = p.ctx, ob = ctx.onboarding && ctx.onboarding.data, sum = mulaiSummary(ob, ctx.meta);
+    var ctx = p.ctx, meta = ctx.meta, ob = ctx.onboarding && ctx.onboarding.data, sum = mulaiSummary(ob, meta);
+    var team = useTeam(ctx);
     if (!sum.show || sum.all || !sum.current) return null;
-    var s = sum.current;
-    return h("section", { className: "ap-mu-banner", "data-tour": "beranda-langkah", "aria-labelledby": "mu-ban-t" },
-      h("div", { className: "g" },
-        h("p", { className: "ap-mu-eye" }, "Mulai di sini · " + sum.done + " dari " + sum.total + " beres"),
-        h("h2", { id: "mu-ban-t" }, L(s.label)),
-        s.prereq ? h("p", { className: "ap-mu-p" }, L(s.hint)) : null,
+    var cur = sum.current, steps = ob.steps, at = cur.prereq ? cur.at : steps.indexOf(cur), asked = {};
+    // the window: the step before the current one when there is one, the current step, then what follows (three rows)
+    var rows = steps.map(function (s, k) { return { s: s, k: k }; });
+    if (cur.prereq) rows.splice(at, 0, { s: cur, k: at, pre: true });
+    var ci = cur.prereq ? at : at, from = Math.max(0, Math.min(ci - 1, rows.length - 3));
+    rows = rows.slice(from, from + 3);
+    function row(x) {
+      var s = x.s, isCur = x.pre || (!cur.prereq && s === cur), role = stepRole(meta, s.model), mem = membersOf(team, role);
+      if (isCur) {
+        return h("li", { key: s.stage, className: "ap-bd-step now", "aria-current": "step" },
+          h("span", { className: "ap-bd-n on", "aria-hidden": "true" }, x.pre ? h(R.Icon, { name: "right" }) : String(x.k + 1)),
+          h("div", { className: "g" },
+            h("h3", { id: "mu-ban-t", className: "ap-bd-t" }, L(s.label)),
+            s.hint ? h("p", { className: "ap-bd-p" }, L(s.hint)) : null,
+            (s.answers || []).length ? h("p", { className: "ap-bd-sub" }, "Menjawab keluhanmu: " + (s.answers || []).map(L).join("; ")) : null,
+            h("div", { className: "ap-mu-acts" },
+              h(R.Button, { variant: "primary", onClick: function () { work(ctx, s); } }, "Kerjakan"),
+              h(R.Button, { onClick: function () { ctx.navigate("#/mulai"); } }, "Lihat semua langkah"))));
+      }
+      var done = s.state === "done", locked = s.state === "locked";
+      var sub = done ? "Beres " + dayWord(s.done_at) + "."
+        : whoText(meta, team, role) + (locked && (s.needs || []).length ? " Butuh " + s.needs.map(function (m) { return lower(modelLabel(meta, m)); }).join(" dan ") + " dulu." : "");
+      var invite = !done && role !== "owner" && !mem.length && !asked[role] && (asked[role] = true) ? inviteButton(ctx, role) : null;
+      return h("li", { key: s.stage, className: "ap-bd-step " + s.state },
+        h("span", { className: "ap-bd-n" + (done ? " done" : ""), "aria-hidden": "true" }, done ? h(R.Icon, { name: "check" }) : locked ? h(R.Icon, { name: "lock" }) : String(x.k + 1)),
+        h("div", { className: "g" }, h("p", { className: "ap-bd-l" }, L(s.label)), h("p", { className: "ap-bd-sub" }, sub)),
+        invite);
+    }
+    return h("section", { className: "ap-bd-card ap-mu-banner", "data-tour": "beranda-langkah", "aria-labelledby": "mu-ban-h" },
+      h("div", { className: "ap-bd-head" },
+        h("div", { className: "ap-bd-headrow" }, h("h2", { id: "mu-ban-h" }, "Mulai di sini"), h("span", { className: "ap-bd-meta" }, sum.done + " dari " + sum.total + " beres")),
         h(Bar, { steps: ob.steps, current: ob.current, done: sum.done, total: sum.total })),
-      h("div", { className: "ap-mu-acts" },
-        h(R.Button, { variant: "primary", onClick: function () { work(ctx, s); } }, "Kerjakan"),
-        h(R.Button, { onClick: function () { ctx.navigate("#/mulai"); } }, "Lihat semua langkah")));
+      h("ol", { className: "ap-bd-steps", "aria-label": "Langkah berikutnya" }, rows.map(row)),
+      h(KerjakanDrawer, { ctx: ctx }));
+  }
+
+  /* Beranda: who is in the business, and the roles nobody holds yet (desain v3). Owner only: the list comes from
+   * GET /team, which staff may not read. */
+  function HomeTeam(p) {
+    var ctx = p.ctx, meta = ctx.meta, ob = ctx.onboarding && ctx.onboarding.data, team = useTeam(ctx);
+    if (!isOwner(meta)) return null;
+    var roles = [];
+    ((ob && ob.steps) || []).forEach(function (s) { var r = stepRole(meta, s.model); if (r !== "owner" && roles.indexOf(r) < 0) roles.push(r); });
+    var members = (team || []).filter(function (m) { return m && (m.full_name || m.email); });
+    var me = ctx.me || {}, hasMe = members.some(function (m) { return m.email === me.email; });
+    var people = (hasMe ? [] : [{ full_name: me.name || me.email || "Kamu", email: me.email, role: "owner" }]).concat(members);
+    var open = roles.filter(function (r) { return !membersOf(team, r).length; });
+    return h("section", { className: "ap-bd-card ap-bd-pad ap-bd-team", "aria-labelledby": "bd-team-h" },
+      h("div", { className: "ap-bd-headrow" }, h("h2", { id: "bd-team-h" }, "Tim"), h("span", { className: "ap-bd-meta" }, people.length + " orang")),
+      h("ul", null,
+        people.map(function (m, i) {
+          return h("li", { key: "m" + i }, h(Who, { name: m.full_name || m.email, tone: roleTone(meta, m.role), size: 24 }),
+            h("span", { className: "g" }, m.full_name || m.email), h("span", { className: "ap-bd-meta" }, roleLabel(meta, m.role)));
+        }),
+        open.map(function (r) {
+          return h("li", { key: "r" + r }, h(Who, null), h("span", { className: "g ap-bd-wait" }, h("span", null, roleLabel(meta, r)), h("small", null, "Belum diundang")), inviteButton(ctx, r));
+        })));
   }
 
   /* ---------------------------------------------------------------- tours */
@@ -463,6 +588,10 @@
 
   RA.MulaiPage = MulaiPage;
   RA.MulaiBanner = MulaiBanner;
+  RA.HomeTeam = HomeTeam;
+  RA.KerjakanDrawer = KerjakanDrawer;
+  RA.mulaiWork = work;
+  RA.mulaiWorkPage = workPage;
   RA.stepRole = stepRole;
   RA.bizRoles = bizRoles;
   RA.roleTone = roleTone;

@@ -69,3 +69,23 @@ test("defaultsTouching finds the defaults that read a field (plain or through a 
   const line = { fields: [{ name: "item", type: "link" }, { name: "uom", default: "item.uom" }, { name: "rate", default: "item.rate" }, { name: "qty", default: "'1'" }] };
   assert.deepStrictEqual([...A.defaultsTouching(line, "item")], ["uom", "rate"]);
 });
+
+test("gridFxCols: only the *_fx twin of a Rupiah column and its companion are extras; a money price and a required column stay", () => {
+  const A = load();
+  const names = (cols) => cols.map((c) => c.name).join(",");
+  // the pilot's invoice lines as the kernel serves them (twins *_idr last)
+  const pilot = [{ name: "item", type: "link" }, { name: "rate", type: "currency" }, { name: "amount", type: "currency" },
+    { name: "rate_fx", type: "money", currency_field: "currency" }, { name: "amount_fx", type: "money", currency_field: "currency" },
+    { name: "rate_fx_idr", type: "currency", money_of: "rate_fx" }, { name: "amount_fx_idr", type: "currency", money_of: "amount_fx" }];
+  assert.strictEqual(names(A.gridFxCols(pilot)), "rate_fx,amount_fx,rate_fx_idr,amount_fx_idr");
+  // contract 0013 also allows the price itself to be a money field: nothing is tucked away, even beside another Rupiah column
+  const bill = [{ name: "qty", type: "float" }, { name: "price", type: "money", currency_field: "currency" }, { name: "amount", type: "money", currency_field: "currency" },
+    { name: "tax", type: "currency" }, { name: "price_idr", type: "currency", money_of: "price" }, { name: "amount_idr", type: "currency", money_of: "amount" }];
+  assert.strictEqual(names(A.gridFxCols(bill)), "");
+  // a required foreign column stays on show, and so does its companion
+  assert.strictEqual(names(A.gridFxCols(pilot.map((c) => (c.name === "rate_fx" ? Object.assign({ required: true }, c) : c)))), "amount_fx,amount_fx_idr");
+  // an *_fx money field without a Rupiah column of that name is not a twin
+  assert.strictEqual(names(A.gridFxCols([{ name: "fee_fx", type: "money" }, { name: "amount", type: "currency" }])), "");
+  assert.strictEqual(names(A.gridFxCols([{ name: "qty", type: "float" }])), "");
+  assert.strictEqual(names(A.gridFxCols(undefined)), "");
+});

@@ -931,7 +931,7 @@ def test_theme_default_light(page, ctx):
     mode = lambda: page.evaluate("document.documentElement.getAttribute('data-theme')")
     app_bg = lambda: page.evaluate("getComputedStyle(document.documentElement).getPropertyValue('--app').trim()")
     # the light --app token of the look in use: Juragan (data-brand="juragan", brand-juragan.css) or Rangka (app.css)
-    light_bg = "#faf9f7" if page.evaluate("document.documentElement.getAttribute('data-brand')") == "juragan" else "#fafaf9"
+    light_bg = "#ffffff" if page.evaluate("document.documentElement.getAttribute('data-brand')") == "juragan" else "#fafaf9"
     assert mode() == "light" and app_bg() == light_bg, f"light by default, got data-theme={mode()} --app={app_bg()}"
     assert page.evaluate("localStorage.getItem('rk-app-theme')") is None, "the old auto-saved key is dropped"
     # the pick is saved with the person's appearance too (PUT /me/appearance, contract 0067 §4): wait for it before
@@ -999,7 +999,7 @@ def test_sidebar_collapse(page, ctx):
         assert page.locator(".ap-mhead").bounding_box()["height"] == 48
         open_nav(page)
         side.wait_for(state="visible", timeout=5000)
-        assert side.get_by_role("button", name="Ciutkan navigasi").count() == 0, "no collapse on a phone"
+        assert side.get_by_role("button", name="Sembunyikan menu").count() == 0, "no collapse on a phone"
         side.get_by_role("link", name=ctx.model_label(model), exact=True).click()
         page.wait_for_function("(h) => location.hash === h", arg="#/r/" + model, timeout=5000)
         assert not side.is_visible(), "picking an entry closes the drawer"
@@ -1008,7 +1008,7 @@ def test_sidebar_collapse(page, ctx):
         # tablet portrait: the icon rail; unfolding floats the full sidebar over the page, picking an entry folds it
         page.wait_for_function("() => document.querySelector('.ap-shell > .rk-side').classList.contains('collapsed')", timeout=5000)
         assert side.bounding_box()["width"] <= 64, f"the rail is narrow: {side.bounding_box()}"
-        side.get_by_role("button", name="Bentangkan navigasi").click()
+        side.get_by_role("button", name="Tampilkan menu").click()
         page.locator(".ap-shell > .rk-side.rk-side-float:not(.collapsed)").wait_for(timeout=5000)
         assert page.locator(".ap-rail-scrim").is_visible(), "a scrim behind the floating sidebar"
         side.get_by_role("link", name=ctx.model_label(model), exact=True).click()
@@ -1023,7 +1023,7 @@ def test_sidebar_collapse(page, ctx):
     page.wait_for_load_state("networkidle")
     shot(page, ctx, "shell-list-expanded")
     w = side.bounding_box()["width"]
-    side.get_by_role("button", name="Ciutkan navigasi").click()
+    side.get_by_role("button", name="Sembunyikan menu").click()
     page.wait_for_function("() => document.querySelector('.ap-shell > .rk-side').classList.contains('collapsed')", timeout=5000)
     assert side.bounding_box()["width"] < w, "collapsed is narrower"
     assert side.get_by_role("link", name=ctx.model_label(model)).count() == 1, "entries keep their names as labels"
@@ -1034,7 +1034,7 @@ def test_sidebar_collapse(page, ctx):
     page.evaluate("document.documentElement.setAttribute('data-theme', 'dark')")
     page.wait_for_timeout(200)
     shot(page, ctx, "shell-list-collapsed-dark")
-    side.get_by_role("button", name="Bentangkan navigasi").click()
+    side.get_by_role("button", name="Tampilkan menu").click()
     page.evaluate("(h) => { location.hash = h; }", home)
     page.locator("[data-loading=false]").first.wait_for(timeout=15000)
     shot(page, ctx, "shell-dashboard-expanded-dark")
@@ -2360,6 +2360,25 @@ def inbox_row(page, name):
     return main_area(page).locator(".ap-inbox-row", has=page.locator("a", has_text=name))
 
 
+def decide_scope(page, name):
+    """Where the Setujui and Tolak buttons of a request are: its row on a phone; from 1024px the row is picked and
+    the buttons sit in the detail panel beside the list."""
+    row = inbox_row(page, name)
+    row.wait_for(timeout=5000)
+    pick = row.locator(".ap-inbox-pick")
+    if pick.count():
+        pick.click(position={"x": 6, "y": 6})  # a corner of the row: its links (the document number) sit above the pick area
+        panel = main_area(page).locator(".ap-apv-panel", has=page.locator("a", has_text="Buka dokumen"))
+        panel.wait_for(timeout=5000)
+        return panel
+    return row
+
+
+def reject_box(page):
+    """The reject reason: a dialog on a phone, a group in the detail panel from 1024px."""
+    return page.get_by_role("dialog", name="Tolak permintaan?").or_(page.get_by_role("group", name="Tolak permintaan?"))
+
+
 def open_inbox(page):
     open_nav(page)
     page.locator(".rk-side").get_by_role("link", name=re.compile("^Persetujuan")).click()
@@ -2417,7 +2436,8 @@ def test_invoice_needs_manager_approval(page, ctx):
     wait_inbox(page)
     row = inbox_row(page, name)
     row.wait_for(timeout=5000)
-    assert row.get_by_role("button", name="Setujui").is_disabled() and row.get_by_role("button", name="Tolak").is_disabled(), "can_decide false → disabled"
+    where = decide_scope(page, name)
+    assert where.get_by_role("button", name="Setujui").is_disabled() and where.get_by_role("button", name="Tolak").is_disabled(), "can_decide false → disabled"
     # the list claims otherwise: the server's 403 is what the user sees
     force_can_decide(page, ctx, mocked)
     ctx.allow_http(403, r"/api/v1/approvals/[^/]+/approve$")
@@ -2425,9 +2445,10 @@ def test_invoice_needs_manager_approval(page, ctx):
         page.get_by_role("tab", name=re.compile("^Disetujui")).click()
         page.get_by_role("tab", name=re.compile("^Menunggu")).click()
         wait_inbox(page)
-        btn = inbox_row(page, name).get_by_role("button", name="Setujui")
+        btn = decide_scope(page, name).get_by_role("button", name="Setujui")
         page.wait_for_function("(n) => { const r = [...document.querySelectorAll('.ap-inbox-row')].find(x => x.textContent.includes(n));"
-                               " return r && !r.querySelector('button').disabled; }", arg=name, timeout=5000)
+                               " const b = (document.querySelector('.ap-apv-panel') || r || document).querySelector('button.ap-approve');"
+                               " return r && b && !b.disabled; }", arg=name, timeout=5000)
         btn.click()
         main_area(page).get_by_text(re.compile("^Kamu tidak punya akses")).first.wait_for(timeout=5000)
     finally:
@@ -2451,7 +2472,7 @@ def test_invoice_needs_manager_approval(page, ctx):
         page.wait_for_function("() => location.hash === '#/approvals'", timeout=5000)
         assert page.get_by_role("dialog", name="Notifikasi").count() == 0, "the panel closes on a click"
     open_nav(page)
-    unfold = page.get_by_role("button", name="Bentangkan navigasi")  # the tablet rail shows a dot, the full sidebar the count
+    unfold = page.get_by_role("button", name="Tampilkan menu")  # the tablet rail shows a dot, the full sidebar the count
     if unfold.count() and unfold.first.is_visible():
         unfold.first.click()
     link = page.locator(".rk-side .rk-navlink", has_text="Persetujuan")
@@ -2464,11 +2485,12 @@ def test_invoice_needs_manager_approval(page, ctx):
     row.wait_for(timeout=5000)
     assert row.get_by_text("Persetujuan manajer", exact=True).count() == 1 and row.get_by_text("Diajukan oleh sales@contoh.test", exact=False).count() == 1, row.inner_text()
     shot(page, ctx, "approval-inbox")
-    approve = row.get_by_role("button", name="Setujui")
+    where = decide_scope(page, name)
+    approve = where.get_by_role("button", name="Setujui")
     held = held_route(page, r".*/api/v1/approvals/[^/?]+/approve$", "POST")
     approve.click()
     wait_held(page, held)
-    assert approve.is_disabled() and row.get_by_role("button", name="Tolak").is_disabled(), "both buttons disabled while the approve is in flight"
+    assert approve.is_disabled() and where.get_by_role("button", name="Tolak").is_disabled(), "both buttons disabled while the approve is in flight"
     approve.click(force=True)
     page.wait_for_timeout(200)
     assert len(held) == 1, f"one approve request for two clicks, saw {len(held)}"
@@ -2515,8 +2537,8 @@ def test_reject_needs_reason(page, ctx):
     wait_inbox(page)
     row = inbox_row(page, name)
     row.wait_for(timeout=5000)
-    row.get_by_role("button", name="Tolak").click()
-    dlg = page.get_by_role("dialog", name="Tolak permintaan?")
+    decide_scope(page, name).get_by_role("button", name="Tolak").click()
+    dlg = reject_box(page)
     dlg.wait_for(timeout=5000)
     dlg.get_by_role("button", name="Tolak", exact=True).click()
     dlg.get_by_text("Alasan wajib diisi").wait_for(timeout=3000)

@@ -67,7 +67,7 @@ func KnownFont(name string) bool {
 }
 
 func hls(h string) (float64, float64, float64) { return rgbToHLS(toRGB(h)) }
-func mk(h, l, s float64) string             { return toHex(hlsToRGB(h, math.Min(math.Max(l, 0), 1), s)) }
+func mk(h, l, s float64) string                { return toHex(hlsToRGB(h, math.Min(math.Max(l, 0), 1), s)) }
 
 // towards moves the lightness of c in 1 % steps (dir −1 darker, +1 lighter) until every bg reaches floor against it.
 func towards(c string, dir float64, floor float64, bgs ...string) string {

@@ -89,6 +89,9 @@ connector_auth:
 - No endpoint, MCP tool, SSE event, export or print returns a secret value, to anyone, the owner included.
 - Who may write: the org's `owner`, and roles the owner grants `connector_auth`. An API token may write only with the
   scope `secrets:write` (Rangka Cloud provisioning). Omilo helper and Rangka AI tokens never get that scope.
+- Host connectors (amended by 0063 §2): only a token with `secrets:host` writes their fields; every other caller gets
+  `409 secret_host_provided`, and `secrets:host` on any other connector gets `403`. Their fields report
+  `source: host` with no `hint` or `set_by`, and their audit entries carry `by: host`.
 - With `env`, `file` and `vault`, writes answer `409 secrets_read_only_driver`. The GET still reports `set`.
 - Audit entries are `secret.set` and `secret.delete`, with connector, field, version and hint, and never the value.
 

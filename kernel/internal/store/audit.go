@@ -12,7 +12,7 @@ const EventsChannel = "rk_events"
 
 // Event is published with NOTIFY (inside the writing transaction, so it is delivered on commit).
 type Event struct {
-	Type      string `json:"type"` // record, changeset, job
+	Type      string `json:"type"` // record, changeset, job, approval, appearance
 	Org       string `json:"org,omitempty"`
 	Model     string `json:"model,omitempty"`
 	Name      string `json:"name,omitempty"`

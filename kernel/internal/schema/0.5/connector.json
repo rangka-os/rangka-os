@@ -421,6 +421,14 @@
       "type": "object",
       "description": "Keys that may change before they settle (contract 0000 §4).",
       "properties": {
+        "provided_by": {
+          "enum": [
+            "host",
+            "owner"
+          ],
+          "default": "owner",
+          "description": "Who provides the auth fields (contract 0063 §2). host: the platform that runs the kernel serves this catalogue connector and writes every auth field with a secrets:host token; the owner sets none of them, and a kernel serves it only when RANGKA_HOST_CONNECTORS names it. owner (the default): the owner sets them."
+        },
         "source": {
           "type": "object",
           "required": [

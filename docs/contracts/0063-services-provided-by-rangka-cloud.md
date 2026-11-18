@@ -1,6 +1,7 @@
 # 0063 Services provided by Rangka Cloud (◆)
 
-Status: accepted (17 Nov 2026, merged by Dede; product decisions the same day, see "Decisions") · Owner of the change:
+Status: accepted (17 Nov 2026, merged by Dede; product decisions the same day, see "Decisions"); Order of work step 1
+(§2 kernel seam and validators) implemented 18 Nov 2026, see "Implementation status" · Owner of the change:
 rangka-os (schema, validators, kernel, web app) · Affects:
 rangka-connectors (host connectors), rangka-apps (the ◆ modules and the gateway ledger), rangka-ai (catalogue reads,
 offer rules), rangka-cloud (catalogue entries, provisioning, settlement; private) · Builds on: 0002, 0017, 0026, 0032,
@@ -325,6 +326,37 @@ account screen, wind-down. Not described here.
    settlement days.
 4. Switch-on and switch-off proposals (§4) in the host.
 5. Later: ports, then WhatsApp and shipping (§7), then device connectors (§6).
+
+## Implementation status
+
+**Step 1, the kernel seam (§2), rangka-os, 18 Nov 2026** (branch `feat/host-connectors-seam`; needs a kernel tag
+before Rangka Cloud relies on it):
+- Schema 0.5 `connector.json`: `experimental.provided_by: host | owner` (default `owner`), under `experimental:` until
+  released (0000 §4). The kernel and both validators read it there.
+- Validators (Go and Python, identical reports): `host_connector_company` and `host_connector_fields` (a field with
+  `default:` or `generate: true`). Testdata `kernel/testdata/host-connector` (valid) and `broken-host-connector`.
+- Kernel:
+  - `RANGKA_HOST_CONNECTORS` (comma-separated). A name that is not a connector name, or is a company connector
+    (`x_`), stops the kernel at start. A listed name that is not a host connector is logged and ignored.
+  - With it set, an unset `RANGKA_SECRETS_DRIVER` becomes `db`; any other driver stops the kernel at start.
+  - Change-set validate (and preview and apply, which validate again) reports `connector_host_unavailable` for each
+    host connector the change installs (`config.connectors`, a flow that calls or triggers on it, `notify`) that the
+    variable does not name.
+  - Token scope `secrets:host`, minted like `members:write` (an owner, with their own session).
+  - `PUT` and `DELETE /api/v1/connectors/{c}/auth/{field}` on a host connector: `409 secret_host_provided` for every
+    caller without `secrets:host` that would otherwise pass 0017 §3 (the owner, connector_auth roles, `secrets:write`
+    tokens). Assistant and OIDC callers keep `403 ai_forbidden`, and members without connector_auth keep
+    `403 forbidden`. A `secrets:host` token on any other connector gets `403 forbidden`.
+  - `GET …/auth`: the answer has `provided_by: "host"`, and each field `source: "host"` with no `hint` and no
+    `set_by`. Stored rows have `set_by = host`.
+  - Audit `secret.set` and `secret.delete` from the host carry `by: host`. The audit actor stays the token's person.
+  - `GET /api/v1/catalogue`: each connector has `provided_by` (`"host"` or null), each auth field of a host connector
+    `source: "host"`, and `state: host_unavailable` for a host connector the kernel does not serve. MCP
+    `rangka_catalogue` connectors carry `provided_by: host`.
+  - A change set's preview `requires` marks a host connector's fields `source: host`.
+- Web app ("Modul dan sambungan"): the ◆ "Disediakan Rangka Cloud" marker on the card and in the detail panel;
+  "Menunggu Rangka Cloud" instead of "Perlu kunci" or "Atur kunci"; a `host_unavailable` connector shows only under
+  the filter Semua. Console: the Kunci panel offers no Isi, Ganti or Hapus for a host connector.
 
 ## Not in this contract
 

@@ -149,6 +149,7 @@ func (v *validator) more() {
 		}
 		if c := asMap(d.Data); c != nil {
 			v.companyConnector(cn, d, c, all)
+			v.hostConnector(cn, d, c)
 			v.secretHosts(d, c)
 			v.pollTriggers(d, c)
 			v.mail(d, c)
@@ -631,11 +632,28 @@ func (v *validator) site(all map[string]vis) {
 	for _, tn := range sortedKeysM(s.Themes) {
 		d := s.Themes[tn]
 		data := asMap(d.Data)
-		if ext, _ := data["extends"].(string); strings.HasPrefix(ext, "rangka/") && !templateExists("themes", strings.TrimPrefix(ext, "rangka/"), tdir) {
-			v.rep.extra("warn", d.Path, "extends", "unknown_template", fmt.Sprintf(`no theme template "%s" in rangka-os/templates/themes`, ext))
+		if ext, _ := data["extends"].(string); strings.HasPrefix(ext, "rangka/") {
+			tn := strings.TrimPrefix(ext, "rangka/")
+			if nn := theme.Renamed[tn]; nn != "" {
+				v.rep.extra("warn", d.Path, "extends", "renamed_template", fmt.Sprintf(`theme template "%s" is now "rangka/%s" (contract 0067 §3)`, ext, nn))
+				tn = nn
+			}
+			if !templateExists("themes", tn, tdir) {
+				v.rep.extra("warn", d.Path, "extends", "unknown_template", fmt.Sprintf(`no theme template "%s" in rangka-os/templates/themes`, ext))
+			}
+		}
+		for _, k := range sortedKeys(asMap(data["color"])) {
+			if theme.Locked(k) {
+				v.rep.extra("error", d.Path, "color/"+k, "locked_token", fmt.Sprintf(`"%s" keeps its meaning in every theme and cannot be set (contract 0067 §1)`, k))
+			}
+		}
+		for _, k := range []string{"sans", "display"} {
+			if f, ok := asMap(data["font"])[k].(string); ok && !theme.KnownFont(f) {
+				v.rep.extra("error", d.Path, "font/"+k, "unknown_font", fmt.Sprintf(`font "%s" is not bundled; use one of %s (contract 0067 §5)`, f, strings.Join(theme.Fonts, ", ")))
+			}
 		}
 		if cc, ok := data["contrast_check"].(bool); !ok || cc {
-			light, dark, over := ThemeColours(d)
+			light, dark, over := ThemeColours(d, tdir)
 			for _, pr := range theme.Check(light, dark, over) {
 				v.rep.extra("error", d.Path, "color/"+pr.Token, "low_contrast", pr.Msg)
 			}
@@ -671,9 +689,66 @@ func orderedKeys(a *App, key string) []string {
 	return out
 }
 
-// ThemeColours applies a theme document's colours (in file order) to the base tokens.
-func ThemeColours(d *rk.Doc) (map[string]string, map[string]string, map[string]theme.Override) {
-	color := asMap(asMap(d.Data)["color"])
+// ThemeColours applies a theme document (merged with its template from tdir, contract 0067) to the base tokens:
+// neutral family, accent and button, then its colours in file order.
+func ThemeColours(d *rk.Doc, tdir string) (map[string]string, map[string]string, map[string]theme.Override) {
+	spec, keys := ThemeSpec(asMap(d.Data), docColorOrder(d), tdir)
+	return theme.Apply(spec, keys)
+}
+
+// ThemeSpec merges a theme with the template it extends (one level, read from tdir; old template names resolve to
+// their new ones) and returns the colour keys in order: the template's, then the theme's own.
+func ThemeSpec(data map[string]any, order []string, tdir string) (map[string]any, []string) {
+	spec := map[string]any{}
+	var keys []string
+	if ext, _ := data["extends"].(string); strings.HasPrefix(ext, "rangka/") {
+		if base := LoadTemplate("themes", strings.TrimPrefix(ext, "rangka/"), tdir); base != nil {
+			for k, v := range base {
+				spec[k] = v
+			}
+			keys = sortedKeys(asMap(base["color"]))
+		}
+	}
+	color := map[string]any{}
+	for k, v := range asMap(spec["color"]) {
+		color[k] = v
+	}
+	for k, v := range data {
+		if k == "color" {
+			continue
+		}
+		spec[k] = v
+	}
+	if order == nil {
+		order = sortedKeys(asMap(data["color"]))
+	}
+	for _, k := range order {
+		color[k] = asMap(data["color"])[k]
+		if !contains(keys, k) {
+			keys = append(keys, k)
+		}
+	}
+	spec["color"] = color
+	return spec, keys
+}
+
+// LoadTemplate reads templates/<kind>/<name>.rk from tdir ("" or missing: nil). Renamed themes resolve to the new name.
+func LoadTemplate(kind, name, tdir string) map[string]any {
+	if tdir == "" {
+		return nil
+	}
+	if kind == "themes" && theme.Renamed[name] != "" {
+		name = theme.Renamed[name]
+	}
+	for _, n := range []string{name, strings.ReplaceAll(name, "_", "-"), strings.ReplaceAll(name, "-", "_")} {
+		if d, err := rk.Load(filepath.Join(tdir, kind, n+".rk")); err == nil {
+			return asMap(d.Data)
+		}
+	}
+	return nil
+}
+
+func docColorOrder(d *rk.Doc) []string {
 	var order []string
 	if d.Root != nil {
 		if n := d.Root.Get("color"); n != nil && n.Kind == rk.MapNode {
@@ -684,10 +759,7 @@ func ThemeColours(d *rk.Doc) (map[string]string, map[string]string, map[string]t
 			}
 		}
 	}
-	if order == nil {
-		order = sortedKeys(color)
-	}
-	return theme.Colours(color, order)
+	return order
 }
 
 func keysDoc[V any](m map[string]V) []string { return sortedKeysM(m) }

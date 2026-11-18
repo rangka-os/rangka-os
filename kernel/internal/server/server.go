@@ -270,6 +270,18 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		db.Close()
 		return nil, err
 	}
+	// host connectors (contract 0063 §2): whoever runs the kernel names the ones it serves; their values are written
+	// through the API, so a hosted kernel uses the db driver whatever system.rk says
+	hostConns, err := api.ParseHostConnectors(os.Getenv(api.HostConnectorsEnv))
+	if err != nil {
+		db.Close()
+		return nil, err
+	}
+	if platformSecrets, err = hostedSecretsDriver(platformSecrets, hostConns); err != nil {
+		db.Close()
+		return nil, err
+	}
+	s.API.HostConnectors = hostConns
 	s.API.Secrets = &secrets.Service{DB: db, Reg: e.Reg, KEK: kek, Now: cfg.Now, Vault: secrets.VaultFromEnv(nil), Log: cfg.Logf, Platform: platformSecrets}
 	if d := platformSecrets.Driver; (d == "file" || d == "vault") && platformSecrets.Path == "" {
 		cfg.Logf("secrets: RANGKA_SECRETS_DRIVER=%s without RANGKA_SECRETS_PATH; connector secrets read as unset", d)
@@ -306,7 +318,30 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	s.Sched.SetPolls(cfg.Org, pollSpecs(reg))
 	e.CallTarget = callTarget
 	s.Changes.Requires = s.API.Secrets.Requires(api.InstalledConnectors)
+	s.Changes.HostUnavailable = s.API.HostUnavailable
+	if len(hostConns) > 0 {
+		for _, n := range s.API.HostConnectorList() {
+			if c := reg.Connectors[n]; c == nil || meta.ProvidedBy(meta.AsMap(c.Data)) != "host" {
+				cfg.Logf("host connectors: %s names %s, which is not a host connector here (provided_by: host); ignored", api.HostConnectorsEnv, n)
+			}
+		}
+	}
 	return s, nil
+}
+
+// hostedSecretsDriver is contract 0063 §2: a kernel that serves host connectors keeps connector secrets in the
+// database, where the host writes them through the API. With RANGKA_HOST_CONNECTORS set, an unset
+// RANGKA_SECRETS_DRIVER becomes db and any other driver is a start error.
+func hostedSecretsDriver(p secrets.Platform, hostConns map[string]bool) (secrets.Platform, error) {
+	if len(hostConns) == 0 {
+		return p, nil
+	}
+	switch p.Driver {
+	case "", "db":
+		p.Driver = "db"
+		return p, nil
+	}
+	return p, fmt.Errorf("%s is set, so connector secrets use the db driver: unset RANGKA_SECRETS_DRIVER=%s or set it to db (contract 0063 §2)", api.HostConnectorsEnv, p.Driver)
 }
 
 // openFiles opens the attachments store (contract 0011 §1). Root: cfg.FilesDir (--files-dir, $RANGKA_FILES_DIR),

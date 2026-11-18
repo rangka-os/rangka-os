@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/theme.json
+name: kopi
+label: {id: Kopi Senja}
+extends: rangka/standard
+accent: '#7a4520'
+button: accent
+neutral: stone
+font: {sans: plus-jakarta-sans, display: inter}

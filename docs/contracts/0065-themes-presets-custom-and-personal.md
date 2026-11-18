@@ -146,11 +146,16 @@ not edited. Personal picks are never gated. Cloud writes `custom_theme: false` o
 
 ### 9. Rangka Cloud
 
-- Konsol › Sistem › Tampilan calls the business kernel (`/themes`, `/themes/derive`, `/themes/from-image`,
-  change sets) through the existing kernel client. Cloud stores no copy of a theme.
-- The account appearance (`users.theme`) keeps the mode for Cloud's own screens and gains `theme_color`
-  (a bundled name or null) for Cloud chrome accents only; business screens follow the business kernel.
-- Business tiles in Bisnismu use the business `brand` from `/meta`.
+- Konsol › Sistem › Tampilan (owner): `GET/PUT /api/konsol/businesses/{id}/appearance` and `POST …/appearance/derive`
+  call the business kernel (`/themes`, `/themes/derive`, files and change sets) with the owner's kernel session.
+  `PUT {theme}` switches, `PUT {custom: {label, accent, button, neutral, font}}` writes `themes/<slug>.rk`; both are
+  one change set, approved and applied with the owner's session, kept in the business's Riwayat. A kernel without
+  this contract answers 404: the Konsol says the business needs an update. Cloud stores no copy of a theme.
+- Package tiers gain `custom_theme` (true from Juragan Pro, like `custom_domain`); without it the `cloud_<tier>` plan in
+  `features.rk` carries `flags: {custom_theme: false}`.
+- Cloud's own screens keep the Juragan look; the account's light/dark pick (`users.theme`) stays as it is. A person's
+  own colour theme lives in each business kernel (§4). Business tiles in Bisnismu taking the business `brand` is left
+  for later.
 
 ### 10. Rangka AI
 
@@ -173,5 +178,5 @@ errors Raka already repairs from or explains. Raka never approves or applies.
    `renamed_template`, `plan_limit/custom_theme`).
 2. rangka-os: endpoints, `rk_user_appearance`, `/meta` additions, SSE repaint.
 3. rangka-os: web app applies tokens, account Tampilan, ⚙ Pengaturan sistem › Tampilan; fonts.
-4. rangka-cloud: Konsol › Tampilan, flag in `cloud_pro` plans, Bisnismu tiles, `theme_color`.
+4. rangka-cloud: Konsol › Tampilan and the `custom_theme` tier flag.
 5. rangka-os: the `rangka-themes` platform skill.

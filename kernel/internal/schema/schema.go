@@ -659,9 +659,10 @@ func (s *Set) validate(schema any, base string, in *Inst, path []any) []Error {
 				if len(valid) == 0 {
 					add(kw, in.repr()+" is not valid under any of the given schemas")
 				} else if len(valid) > 1 {
-					parts := make([]string, len(valid))
-					for i, x := range valid {
-						parts[i] = Repr(x)
+					// Python's jsonschema lists the later valid schemas first, then the first one
+					parts := make([]string, 0, len(valid))
+					for _, x := range append(valid[1:], valid[0]) {
+						parts = append(parts, Repr(x))
 					}
 					add(kw, in.repr()+" is valid under each of "+strings.Join(parts, ", "))
 				}

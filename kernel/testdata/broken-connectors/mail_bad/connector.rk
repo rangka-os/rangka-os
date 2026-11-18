@@ -1,0 +1,23 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+# mail_password_not_secret and secret_misplaced: a mail connector whose password is a plain field and whose secret
+# token sits in the user name (contract 0068); an action with both request and mail fails the schema
+name: mail_bad
+label: {id: Mail bad}
+summary: {id: Kata sandi email di field yang tidak rahasia.}
+version: 1.0.0
+auth:
+  type: basic
+  fields:
+    - {name: host}
+    - {name: password}
+    - {name: token, secret: true}
+mail:
+  receive: {host: '{auth.host}'}
+  send: {host: '{auth.host}'}
+  username: 'u-{auth.token}'
+  password: '{auth.password}'
+actions:
+  - {name: fetch_email, mail: fetch}
+  - name: both
+    mail: send
+    request: {method: GET, url: https://api.example.com/ping}

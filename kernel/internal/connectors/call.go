@@ -3,6 +3,7 @@ package connectors
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/cel"
+	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
@@ -33,6 +35,12 @@ type Runtime struct {
 	// StartFlow queues a flow with an event in qr (the transaction that records the event key; the server wires the
 	// queue); nil = events are only audited.
 	StartFlow func(ctx context.Context, qr pg.Querier, org, flow string, event map[string]any, uniqueKey string) error
+	// Files stores the attachments a mail connector receives (contract 0068 §2); nil = files capability off.
+	Files files.Store
+	// FilesFull says the plan's file storage is full (contract 0057 §1): received attachments are then listed, not kept.
+	FilesFull func() bool
+	// MailTLS is the base TLS configuration of mail connections (tests trust their own certificate); nil = system roots.
+	MailTLS *tls.Config
 }
 
 // maxResponse is how much of a vendor's answer the kernel reads; stored responses are cut to 4 KB after scrubbing.
@@ -90,6 +98,9 @@ func (rt *Runtime) Call(ctx context.Context, org, connector, action string, inpu
 	}
 	if err := rt.gate(ctx, org, connector, action, c); err != nil {
 		return nil, rt.fail(ctx, org, connector, action, nil, err)
+	}
+	if mailOp(a) != "" { // a mail action (contract 0068)
+		return rt.callMail(ctx, org, connector, action, c, a, input)
 	}
 	req, err := rt.Render(ctx, org, connector, action, input)
 	if err != nil {

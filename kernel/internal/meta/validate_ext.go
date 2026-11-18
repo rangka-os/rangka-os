@@ -152,6 +152,7 @@ func (v *validator) more() {
 			v.hostConnector(cn, d, c)
 			v.secretHosts(d, c)
 			v.pollTriggers(d, c)
+			v.mail(d, c)
 		}
 	}
 	if v.reg.Site != nil {

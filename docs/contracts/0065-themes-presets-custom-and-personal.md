@@ -121,12 +121,15 @@ A fixed list, bundled as WOFF2 under `web/app/fonts/` (works offline, no CDN): `
 
 ### 7. Plan flag
 
-`features.rk` plan `flags.custom_theme: true` allows **creating or changing** a site theme with `accent`, `color`,
-or a non-system `font` (the "Buat tema sendiri" editor, logo colours, per-token edits). Without it (or `false`) a
-change set may only point `config.theme` at a bundled theme or set `mode`, `radius`, `density`; anything else is
-invalid at validate (`plan_limit`, detail `custom_theme`). No `features.rk` = self-host = allowed. Downgrade never
-deletes: an existing custom theme keeps working and can be switched away from, not edited. Personal picks are
-never gated. Cloud sets the flag on `cloud_pro` and up ("Juragan Pro", Grup).
+`features.rk` plan flag `custom_theme` gates **creating or changing** a site theme of the business's own: one with
+`accent`, `color`, or a font other than `system` (the "Buat tema sendiri" editor, logo colours, per-token edits).
+Only a plan whose resolved flags say `custom_theme: false` refuses it; a site without `features.rk`, without a chosen
+plan, or whose plans never name the flag allows it (self-host and existing sites keep working). Refused at validate:
+`plan_limit` on the theme file, message "Tema buatan sendiri … mulai paket Juragan Pro". Pointing `config.theme` at
+any theme, a theme that only `extends` a bundled one, and `neutral`, `button`, `mode`, `radius`, `density`, `logo`
+are always allowed. Downgrade never deletes: an existing custom theme keeps working and can be switched away from,
+not edited. Personal picks are never gated. Cloud writes `custom_theme: false` on `cloud_mulai` and `cloud_juragan`;
+`cloud_pro` ("Juragan Pro") and Grup leave it on. `GET /api/v1/plan` reports the plan's `flags`.
 
 ### 8. Web app and Console
 

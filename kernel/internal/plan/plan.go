@@ -52,6 +52,8 @@ type Def struct {
 	// Rate is limits.rate, the tenant's traffic shaping (contract 0040 §9); nil means none. A child's rate replaces
 	// its parent's as a whole.
 	Rate *Rate `json:"-"`
+	// Flags are the plan's on/off features (features.rk flags, the parent's overridden by the child's).
+	Flags map[string]bool `json:"-"`
 }
 
 // Rate is a token bucket: RPS tokens a second, at most Burst; a request without a token waits up to MaxWaitMS,
@@ -73,10 +75,11 @@ func (d Def) MarshalJSON() ([]byte, error) {
 		lim["rate"] = d.Rate
 	}
 	return json.Marshal(struct {
-		Name   string         `json:"name"`
-		Label  string         `json:"label"`
-		Limits map[string]any `json:"limits"`
-	}{d.Name, d.Label, lim})
+		Name   string          `json:"name"`
+		Label  string          `json:"label"`
+		Limits map[string]any  `json:"limits"`
+		Flags  map[string]bool `json:"flags,omitempty"`
+	}{d.Name, d.Label, lim, d.Flags})
 }
 
 func toFloat(v any) (float64, bool) {
@@ -126,7 +129,7 @@ func Defs(reg *meta.Registry) []Def {
 	}
 	out := make([]Def, 0, len(order))
 	for _, n := range order {
-		d := Def{Name: n, Label: label(raw[n]["label"], n), Limits: map[string]int64{}}
+		d := Def{Name: n, Label: label(raw[n]["label"], n), Limits: map[string]int64{}, Flags: map[string]bool{}}
 		// the chain from the root parent down, so a child's value wins
 		var chain []map[string]any
 		seen := map[string]bool{}
@@ -135,6 +138,12 @@ func Defs(reg *meta.Registry) []Def {
 			chain = append([]map[string]any{raw[x]}, chain...)
 		}
 		for _, pm := range chain {
+			fm, _ := pm["flags"].(map[string]any)
+			for k, v := range fm {
+				if b, ok := v.(bool); ok {
+					d.Flags[k] = b
+				}
+			}
 			lm, _ := pm["limits"].(map[string]any)
 			if r, ok := lm["rate"]; ok {
 				d.Rate = parseRate(r)
@@ -253,6 +262,19 @@ func Resolve(ctx context.Context, q pg.Querier, reg *meta.Registry) (*Current, e
 		c.Def = Find(reg, c.Name)
 	}
 	return c, nil
+}
+
+// CustomTheme is the plan flag for themes of one's own (contract 0065 §7).
+const CustomTheme = "custom_theme"
+
+// Allows reports whether the current plan allows a feature flag: only a plan that sets it false refuses it, so
+// a site without plans, without a chosen plan, or whose plans never name the flag allows it (contract 0065 §7).
+func (c *Current) Allows(flag string) bool {
+	if c == nil || c.Def == nil {
+		return true
+	}
+	v, ok := c.Def.Flags[flag]
+	return !ok || v
 }
 
 // Limit returns the effective limit of key and whether there is one: the plan's limit plus the operator's active

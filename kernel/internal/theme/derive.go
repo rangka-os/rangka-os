@@ -153,6 +153,23 @@ func Apply(spec map[string]any, keys []string) (light, dark map[string]string, o
 	return
 }
 
+// Custom reports whether a theme document is one of the business's own (contract 0065 §7): an accent, colours,
+// or a bundled font other than system. neutral, button, mode, radius, density and logo alone are not.
+func Custom(data map[string]any) bool {
+	if a, _ := data["accent"].(string); a != "" {
+		return true
+	}
+	if len(asMapAny(data["color"])) > 0 {
+		return true
+	}
+	for _, k := range []string{"sans", "display"} {
+		if f, _ := asMapAny(data["font"])[k].(string); f != "" && f != "system" {
+			return true
+		}
+	}
+	return false
+}
+
 func str(v any) string { s, _ := v.(string); return s }
 
 func asMapAny(v any) map[string]any {

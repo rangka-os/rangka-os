@@ -464,3 +464,12 @@ create table if not exists rk_connector_checks (
   writes_confirmed_by text not null default '',
   primary key (org_id, connector)
 );
+
+-- the person's own appearance (contract 0065 §4): a theme to see instead of the business one (null = follow the
+-- business) and the colour mode
+create table if not exists rk_user_appearance (
+  user_id    bigint primary key references rk_users(id) on delete cascade,
+  theme      text,
+  mode       text not null default 'system',
+  updated_at timestamptz not null default now()
+);

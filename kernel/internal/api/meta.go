@@ -21,6 +21,9 @@ func (s *Server) getMeta(w http.ResponseWriter, r *http.Request, c *caller) {
 		fail(w, err)
 		return
 	}
+	if th, ok := m["theme"].(map[string]any); ok {
+		s.metaTheme(r.Context(), s.Engine.Reg(), th, c.p.User.ID)
+	}
 	writeJSON(w, 200, m)
 }
 

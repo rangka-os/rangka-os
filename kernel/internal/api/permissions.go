@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"net/http"
+	"strings"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/engine"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -21,8 +22,8 @@ func (s *Server) eventAllow(ctx context.Context, a engine.Actor) func(store.Even
 			_, err := s.Engine.GetApproval(ctx, a, ev.ID)
 			return err == nil
 		}
-		if ev.Type == "appearance" { // only the person's own connections (contract 0067 §6)
-			return ev.ID == a.ID
+		if ev.Type == "appearance" || ev.Type == "notice" { // only the person's own connections (contracts 0067 §6, 0066 §4.1)
+			return ev.ID != "" && strings.EqualFold(ev.ID, a.ID)
 		}
 		if ev.Type != "record" {
 			return true

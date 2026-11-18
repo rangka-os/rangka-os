@@ -967,6 +967,9 @@
     var fs = useState(boot.features), features = fs[0], setFeatures = fs[1];
     var cr = useState(0), setCacheRev = cr[1];
     var acs = useState(0), approvalCount = acs[0], setApprovalCount = acs[1];
+    // the notifications of the top bar (contract 0066 §4.1): the person's inbox, live over SSE
+    var notices = RA.useNotices ? RA.useNotices({ api: api, me: me, toast: function (a, b, c, d) { toast(a, b, c, d); },
+      navigate: function (href) { RA.navigate(href); } }) : null;
     var sws = useState(false), switching = sws[0], setSwitching = sws[1];
     var ubs = useState(!!boot.ubah), ubah = ubs[0], setUbah = ubs[1];
     var pvs = useState(boot.previewCs || null), previewCs = pvs[0], setPreviewCs = pvs[1];
@@ -1477,7 +1480,7 @@
       accountExtra: accountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
-      onNotifications: function () { toast("info", "Belum ada notifikasi"); }
+      unread: notices ? notices.unread : 0, onNotifications: function () { if (notices) notices.toggle(); }
     });
     // side-only from tablet up (contract 0065): the TopNav above the page, beside the full sidebar. The sidebar keeps
     // the business switcher, Mulai di sini and the tour's targets; the bar adds the menu (one item per sidebar group,
@@ -1492,13 +1495,16 @@
       accountExtra: accountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
-      onNotifications: function () { toast("info", "Belum ada notifikasi"); }
+      unread: notices ? notices.unread : 0, onNotifications: function () { if (notices) notices.toggle(); }
     }));
     // side-only on a phone: a 48px bar with the menu button; the sidebar opens as a drawer
     var phoneBar = kind === "top-nav" ? null : h("header", { className: "ap-mhead" },
       h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
       h("b", { className: "ap-mhead-t" }, companyName),
-      h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }));
+      h(R.IconButton, { icon: "search", label: "Cari", onClick: openCmd }),
+      notices ? h(R.IconButton, { icon: "bell", label: "Notifikasi", className: "ap-bell", dot: notices.unread, "aria-expanded": notices.open,
+        onClick: function () { notices.toggle(); } }) : null);
+    var noticePanel = notices && notices.open ? h(RA.NoticePanel, { state: notices, onClose: function () { notices.setOpen(false); } }) : null;
 
     // phone (desain arah E, P7): a bottom tab bar for the three things an owner does most; Menu opens the drawer
     var onHome = route.kind === "dash" && home && ("#/d/" + route.dash) === home;
@@ -1574,6 +1580,7 @@
           ubahOn ? h(RA.UbahBar, { busy: ubahBusy, onPending: uctx.showPending, onDone: function () { toggleUbah(false); } }) : null,
           h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev, "aria-busy": switching ? "true" : undefined }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: !!previewCs || offline })), tabBar),
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(), onClose: function () { setSwitchAt(null); } }) : null,
+        noticePanel,
         cmdOpen ? h(CommandPalette, { meta: meta, features: features, nav: sideNavItems, api: api, eng: eng, readOnly: !!previewCs || offline, onAsk: aiOn ? askRaka : null, onClose: function () { setCmdOpen(false); } }) : null,
         aiOn ? h(RA.AssistantRoot, { key: aiKey, api: api, storageKey: aiKey, getContext: aiPage, navigate: RA.navigate, tuckFor: ".ap-counter-bar",
           onPreview: aiPreview, onOpenUbah: aiOpenUbah, blocked: function () { return expiredRef.current; }, control: aiRef }) : null,

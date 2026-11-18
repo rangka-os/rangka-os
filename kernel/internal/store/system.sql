@@ -473,3 +473,50 @@ create table if not exists rk_user_appearance (
   mode       text not null default 'system',
   updated_at timestamptz not null default now()
 );
+
+-- kernel notices (contract 0066 §4.1): the inbox, one row per recipient of an event; event_id is the event's id
+-- (§2), the kernel's and the host's dedupe key. Pruned after 90 days. RLS like the model tables.
+create table if not exists rk_notices (
+  id        text primary key,               -- ntc_<random>
+  org_id    text not null,
+  event_id  text not null,
+  user_id   bigint not null,                -- rk_users.id of the recipient
+  kind      text not null,
+  severity  text not null,
+  title     text not null,
+  text      text not null default '',
+  link      text not null default '',
+  data      jsonb not null default '{}',
+  read_at   timestamptz,
+  at        timestamptz not null default now(),
+  seq       bigserial,                      -- arrival order: the inbox's sort and cursor
+  unique (org_id, event_id, user_id)
+);
+create index if not exists rk_notices_user_idx on rk_notices (org_id, user_id, seq desc);
+create index if not exists rk_notices_at_idx on rk_notices (at);
+-- a person's mail choice per kind ('*' = every kind) when the kernel mails notices itself (§4.2)
+create table if not exists rk_notice_prefs (
+  org_id  text not null,
+  user_id bigint not null,
+  kind    text not null,
+  mail    boolean not null,
+  primary key (org_id, user_id, kind)
+);
+-- the 60 notices per minute and organisation cap (§3): one row per org and minute; dropped counts per kind until
+-- they are audited once (notice.dropped)
+create table if not exists rk_notice_rate (
+  org_id  text not null,
+  minute  timestamptz not null,
+  n       int not null default 0,
+  dropped jsonb not null default '{}',
+  audited boolean not null default false,
+  primary key (org_id, minute)
+);
+alter table rk_notices enable row level security;
+alter table rk_notices force row level security;
+drop policy if exists rk_org on rk_notices;
+create policy rk_org on rk_notices using (rk_org_ok(org_id)) with check (rk_org_ok(org_id));
+alter table rk_notice_prefs enable row level security;
+alter table rk_notice_prefs force row level security;
+drop policy if exists rk_org on rk_notice_prefs;
+create policy rk_org on rk_notice_prefs using (rk_org_ok(org_id)) with check (rk_org_ok(org_id));

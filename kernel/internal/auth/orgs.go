@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // Membership is one organisation a user belongs to, with the roles held there.
@@ -88,6 +89,10 @@ func RemoveMember(ctx context.Context, q pg.Querier, org string, userID int64) e
 	}
 	// the person's tour states in this org go with the membership (contract 0053 §7)
 	if _, err := q.Exec(ctx, "delete from rk_tours where org_id = $1 and email = (select email from rk_users where id = $2)", org, userID); err != nil {
+		return err
+	}
+	// and so does their inbox there (contract 0066 §4.1)
+	if err := store.DeleteMemberNotices(ctx, q, org, userID); err != nil {
 		return err
 	}
 	res, err := q.Query(ctx, "delete from rk_members where org_id = $1 and user_id = $2 returning user_id", org, userID)

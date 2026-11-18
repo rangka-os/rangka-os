@@ -23,6 +23,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/realtime"
 	"github.com/rangka-os/rangka-os/kernel/internal/sandbox"
 	"github.com/rangka-os/rangka-os/kernel/internal/secrets"
+	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
 // Server holds what the handlers need. The server package fills it.
@@ -230,6 +231,9 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/events", a(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		s.Hub.ServeSSE(w, r, c.actor.Org, s.eventAllow(r.Context(), c.actor))
 	}))
+	// the person's inbox of kernel notices (contract 0066 §4.1)
+	mux.HandleFunc("GET /api/v1/notices", a(s.listNotices))
+	mux.HandleFunc("POST /api/v1/notices/read", a(s.readNotices))
 	// approvals
 	mux.HandleFunc("GET /api/v1/approvals", a(s.listApprovals))
 	mux.HandleFunc("GET /api/v1/approvals/{id}", a(s.getApproval))
@@ -348,7 +352,7 @@ func (s *Server) Handler() http.Handler {
 			if err != nil || p == nil || p.User == nil || p.Via == "pin" || !mcp.RequireScope(p) {
 				return nil, err
 			}
-			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p), Principal: p.Kind()}, nil
+			return &mcp.Caller{Actor: Actor(p), Change: ChangeActor(p), Principal: p.Kind(), UserID: p.User.ID}, nil
 		},
 		Engine:    func() *engine.Engine { return s.Engine },
 		Changes:   s.Changes,
@@ -359,6 +363,16 @@ func (s *Server) Handler() http.Handler {
 		Skills:    s.skillLibrary,
 		Onboarding: func(ctx context.Context, a engine.Actor) (any, error) {
 			return s.Onboarding(pg.WithOrg(ctx, a.Org), a)
+		},
+		Notices: func(ctx context.Context, a engine.Actor, userID int64, unread bool) (any, error) {
+			if userID == 0 {
+				return map[string]any{"data": []any{}, "unread": 0}, nil
+			}
+			items, n, _, err := store.ListNotices(pg.WithOrg(ctx, a.Org), s.DB, store.NoticeFilter{Org: a.Org, User: userID, Limit: 50, Unread: unread})
+			if err != nil {
+				return nil, err
+			}
+			return map[string]any{"data": items, "unread": n}, nil
 		},
 	}
 	for _, m := range []string{"POST", "GET", "DELETE"} {

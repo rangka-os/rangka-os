@@ -67,6 +67,19 @@
   RA.formatNumber = formatNumber;
   RA.defaultsTouching = defaultsTouching;
 
+  /** The columns of a table a form may tuck behind "Tampilkan n kolom valas": the foreign-currency twin of a Rupiah
+   *  column (a `money` field named <x>_fx beside a plain `currency` field <x>) and that twin's own Rupiah companion
+   *  (money_of). A money field that is the price itself (no Rupiah column of the same name) and a required column are
+   *  never tucked away. */
+  function gridFxCols(fields) {
+    fields = fields || [];
+    function plain(name) { return fields.some(function (c) { return c.name === name && c.type === "currency" && !c.money_of; }); }
+    var extra = fields.filter(function (c) { return c.type === "money" && !c.required && /_fx$/.test(c.name) && plain(c.name.replace(/_fx$/, "")); });
+    var names = extra.map(function (c) { return c.name; });
+    return fields.filter(function (c) { return extra.indexOf(c) >= 0 || (!!c.money_of && !c.required && names.indexOf(c.money_of) >= 0); });
+  }
+  RA.gridFxCols = gridFxCols;
+
   /* ================================================================ browser only from here */
   var React = global.React, R = global.Rangka;
   if (!React || !R || !global.document) return;
@@ -103,6 +116,7 @@
     }
   }
   RA.fieldText = fieldText;
+
 
   /* ---------------------------------------------------------------- inputs that keep the typed text while focused */
   function useEditText(value, format) {
@@ -271,8 +285,18 @@
 
   function Grid(p) {
     var ctx = p.ctx, eng = ctx.eng, f = p.field, cm = ctx.meta.models[f.of], rows = p.rec[f.name] || [], ro = p.readOnly;
-    var cols = cm.fields;
     var narrow = RA.useNarrow ? RA.useNarrow() : false;
+    // Foreign-currency columns (money fields and their IDR companions) stay out of the way until they are used: hidden
+    // while every row leaves them empty and the document's currency is the base one, behind "Tampilkan n kolom valas".
+    var fxCols = gridFxCols(cm.fields);
+    var fxUsed = rows.some(function (r) { return fxCols.some(function (c) { return Number(r[c.name]) || 0; }); }) ||
+      fxCols.some(function (c) { // a foreign currency on the document or on a line puts them on show
+        var base = (ctx.meta.config || {}).currency || "IDR", cf = c.currency_field;
+        return !!cf && ((!!p.rec[cf] && p.rec[cf] !== base) || rows.some(function (r) { return !!r[cf] && r[cf] !== base; }));
+      });
+    var fxs = useState(null), fxPick = fxs[0], setFxPick = fxs[1];
+    var fxShown = !fxCols.length || ro || fxUsed || !!fxPick; // in use: always on show, and no way to hide them
+    var cols = fxShown ? cm.fields : cm.fields.filter(function (c) { return fxCols.indexOf(c) < 0; });
 
     function set(i, k, v) {
       var n = rows.map(function (r) { return Object.assign({}, r); });
@@ -309,6 +333,8 @@
     var foot = h("div", { className: "rk-grid-foot" },
       ro ? h("span", { className: "rk-grid-lock" }, h(R.Icon, { name: "lock" }), p.lockText || "Baris tidak bisa diubah.")
         : h(R.Button, { size: "sm", icon: "add", onClick: add }, "Tambah baris"),
+      fxCols.length && !ro && !fxUsed ? h(R.Button, { size: "sm", variant: "quiet", className: "ap-grid-fx",
+        onClick: function () { setFxPick(!fxShown); } }, (fxShown ? "Sembunyikan " : "Tampilkan ") + fxCols.length + " kolom valas") : null,
       h("div", { className: "rk-totals" }, totals.map(function (t, i) {
         var g = t.name === grandName;
         return [h("span", { key: t.name + "l", className: g ? "grand" : undefined }, L(t.label)), h("b", { key: t.name + "v", className: g ? "grand" : undefined }, API.rupiah(p.rec[t.name] || 0))];
@@ -344,7 +370,7 @@
         h("div", { className: "rk-grid-scroll", tabIndex: 0, role: "region", "aria-label": L(f.label) }, h("table", { className: "rk-grid" },
           h("thead", null, h("tr", null, h("th", { className: "idx" }, "No"),
             cols.map(function (c) { return h("th", { key: c.name, className: numeric(c) ? "n" : undefined }, L(c.label)); }),
-            ro ? null : h("th", { className: "act" }, h("span", { className: "rk-sr" }, "Aksi")))),
+            ro ? null : h("th", { className: "act" }, "Aksi"))),
           h("tbody", null, rows.length ? rows.map(function (r, i) {
             return h("tr", { key: i }, h("td", { className: "idx" }, i + 1), cols.map(function (c) { return cell(r, i, c); }),
               ro ? null : h("td", { className: "act" }, h(R.IconButton, { icon: "delete", label: "Hapus baris " + (i + 1), onClick: function () { del(i); } })));

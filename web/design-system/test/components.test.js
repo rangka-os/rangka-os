@@ -61,7 +61,7 @@ test("Sidebar collapsed renders no labels", () => {
 });
 
 test("Sidebar collapsed keeps a compact footer and the expand button", () => {
-  const unfold = (t) => nodes(t, (n) => n.type === "button" && n.props["aria-label"] === "Bentangkan navigasi").length;
+  const unfold = (t) => nodes(t, (n) => n.type === "button" && n.props["aria-label"] === "Tampilkan menu").length;
   const withUser = render(R.Sidebar({ groups: GROUPS, collapsed: true, user: "Dede Kurniawan", role: "Pemilik", onToggleCollapse() {} }));
   const foot = nodes(withUser, (n) => hasClass(n, "rk-side-foot") && hasClass(n, "collapsed"));
   assert.strictEqual(foot.length, 1, "user footer stays");
@@ -85,7 +85,7 @@ test("Sidebar expanded renders labels, counts and the collapse button", () => {
   const tree = render(R.Sidebar({ switcher: { title: "Kopi Senja" }, groups: GROUPS, current: "r/sales_invoice", onToggleCollapse() { toggled++; } }));
   const all = texts(tree);
   assert.ok(all.indexOf("Faktur penjualan") >= 0 && all.indexOf("Penjualan") >= 0 && all.indexOf("3") >= 0);
-  const btn = nodes(tree, (n) => n.type === "button" && n.props["aria-label"] === "Ciutkan navigasi");
+  const btn = nodes(tree, (n) => n.type === "button" && n.props["aria-label"] === "Sembunyikan menu");
   assert.strictEqual(btn.length, 1);
   btn[0].props.onClick();
   assert.strictEqual(toggled, 1);

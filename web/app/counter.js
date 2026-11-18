@@ -293,6 +293,13 @@
     return String(t || "?").split(/\s+/).filter(Boolean).slice(0, 2).map(function (w) { return w[0]; }).join("").toUpperCase();
   }
   function tintOf(g) { var n = 0; String(g || "").split("").forEach(function (ch) { n = (n * 31 + ch.charCodeAt(0)) % 6; }); return "t" + n; }
+  /** An item's photo on its tile: a quiet grey block while it loads, the photo once it is there, the initials (the
+   *  no-photo tile) when it cannot be loaded. */
+  function TileImage(p) {
+    var ls = useState(0), st = ls[0], setSt = ls[1]; // 0 loading, 1 loaded, 2 failed
+    if (st === 2) return h("i", null, p.initials);
+    return h("img", { src: p.src, alt: "", loading: "lazy", className: st === 1 ? undefined : "loading", onLoad: function () { setSt(1); }, onError: function () { setSt(2); } });
+  }
   function imageSrc(v) {
     v = String(v || "");
     if (!v) return "";
@@ -611,7 +618,7 @@
           return h("button", { key: it.item, type: "button", className: "ap-counter-item" + (out ? " out" : "") + (n ? " picked" : ""), onClick: function () { add(it); },
             "aria-label": it.title + ", " + rp(it.price) + (out ? ", habis" : low ? ", sisa " + left : "") + (n ? ", " + n + " di pesanan" : "") },
             h("span", { className: "ap-counter-pic " + tintOf(it.title), "aria-hidden": "true" },
-              it.image ? h("img", { src: imageSrc(it.image), alt: "", loading: "lazy" }) : h("i", null, initials(it.title)),
+              it.image ? h(TileImage, { src: imageSrc(it.image), initials: initials(it.title) }) : h("i", null, initials(it.title)),
               n ? h("strong", { className: "ap-counter-n" }, n) : null),
             h("span", { className: "ap-counter-item-t" }, it.title),
             h("span", { className: "ap-counter-item-p" }, h("span", null, rp(it.price)),

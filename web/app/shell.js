@@ -1335,7 +1335,10 @@
       refreshApprovals: refreshApprovals, route: route, navigate: RA.navigate, toast: toast, readOnly: !!previewCs || offline, offline: offline,
       // a change set built elsewhere (the catalogue's Pasang / Lepas) opens in the same card as Ubah's
       showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); },
-      onboarding: { data: ob, hide: hideOnboarding, reload: loadOnboarding }, askRaka: function (q) { askRaka(q); } };
+      onboarding: { data: ob, hide: hideOnboarding, reload: loadOnboarding }, askRaka: function (q) { askRaka(q); },
+      // each person's own light/dark choice (the account menu's), for Pengaturan → Tampilan
+      startTour: function (def) { startTour(def); },
+      themePick: THEMES[themePick] ? themePick : theme, setThemePick: function (v) { if (THEMES[v]) { setThemePick(v); writeThemePick(v); } } };
     ctxRef.current = ctx;
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 

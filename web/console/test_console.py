@@ -406,7 +406,7 @@ with sync_playwright() as pw:
     side = page.locator(".rk-side")
     if not side.is_visible() or "collapsed" not in (side.get_attribute("class") or "") or side.bounding_box()["width"] > 64:
         fail(f"tablet: sidebar is not the icon rail ({side.get_attribute('class')}, {side.bounding_box()})")
-    page.get_by_role("button", name="Bentangkan navigasi").click()
+    page.get_by_role("button", name="Tampilkan menu").click()
     if "rk-side-float" not in (side.get_attribute("class") or "") or side.bounding_box()["width"] < 200 or not page.locator(".cn-rail-scrim").is_visible():
         fail("tablet: unfolding the rail does not float the full sidebar")
     page.locator(".rk-side .rk-navlink", has_text="Audit log").click()

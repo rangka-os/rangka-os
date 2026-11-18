@@ -40,8 +40,8 @@ def css_block(vals):
 def compile_css(tokens):
     lt, dk = base_tokens(tokens)
     fixed, fixed_dark = {}, {}
-    for group in ("spacing", "radius", "size", "shadow"):
-        for t in tokens[group]["tokens"]:
+    for group in ("spacing", "radius", "size", "shadow", "motion"):
+        for t in tokens.get(group, {}).get("tokens", []):
             v = t["value"]
             fixed[t["name"]] = v["light"] if isinstance(v, dict) else v
             if isinstance(v, dict):

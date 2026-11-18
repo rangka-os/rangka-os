@@ -439,6 +439,7 @@
     api.csVerb = function (id, verb, note) {
       return json("POST", "/api/v1/changesets/" + enc(id) + "/" + enc(verb), note ? { note: note } : {});
     };
+    /** GET /files → [{path, kind, layer, lines, sha}]: every metadata file of the site, to know what exists without a 404. */
     /** GET /files/{path} → {path, kind, layer, text, parsed}, or null when the file does not exist yet. */
     api.file = function (path) {
       return json("GET", "/api/v1/files/" + String(path).split("/").map(enc).join("/")).then(null, function (e) {

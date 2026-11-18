@@ -2,51 +2,62 @@
  * Juragan look on the Rangka app (desain arah E, riset/desain/06 putaran 6, 07 palet Bata). Scoped to
  * <html data-brand="juragan"> so the Rangka default stays untouched. Loaded after app.css.
  * Rules of colour roles:
- *   brand  : Bata only on the logo mark and the business tile
- *   UI     : warm neutral (stone), active nav = neutral tint, primary button = ink, focus = neutral
+ *   brand  : the theme's brand colour; the business tile is ink (or the business logo)
+ *   UI     : neutral grey (v3.1), primary button = ink; selection, links and focus = the business theme's accent
+ *            (default Bata; themes Biru, Hijau, Oranye in templates/themes)
  *   kind   : module colours (sales blue, money teal, work purple, stock gold) for charts and kind tiles
  *   status : ok/warn/bad/info only for real states, always with words
- *   Raka   : neutral (no teal)
+ *   Raka   : the green Raka character, everywhere Raka appears
  */
 :root[data-brand="juragan"]:not([data-theme="dark"]) {
   color-scheme: light;
-  --font-size: 14px; --font-size-sm: 13px; --line-height: 20px;
-  --app: #faf9f7; --surface: #ffffff; --soft: #f2f0ec;
-  --line: #ebe7e1; --line-strong: #ddd8d0; --border: #a8a196;
-  --ink: #1f1e1c; --ink-2: #4a4640; --muted: #6b655d; --faint: #9b938e;
-  --hover: rgba(31, 30, 28, .04); --neutral: #f2f0ec; --neutral-hover: #e9e5df;
-  --selected: #edeae5; --selected-ink: #1f1e1c; --row-selected: #f7f5f2;
-  --primary: #1f1e1c; --primary-hover: #000000; --primary-ink: #ffffff;
-  --link: #1f1e1c; --focus: #57534e; --focus-ring: 0 0 0 2px #57534e; --focus-soft: inset 0 0 0 1px #57534e;
-  --ok: #21763c; --ok-tint: #e3f6e6; --ok-line: #bfe6c8; --ok-solid: #21763c;
-  --warn: #7d5a00; --warn-tint: #ffeed0; --warn-line: #f4d79a; --warn-solid: #edb345; --on-warn: #1f1e1c;
-  --bad: #97123a; --bad-tint: #ffeaec; --bad-line: #f5c3cc; --bad-solid: #97123a; --on-bad: #ffffff;
-  --info: #215db3; --info-tint: #e7f1ff; --info-line: #c5dcfb;
-  --chart-1: #1f5fb8; --chart-2: #04756e; --chart-3: #8250b0; --chart-4: #8a6212; --chart-5: #6b655d; --chart-6: #a8a196;
-  --brand: #b4432a; --brand-deep: #1f1e1c; --brand-soft: #f6ede6;
-  --raka: #4a4640; --raka-deep: #1f1e1c; --raka-soft: #ebe7e1; --spark: #6b655d;
-  --r: 8px; --r-btn: 8px; --r-md: 8px; --r-lg: 12px; --r-dialog: 16px;
-  --control: 32px; --field: 32px; --control-lg: 36px; --row: 40px;
-  --ap-field-line: #ddd8d0; --ap-nav-icon: #6b655d; --ap-col: #f2f0ec; --ap-card-line: #ebe7e1;
-  --ap-pill: #f2f0ec; --ap-pill-ink: #4a4640;
-  --ap-create: #1f1e1c; --ap-create-hover: #000000; --ap-create-ink: #ffffff;
-  --ap-count: #1f1e1c; --ap-count-ink: #ffffff; --ap-docno: #6b655d;
-  --ap-approve: #1f1e1c; --ap-approve-hover: #000000; --ap-approve-ink: #ffffff;
+  /* Fondasi v3.1: abu netral dan latar putih, ink untuk tombol utama, teal untuk Raka, warna status untuk status.
+     Nilai netral dan status di sini sama dengan web/design-system/tokens.json (app.css punya nilai lamanya sendiri,
+     jadi ditegaskan lagi). Aksen (pilihan, tautan, fokus, merek, grafik pertama) milik TEMA usaha: bawaan Bata di
+     bawah ini, dan tema lain menimpanya lewat properti inline di <html> (shell.js, meta.theme.overrides). */
+  --n0: #ffffff; --n50: #f8f8f9; --n100: #f1f2f3; --n200: #e3e4e7; --n300: #d1d3d8; --n400: #b0b3ba;
+  --n500: #8b8e97; --n600: #6a6e77; --n700: #5a5e66; --n800: #43464d; --n900: #2b2d33; --n1000: #1b1c20;
+  /* aksen semantik untuk komponen sistem usaha: selalu turunan token tema, tidak pernah angka sendiri */
+  --accent: var(--focus); --accent-text: var(--selected-ink); --accent-subtle: var(--selected);
+  --sunken: var(--n50);
+  --app: #ffffff; --surface: #ffffff; --soft: var(--n100);
+  --line: var(--n200); --line-strong: var(--n300); --border: var(--n500);
+  --ink: var(--n1000); --ink-2: var(--n800); --muted: var(--n600); --faint: var(--n500);
+  --hover: rgba(27, 28, 32, .04); --neutral: var(--n100); --neutral-hover: var(--n200);
+  --selected: #f6ede6; --selected-ink: #a33b23; --row-selected: #fbf6f2;
+  --primary: var(--n1000); --primary-hover: var(--n900); --primary-ink: #ffffff;
+  --link: #a33b23; --focus: #e0623f; --focus-ring: 0 0 0 2px var(--focus); --focus-soft: inset 0 0 0 1px var(--focus);
+  --ok: #1f6b3a; --ok-tint: #e8f5ec; --ok-line: #bfe0c9; --ok-solid: #1f6b3a;
+  --warn: #8a4b00; --warn-tint: #fff4db; --warn-line: #f1d9a0; --warn-solid: #edb345; --on-warn: #1b1c20;
+  --bad: #b3123a; --bad-tint: #fdecef; --bad-line: #f6c5cf; --bad-solid: #c2183f; --on-bad: #ffffff;
+  --info: #184eab; --info-tint: #edf3fe; --info-line: #d6e4fd;
+  --chart-1: #b4432a; --chart-2: #04756e; --chart-3: #8250b0; --chart-4: #8a6212; --chart-5: #6a6e77; --chart-6: #b0b3ba;
+  --brand: #b4432a; --brand-deep: var(--n1000); --brand-soft: #f6ede6;
+  --raka: #0d9488; --raka-deep: #0f766e; --raka-soft: #e6f4f2; --spark: #f59e0b;
+  --shadow-raised: 0 1px 2px rgba(27, 28, 32, .08), 0 0 0 1px rgba(27, 28, 32, .06);
+  --shadow-overlay: 0 8px 24px rgba(27, 28, 32, .12), 0 0 0 1px rgba(27, 28, 32, .08);
+  --ap-field-line: var(--n300); --ap-nav-icon: var(--n600); --ap-col: var(--n100); --ap-card-line: var(--n200);
+  --ap-pill: var(--n100); --ap-pill-ink: var(--n700);
+  --ap-create: var(--n1000); --ap-create-hover: var(--n900); --ap-create-ink: #ffffff;
+  --ap-count: var(--n1000); --ap-count-ink: #ffffff; --ap-docno: var(--n600);
+  --ap-approve: var(--n1000); --ap-approve-hover: var(--n900); --ap-approve-ink: #ffffff;
   --k-jual: #1f5fb8; --k-jual-s: #e8eff9; --k-uang: #04756e; --k-uang-s: #e2f3f1;
   --k-kerja: #8250b0; --k-kerja-s: #f1eaf8; --k-stok: #8a6212; --k-stok-s: #f7eedb;
 }
 
-/* Dark: Rangka OS site palette (Dede), Bata #E0623F on the mark only */
+/* Dark: Rangka OS site palette (Dede). The accent follows the business theme as in light (default: Bata dark values
+   of tokens.json); Raka keeps the teal. */
 :root[data-brand="juragan"][data-theme="dark"] {
   color-scheme: dark;
   --app: #161412; --surface: #1c1b19; --soft: #211e1b; --line: #33302e; --line-strong: #403c3a;
   --ink: #f3efec; --ink-2: #cfc7c1; --muted: #a79d96;
-  --selected: #2f2d2a; --selected-ink: #f3efec; --row-selected: #262321;
-  --primary: #f3efec; --primary-ink: #161412; --link: #f3efec; --focus: #cfc7c1;
-  --focus-ring: 0 0 0 2px #cfc7c1; --focus-soft: inset 0 0 0 1px #cfc7c1;
+  --selected: #3a2219; --selected-ink: #f08a6b; --row-selected: #2a1d18;
+  --primary: #f3efec; --primary-ink: #161412; --link: #f08a6b; --focus: #f08a6b;
+  --focus-ring: 0 0 0 2px var(--focus); --focus-soft: inset 0 0 0 1px var(--focus);
+  --accent: var(--focus); --accent-text: var(--selected-ink); --accent-subtle: var(--selected);
   --bad: #f47c7c; --bad-tint: #3b2020; --ok: #75d78d; --ok-tint: #1a3520; --warn: #f2c36a; --warn-tint: #3a2b0d;
-  --chart-1: #7fa8e6; --chart-2: #4cc2b8; --chart-3: #c9a0f0; --chart-4: #ebb353; --chart-5: #a79d96;
-  --brand: #e0623f; --brand-soft: #3a2219; --raka: #cfc7c1; --raka-deep: #f3efec; --raka-soft: #2f2d2a; --spark: #a79d96;
+  --chart-1: #e0623f; --chart-2: #4cc2b8; --chart-3: #c9a0f0; --chart-4: #ebb353; --chart-5: #a79d96;
+  --brand: #e0623f; --brand-soft: #2a1d18; --raka: #2dd4bf; --raka-deep: #5eead4; --raka-soft: #115e59; --spark: #f59e0b;
   /* the rest of the set, so no Rangka dark value (Bata create button, yellow counts, green approve) shows through */
   --faint: #7a706a; --border: #7a706a; --hover: rgba(243, 239, 236, .05); --neutral: #262321; --neutral-hover: #2f2d2a; --primary-hover: #ffffff;
   --info: #8fb4ec; --info-tint: #1d2a3d; --info-line: #2c4466;
@@ -61,55 +72,241 @@
   --k-jual: #7fa8e6; --k-jual-s: #1d2a3d; --k-uang: #4cc2b8; --k-uang-s: #14302d; --k-kerja: #c9a0f0; --k-kerja-s: #2b2238; --k-stok: #ebb353; --k-stok-s: #33280f;
 }
 
+/* Ukuran sistem usaha per density (tema: density). "standard" adalah ukuran layar v3 yang direview (kontrol 32,
+   baris 40); "compact" memakai ukuran rapat DS; "comfortable" satu tingkat lebih lega. Sentuh (HP, tablet) tetap 44px
+   lewat aturan di akhir berkas. */
+:root[data-brand="juragan"] { --font-size: 14px; --font-size-sm: 12px; --line-height: 20px;
+  --r-sm: 4px; --r: 6px; --r-btn: 6px; --r-md: 6px; --r-lg: 8px; --r-dialog: 12px;
+  --control-sm: 28px; --control: 32px; --field: 32px; --control-lg: 40px; --row: 40px; --row-head: 36px; }
+:root[data-brand="juragan"][data-density="compact"] { --control-sm: 24px; --control: 28px; --field: 28px; --control-lg: 32px; --row: 36px; --row-head: 32px; }
+:root[data-brand="juragan"][data-density="comfortable"] { --control-sm: 32px; --control: 36px; --field: 36px; --control-lg: 44px; --row: 44px; --row-head: 40px; }
 [data-brand="juragan"] body { font: 14px/20px "Inter", var(--font-sans); background: var(--app); }
+/* batang scroll tanpa wadah: hanya batangnya yang terlihat (fondasi v3 §6) */
+:root[data-brand="juragan"] * { scrollbar-width: thin; scrollbar-color: var(--line-strong) transparent; }
 
-/* logo mark and business tile = Bata (the one brand moment in the app) */
-/* g1 sets --brand to ink on .ap-shell; this beats it (0,3,0, later) */
-:root[data-brand="juragan"]:not([data-theme="dark"]) .ap-shell { --brand: #b4432a; }
-:root[data-brand="juragan"][data-theme="dark"] .ap-shell { --brand: #e0623f; }
+/* tipografi v3 (fondasi §2): Inter saja. Nomor dokumen dan inisial tidak memakai mono atau huruf display; angka
+   memakai tabular-nums. Kode teknis (tampilan teknis, SQL, CEL) tetap mono. Tidak ada huruf besar semua. */
+:root[data-brand="juragan"] { --font-display: "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-main .rk-table .rk-doc-no, [data-brand="juragan"] .ap-main .rk-table td a.rk-doc-no,
+[data-brand="juragan"] .ap-main .ap-inbox-doc a, [data-brand="juragan"] .ap-main .ap-lc-meta .rk-doc-no {
+  font-family: "Inter", var(--font-sans); font-variant-numeric: tabular-nums; }
+[data-brand="juragan"] .rk-docpanel-sec h3, [data-brand="juragan"] .ap-cat-group > h2, [data-brand="juragan"] .pv-h2,
+[data-brand="juragan"] .pd-cols > span, [data-brand="juragan"] .pd-extra-h { text-transform: none; letter-spacing: 0; }
+
+/* ---- kerangka v3 (artboard yang direview): sidebar 240, butir menu 32px/14px, halaman berjarak 40px di desktop,
+   judul halaman 24/28, tombol sekunder berlatar netral tanpa garis, kontrol segmen 32px ---- */
+:root[data-brand="juragan"] { --sidebar: 240px; }
+[data-brand="juragan"] .ap-shell .rk-side-head { padding: 12px 12px 8px; gap: 10px; }
+[data-brand="juragan"] .ap-shell .rk-side-head b { font: 600 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-shell .rk-side-head small { font: 400 12px/16px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-shell .rk-side-mark, [data-brand="juragan"] .ap-shell .rk-side-head .tile { width: 28px; height: 28px; border-radius: var(--r-md); }
+[data-brand="juragan"] .ap-shell .rk-side-search { margin: 0 12px 8px; width: calc(100% - 24px); height: 32px; font: 400 14px/20px "Inter", var(--font-sans); border-radius: var(--r-md); }
+[data-brand="juragan"] .ap-shell .rk-side nav { padding: 2px 12px 12px; gap: 2px; }
+[data-brand="juragan"] .ap-shell .rk-navlink { height: 32px; gap: 10px; padding: 0 8px; font: 400 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-shell .rk-navlink .rk-icon { width: 16px; height: 16px; }
+[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] { font-weight: 500; }
+[data-brand="juragan"] .ap-shell .rk-navgroup > p { margin: 12px 0 0; padding: 0 8px; height: 28px; display: flex; align-items: center; font: 600 12px/16px "Inter", var(--font-sans); color: var(--muted); }
+[data-brand="juragan"] .ap-shell .rk-navgroup > p > .rk-navgroup-t { color: inherit; }
+[data-brand="juragan"] .rk-btn { font: 500 14px/20px "Inter", var(--font-sans); padding: 0 12px; }
+[data-brand="juragan"] .rk-btn-sm { font-size: 12px; line-height: 16px; padding: 0 8px; }
+[data-brand="juragan"] .rk-btn-lg { font-size: 14px; padding: 0 16px; }
+[data-brand="juragan"] .rk-btn:not([class*="rk-btn-"]):not(.ap-create):not(.ap-approve) { background: var(--neutral); color: var(--ink); box-shadow: none; }
+[data-brand="juragan"] .rk-btn:not([class*="rk-btn-"]):not(.ap-create):not(.ap-approve):hover { background: var(--neutral-hover); color: var(--ink); }
+[data-brand="juragan"] .rk-seg { height: 32px; border-radius: var(--r-md); }
+[data-brand="juragan"] .rk-seg button { font: 500 14px/20px "Inter", var(--font-sans); padding: 0 12px; }
+[data-brand="juragan"] .rk-seg button[aria-pressed="true"] { box-shadow: var(--shadow-float); }
+@media (min-width: 1024px) {
+  [data-brand="juragan"] .ap-main .rk-pagehead { padding: 24px 40px 0; }
+  /* work screens (kasir, antrean, absen) keep their own tight frame */
+  [data-brand="juragan"] .ap-main .rk-shell-content:not([class*="ap-work"]) { padding: 24px 40px 40px; gap: 16px; }
+}
+
+/* ---- komponen v3 (artboard yang direview) ---- */
+/* lozenge status: sudut 4px, tanpa titik, selalu dengan kata */
+[data-brand="juragan"] .rk-pill, [data-brand="juragan"] .rk-chip { border-radius: 4px; padding: 0 6px; font: 500 12px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .rk-pill::before, [data-brand="juragan"] .rk-chip::before { display: none; }
+/* form: label 12/16 tebal sedang, isian setinggi --field (40 di density standar), fokus = garis aksen 2px */
+:root[data-brand="juragan"] { --field: 40px; }
+:root[data-brand="juragan"][data-density="compact"] { --field: 32px; }
+:root[data-brand="juragan"][data-density="comfortable"] { --field: 44px; }
+[data-brand="juragan"] .rk-field > label, [data-brand="juragan"] .rk-field > .rk-label { font: 500 12px/16px "Inter", var(--font-sans); color: var(--ink-2); }
+[data-brand="juragan"] .rk-field > input, [data-brand="juragan"] .rk-input-affix input, [data-brand="juragan"] .rk-field textarea, [data-brand="juragan"] .rk-field select,
+[data-brand="juragan"] .rk-select-btn { border-radius: var(--r-md); font-size: 14px; }
+[data-brand="juragan"] .rk-field > input, [data-brand="juragan"] .rk-select-btn { padding-left: 12px; padding-right: 12px; }
+[data-brand="juragan"] .rk-field > input:focus, [data-brand="juragan"] .rk-field textarea:focus, [data-brand="juragan"] .rk-field select:focus,
+[data-brand="juragan"] .rk-select-btn[aria-expanded="true"], [data-brand="juragan"] .rk-select-btn:focus-visible, [data-brand="juragan"] .rk-search:focus-within { border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
+[data-brand="juragan"] .rk-form-sec h2, [data-brand="juragan"] .ap-docsec-t { font: 600 16px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .rk-form-sec > .rk-form-sec-head { padding-top: 20px; }
+/* tabel dan grid baris: kepala kolom 12/16 tebal, isi 14px */
+[data-brand="juragan"] .rk-table th, [data-brand="juragan"] .rk-grid th { font: 600 12px/16px "Inter", var(--font-sans); color: var(--muted); }
+[data-brand="juragan"] .rk-table td, [data-brand="juragan"] .rk-grid td { font-size: 14px; }
+/* tab: 14px, garis aksen 2px di tab aktif */
+[data-brand="juragan"] .rk-tabs { gap: 24px; }
+[data-brand="juragan"] .rk-tabs button { font: 500 14px/20px "Inter", var(--font-sans); padding: 10px 0; color: var(--ink-2); }
+[data-brand="juragan"] .rk-tabs button[aria-selected="true"]::after { background: var(--brand); }
+/* kartu: judul 16/20, tanpa bayangan */
+[data-brand="juragan"] .ap-main .rk-card-head { padding: 0 20px; min-height: 52px; }
+[data-brand="juragan"] .ap-main .rk-card-head h2, [data-brand="juragan"] .ap-attn-head h2 { font: 600 16px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .rk-stat-num { font: 600 24px/28px "Inter", var(--font-sans); letter-spacing: -0.01em; }
+/* langkah dokumen (Draf, Diajukan, ...): langkah sekarang memakai warna aksen */
+[data-brand="juragan"] .ap-main .rk-step.process .rk-step-icon { background: var(--brand); }
+[data-brand="juragan"] .ap-main .rk-step.process .rk-step-title { color: var(--ink); }
+/* kepala halaman dokumen di desktop: remah di baris pertama, judul 24/28 dan status di baris kedua, aksi 40px di kanan */
+@media (min-width: 1024px) {
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs) { display: grid; grid-template-columns: auto auto minmax(0, 1fr) auto; column-gap: 8px; row-gap: 2px; align-items: center; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs) > .rk-iconbtn { grid-column: 1; grid-row: 1; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs) > .rk-crumbs { grid-column: 2 / 4; grid-row: 1; font: 400 14px/20px "Inter", var(--font-sans); }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs):not(:has(> .rk-iconbtn)) > .rk-crumbs { grid-column: 1 / 4; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs) > h1 { grid-column: 1 / 3; grid-row: 2; font: 600 24px/28px "Inter", var(--font-sans); letter-spacing: -0.01em; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs) > .rk-pill { grid-column: 3; grid-row: 2; justify-self: start; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs) > .rk-pagehead-extra { grid-column: 4; grid-row: 1 / 3; align-self: center; }
+  [data-brand="juragan"] .ap-main .rk-pagehead-row:has(> .rk-crumbs) > .rk-pagehead-extra .rk-btn { height: var(--control-lg); padding: 0 16px; }
+}
+
+/* ---- Mulai di sini (artboard): tiap langkah satu kartu, langkah sekarang bergaris aksen; hadiah dan tim kartu putih ---- */
+[data-brand="juragan"] .ap-mu-head { gap: 6px; margin-bottom: 20px; }
+[data-brand="juragan"] .ap-mu-title { font: 600 20px/24px "Inter", var(--font-sans); letter-spacing: -0.005em; }
+[data-brand="juragan"] .ap-mu-bar i { height: 4px; border-radius: 2px; }
+[data-brand="juragan"] .ap-mu-bar i.now { background: var(--brand); }
+[data-brand="juragan"] .ap-mu-grid { grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 16px; }
+[data-brand="juragan"] .ap-mu-path { display: flex; flex-direction: column; gap: 8px; }
+[data-brand="juragan"] .ap-mu-step { grid-template-columns: 24px minmax(0, 1fr); gap: 12px; padding: 14px 20px; border: 1px solid var(--line); border-radius: var(--r-lg); background: var(--surface); }
+[data-brand="juragan"] .ap-mu-step::before { display: none; }
+[data-brand="juragan"] .ap-mu-step.now { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+[data-brand="juragan"] .ap-mu-dot { width: 24px; height: 24px; box-sizing: border-box; border: 1.5px solid var(--faint); background: var(--surface); color: var(--ink-2); font: 600 12px/1 "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-mu-dot .rk-icon { width: 12px; height: 12px; }
+[data-brand="juragan"] .ap-mu-dot.now { background: var(--surface); border-color: var(--brand); color: var(--selected-ink); }
+[data-brand="juragan"] .ap-mu-dot.done { background: var(--ok-tint); border-color: transparent; color: var(--ok); }
+[data-brand="juragan"] .ap-mu-row { padding-top: 2px; gap: 2px; }
+[data-brand="juragan"] .ap-mu-label { font: 500 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-mu-meta { font: 400 12px/16px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-mu-row .ap-mu-meta .ap-mu-av, [data-brand="juragan"] .ap-mu-row .ap-mu-meta .ap-mu-nobody { display: none; }
+[data-brand="juragan"] .ap-mu-step .ap-mu-card { border: 0; padding: 0; background: none; gap: 8px; }
+[data-brand="juragan"] .ap-mu-chip { height: 20px; padding: 0 6px; border-radius: 4px; font: 500 12px/16px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-mu-chips .ap-mu-chip:first-child { background: var(--selected); color: var(--selected-ink); }
+[data-brand="juragan"] .ap-mu-cur-t { font: 600 16px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-mu-opens { color: var(--muted); }
+[data-brand="juragan"] .ap-mu-opens > :first-child:not(span) { display: none; }
+[data-brand="juragan"] .ap-mu-gift { border: 1px solid var(--line); background: var(--surface); padding: 16px 20px; }
+[data-brand="juragan"] .ap-mu-gift-i, [data-brand="juragan"] .ap-mu-bars { display: none; }
+[data-brand="juragan"] .ap-mu-gift .ap-mu-eye.warn { color: var(--muted); }
+[data-brand="juragan"] .ap-mu-gift-h h3 { font: 600 16px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-mu-team { padding: 16px 20px; }
+[data-brand="juragan"] .ap-mu-team h3 { font: 600 16px/20px "Inter", var(--font-sans); }
+@media (max-width: 1023px) { [data-brand="juragan"] .ap-mu-grid { grid-template-columns: minmax(0, 1fr); } [data-brand="juragan"] .ap-mu-step { padding: 12px 16px; } }
+/* ---- daftar (artboard): tombol saring dan alat 32px/14px berlatar netral, tab 14px, kosong tanpa ilustrasi ---- */
+[data-brand="juragan"] .ap-main .ap-views .rk-fbtn, [data-brand="juragan"] .ap-main .ap-views .ap-toolmenu .rk-btn { height: 32px; padding: 0 10px 0 12px; font: 500 14px/20px "Inter", var(--font-sans); color: var(--ink); border-radius: var(--r-md); background: var(--neutral); box-shadow: none; }
+[data-brand="juragan"] .ap-main .ap-views .rk-fbtn:hover, [data-brand="juragan"] .ap-main .ap-views .ap-toolmenu .rk-btn:hover { background: var(--neutral-hover); }
+[data-brand="juragan"] .ap-main .ap-views .rk-fbtn.on { background: var(--selected); color: var(--selected-ink); }
+[data-brand="juragan"] .ap-main .ap-views .rk-fbtn .rk-icon, [data-brand="juragan"] .ap-main .ap-views .ap-toolmenu .rk-btn .rk-icon { width: 16px; height: 16px; }
+[data-brand="juragan"] .ap-main .ap-views { margin: 0 0 4px; }
+[data-brand="juragan"] .rk-search { border-radius: var(--r-md); border-color: var(--line-strong); }
+[data-brand="juragan"] .rk-search input { font-size: 14px; }
+/* keadaan kosong tanpa ilustrasi: judul, satu kalimat, satu tombol. Raka hanya muncul di keadaan kosong milik Raka */
+[data-brand="juragan"] .ap-main .rk-empty > :first-child:not(b) { display: none; }
+[data-brand="juragan"] .ap-main .rk-empty b { font: 600 16px/20px "Inter", var(--font-sans); margin-top: 0; }
+[data-brand="juragan"] .ap-main .rk-empty span { font-size: 14px; color: var(--ink-2); }
+/* tab bawah di HP: tab aktif cukup berwarna aksen, tanpa latar */
+@media (max-width: 1023px) { [data-brand="juragan"] .ap-tabbar [aria-current="page"] { background: none; } }
+
+/* ---- tab, tabel, hitungan menu, kartu modul (artboard) ---- */
+[data-brand="juragan"] .ap-main .rk-tabs { gap: 24px; }
+[data-brand="juragan"] .ap-main .rk-tabs button { font: 500 14px/20px "Inter", var(--font-sans); color: var(--ink-2); padding: 10px 0; }
+[data-brand="juragan"] .ap-main .rk-tabs button[aria-selected="true"] { color: var(--ink); font-weight: 500; }
+[data-brand="juragan"] .ap-main .rk-tabs button[aria-selected="true"]::after { background: var(--brand); }
+[data-brand="juragan"] .ap-main .rk-tabs .n { background: var(--neutral); color: var(--ink-2); font: 500 12px/20px "Inter", var(--font-sans); border-radius: 4px; padding: 0 6px; }
+[data-brand="juragan"] .ap-main .rk-table th { height: var(--row-head); background: var(--surface); font: 600 12px/16px "Inter", var(--font-sans); color: var(--muted); }
+[data-brand="juragan"] .ap-main .rk-table td { height: var(--row); font-size: 14px; color: var(--ink); }
+[data-brand="juragan"] .ap-main .rk-table th:first-child, [data-brand="juragan"] .ap-main .rk-table td:first-child { padding-left: 16px; }
+[data-brand="juragan"] .ap-main .rk-table th:last-child, [data-brand="juragan"] .ap-main .rk-table td:last-child { padding-right: 16px; }
+/* hitungan di menu (langkah mulai, jumlah menunggu) netral: angka kecil tanpa pil gelap */
+[data-brand="juragan"] .ap-shell .rk-navlink .rk-count, [data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] .rk-count { background: transparent; color: var(--ink-2); font: 500 12px/18px "Inter", var(--font-sans); padding: 0 2px; }
+[data-brand="juragan"] .ap-cat-group > h2 { font: 600 12px/16px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-cat-card { border-radius: var(--r-lg); align-items: flex-start; padding: 14px 16px; }
+[data-brand="juragan"] .ap-cat-icon { width: 20px; height: 20px; background: none; color: var(--ink-2); margin-top: 0; }
+[data-brand="juragan"] .ap-cat-text b { font: 600 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-cat-search { min-height: 40px; border-color: var(--border); font-size: 14px; }
+
+/* ---- Proses bisnis, diagram (fondasi v3, warna jenis): langkah kerja = aksen tema, berjalan sendiri = ungu,
+   data yang disiapkan = netral. Ungu ini hanya dipakai di diagram. Titik latar netral. ---- */
+/* teks di atas warna merek tema: putih di terang; di gelap warna merek jadi terang, jadi teksnya gelap (>= 4.5:1) */
+:root[data-brand="juragan"] { --on-brand: #ffffff; }
+:root[data-brand="juragan"][data-theme="dark"] { --on-brand: #161412; }
+:root[data-brand="juragan"] { --k-auto: #6d4ad6; --k-auto-text: #5b3cc4; --k-auto-subtle: #f1ecfd; --k-auto-line: #c4b5f0; }
+:root[data-brand="juragan"][data-theme="dark"] { --k-auto: #b8a5f3; --k-auto-text: #c9b9f7; --k-auto-subtle: #2b2238; --k-auto-line: #4a3a78; }
+[data-brand="juragan"] .pd { --lane-data: var(--ink-2); --lane-data-s: var(--soft); --lane-work: var(--brand); --lane-work-s: var(--selected); --lane-auto: var(--k-auto); --lane-auto-s: var(--k-auto-subtle); }
+:root[data-brand="juragan"]:not([data-theme="dark"]) .pd-vp, :root[data-brand="juragan"]:not([data-theme="dark"]) .pd:not(.is-narrow), :root[data-brand="juragan"]:not([data-theme="dark"]) .pd.is-narrow {
+  background-image: radial-gradient(circle, var(--line-strong) 1px, transparent 1.2px); }
+[data-brand="juragan"] .pd-detail .pd-d-list.is-auto .pd-ic { background: var(--k-auto-subtle); color: var(--k-auto-text); }
+[data-brand="juragan"] .pd-step-trigger .pd-step-k, [data-brand="juragan"] .pd-step-action .pd-step-k { color: var(--k-auto-text); }
+[data-brand="juragan"] .pv-track-step b { color: var(--selected-ink); }
+[data-brand="juragan"] .pv-mini-node { background: var(--selected); color: var(--selected-ink); border-radius: 4px; }
+[data-brand="juragan"] .pv-mini-line { background: var(--brand); }
+[data-brand="juragan"] .pd-crumb, [data-brand="juragan"] .pd-search { box-shadow: var(--shadow-overlay); border-radius: var(--r-lg); }
+/* garis dari "Data yang disiapkan" ke langkah redup (22%) dan menyala saat kotak data atau langkahnya diarahkan */
+[data-brand="juragan"] .pd .pd-e-feed { opacity: .22; }
+[data-brand="juragan"] .pd .pd-e-feed.is-on { opacity: 1; stroke: var(--ink-2); stroke-width: 1.75; }
+
+/* ---- layar kerja staf: layar aktif di bilah bawah berwarna aksen tanpa latar (HP); di rel tablet berlatar terpilih ---- */
+[data-brand="juragan"] .ap-workbar [aria-current="page"] { color: var(--selected-ink); background: var(--selected); font-weight: 500; }
+@media (max-width: 767px) { [data-brand="juragan"] .ap-workbar [aria-current="page"] { background: none; font-weight: 600; } }
+
+/* --brand is the theme's brand colour, set on <html>; g1 redefines it as ink on .ap-shell, so hand it back (0,3,0, later) */
+:root[data-brand="juragan"] .ap-shell { --brand: inherit; }
+/* the business tile is ink with the business initials, as in the reviewed screens; a business logo replaces it */
 [data-brand="juragan"] .ap-shell .rk-side-mark,
-[data-brand="juragan"] .ap-shell .rk-side-head .tile { background: var(--brand) !important; color: #fff; }
+[data-brand="juragan"] .ap-shell .rk-side-head .tile { background: var(--primary) !important; color: var(--primary-ink); }
 /* top-nav: the sidebar tile is the open app, in Ink; the business keeps the Bata tile in the top bar */
 [data-brand="juragan"] .ap-top > .rk-side .rk-side-head .tile { background: var(--primary) !important; color: var(--primary-ink); }
 
 /* sidebar: warm neutral, active item = neutral tint, ink text and icon */
-[data-brand="juragan"] .ap-shell > .rk-side { background: var(--app); border-right: 1px solid var(--line); }
-[data-brand="juragan"] .ap-shell .rk-navlink { border-radius: 8px; color: var(--ink-2); }
+[data-brand="juragan"] .ap-shell > .rk-side { background: var(--sunken, var(--app)); border-right: 1px solid var(--line); }
+[data-brand="juragan"] .ap-shell .rk-navlink { border-radius: var(--r-md); color: var(--ink-2); }
 [data-brand="juragan"] .ap-shell .rk-navlink:hover { background: var(--hover); color: var(--ink); }
-[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); color: var(--ink); font-weight: 600; }
-[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--ink); }
+[data-brand="juragan"] .ap-wmore a[aria-current="page"] { background: var(--selected); }
+/* menu terpilih: warna tema usaha */
+[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); color: var(--selected-ink); font-weight: 600; }
+[data-brand="juragan"] .ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--selected-ink); }
+/* app.css sets the light active item to ink with (0,4,1); the v3 selection is the accent */
+:root[data-brand="juragan"]:not([data-theme="dark"]) .ap-shell .rk-navlink[aria-current="page"],
+:root[data-brand="juragan"]:not([data-theme="dark"]) .ap-shell .rk-navlink[aria-current="page"] .rk-icon { color: var(--selected-ink); }
+:root[data-brand="juragan"]:not([data-theme="dark"]) .ap-shell .rk-navlink[aria-current="page"] { background: var(--selected); }
 [data-brand="juragan"] .ap-shell .rk-navgroup > p { text-transform: none; letter-spacing: 0; font: 500 12px/16px var(--font-sans); color: var(--muted); }
+/* grup yang bisa dilipat: tanpa angka jumlah menu; panah menghadap bawah saat tertutup, atas saat terbuka (keputusan
+   Zein 16 Nov). Komponen DS memberi ikon "right" saat tertutup dan "down" saat terbuka; di sini hanya diputar. */
+[data-brand="juragan"] .ap-shell .rk-navgroup-n { display: none; }
+[data-brand="juragan"] .ap-shell .rk-navgroup-t .rk-icon { opacity: 1; transform: rotate(180deg); }
+[data-brand="juragan"] .ap-shell .rk-navgroup.folded .rk-navgroup-t .rk-icon { transform: rotate(90deg); }
 
 /* page head: a real title, not a 15px label */
 [data-brand="juragan"] .rk-pagehead { background: var(--app); border-bottom: 0; padding-top: 8px; }
-[data-brand="juragan"] .rk-pagehead h1 { font: 600 22px/28px "Inter", var(--font-sans); letter-spacing: -0.01em; }
+[data-brand="juragan"] .rk-pagehead h1 { font: 600 24px/28px "Inter", var(--font-sans); letter-spacing: -0.01em; }
 
-/* cards and stats: white on warm background, hairline, 12px radius */
-[data-brand="juragan"] .rk-card, [data-brand="juragan"] .rk-stat, [data-brand="juragan"] .ap-main .ap-tiles { border-color: var(--line); border-radius: 12px; }
+/* cards and stats: white with a hairline, 8px radius, no shadow */
+[data-brand="juragan"] .rk-card, [data-brand="juragan"] .rk-stat, [data-brand="juragan"] .ap-main .ap-tiles { border-color: var(--line); border-radius: var(--r-lg); }
 [data-brand="juragan"] .rk-stat { padding: 14px 16px; }
 
 /* buttons: 32px, 8px radius; primary ink */
-[data-brand="juragan"] .rk-btn { border-radius: 8px; font-weight: 600; }
+[data-brand="juragan"] .rk-btn { border-radius: var(--r-btn); }
 [data-brand="juragan"] .rk-btn-link { text-decoration: underline; text-underline-offset: 2px; }
 
 /* status badges: small radius, always with words (not round pills) */
-[data-brand="juragan"] .rk-pill, [data-brand="juragan"] .ap-attn-badge { border-radius: 6px; }
+[data-brand="juragan"] .ap-attn-badge { border-radius: 4px; }
 
 /* table: comfortable rows, tabular numbers */
 [data-brand="juragan"] .rk-table td, [data-brand="juragan"] .rk-table th { font-variant-numeric: tabular-nums; }
 [data-brand="juragan"] .rk-table thead th { color: var(--muted); font-weight: 500; }
 
 /* Perlu diurus (home): the first thing the owner sees, kind tiles carry the module colour */
-[data-brand="juragan"] .ap-attn { border-radius: 12px; border-color: var(--line); }
+[data-brand="juragan"] .ap-attn { border-radius: var(--r-lg); border-color: var(--line); }
 [data-brand="juragan"] .ap-attn-head h2 { font: 600 16px/22px "Inter", var(--font-sans); }
 
-/* Raka: neutral avatar and chat, no teal */
-[data-brand="juragan"] .rk-chat-raka, [data-brand="juragan"] .rk-askbar { --raka: var(--ink-2); }
+/* Raka: karakter hijau dipakai utuh (keputusan Zein 16 Nov); UI di sekitarnya netral */
 
 /* phone: 44px targets for primary actions */
 @media (max-width: 1023px) {
   [data-brand="juragan"] .rk-btn-primary, [data-brand="juragan"] .rk-btn-lg { min-height: var(--touch); }
-  [data-brand="juragan"] .rk-pagehead h1 { font-size: 20px; line-height: 26px; }
+  [data-brand="juragan"] .rk-pagehead h1 { font-size: 20px; line-height: 24px; }
 }
 
 /* phone tab bar (shell.js, only with data-brand="juragan") */
@@ -123,7 +320,8 @@
     position: relative; display: grid; justify-items: center; gap: 2px; min-height: 48px; padding: 6px 0; border: 0; border-radius: 10px;
     background: none; color: var(--muted); font: 500 11px/14px "Inter", var(--font-sans); text-decoration: none; cursor: pointer;
   }
-  [data-brand="juragan"] .ap-tabbar [aria-current="page"] { color: var(--ink); background: var(--selected); font-weight: 600; }
+  /* tab aktif: warna menu saja, tanpa latar (sama dengan bilah bawah layar kerja di HP) */
+  [data-brand="juragan"] .ap-tabbar [aria-current="page"] { color: var(--selected-ink); background: none; font-weight: 600; }
   [data-brand="juragan"] .ap-tabbar .rk-icon { width: 20px; height: 20px; }
   [data-brand="juragan"] .ap-tabbar-n {
     position: absolute; top: 2px; left: calc(50% + 6px); min-width: 16px; height: 16px; padding: 0 4px; box-sizing: border-box;
@@ -133,9 +331,7 @@
 
 /* ---- detail dokumen (v2): ringkasan di atas, status berteks, aksi cetak di tangan ---- */
 /* lifecycle rail: the current step is ink, not Bata (Bata is only the mark) */
-[data-brand="juragan"] .ap-main .rk-step.process .rk-step-icon { background: var(--ink); }
-[data-brand="juragan"] .ap-main .rk-step.process .rk-step-title { color: var(--ink); }
-.ap-docsum { display: grid; gap: 12px; margin: 0 0 16px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: 12px; }
+.ap-docsum { display: grid; gap: 12px; margin: 0 0 16px; padding: 16px 18px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--r-lg, 12px); }
 .ap-docsum-top { display: flex; flex-wrap: wrap; align-items: flex-end; justify-content: space-between; gap: 12px 24px; }
 .ap-docsum-main { display: flex; flex-direction: column; align-items: flex-start; gap: 2px; min-width: 0; }
 .ap-docsum-party { font: 600 15px/22px "Inter", var(--font-sans); color: var(--ink); overflow-wrap: anywhere; }
@@ -153,7 +349,7 @@
 .ap-docsum-acts { display: flex; flex-wrap: wrap; gap: 8px; padding-top: 12px; border-top: 1px solid var(--line); }
 .ap-docempty { display: flex; justify-content: flex-start; padding: 4px 0 16px; }
 [data-brand="juragan"] .ap-docsec-t { font: 600 14px/20px "Inter", var(--font-sans); }
-[data-brand="juragan"] .rk-doc-lock { background: var(--soft); border: 0; border-radius: 8px; color: var(--ink-2); }
+[data-brand="juragan"] .rk-doc-lock { background: var(--soft); border: 0; border-radius: var(--r-md); color: var(--ink-2); }
 @media (max-width: 1023px) {
   .ap-docsum { padding: 14px; }
   .ap-docsum-big { font-size: 28px; line-height: 34px; }
@@ -191,7 +387,7 @@
 .rk-card .ap-dash-lc { border: 0; border-top: 1px solid var(--line); border-radius: 0; }
 
 /* ---- persetujuan (v2): siapa dan berapa memutuskan, nominal besar, Setujui/Tolak sebesar ibu jari ---- */
-[data-brand="juragan"] .ap-main .ap-inbox { border-color: var(--line); border-radius: 12px; }
+[data-brand="juragan"] .ap-main .ap-inbox { border-color: var(--line); border-radius: var(--r-lg); }
 [data-brand="juragan"] .ap-main .ap-inbox-row { padding: 14px 16px; }
 [data-brand="juragan"] .ap-inbox-party { font: 600 14px/20px "Inter", var(--font-sans); }
 [data-brand="juragan"] .ap-inbox-amt { font: 600 16px/22px "Inter", var(--font-sans); letter-spacing: -0.01em; }
@@ -240,7 +436,7 @@
 /* ---- touch (phones and touch tablets, tokens.json breakpoint): every control is a 44px target, also under the
  * Juragan metrics above. The phone-only layout rules stay in index.html and app.css at (max-width: 767px). */
 @media (max-width: 767px), (max-width: 1279px) and (pointer: coarse) {
-  :root, :root[data-brand="juragan"]:not([data-theme="dark"]), :root[data-brand="juragan"] { --control-sm: var(--touch); --control: var(--touch); --field: var(--touch); --control-lg: var(--touch); --row: 48px; }
+  :root, :root[data-brand="juragan"]:not([data-theme="dark"]), :root[data-brand="juragan"], :root[data-brand="juragan"][data-density] { --control-sm: var(--touch); --control: var(--touch); --field: var(--touch); --control-lg: var(--touch); --row: 48px; }
   body button, body [role=button], body select, body textarea, body input:not([type=checkbox]):not([type=radio]):not([type=file]) { min-height: var(--touch); }
   body .rk-iconbtn { min-width: var(--touch); }
   body .rk-select-btn, body .rk-btn, body .rk-iconbtn { height: auto; min-height: var(--touch); }
@@ -258,6 +454,152 @@
   .rk-chat-comp textarea { min-height: var(--touch); padding-top: 12px; padding-bottom: 12px; }
   .ap-main .pv-card-move { height: var(--touch); }
   .ap-counter-qty button { width: var(--touch); height: var(--touch); }
+  /* the diagram's way back to the overview is a tap target too */
+  .pd-crumb { height: auto; }
+  .pd-crumb button { min-height: var(--touch); min-width: var(--touch); box-sizing: border-box; }
+  .pd-tools button { height: var(--touch); min-width: var(--touch); } /* zoom controls of the process diagram, tablet too */
+  .pd-tools .pd-tools-sep { height: 24px; }
   /* link values in a read-only document (customer, outlet) are taps too */
   .ap-main .ap-ro-list dd a, .ap-main .ap-docsum-party a { display: inline-flex; align-items: center; min-height: var(--touch); }
 }
+
+/* ubin usaha di rel layar kerja: ink, sama dengan sidebar */
+[data-brand="juragan"] .ap-workshell > .ap-workbar .ap-wbrand { background: var(--primary); color: var(--primary-ink); }
+
+/* ==================================================================================================================
+ * KASIR: usulan gabungan (struktur dan alur kasir Dede, tampilan v3.1, gambar per barang). Belum pernah disetujui
+ * Zein, jadi seluruhnya ada di blok ini dan di satu commit yang mudah dibatalkan. Tidak ada fungsi yang berubah.
+ * ================================================================================================================== */
+[data-brand="juragan"] .ap-counter-groups button { border-radius: var(--r-md); border-color: var(--line); background: var(--surface); color: var(--ink); font: 500 14px/20px "Inter", var(--font-sans); padding: 0 16px; }
+[data-brand="juragan"] .ap-counter-groups [aria-selected="true"] { background: var(--selected); border-color: var(--brand); color: var(--selected-ink); }
+[data-brand="juragan"] .ap-counter-item { border-radius: var(--r-lg); border-color: var(--line); box-shadow: none; }
+[data-brand="juragan"] .ap-counter-item.picked { border-color: var(--brand); box-shadow: 0 0 0 1px var(--brand); }
+/* ubin: foto barang; tanpa foto = inisial di latar netral; sedang dimuat = kotak netral, foto memudar masuk */
+[data-brand="juragan"] .ap-counter-pic { background: var(--soft); overflow: hidden; }
+[data-brand="juragan"] .ap-counter-pic i { font: 600 14px/16px "Inter", var(--font-sans); color: var(--muted); opacity: 1; }
+[data-brand="juragan"] .ap-counter-pic img { transition: opacity var(--dur-2, .15s) linear; }
+[data-brand="juragan"] .ap-counter-pic img.loading { opacity: 0; }
+[data-brand="juragan"] .ap-counter-item-t { font: 500 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-counter-item-p { font: 600 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-counter-left { border-radius: 4px; padding: 0 6px; font: 500 12px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-counter-sync { height: 20px; padding: 0 6px; border-radius: 4px; font: 500 12px/20px "Inter", var(--font-sans); }
+/* HP: kotak cari mengambil satu baris penuh, "Ditahan" dan status sambungan di baris berikutnya (di main kotak cari
+   terjepit sampai tinggal dua huruf) */
+@media (max-width: 767px) {
+  [data-brand="juragan"] .ap-counter-searchrow { flex-wrap: wrap; }
+  [data-brand="juragan"] .ap-counter-searchrow > .ap-counter-searchbox { flex: 1 1 100%; order: -1; }
+  [data-brand="juragan"] .ap-counter-searchrow > .ap-counter-sync { margin-left: auto; }
+}
+
+/* ---- KASIR, tata letak tablet dan HP (18 Nov, setelah Zein melihat hasilnya: angka patah dua baris, kolom dijejerkan
+   di area sempit padahal ruang di bawah kosong). Aturan: angka uang tidak pernah patah; isi disusun ke bawah dan memakai
+   tinggi layar; tombol angka dan tombol nominal satu peran, satu rupa (putih bergaris). ---- */
+[data-brand="juragan"] .ap-counter-item-p > span, [data-brand="juragan"] .ap-counter-left, [data-brand="juragan"] .ap-counter-amt,
+[data-brand="juragan"] .ap-counter-due b, [data-brand="juragan"] .ap-counter-sum dd, [data-brand="juragan"] .ap-counter-cash .rk-btn,
+[data-brand="juragan"] .ap-counter-paybtn > span, [data-brand="juragan"] .ap-counter-bar span { white-space: nowrap; }
+/* kartu barang: lebar minimum mengikuti area katalog (bukan lebar layar), nama maksimal dua baris, harga selalu di dasar
+   kartu; kalau harga dan "sisa n" tidak muat sebaris, labelnya turun utuh ke baris sendiri */
+[data-brand="juragan"] .ap-counter-grid { grid-template-columns: repeat(auto-fill, minmax(152px, 1fr)); }
+@media (max-width: 767px) { [data-brand="juragan"] .ap-counter-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+[data-brand="juragan"] .ap-counter-item { grid-template-rows: auto 1fr auto; }
+[data-brand="juragan"] .ap-counter-item-t { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; align-self: start; }
+[data-brand="juragan"] .ap-counter-item-p { flex-wrap: wrap; gap: 4px 8px; }
+/* baris pesanan di panel sempit: nama dapat lebar penuh, jumlah uang di kanan atas, tombol jumlah di bawahnya */
+[data-brand="juragan"] .ap-counter-cart { container: kasir-cart / inline-size; }
+@container kasir-cart (max-width: 460px) {
+  [data-brand="juragan"] .ap-counter-lines:not(.ap-counter-paidlines) .ap-counter-line { grid-template-columns: minmax(0, 1fr) auto; grid-template-areas: "t amt" "t qty"; align-items: start; gap: 8px 12px; }
+  [data-brand="juragan"] .ap-counter-lines:not(.ap-counter-paidlines) .ap-counter-line-t { grid-area: t; }
+  [data-brand="juragan"] .ap-counter-lines:not(.ap-counter-paidlines) .ap-counter-amt { grid-area: amt; padding-top: 4px; }
+  [data-brand="juragan"] .ap-counter-lines:not(.ap-counter-paidlines) .ap-counter-qty { grid-area: qty; justify-self: end; }
+}
+/* hanya ada baris Total: satu garis pemisah, bukan dua */
+[data-brand="juragan"] .ap-counter-sum > .ap-counter-sum-total:first-child { margin-top: 0; padding-top: 0; border-top: 0; }
+/* layar Bayar: tombol nominal mengisi baris dengan rata; "QRIS penuh" setinggi kolom isiannya, bukan balok */
+[data-brand="juragan"] .ap-counter-cash { grid-template-columns: repeat(auto-fit, minmax(104px, 1fr)); }
+[data-brand="juragan"] .ap-counter-pay .ap-counter-row { align-items: end; flex-wrap: nowrap; }
+[data-brand="juragan"] .ap-counter-pay .ap-counter-row > .rk-btn { min-height: 44px; height: 44px; }
+[data-brand="juragan"] .ap-counter-paytop { align-items: end; }
+[data-brand="juragan"] .ap-counter-pay > .ap-counter-part, [data-brand="juragan"] .ap-counter-pay > .ap-counter-cash, [data-brand="juragan"] .ap-counter-pay > .ap-counter-row,
+[data-brand="juragan"] .ap-counter-pay > .ap-counter-paytop { flex: none; }
+/* tablet mendatar dan desktop: satu kolom di tengah area kiri, tombol angka memakai sisa tinggi layar */
+@media (min-width: 1024px) {
+  [data-brand="juragan"] .ap-workshell .ap-counter-tender { display: flex; flex-direction: column; }
+  [data-brand="juragan"] .ap-counter-tender .ap-counter-pay { display: flex; flex-direction: column; flex: 1 0 auto; gap: 12px; width: 100%; max-width: 520px; margin: 0 auto; }
+  [data-brand="juragan"] .ap-counter-tender .ap-counter-pay > .ap-pad { flex: 1 1 auto; align-self: stretch; min-height: 232px; max-height: 344px; grid-auto-rows: minmax(52px, 1fr); }
+  [data-brand="juragan"] .ap-counter-tender .ap-pad button { min-height: 52px; }
+  [data-brand="juragan"] .ap-counter-tender .ap-counter-due.big b { font-size: 36px; line-height: 44px; }
+  [data-brand="juragan"] .ap-counter-tender .ap-counter-paydone { margin-top: 4px; }
+}
+/* HP dan tablet tegak (pembayaran di dalam lembar pesanan): Kembalian dan Selesai menempel di dasar lembar, sama seperti
+   Total dan Bayar di lembar pesanan */
+@media (max-width: 1023px) {
+  [data-brand="juragan"] .ap-counter.sheet .ap-counter-cart > .ap-counter-pay { display: flex; flex-direction: column; flex: 1 0 auto; gap: 12px; }
+  [data-brand="juragan"] .ap-counter.sheet .ap-counter-cart > .ap-counter-pay > .ap-counter-paydone { margin-top: auto; }
+}
+/* tablet tegak: isi lembar pesanan dan pembayaran di kolom tengah, tidak melebar selebar layar */
+@media (min-width: 768px) and (max-width: 1023px) {
+  [data-brand="juragan"] .ap-counter.sheet .ap-counter-cart > * { width: 100%; max-width: 600px; margin-left: auto; margin-right: auto; box-sizing: border-box; }
+  [data-brand="juragan"] .ap-counter.sheet .ap-counter-pay > .ap-pad { flex: 1 1 auto; max-height: 420px; grid-auto-rows: minmax(64px, 1fr); }
+}
+/* Buka sesi dan Tutup sesi di tablet mendatar: beri jarak dari rel dan tepi layar (sebelumnya menempel); Tutup sesi di
+   kolom tengah */
+@media (min-width: 1024px) {
+  [data-brand="juragan"] .ap-workshell .ap-work-counter > .ap-counter-open, [data-brand="juragan"] .ap-workshell .ap-work-counter > .ap-counter-close { padding: 24px 32px; box-sizing: border-box; }
+  [data-brand="juragan"] .ap-workshell .ap-work-counter > .ap-counter-close { max-width: 624px; margin: 0 auto; }
+  /* hitung per pecahan terbuka: isian dan tombol di kiri, daftar pecahan di kanan, supaya muat tanpa menggulir dan
+     separuh kanan layar tidak kosong */
+  [data-brand="juragan"] .ap-workshell .ap-work-counter > .ap-counter-close:has(.ap-denom) { max-width: 1000px; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); column-gap: 32px; align-content: start; }
+  [data-brand="juragan"] .ap-workshell .ap-work-counter > .ap-counter-close:has(.ap-denom) > * { grid-column: 1; }
+  [data-brand="juragan"] .ap-workshell .ap-work-counter > .ap-counter-close:has(.ap-denom) > .ap-denom { grid-column: 2; grid-row: 1 / span 8; align-self: start; }
+}
+[data-brand="juragan"] .ap-counter-close > .rk-btn-quiet { justify-self: start; }
+[data-brand="juragan"] .ap-denom { padding: 16px; gap: 8px; border-radius: var(--r-lg); }
+[data-brand="juragan"] .ap-denom-row { grid-template-columns: minmax(96px, 1fr) 96px minmax(96px, 1fr); }
+[data-brand="juragan"] .ap-denom-row b, [data-brand="juragan"] .ap-denom-sum span, [data-brand="juragan"] .ap-denom-sum b { white-space: nowrap; }
+/* HP dan tablet tegak: layar Buka/Tutup sesi punya jarak atas dan samping yang sama dengan halaman lain */
+@media (max-width: 1023px) {
+  [data-brand="juragan"] .ap-work-counter > .ap-counter-open, [data-brand="juragan"] .ap-work-counter > .ap-counter-close { padding: 12px 0 24px; }
+}
+@media (min-width: 768px) and (max-width: 1023px) {
+  [data-brand="juragan"] .ap-work-counter > .ap-counter-open, [data-brand="juragan"] .ap-work-counter > .ap-counter-close { padding: 24px 16px 32px; max-width: 640px; margin: 0 auto; box-sizing: border-box; }
+}
+
+/* ---- layar kerja: satu aksen saja. Sebelumnya di tema Bata ada dua hal biru: kotak petunjuk dan label hitungan memakai
+   warna status "info", dan isian mentah (cari, pembeli, catatan, nominal, lembar pecahan, jumlah) tidak punya
+   aturan fokus sehingga browser menggambar garis fokus birunya sendiri. Petunjuk dan hitungan = netral; fokus isian =
+   sama dengan isian form (garis warna fokus tema). ---- */
+[data-brand="juragan"] .ap-work-note { background: var(--soft); color: var(--ink-2); border-radius: var(--r-md); }
+[data-brand="juragan"] .ap-work-count { background: var(--neutral); color: var(--ink-2); }
+[data-brand="juragan"] .ap-counter-search:focus, [data-brand="juragan"] .ap-counter-cust:focus, [data-brand="juragan"] .ap-counter-note:focus,
+[data-brand="juragan"] .ap-counter-part input:focus, [data-brand="juragan"] .ap-denom-row input:focus, [data-brand="juragan"] .ap-roll-qty input:focus,
+[data-brand="juragan"] .ap-roll-note:focus { outline: none; border-color: var(--focus); box-shadow: 0 0 0 1px var(--focus); }
+/* satu peran, satu rupa di semua layar kasir: tombol angka, tombol nominal cepat (Bayar dan Buka sesi) dan "QRIS penuh"
+   = putih bergaris, sudut sama dengan tombol lain */
+[data-brand="juragan"] .ap-pad button { background: var(--surface); border-color: var(--line-strong); border-radius: var(--r-md); }
+[data-brand="juragan"] .ap-pad button:active { background: var(--soft); }
+[data-brand="juragan"] .ap-counter-pay .ap-counter-cash .rk-btn:not(.rk-btn-primary),
+[data-brand="juragan"] .ap-counter-pay .ap-counter-row > .rk-btn:not(.rk-btn-primary) { background: var(--surface); border: 1px solid var(--line-strong); }
+[data-brand="juragan"] .ap-counter-presets button { border-radius: var(--r-md); font: 500 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-counter-presets [aria-pressed="true"] { background: var(--selected); border-color: var(--brand); color: var(--selected-ink); }
+/* tombol nominal di Bayar tidak menyisakan satu tombol sendirian: lima tombol = 3 + 2; empat tombol di HP = 2 + 2 */
+[data-brand="juragan"] .ap-counter-cash:has(> :nth-child(5):last-child) { grid-template-columns: repeat(6, minmax(0, 1fr)); }
+[data-brand="juragan"] .ap-counter-cash:has(> :nth-child(5):last-child) > * { grid-column: span 2; }
+[data-brand="juragan"] .ap-counter-cash:has(> :nth-child(5):last-child) > :nth-child(n+4) { grid-column: span 3; }
+@media (max-width: 480px) { [data-brand="juragan"] .ap-counter-cash:has(> :nth-child(4):last-child) { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+
+/* ---- bilah atas di kerangka bilah samping (kontrak 0065, dari main): butir menunya tidak boleh menyusut sampai saling
+   menimpa atau terpotong di tengah kata. Butir tidak menyusut; yang tidak muat turun ke baris kedua yang tidak terlihat,
+   jadi tersembunyi utuh. Sesuai kontrak, butir tampil sejak 1024px (sebanyak yang muat). ---- */
+[data-brand="juragan"] .ap-dtop .rk-topnav-items { flex: 1 1 0; flex-wrap: wrap; align-content: flex-start; overflow: clip; }
+[data-brand="juragan"] .ap-dtop .rk-topnav-item { flex: none; height: 100%; }
+/* overflow: clip, bukan hidden: fokus ke butir yang terlipat tidak boleh menggulir bilah dan menghilangkan butir aktif.
+   Supaya Tab jarang sampai ke butir yang tidak terlihat, jumlah butir mengikuti lebar bilah (butir di luar itu tidak
+   dirender sama sekali); lipatan di atas tinggal jaring pengaman untuk label yang sangat panjang. */
+[data-brand="juragan"] .ap-dtop { container: dtop / inline-size; }
+@container dtop (max-width: 1029px) { [data-brand="juragan"] .ap-dtop .rk-topnav-item:nth-child(n+6) { display: none; } }
+@container dtop (max-width: 929px) { [data-brand="juragan"] .ap-dtop .rk-topnav-item:nth-child(n+5) { display: none; } }
+@container dtop (max-width: 829px) { [data-brand="juragan"] .ap-dtop .rk-topnav-item:nth-child(n+4) { display: none; } }
+@container dtop (max-width: 629px) { [data-brand="juragan"] .ap-dtop .rk-topnav-items { display: none; } } /* e.g. beside the Raka dock */
+/* paragraf di halaman: tidak ada satu kata tertinggal sendirian di baris terakhir */
+[data-brand="juragan"] .ap-main p, [data-brand="juragan"] .ap-main .ap-muted, [data-brand="juragan"] .ap-main .ap-attn-empty,
+[data-brand="juragan"] .ap-main .rk-empty, [data-brand="juragan"] .ap-main .rk-empty span { text-wrap: pretty; }

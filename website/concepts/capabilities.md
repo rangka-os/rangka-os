@@ -32,7 +32,7 @@ audit:     {enabled: true, retention_days: 365}
 | `schedule: "0 8 * * 1-5"` on a flow | Runs it on that cron, once across all nodes | scheduler, queue |
 | `queue: {retries: 3}` on an action | Returns 202 and runs it in the background with retries | queue |
 | `cache: 5m` on a dashboard | Reuses computed results per organisation and period, dropped on any write | cache |
-| `notify:` step in a flow | Sends through the channel's driver | notify |
+| `notify:` step in a flow | Puts a notice in the app's notifications of the people it names; mails it with `notify.email` `driver: smtp` (`host`, `port` 587 STARTTLS or 465 TLS, `username`, `password` as `${ENV}`, `from`) when no host runs the kernel; a hosted kernel leaves mail to the host ([contract 0066](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0066-kernel-notices.md)) | notify |
 
 ## Drivers, transports and connectors
 

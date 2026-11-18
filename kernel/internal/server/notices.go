@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
@@ -51,4 +52,38 @@ func (s *Server) runNoticeHostJob(ctx context.Context, j *jobs.Job) (any, error)
 		after = notices.Backoff(j.Attempt)
 	}
 	return nil, &jobs.RetryAfter{Err: err, After: after}
+}
+
+// setNoticeMail reads system.rk notify.email: with driver smtp and no host the kernel mails notices itself
+// (contract 0066 §4.2). A host always wins: it mails, so nobody gets two mails.
+func (s *Server) setNoticeMail(reg *meta.Registry) {
+	m, err := notices.SMTPFromConfig(meta.AsMap(reg.SystemConfig("notify.email")), os.Getenv)
+	if err != nil {
+		s.Cfg.Logf("notices: %v; notices are not mailed", err)
+	}
+	s.noticeSMTP.Store(m)
+	s.Engine.Notices.Mail = m != nil && s.NoticeHost == nil
+}
+
+// runNoticeMailJob mails one notice to one person (§4.2): the backoff of §3 between attempts, at most 8; a 5xx answer
+// of the mail server stops it. The last failure is audited as notice.mail_failed (kind and event id, no address).
+func (s *Server) runNoticeMailJob(ctx context.Context, j *jobs.Job) (any, error) {
+	ctx = pg.WithOrg(ctx, j.Org)
+	m := s.noticeSMTP.Load()
+	if m == nil || s.NoticeHost != nil {
+		return nil, &jobs.Permanent{Err: errors.New("notices are not mailed by this kernel (notify.email driver smtp, no host)")}
+	}
+	err := m.Send(ctx, meta.Str(j.Args, "to"), meta.Str(j.Args, "subject"), meta.Str(j.Args, "body"))
+	if err == nil {
+		return map[string]any{"sent": true}, nil
+	}
+	if notices.Permanent(err) || j.Attempt >= j.MaxAttempts {
+		data := map[string]any{"id": meta.Str(j.Args, "id"), "kind": meta.Str(j.Args, "kind"), "user": j.Args["user"], "attempt": j.Attempt}
+		if aerr := store.Audit(context.WithoutCancel(ctx), s.DB, j.Org, "system", "notice.mail_failed", "notice/"+meta.Str(j.Args, "id"),
+			"kabar "+meta.Str(j.Args, "kind")+" tidak terkirim lewat email: "+err.Error(), data); aerr != nil {
+			s.Cfg.Logf("notices: audit: %v", aerr)
+		}
+		return nil, &jobs.Permanent{Err: err}
+	}
+	return nil, &jobs.RetryAfter{Err: err, After: notices.Backoff(j.Attempt)}
 }

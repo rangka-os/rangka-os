@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"syscall"
 	"time"
 
@@ -80,6 +81,9 @@ type Server struct {
 	// NoticeHost posts notices to the host that runs this kernel (contract 0066 §3); nil without
 	// RANGKA_HOST_NOTICES_URL and RANGKA_HOST_NOTICES_SECRET.
 	NoticeHost *notices.Host
+	// noticeSMTP mails notices on a kernel without a host (system.rk notify.email driver smtp, contract 0066 §4.2);
+	// swapped when a change set reloads system.rk.
+	noticeSMTP atomic.Pointer[notices.SMTP]
 	reload     sync.Mutex
 	wg         sync.WaitGroup
 }
@@ -235,6 +239,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 	if err != nil {
 		ttl = 24 * time.Hour
 	}
+	e.Notices.BaseURL = issuer
+	s.setNoticeMail(reg)
+	s.Queue.Handlers["notice_mail"] = s.runNoticeMailJob
 	s.Auth = &auth.Service{DB: db, Issuer: issuer, SessionTTL: ttl, DevOpen: cfg.DevOpen, DefaultOrg: cfg.Org, Now: cfg.Now,
 		Clients: func() []auth.Client { return clients(s.Engine.Reg()) }, Upstreams: ups, UpstreamHTTP: upstreamHTTP, Log: cfg.Logf,
 		Password: func() any { return s.Engine.Reg().SystemConfig("auth.password") }}
@@ -594,6 +601,7 @@ func (s *Server) Reload(ctx context.Context) error {
 		return err
 	}
 	s.Engine.SetRegistry(reg)
+	s.setNoticeMail(reg)
 	s.Sched.SetFlows(reg, s.Cfg.Org)
 	s.Sched.SetPolls(s.Cfg.Org, pollSpecs(reg))
 	s.Cfg.Logf("metadata reloaded: %d models, %d dashboards", len(reg.Models), len(reg.Dashboards))

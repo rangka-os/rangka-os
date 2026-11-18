@@ -894,6 +894,35 @@ def check_host_connector(rep, p, cn, c):
             rep.add("error", p, f"auth/fields/{i}/generate", "host_connector_fields", f'auth field "{pystr(f.get("name"))}" of host connector "{cn}" is generated: its value comes from the host only (contract 0063 §2)')
 
 
+def check_body_signature(rep, p, where, sg):
+    """Contract 0002, refinement of 19 Nov 2026 (body-field signatures): field, concat and key come together, without
+    header or lines; the hash is plain (no hmac- alg); concat uses the key, since a hash without the secret can be
+    computed by anyone; a part's placeholders are {body.<path>} and {auth.<field>}."""
+    if "field" not in sg and "concat" not in sg:
+        return
+    field = sg.get("field") if isinstance(sg.get("field"), str) else ""
+    key = (sg.get("key") if isinstance(sg.get("key"), str) else "").strip().removeprefix("auth.")
+    parts = sg.get("concat")
+    if not field or not isinstance(parts, list) or not parts or not all(isinstance(x, str) for x in parts) or not key:
+        rep.add("error", p, where, "verify_body_signature", "a body signature needs field, concat (a list of text parts) and key (contract 0002)")
+        return
+    for k in ("header", "lines"):
+        if k in sg:
+            rep.add("error", p, f"{where}/{k}", "verify_body_signature", f"a body signature (field, concat) takes no {k} (contract 0002)")
+    alg = sg.get("alg")
+    if isinstance(alg, str) and alg.lower().startswith("hmac-"):
+        rep.add("error", p, f"{where}/alg", "verify_body_signature", f'a body signature is a plain hash of the parts: alg sha1, sha256 or sha512, not "{alg}" (contract 0002)')
+    uses_key = False
+    for j, part in enumerate(parts):
+        for ph in re.findall(r"\{[^{}]*\}", part):
+            if not re.fullmatch(r"\{(auth|body)\.[A-Za-z0-9_.-]+\}", ph):
+                rep.add("error", p, f"{where}/concat/{j}", "verify_body_signature", f'unknown placeholder "{ph}": a part takes {{body.<path>}} and {{auth.<field>}} (contract 0002)')
+            elif ph == "{auth." + key + "}":
+                uses_key = True
+    if not uses_key:
+        rep.add("error", p, f"{where}/concat", "verify_concat_no_key", f"verify.signature.concat must use {{auth.{key}}}: a hash without the secret can be computed by anyone (contract 0002)")
+
+
 def check_secret_hosts(rep, p, c):
     """Contract 0017 §1, §5: a secret field has no default; an action carries a secret only in headers (the query
     string with allow_secret_in: [query], as a warning), uses https and, when the connector declares hosts:, sends it
@@ -911,6 +940,8 @@ def check_secret_hosts(rep, p, c):
         vs = ((t.get("verify") or {}) if isinstance(t, dict) and isinstance(t.get("verify"), dict) else {}).get("signature")
         if isinstance(vs, dict) and isinstance(vs.get("key"), str) and vs.get("key") and vs.get("key").removeprefix("auth.") not in secret:
             rep.add("error", p, f"triggers/{i}/verify/signature/key", "sign_key_not_secret", f'verify.signature.key "{vs.get("key")}" must name a secret auth field (contract 0002)')
+        if isinstance(vs, dict):
+            check_body_signature(rep, p, f"triggers/{i}/verify/signature", vs)
     if not secret:
         return
     hosts = c.get("hosts") if isinstance(c.get("hosts"), list) else None

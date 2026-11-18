@@ -44,6 +44,7 @@ func (v *validator) secretHosts(d *rk.Doc, c map[string]any) {
 			if k, _ := sg["key"].(string); k != "" && !isSecret(strings.TrimPrefix(k, "auth.")) {
 				v.rep.extra("error", d.Path, fmt.Sprintf("triggers/%d/verify/signature/key", i), "sign_key_not_secret", fmt.Sprintf(`verify.signature.key "%s" must name a secret auth field (contract 0002)`, k))
 			}
+			v.bodySignature(d, fmt.Sprintf("triggers/%d/verify/signature", i), sg)
 		}
 	}
 	if len(secret) == 0 {
@@ -324,5 +325,56 @@ func (v *validator) pollTriggers(d *rk.Doc, c map[string]any) {
 				v.rep.extra("error", d.Path, fmt.Sprintf("triggers/%d/each/action", i), "unknown_action", fmt.Sprintf(`connector %s has no action "%s"%s`, pyStr(c["name"]), la, suggest(la, actions)))
 			}
 		}
+	}
+}
+
+var (
+	concatBrace = regexp.MustCompile(`\{[^{}]*\}`)
+	concatKnown = regexp.MustCompile(`^\{(auth|body)\.[A-Za-z0-9_.-]+\}$`)
+)
+
+// bodySignature checks a body-field signature (contract 0002, refinement of 19 Nov 2026): field, concat and key come
+// together, without header or lines; the hash is plain (no hmac- alg); concat uses the key, since a hash without the
+// secret can be computed by anyone; a part's placeholders are {body.<path>} and {auth.<field>}.
+func (v *validator) bodySignature(d *rk.Doc, where string, sg map[string]any) {
+	_, hasField := sg["field"]
+	_, hasConcat := sg["concat"]
+	if !hasField && !hasConcat {
+		return
+	}
+	field, _ := sg["field"].(string)
+	key, _ := sg["key"].(string)
+	key = strings.TrimPrefix(strings.TrimSpace(key), "auth.")
+	parts, isList := sg["concat"].([]any)
+	texts := true
+	for _, p := range parts {
+		if _, ok := p.(string); !ok {
+			texts = false
+		}
+	}
+	if field == "" || !isList || len(parts) == 0 || !texts || key == "" {
+		v.rep.extra("error", d.Path, where, "verify_body_signature", "a body signature needs field, concat (a list of text parts) and key (contract 0002)")
+		return
+	}
+	for _, k := range []string{"header", "lines"} {
+		if _, has := sg[k]; has {
+			v.rep.extra("error", d.Path, where+"/"+k, "verify_body_signature", fmt.Sprintf("a body signature (field, concat) takes no %s (contract 0002)", k))
+		}
+	}
+	if alg, _ := sg["alg"].(string); strings.HasPrefix(strings.ToLower(alg), "hmac-") {
+		v.rep.extra("error", d.Path, where+"/alg", "verify_body_signature", fmt.Sprintf(`a body signature is a plain hash of the parts: alg sha1, sha256 or sha512, not "%s" (contract 0002)`, alg))
+	}
+	usesKey := false
+	for j, p := range parts {
+		for _, ph := range concatBrace.FindAllString(p.(string), -1) {
+			if !concatKnown.MatchString(ph) {
+				v.rep.extra("error", d.Path, fmt.Sprintf("%s/concat/%d", where, j), "verify_body_signature", fmt.Sprintf(`unknown placeholder "%s": a part takes {body.<path>} and {auth.<field>} (contract 0002)`, ph))
+			} else if ph == "{auth."+key+"}" {
+				usesKey = true
+			}
+		}
+	}
+	if !usesKey {
+		v.rep.extra("error", d.Path, where+"/concat", "verify_concat_no_key", fmt.Sprintf("verify.signature.concat must use {auth.%s}: a hash without the secret can be computed by anyone (contract 0002)", key))
 	}
 }

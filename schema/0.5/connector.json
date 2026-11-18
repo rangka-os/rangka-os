@@ -200,7 +200,8 @@
             "description": "poll: CEL over the answer giving the next page (a next_url or /path on the action's host, or a page value bound as page for input:); null or empty stops. At most 50 pages per poll; a cut poll keeps its cursor"
           },
           "verify": {
-            "type": "object"
+            "type": "object",
+            "description": "webhook: signature (an HMAC of the raw body or of canonical lines in a header; or, with field and concat, a plain hash carried in the body: contract 0002), or header + equals (a shared token), or challenge"
           },
           "for_each": {
             "type": "string"

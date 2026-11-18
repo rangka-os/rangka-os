@@ -1,0 +1,39 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+# verify_body_signature, verify_concat_no_key: body-field signatures (contract 0002, refinement of 19 Nov 2026)
+name: bodysig_bad
+label: {id: Body signature bad}
+summary: {id: Tanda tangan di body yang salah bentuk.}
+version: 1.0.0
+hosts: [api.example.com]
+auth:
+  type: basic
+  fields:
+    - {name: server_key, label: {id: Server key}, secret: true}
+    - {name: merchant_id, label: {id: Merchant ID}}
+triggers:
+  # the hash leaves the secret out: anyone can compute it
+  - name: no_key
+    via: webhook
+    verify:
+      signature: {field: signature_key, alg: sha512, key: server_key, concat: ['{body.order_id}', '{body.gross_amount}']}
+    emit: {ref: order_id}
+  # field without concat
+  - name: no_concat
+    via: webhook
+    verify:
+      signature: {field: signature_key, alg: sha512, key: server_key}
+    emit: {ref: order_id}
+  # a header, an HMAC alg and placeholders that only canonical lines have
+  - name: mixed
+    via: webhook
+    verify:
+      signature:
+        field: signature_key
+        header: X-Signature
+        alg: hmac-sha512
+        key: server_key
+        concat: ['{body.order_id}', '{header.X-Time}{request.digest}', '{auth.server_key}']
+    emit: {ref: order_id}
+actions:
+  - name: ping
+    request: {method: GET, url: https://api.example.com/ping}

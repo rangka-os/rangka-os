@@ -55,6 +55,20 @@ test("enqueue: needs a paired device and a known kind; seq counts up per device"
   assert.strictEqual(a.state, "queued");
 });
 
+test("enqueue: the same key twice is one event; a sent event is not queued again", async () => {
+  const A = load();
+  await paired(A);
+  const a = await A.deviceOutbox.enqueue(Object.assign(sale(1), { key: "k-1" }));
+  const b = await A.deviceOutbox.enqueue(Object.assign(sale(1), { key: "k-1" }));
+  assert.deepStrictEqual([a.seq, b.seq], [1, 1]);
+  assert.strictEqual((await A.deviceOutbox.list()).length, 1);
+  await A.deviceOutbox.flush({ fetch: fakeKernel().fetch });
+  const c = await A.deviceOutbox.enqueue(Object.assign(sale(1), { key: "k-1" }));
+  assert.strictEqual(c.state, "sent");
+  const d = await A.deviceOutbox.enqueue(sale(2));
+  assert.strictEqual(d.seq, 2, "the counter did not move for the repeats");
+});
+
 test("flush: events go in seq order with the v1 header and the kernel's shape, then they are sent", async () => {
   const A = load();
   await paired(A);

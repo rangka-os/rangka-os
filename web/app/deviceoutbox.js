@@ -205,23 +205,32 @@
   function delEvent(key) {
     return tx(["events"], "readwrite", function (s) { if (s) s.events.delete(key); else delete mem.events[key]; return null; });
   }
-  /** Stores a new event with the next seq of its device, in one transaction (atomic across tabs and the worker). */
+  /**
+   * Stores a new event with the next seq of its device, in one transaction (atomic across tabs and the worker). A key
+   * already stored is not stored again: the earlier event comes back unchanged (same seq, same state), so pressing
+   * twice never makes two events and never moves a sent one back to the queue.
+   */
   function insert(ev) {
-    var id = "seq:" + ev.device;
+    var id = "seq:" + ev.device, out = { ev: ev };
     return tx(["events", "meta"], "readwrite", function (s) {
       if (!s) {
+        if (mem.events[ev.key]) { out.ev = mem.events[ev.key]; return out; }
         var cur = mem.meta[id] ? mem.meta[id].value : 0;
         ev.seq = cur + 1; mem.meta[id] = { id: id, value: ev.seq }; mem.events[ev.key] = ev;
-        return ev;
+        return out;
       }
-      var r = s.meta.get(id);
-      r.onsuccess = function () {
-        ev.seq = (r.result ? r.result.value : 0) + 1;
-        s.meta.put({ id: id, value: ev.seq });
-        s.events.put(ev);
+      var old = s.events.get(ev.key);
+      old.onsuccess = function () {
+        if (old.result) { out.ev = old.result; return; }
+        var r = s.meta.get(id);
+        r.onsuccess = function () {
+          ev.seq = (r.result ? r.result.value : 0) + 1;
+          s.meta.put({ id: id, value: ev.seq });
+          s.events.put(ev);
+        };
       };
-      return ev;
-    });
+      return out;
+    }).then(function (o) { return o.ev; });
   }
 
   /* ================================================================ the queue */

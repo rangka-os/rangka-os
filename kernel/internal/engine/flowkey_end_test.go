@@ -3,7 +3,6 @@ package engine
 import (
 	"context"
 	"testing"
-	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -128,7 +127,7 @@ steps:
 	liveArgs := roundTrip(q.jobs[len(q.jobs)-1]["args"]).(map[string]any)
 	resume := func(args map[string]any) *FlowResult {
 		t.Helper()
-		out, err := e.RunFlowResume(ctx, owner, "memo_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true, meta.AsMap(args["flow_key"]), time.Time{})
+		out, err := e.RunFlowResume(ctx, owner, "memo_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true, meta.AsMap(args["flow_key"]), FlowJobResume(args))
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -167,7 +166,7 @@ func TestFlowKeyLegacyWaitingRun(t *testing.T) {
 		t.Fatalf("event while the legacy run waits: %+v %v", again, err)
 	}
 	// resume at step 0 of a one-step flow is a fresh run; resume at 1 runs nothing but records into the key
-	out, err := e.RunFlowResume(ctx, owner, flow, map[string]any{"ref": "LEG-1"}, 1, map[string]any{flowKeyVar: key}, false, nil, time.Time{})
+	out, err := e.RunFlowResume(ctx, owner, flow, map[string]any{"ref": "LEG-1"}, 1, map[string]any{flowKeyVar: key}, false, nil, FlowResume{Resumed: true})
 	if err != nil || out.Skipped {
 		t.Fatalf("legacy resume: %+v %v", out, err)
 	}

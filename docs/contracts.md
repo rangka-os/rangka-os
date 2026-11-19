@@ -219,6 +219,8 @@ Additive; nothing above changed.
 - **Flows:** `update: <variable>` needs a record found or created earlier; `if:` + `then:`/`else:` branches; `wait:`
   only at the top level (a duration, or `{until: cel}` re-checked every minute) queues the rest as a `flow` job;
   `{until, timeout}` ends the run at the deadline set when the wait starts (job arg `wait_deadline`, audit `flow.timed_out`).
+  A wait's jobs carry `resumed: true` (older jobs: any `resume` arg), so a re-check of a first-step `{until}` from
+  index 0 continues the run instead of starting it again.
   `POST /flows/{name}/run {event}` runs a flow now (records `connector.event` for connector-triggered flows).
 - **Automations:** `when:` is `<field> changes to <CEL value>`, `<field> changes`, or `created|updated|submitted|cancelled`;
   `if:` is evaluated on the record; `do:` names a hook, run in the same transaction (audit `automation.run`). Built-in

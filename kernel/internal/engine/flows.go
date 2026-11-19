@@ -71,7 +71,7 @@ func (e *Engine) RunFlow(ctx context.Context, a Actor, flowName string, event ma
 			event = ev
 		}
 	}
-	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true, nil, time.Time{})
+	return e.runFlowFrom(ctx, a, flowName, event, 0, nil, true, nil, FlowResume{})
 }
 
 // flowModelEvent splits a flow's on: <model>.<event> (ok false for connector events and flows without on:).
@@ -124,15 +124,35 @@ func (e *Engine) manualRecordEvent(ctx context.Context, a Actor, model, op strin
 // (read, create, write), so a person running a flow can do no more than they could by hand. Flows the
 // kernel starts (schedules, events) run as a System actor; a wait: resumes as the actor that started the run.
 func (e *Engine) RunFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any) (*FlowResult, error) {
-	return e.runFlowFrom(ctx, a, flowName, event, start, vars, false, nil, time.Time{})
+	return e.runFlowFrom(ctx, a, flowName, event, start, vars, false, nil, FlowResume{})
 }
 
 // RunFlowResume is RunFlowFrom for a queued flow job resuming after wait:; manual is the job's "manual" arg, so a
 // run a caller started by hand stays manual after the wait (contract 0026), and flowKey its "flow_key" arg (the
-// idempotency key the run holds, nil when none), and waitDeadline the deadline of the wait: {until, timeout} step
-// the job re-checks (WaitDeadline of the job's args; zero when none).
-func (e *Engine) RunFlowResume(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool, flowKey map[string]any, waitDeadline time.Time) (*FlowResult, error) {
-	return e.runFlowFrom(ctx, a, flowName, event, start, vars, manual, flowKey, waitDeadline)
+// idempotency key the run holds, nil when none), and res what else the job says about the run it continues
+// (FlowJobResume of the job's args).
+func (e *Engine) RunFlowResume(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool, flowKey map[string]any, res FlowResume) (*FlowResult, error) {
+	return e.runFlowFrom(ctx, a, flowName, event, start, vars, manual, flowKey, res)
+}
+
+// FlowResume is what a queued flow job says about the run it continues.
+type FlowResume struct {
+	// Resumed marks a run continued after a wait: (or an approval), not a fresh start. It is separate from the
+	// start step: a wait: {until} at step 1 is re-checked from index 0, which must not claim the idempotency key
+	// again or re-check the flow's if:. A start above 0 is always a resume.
+	Resumed bool
+	// WaitDeadline is the deadline of the wait: {until, timeout} step the job re-checks (zero when none).
+	WaitDeadline time.Time
+}
+
+// resumedArg marks a flow job queued by a wait: step (true). Jobs queued before it existed are recognised by
+// their resume arg, which only a wait: step sets (event and schedule jobs start a flow without it).
+const resumedArg = "resumed"
+
+// FlowJobResume reads a flow job's args: whether it continues a waiting run, and the wait's deadline.
+func FlowJobResume(args map[string]any) FlowResume {
+	_, hasResume := args["resume"]
+	return FlowResume{Resumed: args[resumedArg] == true || hasResume, WaitDeadline: WaitDeadline(args)}
 }
 
 // waitDeadlineArg is the flow job arg holding the deadline of a wait: {until, timeout} step (RFC 3339, UTC). It is
@@ -152,7 +172,7 @@ func WaitDeadline(args map[string]any) time.Time {
 
 // runFlowFrom is RunFlowFrom; manual marks a run a caller started with an event they wrote (REST), which may not
 // create append_only ledger rows (contract 0026): those come only from real events, hooks and seed.
-func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool, key map[string]any, waitDeadline time.Time) (*FlowResult, error) {
+func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, event map[string]any, start int, vars map[string]any, manual bool, key map[string]any, res FlowResume) (*FlowResult, error) {
 	f := e.Reg().Flows[flowName]
 	if f == nil || !e.Reg().IsInstalled(f.App) {
 		return nil, notFound("flow " + flowName)
@@ -172,7 +192,7 @@ func (e *Engine) runFlowFrom(ctx context.Context, a Actor, flowName string, even
 		if pf == nil || !o.registry().IsInstalled(pf.App) {
 			return notFound("flow " + flowName)
 		}
-		return e.flowIn(o, pf, event, start, v, key, waitDeadline, out)
+		return e.flowIn(o, pf, event, start, v, key, res, out)
 	})
 	if c := flowConnector(e, f); err != nil && c != "" {
 		store.Audit(context.WithoutCancel(ctx), e.DB, a.Org, a.ID, "connector.error", "connector/"+c, "flow "+flowName+": "+err.Error(), nil)
@@ -198,9 +218,10 @@ func flowConnector(e *Engine, f *meta.Flow) string {
 	return ""
 }
 
-// flowIn runs f's steps inside o's transaction, as o's actor, from top-level step start. waitDeadline is the
-// deadline of the wait: {until, timeout} step at start that a queued re-check resumes (zero when none).
-func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, vars map[string]any, fk map[string]any, waitDeadline time.Time, out *FlowResult) error {
+// flowIn runs f's steps inside o's transaction, as o's actor, from top-level step start. res says whether the run
+// continues a waiting one (a start above 0 always does) and the deadline of the wait: {until, timeout} step at start.
+func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, vars map[string]any, fk map[string]any, res FlowResume, out *FlowResult) error {
+	resumed := res.Resumed || start > 0
 	a := o.actor
 	if event == nil {
 		event = map[string]any{}
@@ -212,26 +233,26 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 	prevInFlow := o.inFlow
 	o.inFlow = true
 	defer func() { o.inFlow = prevInFlow }()
-	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out, reg: o.registry(), runID: newFlowToken(), start: start, startDeadline: waitDeadline}
-	if c := flowConnector(e, f); start == 0 && c != "" && len(event) > 0 {
+	r := &flowRun{o: o, e: e, a: a, f: f, vars: vars, out: out, reg: o.registry(), runID: newFlowToken(), start: start, startDeadline: res.WaitDeadline}
+	if c := flowConnector(e, f); !resumed && c != "" && len(event) > 0 {
 		if err := store.Audit(o.ctx, o.tx, a.Org, a.ID, "connector.event", "connector/"+c, f.On+" → flow "+f.Name, nil); err != nil {
 			return err
 		}
 	}
-	if start == 0 && f.If != "" {
+	if !resumed && f.If != "" {
 		v, err := cel.Eval(f.If, r.env())
 		if err != nil || !cel.Truthy(v) {
 			out.Skipped = true
 			return nil
 		}
 	}
-	if start == 0 && f.Idempotency != "" {
+	if !resumed && f.Idempotency != "" {
 		dup, err := r.claimKey()
 		if err != nil || dup {
 			return err
 		}
 	}
-	if start > 0 { // a resumed run adds its documents to the key it claimed when it started
+	if resumed { // a resumed run adds its documents to the key it claimed when it started
 		r.key, r.token = resumedFlowKey(fk, vars)
 		if r.key != "" {
 			held, err := store.FlowKeyHeld(o.ctx, o.tx, a.Org, f.Name, r.key, flowKeyMarker(r.token))
@@ -262,7 +283,7 @@ func (e *Engine) flowIn(o *op, f *meta.Flow, event map[string]any, start int, va
 			// or the same event would apply those again (audit kernel-aman 1)
 			docs = append(docs, flowKeyActed)
 		}
-		if err := store.AddFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, docs, start == 0, held, flowKeyMarker(r.token)); err != nil {
+		if err := store.AddFlowKeyDocs(o.ctx, o.tx, a.Org, f.Name, r.key, docs, !resumed, held, flowKeyMarker(r.token)); err != nil {
 			return err
 		}
 		if out.TimedOut {
@@ -885,7 +906,7 @@ func (r *flowRun) steps(list []any, label string, start int) error {
 			if e.Queue == nil {
 				return &StatusError{503, "no_queue", "wait needs the queue"}
 			}
-			args := map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, "vars": r.saved(), "actor": a.JobArgs(), "manual": o.manualRun, flowKeyArg: r.keyArgs()}
+			args := map[string]any{"flow": r.f.Name, "event": r.vars["event"], "resume": next, resumedArg: true, "vars": r.saved(), "actor": a.JobArgs(), "manual": o.manualRun, flowKeyArg: r.keyArgs()}
 			if !deadline.IsZero() {
 				args[waitDeadlineArg] = deadline.UTC().Format(time.RFC3339Nano)
 			}
@@ -1093,7 +1114,7 @@ func (o *op) recordFlows(m *meta.Model, before, rec store.Record, event string) 
 		ev["model"], ev["name"], ev["op"] = m.Name, str(rec["name"]), event
 		ev["record"], ev["before"] = map[string]any(copyRecord(rec)), prev
 		out := newFlowResult(n)
-		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, nil, time.Time{}, out); err != nil {
+		if err := o.e.flowIn(o, reg.Flows[n], ev, 0, nil, nil, FlowResume{}, out); err != nil {
 			return ran, fmt.Errorf("flow %s: %w", n, err)
 		}
 		ran = ran || !out.Skipped

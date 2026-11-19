@@ -40,8 +40,7 @@ func TestFlowWaitUntilTimeout(t *testing.T) {
 	for k, v := range memoFiles {
 		files[k] = v
 	}
-	// the wait is the second step: a re-check resumes at its own index, and a resume at index 0 is taken for a
-	// fresh run (it claims the idempotency key again), a separate issue
+	// the wait is the second step here; TestFlowWaitUntilFirstStep has it first
 	flow := func(name, wait string) string {
 		return `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
 name: ` + name + `
@@ -76,7 +75,7 @@ steps:
 	resume := func(flow string, j timedJob, ready bool) *FlowResult {
 		t.Helper()
 		ref := str(meta.AsMap(j.args["event"])["ref"])
-		out, err := e.RunFlowResume(ctx, owner, flow, ev(ref, ready), int(j.args["resume"].(float64)), meta.AsMap(j.args["vars"]), j.args["manual"] == true, meta.AsMap(j.args["flow_key"]), WaitDeadline(j.args))
+		out, err := e.RunFlowResume(ctx, owner, flow, ev(ref, ready), int(j.args["resume"].(float64)), meta.AsMap(j.args["vars"]), j.args["manual"] == true, meta.AsMap(j.args["flow_key"]), FlowJobResume(j.args))
 		if err != nil {
 			t.Fatalf("resume %s: %v", flow, err)
 		}
@@ -163,6 +162,131 @@ steps:
 	before = memos()
 	if out := resume("memo_ready_forever", q.last(t), true); out.TimedOut || memos() != before+1 {
 		t.Fatalf("wait without timeout, condition met: %+v", out)
+	}
+}
+
+// A wait: {until} as a flow's first step is re-checked from index 0: the job's resumed arg (or, for jobs queued
+// before it, its resume arg) keeps the re-check a resume. It does not claim the idempotency key again (which
+// skipped the run and dropped it), with or without timeout.
+func TestFlowWaitUntilFirstStep(t *testing.T) {
+	files := map[string]string{}
+	for k, v := range memoFiles {
+		files[k] = v
+	}
+	flow := func(name, wait string) string {
+		return `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/flow.json
+name: ` + name + `
+label: {id: Memo saat siap}
+idempotency: event.ref
+steps:
+  - wait: ` + wait + `
+  - create: memo_doc
+    set: {memo_key: "''"}
+`
+	}
+	files["crm/flows/memo_first_timeout.rk"] = flow("memo_first_timeout", `{until: "event.ready", timeout: 3m}`)
+	files["crm/flows/memo_first_forever.rk"] = flow("memo_first_forever", `{until: "event.ready"}`)
+	e, owner := approvalSetupFiles(t, files, "")
+	q := &timedQueue{}
+	e.Queue = q
+	t0 := time.Date(2026, 11, 19, 9, 0, 0, 0, time.UTC)
+	clock := t0
+	e.Now = func() time.Time { return clock }
+	ctx := context.Background()
+	ev := func(ref string, ready bool) map[string]any { return map[string]any{"ref": ref, "ready": ready} }
+	start := func(flow, ref string) *FlowResult {
+		t.Helper()
+		out, err := e.RunFlow(ctx, owner, flow, ev(ref, false))
+		if err != nil {
+			t.Fatalf("%s %s: %v", flow, ref, err)
+		}
+		return out
+	}
+	resume := func(flow string, j timedJob, ready bool) *FlowResult {
+		t.Helper()
+		ref := str(meta.AsMap(j.args["event"])["ref"])
+		out, err := e.RunFlowResume(ctx, owner, flow, ev(ref, ready), int(j.args["resume"].(float64)), meta.AsMap(j.args["vars"]), j.args["manual"] == true, meta.AsMap(j.args["flow_key"]), FlowJobResume(j.args))
+		if err != nil {
+			t.Fatalf("resume %s: %v", flow, err)
+		}
+		if out.Skipped {
+			t.Fatalf("resume %s was skipped as a fresh run: %+v", flow, out)
+		}
+		return out
+	}
+	memos := func() int {
+		t.Helper()
+		recs, err := store.All(ctx, e.DB, e.Reg(), owner.Org, e.Reg().Model("memo_doc"), false)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return len(recs)
+	}
+
+	for _, name := range []string{"memo_first_timeout", "memo_first_forever"} {
+		// condition met on a re-check: the run goes on and its memo holds the key
+		clock = t0
+		start(name, "A")
+		j := q.last(t)
+		if j.args["resume"] != float64(0) || j.args[resumedArg] != true {
+			t.Fatalf("%s: re-check job args %v", name, j.args)
+		}
+		if again := start(name, "A"); !again.Skipped {
+			t.Fatalf("%s: same event while the first run waits: %+v", name, again)
+		}
+		clock = t0.Add(time.Minute)
+		if out := resume(name, j, false); out.WaitingJob == 0 {
+			t.Fatalf("%s: re-check while the condition is false: %+v", name, out)
+		}
+		before := memos()
+		if out := resume(name, q.last(t), true); out.WaitingJob != 0 || memos() != before+1 {
+			t.Fatalf("%s: condition met: %+v, memos %d -> %d", name, out, before, memos())
+		}
+		if again := start(name, "A"); !again.Skipped {
+			t.Fatalf("%s: same event after the run made its memo: %+v", name, again)
+		}
+
+		// a job queued before the resumed arg existed is still a resume
+		clock = t0
+		start(name, "L")
+		j = q.last(t)
+		delete(j.args, resumedArg)
+		clock = t0.Add(time.Minute)
+		before = memos()
+		if out := resume(name, j, true); memos() != before+1 {
+			t.Fatalf("%s: legacy re-check job: %+v", name, out)
+		}
+	}
+
+	// with timeout: the deadline ends the first-step wait and frees the key
+	clock = t0
+	start("memo_first_timeout", "B")
+	clock = t0.Add(3 * time.Minute)
+	if out := resume("memo_first_timeout", q.last(t), false); !out.TimedOut {
+		t.Fatalf("first-step wait at the deadline: %+v", out)
+	}
+	if again := start("memo_first_timeout", "B"); again.Skipped || again.WaitingJob == 0 {
+		t.Fatalf("same event after the timed-out run: %+v", again)
+	}
+
+	// without timeout: still waiting after 30 days
+	clock = t0
+	start("memo_first_forever", "C")
+	clock = t0.Add(30 * 24 * time.Hour)
+	if out := resume("memo_first_forever", q.last(t), false); out.TimedOut || out.WaitingJob == 0 {
+		t.Fatalf("first-step wait without timeout after 30 days: %+v", out)
+	}
+}
+
+func TestFlowJobResume(t *testing.T) {
+	if FlowJobResume(map[string]any{"flow": "x", "event": map[string]any{}}).Resumed {
+		t.Fatal("an event or schedule job is a fresh run")
+	}
+	if !FlowJobResume(map[string]any{"flow": "x", "resume": int64(0)}).Resumed {
+		t.Fatal("a job with resume (queued before the resumed arg) is a resume")
+	}
+	if !FlowJobResume(map[string]any{"flow": "x", resumedArg: true, "resume": int64(0)}).Resumed {
+		t.Fatal("resumed: true is a resume")
 	}
 }
 

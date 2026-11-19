@@ -58,8 +58,13 @@ for tpl in $TEMPLATES; do
   if ! out=$(cd "$dir" && npm run --silent validate 2>&1); then status=1; fi
   echo "$out"
   # The validator prints "N error(s), M warning(s)"; any error or warning fails the check, except
-  # catalogue_summary_missing (contract 0036): rangka-apps and rangka-connectors add summaries after the schema ships.
-  if ! grep -q '^0 error(s), ' <<<"$out" || grep -E '  warn  ' <<<"$out" | grep -vq 'catalogue_summary_missing'; then
+  # - catalogue_summary_missing (contract 0036): rangka-apps and rangka-connectors add summaries after the schema ships;
+  # - secret_in_query on a vendored connector (../connectors/): it is reported only for an action that declares
+  #   allow_secret_in: [query], and contract 0017 §5 keeps it a warning so review sees it (Shopee takes its token
+  #   in the query). Any other warning on a connector, and this one anywhere else, still fails.
+  warns=$(grep -E '  warn  ' <<<"$out" | grep -v 'catalogue_summary_missing' \
+    | grep -vE '^\.\./connectors/[^ ]+  warn +secret_in_query  actions/[0-9]+/allow_secret_in  ' || true)
+  if ! grep -q '^0 error(s), ' <<<"$out" || [ -n "$warns" ]; then
     echo "check-staged: $tpl is not clean" >&2
     status=1
   fi

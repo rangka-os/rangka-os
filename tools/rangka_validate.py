@@ -48,6 +48,8 @@ GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: 
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
 # documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)
 LEGACY_STOCK = {"goods_receipt", "stock_transfer", "stock_count", "stock_adjustment", "stock_transfer_receipt", "outlet_sales"}
+# legacy documents that may declare stock: instead of their Go rule (contract 0070 §7)
+DECLARABLE_LEGACY = {"goods_receipt", "stock_adjustment"}
 
 
 def check_stock(rep, p, mname, m, fields, visible):
@@ -55,7 +57,7 @@ def check_stock(rep, p, mname, m, fields, visible):
     st = m["stock"]
     if not m.get("is_submittable") or "stock.post_moves" not in (m.get("on_submit") or []):
         rep.add("error", p, "stock", "stock_hook", "stock: needs is_submittable: true and stock.post_moves in on_submit")
-    if mname in LEGACY_STOCK:
+    if mname in LEGACY_STOCK and mname not in DECLARABLE_LEGACY:
         rep.add("error", p, "stock", "stock_legacy", f"{mname} has a built-in stock rule and cannot declare stock:")
 
     def field_kind(where, src, name, label, ok, want):
@@ -152,6 +154,7 @@ def check_stock(rep, p, mname, m, fields, visible):
                 sp = c.get("split")
                 if isinstance(sp, str) and sp != "qty" and cfields is not None:
                     field_kind(f"{w}/cost/split", cfields, sp, f" of {of}", number, "is not a number field")
+        check_stock_lots(rep, p, w, r, cfields, of, visible)
         rs = r.get("reason")
         if reasons is not None and isinstance(rs, str) and rs not in reasons:
             rep.add("error", p, f"{w}/reason", "unknown_option", f'"{rs}" is not an option of stock_move.reason')
@@ -161,6 +164,53 @@ def check_stock(rep, p, mname, m, fields, visible):
         if not any("cogs" in r for r in moves):
             rep.add("warn", p, "stock/cogs_total", "cogs_total_unused", "cogs_total stays 0: no out move has cogs")
 
+
+
+def check_stock_lots(rep, p, w, r, cfields, of, visible):
+    """The lot, serials and expired keys of one stock moves entry (contract 0070 §3)."""
+    has_in, is_out, explode = "in" in r, "out" in r, "explode" in r
+
+    def line_field(where, name, want, ok):
+        if cfields is None:
+            return
+        f = cfields.get(name)
+        if f is None:
+            rep.add("error", p, where, "unknown_field", f'"{name}" is not a field of {of}')
+        elif not ok(f):
+            rep.add("error", p, where, "bad_lot_field", f'"{name}" {want}')
+
+    def is_type(*types):
+        return lambda f: f.get("type") in types
+
+    lot = r.get("lot")
+    if isinstance(lot, dict):
+        if "stock_lot" not in visible:
+            rep.add("warn", p, f"{w}/lot", "no_lot_model", "lot: without a stock_lot model: lots are not recorded")
+        for k in ("no", "expiry", "made", "pick"):
+            name = lot.get(k)
+            if not isinstance(name, str):
+                continue
+            if k == "no":
+                line_field(f"{w}/lot/no", name, "is not a data field", is_type("data"))
+            elif k in ("expiry", "made"):
+                line_field(f"{w}/lot/{k}", name, "is not a date field", is_type("date"))
+            else:
+                line_field(f"{w}/lot/pick", name, "is not a link to stock_lot", lambda f: f.get("type") == "link" and f.get("to") == "stock_lot")
+        if has_in and "pick" in lot:
+            rep.add("error", p, f"{w}/lot", "lot_direction", "lot.pick is only for out moves")
+        if is_out and ("no" in lot or "expiry" in lot or "made" in lot):
+            rep.add("error", p, f"{w}/lot", "lot_direction", "lot.no, lot.expiry and lot.made are only for in moves")
+        if explode:
+            rep.add("error", p, f"{w}/lot", "lot_direction", "lot and serials name the line's own item, not with explode: recipe")
+    sn = r.get("serials")
+    if isinstance(sn, str):
+        if "serial_no" not in visible:
+            rep.add("warn", p, f"{w}/serials", "no_serial_model", "serials: without a serial_no model: serials are not recorded")
+        line_field(f"{w}/serials", sn, "is not a text field", is_type("text", "data"))
+        if explode:
+            rep.add("error", p, f"{w}/serials", "lot_direction", "lot and serials name the line's own item, not with explode: recipe")
+    if "expired" in r and has_in:
+        rep.add("error", p, f"{w}/expired", "lot_direction", "expired is only for out moves")
 
 
 def load_schemas():

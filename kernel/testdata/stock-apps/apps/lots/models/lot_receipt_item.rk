@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: lot_receipt_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, required: true}
+  - {name: rate, type: currency}
+  - {name: amount, type: currency, compute: round(qty * rate)}
+  - {name: lot_no, type: data}
+  - {name: expiry_date, type: date}
+  - {name: made_date, type: date}
+  - {name: serial_nos, type: text}

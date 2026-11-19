@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# goods in with lot number, dates and serials, valued at the line amount
+name: lot_receipt
+is_submittable: true
+naming: LR-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: received_on
+  moves:
+    - {lines: items, in: outlet, reason: receipt, cost: {amount: amount}, lot: {no: lot_no, expiry: expiry_date, made: made_date}, serials: serial_nos}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: received_on, type: date, required: true}
+  - {name: items, type: table, of: lot_receipt_item, min_rows: 1}

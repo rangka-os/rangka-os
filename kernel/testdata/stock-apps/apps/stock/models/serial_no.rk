@@ -1,0 +1,15 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# one per item and serial: where the unit is
+name: serial_no
+naming: SN-{######}
+fields:
+  - {name: item, type: link, to: item, required: true, read_only: true}
+  - {name: serial, type: data, required: true, read_only: true}
+  - {name: state, type: select, read_only: true, options: [{value: in_stock, label: {id: Di gudang}}, {value: in_transit, label: {id: Dalam perjalanan}}, {value: sold, label: {id: Terjual}}, {value: returned, label: {id: Diretur}}, {value: consumed, label: {id: Dipakai produksi}}, {value: scrapped, label: {id: Dibuang}}, {value: cancelled, label: {id: Dibatalkan}}]}
+  - {name: prev_state, type: data, read_only: true}
+  - {name: outlet, type: link, to: outlet, read_only: true}
+  - {name: lot, type: link, to: stock_lot, read_only: true}
+  - {name: last_voucher_type, type: data, read_only: true}
+  - {name: last_voucher, type: data, read_only: true}
+  - {name: in_date, type: date, read_only: true}
+  - {name: out_date, type: date, read_only: true}

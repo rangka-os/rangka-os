@@ -10,6 +10,10 @@ import (
 var legacyStock = map[string]bool{"goods_receipt": true, "stock_transfer": true, "stock_count": true,
 	"stock_adjustment": true, "stock_transfer_receipt": true, "outlet_sales": true}
 
+// declarableLegacy are the legacy documents that may declare stock: instead of their Go rule (contract 0070 §7).
+// Keep in step with engine.DeclarableLegacy and DECLARABLE_LEGACY in rangka_validate.py.
+var declarableLegacy = map[string]bool{"goods_receipt": true, "stock_adjustment": true}
+
 // stock checks a model's stock: block (contract 0021 §4); ports check_stock, in the same order.
 func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, visible map[string]vis) {
 	st := asMap(m.Raw["stock"])
@@ -23,7 +27,7 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 	if !boolean(m.Raw, "is_submittable") || !onSubmit {
 		v.rep.add("error", p, "stock", "stock_hook", "stock: needs is_submittable: true and stock.post_moves in on_submit")
 	}
-	if legacyStock[m.Name] {
+	if legacyStock[m.Name] && !declarableLegacy[m.Name] {
 		v.rep.add("error", p, "stock", "stock_legacy", m.Name+" has a built-in stock rule and cannot declare stock:")
 	}
 	fieldKind := func(where string, src map[string]map[string]any, name, label string, ok func(map[string]any) bool, want string) {
@@ -181,6 +185,7 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 				}
 			}
 		}
+		v.stockLots(p, w, r, hasIn, isOut, cfields, of, visible)
 		if rs, ok := r["reason"].(string); ok && hasReasons && !contains(reasons, rs) {
 			v.rep.add("error", p, w+"/reason", "unknown_option", fmt.Sprintf(`"%s" is not an option of stock_move.reason`, rs))
 		}
@@ -197,5 +202,68 @@ func (v *validator) stock(p string, m *Model, fields map[string]map[string]any, 
 		if !withCogs {
 			v.rep.add("warn", p, "stock/cogs_total", "cogs_total_unused", "cogs_total stays 0: no out move has cogs")
 		}
+	}
+}
+
+// stockLots checks the lot, serials and expired keys of one moves entry (contract 0070 §3); ports check_stock_lots.
+func (v *validator) stockLots(p, w string, r map[string]any, hasIn, isOut bool, cfields map[string]map[string]any, of string, visible map[string]vis) {
+	lineField := func(where, name, want string, ok func(map[string]any) bool) {
+		if cfields == nil {
+			return
+		}
+		f, found := cfields[name]
+		if !found {
+			v.rep.add("error", p, where, "unknown_field", fmt.Sprintf(`"%s" is not a field of %s`, name, of))
+		} else if !ok(f) {
+			v.rep.add("error", p, where, "bad_lot_field", fmt.Sprintf(`"%s" %s`, name, want))
+		}
+	}
+	isType := func(types ...string) func(map[string]any) bool {
+		return func(f map[string]any) bool { return contains(types, str(f, "type")) }
+	}
+	_, explode := r["explode"]
+	if lot := asMap(r["lot"]); lot != nil {
+		if _, ok := visible["stock_lot"]; !ok {
+			v.rep.add("warn", p, w+"/lot", "no_lot_model", "lot: without a stock_lot model: lots are not recorded")
+		}
+		for _, k := range []string{"no", "expiry", "made", "pick"} {
+			name, ok := lot[k].(string)
+			if !ok {
+				continue
+			}
+			switch k {
+			case "no":
+				lineField(w+"/lot/no", name, "is not a data field", isType("data"))
+			case "expiry", "made":
+				lineField(w+"/lot/"+k, name, "is not a date field", isType("date"))
+			case "pick":
+				lineField(w+"/lot/pick", name, "is not a link to stock_lot", func(f map[string]any) bool { return str(f, "type") == "link" && str(f, "to") == "stock_lot" })
+			}
+		}
+		_, pick := lot["pick"]
+		_, no := lot["no"]
+		_, exp := lot["expiry"]
+		_, made := lot["made"]
+		if hasIn && pick {
+			v.rep.add("error", p, w+"/lot", "lot_direction", "lot.pick is only for out moves")
+		}
+		if isOut && (no || exp || made) {
+			v.rep.add("error", p, w+"/lot", "lot_direction", "lot.no, lot.expiry and lot.made are only for in moves")
+		}
+		if explode {
+			v.rep.add("error", p, w+"/lot", "lot_direction", "lot and serials name the line's own item, not with explode: recipe")
+		}
+	}
+	if sn, ok := r["serials"].(string); ok {
+		if _, ok := visible["serial_no"]; !ok {
+			v.rep.add("warn", p, w+"/serials", "no_serial_model", "serials: without a serial_no model: serials are not recorded")
+		}
+		lineField(w+"/serials", sn, "is not a text field", isType("text", "data"))
+		if explode {
+			v.rep.add("error", p, w+"/serials", "lot_direction", "lot and serials name the line's own item, not with explode: recipe")
+		}
+	}
+	if _, ok := r["expired"]; ok && hasIn {
+		v.rep.add("error", p, w+"/expired", "lot_direction", "expired is only for out moves")
 	}
 }

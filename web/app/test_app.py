@@ -3648,7 +3648,7 @@ def test_content_full_width(page, ctx):
 SW_SCENARIOS = {"test_pwa_installable_and_offline", "test_pwa_reads_last_seen_offline"}
 # The welcome tour (contract 0053 §7) dims the desk on a person's first visit; every scenario is a fresh browser, so
 # the others see the tours as already seen and only these play them.
-TOUR_SCENARIOS = {"test_tour_kenalan"}
+TOUR_SCENARIOS = {"test_tour_kenalan", "test_tour_offer_on_beranda", "test_tour_staff_side_shell"}
 TOURS_SEEN = {"tours": {t: {"state": "seen", "at": "2026-01-01T00:00:00Z"} for t in ("kenalan", "halaman:mulai")}}
 
 
@@ -4388,6 +4388,82 @@ def test_tour_kenalan(page, ctx):
     page.keyboard.press("Escape")
     page.locator(".ap-tur").wait_for(state="detached", timeout=5000)
     assert kept_tour(owner) == "skipped", "the replay is kept too"  # and its PUT is done before the page closes
+
+
+def test_tour_offer_on_beranda(page, ctx):
+    """Contract 0053 §7a: Beranda offers "Lihat tur singkat" while the welcome tour stays skipped; the offer starts
+    it from the first place, and once it is finished the offer is gone."""
+    ctx.allowed_failed.append(re.compile(r"/api/v1/onboarding/tours(/|$)"))
+    owner = Http(ctx.base).login(*ctx.owner)
+    owner.call("PUT", "/api/v1/onboarding/tours/kenalan", {"state": "skipped"})
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    offer = page.locator(".ap-tur-offer button")
+    offer.wait_for(timeout=10000)
+    assert offer.inner_text().strip() == "Lihat tur singkat", offer.inner_text()
+    offer.click()
+    card = page.locator(".ap-tur-card")
+    card.wait_for(timeout=5000)
+    assert re.search(r"1 dari \d+", card.locator(".ap-tur-n").inner_text()), "the offer starts at the first place"
+    for _ in range(10):
+        if not page.locator(".ap-tur").count():
+            break
+        page.locator("[data-tur-primary]").click()
+        page.wait_for_timeout(900)
+    page.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+    assert kept_tour(owner) == "seen", "finishing the tour is kept"
+    assert page.locator(".ap-tur-offer").count() == 0, "a finished tour is no longer offered"
+
+
+def test_tour_staff_side_shell(page, ctx):
+    """Contract 0053 §7a: a staff member (manajer@contoh.test, sales_manager) gets their own welcome tour in the side
+    shell: each group step lights the sidebar group it names (found by position, not by heading), at most five lit
+    places, none of the owner's copy, and finishing it is kept for that person. (The work shell's tour is in
+    test_screens.py, whose site has staff roles with desk: false.)"""
+    ctx.allowed_failed.append(re.compile(r"/api/v1/onboarding/tours(/|$)"))
+    who = Http(ctx.base).login(USERS[0][0], PASSWORD)
+    who.call("PUT", "/api/v1/onboarding/tours/kenalan", {"state": ""})
+    page.goto(ctx.base + "/app/")
+    sign_in(page, USERS[0][0], PASSWORD)
+    page.locator(".ap-shell").wait_for(timeout=15000)
+    card = page.locator(".ap-tur-card")
+    card.wait_for(timeout=10000)
+    n = int(re.search(r"dari (\d+)", card.locator(".ap-tur-n").inner_text()).group(1))
+    assert n - 1 <= 5, f"at most five lit places after the welcome ({n} steps)"
+    # the sidebar group under the light: the one whose box sits inside the lit hole
+    lit_group = """() => {
+      const hole = document.querySelector('.ap-tur-hole');
+      if (!hole) return null;
+      const r = hole.getBoundingClientRect();
+      const hit = [...document.querySelectorAll('.rk-side nav > .rk-navgroup')].filter((g) => {
+        const b = g.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + Math.min(b.height, 30) / 2;
+        return b.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+      });
+      return hit.map((g) => { const t = g.querySelector(':scope > p'); return t ? ((t.querySelector('.l') || t).textContent || '').trim() : ''; });
+    }"""
+    titles, groups_lit = [], 0
+    for i in range(1, n + 1):
+        if i > 1:
+            page.wait_for_function(f"() => /Langkah {i} dari/.test((document.querySelector('.ap-tur-n') || {{}}).textContent || '')", timeout=5000)
+            page.wait_for_timeout(500)  # the light settles (the phone drawer opens first)
+        title = card.locator(".ap-tur-title").inner_text().strip()
+        body = card.locator(".ap-tur-body").inner_text()
+        titles.append(title)
+        if i > 1 and title not in ("Persetujuan", "Tanya Raka", "Bantuan ada di sini"):
+            # the ring glides to its place (tur CSS); wait for it to settle on the group the step names
+            try:
+                page.wait_for_function(f"(t) => JSON.stringify(({lit_group})()) === JSON.stringify([t])", arg=title, timeout=3000)
+            except Exception:
+                pass
+            assert page.evaluate(lit_group) == [title], f"{title}: the lit group is {page.evaluate(lit_group)}"
+            groups_lit += 1
+        assert not re.search(r"usahamu|Mulai di sini", title + " " + body), f"owner copy for staff: {title}: {body}"
+        card.locator("[data-tur-primary]").click()
+    page.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+    assert titles[0].startswith("Selamat datang di") and titles[-1] == "Bantuan ada di sini", titles
+    assert groups_lit >= 1, titles
+    assert kept_tour(who) == "seen", "finishing the tour is kept for the person"
 
 
 def kept_tour(owner, tour="kenalan", gone=False):

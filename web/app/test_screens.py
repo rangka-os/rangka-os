@@ -31,14 +31,25 @@ PHONE375 = {"width": 375, "height": 812}
 TABLET = {"width": 1024, "height": 768}
 PHONE = {"width": 390, "height": 844}
 DESK = {"width": 1280, "height": 800}
+# The welcome tour (contract 0053 §7a) dims the screen on a person's first visit; every scenario is a fresh browser, so
+# the others see the tours as already seen and only test_work_shell_welcome_tour plays it.
+TOURS_SEEN = json.dumps({"tours": {t: {"state": "seen", "at": "2026-01-01T00:00:00Z"} for t in ("kenalan", "halaman:mulai")}})
 
 
-def page_for(browser, ctx, who, viewport, allow=()):
-    """A fresh context signed in as who; console errors and unexpected HTTP >= 400 are collected in ctx['errors']."""
+def tours_seen(p):
+    p.route("**/api/v1/onboarding/tours", lambda r: r.fulfill(status=200, content_type="application/json", body=TOURS_SEEN)
+            if r.request.method == "GET" else r.continue_())
+
+
+def page_for(browser, ctx, who, viewport, allow=(), tours=False):
+    """A fresh context signed in as who; console errors and unexpected HTTP >= 400 are collected in ctx['errors'].
+    tours: let the welcome tour start (else every tour reads as seen)."""
     c = browser.new_context(viewport=viewport, base_url=ctx["base"])
     r = c.request.post("/auth/login", data=json.dumps({"email": who[0], "password": who[1]}), headers={"Content-Type": "application/json"})
     assert r.status == 200, f"login {who[0]}: {r.status}"
     p = c.new_page()
+    if not tours:
+        tours_seen(p)
     # a 403 is reported below with its URL (the response check), so the browser's own "Failed to load resource" line
     # adds nothing; the shell probes GET /api/v1/catalogue on every load and only the owner may read it (contract 0036)
     p.on("console", lambda m: m.type == "error" and "401" not in m.text and "status of 403" not in m.text and ctx["errors"].append(f"console: {m.text}"))
@@ -450,6 +461,7 @@ def test_counter_fits_phone_and_tablet(browser, ctx):
         c = browser.new_context(viewport=vp, base_url=ctx["base"], is_mobile=size == "phone", has_touch=touch)
         assert c.request.post("/auth/login", data=json.dumps({"email": KASIR[0], "password": KASIR[1]}), headers={"Content-Type": "application/json"}).status == 200
         p = c.new_page()
+        tours_seen(p)
         p.on("console", lambda m: m.type == "error" and "401" not in m.text and "status of 403" not in m.text and ctx["errors"].append(f"console: {m.text}"))
         p.goto("/app/#/w/jual")
         p.wait_for_selector(".ap-counter-open, .ap-counter-item")
@@ -495,6 +507,7 @@ def phone_for(browser, ctx, who, geo=None, allow=()):
     r = c.request.post("/auth/login", data=json.dumps({"email": who[0], "password": who[1]}), headers={"Content-Type": "application/json"})
     assert r.status == 200, f"login {who[0]}: {r.status}"
     p = c.new_page()
+    tours_seen(p)
     p.on("console", lambda m: m.type == "error" and "401" not in m.text and "status of 403" not in m.text and ctx["errors"].append(f"console: {m.text}"))
     def resp(res):
         if res.status == 403 and res.url.endswith("/api/v1/catalogue"):
@@ -535,6 +548,7 @@ def test_counter_empty_catalogue_offers_add_item(browser, ctx):
     c = browser.new_context(viewport=POS_SIZES["tablet"], base_url=ctx["base"], has_touch=True)
     assert c.request.post("/auth/login", data=json.dumps({"email": KASIR[0], "password": KASIR[1]}), headers={"Content-Type": "application/json"}).status == 200
     p = c.new_page()
+    tours_seen(p)
     p.route(re.compile(r".*/api/v1/r/menu\?.*"), lambda r: r.fulfill(status=200, content_type="application/json", body='{"data": [], "total": 0}'))
     p.goto("/app/#/w/jual")
     p.wait_for_selector(".ap-counter-open, .ap-counter-nocat")
@@ -756,6 +770,60 @@ def test_list_submits_many_drafts(browser, ctx):
     rows = c.request.get("/api/v1/r/bayar?limit=20").json()["data"]
     done = sorted(r["amount"] for r in rows if r["customer"] == plg and r["docstatus"] == 1)
     assert done == [100000, 200000, 2000000], done
+    c.close()
+
+
+def tour_state(c, tour="kenalan"):
+    """The kernel's state of one tour for the signed-in person, once the app's PUT has landed (None: not kept)."""
+    state = None
+    for _ in range(50):
+        state = ((c.request.get("/api/v1/onboarding/tours").json().get("tours") or {}).get(tour) or {}).get("state")
+        if state:
+            return state
+        time.sleep(0.1)
+    return state
+
+
+def test_work_shell_welcome_tour(browser, ctx):
+    """Contract 0053 §7a and 0030 §3: staff in the work shell get their own welcome tour on their first visit, even
+    when the layout asks for the top-nav shell (the work shell draws its own bar); it names their screens, and on a
+    phone the card sits at the top while the lit place is in the bottom bar, at the bottom otherwise."""
+    c, p = page_for(browser, ctx, STAF, PHONE, tours=True)
+    assert c.request.put("/api/v1/onboarding/tours/kenalan", data=json.dumps({"state": ""}), headers={"Content-Type": "application/json"}).ok
+    def top_nav(route):
+        r = route.fetch()
+        body = r.json()
+        body["layout"] = dict(body.get("layout") or {}, shell="top-nav")
+        route.fulfill(response=r, json=body)
+    p.route(re.compile(r".*/api/v1/meta(\?.*)?$"), top_nav)
+    p.goto("/app/")
+    p.wait_for_selector(".ap-workshell")
+    card = p.locator(".ap-tur-card")
+    card.wait_for(timeout=10000)
+    assert re.search(r"1 dari \d+", card.locator(".ap-tur-n").inner_text())
+    assert "Isi jam kerja dan Catat" in card.inner_text(), card.inner_text()
+    titles, n = [], int(re.search(r"dari (\d+)", card.locator(".ap-tur-n").inner_text()).group(1))
+    for i in range(1, n + 1):
+        if i > 1:
+            p.wait_for_function(f"() => /Langkah {i} dari/.test((document.querySelector('.ap-tur-n') || {{}}).textContent || '')", timeout=5000)
+            p.wait_for_timeout(400)  # the light settles on its place
+        title = card.locator(".ap-tur-title").inner_text().strip()
+        titles.append(title)
+        if title in ("Isi jam kerja", "Catat"):
+            hole, bar, box = p.locator(".ap-tur-hole").bounding_box(), p.locator(".ap-workbar").bounding_box(), card.bounding_box()
+            assert hole["y"] >= bar["y"] - 12, f"{title}: the light is on the bottom bar ({hole} vs {bar})"
+            assert "top" in card.get_attribute("class").split(), f"{title}: the sheet moves to the top"
+            assert box["y"] + box["height"] <= hole["y"], f"{title}: the sheet does not cover the lit place"
+            shot(ctx, p, "staf-tur-" + title.lower().replace(" ", "-"))
+        if title == "Bantuan ada di sini":
+            assert "top" not in card.get_attribute("class").split(), "the account button is at the top: the sheet stays at the bottom"
+        card.locator("[data-tur-primary]").click()
+    p.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+    assert titles[0].startswith("Selamat datang di"), titles
+    assert titles[1:3] == ["Isi jam kerja", "Catat"], titles
+    assert titles[-1] == "Bantuan ada di sini", titles
+    assert len(titles) - 1 <= 5, f"at most five lit places: {titles}"
+    assert tour_state(c) == "seen", "finishing the tour is kept for the person"
     c.close()
 
 

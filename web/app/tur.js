@@ -8,7 +8,8 @@
  *   - The card: role="dialog" labelled by its title; "x dari y" is aria-live. Focus moves to the card on every step and
  *     goes back where it was at the end. Escape is Lewati; arrow keys move. Tab stays inside the card unless the step
  *     lets the owner use the lit element (step.use).
- *   - Phone (600px and below): the card is a bottom sheet and the lit element scrolls into the upper half.
+ *   - Phone (600px and below): the card is a bottom sheet and the lit element scrolls into the upper half; an element
+ *     that cannot scroll there (the work shell's fixed bottom bar) gets the sheet at the top instead.
  *   - A step whose element never shows (1.5 s) is dropped when optional, else shown as a card without a light
  *     (26 K-TS4: never fail silently).
  *   - prefers-reduced-motion: no transitions (tur CSS in app.css).
@@ -197,7 +198,8 @@
           onMouseDown: function (e) { e.preventDefault(); } });
       }),
       hole ? h("div", { className: "ap-tur-hole", "aria-hidden": "true", style: { top: hole.top + "px", left: hole.left + "px", width: hole.width + "px", height: hole.height + "px" } }) : null,
-      h("div", { ref: card, className: "ap-tur-card" + (phone() ? " sheet" : !hole ? " mid" : ""), role: "dialog", "aria-modal": step.use ? "false" : "true",
+      // phone: a sheet at the bottom; at the top when the lit element stays in the lower part (a fixed bottom bar)
+      h("div", { ref: card, className: "ap-tur-card" + (phone() ? " sheet" + (hole && hole.top > vh * 0.55 ? " top" : "") : !hole ? " mid" : ""), role: "dialog", "aria-modal": step.use ? "false" : "true",
         "aria-labelledby": titleId, "aria-describedby": titleId + "-b", style: style },
         h("p", { className: "ap-tur-n", "aria-live": "polite" }, def.eyebrow ? def.eyebrow + " · " : "", "Langkah " + (i + 1) + " dari " + n),
         h("h2", { id: titleId, className: "ap-tur-title" }, step.title),

@@ -217,7 +217,8 @@
             grid ? h(PeriodFold, { days: days, defs: defs, results: results, loading: loading || !data }, grid) : null),
           h("aside", { className: "ap-home-side", "aria-label": "Yang perlu perhatian dan tim" }, attention, RA.HomeTeam ? h(RA.HomeTeam, { ctx: ctx }) : null))
       : h(React.Fragment, null, attention, grid);
-    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" }, body));
+    var offer = isHome && !u.on && ctx.tourOffer && RA.TourOffer ? h(RA.TourOffer, { onStart: ctx.tourOffer }) : null;
+    return h(React.Fragment, null, header, h("div", { className: "rk-shell-content", "data-period": data ? String(data.period) : undefined, "data-loading": loading ? "true" : "false" }, offer, body));
   }
 
   /* ---------------------------------------------------------------- "<n> hari ini" (desain v3)

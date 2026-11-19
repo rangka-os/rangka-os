@@ -188,6 +188,35 @@ Lewati and "x dari y". A first tour shows once per person, so its state is kept 
 - Removing a member deletes their tour states in that org; changing a member's email moves their states to it.
 - With an older kernel the web app keeps tour states in localStorage.
 
+#### 7a. The welcome tour per person (added 19 Nov 2026, web app only)
+
+The welcome tour (`kenalan`) still starts once per person, on the page they first land on (a home dashboard, a work
+screen, or a form a Mulai di sini step opened). What it shows is composed from what that person can do, by fixed rules
+(no Raka, no LLM), from `GET /api/v1/meta` and the sidebar as drawn:
+
+- **Owner** (`owner` role): the tour of the whole business, unchanged: welcome, Mulai di sini, Persetujuan, the business
+  menu, Tanya Raka, Bantuan.
+- **Everyone else:** welcome, then at most three places of their own work, then Persetujuan only when the approvals
+  feature is on and a model's `approvals:` (0007) names one of their roles, or an `approve:` step does in a flow that
+  runs on that model's event (`on: <model>.<event>`; at any depth: `if` then/else, `for_each` do; a flow on a connector
+  trigger or a schedule names no model and does not count), Tanya Raka only when it is on for them, then where to find
+  the tour again (always last). At most five lit places after the welcome (riset 26 K-TS2): when Persetujuan and Tanya
+  Raka both show, the work places stop at two. The places, in sidebar order:
+  1. their work screens (0030 §3, `meta.work`), each explained by the screen's `description` (0030 §1), else by a
+     sentence for its type;
+  2. then each sidebar group holding entries they may create (`meta.models[m].can.create`), naming those entries;
+     an entry that is a model of one of their own screens is left out (the screen covers it);
+  3. only when 1 and 2 find nothing: the groups whose entries they may read.
+
+  A group step names at most three entries ("a, b, c dan lainnya") and lights the group by its position in the sidebar,
+  not by its heading (two apps may name a group alike). A label is lowercased inside a sentence unless its first word
+  is an acronym ("SPK produksi").
+- The welcome tour starts on its own in the work shell (0030 §3) whatever the layout's shell; on a top-nav layout the
+  side shell's tour does not start on its own (Ulangi tur still works).
+- Copy that speaks of "your business" or "your decision" is the owner's, and the approver's for Persetujuan.
+- Beranda (the home dashboard, or the home work screen) shows "Lihat tur singkat" to a person whose `kenalan` state is
+  `skipped`, for any role, until they finish it (`seen`). "Ulangi tur" in the account menu stays.
+
 ### 8. `meta.apps[].roles` (added 15 Nov 2026)
 
 - Each app entry in `GET /api/v1/meta` carries `roles`: the app's `roles:` from `app.rk` (`[]` when none).

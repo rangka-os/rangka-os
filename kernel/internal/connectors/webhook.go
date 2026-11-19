@@ -115,7 +115,16 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return HookResult{Status: 400, Body: "body is not JSON"}
 	}
-	ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, body, nil)
+	var extra map[string]any
+	if _, _, ok := confirmSpec(t); ok {
+		// the vendor's own answer, read after the signature matched (Midtrans): emit takes what flows act on from it
+		out, res := rt.confirm(ctx, org, connector, trigger, t, body)
+		if res != nil {
+			return *res
+		}
+		extra = map[string]any{"confirmed": out}
+	}
+	ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, body, extra)
 	if err != nil {
 		return HookResult{Status: 500, Body: err.Error()}
 	}

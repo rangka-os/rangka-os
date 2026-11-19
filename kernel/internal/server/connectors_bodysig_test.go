@@ -11,6 +11,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 // Contract 0002, refinement of 19 Nov 2026: body-field signatures (Midtrans). The notification carries its own
@@ -174,4 +175,133 @@ func TestBodySignedWebhook(t *testing.T) {
 	if st := send(nested, `{"data":{"id":"evt-10"},"meta":{"sig":"`+sum+`"}}`); st != 401 {
 		t.Fatalf("nested signature of another id: %d", st)
 	}
+}
+
+// Contract 0002, refinement of 19 Nov 2026: confirmed webhooks. Midtrans signs the order id, the status code and the
+// amount, not the transaction status, so a genuine cancel notification resent with "settlement" verifies. With
+// confirm:, the kernel asks the vendor (GET status) after the signature matched, and emit reads `confirmed`.
+const confirmedConnector = `# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
+name: confirm_test
+label: {id: Confirm test}
+summary: {id: Penghubung uji dengan konfirmasi status.}
+version: 1.0.0
+auth:
+  type: basic
+  fields:
+    - {name: server_key, label: {id: Server key}, secret: true}
+triggers:
+  - name: notified
+    via: webhook
+    verify:
+      signature:
+        field: signature_key
+        alg: sha512
+        key: server_key
+        concat: ['{body.order_id}', '{body.status_code}', '{body.gross_amount}', '{auth.server_key}']
+    confirm:
+      action: get_status
+      input: {gateway_ref: order_id}
+    emit:
+      gateway_ref: order_id
+      claimed_status: transaction_status
+      status: confirmed.status
+      paid: "confirmed.paid == true && confirmed.gateway_ref == order_id && confirmed.paid_amount == gross_amount"
+actions:
+  - name: get_status
+    request:
+      method: GET
+      url: https://api.sandbox.example.com/v2/{input.gateway_ref}/status
+    input:
+      - {name: gateway_ref, type: data, required: true}
+    output:
+      gateway_ref: order_id
+      status: transaction_status
+      paid_amount: gross_amount
+      paid: "status_code == '200' && transaction_status == 'settlement'"
+`
+
+func TestConfirmedWebhook(t *testing.T) {
+	t.Setenv("RANGKA_MASTER_KEY", testKEK(t))
+	t.Setenv("RANGKA_MASTER_KEY_FILE", "")
+	e := newEnv(t, false, func(apps, site string) {
+		p := filepath.Join(site, "system.rk")
+		b, _ := os.ReadFile(p)
+		os.WriteFile(p, []byte(strings.Replace(string(b), "secrets: {driver: env}", "secrets: {driver: db}", 1)), 0o644)
+		dir := filepath.Join(filepath.Dir(apps), "rangka-connectors", "confirm_test")
+		os.MkdirAll(dir, 0o755)
+		if err := os.WriteFile(filepath.Join(dir, "connector.rk"), []byte(confirmedConnector), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	})
+	v := &vendor{status: 200}
+	e.s.Connectors.HTTP = &http.Client{Transport: v, Timeout: 5 * time.Second}
+	e.login()
+	e.must(204, "PUT", "/api/v1/connectors/confirm_test/auth/server_key", map[string]any{"value": bodySigKey})
+	const path = "/hooks/kopi-senja/confirm_test/notified"
+	send := func(body string) int {
+		req, _ := http.NewRequest("POST", e.ts.URL+path, strings.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			t.Fatal(err)
+		}
+		resp.Body.Close()
+		return resp.StatusCode
+	}
+	note := func(order, status string) string {
+		return fmt.Sprintf(`{"order_id":%q,"status_code":"200","gross_amount":"750000.00","transaction_status":%q,"signature_key":%q}`,
+			order, status, midtransSig(order, "200", "750000.00", bodySigKey))
+	}
+	events := func() string {
+		return dump(t, e, "select data::text from rk_audit where kind = 'connector.event' order by id")
+	}
+
+	// a genuine cancel notification relabelled "settlement": the vendor says cancel, so paid is false
+	v.answer = `{"status_code":"200","order_id":"INV-2026-00021","transaction_status":"cancel","gross_amount":"750000.00"}`
+	if st := send(note("INV-2026-00021", "settlement")); st != 200 {
+		t.Fatalf("relabelled cancel: %d", st)
+	}
+	reqs := v.sent()
+	if len(reqs) != 1 || reqs[0].Method != "GET" || reqs[0].URL.String() != "https://api.sandbox.example.com/v2/INV-2026-00021/status" || !strings.HasPrefix(reqs[0].Header.Get("Authorization"), "Basic ") {
+		t.Fatalf("confirm request: %v", reqs)
+	}
+	if ev := events(); !strings.Contains(ev, `"paid": false`) || !strings.Contains(ev, `"status": "cancel"`) || !strings.Contains(ev, `"claimed_status": "settlement"`) {
+		t.Fatalf("relabelled cancel event: %s", ev)
+	}
+	// a genuine settlement: confirmed, paid
+	v.answer = `{"status_code":"200","order_id":"INV-2026-00022","transaction_status":"settlement","gross_amount":"750000.00"}`
+	if st := send(note("INV-2026-00022", "settlement")); st != 200 {
+		t.Fatalf("settlement: %d", st)
+	}
+	if ev := events(); strings.Count(ev, `"paid": true`) != 1 || !strings.Contains(ev, "INV-2026-00022") {
+		t.Fatalf("settlement event: %s", ev)
+	}
+	// the vendor reports another amount for the order: not paid
+	v.answer = `{"status_code":"200","order_id":"INV-2026-00023","transaction_status":"settlement","gross_amount":"5000.00"}`
+	send(note("INV-2026-00023", "settlement"))
+	if ev := events(); strings.Count(ev, `"paid": true`) != 1 {
+		t.Fatalf("another amount at the vendor: %s", ev)
+	}
+	// the vendor does not answer (or answers 404): no event, 502 so the vendor sends it again later
+	n := strings.Count(events(), "connector.event") + strings.Count(events(), "gateway_ref")
+	for _, st := range []int{404, 503} {
+		v.status, v.answer = st, `{"status_code":"404","status_message":"Transaction doesn't exist."}`
+		if got := send(note("INV-2026-00024", "settlement")); got != 502 {
+			t.Fatalf("vendor %d: webhook %d, want 502", st, got)
+		}
+	}
+	if m := strings.Count(events(), "connector.event") + strings.Count(events(), "gateway_ref"); m != n {
+		t.Fatalf("an unconfirmed webhook made an event")
+	}
+	// a bad signature never reaches the vendor
+	v.status = 200
+	before := len(v.sent())
+	bad := strings.Replace(note("INV-2026-00025", "settlement"), "750000.00", "7500000.00", 1)
+	if st := send(bad); st != 401 || len(v.sent()) != before {
+		t.Fatalf("bad signature: %d, %d confirm calls", st, len(v.sent())-before)
+	}
+	if !strings.Contains(dump(t, e, "select summary from rk_audit where kind = 'connector.error'"), "webhook not confirmed") {
+		t.Fatal("unconfirmed webhooks not audited")
+	}
+	noLeak(t, "audit", []byte(dump(t, e, "select coalesce(data::text, '') || coalesce(summary, '') from rk_audit")), bodySigKey)
 }

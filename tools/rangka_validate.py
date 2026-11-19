@@ -910,8 +910,11 @@ def check_body_signature(rep, p, where, sg):
         if k in sg:
             rep.add("error", p, f"{where}/{k}", "verify_body_signature", f"a body signature (field, concat) takes no {k} (contract 0002)")
     alg = sg.get("alg")
-    if isinstance(alg, str) and alg.lower().startswith("hmac-"):
+    if isinstance(alg, str) and alg and alg not in ("sha1", "sha256", "sha512"):
         rep.add("error", p, f"{where}/alg", "verify_body_signature", f'a body signature is a plain hash of the parts: alg sha1, sha256 or sha512, not "{alg}" (contract 0002)')
+    enc = sg.get("encoding")
+    if isinstance(enc, str) and enc and enc not in ("hex", "base64"):
+        rep.add("error", p, f"{where}/encoding", "verify_body_signature", f'a body signature is hex or base64, not "{enc}" (contract 0002)')
     uses_key = False
     for j, part in enumerate(parts):
         for ph in re.findall(r"\{[^{}]*\}", part):
@@ -1036,6 +1039,39 @@ def check_poll_triggers(rep, p, c):
         each = t.get("each")
         if isinstance(each, dict) and isinstance(each.get("action"), str) and each["action"] not in actions:
             rep.add("error", p, f"triggers/{i}/each/action", "unknown_action", f'connector {c.get("name")} has no action "{each["action"]}"{suggest(each["action"], names)}')
+    check_confirm_triggers(rep, p, c)
+
+
+def check_confirm_triggers(rep, p, c):
+    """Contract 0002, refinement of 19 Nov 2026: a webhook trigger's confirm: names a GET action of the connector, its
+    input is CEL text, and it reads one body (no for_each)."""
+    actions = [a.get("name") for a in c.get("actions") or [] if isinstance(a, dict)]
+    names = [a for a in actions if isinstance(a, str)]
+    for i, t in enumerate(c.get("triggers") or []):
+        if not isinstance(t, dict) or "confirm" not in t:
+            continue
+        where = f"triggers/{i}/confirm"
+        m = t["confirm"] if isinstance(t["confirm"], dict) else {}
+        act = m.get("action") if isinstance(m.get("action"), str) else ""
+        if t.get("via") != "webhook":
+            rep.add("error", p, where, "confirm_invalid", "confirm: is for a webhook trigger (contract 0002)")
+        if isinstance(t.get("for_each"), str) and t["for_each"].strip():
+            rep.add("error", p, where, "confirm_invalid", "confirm: reads one notification: a trigger with confirm has no for_each (contract 0002)")
+        if not act:
+            rep.add("error", p, where, "confirm_invalid", "confirm: needs action, a GET action of this connector (contract 0002)")
+            continue
+        if act not in actions:
+            rep.add("error", p, f"{where}/action", "unknown_action", f'connector {c.get("name")} has no action "{act}"{suggest(act, names)}')
+            continue
+        for a in c.get("actions") or []:
+            if isinstance(a, dict) and a.get("name") == act:
+                mth = (a.get("request") or {}).get("method") if isinstance(a.get("request"), dict) else None
+                if not isinstance(mth, str) or mth.upper() != "GET":
+                    rep.add("error", p, f"{where}/action", "confirm_invalid", f'confirm action "{act}" must be a GET: a webhook never makes the kernel write to the vendor (contract 0002)')
+        inp = m.get("input") if isinstance(m.get("input"), dict) else {}
+        for k in inp:
+            if not isinstance(inp[k], str):
+                rep.add("error", p, f"{where}/input/{k}", "confirm_invalid", "confirm input values are CEL text over the body (contract 0002)")
 
 
 def check_connector_auth(rep, sysdoc, conns):

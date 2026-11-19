@@ -114,12 +114,20 @@ crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope 
 crm/roles/territory_rep.rk:4:16  error  unknown_scope_field  scope/field  scope field "wilayah" is not a field of any installed model
 crm/roles/viewer.rk:1:1  error  schema  (root)  'label' is a required property
 crm/roles/viewer.rk:2:7  error  name_mismatch  name  role name "viewers" must match the file name "viewer"
-../broken-connectors/bodysig_bad/connector.rk:18:79  error  verify_concat_no_key  triggers/0/verify/signature/concat  verify.signature.concat must use {auth.server_key}: a hash without the secret can be computed by anyone (contract 0002)
-../broken-connectors/bodysig_bad/connector.rk:24:18  error  verify_body_signature  triggers/1/verify/signature  a body signature needs field, concat (a list of text parts) and key (contract 0002)
-../broken-connectors/bodysig_bad/connector.rk:32:17  error  verify_body_signature  triggers/2/verify/signature/header  a body signature (field, concat) takes no header (contract 0002)
-../broken-connectors/bodysig_bad/connector.rk:33:14  error  verify_body_signature  triggers/2/verify/signature/alg  a body signature is a plain hash of the parts: alg sha1, sha256 or sha512, not "hmac-sha512" (contract 0002)
-../broken-connectors/bodysig_bad/connector.rk:35:37  error  verify_body_signature  triggers/2/verify/signature/concat/1  unknown placeholder "{header.X-Time}": a part takes {body.<path>} and {auth.<field>} (contract 0002)
-../broken-connectors/bodysig_bad/connector.rk:35:37  error  verify_body_signature  triggers/2/verify/signature/concat/1  unknown placeholder "{request.digest}": a part takes {body.<path>} and {auth.<field>} (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:49:55  error  schema  triggers/4/confirm/input/amount  5 is not of type 'string'
+../broken-connectors/bodysig_bad/connector.rk:19:79  error  verify_concat_no_key  triggers/0/verify/signature/concat  verify.signature.concat must use {auth.server_key}: a hash without the secret can be computed by anyone (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:25:18  error  verify_body_signature  triggers/1/verify/signature  a body signature needs field, concat (a list of text parts) and key (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:33:17  error  verify_body_signature  triggers/2/verify/signature/header  a body signature (field, concat) takes no header (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:34:14  error  verify_body_signature  triggers/2/verify/signature/alg  a body signature is a plain hash of the parts: alg sha1, sha256 or sha512, not "hmac-sha512" (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:36:37  error  verify_body_signature  triggers/2/verify/signature/concat/1  unknown placeholder "{header.X-Time}": a part takes {body.<path>} and {auth.<field>} (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:36:37  error  verify_body_signature  triggers/2/verify/signature/concat/1  unknown placeholder "{request.digest}": a part takes {body.<path>} and {auth.<field>} (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:42:36  error  verify_body_signature  triggers/3/verify/signature/alg  a body signature is a plain hash of the parts: alg sha1, sha256 or sha512, not "md5" (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:42:51  error  verify_body_signature  triggers/3/verify/signature/encoding  a body signature is hex or base64, not "base32" (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:49:23  error  confirm_invalid  triggers/4/confirm/action  confirm action "refund" must be a GET: a webhook never makes the kernel write to the vendor (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:49:55  error  confirm_invalid  triggers/4/confirm/input/amount  confirm input values are CEL text over the body (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:55:14  error  confirm_invalid  triggers/5/confirm  confirm: reads one notification: a trigger with confirm has no for_each (contract 0002)
+../broken-connectors/bodysig_bad/connector.rk:55:23  error  unknown_action  triggers/5/confirm/action  connector bodysig_bad has no action "statsu"; did you mean "status"?
+../broken-connectors/bodysig_bad/connector.rk:61:14  error  confirm_invalid  triggers/6/confirm  confirm: is for a webhook trigger (contract 0002)
 ../broken-connectors/leaky/connector.rk:19:16  error  secret_literal  auth/fields/2/default  secret field "pin" cannot have a default: bind its value per org (contract 0017 §1)
 ../broken-connectors/leaky/connector.rk:32:12  error  secret_plain_http  actions/0/request/url  action "plain_http" sends a secret over plain http: use https (contract 0017 §5)
 ../broken-connectors/leaky/connector.rk:37:12  error  secret_host_undeclared  actions/1/request/url  action "other_host" sends a secret to collect.example.net, which is not in hosts (api.example.com) (contract 0017 §5)
@@ -214,4 +222,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-186 error(s), 29 warning(s)
+194 error(s), 29 warning(s)

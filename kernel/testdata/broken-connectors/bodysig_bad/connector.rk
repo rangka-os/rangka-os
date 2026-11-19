@@ -1,5 +1,6 @@
 # yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/connector.json
-# verify_body_signature, verify_concat_no_key: body-field signatures (contract 0002, refinement of 19 Nov 2026)
+# verify_body_signature, verify_concat_no_key, confirm_invalid: body-field signatures and confirmed webhooks
+# (contract 0002, refinements of 19 Nov 2026)
 name: bodysig_bad
 label: {id: Body signature bad}
 summary: {id: Tanda tangan di body yang salah bentuk.}
@@ -34,6 +35,37 @@ triggers:
         key: server_key
         concat: ['{body.order_id}', '{header.X-Time}{request.digest}', '{auth.server_key}']
     emit: {ref: order_id}
+  # an alg and an encoding the kernel does not have: every webhook would be refused at runtime
+  - name: odd_hash
+    via: webhook
+    verify:
+      signature: {field: sig, alg: md5, encoding: base32, key: server_key, concat: ['{body.id}', '{auth.server_key}']}
+    emit: {ref: id}
+  # confirm with a write action, an unknown action, a non-text input, a for_each, and on a poll trigger
+  - name: confirm_write
+    via: webhook
+    verify:
+      signature: {field: sig, alg: sha512, key: server_key, concat: ['{body.id}', '{auth.server_key}']}
+    confirm: {action: refund, input: {id: id, amount: 5}}
+    emit: {ref: confirmed.id}
+  - name: confirm_unknown
+    via: webhook
+    verify:
+      signature: {field: sig, alg: sha512, key: server_key, concat: ['{body.id}', '{auth.server_key}']}
+    confirm: {action: statsu}
+    for_each: items[]
+    emit: {ref: confirmed.id}
+  - name: confirm_poll
+    via: poll
+    action: ping
+    confirm: {action: ping}
+    emit: {ref: id}
 actions:
   - name: ping
     request: {method: GET, url: https://api.example.com/ping}
+  - name: status
+    request: {method: GET, url: 'https://api.example.com/status/{input.id}'}
+    input: [{name: id, type: data}]
+  - name: refund
+    request: {method: POST, url: 'https://api.example.com/refund/{input.id}'}
+    input: [{name: id, type: data}]

@@ -155,15 +155,28 @@ joined without a separator. Midtrans signs a payment notification with
   sent (`750000.00` stays `750000.00`); a missing field, an empty string, an object, a list, a boolean or null is no
   value, and a part without a value refuses the webhook (401, audited as `webhook_refused`). A body that is not one
   JSON object is refused the same way. `header:` and `lines:` do not apply.
-- **Validator**: `field`, `concat` and `key` come together, without `header` or `lines`, with a plain alg, and a part
-  takes only the two placeholders (`verify_body_signature`); `concat` must use `{auth.<key>}`
-  (`verify_concat_no_key`), since a hash without the secret can be computed by anyone. The key is a secret auth field
-  (`sign_key_not_secret`, as above).
-- **What the signature covers is the vendor's choice, so the connector must follow it.** Only the fields in `concat`
-  are authentic: someone who holds one genuine notification can resend it with every other field changed. A connector
-  therefore takes what a flow acts on from signed fields (Midtrans: `gateway_ref` and the invoice from `order_id`, the
-  amount from `gross_amount`, "paid" from `status_code` together with the status), and a flow that records money holds
-  that id in a unique record, as with canonical-line signatures. Fields joined without a separator can also be read
-  with another split (`A1` + `200` and `A12` + `00` hash alike); ids that end where the next field starts are the
-  vendor's to avoid, and a flow that only accepts ids it issued itself is not affected.
+- **Validator**: `field`, `concat` and `key` come together, without `header` or `lines`, with alg `sha1`, `sha256` or
+  `sha512` and encoding `hex` or `base64`, and a part takes only the two placeholders (`verify_body_signature`);
+  `concat` must use `{auth.<key>}` (`verify_concat_no_key`), since a hash without the secret can be computed by anyone.
+  The key is a secret auth field (`sign_key_not_secret`, as above).
+- **Only the fields in `concat` are authentic.** Someone who holds one genuine notification can resend it with every
+  other field changed: a Midtrans `cancel` or `refund` carries status code 200 like a `settlement`, so a status read
+  from the notification can be relabelled. A connector therefore never takes "paid", a status or an amount that is not
+  signed from the body: it confirms them with the vendor (`confirm:`, below) and keys on a signed id. Fields joined
+  without a separator can also be read with another split (`A1` + `200` and `A12` + `00` hash alike); confirming with
+  the vendor by the id and comparing the amount the vendor reports closes that too.
+- **Confirmed webhooks** (`confirm:` on a webhook trigger):
+  ```yaml
+  confirm:
+    action: get_status                # a GET action of this connector
+    input: {gateway_ref: order_id}    # CEL over the verified body
+  ```
+  After the signature matched, the kernel sends that action with the org's keys (over https to a declared host, like
+  any call, audited and scrubbed) and emit sees its mapped output as `confirmed`, next to the body. Midtrans:
+  `paid: confirmed.paid == true && confirmed.gateway_ref == order_id && confirmed.paid_amount == gross_amount`.
+  A confirm that fails (network, a vendor error, an unknown transaction, an input without a value) starts no flow,
+  is audited as `webhook_unconfirmed` and answers 502 (400 for a missing input), so the vendor sends the notification
+  again later. The validator refuses a confirm on a poll trigger, with `for_each`, naming an unknown action or an action
+  that is not a GET (`confirm_invalid`, `unknown_action`): a webhook never makes the kernel write to the vendor. A
+  flow that records money still holds the signed id in a unique record (rangka-apps `gateway_ref_claim`).
 - Outgoing calls are not signed this way (Midtrans uses Basic auth). No timestamp window, as above.

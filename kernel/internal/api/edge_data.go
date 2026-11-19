@@ -29,8 +29,8 @@ import (
 // may use a PIN: only they can work on the device (0058 §2). The screens are the work screens those roles may open
 // (0030 §3, Engine.Work). The data sets are the models the reference slots of their counter screens name
 // (catalogue.model, catalogue.options.model and its group model per 0048 §1, catalogue.available.model per 0039,
-// customer.table.model per 0048 §2), then tax (the org's tax settings, the CEL tax global) and staff. A model a staff
-// role may not read unconditionally is left out. Slot filters are not applied: a set is the whole model (the device
+// customer.table.model per 0048 §2, the targets of document.checkout link fields per 0069 §4), then tax (the org's
+// tax settings, the CEL tax global) and staff. A model a staff role may not read unconditionally is left out. Slot filters are not applied: a set is the whole model (the device
 // filters as the screen says), so two screens over one model share one set.
 //
 // What the rows carry. Rows are read through the engine as the system actor, then: a model with an outlet scope
@@ -118,6 +118,19 @@ func (s *Server) edgePlan(ctx context.Context, d *auth.Device) (*edgePlan, error
 		}
 		add(str(mapOf(cat["available"])["model"]))
 		add(str(mapOf(mapOf(b["customer"])["table"])["model"]))
+		// the records a checkout link field picks (contract 0069 §4: a promotion, a customer), so the device computes
+		// the same totals offline; a data field (a coupon code) needs the connection
+		doc := mapOf(b["document"])
+		if dm := reg.Model(str(doc["model"])); dm != nil {
+			for _, x := range asAnyList(doc["checkout"]) {
+				if o := mapOf(x); o != nil {
+					x = o["field"]
+				}
+				if f := dm.Field(str(x)); f != nil && f.Type == "link" {
+					add(f.To)
+				}
+			}
+		}
 	}
 	if len(p.screens) > 0 {
 		p.sets = append(p.sets, edgeSetTax)
@@ -302,4 +315,9 @@ func edgeRedact(e *engine.Engine, d *auth.Device, roles []string, m *meta.Model,
 	for _, r := range roles {
 		e.Redact(engine.Actor{Org: d.Org, Roles: []string{r}}, m, rec)
 	}
+}
+
+func asAnyList(v any) []any {
+	l, _ := v.([]any)
+	return l
 }

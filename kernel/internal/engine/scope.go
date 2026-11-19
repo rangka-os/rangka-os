@@ -108,6 +108,7 @@ func (s *scope) env() *cel.Env {
 		Vars:  s.lookup,
 		Today: today,
 		Now:   now,
+		Loc:   s.e.Location(),
 		Option: func(field, attr string) (any, error) {
 			f := s.m.Field(field)
 			if f == nil || s.client && s.e.FieldHidden(s.actor, s.m, f) {
@@ -160,6 +161,14 @@ func (s *scope) lookup(name string) (any, bool) {
 		return DeviceVar(s.actor), true
 	case "org", "tax":
 		return GlobalVar(s.e.Reg(), s.actor, name)
+	case "parent":
+		// a child row's document (contract 0069 §2): parent.<field> reads the document's value as the document's own
+		// expressions would (a link is a link, so parent.outlet.code works); tables are left out. Only a row computed
+		// through its document has one; elsewhere parent is not a name.
+		if s.parent == nil {
+			return nil, false
+		}
+		return s.parent.docVars(), true
 	case "name", "created_by", "created_at", "modified_at", "amended_from":
 		return str(s.rec[name]), true
 	case "docstatus":
@@ -171,6 +180,25 @@ func (s *scope) lookup(name string) (any, bool) {
 		return "", true
 	}
 	return nil, false
+}
+
+// docVars is the document's fields (not its tables) and system names as one map, for a child row's parent.
+func (s *scope) docVars() map[string]any {
+	out := map[string]any{}
+	for _, f := range s.m.Fields {
+		if f.Type == "table" {
+			continue
+		}
+		if v, ok := s.lookup(f.Name); ok {
+			out[f.Name] = v
+		}
+	}
+	for _, n := range []string{"name", "docstatus"} {
+		if v, ok := s.lookup(n); ok {
+			out[n] = v
+		}
+	}
+	return out
 }
 
 func (s *scope) link(model, name string) *cel.Link {

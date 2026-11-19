@@ -179,7 +179,8 @@
       if (q === null) return undefined;
       var dead = false;
       var t = setTimeout(function () {
-        ctx.api.list(to, { q: q || undefined, filter: pickFilter(ctx, to), limit: 20 }).then(function (r) {
+        var pf = pickFilter(ctx, to), filter = p.filter ? (pf ? "(" + p.filter + ") && " + pf : p.filter) : pf; // a screen slot may narrow it (0069)
+        ctx.api.list(to, { q: q || undefined, filter: filter, limit: 20 }).then(function (r) {
           if (dead) return;
           (r.data || []).forEach(function (x) { ctx.cache.put(to, x); });
           setHits(r.data || []);
@@ -390,7 +391,7 @@
     var hint = p.error ? undefined : p.hint;
     switch (f.type) {
       case "link":
-        return h(LinkInput, { ctx: ctx, field: f, id: id, label: label, required: f.required, value: v, error: p.error, hint: hint, onChange: set });
+        return h(LinkInput, { ctx: ctx, field: f, id: id, label: label, required: f.required, value: v, error: p.error, hint: hint, filter: p.linkFilter, onChange: set });
       case "date":
         return h(R.DatePicker, { key: id + "|" + (v || ""), id: id, label: label, value: v || undefined, today: ctx.meta.today, error: p.error, hint: hint,
           relativeTo: f.relative_to ? rec[f.relative_to] : undefined,

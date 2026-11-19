@@ -1,0 +1,31 @@
+{
+  "about": "Expressions the kernel (kernel/internal/cel, cel_parity_test.go) and the web app's engine.js (test/engine.test.js) must evaluate to the same value: the dialect a paired device needs to compute pos_sale and its promo lines offline (contracts 0058 §10, 0069 §2). Numbers compare as numbers. Avoid int / int division: the kernel divides integers, engine.js does not.",
+  "cases": [
+    {"expr": "1 + 2 * 3", "vars": {}, "want": 7},
+    {"expr": "a > 2 ? 'big' : 'small'", "vars": {"a": 3}, "want": "big"},
+    {"expr": "a > 2 ? 'big' : a > 1 ? 'mid' : 'small'", "vars": {"a": 2}, "want": "mid"},
+    {"expr": "(a == '' ? 0 : 5) + 1", "vars": {"a": ""}, "want": 1},
+    {"expr": "int(7.9)", "vars": {}, "want": 7},
+    {"expr": "int(qty / (b + g))", "vars": {"qty": 5, "b": 2, "g": 1}, "want": 1},
+    {"expr": "min(gross, round(qty * off))", "vars": {"gross": 30000, "qty": 3, "off": 12500}, "want": 30000},
+    {"expr": "max(0, a - b)", "vars": {"a": 5, "b": 8}, "want": 0},
+    {"expr": "min(1, 2, 3)", "vars": {}, "want": 1},
+    {"expr": "17 % 7", "vars": {}, "want": 3},
+    {"expr": "code.upperAscii() == 'HEMAT10'", "vars": {"code": "hemat10"}, "want": true},
+    {"expr": "code.trim().lowerAscii()", "vars": {"code": "  AbC "}, "want": "abc"},
+    {"expr": "days.contains('3')", "vars": {"days": "1,3,5"}, "want": true},
+    {"expr": "items.map(l, l.amount).sum()", "vars": {"items": [{"amount": 1000}, {"amount": 2500}]}, "want": 3500},
+    {"expr": "promo == '' ? 0 : (kind == 'pct' ? round(gross * pct / 100) : (kind == 'off' ? min(gross, round(qty * off)) : round(int(qty / (buy + get)) * get * rate)))",
+     "vars": {"promo": "PRM-0001", "kind": "pct", "gross": 36000, "pct": 20, "qty": 2, "off": 0, "buy": 0, "get": 0, "rate": 18000}, "want": 7200},
+    {"expr": "promo == '' ? 0 : (kind == 'pct' ? round(gross * pct / 100) : (kind == 'off' ? min(gross, round(qty * off)) : round(int(qty / (buy + get)) * get * rate)))",
+     "vars": {"promo": "PRM-0002", "kind": "buy_get", "gross": 90000, "pct": 0, "qty": 5, "off": 0, "buy": 2, "get": 1, "rate": 18000}, "want": 18000},
+    {"expr": "promo == '' ? 0 : (kind == 'pct' ? round(gross * pct / 100) : (kind == 'off' ? min(gross, round(qty * off)) : round(int(qty / (buy + get)) * get * rate)))",
+     "vars": {"promo": "PRM-0002", "kind": "buy_get", "gross": 108000, "pct": 0, "qty": 6, "off": 0, "buy": 2, "get": 1, "rate": 18000}, "want": 36000},
+    {"expr": "promo == '' ? 0 : (kind == 'pct' ? round(gross * pct / 100) : (kind == 'off' ? min(gross, round(qty * off)) : round(int(qty / (buy + get)) * get * rate)))",
+     "vars": {"promo": "PRM-0003", "kind": "off", "gross": 20000, "pct": 0, "qty": 2, "off": 15000, "buy": 0, "get": 0, "rate": 10000}, "want": 20000},
+    {"expr": "promo == '' ? 0 : 1", "vars": {"promo": ""}, "want": 0},
+    {"expr": "max_discount > 0 ? min(max_discount, round(subtotal * pct / 100)) : round(subtotal * pct / 100)",
+     "vars": {"max_discount": 15000, "subtotal": 200000, "pct": 10}, "want": 15000},
+    {"expr": "subtotal < min_spend ? 0 : min(subtotal, amount_off)", "vars": {"subtotal": 40000, "min_spend": 50000, "amount_off": 10000}, "want": 0}
+  ]
+}

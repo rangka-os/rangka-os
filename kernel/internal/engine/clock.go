@@ -10,7 +10,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
-// Clock computes are computed fields whose value depends on the date: they call today() or now(), read
+// Clock computes are computed fields whose value depends on the date: they call today(), now() or clock(), read
 // another clock compute of their record, or read a table whose rows have clock computes. Computes run at
 // save, so the stored value of a clock compute goes stale when the date passes (a certification saved while
 // valid stays expired = false). Reads recompute them: Get, List (before its filter) and dashboards serve the
@@ -44,7 +44,7 @@ func (e *Engine) clockFieldsOf(m *meta.Model, visiting map[*meta.Model]bool) map
 				clock := false
 				switch {
 				case r.Kind == "fn":
-					clock = r.Head == "today" || r.Head == "now"
+					clock = r.Head == "today" || r.Head == "now" || r.Head == "clock"
 				case out[r.Head]:
 					clock = true
 				default:

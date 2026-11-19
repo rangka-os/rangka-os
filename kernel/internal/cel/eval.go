@@ -1,6 +1,7 @@
 package cel
 
 import (
+	"crypto/rand"
 	"fmt"
 	"math"
 	"math/big"
@@ -48,6 +49,7 @@ type Env struct {
 	Vars   func(name string) (any, bool)
 	Today  func() string
 	Now    func() time.Time
+	Loc    *time.Location                        // the site's timezone for clock() (UTC when nil)
 	Option func(field, attr string) (any, error) // option('stage', 'probability')
 	Apps   func(name string) bool                // app_installed('sales')
 }
@@ -929,6 +931,32 @@ func (e *evaluator) call(n *Call, f *frame) (any, error) {
 			t = e.env.Now()
 		}
 		return t.Format(time.RFC3339), nil
+	case "random_code":
+		// random_code(n): n characters from the pairing-code alphabet (no 0/O, 1/I/L; contract 0006 §2) from crypto/rand,
+		// for single-use coupon codes made by a flow (contract 0069 §3). Validators refuse it outside flows.
+		if err := need(1); err != nil {
+			return nil, err
+		}
+		n, ok := toFloat(Unwrap(args[0]))
+		if !ok || n < 1 || n > 32 || n != math.Trunc(n) {
+			return nil, errf("random_code() takes a length from 1 to 32, got %v", args[0])
+		}
+		return randomCode(int(n))
+	case "clock":
+		// clock(): the wall clock of now() in the site's timezone as "HH:MM" (contract 0069 §3), so a time window
+		// such as a happy hour compares as text: clock() >= '14:00' && clock() < '16:00'.
+		if err := need(0); err != nil {
+			return nil, err
+		}
+		t := time.Now()
+		if e.env.Now != nil {
+			t = e.env.Now()
+		}
+		loc := e.env.Loc
+		if loc == nil {
+			loc = time.UTC
+		}
+		return t.In(loc).Format("15:04"), nil
 	case "duration":
 		if err := need(1); err != nil {
 			return nil, err
@@ -1407,4 +1435,25 @@ func AddMonths(d time.Time, n int) time.Time {
 		day = last
 	}
 	return time.Date(first.Year(), first.Month(), day, 0, 0, 0, 0, time.UTC)
+}
+
+// codeAlphabet is the pairing-code alphabet (auth.PairingAlphabet, contract 0006 §2): no 0/O, 1/I/L.
+const codeAlphabet = "ABCDEFGHJKMNPQRSTUVWXYZ23456789"
+
+// randomCode draws n characters of codeAlphabet uniformly (rejection sampling over crypto/rand bytes).
+func randomCode(n int) (any, error) {
+	out := make([]byte, 0, n)
+	buf := make([]byte, 2*n)
+	limit := byte(256 - 256%len(codeAlphabet))
+	for len(out) < n {
+		if _, err := rand.Read(buf); err != nil {
+			return nil, errf("random_code(): %v", err)
+		}
+		for _, b := range buf {
+			if b < limit && len(out) < n {
+				out = append(out, codeAlphabet[int(b)%len(codeAlphabet)])
+			}
+		}
+	}
+	return string(out), nil
 }

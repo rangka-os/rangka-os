@@ -273,6 +273,14 @@
                 },
                 "note": {
                   "$ref": "model.json#/$defs/name"
+                },
+                "amount": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "The line's amount field (a number, may be computed): with summary the cart shows the model's amount per line, so a promo or a gift line reads as the model says (contract 0069 §1)"
+                },
+                "flag": {
+                  "$ref": "model.json#/$defs/name",
+                  "description": "A check field of the line the cashier can switch on a cart line, e.g. a promo's free gift (contract 0069 §1); its label names the switch"
                 }
               }
             },
@@ -294,6 +302,34 @@
                 "$ref": "model.json#/$defs/name"
               },
               "description": "Number fields of the document shown under the cart, in this order, as POST /api/v1/compute answers them; the last one is the total line (contract 0034)"
+            },
+            "checkout": {
+              "type": "array",
+              "maxItems": 6,
+              "items": {
+                "oneOf": [
+                  {
+                    "$ref": "model.json#/$defs/name"
+                  },
+                  {
+                    "type": "object",
+                    "required": [
+                      "field"
+                    ],
+                    "additionalProperties": false,
+                    "properties": {
+                      "field": {
+                        "$ref": "model.json#/$defs/name"
+                      },
+                      "filter": {
+                        "type": "string",
+                        "description": "List filter for a link field's picker (field names of the linked model, CEL, with user and today())"
+                      }
+                    }
+                  }
+                ]
+              },
+              "description": "Plain fields of the document the cashier fills before paying, in this order (contract 0069 §1): a name, or {field, filter} to narrow a link's picker. Link, data, select, check, int, float or currency; not computed, read-only or a table. A link opens a search picker. The values go into the compute call, so the summary follows them live"
             }
           }
         },

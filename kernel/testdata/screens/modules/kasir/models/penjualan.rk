@@ -9,6 +9,9 @@ fields:
   - {name: date, type: date, label: {id: Tanggal}, default: today()}
   - {name: sold_at, type: datetime, label: {id: Waktu jual}}
   - {name: buyer, type: data, label: {id: Pembeli}}
+  - {name: member, type: check, label: {id: Member}}
+  - {name: promo, type: data, label: {id: Kode promo}}
+  - {name: promo_menu, type: link, to: menu, label: {id: Menu promo}}
   - {name: items, type: table, of: penjualan_baris, label: {id: Barang}, min_rows: 1}
   - {name: grand_total, type: currency, label: {id: Total}, compute: "items.map(l, l.amount).sum()", in_list: true}
   - {name: payments, type: table, of: penjualan_bayar, label: {id: Bayar}}

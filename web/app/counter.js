@@ -4,11 +4,15 @@
  *   catalogue {model, filter, title, search, group_by, price, barcode, image, limit}: the items to tap, loaded once
  *     (GET /r/<model>?filter=…&limit=…) and kept in the device cache for offline use; searched on the device; a barcode
  *     typed or scanned into the search box and ended with Enter adds that item.
- *   document {model, lines, line {item, qty, price, note}, total, change, summary, set}: one sale. Prices, discounts,
+ *   document {model, lines, line {item, qty, price, note, amount, flag}, total, change, summary, checkout, set}: one sale. Prices, discounts,
  *     tax and totals are the model's computes. With summary (contract 0034) the cart is sent to POST /compute/<model>
  *     (debounced, and again before the tender opens) and the breakdown, the Bayar amount and the tender use the
  *     model's numbers; without it, or offline, the screen's own sum shows, marked "perkiraan". The receipt panel
- *     shows the server's total and change fields. set: values are fetched again for every sale.
+ *     shows the server's total and change fields. set: values are fetched again for every sale. line.amount: with summary
+ *     each cart line shows the model's amount (a promo, a free gift), the plain qty x price struck through when lower.
+ *     line.flag: a check of the line the cashier switches on a cart line (e.g. a promo's free gift); a flagged line is
+ *     never merged with another. checkout [field | {field, filter}] (contract 0069 §1): fields of the document filled
+ *     before paying (customer, promo, voucher code); they ride in the compute call, so the breakdown follows them.
  *   payments {table, method, amount, methods}: tender. Cash quick amounts (uang pas and round notes), QRIS full or part;
  *     change = cash given - (total - QRIS).
  *   session {model, link, filter, state {field, open, closed}, open [fields], set, close {model, link, fields, set}}:
@@ -34,7 +38,7 @@
   function cartAdd(cart, item) {
     var out = (cart || []).map(function (l) { return Object.assign({}, l); });
     for (var i = 0; i < out.length; i++) {
-      if (out[i].item === item.item && !out[i].note) { out[i].qty += 1; return out; }
+      if (out[i].item === item.item && !out[i].note && !out[i].flag) { out[i].qty += 1; return out; }
     }
     out.push({ key: item.item + "#" + out.length + "#" + Date.now(), item: item.item, title: item.title, price: Number(item.price) || 0, qty: 1, note: "" });
     return out;
@@ -71,17 +75,28 @@
     return c >= due ? c - due : null;
   }
 
-  /** The sale's POST body: document set: values, the session link, the lines and the payment rows by slot names. */
-  function saleBody(slots, cart, pay, sessionName, setDoc, customer) {
+  /** The checkout slot as [{field, filter}] (contract 0069 §1: a name or {field, filter}). */
+  function checkoutSlots(doc) {
+    return ((doc && doc.checkout) || []).map(function (x) { return typeof x === "string" ? { field: x } : { field: x.field, filter: x.filter }; });
+  }
+
+  /** The sale's POST body: document set: values, the session link, the checkout values, the lines and the payment rows
+   *  by slot names. An empty checkout value (or an unticked check) is left out, so the model's default holds. */
+  function saleBody(slots, cart, pay, sessionName, setDoc, customer, checkout) {
     var doc = slots.document, body = {};
     Object.keys(setDoc || {}).forEach(function (k) { body[k] = setDoc[k]; });
     if (slots.session && sessionName) body[slots.session.link] = sessionName;
     if (slots.customer && customer) body[slots.customer.field] = customer;
+    checkoutSlots(doc).forEach(function (c) {
+      var v = (checkout || {})[c.field];
+      if (v !== undefined && v !== null && v !== "" && v !== false) body[c.field] = v;
+    });
     body[doc.lines] = (cart || []).map(function (l) {
       var r = {};
       r[doc.line.item] = l.item;
       r[doc.line.qty] = l.qty;
       if (doc.line.note && l.note) r[doc.line.note] = l.note;
+      if (doc.line.flag && l.flag) r[doc.line.flag] = true;
       return r;
     });
     if (slots.payments && pay) {
@@ -172,6 +187,15 @@
     return out;
   }
 
+  /** The model's amount of cart line i from a computed record (line.amount slot), or null. */
+  function lineAmount(doc, rec, i) {
+    if (!doc || !doc.line || !doc.line.amount || !rec) return null;
+    var rows = rec[doc.lines], row = Array.isArray(rows) ? rows[i] : null;
+    return row && row[doc.line.amount] != null ? Number(row[doc.line.amount]) || 0 : null;
+  }
+
+  RA.checkoutSlots = checkoutSlots;
+  RA.lineAmount = lineAmount;
   RA.balanceFilter = balanceFilter;
   RA.sumBalances = sumBalances;
   RA.summaryRows = summaryRows;
@@ -319,6 +343,9 @@
     var qs = useState(""), q = qs[0], setQ = qs[1];
     var gs = useState(""), group = gs[0], setGroup = gs[1];
     var cus = useState(""), customer = cus[0], setCustomer = cus[1];
+    var cks = useState({}), checkout = cks[0], setCheckout = cks[1]; // checkout slot values (contract 0069 §1)
+    var cko = useState(false), checkoutOpen = cko[0], setCheckoutOpen = cko[1];
+    var ckSlots = checkoutSlots(doc);
     var ps = useState(null), pay = ps[0], setPay = ps[1]; // tender panel {cash, qris}
     var ds = useState(null), done = ds[0], setDone = ds[1]; // last sale {name, total, change, queued}
     var bs = useState(false), busy = bs[0], setBusy = bs[1];
@@ -380,7 +407,7 @@
     var shiftName = session && typeof session === "object" ? session.name : null;
 
     /* ----- the model's numbers for this cart (contract 0034) */
-    function computeBody() { return saleBody(c, cart, null, shiftName, sets.document, customer); }
+    function computeBody() { return saleBody(c, cart, null, shiftName, sets.document, customer, checkout); }
     var calcKey = doc.summary && cart.length ? JSON.stringify(computeBody()) : "";
     function runCompute(key, body) {
       var seq = ++calcSeq.current;
@@ -420,17 +447,17 @@
 
     function hold() {
       if (!cart.length || jobRef.current) return;
-      var next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, cart: cart, total: total }].concat(held).slice(0, 20);
+      var next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, checkout: checkout, cart: cart, total: total }].concat(held).slice(0, 20);
       setHeld(next); writeHeld(hk, next);
-      setCart([]); setCustomer(""); setSheet(false);
+      setCart([]); setCustomer(""); setCheckout({}); setSheet(false);
       ctx.toast("info", "Bill ditahan", customer || rp(total));
     }
     function resume(h0) {
       if (jobRef.current) return;
       var next = held.filter(function (x) { return x.id !== h0.id; });
-      if (cart.length) next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, cart: cart, total: total }].concat(next);
+      if (cart.length) next = [{ id: RA.newKey(), at: new Date().toISOString(), customer: customer, checkout: checkout, cart: cart, total: total }].concat(next);
       setHeld(next); writeHeld(hk, next);
-      setCart(h0.cart); setCustomer(h0.customer || ""); setHeldOpen(false);
+      setCart(h0.cart); setCustomer(h0.customer || ""); setCheckout(h0.checkout || {}); setHeldOpen(false);
     }
 
     function openPay() {
@@ -460,7 +487,7 @@
         var v = x && x.value;
         if (!v || !v.job || jobRef.current) return;
         jobRef.current = { job: v.job, est: v.est };
-        setCart(v.cart || []); setCustomer(v.customer || ""); setStuck(true);
+        setCart(v.cart || []); setCustomer(v.customer || ""); setCheckout(v.checkout || {}); setStuck(true);
       });
     }, [pendingKey]);
     function send(job, est) {
@@ -476,13 +503,13 @@
           estimate: srvChange == null, queued: !!res.queued, approval: !!res.approval });
         loadCatalogue(); // prices may have changed since the screen opened
         loadBalances(); // and the sale moved stock
-        setCart([]); setCustomer(""); setPay(null);
+        setCart([]); setCustomer(""); setCheckout({}); setCheckoutOpen(false); setPay(null);
         if (res.queued) ctx.toast("info", "Belum terkirim", "Transaksi tersimpan di perangkat dan dikirim saat koneksi kembali.");
       }, function (e) {
         sendingRef.current = false;
         if (RA.outboxRetryable(e)) {
           setStuck(true);
-          RA.outbox.cache.put(pendingKey, { job: job, est: est, cart: cart, customer: customer });
+          RA.outbox.cache.put(pendingKey, { job: job, est: est, cart: cart, customer: customer, checkout: checkout });
           return;
         }
         RA.outbox.cache.put(pendingKey, null);
@@ -510,7 +537,7 @@
       var reloaded = p.reload ? p.reload(true).then(function (d) { return (d && d.sets) || sets; }, function () { return sets; }) : Promise.resolve(sets);
       reloaded.then(function (nowSets) {
         var job = RA.outbox.newJob({ scope: scope, screen: s.name, model: doc.model,
-          body: saleBody(c, cart, payRows, shiftName, nowSets.document, customer), submit: c.submit !== false });
+          body: saleBody(c, cart, payRows, shiftName, nowSets.document, customer, checkout), submit: c.submit !== false });
         jobRef.current = { job: job, est: est };
         return send(job, est);
       });
@@ -632,22 +659,60 @@
 
     // tablet landscape: while paying the tender fills the catalogue's place and the order panel keeps the lines, read-only
     var paying = wide && pay && !stuck;
+    // line.amount (0069 §1): the model's amount per line once computed; the plain qty x price struck through when lower
+    var lineMeta = doc.line && ((ctx.meta.models || {})[((docMeta.fields || []).filter(function (f) { return f.name === doc.lines; })[0] || {}).of] || {});
+    var flagField = doc.line && doc.line.flag ? ((lineMeta.fields || []).filter(function (f) { return f.name === doc.line.flag; })[0] || { name: doc.line.flag }) : null;
+    function amountView(l, i) {
+      var plainAmt = Math.round(l.qty * l.price), modelAmt = fresh ? lineAmount(doc, fresh.rec, i) : null;
+      if (modelAmt === null || modelAmt === plainAmt) return h("span", { className: "ap-counter-amt" }, rp(plainAmt));
+      return h("span", { className: "ap-counter-amt promo" }, modelAmt < plainAmt ? h("s", { "aria-label": "Harga awal " + rp(plainAmt) }, rp(plainAmt)) : null,
+        modelAmt === 0 ? "Gratis" : rp(modelAmt));
+    }
     var lines = h("ul", { className: "ap-counter-lines", "aria-label": "Keranjang" }, cart.map(function (l, i) {
       return h("li", { key: l.key },
         h("div", { className: "ap-counter-line" },
           h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
-            l.note ? h("small", null, l.note) : doc.line && doc.line.note ? h("small", { className: "ap-counter-addnote" }, "+ catatan") : null,
+            l.note ? h("small", null, l.note) : doc.line && (doc.line.note || doc.line.flag) ? h("small", { className: "ap-counter-addnote" }, doc.line.note ? "+ catatan" : "+ pilihan") : null,
             h("small", { className: "ap-counter-unit" }, rp(l.price))),
           h("div", { className: "ap-counter-qty" },
             h("button", { type: "button", "aria-label": "Kurangi " + l.title, onClick: function () { setLine(i, { qty: l.qty - 1 }); } }, "−"),
             h("b", null, l.qty),
             h("button", { type: "button", "aria-label": "Tambah " + l.title, onClick: function () { setLine(i, { qty: l.qty + 1 }); } }, "+")),
-          h("span", { className: "ap-counter-amt" }, rp(l.qty * l.price))),
+          amountView(l, i)),
+        // the switch shows on a line the cashier opened (tap its name, like the note) or one already switched on
+        flagField && (l.flag || noteLine === i) ? h("button", { type: "button", className: "ap-counter-flag", "aria-pressed": l.flag ? "true" : "false",
+          onClick: function () { setLine(i, { flag: !l.flag }); } }, h(R.Icon, { name: l.flag ? "check" : "add" }), L(flagField.label) || flagField.name) : null,
         noteLine === i && doc.line.note ? h("input", { className: "ap-counter-note", "aria-label": "Catatan " + l.title, placeholder: "Catatan, misalnya kurang manis",
           value: l.note, autoFocus: true, onChange: function (e) { setLine(i, { note: e.target.value }); }, onKeyDown: function (e) { if (e.key === "Enter") setNoteLine(null); } }) : null);
     }));
 
-    var rows = fresh ? summaryRows(doc.summary, docMeta.fields, fresh.rec) : [];
+    // checkout (0069 §1): customer, promo, voucher code; folded to one line until opened (a filled value keeps it open)
+    function setCk(n, v) { if (jobRef.current) return; var x = Object.assign({}, checkout); x[n] = v; setCheckout(x); }
+    // a field whose depends_on is false (its module not installed) is not offered, as on the form
+    function fieldShown(f) {
+      if (!f.depends_on || !ctx.eng) return true;
+      try { return !!ctx.eng.evaluate(f.depends_on, ctx.eng.scopeFor(doc.model, checkout)); } catch (e) { return true; }
+    }
+    var ckFields = ckSlots.map(function (sl) { return { slot: sl, f: (docMeta.fields || []).filter(function (f) { return f.name === sl.field; })[0] }; })
+      .filter(function (x) { return x.f && fieldShown(x.f); });
+    var ckFilled = ckFields.filter(function (x) { var v = checkout[x.f.name]; return v !== undefined && v !== null && v !== "" && v !== false; });
+    var ckTitle = ckFields.map(function (x) { return L(x.f.label) || x.f.name; }).join(" · ");
+    var checkoutBox = ckFields.length && cart.length && !(pay && !stuck) ? h("section", { className: "ap-counter-checkout" + (checkoutOpen ? " open" : ""), "aria-label": "Sebelum bayar" },
+      h("button", { type: "button", className: "ap-counter-ck-h", "aria-expanded": checkoutOpen ? "true" : "false", disabled: stuck, onClick: function () { setCheckoutOpen(!checkoutOpen); } },
+        h(R.Icon, { name: "tag" }), h("span", null, checkoutOpen || !ckFilled.length ? ckTitle : ckFilled.map(function (x) {
+          var v = checkout[x.f.name];
+          return x.f.type === "link" && ctx.cache && ctx.cache.title ? ctx.cache.title(x.f.to, v) || v : x.f.type === "check" ? L(x.f.label) : String(v);
+        }).join(" · ")), ckFilled.length && !checkoutOpen ? h("b", null, ckFilled.length) : null, h(R.Icon, { name: "down" })),
+      checkoutOpen ? h("div", { className: "ap-work-fields ap-counter-ck-f" }, ckFields.map(function (x) {
+        return h(RA.FieldEditor, { key: x.f.name, ctx: ctx, model: doc.model, field: x.f, rec: checkout, linkFilter: x.slot.filter, readOnly: stuck,
+          onChange: function (n, v) { setCk(n, x.f.type === "data" && typeof v === "string" ? v : v); } });
+      })) : null) : null;
+    // a summary field whose depends_on is false (e.g. a promo total without the promo module) is left out too
+    var sumNames = (doc.summary || []).filter(function (n, i, all) {
+      var f = (docMeta.fields || []).filter(function (x) { return x.name === n; })[0];
+      return i === all.length - 1 || !f || fieldShown(f);
+    });
+    var rows = fresh ? summaryRows(sumNames, docMeta.fields, fresh.rec) : [];
     var summary = cart.length ? h("dl", { className: "ap-counter-sum", "aria-label": "Rincian", "aria-busy": doc.summary && !fresh && !(calc && calc.failed) ? "true" : "false" },
       rows.length ? rows.map(function (r, i) {
         var last = i === rows.length - 1;
@@ -712,10 +777,10 @@
       pay && !stuck ? (paying ? h("div", { className: "ap-counter-body" }, h("ul", { className: "ap-counter-lines ap-counter-paidlines", "aria-label": "Pesanan dibayar" },
         cart.map(function (l) {
           return h("li", { key: l.key }, h("div", { className: "ap-counter-line" },
-            h("span", { className: "ap-counter-line-t" }, l.qty + "× " + l.title, l.note ? h("small", null, l.note) : null), h("span", { className: "ap-counter-amt" }, rp(l.qty * l.price))));
+            h("span", { className: "ap-counter-line-t" }, l.qty + "× " + l.title, l.note ? h("small", null, l.note) : null), amountView(l, cart.indexOf(l))));
         }))) : null) : h("div", { className: "ap-counter-body" }, cart.length ? lines : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
-      paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
+      paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, checkoutBox, summary,
         h("div", { className: "ap-counter-row" },
           c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
           h(R.Button, { variant: "primary", size: "lg", className: "ap-counter-paybtn", loading: busy && !pay, onClick: openPay, "aria-label": "Bayar " + rp(total) },

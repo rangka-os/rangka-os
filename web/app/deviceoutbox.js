@@ -96,7 +96,8 @@
 
   /**
    * The sync pill (0058 §9): {tone: ok | warn | busy | bad | off, text, queued, rejected}.
-   * st: {events, device, online, offlineSince, sending: {done, total} | null, stopped: kind | null}
+   * st: {events, device, online, offlineSince, sending: {done, total} | null, stopped: kind | null, durable: false when the
+ * queue lives in memory only (no IndexedDB: lost when the page closes)}
    */
   function pillState(st) {
     var mine = (st.events || []).filter(function (e) { return e.device === st.device; });
@@ -104,8 +105,10 @@
     var rejected = mine.filter(function (e) { return e.state === "rejected"; }).length;
     var out = { queued: queued, rejected: rejected };
     if (st.stopped === "revoked") return Object.assign(out, { tone: "bad", text: "Perangkat dicabut · " + queued + " antre" });
-    if (st.stopped === "unpaired") return Object.assign(out, { tone: "bad", text: "Buka kunci dulu · " + queued + " antre" });
+    if (st.stopped === "unpaired") return Object.assign(out, { tone: "bad", text: "Buka kunci kasir untuk mengirim · " + queued + " antre" });
     if (st.stopped === "outdated") return Object.assign(out, { tone: "bad", text: "Perbarui aplikasi · " + queued + " antre" });
+    if (st.stopped === "halt") return Object.assign(out, { tone: "bad", text: "Kiriman ditolak server · " + queued + " antre" });
+    if (st.durable === false) return Object.assign(out, { tone: "bad", text: "Antrean tidak tersimpan permanen · " + queued + " antre" });
     if (rejected) return Object.assign(out, { tone: "bad", text: rejected + " ditolak" + (queued ? " · " + queued + " antre" : "") });
     if (st.sending && st.sending.total) return Object.assign(out, { tone: "busy", text: "Mengirim " + st.sending.done + " dari " + st.sending.total + "…" });
     if (!st.online) {
@@ -151,7 +154,7 @@
     eventLabel: eventLabel, deviceDocName: deviceDocName, wire: wire, KINDS: KINDS, MAX_BATCH: MAX_BATCH };
 
   /* ================================================================ storage */
-  var DB = "rangka-device", mem = { events: {}, meta: {} }, dbp = null;
+  var DB = "rangka-device", mem = { events: {}, meta: {} }, dbp = null, durable = null;
   function idb() {
     if (dbp) return dbp;
     dbp = new Promise(function (resolve) {
@@ -167,7 +170,7 @@
         req.onerror = function () { resolve(null); };
         req.onblocked = function () { resolve(null); };
       } catch (e) { resolve(null); }
-    });
+    }).then(function (db) { durable = !!db; return db; });
     return dbp;
   }
   /** fn(stores | null) inside one transaction over the named stores; resolves what fn returned (a request's result). */
@@ -239,7 +242,7 @@
 
   function snapshot() {
     return Promise.all([allEvents(), getMeta("device")]).then(function (x) {
-      return { events: x[0], device: x[1], status: Object.assign({}, status) };
+      return { events: x[0], device: x[1], status: Object.assign({ durable: durable }, status) };
     });
   }
   function emit() {
@@ -321,6 +324,11 @@
           out.stopped = k;
           if (k === "retry") { status.failures++; if (err.status === 0) setOnline(false); } else status.stopped = k;
           status.lastError = err.message;
+          // revoked (0058 §2): no one may unlock this device offline any more; the queue stays for head office
+          if (k === "revoked") {
+            return Promise.all([setMeta("verifiers", []), setMeta("actor", null), setMeta("staff", null),
+              setMeta("device", Object.assign({}, dev, { unpaired: "revoked" }))]).then(function () { return out; });
+          }
           return out;
         });
       });
@@ -358,11 +366,15 @@
     flush: flush,
     list: allEvents,
     snapshot: snapshot,
-    status: function () { return Object.assign({}, status); },
+    status: function () { return Object.assign({ durable: durable }, status); },
+    /** true when the queue is in IndexedDB, false when it lives in memory only, null before the first use. */
+    durable: function () { return idb().then(function () { return durable; }); },
     dismiss: function (key) {
       return allEvents().then(function (evs) {
         var e = evs.filter(function (x) { return x.key === key; })[0];
-        if (!e || e.state === "queued") return null; // a queued event is never dropped by hand: it is money
+        // a queued event is never dropped by hand (it is money), nor a refused write (a sale or a void head office
+        // must see): only acknowledgements (print.*, device.read) can be put away
+        if (!e || e.state === "queued" || e.kind === "screen.write") return null;
         return delEvent(key);
       }).then(function () { emit(); });
     },
@@ -391,6 +403,6 @@
         if (global.removeEventListener) { global.removeEventListener("online", onOnline); global.removeEventListener("offline", onOffline); }
       };
     },
-    _reset: function () { startOpts = null; mem = { events: {}, meta: {} }; status = { online: true, offlineSince: null, sending: null, stopped: null, failures: 0, lastTry: null, lastOk: null }; flushing = null; }
+    _reset: function () { startOpts = null; durable = null; dbp = null; mem = { events: {}, meta: {} }; status = { online: true, offlineSince: null, sending: null, stopped: null, failures: 0, lastTry: null, lastOk: null }; flushing = null; }
   };
 })(typeof window !== "undefined" ? window : self);

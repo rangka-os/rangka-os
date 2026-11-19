@@ -22,6 +22,46 @@ test("escpos: the receipt is byte for byte what rangka-edge prints (80 mm, 58 mm
   assert.strictEqual(hex(E.receipt(Object.assign({}, FIX.job, { copy: true }), 48)), FIX.copy48);
 });
 
+test("escpos: odd values print as rangka-edge prints them (tie rounding, invalid date, a rate that is not a number)", () => {
+  const E = load().escpos;
+  assert.strictEqual(hex(E.receipt(FIX.odd_job, 32)), FIX.odd32);
+  assert.deepStrictEqual([0.0625, 0.0375, 0.0005, 1.0005, 2.0625].map((n) => E.number(n)), ["0,062", "0,037", "0,001", "1", "2,062"]);
+  assert.strictEqual(E.date("2026-02-30"), "2026-02-30");
+  assert.strictEqual(E.date("2026-13-01"), "2026-13-01");
+  assert.strictEqual(E.number("12abc"), "0");
+});
+
+test("drawer: cash only, once per receipt on the device, never a copy, a void or the browser dialog", () => {
+  const P = load().printerPure;
+  const s = { drawer: true, transport: "serial" };
+  const job = (pays, o) => Object.assign({ job_id: "S1:receipt", doc: { docstatus: 1, payments: pays } }, o || {});
+  const cash = [{ method: "cash", amount: 1 }];
+  assert.strictEqual(P.drawerKick(s, job(cash), []), true);
+  assert.strictEqual(P.drawerKick(s, job(cash), ["S1:receipt"]), false, "the same receipt again");
+  for (const m of ["debit", "credit", "transfer", "ewallet", "qris", "other"]) assert.strictEqual(P.drawerKick(s, job([{ method: m, amount: 1 }]), []), false, m);
+  assert.strictEqual(P.drawerKick(s, job([]), []), false, "no payment recorded");
+  assert.strictEqual(P.drawerKick(s, job([{ method: "qris" }, { method: "cash" }]), []), true, "part cash");
+  assert.strictEqual(P.drawerKick(s, job(cash, { copy: true }), []), false);
+  assert.strictEqual(P.drawerKick(s, job(cash, { doc: { docstatus: 2, payments: cash } }), []), false, "a void");
+  assert.strictEqual(P.drawerKick({ drawer: true, transport: "browser" }, job(cash), []), false);
+  assert.strictEqual(P.drawerKick({ drawer: false, transport: "serial" }, job(cash), []), false);
+});
+
+test("drawer: the second print of the same receipt over serial does not kick", async () => {
+  const written = [];
+  const portObj = { writable: { getWriter: () => ({ write: (b) => { written.push(b); return Promise.resolve(); }, releaseLock() {} }) } };
+  const nav = { serial: { getPorts: () => Promise.resolve([portObj]) } };
+  const A = load();
+  const doc = Object.assign({}, FIX.job.doc, { payments: [{ method: "cash", amount: 70000 }] });
+  await A.printer.print({ doc }, { nav, settings: { transport: "serial", drawer: true } });
+  await A.printer.print({ doc }, { nav, settings: { transport: "serial", drawer: true } });
+  assert.ok(hex(written[0]).endsWith("1b700019fa"));
+  assert.ok(!hex(written[1]).endsWith("1b700019fa"));
+  const card = Object.assign({}, doc, { name: "STRK-2", payments: [{ method: "debit", amount: 70000 }] });
+  await A.printer.print({ doc: card }, { nav, settings: { transport: "serial", drawer: true } });
+  assert.ok(!hex(written[2]).endsWith("1b700019fa"), "a card payment");
+});
+
 test("escpos: the drawer kick only for a paid first print; a void prints BATAL", () => {
   const E = load().escpos;
   const kick = "1b700019fa";

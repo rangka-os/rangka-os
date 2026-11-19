@@ -41,7 +41,10 @@ test("verifiers: only the last 14 days; one per person; offlineStaff lists only 
   assert.deepStrictEqual(plain(P.keepVerifiers(list, now).map((x) => x.user)), [1, 3]);
   assert.deepStrictEqual(plain(P.putVerifier(list, v(1, 0)).filter((x) => x.user === 1).length), 1);
   const staff = [{ id: 1, name: "Sari" }, { id: 2, name: "Budi" }, { id: 4, name: "Rina" }];
-  assert.deepStrictEqual(plain(P.offlineStaff(staff, list, now).map((s) => s.id)), [1, 3], "Budi's verifier is too old, Rina never unlocked here");
+  assert.deepStrictEqual(plain(P.offlineStaff(staff, list, now).map((s) => s.id)), [1], "Budi's verifier is too old, Rina never unlocked here, 3 is not on the staff list");
+  assert.deepStrictEqual(plain(P.pruneVerifiers(list, [{ id: 1 }, { id: 2 }]).map((x) => x.user)), [1, 2]);
+  assert.ok(P.unreachable({ status: 0 }) && P.unreachable({ status: 502 }) && P.unreachable({ status: 504 }) && !P.unreachable({ status: 401 }));
+  assert.ok(P.unpaired({ status: 401, code: "device_revoked" }) && P.unpaired({ status: 401, code: "unauthenticated" }) && !P.unpaired({ status: 401, code: "pin_wrong" }));
 });
 
 test("makeVerifier / checkVerifier: PBKDF2 with its own salt; the right PIN only", async () => {
@@ -104,4 +107,88 @@ test("a kernel lock-out drops the verifier on the device too", async () => {
   locked = true;
   await assert.rejects(A.device.unlock({ id: 7, name: "Sari" }, "4321"), (e) => e.code === "pin_locked");
   assert.strictEqual((await A.deviceOutbox.getMeta("verifiers")).length, 0);
+});
+
+// a kernel that knows Sari (id 7) with PIN 2468 until told otherwise
+function kernel() {
+  const k = { mode: "up", staff: [{ id: 7, name: "Sari", role: "cashier" }], pin: "2468" };
+  k.fetch = (url, init) => {
+    if (k.mode === "down") return Promise.reject(new TypeError("Failed to fetch"));
+    if (k.mode === "proxy") return reply(502, { error: { code: "bad_gateway", message: "Bad Gateway" } });
+    if (k.mode === "revoked") return reply(401, { error: { code: "device_revoked", message: "Perangkat ini sudah dicabut." } });
+    if (url === "/auth/device/staff") return reply(200, k.staff);
+    if (url === "/auth/device/unlock") {
+      const b = JSON.parse(init.body);
+      return k.staff.some((s) => s.id === b.user) && b.pin === k.pin ? reply(200, { user: { id: b.user } }) : reply(401, { error: { code: "pin_wrong", message: "PIN salah" } });
+    }
+    return reply(404, null);
+  };
+  return k;
+}
+async function unlockedOnce(k) {
+  const A = load((u, i) => k.fetch(u, i));
+  await A.deviceOutbox.setDevice({ device_id: "dev_1", code: "K1", outlet: "BTR" });
+  await A.device.staff();
+  await A.device.unlock({ id: 7, name: "Sari" }, "2468");
+  assert.strictEqual((await A.deviceOutbox.getMeta("verifiers")).length, 1);
+  return A;
+}
+
+test("a cashier removed from the outlet (or whose PIN was cleared) cannot unlock offline after the next online staff pull", async () => {
+  const k = kernel();
+  const A = await unlockedOnce(k);
+  k.staff = []; // the owner removed Sari, or cleared her PIN: the kernel stops listing her
+  const st = await A.device.staff();
+  assert.deepStrictEqual(plain(st.list), []);
+  assert.strictEqual((await A.deviceOutbox.getMeta("verifiers")).length, 0, "her verifier is dropped");
+  k.mode = "down";
+  const off = await A.device.staff();
+  assert.deepStrictEqual(plain(off.list), []);
+  await assert.rejects(A.device.unlock({ id: 7, name: "Sari" }, "2468"), (e) => e.code === "offline_unknown");
+});
+
+test("any kernel refusal of an online unlock drops that person's verifier (the kernel says pin_wrong for a cleared PIN too)", async () => {
+  const k = kernel();
+  const A = await unlockedOnce(k);
+  k.pin = "1357"; // the PIN was changed or cleared: the old one is refused online
+  await assert.rejects(A.device.unlock({ id: 7, name: "Sari" }, "2468"), (e) => e.code === "pin_wrong");
+  assert.strictEqual((await A.deviceOutbox.getMeta("verifiers")).length, 0);
+  k.mode = "down";
+  await assert.rejects(A.device.unlock({ id: 7, name: "Sari" }, "2468"), (e) => e.code === "offline_unknown");
+});
+
+test("a revoked device keeps no verifier, no cashier and asks to be paired again; the queue stays", async () => {
+  const k = kernel();
+  const A = await unlockedOnce(k);
+  await A.deviceOutbox.enqueue({ kind: "print.done", actor: 7, payload: { name: "S1" } });
+  k.mode = "revoked";
+  await assert.rejects(A.device.staff(), (e) => e.code === "device_revoked");
+  assert.deepStrictEqual(plain(await A.deviceOutbox.getMeta("verifiers")), []);
+  assert.strictEqual(await A.deviceOutbox.getMeta("actor"), null);
+  assert.strictEqual((await A.deviceOutbox.getDevice()).unpaired, "revoked");
+  k.mode = "down";
+  await assert.rejects(A.device.unlock({ id: 7, name: "Sari" }, "2468"), (e) => e.code === "offline_unknown", "offline after revoke: refused");
+  await A.device.forget();
+  assert.strictEqual(await A.deviceOutbox.getDevice(), null);
+  assert.strictEqual((await A.deviceOutbox.list()).length, 1, "the unsent event is kept");
+});
+
+test("a proxy answering 502 while the kernel is down counts as offline", async () => {
+  const k = kernel();
+  const A = await unlockedOnce(k);
+  k.mode = "proxy";
+  const st = await A.device.staff();
+  assert.strictEqual(st.online, false);
+  const r = await A.device.unlock({ id: 7, name: "Sari" }, "2468");
+  assert.strictEqual(r.online, false);
+});
+
+test("pairing again starts with no verifiers, cashier or staff from the earlier device", async () => {
+  const k = kernel();
+  const A = await unlockedOnce(k);
+  k.fetch = () => reply(201, { device_id: "dev_2", code: "K2", outlet: "BTR" });
+  await A.device.pair("K7Q2M9XD", "");
+  assert.deepStrictEqual(plain(await A.deviceOutbox.getMeta("verifiers")), []);
+  assert.strictEqual(await A.deviceOutbox.getMeta("actor"), null);
+  assert.strictEqual((await A.deviceOutbox.getDevice()).device_id, "dev_2");
 });

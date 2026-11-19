@@ -5,7 +5,8 @@
  * "Mengirim 3 dari 8…", "2 ditolak". It turns to "semua terkirim" only when the kernel answered accepted or duplicate
  * for every event of this device. Tapping it opens the queue: each event with its time, cashier, what it is and its
  * state (antre, terkirim, ditolak with the kernel's reason), "Kirim sekarang", and the time of the last complete data
- * pull. A rejected event can be put away ("Sembunyikan") once head office has seen it; a queued one never.
+ * pull. A rejected acknowledgement (print.*, device.read) can be put away ("Sembunyikan"); a queued event or a refused
+ * write (a sale, a void) never.
  *
  * The page also starts the queue's sender (every 15 s, at reconnect, Background Sync via sw.js).
  * RangkaApp.syncPill.open() opens the panel from elsewhere (Perangkat › Antrean kirim).
@@ -53,14 +54,16 @@
       });
     }, []);
     var events = snap.events.slice().reverse();
-    var pill = P.pillState({ events: snap.events, device: dev && dev.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: st.stopped });
+    var pill = P.pillState({ events: snap.events, device: dev && dev.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: st.stopped, durable: st.durable });
     function send() { setBusy(true); RA.deviceOutbox.flush().then(function () { setBusy(false); }, function () { setBusy(false); }); }
     var footer = h("div", { className: "ap-sync-foot" },
       h("span", { className: "ap-dev-muted" }, "Data referensi: " + (meta.pulled ? "terakhir " + hhmm(meta.pulled) : "belum ditarik")),
       h(R.Button, { variant: "primary", loading: busy, disabled: busy || !pill.queued, onClick: send }, "Kirim sekarang"));
     return h(R.Drawer, { open: true, title: "Antrean kirim", subtitle: pill.text + (dev ? " · Perangkat " + dev.code : ""), onClose: p.onClose, footer: footer },
       st.stopped === "revoked" ? h(R.Alert, { tone: "bad", title: "Perangkat ini dicabut pemilik" }, "Antrean tetap tersimpan. Hubungi pemilik sebelum menghapus data browser.") : null,
-      st.stopped === "unpaired" ? h(R.Alert, { tone: "warn", title: "Sesi perangkat berakhir" }, h("a", { href: "#/pasang" }, "Buka kunci lagi"), " supaya antrean bisa dikirim.") : null,
+      st.stopped === "unpaired" ? h(R.Alert, { tone: "warn", title: "Perlu kasir yang membuka kunci" }, "Antrean dikirim atas nama kasir. ", h("a", { href: "#/pasang" }, "Buka kunci kasir"), " supaya antrean bisa dikirim.") : null,
+      st.stopped === "halt" ? h(R.Alert, { tone: "bad", title: "Server menolak kiriman" }, (st.lastError || "") + " Antrean tetap tersimpan.") : null,
+      st.durable === false ? h(R.Alert, { tone: "bad", title: "Antrean tidak tersimpan permanen" }, "Browser ini tidak menyediakan penyimpanan. Jangan tutup halaman sampai semua terkirim.") : null,
       st.stopped === "outdated" ? h(R.Alert, { tone: "warn", title: "Aplikasi perlu diperbarui" }, "Muat ulang halaman saat online.") : null,
       events.length ? h("ul", { className: "ap-sync-list" }, events.map(function (e) {
         var w = STATE_WORDS[e.state] || [e.state, "neutral"], other = dev && e.device !== dev.device_id;
@@ -71,7 +74,7 @@
             e.state === "rejected" ? h("small", { className: "ap-sync-why" }, e.message + (e.code ? " (" + e.code + ")" : "")) : null),
           h("div", { className: "ap-sync-side" },
             h(R.Lozenge, { tone: w[1] }, w[0]),
-            e.state === "rejected" ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { RA.deviceOutbox.dismiss(e.key); } }, "Sembunyikan") : null));
+            e.state === "rejected" && e.kind !== "screen.write" ? h(R.Button, { size: "sm", variant: "quiet", onClick: function () { RA.deviceOutbox.dismiss(e.key); } }, "Sembunyikan") : null));
       })) : h("p", { className: "ap-dev-muted" }, "Belum ada transaksi dari perangkat ini."));
   }
 
@@ -88,7 +91,7 @@
     useEffect(function () { global.document.documentElement.classList.toggle("ap-sync-on", paired); }, [paired]);
     if (!paired) return null;
     var st = snap.status;
-    var pill = P.pillState({ events: snap.events, device: snap.device.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: st.stopped });
+    var pill = P.pillState({ events: snap.events, device: snap.device.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: st.stopped, durable: st.durable });
     return h(React.Fragment, null,
       open ? null : h("button", { type: "button", className: "ap-sync-pill " + pill.tone, onClick: function () { setOpen(true); }, "aria-haspopup": "dialog",
         "aria-label": "Status kirim: " + pill.text + ". Buka antrean." },

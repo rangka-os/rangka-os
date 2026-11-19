@@ -16,7 +16,10 @@
  * {job_id, model, name, layout, transport, error?}. For "edge", rangka-edge reports its own tries only when it is
  * registered; the browser reports what the endpoint answered (spooled counts as done for the browser's part).
  *
- * Pure helpers (test/printer.test.js): available, normalizeSettings, jobId, edgeRequest, receiptHtml.
+ * The drawer opens only for a receipt paid in cash, printed the first time on this device (localStorage
+ * "rangka-printer-kicked" keeps the job ids that kicked it), never for a copy, a void, a card or QRIS payment.
+ *
+ * Pure helpers (test/printer.test.js): available, normalizeSettings, paidCash, drawerKick, jobId, edgeRequest, receiptHtml.
  */
 (function (global) {
   "use strict";
@@ -46,6 +49,21 @@
       edgeToken: typeof s.edgeToken === "string" ? s.edgeToken : "",
       label: typeof s.label === "string" ? s.label : ""
     };
+  }
+
+  /** true when the sale took cash: a payment with method "cash" (card, transfer, e-wallet, QRIS never open the drawer). */
+  function paidCash(doc) {
+    return ((doc && doc.payments) || []).some(function (p) { return p && p.method === "cash"; });
+  }
+
+  /**
+   * Whether this print opens the drawer: the setting is on, the transport can kick it, the receipt is paid in cash,
+   * not a copy, and this receipt has not opened it before on this device (kicked: job ids that did), as rangka-edge's
+   * DrawerKick (first try only).
+   */
+  function drawerKick(settings, job, kicked) {
+    return !!settings.drawer && settings.transport !== "browser" && !job.copy && paidCash(job.doc) &&
+      String((job.doc && job.doc.docstatus) == null ? "1" : job.doc.docstatus) === "1" && (kicked || []).indexOf(job.job_id) < 0;
   }
 
   /** The print job id: the sale's name and the layout, plus "copy-<n>" for a reprint (rangka-edge prints an id once). */
@@ -80,13 +98,23 @@
       "pre{margin:0;white-space:pre}</style></head><body><pre>" + esc(text.replace(/\n+$/, "")) + "</pre></body></html>";
   }
 
-  RA.printerPure = { available: available, normalizeSettings: normalizeSettings, jobId: jobId, edgeRequest: edgeRequest, receiptHtml: receiptHtml,
+  RA.printerPure = { available: available, normalizeSettings: normalizeSettings, jobId: jobId, paidCash: paidCash, drawerKick: drawerKick, edgeRequest: edgeRequest, receiptHtml: receiptHtml,
     TRANSPORTS: TRANSPORTS, BLE_SERVICES: BLE_SERVICES };
 
   /* ================================================================ settings */
   function load() {
     try { return normalizeSettings(JSON.parse(global.localStorage.getItem(KEY) || "null")); } catch (e) { return normalizeSettings(null); }
   }
+  // receipts that opened the drawer on this device (job ids, newest last, at most 500)
+  var KICKED = "rangka-printer-kicked";
+  function kickedList() {
+    try { var v = JSON.parse(global.localStorage.getItem(KICKED) || "[]"); return Array.isArray(v) ? v : []; } catch (e) { return []; }
+  }
+  function rememberKick(id) {
+    var v = kickedList().filter(function (x) { return x !== id; }).concat([id]).slice(-500);
+    try { global.localStorage.setItem(KICKED, JSON.stringify(v)); } catch (e) { /* private mode */ }
+  }
+
   function save(s) {
     var v = normalizeSettings(s);
     try { global.localStorage.setItem(KEY, JSON.stringify(v)); } catch (e) { /* private mode: kept for this page only */ }
@@ -202,16 +230,16 @@
     /**
      * Prints a receipt. job: {doc (the pos_sale record), header?, outlet_name?, copy?, copyN?, model?, layout?}; opts:
      * {actor?, settings?, fetch?, nav?, document?}. The drawer opens when the settings say so and the sale is paid in
-     * cash (never for a copy). Resolves {ok, transport, job_id}; rejects with the reason, after queueing print.failed.
+     * cash, once per receipt on this device (never for a copy, a void, a card or QRIS payment). Resolves {ok, transport, job_id}; rejects with the reason, after queueing print.failed.
      */
     print: function (job, opts) {
       opts = opts || {};
       var s = normalizeSettings(opts.settings || load()), nav = opts.nav || global.navigator || {};
-      var pays = (job.doc && job.doc.payments) || [];
-      var cash = !pays.length || pays.some(function (p) { return p && p.method !== "qris"; });
       var j = Object.assign({ layout: "receipt", model: "pos_sale" }, job);
       j.job_id = j.job_id || jobId(j.doc && j.doc.name, j.layout, j.copy ? j.copyN || 1 : 0);
-      j.drawer = s.drawer && cash && !j.copy && s.transport !== "browser";
+      j.drawer = drawerKick(s, j, kickedList());
+      // remembered before the bytes go out: a print that fails after the kick must not kick again on the retry
+      if (j.drawer) rememberKick(j.job_id);
       var p;
       switch (s.transport) {
         case "edge": p = edgeWrite(opts.fetch || (global.fetch && global.fetch.bind(global)), s, j); break;

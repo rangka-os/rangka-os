@@ -154,7 +154,7 @@ test("no connection: the device is offline since the failure, the queue waits", 
   assert.strictEqual(A.deviceOutbox.status().online, true);
 });
 
-test("rejected: kept with the kernel's words, never sent again, the rest of the batch still goes; dismiss drops it", async () => {
+test("rejected: kept with the kernel's words, never sent again, the rest of the batch still goes; a refused sale stays", async () => {
   const A = load();
   await paired(A);
   await A.deviceOutbox.enqueue(sale(1, { reject: true }));
@@ -168,15 +168,38 @@ test("rejected: kept with the kernel's words, never sent again, the rest of the 
   assert.strictEqual(k.requests.length, 1, "a rejected event is not resent");
   await A.deviceOutbox.dismiss(evs[0].key);
   evs = await A.deviceOutbox.list();
-  assert.deepStrictEqual(plain(evs.map((e) => e.key)), [ok.key]);
+  assert.strictEqual(evs.length, 2, "a refused sale cannot be hidden: head office must see it");
+  assert.ok(evs.some((e) => e.key === ok.key));
 });
 
-test("dismiss never drops a queued event", async () => {
+test("dismiss never drops a queued event nor a refused sale; a refused print acknowledgement can go", async () => {
   const A = load();
   await paired(A);
   const e = await A.deviceOutbox.enqueue(sale(1));
   await A.deviceOutbox.dismiss(e.key);
   assert.strictEqual((await A.deviceOutbox.list()).length, 1);
+  await A.deviceOutbox.enqueue(sale(2, { reject: true }));
+  await A.deviceOutbox.enqueue({ kind: "print.done", actor: 12, payload: { name: "S3", reject: true } });
+  await A.deviceOutbox.flush({ fetch: fakeKernel().fetch });
+  const rej = (await A.deviceOutbox.list()).filter((x) => x.state === "rejected");
+  assert.deepStrictEqual(plain(rej.map((x) => x.kind)), ["screen.write", "print.done"]);
+  for (const x of rej) await A.deviceOutbox.dismiss(x.key);
+  assert.deepStrictEqual(plain((await A.deviceOutbox.list()).filter((x) => x.state === "rejected").map((x) => x.kind)), ["screen.write"]);
+});
+
+test("revoked while sending: verifiers, cashier and staff are dropped and the device is marked for pairing again", async () => {
+  const A = load();
+  await paired(A);
+  await A.deviceOutbox.setMeta("verifiers", [{ user: 12 }]);
+  await A.deviceOutbox.setMeta("actor", { user: 12 });
+  await A.deviceOutbox.enqueue(sale(1));
+  const k = fakeKernel();
+  k.fails.push(401);
+  await A.deviceOutbox.flush({ fetch: k.fetch });
+  assert.deepStrictEqual(plain(await A.deviceOutbox.getMeta("verifiers")), []);
+  assert.strictEqual(await A.deviceOutbox.getMeta("actor"), null);
+  assert.strictEqual((await A.deviceOutbox.getDevice()).unpaired, "revoked");
+  assert.strictEqual((await A.deviceOutbox.list())[0].state, "queued");
 });
 
 test("revoked: sending stops, the queue is kept; another device id's events are never sent", async () => {
@@ -188,7 +211,7 @@ test("revoked: sending stops, the queue is kept; another device id's events are 
   const r = await A.deviceOutbox.flush({ fetch: k.fetch });
   assert.strictEqual(r.stopped, "revoked");
   assert.strictEqual(A.deviceOutbox.status().stopped, "revoked");
-  // paired again: a new device id; the old event stays for the panel and is not sent with the new cookie
+  // paired again (the device record is set anew): a new device id; the old event stays for the panel and is not sent with the new cookie
   await A.deviceOutbox.setDevice({ device_id: "dev_bbb", code: "K2", outlet: "BTR" });
   const r2 = await A.deviceOutbox.flush({ fetch: k.fetch });
   assert.strictEqual(r2.sent, 0);
@@ -227,6 +250,8 @@ test("pillState: the words of 0058 §9", () => {
   assert.strictEqual(P.pillState({ events: q(2, "rejected"), device: "d", online: true }).text, "2 ditolak");
   assert.strictEqual(P.pillState({ events: q(2, "queued", "other"), device: "d", online: true }).text, "Online · semua terkirim", "another device's events are not counted");
   assert.strictEqual(P.pillState({ events: q(1, "queued"), device: "d", online: true, stopped: "revoked" }).tone, "bad");
+  assert.strictEqual(P.pillState({ events: q(1, "queued"), device: "d", online: true, stopped: "halt" }).text, "Kiriman ditolak server · 1 antre");
+  assert.strictEqual(P.pillState({ events: q(1, "queued"), device: "d", online: true, durable: false }).text, "Antrean tidak tersimpan permanen · 1 antre");
 });
 
 test("eventLabel and deviceDocName", () => {

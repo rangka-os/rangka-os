@@ -86,23 +86,55 @@
   }
 
   function thousands(n) { return String(n).replace(/\B(?=(\d{3})+(?!\d))/g, "."); }
-  function num(v) { var f = typeof v === "number" ? v : parseFloat(String(v == null ? "" : v).trim()); return isFinite(f) ? f : 0; }
+  // as printdoc's num: a number as is, a string only when all of it is a number (strconv.ParseFloat), else 0
+  function num(v) {
+    if (typeof v === "number") return isFinite(v) ? v : 0;
+    if (typeof v !== "string") return 0;
+    var t = v.trim();
+    if (!/^[+-]?(\d+\.?\d*|\.\d+)([eE][+-]?\d+)?$/.test(t)) return 0;
+    var f = Number(t);
+    return isFinite(f) ? f : 0;
+  }
   function str(v) { return v == null ? "" : String(v); }
   function rows(v) { return Array.isArray(v) ? v.filter(function (x) { return x && typeof x === "object"; }) : []; }
   // Go's math.Round: half away from zero
   function round(n) { return n < 0 ? -Math.round(-n) : Math.round(n); }
   function rupiah(n) { var r = round(num(n)); return r < 0 ? "-Rp " + thousands(-r) : "Rp " + thousands(r); }
+  /**
+   * n (>= 0, finite) with 3 decimals exactly as Go's strconv.FormatFloat(n, 'f', 3): the exact binary value of n,
+   * times 1000, rounded to the nearest integer, an exact tie to the even one. (toFixed differs on some values.)
+   */
+  function fixed3(n) {
+    var dv = new DataView(new ArrayBuffer(8));
+    dv.setFloat64(0, n);
+    var hi = dv.getUint32(0), lo = dv.getUint32(4), ex = (hi >>> 20) & 0x7ff;
+    var mant = (BigInt(hi & 0xfffff) << BigInt(32)) | BigInt(lo), e;
+    if (ex === 0) e = -1074; else { mant = mant | (BigInt(1) << BigInt(52)); e = ex - 1075; }
+    var k = BigInt(1000), q;
+    if (e >= 0) q = (mant * k) << BigInt(e);
+    else {
+      var num = mant * k, den = BigInt(1) << BigInt(-e), rem = num % den, twice = rem * BigInt(2);
+      q = num / den;
+      if (twice > den || (twice === den && q % BigInt(2) === BigInt(1))) q = q + BigInt(1);
+    }
+    var m = String(q % k);
+    while (m.length < 3) m = "0" + m;
+    return String(q / k) + "." + m;
+  }
   function number(n) {
     n = num(n);
-    var neg = n < 0, s = Math.abs(n).toFixed(3).split("."), frac = s[1].replace(/0+$/, "");
+    var neg = n < 0, s = fixed3(Math.abs(n)).split("."), frac = s[1].replace(/0+$/, "");
     return (neg ? "-" : "") + thousands(parseInt(s[0], 10)) + (frac ? "," + frac : "");
   }
   var MONTHS = ["Jan", "Feb", "Mar", "Apr", "Mei", "Jun", "Jul", "Agu", "Sep", "Okt", "Nov", "Des"];
+  // as printdoc's Date: YYYY-MM-DD of a real day → "27 Okt 2026"; anything else (2026-02-30, 2026-13-01) as is
   function date(s) {
     s = str(s);
     var m = /^(\d{4})-(\d{2})-(\d{2})/.exec(s);
     if (!m) return s;
-    return parseInt(m[3], 10) + " " + MONTHS[parseInt(m[2], 10) - 1] + " " + m[1];
+    var y = +m[1], mo = +m[2], d = +m[3], t = new Date(Date.UTC(y, mo - 1, d));
+    if (mo < 1 || mo > 12 || d < 1 || t.getUTCMonth() !== mo - 1 || t.getUTCDate() !== d) return s;
+    return d + " " + MONTHS[mo - 1] + " " + m[1];
   }
 
   /** The cashier receipt of a pos_sale (rangka-edge printdoc.Receipt). job: {doc, header?, outlet_name?, drawer?, copy?}. */

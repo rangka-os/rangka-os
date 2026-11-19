@@ -102,18 +102,36 @@
   var ROLE_WORDS = { cashier: "Kasir", outlet_staff: "Staf outlet", employee: "Karyawan", field_worker: "Pekerja lapangan", waiter: "Pelayan", kitchen: "Dapur" };
   function roleWord(id) { return ROLE_WORDS[id] || ""; }
 
-  /** Who can unlock while offline: the staff with a fresh verifier on this device. */
+  /**
+   * Who can unlock while offline: people on the outlet's PIN staff list as last pulled online who also have a fresh
+   * verifier on this device. Nobody outside that list, whatever verifier is left on the device.
+   */
   function offlineStaff(staff, verifiers, now) {
-    var fresh = keepVerifiers(verifiers, now), ids = {};
-    fresh.forEach(function (v) { ids[v.user] = v; });
-    var out = (staff || []).filter(function (s) { return ids[s.id]; });
-    // a verifier of someone missing from the cached staff list still counts (the list was pulled before they joined)
-    fresh.forEach(function (v) { if (!out.some(function (s) { return s.id === v.user; })) out.push({ id: v.user, name: v.name, role: v.role }); });
-    return out;
+    var ids = {};
+    keepVerifiers(verifiers, now).forEach(function (v) { ids[v.user] = true; });
+    return (staff || []).filter(function (s) { return ids[s.id]; });
   }
 
+  /**
+   * The verifiers that may stay after an online staff list (0058 §2): only people still on it. The kernel lists a member
+   * only while they belong to the outlet, have a PIN and a role that may use one, so a removed member, a cleared PIN
+   * or a role change drops the verifier at the next online pull.
+   */
+  function pruneVerifiers(verifiers, staff) {
+    var ids = {};
+    (staff || []).forEach(function (s) { ids[s.id] = true; });
+    return (verifiers || []).filter(function (v) { return ids[v.user]; });
+  }
+
+  /** An answer that means the kernel is not reachable: no connection, or a proxy saying the server is down. */
+  function unreachable(e) { return !!e && (e.status === 0 || e.status === 502 || e.status === 503 || e.status === 504); }
+
+  /** An answer that means this browser is no longer a paired device: revoked, or its rk_device cookie is gone. */
+  function unpaired(e) { return !!e && e.status === 401 && (e.code === "device_revoked" || e.code === "unauthenticated"); }
+
   RA.pairPure = { normalizeCode: normalizeCode, pairErrorText: pairErrorText, unlockErrorText: unlockErrorText, keepVerifiers: keepVerifiers,
-    putVerifier: putVerifier, roleWord: roleWord, makeVerifier: makeVerifier, checkVerifier: checkVerifier, offlineStaff: offlineStaff, MAX_OFFLINE_TRIES: MAX_OFFLINE_TRIES };
+    putVerifier: putVerifier, pruneVerifiers: pruneVerifiers, roleWord: roleWord, makeVerifier: makeVerifier, checkVerifier: checkVerifier,
+    offlineStaff: offlineStaff, unreachable: unreachable, unpaired: unpaired, MAX_OFFLINE_TRIES: MAX_OFFLINE_TRIES };
 
   /* ================================================================ device actions (no DOM) */
   var ob = function () { return RA.deviceOutbox; };
@@ -145,26 +163,54 @@
     return s.persisted().then(function (v) { return !!v; }, function () { return null; });
   }
 
+  function dropVerifier(user) {
+    return ob().getMeta("verifiers").then(function (list) {
+      return ob().setMeta("verifiers", (list || []).filter(function (v) { return v.user !== user; }));
+    });
+  }
+
+  /**
+   * The kernel no longer knows this browser as a paired device: every verifier, the unlocked cashier and the kept staff
+   * list go (0058 §2: dropped on revoke); the device record is marked so the screens offer pairing again. The queue
+   * stays.
+   */
+  function markUnpaired(e) {
+    return ob().getDevice().then(function (dev) {
+      var mark = dev ? ob().setDevice(Object.assign({}, dev, { unpaired: e.code === "device_revoked" ? "revoked" : "lost" })) : null;
+      return Promise.all([mark, ob().setMeta("verifiers", []), ob().setMeta("actor", null), ob().setMeta("staff", null)]);
+    });
+  }
+
   RA.device = {
     pair: function (code, name) {
       return req("POST", "/auth/device/pair", { code: code, name: name }).then(function (d) {
         var dev = { device_id: d.device_id, code: d.code, outlet: d.outlet, name: d.name || name || "", paired_at: new Date().toISOString() };
-        return ob().setDevice(dev).then(function () { return persist(); }).then(function (p) {
-          dev.persisted = p;
-          return ob().setDevice(dev).then(function () { return dev; });
-        });
+        // a new pairing starts clean: verifiers, staff and the unlocked cashier belonged to the earlier device
+        return Promise.all([ob().setMeta("verifiers", []), ob().setMeta("actor", null), ob().setMeta("staff", null)])
+          .then(function () { return ob().setDevice(dev); }).then(function () { return persist(); }).then(function (p) {
+            dev.persisted = p;
+            return ob().setDevice(dev).then(function () { return dev; });
+          });
       });
     },
     get: function () { return ob().getDevice(); },
+    /** Forgets the pairing on this browser so it can be paired again; queued events stay (listed as another device's). */
+    forget: function () {
+      return Promise.all([ob().setDevice(null), ob().setMeta("verifiers", []), ob().setMeta("actor", null), ob().setMeta("staff", null)]);
+    },
+    markUnpaired: markUnpaired,
     persist: persist,
     persisted: persisted,
-    /** The outlet's PIN staff: online from the kernel (and kept), offline the kept list. */
+    /** The outlet's PIN staff: online from the kernel (kept, and verifiers of anyone not on it dropped), offline the kept list. */
     staff: function () {
       return req("GET", "/auth/device/staff").then(function (list) {
         list = Array.isArray(list) ? list : [];
-        return ob().setMeta("staff", { list: list, at: new Date().toISOString() }).then(function () { return { list: list, online: true }; });
+        return ob().getMeta("verifiers").then(function (vs) {
+          return Promise.all([ob().setMeta("staff", { list: list, at: new Date().toISOString() }), ob().setMeta("verifiers", pruneVerifiers(vs, list))]);
+        }).then(function () { return { list: list, online: true }; });
       }, function (e) {
-        if (e.status !== 0) throw e;
+        if (unpaired(e)) return markUnpaired(e).then(function () { throw e; });
+        if (!unreachable(e)) throw e;
         return Promise.all([ob().getMeta("staff"), ob().getMeta("verifiers")]).then(function (x) {
           return { list: offlineStaff(x[0] && x[0].list, x[1]), online: false };
         });
@@ -180,15 +226,11 @@
         }) : Promise.resolve();
         return save.then(function () { return ob().setMeta("actor", actor); }).then(function () { return { actor: actor, online: true, user: r && r.user }; });
       }, function (e) {
-        if (e.status !== 0) {
-          // the kernel refused: a lock-out or a removed PIN drops the verifier on this device too
-          if (e.code === "pin_locked" || e.code === "pin_not_set" || e.code === "pin_not_allowed") {
-            return ob().getMeta("verifiers").then(function (list) {
-              return ob().setMeta("verifiers", (list || []).filter(function (v) { return v.user !== person.id; }));
-            }).then(function () { throw e; });
-          }
-          throw e;
-        }
+        if (unpaired(e)) return markUnpaired(e).then(function () { throw e; });
+        // any refusal from the kernel drops this person's verifier: the kernel answers pin_wrong alike for a wrong PIN,
+        // a cleared PIN, a removed member and a role that may not use one, so the device cannot tell them apart; a
+        // good online unlock makes a new one
+        if (!unreachable(e)) return dropVerifier(person.id).then(function () { throw e; });
         return ob().getMeta("verifiers").then(function (list) {
           list = keepVerifiers(list);
           var v = list.filter(function (x) { return x.user === person.id; })[0];
@@ -328,6 +370,28 @@
       !online ? h("p", { className: "ap-dev-muted" }, "Offline: PIN diperiksa di perangkat ini.") : null);
   }
 
+  /**
+   * The kernel no longer knows this browser (revoked, or its device cookie is gone): pair again with a new code. The
+   * queue is kept; events of this device that were not sent stay listed in the queue for head office.
+   */
+  function Repair(p) {
+    var q = useState(0), queued = q[0], setQueued = q[1];
+    var b = useState(false), busy = b[0], setBusy = b[1];
+    useEffect(function () {
+      RA.deviceOutbox.list().then(function (evs) {
+        setQueued(evs.filter(function (e) { return e.device === p.dev.device_id && e.state === "queued"; }).length);
+      });
+    }, [p.dev.device_id]);
+    var revoked = p.dev.unpaired === "revoked";
+    return h("div", { className: "ap-dev-form" },
+      h(R.Alert, { tone: revoked ? "bad" : "warn", title: revoked ? "Perangkat " + p.dev.code + " sudah dicabut pemilik" : "Perangkat ini tidak dikenali lagi oleh server" },
+        revoked ? "Kasir tidak bisa membuka kunci di perangkat ini, juga saat offline." : "Data pemasangan di browser ini hilang atau kedaluwarsa."),
+      queued ? h(R.Alert, { tone: "warn", title: queued + " transaksi belum terkirim" },
+        "Tetap disimpan di perangkat ini dan tampil di antrean. Laporkan ke pemilik sebelum menghapus data browser.") : null,
+      h(R.Button, { variant: "primary", size: "lg", className: "ap-dev-wide", loading: busy, disabled: busy,
+        onClick: function () { setBusy(true); RA.device.forget().then(function () { setBusy(false); }, function () { setBusy(false); }); } }, "Pasangkan ulang dengan kode baru"));
+  }
+
   function PairScreen() {
     var dev = useDevice();
     var s = useState(null), step = s[0], setStep = s[1];
@@ -336,6 +400,9 @@
     if (!dev) {
       title = "Pasangkan perangkat ini"; sub = "Sekali saja per perangkat. Setelah itu kasir masuk dengan PIN, juga saat offline.";
       body = h(PairForm, { onPaired: function () { setStep("paired"); } });
+    } else if (dev.unpaired) {
+      title = "Pasangkan ulang perangkat ini"; sub = "Perangkat " + dev.code + " · Outlet " + dev.outlet;
+      body = h(Repair, { dev: dev });
     } else if (step === "paired") {
       title = "Perangkat terpasang"; sub = "Nomor perangkat ini dipakai di nomor struk.";
       body = h(Paired, { dev: dev, onNext: function () { setStep(null); } });
@@ -409,7 +476,9 @@
         h("dl", { className: "ap-dev-dl" },
           h("dt", null, "Kode"), h("dd", null, dev.code),
           h("dt", null, "Outlet"), h("dd", null, dev.outlet),
-          dev.name ? h("dt", null, "Nama") : null, dev.name ? h("dd", null, dev.name) : null)),
+          dev.name ? h("dt", null, "Nama") : null, dev.name ? h("dd", null, dev.name) : null),
+        dev.unpaired ? h(R.Alert, { tone: "bad", title: dev.unpaired === "revoked" ? "Perangkat ini sudah dicabut pemilik" : "Perangkat ini tidak dikenali lagi oleh server",
+          actions: h("a", { href: "#/pasang", className: "ap-dev-link" }, "Pasangkan ulang") }) : null),
       h("section", { className: "ap-dev-card" }, h("h2", null, "Penyimpanan"),
         h(StorageNote, { value: st, onRetry: function () { RA.device.persist().then(setSt); } })),
       h(PrinterSection, { dev: dev }),

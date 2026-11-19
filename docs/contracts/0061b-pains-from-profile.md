@@ -28,6 +28,10 @@ private) · Owner of the change: rangka-os (this contract) · Asked by: Dede, 19
   industry.
 - `pain_options` keeps its shape (`[{module, label, options: [{code, label, pain, modules, custom?}]}]`), now per
   project.
+- **Only what the catalogue can answer.** An option is shown only when Cloud's running catalogue holds every module it
+  names (a custom design names none). The catalogue Cloud runs with is pinned and can lag rangka-apps: on 19 Nov 2026
+  it had no `attendance` and no `promotions`, so "Absen karyawan" (F&B) and "Promo dan diskon" (retail) stay hidden
+  until the pin moves.
 - **A pick is never hidden.** An option the owner picked is shown even when the rules of §2 would hide it, in its
   group, at its catalogue place; a hidden group comes back with only its picked options. A profile change never drops
   a pick without the owner seeing it.

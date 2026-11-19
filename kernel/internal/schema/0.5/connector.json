@@ -200,7 +200,18 @@
             "description": "poll: CEL over the answer giving the next page (a next_url or /path on the action's host, or a page value bound as page for input:); null or empty stops. At most 50 pages per poll; a cut poll keeps its cursor"
           },
           "verify": {
-            "type": "object"
+            "type": "object",
+            "description": "webhook: signature (an HMAC of the raw body or of canonical lines in a header; or, with field and concat, a plain hash carried in the body: contract 0002), or header + equals (a shared token), or challenge"
+          },
+          "confirm": {
+            "type": "object",
+            "additionalProperties": false,
+            "required": ["action"],
+            "description": "webhook: after the signature matched, send this GET action of the connector and give emit its mapped output as confirmed, for vendors that sign only part of a notification (contract 0002, refinement of 19 Nov 2026)",
+            "properties": {
+              "action": {"$ref": "model.json#/$defs/name"},
+              "input": {"type": "object", "additionalProperties": {"type": "string"}, "description": "CEL over the verified body"}
+            }
           },
           "for_each": {
             "type": "string"

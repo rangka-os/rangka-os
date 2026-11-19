@@ -135,3 +135,48 @@ headers, the path and a digest of the body, instead of over the raw body. Both d
   window; a flow's `idempotency:` (§A.2) stops a later replay with the same key, but a replay with a changed field
   or a flow without the key starts the flows again. A flow that records money must therefore hold its gateway id in a unique
   record (rangka-apps `gateway_ref_claim`), and the connector must emit an id that is stable per payment.
+
+## Refinements (19 Nov 2026): body-field signatures
+Some gateways put the signature in the JSON body, not in a header, as a plain hash of a few body fields and the secret
+joined without a separator. Midtrans signs a payment notification with
+`signature_key = hex(SHA-512(order_id + status_code + gross_amount + server key))`.
+- **Incoming** (`verify.signature` with `field:` and `concat:`):
+  ```yaml
+  verify:
+    signature:
+      field: signature_key      # where the signature is in the body (a dotted path)
+      alg: sha512               # sha1 | sha256 | sha512: a plain hash of the parts, not an HMAC
+      key: server_key           # the secret auth field; every accepted version is tried (0017 §8)
+      concat: ['{body.order_id}', '{body.status_code}', '{body.gross_amount}', '{auth.server_key}']
+  ```
+  The parts are filled and joined with nothing, hashed, and compared in constant time with the body's signature
+  (`encoding:` hex by default, upper or lower case; `prefix:` as for a header). A part is literal text with
+  `{body.<path>}` and `{auth.<field>}` placeholders. A body value is a string, or a number in the exact text the vendor
+  sent (`750000.00` stays `750000.00`); a missing field, an empty string, an object, a list, a boolean or null is no
+  value, and a part without a value refuses the webhook (401, audited as `webhook_refused`). A body that is not one
+  JSON object is refused the same way. `header:` and `lines:` do not apply.
+- **Validator**: `field`, `concat` and `key` come together, without `header` or `lines`, with alg `sha1`, `sha256` or
+  `sha512` and encoding `hex` or `base64`, and a part takes only the two placeholders (`verify_body_signature`);
+  `concat` must use `{auth.<key>}` (`verify_concat_no_key`), since a hash without the secret can be computed by anyone.
+  The key is a secret auth field (`sign_key_not_secret`, as above).
+- **Only the fields in `concat` are authentic.** Someone who holds one genuine notification can resend it with every
+  other field changed: a Midtrans `cancel` or `refund` carries status code 200 like a `settlement`, so a status read
+  from the notification can be relabelled. A connector therefore never takes "paid", a status or an amount that is not
+  signed from the body: it confirms them with the vendor (`confirm:`, below) and keys on a signed id. Fields joined
+  without a separator can also be read with another split (`A1` + `200` and `A12` + `00` hash alike); confirming with
+  the vendor by the id and comparing the amount the vendor reports closes that too.
+- **Confirmed webhooks** (`confirm:` on a webhook trigger):
+  ```yaml
+  confirm:
+    action: get_status                # a GET action of this connector
+    input: {gateway_ref: order_id}    # CEL over the verified body
+  ```
+  After the signature matched, the kernel sends that action with the org's keys (over https to a declared host, like
+  any call, audited and scrubbed) and emit sees its mapped output as `confirmed`, next to the body. Midtrans:
+  `paid: confirmed.paid == true && confirmed.gateway_ref == order_id && confirmed.paid_amount == gross_amount`.
+  A confirm that fails (network, a vendor error, an unknown transaction, an input without a value) starts no flow,
+  is audited as `webhook_unconfirmed` and answers 502 (400 for a missing input), so the vendor sends the notification
+  again later. The validator refuses a confirm on a poll trigger, with `for_each`, naming an unknown action or an action
+  that is not a GET (`confirm_invalid`, `unknown_action`): a webhook never makes the kernel write to the vendor. A
+  flow that records money still holds the signed id in a unique record (rangka-apps `gateway_ref_claim`).
+- Outgoing calls are not signed this way (Midtrans uses Basic auth). No timestamp window, as above.

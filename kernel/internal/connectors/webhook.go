@@ -115,7 +115,16 @@ func (rt *Runtime) HandleHook(ctx context.Context, org, connector, trigger strin
 	if err := json.Unmarshal(raw, &body); err != nil {
 		return HookResult{Status: 400, Body: "body is not JSON"}
 	}
-	ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, body, nil)
+	var extra map[string]any
+	if _, _, ok := confirmSpec(t); ok {
+		// the vendor's own answer, read after the signature matched (Midtrans): emit takes what flows act on from it
+		out, res := rt.confirm(ctx, org, connector, trigger, t, body)
+		if res != nil {
+			return *res
+		}
+		extra = map[string]any{"confirmed": out}
+	}
+	ev, dupes, err := rt.dispatch(ctx, org, connector, trigger, t, body, extra)
 	if err != nil {
 		return HookResult{Status: 500, Body: err.Error()}
 	}
@@ -222,8 +231,13 @@ func placeholderAuth(expr string) []string {
 // verify checks verify.signature (HMAC over the raw body, or over canonical lines when lines: is set; the header value
 // hex with an optional sha256= prefix, or base64 / an explicit prefix: as declared) or
 // verify.header + verify.equals (a shared token), against every accepted version of the secret, in constant time.
+// A signature declared with field: and concat: is carried in the JSON body (verifyBody).
 func (rt *Runtime) verify(ctx context.Context, org, connector string, verify map[string]any, r *http.Request, raw []byte) (HookResult, bool) {
 	if sig := meta.AsMap(verify["signature"]); sig != nil {
+		if bodySigned(sig) {
+			// the signature is a field of the JSON body (Midtrans): a plain hash of body fields and the key
+			return rt.verifyBody(ctx, org, connector, sig, raw)
+		}
 		got := strings.TrimSpace(r.Header.Get(meta.Str(sig, "header")))
 		if got == "" {
 			return HookResult{Status: 401, Body: "signature missing"}, false

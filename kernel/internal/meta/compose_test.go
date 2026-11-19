@@ -132,3 +132,22 @@ func TestSiteMenuGroupComposed(t *testing.T) {
 		}
 	}
 }
+
+// uses_uninstalled_model on an app-only site too: an overlay or company link on a model of a module the site's apps
+// do not bring in is an error; models of modules the apps bring in, directly or through requires, are fine.
+func TestUninstalledModelAppOnlySite(t *testing.T) {
+	reg, rep := ValidateOpts(Options{AppsDir: "../../testdata/config-modules/apps", SiteDir: "../../testdata/installed-site"}, nil, schema.Embedded())
+	if n := len(rep.All()); n != 0 {
+		t.Fatalf("installed-site: %d problem(s), first %+v", n, rep.All()[0])
+	}
+	if reg.Composed() {
+		t.Fatal("installed-site is meant to be apps-only")
+	}
+	if !reg.IsInstalled("pipeline") || !reg.IsInstalled("contacts") {
+		t.Error("crm should install pipeline and, through its requires, contacts")
+	}
+	if reg.IsInstalled("stock") {
+		t.Error("stock is installed but no app brings it in")
+	}
+	golden(t, "testdata/broken-installed-site.expected.txt", Options{AppsDir: "testdata/config-modules/apps", SiteDir: "testdata/broken-installed-site"})
+}

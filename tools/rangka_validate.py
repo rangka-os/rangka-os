@@ -1789,9 +1789,9 @@ def check_config_modules(rep, cp, cfg, apps, features, plan):
 
 
 def check_uninstalled_models(rep, apps, allmodels, installed, sdocs, overlays, flows):
-    """uses_uninstalled_model (contract 0032 section 2), on a site that names modules: overlays, company models and
-    flows, and site dashboards that name a model of a unit the site does not install. Layouts and numbering report it
-    where they check models."""
+    """uses_uninstalled_model (contract 0032 section 2), on any site (config.apps, config.modules or the plan's apps):
+    overlays, company models and flows, and site dashboards that name a model of a unit the site does not install.
+    Layouts and numbering report it where they check models, on sites that name modules."""
     def gone(mn):
         return isinstance(mn, str) and mn in allmodels and allmodels[mn][0] not in installed
 
@@ -2025,8 +2025,8 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
             installed = closure(apps, [a for a in cfg.get("apps") or [] if listed_apps and a in app_names] + chosen) + company
         elif allowed is not None:
             installed = closure(apps, [a for a in allowed if a in app_names]) + company
-        if listed_mods:
-            check_uninstalled_models(rep, apps, allmodels, installed, sdocs, overlays or {}, flows or {})
+        # every site, not only one that names modules; with no apps, modules or limiting plan, everything is installed
+        check_uninstalled_models(rep, apps, allmodels, installed, sdocs, overlays or {}, flows or {})
         if conns and isinstance(cfg.get("connectors"), list):
             for i, cn in enumerate(cfg["connectors"]):
                 if isinstance(cn, str) and cn not in conns:

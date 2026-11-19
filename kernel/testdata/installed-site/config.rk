@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+# An app-only site (no config.modules): overlays and company links on models of modules crm installs, directly
+# (pipeline) and transitively (contacts, required by pipeline). Pairs with broken-installed-site.
+locale: id-ID
+currency: IDR
+timezone: Asia/Jakarta
+apps: [crm]

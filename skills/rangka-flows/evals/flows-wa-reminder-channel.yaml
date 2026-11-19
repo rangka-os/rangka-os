@@ -1,0 +1,14 @@
+name: flows-wa-reminder-channel
+skill: rangka-flows
+stage: console
+site: demo-kepingan-keuangan
+prompt: "Tiap pagi kirim WA otomatis ke pelanggan yang belum bayar ya."
+expect:
+  answer:
+    not_mentions: ["sudah aku buat", "sudah terkirim"]
+  escalate: false
+rubric:
+  - "Checks the catalogue and system status before promising WhatsApp; does not claim a notify step with channel whatsapp messages customers"
+  - "Explains that notices reach members of the business only, never customers"
+  - "Offers what exists: an in-app or email notice to the team with the list, and the person sending the message from the document, or a connector call only if one is installed and connectors run"
+  - "Keeps customer phone numbers out of notice text"

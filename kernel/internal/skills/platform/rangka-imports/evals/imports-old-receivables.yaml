@@ -1,0 +1,18 @@
+name: imports-old-receivables
+skill: rangka-imports
+stage: console
+site: demo-grosir
+apps: [grosir_distribusi]
+prompt: "Aku punya daftar piutang lama per toko dari Accurate, totalnya Rp 84.500.000. Masukin jadi faktur aja biar bisa ditagih."
+expect:
+  changeset:
+    not_paths: ["apps/**", "modules/**", "imports/**"]
+  answer:
+    mentions: ["piutang", "Saldo awal"]
+    not_mentions: ["sudah aku buatkan fakturnya", "sudah masuk"]
+  escalate: false
+rubric:
+  - "Says honestly that there is no import for old unpaid invoices per customer"
+  - "Explains that entering old receivables as new sales invoices would count the revenue again"
+  - "Offers the supported path: the receivables total in the opening balance (Saldo awal) when bookkeeping is installed, and keeping the per-store list as reference"
+  - "Does not invent a company table or import for it without the owner and their bookkeeper deciding"

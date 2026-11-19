@@ -520,3 +520,14 @@ alter table rk_notice_prefs enable row level security;
 alter table rk_notice_prefs force row level security;
 drop policy if exists rk_org on rk_notice_prefs;
 create policy rk_org on rk_notice_prefs using (rk_org_ok(org_id)) with check (rk_org_ok(org_id));
+-- the scheduler's pause (contract 0070): one row, set by `rangka scheduler pause|resume`, read by every tick
+create table if not exists rk_scheduler_state (
+  id           int primary key default 1 check (id = 1),
+  paused       boolean not null default false,
+  paused_until timestamptz,                  -- the pause ends here; a tick past it records the end (resumed_by system)
+  reason       text not null default '',
+  paused_at    timestamptz,                  -- when the current or last pause started
+  paused_by    text not null default '',
+  resumed_at   timestamptz,                  -- when the last pause ended (resume, or its until)
+  resumed_by   text not null default ''
+);

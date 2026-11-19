@@ -1,0 +1,19 @@
+name: dashboards-course-new-and-withdrawn
+skill: rangka-dashboards
+stage: console
+site: demo-kursus
+apps: [kelas_kursus, faktur_piutang, pembukuan]
+prompt: "Di ringkasan kelas tolong tambahin berapa murid baru dan berapa yang keluar, dibanding bulan lalu."
+expect:
+  changeset:
+    paths: ["dashboards/kursus_ringkas.rk"]
+    not_paths: ["apps/**", "modules/**"]
+    risk: low
+  answer:
+    not_mentions: ["sudah aku buat", "sudah ditambahkan"]
+  escalate: false
+rubric:
+  - "New students count enrollment rows with a period on enrolled_on; withdrawn count status == 'withdrawn' with a period on left_on"
+  - "The withdrawn number sets good_when: down"
+  - "Uses period (rolling, compared with the previous period) or explains that a calendar month would be a filter"
+  - "Keeps the original dashboard's roles so the change does not widen who can open it"

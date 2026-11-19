@@ -1,0 +1,15 @@
+name: dashboards-answer-sales-question
+skill: rangka-dashboards
+stage: console
+site: demo-fnb
+apps: [fnb_cabang, absen_karyawan]
+prompt: "Omzet minggu ini berapa? Cabang mana yang paling laku?"
+expect:
+  answer:
+    not_mentions: ["sudah aku buat", "sudah ditambahkan"]
+  escalate: false
+rubric:
+  - "Answers from the existing dashboard (rangka_dashboard on fnb_overview with period 7) and proposes no change set"
+  - "Every rupiah figure in the reply comes from the kernel's widget values; none is estimated or summed by the agent"
+  - "Says the period is the last 7 days up to today, not the calendar week, and that only submitted sales count"
+  - "Names the top outlet from the net_by_outlet chart"

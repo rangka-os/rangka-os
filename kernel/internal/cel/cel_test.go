@@ -104,3 +104,76 @@ func TestInterpolate(t *testing.T) {
 		t.Errorf("got %q", got)
 	}
 }
+
+// Every comprehension macro binds its first argument; Idents skips it and LoopRefs reports the member reads
+// on it with the identifier the macro ranges over.
+func TestIdentsMacroVars(t *testing.T) {
+	src := "items.all(l, l.qty > 0) && items.exists(e, e.rate > 1) && items.exists_one(o, o.discount > 0) && " +
+		"items.filter(f, f.rate > 0).map(g, g.amount).sum() > 0 && [1, 2].all(n, n > 0) && 'x.all(q, q)' != ''"
+	want := []Ref{{"ref", "items", ""}, {"ref", "items", ""}, {"ref", "items", ""}, {"ref", "items", ""}}
+	if got := Idents(src); !reflect.DeepEqual(got, want) {
+		t.Errorf("Idents: got %v want %v", got, want)
+	}
+	wantLoops := []LoopRef{{"l", "items", "qty"}, {"e", "items", "rate"}, {"o", "items", "discount"}, {"f", "items", "rate"}}
+	if got := LoopRefs(src); !reflect.DeepEqual(got, wantLoops) {
+		t.Errorf("LoopRefs: got %v want %v", got, wantLoops)
+	}
+	// the evaluator runs every macro the validator accepts
+	e := env(map[string]any{"items": []any{map[string]any{"qty": 2.0}, map[string]any{"qty": 0.0}}})
+	for expr, want := range map[string]any{
+		"items.all(l, l.qty > 0)":              false,
+		"items.exists(l, l.qty > 1)":           true,
+		"items.exists_one(l, l.qty == 0)":      true,
+		"size(items.filter(l, l.qty > 0))":     int64(1),
+		"items.map(l, l.qty).sum()":            2.0,
+		"items.map(l, l.qty > 0, l.qty).sum()": 2.0,
+	} {
+		got, err := Eval(expr, e)
+		if err != nil {
+			t.Errorf("%s: %v", expr, err)
+			continue
+		}
+		if Unwrap(got) != want {
+			t.Errorf("%s = %v (%T), want %v", expr, got, got, want)
+		}
+	}
+}
+
+func TestJoin(t *testing.T) {
+	e := env(map[string]any{
+		"names": []any{"Ani", "Budi"},
+		"mixed": []any{"a", int64(2), 1.5, true},
+		"none":  nil,
+		"rows":  []any{map[string]any{"n": "x"}, map[string]any{"n": "y"}},
+	})
+	for expr, want := range map[string]string{
+		"names.join(', ')":           "Ani, Budi",
+		"names.join()":               "AniBudi",
+		"mixed.join('/')":            "a/2/1.5/true",
+		"none.join(', ')":            "",
+		"[].join(', ')":              "",
+		"rows.map(r, r.n).join('-')": "x-y",
+	} {
+		got, err := Eval(expr, e)
+		if err != nil {
+			t.Errorf("%s: %v", expr, err)
+			continue
+		}
+		if got != want {
+			t.Errorf("%s = %q, want %q", expr, got, want)
+		}
+	}
+	for _, expr := range []string{"'abc'.join(',')", "names.join(1)", "names.join(',', ';')"} {
+		if _, err := Eval(expr, e); err == nil {
+			t.Errorf("%s: expected an error", expr)
+		}
+	}
+}
+
+func TestMethodNames(t *testing.T) {
+	got := MethodNames(`items.map(l, l.qty).sum() + size(x) > 0 && name.lower() != 'a.upper()' && n . trim () != "b.fmt()" && items.map(l, l.uom).join(', ') != ''`)
+	want := []string{"map", "sum", "lower", "trim", "join"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %v want %v", got, want)
+	}
+}

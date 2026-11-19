@@ -6,6 +6,8 @@ import (
 	"sort"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/rangka-os/rangka-os/kernel/internal/cel"
 )
 
 // Kernel notices (contract 0066 §1, §6): the notices: of every module and the notify steps of every flow. The checks
@@ -254,6 +256,12 @@ func (v *validator) notifyStep(p, w string, f *Flow, st map[string]any, target s
 		seen := map[string]bool{}
 		for _, text := range noticeTexts(st[k]) {
 			for _, part := range noticeExprPart.FindAllString(text, -1) {
+				for _, n := range cel.MethodNames(part[1 : len(part)-1]) {
+					if !methodSet[n] && !seen["."+n] {
+						seen["."+n] = true
+						v.rep.extra("error", p, w+"/"+k, "unknown_method", fmt.Sprintf("`.%s()` is not a CEL or Rangka method%s", n, suggest(n, Methods)))
+					}
+				}
 				for _, m := range noticeFieldRef.FindAllStringSubmatch(part, -1) {
 					mn := vars[m[1]]
 					if mn == "" || seen[m[1]+"."+m[2]] {

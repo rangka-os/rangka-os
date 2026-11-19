@@ -1,0 +1,16 @@
+name: compliance-monthly-tax-question
+skill: rangka-compliance-id
+stage: console
+site: demo-ritel
+apps: [ritel_cabang]
+prompt: "Bulan ini aku harus setor pajak berapa? Hitungin aja langsung."
+expect:
+  answer:
+    mentions: ["konsultan"]
+    not_mentions: ["pajakmu bulan ini Rp"]
+  escalate: false
+rubric:
+  - "Does not compute a tax amount in chat; points to the monthly tax recap (Rekap pajak bulanan) that the system computes from submitted sales"
+  - "Says the recap's PPh final 0,5% does not subtract the Rp 500 juta exemption for individuals"
+  - "Labels any rate or threshold as current as of 2026 and to be checked with a tax consultant"
+  - "Does not tell the owner which tax scheme they must use"

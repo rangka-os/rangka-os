@@ -76,6 +76,8 @@ compare-python: build
 	            "testdata/broken-catalogue-keys/apps --site testdata/broken-catalogue-keys/site --connectors testdata/broken-catalogue-keys/connectors" \
 	            "testdata/config-modules/apps --site testdata/config-modules/site" \
 	            "testdata/broken-config-modules/apps --site testdata/broken-config-modules/site" \
+	            "testdata/config-modules/apps --site testdata/installed-site" \
+	            "testdata/config-modules/apps --site testdata/broken-installed-site" \
 	            "testdata/device-apps/apps --site testdata/device-apps/site" \
 	            "testdata/device-apps/apps --site testdata/device-apps/site-numbering" \
 	            "testdata/broken-naming-on/apps --site testdata/broken-naming-on/site" \

@@ -1,6 +1,6 @@
 # 0061 Pain picks in onboarding, and "Langsung mulai"
 
-Status: proposed (16 Nov 2026; decisions by Dede the same day, see "Decisions by Dede") · Owner of the change: rangka-os (this contract, skill `rangka-consult`) · Affects:
+Status: proposed (16 Nov 2026; decisions by Dede the same day, see "Decisions by Dede"; 19 Nov 2026 amended by 0061b: the card follows the business profile, §6 "Langsung mulai" withdrawn) · Owner of the change: rangka-os (this contract, skill `rangka-consult`) · Affects:
 rangka-ai (`/v1/interview` request, map ops, consult prompt), rangka-cloud (pick storage, studio card, quick start
 build; private) · Amends: 0050 §4 (Raka's agenda for pains the owner picked), 0054 §4 (what follows a saved profile) ·
 Builds on: 0042, 0046, 0050, 0053, 0054, 0054a, 0059 · Asked by: Dede, 16 Nov 2026

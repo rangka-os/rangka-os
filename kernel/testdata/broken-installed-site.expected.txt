@@ -1,0 +1,4 @@
+../../broken-installed-site/custom/stock_item.rk:2:8  error  uses_uninstalled_model  model  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+../../broken-installed-site/models/x_gudang.rk:7:36  error  uses_uninstalled_model  fields/1/to  "stock_item" comes from module "stock", which this site does not install; add the module to config.modules
+
+2 error(s), 0 warning(s)

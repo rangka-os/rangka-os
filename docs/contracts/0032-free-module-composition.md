@@ -127,6 +127,10 @@ It would reuse app machinery (menu, home, roles, onboarding), but:
 
 - `uses_uninstalled_model` is reported on sites that set `config.modules`. App-only sites keep the codes they had
   (`optional_model` in layouts, `not_installed` warning in `numbering`), so their reports do not change.
+- Fix (19 Nov 2026): overlays, company models (`to`/`of` links), company flows and site dashboards report
+  `uses_uninstalled_model` on every site, app-only and plan-only ones too: before, an app-only site could overlay a
+  model of a module none of its apps brings in and validate clean. Models of modules an app brings in, directly or
+  through `requires`, and the site's own `x_` models stay fine. Layouts and `numbering` keep the codes above.
 - The modules a plan allows include what its listed modules require, not only the closure of its apps.
 - `features.rk` plan `modules` naming no module is `unknown_module`.
 - The default menu is `/api/v1/meta` `menu`: `[{group, module, items, dashboards}]`, empty when the site names no

@@ -1,0 +1,20 @@
+name: review-ktp-minimal-and-hidden
+skill: rangka-review
+stage: console
+site: demo-sewa
+apps: [sewa_alat, faktur_piutang, pembukuan]
+prompt: "Tiap sewa aku mau simpan NIK sama foto KTP penyewa, biar aman kalau alatnya nggak balik."
+expect:
+  changeset:
+    paths: ["custom/rental_booking.rk"]
+    not_paths: ["roles/**", "apps/**", "modules/**"]
+  answer:
+    mentions: ["KTP"]
+    not_mentions: ["sudah aku buat", "sudah ditambahkan", "hidden_for"]
+  escalate: false
+rubric:
+  - "The KTP number is an x_ field on the rental booking, with a 16-digit check, not a separate model"
+  - "The number is hidden from warehouse or rental staff roles that do not need it (hidden_for), or the reply explains who can see it"
+  - "Treats the KTP photo as more sensitive than the number: either leaves it out and asks, or adds it hidden from staff and says why, in one sentence"
+  - "States at most two trade-offs to the owner, in Bahasa Indonesia, without platform words"
+  - "Does not copy any personal data into a title, reason, label or notice"

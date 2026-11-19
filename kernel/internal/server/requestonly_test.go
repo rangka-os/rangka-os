@@ -124,6 +124,21 @@ func TestRequestOnly(t *testing.T) {
 	if status != http.StatusOK || !strings.Contains(body, `"skipped":true`) {
 		t.Fatalf("tick while locked: %d %s", status, body)
 	}
+
+	// 6. A paused scheduler (contract 0070): the tick says so, and a job already queued still runs.
+	if _, err := jobs.Pause(ctx, s.DB, fixedNow().Add(time.Hour), "uji", "ops", fixedNow()); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := s.Queue.Enqueue(pg.WithOrg(ctx, ""), nil, "probe", "kopi-senja", map[string]any{"hello": "tetap"}, engine.EnqueueOpts{}); err != nil {
+		t.Fatal(err)
+	}
+	status, body = roPost(t, ts.URL+"/_rangka/tick", internal)
+	if status != http.StatusOK || json.Unmarshal([]byte(body), &rep) != nil || !rep.Paused || rep.Ran < 1 {
+		t.Fatalf("tick while paused: %d %s", status, body)
+	}
+	if got := <-ran; got != "tetap" {
+		t.Fatalf("queued job while paused ran with %q", got)
+	}
 }
 
 // TestServeHasNoInternalEndpointsWithoutToken: without RANGKA_INTERNAL_TOKEN /_rangka/tick does not exist.

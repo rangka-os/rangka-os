@@ -370,7 +370,8 @@
                     },
                     "timeout": {
                       "type": "string",
-                      "pattern": "^[0-9]+(s|m|h|d)$"
+                      "pattern": "^[0-9]+(s|m|h|d)$",
+                      "description": "Longest wait, counted from when the wait starts (the deadline is stored with the queued job, so a restart does not reset it). If until is still false at the deadline the run ends there: the steps after the wait never run, the audit log records flow.timed_out, and the run's idempotency key is released as after a rejected approval. Without timeout, until is re-checked every minute with no end"
                     }
                   }
                 }

@@ -59,10 +59,15 @@ for (const f of readdirSync(out)) if (f.endsWith('.md') && !kept.has(f)) rmSync(
 
 const esc = s => String(s ?? '').replace(/\|/g, '\\|').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/\n/g, ' ')
 const firstSentence = s => (/^(.+?\.)(\s|$)/.exec(s)?.[1] ?? s)
+// Skills are written for agents, so prose holds placeholders like <model> or "Tambah <label>". Markdown would pass them
+// to Vue as HTML tags (v-pre stops interpolation, not tag parsing), so escape `<` outside fenced and inline code.
+const escapeTags = md => md.split(/(^```[\s\S]*?^```)/m).map((part, i) =>
+  i % 2 ? part : part.split(/(`+[^`]*?`+)/s).map((p, j) => (j % 2 ? p : p.replace(/<(?=[A-Za-z/!])/g, '&lt;'))).join('')
+).join('')
 
 for (const s of skills) {
   // links inside a skill are relative to its folder: point them at the file on GitHub
-  const body = s.body.replace(/\]\((?!https?:|mailto:|#)([^)\s]+)\)/g, (_, target) => `](${s.url.replace('/tree/', '/blob/')}/${target})`)
+  const body = escapeTags(s.body).replace(/\]\((?!https?:|mailto:|#)([^)\s]+)\)/g, (_, target) => `](${s.url.replace('/tree/', '/blob/')}/${target})`)
   const page = [
     '---',
     `title: ${s.front.name}`,

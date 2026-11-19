@@ -1,7 +1,8 @@
 /* Rangka prototype engine: a small CEL-subset evaluator, computed fields, rules and the document lifecycle.
    In the real system this runs in Go (cel-go) and again in the browser for instant feedback. */
 (function () {
-  /* ---------- expression evaluator (CEL subset: literals, fields, + - * /, comparisons, && ||, calls, .map().sum()) */
+  /* ---------- expression evaluator (CEL subset: literals, fields, + - * / %, comparisons, && ||, c ? a : b, calls,
+     .map().sum(), string methods; a child row reads its document as parent, contract 0069 §2) */
   function tokenize(s) {
     var t = [], i = 0, m;
     while (i < s.length) {
@@ -10,7 +11,7 @@
       if ((m = /^\d+(\.\d+)?/.exec(s.slice(i)))) { t.push({ k: "num", v: parseFloat(m[0]) }); i += m[0].length; continue; }
       if ((m = /^'([^']*)'/.exec(s.slice(i)))) { t.push({ k: "str", v: m[1] }); i += m[0].length; continue; }
       if ((m = /^[A-Za-z_][A-Za-z0-9_]*/.exec(s.slice(i)))) { t.push({ k: "id", v: m[0] }); i += m[0].length; continue; }
-      if ((m = /^(>=|<=|==|!=|&&|\|\||[-+*/()<>.,!])/.exec(s.slice(i)))) { t.push({ k: "op", v: m[0] }); i += m[0].length; continue; }
+      if ((m = /^(>=|<=|==|!=|&&|\|\||[-+*/%()<>.,!?:])/.exec(s.slice(i)))) { t.push({ k: "op", v: m[0] }); i += m[0].length; continue; }
       throw new Error("Unexpected '" + c + "' in " + s);
     }
     return t;
@@ -19,14 +20,22 @@
     var t = tokenize(src), p = 0;
     function peek(v) { return t[p] && t[p].k === "op" && t[p].v === v; }
     function eat(v) { if (!peek(v)) throw new Error("Expected " + v + " in " + src); p++; }
-    var PREC = { "||": 1, "&&": 2, "==": 3, "!=": 3, ">=": 4, "<=": 4, ">": 4, "<": 4, "+": 5, "-": 5, "*": 6, "/": 6 };
+    var PREC = { "||": 1, "&&": 2, "==": 3, "!=": 3, ">=": 4, "<=": 4, ">": 4, "<": 4, "+": 5, "-": 5, "*": 6, "/": 6, "%": 6 };
+    // c ? a : b binds loosest and nests to the right, as in CEL
+    function cond() {
+      var c = bin(1);
+      if (!peek("?")) return c;
+      p++;
+      var a = cond(); eat(":");
+      return { tern: c, a: a, b: cond() };
+    }
     function bin(min) {
       var l = unary();
       while (t[p] && t[p].k === "op" && PREC[t[p].v] >= min) { var op = t[p++].v; l = { b: op, l: l, r: bin(PREC[op] + 1) }; }
       return l;
     }
     function unary() { if (peek("-")) { p++; return { b: "-", l: { n: 0 }, r: unary() }; } if (peek("!")) { p++; return { not: unary() }; } return postfix(); }
-    function args() { var a = []; eat("("); if (!peek(")")) { a.push(bin(1)); while (peek(",")) { p++; a.push(bin(1)); } } eat(")"); return a; }
+    function args() { var a = []; eat("("); if (!peek(")")) { a.push(cond()); while (peek(",")) { p++; a.push(cond()); } } eat(")"); return a; }
     function postfix() {
       var e = primary();
       for (;;) {
@@ -40,20 +49,31 @@
       if (!x) throw new Error("Unexpected end in " + src);
       if (x.k === "num") return { n: x.v };
       if (x.k === "str") return { s: x.v };
-      if (x.k === "op" && x.v === "(") { var e = bin(1); eat(")"); return e; }
+      if (x.k === "op" && x.v === "(") { var e = cond(); eat(")"); return e; }
       if (x.k === "id") { if (peek("(")) return { call: x.v, args: args() }; if (x.v === "null") return { nul: true }; return { ref: x.v }; }
       throw new Error("Unexpected " + x.v + " in " + src);
     }
-    var ast = bin(1);
+    var ast = cond();
     if (p < t.length) throw new Error("Unexpected " + t[p].v + " in " + src);
     return ast;
   }
   var cache = {};
+  var STRING_METHODS = { upperAscii: true, lowerAscii: true, trim: true, contains: true, startsWith: true, endsWith: true };
   function addDays(iso, n) { var d = new Date(iso + "T00:00:00"); d.setDate(d.getDate() + n); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   function clockISO() { var d = new Date(); return d.getFullYear() + "-" + ("0" + (d.getMonth() + 1)).slice(-2) + "-" + ("0" + d.getDate()).slice(-2); }
   /* == and != with the kernel's rule (cel equalOrEmpty): against null, a missing value and "" count as null */
   function isEmpty(v) { return v === null || v === undefined || v === ""; }
-  function equal(l, r) { return l == null || r == null ? isEmpty(l) && isEmpty(r) : l == r; }
+  // a linked record compares by its name, as a link does in the kernel
+  function plain(v) { return v && typeof v === "object" && !Array.isArray(v) && "name" in v ? v.name : v; }
+  function equal(l, r) { l = plain(l); r = plain(r); return l == null || r == null ? isEmpty(l) && isEmpty(r) : l == r; }
+  function hhmm(d) { return ("0" + d.getHours()).slice(-2) + ":" + ("0" + d.getMinutes()).slice(-2); }
+  /* int(), min(), max() as the kernel evaluates them (cel/eval.go): int truncates toward zero */
+  function toInt(v) { var n = Number(v); return isFinite(n) ? Math.trunc(n) : 0; }
+  function best(fn, a) {
+    if (a.length === 1 && Array.isArray(a[0])) a = a[0];
+    if (!a.length) throw new Error(fn + "() needs values");
+    return a.reduce(function (x, y) { return fn === "max" ? (y > x ? y : x) : (y < x ? y : x); });
+  }
   function isDate(v) { return typeof v === "string" && /^\d{4}-\d{2}-\d{2}$/.test(v); }
 
   /* create(meta, lookup): the pure engine for live /api/v1/meta metadata.
@@ -65,6 +85,7 @@
     function installed() { return META.installed || (META.app && META.app.installed) || []; }
   function ev(e, scope) {
     if ("n" in e) return e.n;
+    if ("tern" in e) return ev(e.tern, scope) ? ev(e.a, scope) : ev(e.b, scope);
     if ("s" in e) return e.s;
     if (e.nul) return null;
     if (e.ref) return scope(e.ref);
@@ -74,6 +95,9 @@
       var a = e.args.map(function (x) { return ev(x, scope); });
       if (e.call === "today") return todayISO();
       if (e.call === "round") return Math.round(a[0] || 0);
+      if (e.call === "int") return toInt(a[0]);
+      if (e.call === "min" || e.call === "max") return best(e.call, a);
+      if (e.call === "clock") return META.clock ? META.clock() : hhmm(new Date());
       if (e.call === "duration") return { days: Number(a[0]) || 0 };
       if (e.call === "size") return a[0] == null ? 0 : a[0].length;
       if (e.call === "truncate") return String(a[0] || "").slice(0, a[1] || 80);
@@ -82,7 +106,18 @@
       throw new Error("Unknown function " + e.call);
     }
     if (e.method) {
-      var on = ev(e.on, scope) || [];
+      var raw = ev(e.on, scope);
+      if (typeof raw === "string" || STRING_METHODS[e.method]) {
+        var str = raw == null ? "" : String(raw), sa = e.args.map(function (x) { return ev(x, scope); });
+        if (e.method === "upperAscii") return str.replace(/[a-z]+/g, function (x) { return x.toUpperCase(); });
+        if (e.method === "lowerAscii") return str.replace(/[A-Z]+/g, function (x) { return x.toLowerCase(); });
+        if (e.method === "trim") return str.trim();
+        if (e.method === "contains") return str.indexOf(String(sa[0])) >= 0;
+        if (e.method === "startsWith") return str.indexOf(String(sa[0])) === 0;
+        if (e.method === "endsWith") { var suf = String(sa[0]); return str.length >= suf.length && str.slice(str.length - suf.length) === suf; }
+        if (e.method === "size") return str.length;
+      }
+      var on = raw || [];
       if (e.method === "map") { var v = e.args[0].ref, body = e.args[1]; return on.map(function (it) { return ev(body, function (n) { return n === v ? it : scope(n); }); }); }
       if (e.method === "sum") return on.reduce(function (s, x) { return s + (Number(x) || 0); }, 0);
       throw new Error("Unknown method " + e.method);
@@ -96,8 +131,9 @@
       case "-": return (Number(l) || 0) - (Number(r) || 0);
       case "*": return (Number(l) || 0) * (Number(r) || 0);
       case "/": return (Number(l) || 0) / (Number(r) || 1);
+      case "%": return toInt(l) % (toInt(r) || 1);
       case "==": return equal(l, r); case "!=": return !equal(l, r);
-      case ">=": return l >= r; case "<=": return l <= r; case ">": return l > r; case "<": return l < r;
+      case ">=": return plain(l) >= plain(r); case "<=": return plain(l) <= plain(r); case ">": return plain(l) > plain(r); case "<": return plain(l) < plain(r);
     }
   }
   function evaluate(src, scope) { var ast = cache[src] || (cache[src] = parse(src)); return ev(ast, scope); }
@@ -107,13 +143,20 @@
   function field(m, f) { return model(m).fields.filter(function (x) { return x.name === f; })[0]; }
 
   /* scope: plain fields, links resolve to the linked record */
-  function scopeFor(m, rec) {
+  function scopeFor(m, rec, parent) {
     return function (n) {
       var f = field(m, n);
+      if (!f && n === "parent" && parent) return docVars(parent.m, parent.rec);
       if (f && f.type === "link") return rec[n] ? (get(f.to, rec[n]) || {}) : "";
       if (f && f.type === "table") return rec[n] || [];
       return rec[n];
     };
+  }
+  /* a child row's parent: the document's fields (not its tables) as its own expressions see them (links resolved) */
+  function docVars(m, rec) {
+    var sc = scopeFor(m, rec), out = { name: rec.name, docstatus: rec.docstatus };
+    model(m).fields.forEach(function (f) { if (f.type !== "table") out[f.name] = sc(f.name); });
+    return out;
   }
   function applyDefaults(m, rec, only) {
     model(m).fields.forEach(function (f) {
@@ -125,15 +168,15 @@
     return rec;
   }
   function numeric(f) { return ["int", "float", "currency", "percent"].indexOf(f.type) >= 0; }
-  function compute(m, rec) {
+  function compute(m, rec, parent) {
     var mm = model(m);
-    mm.fields.forEach(function (f) { if (f.type === "table") (rec[f.name] || []).forEach(function (row) { compute(f.of, row); }); });
+    mm.fields.forEach(function (f) { if (f.type === "table") (rec[f.name] || []).forEach(function (row) { compute(f.of, row, { m: m, rec: rec }); }); });
     var prev = CURRENT; CURRENT = { m: m, rec: rec };
     // a date that cannot be computed yet (start_date + duration(days) before the start is filled) stays empty, not 0
     mm.fields.forEach(function (f) {
       if (!f.compute) return;
       var dated = f.type === "date", v;
-      try { v = evaluate(f.compute, scopeFor(m, rec)); } catch (e) { v = null; }
+      try { v = evaluate(f.compute, scopeFor(m, rec, parent)); } catch (e) { v = null; }
       if (dated && !isDate(v)) v = null;
       rec[f.name] = v == null ? (dated ? null : 0) : v;
     });

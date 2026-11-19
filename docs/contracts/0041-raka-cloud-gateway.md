@@ -35,7 +35,7 @@ Request (existing fields unchanged: `messages`, `kernel`). One field is added:
 
 | Field | Type | Meaning |
 | --- | --- | --- |
-| `place` | `"studio" \| "console" \| "app"`, optional | Where the owner opened Raka. Raka's system prompt opens with it and says what to look at first: studio, the interview and the build; console, `cloud_business` and then the problem; app, the page the owner is on, which arrives with the kernel relay (0020), not in `/v1/turn`. It changes what Raka looks at first, never which tools exist or what it may do. An unknown value is `400 bad_request`. |
+| `place` | `"studio" \| "console" \| "app" \| "staff"`, optional | Where the owner opened Raka. Raka's system prompt opens with it and says what to look at first: studio, the interview and the build; console, `cloud_business` and then the problem; app, the page the owner is on, which arrives with the kernel relay (0020), not in `/v1/turn`. It changes what Raka looks at first, never which tools exist or what it may do. `staff` is the exception (§3a): the staff console of Rangka Cloud, where the person is a Rangka Cloud staff member, not an owner. An unknown value is `400 bad_request`. |
 
 Response: unchanged: `{ status, text, summary, changeset_ids, escalations, usage }`. `usage` is `{ "inputTokens": n, "outputTokens": n }` for the turn (already sent today); the host counts turns against the plan's Raka allowance from it. The response never carries the gateway or kernel token, and logs never carry either.
 
@@ -57,6 +57,25 @@ All phase-1 tools are read-only. Each result is the JSON the console API returns
 | `cloud_billing` | none | `GET /api/konsol/businesses/{id}/billing` | `{ tier, tier_label, includes: [string], price_note, plans: [{ tier, tier_label, includes: [string], current }] }`. It is the bill as the owner sees it: plan and what it includes. It carries no payment method and no invoice numbers, and Raka cannot change the plan. |
 
 The gateway adds no field and removes none (it only masks values, §6); where the console API changes a view, the tool follows in the same release. Money, when a view carries it, is shown as the console shows it; Raka never computes a price.
+
+### 3a. Place `staff` (amended 19 Nov 2026)
+
+`place: "staff"` is Raka's dock in Kendali, the staff console of Rangka Cloud. Only a host sends it (Rangka Cloud for a signed-in staff member); there is no owner, kernel or app variant.
+
+- **Tool family `staff_*`, read-only.** The gateway grant for place `staff` names the staff member, not an owner or a business, and lists only the `staff_*` tools. Raka offers only the `staff_*` tools the gateway lists: never kernel tools, never `cloud_*` tools, never `draft_changeset` or `escalate`, even if listed. Unlike the other places, the place decides the tool family.
+- **Tools.** Each answers through the staff page's own GET handler, so staff and Raka see one truth:
+
+| Tool | Input (all optional unless listed) | Mirrors staff route |
+| --- | --- | --- |
+| `staff_queue` | `{ "group": "uang" \| "pelanggan" \| "pertumbuhan" \| "infra" }` | `GET /api/staf/queue` |
+| `staff_subscription` | `{ "id": string }`, required non-empty | `GET /api/staf/subscriptions/{id}` |
+| `staff_payments` | `{ "status": "paid" \| "failed" \| "expired" \| "paid_void", "q": string }` | `GET /api/staf/pembayaran/transaksi` |
+| `staff_costs` | `{ "month": "YYYY-MM" }`, default this month | `GET /api/staf/costs` |
+
+- **Person data as tokens.** The host replaces person data in tool results and in the turn's message with stable tokens such as `Pemilik 1`, `Staf 2`, `Email 1`, the same within one staff member's dock. Raka keeps tokens exactly as written and never asks for the real value; the host maps them back for display.
+- **Suggestions, never actions.** Raka runs, approves, sends and changes nothing; staff press the buttons, and risky staff actions keep their second-staff approval in Cloud. Raka may end its `text` with at most one line of each kind, each starting at the beginning of a line, JSON on the same line: `PREFILL {"drawer","fields"}` (fill the open drawer: `budget-drawer` with `reason` and `budget:<category>` in whole rupiah, `pv-drawer` with `reason`, `tdk-drawer` with `note`), `OPEN {"page":"pembayaran"|"bisnis","item","title"}` (point at one item) and `DRAFT {"title","text"}` (a message staff send themselves). The host validates each line against its own whitelist, drops an invalid one, removes them from the text and shows them as cards.
+- **Response.** Unchanged (§2); the host reads `text`. A refusal of a write-sounding request is prose in `text`, with status `answered`.
+- **Names.** `staff_*` names follow §4: none may contain `approve`, `apply`, `reject` or `revert`, and rangka-ai's MCP client calls only the four above.
 
 ### 4. Reserved tool names
 
@@ -106,6 +125,7 @@ Out of scope for the wire format beyond `usage` (§2): the host counts every tur
 - A host that sends no `place`, and a `kernel` that is a real kernel's MCP URL, gets today's `/v1/turn` behaviour: no `cloud_*` tools exist.
 - No new transport field. A host passes its gateway in the existing `kernel` `{url, token}`: the gateway is the MCP server at `kernel.url`, and the token is the per-turn bearer. Raka tells the two apart only by the tool list: kernel tools are offered when `rangka_meta` is listed, `cloud_*` tools when they are listed. A rangka-ai that has not shipped `place` ignores it and works as before.
 - A kernel that offers no `cloud_*` tools is the normal case: those names exist only on the gateway, never on a kernel's own `/mcp`.
+- `place: "staff"` (§3a) is new: a rangka-ai without it answers `400 bad_request`, and the host shows its fixed "Raka belum bisa" line. Turns with any other `place`, or none, are unchanged.
 - Contract 0020's `/v1/chat` and the kernel relay are unchanged.
 - No schema, validator or kernel change. No change to 0035: Cloud skills use its format and are reserved above.
 
@@ -115,8 +135,9 @@ Out of scope for the wire format beyond `usage` (§2): the host counts every tur
   - `/v1/turn` accepts `place` (§2); `kernel.url` may point at a host's gateway, and Raka offers the tool families the MCP server lists;
   - an MCP backend that takes the gateway and passes `cloud_*` tools through; the refusal of approve/apply/reject/revert names applies to both families;
   - a system prompt that opens with the place;
+  - place `staff` (§3a): its own instructions, only the listed `staff_*` tools, the PREFILL/OPEN/DRAFT reply lines;
   - later phases: `DELETE /v1/memory/{business}`, memory behind `RAKA_DATABASE_URL`.
-- **rangka-cloud (private):** the gateway (MCP server on loopback or on a private network shared with Raka, per-turn bearer), the phase-1 `cloud_*` tools backed by the console handlers' data, allowance counting from `usage`, the console chat. Later phases: proposals and cards, kernel forwarding with the mask, escalation, Cloud skills.
+- **rangka-cloud (private):** the gateway (MCP server on loopback or on a private network shared with Raka, per-turn bearer), the phase-1 `cloud_*` tools backed by the console handlers' data, the `staff_*` tools and the staff dock (§3a), allowance counting from `usage`, the console chat. Later phases: proposals and cards, kernel forwarding with the mask, escalation, Cloud skills.
 - **rangka-os:** this file only.
 
 ## Status
@@ -124,3 +145,5 @@ Out of scope for the wire format beyond `usage` (§2): the host counts every tur
 proposed. Accepted before the rangka-ai and rangka-cloud changes merge; those may be built in parallel against this text.
 
 Amended 13 Nov 2026: the gateway may listen on a private network shared only with Raka, with an explicit URL, so Raka can run as its own service (§1). Loopback stays the default.
+
+Amended 19 Nov 2026: `place` gains `"staff"` (§2, §3a): the staff console of Rangka Cloud (Kendali), sent by the host only, with the read-only `staff_*` tool family (`staff_queue`, `staff_subscription`, `staff_payments`, `staff_costs`), person data as tokens, and suggestions as PREFILL/OPEN/DRAFT lines in `text`. Other places are unchanged.

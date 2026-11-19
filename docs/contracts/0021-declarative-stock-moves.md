@@ -265,6 +265,9 @@ The difference with `outlet_sales` is only the duplicate check, which a cashier 
 - Order → delivery note → invoice → return conversions and "returned qty" on the source (K-p, B16). `{source}` here
   only reads cost; the conversions belong in a separate contract next to `conversions.go`.
 - Lot, serial, expiry and bin dimensions (K-q, B13). A later `lot: line.<field>` key on a move entry is reserved.
+  Taken by 0070 (lots and serial numbers, 19 Nov 2026): the key is `lot: {no, expiry, made}` on `in` and
+  `lot: {pick}` on `out`, with `serials` and `expired` beside it; 0070 §7 also lets `goods_receipt` and
+  `stock_adjustment` declare `stock:` (decision 6). Bins stay out of scope.
 - Labour and overhead in production cost, multi-level BOM (K-r, B15).
 
 ## Decisions on the open points (6 Nov 2026)

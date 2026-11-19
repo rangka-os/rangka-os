@@ -15,7 +15,8 @@ import (
 // RequestIDHeader carries the request id in and out (the Rangka Cloud router sets it on the way in).
 const RequestIDHeader = "X-Request-Id"
 
-// SlowRequest is the duration above which a successful request gets an access line (a variable only for tests).
+// SlowRequest is the duration above which a successful request gets an access line. It is a variable only for
+// tests, which must set it before serving and restore it after every request has finished.
 var SlowRequest = time.Second
 
 const maxRequestIDLen = 128
@@ -111,7 +112,7 @@ type recorder struct {
 }
 
 func (w *recorder) WriteHeader(code int) {
-	if w.status == 0 {
+	if w.status == 0 && code >= 200 { // 1xx informational headers are followed by the real status
 		w.status = code
 	}
 	w.ResponseWriter.WriteHeader(code)

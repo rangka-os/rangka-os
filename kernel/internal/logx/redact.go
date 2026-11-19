@@ -2,6 +2,7 @@ package logx
 
 import (
 	"context"
+	"fmt"
 	"log/slog"
 	"regexp"
 	"strings"
@@ -56,14 +57,18 @@ func sensitiveKey(k string) bool {
 }
 
 var (
-	// urlPassword is the password part of scheme://user:password@host.
-	urlPassword = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@]*):[^\s@/]*@`)
-	// bearer is an Authorization header value.
-	bearer = regexp.MustCompile(`(?i)\b(bearer|basic)\s+[A-Za-z0-9._~+/=\-]{8,}`)
-	email  = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+	// urlPassword is the password part of scheme://user:password@host; greedy, so a password with a raw "@" goes too.
+	urlPassword = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@]*):[^\s/]*@`)
+	// bearer is an Authorization header value (a Basic value is base64 of user:password, so at least 16 characters).
+	bearer = regexp.MustCompile(`(?i)\b(bearer\s+[A-Za-z0-9._~+/=\-]{8,}|basic\s+[A-Za-z0-9+/=]{16,})`)
+	// keyValue is key=value, key: value or "key":"value" for a sensitive key, as found in DSNs, query strings,
+	// JSON bodies and %+v of structs and maps.
+	keyValue = regexp.MustCompile(`(?i)("?[A-Za-z0-9_\-]*(?:` + strings.Join(sensitiveKeys, "|") + `)[A-Za-z0-9_\-]*"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}\])]+)`)
+	email    = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 )
 
-// RedactString removes registered secrets, URL passwords, bearer tokens and e-mail addresses from s.
+// RedactString removes registered secrets, URL passwords, values of sensitive key=value pairs, bearer and basic
+// credentials and e-mail addresses from s. It is a safety net, not a parser: callers still must not log secrets.
 func RedactString(s string) string {
 	secretsMu.RLock()
 	r := replacer
@@ -74,10 +79,13 @@ func RedactString(s string) string {
 	if strings.Contains(s, "://") {
 		s = urlPassword.ReplaceAllString(s, "$1:"+Redacted+"@")
 	}
+	s = keyValue.ReplaceAllString(s, "${1}"+Redacted)
 	if strings.Contains(s, "@") {
 		s = email.ReplaceAllString(s, Redacted)
 	}
-	return bearer.ReplaceAllString(s, "$1 "+Redacted)
+	return bearer.ReplaceAllStringFunc(s, func(m string) string {
+		return strings.Fields(m)[0] + " " + Redacted
+	})
 }
 
 func redactAttr(a slog.Attr) slog.Attr {
@@ -104,8 +112,9 @@ func redactAttr(a slog.Attr) slog.Attr {
 		case interface{ String() string }:
 			return slog.String(a.Key, RedactString(x.String()))
 		default:
-			// Structs, maps and slices can hold anything; render them as text so the scrubbing still applies.
-			return slog.String(a.Key, RedactString(slog.AnyValue(x).String()))
+			// Structs, maps and slices can hold anything; render them with field names (%+v) so the key=value
+			// scrubbing still applies.
+			return slog.String(a.Key, RedactString(fmt.Sprintf("%+v", x)))
 		}
 	}
 	return slog.Attr{Key: a.Key, Value: v}

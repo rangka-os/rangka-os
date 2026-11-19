@@ -60,7 +60,7 @@ always-present fields, and context sits in `msg`.
 | `debug` | not emitted by default |
 
 While the old `Logf` call sites remain, a line is `warn` when one of its arguments is an error value or the message
-starts with `WARNING`, else `info`.
+starts with `warning` (any case), else `info`.
 
 ## Request id
 
@@ -91,10 +91,17 @@ Every line passes a redaction step before it is written:
 - fields whose name contains `password`, `passwd`, `secret`, `token`, `authorization`, `cookie`, `api_key`,
   `apikey`, `private_key`, `master_key`, `database_url`, `dsn`, `email`, `phone` or `credential` print `[REDACTED]`;
 - the password in any `scheme://user:password@host` URL;
-- `Bearer` and `Basic` credentials;
+- the value of a `key=value`, `key: value` or `"key":"value"` pair whose key contains one of the names above (DSNs,
+  query strings, JSON bodies, and structs or maps passed as a field, which are rendered with their field names);
+- `Bearer` credentials and `Basic` credentials of 16 characters or more;
 - e-mail addresses;
 - secrets the process knows at start: the database URL (and its password when 12 characters or longer),
   `RANGKA_INTERNAL_TOKEN`, `RANGKA_AI_SECRET`, `RANGKA_MASTER_KEY`, `RANGKA_HOST_NOTICES_SECRET`,
   `RANGKA_USER_PASSWORD`, `VAULT_TOKEN`, `DATABASE_URL` (values of 8 characters or more).
 
-Redaction is a safety net. Code still must not pass secrets or personal data to the logger.
+Redaction is a safety net, not a guarantee: a secret in free text with no recognisable key or shape (and not
+registered above) is not caught. Code still must not pass secrets or personal data to the logger. Not covered yet:
+the fatal start-up error that `rangka serve` prints to stderr before exiting, and the net/http panic message (an
+`info` line with the stack in `msg`).
+
+Context fields (`request_id`, ...) are top-level as long as no logger group is opened; the kernel opens none.

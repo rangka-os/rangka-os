@@ -78,7 +78,7 @@ func replaceBuiltins(groups []string, a slog.Attr) slog.Attr {
 }
 
 // Logf adapts a logger to the kernel's func(format, args...) signature for one component. The level is warn when
-// any argument is an error or the message starts with "WARNING", else info; call sites that need error pick it
+// any argument is an error or the message starts with "warning" (any case), else info; call sites that need error pick it
 // with slog directly.
 func Logf(l *slog.Logger, component string) func(format string, args ...any) {
 	l = l.With(slog.String("component", component))
@@ -91,7 +91,7 @@ func Logf(l *slog.Logger, component string) func(format string, args ...any) {
 			}
 		}
 		msg := fmt.Sprintf(format, args...)
-		if strings.HasPrefix(msg, "WARNING") {
+		if len(msg) >= 7 && strings.EqualFold(msg[:7], "warning") {
 			level = slog.LevelWarn
 		}
 		l.Log(context.Background(), level, msg)

@@ -220,3 +220,47 @@ func TestPanicLogsErrorAndRepanics(t *testing.T) {
 	}()
 	serve(t, h, NewJSON(&b, slog.LevelInfo), httptest.NewRequest("GET", "/x", nil))
 }
+
+// TestRedactionInsideValues covers the audit's F1 and F5 cases: secrets inside structs, maps, DSNs, query strings,
+// JSON bodies and URL passwords with a raw "@", and ordinary words that must survive.
+func TestRedactionInsideValues(t *testing.T) {
+	leak := "fixture" + strings.Repeat("Z5", 5)
+	var b bytes.Buffer
+	l := NewJSON(&b, slog.LevelInfo)
+	l.Info("x", "cfg", struct{ User, Password string }{"u", leak})
+	l.Info("x", "m", map[string]string{"api_token": leak})
+	l.Info("dsn host=db user=rk password=" + leak + " dbname=rk")
+	l.Info("GET /cb?code=1&access_token=" + leak + "&x=2")
+	l.Info(`body {"user":"u","client_secret":"` + leak + `"}`)
+	l.Info("dial postgres://rk:p@" + leak + "@db/rk")
+	l.Info("auth Basic " + leak + "AAAA")
+	if strings.Contains(b.String(), leak) {
+		t.Fatalf("leaked:\n%s", b.String())
+	}
+	b.Reset()
+	l.Info("switched to Basic subscription; bearer of news")
+	if !strings.Contains(b.String(), "Basic subscription") || !strings.Contains(b.String(), "bearer of news") {
+		t.Fatalf("ordinary words blanked: %s", b.String())
+	}
+}
+
+func TestLowercaseWarningIsWarn(t *testing.T) {
+	var b bytes.Buffer
+	Logf(NewJSON(&b, slog.LevelInfo), CompKernel)("warning: connected as a superuser")
+	if m := lines(t, &b)[0]; m["level"] != "warn" {
+		t.Fatalf("level = %v", m["level"])
+	}
+}
+
+func TestInformationalStatusIsNotTheFinalStatus(t *testing.T) {
+	var b bytes.Buffer
+	h := http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusEarlyHints)
+		w.WriteHeader(http.StatusInternalServerError)
+	})
+	serve(t, h, NewJSON(&b, slog.LevelInfo), httptest.NewRequest("GET", "/x", nil))
+	got := lines(t, &b)
+	if len(got) != 1 || got[0]["status"] != float64(500) {
+		t.Fatalf("lines = %v", got)
+	}
+}

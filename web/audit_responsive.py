@@ -59,7 +59,7 @@ def app_routes():
                 routes.append(f"r/{m}/{data[0]['name']}")
         except Exception as e:
             print("rows", m, e)
-    routes += ["approvals", "proses", "ubah"]
+    routes += ["approvals", "proses", "ubah", "pasang", "perangkat"]  # device screens (contract 0058), unpaired here
     return routes
 
 

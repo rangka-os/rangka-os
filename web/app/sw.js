@@ -12,6 +12,7 @@
  *   - /api/, /auth/, /oauth/, /mcp, /.well-known/: record data, sessions, attachments, prints, SSE
  *   - any method other than GET, any other origin
  * Record data never goes into Cache Storage: a shared phone or an org switch must not show someone else's data.
+ * A paired device's event queue (deviceoutbox.js, contract 0058 §5) is imported here and sent on Background Sync.
  * (Work screens keep their own per-user "data terakhir" copy in IndexedDB, see outbox.js.)
  *
  * The page (pwa.js) registers this file. A new version (this file's bytes changed, e.g. PRECACHE or VERSION) waits
@@ -46,6 +47,7 @@
     "process.css",
     "app.css",
     "brand-juragan.css",
+    "device.css",
     "vendor/react.production.min.js",
     "vendor/react-dom.production.min.js",
     "../design-system/bundle.js",
@@ -69,6 +71,11 @@
     "mulai.js",
     "ai.js",
     "outbox.js",
+    "deviceoutbox.js",
+    "printer-escpos.js",
+    "printer.js",
+    "pair.js",
+    "syncpill.js",
     "screens.js",
     "counter.js",
     "queue.js",
@@ -103,6 +110,16 @@
   self.RangkaSW = { classify: classify, PRECACHE: PRECACHE, VERSION: VERSION, SHELL: SHELL, FONTS: FONTS };
 
   if (typeof self.addEventListener !== "function" || !self.caches) return; // loaded by a unit test
+
+  // The paired device's queue (contract 0058 §5): the same file as the page, so Background Sync can send it after the
+  // tab is closed. The page asks for the "rangka-device-outbox" sync after each new event.
+  try { self.importScripts("deviceoutbox.js"); } catch (e) { /* the page still sends every 15 s */ }
+  self.addEventListener("sync", function (e) {
+    var ob = self.RangkaApp && self.RangkaApp.deviceOutbox;
+    if (e.tag !== "rangka-device-outbox" || !ob) return;
+    // a retryable failure rejects, so the browser tries the sync again later
+    e.waitUntil(ob.flush({}).then(function (r) { if (r.stopped === "retry") throw new Error("retry"); }));
+  });
 
   function scopePath() { return new URL(self.registration.scope).pathname; }
 

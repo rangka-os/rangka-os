@@ -97,6 +97,8 @@ func (s *Server) requestOnly(h http.Handler) http.Handler {
 type TickReport struct {
 	// Skipped: another instance holds the tick lock, so this one did nothing.
 	Skipped bool `json:"skipped,omitempty"`
+	// Paused: the scheduler is paused (contract 0070), so no schedule was enqueued; queued jobs still ran.
+	Paused bool `json:"paused,omitempty"`
 	// Ran is how many queued jobs this tick ran (succeeded or failed); Left is how many are due and still waiting.
 	Ran  int   `json:"ran"`
 	Left int64 `json:"left"`
@@ -122,6 +124,7 @@ func (s *Server) Tick(ctx context.Context, budget time.Duration) (TickReport, er
 	}
 	rep := TickReport{}
 	s.Sched.Tick(ctx)
+	rep.Paused = s.Sched.Paused()
 	deadline := start.Add(budget)
 	for time.Now().Before(deadline) {
 		did, err := s.Queue.RunOne(ctx)

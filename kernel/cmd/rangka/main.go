@@ -27,6 +27,8 @@ Usage:
     (once at go-live: continue the client's own numbering; never lowers a counter or reissues a name)
   rangka plan show|set <plan>|clear [--note "..."] [--apps <dir>] [--site <dir>] [--db <url>]
     (the tenant's plan, contract 0028: an operator's upgrade or downgrade; a downgrade deletes nothing)
+  rangka scheduler pause --until <RFC3339> [--reason "..."] | resume | status [--json] [--db <url>]
+    (pauses the scheduled flows and connector polls, at most 30 days; queued jobs still run, contract 0070)
   rangka sandbox create|reset|delete [--org <id>] [--fixtures <dir>] [--email <owner>] [--apps <dir>] [--site <dir>] [--db <url>]
     (the ruang coba, contract 0052: a sandbox org <org>-coba with demo data that sends nothing outside)
   rangka catalogue [--json] [--apps <dir>] [--site <dir>]
@@ -74,6 +76,8 @@ func main() {
 		code = cmdBackup(os.Args[2:])
 	case "restore":
 		code = cmdRestore(os.Args[2:])
+	case "scheduler":
+		code = cmdScheduler(os.Args[2:])
 	case "sandbox":
 		code = cmdSandbox(os.Args[2:])
 	case "catalogue":

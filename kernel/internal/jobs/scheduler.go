@@ -57,6 +57,10 @@ type Scheduler struct {
 	// pollMu is held for a whole tickPolls and by SetPolls, so SetPolls returns only after a tick that copied the old
 	// list has finished enqueueing: once it returns, no poll of a removed spec is queued any more.
 	pollMu sync.Mutex
+	// paused: the last tick found the scheduler paused (contract 0070); noPauseTableWarned: the missing table was
+	// logged once
+	paused             bool
+	noPauseTableWarned bool
 }
 
 // PollSpec is a periodic "poll" job (a connector trigger with via: poll, contract 0002 §A.1).
@@ -296,10 +300,17 @@ func sortedFlowNames(reg *meta.Registry) []string {
 
 // Tick enqueues every schedule whose time has come, for every org; the unique key (org + flow + slot) makes it safe to
 // run on several instances and across restarts. An org whose enqueue fails is logged and tried again next tick; the
-// other orgs go on.
+// other orgs go on. While the scheduler is paused (contract 0070) each slot that comes due is skipped and logged, and
+// a slot that came due during a pause is never caught up; when the pause state cannot be read, nothing is enqueued
+// and the slots stay due for the next tick.
 func (s *Scheduler) Tick(ctx context.Context) {
 	now := s.Now().In(s.Loc)
-	s.tickPolls(ctx, now)
+	pause, err := s.pauseState(ctx, now)
+	if err != nil {
+		s.Log("scheduler: read the pause state: %v; nothing enqueued this tick", err)
+		return
+	}
+	s.pollTick(ctx, now, pause)
 	s.refreshOrgs(ctx, now)
 	s.mu.Lock()
 	items := append([]*Schedule{}, s.items...)
@@ -320,6 +331,13 @@ func (s *Scheduler) Tick(ctx context.Context) {
 			s.mu.Unlock()
 			if due.IsZero() || due.After(now) {
 				break
+			}
+			if pause.skips(due) {
+				s.Log("scheduler: paused: skipped %s: %s due %s", it.Org, it.Name, due.Format(time.RFC3339))
+				s.mu.Lock()
+				it.next = it.Cron.Next(due)
+				s.mu.Unlock()
+				continue
 			}
 			opts := engine.EnqueueOpts{UniqueKey: "flow:" + it.Org + ":" + it.Name + ":" + strconv.FormatInt(due.Unix(), 10)}
 			if off := s.offset(it, due, orgs, stagger); off > 0 {
@@ -343,7 +361,10 @@ func (s *Scheduler) Tick(ctx context.Context) {
 var pollEnqueueTimeout = 10 * time.Second
 
 // tickPolls enqueues each poll whose current slot has not been enqueued yet.
-func (s *Scheduler) tickPolls(ctx context.Context, now time.Time) {
+func (s *Scheduler) tickPolls(ctx context.Context, now time.Time) { s.pollTick(ctx, now, PauseState{}) }
+
+// pollTick is tickPolls under a pause state: a slot the pause skips is logged and marked done, never caught up.
+func (s *Scheduler) pollTick(ctx context.Context, now time.Time, pause PauseState) {
 	s.pollMu.Lock()
 	defer s.pollMu.Unlock()
 	ctx, cancel := context.WithTimeout(ctx, pollEnqueueTimeout)
@@ -357,6 +378,13 @@ func (s *Scheduler) tickPolls(ctx context.Context, now time.Time) {
 		due := slot.After(p.last)
 		s.mu.Unlock()
 		if !due {
+			continue
+		}
+		if pause.skips(slot) {
+			s.Log("scheduler: paused: skipped poll %s: %s due %s", p.org, p.Name, slot.UTC().Format(time.RFC3339))
+			s.mu.Lock()
+			p.last = slot
+			s.mu.Unlock()
 			continue
 		}
 		args := map[string]any{"scheduled_at": slot.UTC().Format(time.RFC3339)}

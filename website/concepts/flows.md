@@ -39,7 +39,7 @@ idempotency: event.message_id
 | `approve` | Stop until a person with one of the `approvers` roles approves; reject ends the flow ([contract 0007](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0007-document-approvals.md)). Top level only |
 
 `on:` takes a connector trigger (`whatsapp_business.message_received`) or a model event (`deal.updated`);
-`schedule:` takes a cron. A scheduled flow runs once per due time even with several kernel nodes.
+`schedule:` takes a cron. A scheduled flow runs once per due time for every organisation on the host (not sandboxes), even with several kernel nodes; with several organisations their runs are spread over `scheduler.stagger_s`, never past the end of the day (contract 0010 §9).
 
 ## Notices
 

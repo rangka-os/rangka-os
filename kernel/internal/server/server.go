@@ -228,6 +228,9 @@ func New(ctx context.Context, cfg Config) (*Server, error) {
 		s.Sched.CatchUp = time.Duration(intCfg(reg, "scheduler.catch_up_s", 600)) * time.Second
 	}
 	s.Sched.Log = cfg.Logf
+	// scheduled flows run for every org on the host, not only the default one (rangka-os#263 slice a)
+	s.Sched.Orgs = s.listOrgs
+	s.Sched.Stagger = time.Duration(intCfg(reg, "scheduler.stagger_s", 300)) * time.Second
 	s.Sched.SetFlows(reg, cfg.Org)
 	s.Hub = realtime.NewHub()
 	s.Hub.Log = cfg.Logf
@@ -575,6 +578,22 @@ func (s *Server) repairMemberRecords(ctx context.Context) {
 	}
 }
 
+// listOrgs lists the businesses on the host for the scheduler: rk_orgs without sandboxes, whose scheduled flows
+// would send real mail and notices on a timer (contract 0052 §2).
+func (s *Server) listOrgs(ctx context.Context) ([]string, error) {
+	res, err := s.DB.Query(pg.WithOrg(ctx, ""), "select id from rk_orgs where not sandbox order by id")
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(res.Rows))
+	for _, row := range res.Rows {
+		if id, ok := row[0].(string); ok {
+			out = append(out, id)
+		}
+	}
+	return out, nil
+}
+
 // Wait waits for background loops after ctx ended.
 func (s *Server) Wait() {
 	s.wg.Wait()
@@ -602,6 +621,7 @@ func (s *Server) Reload(ctx context.Context) error {
 	}
 	s.Engine.SetRegistry(reg)
 	s.setNoticeMail(reg)
+	s.Sched.SetStagger(time.Duration(intCfg(reg, "scheduler.stagger_s", 300)) * time.Second)
 	s.Sched.SetFlows(reg, s.Cfg.Org)
 	s.Sched.SetPolls(s.Cfg.Org, pollSpecs(reg))
 	s.Cfg.Logf("metadata reloaded: %d models, %d dashboards", len(reg.Models), len(reg.Dashboards))

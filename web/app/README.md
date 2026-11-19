@@ -124,6 +124,12 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `sw.js` | Service worker: network-first app shell, Google Fonts cache, never API data |
 | `manifest.webmanifest`, `icons/` | Web app manifest and the Sendi icons (192, 512, maskable, Apple touch) |
 | `outbox.js` | Safe writes for work screens: idempotency keys, the IndexedDB outbox and the read cache (contract 0030 §6, §7) |
+| `deviceoutbox.js` | The paired device's event queue to `/api/v1/edge/events`: seq order, resend, sync pill state (contract 0058 §4, §5, §9); also imported by `sw.js` for Background Sync |
+| `pair.js` | `#/pasang` pairing and cashier unlock (14-day offline PIN verifiers), `#/perangkat` device page (contract 0058 §2, §5, §8) |
+| `printer-escpos.js` | ESC/POS receipt bytes, byte for byte rangka-edge's `printdoc.Receipt` (contract 0058 §8) |
+| `printer.js` | Printer transports: browser print dialog, rangka-edge on loopback, Web Serial, WebUSB, Web Bluetooth; queues `print.done` / `print.failed` (contract 0058 §8) |
+| `syncpill.js` | The sync pill and queue panel of a paired device (contract 0058 §9) |
+| `device.css` | Styles of the device screens and the sync pill |
 | `counter.js` | The `counter` work screen (cashier): catalogue, cart, hold, tender, session, receipt (contract 0030 §2) |
 | `queue.js` | The `queue` work screen (kitchen, today's jobs): columns of cards, steps, undo, polling (contract 0030 §2) |
 | `screens.js` | Work screens (`#/w/<screen>`, contract 0030): the route view and the type renderers (`entry`) |

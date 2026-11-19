@@ -1,0 +1,92 @@
+/* Rangka end-user app: the paired-device screens (pair.js: #/pasang, #/perangkat) and the sync pill (syncpill.js),
+ * contract 0058 §2, §8, §9. Tokens only; the pill sits above the top bar, outside every screen. */
+
+/* ---- overlay: the device screens cover the app (they work before anyone is signed in) ---- */
+html.ap-dev-open, html.ap-dev-open body { overflow: hidden; }
+.ap-dev-overlay { position: fixed; inset: 0; z-index: 1300; overflow: auto; background: var(--app); color: var(--ink); -webkit-overflow-scrolling: touch; }
+.ap-dev-overlay .rk-auth { min-height: 100%; }
+.ap-dev-form { display: flex; flex-direction: column; gap: var(--space-4); }
+.ap-dev-wide { width: 100%; justify-content: center; min-height: var(--touch); }
+.ap-dev-code input { font: 600 20px/28px var(--font-mono); letter-spacing: .18em; text-transform: uppercase; }
+.ap-dev-pin input { font: 600 22px/28px var(--font-mono); letter-spacing: .4em; }
+.ap-dev-muted { margin: 0; color: var(--muted); font-size: var(--font-size-sm); line-height: 18px; }
+.ap-dev-link { color: var(--link); font-size: 13px; text-decoration: none; }
+.ap-dev-link:hover { text-decoration: underline; }
+.ap-dev-badge { display: flex; align-items: center; gap: var(--space-3); padding: var(--space-3) var(--space-4); border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg); background: var(--surface); font-size: 13px; color: var(--ink-2); }
+.ap-dev-code-big { font: 700 24px/32px var(--font-mono); color: var(--ink); }
+
+/* unlock: people as large tiles, a finger's size on a tablet */
+.ap-dev-staff { list-style: none; margin: 0; padding: 0; display: grid; grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); gap: var(--space-2); }
+.ap-dev-person { width: 100%; min-height: 56px; display: flex; align-items: center; gap: var(--space-3); padding: var(--space-2) var(--space-3);
+  border: 1px solid var(--line-strong); border-radius: var(--r-lg); background: var(--surface); color: var(--ink); text-align: left; cursor: pointer;
+  font: inherit; transition: background var(--dur-1) var(--ease-out), border-color var(--dur-1) var(--ease-out); }
+.ap-dev-person:hover { background: var(--soft); }
+.ap-dev-person:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ap-dev-person-t { display: flex; flex-direction: column; min-width: 0; }
+.ap-dev-person-t b { font-weight: 600; font-size: 14px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-dev-person-t small { color: var(--muted); font-size: 12px; }
+.ap-dev-avatar { flex: 0 0 auto; width: 32px; height: 32px; border-radius: var(--r-pill); display: inline-flex; align-items: center; justify-content: center;
+  background: var(--soft); color: var(--ink-2); font-weight: 600; font-size: 14px; }
+.ap-dev-who { display: flex; align-items: center; gap: var(--space-3); }
+.ap-dev-who b { flex: 1 1 auto; font-size: 15px; }
+
+/* the device page */
+.ap-dev-page { min-height: 100%; padding: var(--space-6) var(--space-4) var(--space-12); box-sizing: border-box; }
+.ap-dev-inner { max-width: 640px; margin: 0 auto; display: flex; flex-direction: column; gap: var(--space-4); }
+.ap-dev-inner h1 { margin: 0; font: 600 22px/28px var(--font-sans); letter-spacing: -.01em; }
+.ap-dev-top { display: flex; flex-direction: column; gap: var(--space-2); }
+.ap-dev-card { display: flex; flex-direction: column; gap: var(--space-3); padding: var(--space-4); border: 1px solid var(--line-strong);
+  border-radius: var(--r-lg); background: var(--surface); }
+.ap-dev-card h2 { margin: 0; font: 600 15px/20px var(--font-sans); }
+.ap-dev-dl { display: grid; grid-template-columns: max-content 1fr; gap: var(--space-1) var(--space-4); margin: 0; font-size: 13px; }
+.ap-dev-dl dt { color: var(--muted); }
+.ap-dev-dl dd { margin: 0; font-weight: 500; }
+.ap-dev-options { display: flex; flex-direction: column; gap: var(--space-2); }
+.ap-dev-option { display: flex; align-items: flex-start; gap: var(--space-3); padding: var(--space-3); border: 1px solid var(--line); border-radius: var(--r-lg); cursor: pointer; }
+.ap-dev-option.on { border-color: var(--ink-2); background: var(--soft); }
+.ap-dev-option.off { cursor: not-allowed; opacity: .55; }
+.ap-dev-option input { margin: 3px 0 0; accent-color: var(--primary); }
+.ap-dev-option span { display: flex; flex-direction: column; gap: 2px; }
+.ap-dev-option b { font-weight: 600; font-size: 13.5px; }
+.ap-dev-option small { color: var(--muted); font-size: 12px; line-height: 16px; }
+.ap-dev-grid { display: grid; grid-template-columns: 1fr 1fr; gap: var(--space-3); }
+.ap-dev-actions { display: flex; gap: var(--space-2); flex-wrap: wrap; }
+@media (max-width: 560px) { .ap-dev-grid { grid-template-columns: 1fr; } }
+
+/* ---- the sync pill: top right, above the top bar and the device screens; its queue drawer too ---- */
+#ap-sync-root { position: relative; z-index: 1310; }
+#ap-device-root { position: relative; z-index: 1300; }
+.ap-sync-pill { position: fixed; z-index: 70; top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 16px);
+  display: inline-flex; align-items: center; gap: 6px; max-width: calc(100vw - 96px); height: 28px; padding: 0 12px 0 10px; border: 0;
+  border-radius: var(--r-pill); font: 500 12px/28px var(--font-sans); white-space: nowrap; cursor: pointer; box-shadow: var(--shadow-float);
+  background: var(--surface); color: var(--ink-2); transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
+.ap-sync-pill:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.ap-sync-text { overflow: hidden; text-overflow: ellipsis; }
+.ap-sync-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--ok-solid); }
+.ap-sync-pill.warn { background: var(--warn-tint); color: var(--warn); }
+.ap-sync-pill.warn .ap-sync-dot { background: var(--warn-solid); }
+.ap-sync-pill.bad { background: var(--bad-tint); color: var(--bad); }
+.ap-sync-pill.bad .ap-sync-dot { background: var(--bad-solid); }
+.ap-sync-pill.busy { background: var(--info-tint); color: var(--info); }
+.ap-sync-pill.busy .ap-sync-dot { background: var(--info); animation: ap-sync-blink 1s var(--ease-move) infinite alternate; }
+@keyframes ap-sync-blink { from { opacity: 1; } to { opacity: .3; } }
+@media (prefers-reduced-motion: reduce) { .ap-sync-pill.busy .ap-sync-dot { animation: none; } }
+/* the counter's own offline banner (counter.js) spans the top: the pill sits inside its empty right end, not on its edge */
+@media (min-width: 768px) { html:has(.ap-counter-offline) .ap-sync-pill { top: calc(env(safe-area-inset-top, 0px) + 31px); right: calc(env(safe-area-inset-right, 0px) + 44px); } }
+/* phones: below the 48px top bar's title row, not on it */
+@media (max-width: 767px) {
+  .ap-sync-pill { top: calc(env(safe-area-inset-top, 0px) + 52px); max-width: calc(100vw - 32px); }
+  /* the device screens have no top bar: the pill takes the corner */
+  html.ap-dev-open .ap-sync-pill { top: calc(env(safe-area-inset-top, 0px) + 10px); }
+}
+
+.ap-sync-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; }
+.ap-sync-item { display: flex; align-items: flex-start; justify-content: space-between; gap: var(--space-3); padding: var(--space-3) 0; border-bottom: 1px solid var(--line); }
+.ap-sync-item:last-child { border-bottom: 0; }
+.ap-sync-main { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ap-sync-main b { font-weight: 600; font-size: 13px; overflow-wrap: anywhere; }
+.ap-sync-main small { color: var(--muted); font-size: 12px; }
+.ap-sync-main .ap-sync-why { color: var(--bad); }
+.ap-sync-side { display: flex; flex-direction: column; align-items: flex-end; gap: var(--space-1); flex: 0 0 auto; }
+.ap-sync-foot { display: flex; align-items: center; justify-content: space-between; gap: var(--space-3); width: 100%; flex-wrap: wrap; }

@@ -31,9 +31,11 @@ private) · Owner of the change: rangka-os (this contract) · Asked by: Dede, 19
 - **A pick is never hidden.** An option the owner picked is shown even when the rules of §2 would hide it, in its
   group, at its catalogue place; a hidden group comes back with only its picked options. A profile change never drops
   a pick without the owner seeing it.
-- **Size.** The rules keep a card at most five groups and fifteen options for every profile. If a card would still
-  have more than fifteen options, Cloud drops options from the end of the card: the last unpicked option of the last
-  group that has more than two options, until fifteen are left.
+- **Size.** A card has at most five groups (the business group and the four core groups) and fifteen options. When
+  the rules leave more than fifteen, Cloud drops options from the end of the card until fifteen are left: the last
+  unpicked option of the last group with more than three options, then of the last group with more than two. For
+  example a wholesale card loses "Titip jual" and "Kasbon". Picked options are never dropped (they may take a card
+  past fifteen).
 
 ### 2. The rules
 
@@ -52,7 +54,7 @@ Terms, from confirmed answers:
 | Karyawan: `staff_records`, `staff_pay`, `staff_advance` | not *solo* | |
 | `staff_hiring` | not *solo*, and `staff` is not `to_5` or `industry` is `outsourcing` | |
 | `sales_orders` | `industry` is not `outsourcing`, `training`, `subscription`; and `sales_channels` is not confirmed as only `offline_outlet` | |
-| `sales_daily` | *goods*, and *channel* `offline_outlet` | *one place*: "Rekap penjualan dan setoran harian masih manual"; else "Rekap penjualan dan setoran tiap cabang masih manual" |
+| `sales_daily` | `industry` is `fnb`, `retail` or no industry, and *channel* `offline_outlet` | *one place*: "Rekap penjualan dan setoran harian masih manual"; else "Rekap penjualan dan setoran tiap cabang masih manual" |
 | `sales_invoices`, `sales_overdue` | `industry` is not `fnb`, or *channel* `offline_sales` or `offline_visit` | |
 | `product_prices` | always | *service*: label "Daftar harga", pain "Daftar harga layanan tersebar dan beda-beda" |
 | `product_stock` | *goods* | |

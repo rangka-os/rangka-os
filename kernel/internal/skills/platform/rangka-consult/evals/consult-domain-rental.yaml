@@ -1,0 +1,14 @@
+name: consult-domain-rental
+skill: rangka-consult
+stage: studio
+prompt: "Aku sewain kamera sama lensa. Booking lewat WA, jadwalnya aku tulis di kalender HP. Penyewa bayar deposit atau ninggal KTP, kadang alat balik telat atau lecet."
+expect:
+  answer:
+    not_mentions: ["modul", "konektor", "katalog", "sewa_alat", "kepingan"]
+  escalate: false
+rubric:
+  - "The reply asks one question only, about the deposit, damage or late-return settlement, or about how double booking is avoided"
+  - "Deposit is treated as money held for the customer, not as revenue and not as a free-text note"
+  - "The KTP guarantee is not answered for the owner: how it is kept stays an open question until the owner says"
+  - "A stage for booking, hand-over and return is placed with a catalogue piece for equipment rental"
+  - "Nothing is described as already built or installed"

@@ -1,0 +1,14 @@
+name: consult-domain-outsourcing
+skill: rangka-consult
+stage: studio
+prompt: "Aku punya PT outsourcing satpam sama cleaning service, sekitar 60 orang ditempatkan di 4 klien. Tiap akhir bulan admin rekap absen dari supervisor, hitung gaji di Excel, terus bikin tagihan ke klien dari rekap yang sama."
+expect:
+  answer:
+    not_mentions: ["modul", "konektor", "katalog", "jasa_proyek", "kepingan"]
+  escalate: false
+rubric:
+  - "The reply reacts to the owner's story and asks exactly one question, in Bahasa Indonesia with 'kamu'"
+  - "The question digs where money moves: how the client invoice or the payroll is derived from attendance, or how long clients take to pay"
+  - "Payroll and client billing are mapped as stages from the same attendance, with a catalogue piece that covers field attendance, payroll and invoicing"
+  - "No tax, BPJS or THR rate is stated as a figure; any mention of them defers to the system's per-period settings or a tax consultant"
+  - "The reply does not pitch features or name an app before the owner's day is understood"

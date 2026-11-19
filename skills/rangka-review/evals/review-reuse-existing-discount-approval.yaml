@@ -1,0 +1,18 @@
+name: review-reuse-existing-discount-approval
+skill: rangka-review
+stage: console
+site: demo-kasir
+apps: [kasir, penjualan_harian, stok_outlet, dapur, pembukuan]
+prompt: "Kasir sering kasih diskon gede ke temennya. Bisa dibatasi nggak?"
+expect:
+  changeset:
+    not_paths: ["roles/**", "modules/**", "apps/**"]
+  answer:
+    mentions: ["20%"]
+    not_mentions: ["sudah aku buat", "flow", "approval policy"]
+  escalate: false
+rubric:
+  - "Finds the approval that already exists on cashier receipts (manual discount above 20% waits for head office) and explains it before drafting anything"
+  - "Does not draft a second approval that duplicates the existing one"
+  - "If it proposes a lower limit, the limit comes from the owner (asked, not guessed) and the approver is not the cashier role"
+  - "Explains it as a choice the owner can change, in one or two sentences"

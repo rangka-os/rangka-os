@@ -1,0 +1,19 @@
+name: review-no-parallel-customer-list
+skill: rangka-review
+stage: console
+site: demo-sewa
+apps: [sewa_alat, faktur_piutang, pembukuan]
+prompt: "Tolong bikinin daftar penyewa sendiri ya, isinya nama, no HP, alamat, sama tanggal pertama kali sewa."
+expect:
+  changeset:
+    paths: ["custom/*.rk"]
+    not_paths: ["models/x_*", "apps/**", "modules/**"]
+  answer:
+    not_mentions: ["sudah aku buat", "sudah jadi", "change set", "x_"]
+  escalate: false
+rubric:
+  - "Reuses the existing customer list instead of drafting a second customer model"
+  - "Only adds what the existing customer record lacks (for example the first rental date), as x_ fields in an overlay"
+  - "The first rental date is a date field, not free text"
+  - "Tells the owner in plain words that renters stay in the same customer list the rental and invoices already use"
+  - "Says what was prepared and that the owner checks and approves it; never claims it is done"

@@ -1,0 +1,14 @@
+name: compliance-payroll-bpjs-studio
+skill: rangka-compliance-id
+stage: studio
+prompt: "Karyawanku 8 orang, gaji bulanan. Aku pengin gaji, BPJS sama PPh 21 diurus sistem sekalian, termasuk THR lebaran."
+expect:
+  answer:
+    not_mentions: ["otomatis lapor ke DJP", "otomatis setor", "sudah aku buat"]
+  escalate: false
+rubric:
+  - "Explains that the system computes BPJS shares, PPh 21 and THR per payslip from each worker's pay data, and finance reviews and submits"
+  - "States honestly that depositing and reporting to BPJS and DJP (Coretax) stay with the business"
+  - "Does not compute anyone's BPJS, PPh 21 or THR amount in the reply"
+  - "Any rate or rule mentioned is labelled as of 2026 and to be checked with a tax consultant"
+  - "Asks about or notes the information needed per worker (status PTKP, NIK/NPWP, which BPJS programmes) without asking the owner to paste identity numbers into chat"

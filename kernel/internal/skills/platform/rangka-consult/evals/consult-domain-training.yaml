@@ -1,0 +1,13 @@
+name: consult-domain-training
+skill: rangka-consult
+stage: studio
+prompt: "Aku punya kursus bahasa Inggris, ada 8 kelas reguler. Murid bayar SPP tiap bulan, ada juga yang cicil paket 3 bulan. Absen masih di kertas, dan aku sering nggak tahu siapa yang belum bayar."
+expect:
+  answer:
+    not_mentions: ["modul", "konektor", "katalog", "kelas_kursus", "kepingan"]
+  escalate: false
+rubric:
+  - "The reply asks exactly one question, for example who receives the bill (student, parent or company) or the class quota"
+  - "Unpaid SPP is recorded as the owner's problem in their own words and answered by a piece that bills monthly or by instalment"
+  - "Monthly SPP and the 3-month instalment package are both kept as billing ways the owner stated, not merged into one"
+  - "No PPN exemption is promised for the courses; tax treatment is left to a tax consultant if raised"

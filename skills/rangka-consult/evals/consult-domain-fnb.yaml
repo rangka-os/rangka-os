@@ -1,0 +1,13 @@
+name: consult-domain-fnb
+skill: rangka-consult
+stage: studio
+prompt: "Aku punya 3 cabang kedai kopi. Kasirnya pakai Moka, tapi stok susu sama kopi sering selisih, dan pesanan GoFood aku rekap sendiri tiap malam."
+expect:
+  answer:
+    not_mentions: ["modul", "konektor", "katalog", "fnb_cabang", "kepingan"]
+  escalate: false
+rubric:
+  - "The existing cashier is kept: no new cashier is placed on the map for the counter, sales come from the cashier the owner already uses"
+  - "The reply does not promise that GoFood orders flow in automatically; if mentioned, it says they are recapped daily for now"
+  - "Stock differences are recorded as the owner's problem and answered by stock counting with recipes or transfers, not by editing balances"
+  - "The reply asks one question, for example how often stock is counted or whether a central kitchen sends stock to the branches"

@@ -1,0 +1,19 @@
+name: modelling-rental-deposit-reuse
+skill: rangka-modelling
+stage: console
+site: demo-sewa
+apps: [sewa_alat, faktur_piutang, pembukuan]
+prompt: "Aku sewain alat pesta, tiap sewa ada deposit yang balik kalau barang aman. Kadang penyewa ninggalin barang sebagai jaminan. Bisa dicatat?"
+expect:
+  changeset:
+    paths: ["custom/rental_booking.rk"]
+    not_paths: ["apps/**", "modules/**", "models/x_*deposit*", "models/x_*sewa*"]
+  answer:
+    mentions: ["deposit", "jaminan"]
+    not_mentions: ["sudah aku buat", "sudah ditambahkan"]
+  escalate: false
+rubric:
+  - "Says the deposit is already recorded by the rental module (booking and return), and proposes no new deposit model or field"
+  - "The collateral is an x_ overlay field on rental_booking (a select or data field), not a new company model"
+  - "Does not store an identity card number; records only the kind of collateral or a short description"
+  - "Whether the collateral came back is recorded at return time (rental_return), not by editing the submitted booking"

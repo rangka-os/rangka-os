@@ -1,0 +1,21 @@
+name: dashboards-rental-cash-and-late
+skill: rangka-dashboards
+stage: console
+site: demo-sewa
+apps: [sewa_alat, faktur_piutang, pembukuan]
+prompt: "Tiap pagi aku mau langsung lihat uang yang masuk sama alat yang telat dibalikin. Bisa ditambahin di dashboard?"
+expect:
+  changeset:
+    paths: ["dashboards/sewa_ringkas.rk"]
+    not_paths: ["apps/**", "modules/**"]
+    risk: low
+  answer:
+    mentions: ["usulan"]
+    not_mentions: ["sudah aku buat", "sudah ditambahkan", "sudah jadi"]
+  escalate: false
+rubric:
+  - "Replaces the installed dashboard sewa_ringkas under the same name instead of inventing a new dashboard name"
+  - "The money-in widget sums payment.amount with docstatus == 1 and direction == 'receive', not invoices issued"
+  - "The late widget filters rental_schedule state == 'out' and end_date < today() and sets good_when: down"
+  - "Keeps the widgets the original dashboard already had, or says which it dropped and why"
+  - "Tells the owner what each new widget is for and that they review the preview and approve"

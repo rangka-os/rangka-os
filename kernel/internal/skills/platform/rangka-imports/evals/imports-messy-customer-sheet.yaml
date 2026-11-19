@@ -1,0 +1,17 @@
+name: imports-messy-customer-sheet
+skill: rangka-imports
+stage: console
+site: kopi-senja
+apps: [crm]
+prompt: "Ini daftar pelanggan dari Excel-ku: kolomnya No, Nama Toko, No HP, Kota, NPWP. Ada yang dobel, nomor HP campur 08 sama 812, NPWP-nya jadi 1,23E+15. Tolong masukin semua ya."
+expect:
+  answer:
+    mentions: ["Nama pelanggan", "WhatsApp", "NPWP"]
+    not_mentions: ["sudah aku impor", "sudah diimpor", "sudah masuk"]
+  escalate: false
+rubric:
+  - "Points the owner to the existing customer import (Impor data / Daftar pelanggan) instead of claiming Raka imports the file itself"
+  - "Gives a rename list from the owner's columns to the import's exact column names (Nama Toko -> Nama pelanggan, No HP -> WhatsApp)"
+  - "Flags the duplicate names and asks the owner which to keep, without merging or deleting rows itself"
+  - "Explains the NPWP scientific-notation problem and says to format the column as text, without inventing the digits"
+  - "Suggests a small batch first and reading the preview before the full file"

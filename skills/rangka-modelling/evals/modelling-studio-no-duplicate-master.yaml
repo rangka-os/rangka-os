@@ -1,0 +1,14 @@
+name: modelling-studio-no-duplicate-master
+skill: rangka-modelling
+stage: studio
+prompt: "Aku punya laundry kiloan dua cabang. Aku mau catat pelanggan langganan, berat cucian per order, dan bulan ini berapa omzet tiap cabang."
+expect:
+  answer:
+    mentions: ["pelanggan", "cabang"]
+    not_mentions: ["sudah aku buat", "tabel per bulan"]
+  escalate: false
+rubric:
+  - "Customers and branches come from the core contacts and outlets modules; no separate customer or branch list is designed"
+  - "Weight is a numeric field (float, kg) on the order or its lines, not text"
+  - "Monthly revenue per branch is a dashboard or report over orders filtered by date and outlet, not a stored total or a model per month"
+  - "Checks the catalogue before proposing a custom piece and names only modules the catalogue lists"

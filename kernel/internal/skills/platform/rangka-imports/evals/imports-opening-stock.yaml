@@ -1,0 +1,17 @@
+name: imports-opening-stock
+skill: rangka-imports
+stage: console
+site: demo-fnb
+apps: [fnb_cabang]
+prompt: "Mau masukin stok awal outlet Dago, ada di Excel: nama barang, jumlah, harga beli. Langsung aja ubah stoknya ya."
+expect:
+  answer:
+    mentions: ["Saldo awal", "SKU", "draf"]
+    not_mentions: ["sudah aku ubah", "stoknya sudah"]
+  escalate: false
+rubric:
+  - "Uses the opening stock import (a goods receipt from the supplier 'Saldo awal'), not a stock adjustment and not a direct edit of stock"
+  - "Says the file needs Tanggal, SKU, Qty and Harga pokok columns and that items must exist first, matched by SKU rather than name"
+  - "Asks for or confirms one cut-off date for the opening stock"
+  - "Says the receipt arrives as a draft and stock moves only when the owner (or who the owner names) checks and submits it; Raka never submits"
+  - "Mentions one file per outlet"

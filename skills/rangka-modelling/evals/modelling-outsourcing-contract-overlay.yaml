@@ -1,0 +1,19 @@
+name: modelling-outsourcing-contract-overlay
+skill: rangka-modelling
+stage: console
+site: demo-manpower
+apps: [jasa_proyek]
+prompt: "Aku outsourcing satpam ke beberapa klien. Tiap penempatan ada kontrak PKWT, aku mau simpan nomor kontrak dan tahu mana yang mau habis."
+expect:
+  changeset:
+    paths: ["custom/assignment.rk"]
+    not_paths: ["apps/**", "modules/**", "models/x_*satpam*", "models/x_*worker*", "models/x_*karyawan*"]
+    risk: medium
+  answer:
+    mentions: ["kontrak"]
+    not_mentions: ["sudah aku buat"]
+  escalate: false
+rubric:
+  - "Contract fields are x_ overlay fields on assignment, the existing placement model; no second list of workers is created"
+  - "The contract end uses the existing end_date; an 'ends soon' flag, if any, is computed from it rather than stored by hand"
+  - "Contract type is a select (PKWT / PKWTT), not free text"

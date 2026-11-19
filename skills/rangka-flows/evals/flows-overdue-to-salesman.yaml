@@ -1,0 +1,21 @@
+name: flows-overdue-to-salesman
+skill: rangka-flows
+stage: console
+site: demo-kepingan-keuangan
+prompt: "Faktur yang udah telat dua minggu, tolong salesman-nya yang dikabari biar dia yang nagih."
+expect:
+  changeset:
+    paths: ["flows/x_*.rk"]
+    not_paths: ["apps/**", "modules/**", "custom/sales_invoice.rk"]
+    risk: medium
+  answer:
+    mentions: ["salesman"]
+    not_mentions: ["sudah aku buat", "sudah jalan"]
+  escalate: false
+rubric:
+  - "The flow has schedule: (a daily cron) and finds submitted invoices with outstanding > 0 using days_between on due_date"
+  - "The flow carries description: {id: ...} with an owner sentence that includes the 14-day condition"
+  - "Each notice has a stable id per invoice so a rerun does not tell twice"
+  - "Notifies the salesman as a user record or role, never a literal email address, and handles invoices without a salesman"
+  - "Never updates the submitted invoice"
+  - "Mentions that the existing morning collection list for owner and finance keeps running"

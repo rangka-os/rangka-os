@@ -1,0 +1,14 @@
+name: dashboards-studio-kpi-pick
+skill: rangka-dashboards
+stage: studio
+prompt: "Aku buka les privat matematika, ada 40 murid bayar per bulan. Nanti di layar depan aku bakal lihat apa aja?"
+expect:
+  answer:
+    mentions: ["murid"]
+    not_mentions: ["sudah aku buat"]
+  escalate: false
+rubric:
+  - "Offers 4 to 6 KPIs a course owner acts on (active students, new and withdrawn students, overdue fees, sessions this week), not a long list"
+  - "Explains at least one KPI by the action it triggers (for example, call students who stopped or remind unpaid fees)"
+  - "Does not draft a dashboard file before the site exists"
+  - "Does not invent figures for the owner's business"

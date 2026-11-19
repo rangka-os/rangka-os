@@ -25,6 +25,12 @@ func portalEnv(t *testing.T) *env {
 	})
 }
 
+// submitFaktur submits a draft invoice and returns its final name (a draft is renamed on submit).
+func submitFaktur(e *env, name string) string {
+	e.t.Helper()
+	return e.must(200, "POST", "/api/v1/r/faktur/"+name+"/submit", nil).JSON["name"].(string)
+}
+
 // customer is a browser without credentials.
 func (e *env) customer() *env { return &env{t: e.t, s: e.s, ts: e.ts, jar: newJar()} }
 
@@ -50,7 +56,7 @@ func TestPortalLinkFlow(t *testing.T) {
 
 	// a draft is not shared
 	e.must(409, "POST", "/api/v1/portal/tagihan/links", map[string]any{"record": inv})
-	e.must(200, "POST", "/api/v1/r/faktur/"+inv+"/submit", nil)
+	inv = submitFaktur(e, inv)
 	e.must(404, "POST", "/api/v1/portal/nope/links", map[string]any{"record": inv})
 	e.must(400, "POST", "/api/v1/portal/tagihan/links", map[string]any{"record": inv, "days": 31})
 	e.must(404, "POST", "/api/v1/portal/tagihan/links", map[string]any{"record": "FK-9999"})
@@ -152,7 +158,7 @@ func TestPortalPaidAndCancelled(t *testing.T) {
 	e := portalEnv(t)
 	e.login()
 	paid := portalInvoice(e, 1000000, true)
-	e.must(200, "POST", "/api/v1/r/faktur/"+paid+"/submit", nil)
+	paid = submitFaktur(e, paid)
 	c := e.customer()
 	path := e.must(201, "POST", "/api/v1/portal/tagihan/links", map[string]any{"record": paid}).JSON["path"].(string)
 	d := c.must(200, "GET", path+"/data", nil).JSON
@@ -161,7 +167,7 @@ func TestPortalPaidAndCancelled(t *testing.T) {
 	}
 
 	open := portalInvoice(e, 0, true)
-	e.must(200, "POST", "/api/v1/r/faktur/"+open+"/submit", nil)
+	open = submitFaktur(e, open)
 	path = e.must(201, "POST", "/api/v1/portal/tagihan/links", map[string]any{"record": open}).JSON["path"].(string)
 	e.must(200, "POST", "/api/v1/r/faktur/"+open+"/cancel", nil)
 	// the link of a cancelled document stays readable, without payment or print, and names its amendment
@@ -181,7 +187,7 @@ func TestPortalShareRoles(t *testing.T) {
 	e := portalEnv(t)
 	e.login()
 	inv := portalInvoice(e, 0, false)
-	e.must(200, "POST", "/api/v1/r/faktur/"+inv+"/submit", nil)
+	inv = submitFaktur(e, inv)
 	ctx := context.Background()
 	for email, role := range map[string]string{"kasir@toko.test": "kasir", "uang@toko.test": "keuangan"} {
 		if _, err := auth.EnsureUser(ctx, e.s.DB, email, "Staf", "rahasia-123", "kopi-senja", role, ""); err != nil {

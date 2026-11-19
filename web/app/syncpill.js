@@ -42,6 +42,12 @@
     return snap;
   }
 
+  /** The stop reason the pill shows: the queue's, else the device record's (revoked or no longer known). */
+  function stopOf(snap) {
+    var u = snap.device && snap.device.unpaired;
+    return snap.status.stopped || (u === "revoked" ? "revoked" : u ? "lost" : null);
+  }
+
   function Panel(p) {
     var snap = p.snap, dev = snap.device, st = snap.status;
     var b = useState(false), busy = b[0], setBusy = b[1];
@@ -54,7 +60,7 @@
       });
     }, []);
     var events = snap.events.slice().reverse();
-    var pill = P.pillState({ events: snap.events, device: dev && dev.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: st.stopped, durable: st.durable });
+    var pill = P.pillState({ events: snap.events, device: dev && dev.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: stopOf(snap), durable: st.durable });
     function send() { setBusy(true); RA.deviceOutbox.flush().then(function () { setBusy(false); }, function () { setBusy(false); }); }
     var footer = h("div", { className: "ap-sync-foot" },
       h("span", { className: "ap-dev-muted" }, "Data referensi: " + (meta.pulled ? "terakhir " + hhmm(meta.pulled) : "belum ditarik")),
@@ -91,7 +97,7 @@
     useEffect(function () { global.document.documentElement.classList.toggle("ap-sync-on", paired); }, [paired]);
     if (!paired) return null;
     var st = snap.status;
-    var pill = P.pillState({ events: snap.events, device: snap.device.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: st.stopped, durable: st.durable });
+    var pill = P.pillState({ events: snap.events, device: snap.device.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: stopOf(snap), durable: st.durable });
     return h(React.Fragment, null,
       open ? null : h("button", { type: "button", className: "ap-sync-pill " + pill.tone, onClick: function () { setOpen(true); }, "aria-haspopup": "dialog",
         "aria-label": "Status kirim: " + pill.text + ". Buka antrean." },

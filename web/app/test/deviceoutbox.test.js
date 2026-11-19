@@ -250,6 +250,7 @@ test("pillState: the words of 0058 §9", () => {
   assert.strictEqual(P.pillState({ events: q(2, "rejected"), device: "d", online: true }).text, "2 ditolak");
   assert.strictEqual(P.pillState({ events: q(2, "queued", "other"), device: "d", online: true }).text, "Online · semua terkirim", "another device's events are not counted");
   assert.strictEqual(P.pillState({ events: q(1, "queued"), device: "d", online: true, stopped: "revoked" }).tone, "bad");
+  assert.strictEqual(P.pillState({ events: q(1, "queued"), device: "d", online: true, stopped: "lost" }).text, "Pasangkan ulang perangkat · 1 antre");
   assert.strictEqual(P.pillState({ events: q(1, "queued"), device: "d", online: true, stopped: "halt" }).text, "Kiriman ditolak server · 1 antre");
   assert.strictEqual(P.pillState({ events: q(1, "queued"), device: "d", online: true, durable: false }).text, "Antrean tidak tersimpan permanen · 1 antre");
 });

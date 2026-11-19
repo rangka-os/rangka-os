@@ -96,7 +96,8 @@
 
   /**
    * The sync pill (0058 §9): {tone: ok | warn | busy | bad | off, text, queued, rejected}.
-   * st: {events, device, online, offlineSince, sending: {done, total} | null, stopped: kind | null, durable: false when the
+   * st: {events, device, online, offlineSince, sending: {done, total} | null, stopped: kind | "lost" (the kernel no longer
+ * knows the device) | null, durable: false when the
  * queue lives in memory only (no IndexedDB: lost when the page closes)}
    */
   function pillState(st) {
@@ -105,6 +106,7 @@
     var rejected = mine.filter(function (e) { return e.state === "rejected"; }).length;
     var out = { queued: queued, rejected: rejected };
     if (st.stopped === "revoked") return Object.assign(out, { tone: "bad", text: "Perangkat dicabut · " + queued + " antre" });
+    if (st.stopped === "lost") return Object.assign(out, { tone: "bad", text: "Pasangkan ulang perangkat · " + queued + " antre" });
     if (st.stopped === "unpaired") return Object.assign(out, { tone: "bad", text: "Buka kunci kasir untuk mengirim · " + queued + " antre" });
     if (st.stopped === "outdated") return Object.assign(out, { tone: "bad", text: "Perbarui aplikasi · " + queued + " antre" });
     if (st.stopped === "halt") return Object.assign(out, { tone: "bad", text: "Kiriman ditolak server · " + queued + " antre" });

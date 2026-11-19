@@ -1167,6 +1167,7 @@
       var groups = ws ? [{ label: "Kerja", items: workItems(meta).slice(0, 5) }] : sideNav(meta, features, { approvals: approvalCount }, obPrev.current).groups;
       return { id: "kenalan", eyebrow: "Kenalan", steps: RA.kenalanSteps({ company: companyName, mulai: !!(RA.mulaiEntry && RA.mulaiEntry(obPrev.current)),
         meta: meta, groups: groups, raka: !ws && !!(meta.features && meta.features.ai === true && RA.AssistantRoot && aiKey),
+        approvals: !!(features && features.approvals),
         drawer: drawerNav && !ws ? function (open) { setNavOpen(open); return new Promise(function (r) { global.setTimeout(r, 220); }); } : null }) };
     }
     function replayTour() {
@@ -1450,8 +1451,10 @@
     }
 
     var sideNavItems = sideNav(meta, features, { approvals: approvalCount }, ob);
-    // the welcome tour: once per person, on the desk, after Mulai di sini has answered (it names that entry)
-    var deskReady = !!ob && kind !== "top-nav";
+    // the welcome tour: once per person, on the desk, after Mulai di sini has answered (it names that entry). The
+    // owner's tour lights the side shell's sidebar, so a top-nav layout skips it; the work shell draws its own bar
+    // whatever the layout's shell, so its staff get theirs on a top-nav layout too.
+    var deskReady = !!ob && (kind !== "top-nav" || (workShell(meta) && !ubahOn && !previewCs));
     useEffect(function () {
       if (!deskReady || !RA.kenalanSteps) return;
       tourStates().then(function (all) { setKenalan((all.kenalan && all.kenalan.state) || null); });

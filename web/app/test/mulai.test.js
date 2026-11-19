@@ -187,14 +187,69 @@ const MANDOR_NAV = [{ label: "Proyek", items: [{ id: "r/assignment", label: "Pen
   { label: "Absen lapangan", items: [{ id: "r/attendance_log", label: "Catatan absen" }, { id: "r/work_site", label: "Lokasi kerja" }] }];
 
 test("kenalan staff: mandor sees what they look after, then Persetujuan for what they approve", () => {
-  const steps = A.kenalanSteps({ company: "CV", meta: MANDOR, groups: MANDOR_NAV, raka: false });
+  const steps = A.kenalanSteps({ company: "CV", meta: MANDOR, groups: MANDOR_NAV, raka: false, approvals: true });
   assert.deepStrictEqual(titles(steps), ["Selamat datang di CV", "Proyek", "Absen lapangan", "Persetujuan", "Bantuan ada di sini"]);
   assert.match(steps[2].body, /melihat catatan absen dan lokasi kerja/);
   assert.match(steps[3].body, /^Catatan absen yang menunggu keputusanmu/);
   assert.deepStrictEqual(plain(A.approvesModels(MANDOR)), ["attendance_log"]);
-  // a flow step approve: counts too; a staff member who approves nothing gets no Persetujuan
-  assert.deepStrictEqual(plain(A.approvesModels(person(["sales_manager"], { models: {}, flows: { po: { model: "purchase_order", steps: [{ approve: { approvers: ["sales_manager"] } }] } } }))), ["purchase_order"]);
-  assert.ok(!titles(A.kenalanSteps({ meta: SALES, groups: SALES_NAV })).includes("Persetujuan"));
+  // a staff member who approves nothing gets no Persetujuan
+  assert.ok(!titles(A.kenalanSteps({ meta: SALES, groups: SALES_NAV, approvals: true })).includes("Persetujuan"));
+  // approvals switched off for the site: no Persetujuan step, even for an approver (the work shell would light Lainnya)
+  assert.ok(!titles(A.kenalanSteps({ company: "CV", meta: MANDOR, groups: MANDOR_NAV, approvals: false })).includes("Persetujuan"));
+  assert.ok(!titles(A.kenalanSteps({ company: "CV", meta: MANDOR, groups: MANDOR_NAV })).includes("Persetujuan"));
+});
+
+// flows as GET /api/v1/meta returns them (schema/0.5/flow.json): the model is the prefix of `on`, approve: may be nested
+const PO = { purchase_order: { label: { id: "PO pembelian" }, can: can(0) } };
+const flowMeta = (flows) => person(["purchasing_manager"], { models: PO, flows });
+const approveBy = (r) => ({ approve: { approvers: [r], label: { id: "Setujui PO" } } });
+
+test("approvesModels: a flow approve: step counts for the model of its on: event, at any depth", () => {
+  assert.deepStrictEqual(plain(A.approvesModels(flowMeta({ po_gate: { name: "po_gate", on: "purchase_order.submitted", steps: [approveBy("purchasing_manager")] } }))), ["purchase_order"]);
+  const nested = { name: "po_big", on: "purchase_order.submitted", steps: [
+    { find: "vendor", where: "name == doc.vendor", as: "v" },
+    { if: "doc.grand_total > 10000000", then: [{ notify: "purchasing_manager" }], else: [{ if: "v.risky", then: [approveBy("purchasing_manager")] }] }] };
+  assert.deepStrictEqual(plain(A.approvesModels(flowMeta({ po_big: nested }))), ["purchase_order"]);
+  const loop = { name: "po_lines", on: "purchase_order.updated", steps: [{ for_each: "doc.items", as: "l", do: [approveBy("purchasing_manager")] }] };
+  assert.deepStrictEqual(plain(A.approvesModels(flowMeta({ po_lines: loop }))), ["purchase_order"]);
+  // someone else approves; a connector trigger or a schedule names no model; an unknown model is not named
+  assert.deepStrictEqual(plain(A.approvesModels(flowMeta({ x: { on: "purchase_order.submitted", steps: [approveBy("owner")] } }))), []);
+  assert.deepStrictEqual(plain(A.approvesModels(flowMeta({ x: { on: "doku.paid", steps: [approveBy("purchasing_manager")] } }))), []);
+  assert.deepStrictEqual(plain(A.approvesModels(flowMeta({ x: { schedule: "@daily", steps: [approveBy("purchasing_manager")] } }))), []);
+  assert.deepStrictEqual(plain(A.approvesModels(flowMeta({ x: { on: "ghost.submitted", steps: [approveBy("purchasing_manager")] } }))), []);
+  const steps = A.kenalanSteps({ company: "CV", meta: flowMeta({ po_gate: nested }), groups: [], approvals: true });
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di CV", "Persetujuan", "Bantuan ada di sini"]);
+  assert.match(steps[1].body, /^PO pembelian yang menunggu/); // an acronym keeps its case
+});
+
+test("kenalan staff: five lit places at most; work places drop first, Persetujuan and Bantuan stay", () => {
+  const meta = Object.assign({}, RITEL, { models: Object.assign({}, RITEL.models,
+    { outlet_sales: Object.assign({}, RITEL.models.outlet_sales, { approvals: [{ name: "void", approvers: ["outlet_staff"] }] }) }) });
+  const both = A.kenalanSteps({ company: "Toko", meta, groups: RITEL_NAV, raka: true, approvals: true });
+  assert.deepStrictEqual(titles(both), ["Selamat datang di Toko", "Penjualan toko", "Stok", "Persetujuan", "Tanya Raka", "Bantuan ada di sini"]);
+  assert.match(both[0].body, /tempat kerjamu: Penjualan toko dan Stok\./);
+  const one = A.kenalanSteps({ company: "Toko", meta, groups: RITEL_NAV, raka: false, approvals: true });
+  assert.deepStrictEqual(titles(one), ["Selamat datang di Toko", "Penjualan toko", "Stok", "Pembelian", "Persetujuan", "Bantuan ada di sini"]);
+  for (const s of [both, one]) assert.ok(s.length - 1 <= 5, "at most five lit places after the welcome");
+});
+
+test("kenalan staff: list copy keeps acronyms and says 'dan lainnya' once", () => {
+  const meta = person(["admin_pajak"], { models: {
+    ppn_out: { label: { id: "PPN keluaran" }, can: can(1) }, spk: { label: { id: "SPK produksi" }, can: can(1) },
+    customer: { label: { id: "Pelanggan" }, can: can(1) }, item: { label: { id: "Barang" }, can: can(1) } } });
+  const nav = [{ label: "Pajak", items: [{ id: "r/ppn_out", label: "PPN keluaran" }, { id: "r/spk", label: "SPK produksi" }, { id: "r/customer", label: "Pelanggan" }, { id: "r/item", label: "Barang" }] }];
+  const [place] = A.kenalanPlaces(meta, nav);
+  assert.strictEqual(place.body.split(" Tiap")[0], "Di sini kamu mencatat PPN keluaran, SPK produksi, pelanggan dan lainnya.");
+  const three = A.kenalanPlaces(meta, [{ label: "Pajak", items: nav[0].items.slice(1) }])[0];
+  assert.match(three.body, /mencatat SPK produksi, pelanggan dan barang\./);
+});
+
+test("kenalan staff: two groups with the same heading are told apart by position", () => {
+  const nav = [{ label: "Penjualan", items: [{ id: "r/customer_order", label: "Pesanan pelanggan" }] },
+    { label: "Penjualan", items: [{ id: "r/order_fulfilment", label: "Pemenuhan pesanan" }] }];
+  const places = A.kenalanPlaces(SALES, nav);
+  assert.deepStrictEqual(plain(places.map((x) => x.at)), [{ index: 0, of: 2, label: "Penjualan" }, { index: 1, of: 2, label: "Penjualan" }]);
+  assert.match(places[1].body, /pemenuhan pesanan/);
 });
 
 test("kenalan staff: kasir with two screens and the work shell; places stop at three", () => {

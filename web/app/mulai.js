@@ -28,7 +28,14 @@
     if (typeof v === "string") return v;
     return v.id || v.en || Object.keys(v).map(function (k) { return v[k]; })[0] || "";
   }
-  function lower(s) { return s ? s.charAt(0).toLowerCase() + s.slice(1) : s; }
+  /** A label inside a sentence: its first letter in lower case, unless its first word is an acronym ("SPK produksi",
+   *  "PPN keluaran", "PO pembelian" stay as they are). */
+  function lower(s) {
+    if (!s) return s;
+    var w = String(s).split(/[\s/,-]/)[0];
+    if (w.length > 1 && w === w.toUpperCase() && w !== w.toLowerCase()) return s;
+    return s.charAt(0).toLowerCase() + s.slice(1);
+  }
   function modelLabel(meta, m) { return L((((meta && meta.models) || {})[m] || {}).label) || m; }
   function roleLabel(meta, r) { return r === "owner" ? "Pemilik" : L((((meta && meta.roles) || {})[r] || {}).label) || r; }
   function isOwner(meta) { return (((meta && meta.user) || {}).roles || []).indexOf("owner") >= 0; }
@@ -549,26 +556,30 @@
     return any;
   }
   /** A work screen's place: its sidebar link, else the work shell's bottom bar or rail, else (a folded group draws no
-   *  links) the sidebar group that holds it. */
-  function navPlace(id, group) {
+   *  links) the sidebar group that holds it (at: groupPlace's position). */
+  function navPlace(id, at) {
     return function () {
-      return shown(['.rk-side [data-nav="' + id + '"]', '.ap-workbar a[href="#/' + id + '"]']) || (group ? groupPlace(group)() : null);
+      return shown(['.rk-side [data-nav="' + id + '"]', '.ap-workbar a[href="#/' + id + '"]']) || (at ? groupPlace(at)() : null);
     };
   }
-  /** A sidebar group by its label: the whole group (heading and links) when open; a folded group draws only its
-   *  heading, so the heading alone lights up. The person's fold choice is left alone. */
-  function groupPlace(label) {
+  /** A sidebar group by its position in the groups the tour was composed from (at: {index, of, label}), not by its
+   *  heading: two apps may both name a group "Penjualan". The sidebar draws one .rk-navgroup per group, after the
+   *  pinned entries, so the group is the index-th of the last `of` ones; its heading must still read `label`, else the
+   *  sidebar changed since and nothing lights up (the step is optional). The whole group (heading and links) lights up
+   *  when open; a folded group draws only its heading, so the heading alone does. The person's fold choice is left alone. */
+  function groupPlace(at) {
     return function () {
-      var gs = global.document.querySelectorAll(".rk-side nav .rk-navgroup");
-      for (var i = 0; i < gs.length; i++) {
-        var t = gs[i].querySelector(":scope > p");
-        var l = t && ((t.querySelector(".l") || t).textContent || "").trim();
-        if (l === label) return /\bfolded\b/.test(gs[i].className) ? t : gs[i];
-      }
-      return null;
+      var gs = global.document.querySelectorAll(".rk-side nav > .rk-navgroup"), g = gs[gs.length - at.of + at.index];
+      if (!at.of || gs.length < at.of || !g) return null;
+      var t = g.querySelector(":scope > p");
+      var l = t && ((t.querySelector(".l") || t).textContent || "").trim();
+      if (l !== at.label) return null;
+      return /\bfolded\b/.test(g.className) ? t : g;
     };
   }
-  function joinWords(list) {
+  /** "a", "a dan b", "a, b dan c"; more than `max` entries: "a, b, c dan lainnya". */
+  function joinWords(list, max) {
+    if (max && list.length > max) return list.slice(0, max).join(", ") + " dan lainnya";
     return list.length > 1 ? list.slice(0, -1).join(", ") + " dan " + list[list.length - 1] : list[0] || "";
   }
   function cap(s) { return s ? s.charAt(0).toUpperCase() + s.slice(1) : s; }
@@ -601,13 +612,15 @@
   function kenalanPlaces(meta, groups) {
     var models = (meta && meta.models) || {}, screens = (meta && meta.screens) || {}, out = [], covered = [];
     function leaves(items) { var o = []; (items || []).forEach(function (it) { if (it.items) o = o.concat(leaves(it.items)); else if (it && it.id) o.push(it); }); return o; }
-    (groups || []).forEach(function (g) {
+    var all = groups || [];
+    function at(g) { return { index: all.indexOf(g), of: all.length, label: L(g.label) }; }
+    all.forEach(function (g) {
       leaves(g.items).forEach(function (it) {
         if (it.id.indexOf("w/") !== 0) return;
         var s = screens[it.id.slice(2)];
         if (!s) return;
         covered = covered.concat(screenModels(s));
-        out.push({ kind: "screen", id: it.id, group: L(g.label) || null, label: it.label || L(s.label), body: L(s.description) || SCREEN_KIND[s.type] || "Buka " + (it.label || L(s.label)) + " dari sini untuk mulai bekerja." });
+        out.push({ kind: "screen", id: it.id, at: L(g.label) ? at(g) : null, label: it.label || L(s.label), body: L(s.description) || SCREEN_KIND[s.type] || "Buka " + (it.label || L(s.label)) + " dari sini untuk mulai bekerja." });
       });
     });
     function entries(g, test) {
@@ -618,11 +631,11 @@
       });
     }
     function groupStep(g, list, verb) {
-      var names = list.slice(0, 3).map(function (it) { return lower(it.label); });
-      return { kind: "group", label: L(g.label), body: "Di sini kamu " + verb + " " + joinWords(names) + (list.length > 3 ? ", dan lainnya" : "") + "." +
+      var names = list.map(function (it) { return lower(it.label); });
+      return { kind: "group", label: L(g.label), at: at(g), body: "Di sini kamu " + verb + " " + joinWords(names, 3) + "." +
         (verb === "mencatat" ? " Tiap menu punya tombol Tambah di kanan atas." : "") };
     }
-    var groupsWithLabel = (groups || []).filter(function (g) { return g && L(g.label); }); // the heading is what lights up
+    var groupsWithLabel = all.filter(function (g) { return g && L(g.label); }); // the heading is what lights up
     groupsWithLabel.forEach(function (g) {
       var mine = entries(g, function (m, can) { return can.create && covered.indexOf(m) < 0; });
       if (mine.length) out.push(groupStep(g, mine, "mencatat"));
@@ -635,30 +648,39 @@
     }
     return out.slice(0, 3);
   }
-  /** The models whose approvals (0007 model approvals:, flow steps approve:) name one of the person's roles. */
+  /** The models whose approvals name one of the person's roles: a model's `approvals:` (0007), or an `approve:` step
+   *  of a flow that runs on that model's event (`on: <model>.<event>`), at any depth (if then/else, for_each do).
+   *  A flow on a connector trigger or a schedule names no model, so its approve: steps are not counted. */
   function approvesModels(meta) {
     var roles = ((meta && meta.user) || {}).roles || [], out = [];
     function mine(list) { return (list || []).some(function (r) { return roles.indexOf(r) >= 0; }); }
     var models = (meta && meta.models) || {};
     Object.keys(models).sort().forEach(function (m) {
-      if ((models[m].approvals || []).some(function (a) { return a && mine(a.approvers); })) out.push(m);
+      if (((models[m] || {}).approvals || []).some(function (a) { return a && mine(a.approvers); })) out.push(m);
     });
+    function approves(steps) {
+      return (Array.isArray(steps) ? steps : []).some(function (s) {
+        if (!s || typeof s !== "object") return false;
+        if (s.approve && mine(s.approve.approvers)) return true;
+        return approves(s.then) || approves(s.else) || approves(s.do);
+      });
+    }
     var flows = (meta && meta.flows) || {};
     Object.keys(flows).sort().forEach(function (f) {
-      (flows[f].steps || []).forEach(function (s) {
-        var a = s && s.approve;
-        if (a && mine(a.approvers) && flows[f].model && out.indexOf(flows[f].model) < 0) out.push(flows[f].model);
-      });
+      var fl = flows[f] || {}, on = typeof fl.on === "string" ? fl.on : "", m = on.indexOf(".") > 0 ? on.slice(0, on.indexOf(".")) : "";
+      if (m && models[m] && out.indexOf(m) < 0 && approves(fl.steps)) out.push(m);
     });
-    return out;
+    return out.sort();
   }
+  var MAX_LIT = 5; // lit places after the welcome (riset 26 K-TS2)
   /** Who the welcome tour is for: "owner" for the owner (the tour as it always was), "staff" for everyone else. */
   function kenalanKind(meta) { return !meta || isOwner(meta) ? "owner" : "staff"; }
 
   /** The welcome tour (at most five lit places after the welcome, riset 26 K-TS2). drawer(open) opens the phone drawer.
-   *  o: {company, mulai, drawer, meta, groups (the sidebar as drawn), raka (Tanya Raka is on)}. The owner keeps the
-   *  tour of the whole business; staff get their own work (kenalanPlaces), Persetujuan only when they approve
-   *  something, Tanya Raka only when it is on, and where to find the tour again. */
+   *  o: {company, mulai, drawer, meta, groups (the sidebar as drawn), raka (Tanya Raka is on), approvals (the
+   *  approvals feature is on)}. The owner keeps the tour of the whole business; staff get their own work
+   *  (kenalanPlaces), Persetujuan only when approvals are on and they approve something, Tanya Raka only when it is on,
+   *  and where to find the tour again (always the last). Over five, work places drop first (down to two). */
   function kenalanSteps(o) {
     var side = function () { return o.drawer ? o.drawer(true) : null; };
     var close = function () { return o.drawer ? o.drawer(false) : null; };
@@ -675,17 +697,19 @@
     return steps;
   }
   function staffSteps(o, side, close) {
-    var meta = o.meta, places = kenalanPlaces(meta, o.groups), appr = approvesModels(meta);
+    var meta = o.meta, appr = o.approvals ? approvesModels(meta) : [];
+    // K-TS2: five lit places at most; Bantuan always, then Persetujuan and Raka, and the work places take what is left
+    var places = kenalanPlaces(meta, o.groups).slice(0, MAX_LIT - 1 - (appr.length ? 1 : 0) - (o.raka ? 1 : 0));
     var names = places.map(function (x) { return x.label; });
     var steps = [{ target: null, title: "Selamat datang di " + (o.company || "tempat kerjamu"),
       body: (names.length ? "Kita lihat sebentar tempat kerjamu: " + joinWords(names) + "." : "Kita lihat sebentar tempat-tempat yang kamu pakai di sini.") +
         " Kurang dari satu menit, dan bisa diulang kapan saja.",
       nextLabel: "Mulai", skipLabel: "Nanti saja", before: close }];
     places.forEach(function (x) {
-      steps.push({ target: x.kind === "screen" ? navPlace(x.id, x.group) : groupPlace(x.label), before: side, optional: true, title: x.label, body: x.body });
+      steps.push({ target: x.kind === "screen" ? navPlace(x.id, x.at) : groupPlace(x.at), before: side, optional: true, title: x.label, body: x.body });
     });
     if (appr.length) {
-      var what = cap(joinWords(appr.slice(0, 2).map(function (m) { return lower(modelLabel(meta, m)); })));
+      var what = cap(joinWords(appr.map(function (m) { return lower(modelLabel(meta, m)); }), 2));
       steps.push({ target: function () { return shown(['.rk-side [data-nav="approvals"]', ".ap-workbar button"]); }, before: side, optional: true, title: "Persetujuan",
         body: what + " yang menunggu keputusanmu ada di sini, lengkap dengan alasannya. Angka di sebelahnya jumlah yang menunggu." });
     }

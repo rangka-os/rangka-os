@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# goods back at the cost they left at, into the named lot or the lot the delivery took
+name: lot_return
+is_submittable: true
+naming: LRT-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: return_date
+  moves:
+    - {lines: items, in: outlet, reason: return_in, cost: {source: lot_delivery}, lot: {no: lot_no}, serials: serial_nos}
+fields:
+  - {name: lot_delivery, type: link, to: lot_delivery}
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: return_date, type: date, required: true}
+  - {name: items, type: table, of: lot_return_item, min_rows: 1}

@@ -12,14 +12,31 @@ import (
 // Declared stock moves (contract 0021): a submittable model with on_submit stock.post_moves and a stock: block
 // moves stock by its declaration instead of a Go case. The six built-in documents keep their Go rules.
 
-// LegacyStockModels are the documents stock.post_moves has a Go rule for; they may not declare stock:.
+// LegacyStockModels are the documents stock.post_moves has a Go rule for.
 var LegacyStockModels = map[string]bool{"goods_receipt": true, "stock_transfer": true, "stock_count": true,
 	"stock_adjustment": true, "stock_transfer_receipt": true, "outlet_sales": true}
+
+// DeclarableLegacy are the Go-rule documents that may declare stock: instead (contract 0070 §7, equivalence proven
+// in 0021 decision 6); their Go rule stays the fallback for an app that does not. The other four are state
+// machines and may not declare stock:.
+var DeclarableLegacy = map[string]bool{"goods_receipt": true, "stock_adjustment": true}
+
+// declaredSpec is the stock: block stock.post_moves follows for m, nil when m posts through a Go rule or not at all.
+func declaredSpec(m *meta.Model) *stockSpec {
+	sp := stockSpecOf(m)
+	if sp == nil || (LegacyStockModels[m.Name] && !DeclarableLegacy[m.Name]) {
+		return nil
+	}
+	return sp
+}
 
 type stockRule struct {
 	lines, outlet, item, qty, cond, reason, cogs string
 	in, explode, lineOutlet                      bool
 	cost, costField                              string // average | unit | amount | source | consumed
+	// contract 0070: lot fields of the line (no, expiry, made on in; pick on out), the serial field, the expired mode
+	lotNo, lotExpiry, lotMade, lotPick, serials, expired string
+	hasLot                                               bool
 }
 
 type stockSpec struct {
@@ -53,6 +70,14 @@ func stockSpecOf(m *meta.Model) *stockSpec {
 			cogs: str(r["cogs"]), explode: str(r["explode"]) == "recipe", cost: "average"}
 		if ru.item == "" {
 			ru.item = "item"
+		}
+		if lot := meta.AsMap(r["lot"]); lot != nil {
+			ru.hasLot = true
+			ru.lotNo, ru.lotExpiry, ru.lotMade, ru.lotPick = str(lot["no"]), str(lot["expiry"]), str(lot["made"]), str(lot["pick"])
+		}
+		ru.serials, ru.expired = str(r["serials"]), str(r["expired"])
+		if ru.expired == "" {
+			ru.expired = expiredSkip
 		}
 		ru.outlet, ru.in = str(r["out"]), false
 		if v := str(r["in"]); v != "" {
@@ -162,6 +187,8 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 				}
 			} else {
 				keys = append(keys, [2]string{dl.outlet, dl.item})
+				s.wantLotLock(dl.item, ru.lotIn(row).no)
+				s.wantSerialLocks(dl.item, ru.serialSpec(row).list)
 			}
 			lines = append(lines, dl)
 		}
@@ -173,16 +200,16 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 	cogs := map[string]int64{}
 	hasCogs := map[string]bool{}
 	var consumed, total int64
-	out := func(dl declaredLine, outlet, item string, q float64, reason string) (int64, error) {
-		mv, err := s.move(outlet, item, -q, 0, nil, reason)
+	out := func(dl declaredLine, outlet, item string, q float64, reason string, lo lotOut, ss serialSpec) (int64, error) {
+		v, _, mvs, err := s.outLine(outlet, item, q, reason, lo, ss)
 		if err != nil {
 			return 0, err
 		}
 		// a device write is never refused for stock: move records negative_stock instead (contract 0058)
-		if sp.refuseNegative && mv["negative"] == true && deviceWriteOf(h.op.ctx) == nil {
+		if mv := mvs[len(mvs)-1]; sp.refuseNegative && mv["negative"] == true && deviceWriteOf(h.op.ctx) == nil {
 			return 0, refuse("negative_stock", fmt.Sprintf("Stok %s di %s tidak cukup: sisa %s", item, outlet, formatQty(qtyOf(mv["balance_qty"]))))
 		}
-		return -moneyIn(mv["value"]), nil
+		return v, nil
 	}
 	for _, dl := range lines {
 		ru := sp.rules[dl.rule]
@@ -196,14 +223,14 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 				if q <= qtyEps {
 					continue
 				}
-				x, err := out(dl, dl.outlet, u.material, q, ru.reason)
+				x, err := out(dl, dl.outlet, u.material, q, ru.reason, lotOut{expired: ru.expired}, serialSpec{})
 				if err != nil {
 					return nil, err
 				}
 				v += x
 			}
 		} else {
-			x, err := out(dl, dl.outlet, dl.item, dl.qty, ru.reason)
+			x, err := out(dl, dl.outlet, dl.item, dl.qty, ru.reason, ru.lotOut(dl.row), ru.serialSpec(dl.row))
 			if err != nil {
 				return nil, err
 			}
@@ -266,21 +293,29 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 			}
 			continue
 		}
+		li, ss := ru.lotIn(dl.row), ru.serialSpec(dl.row)
+		if ru.cost == "source" && strings.TrimSpace(li.no) == "" {
+			// a return with no lot number goes back into the lot its source took, when it took exactly one
+			if li.no, err = sourceLot(h, ru.costField, dl.item); err != nil {
+				return nil, err
+			}
+			li.declared = false
+		}
 		switch ru.cost {
 		case "unit":
-			_, err = s.move(dl.outlet, dl.item, dl.qty, moneyIn(dl.row[ru.costField]), nil, ru.reason)
+			_, err = s.inLine(dl.outlet, dl.item, dl.qty, moneyIn(dl.row[ru.costField]), nil, ru.reason, li, ss)
 		case "amount":
 			v := moneyIn(dl.row[ru.costField])
 			unit := moneyIn(dl.row["unit_cost"])
 			if _, ok := dl.row["unit_cost"]; !ok {
 				unit = divRound(v, dl.qty)
 			}
-			_, err = s.move(dl.outlet, dl.item, dl.qty, unit, &v, ru.reason)
+			_, err = s.inLine(dl.outlet, dl.item, dl.qty, unit, &v, ru.reason, li, ss)
 		case "consumed":
 			v := shares[j]
-			_, err = s.move(dl.outlet, dl.item, dl.qty, divRound(v, dl.qty), &v, ru.reason)
+			_, err = s.inLine(dl.outlet, dl.item, dl.qty, divRound(v, dl.qty), &v, ru.reason, li, ss)
 		default: // source, average
-			err = inAtCost(h, s, ru, dl.outlet, dl.item, dl.qty)
+			err = inAtCostLot(h, s, ru, dl.outlet, dl.item, dl.qty, li, ss)
 		}
 		if err != nil {
 			return nil, err
@@ -324,6 +359,11 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 // inAtCost posts q of item into outlet at the source document's unit cost for item (cost source; the outlet
 // average when the source took none) or at the outlet average.
 func inAtCost(h *HookCtx, s *stockPost, ru stockRule, outlet, item string, q float64) error {
+	return inAtCostLot(h, s, ru, outlet, item, q, lotIn{}, serialSpec{})
+}
+
+// inAtCostLot is inAtCost into the line's lot, with its serials.
+func inAtCostLot(h *HookCtx, s *stockPost, ru stockRule, outlet, item string, q float64, li lotIn, ss serialSpec) error {
 	var unit int64
 	ok := false
 	var err error
@@ -337,8 +377,72 @@ func inAtCost(h *HookCtx, s *stockPost, ru stockRule, outlet, item string, q flo
 			return err
 		}
 	}
-	_, err = s.move(outlet, item, q, unit, nil, ru.reason)
+	_, err = s.inLine(outlet, item, q, unit, nil, ru.reason, li, ss)
 	return err
+}
+
+// lotIn is the lot of an incoming row under the rule's lot: {no, expiry, made}.
+func (ru stockRule) lotIn(row map[string]any) lotIn {
+	if !ru.hasLot || ru.lotNo == "" {
+		return lotIn{}
+	}
+	li := lotIn{no: str(row[ru.lotNo]), declared: true}
+	if ru.lotExpiry != "" {
+		li.expiry = dateOnly(row[ru.lotExpiry])
+	}
+	if ru.lotMade != "" {
+		li.made = dateOnly(row[ru.lotMade])
+	}
+	return li
+}
+
+// lotOut is how an outgoing row picks lots under the rule's lot: {pick} and expired.
+func (ru stockRule) lotOut(row map[string]any) lotOut {
+	lo := lotOut{expired: ru.expired}
+	if ru.hasLot && ru.lotPick != "" {
+		lo.pick = str(row[ru.lotPick])
+	}
+	return lo
+}
+
+func (ru stockRule) serialSpec(row map[string]any) serialSpec {
+	if ru.serials == "" {
+		return serialSpec{}
+	}
+	return serialSpec{list: parseSerials(row[ru.serials]), declared: true}
+}
+
+// sourceLot is the lot number the document linked by field took item out of, when its moves of item took exactly
+// one real lot and nothing from the no-lot bucket; "" otherwise (the return goes to the bucket).
+func sourceLot(h *HookCtx, field, item string) (string, error) {
+	f := h.Model.Field(field)
+	name := str(h.Record[field])
+	if f == nil || name == "" || !has(h.op.e.Reg().Model("stock_move"), "lot") || h.op.e.Reg().Model("stock_lot") == nil {
+		return "", nil
+	}
+	moves, err := h.Find("stock_move", map[string]any{"voucher_type": f.To, "voucher": name, "item": item})
+	if err != nil {
+		return "", err
+	}
+	lot := ""
+	for _, mv := range moves {
+		if str(mv["reason"]) == "reversal" {
+			continue
+		}
+		l := str(mv["lot"])
+		if l == "" || (lot != "" && l != lot) {
+			return "", nil
+		}
+		lot = l
+	}
+	if lot == "" {
+		return "", nil
+	}
+	r, err := h.op.load(h.op.e.Reg().Model("stock_lot"), lot)
+	if err != nil {
+		return "", err
+	}
+	return str(r["lot_no"]), nil
 }
 
 func splitWeight(dl declaredLine, ru stockRule) float64 {
@@ -413,7 +517,7 @@ func sourceUnitCost(h *HookCtx, field, item string) (int64, bool, error) {
 	// exploded through a recipe: the source's moves are of the materials; its line cogs are per item sold
 	type cogsRule struct{ lines, item, qty, cogs string }
 	var rules []cogsRule
-	if sp := stockSpecOf(sm); sp != nil && !LegacyStockModels[sm.Name] {
+	if sp := declaredSpec(sm); sp != nil {
 		for _, ru := range sp.rules {
 			if !ru.in && ru.cogs != "" {
 				rules = append(rules, cogsRule{ru.lines, ru.item, ru.qty, ru.cogs})

@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.4/app.json
+# Lots and serial numbers (contract 0070): the kernel-written registers and declared documents with lot, serials
+# and expired keys, installed next to the pilot apps by the lot tests.
+name: lots
+version: 1.0.0
+title: {id: lots}
+requires: {rangka: '>=0.5', outlets: ^1.0, catalogue: ^1.0, stock: ^1.0}
+hooks: [stock.reverse_moves]

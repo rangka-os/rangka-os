@@ -15,3 +15,5 @@ fields:
   - {name: voucher_type, type: data}
   - {name: voucher, type: data}
   - {name: reason, type: select, options: [{value: receipt, label: {id: receipt}}, {value: transfer_in, label: {id: transfer_in}}, {value: transfer_out, label: {id: transfer_out}}, {value: sale, label: {id: sale}}, {value: count, label: {id: count}}, {value: waste, label: {id: waste}}, {value: adjustment, label: {id: adjustment}}, {value: reversal, label: {id: reversal}}, {value: delivery, label: {id: delivery}}, {value: return_in, label: {id: return_in}}, {value: production_in, label: {id: production_in}}, {value: production_out, label: {id: production_out}}]}
+  - {name: lot, type: link, to: stock_lot, read_only: true}
+  - {name: serial_nos, type: text, read_only: true}

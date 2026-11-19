@@ -8,3 +8,4 @@ fields:
   - {name: sales_uom, type: link, to: uom}
   - {name: rate, type: currency}
   - {name: standard_cost, type: currency}
+  - {name: tracking, type: select, options: [{value: none, label: {id: Tidak dilacak}}, {value: lot, label: {id: Per lot}}, {value: lot_expiry, label: {id: Per lot dengan kedaluwarsa}}, {value: serial, label: {id: Per nomor seri}}]}

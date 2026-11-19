@@ -538,9 +538,9 @@ func (v *validator) site(all map[string]vis) {
 			installed = closure(valid)
 			installed[SiteUnit] = installed[SiteUnit] || isSite(apps[SiteUnit])
 		}
-		if composed {
-			v.uninstalledModels(all, installed)
-		}
+		// Every site, not only one that names modules: an overlay or company model on a model the site does not
+		// install has no table to land on. With no apps, modules or limiting plan, everything is installed.
+		v.uninstalledModels(all, installed)
 		if conns := v.reg.Connectors; len(conns) > 0 {
 			for i, x := range asList(c["connectors"]) {
 				if cn, ok := x.(string); ok && conns[cn] == nil {

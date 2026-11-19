@@ -1,0 +1,7 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/config.json
+# An app-only site (no config.modules) whose overlay and company model name stock_item, from a module crm does not
+# bring in: uses_uninstalled_model on any site, not only a composed one (contract 0032).
+locale: id-ID
+currency: IDR
+timezone: Asia/Jakarta
+apps: [crm]

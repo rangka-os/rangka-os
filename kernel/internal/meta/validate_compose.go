@@ -61,9 +61,9 @@ func uninstalledMsg(model, unit string) string {
 	return fmt.Sprintf(`"%s" comes from module "%s", which this site does not install; add the module to config.modules`, model, unit)
 }
 
-// uninstalledModels reports uses_uninstalled_model on a site that names modules: overlays, company models and flows,
-// and site dashboards naming a model of a unit the site does not install. Layouts and numbering report it where they
-// check models.
+// uninstalledModels reports uses_uninstalled_model on any site (config.apps, config.modules or the plan's apps):
+// overlays, company models and flows, and site dashboards naming a model of a unit the site does not install. Layouts
+// and numbering report it where they check models, on sites that name modules.
 func (v *validator) uninstalledModels(all map[string]vis, installed map[string]bool) {
 	gone := func(x any) (string, bool) {
 		mn, ok := x.(string)

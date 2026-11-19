@@ -94,6 +94,7 @@ func (v *validator) more() {
 	all := v.allModels()
 	conns := v.reg.Connectors
 	v.moduleNotices(all) // contract 0066 §1.1
+	v.limitScopes(all)   // contract 0057 §5
 	for _, fn := range sortedKeysM(v.reg.Flows) {
 		f := v.reg.Flows[fn]
 		if v.skip(f.App) {

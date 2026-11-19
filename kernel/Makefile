@@ -83,7 +83,8 @@ compare-python: build
 	            "testdata/broken-naming-on/apps --site testdata/broken-naming-on/site" \
 	            "testdata/broken-member-record/apps --site testdata/broken-member-record/site" \
 	            "testdata/notices/apps --site testdata/notices/site" \
-	            "testdata/broken-notices/apps --site testdata/broken-notices/site"; do \
+	            "testdata/broken-notices/apps --site testdata/broken-notices/site" \
+	            "testdata/broken-limit-scope/apps --site testdata/broken-limit-scope/site"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \
 	  if diff $$D/py.txt $$D/go.txt; then echo "identical ($$(tail -1 $$D/go.txt)): $$args"; else rc=1; fi; \

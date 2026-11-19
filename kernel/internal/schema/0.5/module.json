@@ -129,6 +129,14 @@
           }
         }
       }
+    },
+    "limit_scope": {
+      "type": "object",
+      "description": "Contract 0057 §5: a plan limit counted only on records where a check field of the counted model is true, e.g. {outlets: is_store} (warehouses do not use an outlet seat). Only the module that declares the counted model may set it.",
+      "additionalProperties": {
+        "type": "string",
+        "pattern": "^[a-z][a-z0-9_]*$"
+      }
     }
   },
   "additionalProperties": false

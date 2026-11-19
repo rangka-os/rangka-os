@@ -23,7 +23,9 @@ and `before` (the stored record before the write; `null` on `created`).
 literals `{'item': r.item, 'qty': r.qty}`.
 
 List macros: `list.map(x, expr)`, `list.filter(x, cond)`, `list.exists(x, cond)`, `list.all(x, cond)`,
-`list.exists_one(x, cond)`, `size(list)` or `list.size()`, `list.sum()` / `sum(list)`, `list[0]`, `list.contains(v)`.
+`list.exists_one(x, cond)`, `size(list)` or `list.size()`, `list.sum()` / `sum(list)`, `list[0]`, `list.contains(v)`,
+`list.join(sep)` (text items joined with `sep`; other items written as in a message). The validator checks fields read on
+a macro's variable against the child model, and reports a method the kernel lacks as `unknown_method`.
 
 Text methods: `contains`, `startsWith`, `endsWith`, `matches` (regex), `replace(old, new)`, `lowerAscii`,
 `upperAscii`, `trim`. `has(x.f)` is true when the key is present and not null.
@@ -67,7 +69,7 @@ Globals: `user` (`user.name`, `user.roles`, `user.outlets`), `org`, `tax`, `even
 | `rec.field` after a `find` that may find nothing | the variable is `null` | guard: `if: rec != null`; `rec != null ? rec.item_name : event.item` |
 | `set: {status: Lunas}` | `set:` values are CEL; `Lunas` is an unknown name | `set: {status: "'Lunas'"}` |
 | `set: {open: no}` | strict YAML refuses `no` | `set: {open: 'false'}` (CEL false) or `open: false` |
-| `names.join(', ')` | no `join()` in the kernel's CEL; inside `{...}` the raw text is left in the message | name the first and count the rest: `{list[0].item_name} dan {size(list) - 1} lainnya` |
+| `names.joinAll(', ')`, `x.title()` | a method the kernel lacks: the validator reports `unknown_method`; at run time a failed `{...}` part is left as raw text in the message | use the methods listed above, for example `{names.join(', ')}` |
 | `grand_total > 5.000.000` | not a number | `grand_total > 5000000` |
 | `amount > 5000000` in a `when:` on a foreign-currency model | the foreign amount, or a rate the maker typed | also hold `currency != '' && currency != 'IDR'` |
 | `due_date == today() - 14` | number minus text | `days_between(due_date, today()) == 14`, or a window |

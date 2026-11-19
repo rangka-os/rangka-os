@@ -143,7 +143,7 @@ pack yet and their groups are a first draft.
 
 ### 6. The card (amends 0061 §5)
 
-- The sub line reads "Pilih yang paling repot sekarang. Pilihannya mengikuti profil usahamu."
+- The sub line reads "Pilih yang paling repot sekarang, boleh lebih dari satu. Pilihannya mengikuti profil usahamu."
 - One button, "Lanjut ngobrol dengan Raka", which saves first (rangka-cloud #166). No "Isi data contoh", no "Langsung
   mulai".
 

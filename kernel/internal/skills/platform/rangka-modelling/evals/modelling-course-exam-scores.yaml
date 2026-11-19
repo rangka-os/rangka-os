@@ -1,0 +1,21 @@
+name: modelling-course-exam-scores
+skill: rangka-modelling
+stage: console
+site: demo-kursus
+apps: [kelas_kursus, faktur_piutang, pembukuan]
+prompt: "Tiap akhir angkatan ada ujian. Aku mau catat nilai tiap peserta dan berapa yang lulus."
+expect:
+  changeset:
+    paths: ["models/x_*.rk"]
+    not_paths: ["apps/**", "modules/**", "custom/student.rk"]
+    risk: high
+  answer:
+    mentions: ["nilai", "pemilik"]
+    not_mentions: ["sudah aku buat", "sudah jadi"]
+  escalate: false
+rubric:
+  - "The exam is one submittable company model with the scores as a child table (is_child), not one record per score typed separately"
+  - "Each score line links to enrollment or student; there is no new list of students"
+  - "The number of students who passed is a compute field, not typed"
+  - "Attendance is not remodelled: it says the courses module already records it"
+  - "Tells the owner the change needs the owner's approval because the document is submittable"

@@ -29,6 +29,12 @@ and call yourself "aku". Nothing here is built yet: see "Never" at the end.
 
 ## 2. How to explore
 
+- Load the domain pack for the business type first (contract 0071): `rangka_skill_file {name: "rangka-consult",
+  path: "references/domains/<industry>.md"}`, or read [references/domains/](references/domains/README.md) in a
+  checkout. `<industry>` is the profile's `industry` (0054). The pack gives the usual flow, the owner's words, the pains
+  and the questions that bring them out, and what the catalogue covers. Use it to choose questions, never to assume
+  answers, and check every piece it names against `rangka_catalogue` before offering it. No matching pack: explore
+  without one.
 - Follow the owner's last answer. One question per turn, in their words, never a form. One question means one thing to
   answer: "Boleh ceritakan pesanan terakhir, dari awal sampai uangnya masuk?" is one; "Ceritakan pesanan terakhir. Berapa
   hari jaraknya dari DP ke pelunasan?" is two, so keep the second for the next turn.

@@ -1,0 +1,15 @@
+name: dashboards-too-many-widgets
+skill: rangka-dashboards
+stage: console
+site: demo-langganan
+apps: [langganan_jasa, faktur_piutang, pembukuan]
+prompt: "Masukin semua angka ke dashboard biar lengkap: jumlah pelanggan, jumlah paket, jumlah user, jumlah faktur, rata-rata tingkat tertagih semua bulan, sama pie chart pelanggan per area."
+expect:
+  answer:
+    mentions: ["area"]
+  escalate: false
+rubric:
+  - "Pushes back on vanity counts (jumlah paket, jumlah user, jumlah faktur) and offers numbers tied to an action instead"
+  - "Refuses to average the monthly collection rate across months and offers the rate of one month instead"
+  - "Suggests a sorted bar chart (top areas) instead of a donut with many slices"
+  - "If it proposes a change set, it replaces langganan_ringkas, keeps the total around 10 widgets or fewer added, and stays low risk"

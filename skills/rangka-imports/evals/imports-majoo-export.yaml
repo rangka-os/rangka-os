@@ -1,0 +1,17 @@
+name: imports-majoo-export
+skill: rangka-imports
+stage: console
+site: demo-stok
+apps: [stok_outlet, penjualan_harian]
+prompt: "Kasirku majoo. Ini ekspor penjualan seminggu, dua outlet jadi satu file, tanggalnya ditulis 3 Nov 2026. Bisa langsung masuk?"
+expect:
+  answer:
+    mentions: ["per outlet", "03/11/2026", "SKU"]
+    not_mentions: ["sudah masuk", "sudah aku impor"]
+  escalate: false
+rubric:
+  - "Uses Juragan's POS sales template (pos_sales_file), since majoo has no import of its own"
+  - "Says the file must be split into one file per outlet and the outlet's sales source set to File POS so no day is counted twice"
+  - "Says dates with month names are refused and asks for dd/mm/yyyy, without converting the data itself"
+  - "Asks how majoo writes refunds instead of guessing the mapping"
+  - "Explains that each day arrives as a draft and stock moves only when head office submits it"

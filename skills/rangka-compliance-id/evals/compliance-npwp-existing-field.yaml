@@ -1,0 +1,17 @@
+name: compliance-npwp-existing-field
+skill: rangka-compliance-id
+stage: console
+site: kopi-senja
+apps: [crm]
+prompt: "Tolong tambahin kolom NPWP sama NIK di data pelanggan, buat faktur pajak."
+expect:
+  changeset:
+    not_paths: ["custom/customer.rk", "models/x_*.rk", "apps/**", "modules/**"]
+  answer:
+    mentions: ["NPWP"]
+    not_mentions: ["x_npwp", "x_nik"]
+  escalate: false
+rubric:
+  - "Recognises that the customer record already has an NPWP field and does not add a duplicate x_ field"
+  - "Explains that NIK and NITKU appear on the customer when the Coretax filing piece (app pajak) is installed, and offers adding it rather than custom fields"
+  - "Mentions that NPWP is 16 digits stored as text and is hidden from cashiers and outlet staff"

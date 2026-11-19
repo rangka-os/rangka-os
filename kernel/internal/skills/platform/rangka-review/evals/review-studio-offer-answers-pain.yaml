@@ -1,0 +1,14 @@
+name: review-studio-offer-answers-pain
+skill: rangka-review
+stage: studio
+prompt: "Intinya aku punya 40 satpam yang ditempatin di 6 klien. Absensi dari grup WA, tiap akhir bulan admin rekap manual buat bikin tagihan, sering telat seminggu jadi uang masuknya telat. Udah, tolong susun aja."
+expect:
+  answer:
+    not_mentions: ["sudah aku buat", "sudah jadi", "katalog", "modul", "konektor", "change set"]
+  escalate: false
+rubric:
+  - "Makes an offer in this turn, and says plainly that nothing is built yet"
+  - "The recommended option answers the late-billing pain by producing invoices from recorded attendance, and the reply ties the recommendation to that pain"
+  - "Attendance arriving through WhatsApp groups is either covered by a real catalogue piece or stated honestly as recorded by hand for now"
+  - "Lists only automations the option really contains; nothing invented"
+  - "Payroll, BPJS or tax are not promised unless the owner raised them; any not covered part is said"

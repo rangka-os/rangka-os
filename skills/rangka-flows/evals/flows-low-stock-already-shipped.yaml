@@ -1,0 +1,15 @@
+name: flows-low-stock-already-shipped
+skill: rangka-flows
+stage: console
+site: demo-stok
+prompt: "Tolong kabari kantor pusat kalau stok bahan di outlet udah mau habis."
+expect:
+  answer:
+    mentions: ["batas minimum"]
+    not_mentions: ["sudah aku buat", "sudah jalan"]
+  escalate: false
+rubric:
+  - "Checks what already runs and says the shipped morning low-stock alert exists, driven by each item's reorder level"
+  - "Tells the owner to fill in the minimum level on items (data in the app), not a change set"
+  - "Proposes a new site flow only if the owner wants the alert immediately, and then uses an event on stock_move.created, not a frequent cron"
+  - "Does not create purchase orders or change stock quantities"

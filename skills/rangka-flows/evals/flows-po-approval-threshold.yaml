@@ -1,0 +1,20 @@
+name: flows-po-approval-threshold
+skill: rangka-flows
+stage: console
+site: demo-kepingan-keuangan
+prompt: "Mulai sekarang PO di atas 5 juta harus aku setujui dulu sebelum diajukan ke pemasok."
+expect:
+  changeset:
+    paths: ["custom/purchase_order.rk"]
+    not_paths: ["apps/**", "modules/**", "flows/**", "roles/**"]
+    risk: medium
+  answer:
+    mentions: ["5.000.000", "setuju"]
+    not_mentions: ["sudah aku buat", "sudah jalan", "sudah aktif"]
+  escalate: false
+rubric:
+  - "Uses an approvals: policy on purchase_order (on: submit) in the company overlay, not a flow approve step"
+  - "The when: compares grand_total with the whole number 5000000"
+  - "Approvers are a role the person preparing POs does not hold (or the owner), and the reply explains who will approve"
+  - "Asks or states whether the 5 juta includes PPN instead of silently deciding it"
+  - "Says the change is proposed and needs approval; does not claim it is active"

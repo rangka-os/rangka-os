@@ -35,7 +35,7 @@ idempotency: event.message_id
 | `call` | Call a connector action (recorded in the audit log in v0; the connector runtime is not built yet) |
 | `if` / `then` / `else` | Branch; every step may also carry an `if:` guard |
 | `for_each` / `as` / `do` | Run the steps under `do` once per item of a list (a `find_all` variable), at most 2000 items, no `wait` or `approve` inside ([contract 0031](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0031-recurring-documents.md)) |
-| `wait` | Wait for a duration (`wait: 2h`) or until a condition holds (`wait: {until: …}`, checked every minute); the rest of the flow runs later from the queue. Top level only |
+| `wait` | Wait for a duration (`wait: 2h`) or until a condition holds (`wait: {until: …}`, checked every minute); the rest of the flow runs later from the queue. `wait: {until: …, timeout: 3d}` gives up at a deadline counted from when the wait starts: the run ends there (audit `flow.timed_out`, the steps after the wait never run), like a rejected approval. Without `timeout` the wait has no end. Top level only |
 | `approve` | Stop until a person with one of the `approvers` roles approves; reject ends the flow ([contract 0007](https://github.com/rangka-os/rangka-os/blob/main/docs/contracts/0007-document-approvals.md)). Top level only |
 
 `on:` takes a connector trigger (`whatsapp_business.message_received`) or a model event (`deal.updated`);

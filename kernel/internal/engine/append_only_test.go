@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"testing"
+	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 )
@@ -193,7 +194,7 @@ steps:
 		t.Fatalf("job args lost the manual mark: %v", args)
 	}
 	a := JobActor(owner.Org, args["actor"])
-	_, err = e.RunFlowResume(ctx, a, "deal_log_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true, meta.AsMap(args["flow_key"]))
+	_, err = e.RunFlowResume(ctx, a, "deal_log_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true, meta.AsMap(args["flow_key"]), time.Time{})
 	if !isCode(err, "append_only") {
 		t.Fatalf("resumed manual run = %v, want append_only", err)
 	}
@@ -203,7 +204,7 @@ steps:
 		t.Fatal(err)
 	}
 	args = roundTrip(q.jobs[len(q.jobs)-1]["args"]).(map[string]any)
-	if _, err := e.RunFlowResume(ctx, owner, "deal_log_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true, meta.AsMap(args["flow_key"])); err != nil {
+	if _, err := e.RunFlowResume(ctx, owner, "deal_log_later", meta.AsMap(args["event"]), int(args["resume"].(float64)), meta.AsMap(args["vars"]), args["manual"] == true, meta.AsMap(args["flow_key"]), time.Time{}); err != nil {
 		t.Fatalf("kernel-started run after wait: %v", err)
 	}
 	if rows, _, _ := e.List(ctx, owner, "deal_log", ListOpts{Limit: 10}); len(rows) != 1 {

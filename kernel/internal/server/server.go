@@ -675,7 +675,7 @@ func (s *Server) runFlowJob(ctx context.Context, j *jobs.Job) (any, error) {
 	if r, ok := j.Args["resume"].(int64); ok {
 		start = int(r)
 	}
-	out, err := s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true, meta.AsMap(j.Args["flow_key"]))
+	out, err := s.Engine.RunFlowResume(ctx, a, name, meta.AsMap(j.Args["event"]), start, meta.AsMap(j.Args["vars"]), j.Args["manual"] == true, meta.AsMap(j.Args["flow_key"]), engine.WaitDeadline(j.Args))
 	var perm *jobs.Permanent
 	if err != nil && (j.Attempt >= j.MaxAttempts || errors.As(err, &perm)) {
 		// the run will never finish: its idempotency key is free again for the same event (audit flowkey-release N1);

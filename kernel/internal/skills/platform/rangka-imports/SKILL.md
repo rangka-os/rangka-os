@@ -36,7 +36,7 @@ preview, commits, and submits the drafts. Never say data is imported until `rang
 | The owner has | Do |
 | --- | --- |
 | a file and an import exists for that model | Profile (section 2), map columns (section 3), give the rename list, send them to the wizard |
-| a file whose model has no import (old unpaid invoices per customer, purchase history, students) | Say plainly there is no import for it yet. Offer what exists: the form ("Tambah <label>"), the opening balance total (section 4), or keeping the old file as reference. Never squeeze the data into another model's import |
+| a file whose model has no import (old unpaid invoices per customer, purchase history, students) | Say plainly there is no import for it yet. Offer what exists: the form (`Tambah <label>`), the opening balance total (section 4), or keeping the old file as reference. Never squeeze the data into another model's import |
 | an export from another app (Accurate, Jurnal, marketplace) with its own headers | Map it onto Juragan's template columns; the owner renames or copies columns into the template. Only Moka and Loyverse POS exports have their own import |
 | only a photo or PDF of a book | Read what you can as guesses (`rangka-consult` section 3). An import needs CSV or XLSX: suggest the template |
 

@@ -20,7 +20,7 @@ if: app_installed('invoicing')
 | `add_months(date, n)`, `days_between(a, b)` | Calendar months (day clamped to the month's end: `2026-01-31` + 1 = `2026-02-28`) and whole days from a to b |
 | `distance_m(a, b)` | Metres between two `geo` positions (`{lat, lng}`), `1e9` when either has none (a radius check fails without a position) |
 | `epoch(t)`, `timestamp(n)` | Datetime (or date, midnight UTC) to whole Unix seconds, and back to an RFC 3339 UTC datetime; null stays null (poll cursors) |
-| `round(x)`, `max(…)`, `min(…)`, `size(x)`, `sum(list)`, `list.map(x, expr)`, `list.exists(x, expr)`, `list.all(x, expr)` | Numbers and lists |
+| `round(x)`, `max(…)`, `min(…)`, `size(x)`, `sum(list)`, `list.map(x, expr)`, `list.map(x, cond, expr)`, `list.filter(x, cond)`, `list.all(x, cond)`, `list.exists(x, cond)`, `list.exists_one(x, cond)`, `list.sum()`, `list.join(sep)` | Numbers and lists. `join` writes the items as text with `sep` between them (`users.map(u, u.full_name).join(', ')`). `x` is a loop variable bound only inside the macro: `items.all(l, l.qty > 0)` |
 | `int(x)`, `double(x)`, `string(x)` | Conversions |
 | `option('field', 'attr')` | An attribute of the selected option of a select field (e.g. `probability`) |
 | `app_installed('invoicing')` | Whether a module or app is installed |
@@ -32,4 +32,6 @@ Dates are ISO strings and compare as strings. Missing values are `''` for text, 
 `false` for checks. String literals inside YAML need both quotes: `default: "'new'"`.
 
 The validator checks every identifier against the model's fields (and linked models' fields) and suggests the closest
-name when one is wrong.
+name when one is wrong. Inside a macro over a table field it checks the loop variable's members against the child
+model: `items.all(l, l.qtty > 0)` reports that the line has no field `qtty`. A method the evaluator does not have (`name.lower()`) is reported as
+`unknown_method`, in expressions and in the `{…}` parts of notice texts.

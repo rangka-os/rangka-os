@@ -581,6 +581,23 @@ func setOnceCheck(add func(level, path, where, code, msg string), p string, i in
 
 var optionRe = regexp.MustCompile(`option\(\s*'(\w+)'`)
 
+var methodSet = func() map[string]bool {
+	out := map[string]bool{}
+	for _, m := range Methods {
+		out[m] = true
+	}
+	return out
+}()
+
+// methods reports the names called as methods in a CEL expression that the evaluator does not know.
+func methods(add func(level, path, where, code, msg string), p, where, expr string) {
+	for _, n := range cel.MethodNames(expr) {
+		if !methodSet[n] {
+			add("error", p, where, "unknown_method", fmt.Sprintf("`.%s()` is not a CEL or Rangka method%s", n, suggest(n, Methods)))
+		}
+	}
+}
+
 var funcSet = func() map[string]bool {
 	m := map[string]bool{}
 	for _, f := range Functions {
@@ -682,6 +699,22 @@ func (v *validator) exprTo(extra bool, p, where string, x any, fields map[string
 					add("error", p, where, "unknown_field", fmt.Sprintf("`%s.%s`: %s has no field \"%s\"%s", r.Head, r.Member, str(f, "to"), r.Member, suggest(r.Member, boolKeys(target))))
 				}
 			}
+		}
+	}
+	methods(add, p, where, e)
+	// member reads on a macro loop variable over a table field: lines.all(l, l.qty > 0) checks qty on the child
+	for _, r := range cel.LoopRefs(e) {
+		f := fields[r.Range]
+		if f == nil || str(f, "type") != "table" {
+			continue
+		}
+		tm, ok := visible[str(f, "of")]
+		if !ok {
+			continue
+		}
+		target := union(fieldNames(tm.m), SystemFields)
+		if !target[r.Member] {
+			add("error", p, where, "unknown_field", fmt.Sprintf("`%s.%s`: %s has no field \"%s\"%s", r.Var, r.Member, str(f, "of"), r.Member, suggest(r.Member, boolKeys(target))))
 		}
 	}
 	for _, m := range optionRe.FindAllStringSubmatch(e, -1) {

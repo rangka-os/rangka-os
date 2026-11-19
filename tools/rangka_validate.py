@@ -43,6 +43,8 @@ def check_set_once(rep, p, i, f, child):
         rep.add("error", p, f"fields/{i}/set_once", "set_once_child", "set_once is for fields of the document itself; a table row can be removed and added again")
     elif f.get("type") in SET_ONCE_EMPTY_IS_VALUE:
         rep.add("error", p, f"fields/{i}/set_once", "set_once_type", f'set_once needs a field whose empty value means "not filled"; a {pystr(f.get("type"))} field starts at 0, false or empty')
+# Methods: the macros and what the kernel's cel eval.go method() runs (kernel meta.Methods).
+METHODS = ["all", "exists", "exists_one", "map", "filter", "size", "sum", "join", "contains", "startsWith", "endsWith", "matches", "replace", "lowerAscii", "upperAscii", "trim", "emvcoTag", "emvcoValid"]
 FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string", "min", "max", "clock", "random_code"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
@@ -300,11 +302,16 @@ def suggest(name, choices):
     return f'; did you mean "{m[0]}"?' if m else ""
 
 
-def idents(expr):
-    """Top-level identifiers and link.member pairs in a CEL expression (ignores strings, lambda vars, functions)."""
+MACROS = r"(?:all|exists_one|exists|map|filter)"  # comprehension macros; the first argument is a loop variable
+
+
+def _scan(expr):
     s = re.sub(r"'[^']*'", "''", expr)
-    lam = set(re.findall(r"\.map\(\s*([a-z_]\w*)\s*,", s))
-    out = []
+    lam = set(re.findall(r"\." + MACROS + r"\(\s*([a-z_]\w*)\s*,", s))
+    rng = {}
+    for m in re.finditer(r"(?<![\w.])([A-Za-z_]\w*)\s*\.\s*" + MACROS + r"\(\s*([a-z_]\w*)\s*,", s):
+        rng.setdefault(m.group(2), m.group(1))
+    out, loops = [], []
     for m in re.finditer(r"(?<![\w.])([A-Za-z_]\w*)(\s*\.\s*([A-Za-z_]\w*))?(\s*\()?", s):
         head, member, call = m.group(1), m.group(3), m.group(4)
         if head == "in" and not member and not call:
@@ -313,7 +320,31 @@ def idents(expr):
             out.append(("fn", head, None))
         elif head not in lam:
             out.append(("ref", head, None if (member and m.group(0).rstrip().endswith("(")) else member))
-    return out
+        elif member and not call and head in rng:
+            loops.append((head, rng[head], member))
+    return out, loops
+
+
+def method_names(expr):
+    """Names called as methods (x.name(…)) in a CEL expression, each once in order of first use, ignoring strings."""
+    s = re.sub(r'"[^"]*"', '""', re.sub(r"'[^']*'", "''", expr))
+    return list(dict.fromkeys(re.findall(r"\.\s*([A-Za-z_]\w*)\s*\(", s)))
+
+
+def check_methods(rep, p, where, expr):
+    for n in method_names(expr):
+        if n not in METHODS:
+            rep.add("error", p, where, "unknown_method", f'`.{n}()` is not a CEL or Rangka method{suggest(n, METHODS)}')
+
+
+def idents(expr):
+    """Top-level identifiers and link.member pairs in a CEL expression (ignores strings, macro loop vars, functions)."""
+    return _scan(expr)[0]
+
+
+def loop_refs(expr):
+    """Member reads on macro loop variables as (var, range, member): lines.all(l, l.qty > 0) → (l, lines, qty)."""
+    return _scan(expr)[1]
 
 
 def default_modules(root):
@@ -748,6 +779,13 @@ def check_expr(rep, p, where, expr, m, fields, visible):
             target = {x["name"] for x in visible[f["to"]][2].get("fields", [])} | SYSTEM_FIELDS
             if member not in target:
                 rep.add("error", p, where, "unknown_field", f'`{head}.{member}`: {f["to"]} has no field "{member}"{suggest(member, target)}')
+    check_methods(rep, p, where, expr)
+    for var, rng, member in loop_refs(expr):
+        f = fields.get(rng)
+        if f and f.get("type") == "table" and f.get("of") in visible:
+            target = {x["name"] for x in visible[f["of"]][2].get("fields", []) if isinstance(x, dict) and "name" in x} | SYSTEM_FIELDS
+            if member not in target:
+                rep.add("error", p, where, "unknown_field", f'`{var}.{member}`: {f["of"]} has no field "{member}"{suggest(member, target)}')
     for m_ in re.finditer(r"option\(\s*'(\w+)'", expr):
         f = fields.get(m_.group(1))
         if not f or f.get("type") != "select":
@@ -796,6 +834,8 @@ def schema_errors(rep, V, kind, p, data):
 def parens(rep, p, where, expr):
     if isinstance(expr, str) and expr.count("(") != expr.count(")"):
         rep.add("error", p, where, "cel_syntax", f"unbalanced parentheses in `{expr}`")
+    elif isinstance(expr, str):
+        check_methods(rep, p, where, expr)
 
 
 def kind_of(path):
@@ -1628,6 +1668,10 @@ def check_flow_notices(rep, p, app, f, apps, allmodels):
             seen = set()
             for text in notice_texts(st.get(k)):
                 for part in NOTICE_EXPR_PART.findall(text):
+                    for n in method_names(part[1:-1]):
+                        if n not in METHODS and "." + n not in seen:
+                            seen.add("." + n)
+                            rep.add("error", p, f"{w}/{k}", "unknown_method", f'`.{n}()` is not a CEL or Rangka method{suggest(n, METHODS)}')
                     for v, fld in NOTICE_FIELD_REF.findall(part):
                         mn = vars_.get(v)
                         if not mn or f"{v}.{fld}" in seen or allmodels[mn][0] not in ("users", "contacts"):

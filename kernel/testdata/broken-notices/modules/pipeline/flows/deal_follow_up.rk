@@ -17,3 +17,5 @@ steps:
         template: {id: 'Hubungi {c.customer_name} di {c.phone} atau {c.email}; telepon {c.phone} lagi besok.'}
   - notify: owner
     template: 'Ringkasan: ini adalah teks yang sangat panjang sekali untuk sebuah kabar, lebih panjang dari tiga ratus huruf, karena menceritakan semua peluang yang ada di tahap prospek beserta nilainya, pelanggannya, penanggung jawabnya, tanggal terakhir dihubungi, catatan dari pertemuan terakhir, rencana tindak lanjut, dan berbagai hal lain yang seharusnya tetap berada di balik tautan ke aplikasi {size(open)}.'
+  - notify: owner
+    template: {en: "Open: {open.map(o, o.deal_name).join(', ')} ({open.count()})", id: "Terbuka: {open.map(o, o.deal_name).join(', ')} ({open.count()})"}

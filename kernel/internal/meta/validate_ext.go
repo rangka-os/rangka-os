@@ -25,9 +25,15 @@ func (v *validator) schemaErr(kind string, d *rk.Doc) {
 }
 
 func (v *validator) parens(p, where string, x any) {
-	if s, ok := x.(string); ok && strings.Count(s, "(") != strings.Count(s, ")") {
-		v.rep.extra("error", p, where, "cel_syntax", fmt.Sprintf("unbalanced parentheses in `%s`", s))
+	s, ok := x.(string)
+	if !ok {
+		return
 	}
+	if strings.Count(s, "(") != strings.Count(s, ")") {
+		v.rep.extra("error", p, where, "cel_syntax", fmt.Sprintf("unbalanced parentheses in `%s`", s))
+		return
+	}
+	methods(v.rep.extra, p, where, s)
 }
 
 // allModels is every model as other files see it: with the fields of its company overlay appended

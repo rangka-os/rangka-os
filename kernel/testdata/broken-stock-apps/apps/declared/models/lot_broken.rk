@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# contract 0070: every lot, serials and expired check (no stock_lot or serial_no model in this tree)
+name: lot_broken
+is_submittable: true
+naming: LBK-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: moved_on
+  moves:
+    - {lines: items, in: outlet, reason: receipt, lot: {no: qty, expiry: lot_code, pick: lot_code}, serials: cogs, expired: skip}
+    - {lines: items, out: outlet, reason: waste, explode: recipe, lot: {no: lot_code, pick: nope}, serials: serial_nos, expired: oldest}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: moved_on, type: date, required: true}
+  - {name: items, type: table, of: lot_broken_item, min_rows: 1}

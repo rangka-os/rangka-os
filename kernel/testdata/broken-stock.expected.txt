@@ -1,5 +1,6 @@
 catalogue/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/catalogue/module.rk and an app (contract 0001)
 declared/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/declared/module.rk and an app (contract 0001)
+declared/models/lot_broken.rk:12:130  error  schema  stock/moves/1/expired  'oldest' is not one of ['skip', 'allow', 'refuse', 'first']
 declared/models/sales_return.rk:12:64  error  schema  stock/moves/1/cost  'fifo' is not valid under any of the given schemas
 outlets/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/outlets/module.rk and an app (contract 0001)
 stock/app.rk:1:1  warn   deprecated_layout  (root)  0.4 app.rk: split into modules/stock/module.rk and an app (contract 0001)
@@ -17,6 +18,20 @@ declared/models/gr_declared.rk:12:26  error  bad_stock_field  stock/moves/1/in  
 declared/models/gr_declared.rk:12:45  error  bad_stock_field  stock/moves/1/item  "qty" is not a link to item
 declared/models/gr_declared.rk:12:55  error  bad_stock_field  stock/moves/1/qty  "item" is not a number field
 declared/models/gr_declared.rk:12:93  error  bad_stock_field  stock/moves/1/cost/source  "outlet" is not a link to a document that moves stock
+declared/models/lot_broken.rk:11:56  warn   no_lot_model  stock/moves/0/lot  lot: without a stock_lot model: lots are not recorded
+declared/models/lot_broken.rk:11:61  error  bad_lot_field  stock/moves/0/lot/no  "qty" is not a data field
+declared/models/lot_broken.rk:11:74  error  bad_lot_field  stock/moves/0/lot/expiry  "lot_code" is not a date field
+declared/models/lot_broken.rk:11:90  error  bad_lot_field  stock/moves/0/lot/pick  "lot_code" is not a link to stock_lot
+declared/models/lot_broken.rk:11:56  error  lot_direction  stock/moves/0/lot  lot.pick is only for out moves
+declared/models/lot_broken.rk:11:110  warn   no_serial_model  stock/moves/0/serials  serials: without a serial_no model: serials are not recorded
+declared/models/lot_broken.rk:11:110  error  bad_lot_field  stock/moves/0/serials  "cogs" is not a text field
+declared/models/lot_broken.rk:11:125  error  lot_direction  stock/moves/0/expired  expired is only for out moves
+declared/models/lot_broken.rk:12:72  warn   no_lot_model  stock/moves/1/lot  lot: without a stock_lot model: lots are not recorded
+declared/models/lot_broken.rk:12:93  error  unknown_field  stock/moves/1/lot/pick  "nope" is not a field of lot_broken_item
+declared/models/lot_broken.rk:12:72  error  lot_direction  stock/moves/1/lot  lot.no, lot.expiry and lot.made are only for in moves
+declared/models/lot_broken.rk:12:72  error  lot_direction  stock/moves/1/lot  lot and serials name the line's own item, not with explode: recipe
+declared/models/lot_broken.rk:12:109  warn   no_serial_model  stock/moves/1/serials  serials: without a serial_no model: serials are not recorded
+declared/models/lot_broken.rk:12:109  error  lot_direction  stock/moves/1/serials  lot and serials name the line's own item, not with explode: recipe
 declared/models/production_result.rk:11:70  error  stock_consumed  stock/moves/0/cost  cost consumed needs an out move in this document
 declared/models/production_result.rk:11:94  error  bad_stock_field  stock/moves/0/cost/split  "item" is not a number field
 declared/models/sales_declared.rk:10:84  error  stock_direction  stock/moves/0/cost  cost is only for in moves
@@ -26,6 +41,6 @@ declared/models/sales_return.rk:11:69  error  bad_stock_field  stock/moves/0/cos
 declared/models/sales_return.rk:12:26  error  unknown_field  stock/moves/1/in  "gudang" is not a field of sales_return_item
 declared/models/strict_issue.rk:8:3  error  stock_hook  stock  stock: needs is_submittable: true and stock.post_moves in on_submit
 declared/models/strict_issue.rk:9:15  warn   cogs_total_unused  stock/cogs_total  cogs_total stays 0: no out move has cogs
-stock/models/stock_adjustment.rk:8:3  error  stock_legacy  stock  stock_adjustment has a built-in stock rule and cannot declare stock:
+stock/models/stock_count.rk:8:3  error  stock_legacy  stock  stock_count has a built-in stock rule and cannot declare stock:
 
-24 error(s), 5 warning(s)
+35 error(s), 9 warning(s)

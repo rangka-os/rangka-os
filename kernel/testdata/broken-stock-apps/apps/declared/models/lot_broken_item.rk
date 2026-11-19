@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: lot_broken_item
+is_child: true
+fields:
+  - {name: item, type: link, to: item, required: true}
+  - {name: qty, type: float, required: true}
+  - {name: lot_code, type: data}
+  - {name: serial_nos, type: text}
+  - {name: cogs, type: currency, read_only: true}

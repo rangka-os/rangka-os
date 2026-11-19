@@ -126,7 +126,12 @@ func TestCatalogueHoldsNoSecret(t *testing.T) {
 	}
 	for _, x := range r.JSON["connectors"].([]any) {
 		for _, f := range get(x, "auth").([]any) {
-			for k := range f.(map[string]any) {
+			for k, v := range f.(map[string]any) {
+				// source: host marks a field the host fills (contract 0063 §2); it names who provides the value, never
+				// the value, so it is allowed with that one value only
+				if k == "source" && v == "host" && get(x, "provided_by") == "host" {
+					continue
+				}
 				if k != "name" && k != "label" && k != "secret" && k != "required" && k != "set" {
 					t.Errorf("auth field key %q in %v", k, f)
 				}

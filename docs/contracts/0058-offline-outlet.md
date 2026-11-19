@@ -214,6 +214,40 @@ Status: accepted (15 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
 | 8 | Sync pill and queue panel (§9) | rangka-os web app |
 | 9 | `pos_sale`, `pos_shift` to `naming_on: device` | rangka-apps |
 
+## Implementation notes (web device layer, rangka-os#262 slice a)
+- **Where it lives.** `web/app/deviceoutbox.js` (the device queue, §4–§5), `pair.js` (`#/pasang` pairing and unlock,
+  `#/perangkat` device page, §2), `printer-escpos.js` + `printer.js` (§8), `syncpill.js` (§9), `device.css`. The
+  device screens are an overlay over the app, so they work before anyone is signed in on the device. `sw.js` imports
+  `deviceoutbox.js` and sends the queue on the Background Sync tag `rangka-device-outbox`.
+- **Queue.** IndexedDB `rangka-device` (stores `events`, `meta`); `seq` comes from a per-device counter taken in the
+  same transaction that stores the event. Sent in `seq` order, at most 100 per request; `accepted`/`duplicate` → sent
+  (kept a day for the panel), `rejected` → kept with code and message (only a refused `print.*` / `device.read` can be
+  hidden; a queued event or a refused `screen.write` never); no connection, 5xx, 408 or 429 → the same keys go again
+  later (2 s doubling to 60 s); `401 device_revoked`, `401 unauthenticated` and `400 unsupported_sync_version` stop
+  sending and keep the queue. A repeated key returns the stored event. Events of an earlier device id (a browser
+  paired again) are never sent with the new device's cookie; they stay listed. Without IndexedDB the queue lives in
+  memory and the pill says so.
+- **Offline verifiers (§2).** A good online unlock stores PBKDF2-SHA-256 (100 000 rounds, 16-byte salt) of the PIN for
+  that person, kept 14 days. Offline, only people on the outlet's PIN staff list as last pulled online can unlock.
+  A verifier is dropped after five wrong offline PINs in a row, on any kernel refusal of that person's online unlock
+  (the kernel answers `pin_wrong` alike for a wrong PIN, a cleared PIN, a removed member and a role without PIN), and
+  when an online staff list no longer has them; `device_revoked` (from the queue, the staff list or an unlock) drops
+  all of them and the unlocked cashier, and the device screens offer pairing again with the queue kept. A proxy
+  answering 502/503/504 counts as offline. A 4 to 6 digit PIN is guessable from a stolen device's storage
+  whatever the hash; the device cookie (revocable) is the boundary, as §10 "Actor trust" says.
+- **Printer (§8).** Five transports: the browser print dialog (default, no drawer), rangka-edge `serve` on loopback
+  (`http://127.0.0.1:9180/v1/print`, contract 0045 §1, with its print token), Web Serial, WebUSB and Web Bluetooth.
+  The ESC/POS bytes are byte for byte rangka-edge's `printdoc.Receipt` (a shared fixture in
+  `web/app/test/fixtures/receipt-escpos.json`, odd values included). The drawer opens only for a paid receipt with a
+  `cash` payment, once per receipt on the device (job ids kept in localStorage, as rangka-edge's first-try rule),
+  never for a copy, a void, card, transfer, e-wallet or QRIS.
+  Each try queues `print.done` or `print.failed` on a paired device. No transport has been certified on real
+  hardware yet: the spike (Work row 0) waits for the pilot printers.
+- **Not wired yet.** The counter still writes through the REST API and `outbox.js` (0030 §7): moving the paid sale to
+  `screen.write` needs `pos_sale`/`pos_shift` with `naming_on: device` (Work row 9, rangka-apps), device-side computes
+  (row 4b) and data sets (row 4). Until then a paired device sends `print.*` events through the queue and the sync pill
+  shows them.
+
 ## Consequences
 - A paired PC or Android device sells, prints, switches cashier and closes the shift without internet, and nothing it
   recorded is lost or doubled.

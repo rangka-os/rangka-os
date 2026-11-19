@@ -49,8 +49,10 @@ they are not `append_only` because hooks update them):
   kernel always writes it as `stock_balance.qty` minus the real lots of that outlet and item, so stock from before
   tracking was switched on, or moved by a document that does not carry lots, sits there. The row is created when it
   is first not zero.
-- `serial_no`: one per (`item`, `serial`): `state`, `outlet`, and when the model has them `prev_state`, `lot`,
-  `last_voucher_type`, `last_voucher`, `in_date`, `out_date`. States: `in_stock`, `in_transit`, `sold`, `returned`
+- `serial_no`: one per (`item`, `serial`): `state`, `outlet`, and when the model has them `history`, `prev_state`,
+  `lot`, `last_voucher_type`, `last_voucher`, `in_date`, `out_date`. `history` (read-only text) is the kernel's stack
+  of the forward moves still standing, one line `<type>/<name>|<state before>` each, oldest first (§8); a stock module
+  should ship it, because without it reversals can check the state only. States: `in_stock`, `in_transit`, `sold`, `returned`
   (to the vendor), `consumed`, `scrapped`, `cancelled` (the receipt that brought it in was cancelled).
 - `stock_move` gains `lot` (link `stock_lot`, empty for the no-lot bucket) and `serial_nos` (text, one per line).
 
@@ -122,7 +124,8 @@ balance takes the rest from the bucket. A pick of another item's lot is refused 
 
 One line therefore writes one `stock_move` per lot, same voucher and reason. **Value split to the rupiah:** the line's
 value is what one move would take, `round(qty × avg)` (standard cost when there is no average); each part is
-`round(part_qty × avg)` and the last part takes the remainder, so the parts add up to the single move's value, `cogs`
+`round(part_qty × avg)`, never past what is left of the line's value (so no part flips sign when the average is below
+a rupiah per part), and the last part takes the remainder, so the parts add up to the single move's value, `cogs`
 and `cogs_total` are unchanged, and the balance keeps the average one move would keep when it does not stay above zero.
 `TestLotsFEFOValueSplit` posts the same receipts and delivery for a lot item and an untracked twin and compares.
 
@@ -165,18 +168,33 @@ Serial items are not lot-tracked in v1 (`serial_no.lot` is reserved).
 ### 8. Reversal
 
 `stock.reverse_moves` reverses move by move as before; each reversal carries the move's `lot` and `serial_nos`, so lot
-balances and serial states return exactly. Serials are undone last move first (a one-step transfer's `transfer_in`
-before its `transfer_out`): reversing an out move needs the serial still in the state that move left it in and puts
-it back `in_stock`; reversing an in move needs it still `in_stock` at that outlet and sets `in_transit` (a transfer
-receipt), its `prev_state` when this document moved it last (a cancelled return makes it `sold` again), or
-`cancelled`. A serial that has moved on since is refused `409 serial_moved`: cancel the later document first. A
-cancelled receipt whose lot has since been sold drives that lot negative, like item stock today.
+balances and serial states return exactly.
+
+- **Average.** The parts of one line (consecutive moves of one outlet, item, reason and unit cost, each another lot)
+  are reversed as one: the last reversal keeps the average from before the first when the balance does not stay above
+  zero, as one reversal of the whole line would. A lot item's balance after a cancel equals the untracked twin's
+  (`TestLotsReversalKeepsAverage`).
+- **Serials.** They are undone last move first (a one-step transfer's `transfer_in` before its `transfer_out`). With
+  `serial_no.history` the cancelled document must be the one that moved the serial last (its entry on top), else
+  `409 serial_moved` ("cancel the later document first"); the entry is popped, the serial gets back its state from
+  before (a serial this document created: `cancelled`) and the previous entry is again its last voucher. So a serial
+  sold, returned and sold again cannot be put back in stock by cancelling the first sale, and cancelling in reverse
+  order walks it back to its receipt (`TestSerialHistory`). Without `history` only the state is checked: an out
+  move's reversal needs the state that move left and puts the serial back `in_stock`; an in move's reversal needs it
+  `in_stock` at that outlet and leaves it `in_transit` (a transfer receipt) or `cancelled`.
+- A cancelled receipt whose lot has since been sold drives that lot negative, like item stock today.
+
+**Locks.** Every posting and reversal takes the `stock_balance` keys of the document sorted (`lockAll`, 0021), then the
+`stock_lot` (item, lot number) and `serial_no` (item, serial) keys of its lines sorted, so two documents touching the
+same lots or serials in another line order cannot deadlock. A transfer receipt's pending serials are the ones the
+transfer moved last (history top), never a serial a later transfer carries.
 
 ### 9. Device writes (0058)
 
 A device write is never refused for stock. `lot_expired`, `lot_required`, `expiry_required`, `lot_expiry_mismatch` and
 the serial refusals become exceptions of kind `stock_<code>` with the item, outlet and lot or serial in the detail;
-the move posts by quantity (the no-lot bucket, the register untouched for that serial). The same body over REST is
+the move posts by quantity (the no-lot bucket, also for a picked expired lot under `refuse`; the register untouched
+for that serial). The same body over REST is
 refused.
 
 ### 10. GS1 scan
@@ -236,6 +254,7 @@ following AI; the printed form always parses. No Edge release is needed.
   `goods_receipt` and `stock_adjustment`.
 - Tests: `engine/stock_lots_test.go` (`TestLotsFEFOValueSplit`, `TestLotsExpiredModes`, `TestLotsNoLotBucket`,
   `TestLotsTransferFollowsLots`, `TestLotsCountPerLot`, `TestSerials`, `TestLotsReturnIntoLot`,
-  `TestLotsReverseEverything`, `TestLotsDeclaredGoodsReceipt`, `TestLotsDeviceWriteNeverRefused`);
+  `TestLotsReverseEverything`, `TestLotsDeclaredGoodsReceipt`, `TestLotsDeviceWriteNeverRefused`,
+  `TestLotsReversalKeepsAverage`, `TestSerialHistory`, `TestLotsPartRounding`);
   `kernel/testdata/stock-apps` (registers in `stock`, declared documents in `lots`) and `broken-stock-apps`
   (`lot_broken`) in `make compare-python` and the golden file; `web/app/test/scan.test.js`.

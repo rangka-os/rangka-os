@@ -60,6 +60,7 @@ func postTransferOut(h *HookCtx) (map[string]any, error) {
 			keys = append(keys, [2]string{from, str(l["item"])})
 		}
 	}
+	s.wantLineLocks("stock_transfer", "items")
 	if err := s.lockAll(keys); err != nil {
 		return nil, err
 	}
@@ -196,6 +197,9 @@ func postTransferReceipt(h *HookCtx) (map[string]any, error) {
 	var keys [][2]string
 	for it := range want {
 		keys = append(keys, [2]string{outlet, it})
+	}
+	for _, l := range rows(rec["items"]) {
+		s.wantSerialLocks(str(l["item"]), parseSerials(l["serial_nos"]))
 	}
 	if err := s.lockAll(keys); err != nil {
 		return nil, err
@@ -396,9 +400,16 @@ func transferLots(h *HookCtx, tr store.Record, except string) (map[string]*pendi
 			if err != nil {
 				return nil, err
 			}
-			if len(found) > 0 && str(found[0]["state"]) == "in_transit" {
-				p.serials = append(p.serials, sn)
+			if len(found) == 0 || str(found[0]["state"]) != "in_transit" {
+				continue
 			}
+			// with a history, only serials this transfer moved last are its own (a later transfer may carry it now)
+			if has(h.op.e.Reg().Model("serial_no"), "history") {
+				if v, _, _ := topHistory(str(found[0]["history"])); v != voucherRef("stock_transfer", str(tr["name"])) {
+					continue
+				}
+			}
+			p.serials = append(p.serials, sn)
 		}
 	}
 	return out, nil

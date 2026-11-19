@@ -270,8 +270,12 @@ func (s *stockPost) fefo(outlet, item string, qty float64, lo lotOut) ([]lotTake
 			return nil, refuse("lot_wrong_item", "Lot "+str(l["lot_no"])+" bukan lot barang "+item)
 		}
 		if exp := dateOnly(l["expiry_date"]); lo.expired == expiredRefuse && exp != "" && exp < s.date {
-			if ok, err := s.problem("lot_expired", "Lot "+str(l["lot_no"])+" sudah kedaluwarsa "+exp, outlet, map[string]any{"item": item, "lot": lo.pick}); !ok && err != nil {
+			ok, err := s.problem("lot_expired", "Lot "+str(l["lot_no"])+" sudah kedaluwarsa "+exp, outlet, map[string]any{"item": item, "lot": lo.pick})
+			if err != nil {
 				return nil, err
+			}
+			if !ok { // a flagged device write posts by quantity, out of the no-lot bucket (§9)
+				return []lotTake{{"", qty}}, nil
 			}
 		}
 		have, err := s.lotQty(outlet, item, lo.pick)
@@ -365,6 +369,58 @@ func (s *stockPost) fefo(outlet, item string, qty float64, lo lotOut) ([]lotTake
 	return takes, nil
 }
 
+// ---------- locks
+
+// wantSerialLocks and wantLotLock note the advisory keys a document will take for its serials and lots; lockWanted
+// takes them in sorted order after lockAll, so two documents touching the same serials or lots in another line order
+// cannot deadlock (serialRecord and lotFor take the same keys again, which is a no-op in the transaction).
+func (s *stockPost) wantSerialLocks(item string, serials []string) {
+	for _, sn := range serials {
+		s.wantKey("serial_no|" + item + "|" + sn)
+	}
+}
+
+func (s *stockPost) wantLotLock(item, no string) {
+	if no = strings.TrimSpace(no); no != "" {
+		s.wantKey("stock_lot|" + item + "|" + no)
+	}
+}
+
+func (s *stockPost) wantKey(k string) {
+	if s.want == nil {
+		s.want = map[string]bool{}
+	}
+	s.want[k] = true
+}
+
+func (s *stockPost) lockWanted() error {
+	keys := make([]string, 0, len(s.want))
+	for k := range s.want {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, k := range keys {
+		if err := s.h.LockKey(k); err != nil {
+			return err
+		}
+	}
+	s.want = nil
+	return nil
+}
+
+// wantLineLocks notes the lot and serial keys of a Go-rule document's lines (conventional fields, lineLots).
+func (s *stockPost) wantLineLocks(model, table string) {
+	for _, l := range rows(s.h.Record[table]) {
+		li, _, sp := lineLots(s.h, model, table, l)
+		if li.declared {
+			s.wantLotLock(str(l["item"]), li.no)
+		}
+		if sp.declared {
+			s.wantSerialLocks(str(l["item"]), sp.list)
+		}
+	}
+}
+
 // ---------- serials
 
 // parseSerials is a serial field: one serial per line (commas and semicolons also separate), trimmed, empty
@@ -420,13 +476,17 @@ func (s *stockPost) serialRecord(item, sn string) (store.Record, error) {
 	return found[0], nil
 }
 
-// serialWrite sets a serial's state and outlet (creating it on its first move), keeping prev_state and the last
-// voucher when the model has them.
+// serialWrite sets a serial's state and outlet after a forward move (creating it on its first move), keeping
+// prev_state, the last voucher and the dates when the model has them, and pushing "<type>/<name>|<state before>" on
+// its history (contract 0070 §8), which a reversal pops.
 func (s *stockPost) serialWrite(cur store.Record, item, sn, state, outlet, lot string, in bool) error {
 	m := s.h.op.e.Reg().Model("serial_no")
 	f := map[string]any{"state": state, "outlet": outlet}
-	if has(m, "prev_state") {
+	if has(m, "prev_state") && cur != nil {
 		f["prev_state"] = str(cur["state"])
+	}
+	if has(m, "history") {
+		f["history"] = pushHistory(str(cur["history"]), voucherRef(s.vtype, s.voucher)+"|"+str(cur["state"]))
 	}
 	if has(m, "last_voucher_type") {
 		f["last_voucher_type"] = s.vtype
@@ -445,12 +505,34 @@ func (s *stockPost) serialWrite(cur store.Record, item, sn, state, outlet, lot s
 	}
 	if cur == nil {
 		f["item"], f["serial"] = item, sn
-		delete(f, "prev_state")
 		_, _, err := s.h.Create("serial_no", f)
 		return err
 	}
 	_, err := s.h.SetSubmitted("serial_no", str(cur["name"]), f)
 	return err
+}
+
+// A serial's history is one entry per forward move still standing, oldest first: "<type>/<name>|<state before>".
+func pushHistory(h, entry string) string {
+	if h == "" {
+		return entry
+	}
+	return h + "\n" + entry
+}
+
+// topHistory is the last entry of a history (the document that moved the serial last, the state before it) and
+// the history without it.
+func topHistory(h string) (voucher, before, rest string) {
+	if h == "" {
+		return "", "", ""
+	}
+	i := strings.LastIndex(h, "\n")
+	top := h[i+1:]
+	if i >= 0 {
+		rest = h[:i]
+	}
+	voucher, before, _ = strings.Cut(top, "|")
+	return voucher, before, rest
 }
 
 // serialsIn brings serials into outlet: each must not be in stock or on its way anywhere (a transfer receipt
@@ -584,6 +666,9 @@ func (s *stockPost) outLine(outlet, item string, qty float64, reason string, lo 
 	var sum int64
 	for i, t := range takes {
 		v := mulRound(t.qty, a)
+		if (total >= 0 && v > total-sum) || (total < 0 && v < total-sum) { // never past the line's value: no part flips sign
+			v = total - sum
+		}
 		mo := moveOpt{lot: t.lot}
 		if i == len(takes)-1 {
 			v = total - sum
@@ -717,6 +802,7 @@ func postStockCount(h *HookCtx) (map[string]any, error) {
 	for _, l := range rows(rec["items"]) {
 		countKeys = append(countKeys, [2]string{outlet, str(l["item"])})
 	}
+	s.wantLineLocks(h.Model.Name, "items")
 	if err := s.lockAll(countKeys); err != nil {
 		return nil, err
 	}
@@ -791,12 +877,15 @@ func postStockCount(h *HookCtx) (map[string]any, error) {
 	return map[string]any{"message": "Stok diperbarui dari " + str(rec["name"])}, nil
 }
 
-// serialsReverse undoes what a move did to its serials. Reversing an out move (qty < 0) needs each serial still in
-// the state that move left it in and puts it back in stock at outlet; reversing an in move needs each serial still
-// in stock at outlet and puts it back in transit (a transfer receipt), in its state before the move (prev_state,
-// when this document moved it last), or cancelled. A serial that has moved on since is refused (serial_moved): cancel the later document first.
+// serialsReverse undoes what a move did to its serials (contract 0070 §8). With a history on serial_no, the
+// cancelled document must be the one that moved the serial last (its entry on top), else serial_moved; the entry is
+// popped and the serial gets back the state it had before (a new serial: cancelled) and, for an out move, its place
+// in stock at outlet. Without a history only the state is checked: an out move's reversal needs the state that move
+// left, an in move's reversal needs the serial in stock at outlet and leaves it in transit (a transfer receipt) or
+// cancelled.
 func (s *stockPost) serialsReverse(outlet, item, reason string, q float64, serials []string) error {
 	m := s.h.op.e.Reg().Model("serial_no")
+	history := has(m, "history")
 	for _, sn := range sortedCopy(serials) {
 		cur, err := s.serialRecord(item, sn)
 		if err != nil {
@@ -806,31 +895,64 @@ func (s *stockPost) serialsReverse(outlet, item, reason string, q float64, seria
 			continue
 		}
 		st := str(cur["state"])
+		moved := refuse("serial_moved", "Nomor seri "+sn+" sudah berpindah sejak dokumen ini; batalkan dokumen sesudahnya dulu")
+		f := map[string]any{}
+		if history {
+			v, before, rest := topHistory(str(cur["history"]))
+			if v != voucherRef(s.vtype, s.voucher) {
+				return moved
+			}
+			if before == "" {
+				before = "cancelled"
+			}
+			f["state"], f["history"] = before, rest
+			pv, _, _ := topHistory(rest)
+			vt, vn := splitVoucherRef(pv)
+			if has(m, "last_voucher_type") {
+				f["last_voucher_type"] = vt
+			}
+			if has(m, "last_voucher") {
+				f["last_voucher"] = vn
+			}
+		} else {
+			switch {
+			case q < 0 && st != serialState(reason):
+				return moved
+			case q < 0:
+				f["state"] = "in_stock"
+			case st != "in_stock" || str(cur["outlet"]) != outlet:
+				return moved
+			case reason == "transfer_in":
+				f["state"] = "in_transit"
+			default:
+				f["state"] = "cancelled"
+			}
+		}
 		if q < 0 {
-			if st != serialState(reason) {
-				return refuse("serial_moved", "Nomor seri "+sn+" sudah berpindah sejak dokumen ini; batalkan dokumen sesudahnya dulu")
-			}
-			if err := s.serialWrite(cur, item, sn, "in_stock", outlet, "", true); err != nil {
-				return err
-			}
-			continue
+			f["outlet"] = outlet
 		}
-		if st != "in_stock" || str(cur["outlet"]) != outlet {
-			return refuse("serial_moved", "Nomor seri "+sn+" sudah keluar dari "+outlet+"; batalkan dokumen sesudahnya dulu")
+		if has(m, "prev_state") {
+			f["prev_state"] = st
 		}
-		// prev_state is the state before the serial's last move; it is the state before this one only when this
-		// document moved the serial last
-		last := has(m, "last_voucher") && str(cur["last_voucher"]) == s.voucher && str(cur["last_voucher_type"]) == s.vtype
-		next := "cancelled"
-		switch prev := str(cur["prev_state"]); {
-		case reason == "transfer_in":
-			next = "in_transit"
-		case last && has(m, "prev_state") && prev != "" && prev != "in_stock" && prev != "in_transit":
-			next = prev
-		}
-		if err := s.serialWrite(cur, item, sn, next, outlet, "", false); err != nil {
+		if _, err := s.h.SetSubmitted("serial_no", str(cur["name"]), f); err != nil {
 			return err
 		}
 	}
 	return nil
+}
+
+// voucherRef is "<type>/<name>" ("" when there is none); splitVoucherRef reads it back.
+func voucherRef(vtype, voucher string) string {
+	if voucher == "" {
+		return ""
+	}
+	return vtype + "/" + voucher
+}
+
+func splitVoucherRef(ref string) (string, string) {
+	vt, v, ok := strings.Cut(ref, "/")
+	if !ok {
+		return "", ""
+	}
+	return vt, v
 }

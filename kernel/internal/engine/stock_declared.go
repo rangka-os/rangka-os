@@ -187,6 +187,8 @@ func postDeclaredMoves(h *HookCtx, sp *stockSpec) (map[string]any, error) {
 				}
 			} else {
 				keys = append(keys, [2]string{dl.outlet, dl.item})
+				s.wantLotLock(dl.item, ru.lotIn(row).no)
+				s.wantSerialLocks(dl.item, ru.serialSpec(row).list)
 			}
 			lines = append(lines, dl)
 		}

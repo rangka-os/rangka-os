@@ -514,3 +514,122 @@ func TestLotsDeviceWriteNeverRefused(t *testing.T) {
 	_, err = p.e.CreateAndSubmit(p.ctx, p.a, "lot_delivery", body(), true)
 	wantCode(t, err, 409, "lot_expired")
 }
+
+// sameAsTwin: the lot item's balance at outlet equals the untracked twin's (qty, value, average).
+func (p *pilot) sameAsTwin(m lotMasters, outlet, where string) {
+	p.t.Helper()
+	x, y := p.balance(outlet, m.susu), p.balance(outlet, m.twin)
+	if qtyOf(x["qty"]) != qtyOf(y["qty"]) || rp(x["value"]) != rp(y["value"]) || rp(x["avg_cost"]) != rp(y["avg_cost"]) {
+		p.t.Fatalf("%s: lot item %v/%v/%v, untracked twin %v/%v/%v", where, x["qty"], x["value"], x["avg_cost"], y["qty"], y["value"], y["avg_cost"])
+	}
+}
+
+// TestLotsReversalKeepsAverage (audit F1): cancelling a transfer receipt split over lots, with the destination
+// ending below zero, keeps the average one reversal of the line keeps, like the untracked twin; so does cancelling
+// a one-step transfer.
+func TestLotsReversalKeepsAverage(t *testing.T) {
+	p := setupLots(t)
+	m := p.lotMasters()
+	p.doc("lot_receipt", map[string]any{"outlet": m.outB, "received_on": "2026-11-01", "items": []any{
+		lotLine(m.susu, 10, 10000, "X", "2027-06-30"), lotLine(m.twin, 10, 10000, "", "")}})
+	p.doc("lot_receipt", map[string]any{"outlet": m.outA, "received_on": "2026-11-01", "items": []any{
+		lotLine(m.susu, 4, 20000, "L1", "2027-01-31"), lotLine(m.susu, 3, 20000, "L2", "2026-12-31"),
+		lotLine(m.twin, 4, 20000, "", ""), lotLine(m.twin, 3, 20000, "", "")}})
+	trf := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "transfer_date": "2026-11-05",
+		"items": []any{map[string]any{"item": m.susu, "qty": 7}, map[string]any{"item": m.twin, "qty": 7}}})
+	r := p.submit("stock_transfer_receipt", p.create("stock_transfer_receipt", map[string]any{"stock_transfer": trf, "outlet": m.outB, "items": []any{
+		map[string]any{"item": m.susu, "qty": 7}, map[string]any{"item": m.twin, "qty": 7}}}))
+	p.wantMoveLots(r, "L2:3:60000 L1:4:80000 -:7:140000")
+	p.doc("lot_delivery", map[string]any{"outlet": m.outB, "delivery_date": "2026-11-20", "mode": "allow", "items": []any{
+		map[string]any{"item": m.susu, "qty": 12}, map[string]any{"item": m.twin, "qty": 12}}})
+	p.sameAsTwin(m, m.outB, "after sales at B")
+	if err := p.cancel("stock_transfer_receipt", r); err != nil {
+		t.Fatal(err)
+	}
+	p.sameAsTwin(m, m.outB, "after receipt cancel")
+
+	delete(p.e.Reg().Models, "stock_transfer_receipt")
+	one := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outC, "transfer_date": "2026-11-06",
+		"items": []any{map[string]any{"item": m.susu, "qty": 7}, map[string]any{"item": m.twin, "qty": 7}}})
+	p.doc("lot_delivery", map[string]any{"outlet": m.outC, "delivery_date": "2026-11-20", "items": []any{
+		map[string]any{"item": m.susu, "qty": 9}, map[string]any{"item": m.twin, "qty": 9}}})
+	if err := p.cancel("stock_transfer", one); err != nil {
+		t.Fatal(err)
+	}
+	p.sameAsTwin(m, m.outC, "after one-step cancel")
+	p.sameAsTwin(m, m.outA, "origin after one-step cancel")
+}
+
+// TestSerialHistory (audit F2, F6): the document that moved a serial last is the only one that can be cancelled for
+// it. Sold, returned and sold again: cancelling the first delivery is refused; cancelling in reverse order walks the
+// serial back to the receipt, which then cancels it. A serial one transfer sent and a later transfer carries now is
+// not the earlier transfer's to receive.
+func TestSerialHistory(t *testing.T) {
+	p := setupLots(t)
+	m := p.lotMasters()
+	gr := p.doc("lot_receipt", map[string]any{"outlet": m.outA, "received_on": "2026-11-01", "items": []any{
+		map[string]any{"item": m.hp, "qty": 1, "rate": 2000000, "serial_nos": "S1"}}})
+	sell := func() string {
+		return p.doc("lot_delivery", map[string]any{"outlet": m.outA, "delivery_date": "2026-11-05", "items": []any{map[string]any{"item": m.hp, "qty": 1, "serial_nos": "S1"}}})
+	}
+	d1 := sell()
+	ret := p.doc("lot_return", map[string]any{"lot_delivery": d1, "outlet": m.outA, "return_date": "2026-11-06", "items": []any{map[string]any{"item": m.hp, "qty": 1, "serial_nos": "S1"}}})
+	d2 := sell()
+	wantCode(t, p.cancel("lot_delivery", d1), 409, "serial_moved")
+	wantCode(t, p.cancel("lot_return", ret), 409, "serial_moved")
+	wantCode(t, p.cancel("lot_receipt", gr), 409, "serial_moved")
+	for _, c := range [][2]string{{"lot_delivery", d2}, {"lot_return", ret}} {
+		if err := p.cancel(c[0], c[1]); err != nil {
+			t.Fatalf("cancel %s: %v", c[1], err)
+		}
+	}
+	p.wantSerials(m.hp, "S1:sold@"+m.outA)
+	if err := p.cancel("lot_delivery", d1); err != nil {
+		t.Fatal(err)
+	}
+	p.wantSerials(m.hp, "S1:in_stock@"+m.outA)
+	if err := p.cancel("lot_receipt", gr); err != nil {
+		t.Fatal(err)
+	}
+	p.wantSerials(m.hp, "S1:cancelled@"+m.outA)
+	p.wantBalance(m.outA, m.hp, 0, 0, 2000000)
+
+	// transfers: T1 sends S2, a receipt brings it in, T2 sends it on; cancelling T1's receipt is refused, and a new
+	// receipt of T1 cannot take S2 out of T2's transit
+	p.doc("lot_receipt", map[string]any{"outlet": m.outA, "received_on": "2026-11-01", "items": []any{
+		map[string]any{"item": m.hp, "qty": 1, "rate": 2000000, "serial_nos": "S2"}}})
+	t1 := p.doc("stock_transfer", map[string]any{"from_outlet": m.outA, "to_outlet": m.outB, "transfer_date": "2026-11-07",
+		"items": []any{map[string]any{"item": m.hp, "qty": 1, "serial_nos": "S2"}}})
+	r1 := p.submit("stock_transfer_receipt", p.trReceipt(t1, m.outB, m.hp, 1))
+	p.doc("stock_transfer", map[string]any{"from_outlet": m.outB, "to_outlet": m.outC, "transfer_date": "2026-11-08",
+		"items": []any{map[string]any{"item": m.hp, "qty": 1, "serial_nos": "S2"}}})
+	wantCode(t, p.cancel("stock_transfer_receipt", r1), 409, "serial_moved")
+	p.wantSerials(m.hp, "S1:cancelled@"+m.outA+" S2:in_transit@"+m.outB)
+}
+
+// TestLotsPartRounding (audit F3): parts of a FEFO split never flip sign when the average is below a rupiah per
+// part; the parts still add up to the line's value.
+func TestLotsPartRounding(t *testing.T) {
+	p := setupLots(t)
+	m := p.lotMasters()
+	var lines []any
+	for i, no := range []string{"A", "B", "C", "D"} {
+		rate := int64(4)
+		if i >= 2 {
+			rate = 0
+		}
+		lines = append(lines, lotLine(m.susu, 0.25, rate, no, fmt.Sprintf("2027-0%d-01", i+1)))
+	}
+	p.doc("lot_receipt", map[string]any{"outlet": m.outA, "received_on": "2026-11-01", "items": lines})
+	d := p.doc("lot_delivery", map[string]any{"outlet": m.outA, "delivery_date": "2026-11-20", "items": []any{map[string]any{"item": m.susu, "qty": 1}}})
+	var sum int64
+	for _, mv := range p.moves(d) {
+		if rp(mv["value"]) > 0 {
+			t.Fatalf("out part with a positive value: %s", p.moveLots(d))
+		}
+		sum += rp(mv["value"])
+	}
+	if sum != -2 {
+		t.Fatalf("parts add up to %d, want -2: %s", sum, p.moveLots(d))
+	}
+}

@@ -29,6 +29,7 @@ type stockPost struct {
 	vtype   string
 	items   map[string]store.Record
 	lots    map[string]store.Record
+	want    map[string]bool // lot and serial lock keys to take, sorted, before posting (contract 0070, lockWanted)
 }
 
 func newStockPost(h *HookCtx, date string) *stockPost {
@@ -80,7 +81,7 @@ func (s *stockPost) lockAll(keys [][2]string) error {
 			return err
 		}
 	}
-	return nil
+	return s.lockWanted() // then the document's lot and serial keys, sorted (contract 0070)
 }
 
 // move posts qty (signed, stock uom) of item at outlet. fixed, when set, is the move's value (unsigned):
@@ -219,6 +220,7 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 	switch h.Model.Name {
 	case "goods_receipt":
 		s := newStockPost(h, str(rec["received_on"]))
+		s.wantLineLocks(h.Model.Name, "items")
 		if err := s.lockAll(lineKeys("outlet")); err != nil {
 			return nil, err
 		}
@@ -246,6 +248,7 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 			return postTransferOut(h)
 		}
 		s := newStockPost(h, str(rec["transfer_date"]))
+		s.wantLineLocks(h.Model.Name, "items")
 		if err := s.lockAll(lineKeys("from_outlet", "to_outlet")); err != nil {
 			return nil, err
 		}
@@ -279,6 +282,7 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		return postStockCount(h)
 	case "stock_adjustment":
 		s := newStockPost(h, str(rec["adjustment_date"]))
+		s.wantLineLocks(h.Model.Name, "items")
 		if err := s.lockAll(lineKeys("outlet")); err != nil {
 			return nil, err
 		}
@@ -465,8 +469,17 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 	if err := s.lockAll(keys); err != nil {
 		return nil, err
 	}
-	// serials are undone last move first (a one-step transfer's transfer_in before its transfer_out)
-	if s.serialsOn() && has(h.op.e.Reg().Model("stock_move"), "serial_nos") {
+	// serials are undone last move first (a one-step transfer's transfer_in before its transfer_out), their keys
+	// locked in sorted order first (contract 0070 §8)
+	if s.serialsOn() {
+		for _, mv := range moves {
+			if str(mv["reason"]) != "reversal" {
+				s.wantSerialLocks(str(mv["item"]), parseSerials(mv["serial_nos"]))
+			}
+		}
+		if err := s.lockWanted(); err != nil {
+			return nil, err
+		}
 		for i := len(moves) - 1; i >= 0; i-- {
 			mv := moves[i]
 			if sn := parseSerials(mv["serial_nos"]); len(sn) > 0 && str(mv["reason"]) != "reversal" {
@@ -476,11 +489,41 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 			}
 		}
 	}
+	// a run of lot parts of one line (consecutive moves of one outlet, item, reason and unit cost, each another lot): its last
+	// reversal keeps the average from before the run when the balance does not stay above zero, as one reversal of the
+	// whole line would (contract 0070 §8)
+	// The parts of one line share outlet, item, reason and unit cost, and each takes another lot.
+	runEnd := map[int]int{}
+	for i := 0; i < len(moves); {
+		j, lot := i+1, str(moves[i]["lot"]) != ""
+		seen := map[string]bool{str(moves[i]["lot"]): true}
+		for j < len(moves) && str(moves[i]["reason"]) != "reversal" && str(moves[j]["outlet"]) == str(moves[i]["outlet"]) &&
+			str(moves[j]["item"]) == str(moves[i]["item"]) && str(moves[j]["reason"]) == str(moves[i]["reason"]) &&
+			moneyIn(moves[j]["unit_cost"]) == moneyIn(moves[i]["unit_cost"]) && !seen[str(moves[j]["lot"])] {
+			lot = lot || str(moves[j]["lot"]) != ""
+			seen[str(moves[j]["lot"])] = true
+			j++
+		}
+		if j-i > 1 && lot {
+			runEnd[i] = j - 1
+		}
+		i = j
+	}
+	var keepAvg *int64
+	end := -1
 	n := 0
 	var sold [][2]string
-	for _, mv := range moves {
+	for idx, mv := range moves {
 		if str(mv["reason"]) == "reversal" {
 			continue
+		}
+		if e, ok := runEnd[idx]; ok {
+			bal, err := s.balance(str(mv["outlet"]), str(mv["item"]))
+			if err != nil {
+				return nil, err
+			}
+			a := moneyIn(bal["avg_cost"])
+			keepAvg, end = &a, e
 		}
 		if str(mv["reason"]) == "sale" {
 			sold = append(sold, [2]string{str(mv["outlet"]), str(mv["item"])})
@@ -492,6 +535,9 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 		// contract 0070 §8: the reversal carries the move's lot and serials, so lot balances and serial states return
 		outlet, item, q := str(mv["outlet"]), str(mv["item"]), qtyOf(mv["qty"])
 		mo := moveOpt{lot: str(mv["lot"]), serials: parseSerials(mv["serial_nos"])}
+		if idx == end {
+			mo.keepAvg = keepAvg
+		}
 		if _, err := s.moveX(outlet, item, -q, moneyIn(mv["unit_cost"]), &v, "reversal", mo); err != nil {
 			return nil, err
 		}

@@ -925,6 +925,43 @@
         "cogs": {
           "$ref": "#/$defs/name",
           "description": "out only: read-only currency line field that gets the value the line took out"
+        },
+        "lot": {
+          "type": "object",
+          "additionalProperties": false,
+          "minProperties": 1,
+          "description": "Contract 0070. in: the line's lot number and dates {no, expiry, made}; out: {pick} a line link to stock_lot (empty = FEFO)",
+          "properties": {
+            "no": {
+              "$ref": "#/$defs/name",
+              "description": "in: line data field with the lot number"
+            },
+            "expiry": {
+              "$ref": "#/$defs/name",
+              "description": "in: line date field with the expiry date"
+            },
+            "made": {
+              "$ref": "#/$defs/name",
+              "description": "in: line date field with the production date"
+            },
+            "pick": {
+              "$ref": "#/$defs/name",
+              "description": "out: line link to stock_lot; empty picks by FEFO"
+            }
+          }
+        },
+        "serials": {
+          "$ref": "#/$defs/name",
+          "description": "Contract 0070. Line text field with the serial numbers, one per line"
+        },
+        "expired": {
+          "enum": [
+            "skip",
+            "allow",
+            "refuse",
+            "first"
+          ],
+          "description": "Contract 0070, out only: expired lots under FEFO: skip (default), allow, refuse (409 lot_expired), first"
         }
       }
     },

@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# qty per outlet, item and lot; the row with no lot is the no-lot bucket
+name: stock_lot_balance
+naming: LB-{######}
+fields:
+  - {name: outlet, type: link, to: outlet, required: true, read_only: true}
+  - {name: item, type: link, to: item, required: true, read_only: true}
+  - {name: lot, type: link, to: stock_lot, read_only: true}
+  - {name: qty, type: float, read_only: true}
+  - {name: negative, type: check, compute: qty < 0}

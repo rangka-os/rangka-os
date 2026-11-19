@@ -1,0 +1,12 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# one per item and lot number, created by the first incoming move with that number
+name: stock_lot
+naming: LOT-{#####}
+fields:
+  - {name: item, type: link, to: item, required: true, read_only: true}
+  - {name: lot_no, type: data, required: true, read_only: true}
+  - {name: expiry_date, type: date, read_only: true}
+  - {name: made_date, type: date, read_only: true}
+  - {name: first_voucher_type, type: data, read_only: true}
+  - {name: first_voucher, type: data, read_only: true}
+  - {name: notes, type: text}

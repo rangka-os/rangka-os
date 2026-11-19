@@ -1,0 +1,21 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# goods out by FEFO or a picked lot, with serials; mode picks the expired rule
+name: lot_delivery
+is_submittable: true
+naming: LD-{#####}
+on_submit: [stock.post_moves]
+on_cancel: [stock.reverse_moves]
+stock:
+  date: delivery_date
+  moves:
+    - {lines: items, out: outlet, if: "doc.mode == 'skip'", reason: delivery, cogs: cogs, lot: {pick: lot}, serials: serial_nos}
+    - {lines: items, out: outlet, if: "doc.mode == 'allow'", reason: delivery, cogs: cogs, lot: {pick: lot}, serials: serial_nos, expired: allow}
+    - {lines: items, out: outlet, if: "doc.mode == 'refuse'", reason: delivery, cogs: cogs, lot: {pick: lot}, serials: serial_nos, expired: refuse}
+    - {lines: items, out: outlet, if: "doc.mode == 'first'", reason: waste, cogs: cogs, lot: {pick: lot}, serials: serial_nos, expired: first}
+  cogs_total: cogs_total
+fields:
+  - {name: outlet, type: link, to: outlet, required: true}
+  - {name: delivery_date, type: date, required: true}
+  - {name: mode, type: select, default: "'skip'", options: [{value: skip, label: {id: skip}}, {value: allow, label: {id: allow}}, {value: refuse, label: {id: refuse}}, {value: first, label: {id: first}}]}
+  - {name: items, type: table, of: lot_delivery_item, min_rows: 1}
+  - {name: cogs_total, type: currency, read_only: true}

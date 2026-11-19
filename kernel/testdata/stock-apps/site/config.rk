@@ -2,4 +2,4 @@
 locale: id-ID
 currency: IDR
 timezone: Asia/Jakarta
-apps: [catalogue, outlets, stock, declared]
+apps: [catalogue, outlets, stock, declared, lots]

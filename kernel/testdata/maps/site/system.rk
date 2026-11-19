@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/system.json
+# Contract 0072: a self-hosted kernel on a raster tile mirror with subdomains, and its own Nominatim.
+db: {driver: postgres, url: '${DATABASE_URL}'}
+maps:
+  tiles:
+    url: https://{s}.tiles.kopisenja.id/osm/{z}/{x}/{y}.png
+    attribution: © OpenStreetMap contributors
+    subdomains: [a, b, c]
+    max_zoom: 18
+    cache_tiles: 200
+  geocoder:
+    provider: nominatim
+    url: https://geo.kopisenja.id/nominatim
+    rate_per_second: 5
+    cache_days: 60
+    contact: ops@kopisenja.id
+    countries: [id]

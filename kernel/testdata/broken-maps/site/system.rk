@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/system.json
+# Contract 0072: every way the maps block can be wrong.
+db: {driver: postgres, url: '${DATABASE_URL}'}
+maps:
+  tiles:
+    url: http://tile.openstreetmap.org/{z}/{x}.png
+    max_zoom: 23
+    cache_tiles: 500
+    kind: satellite
+  geocoder:
+    provider: google
+    rate_per_second: 0
+    countries: [ID]
+    api_key: abc

@@ -1,0 +1,4 @@
+../../broken-maps/site-subdomains/system.rk:6:10  error  maps_subdomains  maps/tiles/url  maps.tiles.url has {s} but maps.tiles.subdomains is not set: list the subdomains, or drop {s} (contract 0072 §2)
+../../broken-maps/site-subdomains/system.rk:9:22  error  maps_rate_limit  maps/geocoder/rate_per_second  maps.geocoder.rate_per_second is 2: public Nominatim allows at most 1 request per second; lower it, or point maps.geocoder.url at your own Nominatim (contract 0072 §3)
+
+2 error(s), 0 warning(s)

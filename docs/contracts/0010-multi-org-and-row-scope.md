@@ -208,6 +208,29 @@ org (`Actor.Org`):
   error `bad_dpp_ratio`; at run time it falls back to 11/12, in CEL and in print alike.
 - Imports' `cel:` mappings (contract 0012) see only `row`, not these globals.
 
+### 9. Scheduled flows per org (amended 19 Nov 2026, rangka-os#263 slice a)
+- The scheduler runs every installed flow with `schedule:` once per org listed in `rk_orgs`, sandboxes included
+  (contract 0052 runs the scheduler there as usual). The list is re-read about once a minute (in `rangka serve` and
+  in each `POST /_rangka/tick`), so a business created at run time gets its schedules without a metadata reload; an
+  org that appears later starts from that moment and never runs a slot from before it existed (the first read of a
+  fresh request-only instance catches up `scheduler.catch_up_s`, as for the default org). A removed org loses
+  them. A failed read keeps the last list. Until the first read answers, only the default org (`Cfg.Org`) is
+  scheduled.
+- **Time zone.** An org's slots follow `timezone` in its own `orgs.<org>.config` in `config.rk`, else the
+  installation's `scheduler.timezone`, else UTC. The site-wide `config.timezone` is not read, so a site that never
+  set `scheduler.timezone` keeps its run times.
+- **Once per slot.** Each run is a `flow` job with unique key `flow:<org>:<flow>:<slot unix time>` (the slot in
+  absolute time), so several kernel instances, restarts and catch-up never enqueue an org's slot twice.
+- **Isolation.** Each org's run is its own job under its own org (RLS, §4). A run that fails retries and
+  dead-letters alone; an enqueue that fails for one org is logged and tried again on the next tick while the
+  other orgs go on.
+- **Spread.** On a host with two or more orgs, each org's job for a slot is scheduled at a fixed offset after the
+  slot: a hash of the org id modulo `system.rk` `scheduler.stagger_s` (default 300 seconds), and always below the
+  schedule's own interval. The flow still sees the slot itself (`scheduled_at` in the job's arguments). How many
+  run at once stays bounded by `queue.workers` (or the tick budget in request-only mode). With one org there is no
+  offset.
+- `GET /system/status` lists the scheduler's schedules and time zone for the caller's org only.
+
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.
 - S3, S4 and S8 read org settings with `OrgConfig` and identity with `OrgIdentity`; S4's `{ORG}` is
@@ -217,5 +240,5 @@ org (`Actor.Org`):
   wait for a later contract.
 - `config.rk`, including `orgs:`, is a site-level file: a change set that edits it (any org's settings) is
   approved by a site approver regardless of org. Per-org approval of org settings waits for a later contract.
-- Scheduled flows (`schedule:`) currently register only for the default org (`Cfg.Org`); other orgs do not
-  get them. Per-org schedules are a follow-up in the scheduler work, not S5.
+- Scheduled flows (`schedule:`) run for every org on the host (§9, amended 19 Nov 2026; until then only the
+  default org `Cfg.Org` got them). Connector poll triggers (`via: poll`) still run for the default org only.

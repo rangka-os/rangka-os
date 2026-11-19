@@ -135,6 +135,12 @@
         "leader_lock": {
           "type": "boolean",
           "default": true
+        },
+        "stagger_s": {
+          "type": "integer",
+          "minimum": 0,
+          "default": 300,
+          "description": "On a host with several organisations, spread each scheduled slot over this many seconds (a fixed offset per organisation, below the schedule's own interval). 0 runs every organisation at the slot."
         }
       }
     },

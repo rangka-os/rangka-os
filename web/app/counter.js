@@ -345,6 +345,8 @@
     var cus = useState(""), customer = cus[0], setCustomer = cus[1];
     var cks = useState({}), checkout = cks[0], setCheckout = cks[1]; // checkout slot values (contract 0069 §1)
     var cko = useState(false), checkoutOpen = cko[0], setCheckoutOpen = cko[1];
+    var bodyRef = useRef(null);
+    useEffect(function () { if (bodyRef.current) bodyRef.current.scrollTop = 0; }, [checkoutOpen]);
     var ckSlots = checkoutSlots(doc);
     var ps = useState(null), pay = ps[0], setPay = ps[1]; // tender panel {cash, qris}
     var ds = useState(null), done = ds[0], setDone = ds[1]; // last sale {name, total, change, queued}
@@ -668,7 +670,7 @@
       return h("span", { className: "ap-counter-amt promo" }, modelAmt < plainAmt ? h("s", { "aria-label": "Harga awal " + rp(plainAmt) }, rp(plainAmt)) : null,
         modelAmt === 0 ? "Gratis" : rp(modelAmt));
     }
-    var lines = h("ul", { className: "ap-counter-lines", "aria-label": "Keranjang" }, cart.map(function (l, i) {
+    var lines = h("ul", { key: "lines", className: "ap-counter-lines", "aria-label": "Keranjang" }, cart.map(function (l, i) {
       return h("li", { key: l.key },
         h("div", { className: "ap-counter-line" },
           h("button", { type: "button", className: "ap-counter-line-t", onClick: function () { setNoteLine(noteLine === i ? null : i); } }, l.title,
@@ -689,15 +691,17 @@
     // checkout (0069 §1): customer, promo, voucher code; folded to one line until opened (a filled value keeps it open)
     function setCk(n, v) { if (jobRef.current) return; var x = Object.assign({}, checkout); x[n] = v; setCheckout(x); }
     // a field whose depends_on is false (its module not installed) is not offered, as on the form
-    function fieldShown(f) {
+    function fieldShown(f, rec) {
       if (!f.depends_on || !ctx.eng) return true;
-      try { return !!ctx.eng.evaluate(f.depends_on, ctx.eng.scopeFor(doc.model, checkout)); } catch (e) { return true; }
+      try { return !!ctx.eng.evaluate(f.depends_on, ctx.eng.scopeFor(doc.model, rec || checkout)); } catch (e) { return true; }
     }
     var ckFields = ckSlots.map(function (sl) { return { slot: sl, f: (docMeta.fields || []).filter(function (f) { return f.name === sl.field; })[0] }; })
       .filter(function (x) { return x.f && fieldShown(x.f); });
     var ckFilled = ckFields.filter(function (x) { var v = checkout[x.f.name]; return v !== undefined && v !== null && v !== "" && v !== false; });
     var ckTitle = ckFields.map(function (x) { return L(x.f.label) || x.f.name; }).join(" · ");
-    var checkoutBox = ckFields.length && cart.length && !(pay && !stuck) ? h("section", { className: "ap-counter-checkout" + (checkoutOpen ? " open" : ""), "aria-label": "Sebelum bayar" },
+    // under the lines, in the scrolling list; open, it takes the lines' place (the breakdown and Bayar stay), so a link
+    // picker has room and never covers the total
+    var checkoutBox = ckFields.length && cart.length && !(pay && !stuck) ? h("section", { key: "checkout", className: "ap-counter-checkout" + (checkoutOpen ? " open" : ""), "aria-label": "Sebelum bayar" },
       h("button", { type: "button", className: "ap-counter-ck-h", "aria-expanded": checkoutOpen ? "true" : "false", disabled: stuck, onClick: function () { setCheckoutOpen(!checkoutOpen); } },
         h(R.Icon, { name: "tag" }), h("span", null, checkoutOpen || !ckFilled.length ? ckTitle : ckFilled.map(function (x) {
           var v = checkout[x.f.name];
@@ -707,10 +711,11 @@
         return h(RA.FieldEditor, { key: x.f.name, ctx: ctx, model: doc.model, field: x.f, rec: checkout, linkFilter: x.slot.filter, readOnly: stuck,
           onChange: function (n, v) { setCk(n, x.f.type === "data" && typeof v === "string" ? v : v); } });
       })) : null) : null;
-    // a summary field whose depends_on is false (e.g. a promo total without the promo module) is left out too
+    // a summary field whose depends_on is false for the computed sale (a promo total without the promo module, a
+    // shortfall that is 0) is left out too
     var sumNames = (doc.summary || []).filter(function (n, i, all) {
       var f = (docMeta.fields || []).filter(function (x) { return x.name === n; })[0];
-      return i === all.length - 1 || !f || fieldShown(f);
+      return i === all.length - 1 || !f || fieldShown(f, fresh ? Object.assign({}, checkout, fresh.rec) : checkout);
     });
     var rows = fresh ? summaryRows(sumNames, docMeta.fields, fresh.rec) : [];
     var summary = cart.length ? h("dl", { className: "ap-counter-sum", "aria-label": "Rincian", "aria-busy": doc.summary && !fresh && !(calc && calc.failed) ? "true" : "false" },
@@ -778,9 +783,9 @@
         cart.map(function (l) {
           return h("li", { key: l.key }, h("div", { className: "ap-counter-line" },
             h("span", { className: "ap-counter-line-t" }, l.qty + "× " + l.title, l.note ? h("small", null, l.note) : null), amountView(l, cart.indexOf(l))));
-        }))) : null) : h("div", { className: "ap-counter-body" }, cart.length ? lines : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
+        }))) : null) : h("div", { className: "ap-counter-body", ref: bodyRef }, cart.length ? (checkoutOpen && checkoutBox ? [checkoutBox] : [lines, checkoutBox]) : result || h("p", { className: "ap-counter-empty" }, "Ketuk menu untuk menambah ke pesanan.")),
       err ? h("div", { className: "ap-work-err", role: "alert" }, err) : null,
-      paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, checkoutBox, summary,
+      paying ? h("div", { className: "ap-counter-foot" }, summary) : tender || (cart.length ? h("div", { className: "ap-counter-foot" }, summary,
         h("div", { className: "ap-counter-row" },
           c.hold ? h(R.Button, { onClick: hold }, "Tahan") : null,
           h(R.Button, { variant: "primary", size: "lg", className: "ap-counter-paybtn", loading: busy && !pay, onClick: openPay, "aria-label": "Bayar " + rp(total) },

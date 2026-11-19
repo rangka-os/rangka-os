@@ -206,7 +206,8 @@
       h(R.LinkField, { key: (p.value || "") + (cur ? "+" : ""), id: p.id, label: p.label, doctype: tm ? L(tm.label) : to, records: recs,
         value: p.value || undefined, required: p.required, error: p.error, hint: p.error ? undefined : p.hint, avatar: to === "customer" || to === "user",
         onChange: function (r) { p.onChange(r.id); },
-        onCreate: function () { global.open(global.location.pathname + "#/r/" + to + "/new", "_blank"); },
+        // only someone who may create the linked record is offered "Buat ... baru" (a cashier never makes a promo)
+        onCreate: tm && tm.can && tm.can.create === false ? undefined : function () { global.open(global.location.pathname + "#/r/" + to + "/new", "_blank"); },
         onOpenRecord: function () { if (p.value && tm) ctx.navigate("#/r/" + to + "/" + enc(p.value)); } }));
   }
 

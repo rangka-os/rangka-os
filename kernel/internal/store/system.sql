@@ -531,3 +531,24 @@ create table if not exists rk_scheduler_state (
   resumed_at   timestamptz,                  -- when the last pause ended (resume, or its until)
   resumed_by   text not null default ''
 );
+-- customer links to one document (contract 0073 §3): only sha256(token) is kept, so a copy of the database never
+-- yields a working link. RLS like the model tables; the public route sets rangka.org from the link's path first.
+create table if not exists rk_portal_links (
+  id           text primary key,            -- pl_<random>
+  org_id       text not null,
+  page         text not null,
+  model        text not null,
+  record       text not null,
+  token_hash   bytea not null unique,
+  expires_at   timestamptz not null,
+  revoked_at   timestamptz,
+  created_by   text not null,
+  created_at   timestamptz not null default now(),
+  last_view_at timestamptz,
+  views        bigint not null default 0
+);
+create index if not exists rk_portal_links_record_idx on rk_portal_links (org_id, page, record);
+alter table rk_portal_links enable row level security;
+alter table rk_portal_links force row level security;
+drop policy if exists rk_org on rk_portal_links;
+create policy rk_org on rk_portal_links using (rk_org_ok(org_id)) with check (rk_org_ok(org_id));

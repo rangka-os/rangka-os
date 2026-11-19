@@ -1,0 +1,8 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/portal.json
+type: document
+model: faktur
+label: {id: Skema}
+lines: {field: items, columns: [description, cost, nope]}
+payment: {model: bayaran, link: faktur}
+lifetime_days: 200
+color: red

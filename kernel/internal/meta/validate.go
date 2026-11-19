@@ -33,6 +33,7 @@ func ValidateOpts(o Options, only []string, schemas *schema.Set) (*Registry, *Re
 	v.validatePrints()
 	v.validateProcesses()
 	v.validateScreens()
+	v.validatePortals()
 	reg.applyOverlays()
 	reg.applyAppOverlays()
 	return reg, rep

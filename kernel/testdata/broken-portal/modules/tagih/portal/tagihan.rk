@@ -1,0 +1,19 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/portal.json
+# The test page of contract 0073: one invoice opened by a customer link.
+type: document
+model: faktur
+label: {id: Tagihan, en: Invoice}
+customer: customer
+amount: outstanding
+due: due_date
+fields: [posting_date, due_date, grand_total, paid_amount, outstanding, notes]
+lines: {field: items, columns: [description, qty, rate, amount]}
+print: faktur
+payment:
+  model: cara_bayar
+  link: faktur
+  fields: [bank, account_no, holder, reference]
+  qris: qris_payload
+  qris_label: [qris_merchant_name]
+share: [keuangan]
+lifetime_days: 30

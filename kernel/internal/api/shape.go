@@ -83,8 +83,8 @@ func unshaped(r *http.Request) bool {
 	if r.Method != http.MethodGet && r.Method != http.MethodHead {
 		return false
 	}
-	// static web: everything GET that is not an API, sign-in, OAuth, MCP, file or webhook route
-	for _, pre := range []string{"/api/", "/auth/", "/oauth/", "/mcp", "/files/", "/hooks/", "/.well-known/"} {
+	// static web: everything GET that is not an API, sign-in, OAuth, MCP, file, webhook or portal route (contract 0073 §6)
+	for _, pre := range []string{"/api/", "/auth/", "/oauth/", "/mcp", "/files/", "/hooks/", "/.well-known/", "/p/"} {
 		if strings.HasPrefix(p, pre) {
 			return false
 		}

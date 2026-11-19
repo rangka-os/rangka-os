@@ -66,6 +66,7 @@ type Server struct {
 	verified verifiedSet       // credentials verified in this process: they take the tenant's bucket (shape_verified.go)
 	proxies  trustedProxies    // RANGKA_TRUSTED_PROXIES: whose X-Forwarded-For names the client (shape_verified.go)
 	pairs    pairTries         // device pairing tries per address (devices_api.go, contract 0058 §2)
+	portal   ratelimit.Limiter // customer link requests per address (portal.go, contract 0073 §6)
 }
 
 type ctxKey struct{}
@@ -324,6 +325,8 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /api/v1/edge/data/{set}", s.withEdge(s.edgeData))
 	// embedded assistant (contract 0020): relayed to the rangka-ai sidecar; a() refuses assistant tokens
 	mux.HandleFunc("POST /api/v1/ai/chat", a(s.aiChat))
+	// portal pages (contract 0073): member link routes and the customer routes under /p/
+	s.portalRoutes(mux)
 	// connector webhooks (contract 0002 §A.1, 0017 §7): not signed in; the org's secrets verify each request
 	mux.HandleFunc("POST /hooks/{org}/{connector}/{trigger}", s.hook)
 	mux.HandleFunc("GET /hooks/{org}/{connector}/{trigger}", s.hook)

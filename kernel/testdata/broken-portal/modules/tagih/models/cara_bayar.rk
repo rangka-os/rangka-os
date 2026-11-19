@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: cara_bayar
+label: {id: Cara bayar}
+naming: CB-{####}
+title_field: faktur
+fields:
+  - {name: faktur, type: link, to: faktur, label: {id: Faktur}, required: true, unique: true}
+  - {name: bank, type: data, label: {id: Bank}}
+  - {name: account_no, type: data, label: {id: Nomor rekening}}
+  - {name: holder, type: data, label: {id: Atas nama}}
+  - {name: reference, type: data, label: {id: Referensi bayar}}
+  - {name: qris_payload, type: text, label: {id: Isi QRIS}}
+  - {name: qris_merchant_name, type: data, label: {id: Nama merchant QRIS}}
+  - {name: internal_code, type: data, label: {id: Kode internal}, hidden: true}
+permissions:
+  - {role: keuangan, read: true, create: true}
+  - {role: kasir, read: true}

@@ -45,7 +45,7 @@ validate: build
 # sites (contract 0063: valid, and broken with both host connector codes), the broken apps copy,
 # the broken apps + broken site (overlays, theme contrast) + broken connectors, and the
 # contract 0001 layout (modules/ + apps/), valid and broken, print formats + letterheads, valid and broken, and
-# processes (contract 0014: the canvas snapshot and a broken set), declared stock moves (contract 0021), valid and broken, work screens (contract 0030), valid and broken, the catalogue keys (contract 0036), valid and broken, and config.modules (contract 0032), valid and broken, and kernel notices (contract 0066), valid and broken.
+# processes (contract 0014: the canvas snapshot and a broken set), declared stock moves (contract 0021), valid and broken, work screens (contract 0030), valid and broken, the catalogue keys (contract 0036), valid and broken, and config.modules (contract 0032), valid and broken, and kernel notices (contract 0066), valid and broken, and portal pages (contract 0073), valid and broken.
 # template_error (a template Go's html/template cannot parse) is kernel only: Python has no Go template parser,
 # so the broken print input has no such template.
 compare-python: build
@@ -72,6 +72,8 @@ compare-python: build
 	            "testdata/broken-stock-apps/apps --site testdata/broken-stock-apps/site" \
 	            "testdata/screens/apps --site testdata/screens/site" \
 	            "testdata/broken-screens/apps --site testdata/broken-screens/site" \
+	            "testdata/portal/apps --site testdata/portal/site" \
+	            "testdata/broken-portal/apps --site testdata/broken-portal/site" \
 	            "testdata/catalogue-keys/apps --site testdata/catalogue-keys/site --connectors testdata/catalogue-keys/connectors" \
 	            "testdata/broken-catalogue-keys/apps --site testdata/broken-catalogue-keys/site --connectors testdata/broken-catalogue-keys/connectors" \
 	            "testdata/config-modules/apps --site testdata/config-modules/site" \

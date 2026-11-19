@@ -1,0 +1,3 @@
+<h1>Faktur {{.Doc.name}}</h1>
+<p>{{.Doc.customer}} {{.Doc.grand_total}} margin:{{.Doc.margin_note}}</p>
+{{range $row := .Doc.items}}<div>{{$row.description}} {{$row.amount}} modal:{{$row.cost}}</div>{{end}}

@@ -16,6 +16,10 @@ var ReservedFields = map[string]bool{"created_device": true}
 var SystemFields = map[string]bool{"name": true, "status": true, "created_by": true, "created_at": true, "modified_at": true,
 	"company": true, "docstatus": true, "amended_from": true}
 
+// Methods of the CEL dialect (rangka_validate.py METHODS): the macros (cel parse.go macro()) and what cel
+// eval.go method() runs. Keep the three in step.
+var Methods = []string{"all", "exists", "exists_one", "map", "filter", "size", "sum", "join", "contains", "startsWith", "endsWith", "matches", "replace", "lowerAscii", "upperAscii", "trim", "emvcoTag", "emvcoValid"}
+
 // Functions of the CEL dialect (rangka_validate.py FUNCTIONS).
 var Functions = []string{"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string", "min", "max", "clock", "random_code"}
 

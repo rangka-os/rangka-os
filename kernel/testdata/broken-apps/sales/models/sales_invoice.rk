@@ -85,6 +85,14 @@ rules:
     level: warn
     check: customer.outstanding + grand_total <= customer.credit_limit
     message: {id: Melebihi batas kredit pelanggan}
+  - name: lines_positive
+    on: save
+    check: items.all(l, l.qty > 0) && items.filter(f, f.rate > 0).map(g, g.amount).sum() >= 0 && !items.exists_one(e, e.discount > 100)
+    message: {id: Jumlah barang harus lebih dari nol}
+  - name: lines_typo
+    on: save
+    check: items.exists(l, l.qtty > 5) || items.map(l, l.uom).join(', ').lower() == 'x'
+    message: {id: Salah ketik nama field baris}
 views:
   list:
     columns: [name, customer, posting_date, status, grand_total]

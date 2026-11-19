@@ -408,3 +408,27 @@ func TestBrokenCatalogueKeysMatchPython(t *testing.T) {
 func TestBrokenMemberRecordMatchPython(t *testing.T) {
 	golden(t, "testdata/broken-member-record.expected.txt", Options{AppsDir: "testdata/broken-member-record/apps", SiteDir: "testdata/broken-member-record/site"})
 }
+
+// Unknown methods are reported in rules, flow steps and the {…} parts of notice texts; join and the macros are known.
+func TestUnknownMethod(t *testing.T) {
+	var got []string
+	for _, o := range []Options{
+		{AppsDir: "../../testdata/broken-apps"},
+		{AppsDir: "../../testdata/broken-notices/apps", SiteDir: "../../testdata/broken-notices/site"},
+	} {
+		_, rep := ValidateOpts(o, nil, schema.Embedded())
+		for _, it := range rep.All() {
+			if it.Code == "unknown_method" {
+				got = append(got, it.Where+" "+it.Message)
+			}
+		}
+	}
+	want := []string{
+		"rules/3/check `.lower()` is not a CEL or Rangka method; did you mean \"lowerAscii\"?",
+		"steps/0/where `.upper()` is not a CEL or Rangka method; did you mean \"upperAscii\"?",
+		"steps/3/template `.count()` is not a CEL or Rangka method; did you mean \"contains\"?",
+	}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q\nwant %q", got, want)
+	}
+}

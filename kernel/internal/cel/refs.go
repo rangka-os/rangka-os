@@ -14,21 +14,55 @@ type Ref struct {
 }
 
 var reQuoted = regexp.MustCompile(`'[^']*'`)
-var reLambda = regexp.MustCompile(`\.map\(\s*([a-z_]\w*)\s*,`)
+
+// Macros are the comprehension macros the parser expands (parse.go macro()); their first argument is a
+// loop variable bound inside the macro body.
+const macroAlt = `(?:all|exists_one|exists|map|filter)`
+
+var reLambda = regexp.MustCompile(`\.` + macroAlt + `\(\s*([a-z_]\w*)\s*,`)
+var reMacroRange = regexp.MustCompile(`([A-Za-z_]\w*)\s*\.\s*` + macroAlt + `\(\s*([a-z_]\w*)\s*,`)
+
+// LoopRef is a member read on a macro loop variable whose range is a plain identifier:
+// lines.all(l, l.qty > 0) → {Var: l, Range: lines, Member: qty}.
+type LoopRef struct {
+	Var, Range, Member string
+}
 
 // Idents ports rangka_validate.py idents(): top-level identifiers and link.member pairs in an expression,
-// ignoring single-quoted strings, lambda variables of .map() and functions. It is deliberately the same
-// regex-level scan so the validator reports exactly what the Python reference does.
+// ignoring single-quoted strings, loop variables of the macros (all, exists, exists_one, map, filter) and
+// functions. It is deliberately the same regex-level scan so the validator reports exactly what the Python
+// reference does.
 func Idents(expr string) []Ref {
+	refs, _ := scan(expr)
+	return refs
+}
+
+// LoopRefs ports rangka_validate.py loop_refs(): member reads on macro loop variables, with the identifier
+// the macro ranges over (the first range seen for a variable name wins).
+func LoopRefs(expr string) []LoopRef {
+	_, loops := scan(expr)
+	return loops
+}
+
+func scan(expr string) ([]Ref, []LoopRef) {
 	s := reQuoted.ReplaceAllString(expr, "''")
 	lam := map[string]bool{}
 	for _, m := range reLambda.FindAllStringSubmatch(s, -1) {
 		lam[m[1]] = true
 	}
-	var out []Ref
-	isWord := func(c byte) bool {
-		return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
+	rng := map[string]string{}
+	for _, m := range reMacroRange.FindAllStringSubmatchIndex(s, -1) {
+		if m[0] > 0 && (isWordByte(s[m[0]-1]) || s[m[0]-1] == '.') {
+			continue // (?<![\w.]) in the Python reference
+		}
+		v := s[m[4]:m[5]]
+		if _, ok := rng[v]; !ok {
+			rng[v] = s[m[2]:m[3]]
+		}
 	}
+	var out []Ref
+	var loops []LoopRef
+	isWord := isWordByte
 	isStart := func(c byte) bool { return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') }
 	skipWS := func(i int) int {
 		for i < len(s) && (s[i] == ' ' || s[i] == '\t' || s[i] == '\n' || s[i] == '\r' || s[i] == '\f' || s[i] == '\v') {
@@ -79,10 +113,34 @@ func Idents(expr string) []Ref {
 				member = ""
 			}
 			out = append(out, Ref{"ref", head, member})
+		case member != "" && !call && rng[head] != "":
+			loops = append(loops, LoopRef{head, rng[head], member})
 		}
 		i = end
 	}
+	return out, loops
+}
+
+var reDoubleQuoted = regexp.MustCompile(`"[^"]*"`)
+var reMethodCall = regexp.MustCompile(`\.\s*([A-Za-z_]\w*)\s*\(`)
+
+// MethodNames ports rangka_validate.py method_names(): the names called as methods (x.name(…)) in an expression,
+// each once in order of first use, ignoring quoted strings.
+func MethodNames(expr string) []string {
+	s := reDoubleQuoted.ReplaceAllString(reQuoted.ReplaceAllString(expr, "''"), `""`)
+	var out []string
+	seen := map[string]bool{}
+	for _, m := range reMethodCall.FindAllStringSubmatch(s, -1) {
+		if !seen[m[1]] {
+			seen[m[1]] = true
+			out = append(out, m[1])
+		}
+	}
 	return out
+}
+
+func isWordByte(c byte) bool {
+	return c == '_' || (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || (c >= '0' && c <= '9')
 }
 
 // FreeVars returns the variables an expression reads (excluding macro variables), with the member read

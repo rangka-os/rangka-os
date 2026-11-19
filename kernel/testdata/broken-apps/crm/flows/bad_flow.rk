@@ -2,7 +2,7 @@
 name: bad_flows
 on: deal.archived
 steps:
-  - {find: deals, where: stage == 'won', as: won}
+  - {find: deals, where: "stage == 'won' && 'a.b()' != notes.upper()", as: won}
   - create: activity
     set:
       subject: "'Ucapan terima kasih'"

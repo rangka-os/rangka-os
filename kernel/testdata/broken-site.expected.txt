@@ -67,11 +67,13 @@ sales/models/sales_invoice.rk:18:9  error  unknown_model  fields/1/to  "outlet" 
 sales/models/sales_invoice.rk:34:9  error  not_child  fields/4/of  "sales_invoice_item" must set is_child: true to be used in a table field
 sales/models/sales_invoice.rk:72:21  error  bad_currency_field  fields/14/currency_field  currency field "posting_date" must be select, data or link; it is date
 sales/models/sales_invoice.rk:76:5  error  twin_clash  fields/16  "shipping_idr" is generated for money field "shipping"; rename it
-sales/models/sales_invoice.rk:103:19  error  unknown_verb  approvals/0/on  "post" is not submit, cancel or an action of this model
-sales/models/sales_invoice.rk:103:37  warn   unknown_role  approvals/0/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
-sales/models/sales_invoice.rk:104:12  error  duplicate_approval  approvals/1/name  "a" is declared twice
-sales/models/sales_invoice.rk:104:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
-sales/models/sales_invoice.rk:104:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
+sales/models/sales_invoice.rk:94:12  error  unknown_method  rules/3/check  `.lower()` is not a CEL or Rangka method; did you mean "lowerAscii"?
+sales/models/sales_invoice.rk:94:12  error  unknown_field  rules/3/check  `l.qtty`: sales_invoice_item has no field "qtty"; did you mean "qty"?
+sales/models/sales_invoice.rk:111:19  error  unknown_verb  approvals/0/on  "post" is not submit, cancel or an action of this model
+sales/models/sales_invoice.rk:111:37  warn   unknown_role  approvals/0/approvers/0  role "sales_manager" has no file in roles/ (it must exist at install)
+sales/models/sales_invoice.rk:112:12  error  duplicate_approval  approvals/1/name  "a" is declared twice
+sales/models/sales_invoice.rk:112:33  error  unknown_field  approvals/1/when  `nope` in `nope > 1` is not a field; did you mean "notes"?
+sales/models/sales_invoice.rk:112:57  warn   unknown_role  approvals/1/approvers/0  role "ghost_role" has no file in roles/ (it must exist at install)
 sales/models/sales_invoice.rk:9:3  error  compute_cycle  fields/grand_total/compute  grand_total → grand_total
 sales/models/sales_invoice_item.rk:31:21  error  bad_currency_field  fields/6/currency_field  "nope" is not a field of sales_invoice_item
 sales/models/sales_invoice_item.rk:29:5  error  missing_rate_field  fields/6  money fields need a rate field "fx_rate" (float, currency or int) on sales_invoice_item
@@ -81,6 +83,7 @@ crm/flows/bad_flow.rk:17:5  error  schema  steps/4  {'update': 'won', 'set': {'s
 crm/flows/bad_flow.rk:2:7  error  name_mismatch  name  flow name "bad_flows" must match the file name "bad_flow"
 crm/flows/bad_flow.rk:3:5  error  unknown_event  on  "archived" is not an event of model deal (created, updated, submitted, cancelled, deleted)
 crm/flows/bad_flow.rk:5:12  error  unknown_model  steps/0/find  "deals" is not a model; did you mean "deal"?
+crm/flows/bad_flow.rk:5:26  error  unknown_method  steps/0/where  `.upper()` is not a CEL or Rangka method; did you mean "upperAscii"?
 crm/flows/bad_flow.rk:9:17  error  unknown_field  steps/1/set/deal_ref  "deal_ref" is not a field of activity
 crm/flows/bad_flow.rk:12:20  error  unknown_model  steps/2/then/0/find_all  "leadz" is not a model; did you mean "lead"?
 crm/flows/bad_flow.rk:13:16  error  unknown_action  steps/2/then/1/call  connector whatsapp_business has no action "send_textt"
@@ -222,4 +225,4 @@ crm/models/activity.rk:5:18  error  unknown_series  naming/series  series "activ
 ../broken-site/config.rk:22:12  warn   letterhead_missing  orgs/pt_beta  org "pt_beta" has no letterheads/pt_beta.rk; its documents print without address, bank or signatory
 ../broken-site/config.rk:23:13  warn   letterhead_missing  orgs/pt_delta  org "pt_delta" has no letterheads/pt_delta.rk; its documents print without address, bank or signatory
 
-194 error(s), 29 warning(s)
+197 error(s), 29 warning(s)

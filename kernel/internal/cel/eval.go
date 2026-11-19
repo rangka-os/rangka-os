@@ -1327,12 +1327,42 @@ func sumDecimal(l []any) (any, error) {
 	return d, nil
 }
 
+// join concatenates a list's items with an optional separator (the CEL strings extension's list.join): text items
+// as they are, others as Format writes them; null joins as an empty list.
+func join(t any, args []any) (any, error) {
+	sep := ""
+	if len(args) > 1 {
+		return nil, errf("join() takes at most one separator")
+	}
+	if len(args) == 1 {
+		s, ok := Unwrap(args[0]).(string)
+		if !ok {
+			return nil, errf("join() needs a text separator")
+		}
+		sep = s
+	}
+	if t == nil {
+		return "", nil
+	}
+	l, ok := t.([]any)
+	if !ok {
+		return nil, errf("join() needs a list, got %s", typeName(t))
+	}
+	parts := make([]string, len(l))
+	for i, x := range l {
+		parts[i] = Format(x)
+	}
+	return strings.Join(parts, sep), nil
+}
+
 func method(name string, t any, args []any) (any, error) {
 	switch name {
 	case "size":
 		return size(t)
 	case "sum":
 		return sum(t)
+	case "join":
+		return join(t, args)
 	}
 	s, isStr := t.(string)
 	if isStr && len(args) == 1 {

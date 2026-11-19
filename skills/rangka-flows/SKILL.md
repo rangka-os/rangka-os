@@ -31,7 +31,7 @@ Most things owners ask for already run in a shipped module. Writing a second one
 | --- | --- | --- |
 | "Tidak boleh disimpan/diajukan kalau ..." (a check on one record) | rule, `level: error` (or `warn` to only remind) | `custom/<model>.rk` `rules:` |
 | "Di atas Rp X harus aku setujui dulu", "batal harus izin manajer" | approval policy on `submit`, `cancel` or an action | `custom/<model>.rk` `approvals:` |
-| "Kalau <dokumen> diajukan/dibuat/berubah, lakukan Y" | flow `on: <model>.<event>` | `flows/<name>.rk` |
+| "Kalau [dokumen] diajukan/dibuat/berubah, lakukan Y" | flow `on: <model>.<event>` | `flows/<name>.rk` |
 | "Tiap pagi / tiap Senin / tiap tanggal 1 ..." | flow `schedule:` (cron, site timezone) | `flows/<name>.rk` |
 | "3 hari setelah X, kalau belum Y, kabari Z" | event flow with one `wait: 3d`, then re-read the record | `flows/<name>.rk` |
 | a step that needs a person's OK before the flow goes on, not tied to one document | flow `approve:` step | `flows/<name>.rk` |
@@ -59,8 +59,8 @@ if: event.qty < 0                   # cheap filter before any step
 steps: [...]
 ```
 
-- **Trigger**: `on: <model>.created|updated|submitted|cancelled|deleted` (else `unknown_event`), `on:
-  <connector>.<trigger>`, or `schedule:` (5-field cron or `@daily`, in `system.scheduler.timezone`). Neither:
+- **Trigger**: `on: <model>.created|updated|submitted|cancelled|deleted` (else `unknown_event`),
+  `on: <connector>.<trigger>`, or `schedule:` (5-field cron or `@daily`, in `system.scheduler.timezone`). Neither:
   `never_runs`.
 - **Steps**: `find` / `find_all` (`where`, `sort`, `limit`, `as`), `create` / `update` (`set:` field → CEL),
   `notify`, `call` (`<connector>.<action>`), `if`/`then`/`else`, `for_each` (`as`, `do`, at most 2000 items),

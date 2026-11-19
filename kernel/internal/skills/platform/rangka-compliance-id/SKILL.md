@@ -16,7 +16,7 @@ say so plainly when a question needs one. Talk to the owner in Bahasa Indonesia,
    modules' computed fields (`sales_invoice.ppn`, `payslip.pph21`, `withholding.amount`). You never do tax arithmetic
    in chat, never write a rupiah figure of tax owed, and never write a CEL expression that hardcodes a rate when a
    setting exists. If the owner asks "berapa", point to the record or dashboard that computes it.
-2. **Every rate or threshold you say is "as of <year>, verify with a tax consultant".** Say a number only when it is
+2. **Every rate or threshold you say is "as of [year], verify with a tax consultant".** Say a number only when it is
    in the references below or in the module itself; otherwise describe the mechanism without a number.
 3. **The owner decides tax status.** Becoming PKP, changing the PPN rate or DPP factor, or switching
    `ppn_fee_only` is a `config.tax` change: the kernel rates it **high**, approvable by the owner only. You may

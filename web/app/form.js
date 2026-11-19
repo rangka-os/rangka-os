@@ -200,6 +200,20 @@
     return false;
   }
 
+  /** Whether a form section may fold and whether it starts open (desain v3). A long form (more than three sections) keeps
+   *  its optional sections folded while they are empty; a section may not fold when it is one of the first two, the form
+   *  is read only, or it holds a required field or a child table. It starts open when it carries an error, a value the
+   *  person typed, or a company-layer field (x_, an overlay): the owner asked for that field in a change set, so it
+   *  shows on the form right after the change is applied instead of waiting behind "Tampilkan" (rangka-cloud#222).
+   *  `fields` are the section's visible fields; err(f) and typed(f) answer for one field. */
+  function sectionFold(fields, index, sections, readOnly, err, typed) {
+    var must = fields.some(function (f) { return f.required || f.type === "table"; });
+    var company = fields.some(function (f) { return /^x_/.test(f.name || ""); });
+    return { foldable: !readOnly && sections > 3 && index > 1 && !must,
+      keepOpen: company || fields.some(function (f) { return !!err(f); }) || fields.some(function (f) { return !!typed(f); }) };
+  }
+
+  RA.sectionFold = sectionFold;
   RA.docSummary = docSummary;
   RA.summaryLine = summaryLine;
   RA.blankValue = blankValue;
@@ -566,17 +580,15 @@
 
     var hiddenBlank = 0;
     /* A long form (more than three sections) keeps its optional sections folded while they are empty (desain v3): the
-     * title, what the section holds in a few words, and "Tampilkan". A section stays open when it is one of the first
-     * two, holds a required field or a child table, has a value the person typed, or carries an error. */
+     * title, what the section holds in a few words, and "Tampilkan". When a section folds: sectionFold above. */
     function foldInfo(i) {
       var fs = namesOf(layout[i]).map(function (n) { return eng.field(m, n); }).filter(function (f) { return f && visible(f); });
       if (!fs.length) return null;
-      var must = fs.some(function (f) { return f.required || f.type === "table"; });
-      var err = fs.some(function (f) { return srvErr.fields[f.name]; });
-      var typed = fs.some(function (f) { return !f.compute && !f.read_only && !blankValue(f, rec[f.name]) && (touched[f.name] || !isNew); });
+      var fold = sectionFold(fs, i, layout.length, ro, function (f) { return srvErr.fields[f.name]; },
+        function (f) { return !f.compute && !f.read_only && !blankValue(f, rec[f.name]) && (touched[f.name] || !isNew); });
       var filled = fs.filter(function (f) { return f.type !== "table" && !blankValue(f, rec[f.name]); });
       var text = filled.length ? filled.slice(0, 2).map(function (f) { return L(f.label) + " " + RA.fieldText(ctx, f, rec[f.name]); }).join(", ") : "Belum diisi";
-      return { foldable: !ro && layout.length > 3 && i > 1 && !must, keepOpen: err || typed, text: text };
+      return { foldable: fold.foldable, keepOpen: fold.keepOpen, text: text };
     }
     function section(i) {
       var s = layout[i], title = L(s.section) || "Rincian", body;

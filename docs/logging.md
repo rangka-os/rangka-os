@@ -91,8 +91,11 @@ Every line passes a redaction step before it is written:
 - fields whose name contains `password`, `passwd`, `secret`, `token`, `authorization`, `cookie`, `api_key`,
   `apikey`, `private_key`, `master_key`, `database_url`, `dsn`, `email`, `phone` or `credential` print `[REDACTED]`;
 - the password in any `scheme://user:password@host` URL;
-- the value of a `key=value`, `key: value` or `"key":"value"` pair whose key contains one of the names above (DSNs,
-  query strings, JSON bodies, and structs or maps passed as a field, which are rendered with their field names);
+- the value of a `key=value`, `"key": value` or `Key:value` (no space) pair whose key contains one of the names
+  above: DSNs, query strings, JSON bodies, and structs, maps and `http.Header` passed as a field (rendered with
+  their field names). A `Bearer` or `Basic` scheme goes with the value. An unquoted value is redacted up to the
+  first space or separator. `key: text` with a space is read as prose and kept, and so are keys ending in
+  `_driver`, `_path`, `_file`, `_dir`, `_id`, `_name`, `_count` or `_enabled`, which name a setting, not a secret;
 - `Bearer` credentials and `Basic` credentials of 16 characters or more;
 - e-mail addresses;
 - secrets the process knows at start: the database URL (and its password when 12 characters or longer),

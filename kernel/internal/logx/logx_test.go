@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
@@ -262,5 +263,46 @@ func TestInformationalStatusIsNotTheFinalStatus(t *testing.T) {
 	got := lines(t, &b)
 	if len(got) != 1 || got[0]["status"] != float64(500) {
 		t.Fatalf("lines = %v", got)
+	}
+}
+
+// TestAuthorizationCredentialsStayRedacted covers re-audit D1: a key=value match must take the credential after a
+// Bearer or Basic scheme with it.
+func TestAuthorizationCredentialsStayRedacted(t *testing.T) {
+	tok := "eyJ" + strings.Repeat("hb6", 6)
+	basic := strings.Repeat("dXNlcjpw", 3)
+	for _, in := range []string{
+		"Authorization: Bearer " + tok,
+		"authorization=Bearer " + tok,
+		"Authorization: Basic " + basic,
+		fmt.Sprintf("%v", http.Header{"Authorization": {"Bearer " + tok}}),
+		fmt.Sprintf("%+v", http.Header{"Authorization": {"Basic " + basic}}),
+		`{"authorization":"Bearer ` + tok + `"}`,
+	} {
+		out := RedactString(in)
+		if strings.Contains(out, tok) || strings.Contains(out, basic) {
+			t.Errorf("%q -> %q", in, out)
+		}
+	}
+}
+
+// TestProseAfterASensitiveWordSurvives covers re-audit D2: kernel warnings keep their text.
+func TestProseAfterASensitiveWordSurvives(t *testing.T) {
+	for _, in := range []string{
+		"secrets: RANGKA_SECRETS_DRIVER=file without RANGKA_SECRETS_PATH",
+		"secrets: driver vault without VAULT_ADDR; connector secrets read as unset",
+		"0042_email_verification: ok",
+		"invalid credential: user not found",
+	} {
+		if out := RedactString(in); out != in {
+			t.Errorf("%q -> %q", in, out)
+		}
+	}
+}
+
+func BenchmarkRedactPlainMessage(b *testing.B) {
+	msg := "member records: kopi-senja: 12 synced; plan refresh took 3ms; queue workers 2 idle"
+	for i := 0; i < b.N; i++ {
+		RedactString(msg)
 	}
 }

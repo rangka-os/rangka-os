@@ -46,25 +46,21 @@ var sensitiveKeys = []string{
 	"private_key", "master_key", "database_url", "dsn", "email", "phone", "credential",
 }
 
-func sensitiveKey(k string) bool {
-	k = strings.ToLower(k)
-	for _, s := range sensitiveKeys {
-		if strings.Contains(k, s) {
-			return true
-		}
-	}
-	return false
-}
+func sensitiveKey(k string) bool { return hasSensitiveKey(strings.ToLower(k)) }
 
 var (
 	// urlPassword is the password part of scheme://user:password@host; greedy, so a password with a raw "@" goes too.
 	urlPassword = regexp.MustCompile(`([A-Za-z][A-Za-z0-9+.\-]*://[^\s:/@]*):[^\s/]*@`)
 	// bearer is an Authorization header value (a Basic value is base64 of user:password, so at least 16 characters).
 	bearer = regexp.MustCompile(`(?i)\b(bearer\s+[A-Za-z0-9._~+/=\-]{8,}|basic\s+[A-Za-z0-9+/=]{16,})`)
-	// keyValue is key=value, key: value or "key":"value" for a sensitive key, as found in DSNs, query strings,
-	// JSON bodies and %+v of structs and maps.
-	keyValue = regexp.MustCompile(`(?i)("?[A-Za-z0-9_\-]*(?:` + strings.Join(sensitiveKeys, "|") + `)[A-Za-z0-9_\-]*"?\s*[:=]\s*)("[^"]*"|'[^']*'|[^\s,;&}\])]+)`)
-	email    = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
+	// keyValue is a sensitive key with its value, as found in DSNs and query strings (key=value), JSON bodies
+	// ("key": value) and %+v of structs and maps (Key:value, no space). "key: text" with a space is prose, as in
+	// "secrets: driver db without ...", and is left alone. The value may start with "[" (http.Header) and with a
+	// Bearer or Basic scheme, so the credential after the scheme goes with it. An unquoted value ends at the first
+	// space or separator.
+	keyValue = regexp.MustCompile(`(?i)("?[A-Za-z0-9_\-]*(?:` + strings.Join(sensitiveKeys, "|") + `)[A-Za-z0-9_\-]*(?:"\s*:\s*|\s*=\s*|:))` +
+		`(\[?(?:(?:bearer|basic)\s+)?(?:"(?:[^"\\]|\\.)*"|'[^']*'|[^\s,;&}\])]+))`)
+	email = regexp.MustCompile(`[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}`)
 )
 
 // RedactString removes registered secrets, URL passwords, values of sensitive key=value pairs, bearer and basic
@@ -79,13 +75,40 @@ func RedactString(s string) string {
 	if strings.Contains(s, "://") {
 		s = urlPassword.ReplaceAllString(s, "$1:"+Redacted+"@")
 	}
-	s = keyValue.ReplaceAllString(s, "${1}"+Redacted)
+	lower := strings.ToLower(s)
+	if hasSensitiveKey(lower) { // the pattern is costly; most lines have no sensitive key at all
+		s = keyValue.ReplaceAllStringFunc(s, redactPair)
+	}
 	if strings.Contains(s, "@") {
 		s = email.ReplaceAllString(s, Redacted)
 	}
-	return bearer.ReplaceAllStringFunc(s, func(m string) string {
-		return strings.Fields(m)[0] + " " + Redacted
-	})
+	if strings.Contains(lower, "bearer") || strings.Contains(lower, "basic") {
+		s = bearer.ReplaceAllStringFunc(s, func(m string) string { return strings.Fields(m)[0] + " " + Redacted })
+	}
+	return s
+}
+
+// settingSuffixes end key names that name a setting about a secret, not the secret (RANGKA_SECRETS_DRIVER=file).
+var settingSuffixes = []string{"_driver", "_path", "_file", "_dir", "_id", "_name", "_count", "_enabled"}
+
+func redactPair(m string) string {
+	sub := keyValue.FindStringSubmatch(m)
+	key := strings.ToLower(strings.Trim(sub[1], "\" \t:="))
+	for _, suf := range settingSuffixes {
+		if strings.HasSuffix(key, suf) {
+			return m
+		}
+	}
+	return sub[1] + Redacted
+}
+
+func hasSensitiveKey(lower string) bool {
+	for _, k := range sensitiveKeys {
+		if strings.Contains(lower, k) {
+			return true
+		}
+	}
+	return false
 }
 
 func redactAttr(a slog.Attr) slog.Attr {

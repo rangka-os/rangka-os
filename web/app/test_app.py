@@ -3648,7 +3648,7 @@ def test_content_full_width(page, ctx):
 SW_SCENARIOS = {"test_pwa_installable_and_offline", "test_pwa_reads_last_seen_offline"}
 # The welcome tour (contract 0053 §7) dims the desk on a person's first visit; every scenario is a fresh browser, so
 # the others see the tours as already seen and only these play them.
-TOUR_SCENARIOS = {"test_tour_kenalan"}
+TOUR_SCENARIOS = {"test_tour_kenalan", "test_tour_offer_on_beranda"}
 TOURS_SEEN = {"tours": {t: {"state": "seen", "at": "2026-01-01T00:00:00Z"} for t in ("kenalan", "halaman:mulai")}}
 
 
@@ -4388,6 +4388,32 @@ def test_tour_kenalan(page, ctx):
     page.keyboard.press("Escape")
     page.locator(".ap-tur").wait_for(state="detached", timeout=5000)
     assert kept_tour(owner) == "skipped", "the replay is kept too"  # and its PUT is done before the page closes
+
+
+def test_tour_offer_on_beranda(page, ctx):
+    """Contract 0053 §7a: Beranda offers "Lihat tur singkat" while the welcome tour stays skipped; the offer starts
+    it from the first place, and once it is finished the offer is gone."""
+    ctx.allowed_failed.append(re.compile(r"/api/v1/onboarding/tours(/|$)"))
+    owner = Http(ctx.base).login(*ctx.owner)
+    owner.call("PUT", "/api/v1/onboarding/tours/kenalan", {"state": "skipped"})
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    offer = page.locator(".ap-tur-offer button")
+    offer.wait_for(timeout=10000)
+    assert offer.inner_text().strip() == "Lihat tur singkat", offer.inner_text()
+    offer.click()
+    card = page.locator(".ap-tur-card")
+    card.wait_for(timeout=5000)
+    assert re.search(r"1 dari \d+", card.locator(".ap-tur-n").inner_text()), "the offer starts at the first place"
+    for _ in range(10):
+        if not page.locator(".ap-tur").count():
+            break
+        page.locator("[data-tur-primary]").click()
+        page.wait_for_timeout(900)
+    page.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+    assert kept_tour(owner) == "seen", "finishing the tour is kept"
+    assert page.locator(".ap-tur-offer").count() == 0, "a finished tour is no longer offered"
 
 
 def kept_tour(owner, tour="kenalan", gone=False):

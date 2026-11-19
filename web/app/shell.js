@@ -969,6 +969,8 @@
     var fs = useState(boot.features), features = fs[0], setFeatures = fs[1];
     var cr = useState(0), setCacheRev = cr[1];
     var acs = useState(0), approvalCount = acs[0], setApprovalCount = acs[1];
+    // the welcome tour's state for this person ("seen", "skipped", null): Beranda offers it again while skipped
+    var kns = useState(null), kenalan = kns[0], setKenalan = kns[1];
     // the notifications of the top bar (contract 0066 §4.1): the person's inbox, live over SSE
     var notices = RA.useNotices ? RA.useNotices({ api: api, me: me, toast: function (a, b, c, d) { toast(a, b, c, d); },
       navigate: function (href) { RA.navigate(href); } }) : null;
@@ -1148,6 +1150,7 @@
       if (!RA.tour || !def) return;
       RA.tour.start(def, { onEnd: function (state) {
         setNavOpen(false); // a tour that opened the phone drawer leaves it closed
+        if (def.id === "kenalan") setKenalan(state); // Beranda offers it again while it stays skipped
         tours.current = tourStates().then(function (all) { var x = Object.assign({}, all); x[def.id] = { state: state }; return x; });
         RA.tour.mark(api, me, def.id, state);
       } });
@@ -1157,14 +1160,20 @@
       if (!RA.tour || RA.tour.active() || previewCs || ubahOn) return;
       tourStates().then(function (all) { if (!all[id] && !RA.tour.active()) startTour(def, true); });
     };
+    /** The welcome tour for this person (mulai.js kenalanSteps): the owner's tour of the business, or a staff
+     *  member's own work, from the sidebar as drawn (the work shell: its bottom bar or rail). */
     function kenalanDef() {
+      var ws = workShell(meta) && !ubahOn && !previewCs;
+      var groups = ws ? [{ label: "Kerja", items: workItems(meta).slice(0, 5) }] : sideNav(meta, features, { approvals: approvalCount }, obPrev.current).groups;
       return { id: "kenalan", eyebrow: "Kenalan", steps: RA.kenalanSteps({ company: companyName, mulai: !!(RA.mulaiEntry && RA.mulaiEntry(obPrev.current)),
-        drawer: drawerNav ? function (open) { setNavOpen(open); return new Promise(function (r) { global.setTimeout(r, 220); }); } : null }) };
+        meta: meta, groups: groups, raka: !ws && !!(meta.features && meta.features.ai === true && RA.AssistantRoot && aiKey),
+        drawer: drawerNav && !ws ? function (open) { setNavOpen(open); return new Promise(function (r) { global.setTimeout(r, 220); }); } : null }) };
     }
     function replayTour() {
       setSwitchAt(null);
       RA.tour.mark(api, me, "kenalan", "");
       tours.current = null;
+      setKenalan(null);
       global.setTimeout(function () { startTour(kenalanDef()); }, 150);
     }
     /** A page's own tour: Kerjakan in Mulai di sini left a pending step tour for the form it opened. */
@@ -1337,7 +1346,9 @@
       showChangeSet: function (cs) { RA.postChangeset("created", cs); setCard({ cs: cs }); },
       onboarding: { data: ob, hide: hideOnboarding, reload: loadOnboarding }, askRaka: function (q) { askRaka(q); },
       // the guided tour of a Mulai di sini step (mulai.js)
-      startTour: function (def) { startTour(def); } };
+      startTour: function (def) { startTour(def); },
+      // Beranda (the home dashboard or home work screen) offers the welcome tour to a person who skipped it
+      home: home, tourOffer: kenalan === "skipped" && RA.tour && !previewCs && !ubahOn ? function () { replayTour(); } : null };
     ctxRef.current = ctx;
     var installed = (meta.apps || []).filter(function (a) { return (a.dashboards || []).length || (a.menu || []).length; });
 
@@ -1443,6 +1454,7 @@
     var deskReady = !!ob && kind !== "top-nav";
     useEffect(function () {
       if (!deskReady || !RA.kenalanSteps) return;
+      tourStates().then(function (all) { setKenalan((all.kenalan && all.kenalan.state) || null); });
       var t = global.setTimeout(function () { RA.tourAuto("kenalan", kenalanDef()); }, 700);
       return function () { global.clearTimeout(t); };
     }, [deskReady]);
@@ -1541,7 +1553,7 @@
       var work = h("div", { className: "rk-shell ap-shell ap-workshell" },
         h("header", { className: "ap-whead" },
           h("b", { className: "ap-whead-t" }, companyName),
-          h(R.IconButton, { icon: "user", label: "Akun", onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: Math.max(8, r.right - 260), bottom: r.bottom }); } })),
+          h(R.IconButton, { icon: "user", label: "Akun", className: "ap-wacct", onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: Math.max(8, r.right - 260), bottom: r.bottom }); } })),
         h("main", { className: "ap-main", key: (me && me.org || "") + JSON.stringify(route) + "#" + rev }, h(Page, { route: route, meta: meta, features: features, home: home, readOnly: false })),
         navOpen ? h("div", { className: "ap-wmore", role: "dialog", "aria-label": "Lainnya" },
           h("div", { className: "ap-nav-scrim", onClick: function () { setNavOpen(false); } }),
@@ -1567,6 +1579,7 @@
 
         switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems().slice(installed.length ? installed.length + 2 : 0), onClose: function () { setSwitchAt(null); } }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
+        RA.TourRoot ? h(RA.TourRoot) : null,
         toaster);
       return h(RA.Ctx.Provider, { value: ctx }, work);
     }

@@ -90,6 +90,130 @@ test("kenalan: a welcome, then at most five lit places; Mulai di sini only when 
   assert.ok(all.every((s) => s.title && s.body && !/—/.test(s.body + s.title)));
 });
 
+// The welcome tour per person (kenalanSteps with meta): the owner's tour stays as it was; staff get their own work.
+const OWNER_TITLES = ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Raka", "Bantuan ada di sini"];
+const can = (c) => ({ read: true, create: !!c });
+const person = (roles, extra) => Object.assign({ user: { roles }, roles: {}, models: {}, screens: {}, flows: {} }, extra || {});
+const titles = (steps) => plain(steps.map((s) => s.title));
+const bodies = (steps) => steps.map((s) => s.body).join(" ");
+
+test("kenalan: the owner keeps the tour of the business, with or without meta", () => {
+  const owner = person(["owner"], { models: { goods_receipt: { label: { id: "Penerimaan barang" }, can: can(1) } } });
+  const groups = [{ label: "Pembelian", items: [{ id: "r/goods_receipt", label: "Penerimaan barang" }] }];
+  const a = A.kenalanSteps({ company: "Toko", mulai: true, meta: owner, groups, raka: true });
+  const b = A.kenalanSteps({ company: "Toko", mulai: true });
+  assert.deepStrictEqual(titles(a), OWNER_TITLES);
+  assert.deepStrictEqual(titles(a), titles(b));
+  assert.deepStrictEqual(plain(a.map((s) => s.body)), plain(b.map((s) => s.body)));
+  assert.match(bodies(a), /menyiapkan usahamu/);
+  assert.match(bodies(a), /keputusanmu/);
+  assert.strictEqual(A.kenalanKind(owner), "owner");
+  assert.strictEqual(A.kenalanKind(person(["outlet_staff"])), "staff");
+});
+
+// staf outlet ritel: no work screen; Stok and Pembelian hold what they record (terima kiriman, terima barang)
+const RITEL = person(["outlet_staff"], { models: {
+  outlet_sales: { label: { id: "Penjualan outlet" }, can: can(1) }, outlet_takings: { label: { id: "Setoran harian" }, can: can(1) },
+  stock_balance: { label: { id: "Saldo stok" }, can: can(0) }, stock_transfer_receipt: { label: { id: "Penerimaan transfer" }, can: can(1) },
+  stock_count: { label: { id: "Stok opname" }, can: can(1) }, goods_receipt: { label: { id: "Penerimaan barang" }, can: can(1) },
+  item: { label: { id: "Barang" }, can: can(0) } } });
+const RITEL_NAV = [
+  { label: "Penjualan toko", items: [{ id: "r/outlet_sales", label: "Penjualan outlet" }, { id: "r/outlet_takings", label: "Setoran harian" }] },
+  { label: "Stok", items: [{ id: "r/stock_balance", label: "Saldo stok" }, { id: "r/stock_transfer_receipt", label: "Penerimaan transfer" }, { id: "r/stock_count", label: "Stok opname" }] },
+  { label: "Pembelian", items: [{ id: "r/goods_receipt", label: "Penerimaan barang" }] },
+  { label: "Data induk", items: [{ id: "r/item", label: "Barang" }] },
+];
+
+test("kenalan staff: staf outlet ritel sees the groups they record in, not the owner's copy", () => {
+  const places = A.kenalanPlaces(RITEL, RITEL_NAV);
+  assert.deepStrictEqual(plain(places.map((x) => x.label)), ["Penjualan toko", "Stok", "Pembelian"]);
+  assert.match(places[1].body, /penerimaan transfer dan stok opname/);
+  assert.doesNotMatch(places[1].body, /saldo stok/); // read only: not their work
+  assert.match(places[2].body, /penerimaan barang/);
+  const steps = A.kenalanSteps({ company: "Toko", mulai: true, meta: RITEL, groups: RITEL_NAV, raka: false });
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di Toko", "Penjualan toko", "Stok", "Pembelian", "Bantuan ada di sini"]);
+  assert.match(steps[0].body, /tempat kerjamu: Penjualan toko, Stok dan Pembelian/);
+  assert.doesNotMatch(bodies(steps), /usahamu|keputusanmu|Mulai di sini/);
+  assert.ok(steps.every((s) => !/—/.test(s.title + s.body) && !/aplikasi/i.test(s.title + s.body)));
+});
+
+// staf dapur: one queue screen, home; the Dapur group's tickets are the screen's own model, so it adds nothing
+const DAPUR_SCREEN = { name: "dapur", type: "queue", label: { id: "Dapur" }, description: { id: "Tiket pesanan masuk di sini. Tekan Masak, lalu Siap, lalu Diambil." },
+  source: { model: "kitchen_ticket" } };
+const DAPUR = person(["kitchen"], { screens: { dapur: DAPUR_SCREEN }, models: {
+  kitchen_ticket: { label: { id: "Tiket dapur" }, can: can(1) }, kitchen_station: { label: { id: "Stasiun dapur" }, can: can(0) } } });
+const DAPUR_NAV = [{ label: "Kerja", items: [{ id: "w/dapur", label: "Dapur" }] },
+  { label: "Dapur", items: [{ id: "r/kitchen_ticket", label: "Tiket dapur" }] }, { label: "Pengaturan dapur", items: [{ id: "r/kitchen_station", label: "Stasiun dapur" }] }];
+
+test("kenalan staff: staf dapur gets their screen with its description, nothing else to record", () => {
+  const steps = A.kenalanSteps({ company: "Kedai", meta: DAPUR, groups: DAPUR_NAV, raka: false });
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di Kedai", "Dapur", "Bantuan ada di sini"]);
+  assert.match(steps[1].body, /Masak, lalu Siap, lalu Diambil/);
+  assert.strictEqual(steps[1].optional, true);
+});
+
+test("kenalan staff: a screen without a description falls back to a sentence by its type, then to its title", () => {
+  const meta = person(["cashier"], { screens: { kasir: { type: "counter", label: { id: "Kasir" }, document: { model: "pos_sale" } }, aneh: { type: "baru", label: { id: "Layar baru" } } },
+    models: { pos_sale: { label: { id: "Penjualan kasir" }, can: can(1) } } });
+  const places = A.kenalanPlaces(meta, [{ label: "Kerja", items: [{ id: "w/kasir", label: "Kasir" }, { id: "w/aneh", label: "Layar baru" }] },
+    { label: "Kasir", items: [{ id: "r/pos_sale", label: "Penjualan kasir" }] }]);
+  assert.deepStrictEqual(plain(places.map((x) => x.label)), ["Kasir", "Layar baru"]); // the Kasir group is the screen's own model
+  assert.match(places[0].body, /melayani pembeli/);
+  assert.match(places[1].body, /Buka Layar baru dari sini/);
+});
+
+// salesman grosir: records customer orders and fulfilment; Data induk (customers) is read only
+const SALES = person(["field_sales"], { models: {
+  customer_order: { label: { id: "Pesanan pelanggan" }, can: can(1) }, payment: { label: { id: "Pembayaran" }, can: can(0) },
+  order_fulfilment: { label: { id: "Pemenuhan pesanan" }, can: can(1) }, customer: { label: { id: "Pelanggan" }, can: can(0) } } });
+const SALES_NAV = [{ label: "Penjualan", items: [{ id: "r/customer_order", label: "Pesanan pelanggan" }, { id: "r/payment", label: "Pembayaran" }] },
+  { label: "Pengiriman", items: [{ id: "r/order_fulfilment", label: "Pemenuhan pesanan" }] }, { label: "Data induk", items: [{ id: "r/customer", label: "Pelanggan" }] }];
+
+test("kenalan staff: salesman sees where they record orders; Raka only when it is on", () => {
+  const off = A.kenalanSteps({ company: "CV", meta: SALES, groups: SALES_NAV, raka: false });
+  assert.deepStrictEqual(titles(off), ["Selamat datang di CV", "Penjualan", "Pengiriman", "Bantuan ada di sini"]);
+  assert.match(off[1].body, /mencatat pesanan pelanggan\./);
+  const on = A.kenalanSteps({ company: "CV", meta: SALES, groups: SALES_NAV, raka: true });
+  assert.deepStrictEqual(titles(on), ["Selamat datang di CV", "Penjualan", "Pengiriman", "Tanya Raka", "Bantuan ada di sini"]);
+  assert.doesNotMatch(bodies(on), /usahamu|keputusanmu/);
+});
+
+// mandor: records nothing, reads the sites' attendance and approves attendance outside the radius
+const MANDOR = person(["site_supervisor"], { models: {
+  assignment: { label: { id: "Penugasan" }, can: can(0) },
+  attendance_log: { label: { id: "Catatan absen" }, can: can(0), approvals: [{ name: "outside_site", approvers: ["site_supervisor"] }] },
+  work_site: { label: { id: "Lokasi kerja" }, can: can(0) } } });
+const MANDOR_NAV = [{ label: "Proyek", items: [{ id: "r/assignment", label: "Penugasan" }] },
+  { label: "Absen lapangan", items: [{ id: "r/attendance_log", label: "Catatan absen" }, { id: "r/work_site", label: "Lokasi kerja" }] }];
+
+test("kenalan staff: mandor sees what they look after, then Persetujuan for what they approve", () => {
+  const steps = A.kenalanSteps({ company: "CV", meta: MANDOR, groups: MANDOR_NAV, raka: false });
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di CV", "Proyek", "Absen lapangan", "Persetujuan", "Bantuan ada di sini"]);
+  assert.match(steps[2].body, /melihat catatan absen dan lokasi kerja/);
+  assert.match(steps[3].body, /^Catatan absen yang menunggu keputusanmu/);
+  assert.deepStrictEqual(plain(A.approvesModels(MANDOR)), ["attendance_log"]);
+  // a flow step approve: counts too; a staff member who approves nothing gets no Persetujuan
+  assert.deepStrictEqual(plain(A.approvesModels(person(["sales_manager"], { models: {}, flows: { po: { model: "purchase_order", steps: [{ approve: { approvers: ["sales_manager"] } }] } } }))), ["purchase_order"]);
+  assert.ok(!titles(A.kenalanSteps({ meta: SALES, groups: SALES_NAV })).includes("Persetujuan"));
+});
+
+test("kenalan staff: kasir with two screens and the work shell; places stop at three", () => {
+  const meta = person(["cashier"], { screens: { kasir: { type: "counter", label: { id: "Kasir" }, description: { id: "Jual di sini." }, document: { model: "pos_sale" } },
+    dapur: DAPUR_SCREEN }, models: { pos_sale: { label: { id: "Penjualan kasir" }, can: can(1) }, kitchen_ticket: { label: { id: "Tiket dapur" }, can: can(1) } } });
+  const steps = A.kenalanSteps({ company: "Kedai", meta, groups: [{ label: "Kerja", items: [{ id: "w/kasir", label: "Kasir" }, { id: "w/dapur", label: "Dapur" }] }] });
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di Kedai", "Kasir", "Dapur", "Bantuan ada di sini"]);
+  assert.match(steps[0].body, /tempat kerjamu: Kasir dan Dapur\./);
+  const many = A.kenalanPlaces(RITEL, RITEL_NAV.concat([{ label: "Lain", items: [{ id: "r/outlet_sales", label: "Penjualan outlet" }] }]));
+  assert.strictEqual(many.length, 3);
+  // nothing to record or read: a short welcome, then where the tour lives
+  assert.deepStrictEqual(titles(A.kenalanSteps({ company: "X", meta: person(["guest"]), groups: [] })), ["Selamat datang di X", "Bantuan ada di sini"]);
+});
+
+test("screenModels: every model a screen names", () => {
+  assert.deepStrictEqual(plain(A.screenModels({ type: "counter", catalogue: { model: "item" }, document: { model: "pos_sale", lines: "items" }, session: { model: "pos_shift", close: { model: "pos_shift_close" } } })),
+    ["item", "pos_sale", "pos_shift", "pos_shift_close"]);
+});
+
 test("tur.js: the card goes beside a narrow element, below a wide one", () => {
   const w = { React: { createElement() {}, useState() {}, useEffect() {}, useRef() {}, useLayoutEffect() {} }, Rangka: {}, innerWidth: 1440, innerHeight: 900 };
   vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "tur.js"), "utf8"), { window: w }, { filename: "tur.js" });

@@ -1107,6 +1107,7 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur.on .ap-tur-card.mid { transform: translate(-50%, -50%); }
 .ap-tur-card.sheet { left: 0 !important; right: 0; bottom: 0; top: auto !important; width: auto; max-width: none; border-radius: var(--r-dialog) var(--r-dialog) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
+.ap-tur-card.sheet.top { top: 0 !important; bottom: auto; border-radius: 0 0 var(--r-dialog) var(--r-dialog); padding: calc(16px + env(safe-area-inset-top)) 16px 16px; }
 .ap-tur-n { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
 .ap-tur-title { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
 .ap-tur-body { margin: 0; color: var(--ink-2); }
@@ -1126,6 +1127,9 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur.using .ap-tur-card.sheet .ap-tur-body, .ap-tur.using .ap-tur-card.sheet .ap-tur-dots, .ap-tur.using .ap-tur-card.sheet .ap-tur-n { display: none; }
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts { margin: 0; }
 .ap-tur.using .ap-tur-card.sheet .ap-tur-acts > :not([data-tur-primary]) { display: none; }
+/* "Lihat tur singkat" on Beranda after the welcome tour was skipped: one quiet line, its icon on the content edge */
+.ap-tur-offer { display: flex; margin: -4px 0 12px; }
+.ap-tur-offer .rk-btn { margin-left: -10px; }
 
 /* ---------------------------------------------------------------- Beranda (desain v3)
  * While Mulai di sini guides the owner: the steps lead (a short list around the current step), Perlu diurus and Tim

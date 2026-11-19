@@ -3,6 +3,7 @@ package engine
 import (
 	"math"
 	"sort"
+	"strings"
 	"time"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
@@ -27,10 +28,11 @@ type stockPost struct {
 	voucher string
 	vtype   string
 	items   map[string]store.Record
+	lots    map[string]store.Record
 }
 
 func newStockPost(h *HookCtx, date string) *stockPost {
-	return &stockPost{h: h, date: date, voucher: str(h.Record["name"]), vtype: h.Model.Name, items: map[string]store.Record{}}
+	return &stockPost{h: h, date: date, voucher: str(h.Record["name"]), vtype: h.Model.Name, items: map[string]store.Record{}, lots: map[string]store.Record{}}
 }
 
 func (s *stockPost) item(name string) (store.Record, error) {
@@ -88,6 +90,20 @@ func (s *stockPost) lockAll(keys [][2]string) error {
 // is always the exact sum of move values; avg = round(value / qty) is derived when qty > 0 and kept
 // otherwise. It returns the move.
 func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *int64, reason string) (store.Record, error) {
+	return s.moveX(outlet, item, qty, cost, fixed, reason, moveOpt{})
+}
+
+// moveOpt is what a lot or serial line adds to a move (contract 0070): the stock_lot ("" = none or the no-lot
+// bucket), the serials, and, for the last part of a line split over lots, the average the balance keeps when it
+// does not stay above zero (the average before the first part, as one move would keep it).
+type moveOpt struct {
+	lot     string
+	serials []string
+	keepAvg *int64
+}
+
+// moveX is move with the lot and serials of the move.
+func (s *stockPost) moveX(outlet, item string, qty float64, cost int64, fixed *int64, reason string, mo moveOpt) (store.Record, error) {
 	bal, err := s.balance(outlet, item)
 	if err != nil {
 		return nil, err
@@ -119,12 +135,22 @@ func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *in
 		avg = divRound(bv, bq)
 	case avg == 0 && qty > 0:
 		avg = unit
+	case mo.keepAvg != nil:
+		avg = *mo.keepAvg
 	}
-	mv, _, err := s.h.Create("stock_move", map[string]any{
+	in := map[string]any{
 		"posting_date": s.date, "outlet": outlet, "item": item, "qty": qty, "unit_cost": moneyOut(unit), "value": moneyOut(value),
 		"balance_qty": bq, "balance_value": moneyOut(bv), "avg_cost": moneyOut(avg), "negative": bq < 0,
 		"voucher_type": s.vtype, "voucher": s.voucher, "reason": reason,
-	})
+	}
+	sm := s.h.op.e.Reg().Model("stock_move")
+	if mo.lot != "" && has(sm, "lot") {
+		in["lot"] = mo.lot
+	}
+	if len(mo.serials) > 0 && has(sm, "serial_nos") {
+		in["serial_nos"] = strings.Join(mo.serials, "\n")
+	}
+	mv, _, err := s.h.Create("stock_move", in)
 	if err != nil {
 		return nil, err
 	}
@@ -156,15 +182,6 @@ func (s *stockPost) move(outlet, item string, qty float64, cost int64, fixed *in
 	return mv, nil
 }
 
-// out posts an outgoing quantity at the average and returns the value taken (positive) and the unit cost.
-func (s *stockPost) out(outlet, item string, qty float64, reason string) (int64, int64, error) {
-	mv, err := s.move(outlet, item, -qty, 0, nil, reason)
-	if err != nil {
-		return 0, 0, err
-	}
-	return -moneyIn(mv["value"]), moneyIn(mv["unit_cost"]), nil
-}
-
 // lineQty is a line's quantity in stock uom: stock_qty when the line model computes it, else qty.
 func lineQty(h *HookCtx, table string, row map[string]any) float64 {
 	if f := h.Model.Field(table); f != nil && has(h.op.e.Reg().Models[f.Of], "stock_qty") {
@@ -177,8 +194,12 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 	if h.op.e.Reg().Model("stock_move") == nil || h.op.e.Reg().Model("stock_balance") == nil {
 		return map[string]any{"message": "stock is not installed"}, nil
 	}
-	if sp := stockSpecOf(h.Model); sp != nil && !LegacyStockModels[h.Model.Name] {
-		return postDeclaredMoves(h, sp)
+	if sp := declaredSpec(h.Model); sp != nil {
+		res, err := postDeclaredMoves(h, sp)
+		if err == nil && h.Model.Name == "goods_receipt" { // the receipt's PO side effect stays in Go (contract 0070 §7)
+			err = receivedOnPO(h, 1)
+		}
+		return res, err
 	}
 	rec := h.Record
 	// lineKeys are the (outlet, item) pairs of the document's lines that move stock, for the given outlet
@@ -212,7 +233,8 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 				v := moneyIn(l["amount"])
 				fixed = &v
 			}
-			if _, err := s.move(str(rec["outlet"]), str(l["item"]), q, moneyIn(l["unit_cost"]), fixed, "receipt"); err != nil {
+			li, _, sp := lineLots(h, h.Model.Name, "items", l)
+			if _, err := s.inLine(str(rec["outlet"]), str(l["item"]), q, moneyIn(l["unit_cost"]), fixed, "receipt", li, sp); err != nil {
 				return nil, err
 			}
 		}
@@ -232,57 +254,29 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 			if q <= qtyEps {
 				continue
 			}
-			v, unit, err := s.out(str(rec["from_outlet"]), str(l["item"]), q, "transfer_out")
+			_, lo, sp := lineLots(h, h.Model.Name, "items", l)
+			v, unit, mvs, err := s.outLine(str(rec["from_outlet"]), str(l["item"]), q, "transfer_out", lo, sp)
 			if err != nil {
 				return nil, err
 			}
-			if _, err := s.move(str(rec["to_outlet"]), str(l["item"]), q, unit, &v, "transfer_in"); err != nil {
+			// the goods come in in the lots that left, with the serials that left
+			var parts []lotTake
+			var serials []string
+			for _, mv := range mvs {
+				parts = append(parts, lotTake{str(mv["lot"]), -qtyOf(mv["qty"])})
+				serials = append(serials, parseSerials(mv["serial_nos"])...)
+			}
+			if len(serials) > 0 {
+				if serials, err = s.serialsIn(str(rec["to_outlet"]), str(l["item"]), "transfer_in", q, serialSpec{serials, true}, ""); err != nil {
+					return nil, err
+				}
+			}
+			if err := s.inParts(str(rec["to_outlet"]), str(l["item"]), parts, unit, v, "transfer_in", serials); err != nil {
 				return nil, err
 			}
 		}
 	case "stock_count":
-		s := newStockPost(h, str(rec["count_date"]))
-		var countKeys [][2]string // every counted line reads its balance, so all are locked
-		for _, l := range rows(rec["items"]) {
-			countKeys = append(countKeys, [2]string{str(rec["outlet"]), str(l["item"])})
-		}
-		if err := s.lockAll(countKeys); err != nil {
-			return nil, err
-		}
-		lines := map[string]map[string]any{}
-		for _, l := range rows(rec["items"]) {
-			item := str(l["item"])
-			bal, err := s.balance(str(rec["outlet"]), item)
-			if err != nil {
-				return nil, err
-			}
-			system := qtyOf(bal["qty"])
-			diff := roundQty(qtyOf(l["counted_qty"]) - system)
-			lines[str(l["name"])] = map[string]any{"system_qty": system, "difference": diff}
-			switch {
-			case diff > qtyEps:
-				cost := moneyIn(bal["avg_cost"])
-				if cost == 0 {
-					it, err := s.item(item)
-					if err != nil {
-						return nil, err
-					}
-					cost = moneyIn(it["standard_cost"])
-				}
-				if _, err := s.move(str(rec["outlet"]), item, diff, cost, nil, "count"); err != nil {
-					return nil, err
-				}
-			case diff < -qtyEps:
-				if _, _, err := s.out(str(rec["outlet"]), item, -diff, "count"); err != nil {
-					return nil, err
-				}
-			}
-		}
-		if len(lines) > 0 {
-			if _, err := h.SetSubmitted(h.Model.Name, s.voucher, map[string]any{"items": lines}); err != nil {
-				return nil, err
-			}
-		}
+		return postStockCount(h)
 	case "stock_adjustment":
 		s := newStockPost(h, str(rec["adjustment_date"]))
 		if err := s.lockAll(lineKeys("outlet")); err != nil {
@@ -294,7 +288,11 @@ func postStockMoves(h *HookCtx) (map[string]any, error) {
 		}
 		for _, l := range rows(rec["items"]) {
 			if q := lineQty(h, "items", l); q > qtyEps {
-				if _, _, err := s.out(str(rec["outlet"]), str(l["item"]), q, reason); err != nil {
+				_, lo, sp := lineLots(h, h.Model.Name, "items", l)
+				if r := str(rec["reason"]); r == "expired" || r == "waste" { // expired lots go first (contract 0070 §5)
+					lo.expired = expiredFirst
+				}
+				if _, _, _, err := s.outLine(str(rec["outlet"]), str(l["item"]), q, reason, lo, sp); err != nil {
 					return nil, err
 				}
 			}
@@ -360,7 +358,8 @@ func postOutletSales(h *HookCtx) (map[string]any, error) {
 			if q <= qtyEps {
 				continue
 			}
-			v, _, err := s.out(outlet, u.material, q, "sale")
+			// a POS file is the record of sales that happened: FEFO takes expired lots too (contract 0070 §7)
+			v, _, _, err := s.outLine(outlet, u.material, q, "sale", lotOut{expired: expiredAllow}, serialSpec{})
 			if err != nil {
 				return nil, err
 			}
@@ -466,6 +465,17 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 	if err := s.lockAll(keys); err != nil {
 		return nil, err
 	}
+	// serials are undone last move first (a one-step transfer's transfer_in before its transfer_out)
+	if s.serialsOn() && has(h.op.e.Reg().Model("stock_move"), "serial_nos") {
+		for i := len(moves) - 1; i >= 0; i-- {
+			mv := moves[i]
+			if sn := parseSerials(mv["serial_nos"]); len(sn) > 0 && str(mv["reason"]) != "reversal" {
+				if err := s.serialsReverse(str(mv["outlet"]), str(mv["item"]), str(mv["reason"]), qtyOf(mv["qty"]), sn); err != nil {
+					return nil, err
+				}
+			}
+		}
+	}
 	n := 0
 	var sold [][2]string
 	for _, mv := range moves {
@@ -479,8 +489,25 @@ func reverseStockMoves(h *HookCtx) (map[string]any, error) {
 		if v < 0 {
 			v = -v
 		}
-		if _, err := s.move(str(mv["outlet"]), str(mv["item"]), -qtyOf(mv["qty"]), moneyIn(mv["unit_cost"]), &v, "reversal"); err != nil {
+		// contract 0070 §8: the reversal carries the move's lot and serials, so lot balances and serial states return
+		outlet, item, q := str(mv["outlet"]), str(mv["item"]), qtyOf(mv["qty"])
+		mo := moveOpt{lot: str(mv["lot"]), serials: parseSerials(mv["serial_nos"])}
+		if _, err := s.moveX(outlet, item, -q, moneyIn(mv["unit_cost"]), &v, "reversal", mo); err != nil {
 			return nil, err
+		}
+		if s.lotsOn() {
+			tr, err := s.tracking(item)
+			if err != nil {
+				return nil, err
+			}
+			if mo.lot != "" || tr == trackLot || tr == trackLotExpiry {
+				if err := s.addLot(outlet, item, mo.lot, -q); err != nil {
+					return nil, err
+				}
+				if err := s.syncBucket(outlet, item); err != nil {
+					return nil, err
+				}
+			}
 		}
 		n++
 	}

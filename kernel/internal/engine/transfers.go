@@ -3,6 +3,7 @@ package engine
 import (
 	"fmt"
 	"math"
+	"sort"
 
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
@@ -66,7 +67,8 @@ func postTransferOut(h *HookCtx) (map[string]any, error) {
 	for _, l := range rows(rec["items"]) {
 		var unit int64
 		if q := transferLineQty(h, l); q > qtyEps {
-			_, u, err := s.out(from, str(l["item"]), q, "transfer_out")
+			_, lo, sp := lineLots(h, "stock_transfer", "items", l)
+			_, u, _, err := s.outLine(from, str(l["item"]), q, "transfer_out", lo, sp)
 			if err != nil {
 				return nil, err
 			}
@@ -202,6 +204,10 @@ func postTransferReceipt(h *HookCtx) (map[string]any, error) {
 	if err != nil {
 		return nil, err
 	}
+	pending, err := transferLots(h, tr, name) // lots and serials still on their way, per item (contract 0070 §7)
+	if err != nil {
+		return nil, err
+	}
 	posted := map[string]int64{} // values brought in by this receipt so far
 	for _, l := range rows(rec["items"]) {
 		q := qtyOf(l["qty"])
@@ -214,10 +220,17 @@ func postTransferReceipt(h *HookCtx) (map[string]any, error) {
 		// that takes the whole remainder gets exactly what is left
 		left := si.value - prior[it] - posted[it]
 		value := min(mulRound(q, si.unit), left)
-		if roundQty(si.sent-si.received-q) <= qtyEps {
+		whole := roundQty(si.sent-si.received-q) <= qtyEps
+		if whole {
 			value = left
 		}
-		if _, err := s.move(outlet, it, q, si.unit, &value, "transfer_in"); err != nil {
+		pl := pending[it]
+		parts := pl.take(q)
+		serials, err := pl.serialsFor(s, outlet, it, q, l, whole)
+		if err != nil {
+			return nil, err
+		}
+		if err := s.inParts(outlet, it, parts, si.unit, value, "transfer_in", serials); err != nil {
 			return nil, err
 		}
 		si.received = roundQty(si.received + q)
@@ -294,3 +307,168 @@ func receivedOnTransfer(h *HookCtx, tr store.Record, sign float64) error {
 
 // fmtQty prints a quantity without trailing zeros.
 func fmtQty(q float64) string { return fmt.Sprintf("%g", roundQty(q)) }
+
+// pendingLots is what of one item of a transfer is still on its way: lot parts in the order a receipt takes them
+// (earliest expiry first, the no-lot part last) and the serials still in transit.
+type pendingLots struct {
+	parts   []lotTake
+	serials []string
+}
+
+// transferLots reads, per item, the lots the transfer's transfer_out moves took, less what its other receipts
+// brought in (their reversals net out), and the sent serials that are still in transit.
+func transferLots(h *HookCtx, tr store.Record, except string) (map[string]*pendingLots, error) {
+	out := map[string]*pendingLots{}
+	if !has(h.op.e.Reg().Model("stock_move"), "lot") && !has(h.op.e.Reg().Model("stock_move"), "serial_nos") {
+		return out, nil
+	}
+	moves, err := h.Find("stock_move", map[string]any{"voucher_type": "stock_transfer", "voucher": str(tr["name"]), "reason": "transfer_out"})
+	if err != nil {
+		return nil, err
+	}
+	type key struct{ item, lot string }
+	sent := map[key]float64{}
+	var order []key
+	sentSerials := map[string][]string{}
+	for _, mv := range moves {
+		k := key{str(mv["item"]), str(mv["lot"])}
+		if _, ok := sent[k]; !ok {
+			order = append(order, k)
+		}
+		sent[k] = roundQty(sent[k] - qtyOf(mv["qty"]))
+		sentSerials[k.item] = append(sentSerials[k.item], parseSerials(mv["serial_nos"])...)
+	}
+	got, err := h.Find("stock_transfer_receipt", map[string]any{"stock_transfer": str(tr["name"])})
+	if err != nil {
+		return nil, err
+	}
+	for _, r := range got {
+		if str(r["name"]) == except {
+			continue
+		}
+		mv, err := h.Find("stock_move", map[string]any{"voucher_type": "stock_transfer_receipt", "voucher": str(r["name"])})
+		if err != nil {
+			return nil, err
+		}
+		for _, m := range mv {
+			k := key{str(m["item"]), str(m["lot"])}
+			sent[k] = roundQty(sent[k] - qtyOf(m["qty"]))
+		}
+	}
+	expiry := map[string]string{}
+	if h.op.e.Reg().Model("stock_lot") != nil {
+		for _, k := range order {
+			if k.lot == "" {
+				continue
+			}
+			l, err := h.op.load(h.op.e.Reg().Model("stock_lot"), k.lot)
+			if err != nil {
+				return nil, err
+			}
+			expiry[k.lot] = dateOnly(l["expiry_date"])
+		}
+	}
+	sort.SliceStable(order, func(i, j int) bool {
+		a, b := order[i], order[j]
+		if (a.lot == "") != (b.lot == "") {
+			return b.lot == ""
+		}
+		ea, eb := expiry[a.lot], expiry[b.lot]
+		if ea != eb && ea != "" && eb != "" {
+			return ea < eb
+		}
+		return ea != "" && eb == ""
+	})
+	for _, k := range order {
+		p := out[k.item]
+		if p == nil {
+			p = &pendingLots{}
+			out[k.item] = p
+		}
+		if q := sent[k]; q > qtyEps {
+			p.parts = append(p.parts, lotTake{k.lot, q})
+		}
+	}
+	for it, list := range sentSerials {
+		p := out[it]
+		for _, sn := range list {
+			found, err := h.Find("serial_no", map[string]any{"item": it, "serial": sn})
+			if err != nil {
+				return nil, err
+			}
+			if len(found) > 0 && str(found[0]["state"]) == "in_transit" {
+				p.serials = append(p.serials, sn)
+			}
+		}
+	}
+	return out, nil
+}
+
+// take removes qty from the pending lot parts, earliest first; what the parts do not cover is the no-lot part.
+func (p *pendingLots) take(qty float64) []lotTake {
+	if p == nil || len(p.parts) == 0 {
+		return []lotTake{{"", qty}}
+	}
+	var out []lotTake
+	rest := qty
+	for i := range p.parts {
+		if rest <= qtyEps {
+			break
+		}
+		t := math.Min(rest, p.parts[i].qty)
+		if t <= qtyEps {
+			continue
+		}
+		out = append(out, lotTake{p.parts[i].lot, roundQty(t)})
+		p.parts[i].qty = roundQty(p.parts[i].qty - t)
+		rest = roundQty(rest - t)
+	}
+	if rest > qtyEps {
+		out = append(out, lotTake{"", rest})
+	}
+	return out
+}
+
+// serialsFor brings in the serials of a receipt line: the ones the line names (each must be one the transfer sent
+// and still in transit), else, when the line takes the item's whole remainder, every serial still in transit. A
+// partial line of a serial transfer must name its serials.
+func (p *pendingLots) serialsFor(s *stockPost, outlet, item string, q float64, line map[string]any, whole bool) ([]string, error) {
+	if p == nil || len(p.serials) == 0 {
+		return nil, nil
+	}
+	named := parseSerials(line["serial_nos"])
+	if len(named) == 0 {
+		if !whole {
+			_, err := s.problem("serial_count_mismatch", fmt.Sprintf("Barang %s diterima sebagian: tulis nomor seri yang datang", item), outlet, map[string]any{"item": item})
+			return nil, err
+		}
+		named = append([]string(nil), p.serials...)
+	}
+	sent := map[string]bool{}
+	for _, sn := range p.serials {
+		sent[sn] = true
+	}
+	for _, sn := range named {
+		if !sent[sn] {
+			if ok, err := s.problem("serial_not_sent", "Nomor seri "+sn+" tidak ada di kiriman ini", outlet, map[string]any{"item": item, "serial": sn}); !ok {
+				return nil, err
+			}
+		}
+	}
+	got, err := s.serialsIn(outlet, item, "transfer_in", q, serialSpec{named, true}, "")
+	if err != nil {
+		return nil, err
+	}
+	var rest []string
+	in := map[string]bool{}
+	for _, sn := range got {
+		in[sn] = true
+	}
+	for _, sn := range p.serials {
+		if !in[sn] {
+			rest = append(rest, sn)
+		}
+	}
+	p.serials = rest
+	return got, nil
+}

@@ -190,3 +190,23 @@ test("blankValue: empty, zero and empty tables say nothing; a false check still 
   assert.strictEqual(A.blankValue({ type: "check" }, false), false);
   assert.strictEqual(A.blankValue({ type: "currency" }, 5), false);
 });
+
+test("sectionFold: optional empty sections of a long form fold; a company-layer field keeps its section open", () => {
+  const A = load();
+  const no = () => false;
+  const notes = [{ name: "notes", type: "text" }];
+  // the CRM deal form: four sections, Catatan last
+  assert.deepStrictEqual(plain(A.sectionFold(notes, 3, 4, false, no, no)), { foldable: true, keepOpen: false });
+  // an overlay's x_ field added to that section (Nomor PO from a change set): still foldable, but open from the start
+  const withPO = notes.concat([{ name: "x_nomor_po", type: "data" }]);
+  assert.deepStrictEqual(plain(A.sectionFold(withPO, 3, 4, false, no, no)), { foldable: true, keepOpen: true });
+  // never folds: the first two sections, a short form, read only, a required field or a child table
+  assert.strictEqual(A.sectionFold(notes, 1, 4, false, no, no).foldable, false);
+  assert.strictEqual(A.sectionFold(notes, 2, 3, false, no, no).foldable, false);
+  assert.strictEqual(A.sectionFold(notes, 3, 4, true, no, no).foldable, false);
+  assert.strictEqual(A.sectionFold([{ name: "po", type: "data", required: true }], 3, 4, false, no, no).foldable, false);
+  assert.strictEqual(A.sectionFold([{ name: "items", type: "table" }], 3, 4, false, no, no).foldable, false);
+  // an error or a typed value opens it
+  assert.strictEqual(A.sectionFold(notes, 3, 4, false, (f) => f.name === "notes", no).keepOpen, true);
+  assert.strictEqual(A.sectionFold(notes, 3, 4, false, no, (f) => f.name === "notes").keepOpen, true);
+});

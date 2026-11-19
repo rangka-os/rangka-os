@@ -4,3 +4,5 @@ label: {id: Istirahat}
 is_child: true
 fields:
   - {name: minutes, type: int, label: {id: Menit}, set_once: true}
+  - {name: day, type: date, label: {id: Hari}, compute: parent.date}
+  - {name: missing_parent_field, type: data, label: {id: Hilang}, compute: parent.ghost}

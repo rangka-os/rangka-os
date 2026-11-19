@@ -20,10 +20,11 @@ counter:
   document:
     model: penjualan
     lines: items
-    line: {item: menu, qty: qty, price: rate, note: note}
+    line: {item: menu, qty: qty, price: rate, note: note, amount: amount, flag: is_gift}
     total: grand_total
     change: change_amount
     summary: [grand_total]
+    checkout: [member, promo, {field: promo_menu, filter: "active == true"}]
     set: {date: "today()", sold_at: "now()"}
   payments: {table: payments, method: method, amount: amount, methods: [cash, qris]}
   session:

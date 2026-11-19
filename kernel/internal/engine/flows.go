@@ -498,7 +498,7 @@ func (r *flowRun) env() *cel.Env {
 		ctx := r.o.ctx
 		today, now = func() string { return r.e.todayIn(ctx) }, func() time.Time { return r.e.nowIn(ctx) }
 	}
-	return &cel.Env{Today: today, Now: now, Apps: r.registry().IsInstalled, Vars: func(n string) (any, bool) {
+	return &cel.Env{Today: today, Now: now, Loc: r.e.Location(), Apps: r.registry().IsInstalled, Vars: func(n string) (any, bool) {
 		if v, ok := r.vars[n]; ok {
 			return v, true
 		}

@@ -8,3 +8,5 @@ fields:
   - {name: rate, type: currency, label: {id: Harga}, compute: menu.price}
   - {name: amount, type: currency, label: {id: Jumlah}, compute: round(qty * rate)}
   - {name: note, type: data, label: {id: Catatan}}
+  - {name: is_gift, type: check, label: {id: Gratis}}
+  - {name: buyer_copy, type: data, label: {id: Pembeli}, compute: parent.buyer}

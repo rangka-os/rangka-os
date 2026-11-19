@@ -663,7 +663,7 @@
               r.id === val ? h(Icon, { name: "check", className: "rk-check-mark" }) : null);
           }) : h("div", { className: "rk-cmd-empty" }, "Tidak ada " + p.doctype.toLowerCase() + " “" + q + "”"),
           h("div", { className: "rk-pop-foot" },
-            h("button", { type: "button", className: "rk-opt", onClick: p.onCreate }, h(Icon, { name: "add" }), h("span", { className: "t" }, q ? "Buat " + p.doctype.toLowerCase() + " baru “" + q + "”" : "Buat " + p.doctype.toLowerCase() + " baru")),
+            p.onCreate ? h("button", { type: "button", className: "rk-opt", onClick: p.onCreate }, h(Icon, { name: "add" }), h("span", { className: "t" }, q ? "Buat " + p.doctype.toLowerCase() + " baru “" + q + "”" : "Buat " + p.doctype.toLowerCase() + " baru")) : null,
             h("button", { type: "button", className: "rk-opt" }, h(Icon, { name: "filter" }), h("span", { className: "t" }, "Pencarian lanjutan")))) : null,
         (peek && rec && rec.fields && !open) ? h("div", { className: "rk-peek", role: "tooltip" },
           h("div", { className: "rk-peek-head" }, h(Avatar, { name: rec.title, size: 32, square: true }), h("span", null, h("b", null, rec.title), h("small", null, p.doctype + " · " + rec.id))),

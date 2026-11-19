@@ -43,7 +43,7 @@ def check_set_once(rep, p, i, f, child):
         rep.add("error", p, f"fields/{i}/set_once", "set_once_child", "set_once is for fields of the document itself; a table row can be removed and added again")
     elif f.get("type") in SET_ONCE_EMPTY_IS_VALUE:
         rep.add("error", p, f"fields/{i}/set_once", "set_once_type", f'set_once needs a field whose empty value means "not filled"; a {pystr(f.get("type"))} field starts at 0, false or empty')
-FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string"}
+FUNCTIONS = {"today", "round", "duration", "size", "sum", "map", "option", "app_installed", "truncate", "now", "add_months", "days_between", "distance_m", "epoch", "timestamp", "int", "double", "string", "min", "max", "clock", "random_code"}
 GLOBALS = {"user", "org", "tax", "true", "false", "null", "event"}  # org, tax: contract 0010 §8
 CORE_HOOKS = {"stock.post_moves", "ledger.post_receivable", "tax.efaktur_queue"}
 # documents stock.post_moves has a built-in rule for; they may not declare stock: (contract 0021)
@@ -447,7 +447,9 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
                     rep.add("error", p, f"fields/{i}/relative_to", "unknown_field", f'"{f["relative_to"]}" is not a field')
                 for key in ("default", "compute", "depends_on"):
                     if key in f:
-                        check_expr(rep, p, f"fields/{i}/{key}", f[key], m, fields, visible)
+                        check_expr(rep, p, f"fields/{i}/{key}", f[key], m, with_parent(mname, m, fields, visible), visible)
+                        if isinstance(f[key], str) and re.search(r"\brandom_code\s*\(", f[key]):
+                            rep.add("error", p, f"fields/{i}/{key}", "flow_only_function", "`random_code()` gives a new value every time; use it in a flow's create or update, not in a field")
                 check_money(rep, p, mname, m, i, f, fields, visible)
             if m.get("title_field") and m["title_field"] not in fields:
                 rep.add("error", p, "title_field", "unknown_field", f'"{m["title_field"]}" is not a field{suggest(m["title_field"], fields)}')
@@ -658,6 +660,16 @@ def check_dashboard(rep, p, db, visible, optional, allmodels, app):
             check_expr(rep, p, f"{at}/filter", w["filter"], m, fields, visible)
 
 
+def with_parent(mname, m, fields, visible):
+    """fields plus the name parent for a child model's field expressions (contract 0069 §2): a pseudo-field of type
+    "parent" listing the visible documents with a table of the model, sorted. A real field named parent wins."""
+    if not m.get("is_child") or "parent" in fields:
+        return fields
+    parents = sorted(pn for pn, v in visible.items()
+                     if any(f.get("type") == "table" and f.get("of") == mname for f in v[2].get("fields", []) if isinstance(f, dict) and "name" in f))
+    return {**fields, "parent": {"type": "parent", "parents": parents}}
+
+
 def check_expr(rep, p, where, expr, m, fields, visible):
     if expr.count("(") != expr.count(")"):
         rep.add("error", p, where, "cel_syntax", f"unbalanced parentheses in `{expr}`")
@@ -673,6 +685,15 @@ def check_expr(rep, p, where, expr, m, fields, visible):
             rep.add("error", p, where, "unknown_field", f'`{head}` in `{expr}` is not a field{suggest(head, fields)}')
             continue
         f = fields.get(head)
+        if f and f.get("type") == "parent":
+            if not member:
+                continue
+            for pn in f["parents"]:
+                target = {x["name"] for x in visible[pn][2].get("fields", []) if isinstance(x, dict) and "name" in x} | SYSTEM_FIELDS
+                if member not in target:
+                    rep.add("error", p, where, "unknown_field", f'`parent.{member}`: {pn} has no field "{member}"{suggest(member, target)}')
+                    break
+            continue
         if member and f and f.get("type") == "link" and f.get("to") in visible:
             target = {x["name"] for x in visible[f["to"]][2].get("fields", [])} | SYSTEM_FIELDS
             if member not in target:
@@ -3053,6 +3074,10 @@ def pystr_opt(v):
     return v if isinstance(v, str) else repr(v)
 
 
+# field types a counter's checkout slot may show (contract 0069 §1)
+CHECKOUT_KINDS = ["link", "data", "select", "check", "int", "float", "currency"]
+
+
 def check_screen_counter(rep, p, b, visible, prints):
     cat = b.get("catalogue") if isinstance(b.get("catalogue"), dict) else None
     cat_name = None
@@ -3082,11 +3107,27 @@ def check_screen_counter(rep, p, b, visible, prints):
             slot_field(rep, p, "counter/document/line/qty", ln, lf, line.get("qty"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/document/line/price", ln, lf, line.get("price"), NUMERIC_KINDS)
             slot_field(rep, p, "counter/document/line/note", ln, lf, line.get("note"))
+            slot_field(rep, p, "counter/document/line/amount", ln, lf, line.get("amount"), NUMERIC_KINDS)
+            fl = slot_field(rep, p, "counter/document/line/flag", ln, lf, line.get("flag"), ["check"])
+            if fl is not None and (fl.get("compute") is not None or fl.get("read_only") is True):
+                rep.add("error", p, "counter/document/line/flag", "screen_slot_type", f'"{line.get("flag")}" is computed or read-only; the cashier cannot switch it')
         slot_field(rep, p, "counter/document/total", dn, df, doc.get("total"), NUMERIC_KINDS)
         slot_field(rep, p, "counter/document/change", dn, df, doc.get("change"), NUMERIC_KINDS)
         for i, x in enumerate(doc.get("summary") if isinstance(doc.get("summary"), list) else []):
             slot_field(rep, p, f"counter/document/summary/{i}", dn, df, x, NUMERIC_KINDS)
         slot_set(rep, p, "counter/document/set", dn, df, doc.get("set"))
+        for i, x in enumerate(doc.get("checkout") if isinstance(doc.get("checkout"), list) else []):
+            w = f"counter/document/checkout/{i}"
+            fx = x.get("field") if isinstance(x, dict) else x
+            if isinstance(x, dict):
+                w = f"{w}/field"
+            cf_ = slot_field(rep, p, w, dn, df, fx, CHECKOUT_KINDS)
+            if cf_ is not None and (cf_.get("compute") is not None or cf_.get("read_only") is True):
+                rep.add("error", p, w, "screen_slot_type", f'"{fx}" is computed or read-only; the cashier cannot fill it')
+            if isinstance(x, dict) and "filter" in x:
+                if cf_ is not None and cf_.get("type") != "link":
+                    rep.add("error", p, f"counter/document/checkout/{i}/filter", "screen_slot_type", f'"{fx}" is not a link; only a link\'s picker takes a filter')
+                parens(rep, p, f"counter/document/checkout/{i}/filter", x.get("filter"))
         if isinstance(b.get("customer"), dict):
             slot_field(rep, p, "counter/customer/field", dn, df, b["customer"].get("field"))
         if isinstance(b.get("print"), str):

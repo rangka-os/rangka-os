@@ -113,3 +113,45 @@ test("compute: a date that cannot be computed yet stays empty, not 0", () => {
   assert.strictEqual(r.total, 6);
   assert.strictEqual(E.compute("booking", { start_date: "2026-11-20", days: 3 }).end_date, "2026-11-23");
 });
+
+test("shared CEL fixture: engine.js agrees with the kernel (fixtures/cel-parity.json, cel_parity_test.go)", () => {
+  const E = load({}).create({ models: {}, dashboards: {}, installed: [] }, () => null);
+  const fx = JSON.parse(fs.readFileSync(path.join(__dirname, "fixtures", "cel-parity.json"), "utf8"));
+  assert.ok(fx.cases.length > 10);
+  for (const c of fx.cases) {
+    const got = E.evaluate(c.expr, (n) => c.vars[n]);
+    if (typeof c.want === "number") assert.strictEqual(Number(got), c.want, c.expr);
+    else assert.strictEqual(got, c.want, c.expr);
+  }
+});
+
+test("compute: a child row reads its document as parent (contract 0069 §2), a link by name", () => {
+  const meta = { today: "2026-11-19", installed: [], dashboards: {}, models: {
+    outlet: { name: "outlet", fields: [{ name: "code", type: "data" }] },
+    item: { name: "item", fields: [{ name: "rate", type: "currency" }, { name: "promo_outlet", type: "data" }, { name: "promo_pct", type: "float" }] },
+    sale: { name: "sale", fields: [{ name: "outlet", type: "link", to: "outlet" }, { name: "items", type: "table", of: "sale_line" },
+      { name: "total", type: "currency", compute: "items.map(l, l.amount).sum()" }] },
+    sale_line: { name: "sale_line", is_child: true, fields: [{ name: "item", type: "link", to: "item" }, { name: "qty", type: "float" },
+      { name: "promo", type: "currency", compute: "item.promo_outlet == '' || item.promo_outlet == parent.outlet ? round(qty * item.rate * item.promo_pct / 100) : 0" },
+      { name: "code", type: "data", compute: "parent.outlet.code" },
+      { name: "amount", type: "currency", compute: "round(qty * item.rate) - promo" }] } } };
+  const recs = { outlet: { RIAU: { name: "RIAU", code: "RIA" }, DAGO: { name: "DAGO", code: "DGO" } },
+    item: { KOPI: { name: "KOPI", rate: 18000, promo_outlet: "RIAU", promo_pct: 20 } } };
+  const E = load({}).create(meta, (m, n) => (recs[m] || {})[n] || null);
+  const riau = E.compute("sale", { outlet: "RIAU", items: [{ item: "KOPI", qty: 2 }] });
+  assert.strictEqual(riau.items[0].promo, 7200);
+  assert.strictEqual(riau.items[0].code, "RIA");
+  assert.strictEqual(riau.total, 28800);
+  const dago = E.compute("sale", { outlet: "DAGO", items: [{ item: "KOPI", qty: 2 }] });
+  assert.strictEqual(dago.items[0].promo, 0);
+  assert.strictEqual(dago.total, 36000);
+  // without a document (a row computed alone) parent is not a name: the compute falls back to zero
+  assert.strictEqual(E.compute("sale_line", { item: "KOPI", qty: 1 }).promo, 0);
+});
+
+test("clock() is the device's wall clock as HH:MM, or META.clock", () => {
+  const E = load({}).create({ models: {}, dashboards: {}, installed: [], clock: () => "14:05" }, () => null);
+  assert.strictEqual(E.evaluate("clock() >= '14:00' && clock() < '16:00'", () => undefined), true);
+  const E2 = load({}).create({ models: {}, dashboards: {}, installed: [] }, () => null);
+  assert.match(E2.evaluate("clock()", () => undefined), /^\d\d:\d\d$/);
+});

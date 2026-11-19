@@ -74,7 +74,7 @@ WS1–WS3 merged) and rangka-apps `main` at cd7c624 (`modules/pos`, app `kasir`)
 | **Back office on the device** | | | | | |
 | 30 | Produk & stok: list with "bisa dibuat", price per order type, modifiers, recipe | `item`, `price_list`, `recipe` forms | Part | Price per order type (price list per channel), recipe-based availability | M |
 | 31 | Pelanggan & poin: segments, member tiers, points, redeem | `contacts` only | Gap | Loyalty module | M |
-| 32 | Promo: time-boxed discounts, bundles, buy-2-get-1, member discount, scheduled | Line % and bill discount by hand | Gap | Promo module evaluated by the model (CEL), not the screen | M, K? |
+| 32 | Promo: time-boxed discounts, bundles, buy-2-get-1, member discount, scheduled | Line % and bill discount by hand; contract 0069 adds the counter `checkout` fields (bill promo, voucher code, customer), `line.flag` (free gift) and `line.amount` (promo per line) for the rangka-apps `promotions` module | Partial | Item promos, bill promos, codes and gifts in rangka-apps `promotions` (rangka-apps#103); member discount with loyalty, bundles later | M |
 | 33 | Stok opname (HP): system vs counted, scan, save & next | `stock` count models; `roll` type designed (WS7) | Part | WS7 `roll` renderer | R |
 | 34 | Laporan (tablet) and owner report (phone, all outlets) | Dashboards (`kasir_ringkas`), list aggregates | Part | Hour histogram, by order type; phone dashboard cards exist | M |
 | **Devices and offline** | | | | | |

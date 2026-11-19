@@ -301,6 +301,9 @@ func (v *validator) slotSet(p, where string, m *Model, fields map[string]map[str
 	}
 }
 
+// checkoutKinds are the field types a counter's checkout slot may show (contract 0069 §1).
+var checkoutKinds = []string{"link", "data", "select", "check", "int", "float", "currency"}
+
 // screenCounter checks the slots of a counter screen (contract 0030 §2).
 func (v *validator) screenCounter(p string, b map[string]any, visible map[string]vis) {
 	cat := asMap(b["catalogue"])
@@ -339,6 +342,10 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			v.slotField(p, "counter/document/line/qty", lm, lf, line["qty"], numericKinds)
 			v.slotField(p, "counter/document/line/price", lm, lf, line["price"], numericKinds)
 			v.slotField(p, "counter/document/line/note", lm, lf, line["note"], nil)
+			v.slotField(p, "counter/document/line/amount", lm, lf, line["amount"], numericKinds)
+			if fl := v.slotField(p, "counter/document/line/flag", lm, lf, line["flag"], []string{"check"}); fl != nil && (fl["compute"] != nil || fl["read_only"] == true) {
+				v.rep.extra("error", p, "counter/document/line/flag", "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; the cashier cannot switch it`, pyStr(line["flag"])))
+			}
 		}
 		v.slotField(p, "counter/document/total", docModel, docFields, doc["total"], numericKinds)
 		v.slotField(p, "counter/document/change", docModel, docFields, doc["change"], numericKinds)
@@ -346,6 +353,24 @@ func (v *validator) screenCounter(p string, b map[string]any, visible map[string
 			v.slotField(p, fmt.Sprintf("counter/document/summary/%d", i), docModel, docFields, x, numericKinds)
 		}
 		v.slotSet(p, "counter/document/set", docModel, docFields, doc["set"])
+		for i, x := range asList(doc["checkout"]) {
+			where := fmt.Sprintf("counter/document/checkout/%d", i)
+			fx, obj := x, asMap(x)
+			if obj != nil {
+				fx, where = obj["field"], where+"/field"
+			}
+			f := v.slotField(p, where, docModel, docFields, fx, checkoutKinds)
+			if f != nil && (f["compute"] != nil || f["read_only"] == true) {
+				v.rep.extra("error", p, where, "screen_slot_type", fmt.Sprintf(`"%s" is computed or read-only; the cashier cannot fill it`, pyStr(fx)))
+			}
+			if _, has := obj["filter"]; obj != nil && has {
+				fw := fmt.Sprintf("counter/document/checkout/%d/filter", i)
+				if f != nil && str(f, "type") != "link" {
+					v.rep.extra("error", p, fw, "screen_slot_type", fmt.Sprintf(`"%s" is not a link; only a link's picker takes a filter`, pyStr(fx)))
+				}
+				v.parens(p, fw, obj["filter"])
+			}
+		}
 		if c := asMap(b["customer"]); c != nil {
 			v.slotField(p, "counter/customer/field", docModel, docFields, c["field"], nil)
 		}

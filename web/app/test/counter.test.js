@@ -102,3 +102,34 @@ test("sumBalances: qty summed per item, rows without an item skipped", () => {
   const av = { item: "item", qty: "qty" };
   assert.deepStrictEqual(plain(A.sumBalances([{ item: "A", qty: 2 }, { item: "A", qty: "1.5" }, { item: "B", qty: 0 }, { qty: 9 }], av)), { A: 3.5, B: 0 });
 });
+
+test("checkout slot (0069 §1): names and {field, filter}; saleBody sends filled values, drops empty and unticked", () => {
+  const slots = { document: { model: "pos_sale", lines: "items", line: { item: "item", qty: "qty", flag: "is_gift" },
+    checkout: ["customer", { field: "promotion", filter: "kind == 'bill_pct'" }, "promo_code", "member"] } };
+  assert.deepStrictEqual(plain(A.checkoutSlots(slots.document)), [{ field: "customer" }, { field: "promotion", filter: "kind == 'bill_pct'" }, { field: "promo_code" }, { field: "member" }]);
+  let c = A.cartAdd([], kopi);
+  c = A.cartAdd(c, roti);
+  c = A.cartSet(c, 1, { flag: true });
+  const body = A.saleBody(slots, c, null, null, { date: "2026-11-19" }, "", { customer: "CUST-1", promotion: "PRM-0002", promo_code: "", member: false });
+  assert.deepStrictEqual(plain(body), { date: "2026-11-19", customer: "CUST-1", promotion: "PRM-0002",
+    items: [{ item: "MNU-1", qty: 1 }, { item: "MNU-2", qty: 1, is_gift: true }] });
+  // without a checkout slot the body is as before
+  const old = A.saleBody({ document: { lines: "items", line: { item: "item", qty: "qty" } } }, c, null, null, {}, "", { customer: "X" });
+  assert.deepStrictEqual(plain(old), { items: [{ item: "MNU-1", qty: 1 }, { item: "MNU-2", qty: 1 }] });
+});
+
+test("cartAdd never merges into a flagged line (a free gift stays its own line)", () => {
+  let c = A.cartSet(A.cartAdd([], roti), 0, { flag: true });
+  c = A.cartAdd(c, roti);
+  assert.deepStrictEqual(plain(c).map((l) => [l.item, l.qty, !!l.flag]), [["MNU-2", 1, true], ["MNU-2", 1, false]]);
+});
+
+test("lineAmount: the model's amount of a line from the computed record, null without the slot or the row", () => {
+  const doc = { lines: "items", line: { item: "item", qty: "qty", amount: "amount" } };
+  const rec = { items: [{ amount: 28800 }, { amount: 0 }] };
+  assert.strictEqual(A.lineAmount(doc, rec, 0), 28800);
+  assert.strictEqual(A.lineAmount(doc, rec, 1), 0);
+  assert.strictEqual(A.lineAmount(doc, rec, 2), null);
+  assert.strictEqual(A.lineAmount({ lines: "items", line: {} }, rec, 0), null);
+  assert.strictEqual(A.lineAmount(doc, null, 0), null);
+});

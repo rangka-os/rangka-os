@@ -38,8 +38,14 @@ loads the linked record), list literals. Functions: `today()` (ISO date string, 
 `truncate(s, n)`, `s.contains(t)`, `add_months(date, n)` (a `YYYY-MM-DD` date n calendar months later, the day clamped to the end of
 the target month: `2026-01-31` + 1 = `2026-02-28`; add to an anchor, never to the previous result) and
 `days_between(a, b)` (whole days from a to b, negative when b is earlier, 0 when either is empty; contract 0031), `epoch(t)` (a datetime or `YYYY-MM-DD` date as whole Unix seconds, null when empty), `timestamp(n)` (Unix seconds as an RFC 3339 UTC datetime, null when empty), for poll cursors (contract 0002), and
-`distance_m(a, b)` (metres between two `geo` positions, `1e9` when either has none, so a radius check fails without a position; contract 0030 §4). Globals: `user` (`user.name`, `user.roles`), `org` and `tax` (the
-current org's PKP status and PPN figures, contract 0010 §8), `event` (flows). Dates are ISO
+`distance_m(a, b)` (metres between two `geo` positions, `1e9` when either has none, so a radius check fails without a position; contract 0030 §4), `int(x)` (truncates toward zero), `min(a, b, ...)` and
+`max(a, b, ...)` (also over one list), `clock()` (the wall clock of `now()` in the site timezone as `HH:MM`, for time
+windows such as a happy hour; a compute that calls it is a clock compute; contract 0069 §3), `random_code(n)` (n
+characters, 1 to 32, of the pairing-code alphabet from a secure random source; flows only, e.g. single-use coupon
+codes; contract 0069 §3). Globals: `user`
+(`user.name`, `user.roles`), `org` and `tax` (the
+current org's PKP status and PPN figures, contract 0010 §8), `event` (flows), and in a child model's field
+expressions `parent` (the document of the row: `parent.outlet`, `parent.outlet.code`; tables left out; contract 0069 §2). Dates are ISO
 strings and compare as strings. Missing values are `''` for data/date/link, `0` for numbers, `false` for check.
 
 ## Records and lifecycle

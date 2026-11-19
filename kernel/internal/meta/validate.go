@@ -422,7 +422,10 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 		}
 		for _, key := range []string{"default", "compute", "depends_on"} {
 			if x, ok := f[key]; ok {
-				v.expr(p, fmt.Sprintf("fields/%d/%s", i, key), x, fields, visible)
+				v.expr(p, fmt.Sprintf("fields/%d/%s", i, key), x, withParent(m, fields, visible), visible)
+				if e, ok := x.(string); ok && randomCodeRe.MatchString(e) {
+					v.rep.add("error", p, fmt.Sprintf("fields/%d/%s", i, key), "flow_only_function", "`random_code()` gives a new value every time; use it in a flow's create or update, not in a field")
+				}
 			}
 		}
 		v.money(p, m, i, f, fields, visible)
@@ -591,6 +594,44 @@ func (v *validator) expr(p, where string, x any, fields map[string]map[string]an
 	v.exprTo(false, p, where, x, fields, visible)
 }
 
+// randomCodeRe finds a call of random_code() (contract 0069 §3: flows only).
+var randomCodeRe = regexp.MustCompile(`\brandom_code\s*\(`)
+
+// withParent is fields plus the name parent for a child model's field expressions (contract 0069 §2): a pseudo-field
+// of type "parent" listing the visible documents with a table of the model, sorted. A real field named parent wins.
+func withParent(m *Model, fields map[string]map[string]any, visible map[string]vis) map[string]map[string]any {
+	if !boolean(m.Raw, "is_child") {
+		return fields
+	}
+	if _, has := fields["parent"]; has {
+		return fields
+	}
+	var parents []any
+	for _, pn := range visibleNames(visible) {
+		for _, f := range fieldMap(visible[pn].m) {
+			if str(f, "type") == "table" && str(f, "of") == m.Name {
+				parents = append(parents, pn)
+				break
+			}
+		}
+	}
+	out := make(map[string]map[string]any, len(fields)+1)
+	for k, f := range fields {
+		out[k] = f
+	}
+	out["parent"] = map[string]any{"type": "parent", "parents": parents}
+	return out
+}
+
+func visibleNames(visible map[string]vis) []string {
+	out := make([]string, 0, len(visible))
+	for k := range visible {
+		out = append(out, k)
+	}
+	sort.Strings(out)
+	return out
+}
+
 func (v *validator) exprTo(extra bool, p, where string, x any, fields map[string]map[string]any, visible map[string]vis) {
 	add := v.rep.add
 	if extra {
@@ -618,6 +659,20 @@ func (v *validator) exprTo(extra bool, p, where string, x any, fields map[string
 		}
 		if !isField && !SystemFields[r.Head] {
 			add("error", p, where, "unknown_field", fmt.Sprintf("`%s` in `%s` is not a field%s", r.Head, e, suggest(r.Head, keys(fields))))
+			continue
+		}
+		if f != nil && str(f, "type") == "parent" {
+			if r.Member == "" {
+				continue
+			}
+			for _, pv := range asList(f["parents"]) {
+				pn := pyStr(pv)
+				target := union(fieldNames(visible[pn].m), SystemFields)
+				if !target[r.Member] {
+					add("error", p, where, "unknown_field", fmt.Sprintf("`parent.%s`: %s has no field \"%s\"%s", r.Member, pn, r.Member, suggest(r.Member, boolKeys(target))))
+					break
+				}
+			}
 			continue
 		}
 		if r.Member != "" && f != nil && str(f, "type") == "link" {

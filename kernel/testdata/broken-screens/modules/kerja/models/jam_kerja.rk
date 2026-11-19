@@ -11,6 +11,8 @@ fields:
   - {name: rate, type: currency, label: {id: Tarif}}
   - {name: total, type: currency, label: {id: Total}, compute: hours * rate}
   - {name: breaks, type: table, of: jam_istirahat, label: {id: Istirahat}}
+  - {name: orphan, type: data, label: {id: Yatim}, compute: parent.staff}
+  - {name: ticket, type: data, label: {id: Tiket}, default: random_code(6)}
 permissions:
   - {role: staf, read: true, create: true, write: true, submit: true}
   - {role: mandor, read: true, write: true, submit: true}

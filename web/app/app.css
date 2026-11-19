@@ -610,6 +610,22 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-counter-qty button { width: 32px; height: 32px; border: 1px solid var(--line-strong); border-radius: 8px; background: var(--surface); color: var(--ink); font-size: 17px; cursor: pointer; }
 .ap-counter-qty b { min-width: 20px; text-align: center; font-variant-numeric: tabular-nums; }
 .ap-counter-amt { min-width: 76px; text-align: right; font-variant-numeric: tabular-nums; }
+/* contract 0069: the model's line amount (a promo, a free gift) under the plain one struck through; the line flag
+   switch; the checkout fields folded to one line above the breakdown */
+.ap-counter-amt.promo { display: grid; justify-items: end; color: var(--ink); font-weight: 600; }
+.ap-counter-amt.promo s { color: var(--muted); font-size: 12px; font-weight: 400; }
+.ap-counter-flag { display: inline-flex; align-items: center; gap: 4px; min-height: 32px; margin-top: 4px; padding: 0 10px; border: 1px solid var(--line-strong); border-radius: 999px; background: var(--surface); color: var(--ink-2); font: 500 12px/16px var(--font-sans); cursor: pointer; }
+.ap-counter-flag .rk-icon { width: 14px; height: 14px; }
+.ap-counter-flag[aria-pressed="true"] { border-color: var(--ink); color: var(--ink); }
+.ap-counter-foot { grid-template-columns: minmax(0, 1fr); }
+.ap-counter-body { overflow-y: auto; scrollbar-gutter: stable; }
+.ap-counter-checkout { min-width: 0; border: 1px solid var(--line); border-radius: 12px; }
+.ap-counter-ck-h { display: flex; align-items: center; gap: 8px; width: 100%; min-height: 44px; padding: 0 12px; border: 0; background: none; color: var(--ink); text-align: left; font: 500 14px/18px var(--font-sans); cursor: pointer; }
+.ap-counter-ck-h > span { flex: 1 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-counter-ck-h > b { display: grid; place-items: center; min-width: 20px; height: 20px; border-radius: 10px; background: var(--ink); color: var(--surface); font-size: 12px; }
+.ap-counter-ck-h .rk-icon { width: 17px; height: 17px; color: var(--ink-2); }
+.ap-counter-checkout.open .ap-counter-ck-h > .rk-icon:last-child { transform: rotate(180deg); }
+.ap-counter-ck-f { padding: 0 12px 12px; }
 .ap-counter-sum { display: grid; gap: 4px; margin: 0; padding: 10px 0 0; border-top: 1px dashed var(--line-strong); }
 .ap-counter-sum > div { display: flex; justify-content: space-between; gap: 12px; color: var(--ink-2); font-size: 14px; }
 .ap-counter-sum dt, .ap-counter-sum dd { margin: 0; }

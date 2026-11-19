@@ -41,6 +41,11 @@ func (s *Server) Status(ctx context.Context, org string) map[string]any {
 		if len(s.Sched.Bad) > 0 {
 			sc["errors"] = s.Sched.Bad
 		}
+		if s.Sched.Q != nil && s.Sched.Q.DB != nil {
+			if p, perr := jobs.ReadPause(ctx, s.Sched.Q.DB, s.Sched.Now()); perr == nil {
+				sc["pause"] = p.JSON()
+			}
+		}
 		caps["scheduler"] = sc
 	}
 	transports := meta.StrList(reg.SystemConfig("realtime.transports"))

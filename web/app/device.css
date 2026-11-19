@@ -56,6 +56,10 @@ html.ap-dev-open, html.ap-dev-open body { overflow: hidden; }
 
 /* ---- the sync pill: top right, above the top bar and the device screens; its queue drawer too ---- */
 #ap-sync-root { position: relative; z-index: 1310; }
+/* on a paired device the pill is the one connection status: the shell rail's and the counter's own Online/Offline chips
+ * (navigator.onLine) would say something else while the queue waits, so they step aside; the counter's offline banner
+ * stays (it tells the cashier what still works) */
+html.ap-sync-on .ap-workshell > .ap-wfoot .ap-wsync, html.ap-sync-on .ap-wsync, html.ap-sync-on .ap-counter .ap-counter-sync, html.ap-sync-on .ap-counter-sync { display: none; }
 #ap-device-root { position: relative; z-index: 1300; }
 .ap-sync-pill { position: fixed; z-index: 70; top: calc(env(safe-area-inset-top, 0px) + 10px); right: calc(env(safe-area-inset-right, 0px) + 16px);
   display: inline-flex; align-items: center; gap: 6px; max-width: calc(100vw - 96px); height: 28px; padding: 0 12px 0 10px; border: 0;

@@ -37,7 +37,7 @@ func (s *Server) Status(ctx context.Context, org string) map[string]any {
 		caps["queue"] = map[string]any{"driver": sysStr(reg, "queue.driver", "postgres"), "ok": qerr == nil && s.Queue.Running(), "workers": s.Queue.Workers, "counts": counts}
 	}
 	if s.Sched != nil {
-		sc := map[string]any{"driver": sysStr(reg, "scheduler.driver", "internal"), "ok": len(s.Sched.Bad) == 0, "timezone": s.Sched.Location(org).String(), "schedules": s.Sched.Status(ctx, org)}
+		sc := map[string]any{"driver": sysStr(reg, "scheduler.driver", "internal"), "ok": len(s.Sched.Bad) == 0, "timezone": s.Sched.Loc.String(), "schedules": s.Sched.Status(ctx, org)}
 		if len(s.Sched.Bad) > 0 {
 			sc["errors"] = s.Sched.Bad
 		}

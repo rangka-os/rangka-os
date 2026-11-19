@@ -10,11 +10,15 @@ import (
 )
 
 // On a host with two businesses, the scheduled flow (crm morning_follow_up, 08:00 Jakarta on weekdays) is enqueued
-// and run once for each of them, not only for the default org (rangka-os#263 slice a).
+// and run once for each of them, not only for the default org, and never for a sandbox (rangka-os#263 slice a).
 func TestScheduledFlowRunsForEveryOrg(t *testing.T) {
 	e := newEnv(t, false, nil)
 	ctx := pg.WithOrg(context.Background(), "")
 	if err := auth.EnsureOrg(ctx, e.s.DB, "toko-dua", "Toko Dua"); err != nil {
+		t.Fatal(err)
+	}
+	// a ruang coba gets no scheduled runs: they would send real mail and notices on a timer (contract 0052 §2)
+	if _, err := e.s.DB.Exec(ctx, "insert into rk_orgs (id, name, code, sandbox) values ('ruang-coba', 'Ruang coba', 'RCB', true)"); err != nil {
 		t.Fatal(err)
 	}
 	loc, _ := time.LoadLocation("Asia/Jakarta")
@@ -50,6 +54,9 @@ func TestScheduledFlowRunsForEveryOrg(t *testing.T) {
 		if got := states[org]; len(got) != 1 || got[0] != "completed" {
 			t.Fatalf("org %s: scheduled flow jobs %v, want one completed (all: %v)", org, got, states)
 		}
+	}
+	if _, ok := states["ruang-coba"]; ok {
+		t.Fatalf("the sandbox got a scheduled run: %v", states)
 	}
 	if st := e.s.Sched.Status(ctx, "toko-dua"); len(st) != 1 || st[0]["last_status"] != "completed" {
 		t.Fatalf("status of toko-dua = %v", st)

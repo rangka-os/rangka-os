@@ -209,27 +209,30 @@ org (`Actor.Org`):
 - Imports' `cel:` mappings (contract 0012) see only `row`, not these globals.
 
 ### 9. Scheduled flows per org (amended 19 Nov 2026, rangka-os#263 slice a)
-- The scheduler runs every installed flow with `schedule:` once per org listed in `rk_orgs`, sandboxes included
-  (contract 0052 runs the scheduler there as usual). The list is re-read about once a minute (in `rangka serve` and
-  in each `POST /_rangka/tick`), so a business created at run time gets its schedules without a metadata reload; an
-  org that appears later starts from that moment and never runs a slot from before it existed (the first read of a
+- The scheduler runs every installed flow with `schedule:` once per business org in `rk_orgs`, plus the default
+  org (`Cfg.Org`) always. Sandboxes (contract 0052) get no scheduled runs: their flows would send real mail and
+  notices on a timer, which 0052 §2 rules out. The list is re-read about once a minute (in `rangka serve` and in
+  `POST /_rangka/tick`), so a business created at run time gets its schedules without a metadata reload; an org
+  that appears later starts from that moment and never runs a slot from before it existed (the first read of a
   fresh request-only instance catches up `scheduler.catch_up_s`, as for the default org). A removed org loses
-  them. A failed read keeps the last list. Until the first read answers, only the default org (`Cfg.Org`) is
-  scheduled.
-- **Time zone.** An org's slots follow `timezone` in its own `orgs.<org>.config` in `config.rk`, else the
-  installation's `scheduler.timezone`, else UTC. The site-wide `config.timezone` is not read, so a site that never
-  set `scheduler.timezone` keeps its run times.
+  them. A failed read keeps the last list. Two ticks at once apply their lists in turn.
+- **Time zone.** Every org's slots follow the installation's `scheduler.timezone` (else UTC), as before. An org's
+  own `orgs.<org>.config.timezone` does not move them yet, because the flow's `today()` and `now()` read the
+  site's zone (`Engine.Location`), not the org's; per-org slots wait until the engine's clock is per org.
 - **Once per slot.** Each run is a `flow` job with unique key `flow:<org>:<flow>:<slot unix time>` (the slot in
-  absolute time), so several kernel instances, restarts and catch-up never enqueue an org's slot twice.
+  absolute time), so several kernel instances, restarts and catch-up never enqueue an org's slot twice. A
+  metadata reload starts the schedules from the last tick (at most an hour back), so a slot that came due between
+  that tick and the reload is not dropped.
 - **Isolation.** Each org's run is its own job under its own org (RLS, §4). A run that fails retries and
   dead-letters alone; an enqueue that fails for one org is logged and tried again on the next tick while the
   other orgs go on.
-- **Spread.** On a host with two or more orgs, each org's job for a slot is scheduled at a fixed offset after the
-  slot: a hash of the org id modulo `system.rk` `scheduler.stagger_s` (default 300 seconds), and always below the
-  schedule's own interval. The flow still sees the slot itself (`scheduled_at` in the job's arguments). How many
-  run at once stays bounded by `queue.workers` (or the tick budget in request-only mode). With one org there is no
-  offset.
-- `GET /system/status` lists the scheduler's schedules and time zone for the caller's org only.
+- **Spread.** With two or more orgs scheduled, each org's job for a slot is scheduled at a fixed offset after
+  the slot: a hash of the org id modulo `system.rk` `scheduler.stagger_s` (default 300 seconds, re-read on
+  reload), always below the schedule's own interval and before the end of the slot's day in `scheduler.timezone`,
+  because the flow reads `today()` when it runs. The job's arguments carry the slot as `scheduled_at`. How many
+  run at once stays bounded by `queue.workers` (or the tick budget in request-only mode). With one org there is
+  no offset.
+- `GET /system/status` lists the scheduler's schedules for the caller's org only.
 
 ## Consequences
 - The web app (S0) shows an org switcher from `/auth/me` `orgs` and calls `POST /auth/org`.
@@ -240,5 +243,5 @@ org (`Actor.Org`):
   wait for a later contract.
 - `config.rk`, including `orgs:`, is a site-level file: a change set that edits it (any org's settings) is
   approved by a site approver regardless of org. Per-org approval of org settings waits for a later contract.
-- Scheduled flows (`schedule:`) run for every org on the host (§9, amended 19 Nov 2026; until then only the
-  default org `Cfg.Org` got them). Connector poll triggers (`via: poll`) still run for the default org only.
+- Scheduled flows (`schedule:`) run for every business org on the host, not sandboxes (§9, amended 19 Nov 2026;
+  until then only the default org `Cfg.Org` got them). Connector poll triggers (`via: poll`) still run for the default org only.

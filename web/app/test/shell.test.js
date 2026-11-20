@@ -457,3 +457,24 @@ test("bootErrorText: a server error says the records are safe; a kernel refusal 
   assert.match(A.bootErrorText(null).body, /^Sistem sedang sibuk.*coba lagi/);
   assert.strictEqual(A.bootErrorText({ status: 403, message: "Akunmu tidak terdaftar di usaha ini" }).body, "Akunmu tidak terdaftar di usaha ini");
 });
+
+test("canSetUp and sideNav: Mulai di sini is the owner's checklist; staff do not get the entry", () => {
+  const ob = { steps: [{ stage: "a", state: "done" }, { stage: "b", state: "open" }], hidden: false };
+  const who = (roles) => ({ ...META, user: { roles } });
+  assert.strictEqual(A.canSetUp(who(["owner"])), true);
+  assert.strictEqual(A.canSetUp(META), true, "an older kernel without roles: as before");
+  assert.strictEqual(A.canSetUp(who([])), true);
+  assert.strictEqual(A.canSetUp(who(["outlet_staff"])), false);
+  const pins = (m) => plain(A.sideNav(m, { approvals: true }, {}, ob)).pinned.map((i) => i.id);
+  assert.deepStrictEqual(pins(who(["owner"])).slice(0, 2), ["home", "mulai"]);
+  assert.ok(!pins(who(["outlet_staff"])).includes("mulai"));
+  assert.ok(pins(who(["outlet_staff"])).includes("approvals"), "Persetujuan stays in the sidebar (requests they made)");
+});
+
+test("tabLinks: Setujui only for a person who may approve", () => {
+  const tabs = [{ to: "dashboard:sales_overview" }, { to: "page:approvals" }, { to: "page:search" }];
+  const r = { kind: "dash", dash: "sales_overview" };
+  assert.deepStrictEqual(plain(A.tabLinks(META, tabs, r, "#/d/sales_overview")).map((t) => t.label), ["Ringkasan penjualan", "Setujui", "Cari"]);
+  assert.deepStrictEqual(plain(A.tabLinks(META, tabs, r, "#/d/sales_overview", true)).map((t) => t.label), ["Ringkasan penjualan", "Setujui", "Cari"]);
+  assert.deepStrictEqual(plain(A.tabLinks(META, tabs, r, "#/d/sales_overview", false)).map((t) => t.label), ["Ringkasan penjualan", "Cari"]);
+});

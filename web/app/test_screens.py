@@ -827,6 +827,91 @@ def test_work_shell_welcome_tour(browser, ctx):
     c.close()
 
 
+def pair_device(p):
+    """Pair this browser as an offline device (deviceoutbox.js meta "device"): the sync pill shows and html gets
+    ap-sync-on, as on a phone paired from Perangkat."""
+    p.evaluate("""() => window.RangkaApp.deviceOutbox.setDevice({device_id: "dev-uji-1", name: "HP uji", outlet: null})""")
+    p.wait_for_selector("html.ap-sync-on .ap-sync-pill", timeout=5000)
+
+
+def test_work_shell_tour_clears_sync_pill(browser, ctx):
+    """Audit F9 (2026-11-19): on a paired phone the sync pill floats above the tour (device.css z-index 1310). When
+    the lit place is in the bottom bar the tour's sheet moves to the top; it must start below the pill, so the step's
+    title and text are not covered, and its buttons stay on screen. The pill stays visible (the sync state)."""
+    for size, vp in (("hp", PHONE375), ("tablet", TABLET)):
+        c, p = page_for(browser, ctx, STAF, vp, tours=True)
+        put = lambda state: c.request.put("/api/v1/onboarding/tours/kenalan", data=json.dumps({"state": state}), headers={"Content-Type": "application/json"})
+        assert put("seen").ok
+        p.goto("/app/")
+        p.wait_for_selector(".ap-workshell")
+        pair_device(p)
+        assert put("").ok
+        p.reload()
+        p.wait_for_selector(".ap-workshell")
+        p.wait_for_selector("html.ap-sync-on .ap-sync-pill")
+        card = p.locator(".ap-tur-card")
+        card.wait_for(timeout=10000)
+        n = int(re.search(r"dari (\d+)", card.locator(".ap-tur-n").inner_text()).group(1))
+        checked = 0
+        for i in range(1, n + 1):
+            if i > 1:
+                p.wait_for_function(f"() => /Langkah {i} dari/.test((document.querySelector('.ap-tur-n') || {{}}).textContent || '')", timeout=5000)
+            p.wait_for_timeout(450)  # the light and the card settle
+            title = card.locator(".ap-tur-title").inner_text().strip()
+            pill, box = p.locator(".ap-sync-pill").bounding_box(), card.bounding_box()
+            assert pill and pill["height"] > 0, f"{size} {title}: the sync pill stays visible during the tour"
+            for part in (".ap-tur-n", ".ap-tur-title", ".ap-tur-body", ".ap-tur-acts"):
+                b = card.locator(part).bounding_box()
+                over = b["y"] < pill["y"] + pill["height"] and b["y"] + b["height"] > pill["y"] and b["x"] < pill["x"] + pill["width"] and b["x"] + b["width"] > pill["x"]
+                assert not over, f"{size} {title}: the pill {pill} covers {part} {b}"
+            for btn in card.locator(".ap-tur-acts button").all():
+                b = btn.bounding_box()
+                assert b and b["y"] >= 0 and b["y"] + b["height"] <= vp["height"], f"{size} {title}: a button is off screen {b}"
+            if "top" in (card.get_attribute("class") or "").split():
+                assert "under-pill" in card.get_attribute("class").split(), f"{size} {title}: the top sheet keeps below the pill"
+                assert box["y"] >= pill["y"] + pill["height"], f"{size} {title}: the sheet starts below the pill ({box} vs {pill})"
+                hole = p.locator(".ap-tur-hole").bounding_box()
+                assert box["y"] + box["height"] <= hole["y"], f"{size} {title}: the sheet does not cover the lit place"
+                checked += 1
+            if ctx["shots"] and i > 1:  # the viewport as the person sees it (a full-page shot re-lays the fixed dim)
+                p.screenshot(path=os.path.join(ctx["shots"], f"tur-pill-{size}-{i}-" + title.lower().replace(" ", "-") + ".png"))
+            card.locator("[data-tur-primary]").click()
+        p.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+        if size == "hp":
+            assert checked >= 1, "a step lit the bottom bar with the sheet at the top"
+        c.close()
+
+
+def test_staff_without_setup_or_approvals(browser, ctx):
+    """Owner-only blocks (card t_0ebcf404): staff who do not set the business up get no "Mulai di sini" entry, and a
+    person who approves nothing gets no "Setujui" tab. Mulai di sini answers with steps here (mocked) so the entry
+    would show; the owner keeps it."""
+    ob = json.dumps({"process": None, "current": "isi", "hidden": False, "locks": {}, "steps": [
+        {"stage": "catat", "label": {"id": "Catat harian"}, "model": "catatan_harian", "state": "done", "needs": [], "answers": []},
+        {"stage": "isi", "label": {"id": "Isi jam kerja"}, "model": "jam_kerja", "state": "open", "needs": [], "answers": []}]})
+    for who, vp, size in ((OWNER, TABLET, "tablet"), (MANDOR, TABLET, "tablet"), (MANDOR, PHONE375, "hp"), (KASIR, PHONE375, "hp"), (KASIR, TABLET, "tablet")):
+        c, p = page_for(browser, ctx, who, vp)
+        p.route(re.compile(r".*/api/v1/onboarding$"), lambda r: r.fulfill(status=200, content_type="application/json", body=ob) if r.request.method == "GET" else r.continue_())
+        p.goto("/app/")
+        p.wait_for_selector(".ap-workshell, .ap-shell .rk-shell-content")
+        p.wait_for_timeout(600)
+        name = who[0].split("@")[0]
+        shot(ctx, p, f"beranda-{name}-{size}")
+        if p.locator(".ap-menu-btn").count() and p.locator(".ap-menu-btn").first.is_visible():
+            p.locator(".ap-menu-btn").first.click()
+            p.wait_for_selector(".ap-nav-open")
+            p.wait_for_timeout(300)
+            shot(ctx, p, f"beranda-{name}-{size}-menu")
+        mulai = p.locator('[data-nav="mulai"]').count()
+        tabs = p.locator(".ap-tabbar a span, .ap-tabbar button span").all_inner_texts()
+        if who == OWNER:
+            assert mulai == 1, "the owner keeps Mulai di sini"
+        else:
+            assert mulai == 0, f"{name}: no Mulai di sini for staff"
+            assert "Setujui" not in tabs, f"{name}: approves nothing, no Setujui tab ({tabs})"
+        c.close()
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep", action="store_true")

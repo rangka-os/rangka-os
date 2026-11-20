@@ -278,6 +278,48 @@ test("tur.js: the card goes beside a narrow element, below a wide one", () => {
   assert.strictEqual(place({ top: 700, left: 300, right: 1300, bottom: 860, width: 1000, height: 160 }, 340, 180).side, "top");
 });
 
+test("tur.js: on a paired device the card keeps below the sync pill (audit F9)", () => {
+  const pill = { getBoundingClientRect: () => ({ top: 52, bottom: 80, width: 189, height: 28 }) };
+  let on = true;
+  const doc = { documentElement: { classList: { contains: (c) => on && c === "ap-sync-on" } }, querySelector: (q) => (q === ".ap-sync-pill" ? pill : null) };
+  const w = { React: { createElement() {}, useState() {}, useEffect() {}, useRef() {}, useLayoutEffect() {} }, Rangka: {}, innerWidth: 700, innerHeight: 900, document: doc };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "tur.js"), "utf8"), { window: w }, { filename: "tur.js" });
+  const T = w.RangkaApp.tour;
+  assert.strictEqual(T.pillReserve(), 88, "the pill's bottom plus a gap");
+  on = false;
+  assert.strictEqual(T.pillReserve(), 0, "no pill reserve on an unpaired device");
+  // a wide element near the top: the card would sit at 12px, under the pill; with the reserve it starts below it
+  const r = { top: 20, left: 40, right: 660, bottom: 60, width: 620, height: 40 };
+  assert.ok(T.place(r, 340, 180, 88).top >= 88);
+  assert.strictEqual(T.place({ top: 120, left: 300, right: 660, bottom: 340, width: 360, height: 220 }, 340, 180).side, "bottom", "no reserve: as before");
+});
+
+test("canApprove: the owner always, staff only when they decide something", () => {
+  const owner = person(["owner"], { models: {} });
+  assert.strictEqual(A.canApprove(owner, {}, 0), true, "the owner keeps Setujui even with approvals off");
+  assert.strictEqual(A.canApprove({}, {}, 0), true, "an older kernel without roles: as before");
+  assert.strictEqual(A.canApprove(MANDOR, { approvals: true }, 0), true, "the mandor approves attendance");
+  assert.strictEqual(A.canApprove(MANDOR, { approvals: false }, 0), false, "approvals off: nothing to decide");
+  assert.strictEqual(A.canApprove(SALES, { approvals: true }, 0), false, "a salesman approves nothing");
+  assert.strictEqual(A.canApprove(SALES, { approvals: true }, 2), true, "a request they may decide is waiting");
+  assert.strictEqual(A.canApprove(RITEL, { approvals: true }, 0), false);
+});
+
+test("kenalan owner: Menu usaha lights the first group of records, not the Dasbor group", () => {
+  const nav = [{ label: "Dasbor", items: [{ id: "d/ritel", label: "Ringkasan ritel" }] },
+    { label: "Kerja", items: [{ id: "w/kasir", label: "Kasir" }] }].concat(RITEL_NAV);
+  assert.deepStrictEqual(plain(A.businessGroupAt(nav)), { index: 2, of: 6, label: "Penjualan toko" });
+  assert.strictEqual(A.businessGroupAt([{ label: "Dasbor", items: [{ id: "d/x", label: "X" }] }]), null);
+  // a sub-menu of records counts
+  assert.strictEqual(A.businessGroupAt([{ label: "Dasbor", items: [{ id: "d/x" }] }, { label: "Stok", items: [{ label: "Gudang", items: [{ id: "r/bin" }] }] }]).label, "Stok");
+  const owner = person(["owner"], { models: {} });
+  const steps = A.kenalanSteps({ company: "Toko", mulai: true, meta: owner, groups: nav, approvals: true });
+  const menu = steps.find((x) => x.title === "Menu usaha");
+  assert.ok(menu && typeof menu.target === "function" && menu.optional);
+  // same titles and copy as before: only the target moved
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Raka", "Bantuan ada di sini"]);
+});
+
 const LOCKED = { process: "sewa", current: null, hidden: false, locks: { rental_booking: { reason: "needs_data", needs: ["customer"] } },
   steps: [{ stage: "pesan", label: { id: "Pelanggan pesan lewat WA" }, model: "rental_booking", state: "locked", needs: ["customer", "rental_item"] },
     { stage: "antar", label: { id: "Antar dan pasang" }, model: "rental_handover", state: "locked", needs: ["customer"] }] };

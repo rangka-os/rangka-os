@@ -13,7 +13,8 @@
  *
  * No points, coins or streaks (0053 Out of scope): a bar per step, the chapter's reward is a capability.
  * Pure helpers are on RA for test/mulai.test.js: bizRoles, stepRole, roleTone, dayWord, unlocks, mulaiSummary, kenalanSteps,
- * kenalanPlaces, kenalanKind, approvesModels, screenModels (the welcome tour per person, contract 0053 §7a).
+ * kenalanPlaces, kenalanKind, approvesModels, screenModels (the welcome tour per person, contract 0053 §7a), canApprove
+ * (who sees Setujui and the approvals part of Perlu diurus).
  */
 (function (global) {
   "use strict";
@@ -542,6 +543,21 @@
     var a = global.document.querySelectorAll('.rk-side nav .rk-navgroup:not(:first-child) .rk-navlink, .rk-side nav .rk-navgroup:not(:first-child) .rk-navgroup-t');
     return a[0] || null;
   }
+  /** The owner's "Menu usaha": the first sidebar group that holds a record menu (an "r/<model>" entry), so not the
+   *  Dasbor group of dashboards nor the Kerja group of work screens; lit by its position like a staff group step
+   *  (groupPlace). groups is the sidebar as drawn; without it, the first group after the pinned entries, as before. */
+  function businessGroupAt(groups) {
+    var all = groups || [];
+    function hasRecord(items) { return (items || []).some(function (it) { return it && (it.items ? hasRecord(it.items) : String(it.id || "").indexOf("r/") === 0); }); }
+    for (var i = 0; i < all.length; i++) {
+      if (all[i] && L(all[i].label) && hasRecord(all[i].items)) return { index: i, of: all.length, label: L(all[i].label) };
+    }
+    return null;
+  }
+  function businessNav(groups) {
+    var at = businessGroupAt(groups);
+    return at ? groupPlace(at) : firstBusinessNav;
+  }
   /** The first element of sels that is on screen (the side shell's entry, else the work shell's), else the first
    *  that exists at all (a link in the closed phone drawer: tur.js keeps the step and the step's before() opens it). */
   function shown(sels) {
@@ -672,6 +688,16 @@
     });
     return out.sort();
   }
+  /** Whether the person may decide an approval request: the owner always (Beranda and the tabs stay as they were);
+   *  anyone with a request they may decide waiting (counts.approvals, or can_decide rows: `waiting`); else, like the
+   *  welcome tour's Persetujuan step (0053 §7a), the approvals feature is on and a model's `approvals:` or a flow's
+   *  `approve:` names one of their roles. A meta without the user's roles (an older kernel) counts as yes. */
+  function canApprove(meta, features, waiting) {
+    var roles = meta && meta.user && meta.user.roles;
+    if (!Array.isArray(roles) || !roles.length || roles.indexOf("owner") >= 0) return true;
+    if (Number(waiting) > 0) return true;
+    return !!(features && features.approvals) && approvesModels(meta).length > 0;
+  }
   var MAX_LIT = 5; // lit places after the welcome (riset 26 K-TS2)
   /** Who the welcome tour is for: "owner" for the owner (the tour as it always was), "staff" for everyone else. */
   function kenalanKind(meta) { return !meta || isOwner(meta) ? "owner" : "staff"; }
@@ -690,7 +716,7 @@
         nextLabel: "Mulai", skipLabel: "Nanti saja", before: close },
       o.mulai ? { target: nav("mulai"), before: side, title: "Mulai di sini", body: "Urutan langkah menyiapkan usahamu. Yang sudah beres tercatat di sini: siapa yang mengerjakan dan kapan." } : null,
       { target: nav("approvals"), before: side, optional: true, title: "Persetujuan", body: "Pesanan atau pengeluaran yang perlu keputusanmu menunggu di sini, lengkap dengan angkanya. Angka di sebelahnya jumlah yang menunggu." },
-      { target: firstBusinessNav, before: side, optional: true, title: "Menu usaha", body: "Semua catatan usahamu dikelompokkan di sini, misalnya barang, pemasok, dan penjualan. Tiap menu punya tombol Tambah di kanan atas." },
+      { target: businessNav(o.groups), before: side, optional: true, title: "Menu usaha", body: "Semua catatan usahamu dikelompokkan di sini, misalnya barang, pemasok, dan penjualan. Tiap menu punya tombol Tambah di kanan atas." },
       { target: ".ap-ask", before: side, optional: true, title: "Tanya Raka", body: "Raka bisa menyiapkan draf, menjelaskan angka, atau mencarikan catatan. Raka menyiapkan, kamu yang menyimpan." },
       { target: ".rk-side-switch", before: side, title: "Bantuan ada di sini", body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 }
     ].filter(Boolean);
@@ -776,6 +802,7 @@
   RA.dayWord = dayWord;
   RA.unlocks = unlocks;
   RA.mulaiSummary = mulaiSummary;
+  RA.canApprove = canApprove;
   RA.stepPrereq = stepPrereq;
   RA.whenKind = whenKind;
   RA.saveCopy = saveCopy;
@@ -783,6 +810,7 @@
   RA.kenalanPlaces = kenalanPlaces;
   RA.kenalanKind = kenalanKind;
   RA.approvesModels = approvesModels;
+  RA.businessGroupAt = businessGroupAt;
   RA.screenModels = screenModels;
   RA.TourOffer = TourOffer;
   RA.mulaiTour = mulaiTour;

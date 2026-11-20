@@ -205,12 +205,17 @@
         onMove: onMove, onSpan: onSpan }, card);
     }).filter(Boolean);
     if (!u.on) cards = tileStrips(cards);
-    var attention = !u.on && isHome ? h(AttentionPanel, { ctx: ctx, defs: defs, results: results, loading: loading || !data, approvals: approvals }) : null;
+    // Perlu diurus: the approvals part only for a person who may decide one (the owner always); without it the panel
+    // shows only while the dashboard has "perlu_" lists this person may read
+    var approver = RA.canApprove ? RA.canApprove(ctx.meta, ctx.features, approvals.length) : true;
+    var attnLists = defs.some(function (w, i) { return isAttention(w) && !(results[i] && results[i].hidden); });
+    var attention = !u.on && isHome && (approver || attnLists) ? h(AttentionPanel, { ctx: ctx, defs: defs, results: results, loading: loading || !data, approvals: approvals, approver: approver }) : null;
     var grid = cards.length ? h(R.DashGrid, null, cards) : null;
     // While Mulai di sini guides the owner (desain v3): the steps lead, Perlu diurus and Tim sit beside them, and the
     // numbers and charts fold under "<n> hari ini" (open by default once there is something to read).
     var ms = isHome && !u.on && RA.mulaiSummary ? RA.mulaiSummary(ctx.onboarding && ctx.onboarding.data, ctx.meta) : null;
-    var guided = !!(ms && ms.show && !ms.all && ms.current && RA.MulaiBanner);
+    // the checklist is the owner's (shell.js canSetUp): staff get their own Beranda without it
+    var guided = !!(ms && ms.show && !ms.all && ms.current && RA.MulaiBanner && (!RA.canSetUp || RA.canSetUp(ctx.meta)));
     var body = guided
       ? h("div", { className: "ap-home" },
           h("div", { className: "ap-home-main" }, h(RA.MulaiBanner, { ctx: ctx }),
@@ -302,7 +307,7 @@
         h("h2", { id: "ap-attn-h" }, "Perlu diurus"),
         h("span", { className: "ap-attn-count" }, p.loading ? "" : n ? n + " hal" : "Semua beres")),
       p.loading && !n ? h("div", { className: "ap-attn-empty" }, h(R.Spinner, { size: "sm", label: "Memuat" }))
-        : !n ? h("div", { className: "ap-attn-empty" }, "Tidak ada yang menunggu keputusanmu hari ini.")
+        : !n ? h("div", { className: "ap-attn-empty" }, p.approver === false ? "Tidak ada yang perlu diurus hari ini." : "Tidak ada yang menunggu keputusanmu hari ini.")
         : rows.map(function (x) {
           return h("div", { key: x.key, className: "ap-attn-row" },
             h("span", { className: "ap-attn-badge " + x.tone }, x.badge),

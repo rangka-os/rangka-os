@@ -139,7 +139,11 @@
         h(R.DocumentHeader, { number: "INV-2026-00038", title: "Kedai Senja Dago", status: "draft" }));
     },
     PosKeypad: function () { return h("div", { className: "gx-demo gx-wide" }, h(R.PosKeypad, { initial: 85000 }), h(R.PosKeypad, { offline: true, queued: 3, payLabel: "Bayar tunai", payIcon: "card" })); },
-    Raka: function () { return h("div", { className: "gx-row" }, h(R.Raka, { size: 32 }), h(R.Raka, { size: 56 }), h(R.Raka, { size: 32, withName: true, company: "Kopi Senja" })); },
+    Raka: function () {
+      return h("div", { className: "gx-row" }, h(R.Raka, { size: 72, interactive: true }),
+        ["netral", "mikir", "kerja", "senang", "tidur"].map(function (s) { return h(R.Raka, { key: s, size: 40, state: s }); }),
+        h(R.Raka, { size: 16 }), h(R.Raka, { size: 32, withName: true, company: "Kopi Senja" }));
+    },
     Table: function () {
       return h("div", { className: "gx-wide" }, h(R.Table, { columns: COLS, rows: INVOICES, checked: ["INV-2026-00041", "INV-2026-00040"], sort: { key: "date", dir: "desc" }, searchPlaceholder: "Cari faktur…",
         filters: h(R.Button, { icon: "filter" }, "Filter"), actions: h(R.Button, { variant: "primary", icon: "add" }, "Buat faktur"),

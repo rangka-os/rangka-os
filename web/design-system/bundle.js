@@ -219,28 +219,98 @@
       h("button", { type: "button", className: "rk-pos-pay" }, p.payIcon === null ? null : h(Icon, { name: p.payIcon || "qris" }), p.payLabel || "Bayar QRIS"));
   }
 
-  /* Raka, the Rangka mark: Omilo's face on a teal frame body with a seam and bolts, wearing an amber hard hat.
-     Same 64-unit grid and tile as Omilo helpers (Avatar.tsx). */
-  var RAKA_INNER =
-    '<rect width="64" height="64" fill="#0d9488" opacity=".16"/>' +
-    '<rect x="13" y="18" width="38" height="52" rx="7" fill="#0d9488"/>' +
-    '<path d="M13 54 H51" stroke="#0f766e" stroke-width="2"/>' +
-    '<circle cx="18.5" cy="59" r="1.8" fill="#0f766e"/><circle cx="45.5" cy="59" r="1.8" fill="#0f766e"/>' +
-    '<circle cx="18.5" cy="49" r="1.8" fill="#0f766e"/><circle cx="45.5" cy="49" r="1.8" fill="#0f766e"/>' +
-    '<circle cx="25" cy="34" r="3.6" fill="#1c1917"/><circle cx="39" cy="34" r="3.6" fill="#1c1917"/>' +
-    '<circle cx="26.2" cy="32.8" r="1.2" fill="#fff"/><circle cx="40.2" cy="32.8" r="1.2" fill="#fff"/>' +
-    '<path d="M27.5 42.5 Q32 47 36.5 42.5" stroke="#1c1917" stroke-width="2.2" stroke-linecap="round" fill="none"/>' +
-    '<circle cx="20.5" cy="41" r="2.6" fill="#fff" opacity=".3"/><circle cx="43.5" cy="41" r="2.6" fill="#fff" opacity=".3"/>' +
-    '<path d="M17 22 C17 11.5 47 11.5 47 22 Z" fill="#f59e0b" stroke="#1c1917" stroke-width="1.6" stroke-linejoin="round"/>' +
-    '<path d="M32 12.2 V21.5" stroke="#1c1917" stroke-width="1.4" stroke-linecap="round"/>' +
-    '<rect x="11.5" y="21" width="41" height="4.5" rx="2.25" fill="#f59e0b" stroke="#1c1917" stroke-width="1.6"/>';
+  /* Raka, the Rangka AI agent ("Lampu status", 20 Nov 2026; matches the zafdoz.ai logo): an Ink head (256-unit grid)
+     with two square eyes cut out, and the titik, a square status light top right. The body takes currentColor; the
+     titik lights teal (--raka) only while Raka thinks (mikir) or works (kerja). States: netral, mikir, kerja, senang,
+     tidur. interactive: the eyes and head follow the pointer, Raka blinks, and a click bounces it and shows senang.
+     prefers-reduced-motion keeps the state swaps and drops every movement. */
+  var RAKA_HEAD = "M80 72 H176 A52 52 0 0 1 228 124 V148 A52 52 0 0 1 176 200 H80 A52 52 0 0 1 28 148 V124 A52 52 0 0 1 80 72 Z";
+  var RAKA_STATES = { netral: 1, mikir: 1, kerja: 1, senang: 1, tidur: 1 };
+  var RAKA_ON = { mikir: 1, kerja: 1 };
+  function rakaState(s) { return RAKA_STATES[s] ? s : "netral"; }
+  function rakaEyes(s) {
+    var k = "#000";
+    if (s === "kerja") return [h("rect", { key: "l", x: 76, y: 120, width: 40, height: 16, rx: 4, fill: k }), h("rect", { key: "r", x: 140, y: 120, width: 40, height: 16, rx: 4, fill: k })];
+    if (s === "tidur") return [h("rect", { key: "l", x: 76, y: 130, width: 40, height: 9, rx: 3, fill: k }), h("rect", { key: "r", x: 140, y: 130, width: 40, height: 9, rx: 3, fill: k })];
+    if (s === "senang") return [h("polygon", { key: "l", points: "74,138 96,116 118,138 118,153 96,131 74,153", fill: k }), h("polygon", { key: "r", points: "138,138 160,116 182,138 182,153 160,131 138,153", fill: k })];
+    return [h("rect", { key: "l", x: 76, y: 108, width: 40, height: 40, rx: 6, fill: k }), h("rect", { key: "r", x: 140, y: 108, width: 40, height: 40, rx: 6, fill: k })];
+  }
+  function rakaReduced() { return !!(typeof window !== "undefined" && window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches); }
+  /* One pointer listener and one animation frame loop for every interactive Raka on the page. */
+  var rakaLive = { list: [], bound: false, raf: 0 };
+  function rakaTick() {
+    rakaLive.raf = 0;
+    if (!rakaLive.list.length) return;
+    var now = Date.now(), reduce = rakaReduced();
+    rakaLive.list.forEach(function (r) {
+      var s = r.state(), tx = r.tx, ty = r.ty;
+      if (s === "mikir") { tx = 8; ty = -10; } else if (s === "kerja" || s === "tidur" || reduce) { tx = 0; ty = 0; }
+      r.x += (tx - r.x) * 0.15; r.y += (ty - r.y) * 0.15;
+      var moving = !(reduce || s === "tidur");
+      r.hx += ((moving ? r.x * 0.4 : 0) - r.hx) * 0.15; r.hy += ((moving ? r.y * 0.4 : 0) - r.hy) * 0.15; r.hr += ((moving ? r.x * 0.3 : 0) - r.hr) * 0.15;
+      if (r.look) r.look.setAttribute("transform", "translate(" + r.x.toFixed(2) + " " + r.y.toFixed(2) + ")");
+      if (r.head) r.head.setAttribute("transform", "translate(" + r.hx.toFixed(2) + " " + r.hy.toFixed(2) + ") rotate(" + r.hr.toFixed(2) + " 128 136)");
+      if (r.blink) {
+        if (s === "netral" && !reduce && now > r.nextBlink) { r.blinkUntil = now + 120; r.nextBlink = now + 3000 + Math.random() * 3000; }
+        r.blink.setAttribute("transform", s === "netral" && now < r.blinkUntil ? "translate(0 128) scale(1 0.12) translate(0 -128)" : "");
+      }
+    });
+    if (!document.hidden) rakaLive.raf = window.requestAnimationFrame(rakaTick);
+    else setTimeout(function () { if (!rakaLive.raf) rakaLive.raf = window.requestAnimationFrame(rakaTick); }, 500);
+  }
+  function rakaPoint(e) {
+    rakaLive.list.forEach(function (r) {
+      if (!r.svg) return;
+      var b = r.svg.getBoundingClientRect(), dx = e.clientX - (b.left + b.width / 2), dy = e.clientY - (b.top + b.height * 0.55);
+      var d = Math.sqrt(dx * dx + dy * dy) || 1, k = Math.min(1, d / 320);
+      r.tx = dx / d * 10 * k; r.ty = dy / d * 10 * k;
+    });
+  }
+  function rakaJoin(r) {
+    rakaLive.list.push(r);
+    if (!rakaLive.bound) { window.addEventListener("pointermove", rakaPoint, { passive: true }); window.addEventListener("pointerdown", rakaPoint, { passive: true }); rakaLive.bound = true; }
+    if (!rakaLive.raf) rakaLive.raf = window.requestAnimationFrame(rakaTick);
+  }
+  function rakaLeave(r) {
+    rakaLive.list = rakaLive.list.filter(function (x) { return x !== r; });
+    if (!rakaLive.list.length && rakaLive.bound) { window.removeEventListener("pointermove", rakaPoint); window.removeEventListener("pointerdown", rakaPoint); rakaLive.bound = false; }
+  }
   var rakaN = 0;
   function Raka(p) {
-    var ref = React.useRef(null), size = p.size || 32, id = React.useRef("rk-raka-" + (++rakaN)).current;
+    var size = p.size || 32, id = React.useRef("rk-raka-" + (++rakaN)).current;
+    var fl = React.useState(null), flash = fl[0], setFlash = fl[1];
+    var base = rakaState(p.state), s = flash && !RAKA_ON[base] ? flash : base;
+    var svgRef = React.useRef(null), lookRef = React.useRef(null), blinkRef = React.useRef(null), headRef = React.useRef(null);
+    var stRef = React.useRef(s); stRef.current = s;
+    var live = !!p.interactive;
     React.useEffect(function () {
-      if (ref.current) ref.current.innerHTML = '<defs><clipPath id="' + id + '"><rect width="64" height="64" rx="18"/></clipPath></defs><g clip-path="url(#' + id + ')">' + RAKA_INNER + "</g>";
-    }, []);
-    var svg = h("svg", { ref: ref, className: "rk-mascot", viewBox: "0 0 64 64", width: size, height: size, role: "img", "aria-label": p.title || "Raka" });
+      if (!live || typeof window === "undefined" || !window.requestAnimationFrame) return;
+      var r = { svg: svgRef.current, look: lookRef.current, blink: blinkRef.current, head: headRef.current, state: function () { return stRef.current; },
+        tx: 0, ty: 0, x: 0, y: 0, hx: 0, hy: 0, hr: 0, blinkUntil: 0, nextBlink: Date.now() + 3000 };
+      rakaJoin(r);
+      return function () { rakaLeave(r); };
+    }, [live]);
+    React.useEffect(function () {
+      if (!flash) return;
+      var t = setTimeout(function () { setFlash(null); }, 700);
+      return function () { clearTimeout(t); };
+    }, [flash]);
+    function poke() {
+      var el = svgRef.current;
+      if (el && !rakaReduced()) { el.classList.remove("pop"); void el.getBoundingClientRect(); el.classList.add("pop"); }
+      if (!RAKA_ON[base]) setFlash("senang");
+      if (p.onClick) p.onClick();
+    }
+    var label = p.title === "" ? undefined : (p.title || "Raka") + (s === "mikir" ? ", sedang berpikir" : s === "kerja" ? ", sedang bekerja" : s === "tidur" ? ", sedang istirahat" : "");
+    var svg = h("svg", { ref: svgRef, className: cx("rk-mascot", live && "live"), viewBox: "20 4 224 224", width: size, height: size, "data-state": s,
+      role: label ? "img" : undefined, "aria-label": label, "aria-hidden": label ? undefined : "true", onClick: live ? poke : undefined },
+      h("defs", null, h("mask", { id: id, maskUnits: "userSpaceOnUse", x: 0, y: 0, width: 256, height: 256 },
+        h("rect", { width: 256, height: 256, fill: "#fff" }),
+        h("g", { ref: lookRef, transform: !live && s === "mikir" ? "translate(8 -10)" : undefined },
+          h("g", { className: "rk-mascot-eyes" }, h("g", { ref: blinkRef }, rakaEyes(s)))))),
+      h("g", { ref: headRef }, h("path", { d: RAKA_HEAD, fill: "currentColor", mask: "url(#" + id + ")" })),
+      h("rect", { className: "rk-mascot-ring", x: 206, y: 32, width: 30, height: 30, rx: 4 }),
+      h("rect", { className: "rk-mascot-titik", x: 206, y: 32, width: 30, height: 30, rx: 4, fill: "currentColor", "data-on": RAKA_ON[s] ? "" : undefined }));
     if (!p.withName) return svg;
     return h("span", { className: "rk-brand" }, svg, h("span", null, h("b", null, "Rangka"), p.company ? h("small", null, p.company) : null));
   }
@@ -2089,7 +2159,8 @@
     var t = q.turn, p = q.p;
     if (t.role === "user") return h("div", { className: "rk-chat-me" }, t.text);
     var running = !!q.running;
-    return h("div", { className: "rk-chat-raka", "data-last": q.last ? "" : undefined }, h("span", { className: "rk-chat-av" }, h(Raka, { size: 22, title: "" })),
+    var mood = running ? (t.activity && t.activity.length ? "kerja" : "mikir") : "netral";
+    return h("div", { className: "rk-chat-raka", "data-last": q.last ? "" : undefined }, h("span", { className: "rk-chat-av" }, h(Raka, { size: 22, title: "", state: mood })),
       h("div", { className: "body" },
         h("div", { className: "rk-chat-who" }, h("b", null, "Raka")),
         h(ChatSteps, { activity: t.activity, running: running && !t.text, start: q.start }),
@@ -2185,7 +2256,7 @@
       onKeyDown: onGripKey, onPointerDown: onGripDown, onPointerMove: onGripMove }) : null;
     var body = [
       h("div", { key: "head", className: "rk-chat-head" },
-        h("span", { className: "rk-chat-av rk-chat-av-lg" }, h(Raka, { size: 28, title: "" })),
+        h("span", { className: "rk-chat-av rk-chat-av-lg" }, h(Raka, { size: 28, title: "", state: p.busy ? "kerja" : "netral" })),
         h("span", { className: "rk-chat-title" }, h("b", null, full ? conversationTitle(turns) : "Raka")),
         h(IconButton, { icon: "edit", label: "Percakapan baru", onClick: p.onNew }),
         dock && p.onExpand ? h(IconButton, { icon: "open", label: "Perbesar", onClick: p.onExpand }) : null,
@@ -2195,10 +2266,10 @@
         turns.length ? turns.map(function (t, i) {
           var isLast = i === turns.length - 1;
           return h(ChatTurnView, { key: i, turn: t, p: p, last: isLast, running: isLast && p.busy, start: started.current });
-        }) : h("div", { className: "rk-chat-empty" }, h(Raka, { size: 40, title: "" }),
+        }) : h("div", { className: "rk-chat-empty" }, h(Raka, { size: 40, title: "", interactive: true }),
           h("b", null, "Tanya Raka"),
           h("span", null, "Tanya apa saja tentang data bisnismu. Raka bisa menyusun usulan perubahan; kamu yang menyetujuinya.")),
-        waiting ? h("div", { className: "rk-chat-raka" }, h("span", { className: "rk-chat-av" }, h(Raka, { size: 22, title: "" })),
+        waiting ? h("div", { className: "rk-chat-raka" }, h("span", { className: "rk-chat-av" }, h(Raka, { size: 22, title: "", state: "mikir" })),
           h("div", { className: "body" }, h("div", { className: "rk-chat-who" }, h("b", null, "Raka")),
             h("div", { className: "rk-chat-steps", "data-running": "true" }, h("span", { className: "rk-chat-sum", role: "status" },
               h("span", { className: "i", "aria-hidden": "true" }, h("span", { className: "rk-chat-spin" })), h("span", { className: "l" }, "Raka sedang berpikir…"))))) : null),
@@ -2234,7 +2305,7 @@
           h("span", { className: "rk-fab-tx", "aria-hidden": "true" },
             h("span", { className: "t" }, h("b", null, "Tanya Raka"), tucked ? null : h(Kbd, null, ASK_KEY)),
             h("small", { className: n ? "on" : undefined }, sub)),
-          h("span", { className: "rk-fab-m", "aria-hidden": "true" }, h(Raka, { size: 52, title: "" })),
+          h("span", { className: "rk-fab-m", "aria-hidden": "true" }, h(Raka, { size: 52, title: "", state: p.state || (p.busy ? "kerja" : "netral"), interactive: !tucked })),
           n ? h("span", { className: "rk-fab-n", "aria-hidden": "true" }, tucked ? null : n > 9 ? "9+" : n) : null)),
       !open && !tucked && p.onTuck ? h("button", { type: "button", className: "rk-fab-hide", "aria-label": "Sembunyikan Raka ke tepi", title: "Sembunyikan ke tepi",
         onClick: function () { p.onTuck(true); } }, h(Icon, { name: "right" })) : null);

@@ -9,15 +9,17 @@
  *   center    [lat, lng] or {lat, lng}; zoom 0..max_zoom. Changing either moves the map.
  *   markers   [{id, lat, lng, title, sub, tone, href}]: a divIcon pin per marker in a token tone (ink by default; ok,
  *             warn, bad, info, brand, kind-1..6). Updated in place by id (markerDiff), never by re-creating the map.
- *             A pin is focusable; Enter or a click opens its popup (title, sub, "Buka" to href).
+ *             A pin is focusable; Enter or a click opens its popup (title, sub, "Lihat detail" to href).
  *   cluster   true groups nearby pins (markercluster); a cluster splits on zoom.
  *   fit       truthy fits the view to the pins when they first arrive; a new value (a number, a key) fits again.
  *   circle    {lat, lng, radius_m}: one circle, e.g. a radius rule (contract 0030 distance_m).
  *   me        true shows the "Posisi saya" control (asks the device on click); {lat, lng, accuracy_m} shows that position.
  *   onMove(bbox [s, w, n, e], zoom) after each pan or zoom; onPick(lat, lng) on a click or tap on the map.
+ *   legend    [{tone, label}]: what the pin colours mean, shown on the map. Pass one whenever pins use more than one
+ *             tone; a single meaning keeps the default ink and needs none.
  *   height    CSS height of the map box (default 280px). label: the map's accessible name (default "Peta").
  *   tiles     tile settings instead of the site's (tests, previews).
- * RangkaApp.MapThumb({lat, lng, zoom, width, height, label, tiles}): a static preview with a pin, centred on the point,
+ * RangkaApp.MapThumb({lat, lng, zoom, width, height, fluid, maxWidth, label, tiles}): a static preview with a pin, centred on the point,
  *   for list cells and cards where a live map is too heavy: plain <img> tiles, usually one or two (thumbPlan), no Leaflet. Renders nothing when maps are off or the source is vector.
  *
  * Pure helpers (unit-tested in test/map.test.js) on RangkaApp.map: tileSettings, tileUrl, tileOf, thumbPlan, bboxOf,
@@ -203,7 +205,7 @@
   function popupHtml(m) {
     return "<div class=\"ap-map-pop\"><strong>" + escapeHtml(m.title || "") + "</strong>" +
       (m.sub ? "<span>" + escapeHtml(m.sub) + "</span>" : "") +
-      (safeHref(m.href) ? "<a href=\"" + escapeHtml(safeHref(m.href)) + "\">Buka</a>" : "") + "</div>";
+      (safeHref(m.href) ? "<a href=\"" + escapeHtml(safeHref(m.href)) + "\">Lihat detail</a>" : "") + "</div>";
   }
 
   function clusterIcon(L) {
@@ -394,8 +396,12 @@
       return h("div", { className: "ap-map ap-map-off", style: { height: height }, role: "note" },
         s.enabled ? "Sumber peta vektor belum didukung di aplikasi ini." : "Peta dimatikan untuk usaha ini.");
     }
+    var legend = (p.legend || []).filter(function (l) { return l && l.label; });
     return h("div", { className: "ap-map-wrap", style: { height: height } },
       h("div", { ref: box, className: "ap-map", role: "region", "aria-label": p.label || "Peta", "data-state": status }),
+      legend.length ? h("ul", { className: "ap-map-legend", "aria-label": "Keterangan warna" }, legend.map(function (l) {
+        return h("li", { key: l.label }, h("span", { className: "ap-map-legend-dot " + toneClass(l.tone), "aria-hidden": "true" }), l.label);
+      })) : null,
       status === "loading" ? h("div", { className: "ap-map-note", "aria-live": "polite" }, "Memuat peta…") : null,
       status === "error" ? h("div", { className: "ap-map-note", role: "alert" }, "Peta tidak termuat. Periksa koneksi lalu buka lagi.") : null);
   }
@@ -404,12 +410,15 @@
   function MapThumb(p) {
     var s = settingsOf(p);
     if (!s.enabled || s.kind === "vector" || !isPoint(p)) return null;
-    var w = p.width || 160, ht = p.height || 96, z = Math.min(typeof p.zoom === "number" ? p.zoom : 15, s.maxZoom);
-    return h("span", { className: "ap-map-thumb", style: { width: w, height: ht }, role: "img",
-      "aria-label": p.label || "Peta lokasi", title: s.attribution },
+    var z = Math.min(typeof p.zoom === "number" ? p.zoom : 15, s.maxZoom);
+    // fluid: as wide as its parent (tiles cover up to `maxWidth`, default 960) and `height` tall; else a fixed
+    // width × height box. Tiles are placed from the centre, so the pin stays centred at any rendered width.
+    var fluid = !!p.fluid, w = fluid ? p.maxWidth || 960 : p.width || 160, ht = p.height || 96;
+    var box = fluid ? { width: "100%", maxWidth: w, height: ht } : { width: w, height: ht };
+    return h("span", { className: "ap-map-thumb", style: box, role: "img", "aria-label": p.label || "Peta lokasi", title: s.attribution },
       thumbPlan(s, p.lat, p.lng, z, w, ht).map(function (tl) {
         return h("img", { key: tl.src, src: tl.src, alt: "", loading: "lazy", decoding: "async", draggable: false, width: 256, height: 256,
-          style: { left: tl.left, top: tl.top } });
+          style: { left: "calc(50% + " + (tl.left - Math.round(w / 2)) + "px)", top: "calc(50% + " + (tl.top - Math.round(ht / 2)) + "px)" } });
       }),
       h("span", { className: "ap-map-pin ap-map-thumb-pin " + toneClass(p.tone), "aria-hidden": "true" },
         h("span", { className: "ap-map-pin-dot" })),

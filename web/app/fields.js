@@ -391,10 +391,10 @@
         // a saved point shows where it is (rangka-os#248): a one-tile preview, the coordinates, and the full map outside
         return h("div", { className: "rk-field" }, h("label", null, label),
           h("div", { className: "pv-ro ap-geo-ro" },
-            h(RA.MapThumb, { lat: v.lat, lng: v.lng, width: 256, height: 128, label: "Peta " + label }),
+            h(RA.MapThumb, { lat: v.lat, lng: v.lng, fluid: true, maxWidth: 960, height: 180, label: "Peta " + label }),
             h("div", { className: "ap-geo-line" },
-              h("span", { className: "ap-geo" }, fieldText(ctx, f, v)),
-              h("a", { className: "ap-work-link", href: RA.mapsUrl(v), target: "_blank", rel: "noopener" }, "Buka di peta"))));
+              h("a", { className: "ap-work-link", href: RA.mapsUrl(v), target: "_blank", rel: "noopener" }, "Buka di peta"),
+              h("span", { className: "ap-geo" }, fieldText(ctx, f, v)))));
       }
       return h("div", { className: "rk-field" }, h("label", null, label), h("div", { className: cx("pv-ro", numeric(f) && "num") }, fieldText(ctx, f, v)));
     }

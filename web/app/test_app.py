@@ -4786,7 +4786,7 @@ def test_map_view(page, ctx):
       window.__mapRoot = ReactDOM.createRoot(box);
       window.__mapRoot.render(React.createElement("div", null,
         React.createElement(RangkaApp.MapView, { markers: near(-6.2, 106.8, 6, "jkt").concat(near(-6.91, 107.6, 4, "bdg")), cluster: true, fit: 1,
-          height: 360, label: "Peta outlet", me: true }),
+          height: 360, label: "Peta outlet", me: true, legend: [{ tone: "ok", label: "Buka" }, { tone: "warn", label: "Tutup sementara" }] }),
         React.createElement(RangkaApp.MapThumb, { lat: -6.175392, lng: 106.827153, label: "Peta Monas" }),
         React.createElement(RangkaApp.FieldEditor, { ctx: {}, model: "outlet", readOnly: true, onChange: () => {},
           field: { name: "location", type: "geo", label: "Lokasi" }, rec: { location: { lat: -6.2, lng: 106.8009, accuracy_m: 7.6 } } })));
@@ -4795,6 +4795,8 @@ def test_map_view(page, ctx):
     page.wait_for_function("document.querySelectorAll('#map-test .leaflet-tile-loaded').length > 0", timeout=10000)
     assert page.evaluate("!!(window.L && L.MarkerClusterGroup && L.version === '1.9.4')")
     assert page.locator("#map-test .leaflet-control-attribution").inner_text().strip() == "© OpenStreetMap contributors"
+    legend = page.get_by_role("list", name="Keterangan warna")
+    assert legend.get_by_role("listitem").all_inner_texts() == ["Buka", "Tutup sementara"]
     for name in ("Perbesar", "Perkecil", "Posisi saya"):
         assert page.locator("#map-test [title='" + name + "']").count() == 1, name + " control"
     clusters = page.locator("#map-test .ap-map-cluster")
@@ -4829,7 +4831,7 @@ def test_map_view(page, ctx):
     page.keyboard.press("Enter")
     pop = page.locator("#map-test .ap-map-pop")
     pop.wait_for(timeout=5000)
-    assert title in pop.inner_text() and pop.get_by_role("link", name="Buka").get_attribute("href") == "#/r/outlet/" + title.split(" ")[1]
+    assert title in pop.inner_text() and pop.get_by_role("link", name="Lihat detail").get_attribute("href") == "#/r/outlet/" + title.split(" ")[1]
     thumb = page.locator("#map-test .ap-map-thumb[aria-label='Peta Monas']")
     assert thumb.get_attribute("aria-label") == "Peta Monas"
     srcs = thumb.locator("img").evaluate_all("(l) => l.map((i) => i.src)")

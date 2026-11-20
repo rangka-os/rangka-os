@@ -1,0 +1,14 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# A payslip: finance makes it; every member reads and prints their own once released (contract 0074 §2).
+name: slip
+label: {id: Slip}
+is_submittable: true
+naming: SLP-{#####}
+title_field: employee
+fields:
+  - {name: employee, type: data, label: {id: Karyawan}, in_list: true}
+  - {name: amount, type: int, label: {id: Jumlah}}
+  - {name: released, type: check, label: {id: Dirilis}, default: 'false'}
+permissions:
+  - {role: keuangan, read: true, create: true, write: true, submit: true, cancel: true, print: true, export: true}
+  - {role: member, read: true, print: true, if: "employee == user.name && released"}

@@ -45,21 +45,25 @@ func (e *Engine) screenIf(a Actor, s *meta.Screen) bool {
 
 // Work lists the screens a may open, in the order of the installed apps' work: lists: a screen bound by an app
 // for one of a's roles (narrowed by the entry's roles, else the screen's own) whose if: holds. The owner may open
-// every bound screen and keeps the dashboard home, so no item is Home for them.
+// every bound screen and keeps the dashboard home, so no item is Home for them. An entry for the member pseudo-role
+// (contract 0074 §3) is offered to every member; its home: true counts only when none of the member's own roles has
+// a home, so a cashier keeps landing on the counter.
 func (e *Engine) Work(a Actor) []WorkItem {
 	reg := e.Reg()
 	var out []WorkItem
 	at := map[string]int{}
 	ifs := map[string]bool{}
+	memberHome := -1
 	for _, w := range reg.Work() {
 		s := reg.Screen(w.Screen)
 		roles := w.Roles
 		if len(roles) == 0 {
 			roles = s.Roles
 		}
-		ok := unrestricted(a)
+		ok, own := unrestricted(a), unrestricted(a)
 		for _, r := range roles {
-			ok = ok || hasRole(a, r)
+			own = own || hasRole(a, r)
+			ok = ok || holds(a, r)
 		}
 		if !ok {
 			continue
@@ -72,13 +76,25 @@ func (e *Engine) Work(a Actor) []WorkItem {
 		if !pass {
 			continue
 		}
-		home := w.Home && !unrestricted(a)
-		if i, dup := at[s.Name]; dup {
-			out[i].Home = out[i].Home || home
-			continue
+		home := w.Home && !unrestricted(a) && own
+		i, dup := at[s.Name]
+		if !dup {
+			i = len(out)
+			at[s.Name] = i
+			out = append(out, WorkItem{Screen: s.Name})
 		}
-		at[s.Name] = len(out)
-		out = append(out, WorkItem{Screen: s.Name, Home: home})
+		out[i].Home = out[i].Home || home
+		if w.Home && !own && !unrestricted(a) && memberHome < 0 {
+			memberHome = i
+		}
+	}
+	if memberHome >= 0 {
+		for _, it := range out {
+			if it.Home {
+				return out
+			}
+		}
+		out[memberHome].Home = true
 	}
 	return out
 }

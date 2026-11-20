@@ -99,6 +99,11 @@ Unchanged from 0028 §3: 403 `{"error": {"code": "plan_limit" | "plan_read_only"
 - **Not changed.** Stock (0021, 0039), row scope (0010) and device pairing (0058) keep treating every outlet row the
   same. Whether a cashier device may pair with a row outside the scope is a module rule, not a kernel one.
 
+### 6. Phone-only staff: `staff` (amendment, 21 Nov 2026, rangka-os#261)
+
+The `staff` limit counts people whose roles are all `desk: false` apart from `users` when a plan sets it; see
+0074 §5.
+
 ## Consequences
 
 - rangka-cloud adds subscriptions, the Grup pool sampler, add-on and credit grants, and the Konsol pages (its spec

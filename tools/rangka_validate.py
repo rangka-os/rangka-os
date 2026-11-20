@@ -554,6 +554,9 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
             if isinstance(m.get("stock"), dict):
                 check_stock(rep, p, mname, m, fields, visible)
             for i, pr in enumerate(m.get("permissions", [])):
+                if pr.get("role") == MEMBER_ROLE:
+                    check_member_grant(rep, p, i, pr)
+                    continue
                 if pr.get("role") not in roles:
                     rep.add("warn", p, f"permissions/{i}/role", "unknown_role", f'role "{pr.get("role")}" has no file in roles/ (it must exist at install)')
             approval_names = set()
@@ -1398,6 +1401,8 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         schema_errors(rep, V, "role", p, r)
         if r.get("name") != st:
             rep.add("error", p, "name", "name_mismatch", f'role name "{r.get("name")}" must match the file name "{st}"')
+        if st == MEMBER_ROLE:
+            rep.add("error", p, "name", "reserved_role", f'"{st}" is the pseudo-role the kernel gives every member (contract 0074); name the role file otherwise')
         check_scope(rep, p, r, allmodels)
 
     check_member_record(rep, allmodels, roles)
@@ -1454,6 +1459,20 @@ def check_member_record(rep, allmodels, roles):
         for role in names:
             if role not in ("owner", "head_office") and role not in hidden:
                 rep.add("warn", p, f"user/{name}", "contact_field_visible", f'role "{role}" is not in hidden_for')
+
+
+# The pseudo-role every member holds next to their own role (contract 0074 §1).
+MEMBER_ROLE = "member"
+
+
+def check_member_grant(rep, p, i, g):
+    """permissions/i granted to the member pseudo-role (contract 0074 §2): an if: on user.name, member actions only."""
+    cond = g.get("if") if isinstance(g.get("if"), str) else ""
+    if "user.name" not in cond:
+        rep.add("error", p, f"permissions/{i}/if", "member_grant_unscoped", "a member grant needs an if: on user.name (the person's own records, contract 0074)")
+    for a in ("cancel", "amend", "export", "import", "customize"):
+        if g.get(a) is True:
+            rep.add("error", p, f"permissions/{i}/{a}", "member_grant_action", f"a member grant cannot give {a}; only read, create, write, delete, submit and print (contract 0074)")
 
 
 def check_scope(rep, p, r, allmodels):
@@ -3015,7 +3034,7 @@ def load_screens(rep, screens, app, root):
 
 def check_screens(rep, V, apps, allmodels, only, screens, prints=()):
     """Screen files and the work: lists of apps (contract 0030 §1, §3). The first unit that ships a name keeps it."""
-    roles = {"owner"}.union(*[a["roles"] for a in apps.values()])
+    roles = {"owner", MEMBER_ROLE}.union(*[a["roles"] for a in apps.values()])
     first = {}
     for app, stem, p, d in screens:
         dup = stem in first

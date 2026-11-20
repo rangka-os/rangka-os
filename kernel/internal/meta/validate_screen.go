@@ -13,7 +13,7 @@ var offlineTypes = map[string]bool{"counter": true, "roll": true, "route": true,
 // check_screens in rangka_validate.py.
 func (v *validator) validateScreens() {
 	all := v.allModels()
-	roles := map[string]bool{"owner": true}
+	roles := map[string]bool{"owner": true, MemberRole: true} // contract 0074 §3
 	for _, a := range v.reg.Apps {
 		for _, r := range a.Roles {
 			roles[r] = true

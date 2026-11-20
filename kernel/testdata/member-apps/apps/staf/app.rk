@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+name: staf
+version: 1.0.0
+title: {id: Staf}
+rangka: '>=0.5'
+modules: {slip: ^1.0}
+roles: [kasir, gudang, keuangan]
+dashboards: [saya]
+menu:
+  - group: {id: Gaji}
+    items: [slip, kasbon]
+# kasir lands on jual; every member (gudang has no home of its own) lands on ajukan
+work:
+  - {screen: jual, roles: [kasir], home: true}
+  - {screen: ajukan, home: true}
+summary: {id: App uji grant member.}

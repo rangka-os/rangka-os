@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/screen.json
+name: jual
+type: entry
+label: {id: Jual}
+roles: [kasir]
+entry:
+  model: kasbon
+  fields: [amount]
+  again: false

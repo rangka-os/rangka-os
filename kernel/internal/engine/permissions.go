@@ -170,6 +170,15 @@ func (e *Engine) permModelIn(reg *meta.Registry, name string) *meta.Model {
 	return parent
 }
 
+// holds is hasRole that also answers the member pseudo-role (contract 0074 §1). Only grants, screens, dashboards
+// and work: entries use it: approvers, hidden_for, row scope and the owner check keep the member's one role.
+func holds(a Actor, role string) bool {
+	if role == MemberRole {
+		return isMember(a)
+	}
+	return hasRole(a, role)
+}
+
 func hasRole(a Actor, role string) bool {
 	for _, r := range a.Roles {
 		if r == role {
@@ -178,6 +187,15 @@ func hasRole(a Actor, role string) bool {
 	}
 	return false
 }
+
+// MemberRole is the pseudo-role every signed-in member of an organisation holds next to their one role (contract 0074
+// §1): a model's {role: member, if: ...} grant, a screen's or dashboard's roles: [member] and an app's work: entry for
+// member apply to each of them. It is never a member's role and no role file may take the name.
+const MemberRole = meta.MemberRole
+
+// isMember reports whether a is a person of the organisation with an employee record (user.name): kernel actors,
+// tokens of the platform and the dev-open demo without a user record never hold member.
+func isMember(a Actor) bool { return !a.System && a.UserName != "" && len(a.Roles) > 0 }
 
 // unrestricted reports actors every check lets through: kernel-internal actors and owners.
 func unrestricted(a Actor) bool { return a.System || hasRole(a, "owner") }
@@ -207,7 +225,12 @@ func (e *Engine) decide(a Actor, m *meta.Model, action string) decision {
 	}
 	var d decision
 	for _, g := range mp.grants {
-		if !g.actions[action] || !hasRole(a, g.role) {
+		if !g.actions[action] || !holds(a, g.role) {
+			continue
+		}
+		// contract 0074 §2: a member grant reaches only the person's own records (an if: on user.name) and only the
+		// member actions; one the validator would refuse grants nothing here (fail closed)
+		if g.role == MemberRole && (!strings.Contains(g.cond, "user.name") || !meta.MemberActions[action]) {
 			continue
 		}
 		if g.cond == "" {

@@ -224,7 +224,7 @@ func TestSandboxNotCounted(t *testing.T) {
 	if _, err := auth.EnsureUser(ctx, e.s.DB, "latih@example.test", "Latih", "rangka-demo", sb, "sales_rep", ""); err != nil {
 		t.Fatal(err)
 	}
-	if err := plan.CheckNewPerson(ctx, e.s.DB, sb, "baru@example.test"); err != nil {
+	if err := plan.CheckNewPerson(ctx, e.s.DB, sb, "baru@example.test", "", nil); err != nil {
 		t.Fatalf("a sandbox-only person was checked against the plan: %v", err)
 	}
 	after, err := plan.Measure(ctx, e.s.DB, e.s.Engine.Reg(), fixedNow())

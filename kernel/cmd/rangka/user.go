@@ -260,7 +260,15 @@ func runUser(args []string) error {
 		}
 	}
 	// contract 0028: a new person past the plan's people limit is refused (an existing member is not a new person)
-	if err := plan.CheckNewPerson(ctx, pool, ua.Org, ua.Email); err != nil {
+	// contract 0074 §5: with --apps, a phone-only role counts under the plan's staff limit; without, under users
+	var staffRoles map[string]bool
+	if strings.TrimSpace(ua.Apps) != "" {
+		c := common{apps: ua.Apps, site: ua.Site, modules: ua.Modules, connectors: ua.Connectors}
+		if reg, err := c.registry(); err == nil {
+			staffRoles = plan.StaffRoles(reg)
+		}
+	}
+	if err := plan.CheckNewPerson(ctx, pool, ua.Org, ua.Email, ua.Role, staffRoles); err != nil {
 		return err
 	}
 	id, err := auth.EnsureUser(ctx, pool, ua.Email, ua.Name, password, ua.Org, ua.Role, ua.Record)

@@ -473,6 +473,10 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 	}
 	for i, pv := range asList(m.Raw["permissions"]) {
 		role := pyStr(asMap(pv)["role"])
+		if role == MemberRole {
+			v.memberGrant(p, i, asMap(pv))
+			continue
+		}
 		if !roles[role] {
 			v.rep.add("warn", p, fmt.Sprintf("permissions/%d/role", i), "unknown_role", fmt.Sprintf(`role "%s" has no file in roles/ (it must exist at install)`, role))
 		}
@@ -900,4 +904,25 @@ func actionNames(m *Model) []string {
 		out = append(out, pyStr(asMap(a)["name"]))
 	}
 	return out
+}
+
+// MemberRole is the pseudo-role every member holds next to their own role (contract 0074 §1).
+const MemberRole = "member"
+
+// MemberActions are the actions a member grant may give (contract 0074 §2): a person works on their own records;
+// cancel, amend, export, import and customize stay with the roles that decide for the business.
+var MemberActions = map[string]bool{"read": true, "create": true, "write": true, "delete": true, "submit": true, "print": true}
+
+// memberGrant checks permissions/i of a model granted to the member pseudo-role (contract 0074 §2): it must carry an
+// if: that reads user.name (the person's own records), and only the member actions.
+func (v *validator) memberGrant(p string, i int, g map[string]any) {
+	cond, _ := g["if"].(string)
+	if !strings.Contains(cond, "user.name") {
+		v.rep.add("error", p, fmt.Sprintf("permissions/%d/if", i), "member_grant_unscoped", "a member grant needs an if: on user.name (the person's own records, contract 0074)")
+	}
+	for _, a := range []string{"cancel", "amend", "export", "import", "customize"} {
+		if g[a] == true {
+			v.rep.add("error", p, fmt.Sprintf("permissions/%d/%s", i, a), "member_grant_action", fmt.Sprintf(`a member grant cannot give %s; only read, create, write, delete, submit and print (contract 0074)`, a))
+		}
+	}
 }

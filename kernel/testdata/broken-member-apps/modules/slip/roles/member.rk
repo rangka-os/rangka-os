@@ -1,0 +1,4 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/role.json
+# broken: member is the kernel's pseudo-role (contract 0074 §1)
+name: member
+label: {id: Anggota}

@@ -22,6 +22,10 @@ const (
 	Outlets   = "outlets"
 	Users     = "users"
 	AICredits = "ai_credits_month"
+	// Staff counts the people who only work from the phone (contract 0074 §5, an amendment of 0057): every role they
+	// hold is desk: false. A plan that limits staff counts them here and not under users; a plan without the limit
+	// counts everyone under users, as before.
+	Staff = "staff"
 	// contract 0057 §1
 	Apps          = "apps"
 	DBMB          = "db_mb"
@@ -39,7 +43,7 @@ func mb(v int64) string {
 }
 
 // ReportOrder is the order limits are reported and shown in.
-var ReportOrder = []string{Outlets, Users, AICredits, Apps, DBMB, FilesMB, PDFMonth}
+var ReportOrder = []string{Outlets, Users, Staff, AICredits, Apps, DBMB, FilesMB, PDFMonth}
 
 // WarnAt is the share of a limit from which the plan endpoint reports "near" (an owner banner).
 const WarnAt = 0.8
@@ -399,6 +403,7 @@ func Clear(ctx context.Context, q pg.Querier, reg *meta.Registry, by string) err
 type Usage struct {
 	Outlets   int64 `json:"outlets"`
 	Users     int64 `json:"users"`
+	Staff     int64 `json:"staff"` // contract 0074 §5: phone-only people (under users too when the plan has no staff limit)
 	AICredits int64 `json:"ai_credits_month"`
 	// contract 0057 §1
 	Apps          int64 `json:"apps"`
@@ -525,19 +530,67 @@ func outletRows(ctx context.Context, db *pg.Pool, reg *meta.Registry) ([]outletR
 
 // people lists the tenant's members once each (a person in two organisations counts once): owners first, then
 // in the order they joined. Past a lower limit the last ones become read-only.
-func people(ctx context.Context, q pg.Querier) ([]string, error) {
+// person is one counted person: their e-mail and the roles they hold over the organisations.
+type person struct {
+	email string
+	roles []string
+}
+
+// persons is people with each person's roles, owners first, then by when they joined.
+func persons(ctx context.Context, q pg.Querier) ([]person, error) {
 	// members of the ruang coba only (contract 0052 §2) are not counted
-	res, err := q.Query(ctx, `select u.email from rk_members m join rk_users u on u.id = m.user_id
+	res, err := q.Query(ctx, `select u.email, array_agg(distinct m.role) from rk_members m join rk_users u on u.id = m.user_id
 		join rk_orgs o on o.id = m.org_id where not o.sandbox
 		group by u.id, u.email order by bool_or(m.role = 'owner') desc, min(m.added_at), u.id`)
 	if err != nil {
 		return nil, err
 	}
-	var out []string
+	var out []person
 	for _, r := range res.Rows {
-		out = append(out, r[0].(string))
+		out = append(out, person{email: r[0].(string), roles: textList(r[1])})
 	}
 	return out, nil
+}
+
+// textList reads a text[] column.
+func textList(v any) []string {
+	switch x := v.(type) {
+	case []string:
+		return x
+	case []any:
+		out := make([]string, 0, len(x))
+		for _, e := range x {
+			if s, ok := e.(string); ok {
+				out = append(out, s)
+			}
+		}
+		return out
+	}
+	return nil
+}
+
+// StaffRoles are the roles of reg that work only from the phone (role desk: false, contract 0030 §3). Owner never.
+func StaffRoles(reg *meta.Registry) map[string]bool {
+	out := map[string]bool{}
+	if reg == nil {
+		return out
+	}
+	for n, d := range reg.Roles {
+		if d != nil && n != "owner" && meta.AsMap(d.Data)["desk"] == false {
+			out[n] = true
+		}
+	}
+	return out
+}
+
+// isStaff reports whether every role in roles is a staff role (and there is one).
+func isStaff(roles []string, staff map[string]bool) bool {
+	for _, r := range roles {
+		if !staff[r] {
+			return false
+		}
+	}
+	return len(roles) > 0
 }
 
 // Period is the month AI credits count in (YYYY-MM in the site's timezone).
@@ -571,11 +624,25 @@ func Measure(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time
 		return u, err
 	}
 	u.Outlets = int64(len(ol))
-	ps, err := people(ctx, db)
+	ps, err := persons(ctx, db)
 	if err != nil {
 		return u, err
 	}
-	u.Users = int64(len(ps))
+	c, err := Resolve(ctx, db, reg)
+	if err != nil {
+		return u, err
+	}
+	_, staffLimited := c.Limit(Staff)
+	staffRoles := StaffRoles(reg)
+	for _, p := range ps {
+		staff := isStaff(p.roles, staffRoles)
+		if staff {
+			u.Staff++
+		}
+		if !staff || !staffLimited {
+			u.Users++
+		}
+	}
 	u.AICredits, err = AIUsed(ctx, db, Period(reg, now))
 	return u, err
 }
@@ -725,8 +792,9 @@ func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org 
 }
 
 // CheckNewPerson refuses a person who is not yet a member anywhere when the people limit is reached. It reads the
-// limits rk_site_plan holds (synced at serve, set by rangka plan set), so it needs no metadata.
-func CheckNewPerson(ctx context.Context, q pg.Querier, org, email string) error {
+// limits rk_site_plan holds (synced at serve, set by rangka plan set); staffRoles (StaffRoles of the registry) says
+// which roles count under staff when the plan limits staff (contract 0074 §5), and role is the one being given.
+func CheckNewPerson(ctx context.Context, q pg.Querier, org, email, role string, staffRoles map[string]bool) error {
 	if sb, err := store.IsSandbox(ctx, q, org); err != nil || sb { // joining only the ruang coba is not a new person (contract 0052 §2)
 		return err
 	}
@@ -734,21 +802,34 @@ func CheckNewPerson(ctx context.Context, q pg.Querier, org, email string) error 
 	if err != nil || st == nil {
 		return err
 	}
-	lim, ok := st.Effective(Users, st.Limits[Users], hasKey(st.Limits, Users), time.Now())
+	_, staffLimited := st.Effective(Staff, st.Limits[Staff], hasKey(st.Limits, Staff), time.Now())
+	key := Users
+	if staffLimited && staffRoles[role] {
+		key = Staff
+	}
+	lim, ok := st.Effective(key, st.Limits[key], hasKey(st.Limits, key), time.Now())
 	if !ok {
 		return nil
 	}
-	ps, err := people(ctx, q)
+	ps, err := persons(ctx, q)
 	if err != nil {
 		return err
 	}
 	email = strings.ToLower(strings.TrimSpace(email))
+	var used int64
 	for _, p := range ps {
-		if p == email {
+		if strings.ToLower(p.email) == email {
 			return nil
 		}
+		if !staffLimited || (key == Staff) == isStaff(p.roles, staffRoles) {
+			used++
+		}
 	}
-	if int64(len(ps)) >= lim {
+	if used >= lim {
+		if key == Staff {
+			return &Error{Code: "plan_limit", Resource: Staff, Msg: fmt.Sprintf(
+				"Paket %s berlaku untuk %d staf yang bekerja dari HP, dan semuanya sudah terpakai. Naik paket atau keluarkan staf lain dulu.", st.Plan, lim)}
+		}
 		return &Error{Code: "plan_limit", Resource: Users, Msg: fmt.Sprintf(
 			"Paket %s berlaku untuk %d pengguna, dan semuanya sudah terpakai. Naik paket atau keluarkan pengguna lain dulu.", st.Plan, lim)}
 	}
@@ -795,7 +876,8 @@ type Snapshot struct {
 	Current       *Current
 	Usage         Usage
 	ExcessOutlets map[string]bool // org + "/" + outlet name: the newest outlets past the limit
-	ExcessPeople  map[string]bool // emails: the newest non-owner members past the limit
+	ExcessPeople  map[string]bool // emails: the newest non-owner members past the users or the staff limit
+	ExcessStaff   map[string]bool // the ExcessPeople past the staff limit (contract 0074 §5)
 	ExcessApps    map[string]bool // the newest installed apps past the apps limit (contract 0057 §1)
 	ExcessUnits   map[string]bool // the units only those apps use: their records are read-only
 	At            time.Time
@@ -808,7 +890,7 @@ func Take(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) (
 		return nil, err
 	}
 	c.At = now
-	s := &Snapshot{Current: c, ExcessOutlets: map[string]bool{}, ExcessPeople: map[string]bool{}, ExcessApps: map[string]bool{},
+	s := &Snapshot{Current: c, ExcessOutlets: map[string]bool{}, ExcessPeople: map[string]bool{}, ExcessStaff: map[string]bool{}, ExcessApps: map[string]bool{},
 		ExcessUnits: map[string]bool{}, At: now}
 	s.Usage.Apps = int64(len(InstalledApps(reg)))
 	if lim, ok := c.Limit(Apps); ok {
@@ -826,16 +908,27 @@ func Take(ctx context.Context, db *pg.Pool, reg *meta.Registry, now time.Time) (
 			}
 		}
 	}
-	ps, err := people(ctx, db)
+	ps, err := persons(ctx, db)
 	if err != nil {
 		return nil, err
 	}
-	s.Usage.Users = int64(len(ps))
-	if lim, ok := c.Limit(Users); ok {
-		for i, p := range ps {
-			if int64(i) >= lim && i > 0 { // the first person (an owner) is never read-only
-				s.ExcessPeople[p] = true
+	staffRoles := StaffRoles(reg)
+	staffLim, staffLimited := c.Limit(Staff)
+	userLim, usersLimited := c.Limit(Users)
+	for i, p := range ps {
+		staff := isStaff(p.roles, staffRoles)
+		if staff {
+			s.Usage.Staff++
+		}
+		if staff && staffLimited {
+			if s.Usage.Staff > staffLim && i > 0 {
+				s.ExcessPeople[p.email], s.ExcessStaff[p.email] = true, true
 			}
+			continue
+		}
+		s.Usage.Users++
+		if usersLimited && s.Usage.Users > userLim && i > 0 { // the first person (an owner) is never read-only
+			s.ExcessPeople[p.email] = true
 		}
 	}
 	if s.Usage.AICredits, err = AIUsed(ctx, db, Period(reg, now)); err != nil {
@@ -920,6 +1013,12 @@ func (s *Snapshot) ReadOnlyPerson(email string) *Error {
 	if !s.ExcessPeople[strings.ToLower(email)] {
 		return nil
 	}
+	if s.ExcessStaff[strings.ToLower(email)] {
+		lim, _ := s.Current.Limit(Staff)
+		return &Error{Code: "plan_read_only", Resource: Staff, Msg: fmt.Sprintf(
+			"Akun ini sedang mode baca: paket %s berlaku untuk %d staf yang bekerja dari HP dan usaha ini punya %d. Data tetap aman. Minta pemilik usaha naik paket atau mengeluarkan staf lain.",
+			s.Current.Label(), lim, s.Usage.Staff)}
+	}
 	lim, _ := s.Current.Limit(Users)
 	return &Error{Code: "plan_read_only", Resource: Users, Msg: fmt.Sprintf(
 		"Akun ini sedang mode baca: paket %s berlaku untuk %d pengguna dan usaha ini punya %d. Data tetap aman. Minta pemilik usaha naik paket atau mengeluarkan pengguna lain.",
@@ -991,6 +1090,7 @@ func (s *Snapshot) Report(reg *meta.Registry, period string) map[string]any {
 	meters := map[string]Meter{
 		Outlets:   meter(c, Outlets, s.Usage.Outlets, "outlet"),
 		Users:     meter(c, Users, s.Usage.Users, "pengguna"),
+		Staff:     meter(c, Staff, s.Usage.Staff, "staf HP"),
 		AICredits: meter(c, AICredits, s.Usage.AICredits, "kredit Raka bulan ini"),
 		Apps:      meter(c, Apps, s.Usage.Apps, "app"),
 		DBMB:      meter(c, DBMB, s.Usage.DBMB, "MB database"),

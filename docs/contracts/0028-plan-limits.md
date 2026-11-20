@@ -23,6 +23,8 @@ tenant's plan meant editing `config.rk` and restarting the kernel.
    - `outlets`: creating a record of model `outlet` (REST, import, a flow's `create`) past the limit is refused with
      403 `plan_limit`. Creations take an advisory lock so two at once cannot both take the last place. Seed is not
      checked (operator data).
+     Amended by 0057 §5: a module may scope the count with `limit_scope: {outlets: <check field>}`, so only stores
+     count and warehouses are free.
    - `users`: people, each counted once however many organisations they belong to. `rangka user add` refuses a new
      person past the limit (`plan_limit`, exit 1); an existing member is not a new person. Any future member API
      calls `plan.CheckNewPerson` the same way.

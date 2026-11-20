@@ -426,7 +426,73 @@ type outletRow struct {
 	at        time.Time
 }
 
-// outletRows lists every outlet of every organisation (each read with that org's row-level setting).
+// LimitScope is the check field of model outlet that the outlets limit counts by (contract 0057 §5): the module
+// that owns the model declares limit_scope: {outlets: is_store} in its module.rk, and only records where the field
+// is true count (a warehouse is free). "" when no unit declares it, or the field is not a check field of the
+// model: every record counts, as in 0028.
+func LimitScope(reg *meta.Registry, key string) string {
+	m := reg.Model("outlet")
+	if m == nil || key != Outlets {
+		return ""
+	}
+	names := make([]string, 0, len(reg.App))
+	for n := range reg.App {
+		names = append(names, n)
+	}
+	sort.Strings(names)
+	for _, n := range names {
+		if !owns(reg.App[n], "outlet") { // only the owner of the model may scope it (the validators say so)
+			continue
+		}
+		ls, _ := reg.App[n].Raw["limit_scope"].(map[string]any)
+		name, _ := ls[key].(string)
+		if name == "" {
+			continue
+		}
+		if f := m.Field(name); f != nil && f.Type == "check" {
+			return name
+		}
+		return ""
+	}
+	return ""
+}
+
+func owns(a *meta.App, model string) bool {
+	for _, m := range a.Models {
+		if m == model {
+			return true
+		}
+	}
+	return false
+}
+
+// scopeWhere is the SQL condition (with a leading " and ") that keeps only the outlets the limit counts. A row the
+// field is null on (written before the field existed and not yet backfilled by rangka migrate) counts, so a
+// missing backfill never lowers the count.
+func scopeWhere(reg *meta.Registry) string {
+	f := LimitScope(reg, Outlets)
+	if f == "" {
+		return ""
+	}
+	return " and coalesce(" + pg.QuoteIdent(f) + ", true)"
+}
+
+// Counted reports whether rec (an outlet record, its computes applied) counts toward the outlets limit.
+func Counted(reg *meta.Registry, rec map[string]any) bool {
+	f := LimitScope(reg, Outlets)
+	if f == "" {
+		return true
+	}
+	v, ok := rec[f]
+	if !ok || v == nil {
+		return true
+	}
+	b, isBool := v.(bool)
+	return !isBool || b
+}
+
+// outletRows lists every outlet of every organisation that the outlets limit counts (each read with that org's
+// row-level setting).
 func outletRows(ctx context.Context, db *pg.Pool, reg *meta.Registry) ([]outletRow, error) {
 	if reg.Model("outlet") == nil {
 		return nil, nil
@@ -435,9 +501,10 @@ func outletRows(ctx context.Context, db *pg.Pool, reg *meta.Registry) ([]outletR
 	if err != nil {
 		return nil, err
 	}
+	where := scopeWhere(reg)
 	var out []outletRow
 	for _, o := range os {
-		res, err := db.Query(pg.WithOrg(ctx, o), "select name, created_at from "+pg.QuoteIdent(store.TableName("outlet"))+" where org_id = $1", o)
+		res, err := db.Query(pg.WithOrg(ctx, o), "select name, created_at from "+pg.QuoteIdent(store.TableName("outlet"))+" where org_id = $1"+where, o)
 		if err != nil {
 			return nil, err
 		}
@@ -584,6 +651,16 @@ func LimitError(reg *meta.Registry, c *Current, key string) *Error {
 
 // ---------- enforcement
 
+// CheckOutlet refuses rec, a new outlet or one changed so it starts to count (a warehouse retyped as a store), past
+// the plan's limit (contract 0057 §5). was is the stored record before the change (nil on create). A record that
+// does not count, or already counted, is never refused.
+func CheckOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org string, was, rec map[string]any) error {
+	if !Counted(reg, rec) || (was != nil && Counted(reg, was)) {
+		return nil
+	}
+	return CheckNewOutlet(ctx, tx, reg, org)
+}
+
 // CheckNewOutlet refuses one more outlet past the plan's limit. tx is the creating transaction (org's setting). An
 // advisory lock serialises outlet creation, so two at once cannot both take the last place. Every count runs in tx
 // (the row-level setting switched per org with set_config(..., true), then set back to what tx had), never on a second connection.
@@ -612,12 +689,13 @@ func CheckNewOutlet(ctx context.Context, tx pg.Querier, reg *meta.Registry, org 
 		return err
 	}
 	table := pg.QuoteIdent(store.TableName("outlet"))
+	where := scopeWhere(reg)
 	var used int64
 	count := func(o string) error {
 		if _, err := tx.Query(ctx, "select set_config('rangka.org', $1, true)", o); err != nil {
 			return err
 		}
-		r, err := tx.Query(ctx, "select count(*) from "+table+" where org_id = $1", o)
+		r, err := tx.Query(ctx, "select count(*) from "+table+" where org_id = $1"+where, o)
 		if err != nil {
 			return err
 		}

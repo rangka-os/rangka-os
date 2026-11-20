@@ -1,0 +1,17 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/dashboard.json
+name: crm_overview
+label: {id: Ringkasan CRM}
+widgets:
+  - name: pipeline
+    type: number
+    label: {id: Nilai pipeline}
+    model: deal
+    aggregate: sum
+    field: value
+    filter: stage != 'won' && stage != 'lost'
+  - name: by_stage
+    type: chart
+    chart: bar
+    label: {id: Per tahap}
+    model: deal
+    group_by: stage

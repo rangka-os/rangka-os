@@ -517,6 +517,16 @@ test("Raka draws the head, two eyes in the mask and the titik; teal only for mik
   assert.match(render(R.Raka({ state: "kerja" })).props["aria-label"], /sedang bekerja/);
 });
 
+test("every Raka is alive by default; interactive: false keeps one still", () => {
+  const live = (tree) => hasClass(tree, "live") && typeof tree.props.onClick === "function";
+  assert.ok(live(render(R.Raka({ size: 22, title: "" }))), "a 22 px chat avatar is live");
+  assert.ok(live(render(R.Raka({ size: 56 }))), "a large Raka is live");
+  assert.ok(!live(render(R.Raka({ size: 22, interactive: false }))), "interactive: false keeps it still");
+  const drawer = render(R.ChatDrawer({ open: true, turns: [{ role: "assistant", text: "Halo" }] }));
+  const avatars = nodes(drawer, (n) => n.type === "svg" && hasClass(n, "rk-mascot"));
+  assert.ok(avatars.length >= 1 && avatars.every(live), "chat drawer avatars are live");
+});
+
 test("RakaLauncher shows Raka working while busy; pending changesets do not light the titik", () => {
   const raka = (p) => nodes(render(R.RakaLauncher(Object.assign({ open: false, onToggle() {} }, p))), (n) => n.type === "svg" && hasClass(n, "rk-mascot"))[0];
   assert.strictEqual(raka({ busy: true }).props["data-state"], "kerja");

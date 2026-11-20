@@ -20,7 +20,7 @@ Shared by rangka-ai and rangka-cloud: copy verbatim into tests. The contract (`.
 - `ops-remove-piece.json`: removing a piece removes it from every stage (stages kept); unknown id, and an id from another collection, drop as `unknown_id`.
 - `facts-to-map-complete.json`: all 13 facts to a map: `t_customers` first among the settings, trim, whitespace-only fact is absent, setting order (`data_to_move` last before `t_replace`), `pain_points` as the pain `n_pain_points` (contract 0050 §3), `p_current`, 300 UTF-16 unit cut with an emoji before the cut.
 - `facts-to-map-missing.json`: absent, null, non-string and blank facts are absent; `o_<key>` scripted questions for missing required facts; an unrecognised `replace_or_complement` gives neither setting nor open item.
-- `facts-to-map-normalise.json`: surrounding whitespace is trimmed before use (`  Ganti penuh ` gives setting `t_replace` "Juragan: ganti penuh"; ` Kue basah ` gives summary `Kue basah`); the JavaScript trim set applies: U+FEFF and U+3000 are trimmed, U+0085 is not (Go's `strings.TrimSpace` would differ).
+- `facts-to-map-normalise.json`: surrounding whitespace is trimmed before use (`  Ganti penuh ` gives setting `t_replace` "zafdoz.ai: ganti penuh"; ` Kue basah ` gives summary `Kue basah`); the JavaScript trim set applies: U+FEFF and U+3000 are trimmed, U+0085 is not (Go's `strings.TrimSpace` would differ).
 - `facts-to-map-surrogate-cut.json`: a 320-unit `business_name` is cut to 300; an emoji at units 300–301 is left out whole (cut at 299) in `business.summary` and a setting text; an emoji at units 299–300 is kept.
 
 Since contract 0050 every emitted map carries `pains` and every piece `solves` (both `[]` when empty); a request map may

@@ -57,7 +57,7 @@ QUESTIONS = {
     "business_name": "Nama usahamu apa? (dipakai di aplikasi, tidak dibagikan)",
     "offer": "Kamu jual barang atau jasa apa?",
     "current_tools": "Sekarang semua ini dicatat pakai apa? Buku, Excel, grup WA, atau aplikasi lain?",
-    "replace_or_complement": "Juragan mau menggantikan cara yang sekarang sepenuhnya, atau jadi pendamping sistem "
+    "replace_or_complement": "zafdoz.ai mau menggantikan cara yang sekarang sepenuhnya, atau jadi pendamping sistem "
                              "yang sudah ada?",
 }
 # JavaScript String.prototype.trim() white space and line terminators (section 4).
@@ -400,9 +400,9 @@ def facts_to_map(facts):
     if "replace_or_complement" in present:
         n = normalise_replace(present["replace_or_complement"])
         if n == "ganti":
-            m["settings"].append({"id": "t_replace", "text": "Juragan: ganti penuh"})
+            m["settings"].append({"id": "t_replace", "text": "zafdoz.ai: ganti penuh"})
         elif n == "pendamping":
-            m["settings"].append({"id": "t_replace", "text": "Juragan: pendamping"})
+            m["settings"].append({"id": "t_replace", "text": "zafdoz.ai: pendamping"})
     if "current_tools" in present:
         m["pieces"].append({"id": "p_current", "kind": "existing", "label": cut(present["current_tools"]),
                             "solves": []})

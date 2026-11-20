@@ -144,7 +144,7 @@ Rules (Python and Go must produce maps that are deep-equal after JSON parsing):
 - `business.name` from `business_name`, `business.kind` from `industry`, `business.summary` from `offer`, each cut to 300 (each only if present, else empty string).
 - Settings: for each of `customers`, `ordering`, `payment`, `fulfilment`, `locations`, `team`, `data_to_move`, `pain_points` that is present, a `setting` with id `t_<key>` and text `"<label>: <value>"`, cut to 300. Order: `FactKeys` order (the order just listed), then `t_replace` last.
 - `current_tools` present: one piece, id `p_current`, kind `existing`, `label` = the value cut to 300, no `why`, no `ref`.
-- `replace_or_complement` present: normalise it (trim as above, lowercase; starts with `ganti` → `ganti`, else starts with `pendamping` → `pendamping`, else none). Setting `t_replace` with text `"Juragan: ganti penuh"` for `ganti`, `"Juragan: pendamping"` for `pendamping`; none gives no setting. (This is rangka-cloud `NormaliseReplaceOrComplement` with this contract's trim.)
+- `replace_or_complement` present: normalise it (trim as above, lowercase; starts with `ganti` → `ganti`, else starts with `pendamping` → `pendamping`, else none). Setting `t_replace` with text `"zafdoz.ai: ganti penuh"` for `ganti`, `"zafdoz.ai: pendamping"` for `pendamping`; none gives no setting. (This is rangka-cloud `NormaliseReplaceOrComplement` with this contract's trim.)
 - Each required fact (`RequiredForDone` order: `business_name`, `offer`, `current_tools`, `replace_or_complement`) that is absent gives an `open` item `o_<key>` with the scripted question below.
 - `stages` is empty.
 
@@ -155,7 +155,7 @@ Scripted questions (rangka-cloud `MissingFactQuestions`, verbatim):
 | `business_name` | Nama usahamu apa? (dipakai di aplikasi, tidak dibagikan) |
 | `offer` | Kamu jual barang atau jasa apa? |
 | `current_tools` | Sekarang semua ini dicatat pakai apa? Buku, Excel, grup WA, atau aplikasi lain? |
-| `replace_or_complement` | Juragan mau menggantikan cara yang sekarang sepenuhnya, atau jadi pendamping sistem yang sudah ada? |
+| `replace_or_complement` | zafdoz.ai mau menggantikan cara yang sekarang sepenuhnya, atau jadi pendamping sistem yang sudah ada? |
 
 ### 5. Studio knowledge over the gateway
 

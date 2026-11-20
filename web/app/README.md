@@ -139,6 +139,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 | `ai.js` | Raka (contract 0020): `AssistantRoot` with the ⌘J ask bar and the chat drawer, streamed over `api.aiChat`; shown only when `meta.features.ai`. The Console loads it too |
 | `team.js` | Pengaturan → Tim (contract 0056 §4): the owner's team list, Undang (with the one-time sign-in link: Salin, Kirim lewat WhatsApp), Ubah, Hapus; read only with "Atur tim di Rangka Cloud." when `managed_by` is `host`. Also the sign-in link page (`#/masuk/tautan`), which the shell opens before asking who is signed in |
 | `tampilan.js` | Pengaturan → Tampilan (contract 0067): everyone's own mode and theme (`PUT /me/appearance`); for the owner the theme gallery (try on the page, Terapkan as a change set) and "Buat tema sendiri" (one colour, logo colours, button, neutral, font; gated by the plan's `custom_theme`). The shell paints the effective theme as inline custom properties on `<html>` (`RA.paintTheme`) |
+| `map.js` | Maps (contract 0072, rangka-os#248): `RA.loadLeaflet()` (vendored Leaflet + markercluster on first use), `RA.MapView` (tiles from `/meta` `maps`, token pins, clusters, circle, "Posisi saya", `onMove(bbox)`, `onPick`) and `RA.MapThumb` (static tile preview, used by read-only `geo` fields) |
 | `process.js` | "Proses bisnis": the process list and the read-only canvas (`../canvas`, `RangkaCanvas.Mounted` with `readOnly: true`) |
 | `test/*.test.js` | `node --test` units for the pure parts of each file |
 | `test_app.py` | Live Playwright suite against a real kernel |

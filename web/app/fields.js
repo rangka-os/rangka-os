@@ -389,6 +389,15 @@
     function set(x) { p.onChange(f.name, x); }
     if (f.type === "table") return h(Grid, { ctx: ctx, model: m, field: f, rec: rec, readOnly: p.readOnly, lockText: p.lockText, error: p.error, hint: p.hint, onChange: p.onChange });
     if (p.readOnly || f.read_only || f.compute) {
+      if (f.type === "geo" && RA.MapThumb && RA.mapsUrl && v && typeof v.lat === "number" && typeof v.lng === "number") {
+        // a saved point shows where it is (rangka-os#248): a one-tile preview, the coordinates, and the full map outside
+        return h("div", { className: "rk-field" }, h("label", null, label),
+          h("div", { className: "pv-ro ap-geo-ro" },
+            h(RA.MapThumb, { lat: v.lat, lng: v.lng, fluid: true, maxWidth: 960, height: 180, label: "Peta " + label }),
+            h("div", { className: "ap-geo-line" },
+              h("a", { className: "ap-work-link", href: RA.mapsUrl(v), target: "_blank", rel: "noopener" }, "Buka di peta"),
+              h("span", { className: "ap-geo" }, fieldText(ctx, f, v)))));
+      }
       return h("div", { className: "rk-field" }, h("label", null, label), h("div", { className: cx("pv-ro", numeric(f) && "num") }, fieldText(ctx, f, v)));
     }
     var hint = p.error ? undefined : p.hint;

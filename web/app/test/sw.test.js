@@ -37,13 +37,15 @@ test("only Google Fonts are cached from other origins", () => {
   assert.strictEqual(SW.classify({ url: "not a url", method: "GET" }, ORIGIN, "/app/"), "pass");
 });
 
+const LAZY = ["vendor/zxing.min.js", "vendor/leaflet.min.js", "vendor/leaflet.markercluster.min.js", "vendor/leaflet.css"];
+
 test("PRECACHE lists exactly the local files index.html loads, plus manifest and icons, and they exist", () => {
   const html = fs.readFileSync(path.join(APP, "index.html"), "utf8");
   const refs = [];
   const re = /<(?:script[^>]*\ssrc|link[^>]*\shref)="([^"]+)"/g;
   let m;
   while ((m = re.exec(html))) if (!/^https?:/.test(m[1])) refs.push(m[1]);
-  const extra = SW.PRECACHE.filter((p) => p === "./" || p.startsWith("icons/") || p === "manifest.webmanifest" || p === "vendor/zxing.min.js"); // zxing: loaded by scan.js on first need, precached for offline
+  const extra = SW.PRECACHE.filter((p) => p === "./" || p.startsWith("icons/") || p === "manifest.webmanifest" || LAZY.includes(p)); // loaded on first need (scan.js, map.js), precached for offline
   assert.deepStrictEqual([...SW.PRECACHE].filter((p) => !extra.includes(p)).sort(),
     refs.filter((p) => !p.startsWith("icons/") && p !== "manifest.webmanifest").sort());
   for (const r of refs) assert.ok(SW.PRECACHE.includes(r), r + " is loaded by index.html but not precached");
@@ -60,4 +62,9 @@ test("the manifest is installable: id, start_url, scope, standalone, 192 and 512
   assert.ok(sizes.includes("192x192") && sizes.includes("512x512"));
   assert.ok(man.icons.some((i) => i.purpose === "maskable"));
   for (const i of man.icons) assert.ok(fs.existsSync(path.join(APP, i.src)), i.src);
+});
+
+test("index.html never loads Leaflet: a page without a map keeps its first-load bytes (rangka-os#248)", () => {
+  const html = fs.readFileSync(path.join(APP, "index.html"), "utf8");
+  assert.ok(!/leaflet/i.test(html), "Leaflet is loaded by map.js on first use only");
 });

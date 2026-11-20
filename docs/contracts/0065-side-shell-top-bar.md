@@ -1,6 +1,6 @@
 # 0065 Side-only shell gets the top bar
 
-Status: implemented (18 Nov 2026) · Owner of the change: rangka-os (web app) · Affects: nothing in rangka-apps or rangka-cloud
+Status: implemented (18 Nov 2026), amended 20 Nov 2026 · Owner of the change: rangka-os (web app) · Affects: nothing in rangka-apps or rangka-cloud
 
 ## Context
 
@@ -34,3 +34,20 @@ on `side-only`, and the tour does not start in `top-nav`.
 - `web/app/shell.js`: `deskTop` in the side-only shell.
 - `web/app/index.html`: `.ap-dtop` rules.
 - `web/app/test_app.py`: `test_side_shell_top_bar`.
+
+## Amendment (20 Nov 2026): one account menu
+
+"The sidebar stays exactly as it is" left two menus with the same actions: the sidebar's business switcher carried
+the account since contract 0019 (the side shell had no top bar then), and the new top bar brought TopNav's avatar
+menu. Owners saw Perusahaan, Pakai / Ubah, the theme, Profil, Ganti akun and Keluar twice, with "Mode" as the heading
+of both the theme and Pakai / Ubah.
+
+5. **Beside the top bar the switcher is the business switcher only.** Where `.ap-dtop` shows (side-only, 768px up,
+   not a drawer tablet) its menu lists the companies and nothing else. The apps are in the bar's app switcher, the
+   account in its avatar menu.
+6. **The avatar menu takes what only the switcher had.** "Tema dan tampilan" and "Notifikasi" (heading Pengaturan) and
+   "Ulangi tur" (heading Bantuan), in both TopNavs (side-only and `top-nav`).
+7. **Without the top bar nothing changes.** On a phone, a drawer tablet and the work shell's rail the switcher keeps
+   the full menu (apps, companies, theme, help, account); its theme heading is now "Tema", not "Mode".
+8. **The Kenalan tour's last step** ("Bantuan ada di sini") lights the avatar button where the bar shows, else the
+   switcher.

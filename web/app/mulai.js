@@ -732,7 +732,9 @@
       { target: nav("approvals"), before: side, optional: true, title: "Persetujuan", body: "Pesanan atau pengeluaran yang perlu keputusanmu menunggu di sini, lengkap dengan angkanya. Angka di sebelahnya jumlah yang menunggu." },
       { target: businessNav(o.groups), before: side, optional: true, title: "Menu usaha", body: "Semua catatan usahamu dikelompokkan di sini, misalnya barang, pemasok, dan penjualan. Tiap menu punya tombol Tambah di kanan atas." },
       { target: ".ap-ask", before: side, optional: true, title: "Tanya Raka", body: "Raka bisa menyiapkan draf, menjelaskan angka, atau mencarikan catatan. Raka menyiapkan, kamu yang menyimpan." },
-      { target: ".rk-side-switch", before: side, title: "Bantuan ada di sini", body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 }
+      // the top bar's account menu where it shows (contract 0065), else the sidebar's switcher (phone drawer)
+      { target: function () { return shown([".ap-dtop .rk-av-btn", ".rk-side-switch"]); }, before: side, title: "Bantuan ada di sini",
+        body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 }
     ].filter(Boolean);
     return steps;
   }
@@ -757,7 +759,7 @@
       steps.push({ target: ".ap-ask", before: side, optional: true, title: "Tanya Raka",
         body: "Raka bisa menjelaskan cara mengisi, mencarikan catatan, atau menyiapkan draf. Raka menyiapkan, kamu yang menyimpan." });
     }
-    steps.push({ target: function () { return shown([".rk-side-switch", ".ap-wme", ".ap-wacct"]); }, before: side, title: "Bantuan ada di sini",
+    steps.push({ target: function () { return shown([".ap-dtop .rk-av-btn", ".rk-side-switch", ".ap-wme", ".ap-wacct"]); }, before: side, title: "Bantuan ada di sini",
       body: "Buka menu ini lalu pilih Ulangi tur kalau ingin melihat panduan ini lagi.", wait: 800 });
     return steps;
   }

@@ -20,7 +20,9 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
   collapse button; collapsed state is kept in `localStorage["rk.sidebar.collapsed"]`.
   From 768px up a top bar sits above the page, beside the sidebar (contract 0065). It is the TopNav without the product
   tile: the app switcher when apps are installed, the menu (`nav.top`, else one item per sidebar group, from 1024px),
-  search, notifications, help and the account menu.
+  search, notifications, help and the account menu (which also has Tema dan tampilan, Notifikasi and Ulangi tur).
+  While the bar shows, the sidebar's switcher opens the companies only; the full menu above is for a phone, a drawer
+  tablet and the work shell's rail, where there is no bar (contract 0065 amendment).
   At 600px and below the sidebar is a drawer opened from a 48px bar (menu, company, search).
   With `layout.responsive.phone: tabs` (contract 0038) a phone gets bottom tabs from `responsive.tabs` plus a last Menu
   tab that opens the drawer; the top-nav shell then drops its own menu button, and toasts sit above the tabs. Escape
@@ -88,7 +90,7 @@ The UI is Bahasa Indonesia first and works from 400px (phone) to desktop.
 
 - **Who sees it.** Only people with `meta.changesets.propose` (a browser session and the owner, or a role in
   `config.ai.approvers` / `config.ai.proposers`) get a "Mode" section (Pakai / Ubah tampilan dan data) in the account menu: the avatar menu
-  in the top-nav shell, the business switcher's menu in the side shell. The Ubah bar has "Selesai" to go back to Pakai.
+  in the top-nav shell and in the side shell's top bar, the business switcher's menu where the side shell has no bar. The Ubah bar has "Selesai" to go back to Pakai.
   Everyone else gets no Mode section, and `?ubah=1` does nothing. The mode is off while offline (it writes change sets).
 - **What it does.** In Ubah people rearrange dashboards, forms, list and kanban columns and the menu, and add fields,
   stages, approvals, automations and tables. Every edit is a change set (contract 0015). A low-risk edit by an approver is

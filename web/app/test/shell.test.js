@@ -5,8 +5,11 @@ const path = require("path");
 const vm = require("vm");
 
 const SRC = fs.readFileSync(path.join(__dirname, "..", "shell.js"), "utf8");
+const MULAI = fs.readFileSync(path.join(__dirname, "..", "mulai.js"), "utf8");
 function load() {
-  const w = {};
+  // mulai.js loads before shell.js in index.html; it brings the shared role rule (ownerOrUnknown)
+  const w = { React: { createElement() {}, useState() {}, useEffect() {}, useRef() {}, useContext() {}, useLayoutEffect() {} }, Rangka: {} };
+  vm.runInNewContext(MULAI, { window: w }, { filename: "mulai.js" });
   vm.runInNewContext(SRC, { window: w }, { filename: "shell.js" });
   return w.RangkaApp;
 }

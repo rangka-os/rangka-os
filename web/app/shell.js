@@ -361,8 +361,8 @@
    *  it (contract 0053 §3) and invite the team (0056 §4). A meta without the user's roles (an older kernel) keeps the
    *  checklist for everyone, as before. */
   function canSetUp(meta) {
-    var roles = meta && meta.user && meta.user.roles;
-    return !Array.isArray(roles) || !roles.length || roles.indexOf("owner") >= 0;
+    // one rule with the tour and Setujui (mulai.js ownerOrUnknown, loaded before this file)
+    return RA.ownerOrUnknown ? RA.ownerOrUnknown(meta) : true;
   }
 
   /** The side-only sidebar: Beranda, Mulai di sini and the feature entries pinned on top, the layout's or the apps'
@@ -1141,8 +1141,10 @@
         var fresh = before ? (d.steps || []).filter(function (x) { return x.state === "done" && !was[x.stage]; })[0] : null;
         if (fresh && !d.hidden) {
           var done = (d.steps || []).filter(function (x) { return x.state === "done"; }).length, next = (d.steps || []).filter(function (x) { return x.stage === d.current; })[0];
+          // the checklist is the owner's (canSetUp): staff get the note without the way into #/mulai
+          var nowMeta = (ctxRef.current && ctxRef.current.meta) || meta;
           toast("ok", "Langkah beres: " + L(fresh.label), done + " dari " + d.steps.length + " langkah beres." + (next ? " Berikutnya: " + L(next.label) + "." : " Tahap ini beres."),
-            { action: "Lihat langkah", onAction: function () { RA.navigate("#/mulai"); } });
+            canSetUp(nowMeta) ? { action: "Lihat langkah", onAction: function () { RA.navigate("#/mulai"); } } : undefined);
         }
         return d;
       }, function () { return null; }); // an older kernel without the route: no Mulai di sini, nothing else changes

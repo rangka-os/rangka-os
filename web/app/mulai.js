@@ -664,43 +664,57 @@
     }
     return out.slice(0, 3);
   }
+  /** Whether an `approve:` step in steps (at any depth: if then/else, for_each do) names a role in roles. */
+  function stepsApprove(steps, roles) {
+    return (Array.isArray(steps) ? steps : []).some(function (s) {
+      if (!s || typeof s !== "object") return false;
+      if (s.approve && (s.approve.approvers || []).some(function (r) { return roles.indexOf(r) >= 0; })) return true;
+      return stepsApprove(s.then, roles) || stepsApprove(s.else, roles) || stepsApprove(s.do, roles);
+    });
+  }
   /** The models whose approvals name one of the person's roles: a model's `approvals:` (0007), or an `approve:` step
    *  of a flow that runs on that model's event (`on: <model>.<event>`), at any depth (if then/else, for_each do).
-   *  A flow on a connector trigger or a schedule names no model, so its approve: steps are not counted. */
+   *  A flow on a connector trigger or a schedule names no model, so its approve: steps are not counted here (the
+   *  tour names models); canApprove counts them. */
   function approvesModels(meta) {
     var roles = ((meta && meta.user) || {}).roles || [], out = [];
-    function mine(list) { return (list || []).some(function (r) { return roles.indexOf(r) >= 0; }); }
+    if (!Array.isArray(roles)) roles = [];
     var models = (meta && meta.models) || {};
     Object.keys(models).sort().forEach(function (m) {
-      if (((models[m] || {}).approvals || []).some(function (a) { return a && mine(a.approvers); })) out.push(m);
+      if (((models[m] || {}).approvals || []).some(function (a) { return a && (a.approvers || []).some(function (r) { return roles.indexOf(r) >= 0; }); })) out.push(m);
     });
-    function approves(steps) {
-      return (Array.isArray(steps) ? steps : []).some(function (s) {
-        if (!s || typeof s !== "object") return false;
-        if (s.approve && mine(s.approve.approvers)) return true;
-        return approves(s.then) || approves(s.else) || approves(s.do);
-      });
-    }
     var flows = (meta && meta.flows) || {};
     Object.keys(flows).sort().forEach(function (f) {
       var fl = flows[f] || {}, on = typeof fl.on === "string" ? fl.on : "", m = on.indexOf(".") > 0 ? on.slice(0, on.indexOf(".")) : "";
-      if (m && models[m] && out.indexOf(m) < 0 && approves(fl.steps)) out.push(m);
+      if (m && models[m] && out.indexOf(m) < 0 && stepsApprove(fl.steps, roles)) out.push(m);
     });
     return out.sort();
   }
-  /** Whether the person may decide an approval request: the owner always (Beranda and the tabs stay as they were);
-   *  anyone with a request they may decide waiting (counts.approvals, or can_decide rows: `waiting`); else, like the
-   *  welcome tour's Persetujuan step (0053 §7a), the approvals feature is on and a model's `approvals:` or a flow's
-   *  `approve:` names one of their roles. A meta without the user's roles (an older kernel) counts as yes. */
-  function canApprove(meta, features, waiting) {
+  /** Whether a flow's `approve:` step names one of the person's roles, whatever triggers the flow (a model event, a
+   *  schedule or a connector): the kernel creates those requests with the same approvers (engine requestApproval). */
+  function flowApproves(meta) {
+    var roles = ((meta && meta.user) || {}).roles, flows = (meta && meta.flows) || {};
+    if (!Array.isArray(roles)) return false;
+    return Object.keys(flows).some(function (f) { return stepsApprove((flows[f] || {}).steps, roles); });
+  }
+  /** The owner, or a person whose roles the kernel did not send (an older kernel): one rule for every role check of
+   *  the web app (Mulai di sini, Setujui, the welcome tour), failing open to what the owner sees. */
+  function ownerOrUnknown(meta) {
     var roles = meta && meta.user && meta.user.roles;
-    if (!Array.isArray(roles) || !roles.length || roles.indexOf("owner") >= 0) return true;
+    return !Array.isArray(roles) || !roles.length || roles.indexOf("owner") >= 0;
+  }
+  /** Whether the person may decide an approval request: the owner always (Beranda and the tabs stay as they were);
+   *  anyone with a request they may decide waiting (counts.approvals, or can_decide rows: `waiting`); else the
+   *  approvals feature is on and a model's `approvals:` or any flow's `approve:` (whatever its trigger) names one of
+   *  their roles. A meta without the user's roles (an older kernel) counts as yes. */
+  function canApprove(meta, features, waiting) {
+    if (ownerOrUnknown(meta)) return true;
     if (Number(waiting) > 0) return true;
-    return !!(features && features.approvals) && approvesModels(meta).length > 0;
+    return !!(features && features.approvals) && (approvesModels(meta).length > 0 || flowApproves(meta));
   }
   var MAX_LIT = 5; // lit places after the welcome (riset 26 K-TS2)
   /** Who the welcome tour is for: "owner" for the owner (the tour as it always was), "staff" for everyone else. */
-  function kenalanKind(meta) { return !meta || isOwner(meta) ? "owner" : "staff"; }
+  function kenalanKind(meta) { return ownerOrUnknown(meta) ? "owner" : "staff"; }
 
   /** The welcome tour (at most five lit places after the welcome, riset 26 K-TS2). drawer(open) opens the phone drawer.
    *  o: {company, mulai, drawer, meta, groups (the sidebar as drawn), raka (Tanya Raka is on), approvals (the
@@ -803,6 +817,8 @@
   RA.unlocks = unlocks;
   RA.mulaiSummary = mulaiSummary;
   RA.canApprove = canApprove;
+  RA.ownerOrUnknown = ownerOrUnknown;
+  RA.flowApproves = flowApproves;
   RA.stepPrereq = stepPrereq;
   RA.whenKind = whenKind;
   RA.saveCopy = saveCopy;

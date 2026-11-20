@@ -10,7 +10,8 @@
  *     lets the owner use the lit element (step.use).
  *   - Phone (600px and below): the card is a bottom sheet and the lit element scrolls into the upper half; an element
  *     that cannot scroll there (the work shell's fixed bottom bar) gets the sheet at the top instead. On a paired
- *     device (html.ap-sync-on) that top sheet floats below the sync pill, which stays visible above the dim.
+ *     device (html.ap-sync-on) that top sheet floats below the sync pill, which stays visible above the dim; when that
+ *     would cover the lit place (a phone held sideways) it sits beside the pill instead.
  *   - A step whose element never shows (1.5 s) is dropped when optional, else shown as a card without a light
  *     (26 K-TS4: never fail silently).
  *   - prefers-reduced-motion: no transitions (tur CSS in app.css).
@@ -58,14 +59,23 @@
   }
   function phone() { return global.innerWidth <= 600; }
   /** On a paired device (html.ap-sync-on) the sync pill floats above the tour (device.css, z-index 1310) so the person
-   *  keeps seeing what is still to send: the card keeps below it. The pill's bottom edge plus a gap, else 0. */
-  function pillReserve() {
-    var d = global.document, root = d.documentElement;
-    if (!root || !root.classList || !root.classList.contains("ap-sync-on")) return 0;
+   *  keeps seeing what is still to send. pillRect: the pill's box when it shows, else null. pillReserve: its bottom
+   *  edge plus a gap (the card keeps below it), else 0. */
+  function pillRect() {
+    var d = global.document, root = d && d.documentElement;
+    if (!root || !root.classList || !root.classList.contains("ap-sync-on")) return null;
     var pill = d.querySelector(".ap-sync-pill");
-    if (!pill || !pill.getBoundingClientRect) return 0;
+    if (!pill || !pill.getBoundingClientRect) return null;
     var r = pill.getBoundingClientRect();
-    return r.width > 0 && r.height > 0 ? Math.ceil(r.bottom) + 8 : 0;
+    return r.width > 0 && r.height > 0 ? r : null;
+  }
+  function pillReserve() { var r = pillRect(); return r ? Math.ceil(r.bottom) + 8 : 0; }
+  /** Phone, sheet at the top, sync pill showing: below the pill when the card (height ch) still ends above the lit
+   *  place (holeTop); else (a phone held sideways) beside the pill from the top edge, at most down to the lit place,
+   *  scrolling inside when longer. {mode: "under", top} | {mode: "beside", right, maxHeight}. */
+  function sheetSpot(reserve, ch, holeTop, pillLeft, vw) {
+    if (reserve + ch <= holeTop - GAP) return { mode: "under", top: reserve };
+    return { mode: "beside", right: Math.max(0, Math.ceil(vw - pillLeft) + 8), maxHeight: Math.max(0, Math.floor(holeTop - GAP)) };
   }
   function reduced() { return !!(global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches); }
   function waitFor(target, ms) {
@@ -99,9 +109,10 @@
   function place(r, cw, ch, minTop) {
     var vw = global.innerWidth, vh = global.innerHeight, x, y, t0 = Math.max(12, minTop || 0);
     var clampX = function (v) { return Math.max(12, Math.min(vw - cw - 12, v)); };
-    var clampY = function (v) { return Math.max(t0, Math.min(vh - ch - 12, v)); };
+    // the viewport wins over the pill: in a short window the card may rise next to the pill, never below the fold
+    var clampY = function (v) { return Math.max(Math.max(12, Math.min(t0, vh - ch - 12)), Math.min(vh - ch - 12, v)); };
     if (r.right + GAP + cw < vw - 12 && r.width < vw / 3) return { left: r.right + PAD + GAP, top: clampY(r.top - PAD), side: "right" };
-    if (r.bottom + GAP + ch < vh - 12) return { left: clampX(r.left), top: Math.max(t0, r.bottom + PAD + GAP), side: "bottom" };
+    if (r.bottom + GAP + ch < vh - 12) return { left: clampX(r.left), top: clampY(Math.max(t0, r.bottom + PAD + GAP)), side: "bottom" };
     if (r.top - GAP - ch > t0) return { left: clampX(r.left), top: r.top - PAD - GAP - ch, side: "top" };
     if (r.left - GAP - cw > 12) return { left: r.left - PAD - GAP - cw, top: clampY(r.top - PAD), side: "left" };
     x = clampX(r.left); y = clampY(r.bottom + PAD + GAP);
@@ -155,8 +166,15 @@
       return function () { global.removeEventListener("resize", on); global.removeEventListener("scroll", on, true); global.cancelAnimationFrame(raf); };
     }, []);
     // place the card once its size is known
+    // phone, top sheet on a paired device: under the pill, or beside it when that would cover the lit place
+    var ss = useState(null), spot = ss[0], setSpot = ss[1];
     useLayoutEffect(function () {
       if (!shown || !card.current) return;
+      if (phone()) {
+        var pr = pillRect(), vh0 = global.innerHeight;
+        var top0 = rect && rect.top - PAD > vh0 * 0.55;
+        setSpot(pr && top0 ? sheetSpot(Math.ceil(pr.bottom) + 8, card.current.getBoundingClientRect().height, rect.top - PAD, pr.left, global.innerWidth) : null);
+      }
       if (phone() || !rect) { setPos(null); return; }
       var c = card.current.getBoundingClientRect();
       setPos(place(rect, c.width, c.height, pillReserve()));
@@ -206,7 +224,8 @@
     var style = phone() || !hole ? null : pos ? { left: pos.left + "px", top: pos.top + "px" } : { left: "-9999px", top: "0px" };
     // phone, sheet at the top (the lit place is in the bottom bar): on a paired device it keeps below the sync pill
     var sheetTop = phone() && hole && hole.top > vh * 0.55, reserve = sheetTop ? pillReserve() : 0;
-    if (reserve) style = { "--tur-top": reserve + "px" };
+    var beside = !!(reserve && spot && spot.mode === "beside");
+    if (reserve) style = beside ? { "--tur-right": spot.right + "px", maxHeight: spot.maxHeight + "px" } : { "--tur-top": reserve + "px" };
     return h("div", { className: "ap-tur" + (shown ? " on" : "") + (using ? " using" : ""), "data-tour": def.id },
       blockers.map(function (b, k) {
         return h("div", { key: k, className: "ap-tur-dim", "aria-hidden": "true", style: { top: b.top + "px", left: b.left + "px", width: b.width + "px", height: b.height + "px" },
@@ -214,7 +233,7 @@
       }),
       hole ? h("div", { className: "ap-tur-hole", "aria-hidden": "true", style: { top: hole.top + "px", left: hole.left + "px", width: hole.width + "px", height: hole.height + "px" } }) : null,
       // phone: a sheet at the bottom; at the top when the lit element stays in the lower part (a fixed bottom bar)
-      h("div", { ref: card, className: "ap-tur-card" + (phone() ? " sheet" + (sheetTop ? " top" + (reserve ? " under-pill" : "") : "") : !hole ? " mid" : ""), role: "dialog", "aria-modal": step.use ? "false" : "true",
+      h("div", { ref: card, className: "ap-tur-card" + (phone() ? " sheet" + (sheetTop ? " top" + (beside ? " beside-pill" : reserve ? " under-pill" : "") : "") : !hole ? " mid" : ""), role: "dialog", "aria-modal": step.use ? "false" : "true",
         "aria-labelledby": titleId, "aria-describedby": titleId + "-b", style: style },
         h("p", { className: "ap-tur-n", "aria-live": "polite" }, def.eyebrow ? def.eyebrow + " · " : "", "Langkah " + (i + 1) + " dari " + n),
         h("h2", { id: titleId, className: "ap-tur-title" }, step.title),
@@ -259,6 +278,6 @@
   }
 
   RA.tour = { start: start, stop: function () { if (current) end("skipped"); }, active: function () { return current ? current.def.id : null; },
-    states: states, mark: mark, place: place, pillReserve: pillReserve };
+    states: states, mark: mark, place: place, pillReserve: pillReserve, sheetSpot: sheetSpot };
   RA.TourRoot = TourRoot;
 })(typeof window !== "undefined" ? window : globalThis);

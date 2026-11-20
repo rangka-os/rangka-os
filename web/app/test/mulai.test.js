@@ -320,6 +320,45 @@ test("kenalan owner: Menu usaha lights the first group of records, not the Dasbo
   assert.deepStrictEqual(titles(steps), ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Raka", "Bantuan ada di sini"]);
 });
 
+test("canApprove: an approve: step of a scheduled or connector flow counts too (audit F1)", () => {
+  const sup = (flows) => person(["supervisor"], { models: {}, flows });
+  const nightly = { name: "nightly_check", schedule: "0 2 * * *", steps: [{ if: "x", then: [{ approve: { approvers: ["supervisor"] } }] }] };
+  const hook = { name: "from_shop", on: "connector:shop.order", steps: [{ approve: { approvers: ["supervisor"] } }] };
+  assert.strictEqual(A.canApprove(sup({ nightly }), { approvals: true }, 0), true);
+  assert.strictEqual(A.canApprove(sup({ hook }), { approvals: true }, 0), true);
+  assert.strictEqual(A.canApprove(sup({ hook }), { approvals: false }, 0), false, "approvals off");
+  assert.strictEqual(A.canApprove(person(["clerk"], { flows: { nightly } }), { approvals: true }, 0), false, "another role");
+  assert.deepStrictEqual(plain(A.approvesModels(sup({ nightly, hook }))), [], "the tour still names models only");
+});
+
+test("ownerOrUnknown: one rule for the tour, Setujui and Mulai di sini (audit F4)", () => {
+  for (const m of [undefined, {}, { user: {} }, { user: { roles: null } }, { user: { roles: "x" } }, { user: { roles: [] } }]) {
+    assert.strictEqual(A.ownerOrUnknown(m), true);
+    assert.strictEqual(A.kenalanKind(m), "owner", "a meta without roles gets the owner tour, as it gets Mulai di sini");
+  }
+  assert.strictEqual(A.kenalanKind(person(["owner", "sales_rep"])), "owner");
+  assert.strictEqual(A.kenalanKind(person(["sales_rep"])), "staff");
+});
+
+test("tur.js: a top sheet that would cover the lit place moves beside the pill; the desktop card stays on screen (audit F2, F3)", () => {
+  const w = { React: { createElement() {}, useState() {}, useEffect() {}, useRef() {}, useLayoutEffect() {} }, Rangka: {}, innerWidth: 1024, innerHeight: 400 };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "tur.js"), "utf8"), { window: w }, { filename: "tur.js" });
+  const T = w.RangkaApp.tour;
+  // 375x812 portrait: room below the pill
+  assert.deepStrictEqual(plain(T.sheetSpot(104, 200, 735, 170, 375)), { mode: "under", top: 104 });
+  // 568x320 landscape: pill bottom 96 + 8, card 180, lit bar at 248 -> beside the pill, never past the bar
+  const s = plain(T.sheetSpot(104, 180, 248, 363, 568));
+  assert.strictEqual(s.mode, "beside");
+  assert.strictEqual(s.right, 213);
+  assert.ok(s.maxHeight <= 248 - 12);
+  // 1024x400 desktop, tall card, pill reserve 88: the card's bottom stays in the window
+  const r = T.place({ top: 20, bottom: 60, left: 40, right: 984, width: 944, height: 40 }, 340, 340, 88);
+  assert.ok(r.top + 340 <= 400 - 12, JSON.stringify(r));
+  // a tall window keeps the reserve
+  w.innerHeight = 900;
+  assert.ok(T.place({ top: 20, bottom: 60, left: 40, right: 984, width: 944, height: 40 }, 340, 180, 88).top >= 88);
+});
+
 const LOCKED = { process: "sewa", current: null, hidden: false, locks: { rental_booking: { reason: "needs_data", needs: ["customer"] } },
   steps: [{ stage: "pesan", label: { id: "Pelanggan pesan lewat WA" }, model: "rental_booking", state: "locked", needs: ["customer", "rental_item"] },
     { stage: "antar", label: { id: "Antar dan pasang" }, model: "rental_handover", state: "locked", needs: ["customer"] }] };

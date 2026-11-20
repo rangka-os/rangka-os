@@ -1,5 +1,5 @@
 {
- "about": "A cashier sale (rangka-apps pos_sale with promotions and loyalty) computed by the kernel's own compute path (kernel/internal/engine/pos_parity_test.go, which writes want with -update) and by engine.js prepare() (web/app/test/engine.test.js), which must agree: a paired device's totals are binding (contract 0058 §10). models is a snapshot of rangka-apps (tools/pos_parity_models.py keeps it in step); records are what the computes look up; each case is a new sale with the apps installed and the org's tax.",
+ "about": "A cashier sale (rangka-apps pos_sale with promotions and loyalty) computed by the kernel's own compute path (kernel/internal/engine/pos_parity_test.go, which writes want with -update) and by engine.js prepare() (web/app/test/engine.test.js), which must agree: a paired device's totals are binding (contract 0058 §10). models is a snapshot of rangka-apps (tools/pos_parity_models.py keeps it in step); records are what the computes look up; each case is a new sale with the apps installed and the org's tax. records are as the kernel holds them; a paired device holds the data sets minus fields hidden from the cashier (e.g. promotion.code), so the counter takes the kernel's own preview (POST /compute) while online and refuses non-record checkout values (codes, points, deposit) offline: the cases with a shared code describe the online numbers.",
  "models": {
   "customer": {
    "fields": [
@@ -626,7 +626,7 @@
      "type": "currency"
     },
     {
-     "compute": "promotion == '' || subtotal \u003c promotion.min_spend || !promotion.active || promotion.valid_from \u003e date || promotion.valid_until \u003c date || (promotion.only_outlet != '' \u0026\u0026 promotion.only_outlet != outlet) || (promotion.code_mode == 'shared' \u0026\u0026 promo_code.trim().upperAscii() != promotion.code) ? 0 : (promotion.kind == 'bill_pct' ? (promotion.max_discount \u003e 0 ? min(promotion.max_discount, round(subtotal * promotion.pct / 100)) : round(subtotal * promotion.pct / 100)) : (promotion.kind == 'bill_off' ? min(subtotal, promotion.amount_off) : 0))",
+     "compute": "promotion == '' || subtotal < promotion.min_spend || !promotion.active || promotion.valid_from > date || promotion.valid_until < date || (promotion.only_outlet != '' && promotion.only_outlet != outlet) || (promotion.code_mode == 'shared' && promo_code.trim().upperAscii() != promotion.code) ? 0 : (promotion.kind == 'bill_pct' ? (promotion.max_discount > 0 ? min(promotion.max_discount, round(subtotal * promotion.pct / 100)) : round(subtotal * promotion.pct / 100)) : (promotion.kind == 'bill_off' ? min(subtotal, promotion.amount_off) : 0))",
      "name": "bill_promo_offer",
      "type": "currency"
     },
@@ -636,12 +636,12 @@
      "type": "currency"
     },
     {
-     "compute": "member_discount_offer \u003e bill_promo_offer + gift_value ? member_discount_offer : 0",
+     "compute": "member_discount_offer > bill_promo_offer + gift_value ? member_discount_offer : 0",
      "name": "member_discount",
      "type": "currency"
     },
     {
-     "compute": "member_discount_offer \u003e bill_promo_offer + gift_value ? 0 : bill_promo_offer",
+     "compute": "member_discount_offer > bill_promo_offer + gift_value ? 0 : bill_promo_offer",
      "name": "bill_promo",
      "type": "currency"
     },
@@ -656,7 +656,7 @@
      "type": "currency"
     },
     {
-     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend \u003c= 0 || grand_total \u003c= 0 ? 0 : int(grand_total * member.earn_multiplier_pct / (member.earn_spend * 100))",
+     "compute": "!app_installed('loyalty') || member == '' || member.earn_spend <= 0 || grand_total <= 0 ? 0 : int(grand_total * member.earn_multiplier_pct / (member.earn_spend * 100))",
      "name": "points_earned",
      "type": "int"
     },
@@ -731,7 +731,7 @@
      "type": "currency"
     },
     {
-     "compute": "amount_due == 0 \u0026\u0026 deposit_used \u003e 0 ? 'deposit' : (qris_amount == 0 ? 'cash' : (qris_amount \u003e= amount_due ? 'qris' : 'split'))",
+     "compute": "amount_due == 0 && deposit_used > 0 ? 'deposit' : (qris_amount == 0 ? 'cash' : (qris_amount >= amount_due ? 'qris' : 'split'))",
      "name": "method",
      "options": [
       {
@@ -818,7 +818,7 @@
      "type": "float"
     },
     {
-     "compute": "packing == '' ? item.rate : (packing.rate \u003e 0 ? packing.rate : round(item.rate * packing.factor))",
+     "compute": "packing == '' ? item.rate : (packing.rate > 0 ? packing.rate : round(item.rate * packing.factor))",
      "name": "rate",
      "type": "currency"
     },
@@ -833,7 +833,7 @@
      "type": "float"
     },
     {
-     "compute": "is_gift ? '' : (item.promo_o != '' \u0026\u0026 item.promo_o_outlet == parent.outlet ? 'o' : (item.promo != '' \u0026\u0026 (item.promo_outlet == '' || item.promo_outlet == parent.outlet) ? 'a' : ''))",
+     "compute": "is_gift ? '' : (item.promo_o != '' && item.promo_o_outlet == parent.outlet ? 'o' : (item.promo != '' && (item.promo_outlet == '' || item.promo_outlet == parent.outlet) ? 'a' : ''))",
      "name": "promo_slot",
      "type": "data"
     },
@@ -878,7 +878,7 @@
      "type": "date"
     },
     {
-     "compute": "promotion == '' ? 0 : (promo_kind == 'pct' ? round(gross * promo_pct / 100) : (promo_kind == 'off' ? min(gross, round(stock_qty * promo_off)) : (promo_kind == 'buy_get' \u0026\u0026 promo_buy + promo_get \u003e 0 ? min(gross, round(int(stock_qty / (promo_buy + promo_get)) * promo_get * item.rate)) : 0)))",
+     "compute": "promotion == '' ? 0 : (promo_kind == 'pct' ? round(gross * promo_pct / 100) : (promo_kind == 'off' ? min(gross, round(stock_qty * promo_off)) : (promo_kind == 'buy_get' && promo_buy + promo_get > 0 ? min(gross, round(int(stock_qty / (promo_buy + promo_get)) * promo_get * item.rate)) : 0)))",
      "name": "promo_discount",
      "type": "currency"
     },

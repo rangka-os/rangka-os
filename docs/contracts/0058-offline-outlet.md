@@ -282,13 +282,27 @@ Status: accepted (15 Nov 2026) · Owner of the change: rangka-os (kernel, web ap
   perangkat", printable from the device's own record through `RA.printer`). A session of a model named on the device
   opens the same way with the device's number (kept locally while its event waits) and closes as a `create` +
   `submit` of the close model. Browsers that are not paired keep 0030 §7.
+- **Audit round 1 (same slice).** Online, a paired counter takes the kernel's preview (`POST /compute`: every rule,
+  and fields the device never receives, such as a shared voucher code hidden from the cashier) and sends those
+  numbers; offline it computes with `prepare()` and refuses checkout values that are not pulled records (a voucher or
+  coupon code, points, a deposit: "... perlu koneksi internet"), which the kernel would refuse after the receipt was
+  printed. A set: value whose field defaults to the clock (the sale's date) is left out of the device's body, so it is
+  the day of the press. The number's month and `occurred_at` are one moment, and `clock()` on the device is in the
+  outlet's zone. `/edge/config` leaves out a pattern with `{outlet.code}` while the outlet has no code (the device
+  writes through REST until head office sets it). The CEL `device` global has `event`: true only while the unit of work
+  is a device event write (a live request from a paired browser carries `device.id` but `event` false), so modules
+  relax a guard for what already happened at the outlet without relaxing it for live writes.
 - **rangka-apps (Work row 9).** pos 1.8.0: `pos_sale` and `pos_shift` with `naming_on: device`
   (`STRK-{outlet.code}-{device.code}-{YY}{MM}-{#####}`, `SESI-{outlet.code}-{device.code}-{YY}{MM}-{####}`: the
   shift keeps four digits so head office's series is unchanged), `pos_sale.sold_at` (default `now()`, so the press
-  time on a device), flow `pos_sale_on_submit` no longer refuses a device sale on a shift closed meanwhile (§10), and
-  the store-only rule of rangka-apps#104 repeated as guard `not_a_store` in `pos_shift_on_create` because a device
+  time on a device), flow `pos_sale_on_submit` no longer refuses a device event's sale on a shift closed meanwhile (§10),
+  flow `pos_shift_on_create` accepts a device event's shift though the cashier has another open one (§6), and the
+  store-only rule of rangka-apps#104 repeated as guard `not_a_store` in `pos_shift_on_create` and, for device events, in `pos_sale_on_submit`, because a device
   write turns the shift's own rules into exceptions. Day-one scenarios `tests/day_one_offline.py` cover a named
-  device sale, price drift, a number gap, a sale after the close and a warehouse device.
+  device sale, price drift, a number gap, a sale after the close, a second shift and a warehouse device. Open: a sale
+  accepted after head office closed its shift is journalled by the sale but not by the close (the counted cash already
+  held it), so head office corrects the cash and surplus by hand from the `rule_overridden` exception until a
+  late-sale correction is posted automatically (follow-up).
 
 ## Consequences
 - A paired PC or Android device sells, prints, switches cashier and closes the shift without internet, and nothing it

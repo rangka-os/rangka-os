@@ -452,8 +452,28 @@
       });
       return E;
     }
+    /* The sale as the device sends it: a value of the screen's set: that defaults to the clock (the date) is left out,
+       so it is the day of the press (the kernel evaluates today() at occurred_at), not the day the screen loaded. */
+    function deviceBody(body) {
+      var out = Object.assign({}, body);
+      (docMeta.fields || []).forEach(function (f) { if (f.default && /\b(today|now)\(\)/.test(String(f.default)) && Object.prototype.hasOwnProperty.call(sets.document || {}, f.name)) delete out[f.name]; });
+      return out;
+    }
+    /* What only the kernel can check (contract 0058 §7, §10): a checkout value that is not a pulled record (a voucher
+       or coupon code, points, a deposit) is checked against balances and codes the device does not hold, so offline it
+       waits for the connection instead of a receipt the kernel would refuse after it was printed. */
+    function offlineRefusals(body) {
+      if (online) return [];
+      var out = [];
+      checkoutSlots(doc).forEach(function (c) {
+        var f = (docMeta.fields || []).filter(function (x) { return x.name === c.field; })[0], v = body[c.field];
+        if (!f || f.type === "link" || v === undefined || v === null || v === "" || v === false || v === 0) return;
+        out.push({ field: f.name, rule: "", message: (L(f.label) || f.name) + " perlu koneksi internet" });
+      });
+      return out;
+    }
     function deviceCompute(body) {
-      var E = deviceEngine(), rec = E.prepare(doc.model, JSON.parse(JSON.stringify(body)));
+      var E = deviceEngine(), rec = E.prepare(doc.model, JSON.parse(JSON.stringify(deviceBody(body))));
       // a rule reading the cashier (user.*) or a link whose records the device does not pull (the outlet, the session's
       // own fields) is the kernel's to check; the rest show on the device as they would online
       var sets = (dev.data && dev.data.sets) || {}, unknown = ["user"];
@@ -465,15 +485,30 @@
         var r = rules[x.name];
         return x.level === "error" && !(r && skip.test(r.check || ""));
       }).map(function (x) { return { field: rules[x.name] ? "" : x.name, rule: x.name, message: x.message }; });
-      return { rec: rec, errors: errors };
+      return { rec: rec, errors: offlineRefusals(body).concat(errors) };
+    }
+    /* Online, the kernel's own preview (POST /compute, contract 0034) gives the numbers and every rule, also those over
+       fields the device does not receive (a shared voucher code is hidden from the cashier); offline, or when the
+       preview fails, the device computes. Either way the numbers shown are the numbers sent, and they are binding. */
+    function deviceNumbers(body) {
+      var local = function () { return deviceCompute(body); };
+      if (!online) return Promise.resolve(local());
+      var b = deviceBody(body);
+      return ctx.api.compute(doc.model, b).then(function (r) {
+        var errs = ((r && r.errors) || []).map(function (x) { return { field: x.field || "", rule: x.rule || "", message: x.message }; });
+        return { rec: Object.assign({}, b, (r && r.record) || {}), errors: errs };
+      }, function () { return local(); });
     }
     function runCompute(key, body) {
       var seq = ++calcSeq.current;
       if (devOn) {
-        var local;
-        try { local = deviceCompute(body); } catch (e) { local = null; }
-        if (seq === calcSeq.current) setCalc(local ? { key: key, rec: local.rec, errors: local.errors } : { key: key, failed: true });
-        return Promise.resolve(local && local.rec);
+        return deviceNumbers(body).then(function (x) {
+          if (seq === calcSeq.current) setCalc({ key: key, rec: x.rec, errors: x.errors });
+          return x.rec;
+        }, function () {
+          if (seq === calcSeq.current) setCalc({ key: key, failed: true });
+          return null;
+        });
       }
       return ctx.api.compute(doc.model, body).then(function (r) {
         if (seq === calcSeq.current) setCalc({ key: key, rec: (r && r.record) || {}, errors: (r && r.errors) || [] });
@@ -487,7 +522,7 @@
       if (!calcKey) { setCalc(null); return; }
       var t = setTimeout(function () { runCompute(calcKey, JSON.parse(calcKey)); }, 250);
       return function () { clearTimeout(t); };
-    }, [calcKey, devOn]);
+    }, [calcKey, devOn, online]);
     var fresh = calc && !calc.failed && calc.key === calcKey ? calc : null;
     var totalField = doc.summary && doc.summary.length ? doc.summary[doc.summary.length - 1] : doc.total;
     var total = fresh && fresh.rec[totalField] != null ? Number(fresh.rec[totalField]) : estimate;
@@ -612,14 +647,16 @@
     function deviceSale(payRows) {
       var body = saleBody(c, cart, payRows, shiftName, sets.document, customer, checkout), name = null, rec = null, key = RA.newKey();
       var fail = function (e) { sendingRef.current = false; setBusy(false); setErr((e && e.message) || "Transaksi belum tersimpan di perangkat."); };
-      var local;
-      try { local = deviceCompute(body); } catch (e) { fail(e); return; }
-      if (local.errors.length) { fail({ message: local.errors.map(function (x) { return x.message; }).join(" · ") }); return; }
-      RA.deviceData.takeName(doc.model).then(function (n) {
+      // one moment for the number's month and the event's occurred_at (contract 0058 §3, §10)
+      var at = new Date();
+      deviceNumbers(body).then(function (x) {
+        if (x.errors.length) throw new Error(x.errors.map(function (e) { return e.message; }).join(" · "));
+        rec = x.rec;
+        return RA.deviceData.takeName(doc.model, at);
+      }).then(function (n) {
         name = n;
-        rec = local.rec;
         rec.name = name;
-        return RA.deviceOutbox.enqueue({ kind: "screen.write", key: key, actor: dev.actor.user, label: name,
+        return RA.deviceOutbox.enqueue({ kind: "screen.write", key: key, actor: dev.actor.user, label: name, occurred_at: at.toISOString(),
           payload: { screen: s.name, model: doc.model, op: "create", submit: c.submit !== false, name: name, body: rec } });
       }).then(function () {
         return online ? RA.deviceOutbox.flush().then(function () { return RA.deviceOutbox.list(); }, function () { return null; }) : null;
@@ -637,7 +674,7 @@
         loadBalances();
         setCart([]); setCustomer(""); setCheckout({}); setCheckoutOpen(false); setPay(null);
         if (!ev || ev.state === "queued") ctx.toast("info", "Tersimpan di perangkat", name + " dikirim saat koneksi kembali.");
-      }, fail);
+      }).then(null, fail);
     }
     /* the receipt of a sale made on this device, printed from the device's own record (contract 0058 §8) */
     function printLocal(rec) {
@@ -658,11 +695,11 @@
     /* A session of a model named on the device opens with the device's number (contract 0058 §6): the sales link it
        by that name, so it opens offline too; the kernel checks it when the event arrives. */
     function deviceOpen(body) {
-      var key = RA.newKey();
-      RA.deviceData.takeName(ses.model).then(function (name) {
+      var key = RA.newKey(), at = new Date();
+      RA.deviceData.takeName(ses.model, at).then(function (name) {
         var st = ses.state || {}, local = Object.assign({}, body, { name: name, __device: true });
         if (st.field) local[st.field] = st.open;
-        return RA.deviceOutbox.enqueue({ kind: "screen.write", key: key, actor: dev.actor.user, label: name,
+        return RA.deviceOutbox.enqueue({ kind: "screen.write", key: key, actor: dev.actor.user, label: name, occurred_at: at.toISOString(),
           payload: { screen: s.name, model: ses.model, op: "create", name: name, body: body } }).then(function () {
           return online ? RA.deviceOutbox.flush().then(function () { return RA.deviceOutbox.list(); }, function () { return null; }) : null;
         }).then(function (evs) {

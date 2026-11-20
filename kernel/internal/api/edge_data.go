@@ -166,12 +166,13 @@ func (s *Server) edgeConfig(w http.ResponseWriter, r *http.Request, d *auth.Devi
 		return
 	}
 	outlet := map[string]any{"code": d.Outlet, "name": d.Outlet, "timezone": s.Engine.Location().String()}
+	codeSet := false // the outlet record has a code of its own (the fallback above is only a label)
 	if s.Engine.Reg().Model("outlet") != nil {
 		sys := engine.Actor{Org: d.Org, ID: "system", System: true}
 		rec, err := s.Engine.Get(ctx, sys, "outlet", d.Outlet)
 		if err == nil && rec != nil {
 			if c := str(rec["code"]); c != "" {
-				outlet["code"] = c
+				outlet["code"], codeSet = c, true
 			}
 			if t := s.Engine.Title(ctx, sys, "outlet", rec, 0); t != "" {
 				outlet["name"] = t
@@ -179,11 +180,13 @@ func (s *Server) edgeConfig(w http.ResponseWriter, r *http.Request, d *auth.Devi
 		}
 	}
 	// the number patterns of the documents the device names itself (contract 0058 §3): the counter screens' document
-	// and session models with naming_on: device, after the org's numbering override
+	// and session models with naming_on: device, after the org's numbering override. A pattern with {outlet.code} is
+	// left out while the outlet has no code: the kernel would refuse every such name (device_name_invalid), so the
+	// device writes through the REST path until head office sets the code.
 	naming := map[string]any{}
 	if len(p.screens) > 0 {
 		for _, m := range s.Engine.Reg().InstalledModels() {
-			if pat := s.Engine.DevicePattern(m.Name, d.Org); pat != "" {
+			if pat := s.Engine.DevicePattern(m.Name, d.Org); pat != "" && (codeSet || !strings.Contains(pat, "{outlet.code}")) {
 				naming[m.Name] = pat
 			}
 		}

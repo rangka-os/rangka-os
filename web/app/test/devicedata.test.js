@@ -40,6 +40,8 @@ test("engineMeta: installed modules, the pulled tax, the cashier and the outlet'
   assert.deepStrictEqual(plain(m.globals.device), { id: "d1", code: "K1", outlet: "OUT-01" });
   assert.deepStrictEqual(plain(m.globals.user.roles), ["cashier"]);
   assert.strictEqual(m.today, "2026-11-22");
+  assert.match(m.clock(), /^\d\d:\d\d$/);
+  assert.strictEqual(P.clockIn(new Date("2026-11-21T07:05:00Z"), "Asia/Jakarta"), "14:05", "the outlet's zone, as the kernel's clock()");
 });
 
 test("pull: config and every data set by page, kept only when all arrived; takeName counts on", async () => {

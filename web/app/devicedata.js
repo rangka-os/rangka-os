@@ -41,6 +41,19 @@
     return { YYYY: y, YY: y.slice(-2), MM: m, DD: day };
   }
 
+  /** HH:MM of date d in time zone tz (the device's own zone without one). */
+  function clockIn(d, tz) {
+    try {
+      if (!tz) throw new Error("no zone");
+      var hm = {};
+      new Intl.DateTimeFormat("en-GB", { timeZone: tz, hour: "2-digit", minute: "2-digit", hourCycle: "h23" }).formatToParts(d)
+        .forEach(function (p) { hm[p.type] = p.value; });
+      return hm.hour + ":" + hm.minute;
+    } catch (e) {
+      return pad(d.getHours(), 2) + ":" + pad(d.getMinutes(), 2);
+    }
+  }
+
   /**
    * The name pattern renders for this device: {device.code}, {outlet.<field>} and the date tokens ({YYYY} {YY} {MM}
    * {DD}); returns {prefix, digits, period} where the number goes after prefix, zero-padded to digits ({#####} = 5),
@@ -90,10 +103,12 @@
     var globals = { tax: tax || { pkp: false, ppn_rate: 12, dpp_num: 11, dpp_den: 12, ppn_fee_only: false } };
     if (user) globals.user = user;
     if (cfg.device) globals.device = { id: cfg.device.id || "", code: cfg.device.code || "", outlet: cfg.outlet_name || "" };
-    return { models: appMeta.models || {}, dashboards: {}, installed: installed, globals: globals, today: dp.YYYY + "-" + dp.MM + "-" + dp.DD };
+    // clock() in the outlet's time zone, as the kernel's is in the site's (a happy-hour promo window)
+    var clock = function () { return clockIn(new Date(), tz); };
+    return { models: appMeta.models || {}, dashboards: {}, installed: installed, globals: globals, today: dp.YYYY + "-" + dp.MM + "-" + dp.DD, clock: clock };
   }
 
-  RA.deviceDataPure = { datePartsIn: datePartsIn, renderDeviceName: renderDeviceName, nextNumber: nextNumber, lookupOf: lookupOf, engineMeta: engineMeta };
+  RA.deviceDataPure = { datePartsIn: datePartsIn, clockIn: clockIn, renderDeviceName: renderDeviceName, nextNumber: nextNumber, lookupOf: lookupOf, engineMeta: engineMeta };
 
   /* ================================================================ pulling */
   function ob() { return RA.deviceOutbox; }

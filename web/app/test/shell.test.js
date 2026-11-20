@@ -123,6 +123,18 @@ test("homeHash: the layout's home comes before the app and module defaults (cont
   assert.strictEqual(A.homeHash({ ...META, layout: { home: "page:x" } }), "#/d/crm_overview");
 });
 
+test("navGroups: dashboards missing from meta and models the caller cannot read are left out (rangka-os#261)", () => {
+  const staff = {
+    ...META,
+    apps: [...META.apps, { name: "gaji", title: { id: "Gaji" }, menu: [{ group: { id: "Gaji" }, items: ["payroll_run", "payslip"] }], dashboards: ["gaji_ringkas", "saya"] }],
+    models: { ...META.models, payroll_run: { label: { id: "Periode gaji" }, can: { read: false } }, payslip: { label: { id: "Slip gaji" }, can: { read: true } } },
+    dashboards: { ...META.dashboards, saya: { label: { id: "Saya" } } },
+  };
+  const ids = plain(A.navGroups(staff, {})).flatMap((g) => g.items.map((i) => i.id));
+  assert.ok(ids.includes("d/saya") && ids.includes("r/payslip"), ids);
+  assert.ok(!ids.includes("d/gaji_ringkas") && !ids.includes("r/payroll_run"), ids);
+});
+
 test("navGroups: Proses bisnis only when the kernel has processes", () => {
   const off = plain(A.navGroups(META, { processes: false }));
   assert.ok(!off.some((g) => g.items.some((i) => i.id === "proses")));

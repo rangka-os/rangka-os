@@ -1,0 +1,13 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+# A cash advance request: any member asks for one for themself; finance decides.
+name: kasbon
+label: {id: Kasbon}
+is_submittable: true
+naming: KSB-{#####}
+title_field: requested_by
+fields:
+  - {name: requested_by, type: data, label: {id: Diminta oleh}, default: user.name, in_list: true}
+  - {name: amount, type: int, label: {id: Jumlah}, required: true}
+permissions:
+  - {role: keuangan, read: true, create: true, write: true, submit: true, cancel: true}
+  - {role: member, read: true, create: true, write: true, if: "requested_by == user.name"}

@@ -473,6 +473,10 @@ func (v *validator) model(m *Model, visible map[string]vis, roles, hooks map[str
 	}
 	for i, pv := range asList(m.Raw["permissions"]) {
 		role := pyStr(asMap(pv)["role"])
+		if role == MemberRole {
+			v.memberGrant(p, i, asMap(pv))
+			continue
+		}
 		if !roles[role] {
 			v.rep.add("warn", p, fmt.Sprintf("permissions/%d/role", i), "unknown_role", fmt.Sprintf(`role "%s" has no file in roles/ (it must exist at install)`, role))
 		}
@@ -900,4 +904,102 @@ func actionNames(m *Model) []string {
 		out = append(out, pyStr(asMap(a)["name"]))
 	}
 	return out
+}
+
+// MemberRole is the pseudo-role every member holds next to their own role (contract 0074 §1).
+const MemberRole = "member"
+
+// MemberActions are the actions a member grant may give (contract 0074 §2): a person works on their own records;
+// cancel, amend, export, import and customize stay with the roles that decide for the business.
+var MemberActions = map[string]bool{"read": true, "create": true, "write": true, "delete": true, "submit": true, "print": true}
+
+// memberGrant checks permissions/i of a model granted to the member pseudo-role (contract 0074 §2): it must carry an
+// if: that reads user.name (the person's own records), and only the member actions.
+func (v *validator) memberGrant(p string, i int, g map[string]any) {
+	cond, _ := g["if"].(string)
+	if !MemberScoped(cond) {
+		v.rep.add("error", p, fmt.Sprintf("permissions/%d/if", i), "member_grant_unscoped", "a member grant needs an if: where every || branch requires <field> == user.name (the person's own records, contract 0074)")
+	}
+	for _, a := range []string{"cancel", "amend", "export", "import", "customize"} {
+		if g[a] == true {
+			v.rep.add("error", p, fmt.Sprintf("permissions/%d/%s", i, a), "member_grant_action", fmt.Sprintf(`a member grant cannot give %s; only read, create, write, delete, submit and print (contract 0074)`, a))
+		}
+	}
+}
+
+// memberTerm is one conjunct naming the person's own records: <field> == user.name or user.name == <field>.
+var memberTerm = regexp.MustCompile(`^(?:[A-Za-z_][A-Za-z0-9_.]*\s*==\s*user\.name|user\.name\s*==\s*[A-Za-z_][A-Za-z0-9_.]*)$`)
+
+// MemberScoped reports whether cond limits a member grant to the person's own records (contract 0074 §2): every
+// top-level || branch has a top-level && term <field> == user.name. A test such as user.name != "" or
+// "employee == user.name || released" does not. The same rule as member_scoped in rangka_validate.py; the engine applies it too.
+func MemberScoped(cond string) bool {
+	branches := splitTop(cond, "||")
+	if len(branches) == 0 {
+		return false
+	}
+	for _, b := range branches {
+		ok := false
+		for _, t := range splitTop(b, "&&") {
+			ok = ok || memberTerm.MatchString(stripParens(t))
+		}
+		if !ok {
+			return false
+		}
+	}
+	return true
+}
+
+// splitTop splits s on op outside parentheses, brackets and quotes; parts are trimmed.
+func splitTop(s, op string) []string {
+	var out []string
+	depth, start := 0, 0
+	var quote byte
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		switch {
+		case quote != 0:
+			if c == '\\' {
+				i++
+			} else if c == quote {
+				quote = 0
+			}
+		case c == '\'' || c == '"':
+			quote = c
+		case c == '(' || c == '[' || c == '{':
+			depth++
+		case c == ')' || c == ']' || c == '}':
+			depth--
+		case depth == 0 && strings.HasPrefix(s[i:], op):
+			out = append(out, strings.TrimSpace(s[start:i]))
+			i += len(op) - 1
+			start = i + 1
+		}
+	}
+	return append(out, strings.TrimSpace(s[start:]))
+}
+
+// stripParens drops parentheses that wrap the whole of s.
+func stripParens(s string) string {
+	for strings.HasPrefix(s, "(") && strings.HasSuffix(s, ")") {
+		inner := s[1 : len(s)-1]
+		depth := 0
+		whole := true
+		for _, c := range inner {
+			if c == '(' {
+				depth++
+			} else if c == ')' {
+				depth--
+				if depth < 0 {
+					whole = false
+					break
+				}
+			}
+		}
+		if !whole || depth != 0 {
+			break
+		}
+		s = strings.TrimSpace(inner)
+	}
+	return s
 }

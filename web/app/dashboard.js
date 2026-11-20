@@ -80,6 +80,11 @@
   function DashList(p) {
     var ctx = p.ctx, w = p.w, r = p.r, m = w.model, span = p.span, loading = p.loading, title = p.title, open = p.open;
     var narrow = RA.useNarrow ? RA.useNarrow() : false;
+    // an empty list is one line in a compact card (the widget's empty: sentence), not a tall "Tidak ada data" block
+    if (!loading && !(r.rows || []).length && !r.error) {
+      return h(R.Card, { key: w.name, span: span, title: title, extra: h("span", { className: "rk-card-sub" }, "0 data") },
+        h("p", { className: "ap-dash-empty" }, L(w.empty) || "Belum ada data di periode ini."));
+    }
     if (narrow && !loading && RA.cardSlots && (r.rows || []).length) {
       var s = RA.cardSlots(ctx.meta, m, w.columns);
       var cell = function (c, rec) { return c ? RA.cellFor(m, c, rec, ctx) : null; };

@@ -23,6 +23,8 @@ settings, a database-level guard, and outlet scope.
   `outlets text[] not null default '{}'`: the outlet names this member works at in that org.
 - The API reports roles as a list (`roles: [role]`) so a later change to several roles per org does not
   change the shape.
+- Next to that one role, every member with an employee record also holds the pseudo-role `member` for grants on
+  their own records, self-service screens and dashboards (contract 0074, 21 Nov 2026). It is never stored here.
 
 ### 2. Per-org settings (`config.rk` key `orgs:`, schema 0.5)
 ```yaml

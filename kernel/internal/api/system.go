@@ -13,6 +13,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/mail"
 	"github.com/rangka-os/rangka-os/kernel/internal/meta"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
+	"github.com/rangka-os/rangka-os/kernel/internal/plan"
 	"github.com/rangka-os/rangka-os/kernel/internal/store"
 )
 
@@ -269,9 +270,19 @@ func containsStr(l []string, s string) bool {
 func (s *Server) orgUsage(ctx context.Context, org string) map[string]any {
 	ctx = pg.WithOrg(ctx, org)
 	reg := s.Engine.Reg()
-	var users, records, outlets, ai int64
+	var users, staff, records, outlets, ai int64
 	if res, err := s.DB.Query(ctx, "select count(*) from rk_members where org_id = $1", org); err == nil {
 		users = res.Rows[0][0].(int64)
+	}
+	// contract 0074 §5: of them, the members whose role works only from the phone (desk: false)
+	if sr := plan.StaffRoles(reg); len(sr) > 0 {
+		roles := make([]string, 0, len(sr))
+		for r := range sr {
+			roles = append(roles, r)
+		}
+		if res, err := s.DB.Query(ctx, "select count(*) from rk_members where org_id = $1 and role = any($2)", org, pg.Array(roles)); err == nil {
+			staff = res.Rows[0][0].(int64)
+		}
 	}
 	for _, m := range reg.InstalledModels() {
 		if n, err := store.Count(ctx, s.DB, org, m.Name); err == nil {
@@ -284,7 +295,7 @@ func (s *Server) orgUsage(ctx context.Context, org string) map[string]any {
 	if res, err := s.DB.Query(ctx, `select count(*) from rk_changesets where org_id = $1 and author->>'kind' = 'ai' and created_at >= date_trunc('month', now())`, org); err == nil {
 		ai = res.Rows[0][0].(int64)
 	}
-	return map[string]any{"users": users, "outlets": outlets, "records": records, "storage_mb": 0, "ai_credits_month": ai}
+	return map[string]any{"users": users, "staff": staff, "outlets": outlets, "records": records, "storage_mb": 0, "ai_credits_month": ai}
 }
 
 func (s *Server) listOrgs(w http.ResponseWriter, r *http.Request, c *caller) {

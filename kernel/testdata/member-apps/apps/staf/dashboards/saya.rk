@@ -1,0 +1,6 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/dashboard.json
+name: saya
+label: {id: Saya}
+roles: [member]
+widgets:
+  - {name: slips, type: list, label: {id: Slip saya}, model: slip, filter: "employee == user.name", columns: [amount], span: 12}

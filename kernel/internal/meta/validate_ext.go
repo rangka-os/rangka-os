@@ -143,6 +143,9 @@ func (v *validator) more() {
 			if got, ok := asMap(d.Data)["name"].(string); !ok || got != rn {
 				v.rep.extra("error", d.Path, "name", "name_mismatch", fmt.Sprintf(`role name "%s" must match the file name "%s"`, pyStr(asMap(d.Data)["name"]), rn))
 			}
+			if rn == MemberRole {
+				v.rep.extra("error", d.Path, "name", "reserved_role", fmt.Sprintf(`"%s" is the pseudo-role the kernel gives every member (contract 0074); name the role file otherwise`, rn))
+			}
 			v.scopeFields(d, all)
 		}
 	}

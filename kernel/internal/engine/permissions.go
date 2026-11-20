@@ -93,6 +93,7 @@ func (e *Engine) denyIn(reg *meta.Registry, model, action string) *PermissionErr
 type grant struct {
 	role    string
 	cond    string // if: (CEL over the record), "" = unconditional
+	scoped  bool   // cond limits a member grant to the person's own records (meta.MemberScoped, contract 0074 §2)
 	actions map[string]bool
 }
 
@@ -117,6 +118,7 @@ func (e *Engine) perms(m *meta.Model) *modelPerms {
 			continue
 		}
 		gr := grant{role: meta.Str(g, "role"), cond: strings.TrimSpace(meta.Str(g, "if")), actions: map[string]bool{}}
+		gr.scoped = gr.role == MemberRole && meta.MemberScoped(gr.cond)
 		for _, a := range Actions {
 			if b, ok := g[a].(bool); ok && b {
 				gr.actions[a] = true
@@ -170,6 +172,15 @@ func (e *Engine) permModelIn(reg *meta.Registry, name string) *meta.Model {
 	return parent
 }
 
+// holds is hasRole that also answers the member pseudo-role (contract 0074 §1). Only grants, screens, dashboards
+// and work: entries use it: approvers, hidden_for, row scope and the owner check keep the member's one role.
+func holds(a Actor, role string) bool {
+	if role == MemberRole {
+		return isMember(a)
+	}
+	return hasRole(a, role)
+}
+
 func hasRole(a Actor, role string) bool {
 	for _, r := range a.Roles {
 		if r == role {
@@ -177,6 +188,19 @@ func hasRole(a Actor, role string) bool {
 		}
 	}
 	return false
+}
+
+// MemberRole is the pseudo-role every signed-in member of an organisation holds next to their one role (contract 0074
+// §1): a model's {role: member, if: ...} grant, a screen's or dashboard's roles: [member] and an app's work: entry for
+// member apply to each of them. It is never a member's role and no role file may take the name.
+const MemberRole = meta.MemberRole
+
+// isMember reports whether a is a person of the organisation with an employee record (user.name): kernel actors,
+// tokens of the platform and the dev-open demo without a user record never hold member.
+// A person without an employee record carries their e-mail as UserName (api.Actor), so a name with "@" or equal to
+// the e-mail is no record (audit 261a F3).
+func isMember(a Actor) bool {
+	return !a.System && a.UserName != "" && len(a.Roles) > 0 && !strings.Contains(a.UserName, "@") && !strings.EqualFold(a.UserName, a.ID)
 }
 
 // unrestricted reports actors every check lets through: kernel-internal actors and owners.
@@ -207,7 +231,12 @@ func (e *Engine) decide(a Actor, m *meta.Model, action string) decision {
 	}
 	var d decision
 	for _, g := range mp.grants {
-		if !g.actions[action] || !hasRole(a, g.role) {
+		if !g.actions[action] || !holds(a, g.role) {
+			continue
+		}
+		// contract 0074 §2: a member grant reaches only the person's own records (an if: on user.name) and only the
+		// member actions; one the validator would refuse grants nothing here (fail closed)
+		if g.role == MemberRole && (!g.scoped || !meta.MemberActions[action]) {
 			continue
 		}
 		if g.cond == "" {

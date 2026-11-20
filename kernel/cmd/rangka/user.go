@@ -260,7 +260,20 @@ func runUser(args []string) error {
 		}
 	}
 	// contract 0028: a new person past the plan's people limit is refused (an existing member is not a new person)
-	if err := plan.CheckNewPerson(ctx, pool, ua.Org, ua.Email); err != nil {
+	// contract 0074 §5: which roles are phone-only comes from the metadata (--apps); without it every role counts
+	// under users, which refuses too early rather than too late, and the CLI says so (audit 261a F5)
+	var staffRoles map[string]bool
+	if strings.TrimSpace(ua.Apps) != "" {
+		c := common{apps: ua.Apps, site: ua.Site, modules: ua.Modules, connectors: ua.Connectors}
+		if reg, err := c.registry(); err == nil {
+			staffRoles = plan.StaffRoles(reg)
+		} else {
+			fmt.Fprintf(os.Stderr, "rangka user: --apps could not be read (%v); every role counts under users\n", err)
+		}
+	} else if st, err := plan.LoadStored(ctx, pool); err == nil && st != nil && st.Limits[plan.Staff] > 0 {
+		fmt.Fprintf(os.Stderr, "rangka user: the plan limits staff, but without --apps every role counts under users\n")
+	}
+	if err := plan.CheckNewPerson(ctx, pool, ua.Org, ua.Email, ua.Role, staffRoles); err != nil {
 		return err
 	}
 	id, err := auth.EnsureUser(ctx, pool, ua.Email, ua.Name, password, ua.Org, ua.Role, ua.Record)

@@ -368,7 +368,7 @@ func (s *Server) writeMember(ctx context.Context, tx *pg.Tx, org string, in memb
 			return 0, false, &memberError{http.StatusConflict, "email_taken", msgEmailTaken}
 		}
 	}
-	if err := plan.CheckNewPerson(ctx, tx, org, targetEmail); err != nil { // an existing member is not a new person
+	if err := plan.CheckNewPerson(ctx, tx, org, targetEmail, in.Role, plan.StaffRoles(s.Engine.Reg())); err != nil { // an existing member is not a new person; a phone-only role counts under staff (contract 0074 §5)
 		return 0, false, err
 	}
 	if in.Record != "" {

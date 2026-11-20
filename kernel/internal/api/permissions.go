@@ -46,21 +46,16 @@ func (s *Server) eventAllow(ctx context.Context, a engine.Actor) func(store.Even
 // recordHandler handles a route on one record after recordGuard let the caller through.
 type recordHandler func(w http.ResponseWriter, r *http.Request, c *caller, rec store.Record)
 
-// recordGuard protects routes on /api/v1/r/{model}/{name}/...: it loads the record through engine.Get (which
-// checks read), then authorizes action on it, and only then runs next. A refusal is the 403 body.
+// recordGuard protects routes on /api/v1/r/{model}/{name}/...: it loads the record through engine.GetFor (which
+// checks read and action on the stored record), and only then runs next. A refusal is the 403 body.
 func (s *Server) recordGuard(action string, next recordHandler) http.HandlerFunc {
 	return s.authed(func(w http.ResponseWriter, r *http.Request, c *caller) {
 		model := r.PathValue("model")
-		rec, err := s.Engine.Get(r.Context(), c.actor, model, r.PathValue("name"))
+		// the action is decided on the stored record, before fields hidden from the caller are dropped
+		rec, err := s.Engine.GetFor(r.Context(), c.actor, model, r.PathValue("name"), action)
 		if err != nil {
 			fail(w, err)
 			return
-		}
-		if action != "read" {
-			if err := s.Engine.Authorize(r.Context(), c.actor, model, action, rec); err != nil {
-				fail(w, err)
-				return
-			}
 		}
 		next(w, r, c, rec)
 	})

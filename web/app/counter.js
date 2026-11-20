@@ -441,8 +441,8 @@
     function computeBody() { return saleBody(c, cart, null, shiftName, sets.document, customer, checkout); }
     var calcKey = (doc.summary || devOn) && cart.length ? JSON.stringify(computeBody()) : "";
     /* The device's own computation of the sale (contract 0058 §10): engine.js over the pulled records, the open
-       session and the outlet; the rules whose check needs what only the kernel holds (the cashier's email, the
-       session's fields) are left to it. */
+       session and the outlet; the rules whose check needs what only the kernel holds (the cashier's email, records
+       the device does not pull) are left to it. */
     function deviceEngine() {
       var dd = RA.deviceDataPure, data = dev.data, base = dd.lookupOf(data), cfg = data.config || {};
       var E = global.RangkaEngine.create(dd.engineMeta(ctx.meta, data, dev.actor), function (m, n) {
@@ -454,7 +454,11 @@
     }
     function deviceCompute(body) {
       var E = deviceEngine(), rec = E.prepare(doc.model, JSON.parse(JSON.stringify(body)));
-      var skip = ses ? new RegExp("\\buser\\.|\\b" + ses.link + "\\.") : /\buser\./;
+      // a rule reading the cashier (user.*) or a link whose records the device does not pull (the outlet, the session's
+      // own fields) is the kernel's to check; the rest show on the device as they would online
+      var sets = (dev.data && dev.data.sets) || {}, unknown = ["user"];
+      (docMeta.fields || []).forEach(function (f) { if (f.type === "link" && !sets[f.to]) unknown.push(f.name); });
+      var skip = new RegExp("\\b(" + unknown.join("|") + ")\\.");
       var rules = {};
       (docMeta.rules || []).forEach(function (r) { rules[r.name] = r; });
       var errors = E.runRules(doc.model, rec, "save").filter(function (x) {
@@ -629,11 +633,17 @@
         }
         var dt = doc.total, dc = doc.change;
         setDone({ name: name, total: dt && rec[dt] != null ? Number(rec[dt]) : total, change: dc && rec[dc] != null ? Number(rec[dc]) : null,
-          estimate: false, queued: !ev || ev.state === "queued", approval: false });
+          estimate: false, queued: !ev || ev.state === "queued", approval: false, doc: rec });
         loadBalances();
         setCart([]); setCustomer(""); setCheckout({}); setCheckoutOpen(false); setPay(null);
         if (!ev || ev.state === "queued") ctx.toast("info", "Tersimpan di perangkat", name + " dikirim saat koneksi kembali.");
       }, fail);
+    }
+    /* the receipt of a sale made on this device, printed from the device's own record (contract 0058 §8) */
+    function printLocal(rec) {
+      var cfg = (dev && dev.data && dev.data.config) || {};
+      RA.printer.print({ doc: rec, model: doc.model, outlet_name: (cfg.outlet && cfg.outlet.name) || "" }, { actor: dev && dev.actor && dev.actor.user })
+        .then(null, function (e) { ctx.toast("bad", "Struk belum tercetak", (e && e.message) || ""); });
     }
     function newSale() { setDone(null); setSheet(false); if (searchRef.current) searchRef.current.focus(); }
 
@@ -873,10 +883,13 @@
     var result = done && !cart.length && !pay ? h("div", { className: "ap-counter-done", role: "status" },
       h("span", { className: "ap-counter-tick" + (done.queued ? " queued" : ""), "aria-hidden": "true" }, h(R.Icon, { name: done.queued ? "time" : "check" })),
       h("h3", null, done.queued ? "Tersimpan di perangkat" : done.approval ? "Menunggu persetujuan" : "Pembayaran berhasil"),
-      h("div", { className: "ap-counter-due" }, h("span", null, done.queued ? "Kembalian (perkiraan)" : done.estimate ? "Kembalian (perkiraan)" : "Kembalian"), h("b", null, rp(done.change))),
-      h("p", null, done.queued ? "Akan dikirim saat koneksi kembali; struk bisa dicetak setelah terkirim." : (done.name || "") + " · " + rp(done.total) + (done.approval ? " · menunggu persetujuan" : "")),
+      // a sale made on a paired device has its final number and binding totals before it is sent (contract 0058 §3, §10)
+      h("div", { className: "ap-counter-due" }, h("span", null, (done.queued || done.estimate) && !done.doc ? "Kembalian (perkiraan)" : "Kembalian"), h("b", null, rp(done.change))),
+      h("p", null, done.doc ? done.name + " · " + rp(done.total) + (done.queued ? " · dikirim saat koneksi kembali" : "")
+        : done.queued ? "Akan dikirim saat koneksi kembali; struk bisa dicetak setelah terkirim." : (done.name || "") + " · " + rp(done.total) + (done.approval ? " · menunggu persetujuan" : "")),
       h("div", { className: "ap-counter-row" },
-        c.print && done.name ? h(R.Button, { icon: "print", onClick: function () { printRecord(ctx.api, doc.model, done.name, c.print); } }, "Cetak struk") : null,
+        done.doc && RA.printer ? h(R.Button, { icon: "print", onClick: function () { printLocal(done.doc); } }, "Cetak struk")
+          : c.print && done.name && !done.queued ? h(R.Button, { icon: "print", onClick: function () { printRecord(ctx.api, doc.model, done.name, c.print); } }, "Cetak struk") : null,
         h(R.Button, { variant: "primary", onClick: newSale }, "Pesanan baru"))) : null;
 
     var heldList = heldOpen ? h("ul", { className: "ap-counter-held", "aria-label": "Bill ditahan" }, held.map(function (x) {

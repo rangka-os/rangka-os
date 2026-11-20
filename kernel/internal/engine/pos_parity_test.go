@@ -19,11 +19,11 @@ var updateParity = flag.Bool("update", false, "rewrite the wants of web/app/test
 
 // posFixture is web/app/test/fixtures/pos-sale-parity.json (tools/pos_parity_models.py writes its models).
 type posFixture struct {
-	About   string                               `json:"about"`
-	Models  map[string]map[string]any            `json:"models"`
-	Records map[string][]map[string]any          `json:"records"`
-	Base    posParityEnv                         `json:"base"`
-	Cases   []posParityCase                      `json:"cases"`
+	About   string                      `json:"about"`
+	Models  map[string]map[string]any   `json:"models"`
+	Records map[string][]map[string]any `json:"records"`
+	Base    posParityEnv                `json:"base"`
+	Cases   []posParityCase             `json:"cases"`
 }
 
 type posParityEnv struct {

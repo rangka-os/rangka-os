@@ -272,6 +272,8 @@
         if (!m.changesets) m.changesets = { propose: false, approve: false, approve_high: false };
         if (!m.prints) m.prints = {};
         if (!m.imports) m.imports = {};
+        // the tile source for RangkaApp.MapView and MapThumb (map.js, contract 0072 §2.4)
+        if (global.RangkaApp) global.RangkaApp.mapsConfig = m.maps || null;
         return m;
       });
     };

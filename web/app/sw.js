@@ -32,7 +32,8 @@
 
   // "./" is the page itself (the kernel's file server redirects index.html to ./, and a redirected answer cannot
   // serve a navigation). Then every local file index.html loads (test/sw.test.js fails when the lists differ), the
-  // manifest and the icons.
+  // manifest and the icons, plus the vendored files loaded on first need (zxing by scan.js, Leaflet by map.js) so a
+  // scanner or a map opened once still works offline. Map tiles are never precached (contract 0072 §4).
   var PRECACHE = [
     "./",
     "manifest.webmanifest",
@@ -80,12 +81,16 @@
     "counter.js",
     "queue.js",
     "media.js",
+    "map.js",
     "scan.js",
     "clock.js",
     "roll.js",
     "handover.js",
     "route.js",
     "vendor/zxing.min.js",
+    "vendor/leaflet.min.js",
+    "vendor/leaflet.markercluster.min.js",
+    "vendor/leaflet.css",
     "pwa.js",
     "shell.js"
   ];

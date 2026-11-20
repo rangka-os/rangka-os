@@ -1276,6 +1276,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     conn_origin, conn_dup = {}, set()  # where each connector came from: "shared" directory or "site"
     app_overlays = {}  # <site>/custom/app.<app>.rk by app name (contract 0049)
     app_imports, site_imports, prints, letterheads, processes, screens = [], [], [], {}, [], []
+    portals = []
     for name, a in apps.items():
         for st, p in rkfile.listdir(os.path.join(a["dir"], "flows")):
             f = rep.load(p)
@@ -1294,6 +1295,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         load_prints(rep, prints, name, a["dir"])
         load_processes(rep, processes, name, a["dir"])
         load_screens(rep, screens, name, a["dir"])
+        load_portals(rep, portals, name, a["dir"])
     if site:
         for stem in ("system", "features", "config"):
             p = rkfile.find(site, stem)
@@ -1424,6 +1426,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     check_prints(rep, V, allmodels, only, prints, site, letterheads, sdocs.get("config.rk"))
     check_processes(rep, V, allmodels, only, processes)
     check_screens(rep, V, apps, allmodels, only, screens, prints)
+    check_portals(rep, V, apps, allmodels, only, portals, prints)
 
 
 MEMBER_OWNED = ("email", "role", "outlets", "access", "account_id")
@@ -2872,6 +2875,134 @@ def check_processes(rep, V, allmodels, only, processes):
 
 SCREEN_TYPES = ["counter", "queue", "roll", "route", "handover", "clock", "entry"]
 OFFLINE_TYPES = {"counter", "roll", "route", "clock", "entry"}
+
+PORTAL_TYPES = ["document", "documents", "catalogue", "booking", "intake", "order_page"]
+PORTAL_BUILT = {"document"}
+PORTAL_REFUSED = {"attach", "image", "json", "signature", "geo", "dynamic_link", "table", "password"}
+PORTAL_NUMERIC = {"currency", "int", "float", "percent", "rating"}
+
+
+def load_portals(rep, portals, app, root):
+    """Portal pages (contract 0073 §1) in <root>/portal of a module."""
+    for st, p in rkfile.listdir(os.path.join(root, "portal")):
+        d = rep.load(p)
+        if d is not None:
+            portals.append((app, st, p, d))
+
+
+def check_portals(rep, V, apps, allmodels, only, portals, prints=()):
+    """Portal page files (contract 0073 "Validation"). The first unit that ships a name keeps it."""
+    roles = {"owner"}.union(*[a["roles"] for a in apps.values()])
+    first = {}
+    for app, stem, p, d in portals:
+        dup = stem in first
+        if not dup:
+            first[stem] = app
+        if only and app not in only:
+            continue
+        if dup:
+            rep.add("error", p, "(root)", "duplicate_portal", f'portal page "{stem}" is already shipped by {first[stem]}; page names are unique per site')
+            continue
+        check_portal(rep, V, allmodels, roles, p, d, prints)
+
+
+def portal_field(rep, p, where, m, x):
+    """One field a portal page shows (contract 0073 §2); returns the field when it exists."""
+    if not isinstance(x, str):
+        return None
+    fields = fields_of({"fields": with_twins([f for f in m.get("fields", []) if isinstance(f, dict)])})
+    f = fields.get(x)
+    if f is None:
+        rep.add("error", p, where, "portal_unknown_field", f'"{x}" is not a field of {m.get("name")}')
+        return None
+    def hidden_for(g):
+        hf = g.get("hidden_for") if isinstance(g, dict) else None
+        return isinstance(hf, list) and any(isinstance(r, str) for r in hf)
+    base = fields.get(f["money_of"]) if isinstance(f.get("money_of"), str) else None   # an IDR twin follows its money field
+    if hidden_for(f) or hidden_for(base) or f.get("hidden") is True:
+        rep.add("error", p, where, "portal_field_hidden", f'"{x}" of {m.get("name")} is hidden in the app; a portal page never shows it')
+    t = f.get("type") if isinstance(f.get("type"), str) else ""
+    if t in PORTAL_REFUSED:
+        rep.add("error", p, where, "portal_field_type", f'"{x}" is a {t} field; a portal page does not show {t} fields')
+    return f
+
+
+def portal_print_anchored(pd):
+    """Every related list of a print format is matched on the document's name (contract 0073 §2)."""
+    rel = pd.get("related") if isinstance(pd.get("related"), dict) else {}
+    for r in rel.values():
+        match = r.get("match") if isinstance(r, dict) and isinstance(r.get("match"), dict) else {}
+        if "name" not in match.values():
+            return False
+    return True
+
+
+def check_portal(rep, V, allmodels, roles, p, d, prints):
+    schema_errors(rep, V, "portal", p, d)
+    raw = d if isinstance(d, dict) else {}
+    t = raw.get("type")
+    if isinstance(t, str) and t not in PORTAL_BUILT and t in PORTAL_TYPES:
+        rep.add("error", p, "type", "portal_type_unbuilt", f'page type "{t}" is reserved and not built yet; use document')
+    for i, r in enumerate(raw.get("share") if isinstance(raw.get("share"), list) else []):
+        if isinstance(r, str) and r not in roles:
+            rep.add("error", p, f"share/{i}", "portal_unknown_role", f'role "{r}" is not a role of any module or app{suggest(r, roles)}')
+    mn = raw.get("model") if isinstance(raw.get("model"), str) else ""
+    if isinstance(raw.get("model"), str) and mn not in allmodels:
+        rep.add("error", p, "model", "portal_unknown_model", f'"{mn}" is not a model{suggest(mn, allmodels)}')
+    if mn not in allmodels:
+        return
+    m = allmodels[mn][2]
+    ftype = lambda f: f.get("type") if isinstance(f.get("type"), str) else ""
+    f = portal_field(rep, p, "customer", m, raw.get("customer"))
+    if f is not None and ftype(f) != "link":
+        rep.add("error", p, "customer", "portal_field_type", f'customer "{f["name"]}" must be a link field, not {ftype(f)}')
+    f = portal_field(rep, p, "amount", m, raw.get("amount"))
+    if f is not None and ftype(f) not in PORTAL_NUMERIC:
+        rep.add("error", p, "amount", "portal_field_type", f'amount "{f["name"]}" must be a number field, not {ftype(f)}')
+    f = portal_field(rep, p, "due", m, raw.get("due"))
+    if f is not None and ftype(f) not in ("date", "datetime"):
+        rep.add("error", p, "due", "portal_field_type", f'due "{f["name"]}" must be a date field, not {ftype(f)}')
+    for i, x in enumerate(raw.get("fields") if isinstance(raw.get("fields"), list) else []):
+        portal_field(rep, p, f"fields/{i}", m, x)
+    lines = raw.get("lines") if isinstance(raw.get("lines"), dict) else None
+    if lines is not None and isinstance(lines.get("field"), str):
+        fn = lines["field"]
+        f = fields_of(m).get(fn)
+        if f is None:
+            rep.add("error", p, "lines/field", "portal_unknown_field", f'"{fn}" is not a field of {mn}')
+        elif ftype(f) != "table":
+            rep.add("error", p, "lines/field", "portal_field_type", f'lines "{fn}" must be a table field, not {ftype(f)}')
+        elif f.get("of") in allmodels:
+            cm = allmodels[f["of"]][2]
+            for i, x in enumerate(lines.get("columns") if isinstance(lines.get("columns"), list) else []):
+                portal_field(rep, p, f"lines/columns/{i}", cm, x)
+    if isinstance(raw.get("print"), str):
+        pn = raw["print"]
+        if not any(st == pn and isinstance(pd, dict) and pd.get("model") == mn for _a, _r, st, _p, pd in prints):
+            rep.add("error", p, "print", "portal_print_model", f'"{pn}" is not a print format of {mn}')
+        for _a, _r, st, _p, pd in prints:
+            if st == pn and isinstance(pd, dict) and pd.get("model") == mn and not portal_print_anchored(pd):
+                rep.add("error", p, "print", "portal_print_related", f'print "{pn}" has a related list not matched on the document name; a portal page cannot show it')
+                break
+    pay = raw.get("payment") if isinstance(raw.get("payment"), dict) else None
+    if pay is None:
+        return
+    pmn = pay.get("model") if isinstance(pay.get("model"), str) else ""
+    if pmn not in allmodels:
+        if isinstance(pay.get("model"), str):
+            rep.add("error", p, "payment/model", "portal_unknown_model", f'"{pmn}" is not a model{suggest(pmn, allmodels)}')
+        return
+    pm = allmodels[pmn][2]
+    f = portal_field(rep, p, "payment/link", pm, pay.get("link"))
+    if f is not None and (ftype(f) != "link" or f.get("to") != mn):
+        rep.add("error", p, "payment/link", "portal_field_type", f'payment link "{f["name"]}" must be a link to {mn}')
+    for i, x in enumerate(pay.get("fields") if isinstance(pay.get("fields"), list) else []):
+        portal_field(rep, p, f"payment/fields/{i}", pm, x)
+    f = portal_field(rep, p, "payment/qris", pm, pay.get("qris"))
+    if f is not None and ftype(f) not in ("text", "data"):
+        rep.add("error", p, "payment/qris", "portal_field_type", f'qris "{f["name"]}" must be a text field, not {ftype(f)}')
+    for i, x in enumerate(pay.get("qris_label") if isinstance(pay.get("qris_label"), list) else []):
+        portal_field(rep, p, f"payment/qris_label/{i}", pm, x)
 
 
 def load_screens(rep, screens, app, root):

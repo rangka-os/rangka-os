@@ -31,6 +31,7 @@ type Registry struct {
 	Prints           map[string]*Print   // print formats by name; a site format replaces an app's one
 	Processes        map[string]*Process // processes by name (contract 0014); a site process replaces a unit's one
 	Screens          map[string]*Screen  // work screens by name (contract 0030); the first unit that ships a name keeps it
+	Portals          map[string]*Portal  // portal pages by name (contract 0073); the first unit that ships a name keeps it
 	Orgs             map[string]*OrgDoc  // config.rk orgs: by org id
 	ConnectorsDir    string
 	connectorFiles   map[string]string // connector name -> absolute path of the loaded file
@@ -41,6 +42,7 @@ type Registry struct {
 	printFiles       []*Print   // every loaded print file, apps first (validation)
 	processFiles     []*Process // every loaded process file, units first (validation)
 	screenFiles      []*Screen  // every loaded screen file, in unit order (validation)
+	portalFiles      []*Portal  // every loaded portal page file, in unit order (validation)
 }
 
 // AppOrder returns installed app names in a stable order (dependencies first).
@@ -263,6 +265,7 @@ func LoadOpts(o Options, rep *Report) *Registry {
 		r.loadPrints(ld, a.Name, a.Dir, a.Prefix+"/")
 		r.loadProcesses(ld, a.Name, a.Dir, a.Prefix+"/")
 		r.loadScreens(ld, a.Name, a.Dir, a.Prefix+"/")
+		r.loadPortals(ld, a.Name, a.Dir, a.Prefix+"/")
 	}
 	if siteDir != "" {
 		r.Site = loadSite(siteDir, ld, r)

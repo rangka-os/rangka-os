@@ -1,0 +1,20 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: faktur
+label: {id: Faktur}
+naming: FK-{####}
+is_submittable: true
+title_field: customer
+fields:
+  - {name: customer, type: link, to: pelanggan, label: {id: Pelanggan}, required: true, in_list: true}
+  - {name: posting_date, type: date, label: {id: Tanggal}}
+  - {name: due_date, type: date, label: {id: Jatuh tempo}}
+  - {name: items, type: table, of: faktur_baris, label: {id: Barang}}
+  - {name: grand_total, type: currency, label: {id: Total}}
+  - {name: paid_amount, type: currency, label: {id: Dibayar}}
+  - {name: outstanding, type: currency, label: {id: Sisa tagihan}, read_only: true, compute: grand_total - paid_amount}
+  - {name: margin_note, type: data, label: {id: Catatan margin}, hidden_for: [kasir]}
+  - {name: notes, type: text, label: {id: Catatan}}
+  - {name: currency, type: data, label: {id: Mata uang}}
+permissions:
+  - {role: kasir, read: true, create: true, write: true, submit: true}
+  - {role: keuangan, read: true, create: true, write: true, submit: true, cancel: true, amend: true}

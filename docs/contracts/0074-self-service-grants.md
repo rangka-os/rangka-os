@@ -24,7 +24,8 @@ Issue rangka-os#261 slice a
   `rk_members.role`, never given in Tim or the Member API (0043), and never a role file. The owner is unrestricted
   as before.
 - Kernel actors (`system`, seed, flows the kernel starts), tokens without a person, and a person without an employee
-  record never hold `member`.
+  record never hold `member` (such a person carries their e-mail as `user.name`; a name with `@` or equal to the
+  e-mail is no record).
 - `member` counts for: model `permissions:` (§2), screen `roles:` and an app's `work:` entries (§3), dashboard
   `roles:` (§3). It does not count for approvers, `hidden_for` / `read_only_for`, row scope (`scope:`), notices, or
   any owner check: those keep the person's own role.
@@ -34,13 +35,16 @@ Issue rangka-os#261 slice a
   the grants of the person's role: an action is allowed when a grant of the role or a member grant allows it
   (`Authorize`, lists, `GET /r/{model}/{name}`, print, attachments, dashboards, exports and SSE all use the same
   decision). Row scope still narrows the result.
-- A member grant must carry an `if:` that reads `user.name` (the person's own records). It may give only `read`,
+- A member grant must carry an `if:` where every top-level `||` branch has a top-level `&&` term
+  `<field> == user.name` (or `user.name == <field>`): the person's own records. `user.name != ''` or
+  `employee == user.name || released` are refused. It may give only `read`,
   `create`, `write`, `delete`, `submit` and `print`; `cancel`, `amend`, `export`, `import` and `customize` stay with
   the roles that decide for the business.
-- The engine fails closed: a member grant without `user.name` in its `if:`, or for one of the excluded actions,
+- The engine fails closed: a member grant whose `if:` does not meet that rule, or for one of the excluded actions,
   grants nothing at run time even when the validator was skipped.
 - Validator codes (Go and `tools/rangka_validate.py`, same output):
-  - `member_grant_unscoped` (error, `permissions/<i>/if`): a member grant without an `if:` on `user.name`.
+  - `member_grant_unscoped` (error, `permissions/<i>/if`): a member grant whose `if:` does not limit it to the
+    person's own records as above.
   - `member_grant_action` (error, `permissions/<i>/<action>`): a member grant gives an excluded action.
   - `reserved_role` (error, role file `name`): a role file named `member`.
 - A member grant is not reported as `unknown_role`.
@@ -67,7 +71,11 @@ Issue rangka-os#261 slice a
   phone-only role is refused (`plan_limit`, resource `staff`) past it, and the newest staff past it are read-only
   (`plan_read_only`, resource `staff`), like people past `users`. Without a `staff` limit everyone counts under
   `users` as before, and `staff` is reported only.
-- `GET /api/v1/plan` reports a `staff` meter; `GET /api/v1/orgs` usage adds `staff`. Read-only staff appear under
+- A role change (Tim, Member API, `rangka user add`) that moves an existing person between staff and users takes a
+  place under the other limit and is refused when that one is full. `rangka user add` knows the phone-only roles
+  only with `--apps`; without it every role counts under `users` (it refuses early, never late) and says so.
+- `GET /api/v1/plan` reports a `staff` meter; `GET /api/v1/orgs` usage adds `staff`, the members of that
+  organisation with a phone-only role (its `users` stays every member there). Read-only staff appear under
   `read_only.users` with the other read-only people.
 - The numbers per plan are a business call (Toni, Dede); the issue proposes Mulai 10, Juragan 50, Pro 200, Grup 500.
   Kernel and rangka-apps demo sites only carry example values.

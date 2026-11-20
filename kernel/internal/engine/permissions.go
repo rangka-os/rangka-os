@@ -93,6 +93,7 @@ func (e *Engine) denyIn(reg *meta.Registry, model, action string) *PermissionErr
 type grant struct {
 	role    string
 	cond    string // if: (CEL over the record), "" = unconditional
+	scoped  bool   // cond limits a member grant to the person's own records (meta.MemberScoped, contract 0074 §2)
 	actions map[string]bool
 }
 
@@ -117,6 +118,7 @@ func (e *Engine) perms(m *meta.Model) *modelPerms {
 			continue
 		}
 		gr := grant{role: meta.Str(g, "role"), cond: strings.TrimSpace(meta.Str(g, "if")), actions: map[string]bool{}}
+		gr.scoped = gr.role == MemberRole && meta.MemberScoped(gr.cond)
 		for _, a := range Actions {
 			if b, ok := g[a].(bool); ok && b {
 				gr.actions[a] = true
@@ -195,7 +197,11 @@ const MemberRole = meta.MemberRole
 
 // isMember reports whether a is a person of the organisation with an employee record (user.name): kernel actors,
 // tokens of the platform and the dev-open demo without a user record never hold member.
-func isMember(a Actor) bool { return !a.System && a.UserName != "" && len(a.Roles) > 0 }
+// A person without an employee record carries their e-mail as UserName (api.Actor), so a name with "@" or equal to
+// the e-mail is no record (audit 261a F3).
+func isMember(a Actor) bool {
+	return !a.System && a.UserName != "" && len(a.Roles) > 0 && !strings.Contains(a.UserName, "@") && !strings.EqualFold(a.UserName, a.ID)
+}
 
 // unrestricted reports actors every check lets through: kernel-internal actors and owners.
 func unrestricted(a Actor) bool { return a.System || hasRole(a, "owner") }
@@ -230,7 +236,7 @@ func (e *Engine) decide(a Actor, m *meta.Model, action string) decision {
 		}
 		// contract 0074 §2: a member grant reaches only the person's own records (an if: on user.name) and only the
 		// member actions; one the validator would refuse grants nothing here (fail closed)
-		if g.role == MemberRole && (!strings.Contains(g.cond, "user.name") || !meta.MemberActions[action]) {
+		if g.role == MemberRole && (!g.scoped || !meta.MemberActions[action]) {
 			continue
 		}
 		if g.cond == "" {

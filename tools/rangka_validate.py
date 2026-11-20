@@ -1465,11 +1465,61 @@ def check_member_record(rep, allmodels, roles):
 MEMBER_ROLE = "member"
 
 
+MEMBER_TERM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_.]*\s*==\s*user\.name|user\.name\s*==\s*[A-Za-z_][A-Za-z0-9_.]*)$")
+
+
+def split_top(s, op):
+    """s split on op outside parentheses, brackets and quotes; parts trimmed (splitTop in validate.go)."""
+    out, depth, start, quote, i = [], 0, 0, "", 0
+    while i < len(s):
+        c = s[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "'\"":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif depth == 0 and s.startswith(op, i):
+            out.append(s[start:i].strip())
+            i += len(op) - 1
+            start = i + 1
+        i += 1
+    return out + [s[start:].strip()]
+
+
+def strip_parens(s):
+    """s without parentheses that wrap the whole of it (stripParens in validate.go)."""
+    while s.startswith("(") and s.endswith(")"):
+        inner, depth, whole = s[1:-1], 0, True
+        for c in inner:
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth < 0:
+                    whole = False
+                    break
+        if not whole or depth != 0:
+            break
+        s = inner.strip()
+    return s
+
+
+def member_scoped(cond):
+    """Every top-level || branch has a top-level && term <field> == user.name (MemberScoped, contract 0074 §2)."""
+    return all(any(MEMBER_TERM.match(strip_parens(t)) for t in split_top(b, "&&")) for b in split_top(cond, "||"))
+
+
 def check_member_grant(rep, p, i, g):
     """permissions/i granted to the member pseudo-role (contract 0074 §2): an if: on user.name, member actions only."""
     cond = g.get("if") if isinstance(g.get("if"), str) else ""
-    if "user.name" not in cond:
-        rep.add("error", p, f"permissions/{i}/if", "member_grant_unscoped", "a member grant needs an if: on user.name (the person's own records, contract 0074)")
+    if not member_scoped(cond):
+        rep.add("error", p, f"permissions/{i}/if", "member_grant_unscoped", "a member grant needs an if: where every || branch requires <field> == user.name (the person's own records, contract 0074)")
     for a in ("cancel", "amend", "export", "import", "customize"):
         if g.get(a) is True:
             rep.add("error", p, f"permissions/{i}/{a}", "member_grant_action", f"a member grant cannot give {a}; only read, create, write, delete, submit and print (contract 0074)")

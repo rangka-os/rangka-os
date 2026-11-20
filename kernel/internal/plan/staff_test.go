@@ -77,6 +77,20 @@ func TestStaffLimit(t *testing.T) {
 	if got := limitOf(add("s6@x.test", "kasir")); got != Staff {
 		t.Fatalf("sixth staff refused on %s, want staff", got)
 	}
+	// a role change that moves an existing person between staff and users takes a place under the other limit
+	// (audit 261a F2); within the same class it is not a new person
+	if got := limitOf(CheckNewPerson(ctx, db, "o", "s1@x.test", "keuangan", staff)); got != Users {
+		t.Fatalf("staff to desk with users full refused on %s, want users", got)
+	}
+	if got := limitOf(CheckNewPerson(ctx, db, "o", "f1@x.test", "kasir", staff)); got != Staff {
+		t.Fatalf("desk to staff with staff full refused on %s, want staff", got)
+	}
+	if err := CheckNewPerson(ctx, db, "o", "s1@x.test", "gudang", staff); err != nil {
+		t.Fatalf("staff to another staff role: %v", err)
+	}
+	if err := CheckNewPerson(ctx, db, "o", "f1@x.test", "keuangan", staff); err != nil {
+		t.Fatalf("same desk role again: %v", err)
+	}
 	u, err := Measure(ctx, db, reg, time.Now())
 	if err != nil {
 		t.Fatal(err)

@@ -29,8 +29,10 @@ var (
 	memberGudang   = Actor{Org: "o", ID: "g@example.test", UserName: "USR-003", Roles: []string{"gudang"}}
 	memberKeuangan = Actor{Org: "o", ID: "f@example.test", UserName: "USR-004", Roles: []string{"keuangan"}}
 	memberNoRecord = Actor{Org: "o", ID: "x@example.test", Roles: []string{"kasir"}} // no employee record
-	memberNoRole   = Actor{Org: "o", ID: "y@example.test", UserName: "USR-009"}      // not a member of the org
-	memberSystem   = Actor{Org: "o", ID: "seed", UserName: "USR-002", System: true}
+	// api.Actor gives a person without an employee record their e-mail as UserName (audit 261a F3)
+	memberEmailName = Actor{Org: "o", ID: "z@example.test", UserName: "z@example.test", Roles: []string{"kasir"}}
+	memberNoRole    = Actor{Org: "o", ID: "y@example.test", UserName: "USR-009"} // not a member of the org
+	memberSystem    = Actor{Org: "o", ID: "seed", UserName: "USR-002", System: true}
 )
 
 // TestMemberGrantAuthorize: a member grant is unioned with the person's own role, reaches only their own records,
@@ -61,6 +63,7 @@ func TestMemberGrantAuthorize(t *testing.T) {
 		{"finance reads every slip by role", memberKeuangan, "slip", "read", theirs, true},
 		{"member model-level read is conditional", memberKasir, "slip", "read", nil, true},
 		{"no employee record, no member grant", memberNoRecord, "slip", "read", mine, false},
+		{"e-mail as user name is no record", memberEmailName, "slip", "read", store.Record{"employee": "z@example.test", "released": true, "docstatus": int64(1)}, false},
 		{"no role in the org, no member grant", memberNoRole, "slip", "read", store.Record{"employee": "USR-009", "released": true}, false},
 		{"system bypasses", memberSystem, "slip", "write", mine, true},
 		{"cashier creates own kasbon", memberKasir, "kasbon", "create", kasbon, true},
@@ -87,9 +90,15 @@ func TestMemberGrantFailClosed(t *testing.T) {
 	m.Raw["permissions"] = append(perms,
 		map[string]any{"role": "member", "write": true},
 		map[string]any{"role": "member", "write": true, "if": "released"},
-		map[string]any{"role": "member", "cancel": true, "if": "employee == user.name"})
+		map[string]any{"role": "member", "cancel": true, "if": "employee == user.name"},
+		map[string]any{"role": "member", "write": true, "if": "user.name != ''"},
+		map[string]any{"role": "member", "read": true, "write": true, "if": "employee == user.name || released"})
 	e := New(nil, reg)
 	mine := store.Record{"name": "SLP-1", "employee": "USR-002", "released": true, "docstatus": int64(1)}
+	theirs := store.Record{"name": "SLP-3", "employee": "USR-003", "released": true, "docstatus": int64(1)}
+	if e.Can(context.Background(), memberKasir, "slip", "read", theirs) {
+		t.Error("an unscoped member grant (|| released) let a member read another person's slip")
+	}
 	for _, act := range []string{"write", "cancel"} {
 		if e.Can(context.Background(), memberKasir, "slip", act, mine) {
 			t.Errorf("member grant gave %s", act)
@@ -122,7 +131,7 @@ func TestMemberWorkAndDashboards(t *testing.T) {
 	if has(memberGudang, "jual") {
 		t.Error("warehouse staff must not reach jual")
 	}
-	if has(memberNoRole, "ajukan") || has(memberNoRecord, "ajukan") {
+	if has(memberNoRole, "ajukan") || has(memberNoRecord, "ajukan") || has(memberEmailName, "ajukan") {
 		t.Error("a person without a role or an employee record is not a member")
 	}
 	d := e.Reg().Dashboard("saya")

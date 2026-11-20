@@ -803,23 +803,47 @@ func CheckNewPerson(ctx context.Context, q pg.Querier, org, email, role string, 
 		return err
 	}
 	_, staffLimited := st.Effective(Staff, st.Limits[Staff], hasKey(st.Limits, Staff), time.Now())
+	ps, err := persons(ctx, q)
+	if err != nil {
+		return err
+	}
+	email = strings.ToLower(strings.TrimSpace(email))
+	var me *person
+	for i := range ps {
+		if strings.ToLower(ps[i].email) == email {
+			me = &ps[i]
+		}
+	}
+	// the person's roles once this membership is written: their roles in the other organisations plus role here
+	after := []string{role}
+	if me != nil {
+		res, err := q.Query(ctx, `select m.role from rk_members m join rk_users u on u.id = m.user_id join rk_orgs o on o.id = m.org_id
+			where lower(u.email) = $1 and m.org_id <> $2 and not o.sandbox`, email, org)
+		if err != nil {
+			return err
+		}
+		for _, r := range res.Rows {
+			after = append(after, r[0].(string))
+		}
+	}
+	staffAfter := staffLimited && isStaff(after, staffRoles)
+	// an existing person is not a new person, unless the change moves them between users and staff (contract 0074
+	// §5, audit 261a F2): then they take a place under the other limit
+	if me != nil && (!staffLimited || isStaff(me.roles, staffRoles) == staffAfter) {
+		return nil
+	}
 	key := Users
-	if staffLimited && staffRoles[role] {
+	if staffAfter {
 		key = Staff
 	}
 	lim, ok := st.Effective(key, st.Limits[key], hasKey(st.Limits, key), time.Now())
 	if !ok {
 		return nil
 	}
-	ps, err := persons(ctx, q)
-	if err != nil {
-		return err
-	}
-	email = strings.ToLower(strings.TrimSpace(email))
 	var used int64
 	for _, p := range ps {
 		if strings.ToLower(p.email) == email {
-			return nil
+			continue
 		}
 		if !staffLimited || (key == Staff) == isStaff(p.roles, staffRoles) {
 			used++

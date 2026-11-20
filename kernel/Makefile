@@ -86,6 +86,7 @@ compare-python: build
 	            "testdata/broken-member-record/apps --site testdata/broken-member-record/site" \
 	            "testdata/notices/apps --site testdata/notices/site" \
 	            "testdata/broken-notices/apps --site testdata/broken-notices/site" \
+	            "testdata/broken-limit-scope/apps --site testdata/broken-limit-scope/site" \
 	            "testdata/modules-apps/apps --site testdata/maps/site" \
 	            "testdata/modules-apps/apps --site testdata/broken-maps/site" \
 	            "testdata/modules-apps/apps --site testdata/broken-maps/site-subdomains" \

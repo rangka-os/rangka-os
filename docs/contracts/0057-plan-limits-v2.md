@@ -77,11 +77,35 @@ effective(key) = min( plan_limit(key) + Σ active grants(key), cap(key) )
 Unchanged from 0028 §3: 403 `{"error": {"code": "plan_limit" | "plan_read_only", "message": …}}`. New: 429
 `pdf_slowed` with `Retry-After` (seconds).
 
+### 5. Scoped outlet count: `limit_scope` (amendment, 19 Nov 2026, rangka-apps#104)
+
+- **Why.** The `outlet` record is the stock location everywhere (0021, 0039, 0010 scope), so sites already keep
+  warehouses, canvas vans and a damaged-goods room as outlet rows. Under 0028 each of them took a paid outlet seat.
+  The plans sell shops ("gudang tanpa batas"), not stock locations.
+- **Declaration.** The module that declares model `outlet` may name, in its `module.rk`, a check field of `outlet`
+  that the `outlets` limit counts by: `limit_scope: {outlets: is_store}`. Only `outlets` can be scoped. The field is
+  usually a compute (rangka-apps outlets 1.7.0: `is_store: location_type == '' || location_type == 'store'`).
+- **Count.** With the key, every place that counts outlets counts only rows where the field is true or null (a row
+  written before the field existed and not yet backfilled by `rangka migrate` counts, so a missing backfill never
+  lowers the count): the usage in `GET /api/v1/plan` and `rangka plan show`, the create check under the
+  `rk_plan:outlets` advisory lock (0028 §2), and the read-only pick past a lower limit (0028 §4: the newest stores
+  past the limit; rows outside the scope are never read-only). Without the key every row counts, as before.
+- **Refusal.** Creating an outlet that counts past the limit is refused with 403 `plan_limit`, as in 0028 §2. Creating
+  one that does not count is never refused. Changing an outlet so the field turns true (a warehouse retyped as a
+  store) is checked like a creation; changing it so the field turns false frees a seat.
+- **Validators.** Go and `rangka_validate.py`: `limit_scope_unknown_limit` (a key other than `outlets`),
+  `limit_scope_not_owner` (declared by a unit that does not declare model `outlet`, which also makes it unique),
+  `limit_scope_field` (not a check field of `outlet`). Schema: `module.json` `limit_scope`.
+- **Not changed.** Stock (0021, 0039), row scope (0010) and device pairing (0058) keep treating every outlet row the
+  same. Whether a cashier device may pair with a row outside the scope is a module rule, not a kernel one.
+
 ## Consequences
 
 - rangka-cloud adds subscriptions, the Grup pool sampler, add-on and credit grants, and the Konsol pages (its spec
   above). Hosting already runs `rangka plan set` through `P.RunTask`; grants and caps use the same path.
 - rangka-apps: `features.rk` plans of the Cloud sites gain the new limits; templates without them stay unlimited.
+- rangka-apps outlets 1.7.0 declares `limit_scope: {outlets: is_store}` (§5); rangka-cloud's Konsol plan page can
+  say "N toko dari batas M, gudang tanpa batas".
 - New tables and columns: `rk_site_plan.grants`, `rk_site_plan.caps`, `rk_pdf_usage` (installation-level, left out
   of org backups like `rk_ai_usage`).
 

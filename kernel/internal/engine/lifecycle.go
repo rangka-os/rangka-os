@@ -483,7 +483,7 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 			rec["amended_from"] = str(input["amended_from"])
 		}
 	}
-	if err := o.planNewRecord(m); err != nil {
+	if err := o.planOutlet(m, nil, rec); err != nil {
 		return nil, err
 	}
 	if d := o.actor.Device; d != nil && m.NamingOn == "device" { // the device it was made on (contract 0058 §6)
@@ -651,6 +651,9 @@ func (o *op) update(model, name string, patch map[string]any, authorize, guard b
 		if err := o.e.guardIn(o.registry(), o.ctx, o.actor, m.Name, rec, "update"); err != nil {
 			return nil, err
 		}
+	}
+	if err := o.planOutlet(m, cur, rec); err != nil {
+		return nil, err
 	}
 	if err := store.Update(o.ctx, o.tx, o.registry(), o.actor.Org, m, name, rec); err != nil {
 		return nil, dbIssue(m, err)

@@ -84,7 +84,7 @@ Unchanged from 0028 §3: 403 `{"error": {"code": "plan_limit" | "plan_read_only"
   The plans sell shops ("gudang tanpa batas"), not stock locations.
 - **Declaration.** The module that declares model `outlet` may name, in its `module.rk`, a check field of `outlet`
   that the `outlets` limit counts by: `limit_scope: {outlets: is_store}`. Only `outlets` can be scoped. The field is
-  usually a compute (rangka-apps outlets 1.6.0: `is_store: location_type == '' || location_type == 'store'`).
+  usually a compute (rangka-apps outlets 1.7.0: `is_store: location_type == '' || location_type == 'store'`).
 - **Count.** With the key, every place that counts outlets counts only rows where the field is true or null (a row
   written before the field existed and not yet backfilled by `rangka migrate` counts, so a missing backfill never
   lowers the count): the usage in `GET /api/v1/plan` and `rangka plan show`, the create check under the
@@ -104,7 +104,7 @@ Unchanged from 0028 §3: 403 `{"error": {"code": "plan_limit" | "plan_read_only"
 - rangka-cloud adds subscriptions, the Grup pool sampler, add-on and credit grants, and the Konsol pages (its spec
   above). Hosting already runs `rangka plan set` through `P.RunTask`; grants and caps use the same path.
 - rangka-apps: `features.rk` plans of the Cloud sites gain the new limits; templates without them stay unlimited.
-- rangka-apps outlets 1.6.0 declares `limit_scope: {outlets: is_store}` (§5); rangka-cloud's Konsol plan page can
+- rangka-apps outlets 1.7.0 declares `limit_scope: {outlets: is_store}` (§5); rangka-cloud's Konsol plan page can
   say "N toko dari batas M, gudang tanpa batas".
 - New tables and columns: `rk_site_plan.grants`, `rk_site_plan.caps`, `rk_pdf_usage` (installation-level, left out
   of org backups like `rk_ai_usage`).

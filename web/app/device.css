@@ -66,6 +66,13 @@ html.ap-sync-on .ap-workshell > .ap-wfoot .ap-wsync, html.ap-sync-on .ap-wsync, 
   border-radius: var(--r-pill); font: 500 12px/28px var(--font-sans); white-space: nowrap; cursor: pointer; box-shadow: var(--shadow-float);
   background: var(--surface); color: var(--ink-2); transition: background var(--dur-2) var(--ease-out), color var(--dur-2) var(--ease-out); }
 .ap-sync-pill:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+/* docked in a screen's header row ([data-sync-dock], syncpill.js): in the flow, so it never covers that row's controls */
+.ap-sync-dock { display: none; min-width: 0; }
+html.ap-sync-on .ap-sync-dock { display: inline-flex; }
+.ap-sync-pill.docked { position: static; box-shadow: none; max-width: 100%; min-width: 0; }
+.ap-sync-pill.docked.ok { background: var(--ok-tint); color: var(--ok); }
+/* the order's own dock is for the order sheet over the catalogue (below 1024px); a wide counter docks in the search row */
+@media (min-width: 1024px) { html.ap-sync-on .ap-counter-cart-sync { display: none; } }
 .ap-sync-text { overflow: hidden; text-overflow: ellipsis; }
 .ap-sync-dot { flex: 0 0 auto; width: 8px; height: 8px; border-radius: 50%; background: var(--ok-solid); }
 .ap-sync-pill.warn { background: var(--warn-tint); color: var(--warn); }

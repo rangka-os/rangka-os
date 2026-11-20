@@ -384,6 +384,8 @@
       }, function () {});
       return function () { live = false; };
     }, [s.name]);
+    // the sync pill picks the visible dock of this screen again (a sheet opened, the layout changed)
+    useEffect(function () { try { global.document.dispatchEvent(new global.Event("ap-sync-dock")); } catch (e) { /* no DOM */ } });
     var devOn = !!(dev && dev.data && RA.deviceData && RA.deviceData.namesOn(dev.data, doc.model));
     var devSes = !!(devOn && ses && RA.deviceData.namesOn(dev.data, ses.model));
     var avSlot = cat.available && typeof cat.available === "object" ? cat.available : null;
@@ -802,7 +804,8 @@
         c.hold && held.length ? h("button", { type: "button", className: "ap-counter-heldbtn", "aria-expanded": heldOpen ? "true" : "false",
           onClick: function () { setHeldOpen(!heldOpen); setSheet(true); } }, h(R.Icon, { name: "history" }), "Ditahan · " + held.length) : null,
         scanning ? h(RA.Scanner, { title: "Pindai barcode", keepOpen: true, onCode: onScan, onClose: function () { setScanning(false); } }) : null,
-        h("span", { className: "ap-counter-sync" + (online ? "" : " off") }, online ? "Online" : "Offline")),
+        h("span", { className: "ap-counter-sync" + (online ? "" : " off") }, online ? "Online" : "Offline"),
+        h("span", { className: "ap-sync-dock", "data-sync-dock": "catalogue" })),
       groups.length > 1 ? h("div", { className: "ap-counter-groups", role: "tablist" },
         [""].concat(groups).map(function (g) {
           return h("button", { key: g || "*", type: "button", role: "tab", "aria-selected": group === g ? "true" : "false", onClick: function () { setGroup(g); } }, g ? groupLabel(g) : "Semua");
@@ -936,7 +939,11 @@
 
     var side = h("section", { className: "ap-counter-cart", "aria-label": "Transaksi" },
       h("div", { className: "ap-counter-cart-h" },
-        h("div", { className: "ap-counter-cart-t" }, h("b", null, "Pesanan baru"), h("small", null, "Draf · nomor dibuat saat bayar")),
+        // after payment the header names the saved sale, not a draft (the body shows its receipt)
+        done && !cart.length && !pay
+          ? h("div", { className: "ap-counter-cart-t" }, h("b", null, done.name || (done.approval ? "Menunggu persetujuan" : "Pembayaran berhasil")),
+              h("small", null, done.queued ? "Tersimpan di perangkat" : done.approval ? "Menunggu persetujuan" : "Sudah dibayar"))
+          : h("div", { className: "ap-counter-cart-t" }, h("b", null, "Pesanan baru"), h("small", null, "Draf · nomor dibuat saat bayar")),
         h("span", { className: "ap-counter-tools" },
           ses && ses.close && !stuck ? h("span", { className: "ap-counter-menu" },
             h("button", { type: "button", className: "ap-counter-menu-b", "aria-label": "Menu pesanan", title: "Menu pesanan", "aria-expanded": menuOpen ? "true" : "false",
@@ -945,6 +952,9 @@
               c.hold && held.length ? h("button", { type: "button", role: "menuitem", onClick: function () { setMenuOpen(false); setHeldOpen(!heldOpen); } }, "Ditahan · " + held.length) : null,
               h("button", { type: "button", role: "menuitem", onClick: function () { setMenuOpen(false); setClosing(Object.assign({}, sets["session.close"] || {})); setErr(""); } }, "Tutup sesi")) : null) : null,
           h("button", { type: "button", className: "ap-counter-sheet-x", "aria-label": "Tutup pesanan", onClick: function () { setSheet(false); } }, h(R.Icon, { name: "close" })))),
+      // the paired device's sync pill, on a row of its own under the header when the order is a sheet over the
+      // catalogue (phone), so it never covers the header's menu (syncpill.js picks the dock on top)
+      h("div", { className: "ap-sync-dock ap-counter-cart-sync", "data-sync-dock": "cart" }),
       heldList,
       c.customer && !(pay && !stuck) ? h("label", { className: "ap-counter-custbox" }, h(R.Icon, { name: "user" }),
         h("input", { className: "ap-counter-cust", "aria-label": "Pembeli atau meja", placeholder: "Pembeli atau meja" + (c.customer.required ? " (wajib)" : ""),

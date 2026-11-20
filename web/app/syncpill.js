@@ -92,6 +92,26 @@
       openers.push(fn);
       return function () { openers = openers.filter(function (x) { return x !== fn; }); };
     }, []);
+    // a screen may give the pill a place in its own header row ([data-sync-dock], the counter does): the visible one
+    // on top is used, so the pill never floats over that screen's controls; elsewhere it floats at the top right
+    var dk = useState(null), dock = dk[0], setDock = dk[1];
+    useEffect(function () {
+      var doc = global.document;
+      // a dock inside an overlay (a sheet opened over the screen, position: fixed) wins over one the sheet covers
+      function overlaid(el) {
+        for (var x = el.parentElement; x && x !== doc.body; x = x.parentElement) if (global.getComputedStyle(x).position === "fixed") return true;
+        return false;
+      }
+      function pick() {
+        var shown = Array.prototype.filter.call(doc.querySelectorAll("[data-sync-dock]"), function (el) { return el.offsetParent !== null; });
+        setDock(shown.filter(overlaid)[0] || shown[0] || null);
+      }
+      pick();
+      doc.addEventListener("ap-sync-dock", pick);
+      global.addEventListener("resize", pick);
+      global.addEventListener("hashchange", pick);
+      return function () { doc.removeEventListener("ap-sync-dock", pick); global.removeEventListener("resize", pick); global.removeEventListener("hashchange", pick); };
+    }, []);
     var paired = !!(snap && snap.device && snap.device.device_id);
     useEffect(function () { if (paired) return RA.deviceOutbox.start(); }, [paired]);
     useEffect(function () { global.document.documentElement.classList.toggle("ap-sync-on", paired); }, [paired]);
@@ -99,9 +119,12 @@
     var st = snap.status;
     var pill = P.pillState({ events: snap.events, device: snap.device.device_id, online: st.online, offlineSince: st.offlineSince, sending: st.sending, stopped: stopOf(snap), durable: st.durable });
     return h(React.Fragment, null,
-      open ? null : h("button", { type: "button", className: "ap-sync-pill " + pill.tone, onClick: function () { setOpen(true); }, "aria-haspopup": "dialog",
-        "aria-label": "Status kirim: " + pill.text + ". Buka antrean." },
-        h("span", { className: "ap-sync-dot", "aria-hidden": "true" }), h("span", { className: "ap-sync-text", role: "status" }, pill.text)),
+      open ? null : (function () {
+        var btn = h("button", { type: "button", className: "ap-sync-pill " + pill.tone + (dock && dock.isConnected ? " docked" : ""), onClick: function () { setOpen(true); }, "aria-haspopup": "dialog",
+          "aria-label": "Status kirim: " + pill.text + ". Buka antrean." },
+          h("span", { className: "ap-sync-dot", "aria-hidden": "true" }), h("span", { className: "ap-sync-text", role: "status" }, pill.text));
+        return dock && dock.isConnected ? global.ReactDOM.createPortal(btn, dock) : btn;
+      })(),
       open ? h(Panel, { snap: snap, onClose: function () { setOpen(false); } }) : null);
   }
 

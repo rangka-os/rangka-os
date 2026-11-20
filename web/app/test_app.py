@@ -771,11 +771,17 @@ def expect_signed_in(page, ctx):
 
 
 def account_menu(page):
-    """The business switcher's menu (side-only shell): apps, companies, theme, help, account. On a phone the switcher
+    """The account menu. Where the side-only shell's top bar shows (tablet up, contract 0065) it is the bar's avatar
+    menu; on a phone or drawer tablet it is the business switcher's menu (apps, companies, theme, help, account), which
     sits in the navigation drawer."""
-    open_nav(page)
-    page.locator(".rk-side .rk-side-switch").click()
-    menu = page.locator(".ap-switch-menu [role=menu]")
+    avatar = page.locator(".ap-dtop .rk-av-btn")
+    if avatar.count() and avatar.is_visible():
+        avatar.click()
+        menu = page.locator(".ap-dtop .rk-account")
+    else:
+        open_nav(page)
+        page.locator(".rk-side .rk-side-switch").click()
+        menu = page.locator(".ap-switch-menu [role=menu]")
     menu.wait_for(timeout=5000)
     return menu
 
@@ -1094,6 +1100,22 @@ def test_side_shell_top_bar(page, ctx):
         assert items.count() >= 1, "menu items in the top bar"
         items.first.click()
         page.wait_for_function("() => document.querySelectorAll('.ap-dtop .rk-topnav-item[aria-current=page]').length === 1", timeout=5000)
+    # beside the bar the switcher is the business switcher only; the account actions live in the avatar menu once
+    switch = page.locator(".rk-side .rk-side-switch")
+    if switch.is_visible():
+        switch.click()
+        menu = page.locator(".ap-switch-menu [role=menu]")
+        menu.wait_for(timeout=5000)
+        assert menu.get_by_role("menuitem").count() >= 1, "the switcher lists the companies"
+        for gone in ("Keluar", "Profil", "Terang", "Ulangi tur", "Ubah tampilan dan data"):
+            assert menu.get_by_role("menuitem", name=gone, exact=True).count() == 0, f"{gone!r} is only in the avatar menu"
+        switch.click()
+        menu.wait_for(state="detached", timeout=5000)
+    acct = account_menu(page)
+    for want in ("Tema dan tampilan", "Notifikasi", "Ulangi tur", "Keluar"):
+        assert acct.get_by_role("menuitem", name=want, exact=True).count() == 1, f"the avatar menu has {want!r}"
+    assert acct.locator(".rk-mh", has_text="Mode").count() <= 1, "one Mode heading at most (Pakai / Ubah)"
+    page.keyboard.press("Escape")
     bar.locator(".rk-ask").click()
     page.get_by_role("dialog").wait_for(timeout=5000)
     page.keyboard.press("Escape")
@@ -4379,9 +4401,7 @@ def test_tour_kenalan(page, ctx):
     page.locator(".ap-shell").wait_for(timeout=10000)
     page.wait_for_timeout(1500)
     assert page.locator(".ap-tur").count() == 0, "a skipped tour does not start again"
-    open_nav(page)
-    page.locator(".rk-side-switch").click()
-    page.get_by_text("Ulangi tur", exact=True).click()
+    account_menu(page).get_by_text("Ulangi tur", exact=True).click()
     card.wait_for(timeout=5000)
     assert re.search(r"1 dari \d+", card.locator(".ap-tur-n").inner_text()), "Ulangi tur starts at the first place"
     assert kept_tour(owner, gone=True) is None, "Ulangi tur forgets the kept state"

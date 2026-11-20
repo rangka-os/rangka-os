@@ -1392,6 +1392,7 @@
       }
       else if (k === "appearance") { setNavOpen(false); setSwitchAt(null); RA.navigate("#/pengaturan/tampilan"); }
       else if (k === "noticePrefs") { setNavOpen(false); setSwitchAt(null); RA.navigate("#/pengaturan/notifikasi"); }
+      else if (k === "tour") { setNavOpen(false); replayTour(); }
       else if (k === "logout" || k === "switch") logout();
       else if (k.indexOf("co:") === 0) { if (features.orgs) switchOrg(orgByLabel(orgs, k.slice(3))); }
       else toast("info", "Belum tersedia", "Profil dan keamanan akun diatur di Rangka ID.");
@@ -1439,15 +1440,32 @@
       return accountSections({ propose: !!cs8.propose && !previewCs && !offline, ubah: ubah, pwa: pwaMenu(pwa) });
     }
 
-    /** The switcher's menu: the apps (what TopNav's app switcher listed), companies, theme, help and the account. */
-    function switcherItems() {
+    /** The account menu in a top bar (TopNav's avatar): accountExtra() plus what the side switcher's menu used to carry
+     *  alone, so nothing is lost when the switcher shrinks to the business: Tema dan tampilan, Notifikasi, Ulangi tur. */
+    function topAccountExtra() {
+      return accountExtra().concat([{ heading: "Pengaturan", items: [
+        { key: "appearance", icon: "palette", label: "Tema dan tampilan" },
+        { key: "noticePrefs", icon: "bell", label: "Notifikasi" }] }],
+        RA.tour ? [{ heading: "Bantuan", items: [{ key: "tour", icon: "map", label: "Ulangi tur" }] }] : []);
+    }
+
+    /** The switcher's menu. Beside a top bar (side-only from tablet up, contract 0065) it is the business switcher
+     *  only: the companies. The bar already has the app switcher, help and the account menu, and two menus with the
+     *  same actions confused owners. Without a top bar (phone, drawer tablet, the work shell's rail) it carries
+     *  everything: the apps, companies, theme, help and the account. */
+    function switcherItems(full) {
       var items = [];
+      if (!full && topBar) {
+        return [{ heading: "Perusahaan" }].concat(companies.map(function (c) {
+          return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
+        }));
+      }
       if (installed.length) items = items.concat([{ heading: "Beralih ke" }], installed.map(function (a) {
         return { label: L(a.title) || a.name, icon: "apps", onSelect: function () { goApp({ id: a.name }); } };
       }), ["-"]);
       items = items.concat([{ heading: "Perusahaan" }], companies.map(function (c) {
         return { label: c, icon: "building", checked: c === companyName, onSelect: function () { account("co:" + c); } };
-      }), ["-", { heading: "Mode" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "settings", "Ikuti sistem"]].map(function (t) {
+      }), ["-", { heading: "Tema" }], [["light", "sun", "Terang"], ["dark", "moon", "Gelap"], ["system", "settings", "Ikuti sistem"]].map(function (t) {
         return { label: t[2], icon: t[1], checked: theme === t[0], onSelect: function () { account("theme:" + t[0]); } };
       }), [{ label: "Tema dan tampilan", icon: "palette", onSelect: function () { account("appearance"); } },
         { label: "Notifikasi", icon: "bell", onSelect: function () { account("noticePrefs"); } }], ["-"], [].concat.apply([], accountExtra().map(function (g) {
@@ -1511,22 +1529,24 @@
       // a phone with layout tabs opens the menu from its last tab: no second menu button in the top bar
       actions: phone && resp.phone === "tabs" && tabLinks(meta, resp.tabs, route, home, approver).length ? null
         : h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
-      accountExtra: accountExtra(),
+      accountExtra: topAccountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
       unread: notices ? notices.unread : 0, onNotifications: function () { if (notices) notices.toggle(); }
     });
     // side-only from tablet up (contract 0065): the TopNav above the page, beside the full sidebar. The sidebar keeps
-    // the business switcher, Mulai di sini and the tour's targets; the bar adds the menu (one item per sidebar group,
-    // or the layout's nav.top), search, notifications, help and the account. Hidden where the 48px phone bar shows.
+    // the business switcher (companies only while the bar shows), Mulai di sini and the tour's targets; the bar adds
+    // the menu (one item per sidebar group, or the layout's nav.top), search, notifications, help and the account.
+    // Hidden where the 48px phone bar shows (phone, drawer tablet).
     var deskNav = kind === "top-nav" || phone ? null : topNavItems(sideNavItems.groups, navId(route), 6, navTop(meta));
+    var topBar = !!deskNav && !drawerNav;
     var deskTop = !deskNav ? null : h("div", { className: cx("ap-dtop", !installed.length && "ap-dtop-noapps") }, h(R.TopNav, {
       product: { name: companyName, icon: "store", color: "var(--brand)" },
       items: deskNav.items, current: deskNav.current, onNavigate: onNavigate,
       createLabel: false, theme: theme, searchPlaceholder: "Cari", currentApp: openApp ? openApp.name : null,
       apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: appIcon(a), color: "var(--primary)" }; }),
       user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },
-      accountExtra: accountExtra(),
+      accountExtra: topAccountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
       onSwitch: goApp, onSearch: openCmd, onHelp: help, onAccount: account,
       unread: notices ? notices.unread : 0, onNotifications: function () { if (notices) notices.toggle(); }
@@ -1595,7 +1615,7 @@
               onClick: function (e) { var r = e.currentTarget.getBoundingClientRect(); setSwitchAt(switchAt ? null : { left: r.right + 8, top: r.bottom, up: true }); } },
               String((me && (me.name || me.email)) || "?").split(/[\s@.]+/).filter(Boolean).slice(0, 2).map(function (w) { return w.charAt(0); }).join("").toUpperCase())),
 
-        switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems().slice(installed.length ? installed.length + 2 : 0), onClose: function () { setSwitchAt(null); } }) : null,
+        switchAt ? h(SwitcherMenu, { at: switchAt, items: switcherItems(true).slice(installed.length ? installed.length + 2 : 0), onClose: function () { setSwitchAt(null); } }) : null,
         expired ? h(SignInDialog, { email: me && me.email, onDone: afterReSignIn }) : null,
         RA.TourRoot ? h(RA.TourRoot) : null,
         toaster);

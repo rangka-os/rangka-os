@@ -45,7 +45,7 @@ validate: build
 # sites (contract 0063: valid, and broken with both host connector codes), the broken apps copy,
 # the broken apps + broken site (overlays, theme contrast) + broken connectors, and the
 # contract 0001 layout (modules/ + apps/), valid and broken, print formats + letterheads, valid and broken, and
-# processes (contract 0014: the canvas snapshot and a broken set), declared stock moves (contract 0021), valid and broken, work screens (contract 0030), valid and broken, the catalogue keys (contract 0036), valid and broken, and config.modules (contract 0032), valid and broken, and kernel notices (contract 0066), valid and broken.
+# processes (contract 0014: the canvas snapshot and a broken set), declared stock moves (contract 0021), valid and broken, work screens (contract 0030), valid and broken, the catalogue keys (contract 0036), valid and broken, and config.modules (contract 0032), valid and broken, kernel notices (contract 0066), valid and broken, and system.rk maps (contract 0072), valid and broken.
 # template_error (a template Go's html/template cannot parse) is kernel only: Python has no Go template parser,
 # so the broken print input has no such template.
 compare-python: build
@@ -84,7 +84,11 @@ compare-python: build
 	            "testdata/broken-member-record/apps --site testdata/broken-member-record/site" \
 	            "testdata/notices/apps --site testdata/notices/site" \
 	            "testdata/broken-notices/apps --site testdata/broken-notices/site" \
-	            "testdata/broken-limit-scope/apps --site testdata/broken-limit-scope/site"; do \
+	            "testdata/broken-limit-scope/apps --site testdata/broken-limit-scope/site" \
+	            "testdata/modules-apps/apps --site testdata/maps/site" \
+	            "testdata/modules-apps/apps --site testdata/broken-maps/site" \
+	            "testdata/modules-apps/apps --site testdata/broken-maps/site-subdomains" \
+	            "testdata/modules-apps/apps --site testdata/broken-maps/site-unused"; do \
 	  python3 ../tools/rangka_validate.py $$args > $$D/py.txt; \
 	  set -- $$args; a=$$1; shift; $(BIN) validate --apps $$a "$$@" > $$D/go.txt; \
 	  if diff $$D/py.txt $$D/go.txt; then echo "identical ($$(tail -1 $$D/go.txt)): $$args"; else rc=1; fi; \

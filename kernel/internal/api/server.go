@@ -17,6 +17,7 @@ import (
 	"github.com/rangka-os/rangka-os/kernel/internal/files"
 	"github.com/rangka-os/rangka-os/kernel/internal/imports"
 	"github.com/rangka-os/rangka-os/kernel/internal/jobs"
+	"github.com/rangka-os/rangka-os/kernel/internal/maps"
 	"github.com/rangka-os/rangka-os/kernel/internal/mcp"
 	"github.com/rangka-os/rangka-os/kernel/internal/pg"
 	"github.com/rangka-os/rangka-os/kernel/internal/ratelimit"
@@ -413,6 +414,9 @@ func (s *Server) static() http.Handler {
 			}
 		}
 		staticHeaders(w.Header(), r.URL.Path)
+		if appPage(r.URL.Path) {
+			w.Header().Set("Content-Security-Policy", s.appCSP())
+		}
 		fsrv.ServeHTTP(w, r)
 	})
 }
@@ -432,6 +436,21 @@ func staticHeaders(h http.Header, p string) {
 	case strings.HasSuffix(p, "/") || strings.HasSuffix(p, ".html"):
 		h.Set("Cache-Control", "no-cache")
 	}
+}
+
+// appPage is a page of the end-user app (/app/ and its .html files), which carries the app's CSP.
+func appPage(p string) bool {
+	return (p == "/app" || strings.HasPrefix(p, "/app/")) && (strings.HasSuffix(p, "/") || strings.HasSuffix(p, ".html"))
+}
+
+// appCSP is the web app's Content-Security-Policy (contract 0072 §6): images only from the kernel itself, data:,
+// blob: and the tile source of system.rk maps, so no other host learns where a person looks.
+func (s *Server) appCSP() string {
+	var raw any
+	if s.Engine != nil {
+		raw = s.Engine.Reg().SystemConfig("maps")
+	}
+	return maps.FromSystem(raw).ImgSrc()
 }
 
 func indexPage(dir string) string {

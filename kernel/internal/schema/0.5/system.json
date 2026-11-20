@@ -549,6 +549,132 @@
           "default": true
         }
       }
+    },
+    "maps": {
+      "type": "object",
+      "additionalProperties": false,
+      "description": "Maps (contract 0072): the tile source the browser draws, and the geocoder the kernel calls on the browser's behalf. Both are configuration, not code. Without this block the kernel uses OpenStreetMap standard tiles and public Nominatim.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true,
+          "description": "false: no map views, no geocoding endpoints, and no tile origin in the app's img-src."
+        },
+        "tiles": {
+          "type": "object",
+          "additionalProperties": false,
+          "required": [
+            "url",
+            "attribution"
+          ],
+          "description": "The one tile source of this installation. Every browser that opens a map loads tiles from it, so the URL is public: never put a secret key in it.",
+          "properties": {
+            "url": {
+              "type": "string",
+              "maxLength": 300,
+              "pattern": "^https://([a-z0-9-]*\\{s\\}[a-z0-9-]*\\.)?[a-z0-9.-]+(:[0-9]+)?/[^\\s$\"'<>]*\\{z\\}([^\\s$\"'<>]*\\{x\\}[^\\s$\"'<>]*\\{y\\}|[^\\s$\"'<>]*\\{y\\}[^\\s$\"'<>]*\\{x\\})[^\\s$\"'<>]*$",
+              "default": "https://tile.openstreetmap.org/{z}/{x}/{y}.png",
+              "description": "An https tile URL template with {z}, {x} and {y} ({z}/{y}/{x} is accepted too), and {s} when subdomains are set. No ${VAR}: the browser reads it."
+            },
+            "attribution": {
+              "type": "string",
+              "minLength": 1,
+              "maxLength": 300,
+              "default": "© OpenStreetMap contributors",
+              "description": "Shown on every map, as the tile provider's terms require."
+            },
+            "max_zoom": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 22,
+              "default": 19
+            },
+            "subdomains": {
+              "type": "array",
+              "minItems": 1,
+              "maxItems": 8,
+              "uniqueItems": true,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z0-9-]{1,20}$"
+              },
+              "description": "Values for {s} in url; the url must contain {s} when this is set, and the other way round."
+            },
+            "kind": {
+              "enum": [
+                "raster",
+                "vector"
+              ],
+              "default": "raster",
+              "description": "raster: image tiles drawn by Leaflet. vector: Mapbox vector tiles drawn by protomaps-leaflet (a Protomaps extract served as {z}/{x}/{y})."
+            },
+            "cache_tiles": {
+              "type": "integer",
+              "minimum": 0,
+              "maximum": 300,
+              "default": 300,
+              "description": "How many tiles the person has already seen the service worker keeps (least recently used out). The app never prefetches tiles."
+            }
+          }
+        },
+        "geocoder": {
+          "type": "object",
+          "additionalProperties": false,
+          "description": "Address search and reverse lookup, through the kernel (GET /api/v1/geo/search and /geo/reverse): the provider never sees the person's IP.",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "provider": {
+              "enum": [
+                "nominatim",
+                "photon"
+              ],
+              "default": "nominatim"
+            },
+            "url": {
+              "type": "string",
+              "maxLength": 300,
+              "pattern": "^https://[a-z0-9.-]+(:[0-9]+)?(/[^\\s$\"'<>?#{}]*)?$",
+              "description": "Base URL of the provider. Default: https://nominatim.openstreetmap.org for nominatim, https://photon.komoot.io for photon. A self-hosted Nominatim goes here."
+            },
+            "rate_per_second": {
+              "type": "number",
+              "exclusiveMinimum": 0,
+              "maximum": 50,
+              "default": 1,
+              "description": "Requests per second this kernel sends to the provider. Public Nominatim allows at most 1."
+            },
+            "cache_days": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 365,
+              "default": 30,
+              "description": "How long an answer is reused before the provider is asked again."
+            },
+            "contact": {
+              "type": "string",
+              "maxLength": 200,
+              "pattern": "^[^\\s$\"<>]+$",
+              "description": "An email or https URL the provider can reach the operator at; it goes in the User-Agent with the kernel version and auth.issuer."
+            },
+            "countries": {
+              "type": "array",
+              "uniqueItems": true,
+              "maxItems": 20,
+              "items": {
+                "type": "string",
+                "pattern": "^[a-z]{2}$"
+              },
+              "default": [
+                "id"
+              ],
+              "description": "ISO 3166-1 alpha-2 codes, lower case, that results are limited to."
+            }
+          }
+        }
+      }
     }
   },
   "$defs": {

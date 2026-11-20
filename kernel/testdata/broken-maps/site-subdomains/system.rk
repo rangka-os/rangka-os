@@ -1,0 +1,9 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/system.json
+# Contract 0072: {s} without subdomains, and public Nominatim faster than 1 request per second.
+db: {driver: postgres, url: '${DATABASE_URL}'}
+maps:
+  tiles:
+    url: https://{s}.tile.openstreetmap.fr/hot/{z}/{x}/{y}.png
+    attribution: © OpenStreetMap France
+  geocoder:
+    rate_per_second: 2

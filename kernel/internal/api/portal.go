@@ -626,7 +626,7 @@ func portalNumber(v any) (float64, bool) {
 	return 0, false
 }
 
-// portalStrip is a copy of rec without the fields no page shows, children included (the print of §2).
+// portalStrip is a copy of rec without its hidden_for fields, children included (the print of contract 0073 §2).
 func portalStrip(reg *meta.Registry, m *meta.Model, rec map[string]any) map[string]any {
 	out := map[string]any{}
 	for k, v := range rec {
@@ -635,7 +635,9 @@ func portalStrip(reg *meta.Registry, m *meta.Model, rec map[string]any) map[stri
 			out[k] = v // kernel fields: name, docstatus, owner, timestamps
 			continue
 		}
-		if portalHiddenField(f) {
+		// the print shows what the format templates, as for a member, minus hidden_for fields (contract 0073 §2);
+		// hidden: true only keeps a field off the form (a unit name kept for the print), so it stays
+		if len(meta.StrList(f.Raw["hidden_for"])) > 0 {
 			continue
 		}
 		if f.Type == "table" {

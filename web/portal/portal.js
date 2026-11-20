@@ -157,7 +157,10 @@
         var line = el("div", "line");
         var top = el("div", "top");
         add(top, el("span", null, value(titleCol.type, r[titleCol.name])), amountCol ? el("span", null, value(amountCol.type, r[amountCol.name])) : null);
-        var rest = cols.filter(function (c) { return c !== titleCol && c !== amountCol; })
+        var rest = cols.filter(function (c) {
+          // a zero discount or percent says nothing to the customer
+          return c !== titleCol && c !== amountCol && !(c.type === "percent" && !Number(r[c.name]));
+        })
           .map(function (c) { return c.label + " " + value(c.type, r[c.name]); });
         add(line, top, rest.length ? el("div", "sub", rest.join(" · ")) : null);
         list.appendChild(line);

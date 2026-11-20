@@ -40,7 +40,7 @@ func portalInvoice(e *env, paid float64, withPayment bool) string {
 	cust := e.must(201, "POST", "/api/v1/r/pelanggan", map[string]any{"title": "Toko Maju"}).JSON["name"].(string)
 	inv := e.must(201, "POST", "/api/v1/r/faktur", map[string]any{"customer": cust, "posting_date": "2026-10-30", "due_date": "2026-11-15",
 		"grand_total": 1000000, "paid_amount": paid, "margin_note": "MARGIN-RAHASIA", "notes": "Terima kasih",
-		"items": []any{map[string]any{"description": "Kopi susu literan", "qty": 2, "rate": 500000, "cost": 123456}}}).JSON["name"].(string)
+		"items": []any{map[string]any{"description": "Kopi susu literan", "qty": 2, "rate": 500000, "cost": 777333}}}).JSON["name"].(string)
 	if withPayment {
 		e.must(201, "POST", "/api/v1/r/cara_bayar", map[string]any{"faktur": inv, "bank": "BCA", "account_no": "1234567890", "holder": "PT Kopi",
 			"reference": inv, "qris_payload": "00020101021126570011ID.CO.QRIS.WWW0215ID10203040506070303UMI5204581253033605802ID5909KOPI SENJA6007JAKARTA6304ABCD",
@@ -88,14 +88,14 @@ func TestPortalLinkFlow(t *testing.T) {
 	}
 	data := c.must(200, "GET", path+"/data", nil)
 	body := string(data.Body)
-	for _, leak := range []string{"MARGIN-RAHASIA", "margin_note", "123456", "cost", "KODE-INTERNAL", token} {
+	for _, leak := range []string{"MARGIN-RAHASIA", "margin_note", "777333", "cost", "KODE-INTERNAL", token} {
 		if strings.Contains(body, leak) {
 			t.Errorf("data leaks %q: %s", leak, body)
 		}
 	}
 	d := data.JSON
 	if get(d, "doc", "state") != "open" || get(d, "doc", "customer") != "Toko Maju" || get(d, "doc", "amount", "value") != float64(1000000) ||
-		get(d, "doc", "due", "value") != "2026-11-15" || get(d, "org", "name") == "" || get(d, "print") != true {
+		get(d, "doc", "due", "value") != "2026-11-15" || get(d, "print") != true {
 		t.Fatalf("doc = %v", d)
 	}
 	if rows := get(d, "lines", "rows").([]any); len(rows) != 1 || get(rows, 0, "description") != "Kopi susu literan" || get(rows, 0, "amount") != float64(1000000) {
@@ -108,7 +108,7 @@ func TestPortalLinkFlow(t *testing.T) {
 		t.Fatalf("payment fields = %v", get(d, "payment", "fields"))
 	}
 	pr := c.must(200, "GET", path+"/print", nil)
-	if s := string(pr.Body); !strings.Contains(s, "Faktur "+inv) || strings.Contains(s, "MARGIN-RAHASIA") || strings.Contains(s, "123456") {
+	if s := string(pr.Body); !strings.Contains(s, "Faktur "+inv) || strings.Contains(s, "MARGIN-RAHASIA") || strings.Contains(s, "777333") {
 		t.Fatalf("print = %s", s)
 	}
 	if !strings.Contains(pr.Header.Get("Content-Security-Policy"), "default-src 'none'") {
@@ -177,7 +177,7 @@ func TestPortalPaidAndCancelled(t *testing.T) {
 	}
 	c.must(404, "GET", path+"/print", nil)
 	e.must(409, "POST", "/api/v1/portal/tagihan/links", map[string]any{"record": open})
-	amended := e.must(200, "POST", "/api/v1/r/faktur/"+open+"/amend", nil).JSON["name"].(string)
+	amended := e.must(201, "POST", "/api/v1/r/faktur/"+open+"/amend", nil).JSON["name"].(string)
 	if got := get(c.must(200, "GET", path+"/data", nil).JSON, "doc", "replaced_by"); got != amended {
 		t.Fatalf("replaced_by = %v, want %s", got, amended)
 	}

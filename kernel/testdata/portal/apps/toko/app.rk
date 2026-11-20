@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/app.json
+name: toko
+version: 1.0.0
+title: {id: Toko}
+summary: {id: App uji halaman portal pelanggan.}
+rangka: '>=0.5'
+modules: {tagih: ^1.0}
+roles: [kasir, keuangan]
+menu:
+  - group: {id: Tagihan}
+    items: [faktur, pelanggan]

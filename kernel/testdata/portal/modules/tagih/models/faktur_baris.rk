@@ -1,0 +1,10 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: faktur_baris
+label: {id: Baris faktur}
+is_child: true
+fields:
+  - {name: description, type: data, label: {id: Uraian}, required: true}
+  - {name: qty, type: float, label: {id: Qty}}
+  - {name: rate, type: currency, label: {id: Harga}}
+  - {name: cost, type: currency, label: {id: Modal}, hidden_for: [kasir]}
+  - {name: amount, type: currency, label: {id: Jumlah}, read_only: true, compute: qty * rate}

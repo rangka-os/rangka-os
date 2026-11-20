@@ -1,0 +1,16 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/portal.json
+type: document
+model: faktur
+label: {id: Salah field}
+customer: notes
+amount: notes
+due: notes
+fields: [nope, margin_note, items, grand_total]
+lines: {field: notes, columns: [description]}
+print: nope
+payment:
+  model: cara_bayar
+  link: bank
+  fields: [internal_code, bank]
+  qris: faktur
+  qris_label: [nada]

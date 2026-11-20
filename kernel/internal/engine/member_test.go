@@ -186,6 +186,17 @@ func TestMemberGrantListAndDashboard(t *testing.T) {
 	if got := fmt.Sprint(names(memberKeuangan)); got != "[SLP-1 SLP-2 SLP-3]" {
 		t.Errorf("finance lists %s, want all three", got)
 	}
+	// print is decided on the stored record: the grant reads released, a field hidden from the cashier (contract 0074)
+	rec, err := e.GetFor(ctx, memberKasir, "slip", "SLP-1", "print")
+	if err != nil {
+		t.Fatalf("cashier prints own released slip: %v", err)
+	}
+	if _, shown := rec["released"]; shown {
+		t.Errorf("released is hidden_for kasir but came back: %v", rec)
+	}
+	if _, err := e.GetFor(ctx, memberKasir, "slip", "SLP-3", "print"); err == nil {
+		t.Error("cashier printed another person's slip")
+	}
 	out, _, err := e.Dashboard(ctx, memberKasir, "saya", 0)
 	if err != nil {
 		t.Fatal(err)

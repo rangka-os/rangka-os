@@ -1337,3 +1337,6 @@ div.ap-apv-lines { padding: 12px 20px; box-sizing: border-box; }
 .ap-notices-foot { padding: 8px 16px; border-top: 1px solid var(--line); font-size: var(--font-size-sm); }
 .ap-notices-foot a { color: var(--primary-ink); display: inline-flex; align-items: center; min-height: var(--touch); }
 .ap-mhead .ap-bell { position: relative; }
+
+/* contract 0074 §4: an empty dashboard list is one muted sentence in a compact card */
+.ap-dash-empty { margin: 0; padding: 12px 16px 16px; color: var(--muted); font-size: 14px; }

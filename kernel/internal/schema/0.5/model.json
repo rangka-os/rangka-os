@@ -562,6 +562,10 @@
         "stock": {
           "type": "boolean",
           "description": "Quantity that moves stock. Changes are high risk."
+        },
+        "grouping": {
+          "type": "boolean",
+          "description": "int or float: false writes the number without thousands separators (a year, a code), contract 0074 §4"
         }
       },
       "additionalProperties": false,

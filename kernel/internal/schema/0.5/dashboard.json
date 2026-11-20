@@ -176,6 +176,10 @@
         "if": {
           "$ref": "model.json#/$defs/cel",
           "description": "Show the widget only when true, e.g. app_installed('sales')."
+        },
+        "empty": {
+          "$ref": "model.json#/$defs/label",
+          "description": "list: the sentence an empty list shows in a compact card, e.g. Belum ada jadwal minggu ini. (contract 0074 §4)"
         }
       },
       "allOf": [

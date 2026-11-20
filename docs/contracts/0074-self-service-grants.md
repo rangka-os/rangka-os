@@ -62,6 +62,13 @@ Issue rangka-os#261 slice a
 - The installable app (manifest `web/app/manifest.webmanifest`) adds two shortcuts next to "Setujui": "Absen"
   (`#/w/absen_outlet`) and "Slip gaji" (`#/d/saya`). A site without that screen or dashboard shows "Halaman tidak
   ditemukan" with the way home, as for any unknown address.
+- Reading their own records, a member meets screens made for the people who decide; the web app adapts:
+  - a link to a record the caller may not read (`can.read` false in `/meta`) renders as plain text;
+  - the lock note of a submitted or cancelled document speaks of cancel and amend only to who may do them
+    ("Sudah final. Ada yang salah? Hubungi yang mengurusnya." otherwise);
+  - the menu leaves out dashboards missing from `/meta` and models the caller cannot read.
+- Schema 0.5 field key `grouping: false` (int, float) writes the number without thousands separators (a year:
+  2026, not 2.026); dashboard list key `empty:` (label) is the sentence an empty list shows in a compact card.
 - Web push for members reuses rangka-cloud#179 and the kernel notices inbox (0066); not in this contract.
 
 ### 5. The `staff` plan limit (amendment of 0057 §1)

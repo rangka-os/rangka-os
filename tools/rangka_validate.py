@@ -1245,6 +1245,31 @@ def check_notify_email(rep, sysdoc):
             rep.add("error", p, "notify/email/password", "secret_literal", 'notify.email.password is secret: bind it to a ${VAR} reference, not a literal (contract 0017 §2)')
 
 
+NOMINATIM_PUBLIC = "nominatim.openstreetmap.org"
+
+
+def check_maps(rep, sysdoc):
+    """Contract 0072 §2-3: {s} in the tile URL and subdomains come together; public Nominatim gets at most 1 request
+    per second."""
+    if not sysdoc or not isinstance(sysdoc[1], dict) or not isinstance(sysdoc[1].get("maps"), dict):
+        return
+    p, maps = sysdoc[0], sysdoc[1]["maps"]
+    tiles = maps.get("tiles")
+    if isinstance(tiles, dict) and isinstance(tiles.get("url"), str):
+        has_s, subs = "{s}" in tiles["url"], tiles.get("subdomains")
+        if has_s and not subs:
+            rep.add("error", p, "maps/tiles/url", "maps_subdomains", "maps.tiles.url has {s} but maps.tiles.subdomains is not set: list the subdomains, or drop {s} (contract 0072 §2)")
+        elif subs and not has_s:
+            rep.add("error", p, "maps/tiles/subdomains", "maps_subdomains", "maps.tiles.subdomains is set but maps.tiles.url has no {s}: put {s} in the host, or drop subdomains (contract 0072 §2)")
+    geo = maps.get("geocoder")
+    if isinstance(geo, dict):
+        rate = geo.get("rate_per_second", 1)
+        url = geo.get("url") if isinstance(geo.get("url"), str) else ("https://" + NOMINATIM_PUBLIC if geo.get("provider", "nominatim") == "nominatim" else "")
+        host = url.split("://", 1)[-1].split("/", 1)[0].split(":", 1)[0]
+        if host == NOMINATIM_PUBLIC and isinstance(rate, (int, float)) and not isinstance(rate, bool) and rate > 1:
+            rep.add("error", p, "maps/geocoder/rate_per_second", "maps_rate_limit", f"maps.geocoder.rate_per_second is {rate}: public Nominatim allows at most 1 request per second; lower it, or point maps.geocoder.url at your own Nominatim (contract 0072 §3)")
+
+
 def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
     # load (in this order, so syntax problems are reported the same way everywhere)
     flows, roles, conns, sdocs, overlays = {}, [], {}, {}, {}
@@ -2026,6 +2051,7 @@ def check_site(rep, V, root, apps, allmodels, sdocs, conns=None, overlays=None, 
     check_connector_auth(rep, sdocs.get("system.rk"), conns)
     check_auth_upstream(rep, sdocs.get("system.rk"))
     check_notify_email(rep, sdocs.get("system.rk"))
+    check_maps(rep, sdocs.get("system.rk"))
     themes = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("themes/")}
     layouts = {k.split("/", 1)[1][:-3]: v for k, v in sdocs.items() if k.startswith("layouts/")}
     config = sdocs.get("config.rk", (None, {}))

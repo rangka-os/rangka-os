@@ -24,7 +24,7 @@ export declare function DocumentHeader(props: DocumentHeaderProps): React.ReactE
 export interface PosKeypadProps { initial?: number; offline?: boolean; queued?: number; payLabel?: string; payIcon?: IconName | null }
 export declare function PosKeypad(props: PosKeypadProps): React.ReactElement;
 export type RakaState = 'netral' | 'mikir' | 'kerja' | 'senang' | 'tidur';
-/** Raka, the AI agent: ink head, square eyes, titik status light. `state` swaps the eyes; mikir and kerja light the titik teal. `interactive` follows the pointer, blinks and bounces on click (one shared listener; reduced motion keeps only the state swaps). `title: ""` hides it from assistive tech. */
+/** Raka, the AI agent: ink head, square eyes, titik status light. `state` swaps the eyes; mikir and kerja light the titik teal. Alive by default: follows the pointer, blinks and bounces on click (one shared listener; reduced motion keeps only the state swaps); `interactive: false` keeps it still. `title: ""` hides it from assistive tech. */
 export interface RakaProps { size?: number; title?: string; withName?: boolean; company?: string; state?: RakaState; interactive?: boolean; onClick?: () => void }
 export declare function Raka(props: RakaProps): React.ReactElement;
 type Node = React.ReactNode;

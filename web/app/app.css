@@ -762,6 +762,62 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-sig-pad { display: block; width: 100%; height: 220px; border-radius: 10px; background: #fff; box-shadow: inset 0 0 0 1px var(--line-strong); cursor: crosshair; }
 .ap-sig-by { margin: 0 0 8px; color: var(--ink-2); }
 .ap-sig-hint { margin: 8px 0 0; color: var(--muted); font-size: 13px; }
+/* maps (rangka-os#248, contract 0072): Leaflet restyled with tokens. Roles: controls and clusters = neutral UI (surface,
+   ink, line); a pin = ink by default, a status or kind hue only when the caller gives a tone (brand only on request);
+   the device's own position = info blue. Dark mode darkens the tiles with a filter, never the pins. leaflet.css is
+   added after this file on the first map, so overrides of its rules carry `.ap-map.leaflet-container`. */
+.ap-map-wrap { position: relative; width: 100%; border-radius: var(--r-md); overflow: hidden; box-shadow: inset 0 0 0 1px var(--line); background: var(--soft); }
+.ap-map { position: absolute; inset: 0; font: 400 13px/18px var(--font-sans); background: var(--soft); }
+.ap-map.leaflet-container { font: 400 13px/18px var(--font-sans); background: var(--soft); outline-offset: -2px; }
+.ap-map.leaflet-container:focus-visible { outline: 2px solid var(--focus); }
+.ap-map-off { position: relative; display: flex; align-items: center; justify-content: center; padding: 16px; border-radius: var(--r-md); background: var(--soft); color: var(--muted); text-align: center; }
+.ap-map-note { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 6px 12px; border-radius: var(--r-pill); background: var(--surface); color: var(--ink-2); box-shadow: var(--shadow-pop); font-size: 13px; z-index: 500; }
+.ap-map.leaflet-container .leaflet-bar { border: 0; border-radius: var(--r-sm); box-shadow: var(--shadow-pop); overflow: hidden; }
+.ap-map.leaflet-container .leaflet-bar a, .ap-map.leaflet-container .leaflet-bar a:hover { width: 36px; height: 36px; line-height: 34px; background: var(--surface); color: var(--ink); border-bottom-color: var(--line); font: 500 20px/34px var(--font-sans); }
+.ap-map.leaflet-container .leaflet-bar a:hover { background: var(--hover); }
+.ap-map.leaflet-container .leaflet-bar a:focus-visible { outline: 2px solid var(--focus); outline-offset: -2px; }
+.ap-map.leaflet-container .leaflet-bar a.leaflet-disabled { color: var(--faint); background: var(--surface); }
+.ap-map-me { display: block; width: 36px; height: 36px; padding: 0; border: 0; border-radius: var(--r-sm); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-pop); cursor: pointer; }
+.ap-map-me:hover { background: var(--hover); }
+.ap-map-me:focus-visible { outline: 2px solid var(--focus); outline-offset: 1px; }
+.ap-map-me:disabled { color: var(--faint); cursor: progress; }
+.ap-map-me span { display: block; width: 14px; height: 14px; margin: auto; border: 2px solid currentColor; border-radius: 50%; box-shadow: 0 0 0 3px var(--surface), 0 0 0 4px currentColor; }
+.ap-map.leaflet-container .leaflet-control-attribution { padding: 1px 6px; border-top-left-radius: var(--r-xs); background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--ink-2); font-size: 11px; line-height: 16px; }
+.ap-map.leaflet-container .leaflet-control-attribution a { color: var(--link); }
+.ap-map.leaflet-container .leaflet-popup-content-wrapper { border-radius: var(--r-md); background: var(--surface); color: var(--ink); box-shadow: var(--shadow-overlay); }
+.ap-map.leaflet-container .leaflet-popup-tip { background: var(--surface); box-shadow: none; }
+.ap-map.leaflet-container .leaflet-popup-content { margin: 10px 14px; font: 400 13px/18px var(--font-sans); }
+.ap-map a.leaflet-popup-close-button { color: var(--muted); }
+.ap-map-pop { display: grid; gap: 2px; }
+.ap-map-pop strong { font-weight: 600; color: var(--ink); }
+.ap-map-pop span { color: var(--muted); }
+.ap-map.leaflet-container .ap-map-pop a { margin-top: 4px; color: var(--link); font-weight: 500; }
+.ap-map-pin { --pin: var(--ink); background: none; border: 0; }
+.ap-map-pin::before { content: ""; position: absolute; left: 4px; top: 0; width: 20px; height: 20px; border-radius: 50% 50% 50% 0; transform: rotate(-45deg); background: var(--pin); box-shadow: 0 0 0 2px var(--surface), 0 2px 4px rgba(0, 0, 0, .3); }
+.ap-map-pin .ap-map-pin-dot { position: absolute; left: 11px; top: 7px; width: 6px; height: 6px; border-radius: 50%; background: var(--surface); }
+.ap-map-pin:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; border-radius: var(--r-xs); }
+.ap-map-pin-brand { --pin: var(--brand); }
+.ap-map-pin-ok { --pin: var(--ok-solid); }
+.ap-map-pin-warn { --pin: var(--warn-solid); }
+.ap-map-pin-bad { --pin: var(--bad-solid); }
+.ap-map-pin-info { --pin: var(--info); }
+.ap-map-pin-kind-1 { --pin: var(--chart-1); } .ap-map-pin-kind-2 { --pin: var(--chart-2); } .ap-map-pin-kind-3 { --pin: var(--chart-3); }
+.ap-map-pin-kind-4 { --pin: var(--chart-4); } .ap-map-pin-kind-5 { --pin: var(--chart-5); } .ap-map-pin-kind-6 { --pin: var(--chart-6); }
+.ap-map.leaflet-container .ap-map-cluster { display: flex; align-items: center; justify-content: center; border-radius: 50%; background: var(--surface); color: var(--ink); box-shadow: 0 0 0 2px var(--ink), var(--shadow-pop); font: 600 13px/1 var(--font-sans); font-variant-numeric: tabular-nums; }
+.ap-map.leaflet-container .ap-map-cluster:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
+.ap-map.leaflet-container .ap-map-medot { border-radius: 50%; background: var(--info); box-shadow: 0 0 0 3px var(--surface), 0 1px 4px rgba(0, 0, 0, .35); }
+.ap-map.leaflet-container path.ap-map-accuracy { stroke: var(--info); stroke-width: 1; fill: var(--info); fill-opacity: .12; }
+.ap-map.leaflet-container path.ap-map-circle { stroke: var(--ink-2); stroke-width: 2; stroke-dasharray: 6 4; fill: var(--ink-2); fill-opacity: .06; }
+.ap-map-thumb { position: relative; display: block; flex: none; overflow: hidden; border-radius: var(--r-sm); background: var(--soft); box-shadow: inset 0 0 0 1px var(--line); }
+.ap-map-thumb img { position: absolute; max-width: none; pointer-events: none; }
+.ap-map-thumb .ap-map-thumb-pin { position: absolute; left: calc(50% - 14px); top: calc(50% - 28px); width: 28px; height: 28px; }
+.ap-map-thumb-attr { position: absolute; right: 0; bottom: 0; max-width: 100%; padding: 0 4px; overflow: hidden; border-top-left-radius: var(--r-xs); background: color-mix(in srgb, var(--surface) 82%, transparent); color: var(--ink-2); font-size: 9px; line-height: 13px; white-space: nowrap; text-overflow: ellipsis; }
+.ap-geo-ro { display: grid; justify-items: start; gap: 8px; }
+.ap-geo-ro .ap-map-thumb { max-width: 100%; }
+.ap-geo-line { display: flex; flex-wrap: wrap; align-items: baseline; gap: 4px 12px; }
+:root[data-theme="dark"] .ap-map.leaflet-container .leaflet-tile-pane, :root[data-theme="dark"] .ap-map-thumb img { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.88); }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .ap-map.leaflet-container .leaflet-tile-pane, :root:not([data-theme="light"]) .ap-map-thumb img { filter: invert(1) hue-rotate(180deg) brightness(.9) contrast(.88); } }
+@media (prefers-reduced-motion: reduce) { .ap-map.leaflet-container .leaflet-zoom-anim .leaflet-zoom-animated, .ap-map.leaflet-container .leaflet-cluster-anim .leaflet-marker-icon, .ap-map.leaflet-container .leaflet-fade-anim .leaflet-tile { transition: none !important; } }
 /* scanner */
 .ap-scan-view { position: relative; overflow: hidden; border-radius: 12px; background: var(--viewer); aspect-ratio: 4 / 3; }
 .ap-scan-video { display: block; width: 100%; height: 100%; object-fit: cover; }

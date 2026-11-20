@@ -4753,6 +4753,101 @@ def ai_turn(page, ask):
     return drawer.locator(".rk-chat-raka").last
 
 
+def test_map_view(page, ctx):
+    """rangka-os#248: RangkaApp.MapView loads the vendored Leaflet on first use, draws the tile source of /meta `maps`
+    (OSM by default, attribution visible), clusters pins that split on zoom, and an unmount leaves no map and no window
+    or document listener behind. MapThumb draws one tile with a pin. Tiles are served by the test, not by OSM."""
+    tiles = []
+    png = make_png(256, 256)
+
+    def tile(route):
+        tiles.append(route.request.url)
+        route.fulfill(status=200, content_type="image/png", body=png)
+    page.route(re.compile(r"^https://tile\.openstreetmap\.org/\d+/\d+/\d+\.png$"), tile)
+    page.goto(ctx.base + "/app/")
+    sign_in(page)
+    expect_signed_in(page, ctx)
+    assert not page.evaluate("!!window.L"), "Leaflet is not loaded before a map is shown"
+    assert page.evaluate("RangkaApp.mapsConfig && RangkaApp.mapsConfig.tiles.url") == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
+    page.evaluate("""() => {
+      const live = new Set(), key = (t, f, o) => t + "|" + (o && typeof o === "object" ? !!o.capture : !!o);
+      for (const tgt of [window, document]) {
+        const add = tgt.addEventListener.bind(tgt), rem = tgt.removeEventListener.bind(tgt);
+        tgt.addEventListener = (t, f, o) => { if (window.__mapWatch) live.add({ tgt, t, f, k: key(t, f, o) }); return add(t, f, o); };
+        tgt.removeEventListener = (t, f, o) => { for (const e of live) if (e.tgt === tgt && e.f === f && e.k === key(t, f, o)) live.delete(e); return rem(t, f, o); };
+      }
+      window.__mapLive = live;
+      const box = document.createElement("div");
+      box.id = "map-test"; box.style.cssText = "position:fixed;left:16px;top:16px;width:min(640px, calc(100vw - 32px));max-height:calc(100vh - 32px);overflow:auto;z-index:99999;background:#fff";
+      document.body.appendChild(box);
+      const near = (lat, lng, n, tag) => Array.from({ length: n }, (_, i) => ({ id: tag + i, lat: lat + i * 0.002, lng: lng + i * 0.002,
+        title: "Outlet " + tag + i, sub: "Buka 08.00", tone: i ? "ok" : "warn", href: "#/r/outlet/" + tag + i }));
+      window.__mapWatch = true;
+      window.__mapRoot = ReactDOM.createRoot(box);
+      window.__mapRoot.render(React.createElement("div", null,
+        React.createElement(RangkaApp.MapView, { markers: near(-6.2, 106.8, 6, "jkt").concat(near(-6.91, 107.6, 4, "bdg")), cluster: true, fit: 1,
+          height: 360, label: "Peta outlet", me: true }),
+        React.createElement(RangkaApp.MapThumb, { lat: -6.175392, lng: 106.827153, label: "Peta Monas" }),
+        React.createElement(RangkaApp.FieldEditor, { ctx: {}, model: "outlet", readOnly: true, onChange: () => {},
+          field: { name: "location", type: "geo", label: "Lokasi" }, rec: { location: { lat: -6.2, lng: 106.8009, accuracy_m: 7.6 } } })));
+    }""")
+    page.locator("#map-test .ap-map[data-state=ready]").wait_for(timeout=15000)
+    page.wait_for_function("document.querySelectorAll('#map-test .leaflet-tile-loaded').length > 0", timeout=10000)
+    assert page.evaluate("!!(window.L && L.MarkerClusterGroup && L.version === '1.9.4')")
+    assert page.locator("#map-test .leaflet-control-attribution").inner_text().strip() == "© OpenStreetMap contributors"
+    for name in ("Perbesar", "Perkecil", "Posisi saya"):
+        assert page.locator("#map-test [title='" + name + "']").count() == 1, name + " control"
+    clusters = page.locator("#map-test .ap-map-cluster")
+    page.wait_for_function("document.querySelectorAll('#map-test .ap-map-cluster').length >= 1", timeout=10000)
+    page.wait_for_timeout(400)
+    loose = page.locator("#map-test .leaflet-marker-pane .ap-map-pin").count()
+    counts = [int(x) for x in clusters.all_inner_texts()]
+    assert sum(counts) + loose == 10 and max(counts) >= 4, (counts, loose)
+    big = clusters.filter(has_text=str(max(counts))).first
+    zoom0 = page.evaluate("document.querySelector('#map-test .leaflet-tile-loaded').src.split('/').slice(-3)[0]")
+    big.click()  # zooms to the cluster's pins; it splits as the map zooms in
+    # split: the big cluster is gone and at least two of its outlets stand as pins (a narrow screen may need another step)
+    split = ("!Array.from(document.querySelectorAll('#map-test .ap-map-cluster')).some((c) => c.textContent === '%d')"
+             " && document.querySelectorAll('#map-test .leaflet-marker-pane .ap-map-pin').length >= 2") % max(counts)
+    for _ in range(6):
+        page.wait_for_timeout(700)
+        if page.evaluate(split) or not clusters.count():
+            break
+        clusters.first.click()  # a smaller cluster left on a narrow screen: zoom into it too
+    page.wait_for_function(split, timeout=10000)
+    page.wait_for_timeout(400)
+    zoom1 = page.evaluate("Array.from(document.querySelectorAll('#map-test .leaflet-tile-loaded')).pop().src.split('/').slice(-3)[0]")
+    assert int(zoom1) > int(zoom0), (zoom0, zoom1)
+    assert page.locator("#map-test .ap-map-cluster").filter(has_text=str(max(counts))).count() == 0, "the cluster split"
+    pin = page.locator("#map-test .leaflet-marker-pane .ap-map-pin").first
+    title = pin.get_attribute("title")
+    assert re.fullmatch(r"Outlet (jkt|bdg)\d", title or ""), title
+    assert pin.get_attribute("tabindex") == "0", "pins take keyboard focus"
+    tone = "ap-map-pin-warn" if title.endswith("0") else "ap-map-pin-ok"
+    assert tone in (pin.get_attribute("class") or ""), (title, pin.get_attribute("class"))
+    pin.focus()
+    page.keyboard.press("Enter")
+    pop = page.locator("#map-test .ap-map-pop")
+    pop.wait_for(timeout=5000)
+    assert title in pop.inner_text() and pop.get_by_role("link", name="Buka").get_attribute("href") == "#/r/outlet/" + title.split(" ")[1]
+    thumb = page.locator("#map-test .ap-map-thumb[aria-label='Peta Monas']")
+    assert thumb.get_attribute("aria-label") == "Peta Monas"
+    srcs = thumb.locator("img").evaluate_all("(l) => l.map((i) => i.src)")
+    assert "https://tile.openstreetmap.org/15/26107/16947.png" in srcs and 1 <= len(srcs) <= 4, srcs
+    assert any(u.endswith("/15/26107/16947.png") for u in tiles)
+    ro = page.locator("#map-test .ap-geo-ro")
+    assert ro.locator(".ap-map-thumb[aria-label='Peta Lokasi'] img").count() >= 1, "a read-only geo field shows a map preview"
+    assert ro.locator(".ap-geo").inner_text() == "-6.20000, 106.80090 · ±8 m"
+    assert ro.get_by_role("link", name="Buka di peta").get_attribute("href") == "https://www.google.com/maps/search/?api=1&query=-6.2,106.8009"
+    shot(page, ctx, "map-view")
+    assert page.evaluate("RangkaApp.map.live()") == 1
+    page.evaluate("() => { window.__mapRoot.unmount(); window.__mapWatch = false; }")
+    assert page.evaluate("RangkaApp.map.live()") == 0, "the map is removed on unmount"
+    assert page.locator(".leaflet-container").count() == 0
+    left = page.evaluate("Array.from(window.__mapLive).map((e) => (e.tgt === window ? 'window ' : 'document ') + e.t)")
+    assert left == [], "listeners left after unmount: %s" % left
+
+
 def test_ai_live(page, ctx):
     """The real Raka (rangka-ai serve --demo behind the kernel relay, contract 0020): "berapa faktur jatuh tempo bulan
     ini?" streams an answer about invoices in rupiah from the kernel's data; "tambah field Nomor PO di faktur" ends in a

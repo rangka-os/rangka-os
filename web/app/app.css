@@ -146,18 +146,22 @@ body { font: 13px/20px var(--font-sans); -webkit-font-smoothing: antialiased; }
 .ap-main .rk-pagehead-extra { flex-wrap: wrap; gap: 8px; max-width: 100%; }
 .ap-headcount { display: inline-flex; align-items: center; height: 20px; padding: 0 7px; border-radius: var(--r-pill); background: var(--ap-pill); color: var(--ap-pill-ink); font: 400 11.5px/20px var(--font-sans); white-space: nowrap; }
 /* under it one ruled row: the views as underline tabs on the left, filters and tools as small outlined buttons on the right */
-.ap-main .ap-views { display: flex; align-items: flex-end; gap: 8px 16px; flex-wrap: wrap; padding: 0; margin: -4px 0 4px; border-bottom: 1px solid var(--line); }
-.ap-main .ap-views > .rk-filterbar { flex: 1 1 auto; justify-content: flex-end; padding-bottom: 6px; }
+/* the view row: tabs on the left, quick filters and tools on the right, one line of --control controls in one font
+   (--touch only on phones and coarse pointers); the active tab's underline sits on the row's bottom line */
+.ap-main .ap-views { display: flex; align-items: center; gap: 8px 16px; flex-wrap: wrap; padding: 0; margin: -4px 0 4px; min-height: calc(var(--control) + 8px); border-bottom: 1px solid var(--line); --ap-bar-font: 400 12px/18px var(--font-sans); }
+.ap-main .ap-views > .rk-filterbar { flex: 1 1 auto; justify-content: flex-end; }
 .ap-main .ap-views > .rk-filterbar > .rk-sp { display: none; }
-.ap-main .ap-views > .ap-list-tools { margin-left: 0; padding-bottom: 6px; }
-.ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: 26px; font: 400 12px/18px var(--font-sans); color: var(--ap-pill-ink); padding: 0 8px; border-radius: var(--r); }
+.ap-main .ap-views > .ap-list-tools { margin-left: 0; }
+.ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: var(--control); font: var(--ap-bar-font); color: var(--ap-pill-ink); padding: 0 8px; border-radius: var(--r); }
 .ap-main .ap-views .rk-fbtn .rk-icon, .ap-main .ap-views .ap-toolmenu .rk-btn .rk-icon { width: 12px; height: 12px; }
-.ap-main .rk-viewswitch { order: -1; height: auto; padding: 0; gap: 16px; background: none; border-radius: 0; overflow-x: auto; flex: 0 1 auto; }
-.ap-main .rk-viewswitch-btn { height: 34px; padding: 0; min-width: 0; border-radius: 0; background: none; color: var(--muted); font: 400 12.5px/20px var(--font-sans); box-shadow: inset 0 -2px 0 transparent; }
+.ap-main .rk-viewswitch { order: -1; align-self: stretch; align-items: center; height: auto; padding: 0; gap: 16px; background: none; border-radius: 0; overflow-x: auto; flex: 0 1 auto; }
+.ap-main .rk-viewswitch-btn { position: relative; height: var(--control); padding: 0; min-width: 0; border-radius: 0; background: none; color: var(--muted); font: var(--ap-bar-font); box-shadow: none; }
+.ap-main .rk-viewswitch-btn::after { content: ""; position: absolute; left: 0; right: 0; bottom: -4px; height: 2px; background: transparent; }
 .ap-main .rk-viewswitch-btn:hover { color: var(--ink); }
 .ap-main .rk-viewswitch-btn .rk-icon { display: none; }
 .ap-main .rk-viewswitch-btn .l { display: inline; }
-.ap-main .rk-viewswitch-btn[aria-pressed="true"] { background: none; color: var(--ink); font-weight: 600; box-shadow: inset 0 -2px 0 var(--ink); }
+.ap-main .rk-viewswitch-btn[aria-pressed="true"] { background: none; color: var(--ink); font-weight: 600; box-shadow: none; }
+.ap-main .rk-viewswitch-btn[aria-pressed="true"]::after { background: var(--ink); }
 .ap-main .rk-viewswitch-btn[aria-pressed="true"] .rk-icon { color: var(--ink); }
 .ap-main .rk-viewswitch-btn:focus-visible { outline-offset: -2px; }
 
@@ -432,6 +436,7 @@ a.ap-lc-link:focus-visible { outline: 2px solid var(--focus); outline-offset: -2
   .ap-main .rk-search, .ap-main .rk-seg { height: auto; min-height: var(--touch); }
   .ap-main .rk-viewswitch { min-height: 0; flex: 1 1 100%; }
   .ap-main .rk-viewswitch-btn { min-height: var(--touch); }
+  .ap-main .rk-viewswitch-btn::after { bottom: 0; }
   .ap-main .ap-views > .rk-filterbar { justify-content: flex-start; }
   .ap-main .ap-views .rk-fbtn, .ap-main .ap-views .ap-toolmenu .rk-btn { height: auto; }
   .ap-main .rk-pagehead-extra { flex-wrap: wrap; }

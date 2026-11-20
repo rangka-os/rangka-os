@@ -195,7 +195,8 @@
 [data-brand="juragan"] .ap-mu-team h3 { font: 600 16px/20px "Inter", var(--font-sans); }
 @media (max-width: 1023px) { [data-brand="juragan"] .ap-mu-grid { grid-template-columns: minmax(0, 1fr); } [data-brand="juragan"] .ap-mu-step { padding: 12px 16px; } }
 /* ---- daftar (artboard): tombol saring dan alat 32px/14px berlatar netral, tab 14px, kosong tanpa ilustrasi ---- */
-[data-brand="juragan"] .ap-main .ap-views .rk-fbtn, [data-brand="juragan"] .ap-main .ap-views .ap-toolmenu .rk-btn { height: 32px; padding: 0 10px 0 12px; font: 500 14px/20px "Inter", var(--font-sans); color: var(--ink); border-radius: var(--r-md); background: var(--neutral); box-shadow: none; }
+[data-brand="juragan"] .ap-main .ap-views { --ap-bar-font: 500 14px/20px "Inter", var(--font-sans); }
+[data-brand="juragan"] .ap-main .ap-views .rk-fbtn, [data-brand="juragan"] .ap-main .ap-views .ap-toolmenu .rk-btn { height: var(--control); padding: 0 10px 0 12px; font: var(--ap-bar-font); color: var(--ink); border-radius: var(--r-md); background: var(--neutral); box-shadow: none; }
 [data-brand="juragan"] .ap-main .ap-views .rk-fbtn:hover, [data-brand="juragan"] .ap-main .ap-views .ap-toolmenu .rk-btn:hover { background: var(--neutral-hover); }
 [data-brand="juragan"] .ap-main .ap-views .rk-fbtn.on { background: var(--selected); color: var(--selected-ink); }
 [data-brand="juragan"] .ap-main .ap-views .rk-fbtn .rk-icon, [data-brand="juragan"] .ap-main .ap-views .ap-toolmenu .rk-btn .rk-icon { width: 16px; height: 16px; }

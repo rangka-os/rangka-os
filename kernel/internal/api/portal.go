@@ -130,6 +130,12 @@ func (s *Server) createPortalLink(w http.ResponseWriter, r *http.Request, c *cal
 		writeError(w, http.StatusConflict, "portal_cancelled", "Dokumen ini sudah dibatalkan; bagikan tautan dokumen penggantinya.")
 		return
 	}
+	// v1 shows amounts in the organisation's currency only: a foreign-currency document keeps its prices in _fx
+	// twins the page does not list (contract 0073 §5)
+	if org := portalCurrency(s.Engine.Reg(), c.actor.Org); portalDocCurrency(s.Engine.Reg(), c.actor.Org, m, rec) != org {
+		writeError(w, http.StatusConflict, "portal_currency_unsupported", "Tautan pelanggan belum bisa untuk dokumen mata uang asing; kirim versi cetaknya.")
+		return
+	}
 	days := p.LifetimeDays
 	if v, has := body["days"]; has {
 		f, isNum := v.(float64)
@@ -289,7 +295,8 @@ func (s *Server) portalResolve(r *http.Request) (*portalHit, int, error) {
 	}
 	expires, _ := row["expires_at"].(time.Time)
 	if row["revoked_at"] != nil || !s.Engine.Now().Before(expires) {
-		return nil, http.StatusGone, nil
+		// the token matched a real link, so its organisation is known: the page names the seller to ask
+		return &portalHit{id: id, org: org, page: p}, http.StatusGone, nil
 	}
 	m := reg.Model(model)
 	actor := engine.Actor{Org: org, ID: "portal:" + id, System: true}
@@ -303,8 +310,9 @@ func (s *Server) portalResolve(r *http.Request) (*portalHit, int, error) {
 	return &portalHit{id: id, org: org, page: p, model: m, rec: rec, expires: expires, actor: actor}, http.StatusOK, nil
 }
 
-// portalMiss writes a miss as JSON.
-func (s *Server) portalMiss(w http.ResponseWriter, status int, err error) {
+// portalMiss writes a miss as JSON. A 410 names the seller (hit.org is the link's own organisation); a 404 names
+// nobody, since its path is whatever the caller typed.
+func (s *Server) portalMiss(w http.ResponseWriter, status int, err error, hit *portalHit) {
 	switch status {
 	case http.StatusTooManyRequests:
 		var refused *ratelimit.Refused
@@ -313,7 +321,11 @@ func (s *Server) portalMiss(w http.ResponseWriter, status int, err error) {
 		}
 		writeError(w, status, "rate_limited", msgRateLimited)
 	case http.StatusGone:
-		writeError(w, status, "portal_link_expired", msgPortalExpired)
+		body := map[string]any{"error": map[string]any{"code": "portal_link_expired", "message": msgPortalExpired}}
+		if hit != nil && s.Engine != nil {
+			body["org"] = portalOrg(s.Engine.Reg(), hit.org)
+		}
+		writeJSON(w, status, body)
 	case http.StatusInternalServerError:
 		s.logf("portal: %v", err)
 		writeError(w, status, "internal", "Halaman belum bisa dibuka. Coba lagi sebentar.")
@@ -330,12 +342,12 @@ func (s *Server) portalShell(w http.ResponseWriter, r *http.Request) {
 	portalHeaders(w)
 	_, status, err := s.portalResolve(r)
 	if status == http.StatusTooManyRequests || status == http.StatusInternalServerError {
-		s.portalMiss(w, status, err)
+		s.portalMiss(w, status, err, nil)
 		return
 	}
 	b, rerr := os.ReadFile(filepath.Join(s.WebDir, "portal", "index.html"))
 	if s.WebDir == "" || rerr != nil {
-		s.portalMiss(w, status, err)
+		s.portalMiss(w, status, err, nil)
 		return
 	}
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -348,8 +360,8 @@ func (s *Server) portalShell(w http.ResponseWriter, r *http.Request) {
 func (s *Server) portalData(w http.ResponseWriter, r *http.Request) {
 	portalHeaders(w)
 	hit, status, err := s.portalResolve(r)
-	if hit == nil {
-		s.portalMiss(w, status, err)
+	if status != http.StatusOK {
+		s.portalMiss(w, status, err, hit)
 		return
 	}
 	ctx := pg.WithOrg(r.Context(), hit.org)
@@ -369,7 +381,7 @@ func (s *Server) portalData(w http.ResponseWriter, r *http.Request) {
 		doc["customer"] = s.portalValue(ctx, hit.actor, f, rec[f.Name])
 	}
 	if f := portalShown(m, p.Amount); f != nil {
-		doc["amount"] = map[string]any{"label": fieldLabel(f), "value": rec[f.Name], "currency": portalCurrency(reg, hit.org)}
+		doc["amount"] = map[string]any{"label": fieldLabel(f), "value": rec[f.Name], "currency": portalDocCurrency(reg, hit.org, m, rec)}
 	}
 	if f := portalShown(m, p.Due); f != nil {
 		doc["due"] = map[string]any{"label": fieldLabel(f), "value": rec[f.Name]}
@@ -395,14 +407,30 @@ func (s *Server) portalData(w http.ResponseWriter, r *http.Request) {
 	if state == "open" && p.PayModel != "" {
 		out["payment"] = s.portalPayment(ctx, hit, fmt.Sprint(rec["name"]))
 	}
-	s.portalViewed(ctx, hit, "page")
+	s.portalViewed(ctx, r, hit, "page")
 	writeJSON(w, 200, out)
 }
 
-// portalViewed counts the view and audits it (portal.view), never with the token.
-func (s *Server) portalViewed(ctx context.Context, hit *portalHit, kind string) {
-	if _, err := s.DB.Exec(ctx, `update rk_portal_links set views = views + 1, last_view_at = $2 where id = $1`, hit.id, s.Engine.Now().UTC()); err != nil {
+// portalViewAuditEvery: a link audits portal.view at most once in this window; views counts every one.
+const portalViewAuditEvery = time.Hour
+
+// portalViewed counts the view and audits it (portal.view), never with the token. HEAD is no view. The audit is
+// throttled per link (contract 0073 §4), so a link fetched in a loop does not grow rk_audit by a row per request.
+func (s *Server) portalViewed(ctx context.Context, r *http.Request, hit *portalHit, kind string) {
+	if r.Method == http.MethodHead {
+		return
+	}
+	now := s.Engine.Now().UTC()
+	res, err := s.DB.Query(ctx, `with old as (select last_view_at from rk_portal_links where id = $1)
+		update rk_portal_links set views = views + 1, last_view_at = $2 where id = $1 returning (select last_view_at from old)`, hit.id, now)
+	if err != nil {
 		s.logf("portal: count view %s: %v", hit.id, err)
+		return
+	}
+	if len(res.Rows) == 1 {
+		if prev, ok := res.Rows[0][0].(time.Time); ok && now.Sub(prev) < portalViewAuditEvery {
+			return
+		}
 	}
 	if err := store.Audit(ctx, s.DB, hit.org, hit.actor.ID, "portal.view", hit.model.Name+"/"+fmt.Sprint(hit.rec["name"]), hit.page.Name+" ("+kind+")",
 		map[string]any{"page": hit.page.Name, "kind": kind}); err != nil {
@@ -412,9 +440,14 @@ func (s *Server) portalViewed(ctx context.Context, hit *portalHit, kind string) 
 
 // portalHiddenField: a field no page shows, whatever the page lists (contract 0073 §2, defence in depth behind the
 // validator): any hidden_for, hidden: true, or a type pages never show.
-func portalHiddenField(f *meta.Field) bool {
+func portalHiddenField(m *meta.Model, f *meta.Field) bool {
 	if f == nil || len(meta.StrList(f.Raw["hidden_for"])) > 0 {
 		return true
+	}
+	if base := f.MoneyOf(); base != "" && m != nil { // an IDR twin is hidden when its money field is
+		if bf := m.Field(base); bf != nil && bf != f && portalHiddenField(m, bf) {
+			return true
+		}
 	}
 	if h, _ := f.Raw["hidden"].(bool); h {
 		return true
@@ -432,7 +465,7 @@ func portalShown(m *meta.Model, name string) *meta.Field {
 		return nil
 	}
 	f := m.Field(name)
-	if portalHiddenField(f) || f.Type == "table" {
+	if portalHiddenField(m, f) || f.Type == "table" {
 		return nil
 	}
 	return f
@@ -455,7 +488,7 @@ func (s *Server) portalValue(ctx context.Context, a engine.Actor, f *meta.Field,
 			return sv
 		}
 		tf := tm.Field(tm.TitleField)
-		if tf == nil || portalHiddenField(tf) || tf.Type == "link" {
+		if tf == nil || portalHiddenField(tm, tf) || tf.Type == "link" {
 			return sv
 		}
 		if lr, err := s.Engine.Get(ctx, a, f.To, sv); err == nil {
@@ -574,17 +607,35 @@ func (s *Server) portalPayment(ctx context.Context, hit *portalHit, doc string) 
 	return out
 }
 
-// portalSuccessor is the newest amendment of a cancelled document, or "".
+// portalSuccessor follows the amendment chain of a cancelled document (amended_from) and names the submitted
+// document that replaces it, or "": a draft amendment has only a temporary name, and a chain that ends cancelled
+// replaces nothing. At most 20 hops.
 func (s *Server) portalSuccessor(ctx context.Context, org string, m *meta.Model, name string) string {
-	res, err := s.DB.Query(ctx, fmt.Sprintf("select name from %s where org_id = $1 and amended_from = $2 and docstatus < 2 order by name desc limit 1",
-		pg.QuoteIdent(store.TableName(m.Name))), org, name)
-	if err != nil || len(res.Rows) == 0 {
+	q := fmt.Sprintf("select name, docstatus from %s where org_id = $1 and amended_from = $2 order by docstatus = 2, name desc limit 1",
+		pg.QuoteIdent(store.TableName(m.Name)))
+	best, cur := "", name
+	for i := 0; i < 20; i++ {
+		res, err := s.DB.Query(ctx, q, org, cur)
 		if err != nil {
 			s.logf("portal: successor of %s: %v", name, err)
+			return ""
 		}
-		return ""
+		if len(res.Rows) == 0 {
+			break
+		}
+		next := fmt.Sprint(res.Rows[0][0])
+		ds, _ := portalNumber(res.Rows[0][1])
+		switch int(ds) {
+		case 1:
+			best = next
+		case 2:
+			best = ""
+		default: // a draft: nothing to name yet; it has no amendment of its own
+			return best
+		}
+		cur = next
 	}
-	return fmt.Sprint(res.Rows[0][0])
+	return best
 }
 
 // portalOrg is the seller as the page names it.
@@ -592,15 +643,17 @@ func portalOrg(reg *meta.Registry, org string) map[string]any {
 	id := reg.OrgIdentity(org)
 	name, _ := id["name"].(string)
 	legal, _ := id["legal_name"].(string)
+	phone := ""
 	if lh := reg.Letterhead(org); lh != nil {
 		if l, _ := lh["legal_name"].(string); l != "" {
 			legal = l
 		}
+		phone, _ = lh["phone"].(string)
 	}
 	if name == "" {
 		name = legal
 	}
-	return map[string]any{"name": name, "legal_name": legal}
+	return map[string]any{"name": name, "legal_name": legal, "phone": phone}
 }
 
 // portalCurrency is the organisation's currency (config currency), IDR by default.
@@ -609,6 +662,16 @@ func portalCurrency(reg *meta.Registry, org string) string {
 		return c
 	}
 	return "IDR"
+}
+
+// portalDocCurrency is the document's own currency (its currency field) when it has one, else the organisation's.
+func portalDocCurrency(reg *meta.Registry, org string, m *meta.Model, rec map[string]any) string {
+	if f := m.Field("currency"); f != nil {
+		if c, _ := rec["currency"].(string); c != "" {
+			return c
+		}
+	}
+	return portalCurrency(reg, org)
 }
 
 func portalNumber(v any) (float64, bool) {
@@ -626,6 +689,19 @@ func portalNumber(v any) (float64, bool) {
 	return 0, false
 }
 
+// portalForbidden: a hidden_for field, or the IDR twin of one. A customer holds none of the roles it names.
+func portalForbidden(m *meta.Model, f *meta.Field) bool {
+	if len(meta.StrList(f.Raw["hidden_for"])) > 0 {
+		return true
+	}
+	if base := f.MoneyOf(); base != "" {
+		if bf := m.Field(base); bf != nil && bf != f {
+			return portalForbidden(m, bf)
+		}
+	}
+	return false
+}
+
 // portalStrip is a copy of rec without its hidden_for fields, children included (the print of contract 0073 §2).
 func portalStrip(reg *meta.Registry, m *meta.Model, rec map[string]any) map[string]any {
 	out := map[string]any{}
@@ -637,7 +713,7 @@ func portalStrip(reg *meta.Registry, m *meta.Model, rec map[string]any) map[stri
 		}
 		// the print shows what the format templates, as for a member, minus hidden_for fields (contract 0073 §2);
 		// hidden: true only keeps a field off the form (a unit name kept for the print), so it stays
-		if len(meta.StrList(f.Raw["hidden_for"])) > 0 {
+		if portalForbidden(m, f) {
 			continue
 		}
 		if f.Type == "table" {
@@ -661,8 +737,8 @@ func portalStrip(reg *meta.Registry, m *meta.Model, rec map[string]any) map[stri
 func (s *Server) portalPrint(w http.ResponseWriter, r *http.Request) {
 	portalHeaders(w)
 	hit, status, err := s.portalResolve(r)
-	if hit == nil {
-		s.portalMiss(w, status, err)
+	if status != http.StatusOK {
+		s.portalMiss(w, status, err, hit)
 		return
 	}
 	reg := s.Engine.Reg()
@@ -671,27 +747,58 @@ func (s *Server) portalPrint(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusNotFound, "portal_print_unavailable", "Dokumen ini tidak punya versi cetak untuk pelanggan.")
 		return
 	}
+	if !meta.PortalPrintAnchored(f) {
+		// a related list not matched on the document's name would read other records of the org as the kernel
+		// (contract 0073 §2); the validator refuses it (portal_print_related), a site override is refused here
+		writeError(w, http.StatusNotFound, "portal_print_unavailable", "Dokumen ini tidak punya versi cetak untuk pelanggan.")
+		return
+	}
 	ctx := pg.WithOrg(r.Context(), hit.org)
 	m := hit.model
 	rec := store.Record(portalStrip(reg, m, hit.rec))
 	related, truncated, _, rerr := s.printRelated(ctx, hit.actor, f, hit.rec, false)
 	if rerr != nil {
-		s.portalMiss(w, http.StatusInternalServerError, rerr)
+		s.portalMiss(w, http.StatusInternalServerError, rerr, nil)
 		return
 	}
+	// the format's require checks, as for a member (contract 0029 §4); a refusal names nothing to the customer
+	vars := map[string]any{"doc": map[string]any(hit.rec)}
 	for key, rows := range related {
-		if rm := reg.Model(f.Related[key].Model); rm != nil {
+		rel := f.Related[key]
+		for _, row := range rows {
+			for _, q := range rel.Require {
+				if ok, _ := s.Engine.Holds(ctx, hit.actor, rel.Model, store.Record(row), q.Check, vars); !ok {
+					writeError(w, http.StatusNotFound, "portal_print_unavailable", "Dokumen ini tidak punya versi cetak untuk pelanggan.")
+					return
+				}
+			}
+		}
+		if rm := reg.Model(rel.Model); rm != nil {
 			for i, row := range rows {
 				rows[i] = portalStrip(reg, rm, row)
 			}
 		}
 	}
+	// link records: the page's customer is the customer's own record (minus hidden_for fields); any other link
+	// gives its name and title only
 	links := s.printLinks(ctx, hit.actor, m, hit.rec)
 	for fn, lr := range links {
-		if lf := m.Field(fn); lf != nil {
-			if lm := reg.Model(lf.To); lm != nil {
-				links[fn] = portalStrip(reg, lm, lr)
+		lf := m.Field(fn)
+		lm := (*meta.Model)(nil)
+		if lf != nil {
+			lm = reg.Model(lf.To)
+		}
+		switch {
+		case lm == nil:
+			delete(links, fn)
+		case fn == hit.page.Customer:
+			links[fn] = portalStrip(reg, lm, lr)
+		default:
+			short := map[string]any{"name": lr["name"]}
+			if tf := lm.Field(lm.TitleField); tf != nil && !portalHiddenField(lm, tf) {
+				short[lm.TitleField] = lr[lm.TitleField]
 			}
+			links[fn] = short
 		}
 	}
 	children := map[string]*meta.Model{}
@@ -707,10 +814,10 @@ func (s *Server) portalPrint(w http.ResponseWriter, r *http.Request) {
 		Children: children,
 	})
 	if err != nil {
-		s.portalMiss(w, http.StatusInternalServerError, err)
+		s.portalMiss(w, http.StatusInternalServerError, err, nil)
 		return
 	}
-	s.portalViewed(ctx, hit, "print")
+	s.portalViewed(ctx, r, hit, "print")
 	h := w.Header()
 	h.Set("Content-Type", "text/html; charset=utf-8")
 	h.Set("Content-Security-Policy", docprint.CSP)

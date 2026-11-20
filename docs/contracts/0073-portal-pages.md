@@ -61,9 +61,18 @@ lifetime_days: 30                     # default 30, at most 90
 - Linked records are not opened. A link field shows its target's title (its `title_field`), nothing else.
 - Payment: the kernel reads the first row of `payment.model` whose `payment.link` equals the record name. No other
   record of the organisation is reachable from a page.
-- The print format (`print`) is rendered as for a member (0008), with every `hidden_for` field removed from the
-  record first. It must belong to the page's model (`portal_print_model`). A module names a format only when the
-  whole document is meant for the customer, as an invoice is.
+- The print format (`print`) is rendered as for a member (0008), with every `hidden_for` field (and the IDR twin of
+  one) removed from the record first. It must belong to the page's model (`portal_print_model`). A module names a
+  format only when the whole document is meant for the customer, as an invoice is.
+  - Every `related:` list of the format must be matched on the document's `name` (`portal_print_related`), so the
+    print reads no other document of the organisation. The kernel checks it again at run time, so a site override
+    cannot bring an unanchored list back: the print then answers 404. The format's `require` checks run as for a
+    member; a failing one answers 404 too, naming nothing.
+  - Link records: the page's `customer` record is passed whole, minus `hidden_for` fields (so a field hidden from
+    cashiers, such as the buyer's NPWP in rangka-apps, is not on the customer's copy). Every other link gives only
+    its name and title.
+- A `hidden: true` field only keeps a field off the form; the print still shows it when the format does (a unit
+  name kept for prints). The page itself never lists one.
 
 ### 3. Customer links
 
@@ -78,12 +87,20 @@ lifetime_days: 30                     # default 30, at most 90
   record of a submittable model still in draft, or a page whose module is uninstalled answers the same
   `404 portal_link_unknown`. Changing one character of a token is a 404.
 - An expired or revoked link answers `410 portal_link_expired` ("Tautan sudah kedaluwarsa, minta tautan baru"). Both
-  look the same to the customer.
+  look the same to the customer. Since the token matched a real link, the answer also carries `org` (name, legal name,
+  letterhead phone), so the page says whom to ask. A 404 names no one: its path is whatever the caller typed.
 - Lifetime: `lifetime_days` of the page, default 30, at most 90. A member may ask for fewer days when making a link.
   A link stays valid after the document is paid, so the customer can see "Lunas" and the receipt.
-- A cancelled document (`docstatus` 2) shows "Dibatalkan" and no payment instruction and no print. When an amendment
-  of it exists (`amended_from`), the page names the new document's number; the customer asks for its link.
+- A cancelled document (`docstatus` 2) shows "Dibatalkan" and no payment instruction and no print. The kernel follows
+  the amendment chain (`amended_from`, at most 20 hops) and names the newest submitted document that replaces it;
+  a draft amendment is not named (its name is temporary), and a chain that ends cancelled names nothing. The page
+  then says the document is cancelled and to contact the seller, never that nothing is owed.
 - Links are made only for a document a member can read, and for a submittable model only once submitted.
+- A document whose `currency` field names another currency than the organisation's gets no link in v1
+  (`409 portal_currency_unsupported`): its prices live in `_fx` twins the page does not list. Amounts carry the
+  document's currency.
+- A reverse proxy in front of the kernel logs paths: strip or hash `/p/` paths in its access log. The kernel's own
+  logs name the route pattern, never the token.
 
 ### 4. API
 
@@ -109,14 +126,16 @@ Customers (no credentials):
   from `/portal/` only, and images from `data:`.
 - Audit: `portal.link.create` and `portal.link.revoke` (actor: the member; target `<model>/<record>`; data: page, link
   id, expiry), `portal.view` (actor `portal:<link id>`; data: page, kind `page` or `print`). An entry never carries a
-  token or its hash.
+  token or its hash. `portal.view` is written at most once an hour per link; the link's `views` counts every GET.
+  HEAD is not a view.
+- `GET /api/v1/portal` items also carry `lifetime_days`.
 
 ### 5. Page data
 
 `GET …/data` answers:
 
 ```json
-{"org": {"name": "…", "legal_name": "…"},
+{"org": {"name": "…", "legal_name": "…", "phone": "…"},
  "page": {"name": "tagihan", "label": "Tagihan", "type": "document"},
  "doc": {"name": "SI-2026-00012", "state": "open|paid|cancelled", "customer": "Toko Maju",
          "amount": {"label": "Sisa tagihan", "value": 1250000, "currency": "IDR"},
@@ -131,12 +150,16 @@ Customers (no credentials):
 - `state` is `cancelled` for `docstatus` 2, else `paid` when `amount` is 0 or less, else `open`.
 - `payment` is null when the document is cancelled or paid, or has no payment row.
 - Labels are the field labels in Bahasa Indonesia (`id`), as the app shows them.
+- When a payment field named `holder` differs from the seller's name (ignoring case, punctuation and PT, CV, UD,
+  Tbk), the page says so under it ("Nama rekening berbeda dari nama usaha …"): an owner's personal account is common,
+  and a silent mismatch reads as a scam.
 
 ### 6. Abuse limits
 
 - 0040 §9: `/p/` is shaped per client address like other requests without credentials (it is not static).
 - On top, the kernel keeps its own per-address bucket for `/p/`, whatever the plan: 1 request per second, burst 30,
   then `429 rate_limited` with `Retry-After`. Guessing a 256-bit token is not feasible; the bucket bounds load.
+  Behind a reverse proxy, set `RANGKA_TRUSTED_PROXIES`, or every customer shares the proxy's bucket.
 - Data and print answers are built from one record and at most one payment row and one table field.
 
 ### 7. Customers and plans
@@ -171,6 +194,7 @@ Both validators (Go and `tools/rangka_validate.py`) report the same codes:
 | `portal_field_hidden` | a listed field has `hidden_for` or `hidden: true` |
 | `portal_field_type` | a listed field is a table, attachment, image, signature, geo, dynamic link or JSON field; `lines.field` is not a table; `customer` is not a link; `amount` is not a number; `payment.link` is not a link to the page model; `payment.qris` is not a text field |
 | `portal_print_model` | `print` is not a print format of the page model |
+| `portal_print_related` | the `print` format has a related list not matched on the document's `name` |
 | `portal_unknown_role` | a `share` role is not a role of any loaded unit |
 
 ## Order of work

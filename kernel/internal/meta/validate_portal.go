@@ -93,6 +93,12 @@ func (v *validator) portal(p *Portal, all map[string]vis, roles map[string]bool)
 		if !found {
 			v.rep.extra("error", path, "print", "portal_print_model", fmt.Sprintf(`"%s" is not a print format of %s`, pn, m.Name))
 		}
+		for _, pf := range v.reg.printFiles {
+			if pf.Name == pn && pf.Model == m.Name && !PortalPrintAnchored(pf) {
+				v.rep.extra("error", path, "print", "portal_print_related", fmt.Sprintf(`print "%s" has a related list not matched on the document name; a portal page cannot show it`, pn))
+				break
+			}
+		}
 	}
 	pay := asMap(raw["payment"])
 	if pay == nil {
@@ -132,7 +138,13 @@ func (v *validator) portalField(path, where string, m *Model, x any) *Field {
 		v.rep.extra("error", path, where, "portal_unknown_field", fmt.Sprintf(`"%s" is not a field of %s`, name, m.Name))
 		return nil
 	}
-	if len(strList(f.Raw["hidden_for"])) > 0 || boolean(f.Raw, "hidden") {
+	hiddenFor := len(strList(f.Raw["hidden_for"])) > 0
+	if base := f.MoneyOf(); base != "" { // an IDR twin follows its money field
+		if bf := m.Field(base); bf != nil && len(strList(bf.Raw["hidden_for"])) > 0 {
+			hiddenFor = true
+		}
+	}
+	if hiddenFor || boolean(f.Raw, "hidden") {
 		v.rep.extra("error", path, where, "portal_field_hidden", fmt.Sprintf(`"%s" of %s is hidden in the app; a portal page never shows it`, name, m.Name))
 	}
 	if portalRefused[f.Type] {

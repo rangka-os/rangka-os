@@ -118,13 +118,16 @@ func TestPortalLinkFlow(t *testing.T) {
 	// every miss looks the same: one character changed, another org, another page, a malformed token
 	other := token[:42] + map[bool]string{true: "B", false: "A"}[token[42] == 'A']
 	for _, p := range []string{"/p/kopi-senja/tagihan/" + other, "/p/lain/tagihan/" + token, "/p/kopi-senja/lain/" + token, "/p/kopi-senja/tagihan/pendek"} {
-		if r := c.do("GET", p+"/data", nil); r.Status != 404 || get(r.JSON, "error", "code") != "portal_link_unknown" {
+		if r := c.do("GET", p+"/data", nil); r.Status != 404 || get(r.JSON, "error", "code") != "portal_link_unknown" || r.JSON["org"] != nil {
 			t.Fatalf("%s = %d %s", p, r.Status, r.Body)
 		}
 		c.must(404, "GET", p, nil)
 	}
-	// views are audited without the token; the link counts them
-	if n := dbOne(e, "select count(*) from rk_audit where kind = 'portal.view' and actor = $1", "portal:"+link["id"].(string)).(int64); n != 2 {
+	// views are audited without the token, at most once an hour per link; the link counts every view, HEAD none
+	for i := 0; i < 3; i++ {
+		c.must(200, "HEAD", path+"/data", nil)
+	}
+	if n := dbOne(e, "select count(*) from rk_audit where kind = 'portal.view' and actor = $1", "portal:"+link["id"].(string)).(int64); n != 1 {
 		t.Fatalf("portal.view entries = %d", n)
 	}
 	if n := dbOne(e, "select count(*) from rk_audit where data::text like $1 or summary like $1", "%"+token+"%").(int64); n != 0 {
@@ -139,7 +142,7 @@ func TestPortalLinkFlow(t *testing.T) {
 	if r := e.must(200, "POST", "/api/v1/portal/tagihan/links/revoke", map[string]any{"record": inv}).JSON; r["revoked"] != float64(1) {
 		t.Fatalf("revoke = %v", r)
 	}
-	if r := c.do("GET", path+"/data", nil); r.Status != 410 || get(r.JSON, "error", "code") != "portal_link_expired" {
+	if r := c.do("GET", path+"/data", nil); r.Status != 410 || get(r.JSON, "error", "code") != "portal_link_expired" || r.JSON["org"] == nil {
 		t.Fatalf("revoked = %d %s", r.Status, r.Body)
 	}
 	c.must(410, "GET", path, nil)
@@ -177,9 +180,31 @@ func TestPortalPaidAndCancelled(t *testing.T) {
 	}
 	c.must(404, "GET", path+"/print", nil)
 	e.must(409, "POST", "/api/v1/portal/tagihan/links", map[string]any{"record": open})
-	amended := e.must(201, "POST", "/api/v1/r/faktur/"+open+"/amend", nil).JSON["name"].(string)
+	draft := e.must(201, "POST", "/api/v1/r/faktur/"+open+"/amend", nil).JSON["name"].(string)
+	// a draft amendment has only a temporary name: nothing is named yet
+	if got := get(c.must(200, "GET", path+"/data", nil).JSON, "doc", "replaced_by"); got != "" {
+		t.Fatalf("replaced_by with a draft amendment = %v", got)
+	}
+	amended := submitFaktur(e, draft)
 	if got := get(c.must(200, "GET", path+"/data", nil).JSON, "doc", "replaced_by"); got != amended {
 		t.Fatalf("replaced_by = %v, want %s", got, amended)
+	}
+	// two hops: the amendment is cancelled and amended again; the first link names the live one
+	e.must(200, "POST", "/api/v1/r/faktur/"+amended+"/cancel", nil)
+	if got := get(c.must(200, "GET", path+"/data", nil).JSON, "doc", "replaced_by"); got != "" {
+		t.Fatalf("replaced_by after the amendment is cancelled = %v", got)
+	}
+	second := submitFaktur(e, e.must(201, "POST", "/api/v1/r/faktur/"+amended+"/amend", nil).JSON["name"].(string))
+	if got := get(c.must(200, "GET", path+"/data", nil).JSON, "doc", "replaced_by"); got != second {
+		t.Fatalf("replaced_by two hops = %v, want %s", got, second)
+	}
+
+	// a foreign-currency document gets no link in v1
+	usd := portalInvoice(e, 0, false)
+	e.must(200, "PATCH", "/api/v1/r/faktur/"+usd, map[string]any{"currency": "USD"})
+	usd = submitFaktur(e, usd)
+	if r := e.do("POST", "/api/v1/portal/tagihan/links", map[string]any{"record": usd}); r.Status != 409 || get(r.JSON, "error", "code") != "portal_currency_unsupported" {
+		t.Fatalf("usd link = %d %s", r.Status, r.Body)
 	}
 }
 

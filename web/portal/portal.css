@@ -36,6 +36,9 @@ body { margin: 0; background: var(--soft); color: var(--ink); font: 15px/22px va
   background: var(--neutral); color: var(--ink); font: 600 14px/20px var(--font-sans); cursor: pointer; }
 .copy:hover { background: var(--neutral-hover); }
 .copy:focus-visible, .button:focus-visible { outline: none; box-shadow: var(--focus-ring); }
+.pay-row .hint { margin-top: 4px; color: var(--muted); font-size: 13px; line-height: 18px; }
+.empty .contact { margin-top: 12px; }
+.empty .contact a { color: var(--link); font-weight: 600; text-decoration: none; }
 .instructions { margin: 12px 0 0; color: var(--ink-2); font-size: 14px; white-space: pre-line; }
 .qris { margin-top: 16px; padding-top: 16px; border-top: 1px solid var(--line); text-align: center; }
 .qris img { width: 220px; max-width: 100%; height: auto; image-rendering: pixelated; background: #fff; padding: 8px; border-radius: var(--r-lg); }

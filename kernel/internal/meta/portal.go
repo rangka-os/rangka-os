@@ -99,3 +99,20 @@ func (r *Registry) PortalNames() []string {
 	}
 	return out
 }
+
+// PortalPrintAnchored reports whether every related list of print format f is matched on the document's name, so
+// the portal print reads no other document of the organisation (contract 0073 §2).
+func PortalPrintAnchored(f *Print) bool {
+	for _, rel := range f.Related {
+		anchored := false
+		for _, docField := range rel.Match {
+			if docField == "name" {
+				anchored = true
+			}
+		}
+		if !anchored {
+			return false
+		}
+	}
+	return true
+}

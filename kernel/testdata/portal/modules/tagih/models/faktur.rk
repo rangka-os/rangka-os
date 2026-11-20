@@ -14,6 +14,7 @@ fields:
   - {name: outstanding, type: currency, label: {id: Sisa tagihan}, read_only: true, compute: grand_total - paid_amount}
   - {name: margin_note, type: data, label: {id: Catatan margin}, hidden_for: [kasir]}
   - {name: notes, type: text, label: {id: Catatan}}
+  - {name: currency, type: data, label: {id: Mata uang}}
 permissions:
   - {role: kasir, read: true, create: true, write: true, submit: true}
   - {role: keuangan, read: true, create: true, write: true, submit: true, cancel: true, amend: true}

@@ -48,12 +48,20 @@
       default: return Array.isArray(v) ? v.join(", ") : String(v);
     }
   }
+  // sameName: the account holder is the business, ignoring case, punctuation and PT/CV/UD/Tbk
+  function sameName(holder, org) {
+    var norm = function (x) {
+      return String(x || "").toLowerCase().replace(/\b(pt|cv|ud|tbk|persero)\b/g, "").replace(/[^a-z0-9]/g, "");
+    };
+    var h = norm(holder);
+    return !h || h === norm(org.name) || h === norm(org.legal_name);
+  }
   function today() { var d = new Date(); return new Date(d.getFullYear(), d.getMonth(), d.getDate()); }
 
-  function empty(title, text) {
+  function empty(title, text, extra) {
     root.textContent = "";
     var box = el("section", "card empty");
-    add(box, el("h1", null, title), el("p", null, text));
+    add(box, el("h1", null, title), el("p", null, text), extra || null);
     root.appendChild(box);
     document.title = title;
   }
@@ -109,7 +117,7 @@
     if (d.doc.state === "cancelled") {
       s.appendChild(el("div", "notice", d.doc.replaced_by
         ? "Dokumen ini dibatalkan dan diganti " + d.doc.replaced_by + ". Minta tautan dokumen pengganti ke penjual."
-        : "Dokumen ini dibatalkan. Tidak perlu dibayar."));
+        : "Dokumen ini dibatalkan. Hubungi penjual bila ada pertanyaan soal tagihan ini."));
     }
     root.appendChild(s);
 
@@ -124,6 +132,10 @@
         var row = el("div", "pay-row");
         var kv = el("div");
         add(kv, el("div", "k", f.label), el("div", "v", value(f.type, f.value)));
+        if (f.name === "holder" && !sameName(f.value, org)) {
+          // an owner's personal account is common; say so plainly so a different name does not look like a scam
+          kv.appendChild(el("div", "hint", "Nama rekening berbeda dari nama usaha. Rekening ini yang dicantumkan " + (orgName || "penjual") + " di tagihan ini."));
+        }
         row.appendChild(kv);
         if (/^(account_no|reference|no_rekening|rekening|va_number)$/.test(f.name) || f.type === "data" && /rekening|referensi/i.test(f.label)) {
           row.appendChild(copyButton(String(f.value), f.label));
@@ -188,13 +200,27 @@
 
     var foot = el("footer", "foot");
     add(foot, el("div", null, "Halaman ini dikirim oleh " + (orgName || "penjual") + ", yang mengelola data di dalamnya."),
-      el("div", null, "Tautan berlaku sampai " + date(String(d.expires_at || "").slice(0, 10)) + ". Jangan bagikan tautan ini ke orang lain."));
+      el("div", null, "Tautan berlaku sampai " + date(d.expires_at || "") + ". Jangan bagikan tautan ini ke orang lain."));
     root.appendChild(foot);
   }
 
   fetch(base + "/data", { credentials: "omit", cache: "no-store", referrerPolicy: "no-referrer" })
     .then(function (res) {
-      if (res.status === 410) return empty("Tautan sudah kedaluwarsa", "Minta tautan baru ke penjual yang mengirimkannya.");
+      if (res.status === 410) {
+        // the link was real, so the kernel names its seller; a 404 names nobody
+        return res.json().catch(function () { return {}; }).then(function (b) {
+          var org = (b && b.org) || {};
+          var name = org.name || org.legal_name || "";
+          var contact = null;
+          if (org.phone) {
+            contact = el("p", "contact");
+            var tel = el("a", null, org.phone);
+            tel.href = "tel:" + String(org.phone).replace(/[^0-9+]/g, "");
+            add(contact, document.createTextNode("Telepon "), tel);
+          }
+          empty("Tautan sudah kedaluwarsa", name ? "Minta tautan baru ke " + name + "." : "Minta tautan baru ke penjual yang mengirimkannya.", contact);
+        });
+      }
       if (res.status === 429) return empty("Terlalu banyak permintaan", "Tunggu sebentar, lalu muat ulang halaman ini.");
       if (!res.ok) return empty("Tautan tidak ditemukan", "Periksa lagi tautannya, atau minta tautan baru ke penjual.");
       return res.json().then(render);

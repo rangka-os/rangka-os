@@ -2882,17 +2882,31 @@ def portal_field(rep, p, where, m, x):
     """One field a portal page shows (contract 0073 §2); returns the field when it exists."""
     if not isinstance(x, str):
         return None
-    f = fields_of(m).get(x)
+    fields = fields_of({"fields": with_twins([f for f in m.get("fields", []) if isinstance(f, dict)])})
+    f = fields.get(x)
     if f is None:
         rep.add("error", p, where, "portal_unknown_field", f'"{x}" is not a field of {m.get("name")}')
         return None
-    hf = f.get("hidden_for")
-    if (isinstance(hf, list) and any(isinstance(r, str) for r in hf)) or f.get("hidden") is True:
+    def hidden_for(g):
+        hf = g.get("hidden_for") if isinstance(g, dict) else None
+        return isinstance(hf, list) and any(isinstance(r, str) for r in hf)
+    base = fields.get(f["money_of"]) if isinstance(f.get("money_of"), str) else None   # an IDR twin follows its money field
+    if hidden_for(f) or hidden_for(base) or f.get("hidden") is True:
         rep.add("error", p, where, "portal_field_hidden", f'"{x}" of {m.get("name")} is hidden in the app; a portal page never shows it')
     t = f.get("type") if isinstance(f.get("type"), str) else ""
     if t in PORTAL_REFUSED:
         rep.add("error", p, where, "portal_field_type", f'"{x}" is a {t} field; a portal page does not show {t} fields')
     return f
+
+
+def portal_print_anchored(pd):
+    """Every related list of a print format is matched on the document's name (contract 0073 §2)."""
+    rel = pd.get("related") if isinstance(pd.get("related"), dict) else {}
+    for r in rel.values():
+        match = r.get("match") if isinstance(r, dict) and isinstance(r.get("match"), dict) else {}
+        if "name" not in match.values():
+            return False
+    return True
 
 
 def check_portal(rep, V, allmodels, roles, p, d, prints):
@@ -2938,6 +2952,10 @@ def check_portal(rep, V, allmodels, roles, p, d, prints):
         pn = raw["print"]
         if not any(st == pn and isinstance(pd, dict) and pd.get("model") == mn for _a, _r, st, _p, pd in prints):
             rep.add("error", p, "print", "portal_print_model", f'"{pn}" is not a print format of {mn}')
+        for _a, _r, st, _p, pd in prints:
+            if st == pn and isinstance(pd, dict) and pd.get("model") == mn and not portal_print_anchored(pd):
+                rep.add("error", p, "print", "portal_print_related", f'print "{pn}" has a related list not matched on the document name; a portal page cannot show it')
+                break
     pay = raw.get("payment") if isinstance(raw.get("payment"), dict) else None
     if pay is None:
         return

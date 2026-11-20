@@ -23,6 +23,12 @@
  *   customer {field, required}: a name, table or queue number on the sale.
  *   print: the print format of the receipt ("Cetak struk" prints it through the browser dialog, 80 mm).
  * A sale is one outbox job (outbox.js): created and submitted with Idempotency-Keys, queued when offline.
+ * On a paired device with an unlocked cashier (contract 0058) whose pulled config names the document model's number
+ * pattern (devicedata.js), the counter instead computes the sale on the device with the model's own computes over the
+ * pulled data (engine.js prepare: the totals are binding, §10), takes the device's number at payment (§3) and sends
+ * the paid sale as one screen.write event (create + submit) through the device queue (deviceoutbox.js, §4); a shift
+ * of a model named on the device opens the same way (the sales link it by its device number) and the close is a
+ * create + submit event. Online the queue sends at once and a refusal shows; offline the sale is final on the device.
  *
  * Pure helpers (unit-tested in test/counter.test.js): cartAdd, cartSet, cartTotal, quickCash, changeOf, saleBody,
  * openFilter, findByBarcode, catalogueMatch.
@@ -364,12 +370,35 @@
     var cas = useState(null), calc = cas[0], setCalc = cas[1]; // {key, rec, errors} | {key, failed}
     var bls = useState(null), bal = bls[0], setBal = bls[1]; // contract 0039: {item: qty} for the open session, or null
     var jobRef = useRef(null), searchRef = useRef(null), calcSeq = useRef(0);
+    // a paired device (contract 0058): {device, actor, data} once the device, its unlocked cashier and pulled data are known
+    var dvs = useState(null), dev = dvs[0], setDev = dvs[1];
+    useEffect(function () {
+      var ob = RA.deviceOutbox, dd = RA.deviceData, live = true;
+      if (!ob || !dd) return;
+      Promise.all([ob.getDevice(), ob.getMeta("actor"), dd.load()]).then(function (x) {
+        var d = x[0], actor = x[1];
+        if (!live || !d || !d.device_id || d.unpaired || !actor) return;
+        setDev({ device: d, actor: actor, data: x[2] });
+        // fresh reference data when there is a connection; the last full copy stays otherwise
+        return dd.pull().then(function (data) { if (live) setDev({ device: d, actor: actor, data: data }); }, function () {});
+      }, function () {});
+      return function () { live = false; };
+    }, [s.name]);
+    var devOn = !!(dev && dev.data && RA.deviceData && RA.deviceData.namesOn(dev.data, doc.model));
+    var devSes = !!(devOn && ses && RA.deviceData.namesOn(dev.data, ses.model));
     var avSlot = cat.available && typeof cat.available === "object" ? cat.available : null;
 
     function loadSession() {
       if (!ses) return Promise.resolve();
       return ctx.api.list(ses.model, { filter: openFilter(ses), limit: 1, sort: "-created_at" }).then(function (r) {
-        setSession(((r && r.data) || [])[0] || null);
+        var found = ((r && r.data) || [])[0] || null;
+        if (found || !RA.deviceOutbox) { setSession(found); return; }
+        // a session opened on this paired device whose event is still in the queue: the kernel does not know it yet
+        return Promise.all([RA.outbox.cache.get("session:" + scope + ":" + s.name), RA.deviceOutbox.list()]).then(function (x) {
+          var kept = x[0] && x[0].value, evs = x[1] || [];
+          var waiting = kept && kept.__device && evs.some(function (ev) { return ev.state === "queued" && ev.label === kept.name; });
+          setSession(waiting ? kept : null);
+        }, function () { setSession(null); });
       }, function (e) {
         if (RA.outboxRetryable(e)) return RA.outbox.cache.get("session:" + scope + ":" + s.name).then(function (x) { setSession(x ? x.value : null); });
         setErr(errText(e)); setSession(null);
@@ -410,9 +439,38 @@
 
     /* ----- the model's numbers for this cart (contract 0034) */
     function computeBody() { return saleBody(c, cart, null, shiftName, sets.document, customer, checkout); }
-    var calcKey = doc.summary && cart.length ? JSON.stringify(computeBody()) : "";
+    var calcKey = (doc.summary || devOn) && cart.length ? JSON.stringify(computeBody()) : "";
+    /* The device's own computation of the sale (contract 0058 §10): engine.js over the pulled records, the open
+       session and the outlet; the rules whose check needs what only the kernel holds (the cashier's email, the
+       session's fields) are left to it. */
+    function deviceEngine() {
+      var dd = RA.deviceDataPure, data = dev.data, base = dd.lookupOf(data), cfg = data.config || {};
+      var E = global.RangkaEngine.create(dd.engineMeta(ctx.meta, data, dev.actor), function (m, n) {
+        if (ses && m === ses.model && session && typeof session === "object" && n === session.name) return session;
+        if (m === "outlet" && n === cfg.outlet_name) return Object.assign({ name: n }, cfg.outlet || {});
+        return base(m, n);
+      });
+      return E;
+    }
+    function deviceCompute(body) {
+      var E = deviceEngine(), rec = E.prepare(doc.model, JSON.parse(JSON.stringify(body)));
+      var skip = ses ? new RegExp("\\buser\\.|\\b" + ses.link + "\\.") : /\buser\./;
+      var rules = {};
+      (docMeta.rules || []).forEach(function (r) { rules[r.name] = r; });
+      var errors = E.runRules(doc.model, rec, "save").filter(function (x) {
+        var r = rules[x.name];
+        return x.level === "error" && !(r && skip.test(r.check || ""));
+      }).map(function (x) { return { field: rules[x.name] ? "" : x.name, rule: x.name, message: x.message }; });
+      return { rec: rec, errors: errors };
+    }
     function runCompute(key, body) {
       var seq = ++calcSeq.current;
+      if (devOn) {
+        var local;
+        try { local = deviceCompute(body); } catch (e) { local = null; }
+        if (seq === calcSeq.current) setCalc(local ? { key: key, rec: local.rec, errors: local.errors } : { key: key, failed: true });
+        return Promise.resolve(local && local.rec);
+      }
       return ctx.api.compute(doc.model, body).then(function (r) {
         if (seq === calcSeq.current) setCalc({ key: key, rec: (r && r.record) || {}, errors: (r && r.errors) || [] });
         return r && r.record;
@@ -425,7 +483,7 @@
       if (!calcKey) { setCalc(null); return; }
       var t = setTimeout(function () { runCompute(calcKey, JSON.parse(calcKey)); }, 250);
       return function () { clearTimeout(t); };
-    }, [calcKey]);
+    }, [calcKey, devOn]);
     var fresh = calc && !calc.failed && calc.key === calcKey ? calc : null;
     var totalField = doc.summary && doc.summary.length ? doc.summary[doc.summary.length - 1] : doc.total;
     var total = fresh && fresh.rec[totalField] != null ? Number(fresh.rec[totalField]) : estimate;
@@ -533,6 +591,7 @@
       sendingRef.current = true;
       setBusy(true); setErr("");
       var payRows = c.payments ? { cash: Math.max(0, Number(cash) || 0), qris: Number(qris) || 0 } : null;
+      if (devOn) { deviceSale(payRows); return; }
       var est = { total: total, change: change };
       // a new sale takes set: values again (contract 0030 §2: today's date after midnight, audit WS3 M2); offline or
       // on a failed reload, the last copy
@@ -544,23 +603,84 @@
         return send(job, est);
       });
     }
+    /* A paid sale on a paired device (contract 0058 §3, §4, §10): the device's number, the device's totals, one
+       screen.write event; online it is sent at once and its answer shows, offline it waits in the queue. */
+    function deviceSale(payRows) {
+      var body = saleBody(c, cart, payRows, shiftName, sets.document, customer, checkout), name = null, rec = null, key = RA.newKey();
+      var fail = function (e) { sendingRef.current = false; setBusy(false); setErr((e && e.message) || "Transaksi belum tersimpan di perangkat."); };
+      var local;
+      try { local = deviceCompute(body); } catch (e) { fail(e); return; }
+      if (local.errors.length) { fail({ message: local.errors.map(function (x) { return x.message; }).join(" · ") }); return; }
+      RA.deviceData.takeName(doc.model).then(function (n) {
+        name = n;
+        rec = local.rec;
+        rec.name = name;
+        return RA.deviceOutbox.enqueue({ kind: "screen.write", key: key, actor: dev.actor.user, label: name,
+          payload: { screen: s.name, model: doc.model, op: "create", submit: c.submit !== false, name: name, body: rec } });
+      }).then(function () {
+        return online ? RA.deviceOutbox.flush().then(function () { return RA.deviceOutbox.list(); }, function () { return null; }) : null;
+      }).then(function (evs) {
+        var ev = (evs || []).filter(function (x) { return x.key === key; })[0];
+        sendingRef.current = false; setBusy(false);
+        if (ev && ev.state === "rejected") {
+          // the kernel refused it: the sale stays listed in the queue panel for head office; the cart stays to fix
+          setErr((ev.message || "Transaksi ditolak") + " (" + name + ")");
+          return;
+        }
+        var dt = doc.total, dc = doc.change;
+        setDone({ name: name, total: dt && rec[dt] != null ? Number(rec[dt]) : total, change: dc && rec[dc] != null ? Number(rec[dc]) : null,
+          estimate: false, queued: !ev || ev.state === "queued", approval: false });
+        loadBalances();
+        setCart([]); setCustomer(""); setCheckout({}); setCheckoutOpen(false); setPay(null);
+        if (!ev || ev.state === "queued") ctx.toast("info", "Tersimpan di perangkat", name + " dikirim saat koneksi kembali.");
+      }, fail);
+    }
     function newSale() { setDone(null); setSheet(false); if (searchRef.current) searchRef.current.focus(); }
 
     function openSession() {
       if (busy) return;
       setBusy(true); setErr("");
       var body = Object.assign({}, sets.session || {}, openRec);
+      if (devSes) { deviceOpen(body); return; }
       ctx.api.create(ses.model, body, { key: RA.newKey() }).then(function (r) { setSession(r); setOpenRec(Object.assign({}, sets.session || {})); }, function (e) { setErr(errText(e)); })
         .then(function () { setBusy(false); });
+    }
+    /* A session of a model named on the device opens with the device's number (contract 0058 §6): the sales link it
+       by that name, so it opens offline too; the kernel checks it when the event arrives. */
+    function deviceOpen(body) {
+      var key = RA.newKey();
+      RA.deviceData.takeName(ses.model).then(function (name) {
+        var st = ses.state || {}, local = Object.assign({}, body, { name: name, __device: true });
+        if (st.field) local[st.field] = st.open;
+        return RA.deviceOutbox.enqueue({ kind: "screen.write", key: key, actor: dev.actor.user, label: name,
+          payload: { screen: s.name, model: ses.model, op: "create", name: name, body: body } }).then(function () {
+          return online ? RA.deviceOutbox.flush().then(function () { return RA.deviceOutbox.list(); }, function () { return null; }) : null;
+        }).then(function (evs) {
+          var ev = (evs || []).filter(function (x) { return x.key === key; })[0];
+          if (ev && ev.state === "rejected") { setErr(ev.message || "Sesi ditolak"); return; }
+          setSession(ev && ev.record ? ev.record : local); setOpenRec(Object.assign({}, sets.session || {}));
+        });
+      }).then(null, function (e) { setErr((e && e.message) || "Sesi belum bisa dibuka."); }).then(function () { setBusy(false); });
+    }
+    function deviceClose(body) {
+      var key = RA.newKey(), cl = ses.close;
+      return RA.deviceOutbox.enqueue({ kind: "screen.write", key: key, actor: dev.actor.user, label: "Tutup " + session.name,
+        payload: { screen: s.name, model: cl.model, op: "create", submit: true, body: body } }).then(function () {
+        return online ? RA.deviceOutbox.flush().then(function () { return RA.deviceOutbox.list(); }, function () { return null; }) : null;
+      }).then(function (evs) {
+        var ev = (evs || []).filter(function (x) { return x.key === key; })[0];
+        if (ev && ev.state === "rejected") throw new Error(ev.message || "Tutup sesi ditolak");
+        return ev;
+      });
     }
     function closeSession() {
       if (busy || !closing) return;
       setBusy(true); setErr("");
       var cl = ses.close, body = Object.assign({}, sets["session.close"] || {}, closing);
       body[cl.link] = session.name;
-      ctx.api.create(cl.model, body, { key: RA.newKey() }).then(function (r) {
+      (devSes ? deviceClose(body) : ctx.api.create(cl.model, body, { key: RA.newKey() }).then(function (r) {
         return ctx.api.submit(cl.model, r.name, { key: RA.newKey() });
-      }).then(function () {
+      })).then(function () {
         ctx.toast("ok", "Sesi ditutup", session.name);
         setClosing(null); setDenomOpen(false); setDone(null); setSession(null);
         RA.outbox.cache.put("session:" + scope + ":" + s.name, null); // a closed session never comes back from the cache (audit WS3 L1)

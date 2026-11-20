@@ -77,6 +77,17 @@ func (e *Engine) devicePattern(m *meta.Model, org string) string {
 	return m.Naming
 }
 
+// DevicePattern is the pattern a paired device of org writes names of model with (contract 0058 §3), "" when the
+// model is not installed or not named on the device: the device renders it with its own code, its outlet's fields
+// and the date, so device and kernel number alike after a config.numbering override (contract 0009 §3).
+func (e *Engine) DevicePattern(model, org string) string {
+	m := e.Reg().Model(model)
+	if m == nil || m.NamingOn != "device" {
+		return ""
+	}
+	return e.devicePattern(m, org)
+}
+
 // deviceCodeToken is the token of the paired device's code; validation makes it followed by "-".
 const deviceCodeToken = "{device.code}"
 

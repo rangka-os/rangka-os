@@ -178,7 +178,18 @@ func (s *Server) edgeConfig(w http.ResponseWriter, r *http.Request, d *auth.Devi
 			}
 		}
 	}
+	// the number patterns of the documents the device names itself (contract 0058 §3): the counter screens' document
+	// and session models with naming_on: device, after the org's numbering override
+	naming := map[string]any{}
+	if len(p.screens) > 0 {
+		for _, m := range s.Engine.Reg().InstalledModels() {
+			if pat := s.Engine.DevicePattern(m.Name, d.Org); pat != "" {
+				naming[m.Name] = pat
+			}
+		}
+	}
 	body := map[string]any{
+		"naming":    naming,
 		"outlet":    outlet,
 		"device":    map[string]any{"id": d.ID, "code": d.Code},
 		"screens":   p.screens,

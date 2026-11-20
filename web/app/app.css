@@ -1108,6 +1108,13 @@ html[data-raka="dock"] .ap-ubah-card { right: calc(var(--raka-dock-w, 400px) + 1
 .ap-tur-card.sheet { left: 0 !important; right: 0; bottom: 0; top: auto !important; width: auto; max-width: none; border-radius: var(--r-dialog) var(--r-dialog) 0 0;
   padding: 16px 16px calc(16px + env(safe-area-inset-bottom)); }
 .ap-tur-card.sheet.top { top: 0 !important; bottom: auto; border-radius: 0 0 var(--r-dialog) var(--r-dialog); padding: calc(16px + env(safe-area-inset-top)) 16px 16px; }
+/* a paired device: the sync pill (device.css) stays above the dim, so the top sheet floats below it (tur.js --tur-top) */
+.ap-tur-card.sheet.top.under-pill { top: var(--tur-top) !important; left: 8px !important; right: 8px; border-radius: var(--r-dialog); padding: 16px; }
+/* too short for that (a phone held sideways): from the top edge, left of the pill, never down onto the lit place */
+.ap-tur-card.sheet.top.beside-pill { right: var(--tur-right); border-radius: 0 0 var(--r-dialog) 0; }
+/* beside or below the pill with a height cap (tur.js sheetSpot): the text scrolls, the buttons stay at the sheet's foot */
+.ap-tur-card.sheet.top.fit { box-sizing: border-box; overflow-x: hidden; overflow-y: auto; overscroll-behavior: contain; }
+.ap-tur-card.sheet.top.fit .ap-tur-acts { position: sticky; bottom: 0; margin-bottom: -8px; padding: 4px 0 8px; background: var(--surface); }
 .ap-tur-n { margin: 0; font-size: 12px; line-height: 16px; font-weight: 500; color: var(--muted); }
 .ap-tur-title { margin: 0; font-size: 16px; line-height: 24px; font-weight: 600; }
 .ap-tur-body { margin: 0; color: var(--ink-2); }

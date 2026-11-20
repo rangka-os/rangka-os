@@ -278,6 +278,91 @@ test("tur.js: the card goes beside a narrow element, below a wide one", () => {
   assert.strictEqual(place({ top: 700, left: 300, right: 1300, bottom: 860, width: 1000, height: 160 }, 340, 180).side, "top");
 });
 
+test("tur.js: on a paired device the card keeps below the sync pill (audit F9)", () => {
+  const pill = { getBoundingClientRect: () => ({ top: 52, bottom: 80, width: 189, height: 28 }) };
+  let on = true;
+  const doc = { documentElement: { classList: { contains: (c) => on && c === "ap-sync-on" } }, querySelector: (q) => (q === ".ap-sync-pill" ? pill : null) };
+  const w = { React: { createElement() {}, useState() {}, useEffect() {}, useRef() {}, useLayoutEffect() {} }, Rangka: {}, innerWidth: 700, innerHeight: 900, document: doc };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "tur.js"), "utf8"), { window: w }, { filename: "tur.js" });
+  const T = w.RangkaApp.tour;
+  assert.strictEqual(T.pillReserve(), 88, "the pill's bottom plus a gap");
+  on = false;
+  assert.strictEqual(T.pillReserve(), 0, "no pill reserve on an unpaired device");
+  // a wide element near the top: the card would sit at 12px, under the pill; with the reserve it starts below it
+  const r = { top: 20, left: 40, right: 660, bottom: 60, width: 620, height: 40 };
+  assert.ok(T.place(r, 340, 180, 88).top >= 88);
+  assert.strictEqual(T.place({ top: 120, left: 300, right: 660, bottom: 340, width: 360, height: 220 }, 340, 180).side, "bottom", "no reserve: as before");
+});
+
+test("canApprove: the owner always, staff only when they decide something", () => {
+  const owner = person(["owner"], { models: {} });
+  assert.strictEqual(A.canApprove(owner, {}, 0), true, "the owner keeps Setujui even with approvals off");
+  assert.strictEqual(A.canApprove({}, {}, 0), true, "an older kernel without roles: as before");
+  assert.strictEqual(A.canApprove(MANDOR, { approvals: true }, 0), true, "the mandor approves attendance");
+  assert.strictEqual(A.canApprove(MANDOR, { approvals: false }, 0), false, "approvals off: nothing to decide");
+  assert.strictEqual(A.canApprove(SALES, { approvals: true }, 0), false, "a salesman approves nothing");
+  assert.strictEqual(A.canApprove(SALES, { approvals: true }, 2), true, "a request they may decide is waiting");
+  assert.strictEqual(A.canApprove(RITEL, { approvals: true }, 0), false);
+});
+
+test("kenalan owner: Menu usaha lights the first group of records, not the Dasbor group", () => {
+  const nav = [{ label: "Dasbor", items: [{ id: "d/ritel", label: "Ringkasan ritel" }] },
+    { label: "Kerja", items: [{ id: "w/kasir", label: "Kasir" }] }].concat(RITEL_NAV);
+  assert.deepStrictEqual(plain(A.businessGroupAt(nav)), { index: 2, of: 6, label: "Penjualan toko" });
+  assert.strictEqual(A.businessGroupAt([{ label: "Dasbor", items: [{ id: "d/x", label: "X" }] }]), null);
+  // a sub-menu of records counts
+  assert.strictEqual(A.businessGroupAt([{ label: "Dasbor", items: [{ id: "d/x" }] }, { label: "Stok", items: [{ label: "Gudang", items: [{ id: "r/bin" }] }] }]).label, "Stok");
+  const owner = person(["owner"], { models: {} });
+  const steps = A.kenalanSteps({ company: "Toko", mulai: true, meta: owner, groups: nav, approvals: true });
+  const menu = steps.find((x) => x.title === "Menu usaha");
+  assert.ok(menu && typeof menu.target === "function" && menu.optional);
+  // same titles and copy as before: only the target moved
+  assert.deepStrictEqual(titles(steps), ["Selamat datang di Toko", "Mulai di sini", "Persetujuan", "Menu usaha", "Tanya Raka", "Bantuan ada di sini"]);
+});
+
+test("canApprove: an approve: step of a scheduled or connector flow counts too (audit F1)", () => {
+  const sup = (flows) => person(["supervisor"], { models: {}, flows });
+  const nightly = { name: "nightly_check", schedule: "0 2 * * *", steps: [{ if: "x", then: [{ approve: { approvers: ["supervisor"] } }] }] };
+  const hook = { name: "from_shop", on: "connector:shop.order", steps: [{ approve: { approvers: ["supervisor"] } }] };
+  assert.strictEqual(A.canApprove(sup({ nightly }), { approvals: true }, 0), true);
+  assert.strictEqual(A.canApprove(sup({ hook }), { approvals: true }, 0), true);
+  assert.strictEqual(A.canApprove(sup({ hook }), { approvals: false }, 0), false, "approvals off");
+  assert.strictEqual(A.canApprove(person(["clerk"], { flows: { nightly } }), { approvals: true }, 0), false, "another role");
+  assert.deepStrictEqual(plain(A.approvesModels(sup({ nightly, hook }))), [], "the tour still names models only");
+});
+
+test("ownerOrUnknown: one rule for the tour, Setujui and Mulai di sini (audit F4)", () => {
+  for (const m of [undefined, {}, { user: {} }, { user: { roles: null } }, { user: { roles: "x" } }, { user: { roles: [] } }]) {
+    assert.strictEqual(A.ownerOrUnknown(m), true);
+    assert.strictEqual(A.kenalanKind(m), "owner", "a meta without roles gets the owner tour, as it gets Mulai di sini");
+  }
+  assert.strictEqual(A.kenalanKind(person(["owner", "sales_rep"])), "owner");
+  assert.strictEqual(A.kenalanKind(person(["sales_rep"])), "staff");
+});
+
+test("tur.js: a top sheet that would cover the lit place moves beside the pill; the desktop card stays on screen (audit F2, F3)", () => {
+  const w = { React: { createElement() {}, useState() {}, useEffect() {}, useRef() {}, useLayoutEffect() {} }, Rangka: {}, innerWidth: 1024, innerHeight: 400 };
+  vm.runInNewContext(fs.readFileSync(path.join(__dirname, "..", "tur.js"), "utf8"), { window: w }, { filename: "tur.js" });
+  const T = w.RangkaApp.tour;
+  // 375x812 portrait: room below the pill
+  assert.deepStrictEqual(plain(T.sheetSpot(104, 200, 735, 170, 375)), { mode: "under", top: 104 });
+  // 568x320 landscape: pill bottom 96 + 8, card 180, lit bar at 248 -> beside the pill, never past the bar
+  const s = plain(T.sheetSpot(104, 180, 248, 363, 568));
+  assert.strictEqual(s.mode, "beside");
+  assert.strictEqual(s.right, 213);
+  assert.ok(s.maxHeight <= 248 - 12);
+  // a long pill text leaves less than 280 px beside it: full width below the pill, capped above the lit bar (audit N1)
+  assert.deepStrictEqual(plain(T.sheetSpot(104, 180, 248, 242, 568)), { mode: "under", top: 104, maxHeight: 132 });
+  assert.deepStrictEqual(plain(T.sheetSpot(104, 180, 248, 16, 568)).mode, "under", "the pill at its widest");
+  assert.strictEqual(plain(T.sheetSpot(104, 180, 248, 288, 568)).mode, "beside", "280 px left beside the pill");
+  // 1024x400 desktop, tall card, pill reserve 88: the card's bottom stays in the window
+  const r = T.place({ top: 20, bottom: 60, left: 40, right: 984, width: 944, height: 40 }, 340, 340, 88);
+  assert.ok(r.top + 340 <= 400 - 12, JSON.stringify(r));
+  // a tall window keeps the reserve
+  w.innerHeight = 900;
+  assert.ok(T.place({ top: 20, bottom: 60, left: 40, right: 984, width: 944, height: 40 }, 340, 180, 88).top >= 88);
+});
+
 const LOCKED = { process: "sewa", current: null, hidden: false, locks: { rental_booking: { reason: "needs_data", needs: ["customer"] } },
   steps: [{ stage: "pesan", label: { id: "Pelanggan pesan lewat WA" }, model: "rental_booking", state: "locked", needs: ["customer", "rental_item"] },
     { stage: "antar", label: { id: "Antar dan pasang" }, model: "rental_handover", state: "locked", needs: ["customer"] }] };

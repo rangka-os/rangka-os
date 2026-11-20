@@ -86,14 +86,15 @@
   }
 
   /** layout.responsive.tabs (contract 0038) → phone tabs [{href, label, icon, current, approvals?, search?}]. Links to
-   *  models or dashboards that are not installed are left out; page:approvals and page:search are the app's own. */
-  function tabLinks(meta, tabs, route, home) {
+   *  models or dashboards that are not installed are left out; page:approvals and page:search are the app's own.
+   *  approver false (RA.canApprove: the person decides nothing) leaves page:approvals ("Setujui") out. */
+  function tabLinks(meta, tabs, route, home, approver) {
     var models = (meta && meta.models) || {}, dashes = (meta && meta.dashboards) || {}, here = navId(route, home), out = [];
     (tabs || []).forEach(function (t) {
       var to = String((t && t.to) || ""), k = to.slice(0, to.indexOf(":")), n = to.slice(to.indexOf(":") + 1), x = null;
       if (k === "model" && models[n]) x = { id: "r/" + n, label: L(models[n].label) || n, icon: models[n].icon || "invoice" };
       else if (k === "dashboard" && dashes[n]) x = { id: "d/" + n, label: L(dashes[n].label) || n, icon: "dashboard" };
-      else if (to === "page:approvals") x = { id: "approvals", label: "Setujui", icon: "check", approvals: true };
+      else if (to === "page:approvals" && approver !== false) x = { id: "approvals", label: "Setujui", icon: "check", approvals: true };
       else if (to === "page:search") x = { id: null, label: "Cari", icon: "search", search: true };
       if (!x) return;
       if (t.label) x.label = L(t.label);
@@ -356,6 +357,13 @@
     if (!steps.length || ob.hidden) return null;
     return { id: "mulai", label: "Mulai di sini", icon: "star", count: done + "/" + steps.length };
   }
+  /** Whether this person sets the business up (Mulai di sini is their checklist): the owner, the one role that may hide
+   *  it (contract 0053 §3) and invite the team (0056 §4). A meta without the user's roles (an older kernel) keeps the
+   *  checklist for everyone, as before. */
+  function canSetUp(meta) {
+    // one rule with the tour and Setujui (mulai.js ownerOrUnknown, loaded before this file)
+    return RA.ownerOrUnknown ? RA.ownerOrUnknown(meta) : true;
+  }
 
   /** The side-only sidebar: Beranda, Mulai di sini and the feature entries pinned on top, the layout's or the apps'
    *  groups below. */
@@ -363,7 +371,7 @@
     meta = meta || {};
     var groups = withWork(meta, navFromLayout(meta) || appGroups(meta)), f = featureNav(meta, features || {}, counts || {});
     if (f.imports) groups.push(f.imports);
-    var mulai = mulaiEntry(ob);
+    var mulai = canSetUp(meta) ? mulaiEntry(ob) : null;
     return { pinned: [{ id: "home", label: "Beranda", icon: "home" }].concat(mulai ? [mulai] : [], f.more), groups: groups };
   }
 
@@ -582,6 +590,7 @@
   RA.navGroups = navGroups;
   RA.topNavItems = topNavItems;
   RA.sideNav = sideNav;
+  RA.canSetUp = canSetUp;
   RA.mulaiEntry = mulaiEntry;
   RA.shellKind = shellKind;
   RA.densityOf = densityOf;
@@ -1132,8 +1141,10 @@
         var fresh = before ? (d.steps || []).filter(function (x) { return x.state === "done" && !was[x.stage]; })[0] : null;
         if (fresh && !d.hidden) {
           var done = (d.steps || []).filter(function (x) { return x.state === "done"; }).length, next = (d.steps || []).filter(function (x) { return x.stage === d.current; })[0];
+          // the checklist is the owner's (canSetUp): staff get the note without the way into #/mulai
+          var nowMeta = (ctxRef.current && ctxRef.current.meta) || meta;
           toast("ok", "Langkah beres: " + L(fresh.label), done + " dari " + d.steps.length + " langkah beres." + (next ? " Berikutnya: " + L(next.label) + "." : " Tahap ini beres."),
-            { action: "Lihat langkah", onAction: function () { RA.navigate("#/mulai"); } });
+            canSetUp(nowMeta) ? { action: "Lihat langkah", onAction: function () { RA.navigate("#/mulai"); } } : undefined);
         }
         return d;
       }, function () { return null; }); // an older kernel without the route: no Mulai di sini, nothing else changes
@@ -1451,6 +1462,8 @@
     }
 
     var sideNavItems = sideNav(meta, features, { approvals: approvalCount }, ob);
+    // the phone's "Setujui" tab: only for a person who may decide a request (mulai.js canApprove; true when not loaded)
+    var approver = RA.canApprove ? RA.canApprove(meta, features, approvalCount) : true;
     // the welcome tour: once per person, on the desk, after Mulai di sini has answered (it names that entry). The
     // owner's tour lights the side shell's sidebar, so a top-nav layout skips it; the work shell draws its own bar
     // whatever the layout's shell, so its staff get theirs on a top-nav layout too.
@@ -1496,7 +1509,7 @@
       apps: installed.map(function (a) { return { id: a.name, name: L(a.title) || a.name, desc: (a.menu || []).map(function (g) { return L(g.group); }).join(", "), icon: appIcon(a), color: "var(--primary)" }; }),
       user: { name: (me && me.name) || "", email: me && me.email, company: companyName, companies: companies },
       // a phone with layout tabs opens the menu from its last tab: no second menu button in the top bar
-      actions: phone && resp.phone === "tabs" && tabLinks(meta, resp.tabs, route, home).length ? null
+      actions: phone && resp.phone === "tabs" && tabLinks(meta, resp.tabs, route, home, approver).length ? null
         : h(R.IconButton, { icon: "menu", label: "Buka navigasi", className: "ap-menu-btn", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }),
       accountExtra: accountExtra(),
       onHome: function () { if (home) RA.navigate(home); },
@@ -1529,7 +1542,7 @@
 
     // phone (desain arah E, P7): a bottom tab bar for the three things an owner does most; Menu opens the drawer
     var onHome = route.kind === "dash" && home && ("#/d/" + route.dash) === home;
-    var layoutTabs = phone && resp.phone === "tabs" ? tabLinks(meta, resp.tabs, route, home) : [];
+    var layoutTabs = phone && resp.phone === "tabs" ? tabLinks(meta, resp.tabs, route, home, approver) : [];
     var tabBar = layoutTabs.length ? h("nav", { className: "ap-tabbar ap-tabbar-layout", "aria-label": "Navigasi bawah", style: { gridTemplateColumns: "repeat(" + (layoutTabs.length + 1) + ", 1fr)" } },
       layoutTabs.map(function (t) {
         return t.search ? h("button", { key: "search", type: "button", onClick: openCmd }, h(R.Icon, { name: t.icon }), h("span", null, t.label))
@@ -1537,10 +1550,12 @@
             t.approvals && approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null);
       }),
       h("button", { type: "button", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }, h(R.Icon, { name: "menu" }), h("span", null, "Menu")))
-    : phone && kind !== "top-nav" && global.document.documentElement.getAttribute("data-brand") === "juragan" ? h("nav", { className: "ap-tabbar", "aria-label": "Navigasi bawah" },
+    : phone && kind !== "top-nav" && global.document.documentElement.getAttribute("data-brand") === "juragan" ? h("nav", { className: "ap-tabbar", "aria-label": "Navigasi bawah",
+        style: approver ? undefined : { gridTemplateColumns: "repeat(3, 1fr)" } },
       h("a", { href: home || "#/", "aria-current": onHome ? "page" : undefined }, h(R.Icon, { name: "home" }), h("span", null, "Beranda")),
-      h("a", { href: "#/approvals", "aria-current": route.kind === "approvals" ? "page" : undefined }, h(R.Icon, { name: "check" }), h("span", null, "Setujui"),
-        approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null),
+      // Setujui only for a person who decides something (staff who approve nothing reach Persetujuan from the menu)
+      approver ? h("a", { href: "#/approvals", "aria-current": route.kind === "approvals" ? "page" : undefined }, h(R.Icon, { name: "check" }), h("span", null, "Setujui"),
+        approvalCount > 0 ? h("i", { className: "ap-tabbar-n" }, approvalCount) : null) : null,
       h("button", { type: "button", onClick: openCmd }, h(R.Icon, { name: "search" }), h("span", null, "Cari")),
       h("button", { type: "button", "aria-expanded": navOpen, onClick: function () { setNavOpen(!navOpen); } }, h(R.Icon, { name: "menu" }), h("span", null, "Menu"))) : null;
 

@@ -827,6 +827,128 @@ def test_work_shell_welcome_tour(browser, ctx):
     c.close()
 
 
+def pair_device(p):
+    """Pair this browser as an offline device (deviceoutbox.js meta "device"): the sync pill shows and html gets
+    ap-sync-on, as on a phone paired from Perangkat."""
+    p.evaluate("""() => window.RangkaApp.deviceOutbox.setDevice({device_id: "dev-uji-1", name: "HP uji", outlet: null})""")
+    p.wait_for_selector("html.ap-sync-on .ap-sync-pill", timeout=5000)
+
+
+def test_work_shell_tour_clears_sync_pill(browser, ctx):
+    """Audit F9 (2026-11-19): on a paired phone the sync pill floats above the tour (device.css z-index 1310). When
+    the lit place is in the bottom bar the tour's sheet moves to the top; it must start below the pill, so the step's
+    title and text are not covered, and its buttons stay on screen. The pill stays visible (the sync state)."""
+    for size, vp in (("hp", PHONE375), ("hp-landscape", {"width": 568, "height": 320}), ("hp-landscape-long", {"width": 568, "height": 320}), ("tablet", TABLET)):
+        c, p = page_for(browser, ctx, STAF, vp, tours=True)
+        put = lambda state: c.request.put("/api/v1/onboarding/tours/kenalan", data=json.dumps({"state": state}), headers={"Content-Type": "application/json"})
+        assert put("seen").ok
+        p.goto("/app/")
+        p.wait_for_selector(".ap-workshell")
+        pair_device(p)
+        assert put("").ok
+        p.reload()
+        p.wait_for_selector(".ap-workshell")
+        p.wait_for_selector("html.ap-sync-on .ap-sync-pill")
+
+        card = p.locator(".ap-tur-card")
+        card.wait_for(timeout=10000)
+        n = int(re.search(r"dari (\d+)", card.locator(".ap-tur-n").inner_text()).group(1))
+        checked = 0
+        for i in range(1, n + 1):
+            if i > 1:
+                p.wait_for_function(f"() => /Langkah {i} dari/.test((document.querySelector('.ap-tur-n') || {{}}).textContent || '')", timeout=5000)
+            p.wait_for_timeout(450)  # the light and the card settle
+            if size.endswith("-long") and i == 2:
+                # the pill grows while the step is open (audit N2) to its longest state text (deviceoutbox.js
+                # pillState, when the browser cannot keep the queue): the sheet is placed again
+                p.evaluate("""() => { const t = document.querySelector('.ap-sync-pill .ap-sync-text'); t.textContent = 'Antrean tidak tersimpan permanen · 12 antre'; }""")
+                p.wait_for_timeout(300)
+            title = card.locator(".ap-tur-title").inner_text().strip()
+            pill, box = p.locator(".ap-sync-pill").bounding_box(), card.bounding_box()
+            assert pill and pill["height"] > 0, f"{size} {title}: the sync pill stays visible during the tour"
+            for part in (".ap-tur-n", ".ap-tur-title", ".ap-tur-body", ".ap-tur-acts"):
+                b = card.locator(part).bounding_box()
+                over = b["y"] < pill["y"] + pill["height"] and b["y"] + b["height"] > pill["y"] and b["x"] < pill["x"] + pill["width"] and b["x"] + b["width"] > pill["x"]
+                assert not over, f"{size} {title}: the pill {pill} covers {part} {b}"
+            for btn in card.locator(".ap-tur-acts button").all():
+                b = btn.bounding_box()
+                assert b and b["y"] >= 0 and b["y"] + b["height"] <= vp["height"], f"{size} {title}: a button is off screen {b}"
+                assert b["y"] + b["height"] <= box["y"] + box["height"] + 1, f"{size} {title}: a button is outside the sheet {b} vs {box}"
+                hit = p.evaluate("(b) => { const e = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return !!(e && e.closest('.ap-tur-acts')); }", b)
+                assert hit, f"{size} {title}: a button cannot be pressed {b}"
+            assert p.evaluate("() => { const t = document.querySelector('.ap-tur-title'); return t.scrollWidth <= t.clientWidth + 1; }"), f"{size} {title}: the title overflows"
+            cls = (card.get_attribute("class") or "").split()
+            if "top" in cls:
+                hole = p.locator(".ap-tur-hole").bounding_box()
+                if "beside-pill" in cls:  # a phone held sideways: left of the pill, from the top edge
+                    assert box["x"] + box["width"] <= pill["x"], f"{size} {title}: the sheet keeps left of the pill ({box} vs {pill})"
+                    assert box["width"] >= 280, f"{size} {title}: the sheet beside the pill keeps its minimum width {box}"
+                else:
+                    assert "under-pill" in cls, f"{size} {title}: the top sheet keeps below the pill"
+                    assert box["y"] >= pill["y"] + pill["height"], f"{size} {title}: the sheet starts below the pill ({box} vs {pill})"
+                assert box["y"] + box["height"] <= hole["y"], f"{size} {title}: the sheet does not cover the lit place ({box} vs {hole})"
+                checked += 1
+            if ctx["shots"] and i > 1:  # the viewport as the person sees it (a full-page shot re-lays the fixed dim)
+                p.screenshot(path=os.path.join(ctx["shots"], f"tur-pill-{size}-{i}-" + title.lower().replace(" ", "-") + ".png"))
+            card.locator("[data-tur-primary]").click()
+        p.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+        if size.startswith("hp"):
+            assert checked >= 1, f"{size}: a step lit the bottom bar with the sheet at the top"
+        c.close()
+
+
+def test_staff_without_setup_or_approvals(browser, ctx):
+    """Owner-only blocks (card t_0ebcf404, contract 0053 §5): staff who do not set the business up get no "Mulai di
+    sini" entry. Mulai di sini answers with steps here (mocked) so the entry would show; the owner keeps it."""
+    ob = json.dumps({"process": None, "current": "isi", "hidden": False, "locks": {}, "steps": [
+        {"stage": "catat", "label": {"id": "Catat harian"}, "model": "catatan_harian", "state": "done", "needs": [], "answers": []},
+        {"stage": "isi", "label": {"id": "Isi jam kerja"}, "model": "jam_kerja", "state": "open", "needs": [], "answers": []}]})
+    for who, vp, size in ((OWNER, TABLET, "tablet"), (MANDOR, TABLET, "tablet"), (MANDOR, PHONE375, "hp"), (KASIR, PHONE375, "hp"), (KASIR, TABLET, "tablet")):
+        c, p = page_for(browser, ctx, who, vp)
+        p.route(re.compile(r".*/api/v1/onboarding$"), lambda r: r.fulfill(status=200, content_type="application/json", body=ob) if r.request.method == "GET" else r.continue_())
+        p.goto("/app/")
+        p.wait_for_selector(".ap-workshell, .ap-shell .rk-shell-content")
+        p.wait_for_timeout(600)
+        name = who[0].split("@")[0]
+        shot(ctx, p, f"beranda-{name}-{size}")
+        if p.locator(".ap-menu-btn").count() and p.locator(".ap-menu-btn").first.is_visible():
+            p.locator(".ap-menu-btn").first.click()
+            p.wait_for_selector(".ap-nav-open")
+            p.wait_for_timeout(300)
+            shot(ctx, p, f"beranda-{name}-{size}-menu")
+        mulai = p.locator('[data-nav="mulai"]').count()
+        if who == OWNER:
+            assert mulai == 1, "the owner keeps Mulai di sini"
+        else:
+            assert mulai == 0, f"{name}: no Mulai di sini for staff"
+        c.close()
+
+
+def test_setujui_tab_only_for_approvers(browser, ctx):
+    """Card t_0ebcf404 (audit F7): a desk staff member in the top-nav shell with phone tabs that list page:approvals.
+    The mandor approves nothing on this site, so their tab bar has no "Setujui"; the owner's has it."""
+    def tabs_layout(route):
+        r = route.fetch()
+        body = r.json()
+        body["layout"] = dict(body.get("layout") or {}, shell="top-nav",
+                              responsive={"phone": "tabs", "tabs": [{"to": "model:jam_kerja"}, {"to": "page:approvals"}, {"to": "page:search"}]})
+        route.fulfill(response=r, json=body)
+    seen = {}
+    for who in (OWNER, MANDOR):
+        c, p = page_for(browser, ctx, who, PHONE375)
+        p.route(re.compile(r".*/api/v1/meta(\?.*)?$"), tabs_layout)
+        p.goto("/app/")
+        p.wait_for_selector(".ap-tabbar-layout")
+        p.wait_for_timeout(400)
+        seen[who[0]] = [t.strip() for t in p.locator(".ap-tabbar-layout a span, .ap-tabbar-layout button span").all_inner_texts()]
+        shot(ctx, p, "tab-setujui-" + who[0].split("@")[0] + "-hp")
+        c.close()
+    owner, mandor = seen[OWNER[0]], seen[MANDOR[0]]
+    assert "Setujui" in owner and "Cari" in owner, f"the owner's tabs {owner}"
+    assert len(mandor) >= 3 and "Cari" in mandor, f"the mandor gets the layout tabs {mandor}"
+    assert "Setujui" not in mandor, f"the mandor approves nothing: no Setujui {mandor}"
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--keep", action="store_true")

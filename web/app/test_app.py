@@ -4466,6 +4466,106 @@ def test_tour_staff_side_shell(page, ctx):
     assert kept_tour(who) == "seen", "finishing the tour is kept for the person"
 
 
+# Mulai di sini with steps (mocked: the catalogue site has no process), so the checklist would show on Beranda
+STAFF_HOME_OB = {"process": None, "current": "lead", "hidden": False, "locks": {}, "steps": [
+    {"stage": "pelanggan", "label": {"id": "Catat pelanggan"}, "model": "customer", "state": "done", "needs": [], "answers": []},
+    {"stage": "lead", "label": {"id": "Catat lead pertama"}, "model": "lead", "state": "open", "needs": [], "answers": []},
+    {"stage": "faktur", "label": {"id": "Buat faktur"}, "model": "sales_invoice", "state": "open", "needs": [], "answers": []}]}
+HOME_BLOCKS_JS = """() => ({
+  banner: !!document.querySelector('.ap-home .ap-home-main'),
+  mulaiNav: !!document.querySelector('.rk-side [data-nav="mulai"]'),
+  attn: (document.querySelector('.ap-attn') || {}).innerText || null,
+  tabs: [...document.querySelectorAll('.ap-tabbar a span, .ap-tabbar button span')].map((s) => s.textContent.trim()),
+})"""
+LIT_GROUP_JS = """() => {
+  const hole = document.querySelector('.ap-tur-hole');
+  if (!hole) return null;
+  const r = hole.getBoundingClientRect();
+  const hit = [...document.querySelectorAll('.rk-side nav > .rk-navgroup')].filter((g) => {
+    const b = g.getBoundingClientRect(), x = b.left + b.width / 2, y = b.top + Math.min(b.height, 30) / 2;
+    return b.width > 0 && x >= r.left && x <= r.right && y >= r.top && y <= r.bottom;
+  });
+  return hit.map((g) => { const t = g.querySelector(':scope > p'); return t ? ((t.querySelector('.l') || t).textContent || '').trim() : ''; });
+}"""
+
+
+def home_as(page, ctx, who, viewport, tours_seen=True):
+    """A fresh browser context signed in as who at viewport, Mulai di sini mocked with steps; (context, page)."""
+    c = page.context.browser.new_context(viewport=viewport, locale="id-ID")
+    p = c.new_page()
+    p.route(re.compile(r".*/api/v1/onboarding$"), lambda r: _json(r, 200, STAFF_HOME_OB) if r.request.method == "GET" else r.continue_())
+    if tours_seen:
+        p.route("**/api/v1/onboarding/tours", lambda r: _json(r, 200, TOURS_SEEN) if r.request.method == "GET" else r.continue_())
+    p.goto(ctx.base + "/app/")
+    sign_in(p, *who)
+    p.locator(".ap-shell .rk-shell-content").wait_for(timeout=15000)
+    p.wait_for_timeout(1500)  # the dashboard, the approvals and the team settle
+    return c, p
+
+
+def test_staff_home_hides_owner_blocks(page, ctx):
+    """Card t_0ebcf404: Beranda shows the owner's blocks to the owner only. The owner keeps Mulai di sini (banner and
+    sidebar entry), Perlu diurus with "menunggu keputusanmu" and the Setujui tab; a sales rep (approves nothing, does
+    not set the business up) gets none of them; a sales manager who approves invoices keeps Setujui but not the
+    checklist. Screenshots at 1024x768 and 375x812 with --shots."""
+    live = bool(ctx.features.get("approvals"))
+    for size, vp in (("tablet", {"width": 1024, "height": 768}), ("hp", {"width": 375, "height": 812})):
+        for label, who in (("pemilik", ctx.owner), ("manajer", MANAGER), ("salesman", SALES)):
+            c, p = home_as(page, ctx, who, vp)
+            if ctx.args.shots:
+                # tablet: the whole page; phone: the screen as held (a full-page shot draws the sticky tab bar mid-page)
+                p.screenshot(path=os.path.join(ctx.args.shots, f"beranda-{label}-{size}.png"), full_page=size == "tablet")
+            b = p.evaluate(HOME_BLOCKS_JS)
+            if size == "hp":
+                open_nav(p)
+                p.locator(".ap-nav-open").wait_for(timeout=5000)
+                p.wait_for_timeout(300)
+                b["mulaiNav"] = p.evaluate(HOME_BLOCKS_JS)["mulaiNav"]
+                if ctx.args.shots:
+                    p.screenshot(path=os.path.join(ctx.args.shots, f"beranda-{label}-{size}-menu.png"))
+            if label == "pemilik":
+                assert b["banner"] and b["mulaiNav"], f"{size}: the owner keeps Mulai di sini {b}"
+                assert b["attn"] and "Perlu diurus" in b["attn"], f"{size}: the owner keeps Perlu diurus {b}"
+                if size == "hp":
+                    assert "Setujui" in b["tabs"], f"the owner keeps the Setujui tab {b['tabs']}"
+            else:
+                assert not b["banner"] and not b["mulaiNav"], f"{size} {label}: no Mulai di sini for staff {b}"
+            if label == "salesman":
+                assert not (b["attn"] and "keputusanmu" in b["attn"]), f"{size}: a sales rep decides nothing {b['attn']}"
+                assert "Setujui" not in b["tabs"], f"{size}: a sales rep gets no Setujui tab {b['tabs']}"
+            if label == "manajer" and live and size == "hp":
+                assert "Setujui" in b["tabs"], f"the sales manager approves invoices: Setujui stays {b['tabs']}"
+            c.close()
+
+
+def test_owner_tour_menu_usaha_lights_business_group(page, ctx):
+    """Card t_0ebcf404 (c): the owner's welcome tour step "Menu usaha" lights the first sidebar group of records, not
+    the Dasbor group of dashboards."""
+    ctx.allowed_failed.append(re.compile(r"/api/v1/onboarding/tours(/|$)"))
+    owner = Http(ctx.base).login(*ctx.owner)
+    owner.call("PUT", "/api/v1/onboarding/tours/kenalan", {"state": ""})
+    c, p = home_as(page, ctx, ctx.owner, {"width": 1024, "height": 768}, tours_seen=False)
+    try:
+        card = p.locator(".ap-tur-card")
+        card.wait_for(timeout=10000)
+        for _ in range(8):
+            if card.locator(".ap-tur-title").inner_text().strip() == "Menu usaha":
+                break
+            card.locator("[data-tur-primary]").click()
+            p.wait_for_timeout(700)
+        assert card.locator(".ap-tur-title").inner_text().strip() == "Menu usaha", "the owner tour has Menu usaha"
+        p.wait_for_timeout(500)
+        lit = p.evaluate(LIT_GROUP_JS)
+        assert lit and len(lit) == 1 and lit[0] and lit[0] != "Dasbor", f"Menu usaha lights {lit}"
+        if ctx.args.shots:
+            p.screenshot(path=os.path.join(ctx.args.shots, "tur-pemilik-menu-usaha-tablet.png"))
+        p.keyboard.press("Escape")
+        p.locator(".ap-tur").wait_for(state="detached", timeout=5000)
+    finally:
+        c.close()
+        owner.call("PUT", "/api/v1/onboarding/tours/kenalan", {"state": "seen"})
+
+
 def kept_tour(owner, tour="kenalan", gone=False):
     """The kernel's state of one tour once the web app's PUT has landed (gone: once it was forgotten)."""
     state = None

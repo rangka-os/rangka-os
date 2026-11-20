@@ -114,6 +114,16 @@ stages:
 - **Mulai di sini.**
   - Beranda shows the steps above the dashboard while `hidden` is false and at least one step is not done.
   - The sidebar shows the entry "Mulai di sini" with "<done>/<total>" in the first group.
+  - Who sees it (added 20 Nov 2026, web app only): the Beranda steps, the sidebar entry and the "Lihat langkah" action
+    of the step-done note are the owner's (`owner` role), the one who may hide them (§3) and invite the team (0056 §4).
+    Other roles see their own Beranda without them; the step-done note still shows, without the action. A meta
+    without the user's roles (an older kernel) shows them to everyone, as before. The `#/mulai` page itself is not
+    refused.
+  - On the same terms, the phone tab "Setujui" (layout `page:approvals` and the default tab bar) and the approval rows
+    and copy of Beranda's "Perlu diurus" show only to a person who may decide a request (0007): the owner; anyone with
+    a request they may decide waiting; or, with the approvals feature on, a person named by a model's `approvals:` or
+    by any flow's `approve:` step, whatever triggers the flow. The sidebar entry "Persetujuan" stays for everyone who
+    has the feature.
   - Content of the Beranda card:
     - the steps;
     - progress;

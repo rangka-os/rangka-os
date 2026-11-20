@@ -2001,8 +2001,14 @@ def test_grid_item_search(page, ctx):
     box.press_sequentially(f"telang cari {tag}", delay=20)
     opt = page.locator(f'[role=option][data-value="{item["name"]}"]')
     opt.wait_for(timeout=10000)
-    assert any(m == "GET" and re.search(r"/api/v1/r/item\?.*q=telang cari " + tag, u) for m, u in reqs), \
-        f"the cell searched the server: {[u for m, u in reqs if '/r/item' in u]}"
+    # the new item can already be among the first 20 the cell loads on open, so its option may show before the
+    # debounced search leaves: wait for the search instead of asserting at once
+    searched = lambda: any(m == "GET" and re.search(r"/api/v1/r/item\?.*q=telang cari " + tag, u) for m, u in reqs)
+    for _ in range(50):
+        if searched():
+            break
+        page.wait_for_timeout(100)
+    assert searched(), f"the cell searched the server: {[u for m, u in reqs if '/r/item' in u]}"
     page.wait_for_function("() => document.querySelectorAll('[role=listbox] [role=option]').length === 1", timeout=5000)
     box.press("ArrowDown")
     box.press("Enter")

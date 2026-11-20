@@ -1514,6 +1514,40 @@ def test_report_totals(page, ctx):
     assert want in [t.strip() for t in total_row.locator("td").all_inner_texts()], "the total stays"
 
 
+def list_bar_metrics(page):
+    """Each control in the list's view row (view tabs, quick filters, Urutkan, Kolom): height, font size and centre line."""
+    return page.evaluate("""() => [...document.querySelectorAll(
+        '.ap-views .rk-viewswitch-btn, .ap-views .rk-filterbar .rk-fbtn, .ap-views .ap-toolmenu > .rk-btn')].map(e => {
+      const r = e.getBoundingClientRect(), s = getComputedStyle(e);
+      return { t: (e.innerText || e.getAttribute('aria-label') || '').trim(), h: Math.round(r.height), fs: s.fontSize, cy: Math.round(r.top + r.height / 2) };
+    })""")
+
+
+def test_list_bar_one_row(page, ctx):
+    """Desktop: the view tabs (Daftar · Papan · Kelompok · Laporan) and the tools on the right (quick filters, Urutkan,
+    Kolom) are one row of --control (32px) controls in one font size on one centre line, light and dark. 44px (--touch)
+    is for phones and coarse pointers only."""
+    if ctx.args.width < 1024:
+        return
+    open_route(page, ctx, "#/r/sales_invoice")
+    wait_rows(page)
+    page.locator(".ap-views .ap-toolmenu > .rk-btn").first.wait_for(timeout=5000)
+    seen = {}
+    for scheme in ("light", "dark"):
+        page.evaluate("(m) => document.documentElement.setAttribute('data-theme', m)", scheme)  # this view only, not saved
+        page.wait_for_timeout(200)
+        shot(page, ctx, "list-bar-" + scheme)
+        seen[scheme] = list_bar_metrics(page)
+    control = round(page.evaluate("() => parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--control'))"))
+    for scheme, ms in seen.items():
+        tabs = [m for m in ms if m["t"] in ("Daftar", "Papan", "Kelompok", "Laporan")]
+        assert tabs and len(tabs) < len(ms), f"{scheme}: view tabs and tools in the row, got {ms}"
+        assert {m["h"] for m in ms} == {control}, f"{scheme}: every control is --control ({control}px) tall, got {ms}"
+        assert len({m["fs"] for m in ms}) == 1, f"{scheme}: one font size across tabs and tools, got {ms}"
+        cys = [m["cy"] for m in ms]
+        assert max(cys) - min(cys) <= 1, f"{scheme}: tabs and tools share one centre line, got {ms}"
+
+
 def test_list_prefs_persist(page, ctx):
     open_route(page, ctx, "#/r/sales_invoice")
     wait_rows(page)

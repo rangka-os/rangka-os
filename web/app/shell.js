@@ -210,14 +210,17 @@
   function appGroups(meta) {
     var models = meta.models || {}, dashes = meta.dashboards || {}, groups = [], dashItems = [];
     (meta.apps || []).concat(meta.menu || []).forEach(function (a) {
+      // a dashboard the caller may not open is not in meta.dashboards (contract 0027 roles:): left out, not listed
+      // by its file name (an employee saw gaji_ringkas and transfer_gaji under Lainnya, rangka-os#261)
       (a.dashboards || []).forEach(function (d) {
-        dashItems.push({ id: "d/" + d, label: L((dashes[d] || {}).label) || d, icon: "dashboard" });
+        if (dashes[d]) dashItems.push({ id: "d/" + d, label: L(dashes[d].label) || d, icon: "dashboard" });
       });
     });
     if (dashItems.length) groups.push({ label: "Dasbor", items: dashItems });
     (meta.apps || []).forEach(function (a) {
       (a.menu || []).forEach(function (g) {
-        function modelItem(m) { return models[m] ? { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" } : null; }
+        // a model the caller may not read (can.read false in /meta) is left out of the menu
+        function modelItem(m) { return models[m] && !(models[m].can && models[m].can.read === false) ? { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" } : null; }
         var items = (g.items || []).map(function (it) {
           if (typeof it === "string") return modelItem(it);
           var kids = ((it && it.items) || []).map(modelItem).filter(Boolean); // a sub-menu (contract 0037)
@@ -229,7 +232,7 @@
       });
     });
     (meta.menu || []).forEach(function (g) {
-      var items = (g.items || []).map(function (m) { return models[m] ? { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" } : null; }).filter(Boolean);
+      var items = (g.items || []).map(function (m) { return models[m] && !(models[m].can && models[m].can.read === false) ? { id: "r/" + m, label: L(models[m].label) || m, icon: models[m].icon || "invoice" } : null; }).filter(Boolean);
       if (items.length) groups.push({ label: L(g.group) || g.module, items: items });
     });
     return groups;

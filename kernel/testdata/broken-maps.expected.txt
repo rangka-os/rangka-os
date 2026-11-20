@@ -1,0 +1,11 @@
+../../broken-maps/site/system.rk:11:5  error  schema  maps/geocoder  Additional properties are not allowed ('api_key' was unexpected)
+../../broken-maps/site/system.rk:13:17  error  schema  maps/geocoder/countries/0  'ID' does not match '^[a-z]{2}$'
+../../broken-maps/site/system.rk:11:15  error  schema  maps/geocoder/provider  'google' is not one of ['nominatim', 'photon']
+../../broken-maps/site/system.rk:12:22  error  schema  maps/geocoder/rate_per_second  0 is less than or equal to the minimum of 0
+../../broken-maps/site/system.rk:6:5  error  schema  maps/tiles  'attribution' is a required property
+../../broken-maps/site/system.rk:8:18  error  schema  maps/tiles/cache_tiles  500 is greater than the maximum of 300
+../../broken-maps/site/system.rk:9:11  error  schema  maps/tiles/kind  'satellite' is not one of ['raster', 'vector']
+../../broken-maps/site/system.rk:7:15  error  schema  maps/tiles/max_zoom  23 is greater than the maximum of 22
+../../broken-maps/site/system.rk:6:10  error  schema  maps/tiles/url  'http://tile.openstreetmap.org/{z}/{x}.png' does not match '^https://([a-z0-9-]*\\{s\\}[a-z0-9-]*\\.)?[a-z0-9.-]+(:[0-9]+)?/[^\\s$"\'<>]*\\{z\\}([^\\s$"\'<>]…
+
+9 error(s), 0 warning(s)

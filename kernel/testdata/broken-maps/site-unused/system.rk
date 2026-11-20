@@ -1,0 +1,11 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/system.json
+# Contract 0072: subdomains the tile URL never uses, and a self-hosted URL with the public host faster than 1/s.
+db: {driver: postgres, url: '${DATABASE_URL}'}
+maps:
+  tiles:
+    url: https://tile.openstreetmap.org/{z}/{y}/{x}.png
+    attribution: © OpenStreetMap contributors
+    subdomains: [a, b]
+  geocoder:
+    url: https://nominatim.openstreetmap.org:443/search
+    rate_per_second: 1.5

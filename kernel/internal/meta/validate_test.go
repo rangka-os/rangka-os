@@ -432,3 +432,18 @@ func TestUnknownMethod(t *testing.T) {
 		t.Errorf("got %q\nwant %q", got, want)
 	}
 }
+
+// Contract 0072: system.rk maps. The valid site (a tile mirror with subdomains, its own Nominatim faster than 1/s)
+// has no problems; the broken ones have the schema errors and both maps codes rangka_validate.py prints.
+func TestMapsSettings(t *testing.T) {
+	_, rep := ValidateOpts(Options{AppsDir: "../../testdata/modules-apps/apps", SiteDir: "../../testdata/maps/site"}, nil, schema.Embedded())
+	if n := len(rep.All()); n != 0 {
+		t.Fatalf("problems: %+v", rep.All())
+	}
+}
+
+func TestBrokenMapsMatchPython(t *testing.T) {
+	golden(t, "testdata/broken-maps.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-maps/site"})
+	golden(t, "testdata/broken-maps-subdomains.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-maps/site-subdomains"})
+	golden(t, "testdata/broken-maps-unused.expected.txt", Options{AppsDir: "testdata/modules-apps/apps", SiteDir: "testdata/broken-maps/site-unused"})
+}

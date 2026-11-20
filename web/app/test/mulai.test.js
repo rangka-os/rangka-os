@@ -351,6 +351,10 @@ test("tur.js: a top sheet that would cover the lit place moves beside the pill; 
   assert.strictEqual(s.mode, "beside");
   assert.strictEqual(s.right, 213);
   assert.ok(s.maxHeight <= 248 - 12);
+  // a long pill text leaves less than 280 px beside it: full width below the pill, capped above the lit bar (audit N1)
+  assert.deepStrictEqual(plain(T.sheetSpot(104, 180, 248, 242, 568)), { mode: "under", top: 104, maxHeight: 132 });
+  assert.deepStrictEqual(plain(T.sheetSpot(104, 180, 248, 16, 568)).mode, "under", "the pill at its widest");
+  assert.strictEqual(plain(T.sheetSpot(104, 180, 248, 288, 568)).mode, "beside", "280 px left beside the pill");
   // 1024x400 desktop, tall card, pill reserve 88: the card's bottom stays in the window
   const r = T.place({ top: 20, bottom: 60, left: 40, right: 984, width: 944, height: 40 }, 340, 340, 88);
   assert.ok(r.top + 340 <= 400 - 12, JSON.stringify(r));

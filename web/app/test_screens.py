@@ -838,7 +838,7 @@ def test_work_shell_tour_clears_sync_pill(browser, ctx):
     """Audit F9 (2026-11-19): on a paired phone the sync pill floats above the tour (device.css z-index 1310). When
     the lit place is in the bottom bar the tour's sheet moves to the top; it must start below the pill, so the step's
     title and text are not covered, and its buttons stay on screen. The pill stays visible (the sync state)."""
-    for size, vp in (("hp", PHONE375), ("hp-landscape", {"width": 568, "height": 320}), ("tablet", TABLET)):
+    for size, vp in (("hp", PHONE375), ("hp-landscape", {"width": 568, "height": 320}), ("hp-landscape-long", {"width": 568, "height": 320}), ("tablet", TABLET)):
         c, p = page_for(browser, ctx, STAF, vp, tours=True)
         put = lambda state: c.request.put("/api/v1/onboarding/tours/kenalan", data=json.dumps({"state": state}), headers={"Content-Type": "application/json"})
         assert put("seen").ok
@@ -849,6 +849,7 @@ def test_work_shell_tour_clears_sync_pill(browser, ctx):
         p.reload()
         p.wait_for_selector(".ap-workshell")
         p.wait_for_selector("html.ap-sync-on .ap-sync-pill")
+
         card = p.locator(".ap-tur-card")
         card.wait_for(timeout=10000)
         n = int(re.search(r"dari (\d+)", card.locator(".ap-tur-n").inner_text()).group(1))
@@ -857,6 +858,11 @@ def test_work_shell_tour_clears_sync_pill(browser, ctx):
             if i > 1:
                 p.wait_for_function(f"() => /Langkah {i} dari/.test((document.querySelector('.ap-tur-n') || {{}}).textContent || '')", timeout=5000)
             p.wait_for_timeout(450)  # the light and the card settle
+            if size.endswith("-long") and i == 2:
+                # the pill grows while the step is open (audit N2) to its longest state text (deviceoutbox.js
+                # pillState, when the browser cannot keep the queue): the sheet is placed again
+                p.evaluate("""() => { const t = document.querySelector('.ap-sync-pill .ap-sync-text'); t.textContent = 'Antrean tidak tersimpan permanen · 12 antre'; }""")
+                p.wait_for_timeout(300)
             title = card.locator(".ap-tur-title").inner_text().strip()
             pill, box = p.locator(".ap-sync-pill").bounding_box(), card.bounding_box()
             assert pill and pill["height"] > 0, f"{size} {title}: the sync pill stays visible during the tour"
@@ -867,11 +873,16 @@ def test_work_shell_tour_clears_sync_pill(browser, ctx):
             for btn in card.locator(".ap-tur-acts button").all():
                 b = btn.bounding_box()
                 assert b and b["y"] >= 0 and b["y"] + b["height"] <= vp["height"], f"{size} {title}: a button is off screen {b}"
+                assert b["y"] + b["height"] <= box["y"] + box["height"] + 1, f"{size} {title}: a button is outside the sheet {b} vs {box}"
+                hit = p.evaluate("(b) => { const e = document.elementFromPoint(b.x + b.width / 2, b.y + b.height / 2); return !!(e && e.closest('.ap-tur-acts')); }", b)
+                assert hit, f"{size} {title}: a button cannot be pressed {b}"
+            assert p.evaluate("() => { const t = document.querySelector('.ap-tur-title'); return t.scrollWidth <= t.clientWidth + 1; }"), f"{size} {title}: the title overflows"
             cls = (card.get_attribute("class") or "").split()
             if "top" in cls:
                 hole = p.locator(".ap-tur-hole").bounding_box()
                 if "beside-pill" in cls:  # a phone held sideways: left of the pill, from the top edge
                     assert box["x"] + box["width"] <= pill["x"], f"{size} {title}: the sheet keeps left of the pill ({box} vs {pill})"
+                    assert box["width"] >= 280, f"{size} {title}: the sheet beside the pill keeps its minimum width {box}"
                 else:
                     assert "under-pill" in cls, f"{size} {title}: the top sheet keeps below the pill"
                     assert box["y"] >= pill["y"] + pill["height"], f"{size} {title}: the sheet starts below the pill ({box} vs {pill})"

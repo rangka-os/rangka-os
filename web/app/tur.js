@@ -70,12 +70,17 @@
     return r.width > 0 && r.height > 0 ? r : null;
   }
   function pillReserve() { var r = pillRect(); return r ? Math.ceil(r.bottom) + 8 : 0; }
+  var MIN_BESIDE = 280; // the narrowest sheet beside the pill that still keeps a title and three buttons on their lines
   /** Phone, sheet at the top, sync pill showing: below the pill when the card (height ch) still ends above the lit
-   *  place (holeTop); else (a phone held sideways) beside the pill from the top edge, at most down to the lit place,
-   *  scrolling inside when longer. {mode: "under", top} | {mode: "beside", right, maxHeight}. */
+   *  place (holeTop); else (a phone held sideways) beside the pill from the top edge, at most down to the lit place;
+   *  when the pill leaves less than MIN_BESIDE beside it (a long text such as "Antrean tidak tersimpan permanen"), the
+   *  full width below the pill, down to the lit place. The last two scroll inside, the buttons stay in view.
+   *  {mode: "under", top} | {mode: "beside", right, maxHeight} | {mode: "under", top, maxHeight}. */
   function sheetSpot(reserve, ch, holeTop, pillLeft, vw) {
     if (reserve + ch <= holeTop - GAP) return { mode: "under", top: reserve };
-    return { mode: "beside", right: Math.max(0, Math.ceil(vw - pillLeft) + 8), maxHeight: Math.max(0, Math.floor(holeTop - GAP)) };
+    var maxBelow = Math.max(0, Math.floor(holeTop - GAP));
+    if (pillLeft - 8 >= MIN_BESIDE) return { mode: "beside", right: Math.max(0, Math.ceil(vw - pillLeft) + 8), maxHeight: maxBelow };
+    return { mode: "under", top: reserve, maxHeight: Math.max(0, maxBelow - reserve) };
   }
   function reduced() { return !!(global.matchMedia && global.matchMedia("(prefers-reduced-motion: reduce)").matches); }
   function waitFor(target, ms) {
@@ -168,17 +173,27 @@
     // place the card once its size is known
     // phone, top sheet on a paired device: under the pill, or beside it when that would cover the lit place
     var ss = useState(null), spot = ss[0], setSpot = ss[1];
+    // the pill's text (so its width) changes while a step is open ("Mengirim 3 dari 5", "2 antre"): place again
+    var pz = useState(0), pillSize = pz[0], setPillSize = pz[1];
+    useEffect(function () {
+      var pill = global.document.querySelector && global.document.querySelector(".ap-sync-pill");
+      if (!pill || typeof global.ResizeObserver !== "function") return;
+      var ro = new global.ResizeObserver(function () { setPillSize(function (n) { return n + 1; }); });
+      ro.observe(pill);
+      return function () { ro.disconnect(); };
+    }, [i, shown]);
     useLayoutEffect(function () {
       if (!shown || !card.current) return;
       if (phone()) {
         var pr = pillRect(), vh0 = global.innerHeight;
         var top0 = rect && rect.top - PAD > vh0 * 0.55;
-        setSpot(pr && top0 ? sheetSpot(Math.ceil(pr.bottom) + 8, card.current.getBoundingClientRect().height, rect.top - PAD, pr.left, global.innerWidth) : null);
+        // the card's natural height (scrollHeight), not its box: the previous step may have capped it
+        setSpot(pr && top0 ? sheetSpot(Math.ceil(pr.bottom) + 8, Math.max(card.current.scrollHeight, card.current.getBoundingClientRect().height), rect.top - PAD, pr.left, global.innerWidth) : null);
       }
       if (phone() || !rect) { setPos(null); return; }
       var c = card.current.getBoundingClientRect();
       setPos(place(rect, c.width, c.height, pillReserve()));
-    }, [shown, rect && rect.top, rect && rect.left, rect && rect.width, rect && rect.height, i]);
+    }, [shown, rect && rect.top, rect && rect.left, rect && rect.width, rect && rect.height, i, pillSize]);
     useEffect(function () {
       if (!shown || !card.current) return;
       var b = card.current.querySelector("[data-tur-primary]");
@@ -224,8 +239,9 @@
     var style = phone() || !hole ? null : pos ? { left: pos.left + "px", top: pos.top + "px" } : { left: "-9999px", top: "0px" };
     // phone, sheet at the top (the lit place is in the bottom bar): on a paired device it keeps below the sync pill
     var sheetTop = phone() && hole && hole.top > vh * 0.55, reserve = sheetTop ? pillReserve() : 0;
-    var beside = !!(reserve && spot && spot.mode === "beside");
-    if (reserve) style = beside ? { "--tur-right": spot.right + "px", maxHeight: spot.maxHeight + "px" } : { "--tur-top": reserve + "px" };
+    var beside = !!(reserve && spot && spot.mode === "beside"), scroll = !!(reserve && spot && spot.maxHeight != null);
+    if (reserve) style = beside ? { "--tur-right": spot.right + "px", maxHeight: spot.maxHeight + "px" }
+      : scroll ? { "--tur-top": reserve + "px", maxHeight: spot.maxHeight + "px" } : { "--tur-top": reserve + "px" };
     return h("div", { className: "ap-tur" + (shown ? " on" : "") + (using ? " using" : ""), "data-tour": def.id },
       blockers.map(function (b, k) {
         return h("div", { key: k, className: "ap-tur-dim", "aria-hidden": "true", style: { top: b.top + "px", left: b.left + "px", width: b.width + "px", height: b.height + "px" },
@@ -233,7 +249,7 @@
       }),
       hole ? h("div", { className: "ap-tur-hole", "aria-hidden": "true", style: { top: hole.top + "px", left: hole.left + "px", width: hole.width + "px", height: hole.height + "px" } }) : null,
       // phone: a sheet at the bottom; at the top when the lit element stays in the lower part (a fixed bottom bar)
-      h("div", { ref: card, className: "ap-tur-card" + (phone() ? " sheet" + (sheetTop ? " top" + (beside ? " beside-pill" : reserve ? " under-pill" : "") : "") : !hole ? " mid" : ""), role: "dialog", "aria-modal": step.use ? "false" : "true",
+      h("div", { ref: card, className: "ap-tur-card" + (phone() ? " sheet" + (sheetTop ? " top" + (beside ? " beside-pill" : reserve ? " under-pill" : "") + (scroll ? " fit" : "") : "") : !hole ? " mid" : ""), role: "dialog", "aria-modal": step.use ? "false" : "true",
         "aria-labelledby": titleId, "aria-describedby": titleId + "-b", style: style },
         h("p", { className: "ap-tur-n", "aria-live": "polite" }, def.eyebrow ? def.eyebrow + " · " : "", "Langkah " + (i + 1) + " dari " + n),
         h("h2", { id: titleId, className: "ap-tur-title" }, step.title),

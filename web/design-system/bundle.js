@@ -282,7 +282,7 @@
     var base = rakaState(p.state), s = flash && !RAKA_ON[base] ? flash : base;
     var svgRef = React.useRef(null), lookRef = React.useRef(null), blinkRef = React.useRef(null), headRef = React.useRef(null);
     var stRef = React.useRef(s); stRef.current = s;
-    var live = !!p.interactive;
+    var live = p.interactive !== false; // every Raka is alive; interactive: false keeps one still (a tucked launcher)
     React.useEffect(function () {
       if (!live || typeof window === "undefined" || !window.requestAnimationFrame) return;
       var r = { svg: svgRef.current, look: lookRef.current, blink: blinkRef.current, head: headRef.current, state: function () { return stRef.current; },

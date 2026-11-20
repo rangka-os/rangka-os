@@ -2851,7 +2851,7 @@ OFFLINE_TYPES = {"counter", "roll", "route", "clock", "entry"}
 PORTAL_TYPES = ["document", "documents", "catalogue", "booking", "intake", "order_page"]
 PORTAL_BUILT = {"document"}
 PORTAL_REFUSED = {"attach", "image", "json", "signature", "geo", "dynamic_link", "table", "password"}
-NUMERIC = {"currency", "int", "float", "percent", "rating"}
+PORTAL_NUMERIC = {"currency", "int", "float", "percent", "rating"}
 
 
 def load_portals(rep, portals, app, root):
@@ -2915,7 +2915,7 @@ def check_portal(rep, V, allmodels, roles, p, d, prints):
     if f is not None and ftype(f) != "link":
         rep.add("error", p, "customer", "portal_field_type", f'customer "{f["name"]}" must be a link field, not {ftype(f)}')
     f = portal_field(rep, p, "amount", m, raw.get("amount"))
-    if f is not None and ftype(f) not in NUMERIC:
+    if f is not None and ftype(f) not in PORTAL_NUMERIC:
         rep.add("error", p, "amount", "portal_field_type", f'amount "{f["name"]}" must be a number field, not {ftype(f)}')
     f = portal_field(rep, p, "due", m, raw.get("due"))
     if f is not None and ftype(f) not in ("date", "datetime"):

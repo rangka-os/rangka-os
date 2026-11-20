@@ -23,7 +23,9 @@ export interface DocumentHeaderProps { number: string; title: string; status: Do
 export declare function DocumentHeader(props: DocumentHeaderProps): React.ReactElement;
 export interface PosKeypadProps { initial?: number; offline?: boolean; queued?: number; payLabel?: string; payIcon?: IconName | null }
 export declare function PosKeypad(props: PosKeypadProps): React.ReactElement;
-export interface RakaProps { size?: number; title?: string; withName?: boolean; company?: string }
+export type RakaState = 'netral' | 'mikir' | 'kerja' | 'senang' | 'tidur';
+/** Raka, the AI agent: ink head, square eyes, titik status light. `state` swaps the eyes; mikir and kerja light the titik teal. `interactive` follows the pointer, blinks and bounces on click (one shared listener; reduced motion keeps only the state swaps). `title: ""` hides it from assistive tech. */
+export interface RakaProps { size?: number; title?: string; withName?: boolean; company?: string; state?: RakaState; interactive?: boolean; onClick?: () => void }
 export declare function Raka(props: RakaProps): React.ReactElement;
 type Node = React.ReactNode;
 export interface Option { value: string; label: string; hint?: string; icon?: IconName }
@@ -252,7 +254,7 @@ export declare function OfferCompare(props: { offer: Offer; closedLabel?: string
 export declare function markdownBlocks(text: string): Array<{ t: "h" | "p" | "list" | "kv" | "table" | "code" | "quote" | "callout" | "hr"; [k: string]: unknown }>;
 /** The link a Raka answer may open, or "" (javascript:, data:, //host and the like stay text). */
 export declare function safeHref(url: string): string;
-export declare function RakaLauncher(props: { open: boolean; pending?: number; tucked?: boolean; onToggle: () => void; onTuck?: (tucked: boolean) => void }): React.ReactElement;
+export declare function RakaLauncher(props: { open: boolean; pending?: number; busy?: boolean; state?: RakaState; tucked?: boolean; onToggle: () => void; onTuck?: (tucked: boolean) => void }): React.ReactElement;
   renderChangeset?: (cs: ChatChangeset) => Node; onPreview?: (id: string) => void; onOpenUbah?: (id: string) => void;
   /** same as mode="float" */ floating?: boolean; mode?: 'drawer' | 'float' | 'dock' | 'full'; width?: number; onResize?: (width: number) => void; onExpand?: () => void; onCollapse?: () => void; /** no longer shown */ subtitle?: string; /** the page title as a context chip */ context?: string | null }): React.ReactElement | null;
 /** Dock width: NaN or a non-number gives 400; clamped to 360..640, and with a viewport width at most viewport - 640 (never below 360). */

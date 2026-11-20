@@ -498,3 +498,34 @@ test("ChatDrawer keeps the same wrapper chain to the log and composer in Dock an
     assert.deepStrictEqual(f, d.map((x) => x.replace("aside.rk-chat rk-chat-dock", "aside.rk-chat rk-chat-full")));
   }
 });
+
+// ---- Raka (Lampu status, 20 Nov 2026): ink head with cut-out eyes, titik lit teal only while Raka thinks or works
+test("Raka draws the head, two eyes in the mask and the titik; teal only for mikir and kerja", () => {
+  for (const s of ["netral", "mikir", "kerja", "senang", "tidur"]) {
+    const tree = render(R.Raka({ size: 40, state: s }));
+    assert.strictEqual(tree.type, "svg");
+    assert.strictEqual(tree.props["data-state"], s);
+    const mask = nodes(tree, (n) => n.type === "mask")[0];
+    assert.ok(mask, s + ": eyes are cut out with a mask");
+    assert.strictEqual(nodes(mask, (n) => (n.type === "rect" || n.type === "polygon") && n.props.fill === "#000").length, 2, s + ": two eyes");
+    const titik = nodes(tree, (n) => hasClass(n, "rk-mascot-titik"))[0];
+    assert.strictEqual(titik.props["data-on"] !== undefined, s === "mikir" || s === "kerja", s + ": titik lit only while working");
+    assert.strictEqual(nodes(tree, (n) => n.type === "path" && n.props.fill === "currentColor").length, 1, s + ": body follows currentColor");
+  }
+  assert.strictEqual(render(R.Raka({ state: "bogus" })).props["data-state"], "netral", "unknown state falls back to netral");
+  assert.strictEqual(render(R.Raka({ title: "" })).props["aria-hidden"], "true", "an empty title hides a decorative Raka");
+  assert.match(render(R.Raka({ state: "kerja" })).props["aria-label"], /sedang bekerja/);
+});
+
+test("RakaLauncher shows Raka working while busy; pending changesets do not light the titik", () => {
+  const raka = (p) => nodes(render(R.RakaLauncher(Object.assign({ open: false, onToggle() {} }, p))), (n) => n.type === "svg" && hasClass(n, "rk-mascot"))[0];
+  assert.strictEqual(raka({ busy: true }).props["data-state"], "kerja");
+  assert.strictEqual(raka({ pending: 2 }).props["data-state"], "netral");
+});
+
+test("ChatDrawer: the waiting row shows Raka thinking and the head shows it working while busy", () => {
+  const tree = render(R.ChatDrawer({ open: true, busy: true, turns: [{ role: "user", text: "rekap minggu ini" }] }));
+  const states = nodes(tree, (n) => n.type === "svg" && hasClass(n, "rk-mascot")).map((n) => n.props["data-state"]);
+  assert.ok(states.indexOf("kerja") >= 0, "head avatar works while busy: " + states);
+  assert.ok(states.indexOf("mikir") >= 0, "waiting row thinks: " + states);
+});

@@ -375,7 +375,7 @@
         mode: mode === "closed" ? "drawer" : mode, width: width, onResize: resize,
         onExpand: function () { setFull(true); }, onCollapse: function () { setFull(false); }, context: here ? here.title : null,
         onSend: function (t) { send(t, p.getContext ? p.getContext() : null); }, onPreview: preview, onOpenUbah: openUbah }),
-      R.RakaLauncher && p.launcher !== false && mode !== "dock" && mode !== "full" ? h(R.RakaLauncher, { open: drawerOpen, pending: pending, tucked: tucked || autoTuck,
+      R.RakaLauncher && p.launcher !== false && mode !== "dock" && mode !== "full" ? h(R.RakaLauncher, { open: drawerOpen, pending: pending, busy: s.busy, tucked: tucked || autoTuck,
         onToggle: function () { if (drawerOpen) closeDrawer(); else { setTuck(false); openDrawer(); } }, onTuck: setTuck }) : null,
       drawerOpen ? null : h(R.AskBar, { open: askOpen, context: askCtx ? { label: askCtx.title } : null, onRemoveContext: function () { setAskCtx(null); },
         value: value, onChange: setValue, onSend: sendAsk, onOpenChat: openDrawer, onClose: function () { setAskOpen(false); }, busy: s.busy }));

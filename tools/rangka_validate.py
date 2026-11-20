@@ -1353,6 +1353,7 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
                     conn_origin[cn] = "site"
 
     check_module_notices(rep, apps, allmodels, only)  # contract 0066 §1.1
+    check_limit_scopes(rep, apps, allmodels, only)  # contract 0057 §5
     # flows
     for fname in sorted(flows):
         app, p, f = flows[fname]
@@ -1599,6 +1600,33 @@ def notice_literal(x):
 
 def all_role_names(apps):
     return {"owner"}.union(*[a["roles"] for a in apps.values()])
+
+
+SCOPED_LIMITS = {"outlets": "outlet"}  # contract 0057 §5: limit -> counted model
+
+
+def check_limit_scopes(rep, apps, allmodels, only):
+    """limit_scope: of every unit (contract 0057 §5): a known limit, declared by the unit that owns the counted model (so once), naming a check field of it."""
+    for name in sorted(apps):
+        a = apps[name]
+        if (only and name not in only) or not a.get("app_path") or not isinstance(a.get("manifest"), dict):
+            continue
+        ls = a["manifest"].get("limit_scope")
+        if not isinstance(ls, dict):
+            continue
+        for k in sorted(ls):
+            p, w = a["app_path"], f"limit_scope/{k}"
+            mn = SCOPED_LIMITS.get(k)
+            if mn is None:
+                rep.add("error", p, w, "limit_scope_unknown_limit", f'"{k}" cannot be scoped; only outlets can')
+                continue
+            if mn not in allmodels or allmodels[mn][0] != name:
+                rep.add("error", p, w, "limit_scope_not_owner", f"only the unit that declares model {mn} can scope the {k} limit")
+                continue
+            fn = ls[k] if isinstance(ls[k], str) else ""
+            f = fields_of(a["models"][mn][1]).get(fn) if isinstance(fn, str) else None
+            if not isinstance(f, dict) or f.get("type") != "check":
+                rep.add("error", p, w, "limit_scope_field", f'"{fn}" is not a check field of {mn}')
 
 
 def check_module_notices(rep, apps, allmodels, only):

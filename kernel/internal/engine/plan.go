@@ -18,12 +18,14 @@ func planError(err error) error {
 	return err
 }
 
-// planNewRecord refuses a new outlet past the plan's outlet limit (contract 0028 §2), counting in o's transaction.
-func (o *op) planNewRecord(m *meta.Model) error {
+// planOutlet refuses an outlet that starts to count past the plan's outlet limit (contract 0028 §2), counting in
+// o's transaction: a new one (was nil), or one changed so the limit's scope field turns true (contract 0057 §5,
+// a warehouse retyped as a store). rec has its computes applied.
+func (o *op) planOutlet(m *meta.Model, was, rec store.Record) error {
 	if m.Name != "outlet" {
 		return nil
 	}
-	if err := plan.CheckNewOutlet(o.ctx, o.tx, o.registry(), o.actor.Org); err != nil {
+	if err := plan.CheckOutlet(o.ctx, o.tx, o.registry(), o.actor.Org, was, rec); err != nil {
 		return planError(err)
 	}
 	o.e.Plan.Invalidate()

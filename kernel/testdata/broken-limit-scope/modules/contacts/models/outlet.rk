@@ -1,0 +1,22 @@
+# yaml-language-server: $schema=https://rangka-os.github.io/rangka-os/schema/0.5/model.json
+name: outlet
+label: {id: Outlet}
+naming: OUT-{##}
+title_field: outlet_name
+fields:
+  - name: outlet_name
+    type: data
+    label: {id: Nama outlet}
+    required: true
+  - name: city
+    type: data
+    label: {id: Kota}
+  - name: location_type
+    type: select
+    label: {id: Jenis lokasi}
+    options: [{value: store, label: {id: Toko}}, {value: warehouse, label: {id: Gudang}}]
+  - name: is_store
+    type: check
+    label: {id: Toko}
+    hidden: true
+    compute: "location_type == '' || location_type == 'store'"

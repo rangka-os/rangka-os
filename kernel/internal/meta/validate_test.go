@@ -433,6 +433,28 @@ func TestUnknownMethod(t *testing.T) {
 	}
 }
 
+// limit_scope (contract 0057 §5): a known limit, scoped by the owner of the counted model, on a check field.
+func TestLimitScope(t *testing.T) {
+	_, rep := ValidateOpts(Options{AppsDir: "../../testdata/broken-limit-scope/apps", SiteDir: "../../testdata/broken-limit-scope/site"}, nil, schema.Embedded())
+	var got []string
+	for _, it := range rep.All() {
+		if strings.HasPrefix(it.Code, "limit_scope") {
+			got = append(got, it.Code+" "+it.Where)
+		}
+	}
+	want := []string{"limit_scope_field limit_scope/outlets", "limit_scope_unknown_limit limit_scope/users", "limit_scope_not_owner limit_scope/outlets"}
+	if !reflect.DeepEqual(got, want) {
+		t.Errorf("got %q\nwant %q", got, want)
+	}
+	// the canvas modules (no limit_scope) report none
+	_, rep = ValidateOpts(Options{AppsDir: "../../testdata/canvas/apps", SiteDir: "../../testdata/canvas/site"}, nil, schema.Embedded())
+	for _, it := range rep.All() {
+		if strings.HasPrefix(it.Code, "limit_scope") {
+			t.Errorf("canvas: %s %s", it.Code, it.Where)
+		}
+	}
+}
+
 // Contract 0072: system.rk maps. The valid site (a tile mirror with subdomains, its own Nominatim faster than 1/s)
 // has no problems; the broken ones have the schema errors and both maps codes rangka_validate.py prints.
 func TestMapsSettings(t *testing.T) {

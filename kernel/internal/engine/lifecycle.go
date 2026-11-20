@@ -512,6 +512,13 @@ func (o *op) create(model string, input map[string]any, opts CreateOpts) (*Resul
 
 // Get loads a record the actor may read.
 func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Record, error) {
+	return e.GetFor(ctx, a, model, name, "read")
+}
+
+// GetFor is Get that also authorizes action (print, attachments, ...) on the stored record before it is redacted:
+// a grant's if: may read a field hidden from the caller (a member's payslip grant reads payroll_run, contract 0074),
+// so deciding on the redacted copy would refuse what the grant allows.
+func (e *Engine) GetFor(ctx context.Context, a Actor, model, name, action string) (store.Record, error) {
 	m, err := e.model(model)
 	if err != nil {
 		return nil, err
@@ -530,6 +537,11 @@ func (e *Engine) Get(ctx context.Context, a Actor, model, name string) (store.Re
 	}
 	if err := e.Guard(ctx, a, m.Name, rec, "read"); err != nil {
 		return nil, err
+	}
+	if action != "read" {
+		if err := e.Authorize(ctx, a, m.Name, action, rec); err != nil {
+			return nil, err
+		}
 	}
 	return e.Redact(a, m, rec), nil
 }

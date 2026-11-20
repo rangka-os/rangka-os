@@ -554,6 +554,9 @@ def validate(root, only=None, site=None, connectors=None, modules=None):
             if isinstance(m.get("stock"), dict):
                 check_stock(rep, p, mname, m, fields, visible)
             for i, pr in enumerate(m.get("permissions", [])):
+                if pr.get("role") == MEMBER_ROLE:
+                    check_member_grant(rep, p, i, pr)
+                    continue
                 if pr.get("role") not in roles:
                     rep.add("warn", p, f"permissions/{i}/role", "unknown_role", f'role "{pr.get("role")}" has no file in roles/ (it must exist at install)')
             approval_names = set()
@@ -1398,6 +1401,8 @@ def validate_more(rep, V, root, apps, allmodels, only, site, connectors):
         schema_errors(rep, V, "role", p, r)
         if r.get("name") != st:
             rep.add("error", p, "name", "name_mismatch", f'role name "{r.get("name")}" must match the file name "{st}"')
+        if st == MEMBER_ROLE:
+            rep.add("error", p, "name", "reserved_role", f'"{st}" is the pseudo-role the kernel gives every member (contract 0074); name the role file otherwise')
         check_scope(rep, p, r, allmodels)
 
     check_member_record(rep, allmodels, roles)
@@ -1454,6 +1459,70 @@ def check_member_record(rep, allmodels, roles):
         for role in names:
             if role not in ("owner", "head_office") and role not in hidden:
                 rep.add("warn", p, f"user/{name}", "contact_field_visible", f'role "{role}" is not in hidden_for')
+
+
+# The pseudo-role every member holds next to their own role (contract 0074 §1).
+MEMBER_ROLE = "member"
+
+
+MEMBER_TERM = re.compile(r"^(?:[A-Za-z_][A-Za-z0-9_.]*\s*==\s*user\.name|user\.name\s*==\s*[A-Za-z_][A-Za-z0-9_.]*)$")
+
+
+def split_top(s, op):
+    """s split on op outside parentheses, brackets and quotes; parts trimmed (splitTop in validate.go)."""
+    out, depth, start, quote, i = [], 0, 0, "", 0
+    while i < len(s):
+        c = s[i]
+        if quote:
+            if c == "\\":
+                i += 1
+            elif c == quote:
+                quote = ""
+        elif c in "'\"":
+            quote = c
+        elif c in "([{":
+            depth += 1
+        elif c in ")]}":
+            depth -= 1
+        elif depth == 0 and s.startswith(op, i):
+            out.append(s[start:i].strip())
+            i += len(op) - 1
+            start = i + 1
+        i += 1
+    return out + [s[start:].strip()]
+
+
+def strip_parens(s):
+    """s without parentheses that wrap the whole of it (stripParens in validate.go)."""
+    while s.startswith("(") and s.endswith(")"):
+        inner, depth, whole = s[1:-1], 0, True
+        for c in inner:
+            if c == "(":
+                depth += 1
+            elif c == ")":
+                depth -= 1
+                if depth < 0:
+                    whole = False
+                    break
+        if not whole or depth != 0:
+            break
+        s = inner.strip()
+    return s
+
+
+def member_scoped(cond):
+    """Every top-level || branch has a top-level && term <field> == user.name (MemberScoped, contract 0074 §2)."""
+    return all(any(MEMBER_TERM.match(strip_parens(t)) for t in split_top(b, "&&")) for b in split_top(cond, "||"))
+
+
+def check_member_grant(rep, p, i, g):
+    """permissions/i granted to the member pseudo-role (contract 0074 §2): an if: on user.name, member actions only."""
+    cond = g.get("if") if isinstance(g.get("if"), str) else ""
+    if not member_scoped(cond):
+        rep.add("error", p, f"permissions/{i}/if", "member_grant_unscoped", "a member grant needs an if: where every || branch requires <field> == user.name (the person's own records, contract 0074)")
+    for a in ("cancel", "amend", "export", "import", "customize"):
+        if g.get(a) is True:
+            rep.add("error", p, f"permissions/{i}/{a}", "member_grant_action", f"a member grant cannot give {a}; only read, create, write, delete, submit and print (contract 0074)")
 
 
 def check_scope(rep, p, r, allmodels):
@@ -3015,7 +3084,7 @@ def load_screens(rep, screens, app, root):
 
 def check_screens(rep, V, apps, allmodels, only, screens, prints=()):
     """Screen files and the work: lists of apps (contract 0030 §1, §3). The first unit that ships a name keeps it."""
-    roles = {"owner"}.union(*[a["roles"] for a in apps.values()])
+    roles = {"owner", MEMBER_ROLE}.union(*[a["roles"] for a in apps.values()])
     first = {}
     for app, stem, p, d in screens:
         dup = stem in first

@@ -196,7 +196,7 @@ func (e *Engine) DashboardAllowed(a Actor, d *meta.Dashboard) bool {
 		return true
 	}
 	for _, r := range roles {
-		if hasRole(a, r) {
+		if holds(a, r) { // roles: [member] opens it for every member (contract 0074 §3)
 			return true
 		}
 	}

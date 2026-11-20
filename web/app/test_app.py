@@ -3781,6 +3781,8 @@ def test_pwa_installable_and_offline(page, ctx):
     man = page.request.get(ctx.base + "/app/manifest.webmanifest")
     assert man.ok and man.headers["content-type"].startswith("application/manifest+json"), man.headers
     assert man.json()["display"] == "standalone"
+    # contract 0074 §4: the employee app's shortcuts (clock, own payslips and attendance)
+    assert [x["url"] for x in man.json()["shortcuts"]] == ["./#/approvals", "./#/w/absen_outlet", "./#/d/saya"], man.json()["shortcuts"]
     sw = page.request.get(ctx.base + "/app/sw.js")
     assert sw.headers.get("cache-control") == "no-cache", sw.headers
     page.wait_for_function("() => !!navigator.serviceWorker.controller", timeout=15000)

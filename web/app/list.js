@@ -301,7 +301,7 @@
     if (fd.type === "currency") return h(R.Amount, { value: v });
     if (fd.type === "date") return global.RangkaAppAPI.tanggal(v);
     if (fd.type === "percent") return fmtNum(v) + "%";
-    if (eng.numeric(fd)) return fmtNum(v);
+    if (eng.numeric(fd)) return fd.grouping === false ? String(v) : fmtNum(v); // grouping: false, a year
     return String(v);
   }
 

@@ -677,7 +677,10 @@
     if (more.length) acts.unshift(h(MoreMenu, { key: "more", items: more, disabled: !!busy }));
 
     var lockNote = locked && !(own && !bannerOn) ? h("div", { className: "rk-doc-lock" }, h(R.Icon, { name: "lock" }),
-      docstatus === 1 ? "Sudah diajukan, isi tidak bisa diubah. Batalkan lalu buat amandemen untuk mengoreksi." : "Dibatalkan. Datanya tetap tersimpan; buat amandemen untuk mengoreksi.") : null;
+      // cancel and amend are only offered to who may do them; anyone else (an employee reading their own slip,
+      // contract 0074) is told whom to ask
+      docstatus === 1 ? (allowed("cancel") ? "Sudah diajukan, isi tidak bisa diubah. Batalkan lalu buat amandemen untuk mengoreksi." : "Sudah final. Ada yang salah? Hubungi yang mengurusnya.")
+        : allowed("amend") ? "Dibatalkan. Datanya tetap tersimpan; buat amandemen untuk mengoreksi." : "Dibatalkan. Datanya tetap tersimpan.") : null;
 
     /* the side panel: info, attachments, approvals, print */
     var API = global.RangkaAppAPI;

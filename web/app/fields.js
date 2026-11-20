@@ -104,11 +104,13 @@
         return o ? L(o.label) : String(v);
       case "link":
         var t = ctx.cache.title(f.to, v);
-        return (ctx.meta.models || {})[f.to] ? h("a", { href: "#/r/" + f.to + "/" + enc(v) }, t) : t;
+        // a link the caller may not open (can.read false) is plain text, not a dead link (contract 0074 §4)
+        var to = (ctx.meta.models || {})[f.to];
+        return to && !(to.can && to.can.read === false) ? h("a", { href: "#/r/" + f.to + "/" + enc(v) }, t) : t;
       case "date": return API.tanggal(v);
       case "currency": return API.rupiah(v);
       case "percent": return formatNumber(v) + "%";
-      case "int": case "float": return formatNumber(v);
+      case "int": case "float": return f.grouping === false ? String(v) : formatNumber(v); // a year: 2026, not 2.026
       case "geo": return RA.geoText ? RA.geoText(v) || "—" : "—";
       case "image": return "Ada foto";
       case "signature": return "Sudah tanda tangan";
@@ -140,7 +142,7 @@
 
   function NumberInput(p) {
     var isInt = p.field.type === "int";
-    var t = useEditText(p.value, function (v) { return v == null || v === "" ? "" : formatNumber(v); });
+    var t = useEditText(p.value, function (v) { return v == null || v === "" ? "" : p.field.grouping === false ? String(v) : formatNumber(v); });
     return h(R.Field, { id: p.id, label: p.label, required: p.required, numeric: true, error: p.error, hint: p.error ? undefined : p.hint,
       value: t.value, onFocus: t.onFocus, onBlur: t.onBlur, autoComplete: "off", inputMode: isInt ? "numeric" : "decimal",
       onChange: function (e) { t.set(e.target.value); var n = parseNumber(e.target.value); p.onChange(isInt ? Math.round(n) : n); } });
